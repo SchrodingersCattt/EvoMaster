@@ -1,8 +1,9 @@
 """Tests for SFTPPool — SFTP connection pool with semaphore-based concurrency control."""
+
 from __future__ import annotations
 
 import threading
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -39,14 +40,18 @@ class TestSFTPPoolAcquireRelease:
         # Second acquire should block
         entered = threading.Event()
         acquired = threading.Event()
+
         def try_acquire():
             entered.set()  # 确认线程已启动
             pool.acquire()
             acquired.set()
+
         t = threading.Thread(target=try_acquire, daemon=True)
         t.start()
         entered.wait(timeout=1.0)  # 等线程进入 acquire
-        import time; time.sleep(0.1)  # 让 semaphore.acquire 阻塞
+        import time
+
+        time.sleep(0.1)  # 让 semaphore.acquire 阻塞
         assert not acquired.is_set(), "Should block when pool exhausted"
         # Release first, now second should succeed
         sftp.stat.return_value = MagicMock()

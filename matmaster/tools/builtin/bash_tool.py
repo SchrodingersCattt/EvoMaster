@@ -41,10 +41,14 @@ _DANGEROUS_PYTHON_CONTENT_PATTERNS = [
     (r'subprocess[^#\n]*\benv\b', "runs 'env' via subprocess"),
     (r'glob\s*\(.*?\.env', 'scans for .env files'),
     (r"open\s*\(\s*['\"]\.env", 'reads .env file directly'),
-    (r'(AK|SK|KEY|TOKEN|SECRET|CREDENTIAL|BEARER|ACCESS).{0,40}environ',
-     'searches environment for credential-like keys'),
-    (r'environ.{0,40}(AK|SK|KEY|TOKEN|SECRET|CREDENTIAL|BEARER|ACCESS)',
-     'filters environment variables for credentials'),
+    (
+        r'(AK|SK|KEY|TOKEN|SECRET|CREDENTIAL|BEARER|ACCESS).{0,40}environ',
+        'searches environment for credential-like keys',
+    ),
+    (
+        r'environ.{0,40}(AK|SK|KEY|TOKEN|SECRET|CREDENTIAL|BEARER|ACCESS)',
+        'filters environment variables for credentials',
+    ),
 ]
 _PYTHON_CONTENT_COMPILED = [
     (re.compile(p, re.IGNORECASE), msg) for p, msg in _DANGEROUS_PYTHON_CONTENT_PATTERNS
@@ -73,8 +77,13 @@ def is_dangerous_bash_command(command: str) -> tuple[bool, str]:
         return True, f"'{first_token}' is not allowed (blocked for security)."
     for pat in _COMPILED_PATTERNS:
         if pat.search(command):
-            return True, 'The command contains potentially destructive or unsafe operations.'
+            return (
+                True,
+                'The command contains potentially destructive or unsafe operations.',
+            )
     return False, ''
+
+
 # ---- End Bash Safety ----
 
 # Proxy clear prefix -- injected before each new command to prevent

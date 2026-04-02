@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import threading
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
+from unittest.mock import AsyncMock, create_autospec, patch
 
 import pytest
 

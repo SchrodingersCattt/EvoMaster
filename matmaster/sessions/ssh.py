@@ -8,7 +8,6 @@ Satisfies the Session Protocol (8 methods) via structural typing.
 
 from __future__ import annotations
 
-import base64
 import io
 import logging
 import os
@@ -138,7 +137,9 @@ class SSHSession:
 
         transport = self._client.get_transport()
         channel = transport.open_session()
-        wrapped = f"bash -l -c {shlex.quote(f'cd {shlex.quote(self._workdir)} && {command}')}"
+        wrapped = (
+            f"bash -l -c {shlex.quote(f'cd {shlex.quote(self._workdir)} && {command}')}"
+        )
         channel.exec_command(wrapped)
 
         stdout_chunks: list[bytes] = []

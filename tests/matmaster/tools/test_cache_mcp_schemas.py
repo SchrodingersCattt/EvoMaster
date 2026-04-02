@@ -9,9 +9,7 @@ Behavioral contract:
 
 from __future__ import annotations
 
-import ast
 import inspect
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -20,14 +18,17 @@ import pytest
 class TestCacheMcpSchemasImports:
     def test_generate_cache_importable(self):
         from matmaster.tools.cache_mcp_schemas import generate_cache
+
         assert callable(generate_cache)
 
     def test_no_evomaster_in_source(self):
         import matmaster.tools.cache_mcp_schemas as mod
+
         source = inspect.getsource(mod)
         # Only top-level/non-comment evomaster references are a problem
         lines = [
-            line.strip() for line in source.split('\n')
+            line.strip()
+            for line in source.split('\n')
             if ('from evomaster' in line or 'import evomaster' in line)
             and not line.strip().startswith('#')
         ]
@@ -36,18 +37,20 @@ class TestCacheMcpSchemasImports:
     def test_module_imports_matmaster_mcp_manager(self):
         """generate_cache uses matmaster.mcp.manager.MCPToolManager internally."""
         import matmaster.tools.cache_mcp_schemas as mod
+
         source = inspect.getsource(mod)
-        assert "matmaster.mcp.manager" in source or "from matmaster.mcp" in source, (
-            "cache_mcp_schemas.py does not use matmaster.mcp.manager"
-        )
+        assert (
+            "matmaster.mcp.manager" in source or "from matmaster.mcp" in source
+        ), "cache_mcp_schemas.py does not use matmaster.mcp.manager"
 
     def test_module_imports_matmaster_adaptors_calculation(self):
         """generate_cache uses matmaster.adaptors.calculation for resolve_mcp_config_path."""
         import matmaster.tools.cache_mcp_schemas as mod
+
         source = inspect.getsource(mod)
-        assert "matmaster.adaptors.calculation" in source, (
-            "cache_mcp_schemas.py does not use matmaster.adaptors.calculation"
-        )
+        assert (
+            "matmaster.adaptors.calculation" in source
+        ), "cache_mcp_schemas.py does not use matmaster.adaptors.calculation"
 
 
 class TestCacheMcpSchemasGenerateCache:
@@ -62,7 +65,9 @@ class TestCacheMcpSchemasGenerateCache:
         mcp_yaml.write_text(yaml.dump({"config_file": "mcp_config.json"}))
 
         mcp_config_json = tmp_path / "mcp_config.json"
-        mcp_config_json.write_text('{"mcpServers": {"test_srv": {"transport": "http", "url": "http://x"}}}')
+        mcp_config_json.write_text(
+            '{"mcpServers": {"test_srv": {"transport": "http", "url": "http://x"}}}'
+        )
 
         output_dir = tmp_path / "cache"
 
@@ -88,6 +93,7 @@ class TestCacheMcpSchemasGenerateCache:
 
         with patch("matmaster.mcp.manager.MCPToolManager", return_value=mock_manager):
             from matmaster.tools.cache_mcp_schemas import generate_cache
+
             await generate_cache(tmp_path, output_dir)
 
         # Output file should exist
@@ -95,6 +101,7 @@ class TestCacheMcpSchemasGenerateCache:
         assert out_file.exists(), f"Expected cache file {out_file} not created"
 
         import json
+
         data = json.loads(out_file.read_text())
         assert len(data) == 1
         assert data[0]["name"] == "run"
@@ -104,6 +111,7 @@ class TestCacheMcpSchemasGenerateCache:
         """generate_cache exits with error code when mcp.yaml is absent."""
         output_dir = tmp_path / "cache"
         from matmaster.tools.cache_mcp_schemas import generate_cache
+
         with pytest.raises(SystemExit) as exc_info:
             await generate_cache(tmp_path, output_dir)
         assert exc_info.value.code == 1

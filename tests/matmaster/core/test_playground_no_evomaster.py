@@ -22,15 +22,21 @@ def test_playground_no_evomaster_import():
     tree = ast.parse(src.read_text(encoding="utf-8"))
     evomaster_imports = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module and "evomaster" in node.module:
-            evomaster_imports.append(f"line {node.lineno}: from {node.module} import ...")
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module
+            and "evomaster" in node.module
+        ):
+            evomaster_imports.append(
+                f"line {node.lineno}: from {node.module} import ..."
+            )
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if "evomaster" in alias.name:
                     evomaster_imports.append(f"line {node.lineno}: import {alias.name}")
-    assert evomaster_imports == [], (
-        "Found evomaster imports in playground.py:\n" + "\n".join(evomaster_imports)
-    )
+    assert (
+        evomaster_imports == []
+    ), "Found evomaster imports in playground.py:\n" + "\n".join(evomaster_imports)
 
 
 def test_playground_no_playground_session_mixin():
@@ -54,8 +60,10 @@ def test_playground_no_base_session():
 def test_playground_has_parameterized_constructor():
     """playground.py MUST have Playground with parameterized __init__."""
     content = _playground_src().read_text(encoding="utf-8")
-    assert "def __init__(self, *, session_type" in content or \
-           "def __init__(\n        self,\n        *,\n        session_type" in content
+    assert (
+        "def __init__(self, *, session_type" in content
+        or "def __init__(\n        self,\n        *,\n        session_type" in content
+    )
 
 
 def test_playground_has_inlined_methods():

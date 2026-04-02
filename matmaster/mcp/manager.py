@@ -9,10 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Any, Callable
 
-from .connection import MCPConnection, MCP_CONNECT_TIMEOUT, create_connection
+from .connection import MCP_CONNECT_TIMEOUT, MCPConnection, create_connection
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +204,7 @@ class MCPToolManager:
                 for t in tools_info
                 if not (
                     t.get('name', '').startswith('submit_')
-                    and t.get('name', '')[len('submit_'):] in sync_tools
+                    and t.get('name', '')[len('submit_') :] in sync_tools
                 )
             ]
             if len(tools_info) < before:
@@ -228,7 +227,7 @@ class MCPToolManager:
 
         # 3. async 去重：当 submit_X 存在时移除 base X
         submit_names = {
-            t.get('name', '')[len('submit_'):]
+            t.get('name', '')[len('submit_') :]
             for t in tools_info
             if t.get('name', '').startswith('submit_')
         }
@@ -274,7 +273,7 @@ class MCPToolManager:
             # 4. description 继承
             description = tool_info.get('description', '')
             if original_name.startswith('submit_'):
-                base_name = original_name[len('submit_'):]
+                base_name = original_name[len('submit_') :]
                 base_desc = base_descriptions.get(base_name, '')
                 if base_desc and len(base_desc) > len(description):
                     description = base_desc

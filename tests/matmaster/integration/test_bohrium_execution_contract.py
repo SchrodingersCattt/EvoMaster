@@ -411,9 +411,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
     assert isinstance(spec, SkillSyncSpec)
     assert spec.remote_project_root == '/share/.matmaster'
     assert spec.project_skill_roots
-    assert spec.project_skill_roots[0].endswith(
-        str(Path('matmaster/skills/lazymcp'))
-    )
+    assert spec.project_skill_roots[0].endswith(str(Path('matmaster/skills/lazymcp')))
 
 
 @patch('matmaster.providers.llm_factory.build_provider')

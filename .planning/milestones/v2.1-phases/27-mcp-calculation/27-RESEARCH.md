@@ -168,10 +168,10 @@ async def add_server(self, name: str, transport: str, **connection_kwargs) -> No
 async def execute(self, arguments: dict[str, Any]) -> ToolResult:
     if self._connection is None:
         self._connection = await self._connector.ensure_connection(self._server_name)
-    
+
     # path_adaptor resolve (if configured)
     resolved_args = self._resolve_path_args(arguments) if self._path_adaptor else arguments
-    
+
     try:
         result = await self._connection.call_tool(self._remote_tool_name, resolved_args)
         content = self._format_result(result)
@@ -305,7 +305,7 @@ async def execute(self, arguments: dict[str, Any]) -> ToolResult:
             parts.append(item['text'])
         else:
             parts.append(str(item))
-    
+
     if not parts:
         content = ''
     elif len(parts) == 1:
@@ -321,7 +321,7 @@ async def execute(self, arguments: dict[str, Any]) -> ToolResult:
             content = text
     else:
         content = '\n'.join(parts)
-    
+
     return ToolResult(status="success", content=content)
 ```
 
@@ -368,7 +368,7 @@ class BuiltTool:
     """_build_tools 产出的轻量工具描述。"""
     __slots__ = ('name', 'remote_name', 'description', 'input_schema',
                  'server_name', 'connection')
-    
+
     def __init__(self, name, remote_name, description, input_schema,
                  server_name, connection):
         self.name = name

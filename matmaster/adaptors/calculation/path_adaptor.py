@@ -752,9 +752,7 @@ class CalculationPathAdaptor:
             json.dumps(_params_brief, ensure_ascii=False, default=str),
         )
         if _has_input_files_prop:
-            _raw_if = (
-                ((input_schema or {}).get('properties') or {}).get('input_files')
-            )
+            _raw_if = ((input_schema or {}).get('properties') or {}).get('input_files')
             logger.info(
                 'Path adaptor [%s] input_files raw schema (JSON): %s',
                 tool_name,

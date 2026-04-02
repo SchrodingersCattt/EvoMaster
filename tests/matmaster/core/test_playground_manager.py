@@ -33,7 +33,9 @@ def _write_config(cfg_dir: Path, overrides: dict[str, Any] | None = None) -> Pat
     return config_path
 
 
-def _setup_project_root(tmp_path: Path, overrides: dict[str, Any] | None = None) -> Path:
+def _setup_project_root(
+    tmp_path: Path, overrides: dict[str, Any] | None = None
+) -> Path:
     """Create a fake project root with config directory."""
     mm_dir = tmp_path / "config"
     mm_dir.mkdir(parents=True)

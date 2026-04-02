@@ -16,6 +16,7 @@ import re
 from typing import Any, ClassVar
 
 from .base import BuiltinTool
+from .read_tracker import ReadTracker
 
 # ---- Editor helpers (inlined from evomaster.agent.tools.builtin.editor) ----
 SNIPPET_LINES = 4
@@ -37,8 +38,9 @@ def maybe_truncate(
         return content
     half = max_size // 2
     return content[:half] + '\n' + notice + '\n' + content[-half:]
+
+
 # ---- End Editor helpers ----
-from .read_tracker import ReadTracker
 
 
 class EditTool(BuiltinTool):

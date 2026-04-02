@@ -22,58 +22,69 @@ from unittest.mock import AsyncMock, MagicMock
 class TestMCPToolManagerInstantiation:
     def test_instantiates_with_no_args(self):
         from matmaster.mcp.manager import MCPToolManager
+
         m = MCPToolManager()
         assert m is not None
 
     def test_connections_is_empty_dict(self):
         from matmaster.mcp.manager import MCPToolManager
+
         m = MCPToolManager()
         assert isinstance(m.connections, dict)
         assert len(m.connections) == 0
 
     def test_tools_by_server_is_empty_dict(self):
         from matmaster.mcp.manager import MCPToolManager
+
         m = MCPToolManager()
         assert isinstance(m.tools_by_server, dict)
         assert len(m.tools_by_server) == 0
 
     def test_path_adaptor_servers_is_empty_set(self):
         from matmaster.mcp.manager import MCPToolManager
+
         m = MCPToolManager()
         assert isinstance(m.path_adaptor_servers, set)
         assert len(m.path_adaptor_servers) == 0
 
     def test_path_adaptor_factory_is_none(self):
         from matmaster.mcp.manager import MCPToolManager
+
         m = MCPToolManager()
         assert m.path_adaptor_factory is None
 
     def test_sync_tools_by_server_is_empty_dict(self):
         from matmaster.mcp.manager import MCPToolManager
+
         m = MCPToolManager()
         assert isinstance(m.sync_tools_by_server, dict)
 
     def test_tool_include_only_is_empty_dict(self):
         from matmaster.mcp.manager import MCPToolManager
+
         m = MCPToolManager()
         assert isinstance(m.tool_include_only, dict)
 
     def test_loop_is_none(self):
         from matmaster.mcp.manager import MCPToolManager
+
         m = MCPToolManager()
         assert m.loop is None
 
     def test_has_add_server_method(self):
         from matmaster.mcp.manager import MCPToolManager
+
         assert hasattr(MCPToolManager, "add_server")
         assert asyncio.iscoroutinefunction(MCPToolManager.add_server)
 
     def test_has_build_tools_method(self):
         from matmaster.mcp.manager import MCPToolManager
+
         assert hasattr(MCPToolManager, "_build_tools")
 
     def test_has_cleanup_method(self):
         from matmaster.mcp.manager import MCPToolManager
+
         assert hasattr(MCPToolManager, "cleanup")
         assert asyncio.iscoroutinefunction(MCPToolManager.cleanup)
 
@@ -83,6 +94,7 @@ class TestMCPToolManagerBuildTools:
 
     def _make_manager(self):
         from matmaster.mcp.manager import MCPToolManager
+
         return MCPToolManager()
 
     def _fake_conn(self):
@@ -155,7 +167,11 @@ class TestMCPToolManagerBuildTools:
         tools_info = self._make_tools_info(["build_bulk"])
         m._build_tools("srv", conn1, tools_info)
         # Add a second server with same tool name
-        m._build_tools("srv2", conn2, [{"name": "srv_build_bulk", "description": "d", "input_schema": {}}])
+        m._build_tools(
+            "srv2",
+            conn2,
+            [{"name": "srv_build_bulk", "description": "d", "input_schema": {}}],
+        )
         # The first server's tool stays
         assert "srv_build_bulk" in m.tools_by_server["srv"]
 
@@ -190,6 +206,7 @@ class TestMCPToolManagerBuildTools:
 class TestMCPToolManagerCleanup:
     async def test_cleanup_clears_state(self):
         from matmaster.mcp.manager import MCPToolManager
+
         m = MCPToolManager()
         # Inject a fake connection context
         mock_conn_ctx = AsyncMock()
@@ -206,6 +223,7 @@ class TestMCPToolManagerCleanup:
 
     async def test_cleanup_calls_aexit_on_connections(self):
         from matmaster.mcp.manager import MCPToolManager
+
         m = MCPToolManager()
         mock_conn_ctx = AsyncMock()
         mock_conn_ctx.__aexit__ = AsyncMock(return_value=None)
@@ -218,6 +236,7 @@ class TestMCPToolManagerCleanup:
     async def test_cleanup_tolerates_aexit_error(self):
         """Cleanup should not raise even if a connection's __aexit__ fails."""
         from matmaster.mcp.manager import MCPToolManager
+
         m = MCPToolManager()
         mock_conn_ctx = AsyncMock()
         mock_conn_ctx.__aexit__ = AsyncMock(side_effect=RuntimeError("close failed"))
@@ -230,6 +249,7 @@ class TestMCPToolManagerCleanup:
 class TestNoEvoMasterImportsInManager:
     def test_no_top_level_evomaster_imports(self):
         import matmaster.mcp.manager as mod
+
         module_file = Path(mod.__file__)
         source = module_file.read_text(encoding="utf-8")
         tree = ast.parse(source)
@@ -241,40 +261,47 @@ class TestNoEvoMasterImportsInManager:
             and "evomaster" in node.module
             and node.col_offset == 0
         ]
-        assert top_level_evo == [], (
-            f"Found {len(top_level_evo)} top-level evomaster imports in manager.py"
-        )
+        assert (
+            top_level_evo == []
+        ), f"Found {len(top_level_evo)} top-level evomaster imports in manager.py"
 
     def test_no_evomaster_import_lines_in_source(self):
         """manager.py must not contain any 'from evomaster' or 'import evomaster' lines (comments excluded)."""
         import matmaster.mcp.manager as mod
+
         source = inspect.getsource(mod)
         import_lines = [
-            line.strip() for line in source.split('\n')
+            line.strip()
+            for line in source.split('\n')
             if ('from evomaster' in line or 'import evomaster' in line)
             and not line.strip().startswith('#')
             and not line.strip().startswith('"')
             and not line.strip().startswith("'")
         ]
-        assert import_lines == [], f"Found evomaster import statements in manager.py: {import_lines}"
+        assert (
+            import_lines == []
+        ), f"Found evomaster import statements in manager.py: {import_lines}"
 
     def test_no_reconnect_logic(self):
         import matmaster.mcp.manager as mod
+
         source = inspect.getsource(mod)
-        assert "reconnect" not in source.lower(), (
-            "Reconnect logic found in manager.py (should be stripped per D-03)"
-        )
+        assert (
+            "reconnect" not in source.lower()
+        ), "Reconnect logic found in manager.py (should be stripped per D-03)"
 
     def test_no_progress_callback(self):
         import matmaster.mcp.manager as mod
+
         source = inspect.getsource(mod)
-        assert "_progress_callback" not in source, (
-            "Progress callback found in manager.py (should be stripped per D-03)"
-        )
+        assert (
+            "_progress_callback" not in source
+        ), "Progress callback found in manager.py (should be stripped per D-03)"
 
     def test_no_register_tools(self):
         import matmaster.mcp.manager as mod
+
         source = inspect.getsource(mod)
-        assert "register_tools" not in source, (
-            "register_tools found in manager.py (should be stripped per D-03)"
-        )
+        assert (
+            "register_tools" not in source
+        ), "register_tools found in manager.py (should be stripped per D-03)"

@@ -351,9 +351,7 @@ class AgentRunService:
             from matmaster.core.exp import Exp
             from matmaster.providers.llm_factory import build_provider
 
-            llm_config = load_llm_config(
-                _project_root / 'config' / 'llm_config.yaml'
-            )
+            llm_config = load_llm_config(_project_root / 'config' / 'llm_config.yaml')
 
             agent_default_llm = _get_agent_default_llm()
 
