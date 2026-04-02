@@ -14,15 +14,12 @@ from matmaster.types.session import (
     SessionConfig,
     SSHSessionConfig,
 )
+from matmaster.types.topology import SessionCapabilities
 
 
 class TestSessionProtocol:
     """Session Protocol isinstance checks."""
 
-    @pytest.mark.xfail(
-        reason="LocalSession gains is_open in Task 2; passes after upgrade",
-        strict=False,
-    )
     def test_local_session_satisfies_protocol(self, tmp_path) -> None:
         """Test 1: isinstance(LocalSession(...), Session) returns True."""
         session = LocalSession(workspace_path=tmp_path)
@@ -35,6 +32,10 @@ class TestSessionProtocol:
             @property
             def is_open(self) -> bool:
                 return True
+
+            @property
+            def capabilities(self) -> SessionCapabilities:
+                return SessionCapabilities()
 
             def open(self) -> None: ...
             def close(self) -> None: ...
