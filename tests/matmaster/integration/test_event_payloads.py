@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from matmaster.integration.event_payloads import _public_content_for_event
+from matmaster.integration.event_payloads import (
+    _normalize_public_source,
+    _public_content_for_event,
+)
 
 
 class TestPublicContentForEvent:
@@ -101,3 +104,86 @@ class TestPublicContentForEvent:
         payload = {'type': 'future_event', 'source': 'System', 'content': 'data'}
 
         assert _public_content_for_event('future_event', payload) == 'data'
+
+
+class TestToolResultPayloadMapping:
+    """ESIN-07: ToolResult.payload -> SSE info field mapping."""
+
+    def test_tool_result_payload_maps_to_info(self) -> None:
+        """ESIN-07: ToolResult.payload maps to SSE 'info' field."""
+        result = _public_content_for_event('tool_result', {
+            'call_id': 'call-1',
+            'tool_name': 'bash',
+            'result': 'output text',
+            'status': 'success',
+            'payload': {'exit_code': 0, 'cwd': '/tmp'},
+        })
+        assert result['info'] == {'exit_code': 0, 'cwd': '/tmp'}
+        assert result['status'] == 'success'
+        assert result['name'] == 'bash'
+
+    def test_tool_result_none_payload_maps_to_empty_info(self) -> None:
+        """ESIN-07: None payload -> empty info dict."""
+        result = _public_content_for_event('tool_result', {
+            'call_id': 'call-2',
+            'tool_name': 'read',
+            'result': 'file content',
+            'status': 'success',
+            'payload': None,
+        })
+        assert result['info'] == {}
+
+    def test_tool_result_missing_payload_maps_to_empty_info(self) -> None:
+        """ESIN-07: Missing payload key -> empty info dict."""
+        result = _public_content_for_event('tool_result', {
+            'call_id': 'call-3',
+            'tool_name': 'write',
+            'result': 'written',
+            'status': 'success',
+        })
+        assert result['info'] == {}
+
+    def test_tool_result_payload_with_meta_flags(self) -> None:
+        """ESIN-07: payload with auto_save/summarize flags preserved in info."""
+        result = _public_content_for_event('tool_result', {
+            'call_id': 'call-4',
+            'tool_name': 'write_file',
+            'result': 'saved',
+            'status': 'success',
+            'payload': {'auto_save': True, 'file': '/tmp/out.txt'},
+        })
+        assert result['info']['auto_save'] is True
+        assert result['info']['file'] == '/tmp/out.txt'
+
+    def test_tool_result_info_key_from_model_dump(self) -> None:
+        """ESIN-07: ToolResultEvent.model_dump() uses 'info' key, must map correctly."""
+        # When ToolResultEvent.model_dump() is used, 'info' key is in the dict
+        # (not 'payload'). This tests the generator event path.
+        result = _public_content_for_event('tool_result', {
+            'call_id': 'call-5',
+            'tool_name': 'bash',
+            'result': 'output',
+            'status': 'success',
+            'info': {'exit_code': 0, 'signal': None},
+        })
+        assert result['info'] == {'exit_code': 0, 'signal': None}
+
+
+class TestSourceNormalization:
+    """ESIN-06: Source normalization for generator events."""
+
+    def test_source_normalization_agent_to_matmaster(self) -> None:
+        """ESIN-06: Internal sources normalize to MatMaster."""
+        assert _normalize_public_source('agent') == 'MatMaster'
+        assert _normalize_public_source('direct') == 'MatMaster'
+        assert _normalize_public_source('') == 'MatMaster'
+
+    def test_source_normalization_preserves_subtype(self) -> None:
+        """ESIN-06: MatMaster:subtype preserved."""
+        assert _normalize_public_source('MatMaster:code') == 'MatMaster:code'
+        assert _normalize_public_source('MatMaster:sub1') == 'MatMaster:sub1'
+
+    def test_source_normalization_system_passthrough(self) -> None:
+        """ESIN-06: System/User pass through unchanged."""
+        assert _normalize_public_source('System') == 'System'
+        assert _normalize_public_source('User') == 'User'
