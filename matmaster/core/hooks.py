@@ -15,27 +15,16 @@ Intercepting hooks (pre_tool_call, should_continue) short-circuit on the first
 non-default return. Observation hooks (post_tool_call, pre_llm_call,
 on_stream_chunk, on_segment_complete, on_guard_blocked) execute all hooks
 without short-circuit.
-
-EventEmitterHook bridges hook events to the MessageBus for SSE delivery.
 """
 
 from __future__ import annotations
 
 import enum
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.events import (
-    ResponseEvent,
-    ThoughtEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-)
 from matmaster.types.guards import GuardResult
 from matmaster.types.messages import Message, StreamChunk, ToolCallData
-
-if TYPE_CHECKING:
-    from matmaster.core.bus import MessageBus
 
 
 class HookAction(enum.Enum):
@@ -174,113 +163,3 @@ async def run_guard_blocked(
     """Run on_guard_blocked on all hooks (observation, no short-circuit)."""
     for hook in hooks:
         await hook.on_guard_blocked(tool_call, result)
-
-
-# ── EventEmitterHook ──────────────────────────────────
-
-
-class EventEmitterHook(BaseHook):
-    """Hook that emits kernel events to the MessageBus for SSE delivery.
-
-    Bridges hook calls to BusEvent types:
-    - pre_tool_call -> ToolCallEvent (returns CONTINUE)
-    - post_tool_call -> ToolResultEvent
-    - on_stream_chunk -> ThoughtEvent / ResponseEvent
-    - on_segment_complete -> persisted ThoughtEvent / ResponseEvent snapshot
-
-    """
-
-    def __init__(
-        self,
-        bus: MessageBus,
-        source: str,
-        *,
-        spawn_id: str | None = None,
-    ) -> None:
-        self._bus = bus
-        self._source = source
-        self._spawn_id = spawn_id
-
-    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
-        """Emit ToolCallEvent and continue execution."""
-        await self._bus.emit(
-            ToolCallEvent(
-                source=self._source,
-                spawn_id=self._spawn_id,
-                call_id=tool_call.id,
-                tool_name=tool_call.name,
-                arguments=tool_call.arguments,
-            )
-        )
-        return HookAction.CONTINUE
-
-    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
-        """Emit ToolResultEvent after tool execution."""
-        await self._bus.emit(
-            ToolResultEvent(
-                source=self._source,
-                spawn_id=self._spawn_id,
-                call_id=tool_call.id,
-                tool_name=tool_call.name,
-                result=result.content,
-                status=result.status,
-                payload=result.payload,
-            )
-        )
-
-    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
-        """Emit ThoughtEvent for reasoning and ResponseEvent for visible content."""
-        if chunk.reasoning_content:
-            await self._bus.emit(
-                ThoughtEvent(
-                    source=self._source,
-                    spawn_id=self._spawn_id,
-                    content=chunk.reasoning_content,
-                    stream_state=chunk.stream_state,
-                    stream_id=chunk.stream_id,
-                    reasoning_content=chunk.reasoning_content,
-                )
-            )
-        if chunk.content:
-            await self._bus.emit(
-                ResponseEvent(
-                    source=self._source,
-                    spawn_id=self._spawn_id,
-                    content=chunk.content,
-                    stream_state=chunk.stream_state,
-                    stream_id=chunk.stream_id,
-                )
-            )
-
-    async def on_segment_complete(
-        self, segment_type: str, content: str, stream_id: str | None
-    ) -> None:
-        """Emit a persisted snapshot when a logical segment is complete."""
-        if segment_type == "thought":
-            await self._bus.emit(
-                ThoughtEvent(
-                    source=self._source,
-                    spawn_id=self._spawn_id,
-                    content=content,
-                    stream_state="complete",
-                    stream_id=stream_id,
-                    reasoning_content=content,
-                )
-            )
-            return
-
-        if segment_type == "response":
-            await self._bus.emit(
-                ResponseEvent(
-                    source=self._source,
-                    spawn_id=self._spawn_id,
-                    content=content,
-                    stream_state="complete",
-                    stream_id=stream_id,
-                )
-            )
-
-    async def on_guard_blocked(
-        self, tool_call: ToolCallData, result: GuardResult
-    ) -> None:
-        """Guard blocks are not emitted to the bus by default."""

@@ -136,10 +136,10 @@ class TestExpBuildRuntime:
 
         assert runtime.spec.llm_provider is ctx.llm_provider
 
-    async def test_bus_adds_event_emitter_hook(self) -> None:
-        """When bus is provided, EventEmitterHook is added to spec.hooks."""
+    async def test_bus_no_longer_adds_event_emitter_hook(self) -> None:
+        """After Phase 34, EventEmitterHook is retired -- bus does not add hooks."""
         from matmaster.core.bus import MessageBus
-        from matmaster.core.hooks import EventEmitterHook
+        from matmaster.core.hooks import BaseHook
 
         exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx(with_llm=True)
@@ -148,71 +148,19 @@ class TestExpBuildRuntime:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx, bus=bus)
 
-        emitter_hooks = [
-            h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
-        ]
-        assert len(emitter_hooks) == 1
+        # No hooks should be auto-added by build_runtime (only spec-injected ones)
+        base_hooks = [h for h in runtime.spec.hooks if isinstance(h, BaseHook)]
+        assert len(base_hooks) == 0
 
-    async def test_build_runtime_threads_spawn_id_into_emitter_hook(self) -> None:
-        """Child runtimes pass spawn_id through EventEmitterHook into emitted events."""
-        from matmaster.core.bus import MessageBus
-        from matmaster.core.hooks import EventEmitterHook
-        from matmaster.types.events import ToolCallEvent
-
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        bus = MessageBus()
-        tool_call = ToolCallData(id='tc-1', name='spawn', arguments={'task': 'demo'})
-
-        with patch("matmaster.core.agent.AgentKernel"):
-            runtime = await exp.build_runtime(ctx, bus=bus, spawn_id="childdeadbeef123")
-
-        emitter_hook = next(
-            h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
-        )
-        await emitter_hook.pre_tool_call(tool_call)
-
-        event = bus.get_nowait()
-        assert isinstance(event, ToolCallEvent)
-        assert event.spawn_id == 'childdeadbeef123'
-
-    async def test_parent_runtime_emits_none_spawn_id_by_default(self) -> None:
-        """Parent runtimes keep spawn_id=None unless one is explicitly provided."""
-        from matmaster.core.bus import MessageBus
-        from matmaster.core.hooks import EventEmitterHook
-        from matmaster.types.events import ToolCallEvent
-
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        bus = MessageBus()
-        tool_call = ToolCallData(id='tc-1', name='spawn', arguments={'task': 'demo'})
-
-        with patch("matmaster.core.agent.AgentKernel"):
-            runtime = await exp.build_runtime(ctx, bus=bus)
-
-        emitter_hook = next(
-            h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
-        )
-        await emitter_hook.pre_tool_call(tool_call)
-
-        event = bus.get_nowait()
-        assert isinstance(event, ToolCallEvent)
-        assert event.spawn_id is None
-
-    async def test_no_bus_no_emitter(self) -> None:
-        """Without bus, no EventEmitterHook in spec.hooks."""
-        from matmaster.core.hooks import EventEmitterHook
-
+    async def test_no_bus_no_hooks(self) -> None:
+        """Without bus, no hooks in spec.hooks."""
         exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        emitter_hooks = [
-            h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
-        ]
-        assert len(emitter_hooks) == 0
+        assert len(runtime.spec.hooks) == 0
 
     async def test_runtime_has_cleanup_callable(self) -> None:
         """AgentRuntime.cleanup is a callable."""

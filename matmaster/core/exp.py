@@ -28,7 +28,6 @@ from matmaster.config.exp import ExpConfig
 from matmaster.core.bus import MessageBus
 from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.guard_pipeline import GuardPipeline
-from matmaster.core.hooks import EventEmitterHook
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
@@ -222,12 +221,8 @@ class Exp:
             skill_registry=self._skill_registry,
         )
 
-        # 6. Hooks
+        # 6. Hooks (EventEmitterHook retired in Phase 34; generator events replace it)
         hooks = list(spec.hooks)
-        if bus is not None:
-            emitter_source = source_override or self.exp_name
-            emitter_hook = EventEmitterHook(bus, emitter_source, spawn_id=spawn_id)
-            hooks.append(emitter_hook)
 
         # 7. Compaction: event_sink=None, _run_items() injects local sink at runtime
         compactor = None

@@ -4,15 +4,11 @@ Verifies that:
 1. normalize_event_source preserves MatMaster:* prefix
 2. _normalize_public_source preserves MatMaster:* prefix
 3. _is_matmaster_source helper matches both MatMaster and MatMaster:*
-4. EventEmitterHook with prefixed source emits events with correct source
 """
 
 import pytest
 
-from matmaster.core.bus import MessageBus
-from matmaster.core.hooks import EventEmitterHook
 from matmaster.integration.event_payloads import _normalize_public_source
-from matmaster.types.messages import ToolCallData
 
 _is_matmaster_source = pytest.importorskip(
     "src.services.chat_history",
@@ -81,24 +77,3 @@ def test_is_matmaster_source_other():
     assert _is_matmaster_source("") is False
 
 
-# ── EventEmitterHook with prefixed source ─────────────
-
-
-async def test_event_emitter_hook_with_prefixed_source():
-    """EventEmitterHook(bus, source='MatMaster:explore') should emit events
-    with source='MatMaster:explore', not collapsed to 'MatMaster'."""
-    bus = MessageBus()
-    hook = EventEmitterHook(bus, source="MatMaster:explore")
-
-    tool_call = ToolCallData(
-        id="call_001",
-        name="read_file",
-        arguments={"path": "/tmp/test.txt"},
-    )
-    await hook.pre_tool_call(tool_call)
-
-    event = await bus.get(timeout=1.0)
-    assert event.source == "MatMaster:explore"
-    assert event.type == "tool_call"
-    assert event.call_id == "call_001"
-    assert event.tool_name == "read_file"
