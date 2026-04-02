@@ -112,29 +112,34 @@ Plans:
 Plans:
 - [ ] 33-01-PLAN.md — StructuralValidation + CapabilityPolicy 约束层
 - [ ] 33-02-PLAN.md — ToolScheduler 资源调度器
-- [ ] 33-03-PLAN.md — FullToolRunner 完整执行链 + Exp 激活
+- [ ] 33-03-PLAN.md — FullToolRunner 完整执行链（不含 Exp 激活，激活移至 Phase 34 ESIN-04）
 
 ### Phase 34: Exp/Service 接入 + Hook 退役
-**Goal**: Generator 事件流贯穿 Kernel -> Exp -> Service 全链路，5 个 Hook 全部退役，Hook->Bus 间接事件路径移除
-**Depends on**: Phase 32
-**Requirements**: ESIN-01, ESIN-02, ESIN-03, HRET-01, HRET-02, HRET-03, HRET-04, HRET-05, HRET-06, REGR-02
+**Goal**: FullToolRunner 激活为默认执行路径，Generator 事件流贯穿 Kernel -> Exp -> Service 全链路，5 个 Hook 全部退役，Hook->Bus 间接事件路径移除
+**Depends on**: Phase 32, Phase 33
+**Requirements**: KGEN-06, ESIN-01, ESIN-02, ESIN-03, ESIN-04, ESIN-05, ESIN-06, ESIN-07, ESIN-08, HRET-01, HRET-02, HRET-03, HRET-04, HRET-05, HRET-06, REGR-02
 **Success Criteria** (what must be TRUE):
-  1. `Exp.run_stream()` 可消费且 cleanup 在 generator 正常结束和异常退出时均执行
-  2. `AgentRunService.run_agent_stream()` 消费 generator 事件并对接 SSEHandler + PersistenceHandler，SSE 推送延迟消除 asyncio.Queue 轮询开销
-  3. `_stream_llm_items()` 子 generator 逐 chunk yield LLM 流式事件，与原 EventEmitterHook 产出的事件类型和顺序一致
-  4. matmaster/hooks/ 目录中 EventEmitterHook / AssistantStateHook / SkillHitHook / OutputProcessorHook 全部删除，ContextCompactor 不再依赖 Bus emit
-  5. Exp.run() 和 AgentRunService.run_agent() 行为不变，现有调用方零修改
+  1. `_run_items()` 在工具执行前 yield `ToolCallEvent`、执行后 yield `ToolResultEvent`（Phase 32 gap 修复）
+  2. `Exp.build_runtime()` 构造 FullToolRunner + ToolCatalog + RuntimeTopology 并注入 AgentRuntimeSpec，FullToolRunner 成为默认执行路径
+  3. `on_skill_hit` 路径通过 `ToolCatalog.register_overlay()` 注册 MCP 工具，catalog.version 递增触发 Kernel tool_definitions 刷新
+  4. `Exp.run_stream()` 可消费且 cleanup 在 generator 正常结束和异常退出时均执行
+  5. `AgentRunService.run_agent_stream()` 消费 generator 事件并对接 SSEHandler + PersistenceHandler，事件 source 归一化兼容 ChatHistoryConverter
+  6. `_stream_llm_items()` 子 generator 逐 chunk yield LLM 流式事件，与原 EventEmitterHook 产出的事件类型和顺序一致
+  7. `ToolResult.payload/meta` 到 SSE/持久化前端契约（event_payloads.py `info` 字段）的兼容映射经过测试验证
+  8. matmaster/hooks/ 目录中 EventEmitterHook / AssistantStateHook / SkillHitHook / OutputProcessorHook 全部删除，ContextCompactor 不再依赖 Bus emit
+  9. Exp.run() 和 AgentRunService.run_agent() 行为不变，现有调用方零修改
 **Plans**: TBD
 
 ### Phase 35: 约束迁移 + ToolRegistry 降级
 **Goal**: 工具安全检查从工具内部分散逻辑统一迁入三层约束模型，ToolRegistry 降级为纯存储后 ToolCatalog 成为唯一上层消费接口
 **Depends on**: Phase 33, Phase 34
-**Requirements**: CMIG-01, CMIG-02, CMIG-03, CMIG-04
+**Requirements**: CMIG-01, CMIG-02, CMIG-03, CMIG-04, CMIG-05
 **Success Criteria** (what must be TRUE):
   1. WriteTool/EditTool 中的 read-before-modify 检查代码已删除，等价逻辑由 RunStateGuard + ReadTracker 在 GuardContext 中完成
   2. BashTool 中的 `_is_dangerous_command` 检查代码已删除，等价逻辑由 CapabilityPolicy 完成
   3. ToolBinding 的 state_mode/stop_mode 字段被 Scheduler 实际消费，SessionCapabilities 变化时调度策略随之调整
   4. ToolRegistry 不再被 ContextBuilder / SkillTool / MCP 注入路径直接调用，所有上层消费通过 ToolCatalog
+  5. ContextBuilder 工具来源从 `tool_registry.all_tools` 迁移到 ToolCatalog，或移除 system prompt 工具枚举段
 **Plans**: TBD
 
 ### Phase 36: 去总线化 + 高级调度
@@ -151,7 +156,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases 32-36 execute in numeric order. Phase 35 depends on both 33 and 34 completing. Phase 36 depends on both 34 and 35 completing.
+Phases 32-36 execute in numeric order. Phase 34 depends on both 32 and 33. Phase 35 depends on both 33 and 34. Phase 36 depends on both 34 and 35.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|

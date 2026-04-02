@@ -40,9 +40,9 @@
 
 ### 三层约束模型
 
-- [ ] **TCON-01**: 实现 `StructuralValidation`（无状态），负责 args_schema 校验 / 路径规范化 / plane 启用检查 / session_capabilities 匹配
+- [x] **TCON-01**: 实现 `StructuralValidation`（无状态），负责 args_schema 校验 / 路径规范化 / plane 启用检查 / session_capabilities 匹配
 - [x] **TCON-02**: `RunStateGuard` 保持现有 GuardPipeline 接口，Phase 1 不扩展 GuardContext
-- [ ] **TCON-03**: 实现 `CapabilityPolicy` Protocol，Phase 1 处理 effect_level 约束和 plane/capability 匹配
+- [x] **TCON-03**: 实现 `CapabilityPolicy` Protocol，Phase 1 处理 effect_level 约束和 plane/capability 匹配
 
 ### ToolResult 升级
 
@@ -56,11 +56,20 @@
 
 - [x] **TDEF-01**: 抽出 `_resolve_tool_definitions()` helper，Phase 1 回退到 tool_registry，Phase 2 自动切到 tool_catalog
 
+### Kernel Generator 补全
+
+- [ ] **KGEN-06**: `_run_items()` 在工具执行前 yield `ToolCallEvent`、工具执行后 yield `ToolResultEvent`（Phase 32 实现 gap：当前 tool 事件仅通过 Hook→Bus 路径产出，_run_items() 未 yield）
+
 ### Exp/Service 层接入
 
 - [ ] **ESIN-01**: `Exp` 新增 `run_stream()`，透传 Kernel generator
 - [ ] **ESIN-02**: `AgentRunService` 新增 `run_agent_stream()`，消费 generator 事件
 - [ ] **ESIN-03**: `_do_stream_llm()` 改造为子 generator `_stream_llm_items()`，支持逐 chunk yield，达到与 EventEmitterHook 完全一致的 segment-complete 语义
+- [ ] **ESIN-04**: `Exp.build_runtime()` 构造 FullToolRunner（含 ToolCatalog + StructuralValidation + GuardPipeline + CapabilityPolicy + ToolScheduler + RuntimeTopology）并注入 AgentRuntimeSpec.tool_runner，FullToolRunner 成为默认执行路径（从 Phase 33 移入，原 D-10）
+- [ ] **ESIN-05**: `on_skill_hit` 路径改为通过 `ToolCatalog.register_overlay()` 注册 MCP 工具，使 catalog.version 递增触发 Kernel tool_definitions 刷新
+- [ ] **ESIN-06**: `run_stream()` 产出的事件 source 归一化为 `MatMaster` 或 `MatMaster:{exp_name}` 格式，兼容 ChatHistoryConverter 的 source 过滤逻辑
+- [ ] **ESIN-07**: `ToolResult.payload/meta` 到 SSE/持久化前端契约的兼容映射（event_payloads.py 将 `payload` 映射为 `info` 字段），确保 test_chat_stream_direct.py 前端契约测试通过
+- [ ] **ESIN-08**: system prompt 工具枚举段移除或改为通用说明（消除与 tool_definitions 的不一致风险），或推迟到 Phase 35 随 ContextBuilder 迁移一起处理
 
 ### Hook 退役
 
@@ -77,6 +86,7 @@
 - [ ] **CMIG-02**: 将 bash_tool 的 `_is_dangerous_command` 迁入 CapabilityPolicy
 - [ ] **CMIG-03**: ToolBinding 的 state_mode / stop_mode 字段启用，Scheduler 根据 SessionCapabilities 调整策略
 - [ ] **CMIG-04**: ToolRegistry 降级为纯存储层，ToolCatalog 接管所有上层消费接口
+- [ ] **CMIG-05**: ContextBuilder 工具来源从 `tool_registry.all_tools` 迁移到 ToolCatalog，或移除 system prompt 工具枚举段（如 ESIN-08 未在 Phase 34 处理）
 
 ### 去总线化
 
@@ -139,15 +149,21 @@
 | TRUN-03 | Phase 33 | Pending |
 | TRUN-04 | Phase 33 | Pending |
 | TRUN-05 | Phase 32 | Complete |
-| TCON-01 | Phase 33 | Pending |
+| TCON-01 | Phase 33 | Complete |
 | TCON-02 | Phase 32 | Complete |
-| TCON-03 | Phase 33 | Pending |
+| TCON-03 | Phase 33 | Complete |
 | TRES-01 | Phase 32 | Complete (32-01) |
 | SPEC-01 | Phase 32 | Complete |
 | TDEF-01 | Phase 32 | Complete |
+| KGEN-06 | Phase 34 | Pending |
 | ESIN-01 | Phase 34 | Pending |
 | ESIN-02 | Phase 34 | Pending |
 | ESIN-03 | Phase 34 | Pending |
+| ESIN-04 | Phase 34 | Pending |
+| ESIN-05 | Phase 34 | Pending |
+| ESIN-06 | Phase 34 | Pending |
+| ESIN-07 | Phase 34 | Pending |
+| ESIN-08 | Phase 34/35 | Pending |
 | HRET-01 | Phase 34 | Pending |
 | HRET-02 | Phase 34 | Pending |
 | HRET-03 | Phase 34 | Pending |
@@ -158,6 +174,7 @@
 | CMIG-02 | Phase 35 | Pending |
 | CMIG-03 | Phase 35 | Pending |
 | CMIG-04 | Phase 35 | Pending |
+| CMIG-05 | Phase 35 | Pending |
 | DBUS-01 | Phase 36 | Pending |
 | DBUS-02 | Phase 36 | Pending |
 | DBUS-03 | Phase 36 | Pending |
@@ -167,8 +184,8 @@
 | REGR-03 | Phase 32 | Complete |
 
 **Coverage:**
-- v2.2 requirements: 46 total
-- Mapped to phases: 46
+- v2.2 requirements: 53 total
+- Mapped to phases: 53
 - Unmapped: 0
 
 ---
