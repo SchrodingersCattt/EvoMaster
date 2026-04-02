@@ -7,7 +7,9 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
     python -u -m matmaster.devshell run ... --prompt-file ... --json-out .../_devshell_summary.json
 
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
-``manifest.json`` carries ``eval_tooling`` (from ``matmaster/exps/{--exp}.toml`` + ``matmaster_config/`` MCP);
+``manifest.json`` carries ``eval_tooling`` (default: same as interactive ``mm-devshell`` without ``--exp`` —
+patched ``direct`` / ``matmaster_exp`` ``devshell`` + narrowed ``skills_root``; use ``--exp direct`` for
+full skill trees from ``matmaster/exps/{name}.toml`` + ``matmaster_config/`` MCP);
 the same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
 When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
 labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
@@ -127,6 +129,40 @@ def _merge_eval_config(path: Path | None, overrides: dict[str, Any]) -> dict[str
     return base
 
 
+def _normalize_mm_devshell_exp_cli(raw: str | None) -> str | None:
+    """Normalize ``--exp``: None/blank → omit mm-devshell flag (patched direct default)."""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    return s or None
+
+
+def _mm_devshell_exp_cmd_suffix(exp_cli: str | None) -> list[str]:
+    """Extra argv for ``matmaster.devshell run``; omit ``--exp`` when using default patch."""
+    if exp_cli is None or exp_cli == "devshell":
+        return []
+    return ["--exp", exp_cli]
+
+
+def _eval_tooling_snapshot_for_exp_cli(
+    *, repo_root: Path, exp_cli: str | None
+) -> dict[str, Any]:
+    from evaluation.eval_tooling_snapshot import (
+        snapshot_devshell_eval_tooling,
+        snapshot_eval_tooling,
+    )
+
+    if exp_cli is None or exp_cli == "devshell":
+        return snapshot_devshell_eval_tooling(repo_root=repo_root)
+    return snapshot_eval_tooling(repo_root=repo_root, exp_name=exp_cli)
+
+
+def _manifest_matmaster_exp_label(exp_cli: str | None) -> str:
+    if exp_cli is None or exp_cli == "devshell":
+        return "devshell"
+    return exp_cli
+
+
 def _load_summary_file(summary_file: Path) -> dict[str, Any]:
     if summary_file.is_file():
         try:
@@ -224,10 +260,11 @@ def main() -> int:
     parser.add_argument(
         "--exp",
         type=str,
-        default="direct",
+        default=None,
         help=(
-            "matmaster/exps/{name}.toml for tools/skills (production-aligned; default: direct). "
-            "Passed to ``matmaster devshell run --exp``."
+            "Forwarded to ``mm-devshell run --exp`` when set. Omit this flag (default) for the same "
+            "patched ``direct`` as interactive devshell (narrowed skills_root; manifest "
+            "``matmaster_exp``: devshell). Use ``direct`` for full playground skill trees."
         ),
     )
     parser.add_argument(
@@ -456,7 +493,6 @@ def main() -> int:
         post_eval_ingest,
         upload_eval_task_artifacts_to_oss,
     )
-    from evaluation.eval_tooling_snapshot import snapshot_eval_tooling
 
     pending_only = args.eval_ingest_pending_only
     ingest_url = None if args.no_eval_ingest else EVAL_INGEST_URL
@@ -474,8 +510,9 @@ def main() -> int:
 
     git_commit = git_head_commit(REPO_ROOT)
 
-    eval_tooling_snapshot = snapshot_eval_tooling(
-        repo_root=REPO_ROOT, exp_name=str(args.exp).strip() or "direct"
+    exp_cli = _normalize_mm_devshell_exp_cli(args.exp)
+    eval_tooling_snapshot = _eval_tooling_snapshot_for_exp_cli(
+        repo_root=REPO_ROOT, exp_cli=exp_cli
     )
 
     manifest: dict[str, Any] = {
@@ -489,7 +526,7 @@ def main() -> int:
         "task_timeout_sec": args.task_timeout,
         "dry_run": False,
         "eval_tooling": eval_tooling_snapshot,
-        "matmaster_exp": str(args.exp).strip() or "direct",
+        "matmaster_exp": _manifest_matmaster_exp_label(exp_cli),
     }
     if ingest_url:
         manifest["eval_ingest_url"] = ingest_url
@@ -570,8 +607,7 @@ def main() -> int:
         ]
         if args.model:
             cmd.extend(["--model", args.model])
-        exp_name = str(args.exp).strip() or "direct"
-        cmd.extend(["--exp", exp_name])
+        cmd.extend(_mm_devshell_exp_cmd_suffix(exp_cli))
         if args.verbose:
             cmd.append("--verbose")
 

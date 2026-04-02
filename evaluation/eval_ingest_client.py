@@ -174,17 +174,22 @@ def extract_total_tokens(usage: Any) -> int | None:
             cache_read = usage.get("cache_read_tokens")
             if cache_read is not None:
                 try:
-                    val -= int(cache_read)
+                    adjusted = val - int(cache_read)
+                    if adjusted >= 0:
+                        return adjusted
                 except (TypeError, ValueError):
                     pass
-            return val
+            if val >= 0:
+                return val
         except (TypeError, ValueError):
             pass
     pt = usage.get("prompt_tokens")
     ct = usage.get("completion_tokens")
     if pt is not None and ct is not None:
         try:
-            return int(pt) + int(ct)
+            total = int(pt) + int(ct)
+            if total >= 0:
+                return total
         except (TypeError, ValueError):
             pass
     return None
