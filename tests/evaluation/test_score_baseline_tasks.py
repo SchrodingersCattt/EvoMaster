@@ -11,18 +11,9 @@ import json
 import time
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
-# ---------------------------------------------------------------------------
-# Import the module under test
-# ---------------------------------------------------------------------------
-
-import sys
-
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(REPO_ROOT))
 
 from evaluation.scripts.baseline.score_baseline_tasks import (
     _META_FILENAMES,
@@ -35,7 +26,6 @@ from evaluation.scripts.baseline.score_baseline_tasks import (
     _score_to_int,
     _update_pending_with_score,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -64,7 +54,9 @@ def _write_meta(ws: Path, question_id: str = "SC_struct_001_20260401") -> None:
     (ws / "_eval_task_meta.json").write_text(json.dumps(meta), encoding="utf-8")
 
 
-def _write_summary(ws: Path, *, status: str = "completed", final_content: str = "Done.") -> None:
+def _write_summary(
+    ws: Path, *, status: str = "completed", final_content: str = "Done."
+) -> None:
     summary = {
         "model": "claude-opus-4-6",
         "profile_key": "claude_code",
@@ -86,8 +78,13 @@ def _write_summary(ws: Path, *, status: str = "completed", final_content: str = 
 
 
 def _write_task_start(ws: Path, started_ms: int) -> None:
-    payload = {"started_at_unix_ms": started_ms, "schema": "matmaster_cc_baseline_task_start_v1"}
-    (ws / "_cc_baseline_task_start.json").write_text(json.dumps(payload), encoding="utf-8")
+    payload = {
+        "started_at_unix_ms": started_ms,
+        "schema": "matmaster_cc_baseline_task_start_v1",
+    }
+    (ws / "_cc_baseline_task_start.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -368,7 +365,9 @@ class TestUpdatePendingWithScore:
         pending.write_text(json.dumps(envelope), encoding="utf-8")
 
         ok = _update_pending_with_score(
-            pending, score=75, score_reason="correctness: ✓ formula\ngrounding: ✗ no tool"
+            pending,
+            score=75,
+            score_reason="correctness: ✓ formula\ngrounding: ✗ no tool",
         )
         assert ok is True
 
