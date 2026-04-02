@@ -500,7 +500,10 @@ class BinaryEvaluator:
             tools=[],
         )
         reply = self._llm.query(dialog)
-        data = self._parse_json(reply.content or '')
+        try:
+            data = self._parse_json(reply.content or '')
+        except ValueError:
+            return False, f'LLM response contained no JSON object'
         passed = bool(data.get('pass', False))
         reason = str(data.get('reason', '')).strip() or 'llm_binary_judge'
         return passed, reason
