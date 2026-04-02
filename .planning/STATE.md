@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
 status: executing
-stopped_at: Completed 30-03-PLAN.md
-last_updated: "2026-04-01T18:07:41.131Z"
-last_activity: 2026-04-01
+stopped_at: Completed 31-01-PLAN.md
+last_updated: "2026-04-02T03:58:30Z"
+last_activity: 2026-04-02
 progress:
-  total_phases: 19
+  total_phases: 20
   completed_phases: 19
-  total_plans: 40
-  completed_plans: 40
+  total_plans: 42
+  completed_plans: 41
   percent: 98
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 29 — main-execution-path
+**Current focus:** Phase 31 — tech-debt-cleanup
 
 ## Current Position
 
-Phase: 30
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-01
+Phase: 31
+Plan: 1 of 2 in current phase
+Status: Executing
+Last activity: 2026-04-02
 
 Progress: [===================.] 98%
 
@@ -36,9 +36,9 @@ Progress: [===================.] 98%
 
 **Velocity:**
 
-- Total plans completed: 13 in v2.1 (Phases 25-29)
-- Average duration: ~15min
-- Total execution time: ~3h
+- Total plans completed: 14 in v2.1 (Phases 25-31)
+- Average duration: ~14min
+- Total execution time: ~3.1h
 
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
@@ -46,6 +46,7 @@ Progress: [===================.] 98%
 | Phase 29-02 Plegacy-deletion-config-migration | 4min | 2 tasks | 384 files |
 | Phase 30-02 Pevomaster-deletion-config | 9min | 2 tasks | 120 files |
 | Phase 30 P03 | 3min | 1 tasks | 1 files |
+| Phase 31-01 | 7min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,7 @@ Progress: [===================.] 98%
 - [Phase 30-02]: config.yaml user skill paths (~/.evomaster-skills) kept as-is -- filesystem names not package imports, deferred to v2.2
 - [Phase 30]: v2.1 migration doc uses actual test data (1276 passed, 5 skipped) per D-11, no hardcoded baselines
 - [Phase 30]: v2.2 cleanup ordered P1-P5: config unification > history cleanup > path normalization > packaging > archive disposal
+- [Phase 31-01]: create_autospec(Session, instance=True) for Session Protocol mocks; MockLLMProvider from conftest for LLMProvider Protocol mocks (autospec returns coroutine, not async iterator)
 
 ### Pending Todos
 
@@ -93,6 +95,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T17:58:16.442Z
-Stopped at: Completed 30-03-PLAN.md
+Last session: 2026-04-02T03:58:30Z
+Stopped at: Completed 31-01-PLAN.md
 Resume file: None

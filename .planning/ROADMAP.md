@@ -381,10 +381,10 @@ Plans:
   2. `scripts/test_matmaster_isolation.sh` 在 evomaster 已删除状态下正常运行
   3. REQUIREMENTS.md 中所有已满足需求的复选框更新为 `[x]`
   4. `job_service.py` docstring 中旧 evomaster 路径引用已清理
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 31-01-PLAN.md -- 测试修复：Session/LLMProvider mock 替换 + BohriumSetupService 签名更新 (24 tests)
+- [x] 31-01-PLAN.md -- 测试修复：Session/LLMProvider mock 替换 + BohriumSetupService 签名更新 (24 tests)
 - [ ] 31-02-PLAN.md -- 死代码删除 + 隔离脚本修复 + 文档同步 (9 stale files + script + docstrings)
 
 ## Progress
