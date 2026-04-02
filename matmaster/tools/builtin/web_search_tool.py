@@ -55,9 +55,9 @@ def _normalize_results(payload: dict[str, Any], top_k: int) -> list[dict[str, st
 class WebSearchTool(BuiltinTool):
     """Search the web via SearchApi.io (Google engine)."""
 
-    name: ClassVar[str] = "web_search"
+    name: ClassVar[str] = "mm_web_search"
     description: ClassVar[str] = (
-        "Search the web using a search query and return results.\n\n"
+        "Search the web (SearchApi.io); use when you need title/link/snippet results.\n\n"
         "Returns up to top_k results, each with title, link, and snippet.\n"
         "Requires SEARCHAPI_API_KEY or SEARCHAPI_KEY environment variable."
     )

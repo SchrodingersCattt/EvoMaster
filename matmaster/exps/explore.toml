@@ -39,7 +39,7 @@ builtin = [
     "read_file",
     "glob",
     "grep",
-    "web_search",
+    "mm_web_search",
     "web_fetch",
 ]
 mcp = ""
