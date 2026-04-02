@@ -74,6 +74,7 @@ sync-question-catalog:
       EOF
     - docker pull ${DYNAMIC_IMAGE}
   script:
+    # sync 脚本会 import evaluation → structure_general（顶层 numpy）；主镜像默认不含 numpy，仅本 Job 装入 venv
     - docker rm -f qcat-sync || true
     - |
       docker create --name qcat-sync \
@@ -81,7 +82,7 @@ sync-question-catalog:
         -e SERVICE_ENV \
         -e MATMASTER_TOOLS_EVALUATION_BEARER \
         ${DYNAMIC_IMAGE} \
-        sh -c "cd /app && . .venv/bin/activate && python evaluation/scripts/sync_question_catalog_to_tools_server.py"
+        sh -c "cd /app && . .venv/bin/activate && uv pip install 'numpy>=1.26' && python evaluation/scripts/sync_question_catalog_to_tools_server.py"
     - docker start -a qcat-sync
     - docker rm qcat-sync
   tags:
