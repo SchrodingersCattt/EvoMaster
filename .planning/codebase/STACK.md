@@ -1,134 +1,140 @@
 # Technology Stack
 
-**Analysis Date:** 2026-03-21
+**Analysis Date:** 2026-04-02
 
 ## Languages
 
 **Primary:**
-- Python 3.13 - Core agent framework, backend services, playground implementations
-- Python 3.10+ - Minimum supported version (as specified in pyproject.toml)
+- Python 3.13 (pinned in `.python-version`) — All backend code, agent kernel, API, worker
+- Requires `>=3.10` per `pyproject.toml`
 
 **Secondary:**
-- JavaScript/Node.js - MCP (Model Context Protocol) servers via npx commands
+- TOML — Exp definition files (`matmaster/exps/*.toml`)
+- YAML — Configuration files (`matmaster_config/config.yaml`, `matmaster_config/llm_config.yaml`)
+- Markdown — Skill definitions (`matmaster/skills/lazymcp/mcp-*/SKILL.md`)
 
 ## Runtime
 
 **Environment:**
-- Python 3.13 (`.python-version`)
+- CPython 3.13 (production image: `registry.dp.tech/public/python:3.13-slim`)
+- jemalloc enabled in production via `LD_PRELOAD` (`Dockerfile` line 48)
 
 **Package Manager:**
-- uv (modern Python package manager)
-- Lockfile: `uv.lock` (present and committed)
-- Fallback: pip (used in Docker for initial setup)
+- uv (installed via pip in Docker; used for venv creation and dependency resolution)
+- Lockfile: `uv.lock` present and committed
+- All development commands use `uv run` or `.venv/bin/activate`
 
 ## Frameworks
 
 **Core:**
-- FastAPI >=0.100.0 - Web framework for REST API and WebSocket server
-- Uvicorn[standard] >=0.22.0 - ASGI server for FastAPI
-- Gunicorn >=25.0.3 - Production WSGI HTTP server (with UvicornWorker adapter)
+- FastAPI `>=0.100.0` — HTTP API framework (`app.py`, `src/apis/`)
+- Pydantic (bundled with FastAPI) — All data models, event types, config validation (`matmaster/types/`, `matmaster/config/`)
+- Uvicorn `>=0.22.0` — ASGI server (development)
+- Gunicorn `>=25.0.3` — Production process manager with UvicornWorker (`Dockerfile`)
 
-**Async/Concurrency:**
-- asyncio (Python stdlib) - Event loop, coroutines, task management
-- WebSockets >=11.0 - WebSocket protocol support
+**Testing:**
+- pytest `>=9.0.2` — Test runner (`[project.optional-dependencies].dev`)
+- pytest-asyncio `>=0.24.0` — Async test support; `asyncio_mode = "auto"` in `pyproject.toml`
 
-**LLM & AI:**
-- openai - OpenAI API client (native support)
-- anthropic - Anthropic/Claude API client (native support)
-- google-genai - Google Generative AI API client (native support)
-- mcp >=1.0 - Model Context Protocol for tool integration
-
-**Data & Storage:**
-- PyMySQL >=1.1.2 - MySQL database client (synchronous, cursor-based)
-- redis >=5.0.0 - Redis client for caching and pub/sub
-- oss2 - Aliyun OSS (Object Storage Service) client for file upload/download
-- pydantic - Data validation and settings management
-- PyYAML - YAML configuration parsing
-
-**Web & HTTP:**
-- httpx >=0.28.1 - Async HTTP client (used for Bohrium Open API calls)
-- aiohttp - Async HTTP client/server framework
-- requests - Synchronous HTTP client
-- beautifulsoup4 - HTML parsing
-- lxml - XML/HTML parsing
-- paramiko >=4.0.0 - SSH client for remote execution
-
-**Document & Media Processing:**
-- python-docx >=1.2.0 - Word document generation
-- PyMuPDF - PDF extraction and manipulation
-- weasyprint - HTML to PDF conversion (system dependencies configured in Dockerfile)
-
-**Scientific Computation (Optional):**
-- ase >=3.22 - Atomic Simulation Environment
-- pymatgen >=2024.1 - Materials science toolkit
-- dpdata >=0.2.18 - Molecular data processing
-
-**External Services:**
-- bohrium-sdk >=0.15.0 - Bohrium cloud computing platform SDK (for job submission)
-- bohrium-open-sdk >=1.0.0 - Bohrium Open API SDK (optional dependency)
-
-**Configuration & Environment:**
-- python-dotenv - Environment variable management (.env loading)
+**Build/Dev:**
+- Hatchling — Build backend (`[build-system]` in `pyproject.toml`)
+- pre-commit — Git hooks for code quality (`.pre-commit-config.yaml`)
 
 ## Key Dependencies
 
-**Critical:**
-- openai, anthropic, google-genai - Multiple LLM provider support (pluggable via LLMConfig)
-- FastAPI + Uvicorn - Web service foundation for chat API and streaming
-- mcp - Tool integration protocol (filesystem, bing-search, mind-map, stock-analysis servers)
-- PyMySQL - Session storage, chat history persistence
-- redis - Multi-worker coordination (pub/sub for stop signals, session lifecycle)
+**Critical (Agent Core):**
+- `openai` — AsyncOpenAI client for all LLM calls via OpenAI-compatible interface (`matmaster/providers/openai_provider.py`)
+- `anthropic` — Anthropic SDK (declared dependency; actual calls route through OpenAI-compatible interface via LiteLLM Proxy)
+- `google-genai` — Google GenAI SDK (declared dependency; same routing pattern)
+- `mcp` — Model Context Protocol client SDK (`matmaster/mcp/connection.py`); supports stdio, SSE, streamable HTTP transports
+- `tiktoken >=0.7.0` — Token counting for context compaction (`matmaster/core/context_compactor.py`)
+- `pydantic` — Frozen models for inter-layer data transfer (PlaygroundContext, AgentRuntimeSpec, all 18 event types)
 
 **Infrastructure:**
-- Bohrium SDK - Integration with cloud HPC/GPU infrastructure for computation jobs
-- oss2 - Cloud file storage (mandatory for calculation MCP uploads)
-- paramiko - SSH execution for remote operations
-- httpx - HTTP requests to Bohrium Open API
+- `redis >=5.0.0` — Cross-worker pub/sub, agent run queue (BLPOP), stop signals, session state (`src/dao/redis_dao.py`)
+- `pymysql >=1.1.2` — MySQL database access via raw SQL, custom DAO pattern (`src/base/base_table.py`, `src/dao/`)
+- `paramiko >=4.0.0` — SSH/SFTP for remote Bohrium execution (`matmaster/sessions/ssh.py`, `matmaster/sessions/sftp_pool.py`)
+- `httpx >=0.28.1` — Async HTTP client for external API calls
+- `aiohttp` — Additional async HTTP support
+- `websockets >=11.0` — WebSocket protocol support for SSE/streaming
+
+**File Processing:**
+- `python-docx >=1.2.0` — Word document parsing
+- `pymupdf` — PDF parsing
+- `beautifulsoup4` + `lxml` — HTML parsing
+- `markdownify >=0.14.1` — HTML-to-Markdown conversion
+
+**Cloud/Storage:**
+- `oss2` — Alibaba Cloud OSS file upload/download (`src/dao/oss_io.py`)
+- `bohrium-sdk >=0.15.0` — Bohrium HPC platform SDK
+- `bohrium-open-sdk >=1.0.0` — Optional Bohrium Open SDK (`[project.optional-dependencies].bohrium-open`)
+
+**Calculation (Optional `[calculation]` extra):**
+- `ase >=3.22` — Atomic Simulation Environment
+- `pymatgen >=2024.1` — Materials science Python library
+- `dpdata >=0.2.18` — Deep Potential data processing
+- `cp2k-input-tools >=0.9.0` — CP2K input generation
+- `molcrys-kit` — Molecular crystal toolkit (git dependency from GitHub)
+
+## Development Tools
+
+**Formatting:**
+- Black `25.9.0` — Code formatter (`--skip-string-normalization`, `--line-length=88`)
+- isort `6.0.1` — Import sorting (`--profile black`)
+
+**Linting:**
+- flake8 `7.3.0` + flake8-bugbear — Linting (`--extend-ignore=B008,E501,B036,E203`, `--max-line-length=88`)
+- autoflake `2.3.1` — Remove unused imports and variables
+- pyupgrade `3.20.0` — Upgrade Python syntax to modern idioms
+
+**Pre-commit Hooks (`.pre-commit-config.yaml`):**
+- Custom file line count check: `.pre-commit/check_file_lines.py` enforces 1000-line max per file
+- pre-commit-hooks `v6.0.0`: large file check, AST check, JSON auto-formatting (`--no-ensure-ascii`), merge conflict detection, trailing whitespace, YAML/TOML/XML validation, AWS credential detection, private key detection
+- `no-commit-to-branch`: prevents direct commits to protected branches
+- `name-tests-test` with `--pytest-test-first`: enforces test file naming convention
+
+**Type Checking:**
+- No mypy or pyright configuration detected. Type annotations used extensively (PEP 604 union syntax, Pydantic models, `@runtime_checkable` Protocols) but not enforced via CI.
 
 ## Configuration
 
 **Environment:**
-- `.env.template` - Template with all required variables (provided in repo)
-- `.env.{SERVICE_ENV}` - Environment-specific overrides (test, uat, prod)
-- Loading: `src/utils/constant.py` loads `.env` first, then `.env.{SERVICE_ENV}` to override
+- `.env` file loaded via `python-dotenv` at startup
+- `.env.template` documents all required/optional variables (see Integrations for full list)
+- YAML configs support `${VAR_NAME}` expansion at load time (`matmaster/config/loader.py`)
 
 **Build:**
-- `pyproject.toml` - Hatch-based build configuration with optional dependency groups
-- `uv.lock` - Pinned versions for reproducible builds
+- `pyproject.toml` — Package metadata, dependencies, build system, pytest config, hatch wheel targets
+- `Dockerfile` — Multi-stage build: `builder` base, `worker` target, `api` target (default)
+- `.pre-commit-config.yaml` — Code quality hooks (installed in Docker image for CI)
 
-**Logging:**
-- Structured logging via `src/utils/logger.py` (JSON format, configurable levels)
-- Configuration: `config.yaml` (logging section) specifies console/file output
-
-**YAML Configuration:**
-- `configs/config.yaml` - Unified LLM, agent, session, and env cluster settings
-- `configs/mcp_config.json` - MCP server definitions (filesystem, bing-search, mind-map, stock-analysis)
+**Runtime Config Files:**
+- `matmaster_config/config.yaml` — Main application config
+- `matmaster_config/llm_config.yaml` — LLM profile definitions (model, base_url, api_key, temperature, max_tokens, timeouts)
+- `matmaster_config/mcp.yaml` — MCP server connection definitions
+- `matmaster/exps/_base.toml` — Base system prompt inherited by all Exp types
+- `matmaster/exps/direct.toml`, `matmaster/exps/explore.toml` — Specific Exp configurations
 
 ## Platform Requirements
 
 **Development:**
-- Python 3.10+ virtual environment
-- Git (for version control, pre-commit hooks)
-- uv package manager (recommended) or pip
+- Python 3.13 (via `.python-version`)
+- uv package manager
+- MySQL instance (local or remote)
+- Redis optional for single-process development
+- `.env` file with at minimum one LLM API key
 
-**Docker Container (Production):**
-- Base image: `registry.dp.tech/public/python:3.13-slim`
-- System dependencies: libpango, libharfbuzz, libffi, fontconfig, curl, wget, unzip, git, libjemalloc2
-- Python environment: uv venv + uv sync (deterministic from uv.lock)
-- Fonts: Noto Sans CJK (installed via /app/fonts/NotoSansCJK-*.ttc)
+**Production:**
+- Docker (multi-target: `api` on port 80, `worker` via `python -m src.worker.agent_worker`)
+- MySQL database (mandatory)
+- Redis (required for multi-worker deployment: queue, pub/sub, heartbeat)
+- Bohrium credentials (for HPC execution)
+- OSS credentials (for file upload/download in calculation path)
+- Gunicorn + UvicornWorker (`-w 1 --preload`)
 
-**Deployment:**
-- Gunicorn with Uvicorn workers (see Dockerfile start.sh)
-- Single worker mode (-w 1) by default for tracemalloc compatibility
-- Optional LD_PRELOAD jemalloc for improved memory management
-- Port: 80 (exposed in Dockerfile)
-
-**Multi-container Setup:**
-- API container: Dockerfile with default target=api (FastAPI + Gunicorn)
-- Worker container: Dockerfile --target worker (agent job processing)
-- MySQL: External database (configurable via MYSQL_* env vars)
-- Redis: Optional, enables cross-worker session coordination
+**CLI Tool:**
+- `mm-devshell` — Interactive dev shell for local agent testing (`matmaster/devshell/cli.py`, registered as `[project.scripts]`)
 
 ---
 
-*Stack analysis: 2026-03-21*
+*Stack analysis: 2026-04-02*
