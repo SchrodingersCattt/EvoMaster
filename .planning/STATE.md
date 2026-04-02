@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
 status: executing
-stopped_at: Completed 32-02-PLAN.md
-last_updated: "2026-04-02T09:49:56.500Z"
+stopped_at: Completed 32-03-PLAN.md
+last_updated: "2026-04-02T10:00:14.943Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
   percent: 7
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 32 (kernel-generator-tool-runtime-v2) — EXECUTING
-Plan: 2 of 3 complete
+Plan: 3 of 3 complete
 Status: Ready to execute
 Last activity: 2026-04-02
 
@@ -53,6 +53,7 @@ Progress: [█░░░░░░░░░] 7%
 
 *Updated after each plan completion*
 | Phase 32 P02 | 7min | 2 tasks | 6 files |
+| Phase 32 P03 | 6min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,7 @@ v2.2 新决策:
 - ToolInstance 用 frozen dataclass 而非 Pydantic（持有 callable executor）
 - event_payloads.py 读 'payload' 输出 'info' 保持 SSE 前端兼容
 - [Phase 32]: ToolRunner/ToolCatalog/RuntimeTopology typed as Any at Pydantic runtime to avoid circular import, TYPE_CHECKING for static analysis
+- [Phase 32]: _run_items() uses local _KernelState preserving Kernel statelessness; Phase 1 only yields final-snapshot events (Hook path unchanged until Phase 34)
 
 ### Pending Todos
 
@@ -80,6 +82,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02T09:49:56.498Z
-Stopped at: Completed 32-02-PLAN.md
+Last session: 2026-04-02T10:00:14.941Z
+Stopped at: Completed 32-03-PLAN.md
 Resume file: None

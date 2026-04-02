@@ -7,11 +7,11 @@
 
 ### Kernel Generator
 
-- [ ] **KGEN-01**: AgentKernel 提供 `_run_items()` 私有 AsyncGenerator 作为唯一执行路径，产出 `_KernelItem`（event + messages_delta + terminal）
-- [ ] **KGEN-02**: AgentKernel 提供 `run_stream()` 公开接口，yield `BusEvent`（复用 events.py），最后 yield `RunResultEvent`
-- [ ] **KGEN-03**: AgentKernel 的 `run()` 委托 `_run_items()` 收集 messages 和 terminal，返回 `KernelRunResult`，签名和行为与当前完全一致
-- [ ] **KGEN-04**: `_run_items()` 使用局部 `_KernelState` 管理循环状态（不挂在 self 上），保持 Kernel 无状态/并发安全
-- [ ] **KGEN-05**: `_run_items()` 在 LLM 调用返回后 yield final completed snapshot 事件（ResponseEvent / ThoughtEvent），Phase 1 不要求 segment-complete 语义
+- [x] **KGEN-01**: AgentKernel 提供 `_run_items()` 私有 AsyncGenerator 作为唯一执行路径，产出 `_KernelItem`（event + messages_delta + terminal）
+- [x] **KGEN-02**: AgentKernel 提供 `run_stream()` 公开接口，yield `BusEvent`（复用 events.py），最后 yield `RunResultEvent`
+- [x] **KGEN-03**: AgentKernel 的 `run()` 委托 `_run_items()` 收集 messages 和 terminal，返回 `KernelRunResult`，签名和行为与当前完全一致
+- [x] **KGEN-04**: `_run_items()` 使用局部 `_KernelState` 管理循环状态（不挂在 self 上），保持 Kernel 无状态/并发安全
+- [x] **KGEN-05**: `_run_items()` 在 LLM 调用返回后 yield final completed snapshot 事件（ResponseEvent / ThoughtEvent），Phase 1 不要求 segment-complete 语义
 
 ### Tool Runtime 对象模型
 
@@ -36,7 +36,7 @@
 - [x] **TRUN-02**: 实现 `InlineToolRunner` 作为 Phase 1 过渡，包装当前 agent.py 的 guard → pre_hook → execute → post_hook 逻辑
 - [ ] **TRUN-03**: 实现完整 `ToolRunner`，执行链为 ToolCatalog 查找 → StructuralValidation → RunStateGuard → CapabilityPolicy → fast path 判定 → ToolScheduler → executor → 释放
 - [ ] **TRUN-04**: 实现 `ToolScheduler`，基于 ResourceClaim 调度（exclusive 互斥 / shared_read 并发 / counted 信号量），支持 fast path 跳过
-- [ ] **TRUN-05**: Kernel 通过 `spec.tool_runner` 获取 ToolRunner，Phase 1 回退到 InlineToolRunner
+- [x] **TRUN-05**: Kernel 通过 `spec.tool_runner` 获取 ToolRunner，Phase 1 回退到 InlineToolRunner
 
 ### 三层约束模型
 
@@ -54,7 +54,7 @@
 
 ### Tool Definitions 解析
 
-- [ ] **TDEF-01**: 抽出 `_resolve_tool_definitions()` helper，Phase 1 回退到 tool_registry，Phase 2 自动切到 tool_catalog
+- [x] **TDEF-01**: 抽出 `_resolve_tool_definitions()` helper，Phase 1 回退到 tool_registry，Phase 2 自动切到 tool_catalog
 
 ### Exp/Service 层接入
 
@@ -90,9 +90,9 @@
 
 ### 回归兼容
 
-- [ ] **REGR-01**: 全量现有 `kernel.run()` 测试（50+）零修改通过
+- [x] **REGR-01**: 全量现有 `kernel.run()` 测试（50+）零修改通过
 - [ ] **REGR-02**: Exp.run() 和 AgentRunService.run_agent() 行为不变
-- [ ] **REGR-03**: 工具内部现有安全检查（bash 危险命令、read-before-modify）在约束迁移完成前保持不动
+- [x] **REGR-03**: 工具内部现有安全检查（bash 危险命令、read-before-modify）在约束迁移完成前保持不动
 
 ## Future Requirements
 
@@ -118,11 +118,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| KGEN-01 | Phase 32 | Pending |
-| KGEN-02 | Phase 32 | Pending |
-| KGEN-03 | Phase 32 | Pending |
-| KGEN-04 | Phase 32 | Pending |
-| KGEN-05 | Phase 32 | Pending |
+| KGEN-01 | Phase 32 | Complete |
+| KGEN-02 | Phase 32 | Complete |
+| KGEN-03 | Phase 32 | Complete |
+| KGEN-04 | Phase 32 | Complete |
+| KGEN-05 | Phase 32 | Complete |
 | TOBJ-01 | Phase 32 | Complete (32-01) |
 | TOBJ-02 | Phase 32 | Complete (32-01) |
 | TOBJ-03 | Phase 32 | Complete (32-01) |
@@ -138,13 +138,13 @@
 | TRUN-02 | Phase 32 | Complete |
 | TRUN-03 | Phase 33 | Pending |
 | TRUN-04 | Phase 33 | Pending |
-| TRUN-05 | Phase 32 | Pending |
+| TRUN-05 | Phase 32 | Complete |
 | TCON-01 | Phase 33 | Pending |
 | TCON-02 | Phase 32 | Complete |
 | TCON-03 | Phase 33 | Pending |
 | TRES-01 | Phase 32 | Complete (32-01) |
 | SPEC-01 | Phase 32 | Complete |
-| TDEF-01 | Phase 32 | Pending |
+| TDEF-01 | Phase 32 | Complete |
 | ESIN-01 | Phase 34 | Pending |
 | ESIN-02 | Phase 34 | Pending |
 | ESIN-03 | Phase 34 | Pending |
@@ -162,9 +162,9 @@
 | DBUS-02 | Phase 36 | Pending |
 | DBUS-03 | Phase 36 | Pending |
 | ASCH-01 | Phase 36 | Pending |
-| REGR-01 | Phase 32 | Pending |
+| REGR-01 | Phase 32 | Complete |
 | REGR-02 | Phase 34 | Pending |
-| REGR-03 | Phase 32 | Pending |
+| REGR-03 | Phase 32 | Complete |
 
 **Coverage:**
 - v2.2 requirements: 46 total
