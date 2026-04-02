@@ -75,6 +75,7 @@ class LazyMCPTool:
                     server_name=self._server_name,
                     tool_description=self._description,
                     input_schema=self._input_schema,
+                    session=getattr(self._connector, "session", None),
                 )
             except Exception as e:
                 logger.warning("path_adaptor resolve_args failed: %s", e)
@@ -241,10 +242,7 @@ class LazyMCPConnector:
 
         # Check if this server needs a path_adaptor
         path_adaptor = None
-        if (
-            manager.path_adaptor_factory
-            and server_name in manager.path_adaptor_servers
-        ):
+        if manager.path_adaptor_factory and server_name in manager.path_adaptor_servers:
             path_adaptor = manager.path_adaptor_factory()
 
         return {"connection": conn, "path_adaptor": path_adaptor}

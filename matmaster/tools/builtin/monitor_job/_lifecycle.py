@@ -85,7 +85,9 @@ def _run_lifecycle(
     )
 
     # Duck-type session instead of isinstance(session, SSHSession)
-    is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_file', None))
+    is_ssh = hasattr(session, 'upload_file') and callable(
+        getattr(session, 'upload_file', None)
+    )
 
     current_job_id = job_id
     max_polls = (

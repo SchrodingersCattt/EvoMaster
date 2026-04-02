@@ -14,6 +14,7 @@ from matmaster.types.messages import (
     ToolMessage,
     UserMessage,
 )
+
 ChatHistoryConverter = pytest.importorskip(
     "src.services.chat_history",
     reason="src not available (isolation test)",

@@ -7,12 +7,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
 from matmaster.integration.bohrium_setup import SkillSyncSpec
 from matmaster.integration.workspace_resolver import (
     get_remote_session_workspace_root,
     load_workspace_config_dict,
 )
+from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.services.bohrium_node_service import get_bohrium_node_service
 from src.services.sessions_service import SESSIONS

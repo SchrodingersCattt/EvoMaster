@@ -18,52 +18,55 @@ from pathlib import Path
 class TestJobServiceImport:
     def test_running_statuses_importable(self):
         from matmaster.adaptors.calculation.job_service import RUNNING_STATUSES
+
         assert RUNNING_STATUSES is not None
 
     def test_query_job_status_importable(self):
         from matmaster.adaptors.calculation.job_service import query_job_status
+
         assert callable(query_job_status)
 
     def test_get_job_results_importable(self):
         from matmaster.adaptors.calculation.job_service import get_job_results
+
         assert callable(get_job_results)
 
     def test_iterate_job_files_importable(self):
         from matmaster.adaptors.calculation.job_service import iterate_job_files
+
         assert callable(iterate_job_files)
 
     def test_download_job_file_importable(self):
         from matmaster.adaptors.calculation.job_service import download_job_file
+
         assert callable(download_job_file)
 
     def test_download_job_directory_importable(self):
         from matmaster.adaptors.calculation.job_service import download_job_directory
+
         assert callable(download_job_directory)
 
     def test_terminate_job_importable(self):
         from matmaster.adaptors.calculation.job_service import terminate_job
+
         assert callable(terminate_job)
 
     def test_get_file_token_importable(self):
         from matmaster.adaptors.calculation.job_service import get_file_token
+
         assert callable(get_file_token)
 
     def test_get_job_detail_raw_importable(self):
         from matmaster.adaptors.calculation.job_service import get_job_detail_raw
+
         assert callable(get_job_detail_raw)
 
     def test_importable_from_package(self):
         from matmaster.adaptors.calculation import (
-            RUNNING_STATUSES,
-            download_job_directory,
-            download_job_file,
-            get_file_token,
-            get_job_detail_raw,
-            get_job_results,
-            iterate_job_files,
             query_job_status,
             terminate_job,
         )
+
         assert callable(query_job_status)
         assert callable(terminate_job)
 
@@ -71,44 +74,53 @@ class TestJobServiceImport:
 class TestRunningStatuses:
     def test_is_set_or_frozenset(self):
         from matmaster.adaptors.calculation.job_service import RUNNING_STATUSES
+
         assert isinstance(RUNNING_STATUSES, (set, frozenset))
 
     def test_contains_running(self):
         from matmaster.adaptors.calculation.job_service import RUNNING_STATUSES
+
         assert "Running" in RUNNING_STATUSES
 
     def test_contains_pending(self):
         from matmaster.adaptors.calculation.job_service import RUNNING_STATUSES
+
         assert "Pending" in RUNNING_STATUSES
 
     def test_not_empty(self):
         from matmaster.adaptors.calculation.job_service import RUNNING_STATUSES
+
         assert len(RUNNING_STATUSES) > 0
 
 
 class TestJobServiceFunctionSignatures:
     def test_query_job_status_has_bohr_job_id(self):
         from matmaster.adaptors.calculation.job_service import query_job_status
+
         sig = inspect.signature(query_job_status)
         assert "bohr_job_id" in sig.parameters
 
     def test_get_job_results_has_bohr_job_id(self):
         from matmaster.adaptors.calculation.job_service import get_job_results
+
         sig = inspect.signature(get_job_results)
         assert "bohr_job_id" in sig.parameters
 
     def test_terminate_job_has_bohr_job_id(self):
         from matmaster.adaptors.calculation.job_service import terminate_job
+
         sig = inspect.signature(terminate_job)
         assert "bohr_job_id" in sig.parameters
 
     def test_download_job_directory_has_bohr_job_id(self):
         from matmaster.adaptors.calculation.job_service import download_job_directory
+
         sig = inspect.signature(download_job_directory)
         assert "bohr_job_id" in sig.parameters
 
     def test_query_job_status_has_optional_access_key(self):
         from matmaster.adaptors.calculation.job_service import query_job_status
+
         sig = inspect.signature(query_job_status)
         params = sig.parameters
         assert "access_key" in params
@@ -119,10 +131,11 @@ class TestJobServiceFunctionSignatures:
 class TestJobServiceImportStructure:
     def test_uses_relative_env_config_import(self):
         import matmaster.adaptors.calculation.job_service as mod
+
         source = inspect.getsource(mod)
-        assert "from .env_config import" in source, (
-            "job_service.py must use relative import for env_config"
-        )
+        assert (
+            "from .env_config import" in source
+        ), "job_service.py must use relative import for env_config"
 
     def test_no_top_level_evomaster_imports(self):
         module_file = Path(
@@ -149,6 +162,7 @@ class TestJobServiceImportStructure:
     def test_no_evomaster_imports_remain(self):
         """job_service.py should have no evomaster imports (fully migrated to matmaster)."""
         import matmaster.adaptors.calculation.job_service as mod
+
         source = inspect.getsource(mod)
         tree = ast.parse(source)
         evo_imports = [
@@ -165,16 +179,17 @@ class TestJobServiceImportStructure:
                 and "evomaster" in node.module
             )
         ]
-        assert evo_imports == [], (
-            "job_service.py should have no evomaster imports -- fully migrated to matmaster native"
-        )
+        assert (
+            evo_imports == []
+        ), "job_service.py should have no evomaster imports -- fully migrated to matmaster native"
 
     def test_module_import_does_not_trigger_evomaster_load(self):
         """Importing the module must not trigger evomaster top-level loading."""
-        import sys
+
         # evomaster.env.bohrium should NOT be in sys.modules after a fresh import
         # (we can't truly test this in isolation without reimporting, but we can
         # verify the module loaded fine without evomaster present in top-level imports)
         import matmaster.adaptors.calculation.job_service  # noqa: F401
+
         # If we got here without ImportError, the module loads without needing evomaster at top level
         assert True

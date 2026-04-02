@@ -277,12 +277,12 @@ def _find_log_file_local(workspace: str, software: str) -> str | None:
     return None
 
 
-def _find_log_file_remote(
-    session: Any, workspace: str, software: str
-) -> str | None:
+def _find_log_file_remote(session: Any, workspace: str, software: str) -> str | None:
     """Return path of the most-recently-modified log on the remote node, or None."""
     # Duck-type session instead of isinstance(session, SSHSession)
-    is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_file', None))
+    is_ssh = hasattr(session, 'upload_file') and callable(
+        getattr(session, 'upload_file', None)
+    )
     try:
         if not is_ssh:
             return None

@@ -12,7 +12,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Utility helpers
 # ---------------------------------------------------------------------------
@@ -24,9 +23,7 @@ def _find_matmaster_py_files() -> list[Path]:
     """Collect all .py files under matmaster/ (excluding __pycache__)."""
     matmaster_dir = _PROJECT_ROOT / "matmaster"
     return sorted(
-        p
-        for p in matmaster_dir.rglob("*.py")
-        if "__pycache__" not in p.parts
+        p for p in matmaster_dir.rglob("*.py") if "__pycache__" not in p.parts
     )
 
 
@@ -41,10 +38,7 @@ def _is_inside_type_checking(node: ast.AST, tree: ast.Module) -> bool:
                     if child is node:
                         return True
             # if typing.TYPE_CHECKING:
-            if (
-                isinstance(test, ast.Attribute)
-                and test.attr == "TYPE_CHECKING"
-            ):
+            if isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING":
                 for child in ast.walk(top_node):
                     if child is node:
                         return True
@@ -107,9 +101,11 @@ class TestPhase30FullIsolation:
     # Format: "relative/path.py:L<lineno>"
     # Remove entries as subsequent plans resolve them.
     # 23 violations resolved since Plan 01 (exp.py, playground.py, tools/, integration/).
-    KNOWN_VIOLATIONS: frozenset[str] = frozenset({
-        "matmaster/core/__init__.py:L12",
-    })
+    KNOWN_VIOLATIONS: frozenset[str] = frozenset(
+        {
+            "matmaster/core/__init__.py:L12",
+        }
+    )
 
     def test_no_forbidden_imports_in_matmaster(self):
         """Scan all matmaster/*.py, confirm no evomaster/playground/src runtime imports.

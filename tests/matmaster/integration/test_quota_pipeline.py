@@ -13,9 +13,9 @@ import threading
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import LLMResponse, StreamChunk

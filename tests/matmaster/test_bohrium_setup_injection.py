@@ -11,8 +11,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-
 
 def _make_service(**overrides: Any):
     """Build a BohriumSetupService with mock callables."""
@@ -103,9 +101,10 @@ class TestNoSrcImportInBohriumSetup:
             and node.module is not None
             and node.module.startswith("src.")
         ]
-        assert src_imports == [], (
-            "bohrium_setup.py still has src imports: "
-            + ", ".join(f"L{n.lineno}: from {n.module}" for n in src_imports)
+        assert (
+            src_imports == []
+        ), "bohrium_setup.py still has src imports: " + ", ".join(
+            f"L{n.lineno}: from {n.module}" for n in src_imports
         )
 
 
@@ -120,6 +119,6 @@ class TestBohriumSetupResultFromBohriumEnv:
             / "bohrium_setup.py"
         )
         source = setup_file.read_text(encoding="utf-8")
-        assert "from matmaster.integration.bohrium_env import BohriumSetupResult" in source, (
-            "bohrium_setup.py should import BohriumSetupResult from matmaster.integration.bohrium_env"
-        )
+        assert (
+            "from matmaster.integration.bohrium_env import BohriumSetupResult" in source
+        ), "bohrium_setup.py should import BohriumSetupResult from matmaster.integration.bohrium_env"

@@ -16,7 +16,6 @@ from matmaster.core.playground import Playground
 from matmaster.sessions.local import LocalSession
 from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -262,7 +261,7 @@ class TestCreateSession:
         )
         with patch("matmaster.sessions.ssh.SSHSession") as mock_cls:
             mock_cls.return_value = MagicMock()
-            session = pg._create_session_from_config()
+            pg._create_session_from_config()
             mock_cls.assert_called_once()
 
     def test_docker_raises_value_error(self, tmp_path: Path) -> None:

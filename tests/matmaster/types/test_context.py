@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
-
-from unittest.mock import MagicMock
 
 from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
 from matmaster.types.session import Session

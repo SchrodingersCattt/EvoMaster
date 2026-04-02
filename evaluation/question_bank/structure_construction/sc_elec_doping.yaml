@@ -1,0 +1,65 @@
+version: "v5"
+capability: "structure_construction"
+domain: "elec"
+
+questions:
+  # ============================================================
+  # SC_elec_003_20260401 — NFPP Al掺杂超胞构建
+  # ============================================================
+  - id: "SC_elec_003_20260401"
+    capability: "structure_construction"
+    domain: "elec"
+    intent: "Build NFPP Al-doped supercell by substituting P with Al."
+    human_prompt_seed: |
+      构建NFPP的Al掺杂超胞：
+      1. 获取NFPP（Na₂FePO₄F）结构（空间群Pna2₁）；
+      2. 在P位（PO₄孤立磷酸根位点）用Al替换一个P原子，构建2×1×1超胞；
+      3. 输出掺杂结构文件，并报告：
+         - 超胞化学式
+         - 替换的P原子位置索引
+         - Al与最近邻O的距离
+    tags: ["nfpp", "doping", "structure_build", "supercell", "battery"]
+    mode_scope: ["direct", "planner"]
+    data_files: []
+    reference_answers:
+      - key: "doped_formula"
+        value: "Na16Al1Fe12P15O60"
+      - key: "required_fields"
+        value:
+          - "structure_file"
+          - "doped_formula"
+          - "substituted_site_index"
+          - "Al_O_distance"
+      - key: "duration_budget"
+        value: {max: 3600000}
+      - key: "token_budget_total"
+        value: {max: 30000}
+    scoring_checklist:
+      - id: "doped_formula"
+        criterion: "Reported doped supercell formula is Na16Al1Fe12P15O60."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "required_fields"
+        criterion: "Output includes structure file, doped formula, substituted site index, and Al-O distance."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "grounding_source"
+        criterion: "NFPP structure uses correct wurtzite Pna2₁ lattice parameters; doping is performed by explicit P→Al substitution at PO₄ site with physically justified coordinates."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      - id: "no_retries"
+        criterion: "No repeated identical structure retrieval or substitution attempts."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "efficiency_judge"
+        criterion: "Doped supercell construction completes in a direct workflow."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+      - id: "duration_budget"
+        criterion: "Wall-clock run duration does not exceed benchmark ceiling."
+        axis: "efficiency"
+        verify: "duration_budget"
+      - id: "token_budget_total"
+        criterion: "Total token usage stays within benchmark ceiling."
+        axis: "efficiency"
+        verify: "token_budget"

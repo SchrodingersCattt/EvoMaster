@@ -23,6 +23,7 @@ class TestBohriumOpenapiHost:
         monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
         # Re-import to pick up env change (module-level constant)
         import matmaster.integration.bohrium_env as mod
+
         mod = importlib.reload(mod)
         assert mod.BOHRIUM_OPENAPI_HOST == "https://open.bohrium.com"
 
@@ -30,6 +31,7 @@ class TestBohriumOpenapiHost:
         """BOHRIUM_BASE_URL overrides default; trailing slash is stripped."""
         monkeypatch.setenv("BOHRIUM_BASE_URL", "https://test.dp.tech/")
         import matmaster.integration.bohrium_env as mod
+
         mod = importlib.reload(mod)
         assert mod.BOHRIUM_OPENAPI_HOST == "https://test.dp.tech"
 
@@ -42,6 +44,7 @@ class TestGetBohriumCredentials:
         monkeypatch.setenv("BOHRIUM_PROJECT_ID", "42")
         monkeypatch.setenv("BOHRIUM_USER_ID", "7")
         from matmaster.integration.bohrium_env import get_bohrium_credentials
+
         result = get_bohrium_credentials()
         assert result["access_key"] == "ak123"
         assert result["project_id"] == 42
@@ -53,6 +56,7 @@ class TestGetBohriumCredentials:
         monkeypatch.setenv("BOHRIUM_PROJECT_ID", "99")
         monkeypatch.setenv("BOHRIUM_USER_ID", "88")
         from matmaster.integration.bohrium_env import get_bohrium_credentials
+
         result = get_bohrium_credentials(
             access_key="param_key", project_id=10, user_id=20
         )
@@ -68,6 +72,7 @@ class TestGetBohriumStorageConfig:
         monkeypatch.setenv("BOHRIUM_ACCESS_KEY", "ak")
         monkeypatch.setenv("BOHRIUM_PROJECT_ID", "1")
         from matmaster.integration.bohrium_env import get_bohrium_storage_config
+
         result = get_bohrium_storage_config()
         assert result["type"] == "https"
         assert result["plugin"]["type"] == "bohrium"
@@ -85,6 +90,7 @@ class TestInjectBohriumExecutor:
         monkeypatch.setenv("BOHRIUM_PROJECT_ID", "1")
         monkeypatch.setenv("BOHRIUM_USER_ID", "5")
         from matmaster.integration.bohrium_env import inject_bohrium_executor
+
         template = {"type": "dispatcher"}
         result = inject_bohrium_executor(template, user_no="U001")
         rp = result["machine"]["remote_profile"]
@@ -100,6 +106,7 @@ class TestInjectBohriumExecutor:
         monkeypatch.setenv("BOHRIUM_ACCESS_KEY", "local_ak")
         monkeypatch.setenv("BOHRIUM_PROJECT_ID", "2")
         from matmaster.integration.bohrium_env import inject_bohrium_executor
+
         template = {"type": "local"}
         result = inject_bohrium_executor(template)
         assert result["env"]["BOHRIUM_PROJECT_ID"] == "2"
@@ -110,6 +117,7 @@ class TestInjectBohriumExecutor:
         monkeypatch.setenv("BOHRIUM_ACCESS_KEY", "ak")
         monkeypatch.setenv("BOHRIUM_PROJECT_ID", "1")
         from matmaster.integration.bohrium_env import inject_bohrium_executor
+
         template = {"type": "dispatcher", "machine": {"existing": True}}
         original = copy.deepcopy(template)
         inject_bohrium_executor(template)
@@ -123,6 +131,7 @@ class TestBuildBohriumSkillRemoteEnv:
         # Ensure module uses the right BOHRIUM_OPENAPI_HOST
         monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
         import matmaster.integration.bohrium_env as mod
+
         mod = importlib.reload(mod)
 
         class FakeSession:

@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import json
-import threading
-from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -63,7 +60,7 @@ class TestSessionConfig:
     def test_session_config_frozen(self) -> None:
         """Test 2 (continued): SessionConfig is frozen."""
         cfg = SessionConfig()
-        with pytest.raises(Exception):  # ValidationError for frozen model
+        with pytest.raises((TypeError, ValueError)):  # ValidationError for frozen model
             cfg.timeout = 999
 
 

@@ -4,6 +4,7 @@ Manages a bounded pool of paramiko SFTPClient instances on a single
 SSH transport. Supports lazy creation, health-check on release, and
 generation-safe close_all for reconnection scenarios.
 """
+
 from __future__ import annotations
 
 import collections

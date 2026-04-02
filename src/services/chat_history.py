@@ -87,11 +87,13 @@ def _adapt_tool_calls_format(raw: dict) -> dict:
                 args = args_raw
             else:
                 args = {}
-            adapted.append({
-                'id': tc.get('id', ''),
-                'name': func.get('name', ''),
-                'arguments': args,
-            })
+            adapted.append(
+                {
+                    'id': tc.get('id', ''),
+                    'name': func.get('name', ''),
+                    'arguments': args,
+                }
+            )
         else:
             adapted.append(tc)
     return {**raw, 'tool_calls': adapted}
@@ -382,7 +384,9 @@ class ChatHistoryConverter:
                 return
             msg = AssistantMessage(
                 content='',
-                tool_calls=[ToolCallData.model_validate(tc) for tc in pending_tool_calls],
+                tool_calls=[
+                    ToolCallData.model_validate(tc) for tc in pending_tool_calls
+                ],
             )
             out.append(msg.model_dump())
             pending_tool_calls.clear()
