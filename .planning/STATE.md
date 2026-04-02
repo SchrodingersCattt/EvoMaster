@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
-status: executing
-stopped_at: Completed 34-02-PLAN.md
-last_updated: "2026-04-02T15:06:37.192Z"
+status: verifying
+stopped_at: Completed 34-03-PLAN.md
+last_updated: "2026-04-02T15:17:07.288Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 50
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 Phase: 34 (exp-service-hook) -- EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-02
 
 Progress: [█████░░░░░] 50%
@@ -56,6 +56,7 @@ Progress: [█████░░░░░] 50%
 | Phase 32 P03 | 6min | 1 tasks | 2 files |
 | Phase 34 P01 | 20min | 2 tasks | 11 files |
 | Phase 34 P02 | 10min | 2 tasks | 5 files |
+| Phase 34 P03 | 8min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,8 @@ v2.2 新决策:
 - [Phase 34 P01]: ContextCompactor bus= kept as deprecated kwarg wrapping bus.emit as event_sink
 - [Phase 34 P01]: _call_llm_streaming() collects items for incomplete-response retry, yields events immediately
 - [Phase 34]: event_payloads.py dual-key info mapping: read 'info' first then 'payload' for generator/Hook backward compat
+- [Phase 34]: All 4 Hook deletions confirmed safe: Plan 1 generator events provide equivalent functionality
+- [Phase 34]: Pre-existing test failures (7 tests draining bus via run() path) documented as deferred items, not caused by Hook retirement
 
 ### Pending Todos
 
@@ -94,6 +97,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02T15:06:37.189Z
-Stopped at: Completed 34-02-PLAN.md
+Last session: 2026-04-02T15:17:07.285Z
+Stopped at: Completed 34-03-PLAN.md
 Resume file: None

@@ -76,9 +76,9 @@
 - [x] **HRET-01**: `_run_items()` 产出等价 ThoughtEvent / ResponseEvent / ToolCallEvent / ToolResultEvent，替代 EventEmitterHook — Phase 34 P01
 - [x] **HRET-02**: `_run_items()` 在 tool_calls 轮次 yield AssistantStateEvent，替代 AssistantStateHook — Phase 34 P01
 - [x] **HRET-03**: `_run_items()` 产出等价 SkillHitEvent，替代 SkillHitHook — Phase 34 P01
-- [ ] **HRET-04**: OutputProcessorHook 功能迁移到 ToolRunner post-execute 阶段或消费侧 event transformer
+- [x] **HRET-04**: OutputProcessorHook 功能迁移到 ToolRunner post-execute 阶段或消费侧 event transformer
 - [x] **HRET-05**: ContextCompactor bus 依赖改为通过 Kernel yield ContextCompactionEvent — Phase 34 P01
-- [ ] **HRET-06**: 全部 5 个 Hook 退役后，移除 Hook → Bus 间接事件路径
+- [x] **HRET-06**: 全部 5 个 Hook 退役后，移除 Hook → Bus 间接事件路径
 
 ### 约束迁移
 
@@ -167,9 +167,9 @@
 | HRET-01 | Phase 34 P01 | Complete |
 | HRET-02 | Phase 34 P01 | Complete |
 | HRET-03 | Phase 34 P01 | Complete |
-| HRET-04 | Phase 34 | Pending |
+| HRET-04 | Phase 34 | Complete |
 | HRET-05 | Phase 34 P01 | Complete |
-| HRET-06 | Phase 34 | Pending |
+| HRET-06 | Phase 34 | Complete |
 | CMIG-01 | Phase 35 | Pending |
 | CMIG-02 | Phase 35 | Pending |
 | CMIG-03 | Phase 35 | Pending |
