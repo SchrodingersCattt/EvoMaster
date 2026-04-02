@@ -40,5 +40,5 @@ mcp = "*"
 enabled = true
 skills_root = ["matmaster/skills/lazymcp"]
 cache_dir = "matmaster/cache"
-config_dir = "matmaster_config"
+config_dir = "config"
 mcp_config_file = "mcp_config.json"
