@@ -1,15 +1,16 @@
-"""ToolRunner Protocol and InlineToolRunner transition implementation.
+"""ToolRunner Protocol, InlineToolRunner, and FullToolRunner implementations.
 
 ToolRunner defines the execution strategy interface for tool calls.
+
 InlineToolRunner is the Phase 1 transition: wraps the current agent.py
 guard -> pre_hook -> execute -> post_hook chain as a standalone ToolRunner.
 
+FullToolRunner is the Phase 2 complete execution chain:
+Catalog -> StructuralValidation -> RunStateGuard -> CapabilityPolicy ->
+fast path -> Scheduler -> executor -> release.
+
 ToolExecutionContext carries per-batch execution metadata (turn, max_turns,
 stop_event).
-
-Phase 2 (Plan 33) will implement the full ToolRunner with
-ToolCatalog lookup -> StructuralValidation -> RunStateGuard ->
-CapabilityPolicy -> ToolScheduler -> executor -> release.
 """
 
 from __future__ import annotations
@@ -28,10 +29,15 @@ from matmaster.core.hooks import (
     run_post_tool_call,
     run_pre_tool_call,
 )
+from matmaster.core.structural_validation import StructuralValidation
+from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
+from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.messages import ToolCallData
+from matmaster.types.topology import RuntimeTopology
 
 if TYPE_CHECKING:
+    from matmaster.core.capability_policy import CapabilityPolicy
     from matmaster.core.hooks import Hook
     from matmaster.types.guards import Guard
 
@@ -165,5 +171,154 @@ class InlineToolRunner:
                 await run_post_tool_call(hooks, tc, tr)
                 if on_result:
                     await on_result(tc, tr)
+
+        return results
+
+
+class FullToolRunner:
+    """Complete ToolRunner: Catalog -> Validation -> Guard -> Policy -> Scheduler -> Execute -> Release.
+
+    Per D-01: Does not call pre_hook/post_hook.
+    Per D-05: Strictly follows spec section 9.1 execution chain.
+    Per D-06: Each layer produces ToolResult with meta["layer"] marking failure source.
+    """
+
+    def __init__(
+        self,
+        catalog: ToolCatalog,
+        structural_validation: StructuralValidation,
+        guard_pipeline: GuardPipeline,
+        capability_policy: CapabilityPolicy,
+        scheduler: ToolScheduler,
+        topology: RuntimeTopology,
+    ) -> None:
+        self._catalog = catalog
+        self._validation = structural_validation
+        self._guard_pipeline = guard_pipeline
+        self._policy = capability_policy
+        self._scheduler = scheduler
+        self._topology = topology
+
+    async def execute_batch(
+        self,
+        tool_calls: list[ToolCallData],
+        ctx: ToolExecutionContext,
+        *,
+        on_result: Callable[[ToolCallData, ToolResult], Awaitable[None]] | None = None,
+    ) -> list[tuple[ToolCallData, ToolResult]]:
+        """Execute tool calls through the seven-step chain.
+
+        For each tool_call, sequentially:
+        1. Cancel check
+        2. Catalog lookup
+        3. StructuralValidation (Layer A)
+        4. RunStateGuard (Layer B) via GuardPipeline
+        5. CapabilityPolicy (Layer C)
+        6. Fast path check
+        7. Scheduler acquire (skipped for fast path)
+        8. Execute + Release
+
+        Returns list of (ToolCallData, ToolResult) in input order.
+        """
+        results: list[tuple[ToolCallData, ToolResult]] = []
+
+        for tc in tool_calls:
+            # 1. Cancel check
+            if ctx.stop_event is not None and ctx.stop_event.is_set():
+                tr = ToolResult(status="cancelled", content="Run cancelled.")
+                results.append((tc, tr))
+                continue
+
+            # 2. Catalog lookup
+            instance = self._catalog.get_tool(tc.name)
+            if instance is None:
+                tr = ToolResult(
+                    status="error",
+                    content=f"Unknown tool: {tc.name}",
+                    meta={"layer": "catalog"},
+                )
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            # 3. StructuralValidation (Layer A)
+            decision = self._validation.validate(
+                self._topology, instance, tc.arguments
+            )
+            if decision.decision == "deny":
+                tr = ToolResult(
+                    status="error",
+                    content=decision.reason,
+                    meta={"layer": "structural"},
+                )
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            # 4. RunStateGuard (Layer B)
+            guard_result = self._guard_pipeline.evaluate(tc, ctx.turn, ctx.max_turns)
+            if not guard_result.allowed:
+                tr = ToolResult(
+                    status="error",
+                    content=guard_result.reason or "Guard denied",
+                    meta={"layer": "guard"},
+                )
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            # 5. CapabilityPolicy (Layer C)
+            decision = self._policy.evaluate(self._topology, instance, tc.arguments)
+            if decision.decision == "deny":
+                tr = ToolResult(
+                    status="error",
+                    content=decision.reason,
+                    meta={"layer": "policy", "guidance": decision.guidance},
+                )
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            # 6. Fast path check (per D-08)
+            claims = instance.tool_binding.resource_claims
+            is_fast = (
+                instance.tool_spec.effect_level == "none"
+                and all(c.mode == "shared_read" for c in claims)
+                and instance.tool_spec.fast_path_eligible
+            )
+
+            # 7. Scheduler acquire (skip for fast path)
+            ticket: SchedulerTicket | None = None
+            if not is_fast:
+                ticket = await self._scheduler.acquire(
+                    claims, timeout=self._scheduler._default_timeout
+                )
+                if ticket is None:
+                    tr = ToolResult(
+                        status="error",
+                        content="Scheduling timeout",
+                        meta={"layer": "scheduler"},
+                    )
+                    results.append((tc, tr))
+                    if on_result:
+                        await on_result(tc, tr)
+                    continue
+
+            # 8. Execute + Release
+            try:
+                tr = await instance.tool_executor(tc.arguments)
+            except Exception as e:
+                tr = ToolResult.from_error(tc.name, e)
+            finally:
+                if ticket is not None:
+                    await self._scheduler.release(ticket)
+
+            results.append((tc, tr))
+            if on_result:
+                await on_result(tc, tr)
 
         return results
