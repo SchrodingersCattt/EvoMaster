@@ -282,24 +282,24 @@ class TestRunItemsAssistantState:
     @pytest.mark.asyncio
     async def test_yields_assistant_state_event(self) -> None:
         """AssistantStateEvent emitted when LLM returns tool_calls."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.agent import AgentKernel
 
         provider = ToolCallStreamProvider()
         registry, _ = _make_tool_registry()
         spec = _make_spec(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
 
-        items: list[_KernelItem] = []
-        async for item in kernel.run_stream(spec, "test task"):
-            items.append(item)
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
 
         assistant_state_events = [
-            i for i in items
-            if i.event and isinstance(i.event, AssistantStateEvent)
+            e for e in events
+            if isinstance(e, AssistantStateEvent)
         ]
         assert len(assistant_state_events) >= 1, "Should yield AssistantStateEvent"
         # State should contain tool_calls
-        state = assistant_state_events[0].event.state
+        state = assistant_state_events[0].state
         assert state.get("tool_calls") is not None
 
 
@@ -309,41 +309,41 @@ class TestRunItemsSkillHit:
     @pytest.mark.asyncio
     async def test_yields_skill_hit_event(self) -> None:
         """SkillHitEvent emitted when tool_name == 'use_skill'."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.agent import AgentKernel
 
         provider = UseSkillStreamProvider()
         registry, _ = _make_tool_registry(tool_names=["use_skill", "test_tool"])
         spec = _make_spec(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
 
-        items: list[_KernelItem] = []
-        async for item in kernel.run_stream(spec, "test task"):
-            items.append(item)
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
 
         skill_hit_events = [
-            i for i in items
-            if i.event and isinstance(i.event, SkillHitEvent)
+            e for e in events
+            if isinstance(e, SkillHitEvent)
         ]
         assert len(skill_hit_events) >= 1, "Should yield SkillHitEvent"
-        assert skill_hit_events[0].event.skill_name == "chemistry"
+        assert skill_hit_events[0].skill_name == "chemistry"
 
     @pytest.mark.asyncio
     async def test_no_skill_hit_for_non_skill_tools(self) -> None:
         """No SkillHitEvent for regular tool calls."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.agent import AgentKernel
 
         provider = ToolCallStreamProvider()
         registry, _ = _make_tool_registry()
         spec = _make_spec(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
 
-        items: list[_KernelItem] = []
-        async for item in kernel.run_stream(spec, "test task"):
-            items.append(item)
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
 
         skill_hit_events = [
-            i for i in items
-            if i.event and isinstance(i.event, SkillHitEvent)
+            e for e in events
+            if isinstance(e, SkillHitEvent)
         ]
         assert len(skill_hit_events) == 0, "Should not yield SkillHitEvent for regular tools"
 
@@ -427,7 +427,7 @@ class TestGap1FullToolRunnerActivation:
     @pytest.mark.asyncio
     async def test_run_items_falls_back_to_registry_without_tool_runner(self) -> None:
         """When spec.tool_runner is None, _run_items() uses spec.tool_registry.execute()."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.agent import AgentKernel
 
         provider = ToolCallStreamProvider()
         registry, tools = _make_tool_registry()
@@ -435,14 +435,14 @@ class TestGap1FullToolRunnerActivation:
         # tool_runner is None by default
 
         kernel = AgentKernel()
-        items: list[_KernelItem] = []
-        async for item in kernel.run_stream(spec, "test task"):
-            items.append(item)
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
 
         # Tool should have been executed via registry (tools record calls)
         tool_result_events = [
-            i for i in items
-            if i.event and isinstance(i.event, ToolResultEvent)
+            e for e in events
+            if isinstance(e, ToolResultEvent)
         ]
         assert len(tool_result_events) >= 1, \
             "Should yield ToolResultEvent from registry fallback path"
@@ -513,7 +513,7 @@ class TestGap3CatalogVersionInvalidation:
         """When catalog.version changes, _run_items rebuilds tool_definitions."""
         from unittest.mock import MagicMock, PropertyMock
 
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.agent import AgentKernel
 
         provider = ContentOnlyProvider()
         registry, _ = _make_tool_registry()
@@ -529,9 +529,9 @@ class TestGap3CatalogVersionInvalidation:
         spec = spec.model_copy(update={"tool_catalog": mock_catalog})
 
         kernel = AgentKernel()
-        items: list[_KernelItem] = []
-        async for item in kernel.run_stream(spec, "test task"):
-            items.append(item)
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
 
         # Catalog's build_definitions should have been called
         assert mock_catalog.build_definitions.called, \
@@ -540,9 +540,9 @@ class TestGap3CatalogVersionInvalidation:
     @pytest.mark.asyncio
     async def test_catalog_version_no_refresh_when_unchanged(self) -> None:
         """When catalog.version is unchanged across turns, no extra build_definitions call."""
-        from unittest.mock import MagicMock, PropertyMock, call
+        from unittest.mock import MagicMock, PropertyMock
 
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.agent import AgentKernel
 
         # Provider that makes 2 turns (tool call then natural finish)
         provider = ToolCallStreamProvider()
@@ -558,9 +558,9 @@ class TestGap3CatalogVersionInvalidation:
         spec = spec.model_copy(update={"tool_catalog": mock_catalog})
 
         kernel = AgentKernel()
-        items = []
-        async for item in kernel.run_stream(spec, "test task"):
-            items.append(item)
+        events = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
 
         # build_definitions called once on first turn, but NOT re-called
         # on second turn since version unchanged
