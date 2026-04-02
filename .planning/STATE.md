@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 34 — Exp/Service 接入 + Hook 退役
+**Current focus:** Phase 34 — exp-service-hook
 
 ## Current Position
 
-Phase: 34 (exp-service-hook) -- EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-04-02
+Phase: 34 (exp-service-hook) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 34
+Last activity: 2026-04-02 -- Phase 34 execution started
 
 Progress: [█████░░░░░] 50%
 
