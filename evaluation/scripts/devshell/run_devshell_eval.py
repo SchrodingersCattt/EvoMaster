@@ -7,10 +7,16 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
     python -u -m matmaster.devshell run ... --prompt-file ... --json-out .../_devshell_summary.json
 
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
-``manifest.json`` carries ``eval_tooling`` (registered builtins, skill names, MCP server keys from config);
+``manifest.json`` carries ``eval_tooling`` (default: same as interactive ``mm-devshell`` without ``--exp`` —
+patched ``direct`` / ``matmaster_exp`` ``devshell`` + narrowed ``skills_root``; use ``--exp direct`` for
+full skill trees from ``matmaster/exps/{name}.toml`` + ``matmaster_config/`` MCP);
 the same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
 When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
 labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
+
+**Per-task wall clock**: each ``mm-devshell`` subprocess is limited by ``--task-timeout``
+(default **1200** seconds = 20 minutes). This is the reliable cap when a turn/tool blocks
+without tripping the LLM per-request timeout; use ``0`` to disable.
 
 Optional **per-task ingest** to matmaster-tools-server (after each devshell run).
 POST URL is fixed: ``MATMASTER_TOOLS_SERVER`` + ``/api/v1/evaluation/ingest`` (see ``evaluation.eval_ingest_client``).
@@ -123,6 +129,40 @@ def _merge_eval_config(path: Path | None, overrides: dict[str, Any]) -> dict[str
     return base
 
 
+def _normalize_mm_devshell_exp_cli(raw: str | None) -> str | None:
+    """Normalize ``--exp``: None/blank → omit mm-devshell flag (patched direct default)."""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    return s or None
+
+
+def _mm_devshell_exp_cmd_suffix(exp_cli: str | None) -> list[str]:
+    """Extra argv for ``matmaster.devshell run``; omit ``--exp`` when using default patch."""
+    if exp_cli is None or exp_cli == "devshell":
+        return []
+    return ["--exp", exp_cli]
+
+
+def _eval_tooling_snapshot_for_exp_cli(
+    *, repo_root: Path, exp_cli: str | None
+) -> dict[str, Any]:
+    from evaluation.eval_tooling_snapshot import (
+        snapshot_devshell_eval_tooling,
+        snapshot_eval_tooling,
+    )
+
+    if exp_cli is None or exp_cli == "devshell":
+        return snapshot_devshell_eval_tooling(repo_root=repo_root)
+    return snapshot_eval_tooling(repo_root=repo_root, exp_name=exp_cli)
+
+
+def _manifest_matmaster_exp_label(exp_cli: str | None) -> str:
+    if exp_cli is None or exp_cli == "devshell":
+        return "devshell"
+    return exp_cli
+
+
 def _load_summary_file(summary_file: Path) -> dict[str, Any]:
     if summary_file.is_file():
         try:
@@ -143,20 +183,40 @@ def _run_devshell_task(
     env: dict[str, str],
     summary_file: Path,
     console_log_file: Path | None,
+    timeout_sec: float | None,
 ) -> tuple[int, int, dict[str, Any]]:
     t0 = time.monotonic()
-    if console_log_file is None:
-        proc = subprocess.run(cmd, cwd=cwd, env=env)
-    else:
-        with console_log_file.open("w", encoding="utf-8") as f:
-            proc = subprocess.run(
-                cmd,
-                cwd=cwd,
-                env=env,
-                stdout=f,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
+    timeout = None if timeout_sec is None or timeout_sec <= 0 else float(timeout_sec)
+    try:
+        if console_log_file is None:
+            proc = subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout)
+        else:
+            with console_log_file.open("w", encoding="utf-8") as f:
+                proc = subprocess.run(
+                    cmd,
+                    cwd=cwd,
+                    env=env,
+                    stdout=f,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=timeout,
+                )
+    except subprocess.TimeoutExpired as e:
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        summary = _load_summary_file(summary_file)
+        if not isinstance(summary, dict):
+            summary = {}
+        lim = (
+            float(e.timeout) if getattr(e, "timeout", None) else float(timeout_sec or 0)
+        )
+        summary = {
+            **summary,
+            "task_wall_timeout": True,
+            "timeout_seconds": lim,
+        }
+        # Same convention as coreutils `timeout` / common CI (timed out)
+        return 124, duration_ms, summary
+
     duration_ms = int((time.monotonic() - t0) * 1000)
     summary = _load_summary_file(summary_file)
     return proc.returncode, duration_ms, summary
@@ -196,6 +256,16 @@ def main() -> int:
         type=str,
         default=None,
         help="LLM route key passed to ``mm-devshell run --model`` (see llm_config.yaml routes)",
+    )
+    parser.add_argument(
+        "--exp",
+        type=str,
+        default=None,
+        help=(
+            "Forwarded to ``mm-devshell run --exp`` when set. Omit this flag (default) for the same "
+            "patched ``direct`` as interactive devshell (narrowed skills_root; manifest "
+            "``matmaster_exp``: devshell). Use ``direct`` for full playground skill trees."
+        ),
     )
     parser.add_argument(
         "--capabilities",
@@ -294,6 +364,15 @@ def main() -> int:
         type=float,
         default=30.0,
         help="HTTP timeout seconds for each ingest POST (default: 30).",
+    )
+    parser.add_argument(
+        "--task-timeout",
+        type=float,
+        default=1200.0,
+        help=(
+            "Per-task wall-clock limit in seconds for each mm-devshell subprocess "
+            "(default: 1200 = 20 min). Use 0 to disable."
+        ),
     )
     parser.add_argument(
         "--eval-ingest-strict",
@@ -414,7 +493,6 @@ def main() -> int:
         post_eval_ingest,
         upload_eval_task_artifacts_to_oss,
     )
-    from matmaster.eval_tooling_snapshot import snapshot_devshell_eval_tooling
 
     pending_only = args.eval_ingest_pending_only
     ingest_url = None if args.no_eval_ingest else EVAL_INGEST_URL
@@ -432,7 +510,10 @@ def main() -> int:
 
     git_commit = git_head_commit(REPO_ROOT)
 
-    eval_tooling_snapshot = snapshot_devshell_eval_tooling(repo_root=REPO_ROOT)
+    exp_cli = _normalize_mm_devshell_exp_cli(args.exp)
+    eval_tooling_snapshot = _eval_tooling_snapshot_for_exp_cli(
+        repo_root=REPO_ROOT, exp_cli=exp_cli
+    )
 
     manifest: dict[str, Any] = {
         "run_label": args.run_label,
@@ -442,8 +523,10 @@ def main() -> int:
         "model": args.model,
         "plan_count": len(run_plan),
         "jobs": args.jobs,
+        "task_timeout_sec": args.task_timeout,
         "dry_run": False,
         "eval_tooling": eval_tooling_snapshot,
+        "matmaster_exp": _manifest_matmaster_exp_label(exp_cli),
     }
     if ingest_url:
         manifest["eval_ingest_url"] = ingest_url
@@ -470,6 +553,13 @@ def main() -> int:
     print(f"Run directory: {run_dir}", file=sys.stderr)
     print(f"Planned tasks: {len(run_plan)}", file=sys.stderr)
     print(f"Parallel jobs: {args.jobs}", file=sys.stderr)
+    if args.task_timeout and args.task_timeout > 0:
+        print(
+            f"Per-task timeout: {args.task_timeout:g}s ({args.task_timeout / 60:g} min)",
+            file=sys.stderr,
+        )
+    else:
+        print("Per-task timeout: disabled", file=sys.stderr)
 
     any_failed = False
     ingest_failed = False
@@ -517,6 +607,7 @@ def main() -> int:
         ]
         if args.model:
             cmd.extend(["--model", args.model])
+        cmd.extend(_mm_devshell_exp_cmd_suffix(exp_cli))
         if args.verbose:
             cmd.append("--verbose")
 
@@ -577,6 +668,7 @@ def main() -> int:
             env=env,
             summary_file=summary_file,
             console_log_file=console_log_file,
+            timeout_sec=args.task_timeout,
         )
 
         row: dict[str, Any] = {

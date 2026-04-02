@@ -30,6 +30,8 @@ class ExpSkillsConfig(BaseModel):
 
     enabled: bool = False
     skills_root: str | list[str] = ""
+    # 非空：只注册这些 frontmatter ``name:``。空列表 / 未配置：不过滤，与线上一致（roots 下全量）。
+    skill_names: list[str] = Field(default_factory=list)
     cache_dir: str = ""
     config_dir: str = ""
     mcp_config_file: str = ""
