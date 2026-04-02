@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
-status: ready_to_plan
-stopped_at: Phase 33 complete
-last_updated: "2026-04-02T13:15:16.469Z"
+status: planning
+stopped_at: Phase 34 context gathered
+last_updated: "2026-04-02T13:41:56.909Z"
 last_activity: 2026-04-02 -- Phase 33 complete
 progress:
   total_phases: 5
@@ -88,6 +88,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02T20:30:00.000Z
-Stopped at: Phase 33 complete
-Resume file: .planning/ROADMAP.md
+Last session: 2026-04-02T13:41:56.905Z
+Stopped at: Phase 34 context gathered
+Resume file: .planning/phases/34-exp-service-hook/34-CONTEXT.md
