@@ -119,6 +119,42 @@ class TestEffectLevel:
         assert result.decision == "allow"
 
 
+class TestEffectLevelWithRealBuiltinMeta:
+    """Verify policy checks match the real builtin metadata values."""
+
+    def test_builtin_meta_web_tools_have_external_write(self) -> None:
+        """Builtin web tools use the canonical external_write effect level."""
+        from matmaster.tools.tool_catalog import BUILTIN_META
+
+        for tool_name in ("mm_web_search", "web_fetch", "monitor_job"):
+            _plane, effect_level, _fast = BUILTIN_META[tool_name]
+            assert effect_level == "external_write", (
+                f"{tool_name} effect_level={effect_level!r}, "
+                "expected 'external_write'"
+            )
+
+    def test_deny_web_tool_via_builtin_meta_values(self) -> None:
+        """Policy deny still triggers when using real builtin metadata."""
+        from matmaster.tools.tool_catalog import BUILTIN_META
+
+        plane, effect_level, _fast = BUILTIN_META["mm_web_search"]
+        instance = _make_instance(effect_level=effect_level, plane=plane)
+        topo = RuntimeTopology(
+            session_kind="local",
+            control_root="/ctrl",
+            workspace_root="/ws",
+            active_planes=frozenset(
+                {ToolPlane.SESSION_SHELL, ToolPlane.SESSION_FS}
+            ),
+        )
+
+        decision = DefaultCapabilityPolicy().evaluate(topo, instance, {})
+
+        assert decision.decision == "deny"
+        assert decision.guidance is not None
+        assert "external" in decision.reason.lower()
+
+
 # ---------------------------------------------------------------------------
 # TestCapabilityMatch
 # ---------------------------------------------------------------------------

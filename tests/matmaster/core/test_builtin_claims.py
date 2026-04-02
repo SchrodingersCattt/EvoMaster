@@ -180,6 +180,18 @@ class TestFastPathEligible:
         assert instance.tool_spec.effect_level == "pure_read"
 
 
+class TestEffectLevelConsistency:
+    """Builtin effect levels should match the canonical ToolSpec enum."""
+
+    def test_all_effect_levels_are_canonical(self) -> None:
+        canonical = {"pure_read", "local_mutation", "external_write"}
+
+        for tool_name, (_plane, effect_level, _fast) in BUILTIN_META.items():
+            assert effect_level in canonical, (
+                f"{tool_name} has non-canonical effect_level={effect_level!r}"
+            )
+
+
 # ── Unknown/MCP Tool Default ────────────────────────────
 
 
