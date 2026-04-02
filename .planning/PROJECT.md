@@ -41,12 +41,13 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 - ✓ Kernel Generator-First + Tool Runtime v2 核心骨架（_run_items generator / run_stream / ToolRunner Protocol / ToolCatalog / 8 frozen types + ToolResult payload+meta 升级 / AgentRuntimeSpec 扩展）— v2.2 Phase 32
 - ✓ FullToolRunner 七步执行链 + ToolScheduler（exclusive/shared_read/counted）+ StructuralValidation + CapabilityPolicy — v2.2 Phase 33
 - ✓ _run_items() yield ToolCallEvent/ToolResultEvent（KGEN-06 提前实现）— v2.2 Phase 33
+- ✓ Exp.run_stream() + AgentRunService.run_agent_stream() 接入 generator 事件链 — v2.2 Phase 34
+- ✓ _do_stream_llm() → _stream_llm_items() 子 generator 改造 — v2.2 Phase 34
+- ✓ Hook → Bus 间接路径退役（assistant_state/skill_hit/output_processor/tool_result_hook 全部退役）— v2.2 Phase 34
+- ✓ FullToolRunner 激活为默认执行路径 + run_stream() 输出 BusEvent + ToolCatalog version 消费 — v2.2 Phase 34
 
 ### Active
 
-- [ ] Exp.run_stream() + AgentRunService.run_agent_stream() 接入
-- [ ] _do_stream_llm() → _stream_llm_items() 子 generator 改造
-- [ ] Hook → Bus 间接路径退役（5 个 Hook 逐个替代后移除）
 - [ ] 约束迁移（read-before-modify → RunStateGuard，bash 危险命令 → CapabilityPolicy）
 - [ ] 去总线化评估与实施（MessageBus + EventRouter）
 - [ ] 高级调度（persistent shell 并发、SessionCapabilities 自适应）
@@ -77,7 +78,7 @@ matmaster/ 运行时路径完全独立于 evomaster/playground/src。三方向�
 
 ### Current State
 
-**As of 2026-04-02:** Phase 33 complete — FullToolRunner 七步执行链 + ToolScheduler（exclusive/shared_read/counted）+ StructuralValidation + CapabilityPolicy + ToolCompiler + Session.capabilities 全部落地。KGEN-06 也已提前在 Phase 33 完成。Phase 34 接下来负责 Exp/Service 接入、generator 事件链切流与 Hook 退役。
+**As of 2026-04-02:** Phase 34 complete — Generator 事件流贯穿 Kernel→Exp→Service 全链路，FullToolRunner 激活为默认执行路径，4 个 Hook 全部退役（assistant_state/skill_hit/output_processor/tool_result_hook），run_stream() 输出 BusEvent（含 RunResultEvent 终止事件），ToolCatalog version 变更触发 tool_definitions 缓存刷新。Phase 35 接下来负责约束迁移（read-before-modify → RunStateGuard）+ ToolRegistry 降级。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 Source: 15,839 LOC (matmaster/).
