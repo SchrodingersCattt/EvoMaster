@@ -323,11 +323,61 @@ async def test_exception_emits_error_and_closed():
             raise RuntimeError('test explosion')
             yield  # make it a generator  # noqa: E501
 
-    error_events: list[Any] = []
+    # Use a dedicated _patched_service_with_exp helper to inject the error exp
+    # at construction time, before the lazy import inside run_agent_stream.
+    patches = _standard_patches()
+    mocks = []
+    for p in patches:
+        mocks.append(p.start())
 
-    async with _patched_service([]) as (svc, bus_calls):
-        # Replace the Exp mock with our error-raising version
-        with patch('src.services.agent_run_service.Exp', return_value=_ErrorExp([])):
+    try:
+        pg_mgr_cls = mocks[0]
+        events_table_fn = mocks[1]
+        router_cls = mocks[2]
+        bohrium_cls = mocks[6]
+        history_cls = mocks[8]
+        redis_fn = mocks[9]
+
+        pg_ctx = _make_mock_pg_ctx()
+        pg = _make_mock_playground(pg_ctx)
+        pg_mgr = MagicMock()
+        pg_mgr.get_or_create.return_value = pg
+        pg_mgr_cls.return_value = pg_mgr
+
+        router_inst = MagicMock()
+        router_inst.start = AsyncMock()
+        router_inst.stop = AsyncMock()
+        router_cls.return_value = router_inst
+
+        bohrium_inst = MagicMock()
+        bohrium_result = MagicMock()
+        bohrium_result.ssh_attached = False
+        bohrium_result.abort_result = None
+        bohrium_result.execution_session = None
+        bohrium_result._asdict.return_value = {'ssh_attached': False, 'abort_result': None}
+        bohrium_inst.run_setup = AsyncMock(return_value=bohrium_result)
+        bohrium_inst.run_cleanup = AsyncMock()
+        bohrium_cls.return_value = bohrium_inst
+
+        history_cls.exclude_spawn_events.return_value = []
+        history_cls.exclude_task_events.return_value = []
+        history_cls.events_to_messages.return_value = []
+        redis_fn.return_value = MagicMock()
+        events_table_fn.return_value = MagicMock()
+
+        error_exp = _ErrorExp([])
+
+        with patch('matmaster.config.loader.load_exp_config', return_value=MagicMock()), \
+             patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()), \
+             patch('matmaster.providers.llm_factory.build_provider', return_value=MagicMock()), \
+             patch('matmaster.core.exp.Exp', new=lambda config: error_exp):
+
+            from src.services.agent_run_service import AgentRunService
+
+            svc = AgentRunService.__new__(AgentRunService)
+            svc._sessions_service = MagicMock()
+            svc._pg_manager = pg_mgr
+
             result = await svc.run_agent_stream(
                 session_id='s1',
                 user_prompt='hi',
@@ -337,6 +387,9 @@ async def test_exception_emits_error_and_closed():
                 reply_queue=None,
                 task_id='t1',
             )
+    finally:
+        for p in patches:
+            p.stop()
 
     assert result[0] == (False, 'test explosion')
 
