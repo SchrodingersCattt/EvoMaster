@@ -214,12 +214,14 @@ class ToolSpec(BaseModel):
     effect_level: Literal["none", "local_mutation", "external_effect"]
     exposed_to_model: bool = True
     fast_path_eligible: bool = True
+    max_result_chars: int = 0           # 0 = 不限；>0 时 ToolRunner 裁剪 content
     usage_hint: str = ""
 ```
 
 说明：
 
 - `fast_path_eligible` 默认 True，表示当 effect_level 和 resource_claims 同时满足只读条件时可走 fast path。设为 False 可强制要求 Policy 检查（如外部只读工具有域限制或 quota 规则时）
+- `max_result_chars` 控制单次 tool_executor 返回的 content 字段最大字符数。超限时 ToolRunner 在归一化阶段裁剪 content（保留头尾 + 截断提示），完整结果存入 workdir 临时文件并在 `meta["full_result_path"]` 中记录路径，模型需要时可通过 `read_file` 再取。默认 0 表示不限，内建工具建议设为 12000（约 3000 token）
 
 约束：
 
@@ -273,7 +275,25 @@ class ToolBinding(BaseModel):
 - `binding_key` 格式固定为 `{plane}:{tool_name}`，用于调试、指标和审计
 - Phase 2 字段在 v1 阶段使用默认值，Scheduler 真正需要精细调度时再启用
 
-### 6.7 ToolInstance
+### 6.7 ToolExecutionContext
+
+用途：ToolRunner 在每次工具执行时构造的运行时上下文，传入 tool_executor。将取消信号和进度回调从 executor 签名中解耦。
+
+```python
+@dataclass(frozen=True)
+class ToolExecutionContext:
+    stop_event: asyncio.Event                              # Kernel 级取消信号
+    on_progress: Callable[[str], None] | None = None       # 进度回调，发往 MessageBus
+```
+
+说明：
+
+- `stop_event` 由 Kernel 传入，工具内部可在长时间操作（如 bash 循环、HPC 轮询）中检查并提前退出
+- `on_progress` 由 ToolRunner 注入，工具调用 `on_progress("partial output...")` 发出中间状态。ToolRunner 内部将 progress 包装为 `ToolProgressEvent` 发送到 MessageBus，SSE 层转发给前端
+- 大多数工具忽略这两个字段即可。只有 `execute_bash`（长时间命令的 stdout 流）和 `monitor_job`（HPC 轮询）需要实现
+- ToolExecutionContext 是 frozen 的，每次 tool_call 新建实例
+
+### 6.8 ToolInstance
 
 用途：将逻辑语义、执行语义与真正执行器绑定为一个运行时工具实例。
 
@@ -282,10 +302,17 @@ class ToolBinding(BaseModel):
 class ToolInstance:
     tool_spec: ToolSpec
     tool_binding: ToolBinding
-    tool_executor: Callable[[dict[str, Any]], Awaitable[ToolResult]]
+    tool_executor: Callable[[dict[str, Any], ToolExecutionContext], Awaitable[ToolResult]]
+    input_validator: Callable[[dict[str, Any]], Awaitable[ToolDecision | None]] | None = None
 ```
 
-### 6.8 ToolCatalog
+说明：
+
+- `tool_executor` 接收参数和执行上下文，返回 ToolResult。执行上下文包含取消信号和进度回调
+- `input_validator` 可选，由 ToolCompiler 从工具的 `validate_input()` 方法绑定。返回 None 表示通过，返回 `ToolDecision(deny)` 表示拒绝。用于工具特有的语义校验（区别于 StructuralValidation 的通用 schema 校验）
+- ToolCompiler 编译时：如果源 Tool 实现了 `validate_input` 方法，绑定到 `input_validator`；否则为 None
+
+### 6.9 ToolCatalog
 
 用途：AgentKernel 真正消费的工具目录。静态基座 + 动态 overlay 两层结构。
 
@@ -338,7 +365,7 @@ System prompt 与 tool definitions 的一致性：
 
 Phase 1 策略：system prompt 的 `# Available Tools` 段落移除工具枚举，改为通用说明（如「使用 function calling 中声明的工具」）。工具的 description 和用法信息完全由 tool_definitions 承载。这消除了两个来源之间的不一致风险，也减少了 overlay 变更后的维护成本。
 
-### 6.9 三层约束模型
+### 6.10 三层约束模型
 
 设计初版将 Guard 和 Policy 混为一层。修订版明确拆分为三层，每层有确定的输入和职责：
 
@@ -449,24 +476,52 @@ class ToolDecision(BaseModel):
     decision: Literal["allow", "deny"]
     reason: str = ""
     guidance: str = ""                  # deny 时注入到 ToolMessage，辅助 LLM 修正
+    modified_args: dict[str, Any] | None = None  # 非 None 时替换原参数
 ```
 
-### 6.10 ToolResult
+说明：
+
+- `modified_args` 由 Layer A StructuralValidation 在路径规范化后设置，ToolRunner 在后续步骤使用修改后的参数
+- Layer B / Layer C 如果也需要修改参数，同样通过此字段传递
+- `decision="deny"` 时 `modified_args` 无意义，忽略
+
+### 6.11 ToolResult
 
 ```python
 class ToolResult(BaseModel):
     status: Literal["success", "error"] = "success"
-    content: str = ""                                       # 供模型消费
+    content: str = ""                                       # 供模型消费（受 max_result_chars 裁剪）
     payload: dict[str, Any] = Field(default_factory=dict)   # 结构化数据
     meta: dict[str, Any] = Field(default_factory=dict)      # 运行时 & 调试信息
 ```
 
 说明：
 
-- `content` 供模型直接消费
+- `content` 供模型直接消费。受 `ToolSpec.max_result_chars` 裁剪控制
 - `payload` 替代原 `info`，供结构化处理和后续推理消费
 - `meta` 供运行时附加信息与调试信息
 - 不预设 artifacts / metrics / guidance 等顶层字段；HPC 场景的制品列表等通过 `payload` 的约定键承载
+
+结果裁剪策略：
+
+当 `ToolSpec.max_result_chars > 0` 且 `len(content) > max_result_chars` 时，ToolRunner 在归一化阶段执行裁剪：
+
+1. 将完整 content 写入 `{workdir}/.tool_results/{tool_call_id}.txt`
+2. 裁剪 content 为 `head[:max_result_chars//2] + "\n\n... [{truncated_chars} chars truncated, full result at {path}] ...\n\n" + tail[-2000:]`
+3. 在 `meta["full_result_path"]` 中记录完整结果路径
+
+裁剪只作用于 `content`，不影响 `payload` 和 `meta`。模型可通过 `read_file` 访问完整结果。
+
+典型配置：
+
+| 工具 | max_result_chars | 理由 |
+|------|-----------------|------|
+| `read_file` | 12000 | 大文件读取是上下文膨胀的主要来源 |
+| `execute_bash` | 12000 | VASP/LAMMPS 等长输出 |
+| `grep` | 8000 | 大量匹配结果 |
+| `glob` | 8000 | 深目录树 |
+| `web_fetch` | 16000 | 网页内容 |
+| 其他 | 0 | 不限 |
 
 ---
 
@@ -507,6 +562,10 @@ ToolScheduler 基于工具声明的 ResourceClaim 进行调度，三种 mode 覆
 
 ### 8.2 内建工具的 Resource Claims
 
+resource_claims 不是静态常量，而是由 ToolCompiler 在 `build_runtime()` 阶段根据 RuntimeTopology 动态决定。这正是 ToolSpec（逻辑语义）与 ToolBinding（环境执行语义）分离的设计优势——同一个 ToolSpec 在不同 topology 下可以产出不同的 ToolBinding。
+
+#### 默认 Claims（保守策略）
+
 | 工具 | resource_claims |
 |------|----------------|
 | `execute_bash` | `("session", exclusive)` |
@@ -526,9 +585,23 @@ ToolScheduler 基于工具声明的 ResourceClaim 进行调度，三种 mode 覆
 | `spawn` | `("spawn", counted, max_concurrent=2)` |
 | `monitor_job` | `("workspace", exclusive), ("artifact-sync", exclusive)` |
 
+#### 拓扑依赖的 Claims 放宽
+
+当 `session_kind = "local"` 时，`list_dir`、`glob`、`grep` 底层实际调用 `subprocess.run` 创建独立进程，不存在共享状态。ToolCompiler 可根据 session_capabilities 放宽其 claims：
+
+| 工具 | local session claims | ssh session claims |
+|------|---------------------|-------------------|
+| `list_dir` | `("session", shared_read)` | `("session", exclusive)` |
+| `glob` | `("session", shared_read)` | `("session", exclusive)` |
+| `grep` | `("session", shared_read)` | `("session", exclusive)` |
+
+放宽条件：`session_capabilities.shell_persistence == "stateless"` 且 `session_kind == "local"`（本地子进程天然隔离）。SSH session 即使 stateless，也共享同一个 SSH 连接的 channel 复用，保持 exclusive。
+
+这让一轮 LLM 响应中的多个 grep 调用可以在 local session 下并发执行，显著提升搜索密集型任务的吞吐量。
+
 说明：
 
-- `execute_bash` 等 shell 工具声明 `session: exclusive`，因为当前 SSHSession 和 LocalSession 都是 stateless per-channel，但共享同一个 session 实例和工作目录
+- `execute_bash` 始终声明 `session: exclusive`，因为它可能修改工作目录状态、环境变量或文件系统
 - `read_file` 声明 `workspace: shared_read`，多个读操作可并发
 - `monitor_job` 声明 `workspace: exclusive` + `artifact-sync: exclusive`，因为它会下载制品并 SFTP push 回远端 workspace
 - `web_search` / `web_fetch` 声明 `web: counted, max_concurrent=3`，允许最多 3 个并发网络请求
@@ -536,51 +609,109 @@ ToolScheduler 基于工具声明的 ResourceClaim 进行调度，三种 mode 覆
 
 ### 8.3 Phase 1 保守策略
 
-Phase 1 采用保守策略：
+Phase 1 采用保守策略（默认 claims 表）：
 
 - shell 工具串行（session: exclusive 天然保证）
 - fs 读可并发，写串行（workspace 的读写锁保证）
 - control_plane 工具按各自 resource 调度
 - external_service 工具与 workspace 互斥（monitor_job 声明保证）
+- local session 下 list_dir/glob/grep 放宽为 shared_read（ToolCompiler 拓扑依赖绑定）
 
-Phase 2 可根据 SessionCapabilities 放宽（如 persistent shell 下支持 shell 并发）。
+Phase 2 可根据 SessionCapabilities 进一步放宽（如 persistent shell 下支持 shell 并发）。
 
 ---
 
 ## 9. 工具执行主链
 
-### 9.1 完整链路
+### 9.1 单工具执行链路
 
 ```
-LLM 返回 tool_calls
+LLM 返回 tool_call
   │
-  ├─ Kernel: ToolCatalog.get_tool(tool_name) 查找 ToolInstance
+  ├─ Step 1: Catalog 查找
+  │    ToolCatalog.get_tool(tool_name) → ToolInstance（miss → error ToolResult）
   │
-  ├─ Layer A: StructuralValidation
+  ├─ Step 2: Layer A — StructuralValidation
   │    args_schema 校验 / 路径规范化 / plane 启用检查 / session_capabilities 匹配
+  │    → ToolDecision（deny → error；allow + modified_args → 替换后续参数）
   │
-  ├─ Layer B: RunStateGuard
+  ├─ Step 3: 工具级语义校验
+  │    若 tool_instance.input_validator 非 None → input_validator(tool_args)
+  │    → ToolDecision | None（deny → error ToolResult）
+  │
+  ├─ Step 4: Layer B — RunStateGuard
   │    循环检测 / [Phase 2: read-before-modify]
   │
-  ├─ Layer C: CapabilityPolicy
+  ├─ Step 5: Layer C — CapabilityPolicy
   │    effect_level 约束 / 能力匹配 / [Phase 2: 危险命令拦截]
   │
-  ├─ [fast path: effect_level="none" 且 claims 全 shared_read 且 fast_path_eligible → 跳过 Scheduler（仅 read_file/task_get/task_list 等）]
+  ├─ Step 6: Fast path 判定
+  │    effect_level="none" 且 claims 全 shared_read 且 fast_path_eligible
+  │    → 跳过 Step 7（仅 read_file/task_get/task_list 等）
   │
-  ├─ Scheduler: 按 resource_claims 获取槽位 (exclusive / shared_read / counted)
+  ├─ Step 7: Scheduler 获取槽位
+  │    按 resource_claims 获取 (exclusive / shared_read / counted)
   │
-  ├─ tool_executor(tool_args)
+  ├─ Step 8: 执行
+  │    tool_executor(tool_args, ToolExecutionContext(stop_event, on_progress))
   │
-  ├─ 归一化 ToolResult
+  ├─ Step 9: 归一化 + 结果裁剪
+  │    normalize_tool_result(raw) → ToolResult
+  │    若 max_result_chars > 0 且 len(content) 超限 → 裁剪 content，完整结果存磁盘
   │
-  ├─ Scheduler: 释放槽位
+  ├─ Step 10: Scheduler 释放槽位
   │
-  ├─ 映射为 ToolMessage
+  ├─ Step 11: Post hook
+  │    post_tool_call(tool_name, args, result) → ToolResult | None
+  │    若返回非 None → 替换原 result
   │
-  └─ post hook + 事件发射
+  ├─ Step 12: 映射为 ToolMessage + 事件发射
+  │
+  └─ 返回 ToolResult
 ```
 
-### 9.2 Fast Path
+### 9.2 批量执行策略（execute_batch）
+
+一次 LLM 响应可能返回多个 tool_calls。ToolRunner.execute_batch() 采用「验证串行、执行并发」的两阶段策略，利用 ResourceClaim 精确控制并发：
+
+```
+execute_batch(tool_calls: list[ToolCallData]) -> list[tuple[ToolCallData, ToolResult]]:
+
+  Phase 1 — 逐个验证（串行，毫秒级）:
+    for each tool_call:
+      Step 1-5: Catalog 查找 → StructuralValidation → input_validator → Guard → Policy
+      若任一步 deny → 记录 error ToolResult，跳过该 call 的 Phase 2
+      若全部通过 → 加入 approved_calls
+
+  Phase 2 — 并发执行（由 Scheduler 自然调度）:
+    asyncio.gather(*[_execute_single(call) for call in approved_calls])
+
+    _execute_single 内部:
+      Step 6: fast path 判定
+      Step 7: Scheduler.acquire(claims)  ← 阻塞直到资源可用
+      Step 8: tool_executor(args, ctx)
+      Step 9: 归一化 + 裁剪
+      Step 10: Scheduler.release(claims)
+      Step 11: post hook
+      Step 12: 映射 + 事件
+
+  Phase 3 — 按原序返回:
+    results 按 tool_calls 原始顺序排列返回
+```
+
+关键点：
+
+- 验证阶段串行是因为 RunStateGuard 有状态（循环检测依赖 recent_calls 的累积顺序）
+- 执行阶段全部交给 asyncio.gather，由 Scheduler 的 ResourceClaim 锁自然保证并发安全：
+  - 3 个 `read_file` → 全部 `workspace:shared_read` → 不冲突 → 立即并发
+  - 1 个 `read_file` + 1 个 `write_file` → `shared_read` vs `exclusive` → Scheduler 串行
+  - 2 个 `execute_bash` → 都 `session:exclusive` → Scheduler 串行
+  - 1 个 `read_file` + 1 个 `web_search` → 不同 resource → 立即并发
+- 不需要额外的分区逻辑——ResourceClaim 已经编码了完整的并发兼容性信息
+
+与 InlineToolRunner 的区别：InlineToolRunner 的 Phase 2 无差别 gather 所有 approved tools，不经过 Scheduler，无法正确处理资源冲突。FullToolRunner 的 gather 是安全的，因为 Scheduler.acquire() 会阻塞冲突的调用直到资源释放。
+
+### 9.3 Fast Path
 
 对同时满足以下条件的工具，跳过 Scheduler 获取槽位（仍经过 Layer C Policy 检查）：
 
@@ -590,11 +721,36 @@ LLM 返回 tool_calls
 
 典型受益工具：`read_file`、`task_get`、`task_list`
 
-注意：`glob`、`grep`、`list_dir` 虽然 `effect_level = "none"`，但它们通过 `session.exec_bash()` 执行，声明了 `(session, exclusive)`，不满足 fast path 条件，仍需经过 Scheduler 串行调度。
+注意：`glob`、`grep`、`list_dir` 在 local session 下被放宽为 `(session, shared_read)`（见 8.2），满足 fast path 条件，可跳过 Scheduler。在 SSH session 下仍为 `(session, exclusive)`，不满足 fast path。
 
 说明：fast path 不跳过 CapabilityPolicy，因为未来只读工具也可能需要拓扑级策略检查（如域限制、quota 规则）。`fast_path_eligible` 提供显式 opt-out 能力，对需要强制 Policy + Scheduler 的只读工具设为 False 即可。
 
-### 9.3 错误处理
+### 9.4 Post Hook 语义
+
+Post hook 在工具执行成功后调用，可选择性地修改结果：
+
+```python
+class Hook(Protocol):
+    async def post_tool_call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        result: ToolResult,
+    ) -> ToolResult | None:
+        """返回 None 不修改原结果，返回 ToolResult 替换原结果。"""
+        ...
+```
+
+设计约束：
+
+- 多个 Hook 串行调用，每个 Hook 接收前一个 Hook（或原始执行）的结果
+- Hook 不能修改工具参数（那是 StructuralValidation 的职责）
+- Hook 只在 executor 成功时调用；executor 抛异常时走 error 路径，不触发 post hook
+- 典型用途：OutputProcessorHook 将 auto_save/summarize 信息追加到 `result.content`，而非单独发 ToolResultEvent
+
+迁移说明：当前 OutputProcessorHook 通过额外发 `ToolResultEvent` 注入附加信息，导致事件流中出现伪工具调用事件。新的 post hook 语义允许 Hook 直接修改 ToolResult，消除伪事件，简化 ChatHistoryConverter 的历史恢复逻辑。
+
+### 9.5 错误处理
 
 每一层的失败行为明确定义：
 
@@ -602,10 +758,12 @@ LLM 返回 tool_calls
 |------|----------|
 | Catalog 查找失败 | 返回 `ToolResult(status="error", content="Unknown tool: {name}")` |
 | Layer A 校验失败 | 返回 `ToolResult(status="error", content=decision.reason, meta={"layer": "structural"})` |
+| 工具级语义校验失败 | 返回 `ToolResult(status="error", content=decision.reason, meta={"layer": "input_validation"})` |
 | Layer B Guard deny | 返回 `ToolResult(status="error", content=result.reason, meta={"layer": "guard"})` + 触发 on_guard_blocked hook |
 | Layer C Policy deny | 返回 `ToolResult(status="error", content=decision.reason, meta={"layer": "policy", "guidance": decision.guidance})` |
 | Scheduler 超时 | 返回 `ToolResult(status="error", content="Scheduling timeout", meta={"layer": "scheduler"})` |
 | Executor 异常 | 返回 `ToolResult.from_error(tool_name, exception)` |
+| 结果裁剪 | 非错误。裁剪后 `meta["full_result_path"]` 指向完整结果，status 保持 "success" |
 
 所有失败路径统一产出 ToolResult，Kernel 不需要区分失败来源。`meta["layer"]` 用于调试和审计。fast path 工具跳过 Scheduler，因此不会产生 Scheduler 超时错误。
 
@@ -613,24 +771,24 @@ LLM 返回 tool_calls
 
 ## 10. 内建工具总表
 
-| 工具 | capabilities | effect_level | plane | resource_claims |
-|------|-------------|--------------|-------|-----------------|
-| `execute_bash` | `shell.execute` | `local_mutation` | SESSION_SHELL | `(session, exclusive)` |
-| `list_dir` | `workspace.list` | `none` | SESSION_SHELL | `(session, exclusive)` |
-| `glob` | `workspace.search.path` | `none` | SESSION_SHELL | `(session, exclusive)` |
-| `grep` | `workspace.search.content` | `none` | SESSION_SHELL | `(session, exclusive)` |
-| `read_file` | `workspace.read` | `none` | SESSION_FS | `(workspace, shared_read)` |
-| `write_file` | `workspace.write` | `local_mutation` | SESSION_FS | `(workspace, exclusive)` |
-| `edit_file` | `workspace.write` | `local_mutation` | SESSION_FS | `(workspace, exclusive)` |
-| `task_create` | `task.write` | `local_mutation` | CONTROL_PLANE | `(task-store, exclusive)` |
-| `task_get` | `task.read` | `none` | CONTROL_PLANE | `(task-store, shared_read)` |
-| `task_list` | `task.read` | `none` | CONTROL_PLANE | `(task-store, shared_read)` |
-| `task_update` | `task.write` | `local_mutation` | CONTROL_PLANE | `(task-store, exclusive)` |
-| `task_complete` | `task.write` | `local_mutation` | CONTROL_PLANE | `(task-store, exclusive)` |
-| `web_search` | `web.search` | `external_effect` | CONTROL_PLANE | `(web, counted, 3)` |
-| `web_fetch` | `web.fetch` | `external_effect` | CONTROL_PLANE | `(web, counted, 3)` |
-| `spawn` | `agent.spawn` | `external_effect` | CONTROL_PLANE | `(spawn, counted, 2)` |
-| `monitor_job` | `job.monitor`, `artifact.download` | `external_effect` | EXTERNAL_SERVICE | `(workspace, exclusive), (artifact-sync, exclusive)` |
+| 工具 | capabilities | effect_level | plane | resource_claims | max_result_chars |
+|------|-------------|--------------|-------|-----------------|-----------------|
+| `execute_bash` | `shell.execute` | `local_mutation` | SESSION_SHELL | `(session, exclusive)` | 12000 |
+| `list_dir` | `workspace.list` | `none` | SESSION_SHELL | 拓扑依赖（见 8.2） | 8000 |
+| `glob` | `workspace.search.path` | `none` | SESSION_SHELL | 拓扑依赖（见 8.2） | 8000 |
+| `grep` | `workspace.search.content` | `none` | SESSION_SHELL | 拓扑依赖（见 8.2） | 8000 |
+| `read_file` | `workspace.read` | `none` | SESSION_FS | `(workspace, shared_read)` | 12000 |
+| `write_file` | `workspace.write` | `local_mutation` | SESSION_FS | `(workspace, exclusive)` | 0 |
+| `edit_file` | `workspace.write` | `local_mutation` | SESSION_FS | `(workspace, exclusive)` | 0 |
+| `task_create` | `task.write` | `local_mutation` | CONTROL_PLANE | `(task-store, exclusive)` | 0 |
+| `task_get` | `task.read` | `none` | CONTROL_PLANE | `(task-store, shared_read)` | 0 |
+| `task_list` | `task.read` | `none` | CONTROL_PLANE | `(task-store, shared_read)` | 0 |
+| `task_update` | `task.write` | `local_mutation` | CONTROL_PLANE | `(task-store, exclusive)` | 0 |
+| `task_complete` | `task.write` | `local_mutation` | CONTROL_PLANE | `(task-store, exclusive)` | 0 |
+| `web_search` | `web.search` | `external_effect` | CONTROL_PLANE | `(web, counted, 3)` | 0 |
+| `web_fetch` | `web.fetch` | `external_effect` | CONTROL_PLANE | `(web, counted, 3)` | 16000 |
+| `spawn` | `agent.spawn` | `external_effect` | CONTROL_PLANE | `(spawn, counted, 2)` | 0 |
+| `monitor_job` | `job.monitor`, `artifact.download` | `external_effect` | EXTERNAL_SERVICE | `(workspace, exclusive), (artifact-sync, exclusive)` | 0 |
 
 ---
 
@@ -642,8 +800,9 @@ Playground
 
 Exp
   → derives RuntimeTopology (含 SessionCapabilities)
-  → builds ToolSpec set
-  → resolves ToolBinding (含 ResourceClaim)
+  → builds ToolSpec set (含 max_result_chars)
+  → resolves ToolBinding (含 ResourceClaim，拓扑依赖)
+  → binds input_validator (从 Tool.validate_input 绑定)
   → compiles ToolCatalog (静态 base 层)
   → creates CapabilityPolicy
   → configures RunStateGuard (Phase 1: 循环检测; Phase 2: + read-before-modify)
@@ -655,7 +814,7 @@ AgentRuntimeSpec
     - tool_catalog: ToolCatalog
     - capability_policy: CapabilityPolicy
     - guards: list[RunStateGuard]
-    - hooks: list[Hook]
+    - hooks: list[Hook]          # post_tool_call 返回 ToolResult | None
     - llm_provider
     - system_prompt
 
@@ -677,11 +836,17 @@ ToolCatalog
   overlay: dict[str, ToolInstance]  (mutable, skill-triggered)
   version: int
 
+ToolExecutionContext
+  has:
+    - stop_event: asyncio.Event
+    - on_progress: Callable | None
+
 ToolInstance
   has:
     - ToolSpec
     - ToolBinding
-    - tool_executor
+    - tool_executor(args, ToolExecutionContext) → ToolResult
+    - input_validator(args) → ToolDecision | None  (optional)
 
 ToolScheduler
   schedules by: ResourceClaim (exclusive / shared_read / counted)
@@ -704,24 +869,32 @@ Provider
 
 AgentKernel
   → append AssistantMessage(tool_calls=...)
-  → for each tool_call:
-       → ToolRunner.execute(tool_call, runtime_spec)
+  → ToolRunner.execute_batch(tool_calls, runtime_spec)
 
-ToolRunner
-  → ToolCatalog.get_tool(tool_name)          ... miss → error ToolResult
-  → StructuralValidation.validate(...)       ... deny → error ToolResult
-  → GuardPipeline.evaluate(...)              ... deny → error ToolResult + on_guard_blocked
-  → CapabilityPolicy.evaluate(...)           ... deny → error ToolResult
-  → [fast path: effect_level=none && all shared_read && fast_path_eligible → skip scheduler]
-  → ToolScheduler.acquire(resource_claims)   ... timeout → error ToolResult
-  → tool_executor(tool_args)                 ... exception → ToolResult.from_error
-  → ToolScheduler.release(...)
-  → return ToolResult
+ToolRunner.execute_batch
+  ┌─ Phase 1: 逐个验证（串行）
+  │  for each tool_call:
+  │    → ToolCatalog.get_tool(tool_name)          ... miss → error ToolResult
+  │    → StructuralValidation.validate(...)       ... deny → error (modified_args → 替换参数)
+  │    → input_validator(tool_args)               ... deny → error ToolResult (若有)
+  │    → GuardPipeline.evaluate(...)              ... deny → error ToolResult + on_guard_blocked
+  │    → CapabilityPolicy.evaluate(...)           ... deny → error ToolResult
+  │    → 加入 approved_calls
+  │
+  ├─ Phase 2: 并发执行（Scheduler 自然调度）
+  │  asyncio.gather(*approved_calls):
+  │    → [fast path check → skip scheduler if eligible]
+  │    → ToolScheduler.acquire(resource_claims)   ... timeout → error ToolResult
+  │    → tool_executor(tool_args, ToolExecutionContext(stop_event, on_progress))
+  │    → 归一化 ToolResult + 结果裁剪（max_result_chars）
+  │    → ToolScheduler.release(...)
+  │    → post_tool_call hooks → 可替换 ToolResult
+  │
+  └─ Phase 3: 按原序返回 list[tuple[ToolCallData, ToolResult]]
 
 AgentKernel
-  → append ToolMessage(content=tool_result.content)
-  → run post hooks
-  → emit events
+  → append ToolMessage(content=tool_result.content) for each result
+  → emit events (ToolResultEvent / ToolProgressEvent)
   → continue loop
 ```
 
@@ -736,12 +909,14 @@ AgentKernel
 引入：
 - `SessionCapabilities` — Session Protocol 增加 capabilities 属性
 - `RuntimeTopology` — 从 PlaygroundContext 派生
-- `ToolSpec` — 从现有 Tool Protocol 提取逻辑语义
-- `ToolBinding` — 仅填 plane 和 resource_claims，其余使用默认值
-- `ToolInstance` — 组合 ToolSpec + ToolBinding + executor
+- `ToolSpec` — 从现有 Tool Protocol 提取逻辑语义，含 `max_result_chars`
+- `ToolBinding` — 填 plane 和 resource_claims（拓扑依赖），其余使用默认值
+- `ToolExecutionContext` — 封装 stop_event 和 on_progress 回调
+- `ToolInstance` — 组合 ToolSpec + ToolBinding + executor(args, ctx) + 可选 input_validator
 - `ToolCatalog` — base + overlay，内部封装现有 ToolRegistry 作为兼容 facade
-- `ToolRunner` — 从 Kernel 中提取执行主链
-- `ToolResult` — 升级为 status + content + payload + meta
+- `ToolRunner` — 从 Kernel 中提取执行主链，含 execute_batch 两阶段并发策略
+- `ToolResult` — 升级为 status + content + payload + meta，含结果裁剪逻辑
+- `ToolDecision` — 含 modified_args，Layer A 路径规范化后传回修改后的参数
 
 ToolRegistry 兼容策略：
 
@@ -756,13 +931,35 @@ Phase 1 不直接替换 ToolRegistry，而是让 ToolCatalog 内部持有一个 
 
 Phase 2 再将 ToolRegistry 降级为纯存储层，ToolCatalog 接管所有上层消费接口。
 
+工具级语义校验：
+- BuiltinTool ABC 增加可选 `validate_input()` 方法（默认返回 None）
+- ToolCompiler 编译时，若工具实现了 validate_input，绑定到 ToolInstance.input_validator
+- Phase 1 仅对 WriteTool（检查路径在 workdir 内）和 EditTool（检查 old_string 非空）实现 validate_input
+- 不改动 StructuralValidation 或 CapabilityPolicy 的职责边界
+
+Post Hook 改进：
+- Hook Protocol 的 post_tool_call 签名改为返回 `ToolResult | None`
+- 返回 None 不修改，返回 ToolResult 替换原结果
+- Phase 1 OutputProcessorHook 适配新签名，将 auto_save 信息追加到 result.content
+
+进度上报：
+- Phase 1 定义 ToolExecutionContext 和 ToolProgressEvent 事件类型
+- Phase 1 仅 BashTool 实现 on_progress（LocalSession 的 stdout 逐行上报）
+- 其他工具忽略 on_progress 回调
+
+结果裁剪：
+- ToolRunner 在归一化阶段检查 max_result_chars，超限时裁剪 + 存磁盘
+- Phase 1 所有内建工具使用总表中定义的 max_result_chars 值
+
 保留：
 - GuardPipeline 接口和行为完全不变（不扩展 GuardContext）
-- 工具内部安全检查（bash 危险命令、read-before-modify）保持不动
+- 工具内部安全检查（bash 危险命令、read-before-modify 中的 ReadTracker 检查）保持不动
 - CapabilityPolicy Phase 1 仅处理 effect_level 和 plane/capability 匹配，不承接工具内部迁移
 
 调度：
-- Phase 1 Scheduler 实现为简单的 resource 读写锁/信号量，保守策略
+- Phase 1 Scheduler 实现为简单的 resource 读写锁/信号量
+- execute_batch 采用「验证串行、执行并发」策略，Scheduler.acquire 自然控制并发
+- ToolCompiler 根据 RuntimeTopology 动态决定 resource_claims（local session 下 glob/grep/list_dir 放宽为 shared_read）
 
 ### Phase 2: 约束迁移与调度增强
 
@@ -772,10 +969,12 @@ Phase 2 再将 ToolRegistry 降级为纯存储层，ToolCatalog 接管所有上�
 - 扩展 GuardContext 增加 ReadTracker，将 read-before-modify 检查从 WriteTool/EditTool 迁入 RunStateGuard
 - 将 bash_tool 的 `_is_dangerous_command` 迁入 CapabilityPolicy
 - 将其他跨工具统一的确定性安全约束迁入 CapabilityPolicy
+- BashTool 的 validate_input 承接危险命令迁移后的语义级校验（格式合法性、编码检查）
 
 启用：
 - ToolBinding 的 state_mode、stop_mode 字段
 - Scheduler 根据 SessionCapabilities 动态调整并发策略
+- MonitorJobTool 实现 on_progress（HPC 轮询状态上报）
 
 ### Phase 3: 高级调度
 
@@ -797,10 +996,10 @@ matmaster/
     context.py              # PlaygroundContext（现有）
     runtime.py              # AgentRuntimeSpec（扩展）
     topology.py             # RuntimeTopology, SessionCapabilities, ToolPlane
-    tool_spec.py            # ToolSpec, ToolBinding, ResourceClaim, ToolInstance
-    tool_result.py          # ToolResult（升级）
-    tool_decision.py        # ToolDecision
-    events.py               # 现有事件类型
+    tool_spec.py            # ToolSpec, ToolBinding, ResourceClaim, ToolInstance, ToolExecutionContext
+    tool_result.py          # ToolResult（升级，含裁剪说明）
+    tool_decision.py        # ToolDecision（含 modified_args）
+    events.py               # 现有事件类型 + ToolProgressEvent（新增）
     session.py              # Session Protocol + SessionCapabilities
 
   tools/
@@ -857,10 +1056,14 @@ matmaster/
 | 执行拓扑 | 隐含在 PlaygroundContext 中 | `RuntimeTopology` 显式最小合同 |
 | 工具抽象 | 单层 Tool Protocol | `ToolSpec + ToolBinding + ToolInstance` |
 | 工具目录 | 可变 ToolRegistry | `ToolCatalog` base + overlay |
-| 执行链 | Kernel 内联 guard → gather → post-hook | `ToolRunner` 独立编排 |
-| 调度 | `asyncio.gather()` 全并发 | ResourceClaim (exclusive / shared_read / counted) |
-| 安全约束 | 散落在工具内部 + Guard | 三层约束（Structural / RunState / Capability） |
-| 工具结果 | `status + content + info` | `status + content + payload + meta` |
+| 执行链 | Kernel 内联 guard → gather → post-hook | `ToolRunner` 独立编排（验证串行、执行并发） |
+| 调度 | `asyncio.gather()` 全并发 | ResourceClaim (exclusive / shared_read / counted) + 拓扑依赖绑定 |
+| 安全约束 | 散落在工具内部 + Guard | 三层约束（Structural / RunState / Capability）+ 工具级语义校验 |
+| 工具结果 | `status + content + info` | `status + content + payload + meta` + 结果裁剪 |
+| 输入修改 | 无（校验只能通过或拒绝） | `ToolDecision.modified_args` 路径规范化后回传 |
+| 执行期反馈 | 工具执行是黑盒 | `ToolExecutionContext.on_progress` 中间状态上报 |
+| 取消传播 | stop_event 仅 Kernel 检查 | `ToolExecutionContext.stop_event` 传入 executor |
+| Post hook | fire-and-forget，不能修改结果 | 返回 `ToolResult \| None`，可替换原结果 |
 
 ---
 
@@ -916,3 +1119,72 @@ Phase 1 的解决方案是移除 system prompt 中的工具枚举，改为通用
 ### D-10: 为什么 Phase 1 用 ToolRegistry 作为 ToolCatalog 的内部 facade
 
 直接替换 ToolRegistry 会同时影响 ContextBuilder（消费 all_tools 生成 prompt）、SkillTool（on_skill_hit 回调链调用 registry.register）、Exp 的 MCP 注入路径。Phase 1 的核心目标是引入 ToolRunner 和 ToolCatalog 的上层消费接口，不应同时重构所有下游消费者。让 ToolCatalog 内部持有 ToolRegistry 实例作为兼容 facade，仅改变 Kernel 的消费方式，将迁移面收窄到最小。Phase 2 在执行链稳定后再将 ToolRegistry 降级为纯存储层。
+
+### D-11: 为什么在 ToolRunner 层做结果裁剪而不是在 Kernel 或工具内部
+
+三个候选位置：工具内部、ToolRunner 归一化阶段、Kernel 消息组装阶段。
+
+工具内部裁剪需要每个工具自行实现，重复且不一致。Kernel 消息组装阶段裁剪意味着 ToolResult 在传递过程中（post hook、事件发射）都是全量的，只在最后一步裁剪——但 post hook 可能消费 content 做二次处理，若 content 过大会导致 hook 内存压力。
+
+ToolRunner 归一化阶段（executor 返回后、post hook 之前）是最佳位置：裁剪后的 content 传入 post hook 和事件发射，全链路一致；完整结果通过 `meta["full_result_path"]` 引用，不丢失信息。裁剪阈值由 ToolSpec.max_result_chars 控制，每个工具可独立配置。
+
+### D-12: 为什么 ToolExecutionContext 是独立对象而不是扩展 executor 签名参数
+
+曾考虑 `tool_executor(args, stop_event, on_progress)` 的扁平签名。但未来可能需要传入更多运行时信息（如 workdir、session 引用、run_id），扁平参数会导致签名不断膨胀。
+
+将运行时上下文封装为 frozen dataclass 有三个好处：
+1. executor 签名稳定——新增上下文字段不改签名
+2. ToolInstance 保持 frozen——运行时上下文作为参数传入而非存储在实例上
+3. 测试简化——构造 mock ToolExecutionContext 比 mock 多个独立参数更方便
+
+### D-13: 为什么 execute_batch 验证串行而执行并发
+
+验证阶段（Layer A → input_validator → Layer B → Layer C）必须串行的原因：
+- RunStateGuard（Layer B）是有状态的——循环检测的 recent_calls 按顺序累积，如果并发验证，两个相同的 tool_call 可能同时通过循环检测
+- StructuralValidation（Layer A）的路径规范化通过 ToolDecision.modified_args 回传，后续步骤消费修改后的参数，必须是确定性顺序
+
+执行阶段可以安全并发的原因：
+- 所有并发安全性信息已编码在 ResourceClaim 中
+- Scheduler.acquire() 阻塞冲突的调用直到资源释放
+- 不需要额外的「分区」逻辑——ResourceClaim 是并发兼容性的单一真相源
+
+与 InlineToolRunner 的区别：InlineToolRunner 无差别 gather 所有 approved tools，绕过了 ResourceClaim 约束。FullToolRunner 的 gather 是安全的，因为 Scheduler 保证了互斥。
+
+### D-14: 为什么工具级语义校验（input_validator）和 StructuralValidation 是独立步骤
+
+StructuralValidation 是通用的、无状态的、基于 schema 的校验——它不知道 WriteTool 的业务语义，只知道 args_schema 和拓扑约束。
+
+工具级语义校验是特定于工具的业务逻辑：
+- WriteTool 检查目标路径不在 workdir 之外（语义约束，非 schema 可表达）
+- EditTool 检查 old_string 非空（业务不变量）
+- BashTool 检查命令格式合法性（Phase 2 迁移后的残留校验）
+
+如果把这些塞进 StructuralValidation，它需要 switch-case 工具名分发，破坏了「通用校验」的定位。如果塞进 CapabilityPolicy，它的输入合同是 (topology, instance, args)，不依赖工具业务语义。
+
+input_validator 让每个工具自己决定什么输入是语义上合法的，ToolCompiler 在编译时绑定，ToolRunner 在执行链中统一调用。职责边界干净：schema → StructuralValidation，业务语义 → input_validator，能力约束 → CapabilityPolicy。
+
+### D-15: 为什么 Post hook 可以修改结果而不是只做旁路处理
+
+当前 OutputProcessorHook 通过额外发 ToolResultEvent 注入 auto_save/summarize 结果。这导致：
+1. 事件流中出现伪工具调用事件，ChatHistoryConverter 需要特殊处理
+2. 前端 SSE 接收到和真实工具调用形状相同但语义不同的事件
+3. 历史恢复时需要区分「真实工具结果」和「hook 注入的附加信息」
+
+让 post hook 返回 `ToolResult | None` 允许 hook 直接修改原结果：
+- OutputProcessorHook 将 auto_save 路径追加到 result.content 或 result.payload
+- 事件流中只有一个 ToolResultEvent，内容完整
+- ChatHistoryConverter 不需要特殊处理
+
+约束：post hook 不能修改工具参数（那是 StructuralValidation 的职责），也不能改变成功/失败状态（只在 executor 成功时触发）。这保证了 hook 的修改范围有界。
+
+### D-16: 为什么 resource_claims 是拓扑依赖的而不是静态常量
+
+初版设计中 resource_claims 是工具的固有属性（类似 Claude Code 的 isConcurrencySafe 布尔标记）。但 matmaster 的 ToolSpec/ToolBinding 分离提供了更好的建模能力：
+
+- `glob`、`grep`、`list_dir` 在 local session 下通过 `subprocess.run` 创建独立进程，天然隔离，可以并发（shared_read）
+- 同样的工具在 SSH session 下共享 SSH 连接的 channel 复用，需要串行（exclusive）
+- 这是执行环境的属性，不是工具逻辑语义的属性
+
+ToolCompiler 在 build_runtime() 阶段根据 RuntimeTopology（包含 session_kind 和 session_capabilities）动态决定 ToolBinding 的 resource_claims。同一个 ToolSpec 在不同 topology 下产出不同的 ToolBinding——这正是 Spec/Binding 分离的核心价值。
+
+静态常量方案（如 BUILTIN_CLAIMS 表）无法区分这种拓扑依赖性，只能取最保守的值，导致 local session 下的搜索工具不必要地串行化。
