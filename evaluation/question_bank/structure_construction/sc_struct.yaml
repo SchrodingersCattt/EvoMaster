@@ -608,7 +608,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_007_20260401
+- id: SC_struct_007_20260402
   capability: structure_construction
   domain: struct
   intent: Build the nitroprusside anion and validate its coordination, bond lengths,
@@ -635,7 +635,9 @@ questions:
   - key: file_exists
     value: nitroprusside.xyz
   - key: target_formula
-    value: FeC5N6O
+    value:
+      filename: nitroprusside.xyz
+      formula: FeC5N6O
   - key: fe_coordination
     value:
       filename: nitroprusside.xyz
@@ -716,9 +718,10 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: target_formula
-    criterion: The final reported formula is `FeC5N6O`.
+    criterion: The chemical formula read from nitroprusside.xyz matches FeC5N6O
+      (compared as reduced composition).
     axis: correctness
-    verify: contains_all
+    verify: struct_file_formula
   - id: fe_coordination
     criterion: The Fe coordination number computed from nitroprusside.xyz is 6.
     axis: correctness
