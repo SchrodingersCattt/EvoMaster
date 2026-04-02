@@ -15,14 +15,14 @@
 
 ### Tool Runtime 对象模型
 
-- [ ] **TOBJ-01**: 定义 `SessionCapabilities` (frozen Pydantic model)，Session Protocol 增加 `capabilities` 属性自报告能力
-- [ ] **TOBJ-02**: 定义 `RuntimeTopology` (frozen Pydantic model)，包含 session_kind / control_root / workspace_root / active_planes / session_capabilities
-- [ ] **TOBJ-03**: 定义 `ToolPlane` 枚举（SESSION_SHELL / SESSION_FS / CONTROL_PLANE / EXTERNAL_SERVICE）
-- [ ] **TOBJ-04**: 定义 `ToolSpec` (frozen Pydantic model)，表达工具逻辑语义（tool_name / description / args_schema / source / capabilities / effect_level / exposed_to_model / fast_path_eligible）
-- [ ] **TOBJ-05**: 定义 `ResourceClaim` (frozen Pydantic model)，支持 exclusive / shared_read / counted 三种 mode
-- [ ] **TOBJ-06**: 定义 `ToolBinding` (frozen Pydantic model)，表达工具在当前环境下的执行语义（plane / resource_claims / state_mode / stop_mode）
-- [ ] **TOBJ-07**: 定义 `ToolInstance` (frozen dataclass)，组合 ToolSpec + ToolBinding + tool_executor
-- [ ] **TOBJ-08**: 定义 `ToolDecision` (frozen Pydantic model)，统一 allow/deny 决策（decision / reason / guidance）
+- [x] **TOBJ-01**: 定义 `SessionCapabilities` (frozen Pydantic model)，Session Protocol 增加 `capabilities` 属性自报告能力
+- [x] **TOBJ-02**: 定义 `RuntimeTopology` (frozen Pydantic model)，包含 session_kind / control_root / workspace_root / active_planes / session_capabilities
+- [x] **TOBJ-03**: 定义 `ToolPlane` 枚举（SESSION_SHELL / SESSION_FS / CONTROL_PLANE / EXTERNAL_SERVICE）
+- [x] **TOBJ-04**: 定义 `ToolSpec` (frozen Pydantic model)，表达工具逻辑语义（tool_name / description / args_schema / source / capabilities / effect_level / exposed_to_model / fast_path_eligible）
+- [x] **TOBJ-05**: 定义 `ResourceClaim` (frozen Pydantic model)，支持 exclusive / shared_read / counted 三种 mode
+- [x] **TOBJ-06**: 定义 `ToolBinding` (frozen Pydantic model)，表达工具在当前环境下的执行语义（plane / resource_claims / state_mode / stop_mode）
+- [x] **TOBJ-07**: 定义 `ToolInstance` (frozen dataclass)，组合 ToolSpec + ToolBinding + tool_executor
+- [x] **TOBJ-08**: 定义 `ToolDecision` (frozen Pydantic model)，统一 allow/deny 决策（decision / reason / guidance）
 
 ### Tool Catalog
 
@@ -46,7 +46,7 @@
 
 ### ToolResult 升级
 
-- [ ] **TRES-01**: `ToolResult` 升级为 status + content + payload + meta 四字段，payload 替代原 info 的结构化数据角色
+- [x] **TRES-01**: `ToolResult` 升级为 status + content + payload + meta 四字段，payload 替代原 info 的结构化数据角色
 
 ### AgentRuntimeSpec 扩展
 
@@ -123,14 +123,14 @@
 | KGEN-03 | Phase 32 | Pending |
 | KGEN-04 | Phase 32 | Pending |
 | KGEN-05 | Phase 32 | Pending |
-| TOBJ-01 | Phase 32 | Pending |
-| TOBJ-02 | Phase 32 | Pending |
-| TOBJ-03 | Phase 32 | Pending |
-| TOBJ-04 | Phase 32 | Pending |
-| TOBJ-05 | Phase 32 | Pending |
-| TOBJ-06 | Phase 32 | Pending |
-| TOBJ-07 | Phase 32 | Pending |
-| TOBJ-08 | Phase 32 | Pending |
+| TOBJ-01 | Phase 32 | Complete (32-01) |
+| TOBJ-02 | Phase 32 | Complete (32-01) |
+| TOBJ-03 | Phase 32 | Complete (32-01) |
+| TOBJ-04 | Phase 32 | Complete (32-01) |
+| TOBJ-05 | Phase 32 | Complete (32-01) |
+| TOBJ-06 | Phase 32 | Complete (32-01) |
+| TOBJ-07 | Phase 32 | Complete (32-01) |
+| TOBJ-08 | Phase 32 | Complete (32-01) |
 | TCAT-01 | Phase 32 | Pending |
 | TCAT-02 | Phase 32 | Pending |
 | TCAT-03 | Phase 32 | Pending |
@@ -142,7 +142,7 @@
 | TCON-01 | Phase 33 | Pending |
 | TCON-02 | Phase 32 | Pending |
 | TCON-03 | Phase 33 | Pending |
-| TRES-01 | Phase 32 | Pending |
+| TRES-01 | Phase 32 | Complete (32-01) |
 | SPEC-01 | Phase 32 | Pending |
 | TDEF-01 | Phase 32 | Pending |
 | ESIN-01 | Phase 34 | Pending |
@@ -173,4 +173,4 @@
 
 ---
 *Requirements defined: 2026-04-02*
-*Last updated: 2026-04-02 after initial definition*
+*Last updated: 2026-04-02 after 32-01 completion (9 requirements)*

@@ -15,6 +15,8 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from matmaster.types.topology import SessionCapabilities
+
 
 class SessionConfig(BaseModel):
     """Base session configuration -- shared by all session types.
@@ -113,3 +115,7 @@ class Session(Protocol):
     def is_file(self, path: str) -> bool:
         """Check if path is a regular file."""
         ...
+
+    # Tool Runtime v2: capabilities property (Phase 34 activates, Phase 32 defines type only)
+    # Current LocalSession/SSHSession do not implement this property yet.
+    # When activated, change to: @property \n def capabilities(self) -> SessionCapabilities: ...

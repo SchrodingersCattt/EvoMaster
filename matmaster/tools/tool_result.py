@@ -12,7 +12,8 @@ class ToolResult(BaseModel):
 
     status: str = "success"
     content: str = ""
-    info: dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    meta: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
     def from_error(cls, tool_name: str, error: BaseException) -> ToolResult:

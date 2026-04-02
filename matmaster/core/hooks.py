@@ -224,7 +224,7 @@ class EventEmitterHook(BaseHook):
                 tool_name=tool_call.name,
                 result=result.content,
                 status=result.status,
-                info=result.info,
+                payload=result.payload,
             )
         )
 
