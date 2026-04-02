@@ -1,464 +1,280 @@
-# Technology Stack: matmaster v2.0 Async Transformation
+# Technology Stack: v2.2 AgentKernel Generator-First 全链路改造
 
-**Project:** matmaster-evo 协程改造
-**Researched:** 2026-03-26
+**Project:** matmaster-evo v2.2 Kernel Generator-First Transformation
+**Researched:** 2026-04-02
 **Overall confidence:** HIGH
 
 ## Executive Summary
 
-matmaster v2.0 的 async 改造不需要引入重型新依赖。Python 3.13 标准库的 asyncio 模块已提供全部所需原语（TaskGroup, asyncio.Queue, asyncio.Event, create_subprocess_exec）。OpenAI SDK 已内置 AsyncOpenAI + AsyncStream（当前安装的 openai 2.20.0 即支持，无需升级）。唯一需要新增的 dev 依赖是 pytest-asyncio，用于测试 async 代码。
+v2.2 的 generator-first 改造**不需要引入任何新的外部依赖**。Python 3.13 标准库已提供全部所需原语：`collections.abc.AsyncGenerator` / `AsyncIterator` 类型注解、`contextlib.aclosing` 安全清理、`dataclasses` 私有内部类型。现有 Pydantic v2、pytest 9.x + pytest-asyncio 1.3.0 栈完全覆盖验证需求。
 
-核心判断：
-1. 所有 async 原语来自 Python 3.13 stdlib（asyncio.Queue, asyncio.Event, TaskGroup, create_subprocess_exec），零新运行时依赖
-2. OpenAI AsyncOpenAI 已在当前安装版本中可用（verified: `from openai import AsyncOpenAI` 成功），chat.completions.create 的 async streaming 返回 AsyncStream（同时是 AsyncIterator 和 async context manager）
-3. pytest-asyncio >= 1.0.0 是唯一新增的 dev 依赖，配置 `asyncio_mode = "auto"` 后所有 `async def test_*` 自动识别
-4. MessageBus 从 `queue.Queue` 改为 `asyncio.Queue`，无需第三方库（janus 仅在需要 sync/async 桥接时使用，但 v2.0 全链路 async 不需要）
-5. `threading.Event` 的 9 处使用全部替换为 `asyncio.Event`
-6. `time.sleep` 的 3 处使用全部替换为 `asyncio.sleep`
+本次改造的核心是架构模式的变更（observer-push 转 generator-pull），而非技术栈变更。以下文档聚焦于需要使用的标准库 API、类型注解最佳实践、以及明确不该引入的东西。
 
 ## Recommended Stack
 
-### Core Runtime (No Changes)
+### Core Runtime (不变)
 
-| Technology | Current Version | Purpose | Status |
-|------------|----------------|---------|--------|
-| Python | 3.13.2 | Runtime | Unchanged -- asyncio.TaskGroup (3.11+), full async subprocess support |
-| Pydantic | 2.12.5 | Data models, frozen configs | Unchanged -- model_copy(), ConfigDict 与 async 无关 |
-| FastAPI | 0.128.8 | Web service layer | Unchanged -- src/ 层不在 v2.0 scope |
-| OpenAI SDK | 2.20.0 | LLM API client | Unchanged -- AsyncOpenAI 已可用，无需升级 |
-| httpx | 0.28.1 | HTTP client (OpenAI SDK 底层) | Unchanged -- httpx.AsyncClient 已可用于 AsyncOpenAI |
-| tiktoken | 0.7.0+ | Token estimation | Unchanged -- estimate_tokens() 是纯计算，不涉及 I/O |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Python | 3.13.2 | Runtime | 已有。3.13 的 `collections.abc` 原生支持泛型下标 `AsyncGenerator[Y, S]`，无需 `typing` 模块 |
+| Pydantic | v2.12.5 | 契约模型 (AgentRuntimeSpec, events) | 已有。`frozen=True` + `arbitrary_types_allowed=True` 支持 `Any` 类型预留字段 |
+| asyncio | stdlib | 事件循环 + 并发原语 | 已有。`asyncio.gather` 用于 InlineToolRunner 并行工具执行 |
 
-### New Dev Dependencies
+### 新增使用的 stdlib API (零新依赖)
 
-| Technology | Version | Purpose | Why This One |
-|------------|---------|---------|--------------|
-| pytest-asyncio | >=1.0.0 | Async test runner | 唯一成熟的 pytest async 插件；auto mode 自动识别 async def test；与 pytest >=9.0.2 兼容 |
+| API | 来源 | Purpose | Why |
+|-----|------|---------|-----|
+| `collections.abc.AsyncIterator` | stdlib | `run_stream()` 返回类型 | 公开接口返回 `AsyncIterator[BusEvent]`——消费者只需 `async for`，不需要 `asend()`/`athrow()` 能力 |
+| `collections.abc.AsyncGenerator` | stdlib | `_run_items()` 内部返回类型 | 私有 generator 返回 `AsyncGenerator[_KernelItem, None]`——精确标注 yield 语义 |
+| `dataclasses.dataclass` | stdlib | `_KernelItem`, `_KernelState`, `_TerminalItem`, `ToolExecutionContext` | 内核私有类型用 dataclass 而非 Pydantic——无需验证开销，实例化快 5-15x |
+| `dataclasses.field` | stdlib | `_KernelState.total_usage` 等 mutable default | `field(default_factory=dict)` 避免可变默认值陷阱 |
+| `contextlib.aclosing` | stdlib (3.10+) | Phase 2 消费者安全关闭 generator | Phase 1 不需要（`run()` 完全消费 generator）。Phase 2 Service 层用 `async with aclosing(kernel.run_stream(...)) as events:` 确保异常退出时 generator 被正确 `aclose()` |
+| `typing.Protocol` | stdlib | `ToolRunner` Protocol | 已有模式——项目全面使用 `@runtime_checkable Protocol` 定义接口 |
+| `typing.runtime_checkable` | stdlib | `ToolRunner` isinstance 检查 | 已有模式——与 `Hook`, `LLMProvider`, `Guard` 一致 |
 
-### Explicitly NOT Adding
+### Testing (不变)
 
-| Library | Why Not | Use Instead |
-|---------|---------|-------------|
-| anyio | 项目只用 asyncio，不需要 Trio/curio 兼容层，引入 anyio 增加不必要的抽象 | 直接用 asyncio stdlib |
-| trio | Python stdlib asyncio 已是项目标准，Trio 的 structured concurrency 模型不兼容现有 FastAPI 栈 | asyncio.TaskGroup（Python 3.11+ 引入的 structured concurrency） |
-| aiofiles | 文件 I/O 操作委托给 BaseSession（远程执行），本地文件操作（config 加载等）是一次性同步读取，不值得 async 化 | 同步 pathlib（config 加载）+ asyncio.to_thread（必要时） |
-| janus | v2.0 全链路 async，MessageBus producer/consumer 都在 event loop 内，不需要 sync/async 桥接 | asyncio.Queue |
-| aiomysql / aioredis | src/ 服务层不在 v2.0 scope，数据库/Redis 连接保持现状 | 现有 pymysql + redis |
-| backoff / tenacity | 项目已有手动 retry 实现（3 处 time.sleep + exponential backoff），改为 asyncio.sleep 即可，不值得引入装饰器库 | 手动 async retry + asyncio.sleep |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| pytest | 9.0.2 | Test runner | 已有 |
+| pytest-asyncio | 1.3.0 | Async test support | 已有。`asyncio_mode = "auto"` 配置在 `pyproject.toml`，async test 自动识别 |
 
-## Async Primitive Mapping (stdlib)
+### Supporting Libraries (不变，已在 stack 中)
 
-每个需要替换的同步原语及其 async 对应物：
+| Library | Version | Purpose | Relation to v2.2 |
+|---------|---------|---------|-------------------|
+| openai | (current) | LLM provider SDK | 不变。`chat_stream()` 已返回 `AsyncStream`，与 generator 消费兼容 |
+| tiktoken | >=0.7.0 | Token counting | 不变。ContextCompactor 继续使用 |
 
-| Sync Primitive | Async Replacement | Location in Codebase | Notes |
-|---------------|-------------------|---------------------|-------|
-| `queue.Queue` | `asyncio.Queue` | `matmaster/core/bus.py` | emit() -> async emit(), get() -> async get(), get_nowait() 保留同名 |
-| `threading.Event` | `asyncio.Event` | agent.py, exp.py, spawn_tool.py, event_router.py, repl.py, runner.py, playground.py (9 处) | stop_event.is_set() 签名不变，stop_event.wait() 变 await |
-| `time.sleep(backoff)` | `await asyncio.sleep(backoff)` | openai_provider.py (2 处), agent.py (1 处) | retry backoff 从阻塞变非阻塞 |
-| `Iterator[StreamChunk]` (sync generator) | `AsyncIterator[StreamChunk]` (async generator) | LLMProvider.chat_stream, OpenAIProvider.chat_stream | yield -> async for, 消费端从 for chunk in 变 async for chunk in |
-| `for chunk in provider.chat_stream()` | `async for chunk in provider.chat_stream()` | agent.py _do_stream_llm() | OpenAI SDK stream 变 AsyncStream（已是 AsyncIterator） |
-| `subprocess.run()` | `asyncio.create_subprocess_exec()` | BashTool (间接通过 session) | session-dependent: session 层改造；session-free (DevShell): 直接用 create_subprocess_exec |
+## Type Annotation Strategy
 
-## Detailed Component Changes
+### 公开接口: 使用 `AsyncIterator`
 
-### 1. LLMProvider Protocol -- Async 化
+```python
+from collections.abc import AsyncIterator
 
-**Current** (sync):
+async def run_stream(self, ...) -> AsyncIterator[BusEvent]:
+    ...
+```
+
+**Why `AsyncIterator` 而非 `AsyncGenerator`:**
+- 消费者只做 `async for event in kernel.run_stream(...):`，不使用 `asend()` 或 `athrow()`
+- `AsyncIterator` 是更窄的接口承诺——符合 Liskov 替换原则
+- mypy 对 `AsyncIterator` 返回类型的 async generator 函数检查通过
+- 实际的 async generator 对象同时满足 `AsyncIterator` 和 `AsyncGenerator`
+
+**Confidence:** HIGH (Python 官方文档 + cpython issue #112866 确认此用法)
+
+### 私有 generator: 使用 `AsyncGenerator`
+
+```python
+from collections.abc import AsyncGenerator
+
+async def _run_items(self, ...) -> AsyncGenerator[_KernelItem, None]:
+    ...
+```
+
+**Why `AsyncGenerator[Y, None]`:**
+- 私有方法，精确标注 yield 类型和 send 类型
+- `None` send type 表明不使用 `asend()` 注入值
+- 内部测试可能需要 `aclose()` 能力（`AsyncGenerator` 保证有此方法，`AsyncIterator` 不保证）
+
+### 不使用 `typing.AsyncGenerator` (deprecated)
+
+Python 3.9+ 后 `typing.AsyncGenerator` 已废弃，`collections.abc.AsyncGenerator` 是标准替代。项目已有 `from __future__ import annotations` 启用延迟解析，`collections.abc` 版本在所有语境下可直接使用。
+
+## Internal Types: dataclass, NOT Pydantic
+
+### 决策: `_KernelItem` / `_KernelState` / `_TerminalItem` / `ToolExecutionContext` 用 `@dataclass`
+
+| 考量 | dataclass | Pydantic BaseModel |
+|------|-----------|-------------------|
+| 实例化性能 | 5-15x faster | 有 Rust 加速但仍更慢 |
+| 验证需求 | 无——内核私有类型，数据已在边界校验 | 过度——这些类型不接收外部输入 |
+| 可变性 | `_KernelState` 需要可变（turn++, messages append） | Pydantic frozen=True 是默认——需要额外配置可变 |
+| 序列化 | 不需要——纯内核内部流转 | 过度——不会 JSON 序列化这些对象 |
+| 项目惯例 | `_ToolOutcome` 已用 `NamedTuple`，`KernelResult` 已用 `dataclass(frozen=True)` | `AgentRuntimeSpec` 等跨层契约用 Pydantic |
+
+**规则:**
+- 跨层契约（`AgentRuntimeSpec`, `BusEvent`）: Pydantic `BaseModel(frozen=True)` 保证类型安全 + 序列化
+- 内核私有类型（`_KernelItem`, `_KernelState`）: stdlib `@dataclass` 极简开销
+- 工具执行上下文（`ToolExecutionContext`）: `@dataclass(frozen=True)` 保证不可变，无 Pydantic 开销
+
+**Confidence:** HIGH (与现有 `KernelResult` 用 `dataclass(frozen=True)` 一致)
+
+## ToolRunner Protocol: 设计选择
+
+### 使用 `@runtime_checkable Protocol` 而非 ABC
+
 ```python
 @runtime_checkable
-class LLMProvider(Protocol):
-    def chat(self, messages, tools=None) -> LLMResponse: ...
-    def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0) -> LLMResponse: ...
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]: ...
+class ToolRunner(Protocol):
+    async def execute_batch(
+        self,
+        tool_calls: list[ToolCallData],
+        ctx: ToolExecutionContext,
+        *,
+        on_result: Callable[[ToolCallData, ToolResult], Awaitable[None]] | None = None,
+    ) -> list[tuple[ToolCallData, ToolResult]]:
+        ...
 ```
 
-**Target** (async):
-```python
-@runtime_checkable
-class LLMProvider(Protocol):
-    async def chat(self, messages, tools=None) -> LLMResponse: ...
-    async def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0) -> LLMResponse: ...
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]: ...
-```
+**Why Protocol 而非 ABC:**
+- 项目已有 4 个 `@runtime_checkable Protocol`（`Hook`, `LLMProvider`, `Guard`, `EventHandler`）——保持一致
+- Protocol 支持结构性子类化（duck typing），`InlineToolRunner` 不需要显式继承
+- `isinstance(runner, ToolRunner)` 在运行时可用（Phase 2 Exp 注入时可做 assertion）
 
-**Key point:** `chat_stream` 返回类型从 `Iterator[StreamChunk]` 变 `AsyncIterator[StreamChunk]`。方法本身可以是 `async def`（返回 async generator）或普通 `def`（返回 AsyncIterator 对象）。建议用 `async def` + `yield`（async generator），更自然。
+**Performance caveat:** Python 3.12/3.13 的 `@runtime_checkable` Protocol `isinstance` 检查比普通类型检查慢。但 ToolRunner 实例化发生在 `_run_items()` 入口（每次 run 一次），不在热循环中。性能影响可忽略。
 
-**runtime_checkable 与 async 方法：** `@runtime_checkable` Protocol 只检查方法名是否存在，不检查是否是 coroutine。这意味着 isinstance() 检查仍然有效，但 mypy 会在编译时检查 async 签名匹配。当前 codebase 中 `LLMProvider` 的 runtime_checkable 主要用于 AgentRuntimeSpec 的 arbitrary_types_allowed 场景，async 化后行为不变。
+**Confidence:** HIGH (与现有架构一致，已验证 `isinstance` 在 Python 3.13.2 正常工作)
 
-### 2. OpenAIProvider -- AsyncOpenAI
+## AsyncGenerator Cleanup: Phase-Specific 策略
 
-**Current** (sync):
-```python
-self._client = openai.OpenAI(api_key=..., http_client=httpx.Client(...))
-```
+### Phase 1: 无需 `aclose()` / `aclosing()`
 
-**Target** (async):
-```python
-self._client = openai.AsyncOpenAI(api_key=..., http_client=httpx.AsyncClient(...))
-```
+Phase 1 的两个消费路径都完全消费 generator：
+- `run()`: `async for item in self._run_items(...)` 完整迭代到 terminal
+- `run_stream()`: `async for item in self._run_items(...)` 完整迭代，过滤 yield events
 
-**Verified availability** (Python 3.13.2, openai 2.20.0):
-- `from openai import AsyncOpenAI` -- available
-- `AsyncOpenAI.__init__` accepts `http_client: httpx.AsyncClient | None`
-- `openai.AsyncStream` -- is both AsyncIterator and async context manager
+没有提前退出的场景。Generator 自然结束，GC 无需介入。
 
-**chat_stream async pattern:**
-```python
-async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
-    stream = await self._client.chat.completions.create(stream=True, **kwargs)
-    async for chunk in stream:
-        yield StreamChunk(...)
-```
+### Phase 2: 引入 `contextlib.aclosing`
 
-**Retry 替换:**
-```python
-# Before:
-time.sleep(backoff)
-# After:
-await asyncio.sleep(backoff)
-```
-
-### 3. AgentKernel.run() -- Async Execution Loop
-
-**Current:**
-```python
-def run(self, spec, task, history=None, stop_event: threading.Event | None = None) -> KernelRunResult:
-    while turn < spec.max_turns:
-        if stop_event and stop_event.is_set(): ...
-        response = self._call_llm(spec, messages)
-        tool_result = spec.tool_registry.execute(tc.name, tc.arguments)
-```
-
-**Target:**
-```python
-async def run(self, spec, task, history=None, stop_event: asyncio.Event | None = None) -> KernelRunResult:
-    while turn < spec.max_turns:
-        if stop_event and stop_event.is_set(): ...  # asyncio.Event.is_set() 签名相同
-        response = await self._call_llm(spec, messages)
-        tool_result = await spec.tool_registry.execute(tc.name, tc.arguments)
-```
-
-**Cancellation:** `asyncio.Event.is_set()` 是同步方法（不需要 await），与 `threading.Event.is_set()` 签名完全一致。差别仅在于 `event.wait()` 变成 `await event.wait()`。AgentKernel 的 cancel check 使用 `is_set()`，无需修改检查逻辑。
-
-### 4. MessageBus -- asyncio.Queue
-
-**Current** (`queue.Queue`, thread-safe):
-```python
-class MessageBus:
-    def __init__(self):
-        self._queue: queue.Queue[BusEvent] = queue.Queue()
-    def emit(self, event: BusEvent) -> None:
-        self._queue.put(event)
-    def get(self, timeout=None) -> BusEvent:
-        return self._queue.get(timeout=timeout)
-```
-
-**Target** (`asyncio.Queue`, coroutine-safe):
-```python
-class MessageBus:
-    def __init__(self):
-        self._queue: asyncio.Queue[BusEvent] = asyncio.Queue()
-    async def emit(self, event: BusEvent) -> None:
-        await self._queue.put(event)
-    async def get(self, timeout=None) -> BusEvent:
-        if timeout is not None:
-            return await asyncio.wait_for(self._queue.get(), timeout=timeout)
-        return await self._queue.get()
-    def get_nowait(self) -> BusEvent:
-        return self._queue.get_nowait()  # 同步方法，asyncio.Queue 也提供
-```
-
-**Note:** `asyncio.Queue.get_nowait()` 和 `asyncio.Queue.qsize()` 是同步方法，与 `queue.Queue` 签名一致。`empty` property 也保持不变。变化集中在 `put()` -> `await put()` 和 `get()` -> `await get()`。
-
-### 5. Hook Protocol -- Async 化
-
-**Current** (7 sync methods):
-```python
-class Hook(Protocol):
-    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction: ...
-    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None: ...
-    def on_stream_chunk(self, chunk: StreamChunk) -> None: ...
-    # ... 4 more
-```
-
-**Target** (7 async methods):
-```python
-class Hook(Protocol):
-    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction: ...
-    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None: ...
-    async def on_stream_chunk(self, chunk: StreamChunk) -> None: ...
-    # ... 4 more
-```
-
-**run_* helpers 变化：**
-```python
-# Before:
-def run_pre_tool_call(hooks, tool_call) -> HookAction:
-    for hook in hooks:
-        action = hook.pre_tool_call(tool_call)
-        if action == HookAction.SKIP:
-            return HookAction.SKIP
-    return HookAction.CONTINUE
-
-# After:
-async def run_pre_tool_call(hooks, tool_call) -> HookAction:
-    for hook in hooks:
-        action = await hook.pre_tool_call(tool_call)
-        if action == HookAction.SKIP:
-            return HookAction.SKIP
-    return HookAction.CONTINUE
-```
-
-**EventEmitterHook 影响：** emit 调用从同步变 async，内部 `self._bus.emit(event)` 变 `await self._bus.emit(event)`。所有 7 个 hook method 都需要变 async def。
-
-### 6. BuiltinTool -- Async execute
-
-**Current:**
-```python
-class BuiltinTool(ABC):
-    def execute(self, arguments: dict[str, Any]) -> str:
-        return self._execute(arguments)
-
-    @abstractmethod
-    def _execute(self, arguments: dict[str, Any]) -> str: ...
-```
-
-**Target:**
-```python
-class BuiltinTool(ABC):
-    async def execute(self, arguments: dict[str, Any]) -> str:
-        return await self._execute(arguments)
-
-    @abstractmethod
-    async def _execute(self, arguments: dict[str, Any]) -> str: ...
-```
-
-**BashTool 特殊处理：** 当前通过 `session.exec_bash()` 同步执行。v2.0 有两个选项：
-- session-dependent（生产）: 如果 BaseSession 不改为 async，用 `asyncio.to_thread(session.exec_bash, ...)` 包装
-- session-free (DevShell): 用 `asyncio.create_subprocess_exec()` 或 `asyncio.create_subprocess_shell()` 直接 async 执行
-
-**Subprocess async pattern:**
-```python
-async def _execute(self, arguments):
-    proc = await asyncio.create_subprocess_shell(
-        command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=str(self._workdir),
-    )
-    try:
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout
-        )
-    except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
-        return "Error: command timed out"
-    return stdout.decode()
-```
-
-### 7. Tool Protocol -- Async execute
-
-**Current:**
-```python
-@runtime_checkable
-class Tool(Protocol):
-    def execute(self, arguments: dict[str, Any]) -> str | ToolResult | None: ...
-```
-
-**Target:**
-```python
-@runtime_checkable
-class Tool(Protocol):
-    async def execute(self, arguments: dict[str, Any]) -> str | ToolResult | None: ...
-```
-
-**ToolRegistry.execute 变化:**
-```python
-# Before:
-def execute(self, name, arguments) -> ToolResult:
-    return normalize_tool_result(tool.execute(arguments))
-
-# After:
-async def execute(self, name, arguments) -> ToolResult:
-    return normalize_tool_result(await tool.execute(arguments))
-```
-
-### 8. Guard Protocol -- 保持同步
-
-Guard 的 `evaluate()` 是纯计算（fingerprint 比对、turn 计数），不涉及 I/O。保持同步。
+Service 层消费 `run_stream()` 时可能因异常或超时提前退出。此时需要确保 generator 被正确关闭：
 
 ```python
-# 保持不变
-class Guard(Protocol):
-    def evaluate(self, ctx: GuardContext) -> GuardResult: ...
+from contextlib import aclosing
 
-class GuardPipeline:
-    def evaluate(self, tool_call, current_turn, max_turns) -> GuardResult: ...
+async def run_agent_stream(self, ...):
+    async with aclosing(kernel.run_stream(spec, task)) as events:
+        async for event in events:
+            await bus.emit(event)  # Phase 2 过渡：仍喂入 Bus
 ```
 
-**Rationale:** async 化所有东西是过度工程。Guard 是 CPU-bound 纯逻辑，async 化没有收益，反而增加 await 开销。
+**Why `aclosing` 而非手动 `aclose()`:**
+- PEP 525 规定 async generator 需要事件循环才能 `aclose()`——`aclosing()` 自动在 `__aexit__` 中调用
+- 异常安全——无论正常退出还是异常退出都能清理
+- Python 3.10+ stdlib 自带，不需要第三方库
 
-### 9. ContextCompactor -- Async 化
+### Phase 3 (如果去总线化): Generator fanout 不需要第三方库
 
-内部调用 `self._summary_provider.chat()`，这个 LLM 调用是 I/O-bound，必须 async。
+Phase 3 评估去总线化时，如果需要多消费者 fanout（SSE + 持久化 + workspace），**不要引入 aiostream 或 aioreactive**。应该用 asyncio.Queue 实现 pump 模式：
 
 ```python
-# Before:
-def _summarize(self, old_messages) -> str:
-    response = self._summary_provider.chat(api_messages)
-    return response.content
-
-# After:
-async def _summarize(self, old_messages) -> str:
-    response = await self._summary_provider.chat(api_messages)
-    return response.content
+# 概念：producer → queue → consumers
+async def _pump(gen, queues):
+    async for item in gen:
+        for q in queues:
+            q.put_nowait(item)
+    for q in queues:
+        q.put_nowait(SENTINEL)
 ```
 
-`compact_if_needed()` 也需要变 async（因为内部调用 `_summarize`）。
+**Why 不用第三方:**
+- 单 producer 多 consumer 场景，asyncio.Queue 已足够
+- aiostream/aioreactive 引入响应式编程范式（Observable/Operator），学习成本高，与项目 async/await 原生模式不一致
+- asyncio.Queue 已在 MessageBus 中使用，团队已熟悉
 
-### 10. SubAgent Spawn -- Async 化
+**Confidence:** HIGH
 
-**Current** (sync spawn_fn closure):
-```python
-def spawn_fn(exp_name, task, stop_event: threading.Event | None = None) -> str:
-    child_runtime = child_exp.build_runtime(ctx, bus=bus, ...)
-    run_result = child_runtime.kernel.run(child_runtime.spec, task, stop_event=stop_event)
-    return result.final_content
-```
+## AgentRuntimeSpec 扩展: `Any` 类型预留
 
-**Target** (async spawn_fn):
-```python
-async def spawn_fn(exp_name, task, stop_event: asyncio.Event | None = None) -> str:
-    child_runtime = await child_exp.build_runtime(ctx, bus=bus, ...)
-    run_result = await child_runtime.kernel.run(child_runtime.spec, task, stop_event=stop_event)
-    return result.final_content
-```
-
-**Structured concurrency (future v2.1):** 当前 SubAgent 是串行执行（一次只 spawn 一个），async 改造后可以用 `asyncio.TaskGroup` 实现并行 spawn，但这是 v2.0 out of scope。v2.0 只做 async 基础设施。
-
-## Testing Configuration
-
-### pytest-asyncio Setup
-
-**pyproject.toml 新增：**
-```toml
-[project.optional-dependencies]
-dev = [
-    "pre-commit>=4.5.1",
-    "pytest>=9.0.2",
-    "pytest-asyncio>=1.0.0",   # 新增
-]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-```
-
-**为什么选 auto mode：**
-- matmaster 只使用 asyncio（不用 Trio/curio），auto mode 是最简配置
-- 所有 `async def test_*` 自动被识别为 asyncio 测试，无需手动加 `@pytest.mark.asyncio`
-- 所有 async fixtures 自动被 pytest-asyncio 管理
-- auto mode 从 pytest-asyncio 0.25 开始是推荐模式（1.3.0 默认 strict，但显式配 auto 更简洁）
-
-**为什么不用 strict mode：**
-- strict mode 要求每个 async test 手动加 `@pytest.mark.asyncio`
-- 项目有 863 个测试，新增的 async test 会很多，手动标记增加样板代码
-- 项目不混用多个 async 框架，auto mode 不会产生歧义
-
-### Mock Pattern for Async Tests
-
-**Current MockLLMProvider** (tests/matmaster/core/conftest.py):
-```python
-class MockLLMProvider:
-    def chat(self, messages, tools=None) -> LLMResponse:
-        return LLMResponse(content="mock response", finish_reason="stop")
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
-        yield StreamChunk(content="hello", finish_reason="stop")
-```
-
-**Target MockLLMProvider:**
-```python
-class MockLLMProvider:
-    async def chat(self, messages, tools=None) -> LLMResponse:
-        return LLMResponse(content="mock response", finish_reason="stop")
-    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
-        yield StreamChunk(content="hello", finish_reason="stop")
-```
-
-async generator（`async def` + `yield`）是最自然的 mock 方式。调用端用 `async for chunk in provider.chat_stream(...)` 消费。
-
-### Fixture Patterns
+### Phase 1 预留字段
 
 ```python
-import pytest
-import asyncio
-
-# asyncio_mode = "auto" 下，async fixture 自动被识别
-@pytest.fixture
-async def message_bus():
-    return MessageBus()
-
-@pytest.fixture
-async def stop_event():
-    return asyncio.Event()
-
-# Sync fixtures 不受影响，继续正常工作
-@pytest.fixture
-def mock_tool_call():
-    return ToolCallData(id="tc-1", name="test_tool", arguments={"key": "value"})
+class AgentRuntimeSpec(BaseModel):
+    # ... 现有字段 ...
+    tool_runner: Any | None = None
+    tool_catalog: Any | None = None
+    runtime_topology: Any | None = None
+    capability_policy: Any | None = None
+    structural_validation: Any | None = None
 ```
 
-## Version Compatibility Matrix
+**Why `Any` 而非 forward reference:**
+- `ToolCatalog`, `RuntimeTopology` 等类型在 Tool Runtime v2 中定义，Phase 1 尚未创建
+- Pydantic v2 的 `arbitrary_types_allowed=True` 已启用，`Any` 兼容
+- Forward reference（如 `'ToolCatalog'`）需要类型存在于同一或可导入模块——违反 Phase 分离
+- Phase 2 引入具体类型后直接替换为精确注解
 
-| Package | Current | Required for v2.0 | Action |
-|---------|---------|-------------------|--------|
-| Python | 3.13.2 | >=3.11 (TaskGroup) | No change |
-| openai | 2.20.0 | >=1.0.0 (AsyncOpenAI) | No change -- already satisfied |
-| httpx | 0.28.1 | >=0.23.0 (AsyncClient) | No change -- already satisfied |
-| pydantic | 2.12.5 | >=2.0 | No change |
-| pytest | 9.0.2 | >=8.0 (pytest-asyncio 1.x compat) | No change |
-| pytest-asyncio | (not installed) | >=1.0.0 | **NEW: add to dev deps** |
-| FastAPI | 0.128.8 | N/A (src/ not in scope) | No change |
-| redis | >=5.0.0 | N/A (src/ not in scope) | No change |
+**Confidence:** HIGH (spec 设计决策 D-07 已论证)
+
+## What NOT to Add
+
+| Category | Rejected | Why |
+|----------|----------|-----|
+| Reactive library | aiostream, aioreactive, RxPY | 引入 Observable 范式。项目用 native async/await，不需要响应式编程 |
+| Event bus framework | pyventus, blinker | 正在移除间接 Bus，不应引入新的 |
+| Streaming framework | streamz, faust | 面向分布式流处理，与单进程 agent 循环不匹配 |
+| Type narrowing library | beartype, typeguard | `@runtime_checkable Protocol` 已满足运行时类型检查需求 |
+| Async testing enhancement | anyio, trio | 项目绑定 asyncio，不需要异步运行时抽象层 |
+| pytest plugin | pytest-timeout | 已有 stop_event 取消机制。测试超时用 pytest 内置 `-x --timeout` |
+| Data class alternative | attrs, msgspec | dataclass 足够。attrs 是 superset（功能过剩），msgspec 面向序列化（不需要） |
+| Generator utility | more-itertools, aioitertools | 标准 `async for` + `asyncio.gather` 覆盖全部需求 |
 
 ## Installation
 
 ```bash
-# Only one new dev dependency
+# 无变化。不需要安装新依赖。
 uv sync --extra dev
-
-# After adding pytest-asyncio to pyproject.toml:
-# [project.optional-dependencies]
-# dev = [
-#     "pre-commit>=4.5.1",
-#     "pytest>=9.0.2",
-#     "pytest-asyncio>=1.0.0",
-# ]
 ```
 
-## Integration with src/ Service Layer
+## Alternatives Considered
 
-v2.0 scope 声明 src/ 不改造，但需要考虑接口兼容：
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| AsyncGenerator 返回类型 | `AsyncIterator[BusEvent]` (公开) | `AsyncGenerator[BusEvent, None]` | `AsyncIterator` 是更窄的接口承诺，消费者不需要 send/throw |
+| 内核私有类型 | `@dataclass` | `Pydantic BaseModel` | 无需验证/序列化开销。`_KernelState` 需要可变性，Pydantic frozen 不适配 |
+| ToolRunner 定义 | `@runtime_checkable Protocol` | `ABC` (abstract base class) | Protocol 支持结构性子类化，与项目 4 个现有 Protocol 一致 |
+| ToolExecutionContext | `@dataclass(frozen=True)` | `NamedTuple` | dataclass 支持可选字段默认值 + Phase 2 扩展字段，NamedTuple 扩展性差 |
+| Generator fanout (Phase 3) | `asyncio.Queue` pump | aiostream multicast | 零新依赖，复用现有 MessageBus 模式 |
+| Async cleanup | `contextlib.aclosing` (stdlib) | 手动 try/finally + aclose() | aclosing 是标准模式，异常安全，PEP 525 推荐 |
 
-**Current:** `src/services/agent_run_service.py` 通过 `Exp.run()` 同步调用 agent。Worker 在线程中执行。
+## Integration Points
 
-**v2.0 兼容策略:** Exp.run() 变 async 后，src/ 层调用入口需要 `asyncio.run()` 或 `loop.run_until_complete()` 包装。但这属于 src/ 层适配，不是 matmaster/ 层职责。
+### 与现有 EventEmitterHook 的并存 (Phase 1)
 
-**DevShell 兼容策略:** 项目已声明 DevShell async 改造延后，用 `asyncio.run(exp.run(...))` 包装 async 入口即可。
+Phase 1 中 `_run_items()` yield 事件与 EventEmitterHook emit 到 Bus 并存。两条路径**不产生重复消费**，因为 Phase 1 没有 `run_stream()` 的真实消费者——现有 service 层仍走 `run()` -> Hook -> Bus -> EventRouter。
+
+### 与 FastAPI SSE 的对接 (Phase 2)
+
+FastAPI 0.135.0+ 原生支持 `EventSourceResponse` 接收 async generator。Phase 2 Service 层消费 `run_stream()` 时可直接对接：
+
+```python
+from starlette.responses import StreamingResponse
+
+async def sse_endpoint(request):
+    async def event_generator():
+        async with aclosing(kernel.run_stream(spec, task)) as events:
+            async for event in events:
+                yield f"data: {event.model_dump_json()}\n\n"
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+```
+
+现有项目使用 `sse-starlette` 的 `EventSourceResponse`。Phase 2 对接时需评估是直接用 `StreamingResponse` 还是继续用 `EventSourceResponse`，但这不影响 Phase 1。
+
+### 与 ToolRegistry 的关系
+
+`InlineToolRunner` 持有 `ToolRegistry` 引用，调用 `registry.execute(name, args)`。这与当前 agent.py 内联逻辑完全一致。Phase 2 的真实 `ToolRunner` 将使用 `ToolCatalog` 替代 `ToolRegistry`，但 Kernel 通过 `spec.tool_runner` 注入，不直接依赖具体实现。
+
+## Confidence Assessment
+
+| Area | Confidence | Reason |
+|------|------------|--------|
+| AsyncGenerator stdlib API | HIGH | Python 3.13 验证过，`collections.abc.AsyncGenerator` + `contextlib.aclosing` 均可用 |
+| dataclass for internal types | HIGH | 与 `KernelResult` 现有模式一致，性能优势明确 |
+| ToolRunner Protocol 定义 | HIGH | 与现有 4 个 Protocol 一致，spec 已详细设计 |
+| Pydantic Any 预留字段 | HIGH | `arbitrary_types_allowed=True` 已启用，spec D-07 已论证 |
+| Phase 2 aclosing 清理 | HIGH | stdlib 3.10+ 自带，PEP 525 推荐模式 |
+| Phase 3 Queue fanout | MEDIUM | 概念验证充分，但多消费者排序和背压处理需要 Phase 3 具体验证 |
+| 无需新依赖判断 | HIGH | 全部需求由 stdlib + 现有依赖覆盖 |
 
 ## Sources
 
-- **PyPI verified:** pytest-asyncio 1.3.0 (2025-11-10), supports Python 3.10-3.14 -- [pytest-asyncio PyPI](https://pypi.org/project/pytest-asyncio/)
-- **PyPI verified:** openai 2.20.0 (installed), AsyncOpenAI available -- `from openai import AsyncOpenAI` 本地验证通过
-- **PyPI verified:** httpx 0.28.1 (installed), AsyncClient available -- 本地验证通过
-- **Runtime verified:** `openai.AsyncStream` is both AsyncIterator and async context manager -- 本地代码检查确认
-- **Runtime verified:** Python 3.13.2, asyncio.TaskGroup, asyncio.Queue, asyncio.Event, create_subprocess_exec -- 全部本地验证可用
-- **Official docs:** [pytest-asyncio configuration](https://pytest-asyncio.readthedocs.io/en/stable/reference/configuration.html)
-- **Official docs:** [pytest-asyncio auto mode concepts](https://pytest-asyncio.readthedocs.io/en/stable/concepts.html)
-- **Official docs:** [Python 3.13 asyncio subprocess](https://docs.python.org/3/library/asyncio-subprocess.html)
-- **Official docs:** [Python 3.13 asyncio.Queue](https://docs.python.org/3/library/asyncio-queue.html)
-- **Official docs:** [Python 3.13 What's New -- TaskGroup improvements](https://docs.python.org/3/whatsnew/3.13.html)
-
----
-*Stack research for: matmaster v2.0 协程改造*
-*Researched: 2026-03-26*
+- [PEP 525 -- Asynchronous Generators](https://peps.python.org/pep-0525/) — async generator finalization, aclose() 语义, GeneratorExit 约束
+- [Python collections.abc docs (3.13)](https://docs.python.org/3.13/library/collections.abc.html) — AsyncGenerator vs AsyncIterator 类型层级
+- [cpython issue #112866](https://github.com/python/cpython/issues/112866) — AsyncIterator vs AsyncGenerator 类型注解使用指导
+- [Python contextlib docs](https://docs.python.org/3/library/contextlib.html) — aclosing() 可用性和语义
+- [cpython issue #102936](https://github.com/python/cpython/issues/102936) — runtime_checkable Protocol 性能特征
+- [Pydantic v2 docs -- Dataclasses](https://docs.pydantic.dev/latest/concepts/dataclasses/) — Pydantic vs dataclass 选型
+- 本地验证：Python 3.13.2, pydantic 2.12.5, pytest 9.0.2, pytest-asyncio 1.3.0 全部通过 `uv run` 确认

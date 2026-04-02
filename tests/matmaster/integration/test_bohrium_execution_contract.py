@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import matmaster.config.loader as matmaster_loader
-from matmaster.integration.bohrium_setup import SkillSyncSpec
+from matmaster.core.bus import MessageBus
 from matmaster.types.context import PlaygroundContext
 from tests.matmaster.core.conftest import MockLLMProvider
 
@@ -22,6 +22,8 @@ _src_services = pytest.importorskip(
 )
 arb = _src_services
 BohriumSetupResult = _src_services.BohriumSetupResult
+SkillSyncSpec = _src_services.SkillSyncSpec
+BohriumSetupService = _src_services.BohriumSetupService
 SESSIONS = pytest.importorskip(
     "src.services.sessions_service",
     reason="src not available (isolation test)",
@@ -44,6 +46,13 @@ def _make_pg(original_session: MagicMock) -> MagicMock:
         'skills': {'skills_root': 'matmaster/skills/lazymcp'},
     }
     return pg
+
+
+def _make_bohrium_service(sessions_service: Any | None = None) -> BohriumSetupService:
+    return BohriumSetupService(
+        sessions_service=sessions_service or MagicMock(),
+        bus=MessageBus(),
+    )
 
 
 @patch.object(arb, '_sync_skills_to_ssh_session', MagicMock())
@@ -80,7 +89,8 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
     mock_ssh._env.upload_directory_tarball = MagicMock(return_value=1)
 
     with patch.object(arb, 'SSHSession', return_value=mock_ssh) as mock_ssh_cls:
-        result = arb.setup_bohrium_for_run(
+        svc = _make_bohrium_service()
+        result = svc._setup_bohrium_for_run(
             session_id='sess-ok',
             pg=pg,
             skill_sync_spec=SkillSyncSpec(
@@ -161,7 +171,8 @@ def test_setup_skips_skills_synced_event_when_skill_sync_returns_false(
             self.is_open = False
 
     with patch.object(arb, 'SSHSession', new=FakeSSHSession):
-        result = arb.setup_bohrium_for_run(
+        svc = _make_bohrium_service()
+        result = svc._setup_bohrium_for_run(
             session_id='sess-no-skill-sync',
             pg=pg,
             skill_sync_spec=None,
@@ -225,7 +236,8 @@ def test_setup_failure_after_open_restores_original_and_clears_runtime(
     ):
         mock_run_clear_remote_proxy.side_effect = _raise_after_store
         event_callback = MagicMock()
-        result = arb.setup_bohrium_for_run(
+        svc = _make_bohrium_service()
+        result = svc._setup_bohrium_for_run(
             session_id='sess-fail',
             pg=pg,
             skill_sync_spec=None,
@@ -285,9 +297,9 @@ def test_cleanup_restores_when_ssh_attached_false(
     sessions_service.get_session.return_value = None
     sessions_service.get_session_user_id.return_value = None
 
-    arb.cleanup_bohrium_after_run(
+    svc = _make_bohrium_service(sessions_service)
+    svc._cleanup_bohrium_after_run(
         session_id='sess-x',
-        sessions_service=sessions_service,
         event_callback=MagicMock(),
         pg_for_run=pg,
         ssh_attached=False,
@@ -411,7 +423,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
     assert isinstance(spec, SkillSyncSpec)
     assert spec.remote_project_root == '/share/.matmaster'
     assert spec.project_skill_roots
-    assert spec.project_skill_roots[0].endswith(str(Path('matmaster/skills/lazymcp')))
+    assert spec.project_skill_roots[0].endswith(str(Path('matmaster/skills')))
 
 
 @patch('matmaster.providers.llm_factory.build_provider')

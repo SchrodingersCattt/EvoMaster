@@ -42,7 +42,7 @@ class OutputProcessorHook(BaseHook):
     async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         """Check tool_call.name against patterns and emit events if matched."""
         tool_name = tool_call.name
-        base_info = dict(result.info)
+        base_info = dict(result.payload)
 
         if self._matches(tool_name, self._auto_save_patterns):
             await self._bus.emit(
@@ -52,7 +52,7 @@ class OutputProcessorHook(BaseHook):
                     tool_name=tool_name,
                     result=result.content,
                     status=result.status,
-                    info={**base_info, "auto_save": True},
+                    payload={**base_info, "auto_save": True},
                 )
             )
             return
@@ -65,7 +65,7 @@ class OutputProcessorHook(BaseHook):
                     tool_name=tool_name,
                     result=result.content,
                     status=result.status,
-                    info={**base_info, "summarize": True},
+                    payload={**base_info, "summarize": True},
                 )
             )
 

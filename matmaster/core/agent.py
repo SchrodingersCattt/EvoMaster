@@ -1,8 +1,14 @@
 """AgentKernel -- pure async execution loop for the agent kernel.
 
 Consumes an AgentRuntimeSpec and executes the LLM -> guard -> hook -> tool
--> message accumulate -> loop cycle. All termination paths go through
-_finish() which produces a KernelResult.
+-> message accumulate -> loop cycle. Three-layer interface:
+
+  _run_items()   -- private AsyncGenerator yielding _KernelItem
+  run_stream()   -- public AsyncGenerator yielding BusEvent
+  run()          -- public coroutine returning KernelRunResult (backward compat)
+
+All three consume the same _run_items() generator, ensuring a single
+execution path with no behavioral divergence.
 
 Termination conditions:
 - natural: LLM returns no tool_calls
@@ -18,11 +24,14 @@ import asyncio
 import logging
 import threading
 import time
-from typing import TYPE_CHECKING, Any, NamedTuple
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field as dc_field
+from typing import TYPE_CHECKING, Any
 
 from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.errors import LLMError
+from matmaster.types.events import ResponseEvent, ThoughtEvent
 
 if TYPE_CHECKING:
     from matmaster.types.runtime import AgentRuntimeSpec, KernelRunResult
@@ -61,13 +70,90 @@ class _KernelStopRequested(Exception):
     """Internal: stop_event became set during LLM stream or retry backoff."""
 
 
-class _ToolOutcome(NamedTuple):
-    """Result of guard + pre-hook gating for a single tool call."""
+# ── Private types for _run_items() generator ─────────────
 
-    tc: ToolCallData
-    tool_msg: ToolMessage | None
-    tool_result: ToolResult | None
-    needs_post_hook: bool
+
+@dataclass
+class _TerminalItem:
+    """Kernel termination result, consumed only by run()."""
+
+    status: str          # completed / cancelled / failed
+    reason: str          # natural / max_turns / cancelled / hook_stopped / invalid_finish
+    final_content: str | None = None
+    num_turns: int = 0
+    stop_reason: str | None = None
+    usage: dict[str, int] = dc_field(default_factory=dict)
+
+
+@dataclass
+class _KernelItem:
+    """Kernel private stream item. Not exposed publicly."""
+
+    event: Any = None                       # BusEvent | None
+    messages_delta: list[Any] | None = None  # list[Message] | None
+    terminal: _TerminalItem | None = None
+
+
+@dataclass
+class _KernelState:
+    """Kernel loop local state. Independent per _run_items() invocation."""
+
+    messages: list[Any]  # list[Message]
+    turn: int = 0
+    total_usage: dict[str, int] = dc_field(default_factory=dict)
+    last_stop_reason: str | None = None
+    # Tool Runtime v2: catalog version caching
+    last_catalog_version: int | None = None
+    cached_tool_definitions: list[dict[str, Any]] | None = None
+
+
+def _resolve_tool_definitions(
+    spec: AgentRuntimeSpec,
+    state: _KernelState,
+) -> list[dict[str, Any]] | None:
+    """Resolve tool definitions with Phase 1/Phase 2 dual-path.
+
+    Phase 2 path: tool_catalog with version caching.
+    Phase 1 fallback: direct registry access.
+    """
+    # Phase 2 path: tool_catalog with version caching
+    if spec.tool_catalog is not None:
+        current_version = spec.tool_catalog.version
+        if current_version != state.last_catalog_version:
+            state.cached_tool_definitions = spec.tool_catalog.build_definitions()
+            state.last_catalog_version = current_version
+        return state.cached_tool_definitions
+
+    # Phase 1 fallback: direct registry access
+    if (
+        spec.tool_registry
+        and hasattr(spec.tool_registry, 'get_tool_definitions')
+    ):
+        return spec.tool_registry.get_tool_definitions()
+    return None
+
+
+def _make_terminal(
+    status: str,
+    reason: str,
+    state: _KernelState,
+    final_content: str | None = None,
+) -> _TerminalItem:
+    """Build a _TerminalItem from current kernel state."""
+    if reason == 'cancelled':
+        resolved_status = 'cancelled'
+    elif reason == 'invalid_finish':
+        resolved_status = 'failed'
+    else:
+        resolved_status = status
+    return _TerminalItem(
+        status=resolved_status,
+        reason=reason,
+        final_content=final_content,
+        num_turns=state.turn,
+        stop_reason=state.last_stop_reason,
+        usage=dict(state.total_usage),
+    )
 
 
 class AgentKernel:
@@ -81,6 +167,8 @@ class AgentKernel:
         stop_event: threading.Event | None = None,
     ) -> KernelRunResult:
         """Execute the agent loop until termination.
+
+        Delegates to _run_items() and collects messages + terminal.
 
         Termination conditions:
         - natural: LLM returns no tool_calls
@@ -105,218 +193,246 @@ class AgentKernel:
                 if sp is not spec.llm_provider:
                     _summary_provider = sp
 
+            async def _collect() -> KernelRunResult:
+                all_messages: list[Message] = []
+                async for item in self._run_items(spec, task, history, stop_event):
+                    if item.messages_delta:
+                        all_messages.extend(item.messages_delta)
+                    if item.terminal is not None:
+                        from matmaster.types.runtime import (
+                            KernelResult,
+                            KernelRunResult,
+                        )
+                        result = KernelResult(
+                            status=item.terminal.status,
+                            reason=item.terminal.reason,
+                            final_content=item.terminal.final_content,
+                            num_turns=item.terminal.num_turns,
+                            stop_reason=item.terminal.stop_reason,
+                            usage=item.terminal.usage,
+                        )
+                        return KernelRunResult(result=result, messages=all_messages)
+                # Should not reach here, but defensive
+                from matmaster.types.runtime import (
+                    KernelResult,
+                    KernelRunResult,
+                )
+                return KernelRunResult(
+                    result=KernelResult(status="failed", reason="generator_exhausted"),
+                    messages=all_messages,
+                )
+
             if _summary_provider is not None:
                 async with _summary_provider:
-                    return await self._run_loop(spec, task, history, stop_event)
+                    return await _collect()
             else:
-                return await self._run_loop(spec, task, history, stop_event)
+                return await _collect()
 
-    async def _run_loop(
+    async def run_stream(
+        self,
+        spec: AgentRuntimeSpec,
+        task: str,
+        history: list[Message] | None = None,
+        stop_event: threading.Event | None = None,
+    ) -> AsyncIterator[Any]:
+        """Yield BusEvent sequence from the kernel execution.
+
+        Consumes _run_items() and filters events. Terminal item
+        is converted to RunResultEvent as the final yield.
+        """
+        async with spec.llm_provider:
+            _summary_provider = None
+            if spec.compactor and hasattr(spec.compactor, '_summary_provider'):
+                sp = spec.compactor._summary_provider
+                if sp is not spec.llm_provider:
+                    _summary_provider = sp
+
+            async def _stream() -> AsyncIterator[Any]:
+                async for item in self._run_items(spec, task, history, stop_event):
+                    if item.event is not None:
+                        yield item.event
+                    if item.terminal is not None:
+                        from matmaster.types.runtime import KernelResult
+                        result = KernelResult(
+                            status=item.terminal.status,
+                            reason=item.terminal.reason,
+                            final_content=item.terminal.final_content,
+                            num_turns=item.terminal.num_turns,
+                            stop_reason=item.terminal.stop_reason,
+                            usage=item.terminal.usage,
+                        )
+                        yield result.to_run_result_event(source="agent")
+
+            if _summary_provider is not None:
+                async with _summary_provider:
+                    async for event in _stream():
+                        yield event
+            else:
+                async for event in _stream():
+                    yield event
+
+    async def _run_items(
         self,
         spec: AgentRuntimeSpec,
         task: str,
         history: list[Message] | None,
         stop_event: threading.Event | None,
-    ) -> KernelRunResult:
-        """Internal async execution loop."""
-        messages: list[Message] = [
+    ) -> AsyncIterator[_KernelItem]:
+        """Private AsyncGenerator: the single execution path.
+
+        Yields _KernelItem instances carrying:
+        - event: BusEvent snapshots (ThoughtEvent, ResponseEvent, etc.)
+        - messages_delta: incremental message additions for run() collection
+        - terminal: termination result (last yield, exactly once)
+        """
+        # Initialize local state (not on self -- keeps Kernel stateless)
+        initial_messages: list[Message] = [
             SystemMessage(content=spec.system_prompt),
             *(history or []),
             UserMessage(content=task),
         ]
+        state = _KernelState(messages=list(initial_messages))
+
+        # Yield initial messages for run() to collect
+        yield _KernelItem(messages_delta=list(initial_messages))
+
         guard_pipeline = GuardPipeline(spec.guards)
 
-        turn = 0
-        if spec.compactor:
-            spec.compactor.update_message_count(len(messages))
-        turn_usage: dict[str, int] = {}
-        total_usage: dict[str, int] = {}
-        last_stop_reason: str | None = None
+        # Resolve tool_runner: spec.tool_runner or fallback to InlineToolRunner
+        tool_runner = spec.tool_runner
+        if tool_runner is None:
+            from matmaster.core.tool_runner import InlineToolRunner
+            tool_runner = InlineToolRunner(spec, spec.guards)
 
-        while turn < spec.max_turns:
+        if spec.compactor:
+            spec.compactor.update_message_count(len(state.messages))
+
+        while state.turn < spec.max_turns:
             # External cancel check (before each turn)
             if stop_event and stop_event.is_set():
-                return self._finish(
-                    messages,
-                    'cancelled',
-                    num_turns=turn,
-                    stop_reason=last_stop_reason,
-                    usage=total_usage,
+                yield _KernelItem(
+                    terminal=_make_terminal('cancelled', 'cancelled', state)
                 )
+                return
 
-            turn += 1
+            state.turn += 1
 
             # pre_llm_call hook (observation, all hooks called)
-            await run_pre_llm_call(spec.hooks, messages, turn)
+            await run_pre_llm_call(spec.hooks, state.messages, state.turn)
 
             # should_continue hook (intercepting, short-circuit)
-            if not await run_should_continue(spec.hooks, messages, turn):
-                return self._finish(
-                    messages,
-                    'hook_stopped',
-                    num_turns=turn - 1,
-                    stop_reason=last_stop_reason,
-                    usage=total_usage,
+            if not await run_should_continue(spec.hooks, state.messages, state.turn):
+                # hook_stopped uses turn-1 because this turn didn't complete
+                hook_state = _KernelState(
+                    messages=state.messages,
+                    turn=state.turn - 1,
+                    total_usage=state.total_usage,
+                    last_stop_reason=state.last_stop_reason,
                 )
+                yield _KernelItem(
+                    terminal=_make_terminal('completed', 'hook_stopped', hook_state)
+                )
+                return
 
             # Context compaction check
             if spec.compactor:
-                await spec.compactor.compact_if_needed(messages, turn_usage, turn)
+                turn_usage = {}  # Will be set after LLM call
+                await spec.compactor.compact_if_needed(
+                    state.messages, turn_usage, state.turn
+                )
+
+            # Resolve tool definitions (Phase 1 registry or Phase 2 catalog)
+            tool_defs = _resolve_tool_definitions(spec, state)
 
             # LLM call (streaming by default)
             try:
-                response = await self._call_llm(spec, messages, stop_event=stop_event)
-            except _KernelStopRequested:
-                return self._finish(
-                    messages,
-                    'cancelled',
-                    num_turns=turn,
-                    stop_reason=last_stop_reason,
-                    usage=total_usage,
+                response = await self._call_llm(
+                    spec, state.messages, tool_defs=tool_defs, stop_event=stop_event
                 )
+            except _KernelStopRequested:
+                yield _KernelItem(
+                    terminal=_make_terminal('cancelled', 'cancelled', state)
+                )
+                return
+
             turn_usage = response.usage
-            self._accumulate_usage(total_usage, response.usage)
-            last_stop_reason = response.finish_reason
+            self._accumulate_usage(state.total_usage, response.usage)
+            state.last_stop_reason = response.finish_reason
             if spec.compactor:
-                spec.compactor.update_message_count(len(messages))
+                spec.compactor.update_message_count(len(state.messages))
 
             # Natural finish: no tool_calls
             if not response.tool_calls:
                 if not self._is_valid_natural_finish(response):
-                    return self._finish(
-                        messages,
-                        'invalid_finish',
-                        num_turns=turn,
-                        stop_reason=last_stop_reason,
-                        usage=total_usage,
+                    yield _KernelItem(
+                        terminal=_make_terminal('failed', 'invalid_finish', state)
                     )
-                messages.append(
-                    AssistantMessage(
-                        content=response.content,
-                        reasoning_content=response.reasoning_content,
-                    )
-                )
-                return self._finish(
-                    messages,
-                    'natural',
-                    final_content=response.content,
-                    num_turns=turn,
-                    stop_reason=response.finish_reason,
-                    usage=total_usage,
-                )
+                    return
 
-            # Has tool_calls: append assistant message then process each serially
-            messages.append(
-                AssistantMessage(
+                assistant_msg = AssistantMessage(
                     content=response.content,
-                    tool_calls=response.tool_calls,
                     reasoning_content=response.reasoning_content,
                 )
+                state.messages.append(assistant_msg)
+                yield _KernelItem(messages_delta=[assistant_msg])
+
+                # Yield final completed snapshot events (KGEN-05)
+                if response.reasoning_content:
+                    yield _KernelItem(event=ThoughtEvent(
+                        source="agent",
+                        content=response.reasoning_content,
+                        stream_state="complete",
+                    ))
+                if response.content:
+                    yield _KernelItem(event=ResponseEvent(
+                        source="agent",
+                        content=response.content,
+                        stream_state="complete",
+                    ))
+
+                yield _KernelItem(
+                    terminal=_make_terminal(
+                        'completed', 'natural', state,
+                        final_content=response.content,
+                    )
+                )
+                return
+
+            # Has tool_calls: append assistant message then process tools
+            assistant_msg = AssistantMessage(
+                content=response.content,
+                tool_calls=response.tool_calls,
+                reasoning_content=response.reasoning_content,
+            )
+            state.messages.append(assistant_msg)
+            yield _KernelItem(messages_delta=[assistant_msg])
+
+            # Phase 1: delegate to tool_runner (InlineToolRunner wraps
+            # guard -> pre_hook -> execute -> post_hook chain)
+            from matmaster.core.tool_runner import ToolExecutionContext
+            ctx = ToolExecutionContext(
+                turn=state.turn,
+                max_turns=spec.max_turns,
+                stop_event=stop_event,
+            )
+            results = await tool_runner.execute_batch(
+                response.tool_calls, ctx
             )
 
-            # Phase 1: Serial — guard denials and hook skips must resolve before execution to avoid wasted work
-            outcomes: list[_ToolOutcome] = []
-            approved_indices: list[int] = []
-
-            for _i, tc in enumerate(response.tool_calls):
-                if stop_event and stop_event.is_set():
-                    return self._finish(
-                        messages,
-                        'cancelled',
-                        num_turns=turn,
-                        stop_reason=last_stop_reason,
-                        usage=total_usage,
-                    )
-                guard_result = guard_pipeline.evaluate(tc, turn, spec.max_turns)
-                if not guard_result.allowed:
-                    await run_guard_blocked(spec.hooks, tc, guard_result)
-                    blocked_content = f'BLOCKED: {guard_result.reason}'
-                    if guard_result.guidance:
-                        blocked_content += f'\n{guard_result.guidance}'
-                    outcomes.append(
-                        _ToolOutcome(
-                            tc=tc,
-                            tool_msg=ToolMessage(
-                                tool_call_id=tc.id,
-                                tool_name=tc.name,
-                                content=blocked_content,
-                            ),
-                            tool_result=None,
-                            needs_post_hook=False,
-                        )
-                    )
-                    continue
-
-                action = await run_pre_tool_call(spec.hooks, tc)
-                if action == HookAction.SKIP:
-                    outcomes.append(
-                        _ToolOutcome(
-                            tc=tc,
-                            tool_msg=ToolMessage(
-                                tool_call_id=tc.id,
-                                tool_name=tc.name,
-                                content='Tool call skipped by hook.',
-                            ),
-                            tool_result=None,
-                            needs_post_hook=False,
-                        )
-                    )
-                    continue
-
-                approved_indices.append(len(outcomes))
-                outcomes.append(
-                    _ToolOutcome(
-                        tc=tc, tool_msg=None, tool_result=None, needs_post_hook=True
-                    )
-                )
-
-            # Phase 2: Parallel — approved tools are independent, concurrent execution reduces latency
-            if approved_indices:
-                approved_tcs = [outcomes[idx][0] for idx in approved_indices]
-
-                async def _execute_tool(tc: ToolCallData) -> ToolResult:
-                    try:
-                        return await spec.tool_registry.execute(tc.name, tc.arguments)
-                    except Exception as e:
-                        logger.exception('Tool execution failed: %s', tc.name)
-                        return ToolResult.from_error(tc.name, e)
-
-                results = await asyncio.gather(
-                    *[_execute_tool(tc) for tc in approved_tcs],
-                    return_exceptions=True,
-                )
-
-                for result_idx, outcome_idx in enumerate(approved_indices):
-                    tc = outcomes[outcome_idx].tc
-                    raw = results[result_idx]
-                    if isinstance(raw, BaseException):
-                        tool_result = ToolResult.from_error(tc.name, raw)
-                    else:
-                        tool_result = raw
-                    outcomes[outcome_idx] = _ToolOutcome(
-                        tc=tc,
-                        tool_msg=ToolMessage(
-                            tool_call_id=tc.id,
-                            tool_name=tc.name,
-                            content=tool_result.content,
-                        ),
-                        tool_result=tool_result,
-                        needs_post_hook=True,
-                    )
-
-            # Phase 3: Append in original order — LLM expects tool results to match request order
-            for tc, tool_msg, tool_result, needs_post_hook in outcomes:
-                messages.append(tool_msg)
-                if needs_post_hook and tool_result is not None:
-                    await run_post_tool_call(spec.hooks, tc, tool_result)
+            # Collect tool messages in original order
+            tool_messages: list[Message] = []
+            for tc, tr in results:
+                tool_messages.append(ToolMessage(
+                    tool_call_id=tc.id,
+                    tool_name=tc.name,
+                    content=tr.content,
+                ))
+            state.messages.extend(tool_messages)
+            yield _KernelItem(messages_delta=tool_messages)
 
         # max_turns exhausted
-        return self._finish(
-            messages,
-            'max_turns',
-            num_turns=turn,
-            stop_reason=last_stop_reason,
-            usage=total_usage,
+        yield _KernelItem(
+            terminal=_make_terminal('completed', 'max_turns', state)
         )
 
     async def _call_llm(
@@ -324,6 +440,7 @@ class AgentKernel:
         spec: AgentRuntimeSpec,
         messages: list[Message],
         *,
+        tool_defs: list[dict[str, Any]] | None = None,
         stop_event: threading.Event | None = None,
     ) -> LLMResponse:
         """Call LLM with timeout-doubling retry on transient errors."""
@@ -334,14 +451,16 @@ class AgentKernel:
         max_retries = getattr(provider, 'max_retries', 3)
         retry_delay = getattr(provider, 'retry_delay', 1.0)
 
-        # Serialize once — messages don't change between retries
+        # Serialize once -- messages don't change between retries
         api_messages = [m.to_api_dict() for m in messages]
-        tool_defs = (
-            spec.tool_registry.get_tool_definitions()
-            if spec.tool_registry
-            and hasattr(spec.tool_registry, 'get_tool_definitions')
-            else None
-        )
+        # Use provided tool_defs or fall back to legacy inline resolution
+        if tool_defs is None:
+            tool_defs = (
+                spec.tool_registry.get_tool_definitions()
+                if spec.tool_registry
+                and hasattr(spec.tool_registry, 'get_tool_definitions')
+                else None
+            )
 
         attempt_records: list[dict[str, Any]] | None = None
         last_error: LLMError | None = None
@@ -385,7 +504,7 @@ class AgentKernel:
                     await self._sleep_backoff_with_stop_async(backoff, stop_event)
                     continue
 
-                # Last attempt still incomplete — return degraded
+                # Last attempt still incomplete -- return degraded
                 if self._is_incomplete_response(response):
                     logger.warning(
                         "LLM returned incomplete response after %d attempts, "
@@ -665,35 +784,3 @@ class AgentKernel:
         """Accumulate per-turn usage into running total."""
         for k, v in delta.items():
             total[k] = total.get(k, 0) + v
-
-    @staticmethod
-    def _finish(
-        messages: list[Message],
-        reason: str,
-        final_content: str | None = None,
-        *,
-        num_turns: int = 0,
-        stop_reason: str | None = None,
-        usage: dict[str, int] | None = None,
-    ) -> KernelRunResult:
-        """Unified exit path -- all termination goes through here."""
-        if reason == 'cancelled':
-            status = 'cancelled'
-        elif reason == 'invalid_finish':
-            status = 'failed'
-        else:
-            status = 'completed'
-        from matmaster.types.runtime import (  # lazy to avoid circular
-            KernelResult,
-            KernelRunResult,
-        )
-
-        result = KernelResult(
-            status=status,
-            reason=reason,
-            final_content=final_content,
-            num_turns=num_turns,
-            stop_reason=stop_reason,
-            usage=dict(usage) if usage else {},
-        )
-        return KernelRunResult(result=result, messages=list(messages))

@@ -38,20 +38,37 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 - ✓ 主执行路径切换（API/worker + 本地 Web 改走 matmaster 原生入口）— v2.1 Phase 29
 - ✓ 独立性证明（AST import audit + 隔离测试 + 迁移文档 + evomaster/playground 物理删除）— v2.1 Phase 30
 - ✓ 技术债务收口（32 个测试修复 + 隔离脚本更新 + 文档同步）— v2.1 Phase 31
+- ✓ Kernel Generator-First + Tool Runtime v2 核心骨架（_run_items generator / run_stream / ToolRunner Protocol / ToolCatalog / 8 frozen types + ToolResult payload+meta 升级 / AgentRuntimeSpec 扩展）— v2.2 Phase 32
 
 ### Active
 
-(v2.2 里程碑定义后填充)
+- [ ] ToolRunner 完整执行链实现 + ToolScheduler（exclusive / shared_read / counted）
+- [ ] 三层约束模型（StructuralValidation + RunStateGuard + CapabilityPolicy）
+- [ ] Exp.run_stream() + AgentRunService.run_agent_stream() 接入
+- [ ] _do_stream_llm() → _stream_llm_items() 子 generator 改造
+- [ ] Hook → Bus 间接路径退役（5 个 Hook 逐个替代后移除）
+- [ ] 约束迁移（read-before-modify → RunStateGuard，bash 危险命令 → CapabilityPolicy）
+- [ ] 去总线化评估与实施（MessageBus + EventRouter）
+- [ ] 高级调度（persistent shell 并发、SessionCapabilities 自适应）
+
+## Current Milestone: v2.2 AgentKernel Generator-First + Tool Runtime v2
+
+**Goal:** 将 AgentKernel 改造为 generator-first 架构，同步建立 Tool Runtime v2 核心骨架，贯穿 Kernel → Exp → Service 全链路，最终移除 Hook→Bus 间接路径并评估去总线化
+
+**Target features:**
+- Phase 1: Kernel generator 改造 + Tool Runtime v2 核心骨架（ToolSpec/ToolBinding/ToolCatalog/ToolRunner/ToolScheduler + 三层约束）
+- Phase 2: Exp/Service 接入 + 约束迁移 + Hook 退役 + ToolRegistry 降级
+- Phase 3: 去总线化评估与实施 + 高级调度
 
 ## Shipped: v2.1 matmaster/ 完全独立化 (2026-04-02)
 
 matmaster/ 运行时路径完全独立于 evomaster/playground/src。三方向解耦、物理删除、独立性证明全部完成。详见 milestones/v2.1-ROADMAP.md。
 
-## Next Milestone Goals
+## Deferred Goals
 
-v2.2 尚未定义。候选方向（来自 v2.1 迁移文档 P1-P5 优先级）：
-- P1: 配置统一（matmaster_config/ → config/ 已完成，但 config.yaml 中 ~/.evomaster-skills 路径待清理）
-- P2: 历史路径清理（playground/mat_master/core/ solver 体系、MILESTONES.md 补齐 v1.1/v2.0 历史）
+来自 v2.1 迁移文档 P1-P5 优先级，不在 v2.2 范围内：
+- P1: 配置统一（config.yaml 中 ~/.evomaster-skills 路径待清理）
+- P2: 历史路径清理（MILESTONES.md 补齐 v1.1/v2.0 历史）
 - P3: 路径命名规范化（OSS 前缀、skill 文件系统路径中的 evomaster 残留）
 - P4: 独立打包（matmaster 具备独立 pip install 方案）
 - P5: 归档处置（.planning/phases/ 历史目录管理）
@@ -60,7 +77,7 @@ v2.2 尚未定义。候选方向（来自 v2.1 迁移文档 P1-P5 优先级）�
 
 ### Current State
 
-**As of 2026-04-02:** v2.1 里程碑完成并归档。matmaster/ 运行时零外部依赖（evomaster/playground/src 均已物理删除或解耦）。1,294 个测试通过，19/19 需求满足。
+**As of 2026-04-02:** Phase 32 complete — Kernel Generator-First 架构就绪。_run_items() AsyncGenerator + run_stream() 公开接口 + ToolRunner Protocol + ToolCatalog facade + 完整 Tool Runtime v2 类型体系。1,357 个测试通过，25/25 Phase 32 需求满足。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 Source: 15,839 LOC (matmaster/).
@@ -72,7 +89,7 @@ Architecture (current):
 - `matmaster/tools/` — ToolRegistry, BuiltinTool (原生注册), LazyMCP, SkillTool
 - `matmaster/mcp/` — MCPConnection ABC, MCPToolManager, 三种传输 (stdio/sse/streamable_http)
 - `matmaster/sessions/` — Session Protocol, LocalSession, SSHSession (原生 paramiko)
-- `matmaster/types/` — PlaygroundContext, AgentRuntimeSpec, AgentEvent, CompactionConfig, KernelRunResult, Guards, LLMProvider, Messages, WorkerRegistry
+- `matmaster/types/` — PlaygroundContext, AgentRuntimeSpec, AgentEvent, CompactionConfig, KernelRunResult, Guards, LLMProvider, Messages, WorkerRegistry, ToolPlane/SessionCapabilities/RuntimeTopology (topology), ToolSpec/ToolBinding/ResourceClaim/ToolInstance (tool_spec), ToolDecision (tool_decision)
 - `matmaster/providers/` — OpenAIProvider, llm_factory
 - `matmaster/hooks/` — ConfirmationHook, OutputProcessorHook, SkillHitHook, AssistantStateHook
 - `matmaster/integration/` — EventRouter, EventPayloads, PersistenceHandler, SSEHandler, WorkspaceHandler, BohriumSetupService, bohrium_env, workspace_resolver
@@ -146,4 +163,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-02 after v2.1 milestone*
+*Last updated: 2026-04-02 after v2.2 milestone start*

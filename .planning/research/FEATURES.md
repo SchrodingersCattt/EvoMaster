@@ -1,188 +1,150 @@
-# Feature Landscape: Async Agent Framework Patterns
+# Feature Landscape: AgentKernel Generator-First 全链路改造
 
-**Domain:** Python async agent execution -- converting sync agent framework to async/await
-**Researched:** 2026-03-26
-**Scope:** How real-world agent frameworks (Pydantic AI, OpenAI Agents SDK, LangGraph, Microsoft Agent Framework, Google ADK) implement async execution loops, LLM providers, tool dispatch, hooks, event systems, and context compaction
+**Domain:** Generator-first agent kernel architecture -- streaming event production, tool execution delegation, and event bus retirement
+**Researched:** 2026-04-02
+**Scope:** How production agent frameworks (OpenAI Agents SDK, PydanticAI, LangGraph) implement generator-first execution loops, the run/run_stream interface split, tool runner delegation, and event bus vs generator-direct patterns. Applied to matmaster v2.2 milestone context.
 
 ## Table Stakes
 
-Features every async agent framework implements. Missing any of these means the async conversion is incomplete or architecturally broken.
+Features that are fundamental to a correct generator-first kernel transformation. Without any of these, the architecture is broken or incomplete -- every framework that ships a generator-first model implements all of them.
 
-| Feature | Why Expected | Complexity | Sync Equivalent | Notes |
-|---------|--------------|------------|-----------------|-------|
-| Async kernel execution loop | Core of async conversion -- the `while turn < max_turns` loop must yield control at every I/O point | Medium | `AgentKernel.run()` returns `KernelRunResult` | Every framework: Pydantic AI graph loop, OpenAI SDK Runner.run(), LangGraph ainvoke. The loop itself is `async def run()` with `await` at LLM call and tool dispatch |
-| AsyncIterator[StreamChunk] for LLM streaming | LLM streaming is the longest I/O operation. `async for chunk in provider.chat_stream()` is the fundamental async pattern | Low | `Iterator[StreamChunk]` from `chat_stream()` | OpenAI SDK: `AsyncOpenAI.chat.completions.create(stream=True)` returns `AsyncStream`. All frameworks use `async for` over LLM streams |
-| Async LLM provider protocol | Provider.chat() and Provider.chat_stream() must be async methods | Low | `LLMProvider` Protocol with sync methods | Pydantic AI: all model calls are awaitable. OpenAI SDK: AsyncOpenAI is drop-in. Simple signature change: `async def chat()` + `async def chat_stream() -> AsyncIterator[StreamChunk]` |
-| Async tool execute() | Each tool's execute must be awaitable for non-blocking I/O (subprocess, HTTP, file I/O) | Medium | `Tool.execute()` returns `str \| ToolResult` | Pydantic AI: async functions run on event loop, sync functions offloaded to threads via `asyncio.to_thread()`. OpenAI SDK: sync tools run via `asyncio.to_thread()`. Both approaches viable |
-| asyncio.Event for cancellation | Replace `threading.Event` stop_event with `asyncio.Event`. Cancellation checks become `if stop_event.is_set()` (same API, async-native) | Low | `threading.Event` stop_event | asyncio.Event has same set/is_set/wait API. Additionally, asyncio provides native CancelledError at every await point. Using asyncio.Event is simpler and sufficient |
-| asyncio.Queue for MessageBus | Replace `queue.Queue` with `asyncio.Queue` for event transport between kernel and handlers | Low | `MessageBus` wrapping `queue.Queue` | Pure drop-in: `asyncio.Queue` has same put/get semantics, just async. If sync consumers remain (SSE handler in thread), use janus for dual-face queue |
-| Async hooks (all 7 hook points) | Hooks must be awaitable so hook implementations can do async I/O (e.g., EventEmitterHook emitting to async bus) | Medium | `Hook` Protocol with 7 sync methods | All frameworks: OpenAI SDK RunHooks has 7 async methods (on_agent_start, on_tool_start, etc.). Microsoft Agent Framework middleware is all async. Pattern: `async def pre_tool_call()` |
-| Async retry with asyncio.sleep | Replace `time.sleep(backoff)` with `await asyncio.sleep(backoff)` in retry logic. Without this, retries block the entire event loop | Low | `time.sleep()` in `_call_llm` and `chat_with_retry` | Every async framework uses `await asyncio.sleep()`. Critical: `time.sleep()` in async code blocks ALL coroutines on the same event loop |
-| Async context compaction | ContextCompactor._summarize() calls LLM synchronously. Must become `await self._summary_provider.chat()` | Low | `ContextCompactor.compact_if_needed()` calling sync `chat()` | Microsoft Agent Framework: CompactionStrategy is `async def __call__`. Google ADK: compaction runs asynchronously in background. matmaster compactor calls LLM -- that call MUST be async |
-| Async subprocess for BashTool | Replace `session.exec_bash()` (blocking subprocess) with `asyncio.create_subprocess_exec()` or `asyncio.to_thread()` wrapper | Medium | `session.exec_bash()` blocking call | Python stdlib: `asyncio.create_subprocess_exec()` is the async equivalent. But since session.exec_bash() is evomaster code (out of scope), wrap in `asyncio.to_thread()` instead |
-| Async Exp lifecycle | `assemble()`, `build_runtime()`, `run()` must be async. `run()` wraps async kernel.run() with async cleanup | Low-Med | `Exp.run()` calling sync `kernel.run()` | assemble() is pure data transform (could stay sync), but build_runtime() and run() involve I/O (MCP init, kernel execution). Make all three async for consistency |
-| Async cleanup callbacks | `_run_cleanup_callbacks()` must be async to support async resource cleanup (MCP connections, subprocess termination) | Low | Sync `Callable[[], None]` cleanup callbacks | Type changes to `Callable[[], Awaitable[None] \| None]`. Run sync callbacks via direct call, async ones via await. Microsoft Agent Framework: cleanup is async |
+| Feature | Why Expected | Complexity | Existing Equivalent | Notes |
+|---------|--------------|------------|---------------------|-------|
+| **Private inner generator (_run_items)** | Single source of truth for execution logic. Both run() and run_stream() must consume the same generator -- otherwise behavior diverges between batch and streaming callers. OpenAI Agents SDK and PydanticAI both use a single internal execution path consumed by multiple public interfaces | Medium | `_run_loop()` returning `KernelRunResult` directly | The core refactor. `_run_loop()` becomes `_run_items() -> AsyncIterator[_KernelItem]`. All termination paths (natural / max_turns / cancelled / hook_stopped) become `yield terminal + return` instead of `return self._finish()`. Every framework converges on this single-path-of-execution principle |
+| **run_stream() public generator interface** | Generator-first public API. Every modern agent SDK provides a streaming execution method that yields typed events: OpenAI SDK has `Runner.run_streamed()`, PydanticAI has `Agent.run_stream()` / `run_stream_events()`, LangGraph has `astream()`. Without this, consumers cannot progressively consume execution events | Low | No equivalent -- events currently flow through Hook -> Bus -> EventRouter | Wraps `_run_items()`, filters to yield only `BusEvent` items (no internal messages_delta, no terminal internals). Last yield is always `RunResultEvent`. Signature: `async def run_stream(...) -> AsyncIterator[BusEvent]` |
+| **run() backward-compatible wrapper** | Existing callers (Exp.run, DevRunner, AgentRunService) must keep working with zero changes. OpenAI SDK maintains `Runner.run()` alongside `Runner.run_streamed()`. PydanticAI maintains `Agent.run()` alongside `Agent.run_stream()`. Every framework preserves the batch interface | Low | Current `run()` returning `KernelRunResult` | Consumes `_run_items()`, collects `messages_delta` into transcript, extracts `terminal` into `KernelResult`. Signature and return type unchanged. All 50+ existing tests pass without modification |
+| **Typed internal stream items** | Inner generator needs to carry three kinds of information simultaneously: events (for run_stream), message deltas (for run), and terminal state (for both). A single untyped yield would require downstream consumers to guess content type. PydanticAI uses distinct node types (UserPromptNode, ModelRequestNode, CallToolsNode). OpenAI SDK uses discriminated StreamEvent union | Low | No equivalent -- currently split across KernelRunResult fields and Hook callbacks | `_KernelItem` dataclass with optional fields: `event: BusEvent | None`, `messages_delta: list[Message] | None`, `terminal: _TerminalItem | None`. Private to agent.py, not public API |
+| **ToolRunner Protocol extraction** | Tool execution logic must be separated from the kernel loop. OpenAI SDK delegates to tool execution handlers. PydanticAI has CallToolsNode as a distinct execution stage. LangGraph has explicit tool execution nodes. Inlining guard/execute/post_hook in the generator makes Phase 2 (ToolRunner replacement) require a second kernel refactor | Medium | Tool execution inline in `agent.py` L217-311 (guard -> pre_hook -> asyncio.gather -> post_hook -> append messages) | `ToolRunner` Protocol with `execute_batch()`. Phase 1 ships `InlineToolRunner` that wraps current logic behind the protocol interface. Kernel calls `tool_runner.execute_batch()` instead of inline code. Stateless/reentrant via explicit `ToolExecutionContext` parameter |
+| **InlineToolRunner transition implementation** | Bridge between current inline tool logic and future Tool Runtime v2. Must preserve exact current behavior: serial guard evaluation, parallel execution of approved tools via `asyncio.gather`, post_hook only for actually-executed tools (not guard-denied or hook-skipped) | Medium | Same logic currently inline in `agent.py` | Wraps existing L217-311 logic. Three phases internally: (1) serial guard + pre_hook gating, (2) parallel execution of approved tools, (3) post_hook in original order. `on_result` callback for immediate event yield per completed tool |
+| **Event reuse (no parallel event layer)** | Generator must yield the same event types already consumed by SSEHandler, PersistenceHandler, and integration tests. Creating parallel event types doubles migration surface for zero benefit. OpenAI SDK reuses its RunItemStreamEvent across both batch and streaming modes | Low | 18 BusEvent types in `events.py` (ThoughtEvent, ResponseEvent, ToolCallEvent, ToolResultEvent, RunResultEvent, etc.) | `_run_items()` yields `_KernelItem(event=ResponseEvent(...))`, `_KernelItem(event=ToolCallEvent(...))`, etc. Same Pydantic models, same discriminated union. No new event classes |
+| **Dual-path coexistence (Phase 1)** | During transition, both the new generator yield path and the existing Hook -> Bus path must operate simultaneously. Removing Hook -> Bus before run_stream() has real consumers would break all event delivery. PydanticAI similarly maintained backward-compatible event delivery while introducing its graph-based streaming | Low | Hook -> EventEmitterHook -> MessageBus -> EventRouter -> handlers | Phase 1: _run_items() yields events AND hooks continue emitting to bus. Two paths produce semantically different events (generator: final snapshot; hooks: per-chunk streaming). No real consumer for run_stream() yet, so no duplication visible |
+| **Per-invocation local state** | Generator state must be local to each `_run_items()` call, not stored on `self`. AgentKernel must remain stateless for concurrent safety (SubAgent spawn creates nested kernel calls). PydanticAI AgentRun is per-execution context. OpenAI SDK RunResultStreaming is per-run | Low | State currently managed as local variables in `_run_loop()` | `_KernelState` dataclass: messages list, turn counter, usage accumulator, stop_reason. Instantiated at start of `_run_items()`, not on `self`. Also pre-reserves `last_catalog_version` and `cached_tool_definitions` for Tool Runtime v2 |
+| **AgentRuntimeSpec extension fields** | Spec must have slots for Tool Runtime v2 objects (tool_runner, tool_catalog, runtime_topology, capability_policy, structural_validation) so Phase 2 can inject them without Kernel code changes. All None in Phase 1 | Low | AgentRuntimeSpec has no placeholder fields | 5 new `Any | None` fields. `Any` because concrete types are defined in Tool Runtime v2, not yet created. Phase 2 replaces with precise type annotations |
+| **Tool definitions resolution abstraction** | Kernel should not directly access `spec.tool_registry.get_tool_definitions()`. Abstracting this into a helper enables Phase 2 ToolCatalog injection without touching Kernel LLM call logic. Pattern from OpenAI SDK where tool definitions are resolved through a catalog interface | Low | Direct `spec.tool_registry.get_tool_definitions()` call in `_call_llm()` | `_resolve_tool_definitions(spec, state)` helper. Phase 1: falls back to tool_registry. Phase 2: checks spec.tool_catalog, uses version-based caching. Kernel's `_call_llm()` receives resolved defs as parameter |
 
 ## Differentiators
 
-Features that set a well-designed async framework apart. Not strictly required for "async works", but significantly improve concurrency, debuggability, or future multi-agent capability.
+Features that go beyond the minimal generator-first conversion. Not strictly required for Phase 1, but each makes the architecture significantly better. Ordered by value for matmaster's specific context.
 
-| Feature | Value Proposition | Complexity | Sync Equivalent | Notes |
-|---------|-------------------|------------|-----------------|-------|
-| Parallel tool dispatch (asyncio.gather) | When LLM returns N tool_calls, execute them concurrently instead of serially. 2-5x speedup for multi-tool turns | Medium | Serial `for tc in response.tool_calls` loop | **Pydantic AI default behavior**: `asyncio.gather(*[tool.execute(tc) for tc in tool_calls])`. OpenAI Agents SDK: tools run concurrently. LangGraph: parallel tool node. matmaster currently runs tool_calls serially. This is the single highest-value async optimization |
-| Sequential tool mode option | Some tools have side effects that require ordering (write-then-read). Need opt-out from parallel dispatch | Low | N/A (always serial today) | Pydantic AI: `sequential=True` per-tool flag, or `agent.parallel_tool_call_execution_mode('sequential')` context manager. Implement as a flag on Tool Protocol or on ToolRegistry |
-| Async generator kernel (yield events) | `async def run() -> AsyncGenerator[AgentEvent, None]` that yields events as they happen, instead of returning final result | High | Returns `KernelRunResult` at end | OpenAI SDK: `run_streamed()` returns stream of events. Pydantic AI: `run_stream()` + `iter()` for node-by-node iteration. This enables real-time SSE without MessageBus intermediary. BUT: major API change, consider for later |
-| Structured concurrency (TaskGroup) | Use `asyncio.TaskGroup` (Python 3.11+) for managing concurrent tool execution and subagent spawns. Guaranteed cleanup on exception | Medium | N/A | Python 3.11+ feature. Better than bare `asyncio.gather()` because exceptions in one task cancel siblings. matmaster targets Python 3.13, so TaskGroup is available |
-| Async subagent spawn as coroutine | `spawn_fn` becomes `async def` -- child agent runs as a coroutine in the same event loop instead of blocking the parent | Medium | Sync `spawn_fn()` blocking parent until child completes | OpenAI SDK: `asyncio.gather()` for parallel agent runs. Pydantic AI subagents: async spawn with sync/async auto-select. Key benefit: parent agent stays responsive while child runs, enables future parallel subagents |
-| Graceful cancellation with CancelledError | Beyond `stop_event.is_set()` checks, support `asyncio.Task.cancel()` which raises CancelledError at next await. Cleanup runs in finally blocks | Medium | Only `threading.Event` polling | asyncio native: `task.cancel()` injects CancelledError at the next `await`. Combined with try/finally cleanup, this is more robust than polling `stop_event`. OpenAI SDK streams require consuming before context exit for this reason |
-| Sync-to-async bridge for session I/O | Many BuiltinTools call `session.exec_bash()` or `session.file_read()` which are sync (evomaster session). Wrap in `asyncio.to_thread()` for non-blocking execution | Low | Direct sync calls | Pydantic AI pattern: sync tool functions automatically offloaded via `asyncio.to_thread()`. This is critical for matmaster because evomaster session methods are sync and rewriting them is out of scope (v2.0 constraint) |
-| Per-tool timeout with asyncio.wait_for | Wrap each `await tool.execute()` in `asyncio.wait_for(coro, timeout=N)`. Prevents single tool from blocking the entire loop forever | Low | No per-tool timeout | Standard asyncio pattern. Pydantic AI: tool-level timeout configuration. Easy to implement: `await asyncio.wait_for(tool.execute(args), timeout=tool.timeout)` |
-| Background compaction (non-blocking) | Run context compaction in a background task while the agent continues processing. Apply summary when ready on next turn | High | Blocking `compact_if_needed()` in kernel loop | Microsoft Agent Framework: compaction runs as middleware, potentially async. Google ADK: "Runner handles compaction in background." matmaster v2.0 scope probably too aggressive for this -- keep inline compaction but make the LLM call async |
+| Feature | Value Proposition | Complexity | Existing Equivalent | Notes |
+|---------|-------------------|------------|---------------------|-------|
+| **Exp.run_stream() generator passthrough** (Phase 2) | Exp layer exposes streaming to service layer. Without this, service layer cannot progressively consume kernel events -- it must wait for full run() completion. OpenAI SDK: Runner.run_streamed() passes through agent generator. PydanticAI: Agent.run_stream() wraps graph execution | Low-Med | Exp.run() calls kernel.run() and returns KernelRunResult | Exp.run_stream() wraps kernel.run_stream(), manages cleanup lifecycle (try/finally on generator exhaustion), delegates assembly to existing build_runtime(). Key complexity: ensuring _run_cleanup_callbacks() fires even if consumer abandons generator mid-stream |
+| **AgentRunService.run_agent_stream()** (Phase 2) | Service layer consumes generator instead of setting up EventRouter + consumer task. First real consumer of the generator path. Directly enables streaming responses to API callers. OpenAI SDK: this is the primary interface (run_streamed). LangGraph: astream_events is the production API | Medium | AgentRunService.run_agent() sets up Bus + EventRouter + calls exp.run() | Consumes Exp.run_stream(), fans events to SSEHandler + PersistenceHandler inline (no bus/router). The critical migration step. Must handle: SSE first (latency sensitive), persistence can lag, workspace upload non-blocking |
+| **_stream_llm_items() sub-generator** (Phase 2) | Full segment-complete streaming parity with EventEmitterHook. Phase 1 only yields final merged snapshots because _do_stream_llm() consumes segment boundaries internally. Sub-generator would yield per-chunk ThoughtEvent/ResponseEvent during streaming, matching EventEmitterHook's granularity. This enables full real-time UI streaming via run_stream() | High | `_do_stream_llm()` drives streaming internally, fires Hook callbacks for each chunk/segment | Requires restructuring _do_stream_llm()'s content_parts/reasoning_parts/tool_calls_acc accumulation logic into a generator. Each StreamChunk and segment boundary becomes a yield point instead of a hook callback. Most complex single feature in the milestone |
+| **EventEmitterHook retirement** (Phase 2) | Remove the Hook -> Bus indirection for event delivery. Generator yield path becomes the sole event production mechanism. Eliminates a complete architectural layer (Hook -> Bus -> Router) from the critical path. Reduces latency: events flow directly from generator to consumer instead of through asyncio.Queue intermediary | Medium | EventEmitterHook bridges 4 hook points (pre_tool_call, post_tool_call, on_stream_chunk, on_segment_complete) to 4 BusEvent types | Prerequisite: _stream_llm_items() must achieve segment-complete parity. Then EventEmitterHook's on_stream_chunk and on_segment_complete are fully redundant with generator yields. pre_tool_call -> ToolCallEvent and post_tool_call -> ToolResultEvent are already yielded by _run_items() in Phase 1 |
+| **AssistantStateHook retirement** (Phase 2) | Current hook emits AssistantStateEvent (full AssistantMessage with tool_calls) via Bus before each LLM call. chat_history.py depends on this for persistence. Generator alternative: _run_items() yields AssistantStateEvent when appending AssistantMessage with tool_calls | Low | AssistantStateHook.pre_llm_call() emits to Bus | Simple: yield _KernelItem(event=AssistantStateEvent(...)) at the same point where messages_delta includes an AssistantMessage with tool_calls. Exact same trigger condition |
+| **SkillHitHook retirement** (Phase 2) | Emits SkillHitEvent when use_skill tool is invoked. Can be replaced by _run_items() yielding SkillHitEvent as part of tool result processing | Low | SkillHitHook.post_tool_call() checks tool_name == "use_skill" | Pattern: after tool execution, if tool_name == "use_skill", yield _KernelItem(event=SkillHitEvent(...)). Or move to InlineToolRunner/ToolRunner post-execute stage |
+| **OutputProcessorHook migration** (Phase 2) | Currently inspects tool_name against patterns and emits ToolResultEvent with auto_save/summarize flags via Bus. More complex than other hooks because it adds business logic (pattern matching) to event emission | Medium | OutputProcessorHook.post_tool_call() matches patterns, emits flagged ToolResultEvent | Two migration options: (1) move pattern matching into ToolRunner post-execute stage (annotate ToolResult.info before yield), or (2) implement as event transformer in run_stream() consumer side. Option 1 is cleaner -- enrichment happens at the source |
+| **ContextCompactor bus dependency removal** (Phase 2) | ContextCompactor currently emits ContextCompactionEvent to Bus (optional, `bus: MessageBus | None`). Generator alternative: _run_items() yields the event after compaction occurs | Low | `self._bus.emit(ContextCompactionEvent(...))` in compact_if_needed() | Compactor already handles `bus=None` gracefully. Change: pass a callback `on_compaction: Callable | None` instead of bus reference. _run_items() provides the callback that yields the event. Clean dependency inversion |
+| **Async fanout for multi-consumer event dispatch** (Phase 3) | When Bus/Router are removed, run_stream() generator produces events. Multiple consumers (SSEHandler, PersistenceHandler, WorkspaceHandler) need them. Fanout distributes one generator's output to N consumers. Critical for: SSE first (latency), persistence can buffer, workspace non-blocking | Medium-High | EventRouter dispatches events from Bus to registered handlers via asyncio.Task | Options: (1) tee the generator into N async iterators, (2) inline fanout in service layer (await SSE, fire-and-forget persistence), (3) lightweight per-run asyncio.Queue per consumer. Option 2 is simplest but couples; option 3 preserves decoupling. LangGraph uses internal StreamManager with queue-based fanout |
+| **MessageBus + EventRouter removal** (Phase 3) | Ultimate goal of the generator-first migration: eliminate the Bus/Router indirection entirely. Events flow directly from generator to consumers. Removes asyncio.Queue hop, consumer task management, drain timeout logic | Medium | MessageBus (asyncio.Queue wrapper) + EventRouter (asyncio.Task consumer + multi-handler dispatch) | Only possible after ALL Hook -> Bus paths are retired (Phase 2) AND async fanout replacement is in place. Must verify: no component still calls bus.emit() directly. DevShell path also needs migration (currently uses Bus for EventLogger) |
+| **on_result callback in ToolRunner for immediate event yield** | Each tool result is yielded as an event immediately upon completion, before the entire batch finishes. Users see tool results appear one by one in real-time, not all at once after the batch. OpenAI SDK emits tool_output per tool, not per batch | Low | No equivalent -- current code waits for asyncio.gather then processes all results | InlineToolRunner.execute_batch() accepts `on_result: Callable` callback. Kernel _run_items() provides closure that appends _KernelItem(event=ToolResultEvent) to a pending list, yielded after execute_batch() returns. Phase 2 ToolRunner can stream results even more eagerly |
+| **ToolExecutionContext explicit parameter** | All per-call state (turn, max_turns, stop_event) passes through a frozen dataclass, not via mutable side channels. Makes ToolRunner stateless/reentrant -- safe for SubAgent nested execution. PydanticAI uses RunContext for similar dependency injection | Low | Per-call state currently implicit in Kernel's local variables | `ToolExecutionContext(turn=..., max_turns=..., stop_event=...)`. Phase 2 extends with `runtime_topology`, `capability_policy`. ToolRunner Protocol signature stable across phases |
 
 ## Anti-Features
 
-Features to explicitly NOT build during this async conversion. Adding these would increase scope, introduce unnecessary complexity, or conflict with architecture constraints.
+Features to explicitly NOT build in this milestone. Each represents a common mistake or premature optimization.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| Dual sync+async Protocol with runtime dispatch | Maintaining both `def chat()` and `async def chat()` on the same Protocol doubles the API surface and testing burden. Pydantic AI has `run_sync()` but internally everything is async | Make everything async. Provide `asyncio.run()` or `loop.run_until_complete()` wrappers at entry points (DevShell, tests). Pydantic AI's `run_sync()` is just `loop.run_until_complete(self.run())` |
-| Full async generator kernel return type | Changing `run()` from returning `KernelRunResult` to `AsyncGenerator[AgentEvent, None]` redesigns the kernel-consumer contract. MessageBus already decouples event delivery | Keep `async def run() -> KernelRunResult`. Events flow through async MessageBus as today. Async generator pattern is a future optimization (v3) |
-| Rewriting evomaster session to async | evomaster BaseSession.exec_bash(), file_read() etc. are deeply sync. Rewriting them is a separate project. Out of scope per v2.0 constraints | Use `asyncio.to_thread(session.exec_bash, ...)` to offload sync session calls to thread pool. This is what OpenAI Agents SDK does for sync function tools |
-| Actor-model concurrency (per-agent event loop) | Running each agent in its own event loop or process for isolation. Over-engineering for v2.0 scope | Single event loop, multiple coroutines. SubAgents are coroutines in the same loop. Isolation via TaskGroup if needed |
-| Thread pool for ALL tool execution | Blanket offloading all tools to ThreadPoolExecutor defeats the purpose of async. Only sync-bound tools need threads | Distinguish: tools with native async I/O run on event loop directly. Only tools wrapping sync session calls use `asyncio.to_thread()`. Pydantic AI: "always use async unless doing blocking I/O" |
-| Distributed event bus (Redis Pub/Sub) | The current MessageBus is in-process. Adding distributed transport is a separate concern from async conversion | Keep asyncio.Queue for in-process bus. The existing Redis-based worker coordination (src/ layer) stays unchanged per v2.0 scope |
-| async def for Guard.evaluate() | Guards are pure computation (fingerprint comparison, threshold check). No I/O involved. Making them async adds complexity with zero benefit | Keep `def evaluate()` synchronous. GuardPipeline.evaluate() stays sync, called from the async kernel via direct invocation (no await needed for CPU-only code) |
-| Hook short-circuit via async gather | Running all hooks in parallel with gather and short-circuiting on first SKIP. Hooks are sequential by nature (observation order matters, intercepting hooks must short-circuit) | Keep sequential `for hook in hooks: await hook.pre_tool_call()` pattern. Hooks are cheap; parallelizing them risks ordering bugs |
+| **New event types for streaming** | Creating StreamChunkEvent, SegmentCompleteEvent, GeneratorEvent etc. would duplicate existing events.py types and force all consumers to handle two parallel type hierarchies. Migration surface doubles for no benefit | Reuse existing events.py types (ThoughtEvent, ResponseEvent, ToolCallEvent, ToolResultEvent, RunResultEvent). Generator yields the same Pydantic models that Bus/Router already transport |
+| **generator.aclose() for cancellation** | Tools execute via `asyncio.to_thread()` wrapping sync operations (BashTool subprocess, BuiltinTool.execute). `aclose()` cannot interrupt these. Would create partial-execution states (tool started but generator closed) with no cleanup guarantee | Keep `threading.Event` stop_event checked at loop boundaries in _run_items(). Tool Runtime v2's ToolBinding.stop_mode and SessionCapabilities.exec_cancel are the correct layer for graceful tool cancellation |
+| **Phase 1 Hook removal** | Removing any Hook -> Bus path before run_stream() has real consumers would break ALL event delivery to SSE and persistence. Phase 1 has no run_stream() consumers | Dual-path coexistence: generator yields + Hook -> Bus both operate. Phase 2 switches consumers to generator, then retires hooks one by one |
+| **Phase 1 Bus/Router removal** | Bus and Router are the only event delivery mechanism until Phase 2 wires service layer to run_stream(). Premature removal = no events to frontend or database | Keep Bus/Router fully operational. Phase 3 evaluates removal after all consumers migrate |
+| **Segment-complete streaming in Phase 1** | `_do_stream_llm()` consumes segment boundaries internally via hook callbacks. Extracting them into generator yields requires restructuring the entire streaming accumulation logic. No consumer exists for run_stream() in Phase 1 | Phase 1: yield final merged snapshot (one ResponseEvent after _call_llm returns). Phase 2: convert _do_stream_llm() to _stream_llm_items() sub-generator for full streaming parity |
+| **Changing Hook Protocol interface** | Adding/removing hook methods affects all Hook implementations (EventEmitterHook, DevStreamHook, ConfirmationHook, OutputProcessorHook, SkillHitHook, AssistantStateHook, ContextCompactor). Fragile during transition | Hook Protocol stays unchanged. Hooks are retired by removing their registration, not by changing the interface. BaseHook default no-ops make this safe |
+| **Changing the cancellation mechanism** | Current Redis-driven `threading.Event` works across workers. Replacing with asyncio.Event or CancelledError would break the cross-worker stop signal. Tool Runtime v2's stop_mode is a different abstraction layer | Keep `threading.Event`. _run_items() checks it at the same points as current _run_loop(): each turn start, before tool batch, during stream chunks, during retry backoff |
+| **Exposing _KernelItem as public API** | Internal stream items carry messages_delta and terminal metadata that should not leak to external consumers. Public API should only expose BusEvent (via run_stream) or KernelRunResult (via run) | _KernelItem, _KernelState, _TerminalItem are private dataclasses (underscore prefix). run_stream() filters to BusEvent only. run() extracts KernelRunResult only |
+| **ToolRunner with internal stop_event management** | InlineToolRunner should not own cancellation logic. Cancellation is Kernel's responsibility -- it checks stop_event before calling execute_batch() and yields terminal if set. Mixing cancellation into ToolRunner creates two competing cancellation paths | InlineToolRunner.execute_batch() receives ToolExecutionContext which includes stop_event for Phase 2+ use, but Phase 1 InlineToolRunner ignores it. Kernel checks stop_event before invoking execute_batch() |
+| **Type-precise AgentRuntimeSpec fields in Phase 1** | ToolCatalog, RuntimeTopology, CapabilityPolicy, StructuralValidation types do not exist yet (defined in Tool Runtime v2). Using precise types would create forward dependencies or force stub definitions | Use `Any | None` for all 5 new fields. Phase 2 replaces with concrete types when Tool Runtime v2 classes are implemented |
 
 ## Feature Dependencies
 
 ```
-AsyncOpenAI provider --> Async kernel loop (kernel awaits provider)
-Async tool execute   --> Async kernel loop (kernel awaits tool dispatch)
-asyncio.Queue bus    --> Async hooks (EventEmitterHook emits to async bus)
-asyncio.Event stop   --> Async kernel loop (cancellation checks)
-Async hooks          --> Async kernel loop (kernel awaits hooks)
-Async compactor      --> Async LLM provider (compactor awaits summary LLM call)
-Async Exp lifecycle  --> Async kernel + async tools + async hooks (Exp orchestrates all)
-Async subagent spawn --> Async Exp.run() (spawn_fn calls child Exp.run())
-Parallel tool dispatch --> Async tool execute (gather requires awaitable tools)
-Sync-to-async bridge --> Async tool execute (session calls wrapped in to_thread)
-Sequential tool mode --> Parallel tool dispatch (opt-out mechanism)
-```
+Phase 1 (Kernel layer, no external consumers affected):
+  _KernelItem/_KernelState/_TerminalItem types
+    -> _run_items() generator
+      -> run() delegation (consumes _run_items)
+      -> run_stream() public interface (consumes _run_items)
 
-**Critical path (must be done in order):**
-1. Async LLM provider (AsyncOpenAI) -- no other async component works without this
-2. Async tool protocol + async kernel loop -- the core execution engine
-3. asyncio.Queue MessageBus + async hooks -- event delivery
-4. Async Exp lifecycle -- ties everything together
-5. Async subagent spawn -- depends on async Exp.run()
-6. Parallel tool dispatch -- optimization on top of working async kernel
+  ToolRunner Protocol definition
+    -> InlineToolRunner implementation
+      -> _run_items() delegates tool execution to ToolRunner
+
+  AgentRuntimeSpec extension fields
+    -> _resolve_tool_definitions() helper
+      -> _run_items() uses helper for LLM tool defs
+
+  LLM final completed snapshot events
+    -> _run_items() yields ResponseEvent/ThoughtEvent after _call_llm()
+
+Phase 2 (Exp + Service layer, Hook retirement):
+  _stream_llm_items() sub-generator
+    -> EventEmitterHook retirement (requires streaming parity)
+
+  Exp.run_stream() passthrough
+    -> AgentRunService.run_agent_stream()
+      -> Async fanout to SSE + persistence consumers
+
+  AssistantStateHook retirement (simple, independent)
+  SkillHitHook retirement (simple, independent)
+  OutputProcessorHook migration (medium, choice of location)
+  ContextCompactor bus dependency removal (simple, independent)
+
+Phase 3 (Bus removal, conditional):
+  ALL Hook retirements complete
+  + Async fanout replacement in place
+    -> MessageBus removal
+    -> EventRouter removal
+```
 
 ## MVP Recommendation
 
-### Phase 1: Core async infrastructure (must-have)
+Phase 1 is the MVP -- it establishes the generator-first foundation with zero external breakage.
 
-Prioritize these table-stakes features:
+Prioritize (in implementation order):
 
-1. **Async LLM provider** -- Change `LLMProvider` Protocol to async methods. Implement `AsyncOpenAI` in `OpenAIProvider`. Change `chat_stream()` to return `AsyncIterator[StreamChunk]`. Replace `time.sleep()` with `await asyncio.sleep()` in retry logic.
+1. **ToolRunner Protocol + InlineToolRunner** -- independent of generator refactor, can be built and tested first
+2. **AgentRuntimeSpec extension** -- simple field additions, unblocks _resolve_tool_definitions helper
+3. **_KernelItem/_KernelState/_TerminalItem types** -- prerequisites for _run_items()
+4. **_run_items() generator core** -- the central refactor, replaces _run_loop()
+5. **run() delegation** -- must pass all 50+ existing kernel tests unchanged
+6. **run_stream() public interface** -- new API, validated by new integration tests
+7. **LLM final completed snapshot events** -- enriches run_stream() output
+8. **Full regression suite** -- all existing tests green, new stream tests green
 
-2. **Async tool protocol + builtin tools** -- Change `Tool.execute()` to `async def execute()`. For BashTool and other session-dependent tools, wrap sync session calls in `asyncio.to_thread()`. Pure-compute tools (TaskTools, GlobTool) can just be `async def` with no real await.
+Defer to Phase 2:
+- **_stream_llm_items() sub-generator**: highest complexity, no Phase 1 consumer. Needed for full streaming parity but not for the generator foundation
+- **Hook retirement**: requires Phase 2 consumers. Cannot safely remove until run_stream() is wired through service layer
+- **Exp.run_stream() and Service.run_agent_stream()**: Phase 2 scope per design spec
 
-3. **Async kernel execution loop** -- Change `AgentKernel.run()` to `async def`. `await` the LLM call, `await` each tool dispatch, `await` each hook. Replace `threading.Event` with `asyncio.Event` for stop_event.
+Defer to Phase 3:
+- **MessageBus/EventRouter removal**: depends on all Phase 2 completions. May be kept if the operational overhead is acceptable
 
-4. **Async MessageBus + hooks** -- Replace `queue.Queue` with `asyncio.Queue`. Change all 7 Hook Protocol methods to `async def`. Update `EventEmitterHook` and `run_*` helper functions.
+## Ecosystem Alignment
 
-5. **Async context compactor** -- Change `compact_if_needed()` and `_summarize()` to async. The internal LLM call becomes `await self._summary_provider.chat()`.
+The three-interface design (_run_items / run_stream / run) aligns with industry patterns:
 
-6. **Async Exp lifecycle** -- Change `assemble()`, `build_runtime()`, `run()` to async. Cleanup callbacks support async callables.
+| Framework | Private execution | Public stream | Public batch | Tool delegation |
+|-----------|------------------|---------------|--------------|-----------------|
+| **OpenAI Agents SDK** | Internal loop producing StreamEvent | `Runner.run_streamed()` -> `AsyncIterator[StreamEvent]` | `Runner.run()` -> `RunResult` | Tool handlers invoked by runner |
+| **PydanticAI** | Graph engine (UserPromptNode -> ModelRequestNode -> CallToolsNode) | `Agent.run_stream()` / `run_stream_events()` | `Agent.run()` -> `AgentRunResult` | CallToolsNode as distinct execution stage |
+| **LangGraph** | Pregel engine executing graph nodes | `astream()` / `astream_events()` | `ainvoke()` | Tool nodes in graph, StreamManager for fanout |
+| **matmaster v2.2** | `_run_items() -> AsyncIterator[_KernelItem]` | `run_stream() -> AsyncIterator[BusEvent]` | `run() -> KernelRunResult` | `ToolRunner.execute_batch()` delegation |
 
-### Phase 2: Differentiators (high-value optimization)
-
-Defer these until Phase 1 is stable and tested:
-
-7. **Parallel tool dispatch** -- When `response.tool_calls` has N > 1 items, use `asyncio.gather()` or `asyncio.TaskGroup` to execute concurrently. Add `sequential` flag to Tool Protocol for opt-out.
-
-8. **Async subagent spawn** -- Change `spawn_fn` to `async def`. Child agent runs as coroutine in same event loop. Parent remains responsive.
-
-9. **Per-tool timeout** -- Wrap tool execution in `asyncio.wait_for()`.
-
-### Defer: Not in v2.0
-
-- Async generator kernel return type (v3 consideration)
-- Background compaction
-- Distributed event bus
-- Actor-model concurrency
-
-## Patterns from Real Frameworks
-
-### Pattern 1: Pydantic AI -- Async-First with Sync Wrapper
-
-Pydantic AI's approach is the most instructive for matmaster:
-- Everything internal is async (`async def run()`, async tools, async model calls)
-- `run_sync()` is a thin wrapper: `loop.run_until_complete(self.run())`
-- Tools: async functions run on event loop; sync functions auto-offloaded via threads
-- Parallel tool execution is the DEFAULT, with opt-out to sequential
-- Graph-based execution: UserPromptNode -> ModelRequestNode -> CallToolsNode -> loop
-
-**Relevance:** matmaster should follow this pattern exactly. Make kernel fully async, provide sync entry point via `asyncio.run()` for DevShell/tests.
-
-### Pattern 2: OpenAI Agents SDK -- Runner + Hooks + Streaming Events
-
-- `Runner.run()` is async, `Runner.run_sync()` wraps it
-- `Runner.run_streamed()` returns streaming events via async iteration
-- RunHooks: 7 async lifecycle callbacks (on_agent_start, on_tool_start, on_llm_start, etc.)
-- Sync function tools execute via `asyncio.to_thread()` to avoid blocking event loop
-- max_turns limit with MaxTurnsExceeded exception
-
-**Relevance:** The hook design is nearly identical to matmaster's 7-hook system. Direct mapping: pre_tool_call -> on_tool_start, post_tool_call -> on_tool_end, etc. All hooks are async.
-
-### Pattern 3: Microsoft Agent Framework -- Async Middleware + Compaction
-
-- Middleware pattern: `awrap_model_call()`, `awrap_tool_call()` as async wrappers
-- CompactionStrategy is an async Protocol: `async def __call__(self, messages) -> bool`
-- Pipeline compaction: chain strategies (tool_result -> summarization -> sliding_window -> truncation)
-- Compaction as context provider, runs before each LLM call
-
-**Relevance:** matmaster's ContextCompactor is already similar (summary + sliding_window fallback). The key insight: CompactionStrategy is async because summarization calls LLM. matmaster just needs to make `compact_if_needed()` async.
-
-### Pattern 4: Thread-Safety Bridge (Janus Queue)
-
-For the transition period where `src/` service layer (FastAPI) consumes events from a sync context while the kernel runs async:
-- janus provides a dual-face queue: `sync_q` (put from thread) and `async_q` (get from coroutine)
-- Alternative: use `asyncio.Queue` directly if both producer and consumer are in same event loop
-- matmaster's current pattern: kernel in ThreadPoolExecutor emits to queue.Queue, SSEHandler consumes. After async conversion: kernel is coroutine, MessageBus is asyncio.Queue, SSEHandler awaits queue.get()
-
-**Relevance:** If src/ layer (agent_run_service.py) still wraps kernel execution in `run_in_executor()`, janus bridges the gap. If kernel runs as coroutine in FastAPI's async handler, pure asyncio.Queue suffices.
-
-## Complexity Assessment
-
-| Feature | Lines Changed (est.) | Test Impact | Risk |
-|---------|---------------------|-------------|------|
-| Async LLM provider | ~100 (provider + protocol) | All provider tests need async | Low -- AsyncOpenAI is API-compatible |
-| Async tool protocol | ~200 (12 tools + base + protocol) | All tool tests need async | Low -- most tools just add async def |
-| Async kernel loop | ~150 (agent.py) | All kernel tests need async | Medium -- core control flow changes |
-| Async MessageBus | ~30 (bus.py) | Bus tests need async | Low -- drop-in replacement |
-| Async hooks | ~100 (hooks.py + protocol) | Hook tests need async | Medium -- 7 methods + run_* helpers |
-| Async compactor | ~50 (context_compactor.py) | Compactor tests need async | Low -- one LLM call to async |
-| Async Exp lifecycle | ~100 (exp.py) | Exp tests need async | Medium -- orchestration logic |
-| Async cleanup | ~30 (exp.py) | Cleanup tests need async | Low |
-| Async subagent spawn | ~50 (exp.py + spawn_tool.py) | Spawn tests need async | Medium -- async closure |
-| Parallel tool dispatch | ~80 (agent.py) | New tests for parallel behavior | Medium -- ordering, error handling |
-
-**Total estimated: ~900 lines of production code changes, plus test migration to async.**
+Key industry consensus:
+- **Single execution path**: all frameworks route both batch and streaming through one internal engine. No framework has separate code paths for run() vs run_stream()
+- **Event reuse**: no framework creates separate event types for streaming vs batch. Same event classes serve both paths
+- **Tool delegation**: every framework separates tool execution from the main loop. None inline guard/execute/hook in the kernel
+- **Progressive migration**: PydanticAI maintained backward-compatible run() throughout its streaming evolution. OpenAI SDK provides both run() and run_streamed() with identical semantics. matmaster follows the same pattern
 
 ## Sources
 
-- Pydantic AI agent execution: https://ai.pydantic.dev/agent/
-- Pydantic AI advanced tools (parallel execution): https://ai.pydantic.dev/tools-advanced/
-- OpenAI Agents SDK running agents: https://openai.github.io/openai-agents-python/running_agents/
-- OpenAI Agents SDK lifecycle hooks: https://openai.github.io/openai-agents-python/ref/lifecycle/
-- OpenAI Agents SDK streaming: https://openai.github.io/openai-agents-python/streaming/
-- OpenAI Python SDK async: https://github.com/openai/openai-python
-- Microsoft Agent Framework compaction: https://learn.microsoft.com/en-us/agent-framework/agents/conversations/compaction
-- Microsoft Agent Framework middleware: https://learn.microsoft.com/en-us/agent-framework/agents/middleware/
-- Google ADK context compaction: https://google.github.io/adk-docs/context/compaction/
-- Janus dual-face queue: https://github.com/aio-libs/janus
-- Python asyncio subprocess: https://docs.python.org/3/library/asyncio-subprocess.html
-- Python asyncio synchronization: https://docs.python.org/3/library/asyncio-sync.html
-- PEP 525 Asynchronous Generators: https://peps.python.org/pep-0525/
+- [OpenAI Agents SDK Streaming](https://openai.github.io/openai-agents-python/streaming/) -- run_streamed() architecture, StreamEvent types
+- [OpenAI Agents SDK Running Agents](https://openai.github.io/openai-agents-python/running_agents/) -- run() vs run_streamed() split
+- [PydanticAI Agent API](https://ai.pydantic.dev/api/agent/) -- run() vs run_stream() vs run_stream_events()
+- [PydanticAI Agent Lifecycle (DeepWiki)](https://deepwiki.com/pydantic/pydantic-ai/2.1-agent-run-lifecycle) -- graph node types, AgentRun execution model
+- [AdalFlow: Agent Streaming Architecture Analysis](https://adalflow.sylph.ai/design/agent-streaming.html) -- OpenAI SDK internal event flow analysis
+- [LangGraph Streaming Docs](https://docs.langchain.com/oss/python/langgraph/streaming) -- astream(), stream modes, StreamManager
+- matmaster design spec: `docs/specs/2026-04-02-kernel-generator-first.md`
+- matmaster Tool Runtime v2 spec: `docs/specs/2026-04-02-tool-runtime-v2.md`

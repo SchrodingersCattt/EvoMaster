@@ -1,708 +1,558 @@
-# Architecture Patterns: matmaster Async Transformation (v2.0)
+# Architecture Patterns: AgentKernel Generator-First 全链路改造
 
-**Domain:** Agent framework sync-to-async migration
-**Researched:** 2026-03-26
-**Confidence:** HIGH (based on codebase source analysis + official Python/OpenAI docs)
+**Domain:** Agent framework internal architecture evolution (generator-first kernel + ToolRunner extraction + bus retirement)
+**Researched:** 2026-04-02
+**Confidence:** HIGH (based on complete codebase source analysis of all affected components)
 
 ## Current Architecture Snapshot
 
-The matmaster framework uses a three-layer sync architecture:
+三层模型已全面 async 化 (v2.0)，matmaster/ 已完全独立于 evomaster (v2.1)。当前事件传递依赖 Hook 间接链路：
 
 ```
-Layer 1: Playground     -- prepare() -> PlaygroundContext (frozen Pydantic model)
-Layer 2: Exp            -- assemble() / build_runtime() / run() with threading.Event for cancel
-Layer 3: AgentKernel    -- run() sync loop: LLM stream -> guard -> hook -> tool -> accumulate -> repeat
+Playground.prepare() -> PlaygroundContext (frozen Pydantic)
+    |
+Exp.build_runtime(ctx, bus) -> AgentRuntime { kernel, spec, cleanup }
+    |
+AgentKernel.run(spec, task, history, stop_event) -> KernelRunResult
+    +-- _run_loop(): while turn < max_turns
+    |     +-- run_pre_llm_call(hooks)
+    |     +-- run_should_continue(hooks)
+    |     +-- compactor.compact_if_needed()
+    |     +-- _call_llm() -> _do_stream_llm()
+    |     |     +-- Hook.on_stream_chunk() --> EventEmitterHook --> Bus.emit()
+    |     |     +-- Hook.on_segment_complete() --> EventEmitterHook --> Bus.emit()
+    |     +-- guard_pipeline.evaluate() [sync]
+    |     +-- run_pre_tool_call(hooks) --> EventEmitterHook --> Bus.emit(ToolCallEvent)
+    |     +-- asyncio.gather(*tool_executions)
+    |     +-- run_post_tool_call(hooks) --> EventEmitterHook --> Bus.emit(ToolResultEvent)
+    +-- _finish() -> KernelRunResult { result: KernelResult, messages: list[Message] }
+
+MessageBus (asyncio.Queue)
+    |
+EventRouter._consume_loop() (asyncio.Task, 100ms poll)
+    +-- SSEHandler.handle()    -> send_cb -> frontend
+    +-- PersistenceHandler.handle() -> events_table.add_event -> DB
 ```
 
-Cross-cutting:
-- MessageBus: queue.Queue (thread-safe, sync-only)
-- EventRouter: background threading.Thread consuming from MessageBus, dispatching to EventHandler list
-- Integration handlers (SSE/Persistence/Workspace): all sync EventHandler implementations
-- SubAgent spawn: synchronous in parent thread via spawn_fn closure
+### Current Event Path Problems
 
-Boundary with src/ service layer:
-- AgentRunService.run_agent_sync() runs in ThreadPoolExecutor(max_workers=2) from FastAPI
-- Uses asyncio.run_coroutine_threadsafe() to bridge back to event loop for quota deduction and SSE send_cb
+事件广播和消息转录是两条并行轨道，中间通过 EventEmitterHook 桥接：
 
-## Recommended Architecture: Async Transformation
+1. **Kernel 内部**维护 `messages: list[Message]`，最终打包为 `KernelRunResult`
+2. **EventEmitterHook**（7 个 hook 点中的 5 个被使用）翻译 hook 回调为 BusEvent，通过 MessageBus 送到 EventRouter
+3. 两条轨道语义不同步：messages 包含完整对话历史，Bus 事件是增量流式推送
 
-### Design Principle: Bottom-Up Async with Clean Boundary
+这意味着：
+- 上层无法直接从 Kernel 获取结构化事件流
+- 事件产出路径隐藏在 Hook 内部，不可组合
+- 增加新事件类型需要同时修改 Hook 和 EventEmitterHook
 
-Async transformation propagates bottom-up through the call chain. The I/O-bound leaf nodes (LLM calls, tool execution, hook callbacks) become async first, then their callers (kernel loop, exp lifecycle) follow. The sync boundary sits at the service layer (src/), which already uses ThreadPoolExecutor -- this boundary changes minimally (adds asyncio.run() wrapper).
+## Recommended Architecture: Generator-First 三阶段改造
 
-```
-                    src/ Service Layer (MINIMAL CHANGE)
-                    ====================================
-                    AgentRunService.run_agent_sync()
-                    runs in ThreadPoolExecutor
-                    |
-                    | asyncio.run() wrapper (new)
-                    v
-              ==========================================
-              ||  matmaster/ Framework (ALL ASYNC)    ||
-              ==========================================
-              |                                        |
-   Exp.run() [async]                     MessageBus [asyncio.Queue]
-        |                                        |
-   build_runtime() [async]               EventRouter [asyncio.Task]
-        |                                        |
-   AgentKernel.run() [async]             handlers [async]
-        |
-   +----+----+----+----+
-   |    |    |    |    |
-  LLM  Tool Guard Hook Compactor
-  [async][async][SYNC][async][async]
-```
+### Design Principle: 事件流成为主通路，而非 Hook 的副作用
 
-### Component Boundaries (Before/After)
+Kernel 主循环变成 AsyncGenerator，直接 yield 事件。`run()` 和 `run_stream()` 都消费同一个 `_run_items()` generator，保证行为一致。工具执行链通过 ToolRunner Protocol 从 Kernel 解耦。
 
-| Component | Current Signature | After Async | Boundary Type |
-|-----------|-------------------|-------------|---------------|
-| AgentKernel.run() | `def run(...) -> KernelRunResult` | `async def run(...) -> KernelRunResult` | Internal: fully async |
-| AgentKernel._call_llm() | `def _call_llm(...)` with time.sleep retry | `async def _call_llm(...)` with asyncio.sleep retry | Internal: fully async |
-| AgentKernel._do_stream_llm() | `for chunk in provider.chat_stream(...)` | `async for chunk in provider.chat_stream(...)` | Internal: follows provider |
-| LLMProvider.chat() | `def chat(...) -> LLMResponse` | `async def chat(...) -> LLMResponse` | Protocol boundary changes |
-| LLMProvider.chat_stream() | `def chat_stream(...) -> Iterator[StreamChunk]` | `async def chat_stream(...) -> AsyncIterator[StreamChunk]` | Protocol boundary changes |
-| LLMProvider.chat_with_retry() | `def chat_with_retry(...)` | **REMOVED from Protocol** | Retry is kernel concern |
-| OpenAIProvider | openai.OpenAI + httpx.Client | openai.AsyncOpenAI + httpx.AsyncClient | Implementation change |
-| Tool.execute() | `def execute(...) -> str/ToolResult` | `async def execute(...) -> str/ToolResult` | Protocol boundary changes |
-| ToolRegistry.execute() | `def execute(...)` | `async def execute(...)` | Follows Tool Protocol |
-| BuiltinTool._execute() | `@abstractmethod def _execute(...)` | `@abstractmethod async def _execute(...)` | ABC boundary changes |
-| BashTool._execute() | session.exec_bash (sync) | asyncio.to_thread(session.exec_bash) | Leaf: bridges sync session |
-| Hook Protocol (7 methods) | all sync | all async | Protocol boundary changes |
-| BaseHook (7 methods) | sync no-ops | async no-ops | Default impl changes |
-| EventEmitterHook | sync bus.emit() | async bus.emit() | Follows MessageBus |
-| Guard.evaluate() | `def evaluate(...)` | **NO CHANGE -- stays sync** | Pure computation, no I/O |
-| GuardPipeline.evaluate() | sync | **NO CHANGE -- stays sync** | Pure computation |
-| MessageBus | queue.Queue | asyncio.Queue | Full replacement |
-| ContextCompactor.compact_if_needed() | sync (calls LLM chat) | async (awaits LLM chat) | Follows LLMProvider |
-| Exp.assemble() | sync pure transform | **NO CHANGE -- stays sync** | No I/O |
-| Exp.build_runtime() | sync resource creation | async (tool/provider init) | Minor: mostly data transform |
-| Exp.run() | sync orchestration | async orchestration | Follows kernel |
-| Exp._make_spawn_fn() | returns sync Callable | returns async Callable | Follows kernel |
-| EventRouter | threading.Thread consumer | asyncio.Task consumer | Full replacement |
-| EventHandler.handle() | `def handle(...)` | `async def handle(...)` | Protocol boundary changes |
-| AgentRunService.run_agent_sync() | sync in ThreadPoolExecutor | sync wrapper + asyncio.run() | Sync/async bridge |
-| Playground.prepare() | sync file I/O | **NO CHANGE (out of scope)** | Stays sync |
-| DevShell DevRunner.run() | sync | **NO CHANGE (out of scope)** | Wraps with asyncio.run() later |
-
-### Data Flow (After Async)
+### Component Boundaries (Phase 1 完成态)
 
 ```
-AgentRunService.run_agent_sync() [sync, in ThreadPoolExecutor]
+AgentKernel
   |
-  asyncio.run(self._run_agent_async(...))     # NEW: creates event loop for this run
+  +-- _run_items(spec, task, history, stop_event, source, spawn_id)
+  |     AsyncGenerator[_KernelItem, None]
+  |     +-- yield _KernelItem(event=ThoughtEvent/ResponseEvent)  [completed snapshot]
+  |     +-- yield _KernelItem(event=ToolCallEvent)
+  |     +-- yield _KernelItem(event=ToolResultEvent)             [via on_result callback]
+  |     +-- yield _KernelItem(messages_delta=[...])              [message deltas]
+  |     +-- yield _KernelItem(terminal=_TerminalItem)            [last yield]
   |
-  v
-_run_agent_async() [new async orchestrator method]
+  +-- run_stream(spec, task, ...) -> AsyncIterator[BusEvent]      [new public interface]
+  |     Filters _run_items() -> yields only event, ignores messages_delta
   |
-  +-- Playground.prepare()               [stays sync -- file I/O, out of scope]
-  +-- EventRouter.start()                [asyncio.create_task, not threading.Thread]
-  +-- await Exp.build_runtime(ctx, bus)  [async: provider/tool init]
-  +-- await kernel.run(spec, task, ...)  [async: main agent loop]
-  |     |
-  |     +-- loop:
-  |     |     await run_pre_llm_call()    [async hooks]
-  |     |     await run_should_continue() [async hooks]
-  |     |     await compactor.compact_if_needed() [async: LLM call]
-  |     |     await _call_llm()           [async: stream iteration]
-  |     |     |
-  |     |     for each tool_call:
-  |     |       guard_pipeline.evaluate() [stays SYNC -- pure computation]
-  |     |       await run_pre_tool_call() [async hooks]
-  |     |       await registry.execute()  [async tool dispatch]
-  |     |       await run_post_tool_call()[async hooks]
-  |     |
-  |     +-- return KernelRunResult
+  +-- run(spec, task, ...) -> KernelRunResult                     [compat interface, unchanged]
+        Collects _run_items() -> accumulates messages_delta + terminal -> KernelRunResult
+
+ToolRunner Protocol  [new]
   |
-  +-- await bus.emit(run_result_event)   [async: asyncio.Queue]
-  +-- await router.stop()                [async: drain + close]
+  +-- InlineToolRunner  [Phase 1 transition impl]
+        Wraps current agent.py L217-311: guard -> pre_hook -> asyncio.gather -> post_hook
+
+AgentRuntimeSpec  [extended]
+  +-- 5 new Optional[Any] fields: tool_runner, tool_catalog, runtime_topology,
+      capability_policy, structural_validation
 ```
+
+### Full-Pipeline Data Flow (Three-Phase Evolution)
+
+#### Phase 1: Kernel Layer (Pure Addition)
+
+```
+AgentRunService.run_agent()
+  +-- Exp.build_runtime(ctx, bus) -> AgentRuntime
+  +-- kernel.run(spec, task, ...) -> KernelRunResult        [unchanged]
+  |     +-- internal: _run_items() generator
+  |           +-- Hook -> Bus path still exists (EventEmitterHook untouched)
+  |           +-- _run_items() also yields events (two paths coexist)
+  |           +-- ToolRunner.execute_batch() delegates tool execution
+  +-- bus.emit(run_result_event)                            [unchanged]
+
+Consumers: no run_stream() consumers. run() behavior is fully equivalent to current.
+Coexistence safety: two paths do not produce duplicate events because nobody consumes run_stream().
+```
+
+**Phase 1 Changed Files**:
+
+| File | Change Type | Content |
+|------|-------------|---------|
+| `matmaster/core/agent.py` | Refactor | `_run_loop` -> `_run_items` generator; new `run_stream()`; `run()` delegates; tool execution delegates to ToolRunner |
+| `matmaster/core/tool_runner.py` | New | ToolRunner Protocol + ToolExecutionContext + InlineToolRunner |
+| `matmaster/types/runtime.py` | Extend | AgentRuntimeSpec adds 5 optional fields |
+| `tests/matmaster/core/test_tool_runner.py` | New | InlineToolRunner unit tests |
+| `tests/matmaster/core/test_agent_kernel_stream.py` | New | run_stream() integration tests |
+
+**Unaffected Components** (Phase 1 zero changes):
+- `matmaster/core/exp.py` -- Exp.run() continues calling kernel.run()
+- `matmaster/devshell/runner.py` -- DevRunner continues calling kernel.run()
+- `src/services/agent_run_service.py` -- continues calling kernel.run()
+- `matmaster/core/bus.py` -- MessageBus retained
+- `matmaster/integration/event_router.py` -- EventRouter retained
+- `matmaster/core/hooks.py` -- Hook Protocol unchanged, EventEmitterHook retained
+- `matmaster/hooks/*` -- all service-layer Hooks retained
+
+#### Phase 2: Exp + Service Layer Consume Generator + Hook Retirement
+
+```
+AgentRunService.run_agent_stream()                         [new]
+  +-- Exp.run_stream(ctx, task, ...)                       [new]
+  |     +-- kernel.run_stream(spec, task, ...)
+  |           +-- _run_items()
+  |                 +-- _stream_llm_items() sub-generator    [replaces _do_stream_llm]
+  |                 |     yield chunk-level ThoughtEvent/ResponseEvent
+  |                 |     yield segment-complete events
+  |                 +-- ToolRunner events (unchanged)
+  |
+  +-- async for event in Exp.run_stream():
+        +-- SSEHandler.handle(event)                        [direct consume, no Bus]
+        +-- PersistenceHandler.handle(event)                [direct consume, no Bus]
+
+Hook retirement path (one by one):
+1. EventEmitterHook.on_stream_chunk -> _stream_llm_items() yield replaces
+2. EventEmitterHook.on_segment_complete -> _stream_llm_items() yield replaces
+3. EventEmitterHook.pre_tool_call -> _run_items() yield ToolCallEvent replaces
+4. EventEmitterHook.post_tool_call -> on_result callback yield replaces
+5. EventEmitterHook deleted entirely
+
+Hooks that remain:
+- ConfirmationHook.pre_tool_call (intercepting, cannot be replaced by yield)
+- OutputProcessorHook.post_tool_call (side-effect, needs business logic)
+- SkillHitHook.post_tool_call (side-effect)
+- AssistantStateHook.on_segment_complete (side-effect)
+- should_continue (intercepting, control flow)
+- pre_llm_call (observational, retained)
+```
+
+**Phase 2 Key Changes**:
+
+| File | Change Type | Content |
+|------|-------------|---------|
+| `matmaster/core/agent.py` | Refactor | `_do_stream_llm()` -> `_stream_llm_items()` sub-generator |
+| `matmaster/core/exp.py` | Extend | New `run_stream()` async generator |
+| `src/services/agent_run_service.py` | Extend | New `run_agent_stream()` consuming generator |
+| `matmaster/core/hooks.py` | Reduce | EventEmitterHook removed |
+| `matmaster/hooks/*` | Migrate | Side-effect Hook event emission logic moves to service layer |
+
+#### Phase 3: Bus Removal Assessment and Implementation
+
+```
+Pre-assessment: remaining Bus consumers after Phase 2
+  +-- Service-layer events (ErrorEvent, CancelledEvent, StreamClosedEvent, ExpRunEvent)
+  |     -> emitted by AgentRunService directly, not through Kernel
+  +-- BohriumSetupService events (McpConnectEvent, BohriumNodeEvent)
+  |     -> emitted by bohrium_svc outside Kernel
+  +-- WorkspaceHandler events (WorkspaceUploadErrorEvent)
+        -> emitted during cleanup phase
+
+De-bus solution (if assessment passes):
+  AgentRunService.run_agent_stream()
+    +-- async for event in Exp.run_stream():    [Kernel events]
+    |     +-- await fanout(event, handlers)      [replaces Bus+Router]
+    |
+    +-- service_events = [...ErrorEvent, etc]   [Service events]
+    |     +-- await fanout(event, handlers)
+    |
+    +-- handlers = [SSEHandler, PersistenceHandler, WorkspaceHandler]
+
+async def fanout(event: BusEvent, handlers: list[EventHandler]) -> None:
+    for handler in handlers:
+        await handler.handle(event)
+```
+
+**Phase 3 Conditional Changes** (depend on assessment conclusion):
+
+| File | Change Type | Condition |
+|------|-------------|-----------|
+| `matmaster/core/bus.py` | Delete | If Bus has no remaining consumers |
+| `matmaster/integration/event_router.py` | Delete/simplify | Replace with async fanout |
+| `src/services/agent_run_service.py` | Refactor | Remove Bus/Router lifecycle management |
+| `matmaster/devshell/runner.py` | Adapt | DevRunner if using bus=None path |
+
+### Internal Types Design (Phase 1 New)
+
+```python
+# Kernel-private, not public -- all defined at top of agent.py
+
+@dataclass
+class _TerminalItem:
+    """Kernel termination result, consumed only by run()"""
+    status: str          # completed / cancelled / failed
+    reason: str          # natural / max_turns / cancelled / hook_stopped / invalid_finish
+    final_content: str | None
+    num_turns: int
+    stop_reason: str | None
+    usage: dict[str, int]
+
+@dataclass
+class _KernelItem:
+    """Kernel-private stream item"""
+    event: BusEvent | None = None           # mappable to public event
+    messages_delta: list[Message] | None = None  # messages append
+    terminal: _TerminalItem | None = None   # termination item (last yield)
+
+@dataclass
+class _KernelState:
+    """Per-_run_items() call local state"""
+    messages: list[Message]
+    turn: int = 0
+    total_usage: dict[str, int] = field(default_factory=dict)
+    last_stop_reason: str | None = None
+    # Tool Runtime v2 reserved
+    last_catalog_version: int | None = None
+    cached_tool_definitions: list[dict[str, Any]] | None = None
+```
+
+Design points:
+- `_KernelState` is a function-local variable, not on self, keeping Kernel stateless/concurrency-safe
+- `_KernelItem` three fields are quasi-exclusive (event / messages_delta / terminal), uses dataclass rather than Union because event and messages may need to be yielded in the same batch
+- `_TerminalItem` carries Kernel-private info (usage/stop_reason), not exposed to BusEvent
+
+### ToolRunner Protocol Design
+
+```python
+# matmaster/core/tool_runner.py
+
+@dataclass(frozen=True)
+class ToolExecutionContext:
+    """Per-batch execution context -- explicit, no side channels"""
+    turn: int
+    max_turns: int
+    stop_event: threading.Event | None = None
+    # Phase 2+: runtime_topology, capability_policy
+
+@runtime_checkable
+class ToolRunner(Protocol):
+    """Tool execution chain interface -- Kernel only cares about (ToolCallData, ToolResult) result list"""
+    async def execute_batch(
+        self,
+        tool_calls: list[ToolCallData],
+        ctx: ToolExecutionContext,
+        *,
+        on_result: Callable[[ToolCallData, ToolResult], Awaitable[None]] | None = None,
+    ) -> list[tuple[ToolCallData, ToolResult]]: ...
+```
+
+Interface design points:
+- **Explicit context**: all per-call state through ToolExecutionContext, ToolRunner is safe for concurrent/reuse (sub-agent scenarios)
+- **Batch input**: receives entire batch of tool_calls, Phase 2+ can schedule by ResourceClaim
+- **on_result callback**: notifies Kernel immediately as each tool completes to yield ToolResultEvent, does not wait for full batch
+- **Original order return**: guarantees ToolMessage append order matches LLM request order
+- **stop_event not checked in ToolRunner**: cancellation is Kernel _run_items() responsibility, checked before calling execute_batch()
+
+### InlineToolRunner Implementation (Phase 1 Transition)
+
+Logic equivalent to current `agent.py` L217-311 three phases:
+
+1. **Serial guard + pre_hook gating**: per tool_call check guard deny and hook skip
+2. **Parallel execution**: approved tool_calls use asyncio.gather for concurrent execution
+3. **Post hooks**: post_tool_call hook on executed tools in original order
+
+Key differences from current code:
+- Does not maintain `_ToolOutcome` NamedTuple or construct `ToolMessage` -- that is Kernel `_run_items()` responsibility
+- Returns only `(ToolCallData, ToolResult)` list
+- `was_executed` flag distinguishes tools needing post_hook
 
 ## Patterns to Follow
 
-### Pattern 1: Protocol Hard Cut (Not Gradual Dual Protocols)
+### Pattern 1: Generator Consumption Isolation
 
-Replace sync Protocols with async Protocols in one shot. Do not maintain parallel sync/async Protocol definitions.
-
-**Why:** The codebase is internal (no external consumers). All 863 tests need async infrastructure regardless. Dual Protocols double API surface for zero benefit.
-
-**What this means:** Phase 1 of implementation changes Protocol files only. This breaks all tests. Each subsequent phase fixes implementations and their tests module by module.
+`run()` and `run_stream()` each independently consume `_run_items()`, never sharing a generator instance. Each call creates a new generator.
 
 ```python
-# matmaster/types/llm_provider.py -- AFTER
-
-from typing import Any, AsyncIterator, Protocol, runtime_checkable
-from matmaster.types.messages import LLMResponse, StreamChunk
-
-
-@runtime_checkable
-class LLMProvider(Protocol):
-    """Async LLM provider -- primary Protocol for v2.0+.
-
-    chat_with_retry is REMOVED from Protocol. Retry logic lives in
-    AgentKernel._call_llm() (timeout-doubling strategy). The Protocol
-    only defines primitive operations.
-    """
-
-    async def chat(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-    ) -> LLMResponse: ...
-
-    async def chat_stream(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        timeout: float | None = None,
-    ) -> AsyncIterator[StreamChunk]: ...
-```
-
-**chat_with_retry removal rationale:** The current codebase already has retry logic in two places: (1) LLMProvider.chat_with_retry() in the Protocol, and (2) AgentKernel._call_llm() with timeout-doubling. The kernel is the sole consumer of the provider and already implements its own retry. Protocol-level retry is redundant and forces every provider to duplicate retry logic. Remove from Protocol; keep only the kernel-level retry.
-
-### Pattern 2: Guard Stays Sync (Explicitly)
-
-Guards (Guard Protocol, GuardPipeline, LoopDetectionGuard) perform pure computation: JSON fingerprinting over a deque sliding window. No I/O, no await needed. Making them async adds overhead for a sub-millisecond CPU operation.
-
-```python
-# Guard Protocol -- NO CHANGE from v1.1:
-@runtime_checkable
-class Guard(Protocol):
-    def evaluate(self, ctx: GuardContext) -> GuardResult: ...
-
-# Calling sync from async is free for CPU-bound work:
-# In async kernel:
-guard_result = guard_pipeline.evaluate(tc, turn, max_turns)  # no await
-```
-
-### Pattern 3: MessageBus to asyncio.Queue
-
-Direct replacement. API names stay the same (emit/get/get_nowait/pending/empty). Methods become async where they were blocking.
-
-```python
-import asyncio
-from matmaster.types.events import BusEvent
-
-
-class MessageBus:
-    """Async event bus backed by asyncio.Queue."""
-
-    def __init__(self, maxsize: int = 0) -> None:
-        self._queue: asyncio.Queue[BusEvent] = asyncio.Queue(maxsize=maxsize)
-
-    async def emit(self, event: BusEvent) -> None:
-        """Emit event (coroutine-safe, not thread-safe)."""
-        await self._queue.put(event)
-
-    async def get(self, timeout: float | None = None) -> BusEvent:
-        """Consume next event. Raises asyncio.TimeoutError on timeout."""
-        if timeout is not None:
-            return await asyncio.wait_for(self._queue.get(), timeout=timeout)
-        return await self._queue.get()
-
-    def get_nowait(self) -> BusEvent:
-        """Non-blocking consume. Raises asyncio.QueueEmpty when empty."""
-        return self._queue.get_nowait()
-
-    @property
-    def pending(self) -> int:
-        return self._queue.qsize()
-
-    @property
-    def empty(self) -> bool:
-        return self._queue.empty()
-```
-
-### Pattern 4: EventRouter as asyncio.Task
-
-Replace the background threading.Thread with an asyncio.Task. The router starts as a task in the same event loop as the kernel, consuming from the async MessageBus.
-
-```python
-class EventRouter:
-    """Async event consumer dispatching to handlers."""
-
-    def __init__(self, bus: MessageBus, handlers: list[EventHandler]) -> None:
-        self._bus = bus
-        self._handlers = handlers
-        self._task: asyncio.Task | None = None
-
-    def start(self) -> None:
-        """Spawn consume loop as asyncio.Task."""
-        self._task = asyncio.create_task(self._consume_loop())
-
-    async def stop(self, drain_timeout: float = 2.0) -> None:
-        """Cancel task, drain remaining events, close handlers."""
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-        # Drain remaining events
-        while not self._bus.empty:
-            try:
-                event = self._bus.get_nowait()
-                await self._dispatch(event)
-            except asyncio.QueueEmpty:
-                break
-        await self._close_handlers()
-
-    async def _consume_loop(self) -> None:
-        """Main consume loop."""
-        while True:
-            try:
-                event = await asyncio.wait_for(self._bus.get(), timeout=0.1)
-                await self._dispatch(event)
-            except asyncio.TimeoutError:
-                continue
-            except asyncio.CancelledError:
-                break
-```
-
-### Pattern 5: asyncio.Event for Cancellation (Replace threading.Event)
-
-threading.Event is not compatible with asyncio. Replace with asyncio.Event in the kernel. The src/ service layer thread bridges via loop.call_soon_threadsafe().
-
-```python
-# In AgentKernel.run():
-async def run(
-    self,
-    spec: AgentRuntimeSpec,
-    task: str,
-    history: list[Message] | None = None,
-    stop_event: asyncio.Event | None = None,  # was threading.Event
-) -> KernelRunResult:
-    ...
-    while turn < spec.max_turns:
-        if stop_event and stop_event.is_set():
-            return self._finish(...)
+# Inside run()
+async def run(self, spec, task, ...):
+    async with spec.llm_provider:
         ...
-```
-
-**Thread-safe stop signal from service layer:**
-```python
-# In src/services/agent_run_service.py:
-# The run creates its own event loop via asyncio.run().
-# To set stop_event from the FastAPI thread:
-
-async def _run_agent_async(self, ..., external_stop_requested: Callable[[], bool]):
-    stop_event = asyncio.Event()
-    # Periodically check external cancellation signal
-    async def _poll_cancel():
-        while not stop_event.is_set():
-            if external_stop_requested():
-                stop_event.set()
-                return
-            await asyncio.sleep(0.5)
-    cancel_poller = asyncio.create_task(_poll_cancel())
-    try:
-        result = await kernel.run(spec, task, stop_event=stop_event)
-    finally:
-        cancel_poller.cancel()
-```
-
-Alternative (simpler): since asyncio.run() creates a NEW event loop per thread, the service layer can store a reference to the loop and use loop.call_soon_threadsafe(stop_event.set). This works because the loop is known and accessible:
-
-```python
-def run_agent_sync(self, ...):
-    loop = asyncio.new_event_loop()
-    stop_event = asyncio.Event()  # created before loop.run_until_complete
-    # Store loop reference for external cancellation
-    self._active_loops[session_id] = (loop, stop_event)
-    try:
-        loop.run_until_complete(self._run_agent_async(..., stop_event=stop_event))
-    finally:
-        del self._active_loops[session_id]
-        loop.close()
-
-def cancel_run(self, session_id: str) -> None:
-    """Called from FastAPI thread to cancel a running agent."""
-    entry = self._active_loops.get(session_id)
-    if entry:
-        loop, stop_event = entry
-        loop.call_soon_threadsafe(stop_event.set)
-```
-
-### Pattern 6: asyncio.to_thread for evomaster Session Calls
-
-evomaster BaseSession methods (exec_bash, file operations via paramiko/docker) are inherently sync. Bridge with asyncio.to_thread() to avoid blocking the event loop.
-
-```python
-# In BashTool._execute (async):
-async def _execute(self, arguments: dict[str, Any]) -> str:
-    session = self._require_session()
-    command = arguments.get("command", "").strip()
-    ...
-    # Bridge sync session call to thread pool
-    result = await asyncio.to_thread(
-        session.exec_bash,
-        command=command,
-        timeout=timeout,
-        is_input=is_input,
-    )
-    ...
-```
-
-**Scope of asyncio.to_thread usage:**
-- BashTool: session.exec_bash()
-- ReadTool, WriteTool, EditTool, GlobTool, GrepTool, ListDirTool: all use session.exec_bash() for remote execution
-- EvoToolAdapter: wraps evomaster BaseTool.execute(session, args_json)
-- MonitorJobTool (via EvoToolAdapter): same pattern
-
-### Pattern 7: SubAgent Spawn as Sequential Async
-
-SubAgent spawn stays sequential in v2.0 (parent awaits child completion). The spawn_fn return type changes from sync Callable to async Callable.
-
-```python
-# In Exp._make_spawn_fn():
-@staticmethod
-def _make_spawn_fn(
-    ctx: PlaygroundContext,
-    bus: MessageBus | None,
-    source_prefix: str,
-) -> Callable[[str, str, asyncio.Event | None], Awaitable[str]]:
-
-    async def spawn_fn(
-        exp_name: str,
-        task: str,
-        stop_event: asyncio.Event | None = None,
-    ) -> str:
-        child_config = load_exp_config(exp_name)
-        child_exp = Exp(child_config)
-        child_runtime = await child_exp.build_runtime(ctx, bus=bus, ...)
-        try:
-            run_result = await child_runtime.kernel.run(
-                child_runtime.spec, task, stop_event=stop_event
-            )
-            ...
-        finally:
-            await child_runtime.cleanup()  # cleanup may become async
-
-    return spawn_fn
-```
-
-**SpawnTool._execute becomes async:**
-```python
-async def _execute(self, arguments: dict[str, Any]) -> str:
-    ...
-    return await self._spawn_fn(exp_name, task, self._stop_event)
-```
-
-**v2.0 scope:** Parent awaits child. True concurrent multi-agent (parent continues while child runs) is v2.1+ feature.
-
-### Pattern 8: Service Layer Bridge (asyncio.run Wrapper)
-
-The ONLY change to src/ code. run_agent_sync() wraps the new async orchestrator.
-
-```python
-# In src/services/agent_run_service.py:
-class AgentRunService:
-    def run_agent_sync(self, session_id, user_prompt, send_cb, loop, ...):
-        """Called from ThreadPoolExecutor -- bridges to async matmaster."""
-        # Create event loop for this run
-        run_loop = asyncio.new_event_loop()
-        try:
-            run_loop.run_until_complete(
-                self._run_agent_async(
-                    session_id, user_prompt, send_cb, loop, ...
+        messages = []
+        async for item in self._run_items(spec, task, ...):
+            if item.messages_delta:
+                messages.extend(item.messages_delta)
+            if item.terminal:
+                return KernelRunResult(
+                    result=KernelResult(...from terminal...),
+                    messages=messages,
                 )
-            )
-        finally:
-            run_loop.close()
 
-    async def _run_agent_async(self, session_id, user_prompt, send_cb, fastapi_loop, ...):
-        """Async orchestration using matmaster components."""
-        bus = MessageBus()  # now asyncio.Queue
+# Inside run_stream()
+async def run_stream(self, spec, task, ...):
+    async with spec.llm_provider:
         ...
-        # Playground.prepare() stays sync (no change)
-        pg_ctx = playground.prepare(run_meta)
+        async for item in self._run_items(spec, task, ...):
+            if item.event:
+                yield item.event
+            if item.terminal:
+                yield RunResultEvent(...from terminal...)
+```
 
-        # All matmaster calls are now async
-        runtime = await exp.build_runtime(pg_ctx, bus=bus, ...)
-        result = await runtime.kernel.run(spec, task, ...)
+**Key**: both methods share identical `spec/task/history/stop_event` parameters, since they pass to the same `_run_items()`.
 
-        # SSE callbacks that need FastAPI loop
-        def _send_sse(payload):
-            asyncio.run_coroutine_threadsafe(send_cb(payload), fastapi_loop)
-        ...
+### Pattern 2: ToolRunner Fallback Chain
+
+Kernel internally decides which ToolRunner via spec fields:
+
+```python
+# _run_items() initialization
+if spec.tool_runner is not None:
+    tool_runner = spec.tool_runner           # Phase 2+: real ToolRunner injected by Exp
+else:
+    tool_runner = InlineToolRunner(           # Phase 1: inline transition
+        tool_registry=spec.tool_registry,
+        guard_pipeline=guard_pipeline,
+        hooks=spec.hooks,
+    )
+```
+
+Phase 2 only needs Exp to set `spec.tool_runner` in `build_runtime()`, Kernel code zero changes.
+
+### Pattern 3: Tool Definitions Resolution Abstraction
+
+```python
+def _resolve_tool_definitions(spec, state) -> list[dict] | None:
+    # Phase 2 path (after ToolCatalog injection)
+    if spec.tool_catalog is not None:
+        current_version = spec.tool_catalog.version
+        if current_version != state.last_catalog_version:
+            state.cached_tool_definitions = spec.tool_catalog.build_definitions()
+            state.last_catalog_version = current_version
+        return state.cached_tool_definitions
+    # Phase 1 fallback
+    if spec.tool_registry and hasattr(spec.tool_registry, 'get_tool_definitions'):
+        return spec.tool_registry.get_tool_definitions()
+    return None
+```
+
+Called before each LLM call. Phase 2 ToolCatalog injection auto-switches, no second Kernel change needed.
+
+### Pattern 4: LLM Streaming Events Phased Strategy
+
+| Phase | Event Emission Timing | Relationship to EventEmitterHook |
+|-------|----------------------|----------------------------------|
+| Phase 1 | Final completed snapshot after `_call_llm()` returns | Coexist: Hook sends streaming chunks, generator sends completed snapshot |
+| Phase 2 | `_stream_llm_items()` sub-generator yields in real-time | Replace: EventEmitterHook deleted |
+
+Phase 1's `_run_items()` cannot reproduce segment-complete semantics because `_do_stream_llm()` returns only concatenated content/reasoning_content. This is not a problem -- Phase 1 has no `run_stream()` consumers.
+
+### Pattern 5: on_result Callback Pending Items Pattern
+
+ToolRunner's on_result callback fires when a tool completes, but a generator cannot yield inside a callback. Solution is a pending items queue:
+
+```python
+# _run_items() tool execution section
+pending_items: list[_KernelItem] = []
+
+async def _on_tool_result(tc, result):
+    pending_items.append(_KernelItem(event=ToolResultEvent(...)))
+
+results = await tool_runner.execute_batch(response.tool_calls, exec_ctx, on_result=_on_tool_result)
+
+# After execute_batch returns, yield all pending items
+for item in pending_items:
+    yield item
+pending_items.clear()
 ```
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Dual Sync+Async Protocol Definitions
+### Anti-Pattern 1: Generator Swallows Exceptions
 
-**What:** Maintaining both SyncLLMProvider and AsyncLLMProvider Protocols for gradual migration.
-**Why bad:** Python typing cannot express "method is either sync or async" in a runtime_checkable Protocol. Dual Protocols double the interface surface for an internal codebase with no external consumers. Every component needs to check which variant it received.
-**Instead:** One async Protocol. Sync callers (DevShell) use asyncio.run() wrapper.
+**What:** `_run_items()` internally try/except swallows exceptions, attempts to yield error event then return.
+**Why bad:** Kernel should let it fail. Exception handling is the upper layer's responsibility (Exp.run / AgentRunService). Generator internally handles only expected termination conditions (cancelled / max_turns / hook_stopped), does not catch LLMError and similar runtime exceptions.
+**Instead:** `_run_items()` lets exceptions propagate naturally. `run()` and `run_stream()` each handle exceptions and cleanup.
 
-### Anti-Pattern 2: Making Guards Async
+### Anti-Pattern 2: Removing Any Hook in Phase 1
 
-**What:** Converting Guard.evaluate() to async because "everything should be async."
-**Why bad:** Guards are pure computation (JSON fingerprint + deque sliding window, <1ms). Async overhead (coroutine frame, task scheduling) costs more than the computation itself. Forces GuardPipeline into await chains for no I/O gain.
-**Instead:** Keep Guard sync. Sync calls from async context are free for CPU-bound work.
+**What:** Delete EventEmitterHook in Phase 1 because _run_items() can also produce events.
+**Why bad:** Phase 1 has no run_stream() consumers. All existing callers (AgentRunService / DevRunner / Exp.run) use run(), and run() does not consume item.event. Deleting EventEmitterHook means events no longer reach Bus -> SSEHandler -> frontend, users immediately lose streaming output.
+**Instead:** Phase 1 two paths coexist. Phase 2 switches service layer to run_stream(), then gradually retire Hooks.
 
-### Anti-Pattern 3: Using janus Queue for MessageBus
+### Anti-Pattern 3: _KernelItem as Union Type Instead of Dataclass
 
-**What:** Using the janus library for a dual sync/async queue to allow both sync and async producers.
-**Why bad:** After migration, ALL producers (kernel hooks, EventEmitterHook) and ALL consumers (EventRouter) are async. Janus adds a dependency and measurable performance overhead (janus docs: "for sync-only and async-only cases, use native queues -- otherwise the slowdown can be significant"). The only sync boundary (src/ service layer) uses asyncio.run() which creates the event loop context.
-**Instead:** asyncio.Queue directly. No sync producers after migration.
+**What:** Design _KernelItem as `event | messages_delta | terminal` Union type.
+**Why bad:** Tool execution section may need to yield both event (ToolResultEvent) and messages_delta (ToolMessage append) simultaneously. Union type cannot carry two kinds of info in one yield. Even splitting into multiple yields adds yield points and complexity.
+**Instead:** Dataclass with three optional fields, each yield fills as needed.
 
-### Anti-Pattern 4: Partial Protocol Async (Some Methods Sync, Some Async)
+### Anti-Pattern 4: InlineToolRunner Checks stop_event Internally
 
-**What:** Making only chat_stream() async while keeping chat() sync in LLMProvider.
-**Why bad:** ContextCompactor._summarize() calls LLMProvider.chat(). If chat() stays sync, the compactor blocks the event loop during summarization. Partial async creates confusing contracts where some methods can be awaited and others cannot.
-**Instead:** All LLMProvider methods become async. OpenAIProvider uses AsyncOpenAI for everything.
+**What:** Check stop_event inside InlineToolRunner.execute_batch() and return early.
+**Why bad:** Current agent.py L222-229 cancellation behavior: detect stop_event -> directly return KernelRunResult (cancelled), does not produce ToolResult/ToolMessage for unexecuted tools. If ToolRunner checks internally, it needs to return partial results, and Kernel needs to handle partial cases, adding complexity.
+**Instead:** Cancellation check is Kernel _run_items() responsibility, checks before calling execute_batch() and directly yields terminal.
 
-### Anti-Pattern 5: asyncio.to_thread() for Everything
+### Anti-Pattern 5: run_stream() Implemented by Consuming run()
 
-**What:** Wrapping every existing sync function with asyncio.to_thread() instead of native async conversion.
-**Why bad:** Thread pool bridges add latency and consume thread pool slots. For I/O-bound operations like LLM API calls and subprocess execution, native async is strictly better. to_thread() should be reserved for genuinely unavoidable sync libraries.
-**Instead:** Native async for all matmaster code. Only use to_thread() for evomaster BaseSession method calls (paramiko/docker -- genuinely sync C-extension libraries).
+**What:** `run_stream()` internally calls `run()`, then reverse-engineers events from KernelRunResult.
+**Why bad:** By the time run() returns, all events have already passed, streaming timing cannot be recovered. The value of run_stream() is precisely the real-time event stream.
+**Instead:** Both `run()` and `run_stream()` consume `_run_items()`. _run_items() is the single execution path.
 
-### Anti-Pattern 6: Nested asyncio.run()
+## Integration Points
 
-**What:** Calling asyncio.run() inside already-async code, or from code that already has a running event loop.
-**Why bad:** RuntimeError: "cannot be called when another event loop is running." This is the single most common migration bug.
-**Instead:** asyncio.run() appears ONLY at the one sync-to-async boundary (AgentRunService.run_agent_sync). All internal matmaster code uses plain await. DevShell uses its own asyncio.run() at entry point.
-
-### Anti-Pattern 7: Keeping threading.Event Alongside asyncio.Event
-
-**What:** Using threading.Event for stop_event because "it works from any thread."
-**Why bad:** threading.Event.wait() in async context blocks the event loop. asyncio.Event is not thread-safe but that is the correct choice for async code. Cross-thread signaling uses loop.call_soon_threadsafe().
-**Instead:** asyncio.Event inside matmaster. Service layer bridges via loop.call_soon_threadsafe(stop_event.set) or a cancel-poller task.
-
-## Migration Order (Recommended Build Sequence)
-
-The order is driven by dependency analysis. Each phase builds on the previous.
-
-### Phase 1: Protocol Definitions + Test Infrastructure (Foundation)
-
-Change Protocol definitions only. No implementations yet. Set up pytest-asyncio infrastructure.
-
-**Modified files:**
-- `matmaster/types/llm_provider.py` -- LLMProvider: chat -> async, chat_stream -> AsyncIterator, remove chat_with_retry
-- `matmaster/tools/tool_registry.py` -- Tool Protocol: execute -> async; ToolRegistry.execute -> async
-- `matmaster/core/hooks.py` -- Hook Protocol: all 7 methods -> async; BaseHook: async no-ops; all run_* helpers -> async; EventEmitterHook -> async
-- `matmaster/types/guards.py` -- Guard Protocol: **NO CHANGE**
-
-**New infrastructure:**
-- `pyproject.toml` -- add pytest-asyncio dev dependency
-- `tests/conftest.py` -- asyncio mode configuration
-- `tests/fixtures/` -- async mock factories (AsyncMockProvider, AsyncMockTool)
-
-**Test impact:** All 863 tests break at Protocol level. This is expected and intentional.
-
-**Dependency:** None -- this is the foundation.
-
-### Phase 2: LLM Provider (Leaf I/O -- Highest Value)
-
-Convert OpenAIProvider to use AsyncOpenAI. This is the highest-value change because LLM calls dominate wall-clock time.
-
-**Modified files:**
-- `matmaster/providers/openai_provider.py` -- openai.OpenAI -> openai.AsyncOpenAI, httpx.Client -> httpx.AsyncClient, Iterator -> AsyncIterator, chat/chat_stream -> async, remove chat_with_retry method
-- `matmaster/providers/llm_factory.py` -- build_provider returns async provider
-
-**Test files to fix:**
-- `tests/matmaster/providers/` -- all provider tests -> async
-
-**Dependency:** Phase 1 (async LLMProvider Protocol)
-
-### Phase 3: Tool System (Leaf I/O)
-
-Convert all 12 builtin tools + adapter + registry to async execute.
-
-**Modified files:**
-- `matmaster/tools/builtin/base.py` -- BuiltinTool: execute -> async, _execute -> async abstract
-- `matmaster/tools/builtin/bash_tool.py` -- asyncio.to_thread(session.exec_bash)
-- `matmaster/tools/builtin/read_tool.py`, write_tool.py, edit_tool.py -- asyncio.to_thread for session calls
-- `matmaster/tools/builtin/glob_tool.py`, grep_tool.py, listdir_tool.py -- asyncio.to_thread
-- `matmaster/tools/builtin/spawn_tool.py` -- _execute -> async, spawn_fn -> async callable
-- `matmaster/tools/builtin/task/*.py` -- async (JSON file I/O, minor)
-- `matmaster/tools/tool_registry.py` -- execute() -> async
-- `matmaster/tools/evomaster_tool_adapter.py` -- execute() -> async (wraps sync evo tool with asyncio.to_thread)
-- `matmaster/tools/skill_tool.py` -- execute -> async
-- `matmaster/tools/lazy_mcp.py` -- LazyMCPTool.execute -> async
-
-**Key boundary:** All tools that call session methods use asyncio.to_thread() to bridge the sync evomaster session API. This is the correct approach because evomaster sessions wrap paramiko (SSH), docker SDK, and subprocess -- all inherently sync.
-
-**Test files to fix:**
-- `tests/matmaster/tools/` -- all tool tests -> async
-
-**Dependency:** Phase 1 (async Tool Protocol)
-
-### Phase 4: Hook System (Middleware)
-
-Convert all hooks to async. Hooks are lightweight and this phase is straightforward.
-
-**Modified files:**
-- `matmaster/core/hooks.py` -- Hook Protocol, BaseHook, all run_* helpers, EventEmitterHook -> async
-- `matmaster/hooks/confirmation.py` -- ConfirmationHook: pre_tool_call -> async, queue.Queue.get -> asyncio.Queue.get
-- `matmaster/hooks/output_processor.py` -- post_tool_call -> async
-- `matmaster/hooks/skill_hit.py` -- post_tool_call -> async
-- `matmaster/hooks/assistant_state.py` -- on_stream_chunk/on_segment_complete -> async
-
-**Test files to fix:**
-- `tests/matmaster/hooks/` -- all hook tests -> async
-- `tests/matmaster/core/test_hooks.py` -- hook Protocol tests -> async
-
-**Dependency:** Phase 1 (async Hook Protocol)
-
-### Phase 5: MessageBus + EventRouter (Infrastructure)
-
-Replace sync queue/thread infrastructure with async queue/task.
-
-**Modified files:**
-- `matmaster/core/bus.py` -- queue.Queue -> asyncio.Queue, emit/get -> async
-- `matmaster/integration/event_router.py` -- threading.Thread -> asyncio.Task, EventHandler Protocol: handle -> async
-- `matmaster/integration/sse_handler.py` -- handle -> async
-- `matmaster/integration/persistence_handler.py` -- handle -> async
-- `matmaster/integration/workspace_handler.py` -- handle -> async
-
-**Test files to fix:**
-- `tests/matmaster/core/test_bus.py` -- async queue tests
-- `tests/matmaster/integration/` -- all handler tests -> async
-
-**Dependency:** Phase 4 (EventEmitterHook needs async bus.emit)
-
-### Phase 6: AgentKernel (Core Loop -- Convergence Point)
-
-All leaf dependencies are now async. The kernel loop becomes async. This is the largest single change.
-
-**Modified files:**
-- `matmaster/core/agent.py` -- run() -> async, _call_llm -> async (asyncio.sleep replaces time.sleep), _do_stream_llm -> async (async for replaces for), stop_event: asyncio.Event replaces threading.Event
-- `matmaster/core/context_compactor.py` -- compact_if_needed -> async, _summarize -> async (uses async LLMProvider.chat)
-- `matmaster/core/guard_pipeline.py` -- **NO CHANGE** (stays sync, called from async kernel without await)
-
-**Test files to fix:**
-- `tests/matmaster/core/test_agent.py` -- kernel execution tests -> async
-- `tests/matmaster/core/test_context_compactor.py` -- async
-
-**Dependency:** Phases 2, 3, 4, 5 (all consumed components async)
-
-### Phase 7: Exp Lifecycle (Orchestration)
-
-Exp methods become async to orchestrate async kernel.
-
-**Modified files:**
-- `matmaster/core/exp.py` -- build_runtime() -> async, run() -> async, _make_spawn_fn return type -> async callable, _run_cleanup_callbacks -> handle async cleanups
-- `matmaster/types/runtime.py` -- AgentRuntime.cleanup type -> Callable (may need to support async cleanup)
-
-**Test files to fix:**
-- `tests/matmaster/core/test_exp.py` -- all exp lifecycle tests -> async
-- `tests/matmaster/core/test_exp_skills.py` -- async
-
-**Dependency:** Phase 6 (async kernel)
-
-### Phase 8: Service Layer Bridge (Boundary -- Minimal src/ Change)
-
-Add asyncio.run() bridge in the service layer. This is the ONLY change to src/ code.
-
-**Modified files:**
-- `src/services/agent_run_service.py` -- run_agent_sync wraps new _run_agent_async with asyncio.new_event_loop().run_until_complete(), stop_event bridging
-
-**Test files to fix:**
-- `tests/test_chat_stream_direct.py` and other integration tests -> verify async bridge works
-
-**Dependency:** Phase 7 (all matmaster async)
-
-### Phase 9: DevShell Wrapper (Out of Scope for v2.0)
-
-DevShell is explicitly out of scope per PROJECT.md. When needed:
-
-**Modified files:**
-- `matmaster/devshell/runner.py` -- DevRunner.run() wraps async kernel with asyncio.run()
-
-**Dependency:** Phase 7
-
-## Integration Points: Sync/Async Boundaries
-
-There are exactly 3 sync/async boundaries in the final architecture:
-
-### Boundary 1: AgentRunService -> matmaster (Primary)
+### Point 1: Kernel Internal -- _run_items() is the Single Execution Path
 
 ```
-src/services/agent_run_service.py (sync, in ThreadPoolExecutor)
-  |
-  asyncio.new_event_loop() + loop.run_until_complete()
-  |
-  v
-matmaster/ (fully async, dedicated event loop per run)
+run()          --+
+                 +--> _run_items()   <-- single execution path
+run_stream()   --+
 ```
 
-**Mechanism:** Each agent run gets its own event loop via asyncio.new_event_loop(). This avoids conflicts with the FastAPI event loop.
-**Stop event bridge:** Service layer stores (loop, stop_event) reference. External cancellation calls loop.call_soon_threadsafe(stop_event.set).
-**SSE callback bridge:** Already uses asyncio.run_coroutine_threadsafe(send_cb, fastapi_loop) -- no change needed.
+Behavioral equivalence guarantee: all existing run() tests (50+) need no modification.
 
-### Boundary 2: evomaster BaseSession Calls (Tool Layer)
+### Point 2: Kernel -> ToolRunner -- Delegation Replaces Inline
 
 ```
-matmaster/tools/builtin/ (async)
-  |
-  await asyncio.to_thread(session.exec_bash, command=..., timeout=...)
-  |
-  v
-evomaster/agent/session/ (sync: LocalSession, SSHSession, DockerSession)
+Current: Kernel._run_loop() directly executes guard -> gather -> append (L217-311)
+After:   Kernel._run_items() -> ToolRunner.execute_batch(tool_calls, ctx, on_result=...)
 ```
 
-**Mechanism:** asyncio.to_thread() for all session method calls.
-**Affected tools:** BashTool, ReadTool, WriteTool, EditTool, GlobTool, GrepTool, ListDirTool (all use session.exec_bash), EvoToolAdapter (wraps MonitorJobTool).
-**Why not convert evomaster sessions:** Out of scope. evomaster uses paramiko (inherently sync C-extension for SSH), docker SDK (sync HTTP), subprocess (has async alternative but session API is the contract).
+InlineToolRunner wraps fully equivalent logic. Kernel no longer cares about guard/hook details.
 
-### Boundary 3: DevShell (Deferred)
+### Point 3: Kernel -> LLM -- Tool Definitions Resolution Abstraction
 
 ```
-matmaster/devshell/runner.py (sync REPL input loop)
-  |
-  asyncio.run(...)
-  |
-  v
-matmaster/ (fully async)
+Current: _call_llm() directly calls spec.tool_registry.get_tool_definitions()
+After:   _call_llm() calls _resolve_tool_definitions(spec, state)
+         Phase 1: falls back to tool_registry
+         Phase 2: prefers tool_catalog.build_definitions() + version cache
 ```
 
-**Deferred to:** Post-v2.0. DevShell continues to work during development by wrapping async calls with asyncio.run() at the REPL entry point.
+### Point 4: Exp -> Kernel -- Phase 2 Adds run_stream() Path
 
-## Protocol Changes Summary
+```
+Current:  Exp.run() -> kernel.run() -> KernelRunResult -> result.result
+Phase 2:  Exp.run_stream() -> kernel.run_stream() -> async for event
+```
 
-| Protocol | File | Changes |
-|----------|------|---------|
-| LLMProvider | types/llm_provider.py | chat: sync -> async, chat_stream: Iterator -> AsyncIterator, chat_with_retry: **REMOVED** |
-| Tool | tools/tool_registry.py | execute: sync -> async |
-| Hook (7 methods) | core/hooks.py | pre_tool_call, post_tool_call, pre_llm_call, should_continue, on_stream_chunk, on_segment_complete, on_guard_blocked: all sync -> async |
-| Guard | types/guards.py | **NO CHANGE** (stays sync) |
-| EventHandler | integration/event_router.py | handle: sync -> async |
-| WorkerRegistry | types/worker_registry.py | **NO CHANGE** (src/ layer, out of scope) |
-| ReplyQueueLike | hooks/confirmation.py | get: blocking -> async (asyncio.Queue pattern) |
+Exp.run() retained unchanged, Exp.run_stream() is a new method.
 
-## New Dependencies
+### Point 5: Service -> Exp -- Phase 2 Adds run_agent_stream()
 
-| Package | Version | Purpose | Scope |
-|---------|---------|---------|-------|
-| pytest-asyncio | >=0.24 | async test support (@pytest.mark.asyncio) | dev only |
+```
+Current:  AgentRunService.run_agent() -> Exp.run() / kernel.run()
+Phase 2:  AgentRunService.run_agent_stream() -> Exp.run_stream()
+          async for event:
+            SSEHandler.handle(event)
+            PersistenceHandler.handle(event)
+```
 
-No new production dependencies. AsyncOpenAI is built into the openai SDK. httpx.AsyncClient is built into httpx. asyncio.Queue is stdlib. All existing deps already support async.
+run_agent() retained unchanged, run_agent_stream() is a new method.
+
+### Point 6: DevRunner -- Phase 2+ Adaptation
+
+```
+Current:  DevRunner.run() -> asyncio.run(kernel.run()) -> KernelRunResult
+Phase 2 optional: DevRunner.run_stream() -> kernel.run_stream()
+                  DevStreamHook can directly consume generator events
+```
+
+DevRunner is not a Phase 2 required change. Existing DevStreamHook works through Hook path, Phase 2 can choose to retain or migrate.
+
+### Point 7: SubAgent Spawn -- Phase 1 Compatible
+
+```
+Exp._make_spawn_fn() internally calls child_exp.run() -> kernel.run()
+spawn_fn returns result.final_content
+
+Phase 1: unchanged. spawn_fn continues using run().
+Phase 2+: can switch to run_stream() for real-time sub-agent event forwarding.
+```
+
+## Build Order (Recommended Sequence)
+
+Suggested implementation order based on dependency analysis:
+
+### Phase 1 Internal Order
+
+```
+Chunk 1: ToolRunner Protocol + InlineToolRunner        [no deps, can start first]
+    |
+Chunk 2: AgentRuntimeSpec extension                    [no deps, can parallel with Chunk 1]
+    |
+Chunk 3: _KernelItem/_KernelState/_TerminalItem types  [depends on design, not on Chunk 1-2]
+    |
+Chunk 4: _run_items() generator rewrite                [depends on Chunk 1+2+3]
+    |
+Chunk 5: run_stream() public interface                 [depends on Chunk 4]
+    |
+Chunk 6: run() delegates to _run_items()               [depends on Chunk 4]
+    |
+Verify: all existing tests pass + new tests pass
+```
+
+Key constraints:
+- Chunk 1 and Chunk 2 have no mutual dependency, can be parallelized
+- Chunk 4 is the largest single change (_run_loop -> _run_items), depends on all three prior Chunks
+- Chunk 6 (run() delegation) must complete before running existing tests for compatibility verification
+
+### Phase 2 Internal Order
+
+```
+Step 1: _stream_llm_items() sub-generator               [modify agent.py]
+    |
+Step 2: Exp.run_stream() new method                     [modify exp.py]
+    |
+Step 3: AgentRunService.run_agent_stream()               [modify agent_run_service.py]
+    |
+Step 4: Side-effect Hook event emission migration        [modify hooks/]
+    |
+Step 5: EventEmitterHook deletion                        [modify hooks.py]
+    |
+Step 6: Switch old run_agent() to run_agent_stream()     [modify agent_run_service.py]
+```
+
+### Phase 3 (Conditional)
+
+```
+Assess remaining Bus consumers
+  +-- Only Service-layer direct emit remains -> can de-bus
+  |     Step 1: async fanout replaces Bus+Router
+  |     Step 2: delete bus.py + event_router.py
+  |     Step 3: clean up bus parameter passing in Exp
+  |
+  +-- Non-Kernel events still need Bus -> retain simplified Bus
+        Step 1: simplify Bus to service-layer only
+        Step 2: retain Router but remove Kernel-related logic
+```
 
 ## Scalability Considerations
 
-| Concern | Current (sync) | After Async (v2.0) | Future (v2.1+ multi-agent) |
-|---------|----------------|---------------------|---------------------------|
-| Concurrent agents | ThreadPoolExecutor(2), each blocks a thread | Same thread pool, but internal I/O non-blocking | Multiple agents share one event loop |
-| SubAgent spawn | Sequential, blocks parent thread | Sequential-async (parent awaits child) | asyncio.create_task: parent + child concurrent |
-| LLM streaming | Blocks thread during entire stream | Non-blocking: event loop serves other tasks | Multiple LLM streams interleaved |
-| Tool execution | Blocks thread | Non-blocking (session calls via to_thread) | Parallel tool execution possible |
-| Event processing | Background thread + queue.Queue | asyncio.Task + asyncio.Queue | Same, scales to multi-agent event bus |
-| Memory per agent | Thread stack ~8MB default | Coroutine frame ~few KB | 10x+ reduction enables dense multi-agent |
+| Concern | Phase 1 | Phase 2 | Phase 3 |
+|---------|---------|---------|---------|
+| Event latency | Unchanged (two paths coexist) | Reduced (generator direct consume, no Queue 100ms poll overhead) | Optimal (zero middleware) |
+| Memory | Slight increase (_KernelState local var) | Decrease (delete EventEmitterHook + some Hooks) | Decrease (delete Bus + Router) |
+| Code complexity | Increase (two paths coexist) | Decrease (unified path) | Simplest |
+| Test surface | Increase (new ToolRunner + stream tests) | Net decrease (delete Hook mock tests) | Net decrease |
+| SubAgent event isolation | Unchanged (spawn_id already in place) | Improved (generator chain enables precise forwarding) | Same as Phase 2 |
 
 ## Sources
 
-- Python asyncio documentation: https://docs.python.org/3/library/asyncio.html
-- Python asyncio.Queue: https://docs.python.org/3/library/asyncio-queue.html
-- Python asyncio synchronization primitives: https://docs.python.org/3/library/asyncio-sync.html
-- OpenAI Python SDK (AsyncOpenAI): https://github.com/openai/openai-python
-- Gradual asyncio migration patterns: https://www.erichgrunewald.com/posts/gradually-migrating-python-code-to-asyncio/
-- janus queue (evaluated, rejected for this use case): https://github.com/aio-libs/janus
-- Python typing Protocol discussion: https://github.com/python/typing/discussions/1520
-- asyncio cancellation patterns: https://docs.python.org/3/library/asyncio-task.html
-- asyncio.Event thread safety: https://docs.python.org/3/library/asyncio-sync.html
-- Combining sync and async Python code: https://spwoodcock.dev/blog/2025-02-python-dry-async/
+- Complete source analysis of: agent.py, exp.py, bus.py, event_router.py, hooks.py, runtime.py, events.py, agent_run_service.py, runner.py
+- Design spec: `docs/specs/2026-04-02-kernel-generator-first.md`
+- Tool Runtime v2 spec: `docs/specs/2026-04-02-tool-runtime-v2.md`
+- Python asyncio AsyncGenerator docs: https://docs.python.org/3/library/collections.abc.html#collections.abc.AsyncGenerator
+- PEP 525 -- Asynchronous Generators: https://peps.python.org/pep-0525/

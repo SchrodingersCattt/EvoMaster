@@ -275,7 +275,7 @@ class TestEventEmitterHook:
             ToolResult(
                 status="error",
                 content="result_data",
-                info={"error": "x"},
+                payload={"error": "x"},
             ),
         )
         assert not bus.empty
@@ -286,7 +286,7 @@ class TestEventEmitterHook:
         assert event.tool_name == sample_tool_call.name
         assert event.result == "result_data"
         assert event.status == "error"
-        assert event.info == {"error": "x"}
+        assert event.payload == {"error": "x"}
 
     async def test_on_stream_chunk_emits_thought_event(
         self, sample_chunk: StreamChunk

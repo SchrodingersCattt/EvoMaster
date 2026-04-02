@@ -209,7 +209,7 @@ class MonitorJobTool(BuiltinTool):
         return ToolResult(
             status=status,
             content=output,
-            info={
+            payload={
                 'status': result.get('status'),
                 'job_id': result.get('job_id'),
                 'bohr_job_id': result.get('bohr_job_id'),

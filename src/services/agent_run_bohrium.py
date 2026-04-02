@@ -1,13 +1,18 @@
-"""Bohrium runtime helpers for agent runs."""
+"""Bohrium runtime helpers and setup service for agent runs."""
 
+from __future__ import annotations
+
+import asyncio
 import logging
 import os
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from matmaster.integration.bohrium_setup import SkillSyncSpec
+from matmaster.config.exp import ExpConfig
+from matmaster.core.bus import MessageBus
 from matmaster.integration.workspace_resolver import (
     get_remote_session_workspace_root,
     load_workspace_config_dict,
@@ -21,6 +26,54 @@ from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_N
 
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+@dataclass(frozen=True)
+class SkillSyncSpec:
+    """Resolved paths for project skill sync to remote Bohrium node."""
+
+    project_skill_roots: list[str]
+    remote_project_root: str
+
+
+def derive_skill_sync_spec(
+    exp_config: ExpConfig,
+    *,
+    project_root: Path,
+) -> SkillSyncSpec | None:
+    """Resolve ExpConfig.skills into a SkillSyncSpec for Bohrium upload."""
+    skills = exp_config.skills
+    if not skills.enabled:
+        return None
+
+    raw_value = skills.skills_root
+    if isinstance(raw_value, list):
+        relative_paths = [
+            entry.strip() for entry in raw_value if entry and entry.strip()
+        ]
+    else:
+        stripped = (raw_value or "").strip()
+        relative_paths = [stripped] if stripped else []
+    if not relative_paths:
+        return None
+
+    resolved_roots: list[str] = []
+    for rel_path in relative_paths:
+        path = Path(rel_path)
+        resolved = (
+            path.resolve()
+            if path.is_absolute()
+            else (project_root / rel_path).resolve()
+        )
+        if resolved.is_dir():
+            resolved_roots.append(str(resolved))
+    if not resolved_roots:
+        return None
+
+    return SkillSyncSpec(
+        project_skill_roots=resolved_roots,
+        remote_project_root="/share/.matmaster",
+    )
 
 
 def _clear_remote_proxy_shell() -> str:
@@ -244,7 +297,174 @@ class BohriumSetupResult(NamedTuple):
     session_type: str | None
 
 
-def load_run_credentials(
+class BohriumSetupService:
+    """Owns Bohrium setup/cleanup orchestration for agent runs."""
+
+    def __init__(
+        self,
+        sessions_service: Any,
+        bus: MessageBus | None = None,
+    ) -> None:
+        self._sessions_service = sessions_service
+        self._bus = bus
+
+    def _load_run_credentials(
+        self, session_id: str
+    ) -> tuple[dict[str, Any], str | None, str]:
+        return _load_run_credentials(self._sessions_service, session_id)
+
+    def _apply_run_credentials_to_session(
+        self, session: Any, run_creds: dict[str, Any]
+    ) -> None:
+        _apply_run_credentials_to_session(session, run_creds)
+
+    def _setup_bohrium_for_run(
+        self,
+        *,
+        session_id: str,
+        pg: Any,
+        skill_sync_spec: SkillSyncSpec | None,
+        run_creds: dict[str, Any],
+        user_id_for_ak: str | None,
+        org_id: str,
+        event_callback: Callable[..., None],
+        run_started_at: float,
+    ) -> BohriumSetupResult:
+        return _setup_bohrium_for_run(
+            session_id=session_id,
+            pg=pg,
+            skill_sync_spec=skill_sync_spec,
+            run_creds=run_creds,
+            user_id_for_ak=user_id_for_ak,
+            org_id=org_id,
+            event_callback=event_callback,
+            run_started_at=run_started_at,
+        )
+
+    def _cleanup_bohrium_after_run(
+        self,
+        *,
+        session_id: str,
+        event_callback: Callable[..., None],
+        pg_for_run: Any,
+        ssh_attached: bool,
+    ) -> None:
+        _cleanup_bohrium_after_run(
+            session_id=session_id,
+            sessions_service=self._sessions_service,
+            event_callback=event_callback,
+            pg_for_run=pg_for_run,
+            ssh_attached=ssh_attached,
+        )
+
+    def _make_event_bridge(
+        self,
+        loop: asyncio.AbstractEventLoop,
+    ) -> Callable[..., None]:
+        """Create a thread-safe callback that bridges bohrium events into the bus."""
+        from matmaster.types.events import (
+            BohriumNodeEvent,
+            ErrorEvent,
+            StreamClosedEvent,
+        )
+
+        bus = self._bus
+        assert bus is not None  # noqa: S101 -- caller guarantees
+
+        def _cb(source: Any, event_type: str, content: Any, **extra: Any) -> None:
+            def _do_emit() -> None:
+                try:
+                    if event_type == 'error':
+                        msg = content if isinstance(content, str) else str(content)
+                        bus.emit_nowait(ErrorEvent(source=str(source), message=msg))
+                        bus.emit_nowait(
+                            StreamClosedEvent(
+                                source=str(source),
+                                end_reason='error',
+                                task_completed=False,
+                                treat_as_failure=True,
+                            )
+                        )
+                        return
+                    if event_type == 'stream_closed':
+                        body = '' if content is None else str(content)
+                        bus.emit_nowait(
+                            StreamClosedEvent(
+                                source=str(source),
+                                content=body,
+                                task_completed=False,
+                                end_reason='error',
+                                treat_as_failure=True,
+                            )
+                        )
+                        return
+                    bus.emit_nowait(
+                        BohriumNodeEvent(
+                            source=str(source),
+                            payload={
+                                'type': event_type,
+                                'content': content,
+                                **extra,
+                            },
+                        )
+                    )
+                except Exception:
+                    logger.debug('bohrium event bridge error type=%s', event_type)
+
+            loop.call_soon_threadsafe(_do_emit)
+
+        return _cb
+
+    async def run_setup(
+        self,
+        *,
+        session_id: str,
+        playground: Any,
+        skill_sync_spec: SkillSyncSpec | None,
+        run_started_at: float,
+    ) -> BohriumSetupResult:
+        """Load credentials, bridge events, and run setup in the executor."""
+        run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
+        loop = asyncio.get_running_loop()
+        event_cb = self._make_event_bridge(loop)
+
+        return await loop.run_in_executor(
+            None,
+            lambda: self._setup_bohrium_for_run(
+                session_id=session_id,
+                pg=playground,
+                skill_sync_spec=skill_sync_spec,
+                run_creds=run_creds,
+                user_id_for_ak=user_id_for_ak,
+                org_id=org_id,
+                event_callback=event_cb,
+                run_started_at=run_started_at,
+            ),
+        )
+
+    async def run_cleanup(
+        self,
+        *,
+        session_id: str,
+        pg_for_run: Any,
+        ssh_attached: bool,
+    ) -> None:
+        """Bridge cleanup events and run cleanup in the executor."""
+        loop = asyncio.get_running_loop()
+        event_cb = self._make_event_bridge(loop)
+
+        await loop.run_in_executor(
+            None,
+            lambda: self._cleanup_bohrium_after_run(
+                session_id=session_id,
+                event_callback=event_cb,
+                pg_for_run=pg_for_run,
+                ssh_attached=ssh_attached,
+            ),
+        )
+
+
+def _load_run_credentials(
     sessions_service: Any, session_id: str
 ) -> tuple[dict[str, Any], str | None, str]:
     """Load run credentials from the session store."""
@@ -275,7 +495,7 @@ def load_run_credentials(
     return run_creds, user_id_for_ak, org_id
 
 
-def apply_run_credentials_to_session(session: Any, run_creds: dict[str, Any]) -> None:
+def _apply_run_credentials_to_session(session: Any, run_creds: dict[str, Any]) -> None:
     """Attach transient Bohrium credentials to the active session object."""
     if run_creds and session:
         session._bohrium_credentials = run_creds
@@ -319,7 +539,7 @@ def _emit_node_status(
     event_callback('System', 'bohrium_node', payload)
 
 
-def setup_bohrium_for_run(
+def _setup_bohrium_for_run(
     *,
     session_id: str,
     pg: Any,
@@ -411,6 +631,19 @@ def setup_bohrium_for_run(
                     return False
                 return node_image_name != expected_image_name
 
+            def _destroy_outdated_node(nid: int) -> None:
+                """Delete tracking row and destroy a Bohrium node with outdated image."""
+                nodes_table.delete_by_node(user_id_for_ak, org_id, project_id, nid)
+                try:
+                    node_svc.destroy_node(
+                        access_key, nid, project_id, creator_id=creator_id,
+                    )
+                except Exception as destroy_err:
+                    logger.warning(
+                        'run_agent: destroy outdated node_id=%s failed: %s',
+                        nid, destroy_err,
+                    )
+
             if row:
                 node_id = int(row['node_id'])
                 node_info = node_svc.get_node_info(access_key, node_id)
@@ -430,25 +663,7 @@ def setup_bohrium_for_run(
                             node_info.get('image_name'),
                             expected_image_name,
                         )
-                        nodes_table.delete_by_node(
-                            user_id_for_ak,
-                            org_id,
-                            project_id,
-                            node_id,
-                        )
-                        try:
-                            node_svc.destroy_node(
-                                access_key,
-                                node_id,
-                                project_id,
-                                creator_id=creator_id,
-                            )
-                        except Exception as destroy_err:
-                            logger.warning(
-                                'run_agent: destroy outdated node_id=%s failed: %s',
-                                node_id,
-                                destroy_err,
-                            )
+                        _destroy_outdated_node(node_id)
                         node_id = None
                         node_info = None
                     else:
@@ -478,25 +693,7 @@ def setup_bohrium_for_run(
                             node_detail.get('image_name'),
                             expected_image_name,
                         )
-                        nodes_table.delete_by_node(
-                            user_id_for_ak,
-                            org_id,
-                            project_id,
-                            node_id,
-                        )
-                        try:
-                            node_svc.destroy_node(
-                                access_key,
-                                node_id,
-                                project_id,
-                                creator_id=creator_id,
-                            )
-                        except Exception as destroy_err:
-                            logger.warning(
-                                'run_agent: destroy outdated node_id=%s failed: %s',
-                                node_id,
-                                destroy_err,
-                            )
+                        _destroy_outdated_node(node_id)
                         node_id = None
                     else:
                         try:
@@ -593,7 +790,7 @@ def setup_bohrium_for_run(
             swapped = False
             ssh_session.open()
             try:
-                apply_run_credentials_to_session(ssh_session, run_creds)
+                _apply_run_credentials_to_session(ssh_session, run_creds)
                 pg.session = ssh_session
                 pg._owns_session = False
                 _agent = getattr(pg, 'agent', None)
@@ -681,7 +878,7 @@ def setup_bohrium_for_run(
         )
 
 
-def cleanup_bohrium_after_run(
+def _cleanup_bohrium_after_run(
     *,
     session_id: str,
     sessions_service: Any,

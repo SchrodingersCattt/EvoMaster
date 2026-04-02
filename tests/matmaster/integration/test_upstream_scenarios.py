@@ -22,7 +22,6 @@ from matmaster.core.agent import AgentKernel
 from matmaster.core.bus import MessageBus
 from matmaster.core.exp import Exp
 from matmaster.core.hooks import BaseHook, HookAction
-from matmaster.integration.bohrium_setup import BohriumSetupService, SkillSyncSpec
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
@@ -42,10 +41,13 @@ from matmaster.types.messages import (
 )
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
 
-BohriumSetupResult = pytest.importorskip(
+_src_services = pytest.importorskip(
     "src.services.agent_run_bohrium",
     reason="src not available (isolation test)",
-).BohriumSetupResult
+)
+BohriumSetupResult = _src_services.BohriumSetupResult
+BohriumSetupService = _src_services.BohriumSetupService
+SkillSyncSpec = _src_services.SkillSyncSpec
 
 # -- Mock helpers ------------------------------------------------
 
@@ -245,18 +247,13 @@ class TestWorkspaceUpload:
 class TestBohriumSetupLifecycle:
     """Verify BohriumSetupService delegates correctly."""
 
-    def test_bohrium_setup_lifecycle(self) -> None:
-        """Verify BohriumSetupService.setup() and cleanup() delegate correctly."""
+    @pytest.mark.asyncio
+    async def test_bohrium_setup_lifecycle(self) -> None:
+        """Verify run_setup/run_cleanup delegate to the owned runtime methods."""
         bus = MessageBus()
-        mock_load_creds = MagicMock(return_value=({}, None, "org-1"))
-        mock_apply_creds = MagicMock()
-        mock_setup_fn = MagicMock()
-        mock_cleanup_fn = MagicMock()
+        mock_sessions = MagicMock()
         svc = BohriumSetupService(
-            load_credentials_fn=mock_load_creds,
-            apply_credentials_fn=mock_apply_creds,
-            setup_fn=mock_setup_fn,
-            cleanup_fn=mock_cleanup_fn,
+            sessions_service=mock_sessions,
             bus=bus,
         )
 
@@ -264,7 +261,7 @@ class TestBohriumSetupLifecycle:
             project_skill_roots=["/proj/skills"],
             remote_project_root="/remote/project",
         )
-        mock_setup_fn.return_value = BohriumSetupResult(
+        expected = BohriumSetupResult(
             ssh_attached=False,
             abort_result=None,
             execution_session=None,
@@ -272,32 +269,44 @@ class TestBohriumSetupLifecycle:
             session_type=None,
         )
 
-        result = svc.setup(
-            session_id="sess-1",
-            pg=MagicMock(),
-            skill_sync_spec=skill_sync_spec,
-            run_creds={"key": "val"},
-            user_id_for_ak="user-1",
-            org_id="org-1",
-            event_callback=MagicMock(),
-            run_started_at=0.0,
-        )
+        with (
+            patch.object(
+                svc,
+                "_load_run_credentials",
+                return_value=({"key": "val"}, "user-1", "org-1"),
+            ) as mock_load,
+            patch.object(
+                svc,
+                "_setup_bohrium_for_run",
+                return_value=expected,
+            ) as mock_setup,
+            patch.object(svc, "_make_event_bridge", return_value=MagicMock()),
+        ):
+            result = await svc.run_setup(
+                session_id="sess-1",
+                playground=MagicMock(),
+                skill_sync_spec=skill_sync_spec,
+                run_started_at=0.0,
+            )
 
-        assert mock_setup_fn.called
-        call_kw = mock_setup_fn.call_args.kwargs
+        mock_load.assert_called_once_with("sess-1")
+        call_kw = mock_setup.call_args.kwargs
         assert call_kw["skill_sync_spec"] is skill_sync_spec
-        assert "base" not in call_kw
+        assert call_kw["run_creds"] == {"key": "val"}
         assert result.ssh_attached is False
         assert result.execution_workdir == "/remote/exec/wd"
 
-        svc.cleanup(
-            session_id="sess-1",
-            event_callback=MagicMock(),
-            pg_for_run=MagicMock(),
-            ssh_attached=False,
-        )
+        with (
+            patch.object(svc, "_cleanup_bohrium_after_run") as mock_cleanup,
+            patch.object(svc, "_make_event_bridge", return_value=MagicMock()),
+        ):
+            await svc.run_cleanup(
+                session_id="sess-1",
+                pg_for_run=MagicMock(),
+                ssh_attached=False,
+            )
 
-        assert mock_cleanup_fn.called
+        assert mock_cleanup.called
 
 
 # -- QUAL-04: Event router persistence ---------------------------
