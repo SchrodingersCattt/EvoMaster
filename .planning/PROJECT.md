@@ -41,17 +41,32 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 
 ### Active
 
-(v2.2 里程碑定义后填充)
+- [ ] AgentKernel 三层接口改造（_run_items / run_stream / run）
+- [ ] ToolRunner Protocol + InlineToolRunner 过渡实现
+- [ ] AgentRuntimeSpec Tool Runtime v2 预留字段
+- [ ] Exp.run_stream() + AgentRunService.run_agent_stream() 接入
+- [ ] _do_stream_llm() → _stream_llm_items() 子 generator 改造
+- [ ] Hook → Bus 间接路径退役（5 个 Hook 逐个替代后移除）
+- [ ] 去总线化评估与实施（MessageBus + EventRouter）
+
+## Current Milestone: v2.2 AgentKernel Generator-First 全链路改造
+
+**Goal:** 将 AgentKernel 改造为 generator-first 架构，贯穿 Kernel → Exp → Service 全链路，最终移除 Hook→Bus 间接路径，评估去总线化
+
+**Target features:**
+- Phase 1: Kernel 内核层 generator 改造 + ToolRunner Protocol 抽出
+- Phase 2: Exp + Service 层消费 generator + Hook 退役
+- Phase 3: 去总线化评估与实施
 
 ## Shipped: v2.1 matmaster/ 完全独立化 (2026-04-02)
 
 matmaster/ 运行时路径完全独立于 evomaster/playground/src。三方向解耦、物理删除、独立性证明全部完成。详见 milestones/v2.1-ROADMAP.md。
 
-## Next Milestone Goals
+## Deferred Goals
 
-v2.2 尚未定义。候选方向（来自 v2.1 迁移文档 P1-P5 优先级）：
-- P1: 配置统一（matmaster_config/ → config/ 已完成，但 config.yaml 中 ~/.evomaster-skills 路径待清理）
-- P2: 历史路径清理（playground/mat_master/core/ solver 体系、MILESTONES.md 补齐 v1.1/v2.0 历史）
+来自 v2.1 迁移文档 P1-P5 优先级，不在 v2.2 范围内：
+- P1: 配置统一（config.yaml 中 ~/.evomaster-skills 路径待清理）
+- P2: 历史路径清理（MILESTONES.md 补齐 v1.1/v2.0 历史）
 - P3: 路径命名规范化（OSS 前缀、skill 文件系统路径中的 evomaster 残留）
 - P4: 独立打包（matmaster 具备独立 pip install 方案）
 - P5: 归档处置（.planning/phases/ 历史目录管理）
@@ -146,4 +161,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-02 after v2.1 milestone*
+*Last updated: 2026-04-02 after v2.2 milestone start*
