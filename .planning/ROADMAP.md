@@ -69,12 +69,12 @@ Full details: milestones/v2.1-ROADMAP.md
 
 </details>
 
-### 🚧 v2.2 AgentKernel Generator-First + Tool Runtime v2 (In Progress)
+### v2.2 AgentKernel Generator-First + Tool Runtime v2 (In Progress)
 
 **Milestone Goal:** 将 AgentKernel 改造为 generator-first 架构，同步建立 Tool Runtime v2 核心骨架，贯穿 Kernel -> Exp -> Service 全链路，最终移除 Hook->Bus 间接路径并评估去总线化
 
 - [x] **Phase 32: Kernel Generator + Tool Runtime v2 核心骨架** - _run_items() generator 单一执行路径 + Tool Runtime v2 对象模型/ToolCatalog/InlineToolRunner + AgentRuntimeSpec 扩展，现有 run() 行为完全兼容 (completed 2026-04-02)
-- [ ] **Phase 33: ToolRunner 完整实现 + ToolScheduler** - 完整 ToolRunner 执行链（查找/校验/调度/执行/释放）+ ToolScheduler 资源调度 + StructuralValidation/CapabilityPolicy
+- [ ] **Phase 33: ToolRunner 完整实现 + ToolScheduler** - 完整 ToolRunner 执行链（查找/校验/调度/执行/释放）+ ToolScheduler 资源调度 + StructuralValidation/CapabilityPolicy + ToolCompiler + Session.capabilities
 - [ ] **Phase 34: Exp/Service 接入 + Hook 退役** - Exp.run_stream() + AgentRunService.run_agent_stream() 接入 generator + _stream_llm_items() 子 generator + 5 个 Hook 逐步退役
 - [ ] **Phase 35: 约束迁移 + ToolRegistry 降级** - read-before-modify/bash 危险命令迁入三层约束模型 + ToolBinding 字段启用 + ToolRegistry 降级为纯存储
 - [ ] **Phase 36: 去总线化 + 高级调度** - MessageBus/EventRouter 消费者审计 + async fanout 替代 + Bus 移除 + SessionCapabilities 自适应调度
@@ -107,12 +107,14 @@ Plans:
   2. ToolScheduler 对 exclusive 资源实现互斥调度，对 shared_read 资源实现并发调度，对 counted 资源实现信号量控制
   3. StructuralValidation 对 args_schema 校验失败 / plane 未启用 / session_capabilities 不匹配的工具调用返回 deny 决策
   4. CapabilityPolicy 对 effect_level 超限或 capability 不匹配的工具调用返回 deny 决策且附带 guidance
-**Plans:** 3 plans
+**Plans:** 5 plans
 
 Plans:
 - [ ] 33-01-PLAN.md — StructuralValidation + CapabilityPolicy 约束层
 - [ ] 33-02-PLAN.md — ToolScheduler 资源调度器
 - [ ] 33-03-PLAN.md — FullToolRunner 完整执行链（不含 Exp 激活，激活移至 Phase 34 ESIN-04）
+- [ ] 33-04-PLAN.md — effect_level 值统一修复（gap closure: VERIFICATION Gap 1+2）
+- [ ] 33-05-PLAN.md — ToolCompiler + Session.capabilities（gap closure: advancement plan Wave A 补齐）
 
 ### Phase 34: Exp/Service 接入 + Hook 退役
 **Goal**: FullToolRunner 激活为默认执行路径，Generator 事件流贯穿 Kernel -> Exp -> Service 全链路，5 个 Hook 全部退役，Hook->Bus 间接事件路径移除
@@ -192,7 +194,7 @@ Phases 32-36 execute in numeric order. Phase 34 depends on both 32 and 33. Phase
 | 30. 解耦审计与独立性证明 | v2.1 | 3/3 | Complete | 2026-04-01 |
 | 31. Tech Debt Cleanup | v2.1 | 2/2 | Complete | 2026-04-02 |
 | 32. Kernel Generator + Tool Runtime v2 核心骨架 | v2.2 | 3/3 | Complete    | 2026-04-02 |
-| 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 0/3 | In progress | - |
+| 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 0/5 | In progress | - |
 | 34. Exp/Service 接入 + Hook 退役 | v2.2 | 0/? | Not started | - |
 | 35. 约束迁移 + ToolRegistry 降级 | v2.2 | 0/? | Not started | - |
 | 36. 去总线化 + 高级调度 | v2.2 | 0/? | Not started | - |
