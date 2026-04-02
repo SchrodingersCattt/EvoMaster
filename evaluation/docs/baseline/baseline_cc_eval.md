@@ -12,7 +12,7 @@
 | 阶段 | 执行方式 | 职责 |
 |------|----------|------|
 | **阶段一** | **有 claude CLI**：终端跑脚本，或将「一键话术 · 阶段一」交给 IDE 代跑（`run_claude_cli_baseline_tasks.py` → `claude -p`）。**纯 Cursor / Codex**：复制文末对应的「**一键话术 · 纯 Cursor 阶段一**」或「**一键话术 · 纯 Codex 阶段一**」，不跑 `run_claude_cli_baseline_tasks.py`。 | **做题**并留下与 DevShell 对齐的 summary；CLI 路径下 token 来自 `claude -p --output-format json`。 |
-| **阶段二** | 新开会话（Claude Code、Cursor、Codex 或其它均可） | **阅卷与上报**：按题库 `scoring_checklist` 逐条打分，算百分制，对 `pending_ingest/` 下每个 `.json` 执行 `eval_ingest_submit_pending.py`。 |
+| **阶段二** | 在仓库根执行一条命令（无需新开 IDE 会话） | **自动评分与上报**：`score_baseline_tasks.py` 用与 MatMaster 相同的 `BinaryEvaluator` + 结构验证器（pymatgen）对各 workspace 评分，自动将分数写入 `pending_ingest/` 并可一键提交。 |
 
 ---
 
@@ -75,7 +75,7 @@ uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py -
 
 **5）阶段二**
 
-与本文「阶段二：阅卷与上报」及文末「一键话术 · 阶段二」相同；阅卷会话可开在 **Cursor**。**可一键复制的话术**见文末 **「一键话术 · 纯 Cursor 阶段一」**。
+与本文「阶段二：自动评分与上报」相同——在仓库根运行 `score_baseline_tasks.py`；详见上文该节与文末 **「一键话术 · 阶段二」**。
 
 ---
 
@@ -138,7 +138,7 @@ uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py -
 
 **5）阶段二**
 
-与本文「阶段二：阅卷与上报」及文末「一键话术 · 阶段二」相同；阅卷会话可开在 **Codex**。**可一键复制的话术**见文末 **「一键话术 · 纯 Codex 阶段一」**。
+与本文「阶段二：自动评分与上报」相同——在仓库根运行 `score_baseline_tasks.py`；详见上文该节与文末 **「一键话术 · 阶段二」**。
 
 ---
 
@@ -224,7 +224,39 @@ uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py -
 
 成功时 **RUN_DIR** 下应出现目录 `pending_ingest/`（内含若干 `*.json`）和文件 `raw_runs.jsonl`。
 
-**3）阶段二**：新开 Claude Code 会话，粘贴下文「一键话术 · 阶段二」；**RUN_DIR** 由执行者在仓库根用上文「RUN_DIR 自动解析」得到，无需你在对话里事先提供路径。
+**3）阶段二：自动评分与上报**
+
+`finalize` 完成后，在仓库根直接运行（**无需**新开 IDE 会话）：
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+# 仅打印分数，不写文件（dry-run 确认）
+uv run python evaluation/scripts/baseline/score_baseline_tasks.py \
+  --run-label baseline_cc_struct --dry-run
+
+# 写分数到 pending_ingest/*.json 并自动提交到 ingest API
+uv run python evaluation/scripts/baseline/score_baseline_tasks.py \
+  --run-label baseline_cc_struct --submit
+```
+
+- 脚本使用与 MatMaster 完全相同的 `BinaryEvaluator`：`struct_file_*` 验证器直接用 pymatgen 解析 workspace 内的 CIF/POSCAR；`llm_binary_judge` 调用 `evaluator_llm`（见 `evaluation/config.yaml`）。
+- `--dry-run`：只打印每题的分数与 per-criterion 判定，不修改任何文件，不提交。
+- `--submit`：将算出的分数写入 `pending_ingest/<task_id>.json` 并调用 ingest API POST。若暂不提交，可省略 `--submit`，稍后用 `eval_ingest_submit_pending.py` 手动逐题提交。
+- 需要 `evaluator_llm` 时（题目含 `llm_binary_judge`），确保 `evaluation/config.yaml` 里 `evaluator_llm` 配置正确，或相关环境变量已设置（`LITELLM_PROXY_API_KEY` 等）。未配置时 `llm_binary_judge` 条目自动标记为 `fail`（reason: `no evaluator LLM configured`）。
+- 如需只评部分题目：加 `--tasks SC_struct_007_direct_r0 SC_struct_008_direct_r0`。
+- 如需显式指定 RUN_DIR：用 `--run-dir "$RUN_DIR"` 替换 `--run-label`。
+
+常用选项：
+
+| 选项 | 说明 |
+|------|------|
+| `--run-dir "$RUN_DIR"` | 显式指定 RUN_DIR |
+| `--run-label baseline_cc_struct` | 从 `results/` 自动检测最新匹配目录 |
+| `--eval-config evaluation/config.yaml` | 指定 evaluator_llm 配置（默认即此路径） |
+| `--tasks <task_id> ...` | 只评指定 task（空格分隔） |
+| `--dry-run` | 打印分数，不写文件，不提交 |
+| `--submit` | 写分数到 pending JSON 并 POST 到 ingest API |
+| `--eval-ingest-timeout 120` | 每题提交 HTTP 超时秒数 |
 
 ---
 
@@ -251,32 +283,39 @@ uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py -
 
 ---
 
-## 阶段二：阅卷与上报（百分制 + 原因 + 建议）
+## 阶段二：自动评分与上报（BinaryEvaluator）
 
-- 先阅读 `evaluation/docs/devshell/devshell_claude_code_eval.md` **第 3 节**，按其中公式用 `scoring_checklist` 的 `weight` 计算 **0–100 的整数**。
-- 题目定义在 `evaluation/question_bank/` 下，按 `item.question_id`（与 YAML 中 `id` 一致）找到对应 YAML，读取 `scoring_checklist`。
-- 证据来源：**RUN_DIR/raw_runs.jsonl** 中对应 `task_id` 的行、**RUN_DIR/workspaces/任务目录名/** 内文件；若 pending JSON 的 `item` 中含 `artifact`，可结合 `bundle_object_key` / `files_prefix` 对应的 OSS 产物辅助核对。
+阶段二**不再需要人工阅卷**——改为运行 `score_baseline_tasks.py`，该脚本使用与 MatMaster 自动评测完全相同的 `BinaryEvaluator`：
 
-对每个 **RUN_DIR/pending_ingest/*.json** 执行一次（在仓库根），将 `PENDING_FILE` 换成该文件的**绝对路径**，将 `SCORE_INT` 换成你算出的整数，将字符串参数换成你的判词：
+- `struct_file_*` 验证器（`check_atom_count`、`check_formula`、`check_bond_length` 等）调用 **pymatgen** 直接解析 workspace 内的 CIF / POSCAR，结果与 MatMaster kernel 评分完全一致。
+- `llm_binary_judge` 调用 `evaluator_llm`（`evaluation/config.yaml`）做二元判定。
+- `tool_called` / `tool_args_match` 等依赖 EvoMaster 工具轨迹的 verify 类型：baseline 无轨迹，自动判 `fail`（grounding 轴）——这是预期行为，因为 baseline 不走 MatMaster 的工具体系。
+
+**运行命令**（在仓库根，`finalize` 完成后执行）：
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-uv run python evaluation/scripts/eval_ingest_submit_pending.py \
-  --pending "PENDING_FILE" \
-  --score SCORE_INT \
-  --score-reason "逐条写出 checklist 条目、weight、通过或部分通过或未通过、证据（仓库内相对路径或摘录）" \
-  --suggestion "至少一条可执行改进；确实没有则写：无——并一句话说明理由"
+
+# Step 1: dry-run 确认分数（不写文件，不提交）
+uv run python evaluation/scripts/baseline/score_baseline_tasks.py \
+  --run-label baseline_cc_struct --dry-run
+
+# Step 2: 写分数到 pending JSON 并提交到 ingest API
+uv run python evaluation/scripts/baseline/score_baseline_tasks.py \
+  --run-label baseline_cc_struct --submit
 ```
 
-- **PENDING_FILE** 示例：`$RUN_DIR/pending_ingest/SC_struct_007_direct_r0.json`（先按上文解析 `RUN_DIR`，再拼真实文件名）。
-- 成功时终端最后一行附近出现 **`ingest ok`**。
-- **`--suggestion` 禁止省略**：无改进内容时字面写 `无——` 加简短理由即可。
+- 成功提交时各题输出 `[ingest] <task_id> ok`。
+- 若仅写分数到 `pending_ingest/` 而不立即提交（稍后手动 review），省略 `--submit`，之后用 `eval_ingest_submit_pending.py` 逐题提交。
+- 需要 pymatgen：`uv sync --extra calculation`（否则 `struct_file_*` 类验证器报 `pymatgen not installed`）。
+
+**手动补充 suggestion**（可选）：`score_baseline_tasks.py` 目前不写 `suggestion`。若需要填写可执行改进，仍可在 `--submit` 之前或之后用 `eval_ingest_submit_pending.py --pending <path> --score <已算出的分> --suggestion "..."` 覆盖提交。
 
 ---
 
 ## 为何不要在一个会话里又做题又打分？
 
-即时 POST 或未走 pending 时，入库 `score` 可能是 **100/0 代理分**（见 `evaluation.eval_ingest_client.score_for_eval_ingest`）。两阶段 + pending + `eval_ingest_submit_pending.py` 才能把 **真实百分制 + 原因 + 建议** 写入库。
+即时 POST 或未走 pending 时，入库 `score` 可能是 **100/0 代理分**（见 [`evaluation.eval_ingest_client.score_for_eval_ingest`](evaluation/eval_ingest_client.py)）。两阶段 + pending + `score_baseline_tasks.py --submit` 才能把 **BinaryEvaluator 真实算出的百分制 + per-criterion 判定** 写入库。
 
 ---
 
@@ -361,25 +400,28 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 
 ---
 
-## 一键话术 · 阶段二（只阅卷上报；新开会话；**无需**粘贴 RUN_DIR）
+## 一键话术 · 阶段二（自动评分提交；**无需**新开 IDE 会话）
 
-将下面整段复制到 **新开的 Claude Code / Cursor / Codex 会话 B**。执行者在仓库根用 `baseline_cc_eval.md` 中「RUN_DIR 自动解析」得到 **RUN_DIR**（与阶段一 `finalize` 所用目录一致；若 `results` 下仅有一个匹配目录，即为该次测评）。
+阶段二改为在终端运行 `score_baseline_tasks.py`，**不再需要人工阅卷**。将下面整段复制到任意 IDE 会话（或直接在终端执行）。
 
-> **【外部 Baseline · 阶段二 · 阅卷者】**
-> 你的职责只有：**阅卷**与**调用上报命令**，不修改 **RUN_DIR/workspaces/** 下已有交付物（除非用户明确要求修复明显损坏并说明）。
-> **RUN_DIR**：**不要**要求用户粘贴路径；在仓库根按 `evaluation/docs/baseline/baseline_cc_eval.md`「RUN_DIR 自动解析」导出 `RUN_DIR`。若存在多个 `*_` 目录无法唯一确定，请用户确认本次应对应哪一次 run（或提供 stderr / `manifest.json` 所在路径）。
-> 前置检查：**RUN_DIR/pending_ingest/** 下至少有一个 `.json` 文件；**RUN_DIR/raw_runs.jsonl** 存在。若不满足，先让用户在仓库根补跑 finalize，不要编造路径。
-> 先阅读文件 `evaluation/docs/devshell/devshell_claude_code_eval.md` 的**第 3 节**，严格用其中 **weight 与 0.5×weight** 规则计算每题 **0–100 整数**。
-> **客观性（必读）**：每条 checklist 的通过/部分通过/未通过，**主证据**须来自 **题目 YAML、该任务 `workspaces/<task_id>/_devshell_prompt.txt` 要求的交付物、以及 workspace 内真实文件内容**（结构类须实际打开 POSCAR/CIF 等核对格式与题设，不能只看存在性）。**`raw_runs.jsonl` 中该行 JSON 里的 `devshell_summary` / `final_content`、以及 `_devshell_summary.json`，仅作过程与状态参考**；**禁止**仅凭执行者自述或摘要文字给 checklist 判「通过」。若自述与文件或题设矛盾，**以文件与题设为准**，并在 `score-reason` 中写明矛盾点。
-> 对 **RUN_DIR/pending_ingest/** 下**每一个**扩展名为 `.json` 的文件 `F`（含完整文件名，例如 `SC_struct_007_direct_r0.json`）：
-> 1. 打开 `F`，读取 `item.question_id`，在 `evaluation/question_bank/` 中找到对应 YAML，读取 `scoring_checklist`；并阅读 **RUN_DIR/workspaces/（task_id）/_devshell_prompt.txt**，列出须交付的文件与约束。
-> 2. **先**逐项核对 **RUN_DIR/workspaces/（同上 task_id）/** 下实际产物是否满足上一步与 YAML；**再**对照 **RUN_DIR/raw_runs.jsonl** 同行中的 `devshell_exit_code`、摘要等（摘要不能替代对产物的核对）。若 `F` 内 `item` 含 `artifact`，可按需结合其中的 `bundle_object_key` / `files_prefix` 辅助取证。
-> 3. 构造本条任务的 **PENDING_ABS**：`"$RUN_DIR/pending_ingest/$F文件名"`（`RUN_DIR` 无尾斜杠；`F` 含 `.json`）。示例：RUN_DIR=`/a/b/results/baseline_cc_struct_20260328_120000`，F=`SC_struct_007_direct_r0.json` → PENDING_ABS=`/a/b/results/baseline_cc_struct_20260328_120000/pending_ingest/SC_struct_007_direct_r0.json`。
-> 4. 在仓库根执行**一次**上报。`--pending` 的引号内填**第 3 步整条 PENDING_ABS**；`--score` 后填本题算出的 **0–100 整数**（下面用 `73` 仅作格式示例，每题替换为真实分数）；`--score-reason` 与 `--suggestion` 各用一对双引号包住判词全文（判词内尽量避免未转义的双引号）。
-> `cd "$(git rev-parse --show-toplevel)"`
-> `uv run python evaluation/scripts/eval_ingest_submit_pending.py --pending "第3步得到的完整绝对路径" --score 73 --score-reason "逐条 checklist：条目、weight、判定、证据路径或摘录" --suggestion "可执行建议；若无写：无——加一句理由"`
-> 5. 本条命令终端输出须含 **`ingest ok`**；然后再对下一个 `F` 重复步骤 1–5。
-> 全部文件处理完后，在回复中输出表格：列包括 **question_id**、**task_id（文件名）**、**score**、**一句话结论**；若有多题，最后一行给出 **宏平均（整数，四舍五入）**。
+> **【外部 Baseline · 阶段二 · 自动评分者】**
+> 你的职责：在**本仓库根**通过**终端工具**依次执行命令，对 baseline workspace 自动评分并提交到 ingest API。不要人工阅读 CIF/POSCAR 判分，也不要调用 `eval_ingest_submit_pending.py` 手动赋分——评分由 `BinaryEvaluator` 程序化完成。
+> **前置**：`uv run python` 可用；已运行过 `finalize_external_baseline_ingest.py`（`RUN_DIR/pending_ingest/` 存在）；pymatgen 已安装（`uv sync --extra calculation`，否则 `struct_file_*` 验证器不可用）。
+> 1. 进入仓库根：`cd "$(git rev-parse --show-toplevel)"`
+> 2. 解析 RUN_DIR（与阶段一 finalize 所用目录一致）：
+>    ```bash
+>    ROOT="$(git rev-parse --show-toplevel)"
+>    export RUN_DIR="$(find "$ROOT/results" -maxdepth 1 -type d -name 'baseline_cc_struct_*' | sort | tail -1)"
+>    echo "$RUN_DIR"
+>    ```
+>    若存在多个目录或改了 `--run-label`，用对应前缀，或直接用 `--run-dir "$RUN_DIR"`。
+> 3. **Dry-run 确认**（打印每题分数，不修改文件）：
+>    `uv run python evaluation/scripts/baseline/score_baseline_tasks.py --run-label baseline_cc_struct --dry-run`
+>    检查各题 score 与 per-criterion 判定是否合理（`✓ pass` / `✗ fail`）。若有 `pymatgen not installed` 报错，先补安装：`uv sync --extra calculation`。
+> 4. **正式评分 + 提交**：
+>    `uv run python evaluation/scripts/baseline/score_baseline_tasks.py --run-label baseline_cc_struct --submit`
+>    各题输出 `[ingest] <task_id> ok` 表示提交成功。
+> 5. 在回复中输出表格：列包括 **question_id**、**task_id**、**score/100**、**主要 pass/fail 条目**；若有多题，最后一行给出 **宏平均（整数，四舍五入）**。
 
 ---
 
