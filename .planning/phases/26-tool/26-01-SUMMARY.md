@@ -33,7 +33,7 @@ key-decisions:
 patterns-established:
   - "Inline with origin markers: comment blocks marking inlined code source for traceability"
 
-requirements-completed: [TOOL-08, TOOL-10]
+requirements_completed: [TOOL-07, TOOL-08, TOOL-10]
 
 # Metrics
 duration: 2min

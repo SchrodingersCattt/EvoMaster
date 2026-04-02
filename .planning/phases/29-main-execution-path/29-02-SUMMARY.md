@@ -37,7 +37,7 @@ key-decisions:
 patterns-established:
   - "Session working_dir defaults to ./workspace at project root level"
 
-requirements-completed: [CONS-01, CONS-02]
+requirements_completed: [CONS-02]
 
 # Metrics
 duration: 4min

@@ -53,7 +53,7 @@ patterns-established:
   - "Import audit allowlist: known violations tracked as frozenset, new violations = regression, stale entries = resolved"
   - "Isolation test: mv evomaster _evomaster_hidden + trap cleanup EXIT for atomic restore"
 
-requirements-completed: [QUAL-06, QUAL-07]
+requirements_completed: [QUAL-06]
 
 duration: 14min
 completed: 2026-04-02

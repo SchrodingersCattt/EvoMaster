@@ -46,7 +46,7 @@ patterns-established:
   - "Service layer reads config directly via _project_root / 'matmaster_config' path"
   - "Import audit tests using ast.parse to verify zero evomaster references"
 
-requirements-completed: [PLAY-02, PLAY-03]
+requirements_completed: [PLAY-02, PLAY-03]
 
 duration: 11min
 completed: 2026-04-01

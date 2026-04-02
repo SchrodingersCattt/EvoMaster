@@ -41,7 +41,7 @@ key-decisions:
 patterns-established:
   - "Post-deletion config sweep: pyproject.toml + exp TOML + YAML configs + code comments checked for stale references"
 
-requirements-completed: [QUAL-07]
+requirements_completed: [QUAL-07]
 
 duration: 9min
 completed: 2026-04-02

@@ -40,7 +40,7 @@ patterns-established:
   - "Callback injection: service classes accept callables instead of importing upstream modules"
   - "functools.partial for binding service dependencies into callback signatures"
 
-requirements-completed: [INVR-01, INVR-02]
+requirements_completed: [INVR-01, INVR-02]
 
 # Metrics
 duration: 6min

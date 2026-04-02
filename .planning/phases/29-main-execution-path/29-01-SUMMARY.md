@@ -39,7 +39,7 @@ key-decisions:
 patterns-established:
   - "Sync LLM calls in tools use matmaster config + openai.OpenAI directly, not the async OpenAIProvider"
 
-requirements-completed: [CONS-01, CONS-02]
+requirements_completed: [CONS-01]
 
 # Metrics
 duration: 5min
