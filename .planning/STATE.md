@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
 status: executing
-stopped_at: Completed 31-01-PLAN.md
-last_updated: "2026-04-02T03:58:30Z"
+stopped_at: Completed 31-02-PLAN.md
+last_updated: "2026-04-02T04:08:03.761Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 20
-  completed_phases: 19
+  completed_phases: 20
   total_plans: 42
-  completed_plans: 41
+  completed_plans: 42
   percent: 98
 ---
 
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 31
-Plan: 1 of 2 in current phase
-Status: Executing
+Plan: 2 of 2 in current phase
+Status: Ready to execute
 Last activity: 2026-04-02
 
 Progress: [===================.] 98%
@@ -47,6 +47,7 @@ Progress: [===================.] 98%
 | Phase 30-02 Pevomaster-deletion-config | 9min | 2 tasks | 120 files |
 | Phase 30 P03 | 3min | 1 tasks | 1 files |
 | Phase 31-01 | 7min | 2 tasks | 6 files |
+| Phase 31 P02 | 5min | 2 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,7 @@ Progress: [===================.] 98%
 - [Phase 30]: v2.1 migration doc uses actual test data (1276 passed, 5 skipped) per D-11, no hardcoded baselines
 - [Phase 30]: v2.2 cleanup ordered P1-P5: config unification > history cleanup > path normalization > packaging > archive disposal
 - [Phase 31-01]: create_autospec(Session, instance=True) for Session Protocol mocks; MockLLMProvider from conftest for LLMProvider Protocol mocks (autospec returns coroutine, not async iterator)
+- [Phase 31]: Normalized requirements-completed (hyphenated) to requirements_completed (underscored) across 8 SUMMARY files for tooling consistency
 
 ### Pending Todos
 
@@ -95,6 +97,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02T03:58:30Z
-Stopped at: Completed 31-01-PLAN.md
+Last session: 2026-04-02T04:08:03.757Z
+Stopped at: Completed 31-02-PLAN.md
 Resume file: None
