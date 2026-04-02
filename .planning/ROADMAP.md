@@ -107,7 +107,12 @@ Plans:
   2. ToolScheduler 对 exclusive 资源实现互斥调度，对 shared_read 资源实现并发调度，对 counted 资源实现信号量控制
   3. StructuralValidation 对 args_schema 校验失败 / plane 未启用 / session_capabilities 不匹配的工具调用返回 deny 决策
   4. CapabilityPolicy 对 effect_level 超限或 capability 不匹配的工具调用返回 deny 决策且附带 guidance
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 33-01-PLAN.md — StructuralValidation + CapabilityPolicy 约束层
+- [ ] 33-02-PLAN.md — ToolScheduler 资源调度器
+- [ ] 33-03-PLAN.md — FullToolRunner 完整执行链 + Exp 激活
 
 ### Phase 34: Exp/Service 接入 + Hook 退役
 **Goal**: Generator 事件流贯穿 Kernel -> Exp -> Service 全链路，5 个 Hook 全部退役，Hook->Bus 间接事件路径移除
@@ -182,7 +187,7 @@ Phases 32-36 execute in numeric order. Phase 35 depends on both 33 and 34 comple
 | 30. 解耦审计与独立性证明 | v2.1 | 3/3 | Complete | 2026-04-01 |
 | 31. Tech Debt Cleanup | v2.1 | 2/2 | Complete | 2026-04-02 |
 | 32. Kernel Generator + Tool Runtime v2 核心骨架 | v2.2 | 3/3 | Complete    | 2026-04-02 |
-| 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 0/? | Not started | - |
+| 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 0/3 | In progress | - |
 | 34. Exp/Service 接入 + Hook 退役 | v2.2 | 0/? | Not started | - |
 | 35. 约束迁移 + ToolRegistry 降级 | v2.2 | 0/? | Not started | - |
 | 36. 去总线化 + 高级调度 | v2.2 | 0/? | Not started | - |
