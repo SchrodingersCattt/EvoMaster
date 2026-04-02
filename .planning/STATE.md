@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
-status: active
-stopped_at: null
-last_updated: "2026-04-02"
-last_activity: 2026-04-02
+status: planning
+stopped_at: Phase 32 context gathered
+last_updated: "2026-04-02T08:51:34.329Z"
+last_activity: 2026-04-02 — Roadmap created for v2.2 (5 phases, 46 requirements)
 progress:
   total_phases: 5
   completed_phases: 0
@@ -35,6 +35,7 @@ Progress: [░░░░░░░░░░] 0%
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: —
 - Total execution time: 0 hours
@@ -46,6 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 **Recent Trend:**
+
 - Last 5 plans: —
 - Trend: —
 
@@ -58,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 (v2.1 决策已归档到 milestones/v2.1-ROADMAP.md)
 
 v2.2 新决策:
+
 - 采用方案 B（新 kernel generator + 适配层），平衡重构收益与迁移成本
 - Phase 32 核心骨架 25 个需求一体交付，因 Kernel generator 和 Tool Runtime v2 类型体系互相依赖无法拆分
 
@@ -73,6 +76,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02
-Stopped at: Roadmap created for v2.2 milestone
-Resume file: None
+Last session: 2026-04-02T08:51:34.326Z
+Stopped at: Phase 32 context gathered
+Resume file: .planning/phases/32-kernel-generator-tool-runtime-v2/32-CONTEXT.md
