@@ -12,6 +12,10 @@ the same snapshot is attached to each ingest item as ``extra.eval_tooling`` for 
 When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
 labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
 
+**Per-task wall clock**: each ``mm-devshell`` subprocess is limited by ``--task-timeout``
+(default **1200** seconds = 20 minutes). This is the reliable cap when a turn/tool blocks
+without tripping the LLM per-request timeout; use ``0`` to disable.
+
 Optional **per-task ingest** to matmaster-tools-server (after each devshell run).
 POST URL is fixed: ``MATMASTER_TOOLS_SERVER`` + ``/api/v1/evaluation/ingest`` (see ``evaluation.eval_ingest_client``).
 Each item includes ``score`` (explicit from summary or 100/0 pass-fail proxy) and, when OSS env is set,
@@ -143,20 +147,40 @@ def _run_devshell_task(
     env: dict[str, str],
     summary_file: Path,
     console_log_file: Path | None,
+    timeout_sec: float | None,
 ) -> tuple[int, int, dict[str, Any]]:
     t0 = time.monotonic()
-    if console_log_file is None:
-        proc = subprocess.run(cmd, cwd=cwd, env=env)
-    else:
-        with console_log_file.open("w", encoding="utf-8") as f:
-            proc = subprocess.run(
-                cmd,
-                cwd=cwd,
-                env=env,
-                stdout=f,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
+    timeout = None if timeout_sec is None or timeout_sec <= 0 else float(timeout_sec)
+    try:
+        if console_log_file is None:
+            proc = subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout)
+        else:
+            with console_log_file.open("w", encoding="utf-8") as f:
+                proc = subprocess.run(
+                    cmd,
+                    cwd=cwd,
+                    env=env,
+                    stdout=f,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=timeout,
+                )
+    except subprocess.TimeoutExpired as e:
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        summary = _load_summary_file(summary_file)
+        if not isinstance(summary, dict):
+            summary = {}
+        lim = (
+            float(e.timeout) if getattr(e, "timeout", None) else float(timeout_sec or 0)
+        )
+        summary = {
+            **summary,
+            "task_wall_timeout": True,
+            "timeout_seconds": lim,
+        }
+        # Same convention as coreutils `timeout` / common CI (timed out)
+        return 124, duration_ms, summary
+
     duration_ms = int((time.monotonic() - t0) * 1000)
     summary = _load_summary_file(summary_file)
     return proc.returncode, duration_ms, summary
@@ -294,6 +318,15 @@ def main() -> int:
         type=float,
         default=30.0,
         help="HTTP timeout seconds for each ingest POST (default: 30).",
+    )
+    parser.add_argument(
+        "--task-timeout",
+        type=float,
+        default=1200.0,
+        help=(
+            "Per-task wall-clock limit in seconds for each mm-devshell subprocess "
+            "(default: 1200 = 20 min). Use 0 to disable."
+        ),
     )
     parser.add_argument(
         "--eval-ingest-strict",
@@ -442,6 +475,7 @@ def main() -> int:
         "model": args.model,
         "plan_count": len(run_plan),
         "jobs": args.jobs,
+        "task_timeout_sec": args.task_timeout,
         "dry_run": False,
         "eval_tooling": eval_tooling_snapshot,
     }
@@ -470,6 +504,13 @@ def main() -> int:
     print(f"Run directory: {run_dir}", file=sys.stderr)
     print(f"Planned tasks: {len(run_plan)}", file=sys.stderr)
     print(f"Parallel jobs: {args.jobs}", file=sys.stderr)
+    if args.task_timeout and args.task_timeout > 0:
+        print(
+            f"Per-task timeout: {args.task_timeout:g}s ({args.task_timeout / 60:g} min)",
+            file=sys.stderr,
+        )
+    else:
+        print("Per-task timeout: disabled", file=sys.stderr)
 
     any_failed = False
     ingest_failed = False
@@ -577,6 +618,7 @@ def main() -> int:
             env=env,
             summary_file=summary_file,
             console_log_file=console_log_file,
+            timeout_sec=args.task_timeout,
         )
 
         row: dict[str, Any] = {
