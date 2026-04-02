@@ -172,11 +172,11 @@ def test_tools_section_lists_tool_names(
     """ToolRegistry with 2 tools -- tools section lists both names."""
     reg = ToolRegistry()
     reg.register(MockTool("file_reader", "Reads files"))
-    reg.register(MockTool("web_search", "Searches the web"))
+    reg.register(MockTool("mm_web_search", "Searches the web"))
 
     result = builder.build(ctx, reg)
     assert "file_reader" in result
-    assert "web_search" in result
+    assert "mm_web_search" in result
     assert "Reads files" in result
     assert "Searches the web" in result
 

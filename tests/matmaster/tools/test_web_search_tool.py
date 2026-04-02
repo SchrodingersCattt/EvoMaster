@@ -21,7 +21,7 @@ class TestWebSearchToolProtocol:
 
     def test_name(self) -> None:
         tool = WebSearchTool()
-        assert tool.name == "web_search"
+        assert tool.name == "mm_web_search"
 
     def test_tool_protocol(self) -> None:
         tool = WebSearchTool()
