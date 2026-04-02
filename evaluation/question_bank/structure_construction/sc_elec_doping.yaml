@@ -4,15 +4,15 @@ domain: "elec"
 
 questions:
   # ============================================================
-  # SC_elec_003 — NFPP Al掺杂超胞构建
+  # SC_elec_003_20260401 — NFPP Al掺杂超胞构建
   # ============================================================
-  - id: "SC_elec_003"
+  - id: "SC_elec_003_20260401"
     capability: "structure_construction"
     domain: "elec"
-    intent: "Retrieve NFPP structure from database and build Al-doped supercell by substituting P with Al."
+    intent: "Build NFPP Al-doped supercell by substituting P with Al."
     human_prompt_seed: |
       构建NFPP的Al掺杂超胞：
-      1. 从数据库检索NFPP结构（空间群Pna2₁）；
+      1. 获取NFPP（Na₂FePO₄F）结构（空间群Pna2₁）；
       2. 在P位（PO₄孤立磷酸根位点）用Al替换一个P原子，构建2×1×1超胞；
       3. 输出掺杂结构文件，并报告：
          - 超胞化学式
@@ -20,9 +20,6 @@ questions:
          - Al与最近邻O的距离
     tags: ["nfpp", "doping", "structure_build", "supercell", "battery"]
     mode_scope: ["direct", "planner"]
-    required_tools:
-      - "mat_struct_db_fetch_structures_from_db"
-    optional_tools: []
     data_files: []
     reference_answers:
       - key: "doped_formula"
@@ -47,11 +44,11 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "grounding_source"
-        criterion: "NFPP structure originates from database retrieval; doping is performed by explicit P→Al substitution at PO₄ site."
+        criterion: "NFPP structure uses correct wurtzite Pna2₁ lattice parameters; doping is performed by explicit P→Al substitution at PO₄ site with physically justified coordinates."
         axis: "grounding"
         verify: "llm_binary_judge"
       - id: "no_retries"
-        criterion: "No repeated identical database fetch or substitution attempts."
+        criterion: "No repeated identical structure retrieval or substitution attempts."
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"

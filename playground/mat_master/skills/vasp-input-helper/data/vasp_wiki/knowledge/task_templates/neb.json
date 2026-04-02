@@ -1,0 +1,85 @@
+{
+  "description": "Nudged Elastic Band for transition state and reaction path finding",
+  "directory_structure": {
+    "00": "initial state (fixed, POSCAR only)",
+    "01_to_N-1": "intermediate images (POSCAR for each)",
+    "NN": "final state (fixed, POSCAR only)",
+    "note": "Each image in its own directory: 00/ 01/ 02/ ... NN/"
+  },
+  "execution": {
+    "important": "Total MPI processes must be divisible by IMAGES",
+    "note": "Run with: mpirun -np (IMAGES+2)*cores_per_image vasp_std"
+  },
+  "incar": {
+    "recommended": {
+      "ALGO": "Fast",
+      "ISYM": 0,
+      "LCHARG": false,
+      "LREAL": "Auto",
+      "LWAVE": false,
+      "NCORE": {
+        "rule": "sqrt(cores_per_image)"
+      }
+    },
+    "required": {
+      "EDIFF": {
+        "value": 1e-06
+      },
+      "EDIFFG": {
+        "note": "force criterion",
+        "value": -0.03
+      },
+      "ENCUT": {
+        "rule": "consistent with relaxation"
+      },
+      "IBRION": {
+        "note": "RMM-DIIS, or 3 for FIRE/quick-min with VTST tools",
+        "value": 1
+      },
+      "IMAGES": {
+        "rule": "number of intermediate images (typically 4-8)"
+      },
+      "ISIF": {
+        "note": "fixed cell",
+        "value": 2
+      },
+      "ISMEAR": {
+        "rule": "same as relaxation"
+      },
+      "LCLIMB": {
+        "note": "climbing image NEB for accurate saddle point (VTST)",
+        "value": ".TRUE."
+      },
+      "NSW": {
+        "value": 200
+      },
+      "POTIM": {
+        "value": 0.5
+      },
+      "SIGMA": {
+        "rule": "same as relaxation"
+      },
+      "SPRING": {
+        "note": "spring constant, negative = nudging",
+        "unit": "eV/Å²",
+        "value": -5.0
+      }
+    }
+  },
+  "kpoints": {
+    "rule": "Same as relaxation, may reduce for cost"
+  },
+  "task_type": "neb",
+  "use_cases": [
+    "reaction barriers",
+    "diffusion barriers",
+    "transition states",
+    "minimum energy paths"
+  ],
+  "workflow": [
+    "1. Relax initial state (reactant)",
+    "2. Relax final state (product)",
+    "3. Generate intermediate images (VTST tools or linear interpolation)",
+    "4. Run NEB"
+  ]
+}
