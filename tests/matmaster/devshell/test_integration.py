@@ -12,7 +12,7 @@ import io
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 from matmaster.core.bus import MessageBus
 from matmaster.devshell.config import DevConfig
@@ -20,6 +20,7 @@ from matmaster.devshell.event_logger import EventLogger
 from matmaster.devshell.runner import DevRunner
 from matmaster.devshell.stream_hook import DevStreamHook
 from matmaster.types.messages import StreamChunk
+from matmaster.types.session import Session
 
 # ── Mock Providers ──────────────────────────────────────
 
@@ -100,7 +101,7 @@ def _make_runner(
     config = DevConfig()
 
     with patch('matmaster.devshell.runner.DevRunner._create_session') as mock_session:
-        mock_session.return_value = MagicMock()
+        mock_session.return_value = create_autospec(Session, instance=True)
         return DevRunner(
             config=config,
             workdir=workdir,

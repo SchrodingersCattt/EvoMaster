@@ -6,9 +6,10 @@ import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 from matmaster.types.messages import StreamChunk
+from matmaster.types.session import Session
 
 
 class MockProvider:
@@ -75,7 +76,7 @@ class TestDevRunner:
         with patch(
             "matmaster.devshell.runner.DevRunner._create_session"
         ) as mock_session:
-            mock_session.return_value = MagicMock()
+            mock_session.return_value = create_autospec(Session, instance=True)
             return DevRunner(
                 config=config,
                 workdir=workdir,

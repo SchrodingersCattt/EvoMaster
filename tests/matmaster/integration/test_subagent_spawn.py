@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import threading
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
 
@@ -24,6 +24,7 @@ from matmaster.core.exp import Exp
 from matmaster.tools.builtin.spawn_tool import SpawnTool
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import KernelResult
+from matmaster.types.session import Session
 
 
 def _make_ctx(*, with_session: bool = True) -> PlaygroundContext:
@@ -37,7 +38,7 @@ def _make_ctx(*, with_session: bool = True) -> PlaygroundContext:
         llm_provider=MockLLMProvider(),
     )
     if with_session:
-        kwargs["session"] = MagicMock()
+        kwargs["session"] = create_autospec(Session, instance=True)
     return PlaygroundContext(**kwargs)
 
 
