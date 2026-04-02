@@ -15,6 +15,7 @@ def test_snapshot_default_devshell_skills_disabled() -> None:
     assert snap["skills_enabled"] is False
     assert snap["skill_names"] == []
     assert snap["mcp_server_names"] == []
+    assert snap["skills_skill_names_filter"] == []
     assert "use_skill" not in snap["tool_names_surface"]
     assert "execute_bash" in snap["builtin_tool_names"]
     assert "spawn" in snap["builtin_tool_names"]

@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from matmaster.config.exp import ExpConfig, ExpToolsConfig
+from matmaster.config.exp import ExpConfig, ExpSkillsConfig, ExpToolsConfig
 from matmaster.core.bus import MessageBus
 from matmaster.core.exp import Exp
 from matmaster.devshell.config import DevConfig
@@ -97,10 +97,23 @@ class DevRunner:
         if not system_prompt:
             system_prompt = load_base_system_prompt()
 
+        skills = ExpSkillsConfig()
+        if config.mcp.enabled:
+            skills = ExpSkillsConfig(
+                enabled=True,
+                skills_root=config.mcp.skills_root,
+                skill_names=config.mcp.skill_names,
+                cache_dir="matmaster/cache",
+                config_dir=config.mcp.config_dir,
+                mcp_config_file="mcp_config.json",
+                mcp_runtime_file="mcp.yaml",
+            )
+
         return ExpConfig(
             name=config.agent.name,
             max_turns=config.agent.max_turns,
             tools=ExpToolsConfig(builtin=config.tools.builtin),
+            skills=skills,
             compaction=config.compaction,
             developer_instructions=config.agent.identity or "",
             system_prompt=system_prompt,

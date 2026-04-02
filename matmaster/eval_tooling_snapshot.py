@@ -161,4 +161,5 @@ def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
         "skills_roots": skills_roots_str,
         "skill_names": skill_names,
         "mcp_server_names": mcp_servers,
+        "skills_skill_names_filter": list(exp_cfg.skills.skill_names),
     }

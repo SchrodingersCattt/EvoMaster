@@ -19,3 +19,11 @@ session:
 tools:
   builtin:
     - "*"
+
+# Optional: MCP via use_skill → get_info (lazy inject). Default skills_root is only
+# matmaster/skills/lazymcp/mcp-mat-struct-db (structure DB stub), not full playground.
+# mcp:
+#   enabled: true
+#   config_dir: matmaster_config
+#   # skills_root: [matmaster/skills/lazymcp/mcp-mat-struct-db]
+#   # skill_names: [mcp-mat-struct-db]   # when skills_root spans multiple skills
