@@ -75,7 +75,7 @@ class MonitorJobTool(BuiltinTool):
             },
             'llm_model_alias': {
                 'type': 'string',
-                'description': 'LLM config alias (from configs/mat_master/config.yaml llm section).',
+                'description': 'LLM config alias (from config/config.yaml llm section).',
             },
             'llm_timeout_seconds': {
                 'type': 'integer',

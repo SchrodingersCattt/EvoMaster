@@ -25,7 +25,7 @@ def _project_root() -> Path:
 
 
 def _load_agents_general_llm(main_config: Path) -> str | None:
-    """``agents.general.llm`` from ``matmaster_config/config.yaml`` (profile key)."""
+    """``agents.general.llm`` from ``config/config.yaml`` (profile key)."""
     if not main_config.is_file():
         return None
     with open(main_config, encoding="utf-8") as f:
@@ -69,14 +69,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         type=Path,
         default=None,
-        help="Optional devshell YAML (agent/session/tools only; LLM comes from matmaster_config/llm_config.yaml)",
+        help="Optional devshell YAML (agent/session/tools only; LLM comes from config/llm_config.yaml)",
     )
     common.add_argument(
         "--model",
         type=str,
         default=None,
         help=(
-            "LLM route key, matching routes in matmaster_config/llm_config.yaml "
+            "LLM route key, matching routes in config/llm_config.yaml "
             "(e.g. claude-sonnet-4-6); omit to use config.yaml agents.general.llm or llm_config default"
         ),
     )
@@ -153,8 +153,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     """Load LLM config, build provider, return DevRunner and related objects."""
     root = _project_root()
-    llm_yaml = root / "matmaster_config" / "llm_config.yaml"
-    main_yaml = root / "matmaster_config" / "config.yaml"
+    llm_yaml = root / "config" / "llm_config.yaml"
+    main_yaml = root / "config" / "config.yaml"
 
     if not llm_yaml.is_file():
         print(

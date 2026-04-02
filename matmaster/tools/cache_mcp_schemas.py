@@ -6,7 +6,7 @@ and dumps the resulting tool schemas to matmaster/cache/<server>.json.
 
 Usage:
     uv run python -m matmaster.tools.cache_mcp_schemas
-    uv run python -m matmaster.tools.cache_mcp_schemas --config-dir matmaster_config
+    uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate MCP tool schema cache")
     parser.add_argument(
         "--config-dir",
-        default="matmaster_config",
+        default="config",
         help="Directory containing mcp.yaml and mcp_config*.json",
     )
     parser.add_argument(

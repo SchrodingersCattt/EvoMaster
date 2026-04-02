@@ -16,7 +16,7 @@ from pathlib import Path
 PROMPT = "Build the nitroprusside anion. Export as `nitroprusside.xyz`. In the final answer, explicitly report: (1) whether `nitroprusside.xyz` exists; (2) the formula, written as `FeC5N6O`; (3) Fe coordination number; (4) the counts of Fe-C bonds shorter than 2.0 A and Fe-N bonds shorter than 2.0 A; (5) one representative N-O bond length and Fe-N-O angle; (6) one representative C-N bond length and Fe-C-N angle."  # <-- change this freely
 WORKDIR = Path(__file__).resolve().parent.parent.parent / "debug_workspace"
 LOG_DIR = WORKDIR / "logs"
-LLM_CONFIG: Path | None = None  # None = auto-detect matmaster_config/llm_config.yaml
+LLM_CONFIG: Path | None = None  # None = auto-detect config/llm_config.yaml
 MODEL_OVERRIDE: str | None = "claude-opus-4-6"  # e.g. "claude-sonnet-4-6"
 CONFIG_FILE: Path | None = None  # None = use DevConfig defaults
 VERBOSE = True
@@ -50,8 +50,8 @@ def main(prompt: str | None = None) -> None:
     from matmaster.providers.llm_factory import build_provider
 
     root = _project_root()
-    llm_yaml = LLM_CONFIG or (root / "matmaster_config" / "llm_config.yaml")
-    main_yaml = root / "matmaster_config" / "config.yaml"
+    llm_yaml = LLM_CONFIG or (root / "config" / "llm_config.yaml")
+    main_yaml = root / "config" / "config.yaml"
 
     llm_config = load_llm_config(llm_yaml)
     agent_default_llm = _load_agents_general_llm(main_yaml)

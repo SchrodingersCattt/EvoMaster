@@ -392,8 +392,8 @@ class PlaygroundManager:
 
     @property
     def _config_dir(self) -> Path:
-        """Return the matmaster_config directory."""
-        return self._project_root / "matmaster_config"
+        """Return the config directory."""
+        return self._project_root / "config"
 
     def validate_startup(self) -> None:
         """Fail-fast startup validation. Idempotent: repeated calls are no-ops.

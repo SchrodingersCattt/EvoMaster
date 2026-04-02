@@ -64,11 +64,11 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
 _CONFIRM_TOOLS: frozenset[str] = frozenset({})
 
-_MATMASTER_CONFIG_DIR = _project_root / 'matmaster_config'
+_MATMASTER_CONFIG_DIR = _project_root / 'config'
 
 
 def _get_agent_default_llm() -> str | None:
-    """Read agents.general.llm from matmaster_config/config.yaml.
+    """Read agents.general.llm from config/config.yaml.
 
     Returns None if the file or key is missing.
     """
@@ -352,7 +352,7 @@ class AgentRunService:
             from matmaster.providers.llm_factory import build_provider
 
             llm_config = load_llm_config(
-                _project_root / 'matmaster_config' / 'llm_config.yaml'
+                _project_root / 'config' / 'llm_config.yaml'
             )
 
             agent_default_llm = _get_agent_default_llm()

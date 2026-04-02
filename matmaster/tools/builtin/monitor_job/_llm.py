@@ -69,7 +69,7 @@ def _get_llm_client(alias: str | None = None):
     """
     from matmaster.config.loader import load_llm_config
 
-    llm_config = load_llm_config(REPO_ROOT / 'matmaster_config' / 'llm_config.yaml')
+    llm_config = load_llm_config(REPO_ROOT / 'config' / 'llm_config.yaml')
     profile_key = alias or llm_config.default
     profile = llm_config.get_profile(profile_key)
 

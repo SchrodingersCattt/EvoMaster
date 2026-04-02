@@ -1,6 +1,6 @@
 """DevConfig model and YAML loading for mm-devshell.
 
-LLM 连接由 ``matmaster_config/llm_config.yaml`` + ``build_provider`` 解析（与线上一致），
+LLM 连接由 ``config/llm_config.yaml`` + ``build_provider`` 解析（与线上一致），
 不在此文件中配置 api_key / base_url / model。
 """
 
