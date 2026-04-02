@@ -6,6 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from evaluation.core.evaluator import BinaryEvaluator
@@ -162,6 +163,81 @@ def test_safety_questions_also_count_token_and_duration_efficiency() -> None:
     assert rec.efficiency_total == 2
     assert rec.criteria_results['token_budget_total'].passed is True
     assert rec.criteria_results['duration_budget'].passed is True
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_check_layer_count_counts_nine_atomic_planes(tmp_path: Path) -> None:
+    """Nine z-planes spaced 0.5 Å apart should count as 9 layers (layer_tol=0.25)."""
+    from pymatgen.core import Lattice, Structure
+
+    lattice = Lattice.orthorhombic(2.0, 2.0, 10.0)
+    species: list[str] = []
+    frac_coords: list[list[float]] = []
+    for i in range(9):
+        z_cart = 0.5 + float(i) * 0.5
+        z_frac = z_cart / 10.0
+        species.extend(['Fe', 'Fe'])
+        frac_coords.append([0.25, 0.25, z_frac])
+        frac_coords.append([0.75, 0.75, z_frac + 0.002])
+    struct = Structure(lattice, species, frac_coords)
+    struct.to(filename=str(tmp_path / 'nine_planes.cif'), fmt='cif')
+
+    from evaluation.validators.structure_general import check_layer_count
+
+    ok, msg = check_layer_count(
+        tmp_path,
+        filename='nine_planes.cif',
+        expected=9,
+        tolerance=0,
+        axis='z',
+        layer_tol_A=0.25,
+    )
+    assert ok is True, msg
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_check_layer_count_three_coarse_blocks_old_gap_method_would_be_three(
+    tmp_path: Path,
+) -> None:
+    """Three trilayer blocks (9 atomic planes): gap-based counting collapses to 3."""
+    from pymatgen.core import Lattice, Structure
+
+    lattice = Lattice.orthorhombic(2.0, 2.0, 30.0)
+    species: list[str] = []
+    frac_coords: list[list[float]] = []
+    for base_cart in (1.0, 10.0, 19.0):
+        for d in (0.0, 0.5, 1.0):
+            z_cart = base_cart + d
+            z_frac = z_cart / 30.0
+            species.append('Ce')
+            frac_coords.append([0.5, 0.5, z_frac])
+            species.append('O')
+            frac_coords.append([0.0, 0.0, z_frac + 0.03 / 30.0])
+    struct = Structure(lattice, species, frac_coords)
+    struct.to(filename=str(tmp_path / 'trilayers.cif'), fmt='cif')
+
+    from evaluation.validators.structure_general import check_layer_count
+
+    ok9, msg9 = check_layer_count(
+        tmp_path,
+        filename='trilayers.cif',
+        expected=9,
+        tolerance=0,
+        axis='z',
+        layer_tol_A=0.25,
+    )
+    assert ok9 is True, msg9
+
+    coords = sorted(float(s.coords[2]) for s in struct.sites)
+    diffs = np.diff(coords)
+    n_gap_layers = 1 + int(np.sum(diffs > 0.8))
+    assert n_gap_layers == 3
 
 
 @pytest.mark.skipif(
