@@ -250,7 +250,9 @@ async def chat_stream(
     base_prompt = (req.content or '').strip()
     if req.files:
         normalized = [
-            urlunparse(urlparse(u)._replace(path=quote(unquote(urlparse(u).path), safe='/')))
+            urlunparse(
+                urlparse(u)._replace(path=quote(unquote(urlparse(u).path), safe='/'))
+            )
             for u in req.files
         ]
         base_prompt += '\n\n[Attached files]\n' + '\n'.join(normalized)
