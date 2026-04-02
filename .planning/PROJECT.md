@@ -69,7 +69,7 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 
 ### Current State
 
-**As of 2026-04-02:** v2.1 里程碑全部完成（Phases 25-30）。Phase 30 完成解耦审计与独立性证明：evomaster/ 目录已物理删除（113 文件，26,359 行），import audit 确认 matmaster/ 零外部运行时导入，隔离测试通过（1276 passed），迁移文档 `docs/decoupling-migration-v2.1.md` 记录了完整解耦过程和 v2.2 清理方向。matmaster 包现已完全独立于 evomaster。
+**As of 2026-04-02:** v2.1 里程碑全部完成（Phases 25-31）。Phase 31 完成技术债务收口：修复 24 个 Session/BohriumSetupService/LLMProvider 测试失败，删除 9 个引用已删除 evomaster/evaluation 目录的过期测试文件，硬化隔离脚本，同步文档。测试套件：1294 passed（仅 3 个环境依赖测试除外）。REQUIREMENTS.md 全部 19 项需求确认完成。matmaster 包完全独立且测试健康。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 
