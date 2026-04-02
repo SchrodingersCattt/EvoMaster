@@ -640,17 +640,26 @@ class TestWriteToolValidator:
         assert "outside workspace" in result.reason
 
     @pytest.mark.asyncio
+    async def test_deny_same_prefix_different_dir(self) -> None:
+        """'/workspace_evil/f.txt' must NOT pass for workdir='/workspace'."""
+        tool = WriteTool(workdir=Path("/workspace"))
+        result = await tool.validate_input({"file_path": "/workspace_evil/f.txt", "content": "x"})
+        assert result is not None
+        assert result.decision == "deny"
+
+    @pytest.mark.asyncio
     async def test_allow_path_inside_workdir(self) -> None:
         tool = WriteTool(workdir=Path("/workspace"))
         result = await tool.validate_input({"file_path": "/workspace/src/main.py", "content": "x"})
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_allow_any_path_when_no_workdir(self) -> None:
-        """When workdir is None, no boundary check is performed."""
+    async def test_deny_when_no_workdir(self) -> None:
+        """Fail closed: workdir=None -> deny (safety boundary)."""
         tool = WriteTool()
         result = await tool.validate_input({"file_path": "/anywhere/file.txt", "content": "x"})
-        assert result is None
+        assert result is not None
+        assert result.decision == "deny"
 
     @pytest.mark.asyncio
     async def test_deny_traversal_escaping_workdir(self) -> None:
@@ -727,18 +736,23 @@ Add method after `__init__` (after line 53), before `_execute`:
 
 ```python
     async def validate_input(self, arguments: dict[str, Any]) -> ToolDecision | None:
+        from pathlib import PurePosixPath
+
         file_path = arguments.get("file_path", "")
         if not file_path:
             return ToolDecision(decision="deny", reason="file_path is required")
-        # Boundary check: file_path must be under workdir (when workdir is set)
-        if self._workdir is not None:
-            normalized = posixpath.normpath(file_path)
-            workdir_str = str(self._workdir)
-            if not normalized.startswith(workdir_str):
+        if self._workdir is None:
+            return ToolDecision(decision="deny", reason="workdir not set, cannot validate path")
+        # Parent-child containment via PurePosixPath.is_relative_to (not string prefix)
+        try:
+            resolved = PurePosixPath(posixpath.normpath(file_path))
+            if not resolved.is_relative_to(self._workdir):
                 return ToolDecision(
                     decision="deny",
                     reason=f"file_path '{file_path}' is outside workspace boundary",
                 )
+        except (TypeError, ValueError):
+            return ToolDecision(decision="deny", reason=f"invalid file_path: '{file_path}'")
         return None
 ```
 
@@ -827,7 +841,12 @@ class ToolInstance:
     """Frozen unit combining spec + binding + executor.
 
     This is what ToolCatalog stores and ToolRunner consumes.
-    The executor is an async callable: dict[str, Any] -> Awaitable[ToolResult].
+
+    NOTE: tool_executor annotation says Awaitable[ToolResult] but builtins
+    may return str | ToolResult | None at runtime. FullToolRunner calls
+    normalize_tool_result() after execution to handle this. The annotation
+    is historical type debt — fixing it to Awaitable[str | ToolResult | None]
+    is deferred to avoid changing the executor contract in this plan.
     """
 
     tool_spec: ToolSpec
