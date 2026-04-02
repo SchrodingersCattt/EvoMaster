@@ -4,9 +4,9 @@ domain: "elec"
 
 questions:
   # ============================================================
-  # BP_elec_001 — 多金属表面批量吸附能计算（Mock版）
+  # BP_elec_001_20260401 — 多金属表面批量吸附能计算（Mock版）
   # ============================================================
-  - id: "BP_elec_001"
+  - id: "BP_elec_001_20260401"
     capability: "batch_processing"
     domain: "elec"
     intent: "Batch-compute H adsorption energy on 3 different metal (001) surfaces using mock energies to test batch workflow efficiency."
@@ -14,7 +14,7 @@ questions:
       批量计算 H 原子在 Cu(001)、Ag(001)、Au(001) 三种金属表面的吸附能，用于 HER 活性对比：
 
       对每种金属执行相同流程：
-      1. 从数据库获取 FCC 体相结构；
+      1. 获取 FCC 体相结构（Cu: Fm-3m, a=3.615 Å; Ag: Fm-3m, a=4.085 Å; Au: Fm-3m, a=4.078 Å）；
       2. 切 (001) 面 slab（4 层，15 Å 真空，2×2 扩胞）；
       3. 在 ontop 位点放置 H 原子（距表面 1.5 Å）；
       4. 使用以下mock能量值（模拟DPA弛豫结果）：
@@ -40,10 +40,6 @@ questions:
       - Au: E_ads ≈ -0.65 eV
     tags: ["batch", "her", "adsorption", "metal_screening", "catalysis"]
     mode_scope: ["direct", "planner"]
-    required_tools:
-      - "mat_sg_build_surface_slab"
-      - "mat_struct_db_fetch_structures_from_db"
-    optional_tools: []
     data_files: []
     reference_answers:
       - key: "E_ads_Cu"

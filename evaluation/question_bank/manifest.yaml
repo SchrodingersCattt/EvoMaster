@@ -117,4 +117,10 @@ banks:
     capability: "batch_processing"
     questions: 1
 
-# Total: 41 questions across 16 bank files
+  # --- VASP INCAR generation (20 questions) ---
+
+  - path: "input_generation/ig_incar.yaml"
+    capability: "input_generation"
+    questions: 20
+
+# Total: 61 questions across 17 bank files
