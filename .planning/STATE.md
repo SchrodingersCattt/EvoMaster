@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
-status: planning
+status: executing
 stopped_at: Phase 32 context gathered
-last_updated: "2026-04-02T08:51:34.329Z"
-last_activity: 2026-04-02 — Roadmap created for v2.2 (5 phases, 46 requirements)
+last_updated: "2026-04-02T09:22:36.407Z"
+last_activity: 2026-04-02 -- Phase 32 execution started
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 32 - Kernel Generator + Tool Runtime v2 核心骨架
+**Current focus:** Phase 32 — kernel-generator-tool-runtime-v2
 
 ## Current Position
 
-Phase: 32 (1 of 5 in v2.2) — Kernel Generator + Tool Runtime v2 核心骨架
-Plan: —
-Status: Ready to plan
-Last activity: 2026-04-02 — Roadmap created for v2.2 (5 phases, 46 requirements)
+Phase: 32 (kernel-generator-tool-runtime-v2) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 32
+Last activity: 2026-04-02 -- Phase 32 execution started
 
 Progress: [░░░░░░░░░░] 0%
 

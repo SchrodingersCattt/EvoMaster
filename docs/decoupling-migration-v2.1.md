@@ -17,7 +17,7 @@ v2.1 里程碑目标：让 matmaster/ 运行时路径不再 import evomaster/、
 | 25 | Session 与 Playground 原生化 | 创建 matmaster 自有 session（Local/SSH）、config loader、Playground 参数化构造 | evomaster.agent.session.*, evomaster.config.ConfigManager, PlaygroundSessionMixin |
 | 26 | Tool 内化与遗留工具收归 | 内化 bash_safety/editor helper、MonitorJobTool 搬入、web_search 收归 | EvoToolAdapter, evomaster.agent.tools.builtin.*, playground.mat_master.tools.web_search |
 | 27 | MCP 与 Calculation 原生链路 | MCP Connection/Manager 搬入、Calculation adaptors 搬入、LazyMCPTool 直连 | evomaster.agent.tools.mcp.*, evomaster.adaptors.calculation.* |
-| 28 | src 反向依赖反转与 Consumer 迁移 | bohrium_setup 回调注入、script_env 常量内化、chat_history 类型迁移 | src.services.agent_run_bohrium (反向), src.utils.constant |
+| 28 | src 反向依赖收束与 Consumer 迁移 | Bohrium 运行期服务收拢到 src/services、script_env 常量内化、chat_history 类型迁移 | src.services.agent_run_bohrium, src.utils.constant |
 | 29 | 主执行路径切换 | workspace_resolver 迁移、playground/evaluation 物理删除、config 路径迁移 | evomaster.core.get_playground_class, playground/ 整体 |
 | 30 | 解耦审计与独立性证明 | Import audit 扩展、隔离测试、evomaster/ 物理删除、迁移文档 | evomaster/ 整体 |
 
@@ -38,7 +38,7 @@ v2.1 里程碑目标：让 matmaster/ 运行时路径不再 import evomaster/、
 
 - **Session 简化**: 合并 SSHSession + SSHEnv 为单一类，直接持有 paramiko.SSHClient；移除 Docker session 分支，仅保留 local 和 ssh
 - **Playground 参数化**: Playground 构造函数从 config_path 模式改为 5 个 keyword-only 参数，PlaygroundManager._load_raw_config 返回原始 dict（非 Pydantic model）
-- **回调注入**: BohriumSetupService 从直接 import src 服务函数改为 4 个 callable 回调注入，matmaster 侧不知道 src 的存在
+- **服务层收拢**: BohriumSetupService 最终收回 `src/services/agent_run_bohrium.py`，`matmaster/integration` 仅保留通用 bridge 组件
 - **Duck-typing**: 跨包 session 检测从 isinstance(SSHSession) 改为 hasattr 鸭子类型，避免 import 耦合
 - **Lazy import 清理**: evomaster.env 导入改为 evomaster.env.bohrium 精确导入，避免触发全量加载链
 - **严格全通过策略**: 隔离测试采用 pytest.importorskip（非 xfail），src 不可用时集成测试优雅跳过
@@ -77,7 +77,7 @@ matmaster/core/agent.py        <- Layer 3: 执行循环
 | MCP | matmaster/tools/lazy_mcp.py + matmaster/mcp/ | 原生连接与管理，启动时零连接 |
 | Calculation | matmaster/adaptors/calculation/ | 原生 path adaptor/job service/oss io |
 | Events | matmaster/types/events.py + matmaster/core/bus.py | 18 种事件类型，asyncio.Queue 事件总线 |
-| Integration | matmaster/integration/ | bohrium_setup（回调注入）, bohrium_env, workspace_resolver |
+| Integration | matmaster/integration/ | event_router/handlers, bohrium_env, workspace_resolver |
 | Config | matmaster/config/ | ExpConfig, LLMConfig, YAML + TOML loader |
 | DevShell | matmaster/devshell/ | 纯 matmaster 层本地开发 REPL |
 | Skills | matmaster/skills/ | registry + lazymcp skill roots |
@@ -87,7 +87,7 @@ matmaster/core/agent.py        <- Layer 3: 执行循环
 Exp 通过 TOML 文件声明式定义，位于 matmaster/exps/。当前活跃的 direct.toml 配置：
 
 - builtin 工具集：16 个内置工具（bash/file/task/spawn/web 等）
-- skills_root：`matmaster/skills/lazymcp`（单一路径，已清理旧路径）
+- skills_root：`matmaster/skills`（单一路径）
 - mcp：通配符模式，动态加载所有可用 MCP server
 
 ## 3. 残留路径清单
@@ -98,7 +98,7 @@ Exp 通过 TOML 文件声明式定义，位于 matmaster/exps/。当前活跃的
 
 | 位置 | 内容 | 说明 |
 |------|------|------|
-| matmaster/integration/bohrium_setup.py | 回调注入模式 | src 通过 functools.partial 注入 5 个 Bohrium 操作函数，matmaster 侧不知道 src 的存在。这是设计上的依赖反转，非遗留耦合 |
+| src/services/agent_run_bohrium.py | BohriumSetupService 服务层编排 | Bohrium 凭证加载、SSH attach、cleanup 与 event bridge 已收拢到 src/services；integration 不再承载该运行期服务 |
 | matmaster/adaptors/calculation/oss_io.py:L52 | `oss_prefix: str = 'evomaster/calculation'` | OSS 存储路径的默认前缀，是字符串常量而非 import，属于历史命名。修改需要考虑 OSS 存量数据兼容 |
 
 ### 3.2 遗留路径名
@@ -208,7 +208,7 @@ Exp 通过 TOML 文件声明式定义，位于 matmaster/exps/。当前活跃的
 | MCP-01 | lazy_mcp 原生连接 | 27 | Complete |
 | CALC-01 | Calculation adaptor 原生化 | 27 | Complete |
 | CALC-02 | Bohrium 协议兼容 | 27 | Complete |
-| INVR-01 | bohrium_setup 回调注入 | 28 | Complete |
+| INVR-01 | BohriumSetupService 服务层收拢 | 28 | Complete |
 | INVR-02 | script_env 常量内化 | 28 | Complete |
 | CONS-01 | API/worker 原生入口 | 29 | Complete |
 | CONS-02 | 本地 Web 原生入口 | 29 | Complete |

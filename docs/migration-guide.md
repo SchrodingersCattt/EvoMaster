@@ -136,7 +136,7 @@ All hooks implement the `Hook` Protocol from `matmaster.engine.hooks`:
 The generic `EventEmitterHook` (the kernel->bus bridge) remains in
 `matmaster/engine/hooks.py`.
 
-### matmaster/integration/ -- Service Integration
+### matmaster/integration/ -- Event and Workspace Integration
 
 - **`EventRouter`** (event_router.py) -- Background thread consumer dispatching
   `BusEvent` from `MessageBus` to registered handlers. Single-consumer,
@@ -151,8 +151,14 @@ The generic `EventEmitterHook` (the kernel->bus bridge) remains in
 - **`WorkspaceHandler`** (workspace_handler.py) -- Debounced workspace
   snapshot and upload. Triggers only on `ToolResultEvent`, skips when
   SSH-attached, debounces by time, compares directory snapshots.
-- **`BohriumSetupService`** (bohrium_setup.py) -- Thin wrapper around
-  `agent_run_bohrium.py` module functions. Two-phase setup/cleanup API.
+
+### src/services/agent_run_bohrium.py -- Bohrium Runtime Orchestration
+
+- **`BohriumSetupService`** -- Owns Bohrium credential loading, node/SSH
+  setup, cleanup, and event bridge wiring for a single run.
+- **`SkillSyncSpec` / `derive_skill_sync_spec()`** -- Resolve skill roots from
+  `ExpConfig` before Bohrium setup so remote skill sync uses the finalized run
+  configuration.
 
 ### matmaster/bus/ -- Event Bus
 
@@ -198,10 +204,10 @@ run_agent_sync()
 ```
 run_agent_sync()                               (thin 6-stage orchestration)
   Stage 1: Playground.prepare(run_meta)        -> PlaygroundContext
-  Stage 2: BohriumSetupService.setup(...)      -> ssh_attached, pg_ctx update
-  Stage 3: DirectExp(...).assemble(ctx, hooks) -> AgentRuntimeSpec
-  Stage 4: ChatHistoryConverter.events_to_messages() -> list[Message]
-  Stage 5: EventRouter(bus, handlers).start()  (background thread)
+  Stage 2: EventRouter(bus, handlers).start()  (background consumer)
+  Stage 3: BohriumSetupService.run_setup(...)  -> ssh_attached, pg_ctx update
+  Stage 4: DirectExp(...).assemble(ctx, hooks) -> AgentRuntimeSpec
+  Stage 5: ChatHistoryConverter.events_to_messages() -> list[Message]
   Stage 6: AgentKernel().run(spec, task, history, stop_event) -> FinishEvent
   Post:    quota, workspace upload, cleanup
 ```

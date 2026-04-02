@@ -618,7 +618,7 @@ class TestMatMasterRunAgentE2E:
             real_mock_svc = MagicMock()
             real_mock_svc.load_credentials.return_value = ({}, None, 'org-1')
 
-            def _capture_init(**kwargs):
+            def _capture_init(*args, **kwargs):
                 captured_bus[0] = kwargs.get('bus')
                 return real_mock_svc
 
@@ -738,7 +738,7 @@ class TestMatMasterRunAgentE2E:
             real_mock_svc = MagicMock()
             real_mock_svc.load_credentials.return_value = ({}, None, 'org-1')
 
-            def _capture_init(**kwargs):
+            def _capture_init(*args, **kwargs):
                 captured_bus[0] = kwargs.get('bus')
                 return real_mock_svc
 
