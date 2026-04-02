@@ -68,15 +68,14 @@ sys.path.insert(0, str(REPO_ROOT))
 
 import yaml  # noqa: E402
 
-from evaluation.core.evidence import EvidenceBundle, TokenUsage  # noqa: E402
 from evaluation.core.evaluator import BinaryEvaluator  # noqa: E402
+from evaluation.core.evidence import EvidenceBundle, TokenUsage  # noqa: E402
 from evaluation.core.runner import load_question_banks  # noqa: E402
 from evaluation.core.schemas import (  # noqa: E402
     LLMRuntimeConfig,
     QuestionItem,
     TokenUsageRecord,
 )
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -660,8 +659,7 @@ def main() -> int:
         else:
             n_ok += 1
             print(
-                f"  [scored] {task_id}: {score}/100 "
-                f"(q={qid})",
+                f"  [scored] {task_id}: {score}/100 " f"(q={qid})",
                 file=sys.stderr,
             )
 
