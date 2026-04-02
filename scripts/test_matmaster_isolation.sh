@@ -16,9 +16,9 @@ cleanup() {
 trap cleanup EXIT
 
 echo "[isolation] Hiding evomaster/ and src/ ..."
-mv evomaster _evomaster_hidden
-mv src _src_hidden
-echo "[isolation] Hidden evomaster/ and src/"
+[ -d evomaster ] && mv evomaster _evomaster_hidden
+[ -d src ] && mv src _src_hidden
+echo "[isolation] Hidden directories that exist"
 
 # Run tests/matmaster/ full suite (D-02: no subset filtering)
 echo "[isolation] Running tests/matmaster/ full suite ..."
