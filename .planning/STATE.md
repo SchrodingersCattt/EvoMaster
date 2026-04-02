@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
 status: executing
-stopped_at: Completed 33-02-PLAN.md
-last_updated: "2026-04-02T11:43:42Z"
-last_activity: 2026-04-02 -- Phase 33 Plan 02 complete
+stopped_at: Completed 33-03-PLAN.md
+last_updated: "2026-04-02T11:58:34.071Z"
+last_activity: 2026-04-02
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 2
+  completed_phases: 2
+  total_plans: 6
+  completed_plans: 6
   percent: 33
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 33 (toolrunner-toolscheduler) — EXECUTING
-Plan: 2 of 3 complete
-Status: Executing Phase 33
-Last activity: 2026-04-02 -- Plan 02 complete
+Plan: 3 of 3 complete
+Status: Ready to execute
+Last activity: 2026-04-02
 
 Progress: [███░░░░░░░] 33%
 
@@ -55,6 +55,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 32 P02 | 7min | 2 tasks | 6 files |
 | Phase 32 P03 | 6min | 1 tasks | 2 files |
 | Phase 33 P02 | 3min | 1 tasks | 2 files |
+| Phase 33 P03 | 5min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ v2.2 新决策:
 - [Phase 32]: _run_items() uses local _KernelState preserving Kernel statelessness; Phase 1 only yields final-snapshot events (Hook path unchanged until Phase 34)
 - [Phase 33]: _RWLock uses asyncio.Lock + Condition + int counters, no third-party lock library (per D-02)
 - [Phase 33]: counted limit=None defensively defaults to 1 with warning log, no exception
+- [Phase 33]: mm_web_search used in BUILTIN_CLAIMS instead of web_search (plan referenced pre-Phase-26 name)
+- [Phase 33]: FullToolRunner does not call pre_hook/post_hook per D-01; cleanly separated from InlineToolRunner
 
 ### Pending Todos
 
@@ -85,6 +88,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02T11:43:42Z
-Stopped at: Completed 33-02-PLAN.md
-Resume file: .planning/phases/33-toolrunner-toolscheduler/33-02-SUMMARY.md
+Last session: 2026-04-02T11:58:34.067Z
+Stopped at: Completed 33-03-PLAN.md
+Resume file: None
