@@ -18,8 +18,8 @@ WORKDIR = Path(__file__).resolve().parent.parent.parent / "debug_workspace"
 LOG_DIR = WORKDIR / "logs"
 LLM_CONFIG: Path | None = None  # None = auto-detect matmaster_config/llm_config.yaml
 MODEL_OVERRIDE: str | None = "claude-opus-4-6"  # e.g. "claude-sonnet-4-6"
-# matmaster/exps/{name}.toml — same as mm-devshell (default: direct)
-EXP_NAME: str = "direct"
+# Same as mm-devshell default: direct.toml + narrowed skills_root (see exp_patch).
+USE_DEVSHELL_DEFAULT_PATCH: bool = True
 VERBOSE = True
 # ─────────────────────────────────────────────────────────────────────────
 
@@ -35,9 +35,14 @@ def main(prompt: str | None = None) -> None:
 
     from matmaster.config.loader import load_exp_config
     from matmaster.devshell.config import DevConfig
+    from matmaster.devshell.exp_patch import devshell_default_exp_config
 
     config = DevConfig()
-    exp_cfg = load_exp_config(EXP_NAME)
+    exp_cfg = (
+        devshell_default_exp_config()
+        if USE_DEVSHELL_DEFAULT_PATCH
+        else load_exp_config("direct")
+    )
 
     # Dirs
     WORKDIR.mkdir(parents=True, exist_ok=True)

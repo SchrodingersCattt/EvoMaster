@@ -5,8 +5,8 @@ Primary path: :func:`snapshot_eval_tooling` loads
 (``matmaster/exps/{name}.toml``) — same as production / ``AgentRunService``. MCP paths resolve
 through ``[skills].config_dir`` (typically ``matmaster_config/`` in repo).
 
-:func:`snapshot_devshell_eval_tooling` is an alias for
-``snapshot_eval_tooling(..., exp_name="direct")``.
+:func:`snapshot_devshell_eval_tooling` uses production ``direct`` with the same skill-root
+narrowing as mm-devshell default (see :mod:`matmaster.devshell.exp_patch`).
 
 Used to populate ingest ``extra.eval_tooling`` so runs can be correlated with the
 registered builtin list, skill catalog, and MCP server keys from config.
@@ -19,7 +19,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from matmaster.config.exp import ExpSkillsConfig
+from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -137,23 +137,14 @@ def _mcp_server_names(
         return []
 
 
-def snapshot_eval_tooling(
+def _build_eval_tooling_dict(
     *,
     repo_root: Path,
-    exp_name: str = "direct",
+    exp_cfg: ExpConfig,
+    matmaster_exp_reported: str,
 ) -> dict[str, Any]:
-    """Snapshot tools/skills/MCP keys from ``matmaster/exps/{exp_name}.toml`` (production-aligned).
-
-    ``session_type`` is read from ``matmaster_config/config.yaml`` when present; otherwise
-    ``"local"``. DevShell still runs with a local workspace; this field is metadata only.
-
-    Ingest compatibility: ``devshell_agent_name`` / ``devshell_max_turns`` mirror
-    ``exp_config_name`` / ``max_turns`` from the loaded exp.
-    """
-    from matmaster.config.loader import load_exp_config
-
+    """JSON-serializable tooling snapshot from an already-resolved :class:`ExpConfig`."""
     repo_root = repo_root.resolve()
-    exp_cfg = load_exp_config(exp_name.strip())
     session_type = _matmaster_config_session_type(repo_root) or "local"
 
     builtin_cfg = list(exp_cfg.tools.builtin)
@@ -181,7 +172,7 @@ def snapshot_eval_tooling(
 
     return {
         "schema": "matmaster_eval_tooling_v1",
-        "matmaster_exp": exp_name.strip(),
+        "matmaster_exp": matmaster_exp_reported,
         "devshell_agent_name": exp_cfg.name,
         "devshell_max_turns": exp_cfg.max_turns,
         "session_type": session_type,
@@ -199,6 +190,33 @@ def snapshot_eval_tooling(
     }
 
 
+def snapshot_eval_tooling(
+    *,
+    repo_root: Path,
+    exp_name: str = "direct",
+) -> dict[str, Any]:
+    """Snapshot from ``matmaster/exps/{exp_name}.toml`` (production-aligned).
+
+    ``matmaster_exp`` in the output equals *exp_name*.
+    """
+    from matmaster.config.loader import load_exp_config
+
+    name = exp_name.strip()
+    exp_cfg = load_exp_config(name)
+    return _build_eval_tooling_dict(
+        repo_root=repo_root,
+        exp_cfg=exp_cfg,
+        matmaster_exp_reported=name,
+    )
+
+
 def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
-    """Same as :func:`snapshot_eval_tooling` with ``exp_name=\"direct\"``."""
-    return snapshot_eval_tooling(repo_root=repo_root, exp_name="direct")
+    """Snapshot for mm-devshell default: ``direct`` + narrowed ``skills_root`` (see ``exp_patch``)."""
+    from matmaster.devshell.exp_patch import devshell_default_exp_config
+
+    exp_cfg = devshell_default_exp_config()
+    return _build_eval_tooling_dict(
+        repo_root=repo_root,
+        exp_cfg=exp_cfg,
+        matmaster_exp_reported="devshell",
+    )

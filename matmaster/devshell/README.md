@@ -27,7 +27,9 @@ mm-devshell repl --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-
 
 省略 **`--model`** 时，使用 `config.yaml` 的 `agents.general.llm` 指向的 profile，或 `llm_config.yaml` 顶层的 **`default`**。
 
-工具 / 技能 / `max_turns` 等与线上一致：默认加载 **`matmaster/exps/direct.toml`**；换其它 exp 时用 **`--exp <name>`**（对应 `matmaster/exps/<name>.toml`）。
+- **默认（省略 `--exp` 或 `--exp devshell`）**：先 **`load_exp_config("direct")`**，再在代码里把 **`[skills].skills_root` 收窄为** 仅 `matmaster/skills/lazymcp/mcp-mat-struct-db`（与旧 `DevMcpConfig` 一致），**不**单独维护第二份 toml。
+- **与线上一致的全量技能树**：**`--exp direct`**（未打补丁的 `matmaster/exps/direct.toml`）。
+- **其它**：`--exp explore` 等仍对应 `matmaster/exps/<name>.toml`。
 
 ```bash
 uv run python -m matmaster.devshell --workdir ./workspace --log-dir ./logs --model gemini-3-flash-preview
@@ -85,7 +87,7 @@ uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run
 |------|------|------|
 | `--workdir` | 是 | 工作区目录（持久化） |
 | `--log-dir` | 是 | 事件日志目录（REPL 下为 JSONL；`run` 仍需要有效路径） |
-| `--exp` | 否 | `matmaster/exps/{name}.toml`；省略为 **direct**（与生产一致） |
+| `--exp` | 否 | 省略或 `devshell`：`direct` + 收窄 `skills_root`；`direct` = 未补丁的全技能；其它 name = 对应 toml |
 | `--model` | 否 | `llm_config.yaml` 中 **routes** 的路由 key；省略则用默认 profile |
 | `--session` | 否 | Session 类型：`local` / `docker` / `ssh` |
 | `--verbose` | 否 | 详细输出 |
@@ -107,7 +109,7 @@ uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run
 
 ## Exp 与 matmaster_config
 
-与 **`AgentRunService`** 相同：默认 **`load_exp_config("direct")`**（`matmaster/exps/direct.toml`），其中 **`[skills].config_dir`** 指向 **`matmaster_config/`**（`mcp.yaml`、JSON 等）。会话类型等仍可用 **`--session`** 覆盖在内存中的 `DevConfig.session`。
+本地默认 **`load_exp_config("direct")` + `matmaster.devshell.exp_patch`**（只改 `skills_root`）。线上 Worker 用 **`matmaster/exps/{mode}.toml`**（常见 **direct**，无补丁）。**`[skills].config_dir`** 仍来自 toml（**`matmaster_config/`**）。**`--session`** 覆盖 `DevConfig.session`。
 
 ## 架构
 
@@ -116,7 +118,7 @@ mm-devshell CLI
   │
   ├── load_llm_config(matmaster_config/llm_config.yaml)
   ├── build_provider(...)     ← 与 AgentRunService 相同
-  ├── load_exp_config(direct|--exp)  ← matmaster/exps/*.toml
+  ├── load_exp_config(...) ± exp_patch  ← 默认 direct + 收窄 skills_root
   ├── DevConfig               ← 仅 session 等本地壳（无独立 YAML 文件）
   ├── DevRunner               ← PlaygroundContext.llm_config + llm_provider
   ├── DevStreamHook / EventLogger / REPL
@@ -138,6 +140,7 @@ mm-devshell CLI
 | 模块 | 职责 |
 |------|------|
 | `config.py` | `DevConfig`（session / compaction；无 YAML 加载） |
+| `exp_patch.py` | 默认在 `direct` 上收窄 `skills_root`（仅 struct-DB stub） |
 | `runner.py` | `DevRunner`、history |
 | `stream_hook.py` | 终端流式输出 |
 | `event_logger.py` | JSONL |
