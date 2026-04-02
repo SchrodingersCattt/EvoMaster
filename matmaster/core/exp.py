@@ -444,7 +444,8 @@ class Exp:
             )
             return
 
-        skill_registry = SkillRegistry(roots)
+        name_filter = skills_cfg.skill_names if skills_cfg.skill_names else None
+        skill_registry = SkillRegistry(roots, skills=name_filter)
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
 
         # MCP runtime config: ALWAYS self-load from config_dir.

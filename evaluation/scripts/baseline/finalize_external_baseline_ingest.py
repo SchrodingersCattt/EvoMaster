@@ -179,7 +179,7 @@ def main() -> int:
         post_eval_ingest,
         upload_eval_task_artifacts_to_oss,
     )
-    from matmaster.eval_tooling_snapshot import snapshot_devshell_eval_tooling
+    from evaluation.eval_tooling_snapshot import snapshot_devshell_eval_tooling
 
     ingest_url: str | None = None
     if not args.no_eval_ingest:
