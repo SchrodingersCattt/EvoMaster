@@ -158,9 +158,10 @@ questions:
     - atom_count_ratio_check
     - molecule_integrity_check
   - key: molcrys_slab_molecular_integrity
-    value: true
-    tool_name: mat_sg_build_surface_slab
-    tool_arg: molecule_intact
+    value:
+      unit_cell_atoms: 144
+      slab_atoms: 576
+      layers: 4
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -175,10 +176,10 @@ questions:
     axis: correctness
     verify: struct_file_atom_count
   - id: molcrys_slab_molecular_integrity
-    criterion: The slab-builder tool observation reports `molecule_intact=true`, i.e.
-      no molecules are cut by the slab cut.
+    criterion: No molecules are cut by the slab cut (verified via MolCrysKit
+      graph-based molecular integrity check on workspace CIF files).
     axis: correctness
-    verify: tool_observation_field
+    verify: molcrys_slab_molecular_integrity
   - id: required_fields
     criterion: Output includes structure file, unit-cell atom count, final atom count,
       an explicit 4x ratio check, and a molecule-integrity narrative consistent with
@@ -608,7 +609,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_007_20260401
+- id: SC_struct_007_20260402
   capability: structure_construction
   domain: struct
   intent: Build the nitroprusside anion and validate its coordination, bond lengths,
@@ -635,7 +636,9 @@ questions:
   - key: file_exists
     value: nitroprusside.xyz
   - key: target_formula
-    value: FeC5N6O
+    value:
+      filename: nitroprusside.xyz
+      formula: FeC5N6O
   - key: fe_coordination
     value:
       filename: nitroprusside.xyz
@@ -716,9 +719,10 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: target_formula
-    criterion: The final reported formula is `FeC5N6O`.
+    criterion: The chemical formula read from nitroprusside.xyz matches FeC5N6O
+      (compared as reduced composition).
     axis: correctness
-    verify: contains_all
+    verify: struct_file_formula
   - id: fe_coordination
     criterion: The Fe coordination number computed from nitroprusside.xyz is 6.
     axis: correctness
@@ -901,16 +905,20 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260401b
+- id: SC_struct_009_20260402
   capability: structure_construction
   domain: struct
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce
-    trilayers and oxygen termination.
+    trilayers and oxygen termination; slab normal stacking should expose nine distinct
+    atomic planes along z (three trilayers times three planes each).
   human_prompt_seed: 'Build a CeO2(111) surface with three Ce-O-Ce tri-layers. Export
-    as `ceo2_111_trilayer.cif`. In the final answer, explicitly report: (1) whether
-    `ceo2_111_trilayer.cif` exists; (2) the total layer count, which should be 9;
-    (3) whether the slab is symmetric; (4) whether the outermost surface layer is
-    O-terminated; (5) the Ce:O stoichiometric ratio, which should match CeO2.
+    as `ceo2_111_trilayer.cif`. Here "layer count" means **nine atomic planes** along
+    the slab normal (z): each Ce-O-Ce tri-layer contributes three planes (O–Ce–O style
+    stacking), not three coarse trilayer blocks. In the final answer, explicitly report:
+    (1) whether `ceo2_111_trilayer.cif` exists; (2) the total **atomic** layer count
+    along z, which should be 9; (3) whether the slab is symmetric; (4) whether the
+    outermost surface layer is O-terminated; (5) the Ce:O stoichiometric ratio, which
+    should match CeO2.
 
     '
   tags:
@@ -932,7 +940,7 @@ questions:
       expected: 9
       tolerance: 0
       axis: z
-      gap_threshold_A: 0.8
+      layer_tol_A: 0.25
   - key: ce_o_ratio
     value:
       filename: ceo2_111_trilayer.cif
@@ -964,7 +972,9 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: slab_layers
-    criterion: The layer count along z computed from ceo2_111_trilayer.cif is 9.
+    criterion: The number of distinct atomic z-planes in ceo2_111_trilayer.cif is 9
+      (atoms on the same plane merged within 0.25 Å along z), matching three Ce-O-Ce
+      trilayers.
     axis: correctness
     verify: struct_file_layer_count
   - id: ce_o_ratio

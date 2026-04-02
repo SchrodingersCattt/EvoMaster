@@ -16,6 +16,11 @@ from typing import Any
 from evomaster.utils.llm import LLMConfig, create_llm
 from evomaster.utils.types import Dialog, SystemMessage, UserMessage
 
+from .evaluator_batch_checks import (
+    check_batch_consistent_calls,
+    check_batch_single_variable_sweep,
+    check_batch_tool_args_constant,
+)
 from .evaluator_helpers import (
     build_llm_context,
     build_safety_eval_record,
@@ -500,7 +505,10 @@ class BinaryEvaluator:
             tools=[],
         )
         reply = self._llm.query(dialog)
-        data = self._parse_json(reply.content or '')
+        try:
+            data = self._parse_json(reply.content or '')
+        except ValueError:
+            return False, 'LLM response contained no JSON object'
         passed = bool(data.get('pass', False))
         reason = str(data.get('reason', '')).strip() or 'llm_binary_judge'
         return passed, reason
@@ -625,15 +633,23 @@ class BinaryEvaluator:
     ) -> tuple[bool, str]:
         if evidence is None:
             return False, 'no EvidenceBundle provided'
-        if not ref.tool_name or not ref.tool_arg:
+        if not ref.tool_arg:
             return (
                 False,
-                'tool_observation_field requires tool_name and tool_arg in reference',
+                'tool_observation_field requires tool_arg in reference',
             )
 
-        matches = [tc for tc in evidence.tool_calls if tc.tool_name == ref.tool_name]
-        if not matches:
-            return False, f'tool {ref.tool_name!r} was never called'
+        if ref.tool_name:
+            matches = [
+                tc for tc in evidence.tool_calls if tc.tool_name == ref.tool_name
+            ]
+            if not matches:
+                return False, f'tool {ref.tool_name!r} was never called'
+        else:
+            # tool-name-agnostic: search all tool calls for the field
+            matches = list(evidence.tool_calls)
+            if not matches:
+                return False, 'no tool calls recorded'
 
         for tc in matches:
             raw = tc.observation_excerpt.strip()
@@ -666,9 +682,10 @@ class BinaryEvaluator:
                 f'observation field {ref.tool_arg}={actual!r}, expected={expected!r}',
             )
 
+        tool_label = repr(ref.tool_name) if ref.tool_name else '<any>'
         return (
             False,
-            f'field {ref.tool_arg!r} not found in observation excerpt for tool {ref.tool_name!r}',
+            f'field {ref.tool_arg!r} not found in observation excerpt for tool {tool_label}',
         )
 
     @staticmethod
@@ -758,7 +775,7 @@ class BinaryEvaluator:
         return False, f"artifact '{needle}' not found (artifacts: {paths})"
 
     # ------------------------------------------------------------------
-    # Batch processing checks
+    # Batch processing checks (implementations in evaluator_batch_checks.py)
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -768,69 +785,8 @@ class BinaryEvaluator:
         evidence: EvidenceBundle | None,
         ref: ReferenceAnswer,
     ) -> tuple[bool, str]:
-        """Verify that across multiple calls to the same tool, only one parameter varies.
-
-        Reference format:
-            - tool_name: the MCP tool being called (required)
-            - tool_arg: the parameter that should vary (required)
-            - value: list of expected varying values (optional; if provided, verifies values match)
-        """
-        if not ref.tool_name or not ref.tool_arg:
-            return False, 'batch_single_variable_sweep requires tool_name and tool_arg'
-
-        names = (
-            [n.strip() for n in ref.tool_name.split('|')]
-            if '|' in str(ref.tool_name)
-            else [str(ref.tool_name)]
-        )
-        matching_calls = [c for c in tool_calls if c.get('tool_name') in names]
-
-        if len(matching_calls) < 2:
-            return (
-                False,
-                f'need at least 2 calls to {names} for sweep check, found {len(matching_calls)}',
-            )
-
-        # Extract all args from matching calls
-        all_args = [call.get('tool_args', {}) for call in matching_calls]
-        sweep_var = str(ref.tool_arg)
-
-        # Get all parameter names from first call
-        if not all_args[0]:
-            return False, 'first call has no arguments'
-
-        all_param_names = set(all_args[0].keys())
-
-        # Check that only sweep_var changes across calls
-        for param in all_param_names:
-            if param == sweep_var:
-                continue
-            values = [str(args.get(param, '<missing>')) for args in all_args]
-            if len(set(values)) > 1:
-                return (
-                    False,
-                    f"parameter '{param}' varies across calls (expected constant): {values}",
-                )
-
-        # Check that sweep_var actually varies
-        sweep_values = [args.get(sweep_var, '<missing>') for args in all_args]
-        if len({str(v) for v in sweep_values}) < 2:
-            return False, f"sweep parameter '{sweep_var}' does not vary: {sweep_values}"
-
-        # If expected values provided, verify they match
-        if ref.value is not None:
-            expected_vals = ref.value if isinstance(ref.value, list) else [ref.value]
-            expected_strs = {str(v) for v in expected_vals}
-            actual_strs = {str(v) for v in sweep_values}
-            if actual_strs != expected_strs:
-                return (
-                    False,
-                    f'sweep values {actual_strs} do not match expected {expected_strs}',
-                )
-
-        return (
-            True,
-            f'single variable sweep verified: {sweep_var} varies, other params constant',
+        return check_batch_single_variable_sweep(
+            tool_calls=tool_calls, evidence=evidence, ref=ref
         )
 
     @staticmethod
@@ -840,49 +796,9 @@ class BinaryEvaluator:
         evidence: EvidenceBundle | None,
         ref: ReferenceAnswer,
     ) -> tuple[bool, str]:
-        """Verify that across multiple calls, specified parameters remain constant.
-
-        Reference format:
-            - tool_name: the MCP tool being called (required)
-            - tool_arg: comma-separated parameter names that must be constant (required)
-            - value: dict mapping param_name -> expected_value (optional)
-        """
-        if not ref.tool_name or not ref.tool_arg:
-            return False, 'batch_tool_args_constant requires tool_name and tool_arg'
-
-        names = (
-            [n.strip() for n in ref.tool_name.split('|')]
-            if '|' in str(ref.tool_name)
-            else [str(ref.tool_name)]
+        return check_batch_tool_args_constant(
+            tool_calls=tool_calls, evidence=evidence, ref=ref
         )
-        matching_calls = [c for c in tool_calls if c.get('tool_name') in names]
-
-        if len(matching_calls) < 2:
-            return (
-                False,
-                f'need at least 2 calls to {names}, found {len(matching_calls)}',
-            )
-
-        # Parse constant parameter names from tool_arg
-        param_names = [p.strip() for p in str(ref.tool_arg).split(',')]
-        all_args = [call.get('tool_args', {}) for call in matching_calls]
-
-        for param in param_names:
-            values = [args.get(param, '<missing>') for args in all_args]
-            if len({str(v) for v in values}) > 1:
-                return False, f"parameter '{param}' varies across calls: {values}"
-
-            # If expected value provided, verify it
-            if isinstance(ref.value, dict) and param in ref.value:
-                expected = ref.value[param]
-                actual = values[0]
-                if str(actual) != str(expected):
-                    return (
-                        False,
-                        f"parameter '{param}' is {actual}, expected {expected}",
-                    )
-
-        return True, f"batch parameters constant: {', '.join(param_names)}"
 
     @staticmethod
     def _check_batch_consistent_calls(
@@ -891,64 +807,8 @@ class BinaryEvaluator:
         evidence: EvidenceBundle | None,
         ref: ReferenceAnswer,
     ) -> tuple[bool, str]:
-        """Verify that calls follow a consistent pattern (e.g., same tool, same order).
-
-        Reference format:
-            - tool_name: comma-separated tool names or pipe-separated tool name variants (required)
-            - value: expected structure:
-                {
-                    'min_calls': int,
-                    'max_calls': int,
-                    'pattern': 'sequential' | 'grouped',  # sequential: same tool repeated; grouped: fixed sequence
-                    'tools': ['tool1', 'tool2', ...]  (for grouped pattern)
-                }
-        """
-        if not ref.tool_name:
-            return False, 'batch_consistent_calls requires tool_name'
-
-        if not isinstance(ref.value, dict):
-            return (
-                False,
-                'batch_consistent_calls requires value as dict with pattern config',
-            )
-
-        min_calls = int(ref.value.get('min_calls', 1))
-        max_calls = int(ref.value.get('max_calls', 9999))
-        pattern = ref.value.get('pattern', 'sequential')
-        pattern_tools = ref.value.get('tools', [])
-
-        matching_calls = tool_calls
-        if isinstance(ref.tool_name, str) and ref.tool_name.strip():
-            names = [n.strip() for n in ref.tool_name.split('|')]
-            matching_calls = [c for c in tool_calls if c.get('tool_name') in names]
-
-        if not (min_calls <= len(matching_calls) <= max_calls):
-            return (
-                False,
-                f'call count {len(matching_calls)} not in range [{min_calls}, {max_calls}]',
-            )
-
-        if pattern == 'grouped' and pattern_tools:
-            # Check that the tool sequence matches
-            actual_sequence = [c.get('tool_name') for c in tool_calls]
-            expected_len = len(pattern_tools)
-            if len(actual_sequence) % expected_len != 0:
-                return (
-                    False,
-                    f'sequence length {len(actual_sequence)} not multiple of pattern length {expected_len}',
-                )
-
-            for i, tool_name in enumerate(actual_sequence):
-                expected_tool = pattern_tools[i % expected_len]
-                if tool_name != expected_tool:
-                    return (
-                        False,
-                        f'position {i}: expected {expected_tool}, got {tool_name}',
-                    )
-
-        return (
-            True,
-            f'batch calls consistent: {len(matching_calls)} calls, pattern={pattern}',
+        return check_batch_consistent_calls(
+            tool_calls=tool_calls, evidence=evidence, ref=ref
         )
 
     # ------------------------------------------------------------------
