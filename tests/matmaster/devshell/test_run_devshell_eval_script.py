@@ -88,7 +88,9 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
     out = (tmp_path / "verbose_default").resolve()
     captured: list[list[str | Path]] = []
 
-    def fake_run_devshell_task(*, cmd, cwd, env, summary_file, console_log_file):
+    def fake_run_devshell_task(
+        *, cmd, cwd, env, summary_file, console_log_file, timeout_sec=None
+    ):
         captured.append(list(cmd))
         summary_file.write_text(
             '{"status":"completed","reason":"natural","final_content":"ok","num_turns":1,"usage":{"total_tokens":1}}\n',
@@ -129,7 +131,10 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
 
     assert rc == 0
     assert captured
-    assert "--verbose" in [str(x) for x in captured[0]]
+    cmd0 = [str(x) for x in captured[0]]
+    assert "--verbose" in cmd0
+    assert "--exp" in cmd0
+    assert "direct" in cmd0
 
 
 def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> None:
@@ -137,7 +142,9 @@ def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> 
     out = (tmp_path / "verbose_disabled").resolve()
     captured: list[list[str | Path]] = []
 
-    def fake_run_devshell_task(*, cmd, cwd, env, summary_file, console_log_file):
+    def fake_run_devshell_task(
+        *, cmd, cwd, env, summary_file, console_log_file, timeout_sec=None
+    ):
         captured.append(list(cmd))
         summary_file.write_text(
             '{"status":"completed","reason":"natural","final_content":"ok","num_turns":1,"usage":{"total_tokens":1}}\n',
@@ -179,4 +186,6 @@ def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> 
 
     assert rc == 0
     assert captured
-    assert "--verbose" not in [str(x) for x in captured[0]]
+    cmd0 = [str(x) for x in captured[0]]
+    assert "--verbose" not in cmd0
+    assert "--exp" in cmd0
