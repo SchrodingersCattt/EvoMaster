@@ -31,6 +31,12 @@
 - **D-09:** 内建工具 ResourceClaim 按 spec §8.2 表格声明。
 - **D-10:** 激活路径：Exp.build_runtime() 构造完整 ToolRunner（含 ToolCatalog + StructuralValidation + GuardPipeline + CapabilityPolicy + ToolScheduler），通过 AgentRuntimeSpec.tool_runner 注入 Kernel。
 
+### D-10 范围修正（2026-04-02 Review 后）
+- **D-10 (revised):** D-10 原文描述的是激活机制（how），不是激活时机（when）。经 GPT cross-review 确认：Phase 33 仅实现+测试 FullToolRunner 执行链（通过直接构造的集成测试验证），**不改 Exp.build_runtime()**。Exp 注入 FullToolRunner 移至 Phase 34（ESIN-04）。
+  - 原因 1: 当前 `_run_items()` 不 yield ToolCallEvent/ToolResultEvent（Phase 32 gap），FullToolRunner 默认化后 run_stream() 缺 tool 事件
+  - 原因 2: FullToolRunner 不调 hook（D-01），Service 层仍依赖 Hook→Bus 事件链，默认化会断掉 WorkspaceHandler/ChatHistory/SSE 事件流
+  - 原因 3: on_skill_hit 仍直走 registry.register()，不走 catalog.register_overlay()，catalog.version 不递增导致 MCP 工具对模型不可见
+
 ### Claude's Discretion
 - Scheduler 内部 RWLock 的具体实现细节（公平性策略、饥饿防护）
 - StructuralValidation 的路径规范化具体实现

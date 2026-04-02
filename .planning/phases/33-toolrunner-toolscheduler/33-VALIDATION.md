@@ -41,8 +41,7 @@ created: 2026-04-02
 | 33-01-01 | 01 | 1 | TRUN-03 | unit | `uv run pytest tests/matmaster/core/test_structural_validation.py -x` | ❌ W0 | ⬜ pending |
 | 33-01-02 | 01 | 1 | TCON-01 | unit | `uv run pytest tests/matmaster/core/test_capability_policy.py -x` | ❌ W0 | ⬜ pending |
 | 33-02-01 | 02 | 1 | TRUN-04 | unit | `uv run pytest tests/matmaster/core/test_tool_scheduler.py -x` | ❌ W0 | ⬜ pending |
-| 33-03-01 | 03 | 2 | TRUN-03 | integration | `uv run pytest tests/matmaster/core/test_tool_runner_full.py -x` | ❌ W0 | ⬜ pending |
-| 33-03-02 | 03 | 2 | TCON-03 | integration | `uv run pytest tests/matmaster/core/test_tool_runner_full.py -x` | ❌ W0 | ⬜ pending |
+| 33-03-01 | 03 | 2 | TRUN-03 | integration | `uv run pytest tests/matmaster/core/test_full_tool_runner.py -x` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -53,7 +52,7 @@ created: 2026-04-02
 - [ ] `tests/matmaster/core/test_structural_validation.py` — stubs for TRUN-03 args_schema validation
 - [ ] `tests/matmaster/core/test_capability_policy.py` — stubs for TCON-01 effect_level / capability matching
 - [ ] `tests/matmaster/core/test_tool_scheduler.py` — stubs for TRUN-04 exclusive/shared_read/counted scheduling
-- [ ] `tests/matmaster/core/test_tool_runner_full.py` — stubs for TRUN-03/TCON-03 end-to-end execution chain
+- [ ] `tests/matmaster/core/test_full_tool_runner.py` — stubs for TRUN-03 end-to-end execution chain (no Exp activation; Exp activation moved to Phase 34 ESIN-04)
 
 *Existing pytest infrastructure covers framework requirements.*
 

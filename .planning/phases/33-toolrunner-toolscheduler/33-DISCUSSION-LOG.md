@@ -87,6 +87,21 @@
 - StructuralValidation 路径规范化实现
 - CapabilityPolicy 具体拒绝规则
 
+---
+
+## D-10 范围修正 (2026-04-02 Post-Review)
+
+GPT cross-review 指出 4 个硬耦合点。Claude 验证代码后确认其中 3 个属实：
+
+| Issue | GPT 判断 | Claude 代码验证 | 归属 Phase |
+|-------|----------|----------------|------------|
+| FullToolRunner 默认化断 Hook 事件链 | 正确 | `_run_items()` 未 yield ToolCallEvent/ToolResultEvent（Phase 32 gap） | Phase 34 (KGEN-06 + ESIN-04) |
+| on_skill_hit 不走 catalog overlay | 正确 | `exp.py:509` 直调 `registry.register()` | Phase 34 (ESIN-05) |
+| source 归一化 | 正确 | `agent.py:264` 用 `source="agent"`，ChatHistory 过滤 `MatMaster` | Phase 34 (ESIN-06) |
+| ContextBuilder tool listing | 正确但已缓解 | `ToolCatalog.register_overlay()` 内部走 registry，listing 同步 | Phase 35 (CMIG-05) |
+
+**Decision**: Exp.build_runtime() 注入 FullToolRunner 从 Phase 33 移至 Phase 34（ESIN-04）。Phase 33 只实现+测试执行链。
+
 ## Deferred Ideas
 
 None
