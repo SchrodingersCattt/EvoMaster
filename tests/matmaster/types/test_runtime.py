@@ -400,3 +400,86 @@ class TestKernelResult:
         kr = KernelResult(status="cancelled", reason="cancelled")
         event = kr.to_run_result_event(source="worker")
         assert event.source == "worker"
+
+
+# ── Tool Runtime v2 fields (Phase 32-02) ─────────────────
+
+
+class TestAgentRuntimeSpecToolRuntimeV2Fields:
+    """Phase 32-02: 5 new optional fields default to None for backward compat."""
+
+    def test_new_fields_default_none(self) -> None:
+        """All 5 new fields default to None when not provided."""
+        spec = AgentRuntimeSpec()
+        assert spec.tool_runner is None
+        assert spec.tool_catalog is None
+        assert spec.runtime_topology is None
+        assert spec.capability_policy is None
+        assert spec.structural_validation is None
+
+    def test_backward_compat_with_existing_constructor(self) -> None:
+        """Existing _make_spec() pattern (no new fields) still works."""
+        spec = AgentRuntimeSpec(
+            llm_provider=_MockLLMProvider(),
+            tool_registry=ToolRegistry(),
+            guards=[_MockGuard()],
+            hooks=[],
+            max_turns=10,
+            system_prompt="You are a test agent",
+        )
+        assert spec.llm_provider is not None
+        assert spec.tool_runner is None
+        assert spec.tool_catalog is None
+
+    def test_tool_runner_field_accepts_inline_runner(self) -> None:
+        """tool_runner field accepts InlineToolRunner instance."""
+        from matmaster.core.tool_runner import InlineToolRunner
+
+        registry = ToolRegistry()
+        spec_for_runner = AgentRuntimeSpec(tool_registry=registry)
+        runner = InlineToolRunner(spec_for_runner, [])
+
+        spec = AgentRuntimeSpec(
+            tool_registry=registry,
+            tool_runner=runner,
+        )
+        assert spec.tool_runner is runner
+
+    def test_tool_catalog_field_accepts_catalog(self) -> None:
+        """tool_catalog field accepts ToolCatalog instance."""
+        from matmaster.tools.tool_catalog import ToolCatalog
+
+        registry = ToolRegistry()
+        catalog = ToolCatalog(registry)
+
+        spec = AgentRuntimeSpec(
+            tool_registry=registry,
+            tool_catalog=catalog,
+        )
+        assert spec.tool_catalog is catalog
+
+    def test_runtime_topology_field_accepts_topology(self) -> None:
+        """runtime_topology field accepts RuntimeTopology instance."""
+        from matmaster.types.topology import RuntimeTopology
+
+        topo = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp",
+            workspace_root="/tmp/workspace",
+        )
+        spec = AgentRuntimeSpec(runtime_topology=topo)
+        assert spec.runtime_topology is topo
+        assert spec.runtime_topology.session_kind == "local"
+
+    def test_model_dump_includes_new_fields(self) -> None:
+        """model_dump() output includes the 5 new fields."""
+        spec = AgentRuntimeSpec()
+        data = spec.model_dump()
+        assert "tool_runner" in data
+        assert "tool_catalog" in data
+        assert "runtime_topology" in data
+        assert "capability_policy" in data
+        assert "structural_validation" in data
+        # All should be None
+        assert data["tool_runner"] is None
+        assert data["tool_catalog"] is None

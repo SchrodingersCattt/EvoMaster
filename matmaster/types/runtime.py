@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,6 +23,11 @@ from matmaster.types.messages import Message
 
 from .guards import Guard
 from .llm_provider import LLMProvider
+
+if TYPE_CHECKING:
+    from matmaster.core.tool_runner import ToolRunner
+    from matmaster.tools.tool_catalog import ToolCatalog
+    from matmaster.types.topology import RuntimeTopology
 
 
 class CompactionConfig(BaseModel):
@@ -71,6 +76,17 @@ class AgentRuntimeSpec(BaseModel):
 
     # Extensible metadata bag (prompt templates, MCP/skill config, etc.)
     meta: dict[str, Any] = Field(default_factory=dict)
+
+    # ── Tool Runtime v2 fields (Phase 32, all optional for backward compat) ──
+    # Runtime annotations use Any to avoid circular import through
+    # types/__init__.py -> runtime.py -> tool_runner.py -> guard_pipeline.py
+    # -> types/guards.py -> types/__init__.py. TYPE_CHECKING block above
+    # provides ToolRunner/ToolCatalog/RuntimeTopology for static type checkers.
+    tool_runner: Any | None = None  # TYPE_CHECKING: ToolRunner | None
+    tool_catalog: Any | None = None  # TYPE_CHECKING: ToolCatalog | None
+    runtime_topology: Any | None = None  # TYPE_CHECKING: RuntimeTopology | None
+    capability_policy: Any | None = None  # Phase 33 defines CapabilityPolicy Protocol
+    structural_validation: Any | None = None  # Phase 33 defines StructuralValidation
 
 
 @dataclass(frozen=True)
