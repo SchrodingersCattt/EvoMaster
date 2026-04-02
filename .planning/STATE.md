@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
 status: executing
-stopped_at: Phase 33 context gathered
-last_updated: "2026-04-02T10:57:52.109Z"
-last_activity: 2026-04-02
+stopped_at: Completed 33-02-PLAN.md
+last_updated: "2026-04-02T11:43:42Z"
+last_activity: 2026-04-02 -- Phase 33 Plan 02 complete
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 3
-  completed_plans: 3
-  percent: 7
+  completed_plans: 2
+  percent: 33
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 32 — kernel-generator-tool-runtime-v2
+**Current focus:** Phase 33 — toolrunner-toolscheduler
 
 ## Current Position
 
-Phase: 33
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-02
+Phase: 33 (toolrunner-toolscheduler) — EXECUTING
+Plan: 2 of 3 complete
+Status: Executing Phase 33
+Last activity: 2026-04-02 -- Plan 02 complete
 
-Progress: [█░░░░░░░░░] 7%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [█░░░░░░░░░] 7%
 *Updated after each plan completion*
 | Phase 32 P02 | 7min | 2 tasks | 6 files |
 | Phase 32 P03 | 6min | 1 tasks | 2 files |
+| Phase 33 P02 | 3min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,8 @@ v2.2 新决策:
 - event_payloads.py 读 'payload' 输出 'info' 保持 SSE 前端兼容
 - [Phase 32]: ToolRunner/ToolCatalog/RuntimeTopology typed as Any at Pydantic runtime to avoid circular import, TYPE_CHECKING for static analysis
 - [Phase 32]: _run_items() uses local _KernelState preserving Kernel statelessness; Phase 1 only yields final-snapshot events (Hook path unchanged until Phase 34)
+- [Phase 33]: _RWLock uses asyncio.Lock + Condition + int counters, no third-party lock library (per D-02)
+- [Phase 33]: counted limit=None defensively defaults to 1 with warning log, no exception
 
 ### Pending Todos
 
@@ -82,6 +85,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02T10:57:52.105Z
-Stopped at: Phase 33 context gathered
-Resume file: .planning/phases/33-toolrunner-toolscheduler/33-CONTEXT.md
+Last session: 2026-04-02T11:43:42Z
+Stopped at: Completed 33-02-PLAN.md
+Resume file: .planning/phases/33-toolrunner-toolscheduler/33-02-SUMMARY.md
