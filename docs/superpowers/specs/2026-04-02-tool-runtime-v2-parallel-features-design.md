@@ -71,7 +71,7 @@ class ToolSpec(BaseModel):
 
 文件：`matmaster/tools/tool_compiler.py`
 
-BUILTIN_META 从 `(ToolPlane, effect_level, fast_path_eligible)` 扩展为 `(ToolPlane, effect_level, fast_path_eligible, max_result_chars)`。
+BUILTIN_META 从 `(ToolPlane, effect_level, fast_path_eligible)` 扩展为 `(ToolPlane, effect_level, fast_path_eligible, max_result_chars)`。`compile()` 中的位置解包（当前 `plane, effect_level, fast_path = BUILTIN_META.get(...)`）需同步更新为 4 元素解包。
 
 按 spec 第 10 章总表：
 
@@ -262,7 +262,18 @@ return ToolInstance(
 ```python
 # Step 3: input_validator (tool-specific semantic check)
 if instance.input_validator is not None:
-    decision = await instance.input_validator(tc.arguments)
+    try:
+        decision = await instance.input_validator(tc.arguments)
+    except Exception as exc:
+        tr = ToolResult(
+            status="error",
+            content=str(exc),
+            meta={"layer": "input_validation"},
+        )
+        if on_result:
+            await on_result(tc, tr)
+        results.append((tc, tr))
+        continue
     if decision is not None and decision.decision == "deny":
         tr = ToolResult(
             status="error",
@@ -270,7 +281,7 @@ if instance.input_validator is not None:
             meta={"layer": "input_validation"},
         )
         if on_result:
-            on_result(tc, tr)
+            await on_result(tc, tr)
         results.append((tc, tr))
         continue
 ```
