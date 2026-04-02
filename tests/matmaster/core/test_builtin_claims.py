@@ -171,13 +171,13 @@ class TestSpawn:
 
 class TestFastPathEligible:
     def test_read_file_fast_path(self) -> None:
-        """read_file -> fast_path_eligible=True, effect_level='none'."""
+        """read_file -> fast_path_eligible=True, effect_level='pure_read'."""
         catalog = _make_catalog("read_file")
         instance = catalog.get_tool("read_file")
 
         assert instance is not None
         assert instance.tool_spec.fast_path_eligible is True
-        assert instance.tool_spec.effect_level == "none"
+        assert instance.tool_spec.effect_level == "pure_read"
 
 
 # ── Unknown/MCP Tool Default ────────────────────────────

@@ -286,7 +286,7 @@ class FullToolRunner:
             # 6. Fast path check (per D-08)
             claims = instance.tool_binding.resource_claims
             is_fast = (
-                instance.tool_spec.effect_level == "none"
+                instance.tool_spec.effect_level == "pure_read"
                 and all(c.mode == "shared_read" for c in claims)
                 and instance.tool_spec.fast_path_eligible
             )

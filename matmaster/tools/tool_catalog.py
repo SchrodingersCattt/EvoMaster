@@ -43,21 +43,21 @@ BUILTIN_CLAIMS: dict[str, tuple[ResourceClaim, ...]] = {
 # (plane, effect_level, fast_path_eligible)
 BUILTIN_META: dict[str, tuple[ToolPlane, str, bool]] = {
     "execute_bash": (ToolPlane.SESSION_SHELL, "local_mutation", False),
-    "list_dir": (ToolPlane.SESSION_SHELL, "none", False),
-    "glob": (ToolPlane.SESSION_SHELL, "none", False),
-    "grep": (ToolPlane.SESSION_SHELL, "none", False),
-    "read_file": (ToolPlane.SESSION_FS, "none", True),
+    "list_dir": (ToolPlane.SESSION_SHELL, "pure_read", False),
+    "glob": (ToolPlane.SESSION_SHELL, "pure_read", False),
+    "grep": (ToolPlane.SESSION_SHELL, "pure_read", False),
+    "read_file": (ToolPlane.SESSION_FS, "pure_read", True),
     "write_file": (ToolPlane.SESSION_FS, "local_mutation", False),
     "edit_file": (ToolPlane.SESSION_FS, "local_mutation", False),
     "task_create": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
-    "task_get": (ToolPlane.CONTROL_PLANE, "none", True),
-    "task_list": (ToolPlane.CONTROL_PLANE, "none", True),
+    "task_get": (ToolPlane.CONTROL_PLANE, "pure_read", True),
+    "task_list": (ToolPlane.CONTROL_PLANE, "pure_read", True),
     "task_update": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
     "task_complete": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
-    "mm_web_search": (ToolPlane.EXTERNAL_SERVICE, "external_effect", False),
-    "web_fetch": (ToolPlane.EXTERNAL_SERVICE, "external_effect", False),
+    "mm_web_search": (ToolPlane.EXTERNAL_SERVICE, "external_write", False),
+    "web_fetch": (ToolPlane.EXTERNAL_SERVICE, "external_write", False),
     "spawn": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
-    "monitor_job": (ToolPlane.SESSION_FS, "external_effect", False),
+    "monitor_job": (ToolPlane.SESSION_FS, "external_write", False),
 }
 
 
