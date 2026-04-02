@@ -618,8 +618,8 @@ class TestMatMasterRunAgentE2E:
             real_mock_svc = MagicMock()
             real_mock_svc.load_credentials.return_value = ({}, None, 'org-1')
 
-            def _capture_init(sessions_svc, bus):
-                captured_bus[0] = bus
+            def _capture_init(**kwargs):
+                captured_bus[0] = kwargs.get('bus')
                 return real_mock_svc
 
             mock_bohrium_cls.side_effect = _capture_init
@@ -738,8 +738,8 @@ class TestMatMasterRunAgentE2E:
             real_mock_svc = MagicMock()
             real_mock_svc.load_credentials.return_value = ({}, None, 'org-1')
 
-            def _capture_init(sessions_svc, bus):
-                captured_bus[0] = bus
+            def _capture_init(**kwargs):
+                captured_bus[0] = kwargs.get('bus')
                 return real_mock_svc
 
             mock_bohrium_cls.side_effect = _capture_init

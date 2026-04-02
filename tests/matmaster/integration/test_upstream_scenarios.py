@@ -246,55 +246,57 @@ class TestBohriumSetupLifecycle:
 
     def test_bohrium_setup_lifecycle(self) -> None:
         """Verify BohriumSetupService.setup() and cleanup() delegate correctly."""
-        mock_sessions_svc = MagicMock()
         bus = MessageBus()
-        svc = BohriumSetupService(mock_sessions_svc, bus)
+        mock_load_creds = MagicMock(return_value=({}, None, "org-1"))
+        mock_apply_creds = MagicMock()
+        mock_setup_fn = MagicMock()
+        mock_cleanup_fn = MagicMock()
+        svc = BohriumSetupService(
+            load_credentials_fn=mock_load_creds,
+            apply_credentials_fn=mock_apply_creds,
+            setup_fn=mock_setup_fn,
+            cleanup_fn=mock_cleanup_fn,
+            bus=bus,
+        )
 
-        # Patch the lazy-imported functions
-        with (
-            patch("src.services.agent_run_bohrium.setup_bohrium_for_run") as mock_setup,
-            patch(
-                "src.services.agent_run_bohrium.cleanup_bohrium_after_run"
-            ) as mock_cleanup,
-        ):
-            skill_sync_spec = SkillSyncSpec(
-                project_skill_roots=["/proj/skills"],
-                remote_project_root="/remote/project",
-            )
-            mock_setup.return_value = BohriumSetupResult(
-                ssh_attached=False,
-                abort_result=None,
-                execution_session=None,
-                execution_workdir="/remote/exec/wd",
-                session_type=None,
-            )
+        skill_sync_spec = SkillSyncSpec(
+            project_skill_roots=["/proj/skills"],
+            remote_project_root="/remote/project",
+        )
+        mock_setup_fn.return_value = BohriumSetupResult(
+            ssh_attached=False,
+            abort_result=None,
+            execution_session=None,
+            execution_workdir="/remote/exec/wd",
+            session_type=None,
+        )
 
-            result = svc.setup(
-                session_id="sess-1",
-                pg=MagicMock(),
-                skill_sync_spec=skill_sync_spec,
-                run_creds={"key": "val"},
-                user_id_for_ak="user-1",
-                org_id="org-1",
-                event_callback=MagicMock(),
-                run_started_at=0.0,
-            )
+        result = svc.setup(
+            session_id="sess-1",
+            pg=MagicMock(),
+            skill_sync_spec=skill_sync_spec,
+            run_creds={"key": "val"},
+            user_id_for_ak="user-1",
+            org_id="org-1",
+            event_callback=MagicMock(),
+            run_started_at=0.0,
+        )
 
-            assert mock_setup.called
-            call_kw = mock_setup.call_args.kwargs
-            assert call_kw["skill_sync_spec"] is skill_sync_spec
-            assert "base" not in call_kw
-            assert result.ssh_attached is False
-            assert result.execution_workdir == "/remote/exec/wd"
+        assert mock_setup_fn.called
+        call_kw = mock_setup_fn.call_args.kwargs
+        assert call_kw["skill_sync_spec"] is skill_sync_spec
+        assert "base" not in call_kw
+        assert result.ssh_attached is False
+        assert result.execution_workdir == "/remote/exec/wd"
 
-            svc.cleanup(
-                session_id="sess-1",
-                event_callback=MagicMock(),
-                pg_for_run=MagicMock(),
-                ssh_attached=False,
-            )
+        svc.cleanup(
+            session_id="sess-1",
+            event_callback=MagicMock(),
+            pg_for_run=MagicMock(),
+            ssh_attached=False,
+        )
 
-            assert mock_cleanup.called
+        assert mock_cleanup_fn.called
 
 
 # -- QUAL-04: Event router persistence ---------------------------

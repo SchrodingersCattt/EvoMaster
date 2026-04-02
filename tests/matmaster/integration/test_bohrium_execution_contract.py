@@ -14,6 +14,7 @@ import pytest
 import matmaster.config.loader as matmaster_loader
 from matmaster.integration.bohrium_setup import SkillSyncSpec
 from matmaster.types.context import PlaygroundContext
+from tests.matmaster.core.conftest import MockLLMProvider
 
 _src_services = pytest.importorskip(
     "src.services.agent_run_bohrium",
@@ -358,7 +359,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
         captured_spec['skill_sync_spec'] = kwargs.get('skill_sync_spec')
         return mock_bohrium_result
 
-    mock_llm = MagicMock()
+    mock_llm = MockLLMProvider()
     mock_build_provider.return_value = mock_llm
     mock_load_llm.return_value = MagicMock()
 
@@ -411,7 +412,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
     assert spec.remote_project_root == '/share/.matmaster'
     assert spec.project_skill_roots
     assert spec.project_skill_roots[0].endswith(
-        str(Path('playground/mat_master/skills'))
+        str(Path('matmaster/skills/lazymcp'))
     )
 
 
