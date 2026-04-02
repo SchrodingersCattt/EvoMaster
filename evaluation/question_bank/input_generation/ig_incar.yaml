@@ -9,8 +9,8 @@ questions:
     density (ICHARG=11), with projected band output (LORBIT=11).
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 Lu4N4 体系生成一个能带结构计算的 VASP INCAR 文件。要求：非自洽计算，从已有电荷密度读取，输出投影能带。直接输出完整的 INCAR
-    内容。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 Lu4N4 体系生成一个能带结构计算的 VASP INCAR 文件。要求：非自洽计算，从已有电荷密度读取，输出投影能带。将完整的 INCAR 写入当前目录下的
+    `INCAR` 文件。
   tags:
   - incar_generation
   - band_structure
@@ -24,14 +24,24 @@ questions:
     oss_url: ''
     description: Task specification for band structure INCAR generation.
   reference_answers:
-  - key: has_ICHARG_11
-    value: ICHARG = 11
-  - key: has_NSW_0
-    value: NSW = 0
-  - key: has_IBRION_neg1
-    value: IBRION = -1
-  - key: has_LORBIT_11
-    value: LORBIT = 11
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_001/reference_incar.txt
+      key_tags:
+      - IBRION
+      - ISIF
+      - ISMEAR
+      - ISPIN
+      - ISYM
+      - NEDOS
+      - NSW
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_001/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -42,34 +52,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_ICHARG_11
-    criterion: INCAR contains ICHARG = 11 for non-self-consistent band structure calculation.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（IBRION, ISIF, ISMEAR, ISPIN, ISYM, NEDOS 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_NSW_0
-    criterion: INCAR sets NSW = 0 (static, no ionic steps).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_IBRION_neg1
-    criterion: INCAR sets IBRION = -1 (no ionic relaxation).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_LORBIT_11
-    criterion: INCAR sets LORBIT = 11 for projected band structure output.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR is valid and complete for band structure: appropriate ISMEAR (e.g. 0 or -5), reasonable EDIFF,
-      and no conflicting relaxation parameters.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -90,10 +82,8 @@ questions:
     high-precision convergence.
 
     '
-  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为有机-无机杂化钙钛矿 C26H28Cl4N4Pb2 生成一个 静态自洽(SCF)计算的 VASP INCAR 文件。体系是半导体，需要高精度收敛。
-    直接输出完整的 INCAR 内容。
-
-    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为有机-无机杂化钙钛矿 C26H28Cl4N4Pb2 生成一个 静态自洽(SCF)计算的 VASP INCAR 文件。体系是半导体，需要高精度收敛。
+    将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - scf
@@ -108,12 +98,23 @@ questions:
     oss_url: ''
     description: Task specification for SCF INCAR generation.
   reference_answers:
-  - key: has_NSW_0
-    value: NSW = 0
-  - key: has_ISMEAR_0
-    value: ISMEAR = 0
-  - key: has_PREC
-    value: PREC = Accurate
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_002/reference_incar.txt
+      key_tags:
+      - ISMEAR
+      - ISYM
+      - IVDW
+      - LASPH
+      - NSW
+      - NUPDOWN
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_002/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -124,30 +125,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_NSW_0
-    criterion: INCAR sets NSW = 0 for static SCF (no ionic relaxation).
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（ISMEAR, ISYM, IVDW, LASPH, NSW, NUPDOWN 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISMEAR_0
-    criterion: INCAR uses ISMEAR = 0 (Gaussian smearing) appropriate for semiconductor.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_PREC
-    criterion: INCAR uses PREC = Accurate or High for high-precision SCF.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR is a valid static SCF INCAR with reasonable EDIFF (1e-5 to 1e-7), appropriate ENCUT (>=400),
-      ALGO setting, and no conflicting parameters for a semiconductor system.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -168,8 +155,8 @@ questions:
     (Er3+ f electrons).
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 ErNaO3 生成一个结构弛豫(relaxation)计算的 VASP INCAR。需要同时优化离子位置和晶胞参数。Er 含 f 电子，需要自旋极化。直接输出完整的
-    INCAR 内容。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 ErNaO3 生成一个结构弛豫(relaxation)计算的 VASP INCAR。需要同时优化离子位置和晶胞参数。Er 含 f 电子，需要自旋极化。将完整的
+    INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - relaxation
@@ -184,12 +171,28 @@ questions:
     oss_url: ''
     description: Task specification for relaxation INCAR generation.
   reference_answers:
-  - key: has_IBRION
-    value: IBRION = 1 or 2
-  - key: has_ISIF_3
-    value: ISIF = 3
-  - key: has_ISPIN_2
-    value: ISPIN = 2
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_003/reference_incar.txt
+      key_tags:
+      - AMIX
+      - BMIX
+      - IBRION
+      - ISIF
+      - ISMEAR
+      - ISPIN
+      - ISYM
+      - MAGMOM
+      - MAXMIX
+      - NSW
+      - POTIM
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_003/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -200,30 +203,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_IBRION
-    criterion: INCAR sets IBRION = 1 or 2 for ionic relaxation (quasi-Newton or CG).
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（AMIX, BMIX, IBRION, ISIF, ISMEAR, ISPIN 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISIF_3
-    criterion: INCAR sets ISIF = 3 for simultaneous cell and ion optimization.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISPIN_2
-    criterion: INCAR sets ISPIN = 2 for spin-polarized calculation (Er3+ has f electrons).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR is a valid relaxation INCAR with NSW > 0, reasonable EDIFF and EDIFFG, POTIM setting, and
-      MAGMOM for Er magnetic moments.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -244,10 +233,8 @@ questions:
     and band gap.
 
     '
-  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为金属有机框架(MOF) C30H22N4O10Zn2 生成一个 HSE06 杂化泛函静态计算的 VASP INCAR。需要精确的电子结构和带隙。
-    直接输出完整的 INCAR 内容。
-
-    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为金属有机框架(MOF) C30H22N4O10Zn2 生成一个 HSE06 杂化泛函静态计算的 VASP INCAR。需要精确的电子结构和带隙。
+    将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - hse06
@@ -262,12 +249,28 @@ questions:
     oss_url: ''
     description: Task specification for HSE06 INCAR generation.
   reference_answers:
-  - key: has_LHFCALC
-    value: LHFCALC = .TRUE.
-  - key: has_HFSCREEN
-    value: HFSCREEN = 0.2
-  - key: has_ALGO_All
-    value: ALGO = All
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_004/reference_incar.txt
+      key_tags:
+      - HFSCREEN
+      - ISMEAR
+      - ISYM
+      - IVDW
+      - LASPH
+      - LHFCALC
+      - NEDOS
+      - NSW
+      - VDW_A1
+      - VDW_A2
+      - VDW_S8
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_004/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -278,30 +281,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_LHFCALC
-    criterion: INCAR sets LHFCALC = .TRUE. to enable Hartree-Fock exchange.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（HFSCREEN, ISMEAR, ISYM, IVDW, LASPH, LHFCALC 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_HFSCREEN
-    criterion: INCAR sets HFSCREEN = 0.2 for HSE06 screening parameter.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_ALGO_All
-    criterion: INCAR sets ALGO = All (required for hybrid functionals in VASP).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR is a valid HSE06 INCAR with NSW=0, ISMEAR=0 for semiconductor, reasonable ENCUT (>=400), PREC=Accurate,
-      and no conflicting parameters.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -322,7 +311,7 @@ questions:
 
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为含稀土和过渡金属的氧化物 RbPmMo2O8 生成一个 DFT+U 计算的 VASP INCAR。需要对 Mo 的 d 轨道施加 Hubbard
-    U 校正。元素顺序为 Rb, Pm, Mo, O。体系为磁性体系。直接输出完整的 INCAR 内容。
+    U 校正。元素顺序为 Rb, Pm, Mo, O。体系为磁性体系。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - dft_plus_u
@@ -337,12 +326,28 @@ questions:
     oss_url: ''
     description: Task specification for DFT+U INCAR generation.
   reference_answers:
-  - key: has_LDAU
-    value: LDAU = .TRUE.
-  - key: has_LDAUTYPE
-    value: LDAUTYPE = 2
-  - key: has_ISPIN_2
-    value: ISPIN = 2
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_005/reference_incar.txt
+      key_tags:
+      - IBRION
+      - ISPIN
+      - ISYM
+      - LDAU
+      - LDAUJ
+      - LDAUL
+      - LDAUTYPE
+      - LDAUU
+      - LMAXMIX
+      - MAGMOM
+      - NSW
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_005/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -353,30 +358,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_LDAU
-    criterion: INCAR sets LDAU = .TRUE. to enable DFT+U.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（IBRION, ISPIN, ISYM, LDAU, LDAUJ, LDAUL 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_LDAUTYPE
-    criterion: INCAR sets LDAUTYPE = 2 (Dudarev approach).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISPIN_2
-    criterion: INCAR sets ISPIN = 2 for spin-polarized calculation.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR includes correct LDAUL, LDAUU, LDAUJ arrays matching element order (Rb, Pm, Mo, O) with U
-      applied to Mo d-orbitals (l=2), and reasonable ENCUT, EDIFF, MAGMOM settings.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -396,10 +387,8 @@ questions:
   intent: 'Generate VASP INCAR for SCAN metaGGA calculation of intermetallic Tm2ZnGa2. Tm has f electrons; spin-polarized.
 
     '
-  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为金属间化合物 Tm2ZnGa2 生成一个 SCAN metaGGA 泛函静态计算的 VASP INCAR。Tm 含 f 电子，需要自旋极化。 直接输出完整的
-    INCAR 内容。
-
-    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为金属间化合物 Tm2ZnGa2 生成一个 SCAN metaGGA 泛函静态计算的 VASP INCAR。Tm 含 f 电子，需要自旋极化。 将完整的
+    INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - metagga
@@ -414,12 +403,25 @@ questions:
     oss_url: ''
     description: Task specification for metaGGA SCAN INCAR generation.
   reference_answers:
-  - key: has_METAGGA
-    value: METAGGA = SCAN
-  - key: has_LASPH
-    value: LASPH = .TRUE.
-  - key: has_ISPIN_2
-    value: ISPIN = 2
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_006/reference_incar.txt
+      key_tags:
+      - IBRION
+      - ISPIN
+      - ISYM
+      - LASPH
+      - LMAXTAU
+      - MAGMOM
+      - METAGGA
+      - NSW
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_006/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -430,30 +432,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_METAGGA
-    criterion: INCAR sets METAGGA = SCAN to enable the SCAN metaGGA functional.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（IBRION, ISPIN, ISYM, LASPH, LMAXTAU, MAGMOM 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_LASPH
-    criterion: INCAR sets LASPH = .TRUE. for non-spherical contributions (recommended for metaGGA).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISPIN_2
-    criterion: INCAR sets ISPIN = 2 for spin-polarized calculation (Tm has f electrons).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR is a valid SCAN metaGGA INCAR with NSW=0, reasonable ENCUT (>=400), MAGMOM for Tm, and no
-      conflicting GGA/hybrid settings.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -474,10 +462,8 @@ questions:
     0.5 fs.
 
     '
-  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为 Heusler 合金 MnNaPm2 生成一个分子动力学(MD) 计算的 VASP INCAR。Mn 含磁性，需要自旋极化。MD 时间步长设为
-    0.5 fs。 直接输出完整的 INCAR 内容。
-
-    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 Heusler 合金 MnNaPm2 生成一个分子动力学(MD) 计算的 VASP INCAR。Mn 含磁性，需要自旋极化。MD 时间步长设为
+    0.5 fs。 将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - molecular_dynamics
@@ -492,12 +478,31 @@ questions:
     oss_url: ''
     description: Task specification for MD INCAR generation.
   reference_answers:
-  - key: has_IBRION_0
-    value: IBRION = 0
-  - key: has_POTIM
-    value: POTIM = 0.5
-  - key: has_ISPIN_2
-    value: ISPIN = 2
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_007/reference_incar.txt
+      key_tags:
+      - AMIX
+      - BMIX
+      - IBRION
+      - ISIF
+      - ISMEAR
+      - ISPIN
+      - ISYM
+      - MAGMOM
+      - MAXMIX
+      - NSW
+      - POTIM
+      - SMASS
+      - TEBEG
+      - TEEND
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_007/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -508,30 +513,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_IBRION_0
-    criterion: INCAR sets IBRION = 0 for molecular dynamics.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（AMIX, BMIX, IBRION, ISIF, ISMEAR, ISPIN 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_POTIM
-    criterion: INCAR sets POTIM = 0.5 (time step in fs).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISPIN_2
-    criterion: INCAR sets ISPIN = 2 for spin-polarized MD (Mn is magnetic).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR is a valid MD INCAR with SMASS or MDALGO/TEBEG for thermostat, NSW >= 1000 for adequate MD
-      steps, ISIF=2 for NVT or ISIF=3 for NpT, ISYM=0 (required for MD), ISMEAR=1 or 0 (NEVER -5 for MD), and MAGMOM for Mn.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -552,8 +543,8 @@ questions:
     displacement 0.015 A.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 BaZrO3 生成一个弹性常数计算的 VASP INCAR。使用有限差分法计算弹性张量，位移幅度 0.015 A。直接输出完整的 INCAR
-    内容。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 BaZrO3 生成一个弹性常数计算的 VASP INCAR。使用有限差分法计算弹性张量，位移幅度 0.015 A。将完整的 INCAR 写入当前目录下的
+    `INCAR` 文件。
   tags:
   - incar_generation
   - elastic_constants
@@ -568,12 +559,25 @@ questions:
     oss_url: ''
     description: Task specification for elastic constants INCAR generation.
   reference_answers:
-  - key: has_IBRION_6
-    value: IBRION = 6
-  - key: has_ISIF_3
-    value: ISIF = 3
-  - key: has_NFREE_2
-    value: NFREE = 2
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_008/reference_incar.txt
+      key_tags:
+      - EDIFFG
+      - IBRION
+      - ISIF
+      - ISMEAR
+      - ISPIN
+      - NFREE
+      - NSW
+      - POTIM
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_008/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -584,30 +588,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_IBRION_6
-    criterion: INCAR sets IBRION = 6 for finite-difference elastic constants.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（EDIFFG, IBRION, ISIF, ISMEAR, ISPIN, NFREE 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISIF_3
-    criterion: INCAR sets ISIF = 3 for stress-strain relationship calculation.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_NFREE_2
-    criterion: INCAR sets NFREE = 2 for central differences (positive and negative displacements).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR has POTIM around 0.015 for displacement, reasonable EDIFF, appropriate ISMEAR for insulator
-      (0 or -5), and ENCUT >= 400.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -628,10 +618,8 @@ questions:
     charges.
 
     '
-  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为有机金属氧化物 C8H12HfO4 生成一个 DFPT(密度泛函微扰理论) 介电常数计算的 VASP INCAR。需要计算介电张量和 Born
-    有效电荷。 直接输出完整的 INCAR 内容。
-
-    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为有机金属氧化物 C8H12HfO4 生成一个 DFPT(密度泛函微扰理论) 介电常数计算的 VASP INCAR。需要计算介电张量和 Born 有效电荷。
+    将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - dfpt
@@ -646,12 +634,25 @@ questions:
     oss_url: ''
     description: Task specification for DFPT dielectric INCAR generation.
   reference_answers:
-  - key: has_IBRION_8
-    value: IBRION = 8
-  - key: has_LEPSILON
-    value: LEPSILON = .TRUE.
-  - key: has_ISMEAR_0
-    value: ISMEAR = 0
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_009/reference_incar.txt
+      key_tags:
+      - AGGAC
+      - IBRION
+      - ISMEAR
+      - LEPSILON
+      - LPEAD
+      - LUSE_VDW
+      - NSW
+      - ZAB_VDW
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_009/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -662,30 +663,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_IBRION_8
-    criterion: INCAR sets IBRION = 8 for DFPT (density functional perturbation theory).
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（AGGAC, IBRION, ISMEAR, LEPSILON, LPEAD, LUSE_VDW 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_LEPSILON
-    criterion: INCAR sets LEPSILON = .TRUE. to compute dielectric tensor and Born charges.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISMEAR_0
-    criterion: INCAR uses ISMEAR = 0 (Gaussian smearing) appropriate for insulator/semiconductor.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR is a valid DFPT INCAR with reasonable EDIFF (<=1e-4 for DFPT), PREC=Accurate, appropriate
-      ENCUT, and no conflicting relaxation settings.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -705,10 +692,8 @@ questions:
   intent: 'Generate VASP INCAR for spin-orbit coupling calculation of heavy-element halide Br6H6Pb2S2. Pb SOC is significant.
 
     '
-  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为含重元素 Pb 的卤化物 Br6H6Pb2S2 生成一个 自旋轨道耦合(SOC)计算的 VASP INCAR。Pb 的 SOC 效应显著，需要高精度设置。
-    直接输出完整的 INCAR 内容。
-
-    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为含重元素 Pb 的卤化物 Br6H6Pb2S2 生成一个 自旋轨道耦合(SOC)计算的 VASP INCAR。Pb 的 SOC 效应显著，需要高精度设置。
+    将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - soc
@@ -723,12 +708,30 @@ questions:
     oss_url: ''
     description: Task specification for SOC INCAR generation.
   reference_answers:
-  - key: has_LSORBIT
-    value: LSORBIT = .TRUE.
-  - key: has_ISPIN_2
-    value: ISPIN = 2
-  - key: has_PREC
-    value: PREC = Accurate
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_010/reference_incar.txt
+      key_tags:
+      - GGA_COMPAT
+      - IBRION
+      - IDIPOL
+      - ISIF
+      - ISMEAR
+      - ISYM
+      - LDIPOL
+      - LMAXMIX
+      - LSORBIT
+      - MAGMOM
+      - NBANDS
+      - NSW
+      - POTIM
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_010/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -739,30 +742,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_LSORBIT
-    criterion: INCAR sets LSORBIT = .TRUE. to enable spin-orbit coupling.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（GGA_COMPAT, IBRION, IDIPOL, ISIF, ISMEAR, ISYM 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISPIN_2
-    criterion: INCAR sets ISPIN = 2 for spin-polarized calculation (required for SOC).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_PREC
-    criterion: INCAR uses PREC = Accurate (or ACC) for high-precision SOC calculation.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR is a valid SOC INCAR with LMAXMIX >= 4 for d/f elements, ISMEAR = 0 for semiconductor, appropriate
-      MAGMOM with 3-component spinor format or standard format, and sufficient NBANDS.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -782,10 +771,8 @@ questions:
   intent: 'Generate VASP INCAR for density of states calculation of ternary intermetallic CdOs3Pt. Magnetic metal; needs PDOS.
 
     '
-  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为三元金属间化合物 CdOs3Pt 生成一个 高精度态密度(DOS)计算的 VASP INCAR。体系为磁性金属，需要投影态密度(PDOS)。 直接输出完整的
-    INCAR 内容。
-
-    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元金属间化合物 CdOs3Pt 生成一个 高精度态密度(DOS)计算的 VASP INCAR。体系为磁性金属，需要投影态密度(PDOS)。 将完整的
+    INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - dos
@@ -800,12 +787,23 @@ questions:
     oss_url: ''
     description: Task specification for DOS INCAR generation.
   reference_answers:
-  - key: has_LORBIT_11
-    value: LORBIT = 11
-  - key: has_ISMEAR
-    value: ISMEAR = -5
-  - key: has_NSW_0
-    value: NSW = 0
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_011/reference_incar.txt
+      key_tags:
+      - IBRION
+      - ISMEAR
+      - ISPIN
+      - ISYM
+      - MAGMOM
+      - NSW
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_011/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -816,30 +814,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_LORBIT_11
-    criterion: INCAR sets LORBIT = 11 for projected density of states output.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（IBRION, ISMEAR, ISPIN, ISYM, MAGMOM, NSW 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISMEAR
-    criterion: INCAR uses ISMEAR = -5 (tetrahedron method) for accurate DOS integration.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_NSW_0
-    criterion: INCAR sets NSW = 0 for static DOS calculation.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR has tight EDIFF (<=1e-6), ISPIN=2 for magnetic system, NEDOS for DOS resolution, IBRION=-1,
-      and no conflicting relaxation parameters.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -861,7 +845,7 @@ questions:
 
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。Fe
-    含磁性，需要固定总磁矩。直接输出完整的 INCAR 内容。
+    含磁性，需要固定总磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - neb
@@ -877,12 +861,33 @@ questions:
     oss_url: ''
     description: Task specification for NEB INCAR generation.
   reference_answers:
-  - key: has_IBRION
-    value: IBRION = 1 or 3
-  - key: has_LHFCALC
-    value: LHFCALC = .TRUE.
-  - key: has_ISPIN_2
-    value: ISPIN = 2
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_012/reference_incar.txt
+      key_tags:
+      - EDIFFG
+      - HFSCREEN
+      - IBRION
+      - ISIF
+      - ISMEAR
+      - ISPIN
+      - ISYM
+      - LASPH
+      - LDAUPRINT
+      - LHFCALC
+      - LMAXMIX
+      - MAGMOM
+      - NFREE
+      - NSW
+      - NUPDOWN
+      - POTIM
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_012/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -893,30 +898,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_IBRION
-    criterion: INCAR sets IBRION = 1 or 3 for NEB path optimization.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（EDIFFG, HFSCREEN, IBRION, ISIF, ISMEAR, ISPIN 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_LHFCALC
-    criterion: INCAR sets LHFCALC = .TRUE. and HFSCREEN = 0.2 for HSE06.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISPIN_2
-    criterion: INCAR sets ISPIN = 2 for spin-polarized calculation (Fe magnetic).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR is a valid NEB+HSE06 INCAR with NSW >> 0, ISIF=2, IMAGES or SPRING tag, ALGO=Conjugate or
-      Damped, EDIFFG for force convergence, MAGMOM for Fe, and NUPDOWN for fixed magnetization.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -937,8 +928,8 @@ questions:
     metallic.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元碳化物表面 (Ta,V)2C (C33O2Ta16V16) 生成一个表面弛豫计算的 VASP INCAR。表面计算需要固定晶胞形状，体系为金属。直接输出完整的
-    INCAR 内容。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元碳化物表面 (Ta,V)2C (C33O2Ta16V16) 生成一个表面弛豫计算的 VASP INCAR。表面计算需要固定晶胞形状，体系为金属。将完整的
+    INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - surface
@@ -954,12 +945,25 @@ questions:
     oss_url: ''
     description: Task specification for surface relaxation INCAR generation.
   reference_answers:
-  - key: has_ISIF_2
-    value: ISIF = 2
-  - key: has_IBRION
-    value: IBRION = 2
-  - key: has_ISMEAR
-    value: ISMEAR = 1 (metallic MP smearing)
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_013/reference_incar.txt
+      key_tags:
+      - EDIFFG
+      - IALGO
+      - IBRION
+      - INIWAV
+      - ISIF
+      - ISMEAR
+      - NSW
+      - POTIM
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_013/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -970,31 +974,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_ISIF_2
-    criterion: INCAR sets ISIF = 2 to fix cell shape/volume for surface calculation.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（EDIFFG, IALGO, IBRION, INIWAV, ISIF, ISMEAR 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_IBRION
-    criterion: INCAR sets IBRION = 2 (CG) or 1 (quasi-Newton) for ionic relaxation.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISMEAR
-    criterion: INCAR uses ISMEAR = 1 or 2 (Methfessel-Paxton) appropriate for metallic surface relaxation. ISMEAR=-5 is NOT
-      acceptable for relaxation.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR has NSW > 0, EDIFFG for force convergence (e.g. -0.01), reasonable ENCUT (>=400), EDIFF, LREAL=Auto
-      for large slab, and no conflicting cell optimization.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -1014,8 +1003,8 @@ questions:
   intent: 'Generate VASP INCAR for static calculation of hydrogen-passivated SiO2 slab H16O24Si12. Insulator, fixed cell (ISIF=2).
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为氢钝化的 SiO2 slab 模型 H16O24Si12 生成一个静态计算的 VASP INCAR。体系是绝缘体 slab，需要固定晶胞形状。直接输出完整的
-    INCAR 内容。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为氢钝化的 SiO2 slab 模型 H16O24Si12 生成一个静态计算的 VASP INCAR。体系是绝缘体 slab，需要固定晶胞形状。将完整的
+    INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - slab
@@ -1031,12 +1020,28 @@ questions:
     oss_url: ''
     description: Task specification for slab INCAR generation.
   reference_answers:
-  - key: has_ISIF_2
-    value: ISIF = 2
-  - key: has_ISMEAR_0
-    value: ISMEAR = 0
-  - key: has_NSW_0
-    value: NSW = 0
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_014/reference_incar.txt
+      key_tags:
+      - EDIFFG
+      - IBRION
+      - ISIF
+      - ISMEAR
+      - ISPIN
+      - ISYM
+      - IVDW
+      - NELMDL
+      - NFREE
+      - NSW
+      - POTIM
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_014/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -1047,30 +1052,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_ISIF_2
-    criterion: INCAR sets ISIF = 2 to fix cell for slab calculation.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（EDIFFG, IBRION, ISIF, ISMEAR, ISPIN, ISYM 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISMEAR_0
-    criterion: INCAR uses ISMEAR = 0 (Gaussian smearing) appropriate for insulator.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_NSW_0
-    criterion: INCAR sets NSW = 0 or IBRION = -1 for static calculation.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR has PREC=Accurate, reasonable ENCUT (>=400), tight EDIFF, LREAL=Auto for large slab, small
-      SIGMA for insulator, and no spin polarization (ISPIN=1 for SiO2).
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -1092,7 +1083,7 @@ questions:
 
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 BiSI 中 I 替位 S 缺陷体系生成一个 HSE06+SOC 缺陷计算的 VASP INCAR。含重元素 Bi 需要自旋轨道耦合，缺陷计算需要固定晶胞形状，使用
-    HSE06 获取准确缺陷能级。需要离子弛豫。直接输出完整的 INCAR 内容。
+    HSE06 获取准确缺陷能级。需要离子弛豫。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - defect
@@ -1108,12 +1099,25 @@ questions:
     oss_url: ''
     description: Task specification for defect INCAR generation.
   reference_answers:
-  - key: has_ISIF_2
-    value: ISIF = 2
-  - key: has_LHFCALC
-    value: LHFCALC = .TRUE.
-  - key: has_LSORBIT
-    value: LSORBIT = .TRUE.
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_015/reference_incar.txt
+      key_tags:
+      - IBRION
+      - ISMEAR
+      - ISPIN
+      - LMAXMIX
+      - LSORBIT
+      - MAGMOM
+      - NSW
+      - SAXIS
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_015/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -1124,30 +1128,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_ISIF_2
-    criterion: INCAR sets ISIF = 2 to fix cell volume/shape for defect supercell.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（IBRION, ISMEAR, ISPIN, LMAXMIX, LSORBIT, MAGMOM 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_LHFCALC
-    criterion: INCAR sets LHFCALC = .TRUE. and HFSCREEN = 0.2 for HSE06.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_LSORBIT
-    criterion: INCAR sets LSORBIT = .TRUE. for spin-orbit coupling (Bi is heavy element).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR has IBRION=2 for ion relaxation, ISPIN=2, ALGO=All for HSE, EDIFFG for force convergence,
-      PREC=Accurate, and reasonable ENCUT.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -1168,10 +1158,8 @@ questions:
     for subsequent GW.
 
     '
-  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为稀土硒化物 DySe 生成一个 GW 计算前驱步骤的 SCF VASP INCAR。Dy 含 f 电子(MAGMOM~7)，需要保存高质量波函数供后续
-    GW 使用。 直接输出完整的 INCAR 内容。
-
-    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为稀土硒化物 DySe 生成一个 GW 计算前驱步骤的 SCF VASP INCAR。Dy 含 f 电子(MAGMOM~7)，需要保存高质量波函数供后续
+    GW 使用。 将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - gw
@@ -1186,12 +1174,22 @@ questions:
     oss_url: ''
     description: Task specification for GW precursor SCF INCAR generation.
   reference_answers:
-  - key: has_NSW_0
-    value: NSW = 0
-  - key: has_ISPIN_2
-    value: ISPIN = 2
-  - key: has_LWAVE
-    value: LWAVE = .TRUE.
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_016/reference_incar.txt
+      key_tags:
+      - ISMEAR
+      - ISPIN
+      - LHVAR
+      - MAGMOM
+      - NSW
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_016/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -1202,30 +1200,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_NSW_0
-    criterion: INCAR sets NSW = 0 for static SCF (GW precursor).
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（ISMEAR, ISPIN, LHVAR, MAGMOM, NSW 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISPIN_2
-    criterion: INCAR sets ISPIN = 2 for spin-polarized calculation (Dy has f electrons).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_LWAVE
-    criterion: INCAR sets LWAVE = .TRUE. to save wavefunctions for subsequent GW step.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR saves charge density (LCHARG=.TRUE.) for GW, has MAGMOM for Dy (f7 ~7.0), ENCUT >= 400, ISMEAR
-      = -5, and LORBIT=11.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -1245,8 +1229,8 @@ questions:
   intent: 'Generate VASP INCAR for high-precision structure optimization of Al as BSE precursor. PREC=Accurate, ISIF=3.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为简单金属 Al (FCC) 生成一个高精度结构优化的 VASP INCAR，作为后续光学计算的前驱步骤。需要高精度设置和完全优化晶胞参数。直接输出完整的
-    INCAR 内容。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为简单金属 Al (FCC) 生成一个高精度结构优化的 VASP INCAR，作为后续光学计算的前驱步骤。需要高精度设置和完全优化晶胞参数。将完整的
+    INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - bse_precursor
@@ -1261,12 +1245,28 @@ questions:
     oss_url: ''
     description: Task specification for BSE precursor relax INCAR generation.
   reference_answers:
-  - key: has_IBRION
-    value: IBRION = 1 or 2
-  - key: has_ISIF_3
-    value: ISIF = 3
-  - key: has_ISMEAR
-    value: ISMEAR = 1 (metal MP)
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_017/reference_incar.txt
+      key_tags:
+      - EDIFFG
+      - IBRION
+      - ISIF
+      - ISMEAR
+      - ISPIN
+      - ISYM
+      - KSPACING
+      - LMAXMIX
+      - NELMDL
+      - NSW
+      - POTIM
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_017/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -1277,30 +1277,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_IBRION
-    criterion: INCAR sets IBRION = 1 (quasi-Newton) or 2 (CG) for structure optimization.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（EDIFFG, IBRION, ISIF, ISMEAR, ISPIN, ISYM 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISIF_3
-    criterion: INCAR sets ISIF = 3 for full cell+ion optimization.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISMEAR
-    criterion: INCAR uses ISMEAR = 1 (Methfessel-Paxton) or 2 appropriate for metals.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR has PREC=Accurate, tight EDIFF (<=1e-6), EDIFFG for force convergence, NSW > 0, ENCUT >= 400,
-      and ISPIN=1 (Al is non-magnetic).
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -1321,8 +1307,8 @@ questions:
     with MAGMOM.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为双钙钛矿 Ca4TaOs 生成一个磁性自洽(SCF)计算的 VASP INCAR。体系含 5d 过渡金属(Ta, Os)，需要自旋极化和适当的初始磁矩。直接输出完整的
-    INCAR 内容。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为双钙钛矿 Ca4TaOs 生成一个磁性自洽(SCF)计算的 VASP INCAR。体系含 5d 过渡金属(Ta, Os)，需要自旋极化和适当的初始磁矩。将完整的
+    INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - magnetic
@@ -1337,12 +1323,22 @@ questions:
     oss_url: ''
     description: Task specification for magnetic SCF INCAR generation.
   reference_answers:
-  - key: has_ISPIN_2
-    value: ISPIN = 2
-  - key: has_MAGMOM
-    value: MAGMOM with initial moments
-  - key: has_NSW_0
-    value: NSW = 0
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_018/reference_incar.txt
+      key_tags:
+      - IBRION
+      - ISPIN
+      - ISYM
+      - MAGMOM
+      - NSW
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_018/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -1353,30 +1349,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_ISPIN_2
-    criterion: INCAR sets ISPIN = 2 for spin-polarized magnetic calculation.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（IBRION, ISPIN, ISYM, MAGMOM, NSW 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_MAGMOM
-    criterion: INCAR includes MAGMOM with initial magnetic moments for all atoms.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_NSW_0
-    criterion: INCAR sets NSW = 0 for static SCF.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR has LORBIT=11 for projected DOS, tight EDIFF (<= 1e-6), reasonable ENCUT (>=400), and appropriate
-      ALGO.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -1397,8 +1379,8 @@ questions:
     (ISPIN=1), wide-gap insulator.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为硼酸铯 B12Cs4O20 生成一个非磁性绝缘体的静态 SCF 计算 VASP INCAR。体系为非磁性，宽带隙绝缘体。直接输出完整的 INCAR
-    内容。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为硼酸铯 B12Cs4O20 生成一个非磁性绝缘体的静态 SCF 计算 VASP INCAR。体系为非磁性，宽带隙绝缘体。将完整的 INCAR 写入当前目录下的
+    `INCAR` 文件。
   tags:
   - incar_generation
   - scf
@@ -1413,12 +1395,21 @@ questions:
     oss_url: ''
     description: Task specification for non-magnetic SCF INCAR generation.
   reference_answers:
-  - key: has_ISPIN_1
-    value: ISPIN = 1 or omitted
-  - key: has_ISMEAR
-    value: ISMEAR = 0 or -5
-  - key: has_NSW_0
-    value: NSW = 0
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_019/reference_incar.txt
+      key_tags:
+      - ISMEAR
+      - ISPIN
+      - LHVAR
+      - NSW
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_019/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -1429,30 +1420,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_ISPIN_1
-    criterion: INCAR sets ISPIN = 1 (non-magnetic) or omits ISPIN (defaults to 1).
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（ISMEAR, ISPIN, LHVAR, NSW 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISMEAR
-    criterion: INCAR uses ISMEAR = -5 (tetrahedron) or 0 (Gaussian) for insulator.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_NSW_0
-    criterion: INCAR sets NSW = 0 for static SCF.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR has reasonable ENCUT (>=400), ALGO=FAST or Normal, LORBIT=11, and no unnecessary spin or relaxation
-      settings.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency
@@ -1473,8 +1450,8 @@ questions:
     PDOS (LORBIT=11).
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元硒化物 Na3AlSe 生成一个磁性金属体系的静态 SCF 计算 VASP INCAR。体系为磁性金属，需要投影态密度。直接输出完整的 INCAR
-    内容。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元硒化物 Na3AlSe 生成一个磁性金属体系的静态 SCF 计算 VASP INCAR。体系为磁性金属，需要投影态密度。将完整的 INCAR
+    写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - magnetic_metal
@@ -1489,12 +1466,23 @@ questions:
     oss_url: ''
     description: Task specification for magnetic metal SCF INCAR generation.
   reference_answers:
-  - key: has_ISPIN_2
-    value: ISPIN = 2
-  - key: has_ISMEAR
-    value: ISMEAR = -5 or positive (metallic)
-  - key: has_LORBIT
-    value: LORBIT = 11
+  - key: key_params_match
+    value:
+      ref_incar: data/IG_incar_020/reference_incar.txt
+      key_tags:
+      - IBRION
+      - ISMEAR
+      - ISPIN
+      - ISYM
+      - MAGMOM
+      - NSW
+      mode: key_only
+      pass_threshold: 0.6
+  - key: full_incar_quality
+    value:
+      ref_incar: data/IG_incar_020/reference_incar.txt
+      mode: full
+      pass_threshold: 0.5
   - key: required_fields
     value:
     - INCAR_content
@@ -1505,30 +1493,16 @@ questions:
     value:
       max: 50000
   scoring_checklist:
-  - id: has_ISPIN_2
-    criterion: INCAR sets ISPIN = 2 for spin-polarized magnetic calculation.
+  - id: key_params_match
+    criterion: Agent INCAR 的核心参数（IBRION, ISMEAR, ISPIN, ISYM, MAGMOM, NSW 等）与 reference INCAR 一致。
     axis: correctness
-    verify: llm_binary_judge
-  - id: has_ISMEAR
-    criterion: INCAR uses ISMEAR = -5 (tetrahedron) or positive integer for metallic system.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: has_LORBIT
-    criterion: INCAR sets LORBIT = 11 for projected density of states.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_quality
-    criterion: 'Generated INCAR has NSW=0, tight EDIFF (<= 1e-6), MAGMOM for magnetic atoms, reasonable ENCUT (>=400), and
-      IBRION=-1.
-
-      '
+    verify: incar_param_compare
+    weight: 3.0
+  - id: full_incar_quality
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
     axis: grounding
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element
-      order) rather than hallucinated.
-    axis: grounding
-    verify: llm_binary_judge
+    verify: incar_param_compare
+    weight: 2.0
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries, or irrelevant exploration.
     axis: efficiency

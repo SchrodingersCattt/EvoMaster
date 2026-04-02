@@ -50,7 +50,10 @@ def _load_summary_file(summary_file: Path) -> dict[str, Any]:
 def _exit_code_from_summary(summary: dict[str, Any]) -> int:
     if summary.get("parse_error"):
         return 1
-    if summary.get("reason") == "natural":
+    # Accept both "natural" and "completed" as successful termination
+    status = summary.get("status", "")
+    reason = summary.get("reason", "")
+    if reason == "natural" or status == "completed":
         return 0
     return 1
 

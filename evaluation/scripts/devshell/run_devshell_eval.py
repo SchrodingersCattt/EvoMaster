@@ -610,6 +610,8 @@ def main() -> int:
                 artifact=artifact,
                 eval_tooling=eval_tooling_snapshot,
                 events_timeline=events_tl,
+                question_capability=getattr(question, "capability", None),
+                question_domain=getattr(question, "domain", None),
             )
             if pending_only:
                 pending_dir = run_dir / "pending_ingest"

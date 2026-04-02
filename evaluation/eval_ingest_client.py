@@ -187,6 +187,22 @@ def extract_total_tokens(usage: Any) -> int | None:
             return int(pt) + int(ct)
         except (TypeError, ValueError):
             pass
+    # Anthropic API key names (used by Claude Code CLI)
+    it = usage.get("input_tokens")
+    ot = usage.get("output_tokens")
+    if it is not None and ot is not None:
+        try:
+            val = int(it) + int(ot)
+            # Add cache_creation_input_tokens if present (real new input)
+            cache_creation = usage.get("cache_creation_input_tokens")
+            if cache_creation is not None:
+                try:
+                    val += int(cache_creation)
+                except (TypeError, ValueError):
+                    pass
+            return val
+        except (TypeError, ValueError):
+            pass
     return None
 
 
@@ -469,6 +485,8 @@ def build_ingest_item(
     artifact: dict[str, Any] | None = None,
     eval_tooling: dict[str, Any] | None = None,
     events_timeline: list[str] | None = None,
+    question_capability: str | None = None,
+    question_domain: str | None = None,
 ) -> dict[str, Any]:
     usage = summary.get("usage") if isinstance(summary, dict) else None
     tokens = extract_total_tokens(usage)
@@ -504,6 +522,10 @@ def build_ingest_item(
         extra["eval_tooling"] = eval_tooling
     if events_timeline:
         extra["events_timeline"] = list(events_timeline)
+    if question_capability:
+        extra["question_capability"] = question_capability
+    if question_domain:
+        extra["question_domain"] = question_domain
 
     item: dict[str, Any] = {
         "question_id": question_id,
