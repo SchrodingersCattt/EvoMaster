@@ -23,6 +23,7 @@ from typing import Any
 
 from matmaster.sessions.sftp_pool import SFTPPool
 from matmaster.types.session import SSHSessionConfig
+from matmaster.types.topology import SessionCapabilities
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,17 @@ class SSHSession:
     def is_open(self) -> bool:
         """Whether the SSH session is currently open."""
         return self._is_open
+
+    @property
+    def capabilities(self) -> SessionCapabilities:
+        """SSH session capabilities for ToolRunner/CapabilityPolicy."""
+        return SessionCapabilities(
+            shell_persistence="stateless",
+            shell_input=False,
+            file_ops="sftp",
+            upload_support=True,
+            exec_cancel=True,
+        )
 
     # ------------------------------------------------------------------
     # Session Protocol: open / close

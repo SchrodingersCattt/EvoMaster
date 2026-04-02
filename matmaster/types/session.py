@@ -116,6 +116,7 @@ class Session(Protocol):
         """Check if path is a regular file."""
         ...
 
-    # Tool Runtime v2: capabilities property (Phase 34 activates, Phase 32 defines type only)
-    # Current LocalSession/SSHSession do not implement this property yet.
-    # When activated, change to: @property \n def capabilities(self) -> SessionCapabilities: ...
+    @property
+    def capabilities(self) -> SessionCapabilities:
+        """Report runtime capabilities exposed by this session implementation."""
+        ...

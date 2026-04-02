@@ -12,6 +12,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from matmaster.types.topology import SessionCapabilities
+
 
 class LocalSession:
     """Local session executing commands via subprocess.
@@ -32,6 +34,17 @@ class LocalSession:
     def is_open(self) -> bool:
         """Whether the session has been opened."""
         return self._is_open
+
+    @property
+    def capabilities(self) -> SessionCapabilities:
+        """Local session capabilities for ToolRunner/CapabilityPolicy."""
+        return SessionCapabilities(
+            shell_persistence="stateless",
+            shell_input=False,
+            file_ops="native",
+            upload_support=False,
+            exec_cancel=True,
+        )
 
     def open(self) -> None:
         """Mark session as open."""
