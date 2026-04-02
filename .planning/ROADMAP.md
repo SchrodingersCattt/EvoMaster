@@ -107,13 +107,13 @@ Plans:
   2. ToolScheduler 对 exclusive 资源实现互斥调度，对 shared_read 资源实现并发调度，对 counted 资源实现信号量控制
   3. StructuralValidation 对 args_schema 校验失败 / plane 未启用 / session_capabilities 不匹配的工具调用返回 deny 决策
   4. CapabilityPolicy 对 effect_level 超限或 capability 不匹配的工具调用返回 deny 决策且附带 guidance
-**Plans:** 5 plans
+**Plans:** 4/5 plans executed
 
 Plans:
-- [ ] 33-01-PLAN.md — StructuralValidation + CapabilityPolicy 约束层
-- [ ] 33-02-PLAN.md — ToolScheduler 资源调度器
-- [ ] 33-03-PLAN.md — FullToolRunner 完整执行链（不含 Exp 激活，激活移至 Phase 34 ESIN-04）
-- [ ] 33-04-PLAN.md — effect_level 值统一修复（gap closure: VERIFICATION Gap 1+2）
+- [x] 33-01-PLAN.md — StructuralValidation + CapabilityPolicy 约束层
+- [x] 33-02-PLAN.md — ToolScheduler 资源调度器
+- [x] 33-03-PLAN.md — FullToolRunner 完整执行链（不含 Exp 激活，激活移至 Phase 34 ESIN-04）
+- [x] 33-04-PLAN.md — effect_level 值统一修复（gap closure: VERIFICATION Gap 1+2）
 - [ ] 33-05-PLAN.md — ToolCompiler + Session.capabilities（gap closure: advancement plan Wave A 补齐）
 
 ### Phase 34: Exp/Service 接入 + Hook 退役
@@ -194,7 +194,7 @@ Phases 32-36 execute in numeric order. Phase 34 depends on both 32 and 33. Phase
 | 30. 解耦审计与独立性证明 | v2.1 | 3/3 | Complete | 2026-04-01 |
 | 31. Tech Debt Cleanup | v2.1 | 2/2 | Complete | 2026-04-02 |
 | 32. Kernel Generator + Tool Runtime v2 核心骨架 | v2.2 | 3/3 | Complete    | 2026-04-02 |
-| 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 0/5 | In progress | - |
+| 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 4/5 | In Progress | - |
 | 34. Exp/Service 接入 + Hook 退役 | v2.2 | 0/? | Not started | - |
 | 35. 约束迁移 + ToolRegistry 降级 | v2.2 | 0/? | Not started | - |
 | 36. 去总线化 + 高级调度 | v2.2 | 0/? | Not started | - |
