@@ -503,7 +503,7 @@ class BinaryEvaluator:
         try:
             data = self._parse_json(reply.content or '')
         except ValueError:
-            return False, f'LLM response contained no JSON object'
+            return False, 'LLM response contained no JSON object'
         passed = bool(data.get('pass', False))
         reason = str(data.get('reason', '')).strip() or 'llm_binary_judge'
         return passed, reason
@@ -635,7 +635,9 @@ class BinaryEvaluator:
             )
 
         if ref.tool_name:
-            matches = [tc for tc in evidence.tool_calls if tc.tool_name == ref.tool_name]
+            matches = [
+                tc for tc in evidence.tool_calls if tc.tool_name == ref.tool_name
+            ]
             if not matches:
                 return False, f'tool {ref.tool_name!r} was never called'
         else:
@@ -845,7 +847,11 @@ class BinaryEvaluator:
         # If expected values provided, verify they match
         # Prefer value.expected_values (dict form); fall back to bare list ref.value
         expected_vals = sweep_cfg.get('expected_values') if sweep_cfg else None
-        if expected_vals is None and ref.value is not None and not isinstance(ref.value, dict):
+        if (
+            expected_vals is None
+            and ref.value is not None
+            and not isinstance(ref.value, dict)
+        ):
             expected_vals = ref.value if isinstance(ref.value, list) else [ref.value]
         if expected_vals is not None:
             expected_strs = {str(v) for v in expected_vals}
