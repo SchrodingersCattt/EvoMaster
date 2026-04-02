@@ -19,7 +19,7 @@ created: 2026-04-02
 |----------|-------|
 | **Framework** | pytest 7.x |
 | **Config file** | `pyproject.toml` |
-| **Quick run command** | `uv run pytest tests/unit/core/ -x -q --tb=short` |
+| **Quick run command** | `uv run pytest tests/matmaster/core/ -x -q --tb=short` |
 | **Full suite command** | `uv run pytest tests/ -x --tb=short` |
 | **Estimated runtime** | ~30 seconds |
 
@@ -27,7 +27,7 @@ created: 2026-04-02
 
 ## Sampling Rate
 
-- **After every task commit:** Run `uv run pytest tests/unit/core/ -x -q --tb=short`
+- **After every task commit:** Run `uv run pytest tests/matmaster/core/ -x -q --tb=short`
 - **After every plan wave:** Run `uv run pytest tests/ -x --tb=short`
 - **Before `/gsd:verify-work`:** Full suite must be green
 - **Max feedback latency:** 30 seconds
@@ -38,11 +38,11 @@ created: 2026-04-02
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 33-01-01 | 01 | 1 | TRUN-03 | unit | `uv run pytest tests/unit/core/test_structural_validation.py -x` | ❌ W0 | ⬜ pending |
-| 33-01-02 | 01 | 1 | TCON-01 | unit | `uv run pytest tests/unit/core/test_capability_policy.py -x` | ❌ W0 | ⬜ pending |
-| 33-02-01 | 02 | 1 | TRUN-04 | unit | `uv run pytest tests/unit/core/test_tool_scheduler.py -x` | ❌ W0 | ⬜ pending |
-| 33-03-01 | 03 | 2 | TRUN-03 | integration | `uv run pytest tests/unit/core/test_tool_runner_full.py -x` | ❌ W0 | ⬜ pending |
-| 33-03-02 | 03 | 2 | TCON-03 | integration | `uv run pytest tests/unit/core/test_tool_runner_full.py -x` | ❌ W0 | ⬜ pending |
+| 33-01-01 | 01 | 1 | TRUN-03 | unit | `uv run pytest tests/matmaster/core/test_structural_validation.py -x` | ❌ W0 | ⬜ pending |
+| 33-01-02 | 01 | 1 | TCON-01 | unit | `uv run pytest tests/matmaster/core/test_capability_policy.py -x` | ❌ W0 | ⬜ pending |
+| 33-02-01 | 02 | 1 | TRUN-04 | unit | `uv run pytest tests/matmaster/core/test_tool_scheduler.py -x` | ❌ W0 | ⬜ pending |
+| 33-03-01 | 03 | 2 | TRUN-03 | integration | `uv run pytest tests/matmaster/core/test_tool_runner_full.py -x` | ❌ W0 | ⬜ pending |
+| 33-03-02 | 03 | 2 | TCON-03 | integration | `uv run pytest tests/matmaster/core/test_tool_runner_full.py -x` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -50,10 +50,10 @@ created: 2026-04-02
 
 ## Wave 0 Requirements
 
-- [ ] `tests/unit/core/test_structural_validation.py` — stubs for TRUN-03 args_schema validation
-- [ ] `tests/unit/core/test_capability_policy.py` — stubs for TCON-01 effect_level / capability matching
-- [ ] `tests/unit/core/test_tool_scheduler.py` — stubs for TRUN-04 exclusive/shared_read/counted scheduling
-- [ ] `tests/unit/core/test_tool_runner_full.py` — stubs for TRUN-03/TCON-03 end-to-end execution chain
+- [ ] `tests/matmaster/core/test_structural_validation.py` — stubs for TRUN-03 args_schema validation
+- [ ] `tests/matmaster/core/test_capability_policy.py` — stubs for TCON-01 effect_level / capability matching
+- [ ] `tests/matmaster/core/test_tool_scheduler.py` — stubs for TRUN-04 exclusive/shared_read/counted scheduling
+- [ ] `tests/matmaster/core/test_tool_runner_full.py` — stubs for TRUN-03/TCON-03 end-to-end execution chain
 
 *Existing pytest infrastructure covers framework requirements.*
 
