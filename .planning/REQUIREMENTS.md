@@ -58,7 +58,7 @@
 
 ### Kernel Generator 补全
 
-- [ ] **KGEN-06**: `_run_items()` 在工具执行前 yield `ToolCallEvent`、工具执行后 yield `ToolResultEvent`（Phase 32 实现 gap：当前 tool 事件仅通过 Hook→Bus 路径产出，_run_items() 未 yield）
+- [x] **KGEN-06**: `_run_items()` 在工具执行前 yield `ToolCallEvent`、工具执行后 yield `ToolResultEvent`（Phase 32 实现 gap：当前 tool 事件仅通过 Hook→Bus 路径产出，_run_items() 未 yield）— 提前在 Phase 33 期间实现（commit 6f534fa6）
 
 ### Exp/Service 层接入
 
@@ -155,7 +155,7 @@
 | TRES-01 | Phase 32 | Complete (32-01) |
 | SPEC-01 | Phase 32 | Complete |
 | TDEF-01 | Phase 32 | Complete |
-| KGEN-06 | Phase 34 | Pending |
+| KGEN-06 | Phase 33 (early) | Complete |
 | ESIN-01 | Phase 34 | Pending |
 | ESIN-02 | Phase 34 | Pending |
 | ESIN-03 | Phase 34 | Pending |
