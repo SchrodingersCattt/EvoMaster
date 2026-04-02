@@ -628,15 +628,21 @@ class BinaryEvaluator:
     ) -> tuple[bool, str]:
         if evidence is None:
             return False, 'no EvidenceBundle provided'
-        if not ref.tool_name or not ref.tool_arg:
+        if not ref.tool_arg:
             return (
                 False,
-                'tool_observation_field requires tool_name and tool_arg in reference',
+                'tool_observation_field requires tool_arg in reference',
             )
 
-        matches = [tc for tc in evidence.tool_calls if tc.tool_name == ref.tool_name]
-        if not matches:
-            return False, f'tool {ref.tool_name!r} was never called'
+        if ref.tool_name:
+            matches = [tc for tc in evidence.tool_calls if tc.tool_name == ref.tool_name]
+            if not matches:
+                return False, f'tool {ref.tool_name!r} was never called'
+        else:
+            # tool-name-agnostic: search all tool calls for the field
+            matches = list(evidence.tool_calls)
+            if not matches:
+                return False, 'no tool calls recorded'
 
         for tc in matches:
             raw = tc.observation_excerpt.strip()
@@ -669,9 +675,10 @@ class BinaryEvaluator:
                 f'observation field {ref.tool_arg}={actual!r}, expected={expected!r}',
             )
 
+        tool_label = repr(ref.tool_name) if ref.tool_name else '<any>'
         return (
             False,
-            f'field {ref.tool_arg!r} not found in observation excerpt for tool {ref.tool_name!r}',
+            f'field {ref.tool_arg!r} not found in observation excerpt for tool {tool_label}',
         )
 
     @staticmethod
@@ -773,30 +780,45 @@ class BinaryEvaluator:
     ) -> tuple[bool, str]:
         """Verify that across multiple calls to the same tool, only one parameter varies.
 
-        Reference format:
-            - tool_name: the MCP tool being called (required)
-            - tool_arg: the parameter that should vary (required)
-            - value: list of expected varying values (optional; if provided, verifies values match)
+        Reference format (tool_name is optional; if absent, matches all calls):
+            - tool_name: the MCP tool being called (optional; also read from value.tool_name)
+            - tool_arg: the parameter that should vary (optional; also read from value.sweep_param)
+            - value: dict with sweep_param/expected_values keys, or a bare list of expected values
         """
-        if not ref.tool_name or not ref.tool_arg:
-            return False, 'batch_single_variable_sweep requires tool_name and tool_arg'
-
-        names = (
-            [n.strip() for n in ref.tool_name.split('|')]
-            if '|' in str(ref.tool_name)
-            else [str(ref.tool_name)]
-        )
-        matching_calls = [c for c in tool_calls if c.get('tool_name') in names]
-
-        if len(matching_calls) < 2:
+        sweep_cfg = ref.value if isinstance(ref.value, dict) else {}
+        tool_name = ref.tool_name or sweep_cfg.get('tool_name')
+        sweep_var = ref.tool_arg or sweep_cfg.get('sweep_param')
+        if not sweep_var:
             return (
                 False,
-                f'need at least 2 calls to {names} for sweep check, found {len(matching_calls)}',
+                'batch_single_variable_sweep requires sweep_param '
+                '(via tool_arg or value.sweep_param)',
+            )
+        sweep_var = str(sweep_var)
+
+        if tool_name:
+            names = (
+                [n.strip() for n in str(tool_name).split('|')]
+                if '|' in str(tool_name)
+                else [str(tool_name)]
+            )
+            matching_calls = [c for c in tool_calls if c.get('tool_name') in names]
+        else:
+            # tool-name-agnostic: match all calls that have the sweep parameter
+            names = None
+            matching_calls = [
+                c for c in tool_calls if sweep_var in (c.get('tool_args') or {})
+            ]
+
+        if len(matching_calls) < 2:
+            label = names if names else f'any call with {sweep_var!r}'
+            return (
+                False,
+                f'need at least 2 calls to {label} for sweep check, found {len(matching_calls)}',
             )
 
         # Extract all args from matching calls
         all_args = [call.get('tool_args', {}) for call in matching_calls]
-        sweep_var = str(ref.tool_arg)
 
         # Get all parameter names from first call
         if not all_args[0]:
@@ -821,8 +843,11 @@ class BinaryEvaluator:
             return False, f"sweep parameter '{sweep_var}' does not vary: {sweep_values}"
 
         # If expected values provided, verify they match
-        if ref.value is not None:
+        # Prefer value.expected_values (dict form); fall back to bare list ref.value
+        expected_vals = sweep_cfg.get('expected_values') if sweep_cfg else None
+        if expected_vals is None and ref.value is not None and not isinstance(ref.value, dict):
             expected_vals = ref.value if isinstance(ref.value, list) else [ref.value]
+        if expected_vals is not None:
             expected_strs = {str(v) for v in expected_vals}
             actual_strs = {str(v) for v in sweep_values}
             if actual_strs != expected_strs:
@@ -845,29 +870,48 @@ class BinaryEvaluator:
     ) -> tuple[bool, str]:
         """Verify that across multiple calls, specified parameters remain constant.
 
-        Reference format:
-            - tool_name: the MCP tool being called (required)
-            - tool_arg: comma-separated parameter names that must be constant (required)
-            - value: dict mapping param_name -> expected_value (optional)
+        Reference format (tool_name is optional; if absent, matches all calls):
+            - tool_name: the MCP tool being called (optional; also read from value.tool_name)
+            - tool_arg: comma-separated param names that must be constant
+                        (optional; also read from value.param_names)
+            - value: dict with param_names/expected_constant keys, or param_name->value map
         """
-        if not ref.tool_name or not ref.tool_arg:
-            return False, 'batch_tool_args_constant requires tool_name and tool_arg'
-
-        names = (
-            [n.strip() for n in ref.tool_name.split('|')]
-            if '|' in str(ref.tool_name)
-            else [str(ref.tool_name)]
-        )
-        matching_calls = [c for c in tool_calls if c.get('tool_name') in names]
-
-        if len(matching_calls) < 2:
+        val_cfg = ref.value if isinstance(ref.value, dict) else {}
+        tool_name = ref.tool_name or val_cfg.get('tool_name')
+        param_arg = ref.tool_arg or val_cfg.get('param_names')
+        if not param_arg:
             return (
                 False,
-                f'need at least 2 calls to {names}, found {len(matching_calls)}',
+                'batch_tool_args_constant requires param_names '
+                '(via tool_arg or value.param_names)',
             )
 
-        # Parse constant parameter names from tool_arg
-        param_names = [p.strip() for p in str(ref.tool_arg).split(',')]
+        # Parse constant parameter names
+        param_names = [p.strip() for p in str(param_arg).split(',')]
+
+        if tool_name:
+            names = (
+                [n.strip() for n in str(tool_name).split('|')]
+                if '|' in str(tool_name)
+                else [str(tool_name)]
+            )
+            matching_calls = [c for c in tool_calls if c.get('tool_name') in names]
+        else:
+            # tool-name-agnostic: match all calls that have any of the constant params
+            names = None
+            matching_calls = [
+                c
+                for c in tool_calls
+                if any(p in (c.get('tool_args') or {}) for p in param_names)
+            ]
+
+        if len(matching_calls) < 2:
+            label = names if names else f'any call with {param_names}'
+            return (
+                False,
+                f'need at least 2 calls to {label}, found {len(matching_calls)}',
+            )
+
         all_args = [call.get('tool_args', {}) for call in matching_calls]
 
         for param in param_names:
@@ -875,9 +919,14 @@ class BinaryEvaluator:
             if len({str(v) for v in values}) > 1:
                 return False, f"parameter '{param}' varies across calls: {values}"
 
-            # If expected value provided, verify it
-            if isinstance(ref.value, dict) and param in ref.value:
-                expected = ref.value[param]
+            # Determine expected value: check ref.value dict fields, then expected_constant
+            expected = None
+            if isinstance(ref.value, dict):
+                if param in ref.value:
+                    expected = ref.value[param]
+                elif 'expected_constant' in ref.value:
+                    expected = ref.value['expected_constant']
+            if expected is not None:
                 actual = values[0]
                 if str(actual) != str(expected):
                     return (

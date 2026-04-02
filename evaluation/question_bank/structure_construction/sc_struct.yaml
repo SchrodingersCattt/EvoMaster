@@ -158,9 +158,10 @@ questions:
     - atom_count_ratio_check
     - molecule_integrity_check
   - key: molcrys_slab_molecular_integrity
-    value: true
-    tool_name: mat_sg_build_surface_slab
-    tool_arg: molecule_intact
+    value:
+      unit_cell_atoms: 144
+      slab_atoms: 576
+      layers: 4
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -175,10 +176,10 @@ questions:
     axis: correctness
     verify: struct_file_atom_count
   - id: molcrys_slab_molecular_integrity
-    criterion: The slab-builder tool observation reports `molecule_intact=true`, i.e.
-      no molecules are cut by the slab cut.
+    criterion: No molecules are cut by the slab cut (verified via MolCrysKit
+      graph-based molecular integrity check on workspace CIF files).
     axis: correctness
-    verify: tool_observation_field
+    verify: molcrys_slab_molecular_integrity
   - id: required_fields
     criterion: Output includes structure file, unit-cell atom count, final atom count,
       an explicit 4x ratio check, and a molecule-integrity narrative consistent with

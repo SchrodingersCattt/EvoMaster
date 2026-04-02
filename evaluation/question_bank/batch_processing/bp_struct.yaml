@@ -31,7 +31,6 @@ questions:
   reference_answers:
   - key: vacuum_sweep_variable
     value:
-      tool_name: mat_sg_build_surface_slab
       sweep_param: vacuum_thickness_A
       expected_values:
       - 10.0
@@ -41,12 +40,10 @@ questions:
       - 30.0
   - key: locked_miller_index
     value:
-      tool_name: mat_sg_build_surface_slab
       param_names: miller_index
       expected_constant: '[1, 0, 0]'
   - key: locked_layer_count
     value:
-      tool_name: mat_sg_build_surface_slab
       param_names: number_of_layers
       expected_constant: 4
   - key: output_files_generated
@@ -70,7 +67,7 @@ questions:
     axis: correctness
     verify: batch_single_variable_sweep
   - id: locked_miller_index
-    criterion: Miller index [1,0,0] remains constant across all 5 mat_sg_build_surface_slab
+    criterion: Miller index [1,0,0] remains constant across all 5 slab-construction
       calls.
     axis: correctness
     verify: batch_tool_args_constant
