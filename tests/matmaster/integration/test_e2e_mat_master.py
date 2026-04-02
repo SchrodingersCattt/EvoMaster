@@ -299,7 +299,7 @@ class TestMatMasterRunAgentE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path('configs/mat_master/config.yaml')
+        mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
         with (
@@ -401,7 +401,7 @@ class TestMatMasterRunAgentE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path('configs/mat_master/config.yaml')
+        mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
         current_task_id = 'task-1'
@@ -513,7 +513,7 @@ class TestMatMasterRunAgentE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path('configs/mat_master/config.yaml')
+        mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
         # Pre-populate the PlaygroundManager cache so release() finds the mock
@@ -586,7 +586,7 @@ class TestMatMasterRunAgentE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path('configs/mat_master/config.yaml')
+        mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
         with (
@@ -718,7 +718,7 @@ class TestMatMasterRunAgentE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path('configs/mat_master/config.yaml')
+        mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
         reason = 'Bohrium 节点创建失败: no attach'
@@ -835,7 +835,7 @@ class TestMatMasterRunAgentE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path('configs/mat_master/config.yaml')
+        mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
         with (

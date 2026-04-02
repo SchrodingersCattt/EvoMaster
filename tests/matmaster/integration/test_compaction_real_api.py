@@ -58,7 +58,7 @@ def _build_provider(profile_key: str = "haiku"):
     from matmaster.config.loader import load_llm_config
     from matmaster.providers.llm_factory import build_provider
 
-    llm_config_path = _PROJECT_ROOT / "matmaster_config" / "llm_config.yaml"
+    llm_config_path = _PROJECT_ROOT / "config" / "llm_config.yaml"
     assert llm_config_path.exists(), f"Missing {llm_config_path}"
     llm_config = load_llm_config(llm_config_path)
     return build_provider(llm_config, llm_override=profile_key)

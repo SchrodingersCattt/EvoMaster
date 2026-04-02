@@ -115,7 +115,7 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
     mock_pg = MagicMock()
     if mock_pg_ctx is not None:
         mock_pg.prepare.return_value = mock_pg_ctx
-    mock_pg.config_path = Path('configs/mat_master/config.yaml')
+    mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
 
     return svc, mock_pg

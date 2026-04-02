@@ -499,7 +499,7 @@ class TestAgentRunServiceConfirmationRecovery:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.config_path = Path("config/config.yaml")
         mock_pg.config = SimpleNamespace()
         mock_pg.session = None
         return mock_pg, mock_pg_ctx

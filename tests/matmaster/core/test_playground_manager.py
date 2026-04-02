@@ -34,8 +34,8 @@ def _write_config(cfg_dir: Path, overrides: dict[str, Any] | None = None) -> Pat
 
 
 def _setup_project_root(tmp_path: Path, overrides: dict[str, Any] | None = None) -> Path:
-    """Create a fake project root with matmaster_config directory."""
-    mm_dir = tmp_path / "matmaster_config"
+    """Create a fake project root with config directory."""
+    mm_dir = tmp_path / "config"
     mm_dir.mkdir(parents=True)
     _write_config(mm_dir, overrides)
     return tmp_path
@@ -74,7 +74,7 @@ class TestValidateStartup:
 
     def test_warns_missing_agents_key(self, tmp_path: Path) -> None:
         root = tmp_path / "root"
-        cfg_dir = root / "matmaster_config"
+        cfg_dir = root / "config"
         cfg_dir.mkdir(parents=True)
         (cfg_dir / "config.yaml").write_text(yaml.dump({"session": {"type": "local"}}))
         mgr = PlaygroundManager(root)
@@ -178,7 +178,7 @@ class TestGetOrCreate:
     def test_missing_config_uses_defaults(self, tmp_path: Path) -> None:
         root = tmp_path / "no_config"
         root.mkdir()
-        (root / "matmaster_config").mkdir()
+        (root / "config").mkdir()
         # No config.yaml
         mgr = PlaygroundManager(root)
 
@@ -252,7 +252,7 @@ class TestHelpers:
     def test_load_raw_config_missing_file(self, tmp_path: Path) -> None:
         root = tmp_path / "empty"
         root.mkdir()
-        (root / "matmaster_config").mkdir()
+        (root / "config").mkdir()
         mgr = PlaygroundManager(root)
 
         raw = mgr._load_raw_config()

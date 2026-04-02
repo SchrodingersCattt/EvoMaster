@@ -10,9 +10,9 @@ import yaml
 
 @pytest.fixture
 def cleaned_config():
-    config_path = Path("matmaster_config/config.yaml")
+    config_path = Path("config/config.yaml")
     if not config_path.exists():
-        pytest.skip("matmaster_config/config.yaml not found")
+        pytest.skip("config/config.yaml not found")
     with open(config_path) as f:
         return yaml.safe_load(f)
 
@@ -63,20 +63,20 @@ class TestCleanedConfigYaml:
 
 
 class TestConfigDirRouting:
-    def test_config_dir_is_matmaster_config(self, tmp_path):
+    def test_config_dir_is_config(self, tmp_path):
         from matmaster.core.playground import PlaygroundManager
 
         mgr = PlaygroundManager(tmp_path)
-        assert mgr._config_dir == tmp_path / "matmaster_config"
+        assert mgr._config_dir == tmp_path / "config"
 
-    def test_get_or_create_uses_matmaster_config_dir(self, tmp_path):
-        """Verify get_or_create() reads config from matmaster_config/."""
+    def test_get_or_create_uses_config_dir(self, tmp_path):
+        """Verify get_or_create() reads config from config/."""
         import yaml
 
         from matmaster.core.playground import Playground, PlaygroundManager
 
         mgr = PlaygroundManager(tmp_path)
-        cfg_dir = tmp_path / "matmaster_config"
+        cfg_dir = tmp_path / "config"
         cfg_dir.mkdir()
         # Write a minimal config to parse
         (cfg_dir / "config.yaml").write_text(

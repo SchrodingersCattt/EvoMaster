@@ -348,7 +348,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
         run_meta={'run_dir': str(tmp_path), 'task_id': 'test-task'},
     )
     mock_pg.prepare.return_value = mock_pg_ctx
-    mock_pg.config_path = Path('matmaster_config/config.yaml')
+    mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
     captured_spec: dict[str, Any] = {}
     mock_bohrium_result = _make_no_attach_bohrium_result()
@@ -440,7 +440,7 @@ def test_execution_binding_before_build_runtime(
         run_meta={'run_dir': str(tmp_path), 'task_id': 'test-task'},
     )
     mock_pg.prepare.return_value = mock_pg_ctx
-    mock_pg.config_path = Path('matmaster_config/config.yaml')
+    mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
 
     mock_exec = MagicMock()
