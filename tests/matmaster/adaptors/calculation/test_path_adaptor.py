@@ -159,6 +159,46 @@ class TestResolveArgsCompat:
         assert "param" in result
         assert result["param"] == "value"
 
+    def test_resolve_args_uses_session_bohrium_credentials_when_env_missing(
+        self, monkeypatch
+    ):
+        """Session-attached Bohrium credentials should drive executor/storage injection."""
+        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
+        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
+        monkeypatch.delenv("BOHRIUM_USER_ID", raising=False)
+
+        from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
+        class FakeSession:
+            _bohrium_credentials = {
+                "access_key": "session-ak",
+                "project_id": 123,
+                "user_id": 456,
+                "user_no": "U001",
+            }
+
+        adaptor = CalculationPathAdaptor(
+            calculation_executors={
+                "mat_sg": {
+                    "sync_tools": ["build_molecule_structures_from_smiles"],
+                }
+            }
+        )
+        result = adaptor.resolve_args(
+            workspace_path="",
+            args={"smiles": "CCO"},
+            tool_name="mat_sg_build_molecule_structures_from_smiles",
+            server_name="mat_sg",
+            session=FakeSession(),
+        )
+
+        assert result["executor"]["env"]["BOHRIUM_ACCESS_KEY"] == "session-ak"
+        assert result["executor"]["env"]["BOHRIUM_PROJECT_ID"] == "123"
+        assert result["executor"]["env"]["BOHRIUM_USER_ID"] == "456"
+        assert result["executor"]["env"]["BOHRIUM_USER_NO"] == "U001"
+        assert result["storage"]["plugin"]["access_key"] == "session-ak"
+        assert result["storage"]["plugin"]["project_id"] == 123
+
     def test_resolve_executor_exists_for_injection(self):
         """Per CALC-02: _resolve_executor implements Bohrium executor injection."""
         from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor

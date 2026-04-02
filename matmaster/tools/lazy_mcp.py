@@ -75,6 +75,7 @@ class LazyMCPTool:
                     server_name=self._server_name,
                     tool_description=self._description,
                     input_schema=self._input_schema,
+                    session=getattr(self._connector, "session", None),
                 )
             except Exception as e:
                 logger.warning("path_adaptor resolve_args failed: %s", e)

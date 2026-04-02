@@ -13,8 +13,9 @@ from matmaster.tools.tool_result import ToolResult
 class FakeConnector:
     """Fake LazyMCPConnector for testing the new direct-call architecture."""
 
-    def __init__(self, path_adaptor=None):
+    def __init__(self, path_adaptor=None, *, session=None):
         self.workspace_path = "/fake/workspace"
+        self.session = session
         self.ensure_calls: list[str] = []
         self._mock_conn = AsyncMock()
         self._mock_conn.call_tool.return_value = [MagicMock(text="result_text")]
@@ -215,6 +216,24 @@ class TestLazyMCPToolPathAdaptor:
         connector._mock_conn.call_tool.assert_called_once_with(
             "run", {"resolved": "path"}
         )
+
+    async def test_path_adaptor_receives_connector_session(self):
+        mock_adaptor = MagicMock()
+        mock_adaptor.resolve_args.return_value = {"resolved": "path"}
+        fake_session = MagicMock()
+        connector = FakeConnector(path_adaptor=mock_adaptor, session=fake_session)
+        tool = LazyMCPTool(
+            server_name="mat_sg",
+            tool_name="mat_sg_run",
+            remote_tool_name="run",
+            description="Run calculation",
+            input_schema={"type": "object"},
+            connector=connector,
+        )
+
+        await tool.execute({"input": "/local/file"})
+
+        assert mock_adaptor.resolve_args.call_args.kwargs["session"] is fake_session
 
     async def test_path_adaptor_failure_falls_back(self):
         mock_adaptor = MagicMock()

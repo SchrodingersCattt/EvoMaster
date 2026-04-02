@@ -72,6 +72,30 @@ def _has_remote_profile(executor_cfg: Any) -> bool:
     return isinstance(remote_profile, dict) and bool(remote_profile)
 
 
+def _is_missing_credential(value: Any) -> bool:
+    """Return True when a Bohrium credential value should fall back."""
+    return value is None or str(value).strip() in {'', '-1'}
+
+
+def _session_bohrium_credentials(
+    session: Any,
+) -> tuple[str | None, Any | None, Any | None, str | None]:
+    """Read Bohrium credentials attached to the active session, if any."""
+    creds = getattr(session, '_bohrium_credentials', None)
+    if not isinstance(creds, dict):
+        return None, None, None, None
+
+    access_key = str(creds.get('access_key') or '').strip() or None
+    project_id = creds.get('project_id')
+    if _is_missing_credential(project_id):
+        project_id = None
+    user_id = creds.get('user_id')
+    if _is_missing_credential(user_id):
+        user_id = None
+    user_no = str(creds.get('user_no') or '').strip() or None
+    return access_key, project_id, user_id, user_no
+
+
 # ---------------------------------------------------------------------------
 # Layer 1: schema-driven detection
 # ---------------------------------------------------------------------------
@@ -661,6 +685,26 @@ class CalculationPathAdaptor:
                 f"Async tool '{tool_name}' is blocked for LLM runtime. "
                 f"Use submit interface: '{server_name}_submit_*'."
             )
+
+        if session is not None:
+            (
+                session_access_key,
+                session_project_id,
+                session_user_id,
+                session_user_no,
+            ) = _session_bohrium_credentials(session)
+            if not access_key and session_access_key:
+                access_key = session_access_key
+            if _is_missing_credential(project_id) and not _is_missing_credential(
+                session_project_id
+            ):
+                project_id = session_project_id
+            if _is_missing_credential(user_id) and not _is_missing_credential(
+                session_user_id
+            ):
+                user_id = session_user_id
+            if not user_no and session_user_no:
+                user_no = session_user_no
 
         # --- executor & storage injection ---
         if 'executor' in out:
