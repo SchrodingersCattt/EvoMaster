@@ -71,8 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="NAME",
         help=(
-            "matmaster/exps/{NAME}.toml for tools/skills/max_turns/compaction "
-            "(same as production; default: direct when omitted). "
+            "matmaster/exps/{NAME}.toml. Omit or ``devshell``: load ``direct`` but narrow "
+            "skills_root to struct-DB lazymcp stub only. ``direct``: unpatched production toml. "
             "MCP paths use [skills].config_dir (typically matmaster_config/)."
         ),
     )
@@ -201,12 +201,17 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
 
     from matmaster.config.loader import load_exp_config
     from matmaster.devshell.config import DevConfig
+    from matmaster.devshell.exp_patch import devshell_default_exp_config
 
-    exp_name = (getattr(args, "exp", None) or "").strip() or "direct"
+    exp_opt = (getattr(args, "exp", None) or "").strip() or None
     try:
-        exp_override = load_exp_config(exp_name)
+        if not exp_opt or exp_opt == "devshell":
+            exp_override = devshell_default_exp_config()
+        else:
+            exp_override = load_exp_config(exp_opt)
     except (FileNotFoundError, ValueError) as e:
-        print(f"Error loading exp '{exp_name}': {e}", file=sys.stderr)
+        label = exp_opt or "devshell"
+        print(f"Error loading exp '{label}': {e}", file=sys.stderr)
         sys.exit(1)
     config = DevConfig()
 

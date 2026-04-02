@@ -28,7 +28,12 @@ def test_snapshot_eval_tooling_direct_matches_production_exp() -> None:
     assert "mat_master" in joined or "lazymcp" in joined
 
 
-def test_snapshot_devshell_alias_is_direct_exp() -> None:
+def test_snapshot_devshell_is_direct_plus_narrow_skills() -> None:
     a = snapshot_devshell_eval_tooling(repo_root=REPO_ROOT)
-    b = snapshot_eval_tooling(repo_root=REPO_ROOT, exp_name="direct")
-    assert a == b
+    d = snapshot_eval_tooling(repo_root=REPO_ROOT, exp_name="direct")
+    assert a["matmaster_exp"] == "devshell"
+    assert a["exp_config_name"] == "direct"
+    assert len(a["skills_roots"]) == 1
+    assert "mcp-mat-struct-db" in a["skills_roots"][0]
+    assert a["builtin_tool_names"] == d["builtin_tool_names"]
+    assert a["max_turns"] == d["max_turns"]
