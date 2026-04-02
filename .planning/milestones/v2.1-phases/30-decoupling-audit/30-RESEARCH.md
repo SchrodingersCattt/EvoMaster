@@ -142,7 +142,7 @@ echo "[isolation] All tests passed with evomaster/ and src/ hidden"
 ```python
 class TestNoEvomasterImportsAnywhere:
     """Phase 30: matmaster/ 不得有任何 evomaster 运行时导入（统一审计）。"""
-    
+
     def test_no_evomaster_imports_in_matmaster(self):
         """扫描所有 matmaster/*.py，确认无 evomaster 运行时导入。"""
         project_root = Path(__file__).parent.parent.parent
@@ -315,9 +315,9 @@ class TestCleanedConfigYaml:
 ```python
 class TestPhase30FullIsolation:
     """Phase 30 统一审计：matmaster/ 不得有任何 evomaster/playground/src 运行时导入。"""
-    
+
     FORBIDDEN_PREFIXES = ["evomaster", "playground", "src."]
-    
+
     def test_no_forbidden_imports(self):
         project_root = Path(__file__).parent.parent.parent
         violations = []

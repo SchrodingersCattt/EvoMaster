@@ -22,6 +22,7 @@ from unittest.mock import patch
 class TestGetCurrentEnv:
     def test_default_is_prod(self):
         from matmaster.adaptors.calculation.env_config import get_current_env
+
         with patch.dict(os.environ, {}, clear=False):
             env = os.environ.pop("SERVICE_ENV", None)
             try:
@@ -33,11 +34,13 @@ class TestGetCurrentEnv:
 
     def test_returns_service_env_value(self):
         from matmaster.adaptors.calculation.env_config import get_current_env
+
         with patch.dict(os.environ, {"SERVICE_ENV": "test"}):
             assert get_current_env() == "test"
 
     def test_returns_uat_when_set(self):
         from matmaster.adaptors.calculation.env_config import get_current_env
+
         with patch.dict(os.environ, {"SERVICE_ENV": "uat"}):
             assert get_current_env() == "uat"
 
@@ -45,6 +48,7 @@ class TestGetCurrentEnv:
 class TestResolveMcpConfigPath:
     def test_prod_env_returns_original_path(self, tmp_path):
         from matmaster.adaptors.calculation.env_config import resolve_mcp_config_path
+
         config_file = tmp_path / "mcp_config.json"
         config_file.write_text("{}")
         with patch.dict(os.environ, {"SERVICE_ENV": "prod"}):
@@ -53,6 +57,7 @@ class TestResolveMcpConfigPath:
 
     def test_test_env_returns_test_file_when_exists(self, tmp_path):
         from matmaster.adaptors.calculation.env_config import resolve_mcp_config_path
+
         config_file = tmp_path / "mcp_config.json"
         config_file.write_text("{}")
         test_file = tmp_path / "mcp_config.test.json"
@@ -63,6 +68,7 @@ class TestResolveMcpConfigPath:
 
     def test_test_env_falls_back_when_env_file_missing(self, tmp_path):
         from matmaster.adaptors.calculation.env_config import resolve_mcp_config_path
+
         config_file = tmp_path / "mcp_config.json"
         config_file.write_text("{}")
         # No mcp_config.test.json
@@ -72,6 +78,7 @@ class TestResolveMcpConfigPath:
 
     def test_uat_env_returns_uat_file_when_exists(self, tmp_path):
         from matmaster.adaptors.calculation.env_config import resolve_mcp_config_path
+
         config_file = tmp_path / "mcp_config.json"
         config_file.write_text("{}")
         uat_file = tmp_path / "mcp_config.uat.json"
@@ -82,6 +89,7 @@ class TestResolveMcpConfigPath:
 
     def test_accepts_path_object(self, tmp_path):
         from matmaster.adaptors.calculation.env_config import resolve_mcp_config_path
+
         config_file = tmp_path / "mcp_config.json"
         config_file.write_text("{}")
         with patch.dict(os.environ, {"SERVICE_ENV": "prod"}):
@@ -91,12 +99,17 @@ class TestResolveMcpConfigPath:
 
 class TestEnvConfigPackageLevelImport:
     def test_importable_from_package(self):
-        from matmaster.adaptors.calculation import get_current_env, resolve_mcp_config_path
+        from matmaster.adaptors.calculation import (
+            get_current_env,
+            resolve_mcp_config_path,
+        )
+
         assert callable(get_current_env)
         assert callable(resolve_mcp_config_path)
 
     def test_no_evomaster_in_source(self):
         import matmaster.adaptors.calculation.env_config as mod
+
         source = inspect.getsource(mod)
         assert "evomaster" not in source, "Found 'evomaster' in env_config.py"
 

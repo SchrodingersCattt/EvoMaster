@@ -41,6 +41,7 @@ from matmaster.types.messages import (
     ToolCallData,
 )
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
+
 BohriumSetupResult = pytest.importorskip(
     "src.services.agent_run_bohrium",
     reason="src not available (isolation test)",

@@ -98,5 +98,5 @@ updated: 2026-04-01
 | 7 | 27-02-04 | (merged into test_path_adaptor.py) | 3 | green | 0 |
 | 8 | 27-03-01 | `tests/matmaster/test_import_audit.py` | 13 | green | 1 (path calc error) |
 
-**Total new tests: 115 passing**  
+**Total new tests: 115 passing**
 **Combined with existing test_lazy_mcp.py (31 tests): 153 tests green in 0.61s**

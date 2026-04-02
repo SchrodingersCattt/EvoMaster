@@ -242,10 +242,7 @@ class LazyMCPConnector:
 
         # Check if this server needs a path_adaptor
         path_adaptor = None
-        if (
-            manager.path_adaptor_factory
-            and server_name in manager.path_adaptor_servers
-        ):
+        if manager.path_adaptor_factory and server_name in manager.path_adaptor_servers:
             path_adaptor = manager.path_adaptor_factory()
 
         return {"connection": conn, "path_adaptor": path_adaptor}

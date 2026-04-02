@@ -27,7 +27,9 @@ class SessionConfig(BaseModel):
 
     timeout: int = Field(default=300, description="Default execution timeout (seconds)")
     workspace_path: str = Field(default="/workspace", description="Workspace root path")
-    working_dir: str = Field(default="/workspace", description="Working directory inside session")
+    working_dir: str = Field(
+        default="/workspace", description="Working directory inside session"
+    )
 
 
 class LocalSessionConfig(SessionConfig):

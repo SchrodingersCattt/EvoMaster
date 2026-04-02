@@ -8,6 +8,7 @@ from typing import Any, ClassVar
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
+
 from ._constants import _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS
 from ._lifecycle import _run_lifecycle
 
@@ -116,17 +117,32 @@ class MonitorJobTool(BuiltinTool):
         poll_interval = int(arguments.get('poll_interval', 30))
         access_key = arguments.get('access_key')
         download_tag = arguments.get('download_tag')
-        llm_decision_mode = (arguments.get('llm_decision_mode', 'auto_terminate') or 'off').strip().lower()
+        llm_decision_mode = (
+            (arguments.get('llm_decision_mode', 'auto_terminate') or 'off')
+            .strip()
+            .lower()
+        )
         llm_model_alias = arguments.get('llm_model_alias')
-        llm_timeout_seconds = max(5, int(arguments.get('llm_timeout_seconds', _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS)))
-        decision_check_interval = max(1, int(arguments.get('decision_check_interval', 10)))
+        llm_timeout_seconds = max(
+            5,
+            int(
+                arguments.get(
+                    'llm_timeout_seconds', _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS
+                )
+            ),
+        )
+        decision_check_interval = max(
+            1, int(arguments.get('decision_check_interval', 10))
+        )
         max_ppc = arguments.get('max_polls_per_call')
         timeout_minutes = arguments.get('timeout_minutes')
         task_intent = arguments.get('task_intent')
 
         # Resolve workspace (duck-type session instead of isinstance SSHSession)
         if not workspace or workspace == '.':
-            is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_file', None))
+            is_ssh = hasattr(session, 'upload_file') and callable(
+                getattr(session, 'upload_file', None)
+            )
             if is_ssh:
                 config = getattr(session, 'config', None)
                 workspace = (
@@ -175,8 +191,21 @@ class MonitorJobTool(BuiltinTool):
         )
 
         output = json.dumps(result, indent=2, ensure_ascii=False)
-        status = 'success' if result.get('status') in ('Done', 'Success', 'Finished', 'Completed',
-                                                         'done', 'success', 'finished', 'completed') else 'error'
+        status = (
+            'success'
+            if result.get('status')
+            in (
+                'Done',
+                'Success',
+                'Finished',
+                'Completed',
+                'done',
+                'success',
+                'finished',
+                'completed',
+            )
+            else 'error'
+        )
         return ToolResult(
             status=status,
             content=output,

@@ -12,7 +12,7 @@ import io
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, create_autospec, patch
+from unittest.mock import create_autospec, patch
 
 from matmaster.core.bus import MessageBus
 from matmaster.devshell.config import DevConfig

@@ -9,7 +9,7 @@ Coverage:
 from __future__ import annotations
 
 import sys
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
 
@@ -100,11 +100,15 @@ class TestMonitorJobToolSchemaValidity:
     def test_schema_required_contains_software(self, schema: dict[str, Any]) -> None:
         assert "software" in schema["required"]
 
-    def test_schema_job_id_property_is_string_type(self, schema: dict[str, Any]) -> None:
+    def test_schema_job_id_property_is_string_type(
+        self, schema: dict[str, Any]
+    ) -> None:
         job_id_prop = schema["properties"].get("job_id", {})
         assert job_id_prop.get("type") == "string"
 
-    def test_schema_software_property_is_string_type(self, schema: dict[str, Any]) -> None:
+    def test_schema_software_property_is_string_type(
+        self, schema: dict[str, Any]
+    ) -> None:
         software_prop = schema["properties"].get("software", {})
         assert software_prop.get("type") == "string"
 
@@ -113,8 +117,15 @@ class TestMonitorJobToolSchemaValidity:
     ) -> None:
         """Schema defines the full parameter surface (spot-check optional keys)."""
         props = schema["properties"]
-        for key in ("workspace", "poll_interval", "llm_decision_mode", "timeout_minutes"):
-            assert key in props, f"Expected optional property '{key}' missing from schema"
+        for key in (
+            "workspace",
+            "poll_interval",
+            "llm_decision_mode",
+            "timeout_minutes",
+        ):
+            assert (
+                key in props
+            ), f"Expected optional property '{key}' missing from schema"
 
 
 class TestMonitorJobToolImportCleanliness:
@@ -129,12 +140,10 @@ class TestMonitorJobToolImportCleanliness:
         # Re-import to ensure the module is present (may already be loaded)
         import matmaster.tools.builtin.monitor_job  # noqa: F401
 
-        leaked = [
-            k for k in sys.modules if "evomaster.agent.tools.builtin" in k
-        ]
-        assert not leaked, (
-            f"evomaster.agent.tools.builtin modules unexpectedly loaded: {leaked}"
-        )
+        leaked = [k for k in sys.modules if "evomaster.agent.tools.builtin" in k]
+        assert (
+            not leaked
+        ), f"evomaster.agent.tools.builtin modules unexpectedly loaded: {leaked}"
 
     def test_no_evomaster_agent_session_ssh_loaded_after_import(self) -> None:
         """
@@ -142,9 +151,5 @@ class TestMonitorJobToolImportCleanliness:
         """
         import matmaster.tools.builtin.monitor_job  # noqa: F401
 
-        leaked = [
-            k for k in sys.modules if "evomaster.agent.session.ssh" in k
-        ]
-        assert not leaked, (
-            f"evomaster.agent.session.ssh unexpectedly loaded: {leaked}"
-        )
+        leaked = [k for k in sys.modules if "evomaster.agent.session.ssh" in k]
+        assert not leaked, f"evomaster.agent.session.ssh unexpectedly loaded: {leaked}"

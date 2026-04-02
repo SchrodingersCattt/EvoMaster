@@ -207,15 +207,15 @@ def _download_results_to_local_dir(
     return info
 
 
-def _sftp_push_directory(
-    session: Any, local_dir: Path, remote_dir: str
-) -> list[str]:
+def _sftp_push_directory(session: Any, local_dir: Path, remote_dir: str) -> list[str]:
     """Upload all files in *local_dir* to *remote_dir* on the SSH node.
 
     Returns list of remote paths uploaded.
     """
     # Duck-type session instead of isinstance(session, SSHSession)
-    is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_file', None))
+    is_ssh = hasattr(session, 'upload_file') and callable(
+        getattr(session, 'upload_file', None)
+    )
     if not is_ssh:
         return []
     pushed: list[str] = []

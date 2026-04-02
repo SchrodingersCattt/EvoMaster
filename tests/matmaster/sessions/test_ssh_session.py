@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from matmaster.types.session import SSHSessionConfig, Session
+from matmaster.types.session import Session, SSHSessionConfig
 
 
 @pytest.fixture

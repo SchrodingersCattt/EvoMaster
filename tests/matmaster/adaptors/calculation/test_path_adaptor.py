@@ -21,14 +21,22 @@ from unittest.mock import MagicMock, patch
 class TestCalculationPathAdaptorExists:
     def test_class_importable(self):
         from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
         assert CalculationPathAdaptor is not None
 
     def test_factory_importable(self):
-        from matmaster.adaptors.calculation.path_adaptor import get_calculation_path_adaptor
+        from matmaster.adaptors.calculation.path_adaptor import (
+            get_calculation_path_adaptor,
+        )
+
         assert callable(get_calculation_path_adaptor)
 
     def test_importable_from_package(self):
-        from matmaster.adaptors.calculation import CalculationPathAdaptor, get_calculation_path_adaptor
+        from matmaster.adaptors.calculation import (
+            CalculationPathAdaptor,
+            get_calculation_path_adaptor,
+        )
+
         assert CalculationPathAdaptor is not None
         assert callable(get_calculation_path_adaptor)
 
@@ -39,6 +47,7 @@ class TestGetCalculationPathAdaptorFactory:
             CalculationPathAdaptor,
             get_calculation_path_adaptor,
         )
+
         adaptor = get_calculation_path_adaptor({})
         assert isinstance(adaptor, CalculationPathAdaptor)
 
@@ -47,11 +56,15 @@ class TestGetCalculationPathAdaptorFactory:
             CalculationPathAdaptor,
             get_calculation_path_adaptor,
         )
+
         adaptor = get_calculation_path_adaptor(None)
         assert isinstance(adaptor, CalculationPathAdaptor)
 
     def test_injects_calculation_executors_from_config(self):
-        from matmaster.adaptors.calculation.path_adaptor import get_calculation_path_adaptor
+        from matmaster.adaptors.calculation.path_adaptor import (
+            get_calculation_path_adaptor,
+        )
+
         config = {
             "calculation_executors": {
                 "mat_sg": {"sync_tools": ["build_bulk"]},
@@ -61,7 +74,10 @@ class TestGetCalculationPathAdaptorFactory:
         assert "mat_sg" in adaptor.calculation_executors
 
     def test_empty_config_produces_empty_executors(self):
-        from matmaster.adaptors.calculation.path_adaptor import get_calculation_path_adaptor
+        from matmaster.adaptors.calculation.path_adaptor import (
+            get_calculation_path_adaptor,
+        )
+
         adaptor = get_calculation_path_adaptor({})
         assert adaptor.calculation_executors == {}
 
@@ -69,29 +85,34 @@ class TestGetCalculationPathAdaptorFactory:
 class TestCalculationPathAdaptorInterface:
     def test_has_resolve_args_method(self):
         from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
         assert hasattr(CalculationPathAdaptor, "resolve_args")
         assert callable(CalculationPathAdaptor.resolve_args)
 
     def test_resolve_args_signature_has_workspace_path(self):
         from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
         sig = inspect.signature(CalculationPathAdaptor.resolve_args)
         params = list(sig.parameters)
         assert "workspace_path" in params, "resolve_args must accept workspace_path"
 
     def test_resolve_args_signature_has_args(self):
         from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
         sig = inspect.signature(CalculationPathAdaptor.resolve_args)
         params = list(sig.parameters)
         assert "args" in params, "resolve_args must accept args"
 
     def test_resolve_args_signature_has_tool_name(self):
         from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
         sig = inspect.signature(CalculationPathAdaptor.resolve_args)
         params = list(sig.parameters)
         assert "tool_name" in params, "resolve_args must accept tool_name"
 
     def test_resolve_args_signature_has_server_name(self):
         from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
         sig = inspect.signature(CalculationPathAdaptor.resolve_args)
         params = list(sig.parameters)
         assert "server_name" in params, "resolve_args must accept server_name"
@@ -99,12 +120,14 @@ class TestCalculationPathAdaptorInterface:
     def test_has_resolve_executor_method(self):
         """executor injection preserved per CALC-02."""
         from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
-        assert hasattr(CalculationPathAdaptor, "_resolve_executor"), (
-            "_resolve_executor must exist for Bohrium executor injection"
-        )
+
+        assert hasattr(
+            CalculationPathAdaptor, "_resolve_executor"
+        ), "_resolve_executor must exist for Bohrium executor injection"
 
     def test_has_calculation_executors_attribute(self):
         from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
         adaptor = CalculationPathAdaptor()
         assert hasattr(adaptor, "calculation_executors")
 
@@ -114,7 +137,9 @@ class TestResolveArgsCompat:
 
     def test_resolve_args_returns_dict(self):
         """resolve_args should return a dict (the resolved args)."""
-        from matmaster.adaptors.calculation.path_adaptor import get_calculation_path_adaptor
+        from matmaster.adaptors.calculation.path_adaptor import (
+            get_calculation_path_adaptor,
+        )
 
         adaptor = get_calculation_path_adaptor({})
 
@@ -122,8 +147,20 @@ class TestResolveArgsCompat:
         mock_storage = MagicMock()
         mock_storage.get.return_value = None
 
-        with patch("matmaster.adaptors.calculation.path_adaptor.CalculationPathAdaptor._resolve_executor", return_value=None), \
-             patch.dict("sys.modules", {"evomaster.env.bohrium": MagicMock(get_bohrium_storage_config=MagicMock(return_value={}))}):
+        with (
+            patch(
+                "matmaster.adaptors.calculation.path_adaptor.CalculationPathAdaptor._resolve_executor",
+                return_value=None,
+            ),
+            patch.dict(
+                "sys.modules",
+                {
+                    "evomaster.env.bohrium": MagicMock(
+                        get_bohrium_storage_config=MagicMock(return_value={})
+                    )
+                },
+            ),
+        ):
             try:
                 result = adaptor.resolve_args(
                     workspace_path="/tmp/ws",
@@ -138,7 +175,9 @@ class TestResolveArgsCompat:
 
     def test_resolve_args_passes_args_through_when_no_paths(self):
         """When no path-type args present, resolve_args passes args through unchanged."""
-        from matmaster.adaptors.calculation.path_adaptor import get_calculation_path_adaptor
+        from matmaster.adaptors.calculation.path_adaptor import (
+            get_calculation_path_adaptor,
+        )
 
         adaptor = get_calculation_path_adaptor({})
 
@@ -153,7 +192,10 @@ class TestResolveArgsCompat:
                 args={"param": "value"},
                 tool_name="srv_run",
                 server_name="srv",
-                input_schema={"type": "object", "properties": {"param": {"type": "string"}}},
+                input_schema={
+                    "type": "object",
+                    "properties": {"param": {"type": "string"}},
+                },
             )
         # param is not a path type, should pass through
         assert "param" in result
@@ -202,6 +244,7 @@ class TestResolveArgsCompat:
     def test_resolve_executor_exists_for_injection(self):
         """Per CALC-02: _resolve_executor implements Bohrium executor injection."""
         from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
         source = inspect.getsource(CalculationPathAdaptor._resolve_executor)
         # Should reference inject_bohrium_executor as lazy import
         assert "inject_bohrium_executor" in source or "bohrium" in source.lower()
@@ -234,15 +277,17 @@ class TestNoTopLevelEvoMasterInPathAdaptor:
     def test_function_level_bohrium_imports_exist(self):
         """Bohrium imports come from matmaster.integration.bohrium_env (Phase 28 migration)."""
         import matmaster.adaptors.calculation.path_adaptor as mod
+
         source = inspect.getsource(mod)
-        assert "matmaster.integration.bohrium_env" in source, (
-            "Expected imports from matmaster.integration.bohrium_env in path_adaptor.py"
-        )
+        assert (
+            "matmaster.integration.bohrium_env" in source
+        ), "Expected imports from matmaster.integration.bohrium_env in path_adaptor.py"
 
     def test_relative_oss_io_import_used(self):
         """path_adaptor.py imports oss_io from matmaster (not evomaster)."""
         import matmaster.adaptors.calculation.path_adaptor as mod
+
         source = inspect.getsource(mod)
-        assert "from .oss_io import" in source or "from matmaster" in source, (
-            "path_adaptor.py must use relative import for oss_io"
-        )
+        assert (
+            "from .oss_io import" in source or "from matmaster" in source
+        ), "path_adaptor.py must use relative import for oss_io"

@@ -6,7 +6,7 @@ import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, create_autospec, patch
+from unittest.mock import create_autospec, patch
 
 from matmaster.types.messages import StreamChunk
 from matmaster.types.session import Session

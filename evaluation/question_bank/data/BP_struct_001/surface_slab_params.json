@@ -1,0 +1,57 @@
+{
+  "base_system": "Si(100)",
+  "builder": "mat_sg_build_surface_slab",
+  "description": "Build Si(100) surface slabs with fixed composition and thickness, varying only the number of vacuum layers. All other builder parameters (Miller index, number of layers, supercell) remain constant. This tests whether the agent can parametrically sweep one variable while keeping others locked.",
+  "locked_parameters": {
+    "miller_index": "[1, 0, 0]",
+    "number_of_layers": 4,
+    "structure_formula": "Si",
+    "x_size": 3,
+    "y_size": 3
+  },
+  "output_requirement": "Generate 5 CIF/POSCAR files with consistent naming (e.g., si100_slab_vac_{vacuum}_A.cif)",
+  "sweep_values": [
+    10.0,
+    15.0,
+    20.0,
+    25.0,
+    30.0
+  ],
+  "sweep_variable": "vacuum_thickness_A",
+  "task": "batch_surface_slab_geometric_parameter_sweep",
+  "verification_points": [
+    {
+      "expected_values": [
+        10.0,
+        15.0,
+        20.0,
+        25.0,
+        30.0
+      ],
+      "must_vary": true,
+      "parameter": "vacuum_thickness_A"
+    },
+    {
+      "expected_values": [
+        "[1, 0, 0]",
+        "[1, 0, 0]",
+        "[1, 0, 0]",
+        "[1, 0, 0]",
+        "[1, 0, 0]"
+      ],
+      "must_vary": false,
+      "parameter": "miller_index"
+    },
+    {
+      "expected_values": [
+        4,
+        4,
+        4,
+        4,
+        4
+      ],
+      "must_vary": false,
+      "parameter": "number_of_layers"
+    }
+  ]
+}

@@ -74,6 +74,7 @@ def _get_llm_client(alias: str | None = None):
     profile = llm_config.get_profile(profile_key)
 
     import openai
+
     client = openai.OpenAI(
         api_key=profile.api_key,
         base_url=profile.base_url,
