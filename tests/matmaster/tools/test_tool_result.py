@@ -10,13 +10,14 @@ class TestToolResult:
         result = ToolResult()
         assert result.status == "success"
         assert result.content == ""
-        assert result.info == {}
+        assert result.payload == {}
+        assert result.meta == {}
 
     def test_normalize_success_string(self) -> None:
         result = normalize_tool_result("hello")
         assert result.status == "success"
         assert result.content == "hello"
-        assert result.info == {}
+        assert result.payload == {}
 
     def test_normalize_error_prefixed_string(self) -> None:
         result = normalize_tool_result("Error: boom")
@@ -32,9 +33,9 @@ class TestToolResult:
         raw = ToolResult(
             status="success",
             content="Error: literal text",
-            info={"source": "explicit"},
+            payload={"source": "explicit"},
         )
         result = normalize_tool_result(raw)
         assert result is raw
         assert result.status == "success"
-        assert result.info == {"source": "explicit"}
+        assert result.payload == {"source": "explicit"}

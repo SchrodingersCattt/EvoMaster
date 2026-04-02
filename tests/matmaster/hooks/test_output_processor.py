@@ -27,7 +27,7 @@ class TestOutputProcessorHook:
             ToolResult(
                 status="error",
                 content="file written",
-                info={"error": "boom"},
+                payload={"error": "boom"},
             ),
         )
 
@@ -35,7 +35,7 @@ class TestOutputProcessorHook:
         emitted = bus.emit.call_args[0][0]
         assert isinstance(emitted, ToolResultEvent)
         assert emitted.status == "error"
-        assert emitted.info == {"error": "boom", "auto_save": True}
+        assert emitted.payload == {"error": "boom", "auto_save": True}
 
     async def test_emits_summarize_when_tool_matches_pattern(self) -> None:
         """post_tool_call emits ToolResultEvent with summarize info when matched."""
@@ -52,7 +52,7 @@ class TestOutputProcessorHook:
             tc,
             ToolResult(
                 content="very long text...",
-                info={"saved_path": "/tmp/out.txt"},
+                payload={"saved_path": "/tmp/out.txt"},
             ),
         )
 
@@ -60,7 +60,7 @@ class TestOutputProcessorHook:
         emitted = bus.emit.call_args[0][0]
         assert isinstance(emitted, ToolResultEvent)
         assert emitted.status == "success"
-        assert emitted.info == {
+        assert emitted.payload == {
             "saved_path": "/tmp/out.txt",
             "summarize": True,
         }

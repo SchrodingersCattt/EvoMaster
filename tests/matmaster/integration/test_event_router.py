@@ -358,7 +358,7 @@ class TestPersistenceHandler:
                 call_id='c1',
                 tool_name='bash',
                 result='file.txt',
-                info={'auto_save': True},
+                payload={'auto_save': True},
             )
         )
 
@@ -560,7 +560,7 @@ class TestSSEHandler:
                 call_id='call-1',
                 tool_name='bash',
                 result={'status': 'success', 'stdout': 'ok'},
-                info={'auto_save': True},
+                payload={'auto_save': True},
             )
         )
 
