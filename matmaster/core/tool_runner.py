@@ -1,0 +1,324 @@
+"""ToolRunner Protocol, InlineToolRunner, and FullToolRunner implementations.
+
+ToolRunner defines the execution strategy interface for tool calls.
+
+InlineToolRunner is the Phase 1 transition: wraps the current agent.py
+guard -> pre_hook -> execute -> post_hook chain as a standalone ToolRunner.
+
+FullToolRunner is the Phase 2 complete execution chain:
+Catalog -> StructuralValidation -> RunStateGuard -> CapabilityPolicy ->
+fast path -> Scheduler -> executor -> release.
+
+ToolExecutionContext carries per-batch execution metadata (turn, max_turns,
+stop_event).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import threading
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+from matmaster.core.guard_pipeline import GuardPipeline
+from matmaster.core.hooks import (
+    HookAction,
+    run_guard_blocked,
+    run_post_tool_call,
+    run_pre_tool_call,
+)
+from matmaster.core.structural_validation import StructuralValidation
+from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
+from matmaster.tools.tool_catalog import ToolCatalog
+from matmaster.tools.tool_result import ToolResult
+from matmaster.types.messages import ToolCallData
+from matmaster.types.topology import RuntimeTopology
+
+if TYPE_CHECKING:
+    from matmaster.core.capability_policy import CapabilityPolicy
+    from matmaster.core.hooks import Hook
+    from matmaster.types.guards import Guard
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ToolExecutionContext:
+    """Per-batch execution context passed to ToolRunner.
+
+    Carries the current turn number, max turns for guard evaluation,
+    and an optional stop event for cancellation.
+    """
+
+    turn: int
+    max_turns: int
+    stop_event: threading.Event | None = None
+
+
+@runtime_checkable
+class ToolRunner(Protocol):
+    """Protocol for tool execution strategies.
+
+    execute_batch processes a list of tool calls and returns
+    (ToolCallData, ToolResult) pairs in the same order as input.
+    """
+
+    async def execute_batch(
+        self,
+        tool_calls: list[ToolCallData],
+        ctx: ToolExecutionContext,
+        *,
+        on_result: Callable[[ToolCallData, ToolResult], Awaitable[None]] | None = None,
+    ) -> list[tuple[ToolCallData, ToolResult]]: ...
+
+
+class InlineToolRunner:
+    """Phase 1 transition: wraps current agent.py guard->hook->execute->hook chain.
+
+    Extracts the logic from agent.py L217-311 into a standalone ToolRunner.
+    The three-phase execution model is preserved:
+
+    Phase 1 (serial): Guard evaluation + pre_hook gating
+    Phase 2 (parallel): Concurrent tool execution via asyncio.gather
+    Phase 3 (serial): Post-hook callbacks in original order
+    """
+
+    def __init__(
+        self,
+        spec: Any,  # AgentRuntimeSpec (avoid circular import)
+        guards: list[Guard],
+    ) -> None:
+        self._spec = spec
+        self._guard_pipeline = GuardPipeline(guards)
+
+    async def execute_batch(
+        self,
+        tool_calls: list[ToolCallData],
+        ctx: ToolExecutionContext,
+        *,
+        on_result: Callable[[ToolCallData, ToolResult], Awaitable[None]] | None = None,
+    ) -> list[tuple[ToolCallData, ToolResult]]:
+        """Execute a batch of tool calls through guard -> hook -> execute -> hook.
+
+        Returns list of (ToolCallData, ToolResult) in input order.
+        """
+        hooks = self._spec.hooks
+        results: list[tuple[ToolCallData, ToolResult]] = []
+
+        # Phase 1: Serial guard + pre_hook gating
+        approved: list[tuple[int, ToolCallData]] = []  # (result_index, tc)
+        for tc in tool_calls:
+            # Check stop_event between serial tool calls (cancel semantics)
+            if ctx.stop_event is not None and ctx.stop_event.is_set():
+                tr = ToolResult(status="cancelled", content="Run cancelled.")
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            guard_result = self._guard_pipeline.evaluate(tc, ctx.turn, ctx.max_turns)
+            if not guard_result.allowed:
+                await run_guard_blocked(hooks, tc, guard_result)
+                blocked_content = f"BLOCKED: {guard_result.reason}"
+                if guard_result.guidance:
+                    blocked_content += f"\n{guard_result.guidance}"
+                tr = ToolResult(status="blocked", content=blocked_content)
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            action = await run_pre_tool_call(hooks, tc)
+            if action == HookAction.SKIP:
+                tr = ToolResult(status="skipped", content="Tool call skipped by hook.")
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            idx = len(results)
+            results.append((tc, ToolResult()))  # placeholder
+            approved.append((idx, tc))
+
+        # Phase 2: Parallel execution of approved tools
+        if approved:
+
+            async def _exec(tc: ToolCallData) -> ToolResult:
+                try:
+                    return await self._spec.tool_registry.execute(tc.name, tc.arguments)
+                except Exception as e:
+                    logger.exception("Tool execution failed: %s", tc.name)
+                    return ToolResult.from_error(tc.name, e)
+
+            raw_results = await asyncio.gather(
+                *[_exec(tc) for _, tc in approved],
+                return_exceptions=True,
+            )
+            for (idx, tc), raw in zip(approved, raw_results):
+                if isinstance(raw, BaseException):
+                    tr = ToolResult.from_error(tc.name, raw)
+                else:
+                    tr = raw
+                results[idx] = (tc, tr)
+
+        # Phase 3: Post-hook in order (only for executed tools)
+        executed_indices = {idx for idx, _ in approved}
+        for i, (tc, tr) in enumerate(results):
+            was_executed = i in executed_indices
+            if was_executed and tr.status not in ("blocked", "skipped"):
+                await run_post_tool_call(hooks, tc, tr)
+                if on_result:
+                    await on_result(tc, tr)
+
+        return results
+
+
+class FullToolRunner:
+    """Complete ToolRunner: Catalog -> Validation -> Guard -> Policy -> Scheduler -> Execute -> Release.
+
+    Per D-01: Does not call pre_hook/post_hook.
+    Per D-05: Strictly follows spec section 9.1 execution chain.
+    Per D-06: Each layer produces ToolResult with meta["layer"] marking failure source.
+    """
+
+    def __init__(
+        self,
+        catalog: ToolCatalog,
+        structural_validation: StructuralValidation,
+        guard_pipeline: GuardPipeline,
+        capability_policy: CapabilityPolicy,
+        scheduler: ToolScheduler,
+        topology: RuntimeTopology,
+    ) -> None:
+        self._catalog = catalog
+        self._validation = structural_validation
+        self._guard_pipeline = guard_pipeline
+        self._policy = capability_policy
+        self._scheduler = scheduler
+        self._topology = topology
+
+    async def execute_batch(
+        self,
+        tool_calls: list[ToolCallData],
+        ctx: ToolExecutionContext,
+        *,
+        on_result: Callable[[ToolCallData, ToolResult], Awaitable[None]] | None = None,
+    ) -> list[tuple[ToolCallData, ToolResult]]:
+        """Execute tool calls through the seven-step chain.
+
+        For each tool_call, sequentially:
+        1. Cancel check
+        2. Catalog lookup
+        3. StructuralValidation (Layer A)
+        4. RunStateGuard (Layer B) via GuardPipeline
+        5. CapabilityPolicy (Layer C)
+        6. Fast path check
+        7. Scheduler acquire (skipped for fast path)
+        8. Execute + Release
+
+        Returns list of (ToolCallData, ToolResult) in input order.
+        """
+        results: list[tuple[ToolCallData, ToolResult]] = []
+
+        for tc in tool_calls:
+            # 1. Cancel check
+            if ctx.stop_event is not None and ctx.stop_event.is_set():
+                tr = ToolResult(status="cancelled", content="Run cancelled.")
+                results.append((tc, tr))
+                continue
+
+            # 2. Catalog lookup
+            instance = self._catalog.get_tool(tc.name)
+            if instance is None:
+                tr = ToolResult(
+                    status="error",
+                    content=f"Unknown tool: {tc.name}",
+                    meta={"layer": "catalog"},
+                )
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            # 3. StructuralValidation (Layer A)
+            decision = self._validation.validate(
+                self._topology, instance, tc.arguments
+            )
+            if decision.decision == "deny":
+                tr = ToolResult(
+                    status="error",
+                    content=decision.reason,
+                    meta={"layer": "structural"},
+                )
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            # 4. RunStateGuard (Layer B)
+            guard_result = self._guard_pipeline.evaluate(tc, ctx.turn, ctx.max_turns)
+            if not guard_result.allowed:
+                tr = ToolResult(
+                    status="error",
+                    content=guard_result.reason or "Guard denied",
+                    meta={"layer": "guard"},
+                )
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            # 5. CapabilityPolicy (Layer C)
+            decision = self._policy.evaluate(self._topology, instance, tc.arguments)
+            if decision.decision == "deny":
+                tr = ToolResult(
+                    status="error",
+                    content=decision.reason,
+                    meta={"layer": "policy", "guidance": decision.guidance},
+                )
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            # 6. Fast path check (per D-08)
+            claims = instance.tool_binding.resource_claims
+            is_fast = (
+                instance.tool_spec.effect_level == "pure_read"
+                and all(c.mode == "shared_read" for c in claims)
+                and instance.tool_spec.fast_path_eligible
+            )
+
+            # 7. Scheduler acquire (skip for fast path)
+            ticket: SchedulerTicket | None = None
+            if not is_fast:
+                ticket = await self._scheduler.acquire(
+                    claims, timeout=self._scheduler._default_timeout
+                )
+                if ticket is None:
+                    tr = ToolResult(
+                        status="error",
+                        content="Scheduling timeout",
+                        meta={"layer": "scheduler"},
+                    )
+                    results.append((tc, tr))
+                    if on_result:
+                        await on_result(tc, tr)
+                    continue
+
+            # 8. Execute + Release
+            try:
+                tr = await instance.tool_executor(tc.arguments)
+            except Exception as e:
+                tr = ToolResult.from_error(tc.name, e)
+            finally:
+                if ticket is not None:
+                    await self._scheduler.release(ticket)
+
+            results.append((tc, tr))
+            if on_result:
+                await on_result(tc, tr)
+
+        return results

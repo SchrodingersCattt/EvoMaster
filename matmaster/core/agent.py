@@ -643,7 +643,7 @@ class AgentKernel:
                             tool_name=tc.name,
                             result=tool_result.content,
                             status=tool_result.status,
-                            info=tool_result.info,
+                            payload=tool_result.payload,
                         )
                     )
 

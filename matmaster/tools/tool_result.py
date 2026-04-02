@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ToolResult(BaseModel):
     """Structured tool execution result consumed by the kernel and SSE layer."""
 
+    model_config = ConfigDict(extra="forbid")
+
     status: str = "success"
     content: str = ""
-    info: dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    meta: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
     def from_error(cls, tool_name: str, error: BaseException) -> ToolResult:

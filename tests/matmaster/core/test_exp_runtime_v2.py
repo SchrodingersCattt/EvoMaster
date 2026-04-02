@@ -1,0 +1,357 @@
+"""Tests for Exp.build_runtime() FullToolRunner injection and Exp.run_stream().
+
+Phase 34 Plan 1 Task 2: ESIN-01, ESIN-04, ESIN-05.
+"""
+
+from __future__ import annotations
+
+import threading
+from collections.abc import AsyncIterator
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from matmaster.types.messages import (
+    LLMResponse,
+    StreamChunk,
+)
+from matmaster.types.runtime import AgentRuntimeSpec
+
+
+# ── Minimal mocks for Exp.build_runtime() tests ──────────
+
+
+class _MockSession:
+    """Minimal Session mock satisfying the Session Protocol."""
+
+    _stop_event = None
+
+    @property
+    def is_open(self) -> bool:
+        return True
+
+    def open(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+    def exec_bash(self, command, timeout=None, stop_event=None):
+        return {"stdout": "", "stderr": "", "exit_code": 0}
+
+    def read_file(self, path, encoding="utf-8"):
+        return ""
+
+    def write_file(self, path, content, encoding="utf-8"):
+        pass
+
+    def path_exists(self, path):
+        return False
+
+    def is_file(self, path):
+        return False
+
+    @property
+    def capabilities(self):
+        from matmaster.types.topology import SessionCapabilities
+        return SessionCapabilities()
+
+
+class _MockProvider:
+    """Minimal LLM provider for tests."""
+
+    stream_timeout = 10.0
+    max_retries = 1
+    retry_delay = 0.0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="mock", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        yield StreamChunk(content="hello")
+        yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
+
+
+def _make_playground_context(
+    workdir: str = "/tmp/test-workdir",
+    execution_workdir: str = "/tmp/test-exec",
+    session: Any = None,
+    llm_provider: Any = None,
+) -> Any:
+    """Build a minimal PlaygroundContext-like object."""
+    from matmaster.types.context import PlaygroundContext
+
+    ctx = PlaygroundContext(
+        workdir=Path(workdir),
+        session_type="local",
+        cache_area=Path("/tmp/test-cache"),
+        execution_workdir=execution_workdir,
+        session=session or _MockSession(),
+        llm_provider=llm_provider or _MockProvider(),
+    )
+    return ctx
+
+
+def _make_exp_config(**overrides: Any) -> Any:
+    """Build a minimal ExpConfig for testing."""
+    from matmaster.config.exp import ExpConfig
+
+    defaults = {
+        "name": "test",
+        "max_turns": 5,
+        "tools": {"builtin": []},  # No builtins to avoid real file system tools
+        "skills": {"enabled": False},
+    }
+    defaults.update(overrides)
+    return ExpConfig(**defaults)
+
+
+# ── ESIN-04: build_runtime() injects FullToolRunner ──────
+
+
+class TestBuildRuntimeFullToolRunner:
+    """ESIN-04: build_runtime() constructs and injects FullToolRunner."""
+
+    @pytest.mark.asyncio
+    async def test_spec_has_full_tool_runner(self) -> None:
+        """build_runtime() injects a FullToolRunner instance into spec."""
+        from matmaster.core.exp import Exp
+        from matmaster.core.tool_runner import FullToolRunner
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context()
+
+        runtime = await exp.build_runtime(ctx)
+
+        assert runtime.spec.tool_runner is not None
+        assert isinstance(runtime.spec.tool_runner, FullToolRunner)
+
+    @pytest.mark.asyncio
+    async def test_spec_has_tool_catalog(self) -> None:
+        """build_runtime() injects a ToolCatalog instance into spec."""
+        from matmaster.core.exp import Exp
+        from matmaster.tools.tool_catalog import ToolCatalog
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context()
+
+        runtime = await exp.build_runtime(ctx)
+
+        assert runtime.spec.tool_catalog is not None
+        assert isinstance(runtime.spec.tool_catalog, ToolCatalog)
+
+    @pytest.mark.asyncio
+    async def test_spec_has_runtime_topology(self) -> None:
+        """build_runtime() injects a RuntimeTopology instance into spec."""
+        from matmaster.core.exp import Exp
+        from matmaster.types.topology import RuntimeTopology
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context()
+
+        runtime = await exp.build_runtime(ctx)
+
+        assert runtime.spec.runtime_topology is not None
+        assert isinstance(runtime.spec.runtime_topology, RuntimeTopology)
+
+    @pytest.mark.asyncio
+    async def test_topology_has_correct_paths(self) -> None:
+        """RuntimeTopology paths match PlaygroundContext."""
+        from matmaster.core.exp import Exp
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context(
+            workdir="/tmp/ctrl",
+            execution_workdir="/tmp/exec",
+        )
+
+        runtime = await exp.build_runtime(ctx)
+        topology = runtime.spec.runtime_topology
+
+        assert topology.control_root == "/tmp/ctrl"
+        assert topology.workspace_root == "/tmp/exec"
+
+
+# ── ESIN-01: run_stream() yields events and runs cleanup ─
+
+
+class TestRunStream:
+    """ESIN-01: Exp.run_stream() yields kernel generator events."""
+
+    @pytest.mark.asyncio
+    async def test_run_stream_yields_events(self) -> None:
+        """run_stream() yields _KernelItem events from kernel.run_stream()."""
+        from matmaster.core.agent import _KernelItem
+        from matmaster.core.exp import Exp
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context()
+
+        items: list[_KernelItem] = []
+        async for item in exp.run_stream(ctx, "test task"):
+            items.append(item)
+
+        # Should have at least some events (start, streaming, complete, end)
+        # and a terminal item
+        assert len(items) > 0
+        terminal_items = [i for i in items if i.terminal is not None]
+        assert len(terminal_items) == 1
+        assert terminal_items[0].terminal.reason == "natural"
+
+    @pytest.mark.asyncio
+    async def test_run_stream_runs_cleanup(self) -> None:
+        """run_stream() calls cleanup callbacks in finally block."""
+        from matmaster.core.exp import Exp
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context()
+
+        cleanup_called = False
+
+        def on_cleanup():
+            nonlocal cleanup_called
+            cleanup_called = True
+
+        exp._register_cleanup(on_cleanup)
+
+        async for _ in exp.run_stream(ctx, "test task"):
+            pass
+
+        assert cleanup_called, "Cleanup callback should have been called"
+
+    @pytest.mark.asyncio
+    async def test_run_stream_cleanup_on_aclose(self) -> None:
+        """run_stream() runs cleanup when generator is explicitly closed."""
+        from matmaster.core.exp import Exp
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context()
+
+        cleanup_called = False
+
+        def on_cleanup():
+            nonlocal cleanup_called
+            cleanup_called = True
+
+        exp._register_cleanup(on_cleanup)
+
+        gen = exp.run_stream(ctx, "test task")
+        try:
+            await gen.__anext__()  # Get first item
+        finally:
+            await gen.aclose()  # Explicitly close, triggering finally
+
+        assert cleanup_called, "Cleanup should run on explicit aclose"
+
+
+# ── ESIN-05: on_skill_hit uses catalog.register_overlay() ─
+
+
+class TestSkillOverlayCatalog:
+    """ESIN-05: on_skill_hit uses ToolCatalog.register_overlay()."""
+
+    @pytest.mark.asyncio
+    async def test_catalog_register_overlay_called(self) -> None:
+        """When catalog is provided, on_skill_hit uses catalog.register_overlay()."""
+        from matmaster.tools.tool_catalog import ToolCatalog
+        from matmaster.tools.tool_compiler import ToolCompiler
+        from matmaster.tools.tool_registry import ToolRegistry
+        from matmaster.types.topology import RuntimeTopology
+
+        registry = ToolRegistry()
+        topology = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp",
+            workspace_root="/tmp",
+        )
+        compiler = ToolCompiler()
+        catalog = ToolCatalog(registry, compiler=compiler, topology=topology)
+
+        initial_version = catalog.version
+        assert initial_version == 0
+
+        # Simulate what on_skill_hit does: register a lazy MCP tool via overlay
+        class FakeLazyTool:
+            name = "server_tool1"
+            description = "test tool"
+            json_schema = {"type": "object", "properties": {}}
+
+            async def execute(self, arguments):
+                return "result"
+
+        catalog.register_overlay(FakeLazyTool(), source="mcp")
+
+        assert catalog.version == 1
+        assert "server_tool1" in registry
+
+    @pytest.mark.asyncio
+    async def test_exp_build_runtime_passes_catalog(self) -> None:
+        """Verify build_runtime passes catalog to _init_skill_tools."""
+        from matmaster.core.exp import Exp
+
+        config = _make_exp_config()
+        exp = Exp(config)
+
+        # _init_skill_tools should accept catalog kwarg
+        # We test this indirectly: skills.enabled=False means it's not called,
+        # but the signature should accept it
+        import inspect
+
+        sig = inspect.signature(exp._init_skill_tools)
+        params = list(sig.parameters.keys())
+        assert "catalog" in params, "_init_skill_tools should accept catalog parameter"
+
+
+# ── Compactor event_sink in build_runtime ─────────────────
+
+
+class TestBuildRuntimeCompactorEventSink:
+    """Compactor creation uses event_sink=None instead of bus=bus."""
+
+    @pytest.mark.asyncio
+    async def test_compactor_uses_event_sink(self) -> None:
+        """Compactor created with event_sink=None for _run_items() injection."""
+        from matmaster.config.exp import CompactionConfig
+        from matmaster.core.exp import Exp
+
+        compaction_cfg = CompactionConfig(
+            enabled=True,
+            context_window_tokens=128000,
+            trigger_ratio=0.9,
+        )
+        config = _make_exp_config()
+        # Manually override compaction in the assembled spec
+        exp = Exp(config)
+        ctx = _make_playground_context()
+
+        # Patch assemble to return spec with compaction enabled
+        original_assemble = exp.assemble
+
+        async def patched_assemble(ctx):
+            spec = await original_assemble(ctx)
+            return spec.model_copy(update={"compaction": compaction_cfg})
+
+        exp.assemble = patched_assemble
+
+        runtime = await exp.build_runtime(ctx)
+
+        # Compactor should exist and have _event_sink attribute
+        assert runtime.spec.compactor is not None
+        assert hasattr(runtime.spec.compactor, "_event_sink")
+        # event_sink should be None (set later by _run_items)
+        assert runtime.spec.compactor._event_sink is None
