@@ -549,7 +549,7 @@ class TestExpBuiltinTools:
         _, registry = self._build_registry(tmp_path)
         native = registry.get_tools_by_source('builtin')
         native_names = {t.name for t in native}
-        assert 'web_search' in native_names
+        assert 'mm_web_search' in native_names
 
     def test_read_tracker_cleanup_registered(self, tmp_path: Path) -> None:
         """ReadTracker.clear is registered as a cleanup callback after _init_builtin_tools."""
