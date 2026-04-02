@@ -7,7 +7,7 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
     python -u -m matmaster.devshell run ... --prompt-file ... --json-out .../_devshell_summary.json
 
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
-``manifest.json`` carries ``eval_tooling`` (registered builtins, skill names, MCP server keys from config);
+``manifest.json`` carries ``eval_tooling`` (from ``matmaster/exps/{--exp}.toml`` + ``matmaster_config/`` MCP);
 the same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
 When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
 labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
@@ -220,6 +220,15 @@ def main() -> int:
         type=str,
         default=None,
         help="LLM route key passed to ``mm-devshell run --model`` (see llm_config.yaml routes)",
+    )
+    parser.add_argument(
+        "--exp",
+        type=str,
+        default="direct",
+        help=(
+            "matmaster/exps/{name}.toml for tools/skills (production-aligned; default: direct). "
+            "Passed to ``matmaster devshell run --exp``."
+        ),
     )
     parser.add_argument(
         "--capabilities",
@@ -447,7 +456,7 @@ def main() -> int:
         post_eval_ingest,
         upload_eval_task_artifacts_to_oss,
     )
-    from matmaster.eval_tooling_snapshot import snapshot_devshell_eval_tooling
+    from evaluation.eval_tooling_snapshot import snapshot_eval_tooling
 
     pending_only = args.eval_ingest_pending_only
     ingest_url = None if args.no_eval_ingest else EVAL_INGEST_URL
@@ -465,7 +474,9 @@ def main() -> int:
 
     git_commit = git_head_commit(REPO_ROOT)
 
-    eval_tooling_snapshot = snapshot_devshell_eval_tooling(repo_root=REPO_ROOT)
+    eval_tooling_snapshot = snapshot_eval_tooling(
+        repo_root=REPO_ROOT, exp_name=str(args.exp).strip() or "direct"
+    )
 
     manifest: dict[str, Any] = {
         "run_label": args.run_label,
@@ -478,6 +489,7 @@ def main() -> int:
         "task_timeout_sec": args.task_timeout,
         "dry_run": False,
         "eval_tooling": eval_tooling_snapshot,
+        "matmaster_exp": str(args.exp).strip() or "direct",
     }
     if ingest_url:
         manifest["eval_ingest_url"] = ingest_url
@@ -558,6 +570,8 @@ def main() -> int:
         ]
         if args.model:
             cmd.extend(["--model", args.model])
+        exp_name = str(args.exp).strip() or "direct"
+        cmd.extend(["--exp", exp_name])
         if args.verbose:
             cmd.append("--verbose")
 

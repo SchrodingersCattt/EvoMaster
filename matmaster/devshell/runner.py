@@ -36,6 +36,7 @@ class DevRunner:
         llm_config: Any = None,
         resolved_route: Any = None,
         stream_hook: DevStreamHook | None = None,
+        exp_config: ExpConfig | None = None,
     ) -> None:
         self._config = config
         self._workdir = workdir
@@ -60,8 +61,10 @@ class DevRunner:
             run_meta={"source": "devshell"},
         )
 
-        # Exp config dict
-        self._exp_config = self._build_exp_config(config)
+        # Exp config: always from matmaster/exps/*.toml (``--exp`` or default ``direct``).
+        self._exp_config = (
+            exp_config if exp_config is not None else self._build_exp_config(config)
+        )
         # Local devshell is not Bohrium SSH; avoid model defaulting to /share from tool hints.
         if config.session.type == "local":
             wd = str(workdir.resolve())
@@ -97,23 +100,11 @@ class DevRunner:
         if not system_prompt:
             system_prompt = load_base_system_prompt()
 
-        skills = ExpSkillsConfig()
-        if config.mcp.enabled:
-            skills = ExpSkillsConfig(
-                enabled=True,
-                skills_root=config.mcp.skills_root,
-                skill_names=config.mcp.skill_names,
-                cache_dir="matmaster/cache",
-                config_dir=config.mcp.config_dir,
-                mcp_config_file="mcp_config.json",
-                mcp_runtime_file="mcp.yaml",
-            )
-
         return ExpConfig(
             name=config.agent.name,
             max_turns=config.agent.max_turns,
             tools=ExpToolsConfig(builtin=config.tools.builtin),
-            skills=skills,
+            skills=ExpSkillsConfig(),
             compaction=config.compaction,
             developer_instructions=config.agent.identity or "",
             system_prompt=system_prompt,

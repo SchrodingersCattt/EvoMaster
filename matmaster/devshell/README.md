@@ -27,7 +27,7 @@ mm-devshell repl --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-
 
 省略 **`--model`** 时，使用 `config.yaml` 的 `agents.general.llm` 指向的 profile，或 `llm_config.yaml` 顶层的 **`default`**。
 
-可选 **`--config`**：仅覆盖 agent / session / tools（见 `configs/devshell/dev.yaml.example`），**不包含** LLM 连接信息。
+工具 / 技能 / `max_turns` 等与线上一致：默认加载 **`matmaster/exps/direct.toml`**；换其它 exp 时用 **`--exp <name>`**（对应 `matmaster/exps/<name>.toml`）。
 
 ```bash
 uv run python -m matmaster.devshell --workdir ./workspace --log-dir ./logs --model gemini-3-flash-preview
@@ -85,7 +85,7 @@ uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run
 |------|------|------|
 | `--workdir` | 是 | 工作区目录（持久化） |
 | `--log-dir` | 是 | 事件日志目录（REPL 下为 JSONL；`run` 仍需要有效路径） |
-| `--config` | 否 | 可选 devshell YAML（仅 agent/session/tools） |
+| `--exp` | 否 | `matmaster/exps/{name}.toml`；省略为 **direct**（与生产一致） |
 | `--model` | 否 | `llm_config.yaml` 中 **routes** 的路由 key；省略则用默认 profile |
 | `--session` | 否 | Session 类型：`local` / `docker` / `ssh` |
 | `--verbose` | 否 | 详细输出 |
@@ -105,9 +105,9 @@ uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run
 | `Ctrl+C` | 取消当前 run |
 | `Ctrl+D` | 退出 |
 
-## 可选 devshell YAML
+## Exp 与 matmaster_config
 
-仅用于 **agent（max_turns、identity 等）、session.type、tools.builtin**。示例：`configs/devshell/dev.yaml.example`。
+与 **`AgentRunService`** 相同：默认 **`load_exp_config("direct")`**（`matmaster/exps/direct.toml`），其中 **`[skills].config_dir`** 指向 **`matmaster_config/`**（`mcp.yaml`、JSON 等）。会话类型等仍可用 **`--session`** 覆盖在内存中的 `DevConfig.session`。
 
 ## 架构
 
@@ -116,7 +116,8 @@ mm-devshell CLI
   │
   ├── load_llm_config(matmaster_config/llm_config.yaml)
   ├── build_provider(...)     ← 与 AgentRunService 相同
-  ├── DevConfig               ← 仅 agent / session / tools（可选 YAML）
+  ├── load_exp_config(direct|--exp)  ← matmaster/exps/*.toml
+  ├── DevConfig               ← 仅 session 等本地壳（无独立 YAML 文件）
   ├── DevRunner               ← PlaygroundContext.llm_config + llm_provider
   ├── DevStreamHook / EventLogger / REPL
 ```
@@ -136,7 +137,7 @@ mm-devshell CLI
 
 | 模块 | 职责 |
 |------|------|
-| `config.py` | `DevConfig`（非 LLM）+ `load_dev_config()` |
+| `config.py` | `DevConfig`（session / compaction；无 YAML 加载） |
 | `runner.py` | `DevRunner`、history |
 | `stream_hook.py` | 终端流式输出 |
 | `event_logger.py` | JSONL |

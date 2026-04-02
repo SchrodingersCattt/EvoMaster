@@ -24,7 +24,7 @@ before POST. Artifact upload only includes the current task under that run:
 :func:`upload_eval_task_artifacts_to_oss`). The parent ``devshell_eval_*`` folder is
 shared by all tasks in the batch; it is not uploaded whole. ``extra`` is stored as
 opaque JSON. Optional ``eval_tooling`` (from
-:func:`matmaster.eval_tooling_snapshot.snapshot_devshell_eval_tooling`) records builtin /
+:func:`evaluation.eval_tooling_snapshot.snapshot_eval_tooling`) records builtin /
 skill / MCP server config for batch analysis. Optional ``events_timeline`` (from
 :func:`load_devshell_events_timeline`) is a short list of step labels in order, e.g.
 ``["response", "read_file", "execute_bash", "run_result"]``, derived from
@@ -470,13 +470,14 @@ def build_ingest_item(
     eval_tooling: dict[str, Any] | None = None,
     events_timeline: list[str] | None = None,
 ) -> dict[str, Any]:
-    usage = summary.get("usage") if isinstance(summary, dict) else None
+    raw_summary = summary if isinstance(summary, dict) else None
+    s: dict[str, Any] = raw_summary if raw_summary is not None else {}
+    usage = s.get("usage")
     tokens = extract_total_tokens(usage)
     preview: str | None = None
-    if isinstance(summary, dict):
-        fc = summary.get("final_content")
-        if isinstance(fc, str) and fc:
-            preview = fc[:2000]
+    fc = s.get("final_content")
+    if isinstance(fc, str) and fc:
+        preview = fc[:2000]
 
     extra: dict[str, Any] = {
         "task_id": task_id,
@@ -484,19 +485,18 @@ def build_ingest_item(
         "mode": mode,
         "repeat_idx": repeat_idx,
     }
-    if isinstance(summary, dict):
-        extra.update(
-            {
-                "status": summary.get("status"),
-                "reason": summary.get("reason"),
-                "profile_key": summary.get("profile_key"),
-            }
-        )
-        if summary.get("parse_error"):
-            extra["parse_error"] = True
-            for k in ("error", "missing_file", "empty_file"):
-                if k in summary:
-                    extra[k] = summary[k]
+    extra.update(
+        {
+            "status": s.get("status"),
+            "reason": s.get("reason"),
+            "profile_key": s.get("profile_key"),
+        }
+    )
+    if s.get("parse_error"):
+        extra["parse_error"] = True
+        for k in ("error", "missing_file", "empty_file"):
+            if k in s:
+                extra[k] = s[k]
     if preview is not None:
         extra["final_content_preview"] = preview
 
@@ -509,28 +509,24 @@ def build_ingest_item(
         "question_id": question_id,
         "extra": extra,
     }
-    if isinstance(summary, dict):
-        nt = summary.get("num_turns")
-        if nt is not None:
-            try:
-                nti = int(nt)
-                if nti >= 0:
-                    item["num_turns"] = nti
-            except (TypeError, ValueError):
-                pass
-        mod = summary.get("model")
-        if isinstance(mod, str) and mod.strip():
-            item["model"] = mod.strip()[:256]
+    nt = s.get("num_turns")
+    if nt is not None:
+        try:
+            nti = int(nt)
+            if nti >= 0:
+                item["num_turns"] = nti
+        except (TypeError, ValueError):
+            pass
+    mod = s.get("model")
+    if isinstance(mod, str) and mod.strip():
+        item["model"] = mod.strip()[:256]
 
     if duration_ms is not None and duration_ms >= 0:
         item["duration_ms"] = int(duration_ms)
     if tokens is not None:
         item["tokens"] = tokens
 
-    item["score"] = score_for_eval_ingest(
-        summary if isinstance(summary, dict) else None,
-        devshell_exit_code,
-    )
+    item["score"] = score_for_eval_ingest(raw_summary, devshell_exit_code)
     if isinstance(artifact, dict) and artifact:
         item["artifact"] = dict(artifact)
     return item
@@ -545,31 +541,50 @@ def matmaster_evaluation_request_headers() -> dict[str, str]:
     return headers
 
 
+def _post_matmaster_tools_json(
+    url: str,
+    body: dict[str, Any],
+    *,
+    timeout: float,
+) -> tuple[bool, str, dict[str, Any] | None]:
+    """POST JSON to tools-server; parse ``{code, msg, data?}`` envelope.
+
+    Returns ``(ok, message, full_json)`` where *full_json* is the decoded body on
+    success or on JSON parse failure path is still returned when decode succeeded
+    but ``code != 0``; ``None`` on transport / non-JSON / empty decode errors.
+    """
+    headers = matmaster_evaluation_request_headers()
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(url, json=body, headers=headers)
+    except httpx.HTTPError as exc:
+        return False, str(exc), None
+
+    if resp.status_code != 200:
+        return False, f"HTTP {resp.status_code}: {resp.text[:500]}", None
+
+    try:
+        data = resp.json()
+    except Exception:
+        return False, f"non-JSON response: {resp.text[:200]}", None
+
+    if not isinstance(data, dict):
+        return False, f"unexpected JSON type: {type(data).__name__}", None
+
+    if data.get("code") != 0:
+        return False, str(data.get("msg", data)), data
+
+    return True, str(data.get("msg", "success")), data
+
+
 def post_eval_ingest(
     url: str,
     body: dict[str, Any],
     *,
     timeout: float = 30.0,
 ) -> tuple[bool, str]:
-    headers = matmaster_evaluation_request_headers()
-
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(url, json=body, headers=headers)
-    except httpx.HTTPError as exc:
-        return False, str(exc)
-
-    if resp.status_code != 200:
-        return False, f"HTTP {resp.status_code}: {resp.text[:500]}"
-
-    try:
-        data = resp.json()
-    except Exception:
-        return False, f"non-JSON response: {resp.text[:200]}"
-
-    if data.get("code") != 0:
-        return False, str(data.get("msg", data))
-    return True, str(data.get("msg", "success"))
+    ok, msg, _ = _post_matmaster_tools_json(url, body, timeout=timeout)
+    return ok, msg
 
 
 def post_question_catalog_sync(
@@ -606,26 +621,11 @@ def post_question_catalog_sync(
         body_items.append({"question_id": qid, "question_text": qtext})
 
     body = {"items": body_items}
-    headers = matmaster_evaluation_request_headers()
+    ok, err_msg, data = _post_matmaster_tools_json(url, body, timeout=timeout)
+    if not ok:
+        return False, err_msg
 
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(url, json=body, headers=headers)
-    except httpx.HTTPError as exc:
-        return False, str(exc)
-
-    if resp.status_code != 200:
-        return False, f"HTTP {resp.status_code}: {resp.text[:500]}"
-
-    try:
-        data = resp.json()
-    except Exception:
-        return False, f"non-JSON response: {resp.text[:200]}"
-
-    if data.get("code") != 0:
-        return False, str(data.get("msg", data))
-
-    inner = data.get("data") or {}
+    inner = (data or {}).get("data") or {}
     ac = inner.get("active_count")
     ic = inner.get("inactive_count")
     if ac is not None and ic is not None:

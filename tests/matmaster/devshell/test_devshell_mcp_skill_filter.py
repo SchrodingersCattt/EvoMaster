@@ -1,4 +1,4 @@
-"""Devshell MCP: only struct-DB skill; MCP tools stay lazy until use_skill get_info."""
+"""Lazy MCP: only struct-DB skill registered; MCP tools inject after use_skill get_info."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from matmaster.config.exp import ExpConfig, ExpSkillsConfig, ExpToolsConfig
+from matmaster.config.loader import load_base_system_prompt
 from matmaster.core.exp import Exp
-from matmaster.devshell.config import DevConfig, DevMcpConfig, ToolsConfig
-from matmaster.devshell.runner import DevRunner
 from matmaster.providers.openai_provider import OpenAIProvider
 from matmaster.sessions.local import LocalSession
 from matmaster.types.context import PlaygroundContext
@@ -44,11 +44,18 @@ def test_devshell_mcp_only_struct_db_skill_and_lazy_mcp(
         run_meta={"source": "test"},
     )
 
-    dev = DevConfig(
-        tools=ToolsConfig(builtin=["execute_bash"]),
-        mcp=DevMcpConfig(enabled=True),
+    exp_cfg = ExpConfig(
+        tools=ExpToolsConfig(builtin=["execute_bash"]),
+        skills=ExpSkillsConfig(
+            enabled=True,
+            skills_root=["matmaster/skills/lazymcp/mcp-mat-struct-db"],
+            cache_dir="matmaster/cache",
+            config_dir="matmaster_config",
+            mcp_config_file="mcp_config.json",
+            mcp_runtime_file="mcp.yaml",
+        ),
+        system_prompt=load_base_system_prompt(),
     )
-    exp_cfg = DevRunner._build_exp_config(dev)
     assert exp_cfg.skills.enabled is True
     assert exp_cfg.skills.skill_names == []
     assert exp_cfg.skills.skills_root == ["matmaster/skills/lazymcp/mcp-mat-struct-db"]

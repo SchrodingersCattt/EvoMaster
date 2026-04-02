@@ -1,8 +1,12 @@
-"""Static snapshot of tools / skills configuration for devshell-backed evaluation.
+"""Static snapshot of tools / skills for devshell-backed evaluation.
 
-Mirrors how :class:`matmaster.devshell.runner.DevRunner` builds
-:class:`~matmaster.config.exp.ExpConfig` from :class:`~matmaster.devshell.config.DevConfig`
-(no merge with ``matmaster/exps/direct.toml`` unless devshell is changed to load it).
+Primary path: :func:`snapshot_eval_tooling` loads
+:class:`~matmaster.config.exp.ExpConfig` via :func:`~matmaster.config.loader.load_exp_config`
+(``matmaster/exps/{name}.toml``) — same as production / ``AgentRunService``. MCP paths resolve
+through ``[skills].config_dir`` (typically ``matmaster_config/`` in repo).
+
+:func:`snapshot_devshell_eval_tooling` is an alias for
+``snapshot_eval_tooling(..., exp_name="direct")``.
 
 Used to populate ingest ``extra.eval_tooling`` so runs can be correlated with the
 registered builtin list, skill catalog, and MCP server keys from config.
@@ -36,6 +40,24 @@ _BUILTIN_WHEN_STAR: list[str] = [
     "monitor_job",
     "web-search",
 ]
+
+
+def _matmaster_config_session_type(repo_root: Path) -> str | None:
+    """``session.type`` from ``matmaster_config/config.yaml`` (informational for ingest)."""
+    from matmaster.config.loader import _load_raw
+
+    path = repo_root / "matmaster_config" / "config.yaml"
+    if not path.is_file():
+        return None
+    try:
+        raw = _load_raw(path)
+    except OSError:
+        return None
+    sess = raw.get("session") or {}
+    if not isinstance(sess, dict):
+        return None
+    t = sess.get("type")
+    return str(t).strip() if t else None
 
 
 def _resolve_builtin_tool_names(builtin_cfg: list[str]) -> list[str]:
@@ -115,15 +137,25 @@ def _mcp_server_names(
         return []
 
 
-def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
-    """Return a JSON-serializable dict describing devshell-aligned tooling (default DevConfig)."""
-    from matmaster.devshell.config import DevConfig
-    from matmaster.devshell.runner import DevRunner
+def snapshot_eval_tooling(
+    *,
+    repo_root: Path,
+    exp_name: str = "direct",
+) -> dict[str, Any]:
+    """Snapshot tools/skills/MCP keys from ``matmaster/exps/{exp_name}.toml`` (production-aligned).
+
+    ``session_type`` is read from ``matmaster_config/config.yaml`` when present; otherwise
+    ``"local"``. DevShell still runs with a local workspace; this field is metadata only.
+
+    Ingest compatibility: ``devshell_agent_name`` / ``devshell_max_turns`` mirror
+    ``exp_config_name`` / ``max_turns`` from the loaded exp.
+    """
+    from matmaster.config.loader import load_exp_config
 
     repo_root = repo_root.resolve()
-    dev = DevConfig()
+    exp_cfg = load_exp_config(exp_name.strip())
+    session_type = _matmaster_config_session_type(repo_root) or "local"
 
-    exp_cfg = DevRunner._build_exp_config(dev)
     builtin_cfg = list(exp_cfg.tools.builtin)
     builtin_names = _resolve_builtin_tool_names(builtin_cfg)
 
@@ -149,10 +181,12 @@ def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
 
     return {
         "schema": "matmaster_eval_tooling_v1",
-        "devshell_agent_name": dev.agent.name,
-        "devshell_max_turns": dev.agent.max_turns,
-        "session_type": dev.session.type,
+        "matmaster_exp": exp_name.strip(),
+        "devshell_agent_name": exp_cfg.name,
+        "devshell_max_turns": exp_cfg.max_turns,
+        "session_type": session_type,
         "exp_config_name": exp_cfg.name,
+        "max_turns": exp_cfg.max_turns,
         "tools_builtin_config": builtin_cfg,
         "tools_mcp_pattern": exp_cfg.tools.mcp,
         "builtin_tool_names": builtin_names,
@@ -163,3 +197,8 @@ def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
         "mcp_server_names": mcp_servers,
         "skills_skill_names_filter": list(exp_cfg.skills.skill_names),
     }
+
+
+def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
+    """Same as :func:`snapshot_eval_tooling` with ``exp_name=\"direct\"``."""
+    return snapshot_eval_tooling(repo_root=repo_root, exp_name="direct")

@@ -18,7 +18,8 @@ WORKDIR = Path(__file__).resolve().parent.parent.parent / "debug_workspace"
 LOG_DIR = WORKDIR / "logs"
 LLM_CONFIG: Path | None = None  # None = auto-detect matmaster_config/llm_config.yaml
 MODEL_OVERRIDE: str | None = "claude-opus-4-6"  # e.g. "claude-sonnet-4-6"
-CONFIG_FILE: Path | None = None  # None = use DevConfig defaults
+# matmaster/exps/{name}.toml — same as mm-devshell (default: direct)
+EXP_NAME: str = "direct"
 VERBOSE = True
 # ─────────────────────────────────────────────────────────────────────────
 
@@ -32,13 +33,11 @@ def main(prompt: str | None = None) -> None:
     current_env = os.getenv("SERVICE_ENV", "test")
     load_dotenv(find_dotenv(f".env.{current_env}"))
 
-    from matmaster.devshell.config import DevConfig, load_dev_config
+    from matmaster.config.loader import load_exp_config
+    from matmaster.devshell.config import DevConfig
 
-    # Config
-    if CONFIG_FILE:
-        config = load_dev_config(CONFIG_FILE)
-    else:
-        config = DevConfig()
+    config = DevConfig()
+    exp_cfg = load_exp_config(EXP_NAME)
 
     # Dirs
     WORKDIR.mkdir(parents=True, exist_ok=True)
@@ -78,6 +77,7 @@ def main(prompt: str | None = None) -> None:
         llm_config=llm_config,
         resolved_route=resolved,
         stream_hook=stream_hook,
+        exp_config=exp_cfg,
     )
 
     task = prompt or PROMPT
