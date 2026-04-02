@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matmaster.core.hooks import Hook
 from matmaster.tools.tool_registry import ToolRegistry
@@ -78,15 +78,33 @@ class AgentRuntimeSpec(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
     # ── Tool Runtime v2 fields (Phase 32, all optional for backward compat) ──
-    # Runtime annotations use Any to avoid circular import through
-    # types/__init__.py -> runtime.py -> tool_runner.py -> guard_pipeline.py
-    # -> types/guards.py -> types/__init__.py. TYPE_CHECKING block above
-    # provides ToolRunner/ToolCatalog/RuntimeTopology for static type checkers.
-    tool_runner: Any | None = None  # TYPE_CHECKING: ToolRunner | None
-    tool_catalog: Any | None = None  # TYPE_CHECKING: ToolCatalog | None
-    runtime_topology: Any | None = None  # TYPE_CHECKING: RuntimeTopology | None
+    # Annotations are Any to avoid circular import (core/__init__ → agent →
+    # guard_pipeline → types.guards triggers types/__init__ → runtime →
+    # tool_runner → guard_pipeline). TYPE_CHECKING block provides static
+    # typing; model_validator below enforces runtime contracts.
+    tool_runner: Any | None = None
+    tool_catalog: Any | None = None
+    runtime_topology: Any | None = None
     capability_policy: Any | None = None  # Phase 33 defines CapabilityPolicy Protocol
     structural_validation: Any | None = None  # Phase 33 defines StructuralValidation
+
+    @model_validator(mode="after")
+    def _check_v2_field_types(self) -> AgentRuntimeSpec:
+        """Lazy-import runtime checks for v2 fields (avoids circular import)."""
+        from matmaster.core.tool_runner import ToolRunner
+        from matmaster.tools.tool_catalog import ToolCatalog
+        from matmaster.types.topology import RuntimeTopology
+
+        checks: list[tuple[str, Any, type]] = [
+            ("tool_runner", self.tool_runner, ToolRunner),
+            ("tool_catalog", self.tool_catalog, ToolCatalog),
+            ("runtime_topology", self.runtime_topology, RuntimeTopology),
+        ]
+        for name, value, expected in checks:
+            if value is not None and not isinstance(value, expected):
+                msg = f"{name} must be {expected.__name__}, got {type(value).__name__}"
+                raise ValueError(msg)
+        return self
 
 
 @dataclass(frozen=True)

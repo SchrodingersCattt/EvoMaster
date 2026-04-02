@@ -14,6 +14,7 @@ Verifies:
 from __future__ import annotations
 
 import asyncio
+import threading
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -334,3 +335,63 @@ class TestExecuteBatchPostHook:
 
         assert "exec_me" in post_call_log
         assert "deny_me" not in post_call_log
+
+
+# ── Stop event (cancel semantics) ──────────────────────
+
+
+class TestExecuteBatchStopEvent:
+    @pytest.mark.asyncio
+    async def test_stop_event_skips_remaining_tools(self) -> None:
+        """When stop_event is set during serial phase, remaining tools get cancelled."""
+        stop = threading.Event()
+        executed: list[str] = []
+
+        class _SetStopOnPreHook(BaseHook):
+            """Sets stop_event during pre_tool_call of the first tool."""
+
+            def __init__(self) -> None:
+                self._fired = False
+
+            async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+                if not self._fired:
+                    self._fired = True
+                    stop.set()
+                executed.append(tool_call.name)
+                return HookAction.CONTINUE
+
+        registry = _make_registry("tool_a", "tool_b", "tool_c")
+        hooks = [_SetStopOnPreHook()]
+        spec = _make_spec(registry, hooks=hooks)
+        runner = InlineToolRunner(spec, [])
+        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+
+        results = await runner.execute_batch(
+            [_make_tc("tool_a"), _make_tc("tool_b"), _make_tc("tool_c")], ctx
+        )
+
+        assert len(results) == 3
+        # tool_a went through pre_hook (which set stop_event) and executed
+        assert results[0][1].status == "success"
+        # tool_b and tool_c should be cancelled (stop_event was set before their iteration)
+        assert results[1][1].status == "cancelled"
+        assert results[2][1].status == "cancelled"
+        # Only tool_a should have reached pre_tool_call
+        assert executed == ["tool_a"]
+
+    @pytest.mark.asyncio
+    async def test_stop_event_already_set(self) -> None:
+        """If stop_event is already set, all tools are cancelled immediately."""
+        stop = threading.Event()
+        stop.set()
+
+        registry = _make_registry("t1", "t2")
+        spec = _make_spec(registry)
+        runner = InlineToolRunner(spec, [])
+        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+
+        results = await runner.execute_batch(
+            [_make_tc("t1"), _make_tc("t2")], ctx
+        )
+
+        assert all(r[1].status == "cancelled" for r in results)

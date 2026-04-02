@@ -41,6 +41,9 @@ from .messages import (
 )
 from .runtime import AgentRuntimeSpec, CompactionConfig
 from .session import LocalSessionConfig, Session, SessionConfig, SSHSessionConfig
+from .tool_decision import ToolDecision
+from .tool_spec import ResourceClaim, ToolBinding, ToolInstance, ToolSpec
+from .topology import RuntimeTopology, SessionCapabilities, ToolPlane
 from .worker_registry import WorkerRegistry
 
 __all__ = [
@@ -90,6 +93,15 @@ __all__ = [
     # runtime
     "AgentRuntimeSpec",
     "CompactionConfig",
+    # tool runtime v2
+    "ToolPlane",
+    "SessionCapabilities",
+    "RuntimeTopology",
+    "ToolSpec",
+    "ResourceClaim",
+    "ToolBinding",
+    "ToolInstance",
+    "ToolDecision",
     # session
     "Session",
     "SessionConfig",

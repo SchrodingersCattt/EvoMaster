@@ -483,3 +483,41 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
         # All should be None
         assert data["tool_runner"] is None
         assert data["tool_catalog"] is None
+
+    def test_tool_runner_rejects_invalid_type(self) -> None:
+        """tool_runner field rejects non-ToolRunner objects at construction."""
+        with pytest.raises(ValidationError, match="tool_runner must be ToolRunner"):
+            AgentRuntimeSpec(tool_runner=object())
+
+    def test_tool_catalog_rejects_invalid_type(self) -> None:
+        """tool_catalog field rejects non-ToolCatalog objects at construction."""
+        with pytest.raises(ValidationError, match="tool_catalog must be ToolCatalog"):
+            AgentRuntimeSpec(tool_catalog="not a catalog")
+
+    def test_runtime_topology_rejects_invalid_type(self) -> None:
+        """runtime_topology field rejects non-RuntimeTopology objects."""
+        with pytest.raises(ValidationError, match="runtime_topology must be RuntimeTopology"):
+            AgentRuntimeSpec(runtime_topology=42)
+
+
+# ── Types re-export from matmaster.types (Phase 32) ───
+
+
+class TestTypesReExport:
+    """Phase 32 types importable from matmaster.types package."""
+
+    def test_topology_types(self) -> None:
+        from matmaster.types import ToolPlane, SessionCapabilities, RuntimeTopology
+        assert hasattr(ToolPlane, "SESSION_SHELL")
+        assert hasattr(SessionCapabilities, "model_fields")
+        assert hasattr(RuntimeTopology, "model_fields")
+
+    def test_tool_spec_types(self) -> None:
+        from matmaster.types import ToolSpec, ResourceClaim, ToolBinding, ToolInstance
+        assert hasattr(ToolSpec, "model_fields")
+        assert hasattr(ResourceClaim, "model_fields")
+        assert hasattr(ToolBinding, "model_fields")
+
+    def test_tool_decision_type(self) -> None:
+        from matmaster.types import ToolDecision
+        assert hasattr(ToolDecision, "model_fields")

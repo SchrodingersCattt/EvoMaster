@@ -104,6 +104,14 @@ class InlineToolRunner:
         # Phase 1: Serial guard + pre_hook gating
         approved: list[tuple[int, ToolCallData]] = []  # (result_index, tc)
         for tc in tool_calls:
+            # Check stop_event between serial tool calls (cancel semantics)
+            if ctx.stop_event is not None and ctx.stop_event.is_set():
+                tr = ToolResult(status="cancelled", content="Run cancelled.")
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
             guard_result = self._guard_pipeline.evaluate(tc, ctx.turn, ctx.max_turns)
             if not guard_result.allowed:
                 await run_guard_blocked(hooks, tc, guard_result)
