@@ -38,22 +38,12 @@ created: 2026-04-02
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 34-01-01 | 01 | 1 | KGEN-06 | regression | `uv run pytest tests/matmaster/core/test_agent_kernel_stream.py -x` | Existing | ⬜ pending |
-| 34-01-02 | 01 | 1 | ESIN-04 | unit | `uv run pytest tests/matmaster/core/test_exp_runtime_v2.py -x` | ❌ W0 | ⬜ pending |
-| 34-01-03 | 01 | 1 | ESIN-05 | integration | `uv run pytest tests/matmaster/core/test_exp_skills.py -x` | Partial | ⬜ pending |
-| 34-02-01 | 02 | 1 | ESIN-03 | unit | `uv run pytest tests/matmaster/core/test_agent_kernel_stream.py -x` | Partial | ⬜ pending |
-| 34-02-02 | 02 | 1 | HRET-01 | unit | `uv run pytest tests/matmaster/core/test_agent_kernel_stream.py -x` | Partial | ⬜ pending |
-| 34-02-03 | 02 | 1 | HRET-02 | unit | `uv run pytest tests/matmaster/core/test_agent_kernel_stream.py -x` | ❌ W0 | ⬜ pending |
-| 34-02-04 | 02 | 1 | HRET-03 | unit | `uv run pytest tests/matmaster/core/test_agent_kernel_stream.py -x` | ❌ W0 | ⬜ pending |
-| 34-03-01 | 03 | 2 | ESIN-01 | integration | `uv run pytest tests/matmaster/core/test_exp_runtime_v2.py -x` | ❌ W0 | ⬜ pending |
-| 34-03-02 | 03 | 2 | ESIN-02 | integration | `uv run pytest tests/test_chat_stream_direct.py -x` | Partial | ⬜ pending |
-| 34-03-03 | 03 | 2 | ESIN-06 | unit | `uv run pytest tests/matmaster/integration/test_event_payloads.py -x` | Existing | ⬜ pending |
-| 34-03-04 | 03 | 2 | ESIN-07 | unit | `uv run pytest tests/matmaster/integration/test_event_payloads.py -x` | Existing | ⬜ pending |
-| 34-03-05 | 03 | 2 | ESIN-08 | unit | `uv run pytest tests/matmaster/integration/test_event_payloads.py -x` | Existing | ⬜ pending |
-| 34-04-01 | 04 | 3 | HRET-04 | unit | `uv run pytest tests/matmaster/hooks/test_output_processor.py -x` | Existing | ⬜ pending |
-| 34-04-02 | 04 | 3 | HRET-05 | unit | `uv run pytest tests/matmaster/core/test_context_compactor.py -x` | Existing | ⬜ pending |
-| 34-04-03 | 04 | 3 | HRET-06 | integration | `uv run pytest tests/matmaster/integration/ -x` | Existing | ⬜ pending |
-| 34-05-01 | 05 | 3 | REGR-02 | regression | `uv run pytest tests/matmaster/core/test_agent_kernel.py tests/matmaster/core/test_agent_kernel_extended.py -x` | Existing | ⬜ pending |
+| 34-01-01 | 01 | 1 | KGEN-06, ESIN-03, HRET-01, HRET-02, HRET-03, HRET-05 | unit | `uv run pytest tests/matmaster/core/test_agent_kernel.py tests/matmaster/core/test_agent_kernel_stream.py tests/matmaster/core/test_context_compactor.py -x -q` | Partial (W0 extend) | ⬜ pending |
+| 34-01-02 | 01 | 1 | ESIN-01, ESIN-04, ESIN-05 | unit | `uv run pytest tests/matmaster/core/test_exp_runtime_v2.py tests/matmaster/core/test_agent_kernel.py tests/matmaster/core/test_agent_kernel_stream.py -x -q` | ❌ W0 | ⬜ pending |
+| 34-02-01 | 02 | 2 | ESIN-02, ESIN-06, REGR-02 | integration | `uv run pytest tests/matmaster/services/test_agent_run_stream.py tests/matmaster/core/test_agent_kernel.py tests/matmaster/core/test_agent_kernel_extended.py -x -q` | ❌ W0 | ⬜ pending |
+| 34-02-02 | 02 | 2 | ESIN-07 | unit | `uv run pytest tests/matmaster/integration/test_event_payloads.py -x -q` | Existing (extend) | ⬜ pending |
+| 34-03-01 | 03 | 3 | HRET-06 | integration | `uv run pytest tests/matmaster/core/test_agent_kernel.py tests/matmaster/core/test_agent_kernel_stream.py -x -q` | Existing | ⬜ pending |
+| 34-03-02 | 03 | 3 | HRET-04, HRET-06 | regression | `uv run pytest tests/matmaster/ -x -q` | Existing | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -65,6 +55,7 @@ created: 2026-04-02
 - [ ] `tests/matmaster/core/test_agent_kernel_stream.py` extension — stubs for ESIN-03, HRET-01, HRET-02, HRET-03 (_stream_llm_items segment-complete + event equivalence)
 - [ ] `tests/matmaster/core/test_context_compactor.py` extension — stubs for HRET-05 (event_sink pattern, no Bus dependency)
 - [ ] `tests/matmaster/integration/test_event_payloads.py` extension — stubs for ESIN-07 (ToolResult.payload -> info explicit mapping)
+- [ ] `tests/matmaster/services/test_agent_run_stream.py` — stubs for ESIN-02 (run_agent_stream event bridging + source normalization)
 
 ---
 
