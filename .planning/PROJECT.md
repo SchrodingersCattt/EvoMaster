@@ -38,17 +38,12 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 - ✓ 主执行路径切换（API/worker + 本地 Web 改走 matmaster 原生入口）— v2.1 Phase 29
 - ✓ 独立性证明（AST import audit + 隔离测试 + 迁移文档 + evomaster/playground 物理删除）— v2.1 Phase 30
 - ✓ 技术债务收口（32 个测试修复 + 隔离脚本更新 + 文档同步）— v2.1 Phase 31
+- ✓ Kernel Generator-First + Tool Runtime v2 核心骨架（_run_items generator / run_stream / ToolRunner Protocol / ToolCatalog / 8 frozen types + ToolResult payload+meta 升级 / AgentRuntimeSpec 扩展）— v2.2 Phase 32
 
 ### Active
 
-- [ ] AgentKernel 三层接口改造（_run_items / run_stream / run）
-- [ ] SessionCapabilities + RuntimeTopology 显式建模
-- [ ] ToolSpec / ToolBinding / ResourceClaim / ToolInstance 对象模型
-- [ ] ToolCatalog（base + overlay，ToolRegistry facade 兼容）
-- [ ] ToolRunner Protocol + ToolScheduler（exclusive / shared_read / counted）
+- [ ] ToolRunner 完整执行链实现 + ToolScheduler（exclusive / shared_read / counted）
 - [ ] 三层约束模型（StructuralValidation + RunStateGuard + CapabilityPolicy）
-- [ ] ToolResult 升级（status + content + payload + meta）
-- [ ] AgentRuntimeSpec 扩展字段
 - [ ] Exp.run_stream() + AgentRunService.run_agent_stream() 接入
 - [ ] _do_stream_llm() → _stream_llm_items() 子 generator 改造
 - [ ] Hook → Bus 间接路径退役（5 个 Hook 逐个替代后移除）
@@ -82,7 +77,7 @@ matmaster/ 运行时路径完全独立于 evomaster/playground/src。三方向�
 
 ### Current State
 
-**As of 2026-04-02:** v2.1 里程碑完成并归档。matmaster/ 运行时零外部依赖（evomaster/playground/src 均已物理删除或解耦）。1,294 个测试通过，19/19 需求满足。
+**As of 2026-04-02:** Phase 32 complete — Kernel Generator-First 架构就绪。_run_items() AsyncGenerator + run_stream() 公开接口 + ToolRunner Protocol + ToolCatalog facade + 完整 Tool Runtime v2 类型体系。1,357 个测试通过，25/25 Phase 32 需求满足。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 Source: 15,839 LOC (matmaster/).
@@ -94,7 +89,7 @@ Architecture (current):
 - `matmaster/tools/` — ToolRegistry, BuiltinTool (原生注册), LazyMCP, SkillTool
 - `matmaster/mcp/` — MCPConnection ABC, MCPToolManager, 三种传输 (stdio/sse/streamable_http)
 - `matmaster/sessions/` — Session Protocol, LocalSession, SSHSession (原生 paramiko)
-- `matmaster/types/` — PlaygroundContext, AgentRuntimeSpec, AgentEvent, CompactionConfig, KernelRunResult, Guards, LLMProvider, Messages, WorkerRegistry
+- `matmaster/types/` — PlaygroundContext, AgentRuntimeSpec, AgentEvent, CompactionConfig, KernelRunResult, Guards, LLMProvider, Messages, WorkerRegistry, ToolPlane/SessionCapabilities/RuntimeTopology (topology), ToolSpec/ToolBinding/ResourceClaim/ToolInstance (tool_spec), ToolDecision (tool_decision)
 - `matmaster/providers/` — OpenAIProvider, llm_factory
 - `matmaster/hooks/` — ConfirmationHook, OutputProcessorHook, SkillHitHook, AssistantStateHook
 - `matmaster/integration/` — EventRouter, EventPayloads, PersistenceHandler, SSEHandler, WorkspaceHandler, BohriumSetupService, bohrium_env, workspace_resolver
