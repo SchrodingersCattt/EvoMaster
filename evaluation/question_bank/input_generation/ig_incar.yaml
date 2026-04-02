@@ -2,7 +2,7 @@ version: v5
 capability: input_generation
 domain: incar
 questions:
-- id: IG_incar_001_20260401
+- id: IG_incar_001_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for a band structure calculation of Lu4N4. Non-self-consistent run reading existing charge
@@ -83,7 +83,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_002_20260401
+- id: IG_incar_002_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for a static SCF calculation of organic-inorganic hybrid perovskite C26H28Cl4N4Pb2. Semiconductor,
@@ -161,7 +161,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_003_20260401
+- id: IG_incar_003_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for structure relaxation of perovskite ErNaO3. Full cell+ion optimization (ISIF=3), spin-polarized
@@ -237,7 +237,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_004_20260401
+- id: IG_incar_004_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for HSE06 hybrid functional calculation of MOF C30H22N4O10Zn2. Accurate electronic structure
@@ -315,7 +315,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_005_20260401
+- id: IG_incar_005_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for DFT+U calculation of RbPmMo2O8 with Hubbard U on Mo d-orbitals. Spin-polarized.
@@ -390,7 +390,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_006_20260401
+- id: IG_incar_006_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for SCAN metaGGA calculation of intermetallic Tm2ZnGa2. Tm has f electrons; spin-polarized.
@@ -467,7 +467,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_007_20260401
+- id: IG_incar_007_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for Born-Oppenheimer molecular dynamics of Heusler alloy MnNaPm2. Mn is magnetic; timestep
@@ -545,7 +545,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_008_20260401
+- id: IG_incar_008_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for elastic constants calculation of perovskite BaZrO3. Finite-difference method (IBRION=6),
@@ -621,7 +621,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_009_20260401
+- id: IG_incar_009_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for DFPT dielectric constant calculation of C8H12HfO4. Compute dielectric tensor and Born effective
@@ -699,7 +699,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_010_20260401
+- id: IG_incar_010_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for spin-orbit coupling calculation of heavy-element halide Br6H6Pb2S2. Pb SOC is significant.
@@ -776,7 +776,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_011_20260401
+- id: IG_incar_011_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for density of states calculation of ternary intermetallic CdOs3Pt. Magnetic metal; needs PDOS.
@@ -853,7 +853,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_012_20260401
+- id: IG_incar_012_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Fe magnetic,
@@ -930,7 +930,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_013_20260401
+- id: IG_incar_013_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for surface relaxation of ternary carbide (Ta,V)2C surface (C33O2Ta16V16). Fixed cell (ISIF=2),
@@ -1008,7 +1008,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_014_20260401
+- id: IG_incar_014_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for static calculation of hydrogen-passivated SiO2 slab H16O24Si12. Insulator, fixed cell (ISIF=2).
@@ -1084,7 +1084,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_015_20260401
+- id: IG_incar_015_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for defect calculation of I-on-S substitution in BiSI with HSE06+SOC. Heavy element Bi requires
@@ -1161,7 +1161,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_016_20260401
+- id: IG_incar_016_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for GW precursor SCF of rare-earth selenide DySe. Dy has f electrons (MAGMOM~7); save wavefunctions
@@ -1239,7 +1239,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_017_20260401
+- id: IG_incar_017_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for high-precision structure optimization of Al as BSE precursor. PREC=Accurate, ISIF=3.
@@ -1314,7 +1314,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_018_20260401
+- id: IG_incar_018_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for magnetic SCF calculation of double perovskite Ca4TaOs. 5d transition metals (Ta, Os); spin-polarized
@@ -1390,7 +1390,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_019_20260401
+- id: IG_incar_019_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for non-magnetic insulator static SCF calculation of cesium borate B12Cs4O20. Non-magnetic
@@ -1466,7 +1466,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_020_20260401
+- id: IG_incar_020_20260402
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for magnetic metal SCF calculation of ternary selenide Na3AlSe. Spin-polarized (ISPIN=2) with
