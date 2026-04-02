@@ -379,3 +379,191 @@ class TestRunBackwardCompat:
         kernel = AgentKernel()
         result = await kernel.run(spec, "test")
         assert result.result.reason == "natural"
+
+
+# ── Gap Closure tests (Phase 34 Plan 4) ────────────────────
+
+
+class TestGap1FullToolRunnerActivation:
+    """Gap 1: _run_items() calls spec.tool_runner.execute_batch() when present."""
+
+    @pytest.mark.asyncio
+    async def test_run_items_uses_tool_runner_when_present(self) -> None:
+        """When spec.tool_runner is not None, _run_items() delegates to execute_batch()."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.tool_runner import ToolExecutionContext
+        from matmaster.tools.tool_result import ToolResult as TR
+
+        provider = ToolCallStreamProvider()
+        registry, _ = _make_tool_registry()
+
+        # Mock ToolRunner that records calls
+        mock_runner = MagicMock()
+        mock_runner.execute_batch = AsyncMock(return_value=[
+            (ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1}),
+             TR(status="success", content="runner result"))
+        ])
+
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        # Inject tool_runner via model_copy (frozen model)
+        spec = spec.model_copy(update={"tool_runner": mock_runner})
+
+        kernel = AgentKernel()
+        items: list[_KernelItem] = []
+        async for item in kernel.run_stream(spec, "test task"):
+            items.append(item)
+
+        # FullToolRunner.execute_batch should have been called
+        assert mock_runner.execute_batch.called, \
+            "spec.tool_runner.execute_batch() should be called when tool_runner is present"
+        # Verify ToolExecutionContext was passed
+        call_args = mock_runner.execute_batch.call_args
+        ctx_arg = call_args[0][1]  # second positional arg
+        assert isinstance(ctx_arg, ToolExecutionContext), \
+            "Second arg to execute_batch should be ToolExecutionContext"
+
+    @pytest.mark.asyncio
+    async def test_run_items_falls_back_to_registry_without_tool_runner(self) -> None:
+        """When spec.tool_runner is None, _run_items() uses spec.tool_registry.execute()."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        provider = ToolCallStreamProvider()
+        registry, tools = _make_tool_registry()
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        # tool_runner is None by default
+
+        kernel = AgentKernel()
+        items: list[_KernelItem] = []
+        async for item in kernel.run_stream(spec, "test task"):
+            items.append(item)
+
+        # Tool should have been executed via registry (tools record calls)
+        tool_result_events = [
+            i for i in items
+            if i.event and isinstance(i.event, ToolResultEvent)
+        ]
+        assert len(tool_result_events) >= 1, \
+            "Should yield ToolResultEvent from registry fallback path"
+
+
+class TestGap2RunStreamYieldsBusEvent:
+    """Gap 2: run_stream() yields BusEvent objects, not _KernelItem."""
+
+    @pytest.mark.asyncio
+    async def test_run_stream_yields_bus_event_not_kernel_item(self) -> None:
+        """run_stream() must yield BusEvent objects, with RunResultEvent as terminal."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.types.events import RunResultEvent
+
+        provider = ContentOnlyProvider()
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        # No event should be a _KernelItem
+        for event in events:
+            assert not isinstance(event, _KernelItem), \
+                f"run_stream() yielded _KernelItem: {event!r}. Must yield BusEvent."
+
+        # All events should have 'type' attribute (BusEvent signature)
+        for event in events:
+            assert hasattr(event, 'type'), \
+                f"Yielded object missing 'type' attribute: {type(event).__name__}"
+
+        # Last event should be RunResultEvent
+        assert isinstance(events[-1], RunResultEvent), \
+            f"Last event should be RunResultEvent, got {type(events[-1]).__name__}"
+        assert events[-1].status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_run_stream_with_tool_calls_yields_bus_events(self) -> None:
+        """run_stream() with tool calls also yields only BusEvent objects."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.types.events import RunResultEvent
+
+        provider = ToolCallStreamProvider()
+        registry, _ = _make_tool_registry()
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        for event in events:
+            assert not isinstance(event, _KernelItem), \
+                f"run_stream() yielded _KernelItem: {event!r}"
+            assert hasattr(event, 'type'), \
+                f"Missing 'type' attribute: {type(event).__name__}"
+
+        assert isinstance(events[-1], RunResultEvent), \
+            f"Last event should be RunResultEvent, got {type(events[-1]).__name__}"
+
+
+class TestGap3CatalogVersionInvalidation:
+    """Gap 3: catalog.version change invalidates cached tool_definitions."""
+
+    @pytest.mark.asyncio
+    async def test_catalog_version_invalidates_tool_definitions(self) -> None:
+        """When catalog.version changes, _run_items rebuilds tool_definitions."""
+        from unittest.mock import MagicMock, PropertyMock
+
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        provider = ContentOnlyProvider()
+        registry, _ = _make_tool_registry()
+
+        # Mock ToolCatalog with controllable version
+        mock_catalog = MagicMock()
+        type(mock_catalog).version = PropertyMock(return_value=1)
+        mock_catalog.build_definitions = MagicMock(return_value=[
+            {"type": "function", "function": {"name": "test", "parameters": {}}}
+        ])
+
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        spec = spec.model_copy(update={"tool_catalog": mock_catalog})
+
+        kernel = AgentKernel()
+        items: list[_KernelItem] = []
+        async for item in kernel.run_stream(spec, "test task"):
+            items.append(item)
+
+        # Catalog's build_definitions should have been called
+        assert mock_catalog.build_definitions.called, \
+            "tool_catalog.build_definitions() should be called when catalog is present"
+
+    @pytest.mark.asyncio
+    async def test_catalog_version_no_refresh_when_unchanged(self) -> None:
+        """When catalog.version is unchanged across turns, no extra build_definitions call."""
+        from unittest.mock import MagicMock, PropertyMock, call
+
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        # Provider that makes 2 turns (tool call then natural finish)
+        provider = ToolCallStreamProvider()
+        registry, _ = _make_tool_registry()
+
+        mock_catalog = MagicMock()
+        type(mock_catalog).version = PropertyMock(return_value=1)
+        mock_catalog.build_definitions = MagicMock(return_value=[
+            {"type": "function", "function": {"name": "test_tool", "parameters": {}}}
+        ])
+
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        spec = spec.model_copy(update={"tool_catalog": mock_catalog})
+
+        kernel = AgentKernel()
+        items = []
+        async for item in kernel.run_stream(spec, "test task"):
+            items.append(item)
+
+        # build_definitions called once on first turn, but NOT re-called
+        # on second turn since version unchanged
+        build_calls = mock_catalog.build_definitions.call_count
+        assert build_calls == 1, \
+            f"build_definitions should be called once (caching), got {build_calls}"
