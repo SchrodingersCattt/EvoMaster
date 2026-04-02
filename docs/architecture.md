@@ -19,7 +19,7 @@ EvoMaster/
 │   ├── skills/             # Skill system
 │   └── utils/              # Utilities (LLM, Types)
 ├── playground/             # Playground implementations
-├── configs/                # Configuration files
+├── config/                 # Configuration files
 └── docs/                   # Documentation
 ```
 

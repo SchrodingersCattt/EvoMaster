@@ -107,7 +107,7 @@
 
 ## 其他约定
 
-- **配置目录**：产品主配置与 MCP JSON 位于 `configs/mat_master/`（仓库根目录不再保留泛用 `configs/config.yaml`）。`ConfigManager` / `get_config_manager()` 未指定 `config_dir` 时默认加载该目录下的 `config.yaml`。
+- **配置目录**：产品主配置与 MCP JSON 位于 `config/`。`ConfigManager` / `get_config_manager()` 未指定 `config_dir` 时默认加载该目录下的 `config.yaml`。
 - **维护本文件**：在对话或开发过程中，若产生新的、值得固化的约定或逻辑（如架构决策、命名/用法约定、废弃说明等），应适时补充到 AGENTS.md，便于后续遵守。
 - **多实例与 Redis**：API 与 Worker 均可多实例部署。跨实例的协调一律使用 Redis（或其它共享存储）；事件顺序、用户回复、run 归属与存活判断等均依赖 Redis，不依赖进程内状态或「请求与执行同进程」的假设。
 - **服务重启**：新增或修改功能时需考虑服务重启场景。进程内内存（如 `SESSIONS`）在重启后会清空；若逻辑依赖跨请求的状态（如会话级鉴权、当前 run 所用资源），应区分「需持久化」与「仅当次 run 有效」：前者落库或共享存储，后者可保留在内存，并确保重启后新请求能从 DB/共享存储恢复必要信息继续工作。

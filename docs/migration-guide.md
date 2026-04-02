@@ -222,9 +222,7 @@ run_agent_sync()                               (thin 6-stage orchestration)
 
 ### Config YAML Location
 
-Unchanged. Configuration files remain at:
-- `configs/mat_master/config.yaml`
-- `configs/minimal/config.yaml`
+Configuration files are now at `config/` (single directory).
 
 ### Startup Validation
 

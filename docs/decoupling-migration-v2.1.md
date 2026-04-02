@@ -103,10 +103,7 @@ Exp 通过 TOML 文件声明式定义，位于 matmaster/exps/。当前活跃的
 
 ### 3.2 遗留路径名
 
-| 文件 | 路径 | 性质 |
-|------|------|------|
-| configs/mat_master/config.yaml:L238 | `local_user_skills_root: "~/.evomaster-skills"` | 文件系统目录名，用户本机上的实际目录路径，非代码依赖 |
-| configs/mat_master/config.yaml:L240 | `remote_user_skills_root: "/personal/.evomaster-skills"` | SSH 远程节点上的目录名，非代码依赖 |
+（已清理：`configs/` 目录已删除，配置统一到 `config/`）
 
 ### 3.3 归档资产
 
@@ -117,14 +114,9 @@ Exp 通过 TOML 文件声明式定义，位于 matmaster/exps/。当前活跃的
 
 注：.archive/ 已在 .gitignore 中，不纳入版本控制。这些技能仅在本地保留以供参考。
 
-### 3.4 配置双目录
+### 3.4 配置目录（已完成）
 
-`matmaster_config/` 和 `configs/mat_master/` 两个配置目录共存：
-
-- `matmaster_config/` -- matmaster 独立运行使用的配置目录（config.yaml, llm_config.yaml, mcp.yaml, mcp_config.*.json）
-- `configs/mat_master/` -- src/services/ 经 ConfigManager 桥接使用的旧路径，包含完整的 LLM、session、skill、calculation 配置
-
-两者在 LLM 配置和技能路径上存在内容重叠。matmaster 通过 matmaster/config/loader.py 独立加载 matmaster_config/，不依赖 configs/ 目录。
+配置已统一到 `config/` 单一目录（原 `matmaster_config/` 重命名，`configs/` 已删除）。
 
 ### 3.5 文档和注释中的历史引用
 
@@ -134,13 +126,9 @@ Exp 通过 TOML 文件声明式定义，位于 matmaster/exps/。当前活跃的
 
 以下清理项按优先级排序，建议在 v2.2 里程碑中执行：
 
-### P1: 配置统一（高优先级）
+### P1: 配置统一（已完成）
 
-**目标:** 将 configs/mat_master/ 和 matmaster_config/ 合并为单一配置源。
-
-- 当前两个目录存在 LLM 配置和技能路径的重叠定义
-- 合并后 src/services/ 直接读取 matmaster_config/，消除 ConfigManager 桥接层
-- 需同步更新所有消费 configs/ 路径的 src 代码
+`configs/` 已删除，`matmaster_config/` 已重命名为 `config/`，所有代码引用已更新。
 
 ### P2: 历史路径清理（LEGY-01, LEGY-02）
 

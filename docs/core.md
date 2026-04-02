@@ -136,7 +136,7 @@ def __init__(
     """Initialize Playground
 
     Args:
-        config_dir: Config directory (default: configs/)
+        config_dir: Config directory (default: config/)
         config_path: Full config file path (overrides config_dir if provided)
     """
 ```
@@ -353,7 +353,7 @@ class MultiAgentPlayground(BasePlayground):
 from pathlib import Path
 
 # Create playground
-playground = MyPlayground(config_path=Path("configs/my_config/config.yaml"))
+playground = MyPlayground(config_path=Path("config/config.yaml"))
 
 # Set run directory
 playground.set_run_dir("runs/my_run_001")

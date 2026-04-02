@@ -44,7 +44,7 @@
 
 - **1.1** `EvoMasterConfig` 使用 `agents: dict`，无顶层 `agent`；新增 `ToolConfig`（顶层 `tools`）；per-agent 通过 `get_agent_config(name)`、`get_agent_tools_config(name)`、`get_agent_skills_config(name)` 等读取。
 - **1.2** YAML 中不再使用 `enable_tools`；缺失 `tools` 时 `get_agent_tools_config` 返回默认 `{ builtin: ['*'], mcp: '' }`。
-- **1.3 / 1.4** 现有 `configs/` 下 YAML 已全部改为 `tools: { builtin: [...], mcp: "..." }` 形式。
+- **1.3 / 1.4** 现有 `config/` 下 YAML 已全部改为 `tools: { builtin: [...], mcp: "..." }` 形式。
 
 ### 阶段 2：Playground 与 Agent 创建
 
@@ -91,7 +91,7 @@
 
 ### Skills 已与上游对齐（已完成）
 
-- **配置层**：已移除 `SkillConfig`、`KnowledgeSkillConfig`、`OperatorSkillConfig`、`EvoMasterConfig.skill`、`get_skill_config()`；产品配置（如 `configs/mat_master/config.yaml`）已删除 `skill:` 段；`evomaster/__init__.py` 已去掉上述导出。
+- **配置层**：已移除 `SkillConfig`、`KnowledgeSkillConfig`、`OperatorSkillConfig`、`EvoMasterConfig.skill`、`get_skill_config()`；产品配置（如 `config/config.yaml`）已删除 `skill:` 段；`evomaster/__init__.py` 已去掉上述导出。
 - **Skills 实现层**：已移除 `KnowledgeSkill` 类；`SkillRegistry._load_skills()` 仅从 `skills_root` 子目录加载统一类型 `Skill`；`get_meta_info_context()` 不再区分类型；已删除 `get_knowledge_skills()` / `get_operator_skills()`。
 - **文档**：`docs/skills.md`、`docs/zh/skills.md` 已更新为仅描述 `Skill` 与统一加载方式。
 

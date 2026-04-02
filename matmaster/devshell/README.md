@@ -4,7 +4,7 @@
 
 ## LLM 从哪里来
 
-与 **`AgentRunService` 一致**：读取仓库根目录 **`matmaster_config/llm_config.yaml`**，用 **`build_provider`** 构造 `OpenAIProvider`；默认 profile 来自 **`matmaster_config/config.yaml`** 的 **`agents.general.llm`**（若缺省则用 `llm_config.yaml` 的 `default`）。
+与 **`AgentRunService` 一致**：读取仓库根目录 **`config/llm_config.yaml`**，用 **`build_provider`** 构造 `OpenAIProvider`；默认 profile 来自 **`config/config.yaml`** 的 **`agents.general.llm`**（若缺省则用 `llm_config.yaml` 的 `default`）。
 
 鉴权与环境变量写在 **`.env`**（或已 export 的环境变量）中，由 **`llm_config.yaml` 里 `${LITELLM_PROXY_API_KEY}` 等** 在加载时展开 —— 与线上一致，无需在 devshell 里再配一套 Key/Base URL。
 
@@ -27,7 +27,7 @@ mm-devshell repl --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-
 
 省略 **`--model`** 时，使用 `config.yaml` 的 `agents.general.llm` 指向的 profile，或 `llm_config.yaml` 顶层的 **`default`**。
 
-可选 **`--config`**：仅覆盖 agent / session / tools（见 `configs/devshell/dev.yaml.example`），**不包含** LLM 连接信息。
+可选 **`--config`**：仅覆盖 agent / session / tools（见 `matmaster/devshell/dev.yaml.example`），**不包含** LLM 连接信息。
 
 ```bash
 uv run python -m matmaster.devshell --workdir ./workspace --log-dir ./logs --model gemini-3-flash-preview
@@ -107,14 +107,14 @@ uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run
 
 ## 可选 devshell YAML
 
-仅用于 **agent（max_turns、identity 等）、session.type、tools.builtin**。示例：`configs/devshell/dev.yaml.example`。
+仅用于 **agent（max_turns、identity 等）、session.type、tools.builtin**。示例：`matmaster/devshell/dev.yaml.example`。
 
 ## 架构
 
 ```
 mm-devshell CLI
   │
-  ├── load_llm_config(matmaster_config/llm_config.yaml)
+  ├── load_llm_config(config/llm_config.yaml)
   ├── build_provider(...)     ← 与 AgentRunService 相同
   ├── DevConfig               ← 仅 agent / session / tools（可选 YAML）
   ├── DevRunner               ← PlaygroundContext.llm_config + llm_provider

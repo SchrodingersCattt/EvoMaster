@@ -136,7 +136,7 @@ def __init__(
     """初始化 Playground
 
     Args:
-        config_dir: 配置目录（默认为 configs/）
+        config_dir: 配置目录（默认为 config/）
         config_path: 配置文件完整路径（如果提供，会覆盖 config_dir）
     """
 ```
@@ -352,7 +352,7 @@ class MultiAgentPlayground(BasePlayground):
 from pathlib import Path
 
 # 创建 playground
-playground = MyPlayground(config_path=Path("configs/my_config/config.yaml"))
+playground = MyPlayground(config_path=Path("config/config.yaml"))
 
 # 设置 run 目录
 playground.set_run_dir("runs/my_run_001")

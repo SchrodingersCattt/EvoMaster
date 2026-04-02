@@ -328,7 +328,7 @@ agent = Agent(
     system_prompt_file="prompts/system.txt",
     user_prompt_file="prompts/user.txt",
     prompt_format_kwargs={"domain": "physics"},
-    config_dir=Path("./configs/my_agent"),
+    config_dir=Path("./config"),
 )
 ```
 

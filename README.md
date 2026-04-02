@@ -96,7 +96,7 @@ EvoMaster/
 ├── evomaster/           # Core (agent, session, tools, skills, LLM)
 ├── playground/
 │   └── mat_master/      # MatMaster app (frontend + service + start_dev.sh)
-├── configs/mat_master/  # MatMaster YAML + mcp_config*.json
+├── config/              # MatMaster YAML + mcp_config*.json
 └── docs/                # Documentation
 ```
 
@@ -106,20 +106,20 @@ EvoMaster/
 
 You can run agents from the command line without the web UI.
 
-**Prerequisites:** `uv sync` (or `pip install -e .`). Configure LLM and Bohrium in `.env` and/or in `configs/mat_master/config.yaml` (and MCP JSON as needed).
+**Prerequisites:** `uv sync` (or `pip install -e .`). Configure LLM and Bohrium in `.env` and/or in `config/config.yaml` (and MCP JSON as needed).
 
 ```bash
-# MatMaster agent (default config under configs/mat_master/)
-python run.py --agent mat_master --config configs/mat_master/config.yaml --task "Your task"
+# MatMaster agent (default config under config/)
+python run.py --agent mat_master --config config/config.yaml --task "Your task"
 
 # Task from file
-python run.py --agent mat_master --config configs/mat_master/config.yaml --task task.txt
+python run.py --agent mat_master --config config/config.yaml --task task.txt
 
 # Interactive
-python run.py --agent mat_master --config configs/mat_master/config.yaml --interactive
+python run.py --agent mat_master --config config/config.yaml --interactive
 
 # Planner vs direct mode (MatMaster)
-python run.py --agent mat_master --config configs/mat_master/config.yaml --mode planner --task "Your task"
+python run.py --agent mat_master --config config/config.yaml --mode planner --task "Your task"
 ```
 
 ---
