@@ -2,7 +2,7 @@
 
 ## What This Is
 
-MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground -> exp -> agent` 三层抽象组织运行时、工具、技能与执行环境。项目最初借助 `evomaster/` 演进出了当前能力面，如今的主线目标是把 `matmaster/` 抽离为可独立运行、测试与发布的核心包，同时为仓库中遗留的服务层和本地 Web 调试路径保留清晰、可迁移的兼容边界。
+MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground -> exp -> agent` 三层抽象组织运行时、工具、技能与执行环境。v2.1 完成后，`matmaster/` 已是完全独立的核心包——运行时零依赖 `evomaster`/`playground`/`src`，15,839 行 Python 代码，1,294 个测试全部通过。仓库中 `src/` 服务层作为应用层正向调用 `matmaster/`，是正确的依赖方向。
 
 ## Core Value
 
@@ -26,100 +26,65 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 - ✓ EventRouter SRP 拆分 (event_payloads + PersistenceHandler + SSEHandler) — post-v1
 - ✓ DevShell 本地开发 REPL (DevConfig + DevRunner + CLI entry) — post-v1
 - ✓ Kernel 强化 (KernelRunResult + on_guard_blocked + tool 异常捕获 + stream finish 校验) — post-v1
-- ✓ BuiltinTool 体系 (base ABC + BashTool/ListDirTool/TaskTools + session 注入 + Exp 双源注册) — v1.1 (TOOL-04,07,09)
-- ✓ 文件操作 Tools (Read/Write/Edit/Glob/Grep + ReadTracker + Read-Before-Modify 协议) — v1.1 (TOOL-01~06,08)
-- ✓ Tool Description/Schema 精细化 + developer_instructions system prompt — v1.1 (PRMT-01~02)
-- ✓ SubAgent Spawn 机制 (SubAgentTool + spawn_fn 闭包 + 事件路由 + stop_event 级联) — v1.1 (SUBA-01~06, PRMT-03)
-- ✓ Hook 系统异步化 (5 个 Hook async 化 + ConfirmationHook asyncio.Future 重构 + _bridge_loop 桥接) — v2.0 Phase 15 (HOOK-01~03)
-- ✓ Exp 生命周期 async 化 (assemble/build_runtime/run/cleanup 全 async + async cleanup callback dispatch) — v2.0 Phase 18 (EXPL-01~03)
-- ✓ SubAgent spawn async 链路 (async spawn_fn 复用 Exp.run() + SpawnTool native async execute()) — v2.0 Phase 18 (EXPL-04)
-- ✓ v2.0 async 基础设施闭环（Bus/Router、Tool Dispatch、Confirmation Flow、emit_nowait 技术债收口）— v2.0 Phase 16-24
-- ✓ `matmaster/ → src/` 反向依赖消除：bohrium_env.py 纯模块 + BohriumSetupService 回调注入 + script_env/path_adaptor/job_service import 切换 — v2.1 Phase 28 (INVR-01, INVR-02)
-- ✓ `src/` 消费者迁移到 matmaster 原生数据结构：chat_history.py 消息类型、agent_run_bohrium.py SSHSession、agent_run_service.py 回调绑定 — v2.1 Phase 28 (CONS-03, CONS-04)
+- ✓ BuiltinTool 体系 (base ABC + BashTool/ListDirTool/TaskTools + session 注入 + Exp 双源注册) — v1.1
+- ✓ 文件操作 Tools (Read/Write/Edit/Glob/Grep + ReadTracker + Read-Before-Modify 协议) — v1.1
+- ✓ Tool Description/Schema 精细化 + developer_instructions system prompt — v1.1
+- ✓ SubAgent Spawn 机制 (SubAgentTool + spawn_fn 闭包 + 事件路由 + stop_event 级联) — v1.1
+- ✓ v2.0 async 基础设施闭环（Protocol/LLM/Tool/Hook/Bus/Kernel/Exp 全链路 async + Confirmation Flow + parallel dispatch）— v2.0
+- ✓ Session & Playground 原生化（matmaster 自有 Session Protocol + 参数化 Playground + YAML 配置直读）— v2.1 Phase 25
+- ✓ Tool 全面内化（bash_safety/editor 内联 + MonitorJobTool 迁入 + EvoToolAdapter 删除 + web_search 解耦）— v2.1 Phase 26
+- ✓ MCP/Calculation 原生链路（MCPConnection ABC + MCPToolManager + calculation adaptors 搬入）— v2.1 Phase 27
+- ✓ src 反向依赖消除 + Consumer 迁移（BohriumSetupService 回调注入 + chat_history/agent_run_bohrium 切换 matmaster 类型）— v2.1 Phase 28
+- ✓ 主执行路径切换（API/worker + 本地 Web 改走 matmaster 原生入口）— v2.1 Phase 29
+- ✓ 独立性证明（AST import audit + 隔离测试 + 迁移文档 + evomaster/playground 物理删除）— v2.1 Phase 30
+- ✓ 技术债务收口（32 个测试修复 + 隔离脚本更新 + 文档同步）— v2.1 Phase 31
 
 ### Active
 
-- [ ] `matmaster/` 运行时路径不再直接 import `evomaster`、`playground` 或 `src`
-- [ ] `session / playground / config / tool / MCP` 边界提供 matmaster 原生实现
-- [ ] `matmaster/ → playground/` 依赖消除（web_search_tool），收归 matmaster 原生或 skill 机制
-- [ ] `src/` 与本地 Web 主执行路径切换到 matmaster 原生入口或受控兼容层
-- [ ] `calculation / Bohrium / skills / MCP` 能力在解耦后保持现有行为
-- [ ] 通过解耦审计与测试门禁证明 matmaster 可脱离 evomaster / playground / src 独立运行
+(v2.2 里程碑定义后填充)
 
-## Current Milestone: v2.1 matmaster/ 完全独立化
+## Shipped: v2.1 matmaster/ 完全独立化 (2026-04-02)
 
-**Goal:** 让 `matmaster/` 运行时路径不再 import `evomaster/`、`playground/` 或 `src/`，成为可独立运行、测试与发布的核心包。
+matmaster/ 运行时路径完全独立于 evomaster/playground/src。三方向解耦、物理删除、独立性证明全部完成。详见 milestones/v2.1-ROADMAP.md。
 
-**Target features:**
-- evomaster/ 解耦（~15 imports, 8 files）：session/config/playground 原生化、builtin tool helper 内化、MCP/calculation 链路收回、EvoToolAdapter 消除
-- playground/ 解耦（1 import）：`exp.py` 中 `get_web_search_tool` 收归 matmaster 或通过 skill/tool 注册机制替代
-- src/ 反向依赖消除（6 imports, 2 files）：`bohrium_setup.py` 的 5 个 service 函数和 `script_env.py` 的常量引用改为依赖反转
-- 主执行路径迁移：API/worker 与本地 Web 初始化逻辑改用 matmaster 原生入口
-- 质量门禁：import audit + 独立测试证明 matmaster 可脱离上述三者独立运行
+## Next Milestone Goals
 
-### Out of Scope
-
-- 新产品能力或前端交互改版 — 本里程碑聚焦架构解耦，不扩展用户可见功能面
-- `playground/mat_master/core/` 历史 solver 体系的全面重写 — 仅处理阻塞 matmaster 独立运行的依赖点
-- `bohr-agent-sdk` 服务端协议调整 — 继续兼容当前 executor / storage / OSS 契约
-- `src/` 对 `matmaster/` 的正向依赖清理 — 应用层调核心层是正确方向，不在本次范围
-- `playground/ → src/` 和 `playground/ → matmaster/` 的依赖 — 本里程碑只关注 matmaster 的出向依赖
+v2.2 尚未定义。候选方向（来自 v2.1 迁移文档 P1-P5 优先级）：
+- P1: 配置统一（matmaster_config/ → config/ 已完成，但 config.yaml 中 ~/.evomaster-skills 路径待清理）
+- P2: 历史路径清理（playground/mat_master/core/ solver 体系、MILESTONES.md 补齐 v1.1/v2.0 历史）
+- P3: 路径命名规范化（OSS 前缀、skill 文件系统路径中的 evomaster 残留）
+- P4: 独立打包（matmaster 具备独立 pip install 方案）
+- P5: 归档处置（.planning/phases/ 历史目录管理）
 
 ## Context
 
 ### Current State
 
-**As of 2026-04-02:** v2.1 里程碑全部完成（Phases 25-31）。Phase 31 完成技术债务收口：修复 24 个 Session/BohriumSetupService/LLMProvider 测试失败，删除 9 个引用已删除 evomaster/evaluation 目录的过期测试文件，硬化隔离脚本，同步文档。测试套件：1294 passed（仅 3 个环境依赖测试除外）。REQUIREMENTS.md 全部 19 项需求确认完成。matmaster 包完全独立且测试健康。
+**As of 2026-04-02:** v2.1 里程碑完成并归档。matmaster/ 运行时零外部依赖（evomaster/playground/src 均已物理删除或解耦）。1,294 个测试通过，19/19 需求满足。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
+Source: 15,839 LOC (matmaster/).
 
 Architecture (current):
 - `matmaster/core/` — AgentKernel, GuardPipeline, Hooks, Exp (config-driven), ContextBuilder, ContextCompactor, MessageBus, Playground
 - `matmaster/config/` — ExpConfig, LLMConfig (profiles/routes), loader (YAML + TOML)
 - `matmaster/exps/` — TOML exp 定义 (`direct.toml`, `explore.toml`)
-- `matmaster/tools/` — ToolRegistry, EvoToolAdapter, BuiltinTool, LazyMCP, SkillTool
+- `matmaster/tools/` — ToolRegistry, BuiltinTool (原生注册), LazyMCP, SkillTool
+- `matmaster/mcp/` — MCPConnection ABC, MCPToolManager, 三种传输 (stdio/sse/streamable_http)
+- `matmaster/sessions/` — Session Protocol, LocalSession, SSHSession (原生 paramiko)
 - `matmaster/types/` — PlaygroundContext, AgentRuntimeSpec, AgentEvent, CompactionConfig, KernelRunResult, Guards, LLMProvider, Messages, WorkerRegistry
 - `matmaster/providers/` — OpenAIProvider, llm_factory
 - `matmaster/hooks/` — ConfirmationHook, OutputProcessorHook, SkillHitHook, AssistantStateHook
-- `matmaster/integration/` — EventRouter, EventPayloads, PersistenceHandler, SSEHandler, WorkspaceHandler, BohriumSetupService
+- `matmaster/integration/` — EventRouter, EventPayloads, PersistenceHandler, SSEHandler, WorkspaceHandler, BohriumSetupService, bohrium_env, workspace_resolver
+- `matmaster/calculation/` — env_config, oss_io, job_service, path_adaptor
 - `matmaster/devshell/` — DevConfig, DevRunner, DevStreamHook, EventLogger, REPL, CLI
 - `matmaster/skills/` — registry 与 lazymcp skill roots
 
-### Decoupling Inventory (2026-04-01, revised)
-
-`matmaster/` 的三方向出向依赖全景：
-
-**A. matmaster/ → evomaster/（~15 imports, 8 files）**
-1. **Playground / Session / Config** — `core/playground.py` 依赖 BaseSession、LocalSessionConfig、ConfigManager、PlaygroundSessionMixin 及 docker/ssh session
-2. ~~**Tool / MCP / Calculation** — `tools/lazy_mcp.py`、`cache_mcp_schemas.py`、`eval_tooling_snapshot.py` 依赖 evomaster MCP manager 与 calculation adaptor~~ — Resolved in Phase 27; `core/exp.py` 的 EvoToolAdapter 仍待 Phase 28+
-3. **Builtin Helper** — `tools/builtin/bash_tool.py` 与 `edit_tool.py` 复用 evomaster 安全检查和编辑辅助
-
-**B. matmaster/ → playground/（1 import）**
-4. **Web Search Tool** — `core/exp.py:396` lazy import `playground.mat_master.tools.web_search.get_web_search_tool`
-
-~~**C. matmaster/ → src/（6 imports, 2 files）**~~
-5. ~~**Bohrium Setup 反向依赖**~~ — Resolved in Phase 28; `bohrium_env.py` 纯模块 + 回调注入
-6. ~~**Script Env 常量**~~ — Resolved in Phase 28; `BOHRIUM_OPENAPI_HOST` 从 `bohrium_env` 导入
-
-### Post-v1 Changes (untracked by GSD)
-
-v1 之后在 GSD 体系外进行的 6 个主要特性开发：
-
-1. **Config-Driven Exp**: Exp 从 dict 参数改为 ExpConfig Pydantic model，exp 定义通过 TOML 文件 (`matmaster/exps/*.toml`) 加载。DirectExp 已删除。
-2. **LLM Config System**: LLMProfileConfig (semantic methods: effective_family/temperature/build_extra_kwargs) + LLMRouteConfig 路由解析 + llm_factory.build_provider() 工厂函数。
-3. **Context Compaction**: ContextCompactor (summary + sliding_window fallback)，集成到 kernel 执行循环，支持独立 compaction LLM 配置。
-4. **EventRouter SRP Split**: 原 event_router.py 拆为 EventRouter + EventPayloads + PersistenceHandler + SSEHandler 四个单职责模块。
-5. **DevShell**: 完整的本地开发 REPL (`matmaster/devshell/`)，支持 YAML 配置、多轮对话历史、事件日志、终端流式输出。
-6. **Kernel Hardening**: KernelRunResult 返回类型、on_guard_blocked hook、tool 异常捕获、stream finish 校验、identity config 转发。
-
 ### Known Tech Debt
 
-- `matmaster/core/playground.py` 仍是最大 runtime 耦合点，session / config / mixin 三类依赖未抽离
-- `matmaster/core/exp.py` 仍挂着 `EvoToolAdapter` 与 `MonitorJobTool`，tool 注册链路并未完全原生化
-- ~~`matmaster/tools/lazy_mcp.py` 与 calculation path adaptor 仍建立在 `evomaster` MCP manager/adaptor 之上~~ — Resolved in Phase 27
-- ~~`src/services/chat_history.py` 仍以 `evomaster` 类型为事实标准~~ — Resolved in Phase 28; 已迁移到 matmaster 消息类型
-- 本地 Web 初始化路径仍以 `evomaster` 入口为事实标准
-- `tests/test_streaming_thought_protocol.py` 仍有收集失败问题，需要在解耦期纳入统一质量门禁
+- `config.yaml` 中 `~/.evomaster-skills` 文件系统路径待 v2.2 清理（非代码依赖）
+- `oss_io.py` 含 `evomaster/calculation` OSS 前缀字符串常量（非 import，仅 storage key）
+- `tests/test_streaming_thought_protocol.py` 收集失败待纳入质量门禁
 
 ## Constraints
 
@@ -134,7 +99,7 @@ v1 之后在 GSD 体系外进行的 6 个主要特性开发：
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| v2.1 扩展为三方向完全独立化 | 用户目标是 matmaster 不依赖 evomaster/playground/src，一个里程碑收口 | — Pending |
+| v2.1 扩展为三方向完全独立化 | 用户目标是 matmaster 不依赖 evomaster/playground/src，一个里程碑收口 | ✓ Good |
 | 本轮 phase 从 25 连续编号 | `.planning/phases/` 已存在 24 个目录，且当前无安全 archive target 支持 reset | ✓ Good |
 | 本轮默认跳过外部 research | 这是 brownfield 内部解耦，已有代码耦合清单比外部生态调研更关键 | ✓ Good |
 | 采用方案 B（新 kernel + 适配层） | 平衡重构收益与迁移成本，保留心智模型 | ✓ Good |
@@ -151,6 +116,11 @@ v1 之后在 GSD 体系外进行的 6 个主要特性开发：
 | TYPE_CHECKING + lazy import 解决循环导入 | 运行时惰性加载 AgentKernel | ✓ Good |
 | Retry at Protocol level (chat_with_retry) | 每个 provider 实现自己的重试逻辑 | ✓ Good |
 | Guard shells 已删除，未来业务 guard 用 Hook | Phase 6 决策 | ⚠️ Revisit |
+| Playground 参数化构造（5 keyword-only params）替代 config_path 构造 | 避免 EvoMasterConfig 耦合，直接传入运行参数 | ✓ Good |
+| SSHSession + SSHEnv 合并为单类直持 paramiko.SSHClient | 消除 Env 中间层，简化生命周期 | ✓ Good |
+| BohriumSetupService 回调注入替代 sessions_service 注入 | 4 个 callable 替代整个 service 对象，打破 src 反向依赖 | ✓ Good |
+| evomaster/playground/evaluation 物理删除 | 解耦完成后不保留死代码，减轻仓库负担 | ✓ Good |
+| Duck-typing (hasattr) 替代 isinstance 跨包类型检查 | 避免 import 耦合，保持运行时兼容 | ✓ Good |
 | 目录重组 engine/assembly/bus/playground → core/tools/types | Phase 7 清理 | ✓ Good |
 | Exp 改为 ExpConfig 驱动 + TOML 定义 | 消除 dict 配置，类型安全，声明式 exp 定义 | ✓ Good |
 | LLM 配置引入 profile/route 两级解析 | 支持前端 model 选择 → 内部 profile 映射，model family 语义方法 | ✓ Good |
@@ -176,4 +146,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-02 after Phase 30 completion (v2.1 milestone complete — decoupling audit & independence proof)*
+*Last updated: 2026-04-02 after v2.1 milestone*

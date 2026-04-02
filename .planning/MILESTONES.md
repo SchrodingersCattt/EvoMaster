@@ -1,5 +1,35 @@
 # Milestones
 
+## v2.1 — matmaster/ 完全独立化
+
+**Shipped:** 2026-04-02
+**Phases:** 7 (25-31) | **Plans:** 19 | **Tests:** 1,294
+**Status:** complete (19/19 requirements satisfied, tech debt closed by Phase 31)
+
+### Delivered
+
+让 `matmaster/` 运行时路径完全独立于 `evomaster/`、`playground/` 和 `src/`。三方向解耦完成后物理删除了 evomaster/ (113 files, 26k lines) 和 playground/evaluation/ (78K+ lines)，通过 AST import audit 和隔离测试证明零残留运行时依赖。
+
+### Key Accomplishments
+
+1. Session & Playground 原生化：matmaster 自有 Session Protocol (Local + SSH)、参数化 Playground 构造器、直接 YAML 配置加载，零 evomaster 运行时依赖
+2. Tool 全面内化：bash_safety/editor helper 内联、MonitorJobTool 迁入 BuiltinTool 体系、EvoToolAdapter 删除、web_search 解耦 playground，全部工具原生注册
+3. MCP/Calculation 原生链路：MCPConnection ABC + 三种传输 + MCPToolManager + 4 个 calculation 模块搬入 matmaster，LazyMCPTool 直连重写
+4. src 反向依赖消除 + Consumer 迁移：BohriumSetupService 回调注入、bohrium_env 纯模块化、chat_history/agent_run_bohrium 切换 matmaster 原生类型
+5. 遗留代码物理删除：evomaster/ + playground/ + evaluation/ 删除，24 个 skill 归档，配置路径统一
+6. 独立性证明：AST import audit + 隔离测试脚本 + v2.1 迁移文档，1,294 tests passed
+
+### Stats
+
+- Source: 15,839 LOC (matmaster/)
+- Timeline: 2 days (2026-04-01 → 2026-04-02)
+- Commits: 178 milestone-related
+- Files modified: 703 (+23,012 / -104,704 lines)
+- Requirements: 19/19 satisfied
+- Archive: milestones/v2.1-ROADMAP.md, milestones/v2.1-REQUIREMENTS.md
+
+---
+
 ## v1 — MatMaster Framework Refactoring
 
 **Shipped:** 2026-03-22

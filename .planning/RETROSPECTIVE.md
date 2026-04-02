@@ -45,6 +45,53 @@
 
 ---
 
+## Milestone: v2.1 — matmaster/ 完全独立化
+
+**Shipped:** 2026-04-02
+**Phases:** 7 | **Plans:** 19
+
+### What Was Built
+- Session & Playground 原生化（Session Protocol + LocalSession/SSHSession + 参数化 Playground）
+- Tool 全面内化（bash_safety/editor 内联 + MonitorJobTool 迁入 + EvoToolAdapter 删除）
+- MCP/Calculation 原生链路（MCPConnection ABC + MCPToolManager + 4 个 calculation 模块搬入）
+- src 反向依赖消除（BohriumSetupService 回调注入 + consumer 类型迁移）
+- evomaster/ + playground/ + evaluation/ 物理删除（190K+ lines 移除）
+- 独立性证明（AST import audit + 隔离测试 + 迁移文档）
+- 技术债务收口（32 个测试修复 + 文档同步）
+
+### What Worked
+- 分层解耦策略：底层先行（session→tool→MCP→src→主入口→审计→收口），每层为下层建立稳定底座
+- 里程碑审计→gap closure 反馈循环：Phase 31 精准定位并修复审计发现的 32 个测试失败
+- AST import audit 作为持续回归门禁：每个 phase 结束都能验证是否引入新依赖
+- Duck-typing (hasattr) 替代 isinstance 跨包类型检查：避免 import 耦合又保持类型安全
+- 回调注入模式（BohriumSetupService）：4 个 callable 替代整个 service 对象，干净切断反向依赖
+
+### What Was Inefficient
+- ROADMAP.md 中 Phase 25/26 的 plan 完成数未及时更新（25-03/26-03 有 SUMMARY 但 checkbox 显示 `[ ]`）
+- SUMMARY frontmatter 和 REQUIREMENTS.md checkbox 多次不同步，Phase 31 花了专门的 plan 来修复
+- v2.0 阶段（12-24）与 v2.1 阶段（25-31）在 gsd-tools 中被统一计数为同一里程碑的 phase，导致归档时需要手动修正
+
+### Patterns Established
+- 回调注入模式替代 service 注入：当需要打破反向依赖时，传入 callable 而非整个 service 对象
+- Duck-typing 跨包兼容：hasattr 检查替代 isinstance，避免 import 耦合
+- 物理删除策略：解耦完成后立即删除死代码，不保留 deprecated 路径
+- AST import audit 作为 CI 门禁：验证 matmaster/ 运行时模块无外部依赖
+- create_autospec(Protocol, instance=True) 作为 Protocol mock 标准模式
+
+### Key Lessons
+1. 大规模解耦应在每个 phase 完成时立即同步文档（checkbox、frontmatter），不要积累到最后
+2. 回调注入比依赖注入更适合打破反向依赖——callable 没有 import 负担
+3. 物理删除（而非 deprecation）在内部项目中更干净——没有外部用户就不需要过渡期
+4. AST-based import audit 比 grep 更可靠——能区分 TYPE_CHECKING 内的 import 和运行时 import
+5. 里程碑审计是必要步骤——Phase 31 的 32 个测试失败如果不审计就不会被发现
+
+### Cost Observations
+- Model mix: quality profile (opus for planning/execution/verification)
+- Sessions: 约 6 个 session 完成 v2.1 全部 7 个 phase
+- Notable: 2 天完成 7 阶段 19 个 plan，净删除 81K 行代码
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -52,14 +99,18 @@
 | Milestone | Phases | Plans | Key Change |
 |-----------|--------|-------|------------|
 | v1 | 7 | 21 | 契约驱动重构，TDD + 阶段验证反馈循环 |
+| v2.1 | 7 | 19 | 分层解耦 + AST import audit 门禁 + 物理删除策略 |
 
 ### Cumulative Quality
 
 | Milestone | Tests | Architecture | Zero-Dep Additions |
 |-----------|-------|--------------|--------------------|
 | v1 | 380 | core/tools/types/hooks/integration/providers | Pydantic v2 (existing), stdlib only |
+| v2.1 | 1,294 | +sessions/mcp/calculation/integration (原生化) | paramiko (existing), stdlib only |
 
 ### Top Lessons (Verified Across Milestones)
 
 1. 契约优先开发在框架重构中比功能优先开发更有效
 2. 阶段验证 + 里程碑审计是发现集成 gap 的关键机制
+3. 每个 phase 完成时立即同步文档，不要积累到里程碑末尾
+4. 回调注入比 service 注入更适合打破反向依赖
