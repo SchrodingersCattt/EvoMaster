@@ -42,21 +42,28 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 ### Active
 
 - [ ] AgentKernel 三层接口改造（_run_items / run_stream / run）
-- [ ] ToolRunner Protocol + InlineToolRunner 过渡实现
-- [ ] AgentRuntimeSpec Tool Runtime v2 预留字段
+- [ ] SessionCapabilities + RuntimeTopology 显式建模
+- [ ] ToolSpec / ToolBinding / ResourceClaim / ToolInstance 对象模型
+- [ ] ToolCatalog（base + overlay，ToolRegistry facade 兼容）
+- [ ] ToolRunner Protocol + ToolScheduler（exclusive / shared_read / counted）
+- [ ] 三层约束模型（StructuralValidation + RunStateGuard + CapabilityPolicy）
+- [ ] ToolResult 升级（status + content + payload + meta）
+- [ ] AgentRuntimeSpec 扩展字段
 - [ ] Exp.run_stream() + AgentRunService.run_agent_stream() 接入
 - [ ] _do_stream_llm() → _stream_llm_items() 子 generator 改造
 - [ ] Hook → Bus 间接路径退役（5 个 Hook 逐个替代后移除）
+- [ ] 约束迁移（read-before-modify → RunStateGuard，bash 危险命令 → CapabilityPolicy）
 - [ ] 去总线化评估与实施（MessageBus + EventRouter）
+- [ ] 高级调度（persistent shell 并发、SessionCapabilities 自适应）
 
-## Current Milestone: v2.2 AgentKernel Generator-First 全链路改造
+## Current Milestone: v2.2 AgentKernel Generator-First + Tool Runtime v2
 
-**Goal:** 将 AgentKernel 改造为 generator-first 架构，贯穿 Kernel → Exp → Service 全链路，最终移除 Hook→Bus 间接路径，评估去总线化
+**Goal:** 将 AgentKernel 改造为 generator-first 架构，同步建立 Tool Runtime v2 核心骨架，贯穿 Kernel → Exp → Service 全链路，最终移除 Hook→Bus 间接路径并评估去总线化
 
 **Target features:**
-- Phase 1: Kernel 内核层 generator 改造 + ToolRunner Protocol 抽出
-- Phase 2: Exp + Service 层消费 generator + Hook 退役
-- Phase 3: 去总线化评估与实施
+- Phase 1: Kernel generator 改造 + Tool Runtime v2 核心骨架（ToolSpec/ToolBinding/ToolCatalog/ToolRunner/ToolScheduler + 三层约束）
+- Phase 2: Exp/Service 接入 + 约束迁移 + Hook 退役 + ToolRegistry 降级
+- Phase 3: 去总线化评估与实施 + 高级调度
 
 ## Shipped: v2.1 matmaster/ 完全独立化 (2026-04-02)
 

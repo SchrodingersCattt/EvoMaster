@@ -1,7 +1,7 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.2
-milestone_name: AgentKernel Generator-First 全链路改造
+milestone_name: AgentKernel Generator-First + Tool Runtime v2
 status: active
 stopped_at: null
 last_updated: "2026-04-02"
@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** v2.2 AgentKernel Generator-First 全链路改造
+**Current focus:** v2.2 AgentKernel Generator-First + Tool Runtime v2
 
 ## Current Position
 
