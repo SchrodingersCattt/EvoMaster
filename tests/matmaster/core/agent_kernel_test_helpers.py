@@ -141,11 +141,11 @@ class ToolCallingProvider:
     ) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count <= self._max_tool_turns:
-            for tc in self._tool_calls:
+            for i, tc in enumerate(self._tool_calls):
                 yield StreamChunk(
                     tool_call_deltas=[
                         {
-                            'index': 0,
+                            'index': i,
                             'id': tc.id,
                             'name': tc.name,
                             'arguments': str(tc.arguments).replace("'", '"'),

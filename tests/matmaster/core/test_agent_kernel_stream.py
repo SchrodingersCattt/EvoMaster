@@ -16,6 +16,8 @@ from matmaster.types.events import (
     ResponseEvent,
     RunResultEvent,
     ThoughtEvent,
+    ToolCallEvent,
+    ToolResultEvent,
 )
 from matmaster.types.messages import (
     LLMResponse,
@@ -302,6 +304,122 @@ class TestKernelStateIsLocal:
 # ---------------------------------------------------------------------------
 # Tool runner fallback test
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# KGEN-06: _run_items() yields ToolCallEvent / ToolResultEvent
+# ---------------------------------------------------------------------------
+
+
+class TestRunStreamYieldsToolCallEvent:
+    """run_stream() yields ToolCallEvent before tool execution (KGEN-06)."""
+
+    @pytest.mark.asyncio
+    async def test_run_stream_yields_tool_call_event(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        tc = ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1})
+        provider = ToolCallingProvider(
+            tool_calls=[tc], max_tool_turns=1, final_content="done"
+        )
+        spec = _make_spec(provider=provider, max_turns=5)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        tool_call_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        assert len(tool_call_events) == 1
+        assert tool_call_events[0].call_id == "tc-1"
+        assert tool_call_events[0].tool_name == "test_tool"
+        assert tool_call_events[0].arguments == {"x": 1}
+        assert tool_call_events[0].source == "agent"
+
+
+class TestRunStreamYieldsToolResultEvent:
+    """run_stream() yields ToolResultEvent after tool execution (KGEN-06)."""
+
+    @pytest.mark.asyncio
+    async def test_run_stream_yields_tool_result_event(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        tc = ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1})
+        provider = ToolCallingProvider(
+            tool_calls=[tc], max_tool_turns=1, final_content="done"
+        )
+        spec = _make_spec(provider=provider, max_turns=5)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        tool_result_events = [e for e in events if isinstance(e, ToolResultEvent)]
+        assert len(tool_result_events) == 1
+        assert tool_result_events[0].call_id == "tc-1"
+        assert tool_result_events[0].tool_name == "test_tool"
+        assert tool_result_events[0].status == "success"
+        assert tool_result_events[0].source == "agent"
+
+
+class TestRunStreamToolEventOrder:
+    """ToolCallEvent appears before ToolResultEvent in the event sequence (KGEN-06)."""
+
+    @pytest.mark.asyncio
+    async def test_tool_call_before_tool_result(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        tc = ToolCallData(id="tc-1", name="test_tool", arguments={"a": 2})
+        provider = ToolCallingProvider(
+            tool_calls=[tc], max_tool_turns=1, final_content="done"
+        )
+        spec = _make_spec(provider=provider, max_turns=5)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        # Find indices
+        call_idx = next(
+            i for i, e in enumerate(events) if isinstance(e, ToolCallEvent)
+        )
+        result_idx = next(
+            i for i, e in enumerate(events) if isinstance(e, ToolResultEvent)
+        )
+        assert call_idx < result_idx, (
+            f"ToolCallEvent (idx={call_idx}) must appear before "
+            f"ToolResultEvent (idx={result_idx})"
+        )
+
+
+class TestRunStreamMultipleToolCalls:
+    """Multiple tool_calls in one turn yield matching events (KGEN-06)."""
+
+    @pytest.mark.asyncio
+    async def test_multiple_tool_calls_yield_events(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        tc1 = ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1})
+        tc2 = ToolCallData(id="tc-2", name="some_tool", arguments={"y": 2})
+        provider = ToolCallingProvider(
+            tool_calls=[tc1, tc2], max_tool_turns=1, final_content="done"
+        )
+        spec = _make_spec(provider=provider, max_turns=5)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        tool_call_events = [e for e in events if isinstance(e, ToolCallEvent)]
+        tool_result_events = [e for e in events if isinstance(e, ToolResultEvent)]
+        assert len(tool_call_events) == 2
+        assert len(tool_result_events) == 2
+        # call_ids match
+        assert {e.call_id for e in tool_call_events} == {"tc-1", "tc-2"}
+        assert {e.call_id for e in tool_result_events} == {"tc-1", "tc-2"}
 
 
 class TestToolRunnerFallback:

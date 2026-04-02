@@ -31,7 +31,12 @@ from typing import TYPE_CHECKING, Any
 from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.errors import LLMError
-from matmaster.types.events import ResponseEvent, ThoughtEvent
+from matmaster.types.events import (
+    ResponseEvent,
+    ThoughtEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
 
 if TYPE_CHECKING:
     from matmaster.types.runtime import AgentRuntimeSpec, KernelRunResult
@@ -407,6 +412,15 @@ class AgentKernel:
             state.messages.append(assistant_msg)
             yield _KernelItem(messages_delta=[assistant_msg])
 
+            # KGEN-06: yield ToolCallEvent before execution
+            for tc in response.tool_calls:
+                yield _KernelItem(event=ToolCallEvent(
+                    source="agent",
+                    call_id=tc.id,
+                    tool_name=tc.name,
+                    arguments=tc.arguments,
+                ))
+
             # Phase 1: delegate to tool_runner (InlineToolRunner wraps
             # guard -> pre_hook -> execute -> post_hook chain)
             from matmaster.core.tool_runner import ToolExecutionContext
@@ -429,6 +443,17 @@ class AgentKernel:
                 ))
             state.messages.extend(tool_messages)
             yield _KernelItem(messages_delta=tool_messages)
+
+            # KGEN-06: yield ToolResultEvent after execution
+            for tc, tr in results:
+                yield _KernelItem(event=ToolResultEvent(
+                    source="agent",
+                    call_id=tc.id,
+                    tool_name=tc.name,
+                    result=tr.content,
+                    status=tr.status,
+                    payload=tr.payload,
+                ))
 
         # max_turns exhausted
         yield _KernelItem(
