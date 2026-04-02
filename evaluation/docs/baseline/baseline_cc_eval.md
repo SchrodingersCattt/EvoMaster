@@ -257,6 +257,65 @@ uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py -
 - 题目定义在 `evaluation/question_bank/` 下，按 `item.question_id`（与 YAML 中 `id` 一致）找到对应 YAML，读取 `scoring_checklist`。
 - 证据来源：**RUN_DIR/raw_runs.jsonl** 中对应 `task_id` 的行、**RUN_DIR/workspaces/任务目录名/** 内文件；若 pending JSON 的 `item` 中含 `artifact`，可结合 `bundle_object_key` / `files_prefix` 对应的 OSS 产物辅助核对。
 
+### IG_incar 题型：结构化 INCAR 参数对比
+
+IG_incar 20 道题（`evaluation/question_bank/input_generation/ig_incar.yaml`）使用 **`incar_param_compare`** 评分方式，**不使用** `llm_binary_judge` 判断核心参数。
+
+**评分逻辑**：
+
+1. **读取 agent INCAR**：优先读 `workspaces/<task_id>/INCAR` 文件；若无独立文件，从 `_devshell_summary.json` 的 `final_content` 中提取代码块。
+2. **读取 reference INCAR**：`evaluation/question_bank/data/IG_incar_XXX/reference_incar.txt`（来自 NOMAD 真实计算，**不暴露给 agent**）。
+3. **结构化对比**：使用 `evaluation/core/incar_parser.py` 的 `parse_incar()` + `compare_incar()`：
+   - 两份 INCAR 解析为 `{TAG: normalized_value}` dict
+   - 值归一化：`.TRUE.`→bool、`12*1.0`→数组展开、`A`→`ALL`（ALGO 别名）、科学计数法等
+   - 逐参数对比：整数精确匹配、浮点 15% 相对容差、数组逐元素、字符串忽略大小写+别名
+
+**Checklist（每题 5 条）**：
+
+| id | weight | verify | 通过条件 |
+|----|--------|--------|----------|
+| `key_params_match` | 3.0 | `incar_param_compare` | `key_score ≥ 0.6`（核心参数 ≥60% 匹配） |
+| `full_incar_quality` | 2.0 | `incar_param_compare` | `full_score ≥ 0.5`（全部参数 ≥50% 匹配） |
+| `efficiency_judge` | 1.0 | `llm_binary_judge` | agent 流程高效 |
+| `duration_budget` | 1.0 | `duration_budget` | 耗时在预算内 |
+| `token_budget_total` | 1.0 | `token_budget` | token 在预算内 |
+
+**百分制** = `100 × Σ(通过的 weight) / 8.0`。例如：key_params 不通过 + full_incar 不通过 + 其余通过 → `100 × 3/8 = 38`；key_params 通过 + full_incar 不通过 → `100 × 6/8 = 75`。
+
+**手动评分时的 Python 示例**（在仓库根执行）：
+
+```python
+import sys; sys.path.insert(0, '.')
+from evaluation.core.incar_parser import parse_incar, compare_incar, extract_incar_from_text
+
+# 读 reference
+ref = parse_incar(open('evaluation/question_bank/data/IG_incar_005/reference_incar.txt').read())
+
+# 读 agent INCAR（优先文件，fallback 提取）
+agent_text = open('results/.../workspaces/IG_incar_005_.../INCAR').read()
+agent = parse_incar(agent_text)
+
+# 核心参数 = reference 中除通用参数外的所有 tag
+common = {'ENCUT','PREC','EDIFF','NELM','ALGO','GGA','LORBIT','NCORE','KPAR',...}
+key_tags = [t for t in ref if t not in common]
+
+result = compare_incar(ref, agent, key_tags=key_tags)
+print(f'key_score={result.key_score:.0%}, full_score={result.full_score:.0%}')
+print(result.summary())  # 生成 score_reason 内容
+```
+
+**score_reason 格式**：
+
+```markdown
+**checklist 共 5 条（key_params w=3, full_incar w=2, 其余 w=1）**
+
+- **key_params_match**：未通过 — key_score=50% (4/8), 不匹配: ['IBRION', 'NSW'], 缺失: ['LMAXMIX', 'MAGMOM']
+- **full_incar_quality**：未通过 — full_score=40% (8/20)
+- **efficiency_judge**：通过 — 5 turns，流程直接
+- **duration_budget**：通过 — duration_ms=64757
+- **token_budget_total**：通过 — tokens=0（CC CLI 未追踪）
+```
+
 对每个 **RUN_DIR/pending_ingest/*.json** 执行一次（在仓库根），将 `PENDING_FILE` 换成该文件的**绝对路径**，将 `SCORE_INT` 换成你算出的整数，将字符串参数换成你的判词：
 
 ```bash
