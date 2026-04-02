@@ -89,42 +89,77 @@ BUILTIN_META 从 `(ToolPlane, effect_level, fast_path_eligible)` 扩展为 `(Too
 
 文件：`matmaster/core/tool_runner.py`
 
-在 Step 8（executor 执行）返回后、append result 前插入归一化步骤（行号基于未修改的代码，Plan 3 插入后会偏移）：
+在 Step 8（executor 执行）返回后、append result 前插入两步（行号基于未修改的代码，Plan 3 插入后会偏移）：
+
+**Step 9a: 结果归一化**。当前 FullToolRunner 直接 `await instance.tool_executor(tc.arguments)`，但许多 builtin 工具仍返回 `str`（如 write_tool、listdir_tool）。只有旧的 `ToolRegistry.execute()` 路径做了 `normalize_tool_result()`。FullToolRunner 必须在裁剪前先归一化：
 
 ```python
-# 结果裁剪
+from matmaster.tools.tool_result import normalize_tool_result
+
+# Step 9a: 归一化 executor 返回值
+tr = normalize_tool_result(tr)
+```
+
+**Step 9b: 结果裁剪**：
+
+```python
+# Step 9b: 结果裁剪
 if instance.tool_spec.max_result_chars > 0 and len(tr.content) > instance.tool_spec.max_result_chars:
     tr = self._truncate_result(tr, instance.tool_spec.max_result_chars, tc.tool_call_id)
 ```
 
-`_truncate_result` 是 FullToolRunner 的实例方法，通过 `self._topology.workspace_root` 获取输出目录：
+`_truncate_result` 是 FullToolRunner 的实例方法，通过 `self._topology.control_root` 获取输出目录。
 
-1. 确保 `{workspace_root}/.tool_results/` 目录存在（`Path.mkdir(parents=True, exist_ok=True)`）
-2. 完整 content 写入 `{workspace_root}/.tool_results/{tool_call_id}.txt`
+**为什么用 control_root 而非 workspace_root**：`workspace_root` 在 SSH/Bohrium 场景下是远端路径（来自 `ctx.execution_workdir`），FullToolRunner 运行在本地 worker 进程，无法用 `Path` 写入远端。`control_root` 来自 `ctx.workdir`，始终是本地路径。在 SSH 模式下，落盘文件仅供审计/调试用途，模型无法通过 `read_file` 访问（read_file 操作的是远端 workspace）；裁剪提示应引导模型用更精确的参数重新执行工具，而非 re-read 完整输出。
+
+步骤：
+
+1. 确保 `{control_root}/.tool_results/` 目录存在（`Path.mkdir(parents=True, exist_ok=True)`）
+2. 完整 content 写入 `{control_root}/.tool_results/{tool_call_id}.txt`
 3. 计算 tail 长度：`tail_len = min(2000, max_result_chars // 4)`，使裁剪后内容接近上限
-4. 裁剪策略：`head[:max//2] + "\n\n... [{n} chars truncated, full result at {path}] ...\n\n" + tail[-tail_len:]`
-5. 返回新 ToolResult，`meta` 中新增 `full_result_path` 指向完整结果文件
-6. 裁剪只作用于 content，不影响 payload 和 meta（除了新增 full_result_path）
+4. 裁剪策略：`head[:max//2] + "\n\n... [{n} chars truncated; re-run with more specific parameters to see full output] ...\n\n" + tail[-tail_len:]`
+5. 返回新 ToolResult，`meta` 中新增 `full_result_path`（本地路径，供审计/调试）和 `truncated: True`
+6. 裁剪只作用于 content，不影响 payload 和 meta（除了上述新增字段）
 
 ### 测试策略
 
 - 单测：ToolSpec 构造时 max_result_chars 字段存在且默认 0
+- 单测：executor 返回 str 时 normalize_tool_result 正确转为 ToolResult
+- 单测：executor 返回 None 时 normalize_tool_result 返回空 ToolResult
 - 单测：_truncate_result 对超限 content 正确裁剪，保留头尾
-- 单测：_truncate_result 写入磁盘文件且 meta["full_result_path"] 正确
+- 单测：_truncate_result 写入磁盘文件且 meta["full_result_path"] 和 meta["truncated"] 正确
 - 单测：content 未超限时不裁剪
 - 集成测：BUILTIN_META 中 read_file 的 max_result_chars=12000 被 ToolCompiler 传入 ToolSpec
 
 ---
 
-## Plan 2: ToolCompiler 拓扑依赖绑定
+## Plan 2: ToolCompiler 拓扑依赖绑定 + fast_path_eligible 修正
 
 ### 目标
 
-让 ToolCompiler.compile() 真正消费 RuntimeTopology，在 local session 下将 glob/grep/list_dir 的 resource_claims 从 exclusive 放宽为 shared_read。
+让 ToolCompiler.compile() 真正消费 RuntimeTopology，在 local session 下将 glob/grep/list_dir 的 resource_claims 从 exclusive 放宽为 shared_read。同时修正这三个工具的 `fast_path_eligible` 为 True（当前 BUILTIN_META 错误地设为 False）。
+
+**本 plan 是元数据铺垫**。claims 和 fast_path_eligible 的修正使这三个工具在未来 execute_batch 并发化后能正确命中 fast path。当前 execute_batch 仍是串行 for 循环（并发化在显式排除中 defer），因此本 plan 不会带来即时的并发性能提升。
 
 ### 改动细节
 
 文件：`matmaster/tools/tool_compiler.py`
+
+#### 2.1 修正 BUILTIN_META fast_path_eligible
+
+当前 list_dir/glob/grep 的 `fast_path_eligible` 为 False，与 spec 第 10 章不符（effect_level=pure_read 的只读工具应为 True）。修正为 True：
+
+```python
+BUILTIN_META = {
+    # ...
+    "list_dir": (ToolPlane.SESSION_SHELL, "pure_read", True),   # was False
+    "glob": (ToolPlane.SESSION_SHELL, "pure_read", True),       # was False
+    "grep": (ToolPlane.SESSION_SHELL, "pure_read", True),       # was False
+    # ...
+}
+```
+
+#### 2.2 拓扑依赖 claims 放宽
 
 在 compile() 中，查完 BUILTIN_CLAIMS 静态表后，根据 topology 条件放宽：
 
@@ -148,7 +183,9 @@ SSH session 即使 stateless 也保持 exclusive，因为共享 SSH 连接的 ch
 
 ### 运行时影响
 
-放宽后，这三个工具在 local session 下满足 fast path 条件（effect_level=pure_read + shared_read claims + fast_path_eligible=True），跳过 Scheduler 直接并发执行。搜索密集型任务的吞吐量显著提升。
+**当前**：元数据变更，无即时性能影响。execute_batch 串行执行不受 claims/fast_path_eligible 影响。
+
+**execute_batch 并发化后**：这三个工具在 local session 下满足 fast path 全部三个条件（effect_level=pure_read + shared_read claims + fast_path_eligible=True），跳过 Scheduler 直接并发执行。
 
 ### 测试策略
 
@@ -157,6 +194,7 @@ SSH session 即使 stateless 也保持 exclusive，因为共享 SSH 连接的 ch
 - 单测：local + session_capabilities=None 时不放宽（保持 exclusive）
 - 单测：local topology 下 execute_bash 仍为 exclusive claim（不受放宽影响）
 - 单测：非 builtin 工具（无 BUILTIN_CLAIMS 条目）不受拓扑放宽影响
+- 单测：glob/grep/list_dir 编译后 fast_path_eligible=True
 
 ---
 
@@ -196,34 +234,43 @@ async def validate_input(self, arguments: dict[str, Any]) -> ToolDecision | None
 
 文件：`matmaster/tools/builtin/write_tool.py`
 
-提取现有 L61-67 的 read-before-modify 检查逻辑。注意 `session.path_exists()` 在 LocalSession 下是 `os.path.exists`（微秒级），在 SSHSession 下是 SFTP 调用（需要网络 I/O）。对于 SSHSession 场景，path_exists 调用应通过 `asyncio.to_thread()` 包装以避免阻塞事件循环：
+按 spec 6.8 的原始意图，WriteTool 的 input_validator 做纯语义校验——检查目标路径在 workdir 边界内。**不包含 read-before-modify 检查**（那是运行态约束，依赖 `_tracker` 的 per-run 状态，属于 Phase 35 CMIG-01 迁入 RunStateGuard 的范围）。
 
 ```python
 async def validate_input(self, arguments: dict[str, Any]) -> ToolDecision | None:
     file_path = arguments.get("file_path", "")
-    if self._tracker is None:
-        return None
-    exists = await asyncio.to_thread(self._session.path_exists, file_path)
-    if exists and not self._tracker.has_been_read(posixpath.normpath(file_path)):
+    if not file_path:
         return ToolDecision(
             decision="deny",
-            reason=f"file '{file_path}' must be read before modify",
+            reason="file_path is required",
+        )
+    # 纯路径语义检查：禁止写入 workdir 之外
+    normalized = posixpath.normpath(file_path)
+    if normalized.startswith("..") or posixpath.isabs(normalized):
+        return ToolDecision(
+            decision="deny",
+            reason=f"file_path '{file_path}' is outside workspace boundary",
         )
     return None
 ```
 
-原位置的检查代码保留（双保险）。Phase 35 CMIG-01 统一迁移后再删除原位置代码。
+read-before-modify 检查保留在原位（`_execute` 内部），Phase 35 CMIG-01 迁入 RunStateGuard。
 
 #### 3.4 EditTool.validate_input
 
 文件：`matmaster/tools/builtin/edit_tool.py`
 
-提取 old_str == new_str 的 no-op 检查：
+按 spec 6.8，检查 old_str 非空（业务不变量）：
 
 ```python
 async def validate_input(self, arguments: dict[str, Any]) -> ToolDecision | None:
     old_str = arguments.get("old_str", "")
     new_str = arguments.get("new_str", "")
+    if not old_str:
+        return ToolDecision(
+            decision="deny",
+            reason="old_str must not be empty",
+        )
     if old_str == new_str:
         return ToolDecision(
             decision="deny",
@@ -288,18 +335,21 @@ if instance.input_validator is not None:
 
 ### 约束
 
-- WriteTool/EditTool 原有检查不删除，Phase 35 CMIG-01 负责统一迁移
+- input_validator 严格限定为纯语义校验——只看参数值和静态配置，不访问运行态（_tracker、session I/O）、不依赖 per-run 累积状态
+- read-before-modify 是运行态约束（依赖 ReadTracker），留在 _execute 原位，Phase 35 CMIG-01 迁入 RunStateGuard
 - BashTool 的 _is_dangerous_command 不在此 plan 迁移（Phase 35 CMIG-02，属 CapabilityPolicy）
-- input_validator 是纯语义校验，不依赖运行态（区别于 RunStateGuard）
 - 当前 tool_executor 签名尚未包含 ToolExecutionContext（defer 到 Plan 4），input_validator 的 Callable 签名基于当前代码的单参数形式
 - input_validator 抛出异常时，FullToolRunner 应 catch 并返回 `ToolResult(status="error", content=str(exc), meta={"layer": "input_validation"})`，不让异常传播
 
 ### 测试策略
 
 - 单测：ToolInstance 构造时 input_validator=None 默认正常工作
-- 单测：WriteTool.validate_input 未读文件时返回 deny
-- 单测：WriteTool.validate_input 新文件（path_exists=False）返回 None
+- 单测：WriteTool.validate_input 路径包含 `..` 时返回 deny
+- 单测：WriteTool.validate_input 绝对路径时返回 deny
+- 单测：WriteTool.validate_input 正常相对路径时返回 None
+- 单测：EditTool.validate_input old_str 为空时返回 deny
 - 单测：EditTool.validate_input old==new 时返回 deny
+- 单测：EditTool.validate_input 正常输入时返回 None
 - 单测：ToolCompiler 对有 validate_input 的工具绑定到 ToolInstance.input_validator
 - 单测：ToolCompiler 对无 validate_input 的工具 input_validator=None
 - 集成测：FullToolRunner 对 deny 的 input_validator 返回 error ToolResult 且不执行 executor
