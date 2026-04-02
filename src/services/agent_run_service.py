@@ -20,11 +20,6 @@ from typing import Any, Protocol, runtime_checkable
 
 from matmaster.core.bus import MessageBus
 from matmaster.core.playground import PlaygroundManager
-from matmaster.hooks import (
-    AssistantStateHook,
-    OutputProcessorHook,
-    SkillHitHook,
-)
 from matmaster.integration import (
     EventRouter,
     PersistenceHandler,
@@ -139,16 +134,14 @@ def _build_service_hooks(
     mode: str,
     reply_queue: ReplyQueueLike | None,
 ) -> list[Any]:
-    """Assemble service-layer hooks (observer + confirmation).
+    """Assemble service-layer hooks (ConfirmationHook only).
+
+    Phase 34: AssistantStateHook, SkillHitHook, OutputProcessorHook retired.
+    Generator events replace their functionality. Only ConfirmationHook remains.
 
     spec_hooks: hooks from runtime.spec (Exp-layer extension point).
     """
-    observer_hooks = [
-        OutputProcessorHook(bus),
-        SkillHitHook(bus),
-        AssistantStateHook(bus),
-    ]
-    merged = [*spec_hooks, *observer_hooks]
+    merged = list(spec_hooks)
     if mode == 'direct' and reply_queue is not None and _CONFIRM_TOOLS:
         from matmaster.hooks.confirmation import ConfirmationHook
 
@@ -157,7 +150,7 @@ def _build_service_hooks(
             confirm_tools=set(_CONFIRM_TOOLS),
             get_reply=lambda: _poll_reply_queue(reply_queue),
         )
-        merged = [confirmation_hook, *spec_hooks, *observer_hooks]
+        merged = [confirmation_hook, *spec_hooks]
     return merged
 
 
