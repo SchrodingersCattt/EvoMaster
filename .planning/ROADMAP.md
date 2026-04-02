@@ -75,7 +75,7 @@ Full details: milestones/v2.1-ROADMAP.md
 
 - [x] **Phase 32: Kernel Generator + Tool Runtime v2 核心骨架** - _run_items() generator 单一执行路径 + Tool Runtime v2 对象模型/ToolCatalog/InlineToolRunner + AgentRuntimeSpec 扩展，现有 run() 行为完全兼容 (completed 2026-04-02)
 - [x] **Phase 33: ToolRunner 完整实现 + ToolScheduler** - 完整 ToolRunner 执行链（查找/校验/调度/执行/释放）+ ToolScheduler 资源调度 + StructuralValidation/CapabilityPolicy + ToolCompiler + Session.capabilities (completed 2026-04-02)
-- [ ] **Phase 34: Exp/Service 接入 + Hook 退役** - Exp.run_stream() + AgentRunService.run_agent_stream() 接入 generator + _stream_llm_items() 子 generator + 5 个 Hook 逐步退役 (gap closure in progress)
+- [x] **Phase 34: Exp/Service 接入 + Hook 退役** - Exp.run_stream() + AgentRunService.run_agent_stream() 接入 generator + _stream_llm_items() 子 generator + 5 个 Hook 逐步退役 (gap closure in progress) (completed 2026-04-02)
 - [ ] **Phase 35: 约束迁移 + ToolRegistry 降级** - read-before-modify/bash 危险命令迁入三层约束模型 + ToolBinding 字段启用 + ToolRegistry 降级为纯存储
 - [ ] **Phase 36: 去总线化 + 高级调度** - MessageBus/EventRouter 消费者审计 + async fanout 替代 + Bus 移除 + SessionCapabilities 自适应调度
 
@@ -130,13 +130,13 @@ Plans:
   7. `ToolResult.payload/meta` 到 SSE/持久化前端契约（event_payloads.py `info` 字段）的兼容映射经过测试验证
   8. matmaster/hooks/ 目录中 EventEmitterHook / AssistantStateHook / SkillHitHook / OutputProcessorHook 全部删除，ContextCompactor 不再依赖 Bus emit
   9. Exp.run() 和 AgentRunService.run_agent() 行为不变，现有调用方零修改
-**Plans:** 4 plans (3 complete + 1 gap closure)
+**Plans:** 4/4 plans complete
 
 Plans:
 - [x] 34-01-PLAN.md — Kernel/Exp 内核改造（_stream_llm_items + FullToolRunner 注入 + run_stream + skill overlay + ContextCompactor event_sink）
 - [x] 34-02-PLAN.md — Service 层切流（run_agent_stream + source 归一化 + payload->info 映射验证）
 - [x] 34-03-PLAN.md — Hook 退役（EventEmitterHook + AssistantStateHook + SkillHitHook + OutputProcessorHook 删除）
-- [ ] 34-04-PLAN.md — Gap closure: FullToolRunner 激活 + run_stream BusEvent yield + catalog version 刷新
+- [x] 34-04-PLAN.md — Gap closure: FullToolRunner 激活 + run_stream BusEvent yield + catalog version 刷新
 
 ### Phase 35: 约束迁移 + ToolRegistry 降级
 **Goal**: 工具安全检查从工具内部分散逻辑统一迁入三层约束模型，ToolRegistry 降级为纯存储后 ToolCatalog 成为唯一上层消费接口
@@ -201,6 +201,6 @@ Phases 32-36 execute in numeric order. Phase 34 depends on both 32 and 33. Phase
 | 31. Tech Debt Cleanup | v2.1 | 2/2 | Complete | 2026-04-02 |
 | 32. Kernel Generator + Tool Runtime v2 核心骨架 | v2.2 | 3/3 | Complete    | 2026-04-02 |
 | 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 5/5 | Complete    | 2026-04-02 |
-| 34. Exp/Service 接入 + Hook 退役 | v2.2 | 3/4 | Gap closure   | - |
+| 34. Exp/Service 接入 + Hook 退役 | v2.2 | 4/4 | Complete   | 2026-04-02 |
 | 35. 约束迁移 + ToolRegistry 降级 | v2.2 | 0/? | Not started | - |
 | 36. 去总线化 + 高级调度 | v2.2 | 0/? | Not started | - |
