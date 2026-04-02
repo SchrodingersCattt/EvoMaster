@@ -1,0 +1,457 @@
+[
+  {
+    "category": "basic",
+    "default": 1,
+    "description": "Number of datasets. ndtset=0 means single-dataset mode (equivalent to 1). In multi-dataset runs, append a numeric suffix to variable names (e.g., ecut1, ecut2) to distinguish parameters across datasets.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#ndtset",
+    "name": "ndtset",
+    "param_type": "integer",
+    "valid_range": [
+      0,
+      999
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 15.0,
+    "description": "Plane-wave basis kinetic energy cutoff in Hartree. Larger values improve accuracy at higher computational cost. Typical values: NC pseudopotentials 20-40 Ha, PAW pseudopotentials 8-20 Ha (used together with pawecutdg).",
+    "doc_url": "https://docs.abinit.org/variables/basic/#ecut",
+    "name": "ecut",
+    "param_type": "float",
+    "unit": "Hartree",
+    "valid_range": [
+      1.0,
+      1000.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": null,
+    "description": "Double-grid cutoff energy for PAW calculations in Hartree. Typically 2-4 times ecut. Required only for PAW pseudopotential calculations.",
+    "doc_url": "https://docs.abinit.org/variables/paw/#pawecutdg",
+    "name": "pawecutdg",
+    "param_type": "float",
+    "requires": [
+      "ecut"
+    ],
+    "unit": "Hartree",
+    "valid_range": [
+      1.0,
+      2000.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 11,
+    "description": "Exchange-correlation functional selector. Common values: 1=LDA(Teter-Pade), 7=LDA(PW), 11=PBE(GGA), 24=HSE06, -116133=PBE0. Negative values select the corresponding LibXC functional by its ID.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#ixc",
+    "enum_values": [
+      "1",
+      "7",
+      "11",
+      "24",
+      "-116133"
+    ],
+    "name": "ixc",
+    "param_type": "integer"
+  },
+  {
+    "category": "structure",
+    "default": null,
+    "description": "Scaling factors for the primitive lattice vectors, consisting of 3 values in Bohr (default). Combined with rprim to define the lattice: actual lattice vector = acell[i] * rprim[i]. A unit label may be appended, e.g., acell 10.26 10.26 10.26 Bohr or acell 5.431 5.431 5.431 Angstrom.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#acell",
+    "name": "acell",
+    "param_type": "array",
+    "unit": "Bohr"
+  },
+  {
+    "category": "structure",
+    "default": null,
+    "description": "Primitive lattice vectors (dimensionless), one vector per row, 3 rows total. Combined with acell to obtain lattice vectors in Bohr. Example for an FCC primitive cell: 0 0.5 0.5 / 0.5 0 0.5 / 0.5 0.5 0.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#rprim",
+    "name": "rprim",
+    "param_type": "array"
+  },
+  {
+    "category": "structure",
+    "default": null,
+    "description": "Total number of atoms in the unit cell. Must match the number of rows in xred or xcart and the length of the typat array.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#natom",
+    "name": "natom",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      100000
+    ]
+  },
+  {
+    "category": "structure",
+    "default": null,
+    "description": "Number of atom types. Must equal the length of the znucl array; the maximum value in typat must not exceed ntypat.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#ntypat",
+    "name": "ntypat",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      200
+    ]
+  },
+  {
+    "category": "structure",
+    "default": null,
+    "description": "Array of atom type indices (length = natom), 1-based. The maximum value must not exceed ntypat. Example: typat 1 1 means both atoms belong to the first atom type.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#typat",
+    "name": "typat",
+    "param_type": "array"
+  },
+  {
+    "category": "structure",
+    "default": null,
+    "description": "Atomic number (nuclear charge) for each atom type; array length = ntypat. Examples: Si=14, C=6, O=8, Fe=26.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#znucl",
+    "name": "znucl",
+    "param_type": "array"
+  },
+  {
+    "category": "structure",
+    "conflicts_with": [
+      "xcart"
+    ],
+    "default": null,
+    "description": "Reduced (fractional) atomic coordinates, 3 values per row, natom rows total. Coordinates are relative to the lattice vectors, typically in [0, 1).",
+    "doc_url": "https://docs.abinit.org/variables/basic/#xred",
+    "name": "xred",
+    "param_type": "array"
+  },
+  {
+    "category": "structure",
+    "conflicts_with": [
+      "xred"
+    ],
+    "default": null,
+    "description": "Cartesian atomic coordinates in Bohr, 3 values per row, natom rows total. Mutually exclusive with xred; only one of the two may be set.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#xcart",
+    "name": "xcart",
+    "param_type": "array",
+    "unit": "Bohr"
+  },
+  {
+    "category": "kpoints",
+    "default": 1,
+    "description": "k-point generation scheme. 1=automatic (Monkhorst-Pack with symmetry); 2=automatic (without time-reversal symmetry); 3=manual (requires nkpt and kpt); 0=no k-points (molecular calculation).",
+    "doc_url": "https://docs.abinit.org/variables/basic/#kptopt",
+    "enum_values": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "name": "kptopt",
+    "param_type": "integer"
+  },
+  {
+    "category": "kpoints",
+    "default": null,
+    "description": "Monkhorst-Pack k-point grid dimensions, 3 integers (nkx nky nkz). Used together with shiftk. Larger grids improve accuracy but increase cost.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#ngkpt",
+    "name": "ngkpt",
+    "param_type": "array",
+    "requires": [
+      "kptopt"
+    ]
+  },
+  {
+    "category": "kpoints",
+    "default": null,
+    "description": "k-point grid shifts (fractional coordinates relative to ngkpt), 3 values. Common values: 0.5 0.5 0.5 (Gamma-centered offset); 0 0 0 (includes the Gamma point).",
+    "doc_url": "https://docs.abinit.org/variables/basic/#shiftk",
+    "name": "shiftk",
+    "param_type": "array",
+    "requires": [
+      "ngkpt"
+    ]
+  },
+  {
+    "category": "kpoints",
+    "default": null,
+    "description": "Number of k-points specified manually. Used together with the kpt array when kptopt=3.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#nkpt",
+    "name": "nkpt",
+    "param_type": "integer",
+    "requires": [
+      "kpt"
+    ]
+  },
+  {
+    "category": "kpoints",
+    "default": null,
+    "description": "Manually specified k-point list in fractional coordinates, 3 values per row, nkpt rows total. Used when kptopt=3.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#kpt",
+    "name": "kpt",
+    "param_type": "array",
+    "requires": [
+      "nkpt"
+    ]
+  },
+  {
+    "category": "scf",
+    "default": 50,
+    "description": "Maximum number of SCF iterations. If SCF does not converge within nstep steps, ABINIT stops and reports a warning. Increasing nstep can help for difficult systems.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#nstep",
+    "name": "nstep",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      10000
+    ]
+  },
+  {
+    "category": "scf",
+    "conflicts_with": [
+      "tolvrs",
+      "tolwfr"
+    ],
+    "default": null,
+    "description": "SCF convergence criterion: SCF is considered converged when the absolute difference in total energy between consecutive steps is less than toldfe (in Hartree). Mutually exclusive with tolvrs and tolwfr.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#toldfe",
+    "name": "toldfe",
+    "param_type": "float",
+    "unit": "Hartree",
+    "valid_range": [
+      1e-20,
+      0.1
+    ]
+  },
+  {
+    "category": "scf",
+    "conflicts_with": [
+      "toldfe",
+      "tolwfr"
+    ],
+    "default": null,
+    "description": "SCF convergence criterion: SCF is converged when the variance of the potential residual falls below tolvrs. Mutually exclusive with toldfe and tolwfr. Recommended for PAW calculations.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#tolvrs",
+    "name": "tolvrs",
+    "param_type": "float",
+    "unit": "Hartree^2",
+    "valid_range": [
+      1e-22,
+      0.1
+    ]
+  },
+  {
+    "category": "scf",
+    "conflicts_with": [
+      "toldfe",
+      "tolvrs"
+    ],
+    "default": null,
+    "description": "SCF convergence criterion: SCF is converged when the wavefunction residual falls below tolwfr. Mutually exclusive with toldfe and tolvrs. Suitable for non-self-consistent (NSCF) or response-function calculations.",
+    "doc_url": "https://docs.abinit.org/variables/basic/#tolwfr",
+    "name": "tolwfr",
+    "param_type": "float",
+    "valid_range": [
+      1e-22,
+      0.1
+    ]
+  },
+  {
+    "category": "scf",
+    "default": 7,
+    "description": "SCF iteration scheme. Common values: 2=simple mixing (Pulay); 5=energy prediction (CG); 7=Pulay mixing (recommended); 17=improved Pulay; -2=non-self-consistent (nscf).",
+    "doc_url": "https://docs.abinit.org/variables/dev/#iscf",
+    "enum_values": [
+      "-3",
+      "-2",
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "7",
+      "12",
+      "14",
+      "17",
+      "22"
+    ],
+    "name": "iscf",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 1,
+    "description": "Whether to write the wavefunction file (WFK). 0=do not write; 1=write (default). The WFK file is needed for subsequent NSCF or response-function calculations but can be large.",
+    "doc_url": "https://docs.abinit.org/variables/files/#prtwf",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "prtwf",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 1,
+    "description": "Whether to write the charge density file (DEN). 0=do not write; 1=write (default). The DEN file is used for post-processing or restart calculations.",
+    "doc_url": "https://docs.abinit.org/variables/files/#prtden",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "prtden",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Output verbosity level. 0=standard; 1=more detailed; 2=very detailed. Increasing this value significantly enlarges the output file.",
+    "doc_url": "https://docs.abinit.org/variables/files/#prtvol",
+    "name": "prtvol",
+    "param_type": "integer",
+    "valid_range": [
+      0,
+      10
+    ]
+  },
+  {
+    "category": "pseudo",
+    "default": "/opt/abinit/share/pseudo/",
+    "description": "Directory path containing pseudopotential files (quoted string). ABINIT searches this directory for the files listed in pseudos.",
+    "doc_url": "https://docs.abinit.org/variables/files/#ppdirpath",
+    "name": "ppdirpath",
+    "param_type": "string"
+  },
+  {
+    "category": "pseudo",
+    "default": null,
+    "description": "Comma-separated list of pseudopotential filenames (quoted string). The number of filenames must equal ntypat. Example: pseudos \"Si.psp8\" or pseudos \"Fe.psp8, O.psp8\".",
+    "doc_url": "https://docs.abinit.org/variables/files/#pseudos",
+    "name": "pseudos",
+    "param_type": "string",
+    "requires": [
+      "ppdirpath",
+      "ntypat"
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": 0,
+    "description": "Ionic motion algorithm. 0=fixed ions (SCF only); 2=BFGS quasi-Newton (relaxation, recommended); 3=Broyden method; 20=molecular dynamics (Verlet); 22=Langevin dynamics.",
+    "doc_url": "https://docs.abinit.org/variables/rlx/#ionmov",
+    "enum_values": [
+      "0",
+      "2",
+      "3",
+      "6",
+      "20",
+      "21",
+      "22"
+    ],
+    "name": "ionmov",
+    "param_type": "integer"
+  },
+  {
+    "category": "ionic",
+    "default": 0,
+    "description": "Maximum number of ionic relaxation or MD steps. Must be set when ionmov != 0.",
+    "doc_url": "https://docs.abinit.org/variables/rlx/#ntime",
+    "name": "ntime",
+    "param_type": "integer",
+    "requires": [
+      "ionmov"
+    ],
+    "valid_range": [
+      1,
+      100000
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": 0,
+    "description": "Cell optimization scheme. 0=fixed cell; 1=optimize volume (fixed shape); 2=fully optimize cell (shape and volume); 3=optimize c/a ratio; 4-9=constrain specific lattice vector components.",
+    "doc_url": "https://docs.abinit.org/variables/rlx/#optcell",
+    "enum_values": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+    ],
+    "name": "optcell",
+    "param_type": "integer"
+  },
+  {
+    "category": "ionic",
+    "default": 1.05,
+    "description": "Maximum allowed cell volume expansion ratio relative to the initial cell during cell optimization. Used to pre-allocate memory. Setting it too small may cause calculation failure; too large wastes memory. Typical range: 1.05-1.15.",
+    "doc_url": "https://docs.abinit.org/variables/rlx/#dilatmx",
+    "name": "dilatmx",
+    "param_type": "float",
+    "requires": [
+      "optcell"
+    ],
+    "valid_range": [
+      1.0,
+      2.0
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": 0.5,
+    "description": "Smearing width applied to the plane-wave cutoff during cell optimization, in Hartree. Effective only when optcell != 0. Recommended value: 0.5 Ha, to avoid energy oscillations caused by discontinuities in the cutoff.",
+    "doc_url": "https://docs.abinit.org/variables/rlx/#ecutsm",
+    "name": "ecutsm",
+    "param_type": "float",
+    "requires": [
+      "optcell"
+    ],
+    "unit": "Hartree",
+    "valid_range": [
+      0.0,
+      5.0
+    ]
+  },
+  {
+    "category": "parallel",
+    "default": 1,
+    "description": "Number of MPI processes for band parallelism. The product npband * npfft * npkpt * nspinor * bandpp must equal the total number of MPI processes. Increasing npband makes better use of multi-core nodes.",
+    "doc_url": "https://docs.abinit.org/variables/paral/#npband",
+    "name": "npband",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      10000
+    ]
+  },
+  {
+    "category": "parallel",
+    "default": 1,
+    "description": "Number of MPI processes for FFT parallelism. npband * npfft * npkpt must equal the total number of MPI processes (or a factor thereof). Useful for systems with large FFT grids.",
+    "doc_url": "https://docs.abinit.org/variables/paral/#npfft",
+    "name": "npfft",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      10000
+    ]
+  },
+  {
+    "category": "parallel",
+    "default": 1,
+    "description": "Number of MPI processes for k-point parallelism. npkpt must not exceed the total number of k-points. This is the most efficient parallelism strategy since k-points are independent.",
+    "doc_url": "https://docs.abinit.org/variables/paral/#npkpt",
+    "name": "npkpt",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      10000
+    ]
+  }
+]

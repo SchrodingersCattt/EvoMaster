@@ -1,0 +1,421 @@
+[
+  {
+    "category": "control",
+    "default": "scf",
+    "description": "Type of calculation. 'scf'=self-consistent field; 'nscf'=non-self-consistent; 'bands'=band structure; 'relax'=ionic relaxation; 'md'=molecular dynamics; 'vc-relax'=variable-cell relaxation; 'vc-md'=variable-cell MD.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm45",
+    "enum_values": [
+      "scf",
+      "nscf",
+      "bands",
+      "relax",
+      "md",
+      "vc-relax",
+      "vc-md"
+    ],
+    "name": "calculation",
+    "param_type": "enum",
+    "section": "&CONTROL"
+  },
+  {
+    "category": "control",
+    "default": "pwscf",
+    "description": "Prefix for output file names, used to name the .save directory and various output files.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm90",
+    "name": "prefix",
+    "param_type": "string",
+    "section": "&CONTROL"
+  },
+  {
+    "category": "control",
+    "default": "./",
+    "description": "Output directory (scratch directory) that holds the .save directory and temporary files.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm100",
+    "name": "outdir",
+    "param_type": "string",
+    "section": "&CONTROL"
+  },
+  {
+    "category": "control",
+    "default": "./",
+    "description": "Directory containing pseudopotential files.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm107",
+    "name": "pseudo_dir",
+    "param_type": "string",
+    "section": "&CONTROL"
+  },
+  {
+    "category": "control",
+    "default": false,
+    "description": "Whether to compute and print atomic forces. Automatically enabled for relaxation or MD calculations.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm128",
+    "name": "tprnfor",
+    "param_type": "boolean",
+    "section": "&CONTROL"
+  },
+  {
+    "category": "control",
+    "default": false,
+    "description": "Whether to compute and print the stress tensor. Automatically enabled for vc-relax or vc-md calculations.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm133",
+    "name": "tstress",
+    "param_type": "boolean",
+    "section": "&CONTROL"
+  },
+  {
+    "category": "control",
+    "default": 0.001,
+    "description": "Convergence threshold for ionic relaxation in Ry/bohr. Convergence is reached when all forces fall below this value.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm160",
+    "name": "forc_conv_thr",
+    "param_type": "float",
+    "section": "&CONTROL",
+    "unit": "Ry/bohr",
+    "valid_range": [
+      1e-10,
+      1.0
+    ]
+  },
+  {
+    "category": "control",
+    "default": 0.0001,
+    "description": "Total energy convergence threshold for ionic relaxation (energy difference between consecutive steps) in Ry.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm155",
+    "name": "etot_conv_thr",
+    "param_type": "float",
+    "section": "&CONTROL",
+    "unit": "Ry",
+    "valid_range": [
+      1e-12,
+      1.0
+    ]
+  },
+  {
+    "category": "control",
+    "default": 50,
+    "description": "Maximum number of relaxation or MD steps.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm55",
+    "name": "nstep",
+    "param_type": "integer",
+    "section": "&CONTROL",
+    "valid_range": [
+      1,
+      100000
+    ]
+  },
+  {
+    "category": "control",
+    "default": "from_scratch",
+    "description": "Restart mode: 'from_scratch' starts a fresh calculation; 'restart' continues from a previous interrupted run.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm60",
+    "enum_values": [
+      "from_scratch",
+      "restart"
+    ],
+    "name": "restart_mode",
+    "param_type": "enum",
+    "section": "&CONTROL"
+  },
+  {
+    "category": "control",
+    "default": "low",
+    "description": "Output verbosity level: 'low'=minimal; 'medium'=moderate; 'high'=detailed; 'debug'=full debug output.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm40",
+    "enum_values": [
+      "low",
+      "medium",
+      "high",
+      "debug"
+    ],
+    "name": "verbosity",
+    "param_type": "enum",
+    "section": "&CONTROL"
+  },
+  {
+    "category": "system",
+    "default": 0,
+    "description": "Bravais lattice type index. 0=specify the lattice manually via the CELL_PARAMETERS card; other values select a standard lattice type (requires celldm or A/B/C/cosAB parameters to be set accordingly).",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm200",
+    "name": "ibrav",
+    "param_type": "integer",
+    "section": "&SYSTEM",
+    "valid_range": [
+      -13,
+      14
+    ]
+  },
+  {
+    "category": "system",
+    "default": null,
+    "description": "Total number of atoms in the unit cell. Required. Must match the number of atom lines in ATOMIC_POSITIONS.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm247",
+    "name": "nat",
+    "param_type": "integer",
+    "section": "&SYSTEM",
+    "valid_range": [
+      1,
+      100000
+    ]
+  },
+  {
+    "category": "system",
+    "default": null,
+    "description": "Number of atom types. Required. Must match the number of species in ATOMIC_SPECIES.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm252",
+    "name": "ntyp",
+    "param_type": "integer",
+    "section": "&SYSTEM",
+    "valid_range": [
+      1,
+      10
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 30.0,
+    "description": "Kinetic energy cutoff for wavefunctions in Ry. Typical values: NC pseudopotentials 40-80 Ry; PAW/US pseudopotentials 25-60 Ry.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm257",
+    "name": "ecutwfc",
+    "param_type": "float",
+    "section": "&SYSTEM",
+    "unit": "Ry",
+    "valid_range": [
+      10.0,
+      200.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": null,
+    "description": "Kinetic energy cutoff for charge density in Ry. NC pseudopotentials default to 4*ecutwfc; PAW/US pseudopotentials typically need 8-12*ecutwfc.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm262",
+    "name": "ecutrho",
+    "param_type": "float",
+    "section": "&SYSTEM",
+    "unit": "Ry",
+    "valid_range": [
+      40.0,
+      2000.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "fixed",
+    "description": "Occupation treatment: 'fixed'=fixed occupations (insulators); 'smearing'=Fermi smearing (metals); 'tetrahedra'=tetrahedron method; 'from_input'=manually specified.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm285",
+    "enum_values": [
+      "fixed",
+      "smearing",
+      "tetrahedra",
+      "tetrahedra_lin",
+      "tetrahedra_opt",
+      "from_input"
+    ],
+    "name": "occupations",
+    "param_type": "enum",
+    "section": "&SYSTEM"
+  },
+  {
+    "category": "electronic",
+    "default": "gaussian",
+    "description": "Smearing method (used when occupations='smearing'): 'gaussian'; 'methfessel-paxton' (recommended for metals); 'marzari-vanderbilt'; 'fermi-dirac'.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm290",
+    "enum_values": [
+      "gaussian",
+      "methfessel-paxton",
+      "marzari-vanderbilt",
+      "cold",
+      "fermi-dirac"
+    ],
+    "name": "smearing",
+    "param_type": "enum",
+    "requires": [
+      "occupations"
+    ],
+    "section": "&SYSTEM"
+  },
+  {
+    "category": "electronic",
+    "default": 0.01,
+    "description": "Smearing width in Ry. Typical values for metals: 0.01-0.05 Ry. Excessively large values degrade accuracy.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm295",
+    "name": "degauss",
+    "param_type": "float",
+    "requires": [
+      "occupations",
+      "smearing"
+    ],
+    "section": "&SYSTEM",
+    "unit": "Ry",
+    "valid_range": [
+      1e-06,
+      1.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 1,
+    "description": "Spin polarization: 1=non-spin-polarized; 2=collinear spin polarization; 4=non-collinear spin-orbit coupling.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm330",
+    "enum_values": [
+      "1",
+      "2",
+      "4"
+    ],
+    "name": "nspin",
+    "param_type": "integer",
+    "section": "&SYSTEM"
+  },
+  {
+    "category": "electronic",
+    "default": null,
+    "description": "Number of bands to compute. Defaults to ceil(nelec/2) plus a few empty bands. Typically needs to be increased for band structure calculations.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm280",
+    "name": "nbnd",
+    "param_type": "integer",
+    "section": "&SYSTEM",
+    "valid_range": [
+      1,
+      100000
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": null,
+    "description": "Override the exchange-correlation functional embedded in the pseudopotential. Examples: 'pbe', 'pbesol', 'hse', 'b3lyp'.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm385",
+    "name": "input_dft",
+    "param_type": "string",
+    "section": "&SYSTEM"
+  },
+  {
+    "category": "electronic",
+    "default": 1e-06,
+    "description": "SCF convergence threshold (total energy change) in Ry. Typical value: 1e-6 for single-point; use 1e-8 or tighter for relaxation calculations.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm470",
+    "name": "conv_thr",
+    "param_type": "float",
+    "section": "&ELECTRONS",
+    "unit": "Ry",
+    "valid_range": [
+      1e-14,
+      0.01
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 0.7,
+    "description": "Charge density mixing parameter (Pulay/Broyden). Use 0.7 for insulators; reduce to 0.3-0.5 for metals or magnetic systems to improve convergence.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm480",
+    "name": "mixing_beta",
+    "param_type": "float",
+    "section": "&ELECTRONS",
+    "valid_range": [
+      0.01,
+      1.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "plain",
+    "description": "Mixing scheme: 'plain'=simple linear mixing; 'TF'=Thomas-Fermi preconditioning; 'local-TF'=local Thomas-Fermi preconditioning.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm475",
+    "enum_values": [
+      "plain",
+      "TF",
+      "local-TF"
+    ],
+    "name": "mixing_mode",
+    "param_type": "enum",
+    "section": "&ELECTRONS"
+  },
+  {
+    "category": "electronic",
+    "default": 100,
+    "description": "Maximum number of SCF iterations. If SCF does not converge within this many steps, QE reports an error (results may still be written but should be checked).",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm465",
+    "name": "electron_maxstep",
+    "param_type": "integer",
+    "section": "&ELECTRONS",
+    "valid_range": [
+      1,
+      10000
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "david",
+    "description": "Diagonalization algorithm: 'david'=Davidson-David (default, most efficient in general); 'cg'=conjugate gradient; 'ppcg'=parallel PCG; 'paro'=parallel RO.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm455",
+    "enum_values": [
+      "david",
+      "cg",
+      "ppcg",
+      "paro",
+      "par_io"
+    ],
+    "name": "diagonalization",
+    "param_type": "enum",
+    "section": "&ELECTRONS"
+  },
+  {
+    "category": "ionic",
+    "default": "bfgs",
+    "description": "Ionic motion algorithm (for relax/md): 'bfgs' (recommended for relaxation); 'damp' (damped MD); 'verlet' (MD); 'langevin'; 'fire', etc.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm540",
+    "enum_values": [
+      "bfgs",
+      "damp",
+      "verlet",
+      "langevin",
+      "langevin-smc",
+      "beeman",
+      "fire"
+    ],
+    "name": "ion_dynamics",
+    "param_type": "enum",
+    "section": "&IONS"
+  },
+  {
+    "category": "ionic",
+    "default": 100.0,
+    "description": "Upscaling factor for the BFGS convergence threshold. In the final steps, the SCF threshold is tightened to conv_thr/upscale to ensure accurate forces.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm590",
+    "name": "upscale",
+    "param_type": "float",
+    "section": "&IONS",
+    "valid_range": [
+      1.0,
+      1000000.0
+    ]
+  },
+  {
+    "category": "cell",
+    "default": "bfgs",
+    "description": "Cell optimization algorithm (used for vc-relax): 'bfgs' (recommended); 'damp-pr'; 'damp-w'.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm620",
+    "enum_values": [
+      "bfgs",
+      "damp-pr",
+      "damp-w",
+      "none"
+    ],
+    "name": "cell_dynamics",
+    "param_type": "enum",
+    "section": "&CELL"
+  },
+  {
+    "category": "cell",
+    "default": 0.0,
+    "description": "External pressure for vc-relax/vc-md calculations in kbar. Positive values correspond to compression.",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm628",
+    "name": "press",
+    "param_type": "float",
+    "section": "&CELL",
+    "unit": "kbar",
+    "valid_range": [
+      -1000000.0,
+      1000000.0
+    ]
+  }
+]

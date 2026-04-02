@@ -1,0 +1,807 @@
+[
+  {
+    "category": "system",
+    "default": "cp2k",
+    "description": "Name of the project. Used as prefix for output files.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/GLOBAL.html#PROJECT",
+    "name": "PROJECT",
+    "param_type": "string",
+    "section": "&GLOBAL"
+  },
+  {
+    "category": "system",
+    "default": "ENERGY",
+    "description": "Type of calculation to perform.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/GLOBAL.html#RUN_TYPE",
+    "enum_values": [
+      "ENERGY",
+      "ENERGY_FORCE",
+      "GEO_OPT",
+      "CELL_OPT",
+      "MD",
+      "VIBRATIONAL_ANALYSIS",
+      "BAND",
+      "LINEAR_RESPONSE",
+      "PINT",
+      "MONTE_CARLO",
+      "SPECTRA",
+      "TAMC",
+      "DEBUG"
+    ],
+    "name": "RUN_TYPE",
+    "param_type": "enum",
+    "section": "&GLOBAL"
+  },
+  {
+    "category": "output",
+    "default": "MEDIUM",
+    "description": "Controls the amount of output written to the output file.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/GLOBAL.html#PRINT_LEVEL",
+    "enum_values": [
+      "SILENT",
+      "LOW",
+      "MEDIUM",
+      "HIGH",
+      "DEBUG"
+    ],
+    "name": "PRINT_LEVEL",
+    "param_type": "enum",
+    "section": "&GLOBAL"
+  },
+  {
+    "category": "electronic",
+    "default": 300,
+    "description": "Plane-wave cutoff energy in Ry for the finest grid level in MGRID. Higher values improve accuracy but increase cost.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/MGRID.html#CUTOFF",
+    "name": "CUTOFF",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&MGRID",
+    "unit": "Ry",
+    "valid_range": [
+      50,
+      2000
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 50,
+    "description": "Controls the grid level onto which a Gaussian is mapped. The higher the value, the more accurate but expensive.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/MGRID.html#REL_CUTOFF",
+    "name": "REL_CUTOFF",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&MGRID",
+    "unit": "Ry",
+    "valid_range": [
+      20,
+      500
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 4,
+    "description": "Number of multi-grids to use for the density mapping.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/MGRID.html#NGRIDS",
+    "name": "NGRIDS",
+    "param_type": "integer",
+    "section": "&FORCE_EVAL/&DFT/&MGRID",
+    "valid_range": [
+      1,
+      8
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "GPW",
+    "description": "Specifies the electronic structure method to use in QS.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/QS.html#METHOD",
+    "enum_values": [
+      "GPW",
+      "GAPW",
+      "GAPW_XC",
+      "LRIGPW",
+      "PNNL_GPW",
+      "OFGPW",
+      "PM6",
+      "AM1",
+      "RM1",
+      "MNDO",
+      "MNDOD",
+      "PDG",
+      "PM3",
+      "PM3-ZNod",
+      "DFTB",
+      "SCC-DFTB",
+      "xTB"
+    ],
+    "name": "METHOD",
+    "param_type": "enum",
+    "section": "&FORCE_EVAL/&DFT/&QS"
+  },
+  {
+    "category": "electronic",
+    "default": 1e-10,
+    "description": "Default threshold for integral screening. Controls the accuracy of the calculation.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/QS.html#EPS_DEFAULT",
+    "name": "EPS_DEFAULT",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&QS",
+    "valid_range": [
+      1e-20,
+      0.0001
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "ATOMIC",
+    "description": "Initial guess for the SCF wavefunction. ATOMIC uses superposition of atomic densities.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF.html#SCF_GUESS",
+    "enum_values": [
+      "ATOMIC",
+      "RESTART",
+      "RANDOM",
+      "CORE",
+      "HISTORY_RESTART",
+      "MOPAC",
+      "NONE"
+    ],
+    "name": "SCF_GUESS",
+    "param_type": "enum",
+    "section": "&FORCE_EVAL/&DFT/&SCF"
+  },
+  {
+    "category": "electronic",
+    "default": 1e-06,
+    "description": "Convergence threshold for the SCF orbital gradient.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF.html#EPS_SCF",
+    "name": "EPS_SCF",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&SCF",
+    "valid_range": [
+      1e-15,
+      0.01
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 50,
+    "description": "Maximum number of SCF iterations per outer loop.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF.html#MAX_SCF",
+    "name": "MAX_SCF",
+    "param_type": "integer",
+    "section": "&FORCE_EVAL/&DFT/&SCF",
+    "valid_range": [
+      1,
+      500
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 4,
+    "description": "Maximum number of DIIS vectors for wavefunction extrapolation.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF.html#MAX_DIIS",
+    "name": "MAX_DIIS",
+    "param_type": "integer",
+    "section": "&FORCE_EVAL/&DFT/&SCF",
+    "valid_range": [
+      1,
+      20
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 0,
+    "description": "Number of additional MOs (molecular orbitals) to add above the occupied states. Useful for metallic systems.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF.html#ADDED_MOS",
+    "name": "ADDED_MOS",
+    "param_type": "integer",
+    "section": "&FORCE_EVAL/&DFT/&SCF",
+    "valid_range": [
+      0,
+      1000
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "BASIS_MOLOPT",
+    "description": "Name of the file containing the basis set definitions. Standard files include BASIS_MOLOPT, BASIS_SET, cc-pVDZ, etc.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT.html#BASIS_SET_FILE_NAME",
+    "name": "BASIS_SET_FILE_NAME",
+    "param_type": "string",
+    "section": "&FORCE_EVAL/&DFT"
+  },
+  {
+    "category": "electronic",
+    "default": "GTH_POTENTIALS",
+    "description": "Name of the file containing the pseudopotential definitions.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT.html#POTENTIAL_FILE_NAME",
+    "name": "POTENTIAL_FILE_NAME",
+    "param_type": "string",
+    "section": "&FORCE_EVAL/&DFT"
+  },
+  {
+    "category": "system",
+    "default": 0,
+    "description": "Total charge of the system. Positive for cations, negative for anions.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT.html#CHARGE",
+    "name": "CHARGE",
+    "param_type": "integer",
+    "section": "&FORCE_EVAL/&DFT",
+    "valid_range": [
+      -100,
+      100
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 1,
+    "description": "Spin multiplicity of the system (2S+1). 1 = singlet, 2 = doublet, 3 = triplet.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT.html#MULTIPLICITY",
+    "name": "MULTIPLICITY",
+    "param_type": "integer",
+    "section": "&FORCE_EVAL/&DFT",
+    "valid_range": [
+      1,
+      100
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": false,
+    "description": "Use unrestricted Kohn-Sham (UKS) formalism for open-shell systems.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT.html#UKS",
+    "name": "UKS",
+    "param_type": "boolean",
+    "section": "&FORCE_EVAL/&DFT"
+  },
+  {
+    "category": "electronic",
+    "default": "MONKHORST-PACK 4 4 4",
+    "description": "K-point sampling scheme. Options: MONKHORST-PACK nx ny nz, GAMMA, NONE. Format: SCHEME MONKHORST-PACK N1 N2 N3.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/KPOINTS.html#SCHEME",
+    "name": "SCHEME",
+    "param_type": "string",
+    "section": "&FORCE_EVAL/&DFT/&KPOINTS"
+  },
+  {
+    "category": "ionic",
+    "default": 1e-06,
+    "description": "Threshold for geometry convergence in GEO_OPT.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/MOTION/GEO_OPT.html#EPS_GRAD_CARTESIAN",
+    "name": "EPS_GEO",
+    "param_type": "float",
+    "section": "&MOTION/&GEO_OPT",
+    "valid_range": [
+      1e-15,
+      0.01
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": 200,
+    "description": "Maximum number of geometry optimization steps.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/MOTION/GEO_OPT.html#MAX_ITER",
+    "name": "MAX_ITER",
+    "param_type": "integer",
+    "section": "&MOTION/&GEO_OPT",
+    "valid_range": [
+      1,
+      10000
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": "BFGS",
+    "description": "Optimizer algorithm for geometry optimization.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/MOTION/GEO_OPT.html#OPTIMIZER",
+    "enum_values": [
+      "BFGS",
+      "CG",
+      "LBFGS"
+    ],
+    "name": "OPTIMIZER",
+    "param_type": "enum",
+    "section": "&MOTION/&GEO_OPT"
+  },
+  {
+    "category": "ionic",
+    "default": 1000,
+    "description": "Number of MD steps.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/MOTION/MD.html#STEPS",
+    "name": "STEPS",
+    "param_type": "integer",
+    "section": "&MOTION/&MD",
+    "valid_range": [
+      1,
+      10000000
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": 0.5,
+    "description": "MD time step in femtoseconds.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/MOTION/MD.html#TIMESTEP",
+    "name": "TIMESTEP",
+    "param_type": "float",
+    "section": "&MOTION/&MD",
+    "unit": "fs",
+    "valid_range": [
+      0.001,
+      100.0
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": 300.0,
+    "description": "Temperature for MD simulation (NVT/NPT ensembles).",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/MOTION/MD.html#TEMPERATURE",
+    "name": "TEMPERATURE",
+    "param_type": "float",
+    "section": "&MOTION/&MD",
+    "unit": "K",
+    "valid_range": [
+      0.0,
+      100000.0
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": "NVT",
+    "description": "Statistical ensemble for MD. NVE=microcanonical, NVT=canonical, NPT_I=NPT(isotropic).",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/MOTION/MD.html#ENSEMBLE",
+    "enum_values": [
+      "NVE",
+      "NVT",
+      "NPT_I",
+      "NPT_F",
+      "REFTRAJ",
+      "LANGEVIN",
+      "NPT_IA",
+      "MSST"
+    ],
+    "name": "ENSEMBLE",
+    "param_type": "enum",
+    "section": "&MOTION/&MD"
+  },
+  {
+    "category": "electronic",
+    "default": "DZVP-MOLOPT-SR-GTH",
+    "description": "Name of the basis set to use for this atomic kind. Must match an entry in the BASIS_SET_FILE.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/SUBSYS/KIND.html#BASIS_SET",
+    "name": "BASIS_SET",
+    "param_type": "string",
+    "section": "&FORCE_EVAL/&SUBSYS/&KIND"
+  },
+  {
+    "category": "electronic",
+    "default": "GTH-PBE",
+    "description": "Name of the pseudopotential for this atomic kind. Must match an entry in the POTENTIAL_FILE.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/SUBSYS/KIND.html#POTENTIAL",
+    "name": "POTENTIAL",
+    "param_type": "string",
+    "section": "&FORCE_EVAL/&SUBSYS/&KIND"
+  },
+  {
+    "category": "system",
+    "default": "XYZ",
+    "description": "Specifies the periodicity of the cell. XYZ=fully periodic, NONE=molecular.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/SUBSYS/CELL.html#PERIODIC",
+    "enum_values": [
+      "NONE",
+      "X",
+      "Y",
+      "Z",
+      "XY",
+      "XZ",
+      "YZ",
+      "XYZ"
+    ],
+    "name": "PERIODIC",
+    "param_type": "enum",
+    "section": "&FORCE_EVAL/&SUBSYS/&CELL"
+  },
+  {
+    "category": "electronic",
+    "default": false,
+    "description": "Enable Fermi smearing for electronic structure calculations. Required for metallic systems.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF/SMEAR.html",
+    "name": "SMEAR",
+    "param_type": "boolean",
+    "section": "&FORCE_EVAL/&DFT/&SCF/&SMEAR"
+  },
+  {
+    "category": "electronic",
+    "default": 300.0,
+    "description": "Electronic temperature for Fermi smearing in Kelvin.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF/SMEAR.html#ELECTRONIC_TEMPERATURE",
+    "name": "ELECTRONIC_TEMPERATURE",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&SCF/&SMEAR",
+    "unit": "K",
+    "valid_range": [
+      10.0,
+      50000.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "Quickstep",
+    "description": "Method to use for computing forces and energy in FORCE_EVAL.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL.html#METHOD",
+    "enum_values": [
+      "Quickstep",
+      "FIST",
+      "QMMM",
+      "EIP",
+      "SIRIUS",
+      "MIXED"
+    ],
+    "name": "METHOD_FORCE_EVAL",
+    "param_type": "enum",
+    "section": "&FORCE_EVAL"
+  },
+  {
+    "category": "electronic",
+    "default": 0.0,
+    "description": "Convergence tolerance for SCF when using history-based restart. 0 means same as EPS_SCF.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF.html#EPS_SCF_HISTORY",
+    "name": "EPS_SCF_HISTORY",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&SCF",
+    "valid_range": [
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 0,
+    "description": "Maximum number of SCF steps retained for history-based restart.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF.html#MAX_SCF_HISTORY",
+    "name": "MAX_SCF_HISTORY",
+    "param_type": "integer",
+    "section": "&FORCE_EVAL/&DFT/&SCF",
+    "valid_range": [
+      0,
+      100
+    ]
+  },
+  {
+    "category": "output",
+    "default": false,
+    "description": "Print the full orbital analysis in PRINT section.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/PRINT.html",
+    "name": "FULL_ALL",
+    "param_type": "boolean",
+    "section": "&FORCE_EVAL/&DFT/&PRINT"
+  },
+  {
+    "category": "output",
+    "default": "RESTART",
+    "description": "Filename for restart wavefunction.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF/PRINT/RESTART.html#FILENAME",
+    "name": "FILENAME",
+    "param_type": "string",
+    "section": "&FORCE_EVAL/&DFT/&SCF/&PRINT/&RESTART"
+  },
+  {
+    "category": "electronic",
+    "default": 0.0,
+    "description": "Filter threshold for sparse matrices in linear scaling methods.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/QS.html#EPS_FILTER_MATRIX",
+    "name": "EPS_FILTER_MATRIX",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&QS",
+    "valid_range": [
+      0.0,
+      0.001
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "ASPC",
+    "description": "Extrapolation method for wavefunction during MD.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/QS/EXTRAPOLATION.html",
+    "enum_values": [
+      "NONE",
+      "PS",
+      "ASPC",
+      "LINEAR",
+      "PS2",
+      "PS3",
+      "PS4"
+    ],
+    "name": "EXTRAPOLATION",
+    "param_type": "enum",
+    "section": "&FORCE_EVAL/&DFT/&SCF/&PRINT/&RESTART"
+  },
+  {
+    "category": "electronic",
+    "default": 0.4,
+    "description": "Mixing coefficient for charge density mixing in SCF. Larger values speed convergence but may cause oscillation.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF/MIXING.html#ALPHA",
+    "name": "ALPHA",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&SCF/&MIXING",
+    "valid_range": [
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "BROYDEN_MIXING",
+    "description": "Charge density mixing method for SCF convergence acceleration.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF/MIXING.html#METHOD",
+    "enum_values": [
+      "NONE",
+      "DIRECT_P_MIXING",
+      "KERKER_MIXING",
+      "MULTISECANT_MIXING",
+      "BROYDEN_MIXING",
+      "PULAY_MIXING"
+    ],
+    "name": "MIXING_METHOD",
+    "param_type": "enum",
+    "section": "&FORCE_EVAL/&DFT/&SCF/&MIXING"
+  },
+  {
+    "category": "electronic",
+    "default": 4,
+    "description": "Number of Broyden vectors to keep in BROYDEN_MIXING. More vectors improve convergence but use more memory.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF/MIXING.html#NBUFFER",
+    "name": "NBROYDEN",
+    "param_type": "integer",
+    "section": "&FORCE_EVAL/&DFT/&SCF/&MIXING",
+    "valid_range": [
+      1,
+      50
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "STANDARD",
+    "description": "Diagonalization algorithm for the KS matrix.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF/DIAGONALIZATION.html#ALGORITHM",
+    "enum_values": [
+      "STANDARD",
+      "OT",
+      "BLOCK_LANCZOS",
+      "CUSOLVERDN_SYD",
+      "SCP",
+      "QPES"
+    ],
+    "name": "ALGORITHM",
+    "param_type": "enum",
+    "section": "&FORCE_EVAL/&DFT/&SCF/&DIAGONALIZATION"
+  },
+  {
+    "category": "output",
+    "default": 1,
+    "description": "Number of backup copies to keep for the restart wavefunction file. 0 disables backup.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/SCF/PRINT/RESTART.html#BACKUP_COPIES",
+    "name": "BACKUP_COPIES",
+    "param_type": "integer",
+    "section": "&FORCE_EVAL/&DFT/&SCF/&PRINT/&RESTART",
+    "valid_range": [
+      0,
+      10
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 1e-05,
+    "description": "Threshold for the overlap matrix eigenvalues. Used to filter out nearly linearly dependent basis functions. Decrease if 'Kohn Sham matrix not 100% occupied' warning appears.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/QS.html#EPS_PGF_ORB",
+    "name": "EPS_PGF_ORB",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&QS",
+    "valid_range": [
+      1e-20,
+      0.001
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "PERIODIC",
+    "description": "Method to solve the Poisson equation. PERIODIC for periodic systems, MT for isolated systems.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/POISSON.html#PSOLVER",
+    "enum_values": [
+      "PERIODIC",
+      "MT",
+      "WAVELET",
+      "MULTIPOLE",
+      "IMPLICIT"
+    ],
+    "name": "PSOLVER",
+    "param_type": "enum",
+    "section": "&FORCE_EVAL/&DFT/&POISSON"
+  },
+  {
+    "category": "electronic",
+    "default": "MO_DIAG",
+    "description": "Purification method for the ADMM density matrix. NONE skips purification (recommended for ADMM with hybrid functionals).",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/AUXILIARY_DENSITY_MATRIX_METHOD.html#ADMM_PURIFICATION_METHOD",
+    "enum_values": [
+      "NONE",
+      "MO_DIAG",
+      "MO_NO_DIAG",
+      "CAUCHY",
+      "CAUCHY_SUBSPACE",
+      "SIGN",
+      "SIGN_SUBSPACE"
+    ],
+    "name": "ADMM_PURIFICATION_METHOD",
+    "param_type": "enum",
+    "section": "&FORCE_EVAL/&DFT/&AUXILIARY_DENSITY_MATRIX_METHOD"
+  },
+  {
+    "category": "electronic",
+    "default": 0.25,
+    "description": "Fraction of Hartree-Fock exchange. PBE0: 0.25, B3LYP: 0.20, HSE06: 0.25 (short-range).",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/XC/HF.html#FRACTION",
+    "name": "FRACTION",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&XC/&HF",
+    "valid_range": [
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 1e-06,
+    "description": "Threshold for Schwarz screening of ERI (electron repulsion integrals). Larger values reduce cost but lose accuracy.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/XC/HF/SCREENING.html#EPS_SCHWARZ",
+    "name": "EPS_SCHWARZ",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&XC/&HF/&SCREENING",
+    "valid_range": [
+      1e-15,
+      0.001
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": false,
+    "description": "Screen ERI based on the initial density matrix (requires wavefunction restart file). Speeds up first SCF cycle.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/XC/HF/SCREENING.html#SCREEN_ON_INITIAL_P",
+    "name": "SCREEN_ON_INITIAL_P",
+    "param_type": "boolean",
+    "section": "&FORCE_EVAL/&DFT/&XC/&HF/&SCREENING"
+  },
+  {
+    "category": "electronic",
+    "default": "COULOMB",
+    "description": "Type of HF exchange potential. COULOMB for PBE0, SHORTRANGE (with OMEGA) for HSE06, TRUNCATED for large systems.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/XC/HF/INTERACTION_POTENTIAL.html#POTENTIAL_TYPE",
+    "enum_values": [
+      "COULOMB",
+      "SHORTRANGE",
+      "LONGRANGE",
+      "TRUNCATED",
+      "MIX_CL",
+      "MIX_LG",
+      "IDENTITY",
+      "MIX_CL_TRUNC"
+    ],
+    "name": "POTENTIAL_TYPE",
+    "param_type": "enum",
+    "section": "&FORCE_EVAL/&DFT/&XC/&HF/&INTERACTION_POTENTIAL"
+  },
+  {
+    "category": "electronic",
+    "default": 0.0,
+    "description": "Cutoff radius for TRUNCATED HF potential. Must be less than half the minimum periodic image distance.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/XC/HF/INTERACTION_POTENTIAL.html#CUTOFF_RADIUS",
+    "name": "CUTOFF_RADIUS",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&XC/&HF/&INTERACTION_POTENTIAL",
+    "unit": "bohr",
+    "valid_range": [
+      0.0,
+      100.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 0.11,
+    "description": "Range-separation parameter for RSH (range-separated hybrid) functionals like HSE06. Controls the decay of the short-range HF exchange.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/XC/HF/INTERACTION_POTENTIAL.html#OMEGA",
+    "name": "OMEGA",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&XC/&HF/&INTERACTION_POTENTIAL",
+    "unit": "bohr^-1",
+    "valid_range": [
+      0.0,
+      10.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 512,
+    "description": "Maximum memory per MPI process for storing HF exchange integrals (MB). Increase for large systems.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/XC/HF/MEMORY.html#MAX_MEMORY",
+    "name": "MAX_MEMORY",
+    "param_type": "integer",
+    "section": "&FORCE_EVAL/&DFT/&XC/&HF/&MEMORY",
+    "unit": "MB",
+    "valid_range": [
+      64,
+      1048576
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 1.0,
+    "description": "Scaling factor for EPS_SCHWARZ when determining which ERI batches to store in memory.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/XC/HF/MEMORY.html#EPS_STORAGE_SCALING",
+    "name": "EPS_STORAGE_SCALING",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&XC/&HF/&MEMORY",
+    "valid_range": [
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 1.0,
+    "description": "Scaling factor for the exchange part of the XC functional. In PBE0: 0.75 (remaining after 0.25 HF). In HSE06 XWPBE: -0.25 (correction term).",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/XC/XC_FUNCTIONAL/PBE.html#SCALE_X",
+    "name": "SCALE_X",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&XC/&XC_FUNCTIONAL/&PBE",
+    "valid_range": [
+      -1.0,
+      2.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 1.0,
+    "description": "Scaling factor for the correlation part of the XC functional.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/XC/XC_FUNCTIONAL/PBE.html#SCALE_C",
+    "name": "SCALE_C",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&XC/&XC_FUNCTIONAL/&PBE",
+    "valid_range": [
+      0.0,
+      2.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 1.0,
+    "description": "Scaling for the long-range exchange in range-separated hybrid (XWPBE term for HSE06).",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/XC/XC_FUNCTIONAL/XWPBE.html",
+    "name": "SCALE_X0",
+    "param_type": "float",
+    "section": "&FORCE_EVAL/&DFT/&XC/&XC_FUNCTIONAL/&XWPBE",
+    "valid_range": [
+      -1.0,
+      2.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 20,
+    "description": "Number of k-points along the path segment between two SPECIAL_POINTs in band structure calculation.",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/PRINT/BAND_STRUCTURE/KPOINT_SET.html#NPOINTS",
+    "name": "NPOINTS",
+    "param_type": "integer",
+    "section": "&FORCE_EVAL/&DFT/&PRINT/&BAND_STRUCTURE/&KPOINT_SET",
+    "valid_range": [
+      1,
+      1000
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": null,
+    "description": "High-symmetry k-point for band structure path. Format: SPECIAL_POINT LABEL kx ky kz (in fractional reciprocal coordinates). E.g.: SPECIAL_POINT GAMMA 0.0 0.0 0.0",
+    "doc_url": "https://manual.cp2k.org/trunk/CP2K_INPUT/FORCE_EVAL/DFT/PRINT/BAND_STRUCTURE/KPOINT_SET.html#SPECIAL_POINT",
+    "name": "SPECIAL_POINT",
+    "param_type": "string",
+    "section": "&FORCE_EVAL/&DFT/&PRINT/&BAND_STRUCTURE/&KPOINT_SET"
+  }
+]

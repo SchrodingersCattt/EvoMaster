@@ -1,0 +1,44 @@
+# ABINIT reference: Ground-state SCF (single dataset)
+# Use as base for GS runs. For NLO/SHG: pass this (or adapted) to prepare_abinit_job with workflow_type="nlo";
+# the tool will generate multi-dataset DFPT + optic.inp via AbiPy — do NOT hand-edit multiple datasets.
+# Replace __ECUT__, __PSEUDOS__, structure (acell, rprim, natom, typat, xred, znucl) and k-points as needed.
+
+ndtset 1
+ecut __ECUT__
+pawecutdg 50
+
+# XC: 7=LDA, 11=PBE
+ixc 11
+
+# Structure (replace with your cell and atoms)
+acell 1 1 1
+rprim
+  10.26  0.0    0.0
+  0.0    10.26  0.0
+  0.0    0.0    10.26
+natom 2
+ntypat 1
+typat 1 1
+znucl 14
+xred
+  0.0    0.0    0.0
+  0.25   0.25   0.25
+
+# K-points
+kptopt 1
+ngkpt 4 4 4
+shiftk 0.5 0.5 0.5
+
+# SCF
+nstep 50
+toldfe 1.0d-10
+tolwfr 1.0d-14
+iscf 7
+
+# Pseudopotentials (replace paths; or use prepare_abinit_job to resolve)
+ppdirpath __PSEUDO_DIR__
+pseudos __PSEUDOS__
+
+# Optional
+prtwf 1
+prtvol 0

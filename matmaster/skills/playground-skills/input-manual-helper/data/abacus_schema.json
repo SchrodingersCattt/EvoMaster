@@ -1,0 +1,1021 @@
+[
+  {
+    "category": "system",
+    "default": "ABACUS",
+    "description": "Output file suffix. All output files will be prefixed with this label. Corresponds to the output directory OUT.suffix.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#suffix",
+    "name": "suffix",
+    "param_type": "string"
+  },
+  {
+    "category": "system",
+    "default": null,
+    "description": "Number of atom types. Must match the number of species blocks in the STRU file.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#ntype",
+    "name": "ntype",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      200
+    ]
+  },
+  {
+    "category": "system",
+    "default": "scf",
+    "description": "Type of calculation to perform. 'scf': self-consistent field ground state. 'relax': ionic relaxation (BFGS). 'cell-relax': cell + ionic relaxation. 'md': molecular dynamics. 'nscf': non-self-consistent field (for band structures, DOS). 'get_S': compute overlap matrix only.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#calculation",
+    "enum_values": [
+      "scf",
+      "relax",
+      "cell-relax",
+      "md",
+      "nscf",
+      "get_S"
+    ],
+    "name": "calculation",
+    "param_type": "enum"
+  },
+  {
+    "category": "electronic",
+    "default": 50.0,
+    "description": "Plane-wave kinetic energy cutoff in Ry. Controls the completeness of the PW basis. Typical values for norm-conserving pseudopotentials: 50-100 Ry. For LCAO calculations this sets the PW auxiliary basis cutoff.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#ecutwfc",
+    "name": "ecutwfc",
+    "param_type": "float",
+    "unit": "Ry",
+    "valid_range": [
+      5.0,
+      1000.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "lcao",
+    "description": "Type of basis set. 'pw': plane-wave basis only. 'lcao': linear combination of atomic orbitals (requires orbital files). 'lcao_in_pw': LCAO in PW projection.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#basis_type",
+    "enum_values": [
+      "pw",
+      "lcao",
+      "lcao_in_pw"
+    ],
+    "name": "basis_type",
+    "param_type": "enum"
+  },
+  {
+    "category": "system",
+    "default": "./",
+    "description": "Directory containing pseudopotential files (UPF format). If a relative path is given it is resolved relative to the working directory.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#pseudo_dir",
+    "name": "pseudo_dir",
+    "param_type": "string"
+  },
+  {
+    "category": "system",
+    "default": "./",
+    "description": "Directory containing numerical atomic orbital files (.orb format). Required when basis_type=lcao.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#orbital_dir",
+    "name": "orbital_dir",
+    "param_type": "string",
+    "requires": [
+      "basis_type"
+    ]
+  },
+  {
+    "category": "system",
+    "default": 1,
+    "description": "Symmetry analysis switch. 1: auto-detect crystal symmetry and use it to reduce k-points. 0: no symmetry analysis (use full k-mesh). -1: use time-reversal symmetry only.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#symmetry",
+    "enum_values": [
+      "-1",
+      "0",
+      "1"
+    ],
+    "name": "symmetry",
+    "param_type": "integer"
+  },
+  {
+    "category": "electronic",
+    "default": 1,
+    "description": "Number of spin channels. 1: non-spin-polarized. 2: spin-polarized (collinear). 4: non-collinear spin-orbit coupling.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#nspin",
+    "enum_values": [
+      "1",
+      "2",
+      "4"
+    ],
+    "name": "nspin",
+    "param_type": "integer"
+  },
+  {
+    "category": "electronic",
+    "default": null,
+    "description": "Number of Kohn-Sham bands to compute. If not set, ABACUS auto-selects nbands = max(nelec/2 + 4, nelec*1.2). For band-structure (nscf) calculations set this explicitly to include empty bands above the Fermi level.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#nbands",
+    "name": "nbands",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      100000
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "default",
+    "description": "Exchange-correlation functional. 'default': use functional embedded in pseudopotential. 'lda': LDA (PZ). 'pbe': PBE (GGA). 'pbesol': PBEsol. 'hse': HSE06 (hybrid). 'scan': SCAN meta-GGA. 'pbe0': PBE0 (hybrid). 'revpbe': revPBE. 'vdwd3': PBE+D3 dispersion.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#dft_functional",
+    "enum_values": [
+      "default",
+      "lda",
+      "pbe",
+      "pbesol",
+      "hse",
+      "scan",
+      "pbe0",
+      "revpbe",
+      "vdwd3"
+    ],
+    "name": "dft_functional",
+    "param_type": "enum"
+  },
+  {
+    "category": "scf",
+    "default": 1e-07,
+    "description": "Convergence threshold for the SCF density difference (||rho_new - rho_old||). Typical value: 1e-7 for single-point; tighten to 1e-8 for force/stress calculations.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#scf_thr",
+    "name": "scf_thr",
+    "param_type": "float",
+    "valid_range": [
+      1e-15,
+      1.0
+    ]
+  },
+  {
+    "category": "scf",
+    "default": 100,
+    "description": "Maximum number of SCF iterations. If convergence is not reached within scf_nmax steps the job terminates (for 'scf') or continues with the next ionic step (for 'relax').",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#scf_nmax",
+    "name": "scf_nmax",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      10000
+    ]
+  },
+  {
+    "category": "scf",
+    "default": "broyden",
+    "description": "Density mixing scheme for SCF convergence. 'plain': simple linear mixing. 'pulay': Pulay DIIS mixing. 'broyden': Broyden mixing (recommended for most systems). 'broyden-modified': modified Broyden.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#mixing_type",
+    "enum_values": [
+      "plain",
+      "pulay",
+      "broyden",
+      "broyden-modified"
+    ],
+    "name": "mixing_type",
+    "param_type": "enum"
+  },
+  {
+    "category": "scf",
+    "default": 0.8,
+    "description": "Mixing coefficient (linear mixing factor). Range 0–1; smaller values give more stable but slower convergence. Typical: 0.4-0.8 for metals, 0.1-0.4 for difficult systems.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#mixing_beta",
+    "name": "mixing_beta",
+    "param_type": "float",
+    "valid_range": [
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "category": "scf",
+    "default": 8,
+    "description": "Number of previous charge densities kept in the Broyden/Pulay mixing history. Larger values generally improve convergence stability at the cost of memory.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#mixing_ndim",
+    "name": "mixing_ndim",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      50
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 0,
+    "description": "Use Gamma-only k-point sampling. 1: Gamma only (fast, for large supercells or molecules). 0: use full k-mesh from KPT file.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#gamma_only",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "gamma_only",
+    "param_type": "integer"
+  },
+  {
+    "category": "electronic",
+    "default": null,
+    "description": "Reciprocal-space k-point spacing in 1/Bohr. When set, ABACUS auto-generates a Monkhorst-Pack grid with this spacing. Typical: 0.1-0.2 1/Bohr for metals, 0.2-0.5 for insulators. Mutually exclusive with reading the KPT file.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#kspacing",
+    "name": "kspacing",
+    "param_type": "float",
+    "unit": "1/Bohr",
+    "valid_range": [
+      0.001,
+      5.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "fixed",
+    "description": "Fermi-level smearing method. 'fixed': no smearing (insulator/semiconductor). 'gauss': Gaussian smearing (metal). 'fermi-dirac': Fermi-Dirac distribution. 'methfessel-paxton': Methfessel-Paxton (metal, high accuracy). 'marzari-vanderbilt': cold smearing.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#smearing_method",
+    "enum_values": [
+      "fixed",
+      "gauss",
+      "fermi-dirac",
+      "methfessel-paxton",
+      "marzari-vanderbilt"
+    ],
+    "name": "smearing_method",
+    "param_type": "enum"
+  },
+  {
+    "category": "electronic",
+    "default": 0.015,
+    "description": "Smearing broadening parameter in Ry. Typical values: 0.01-0.03 Ry for metals. Should be validated by checking that total energy is converged w.r.t. smearing_sigma.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#smearing_sigma",
+    "name": "smearing_sigma",
+    "param_type": "float",
+    "requires": [
+      "smearing_method"
+    ],
+    "unit": "Ry",
+    "valid_range": [
+      0.0001,
+      1.0
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": 0.001,
+    "description": "Force convergence threshold in Ry/Bohr for ionic relaxation. The relaxation stops when the maximum force on any atom falls below this value. Typical: 1e-3 for rough, 1e-4 for tight.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#force_thr",
+    "name": "force_thr",
+    "param_type": "float",
+    "unit": "Ry/Bohr",
+    "valid_range": [
+      1e-08,
+      1.0
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": 10.0,
+    "description": "Stress convergence threshold in kbar for cell-relaxation. The optimization stops when all stress tensor components are below this value.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#stress_thr",
+    "name": "stress_thr",
+    "param_type": "float",
+    "unit": "kbar",
+    "valid_range": [
+      0.001,
+      1000.0
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": 100,
+    "description": "Maximum number of ionic relaxation steps. If convergence is not reached the calculation stops with a warning.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#relax_nmax",
+    "name": "relax_nmax",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      10000
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": "bfgs",
+    "description": "Algorithm for ionic relaxation. 'bfgs': quasi-Newton BFGS (recommended). 'cg': conjugate gradient. 'sd': steepest descent (slow). 'fire': FIRE algorithm (good for large systems).",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#relax_method",
+    "enum_values": [
+      "bfgs",
+      "cg",
+      "sd",
+      "fire"
+    ],
+    "name": "relax_method",
+    "param_type": "enum"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Whether to compute atomic forces. 0: no. 1: yes (automatically enabled for 'relax' and 'md' calculations). Required for ionic optimization.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#cal_force",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "cal_force",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Whether to compute the stress tensor. 0: no. 1: yes (required for 'cell-relax' calculations and EOS calculations).",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#cal_stress",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "cal_stress",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Output charge density to file. 0: no output. 1: write charge density (SPIN1_CHG.cube). Useful for visualisation or as restart checkpoint.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#out_chg",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "out_chg",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Output density of states. 0: no. 1: write DOS files (requires NSCF or post-SCF calculation with sufficient k-points). Output files: TDOS.dat, LDOS.dat.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#out_dos",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "out_dos",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Output band structure along k-path. 0: no. 1: write BANDS_1.dat (requires 'nscf' calculation with K_POINTS BAND block in KPT file).",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#out_band",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "out_band",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Output projected band structure (fat bands). 0: no. 1: yes (requires basis_type=lcao).",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#out_proj_band",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "out_proj_band",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Output updated STRU file after relaxation. 0: no. 1: write STRU_ION_D (each ionic step) and STRU_NOW (final structure).",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#out_stru",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "out_stru",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Output LCAO wavefunction coefficients. 0: no. 1: write wavefunction coefficients to WFC_NAO_GAMMA.dat (or WFC_NAO_K*.dat for multiple k-points). Requires basis_type=lcao.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#out_wfc_lcao",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "out_wfc_lcao",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0.07,
+    "description": "Gaussian broadening width (eV) for DOS calculation. Controls the energy resolution of the output DOS curve. Smaller values give sharper features but require more k-points.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#dos_sigma",
+    "name": "dos_sigma",
+    "param_type": "float",
+    "unit": "eV",
+    "valid_range": [
+      0.001,
+      5.0
+    ]
+  },
+  {
+    "category": "output",
+    "default": null,
+    "description": "Minimum energy (eV, relative to Fermi level) for DOS output window. Defaults to auto-detect from band structure.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#dos_emin_ev",
+    "name": "dos_emin_ev",
+    "param_type": "float",
+    "unit": "eV"
+  },
+  {
+    "category": "output",
+    "default": null,
+    "description": "Maximum energy (eV, relative to Fermi level) for DOS output window. Defaults to auto-detect from band structure.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#dos_emax_ev",
+    "name": "dos_emax_ev",
+    "param_type": "float",
+    "unit": "eV"
+  },
+  {
+    "category": "output",
+    "default": 0.01,
+    "description": "Energy step (eV) for DOS grid. Smaller values give finer energy resolution in the output DOS curve.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#dos_edelta_ev",
+    "name": "dos_edelta_ev",
+    "param_type": "float",
+    "unit": "eV",
+    "valid_range": [
+      0.0001,
+      1.0
+    ]
+  },
+  {
+    "category": "md",
+    "default": "nvt",
+    "description": "Molecular dynamics ensemble / thermostat. 'nvt': NVT with velocity rescaling (Berendsen). 'npt': NPT (Parrinello-Rahman). 'nve': NVE micro-canonical. 'msst': multi-shock Hugoniot. 'fire': FIRE relaxation via MD.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#md_type",
+    "enum_values": [
+      "nvt",
+      "npt",
+      "nve",
+      "msst",
+      "fire"
+    ],
+    "name": "md_type",
+    "param_type": "enum"
+  },
+  {
+    "category": "md",
+    "default": 10,
+    "description": "Number of MD time steps to run.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#md_nstep",
+    "name": "md_nstep",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      10000000
+    ]
+  },
+  {
+    "category": "md",
+    "default": 1.0,
+    "description": "MD time step in fs. Typical values: 0.5-2 fs for atomic systems. Smaller steps improve energy conservation at the cost of computational time.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#md_dt",
+    "name": "md_dt",
+    "param_type": "float",
+    "unit": "fs",
+    "valid_range": [
+      0.001,
+      100.0
+    ]
+  },
+  {
+    "category": "md",
+    "default": 300.0,
+    "description": "Initial temperature for MD in K. Used to generate initial Maxwell-Boltzmann velocities.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#md_tfirst",
+    "name": "md_tfirst",
+    "param_type": "float",
+    "unit": "K",
+    "valid_range": [
+      0.01,
+      100000.0
+    ]
+  },
+  {
+    "category": "md",
+    "default": null,
+    "description": "Final temperature for MD in K. If set, a linear temperature ramp is applied from md_tfirst to md_tlast over the run.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#md_tlast",
+    "name": "md_tlast",
+    "param_type": "float",
+    "unit": "K",
+    "valid_range": [
+      0.01,
+      100000.0
+    ]
+  },
+  {
+    "category": "md",
+    "default": null,
+    "description": "Thermostat frequency (1/fs) for Berendsen NVT thermostat. Determines how tightly the temperature is controlled. Typical: 1/40 to 1/10.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#md_tfreq",
+    "name": "md_tfreq",
+    "param_type": "float",
+    "unit": "1/fs"
+  },
+  {
+    "category": "md",
+    "default": 1,
+    "description": "Frequency (in MD steps) for writing trajectory frames to MD_dump file.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#md_dumpfreq",
+    "name": "md_dumpfreq",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      100000
+    ]
+  },
+  {
+    "category": "md",
+    "default": 5,
+    "description": "Frequency (in MD steps) for writing restart files (Restart_md.dat). Allows resuming interrupted MD runs.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#md_restartfreq",
+    "name": "md_restartfreq",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      100000
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "none",
+    "description": "Van der Waals dispersion correction method. 'none': no dispersion. 'd2': Grimme D2. 'd3_0': Grimme D3 with zero damping. 'd3_bj': Grimme D3 with Becke-Johnson damping (recommended).",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#vdw_method",
+    "enum_values": [
+      "none",
+      "d2",
+      "d3_0",
+      "d3_bj"
+    ],
+    "name": "vdw_method",
+    "param_type": "enum"
+  },
+  {
+    "category": "electronic",
+    "default": 1.0,
+    "description": "D3 overall scaling factor s6. For PBE+D3 this should be 1.0 (the default). Usually not changed.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#vdw_s6",
+    "name": "vdw_s6",
+    "param_type": "float"
+  },
+  {
+    "category": "system",
+    "default": 0,
+    "description": "Output DeePKS machine-learning labels (eigenvalues, forces) for training. 1: write labels. Requires DeePKS support compiled in.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#deepks_out_labels",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "deepks_out_labels",
+    "param_type": "integer"
+  },
+  {
+    "category": "system",
+    "default": 0,
+    "description": "Use DeePKS model in SCF loop for corrected DFT+ML energy. 1: enabled. Requires a trained DeePKS model file.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#deepks_scf",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "deepks_scf",
+    "param_type": "integer"
+  },
+  {
+    "category": "scf",
+    "default": "atomic",
+    "description": "Initial charge density. 'atomic': superposition of free-atom densities (default, safe choice). 'file': read from SPIN1_CHG.cube (restart). 'auto': attempt file first, fall back to atomic.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#init_chg",
+    "enum_values": [
+      "atomic",
+      "file",
+      "auto"
+    ],
+    "name": "init_chg",
+    "param_type": "enum"
+  },
+  {
+    "category": "md",
+    "default": 0,
+    "description": "Read initial atomic velocities from STRU file. 0: use Maxwell-Boltzmann at md_tfirst. 1: read velocities from STRU (requires VELOCITY block).",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#init_vel",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "init_vel",
+    "param_type": "integer"
+  },
+  {
+    "category": "electronic",
+    "default": 0,
+    "description": "Enable non-collinear spin calculation. 0: collinear. 1: non-collinear (requires nspin=4). Non-collinear mode enables spin-orbit coupling.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#noncolin",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "noncolin",
+    "param_type": "integer",
+    "requires": [
+      "nspin"
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 0,
+    "description": "Enable spin-orbit coupling (SOC). 0: off. 1: on. Requires noncolin=1 and nspin=4. Needs fully-relativistic pseudopotentials.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#lspinorb",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "lspinorb",
+    "param_type": "integer",
+    "requires": [
+      "noncolin",
+      "nspin"
+    ]
+  },
+  {
+    "category": "system",
+    "default": 0,
+    "description": "Dipole correction for slab calculations. 0: off. 1: apply dipole correction along the axis specified by dip_cor_axis. Needed for asymmetric slabs.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#dip_cor_flag",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "dip_cor_flag",
+    "param_type": "integer"
+  },
+  {
+    "category": "system",
+    "default": "z",
+    "description": "Axis along which to apply dipole correction ('x', 'y', or 'z'). Only used when dip_cor_flag=1.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#dip_cor_axis",
+    "enum_values": [
+      "x",
+      "y",
+      "z"
+    ],
+    "name": "dip_cor_axis",
+    "param_type": "enum",
+    "requires": [
+      "dip_cor_flag"
+    ]
+  },
+  {
+    "category": "system",
+    "default": 0,
+    "description": "Apply external electric field. 0: off. 1: on. The field direction and amplitude are set by efield_dir and efield_amp.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#efield_flag",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "efield_flag",
+    "param_type": "integer"
+  },
+  {
+    "category": "system",
+    "default": 2,
+    "description": "Direction of the external electric field (0=x, 1=y, 2=z). Only used when efield_flag=1.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#efield_dir",
+    "enum_values": [
+      "0",
+      "1",
+      "2"
+    ],
+    "name": "efield_dir",
+    "param_type": "integer",
+    "requires": [
+      "efield_flag"
+    ]
+  },
+  {
+    "category": "system",
+    "default": 0.0,
+    "description": "Amplitude of the external electric field in a.u. (1 a.u. ≈ 51.4 V/Å).",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#efield_amp",
+    "name": "efield_amp",
+    "param_type": "float",
+    "requires": [
+      "efield_flag"
+    ],
+    "unit": "a.u."
+  },
+  {
+    "category": "electronic",
+    "default": 0,
+    "description": "Enable DFT+U Hubbard correction. 0: off. 1: on (Dudarev simplified rotationally invariant). Requires orbital_corr and hubbard_u to be set in the STRU file or INPUT.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#lda_plus_u",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "lda_plus_u",
+    "param_type": "integer"
+  },
+  {
+    "category": "electronic",
+    "default": null,
+    "description": "Hubbard U parameters (in eV) for each atom type, space-separated. Must have ntype entries. Example: hubbard_u 4.5 0.0 (for a two-species system where only the first has U applied).",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#hubbard_u",
+    "name": "hubbard_u",
+    "param_type": "array",
+    "requires": [
+      "lda_plus_u"
+    ],
+    "unit": "eV"
+  },
+  {
+    "category": "electronic",
+    "default": null,
+    "description": "Angular momentum quantum number l of the correlated orbital for each atom type. -1: no correction, 0: s, 1: p, 2: d, 3: f. Must have ntype entries. Example: orbital_corr 2 -1.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#orbital_corr",
+    "name": "orbital_corr",
+    "param_type": "array",
+    "requires": [
+      "lda_plus_u"
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 0.0,
+    "description": "Fixed magnetization (number of up-minus-down electrons) for spin-polarized calculations. Only used when nspin=2.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#nupdown",
+    "name": "nupdown",
+    "param_type": "float",
+    "requires": [
+      "nspin"
+    ]
+  },
+  {
+    "category": "output",
+    "default": 100,
+    "description": "Frequency (steps) for printing MD energy to running_md.log. Smaller values generate more detailed output.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#printe",
+    "name": "printe",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      100000
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": "default",
+    "description": "Kohn-Sham equation diagonalization method. 'default': auto-select based on basis_type. 'cg': conjugate-gradient (good for PW). 'dav': Davidson iterative diagonalizer. 'genelpa': generalized eigenvalue via ELPA (recommended for large LCAO).",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#ks_solver",
+    "enum_values": [
+      "default",
+      "cg",
+      "dav",
+      "genelpa",
+      "scalapack_gvx"
+    ],
+    "name": "ks_solver",
+    "param_type": "enum"
+  },
+  {
+    "category": "electronic",
+    "default": 0.01,
+    "description": "Convergence threshold for the iterative diagonalization of the KS Hamiltonian. This is tightened automatically as SCF converges.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#pw_diag_thr",
+    "name": "pw_diag_thr",
+    "param_type": "float",
+    "valid_range": [
+      1e-15,
+      1.0
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 50,
+    "description": "Maximum number of iterations for the iterative diagonalization of the KS Hamiltonian per SCF step.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#pw_diag_nmax",
+    "name": "pw_diag_nmax",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      1000
+    ]
+  },
+  {
+    "category": "parallel",
+    "default": 1,
+    "description": "Number of k-point pools for MPI parallelisation. npool must divide evenly into the total number of MPI ranks. Set to the number of k-points for best performance.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#npool",
+    "name": "npool",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      10000
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 5,
+    "description": "Number of occupied bands above VBM to include in TDDFT calculations. Only relevant for calculation=tddft.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#nband_istate",
+    "name": "nband_istate",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      10000
+    ]
+  },
+  {
+    "category": "parallel",
+    "default": 0,
+    "description": "Memory-saving mode. 0: standard (fastest). 1: reduce memory usage at some computational overhead. Useful for very large systems that approach memory limits.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#mem_saver",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "mem_saver",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Output dipole moment (in Debye). 0: no. 1: write dipole to running_scf.log.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#out_dipole",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "out_dipole",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Output Mulliken population analysis. 0: no. 1: write Mulliken charges to mulliken.txt. Requires basis_type=lcao.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#out_mul",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "out_mul",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Output all KS eigenvalues (including unoccupied) to file. 0: no. 1: write to KS_EIGENVALUES.dat.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#out_allband",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "out_allband",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Compute macroscopic polarization via Berry phase. 0: off. 1: compute along direction gdir.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#berry_phase",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "berry_phase",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 3,
+    "description": "Reciprocal lattice direction for Berry phase calculation. 1: G1, 2: G2, 3: G3 (c-axis). Requires berry_phase=1.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#gdir",
+    "enum_values": [
+      "1",
+      "2",
+      "3"
+    ],
+    "name": "gdir",
+    "param_type": "integer",
+    "requires": [
+      "berry_phase"
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": 0,
+    "description": "Self-consistent constraining magnetic moment switch. 0: off. 1: constrain total magnetization. Requires nspin=2.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#sc_mag_switch",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "sc_mag_switch",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Interface with Wannier90: write AMN/MMN/EIG files for post-processing with wannier90. 0: off. 1: on. Requires basis_type=lcao.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#towannier90",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "towannier90",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": "up",
+    "description": "Spin channel to use for Wannier90 projection. 'up': spin-up channel. 'down': spin-down channel. Only relevant when nspin=2 and towannier90=1.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#wannier_spin",
+    "enum_values": [
+      "up",
+      "down"
+    ],
+    "name": "wannier_spin",
+    "param_type": "enum",
+    "requires": [
+      "towannier90"
+    ]
+  },
+  {
+    "category": "system",
+    "default": "STRU",
+    "description": "Path to the structure file (STRU format). Default is 'STRU' in the working directory.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html",
+    "name": "stru_file",
+    "param_type": "string"
+  },
+  {
+    "category": "system",
+    "default": "KPT",
+    "description": "Path to the k-point sampling file (KPT format). Default is 'KPT' in the working directory. Not needed when gamma_only=1.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/kpt.html",
+    "name": "kpoint_file",
+    "param_type": "string"
+  },
+  {
+    "category": "system",
+    "default": "ksdft",
+    "description": "Type of energy solver. 'ksdft': standard Kohn-Sham DFT. 'ofdft': orbital-free DFT (for simple metals at high pressure). 'sdft': stochastic DFT. 'tddft': time-dependent DFT.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#esolver_type",
+    "enum_values": [
+      "ksdft",
+      "ofdft",
+      "sdft",
+      "tddft"
+    ],
+    "name": "esolver_type",
+    "param_type": "enum"
+  },
+  {
+    "category": "scf",
+    "default": 4,
+    "description": "Dimension of the Krylov subspace used in the OS (optimal damping) preconditioning. Only used for charge-mixing.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#scf_os_ndim",
+    "name": "scf_os_ndim",
+    "param_type": "integer",
+    "valid_range": [
+      1,
+      50
+    ]
+  },
+  {
+    "category": "ionic",
+    "default": 0,
+    "description": "Fix atomic positions during relaxation. 0: all atoms free. 1: freeze atoms marked with 0 0 0 in the STRU ATOMIC_POSITIONS block.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#fixed_atoms",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "fixed_atoms",
+    "param_type": "integer"
+  },
+  {
+    "category": "output",
+    "default": 0,
+    "description": "Calculate electrical conductivity via Kubo-Greenwood formula. 0: off. 1: on.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#cal_cond",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "cal_cond",
+    "param_type": "integer"
+  }
+]

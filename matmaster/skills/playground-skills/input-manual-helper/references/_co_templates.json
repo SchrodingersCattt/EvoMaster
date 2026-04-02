@@ -1,0 +1,117 @@
+{
+  "_comment": "Co-template hints. task_* may pair with method_* for non-PBE functionals. minimal_* are fallbacks when user provides no input_file; structure/basis/potential are filled by prepare_*.",
+  "abinit/gs_scf.abi": {
+    "hint": "Base ground-state SCF. For NLO/SHG, call prepare_abinit_job with workflow_type='nlo'; do not hand-edit multiple datasets.",
+    "related": []
+  },
+  "cp2k/method_admm_hse06.inp": {
+    "hint": "METHOD template (ADMM+HSE06). Merge into a task_ template.",
+    "related": [
+      "cp2k/task_band.inp",
+      "cp2k/task_scf.inp",
+      "cp2k/task_opt.inp",
+      "cp2k/task_cellopt.inp"
+    ]
+  },
+  "cp2k/method_admm_pbe0.inp": {
+    "hint": "METHOD template (ADMM+PBE0). Merge XC/ADMM/HF sections into a task_ template.",
+    "related": [
+      "cp2k/task_band.inp",
+      "cp2k/task_scf.inp",
+      "cp2k/task_opt.inp",
+      "cp2k/task_cellopt.inp"
+    ]
+  },
+  "cp2k/method_dft_plus_u.inp": {
+    "hint": "METHOD template (DFT+U). Merge DFT+U sections into a task_ template.",
+    "related": [
+      "cp2k/task_scf.inp",
+      "cp2k/task_opt.inp",
+      "cp2k/task_band.inp"
+    ]
+  },
+  "cp2k/method_r2scan.inp": {
+    "hint": "METHOD template (r2SCAN meta-GGA). Merge XC sections into a task_ template.",
+    "related": [
+      "cp2k/task_band.inp",
+      "cp2k/task_scf.inp",
+      "cp2k/task_opt.inp"
+    ]
+  },
+  "cp2k/minimal_periodic.inp": {
+    "hint": "Minimal periodic CP2K template. Use when user provides no input_file. Structure, basis, potential are placeholders; prepare_cp2k_job overwrites them.",
+    "related": []
+  },
+  "cp2k/task_band.inp": {
+    "hint": "TASK template (PBE k-path). Pair with a method_ template for the functional.",
+    "related": [
+      "cp2k/method_admm_pbe0.inp",
+      "cp2k/method_admm_hse06.inp",
+      "cp2k/method_r2scan.inp"
+    ]
+  },
+  "cp2k/task_cellopt.inp": {
+    "hint": "TASK template (PBE cell optimization). For a different functional, fetch the corresponding method_ template.",
+    "related": [
+      "cp2k/method_admm_pbe0.inp",
+      "cp2k/method_admm_hse06.inp",
+      "cp2k/method_r2scan.inp"
+    ]
+  },
+  "cp2k/task_md_nvt.inp": {
+    "hint": "TASK template (PBE NVT MD). For a different functional, fetch a method_ template.",
+    "related": [
+      "cp2k/method_admm_pbe0.inp",
+      "cp2k/method_r2scan.inp"
+    ]
+  },
+  "cp2k/task_opt.inp": {
+    "hint": "TASK template (PBE geometry optimization). For hybrid or meta-GGA, fetch the corresponding method_ template.",
+    "related": [
+      "cp2k/method_admm_pbe0.inp",
+      "cp2k/method_admm_hse06.inp",
+      "cp2k/method_r2scan.inp"
+    ]
+  },
+  "cp2k/task_scf.inp": {
+    "hint": "TASK template (basic PBE SCF). For a different functional, fetch the corresponding method_ template.",
+    "related": [
+      "cp2k/method_admm_pbe0.inp",
+      "cp2k/method_admm_hse06.inp",
+      "cp2k/method_r2scan.inp",
+      "cp2k/method_dft_plus_u.inp"
+    ]
+  },
+  "lammps/gcmc_adsorption.lammps": {
+    "hint": "GCMC adsorption. Use prepare_lammps_job for path binding.",
+    "related": []
+  },
+  "lammps/msst_shock.lammps": {
+    "hint": "MSST shock simulation. Use prepare_lammps_job for structure/potential binding.",
+    "related": []
+  },
+  "orca/dlpno_ccsd_t_normal.inp": {
+    "hint": "DLPNO-CCSD(T) template (ORCA core scenario).",
+    "related": []
+  },
+  "orca/minimal_molecule.inp": {
+    "hint": "Minimal ORCA molecule template. Use when user provides no input_file. Coordinates are placeholder; prepare_orca_job overwrites them.",
+    "related": []
+  },
+  "orca/std_dft.inp": {
+    "hint": "Molecular ground-state DFT base template (B3LYP/def2-TZVP, RIJCOSX). Use as starting point for single-point or geometry-optimisation jobs.",
+    "related": []
+  },
+  "orca/stdft_wb97x-d3.inp": {
+    "hint": "Simplified TD-DFT (sTD-DFT) template using wB97X-D3/def2-SV(P). Covers excitations up to 7 eV with perturbative selection (PThresh/PTLimit). Suitable for UV/Vis spectra of medium-to-large molecules.",
+    "related": [
+      "orca/tddft_pbe0.inp"
+    ]
+  },
+  "orca/tddft_pbe0.inp": {
+    "hint": "Full TD-DFT template (PBE0/def2-SV(P), TDA disabled). For conventional excited-state calculations with a hybrid functional.",
+    "related": [
+      "orca/stdft_wb97x-d3.inp"
+    ]
+  }
+}
