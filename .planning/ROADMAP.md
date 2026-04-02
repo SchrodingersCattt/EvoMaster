@@ -91,11 +91,11 @@ Full details: milestones/v2.1-ROADMAP.md
   3. ToolRunner Protocol 定义存在且 InlineToolRunner 通过 `isinstance` 检查，Kernel 通过 `spec.tool_runner` 获取 runner
   4. Tool Runtime v2 类型体系（ToolSpec/ToolBinding/ToolInstance/ResourceClaim/ToolDecision/SessionCapabilities/RuntimeTopology/ToolPlane）全部可导入且为 frozen 不可变
   5. ToolCatalog 以 base+overlay 结构运行，内部持有 ToolRegistry 作为兼容 facade，overlay 变更递增 version
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 32-01-PLAN.md — Tool Runtime v2 类型体系 + ToolResult 升级
-- [ ] 32-02-PLAN.md — ToolCatalog + ToolRunner + AgentRuntimeSpec 扩展
+- [x] 32-02-PLAN.md — ToolCatalog + ToolRunner + AgentRuntimeSpec 扩展
 - [ ] 32-03-PLAN.md — Kernel generator 改造 + 回归验证
 
 ### Phase 33: ToolRunner 完整实现 + ToolScheduler
@@ -181,7 +181,7 @@ Phases 32-36 execute in numeric order. Phase 35 depends on both 33 and 34 comple
 | 29. 主执行路径切换 | v2.1 | 2/2 | Complete | 2026-04-01 |
 | 30. 解耦审计与独立性证明 | v2.1 | 3/3 | Complete | 2026-04-01 |
 | 31. Tech Debt Cleanup | v2.1 | 2/2 | Complete | 2026-04-02 |
-| 32. Kernel Generator + Tool Runtime v2 核心骨架 | v2.2 | 1/3 | In Progress | - |
+| 32. Kernel Generator + Tool Runtime v2 核心骨架 | v2.2 | 2/3 | In Progress|  |
 | 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 0/? | Not started | - |
 | 34. Exp/Service 接入 + Hook 退役 | v2.2 | 0/? | Not started | - |
 | 35. 约束迁移 + ToolRegistry 降级 | v2.2 | 0/? | Not started | - |

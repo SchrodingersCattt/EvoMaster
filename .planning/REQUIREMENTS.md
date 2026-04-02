@@ -26,14 +26,14 @@
 
 ### Tool Catalog
 
-- [ ] **TCAT-01**: 实现 `ToolCatalog`（base + overlay 两层结构），base 在 build_runtime() 编译时不可变，overlay 承载 skill 触发的 MCP 工具懒注入
-- [ ] **TCAT-02**: `ToolCatalog` 维护 `version` 属性，overlay 变更时递增，Kernel 每轮比对 version 决定是否刷新 tool_definitions
-- [ ] **TCAT-03**: `ToolCatalog` Phase 1 内部持有 ToolRegistry 实例作为兼容 facade，不改动 ContextBuilder / SkillTool / MCP 注入路径
+- [x] **TCAT-01**: 实现 `ToolCatalog`（base + overlay 两层结构），base 在 build_runtime() 编译时不可变，overlay 承载 skill 触发的 MCP 工具懒注入
+- [x] **TCAT-02**: `ToolCatalog` 维护 `version` 属性，overlay 变更时递增，Kernel 每轮比对 version 决定是否刷新 tool_definitions
+- [x] **TCAT-03**: `ToolCatalog` Phase 1 内部持有 ToolRegistry 实例作为兼容 facade，不改动 ContextBuilder / SkillTool / MCP 注入路径
 
 ### Tool Runner + Scheduler
 
-- [ ] **TRUN-01**: 定义 `ToolRunner` Protocol（`@runtime_checkable`），接口为 `execute_batch(tool_calls, ctx, on_result) -> list[(ToolCallData, ToolResult)]`
-- [ ] **TRUN-02**: 实现 `InlineToolRunner` 作为 Phase 1 过渡，包装当前 agent.py 的 guard → pre_hook → execute → post_hook 逻辑
+- [x] **TRUN-01**: 定义 `ToolRunner` Protocol（`@runtime_checkable`），接口为 `execute_batch(tool_calls, ctx, on_result) -> list[(ToolCallData, ToolResult)]`
+- [x] **TRUN-02**: 实现 `InlineToolRunner` 作为 Phase 1 过渡，包装当前 agent.py 的 guard → pre_hook → execute → post_hook 逻辑
 - [ ] **TRUN-03**: 实现完整 `ToolRunner`，执行链为 ToolCatalog 查找 → StructuralValidation → RunStateGuard → CapabilityPolicy → fast path 判定 → ToolScheduler → executor → 释放
 - [ ] **TRUN-04**: 实现 `ToolScheduler`，基于 ResourceClaim 调度（exclusive 互斥 / shared_read 并发 / counted 信号量），支持 fast path 跳过
 - [ ] **TRUN-05**: Kernel 通过 `spec.tool_runner` 获取 ToolRunner，Phase 1 回退到 InlineToolRunner
@@ -41,7 +41,7 @@
 ### 三层约束模型
 
 - [ ] **TCON-01**: 实现 `StructuralValidation`（无状态），负责 args_schema 校验 / 路径规范化 / plane 启用检查 / session_capabilities 匹配
-- [ ] **TCON-02**: `RunStateGuard` 保持现有 GuardPipeline 接口，Phase 1 不扩展 GuardContext
+- [x] **TCON-02**: `RunStateGuard` 保持现有 GuardPipeline 接口，Phase 1 不扩展 GuardContext
 - [ ] **TCON-03**: 实现 `CapabilityPolicy` Protocol，Phase 1 处理 effect_level 约束和 plane/capability 匹配
 
 ### ToolResult 升级
@@ -50,7 +50,7 @@
 
 ### AgentRuntimeSpec 扩展
 
-- [ ] **SPEC-01**: `AgentRuntimeSpec` 新增 tool_runner / tool_catalog / runtime_topology / capability_policy / structural_validation 可选字段
+- [x] **SPEC-01**: `AgentRuntimeSpec` 新增 tool_runner / tool_catalog / runtime_topology / capability_policy / structural_validation 可选字段
 
 ### Tool Definitions 解析
 
@@ -131,19 +131,19 @@
 | TOBJ-06 | Phase 32 | Complete (32-01) |
 | TOBJ-07 | Phase 32 | Complete (32-01) |
 | TOBJ-08 | Phase 32 | Complete (32-01) |
-| TCAT-01 | Phase 32 | Pending |
-| TCAT-02 | Phase 32 | Pending |
-| TCAT-03 | Phase 32 | Pending |
-| TRUN-01 | Phase 32 | Pending |
-| TRUN-02 | Phase 32 | Pending |
+| TCAT-01 | Phase 32 | Complete |
+| TCAT-02 | Phase 32 | Complete |
+| TCAT-03 | Phase 32 | Complete |
+| TRUN-01 | Phase 32 | Complete |
+| TRUN-02 | Phase 32 | Complete |
 | TRUN-03 | Phase 33 | Pending |
 | TRUN-04 | Phase 33 | Pending |
 | TRUN-05 | Phase 32 | Pending |
 | TCON-01 | Phase 33 | Pending |
-| TCON-02 | Phase 32 | Pending |
+| TCON-02 | Phase 32 | Complete |
 | TCON-03 | Phase 33 | Pending |
 | TRES-01 | Phase 32 | Complete (32-01) |
-| SPEC-01 | Phase 32 | Pending |
+| SPEC-01 | Phase 32 | Complete |
 | TDEF-01 | Phase 32 | Pending |
 | ESIN-01 | Phase 34 | Pending |
 | ESIN-02 | Phase 34 | Pending |
