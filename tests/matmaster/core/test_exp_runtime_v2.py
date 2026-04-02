@@ -192,24 +192,32 @@ class TestRunStream:
 
     @pytest.mark.asyncio
     async def test_run_stream_yields_events(self) -> None:
-        """run_stream() yields _KernelItem events from kernel.run_stream()."""
-        from matmaster.core.agent import _KernelItem
+        """run_stream() yields BusEvent objects from kernel.run_stream().
+
+        After Gap 2 closure, kernel.run_stream() yields BusEvent directly
+        (not _KernelItem). Terminal events are RunResultEvent.
+        """
         from matmaster.core.exp import Exp
+        from matmaster.types.events import RunResultEvent
 
         config = _make_exp_config()
         exp = Exp(config)
         ctx = _make_playground_context()
 
-        items: list[_KernelItem] = []
-        async for item in exp.run_stream(ctx, "test task"):
-            items.append(item)
+        events: list = []
+        async for event in exp.run_stream(ctx, "test task"):
+            events.append(event)
 
         # Should have at least some events (start, streaming, complete, end)
-        # and a terminal item
-        assert len(items) > 0
-        terminal_items = [i for i in items if i.terminal is not None]
-        assert len(terminal_items) == 1
-        assert terminal_items[0].terminal.reason == "natural"
+        # and a terminal RunResultEvent
+        assert len(events) > 0
+        # All events should have 'type' attribute (BusEvent contract)
+        for event in events:
+            assert hasattr(event, 'type'), \
+                f"Yielded object missing 'type' attribute: {type(event).__name__}"
+        terminal_events = [e for e in events if isinstance(e, RunResultEvent)]
+        assert len(terminal_events) == 1
+        assert terminal_events[0].reason == "natural"
 
     @pytest.mark.asyncio
     async def test_run_stream_runs_cleanup(self) -> None:

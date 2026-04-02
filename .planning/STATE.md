@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
 status: verifying
-stopped_at: Completed 34-03-PLAN.md
-last_updated: "2026-04-02T15:17:07.288Z"
+stopped_at: Completed 34-04-PLAN.md
+last_updated: "2026-04-02T16:04:02.389Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 12
+  completed_plans: 12
   percent: 50
 ---
 
@@ -57,6 +57,7 @@ Progress: [█████░░░░░] 50%
 | Phase 34 P01 | 20min | 2 tasks | 11 files |
 | Phase 34 P02 | 10min | 2 tasks | 5 files |
 | Phase 34 P03 | 8min | 2 tasks | 14 files |
+| Phase 34 P04 | 10min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,9 @@ v2.2 新决策:
 - [Phase 34]: event_payloads.py dual-key info mapping: read 'info' first then 'payload' for generator/Hook backward compat
 - [Phase 34]: All 4 Hook deletions confirmed safe: Plan 1 generator events provide equivalent functionality
 - [Phase 34]: Pre-existing test failures (7 tests draining bus via run() path) documented as deferred items, not caused by Hook retirement
+- [Phase 34]: FullToolRunner path bypasses entire legacy guard/hook block (FullToolRunner has its own seven-step chain)
+- [Phase 34]: run_stream() yields BusEvent directly via _consume_and_yield() inner generator, callers never see _KernelItem
+- [Phase 34]: Catalog version sentinel last_catalog_version=-1 ensures first-turn build_definitions always fires
 
 ### Pending Todos
 
@@ -97,6 +101,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02T15:17:07.285Z
-Stopped at: Completed 34-03-PLAN.md
+Last session: 2026-04-02T16:04:02.386Z
+Stopped at: Completed 34-04-PLAN.md
 Resume file: None
