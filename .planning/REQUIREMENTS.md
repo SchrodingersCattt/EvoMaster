@@ -63,12 +63,12 @@
 ### Exp/Service 层接入
 
 - [x] **ESIN-01**: `Exp` 新增 `run_stream()`，透传 Kernel generator — Phase 34 P01
-- [ ] **ESIN-02**: `AgentRunService` 新增 `run_agent_stream()`，消费 generator 事件
+- [x] **ESIN-02**: `AgentRunService` 新增 `run_agent_stream()`，消费 generator 事件
 - [x] **ESIN-03**: `_do_stream_llm()` 改造为子 generator `_stream_llm_items()`，支持逐 chunk yield，达到与 EventEmitterHook 完全一致的 segment-complete 语义 — Phase 34 P01
 - [x] **ESIN-04**: `Exp.build_runtime()` 构造 FullToolRunner（含 ToolCatalog + StructuralValidation + GuardPipeline + CapabilityPolicy + ToolScheduler + RuntimeTopology）并注入 AgentRuntimeSpec.tool_runner，FullToolRunner 成为默认执行路径（从 Phase 33 移入，原 D-10）— Phase 34 P01
 - [x] **ESIN-05**: `on_skill_hit` 路径改为通过 `ToolCatalog.register_overlay()` 注册 MCP 工具，使 catalog.version 递增触发 Kernel tool_definitions 刷新 — Phase 34 P01
-- [ ] **ESIN-06**: `run_stream()` 产出的事件 source 归一化为 `MatMaster` 或 `MatMaster:{exp_name}` 格式，兼容 ChatHistoryConverter 的 source 过滤逻辑
-- [ ] **ESIN-07**: `ToolResult.payload/meta` 到 SSE/持久化前端契约的兼容映射（event_payloads.py 将 `payload` 映射为 `info` 字段），确保 test_chat_stream_direct.py 前端契约测试通过
+- [x] **ESIN-06**: `run_stream()` 产出的事件 source 归一化为 `MatMaster` 或 `MatMaster:{exp_name}` 格式，兼容 ChatHistoryConverter 的 source 过滤逻辑
+- [x] **ESIN-07**: `ToolResult.payload/meta` 到 SSE/持久化前端契约的兼容映射（event_payloads.py 将 `payload` 映射为 `info` 字段），确保 test_chat_stream_direct.py 前端契约测试通过
 - [ ] **ESIN-08**: system prompt 工具枚举段移除或改为通用说明（消除与 tool_definitions 的不一致风险），或推迟到 Phase 35 随 ContextBuilder 迁移一起处理
 
 ### Hook 退役
@@ -101,7 +101,7 @@
 ### 回归兼容
 
 - [x] **REGR-01**: 全量现有 `kernel.run()` 测试（50+）零修改通过
-- [ ] **REGR-02**: Exp.run() 和 AgentRunService.run_agent() 行为不变
+- [x] **REGR-02**: Exp.run() 和 AgentRunService.run_agent() 行为不变
 - [x] **REGR-03**: 工具内部现有安全检查（bash 危险命令、read-before-modify）在约束迁移完成前保持不动
 
 ## Future Requirements
@@ -157,12 +157,12 @@
 | TDEF-01 | Phase 32 | Complete |
 | KGEN-06 | Phase 33 (early) | Complete |
 | ESIN-01 | Phase 34 P01 | Complete |
-| ESIN-02 | Phase 34 | Pending |
+| ESIN-02 | Phase 34 | Complete |
 | ESIN-03 | Phase 34 P01 | Complete |
 | ESIN-04 | Phase 34 P01 | Complete |
 | ESIN-05 | Phase 34 P01 | Complete |
-| ESIN-06 | Phase 34 | Pending |
-| ESIN-07 | Phase 34 | Pending |
+| ESIN-06 | Phase 34 | Complete |
+| ESIN-07 | Phase 34 | Complete |
 | ESIN-08 | Phase 34/35 | Pending |
 | HRET-01 | Phase 34 P01 | Complete |
 | HRET-02 | Phase 34 P01 | Complete |
@@ -180,7 +180,7 @@
 | DBUS-03 | Phase 36 | Pending |
 | ASCH-01 | Phase 36 | Pending |
 | REGR-01 | Phase 32 | Complete |
-| REGR-02 | Phase 34 | Pending |
+| REGR-02 | Phase 34 | Complete |
 | REGR-03 | Phase 32 | Complete |
 
 **Coverage:**

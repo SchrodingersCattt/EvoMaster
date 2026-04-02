@@ -130,11 +130,11 @@ Plans:
   7. `ToolResult.payload/meta` 到 SSE/持久化前端契约（event_payloads.py `info` 字段）的兼容映射经过测试验证
   8. matmaster/hooks/ 目录中 EventEmitterHook / AssistantStateHook / SkillHitHook / OutputProcessorHook 全部删除，ContextCompactor 不再依赖 Bus emit
   9. Exp.run() 和 AgentRunService.run_agent() 行为不变，现有调用方零修改
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 34-01-PLAN.md — Kernel/Exp 内核改造（_stream_llm_items + FullToolRunner 注入 + run_stream + skill overlay + ContextCompactor event_sink）
-- [ ] 34-02-PLAN.md — Service 层切流（run_agent_stream + source 归一化 + payload->info 映射验证）
+- [x] 34-02-PLAN.md — Service 层切流（run_agent_stream + source 归一化 + payload->info 映射验证）
 - [ ] 34-03-PLAN.md — Hook 退役（EventEmitterHook + AssistantStateHook + SkillHitHook + OutputProcessorHook 删除）
 
 ### Phase 35: 约束迁移 + ToolRegistry 降级
@@ -200,6 +200,6 @@ Phases 32-36 execute in numeric order. Phase 34 depends on both 32 and 33. Phase
 | 31. Tech Debt Cleanup | v2.1 | 2/2 | Complete | 2026-04-02 |
 | 32. Kernel Generator + Tool Runtime v2 核心骨架 | v2.2 | 3/3 | Complete    | 2026-04-02 |
 | 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 5/5 | Complete    | 2026-04-02 |
-| 34. Exp/Service 接入 + Hook 退役 | v2.2 | 0/3 | Planning | - |
+| 34. Exp/Service 接入 + Hook 退役 | v2.2 | 2/3 | In Progress|  |
 | 35. 约束迁移 + ToolRegistry 降级 | v2.2 | 0/? | Not started | - |
 | 36. 去总线化 + 高级调度 | v2.2 | 0/? | Not started | - |
