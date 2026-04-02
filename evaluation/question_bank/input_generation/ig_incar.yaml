@@ -2,15 +2,15 @@ version: v5
 capability: input_generation
 domain: incar
 questions:
-- id: IG_incar_001_20260401
+- id: IG_incar_001_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for a band structure calculation of Lu4N4. Non-self-consistent run reading existing charge density
-    (ICHARG=11), with projected band output (LORBIT=11).
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为 Lu4N4 体系生成一个能带结构计算的 VASP INCAR 文件。 要求：非自洽计算，从已有电荷密度读取(ICHARG=11)，输出投影能带(LORBIT=11)。 直接输出完整的
-    INCAR 内容。
+  intent: 'Generate VASP INCAR for a band structure calculation of Lu4N4. Non-self-consistent run reading existing charge
+    density (ICHARG=11), with projected band output (LORBIT=11).
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 Lu4N4 体系生成一个能带结构计算的 VASP INCAR 文件。要求：非自洽计算，从已有电荷密度读取，输出投影能带。直接输出完整的 INCAR
+    内容。
   tags:
   - incar_generation
   - band_structure
@@ -23,10 +23,6 @@ questions:
     path: data/IG_incar_001/task_spec.json
     oss_url: ''
     description: Task specification for band structure INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_001/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_ICHARG_11
     value: ICHARG = 11
@@ -63,9 +59,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR is valid and complete for band structure: appropriate ISMEAR (e.g. 0 or -5), reasonable EDIFF, and no
-      conflicting relaxation parameters.
+    criterion: 'Generated INCAR is valid and complete for band structure: appropriate ISMEAR (e.g. 0 or -5), reasonable EDIFF,
+      and no conflicting relaxation parameters.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -86,14 +83,17 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_002_20260401
+- id: IG_incar_002_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for a static SCF calculation of organic-inorganic hybrid perovskite C26H28Cl4N4Pb2. Semiconductor,
+  intent: 'Generate VASP INCAR for a static SCF calculation of organic-inorganic hybrid perovskite C26H28Cl4N4Pb2. Semiconductor,
     high-precision convergence.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为有机-无机杂化钙钛矿 C26H28Cl4N4Pb2 生成一个 静态自洽(SCF)计算的 VASP INCAR 文件。体系是半导体，需要高精度收敛。 直接输出完整的 INCAR 内容。
+
+    '
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为有机-无机杂化钙钛矿 C26H28Cl4N4Pb2 生成一个 静态自洽(SCF)计算的 VASP INCAR 文件。体系是半导体，需要高精度收敛。
+    直接输出完整的 INCAR 内容。
+
+    '
   tags:
   - incar_generation
   - scf
@@ -107,10 +107,6 @@ questions:
     path: data/IG_incar_002/task_spec.json
     oss_url: ''
     description: Task specification for SCF INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_002/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_NSW_0
     value: NSW = 0
@@ -141,9 +137,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR is a valid static SCF INCAR with reasonable EDIFF (1e-5 to 1e-7), appropriate ENCUT (>=400), ALGO setting,
-      and no conflicting parameters for a semiconductor system.
+    criterion: 'Generated INCAR is a valid static SCF INCAR with reasonable EDIFF (1e-5 to 1e-7), appropriate ENCUT (>=400),
+      ALGO setting, and no conflicting parameters for a semiconductor system.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -164,15 +161,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_003_20260401
+- id: IG_incar_003_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for structure relaxation of perovskite ErNaO3. Full cell+ion optimization (ISIF=3), spin-polarized
+  intent: 'Generate VASP INCAR for structure relaxation of perovskite ErNaO3. Full cell+ion optimization (ISIF=3), spin-polarized
     (Er3+ f electrons).
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为钙钛矿 ErNaO3 生成一个结构弛豫(relaxation)计算的 VASP INCAR。 需要同时优化离子位置和晶胞参数(ISIF=3)。Er3+ 含 f 电子，需要开启自旋极化。
-    直接输出完整的 INCAR 内容。
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 ErNaO3 生成一个结构弛豫(relaxation)计算的 VASP INCAR。需要同时优化离子位置和晶胞参数。Er 含 f 电子，需要自旋极化。直接输出完整的
+    INCAR 内容。
   tags:
   - incar_generation
   - relaxation
@@ -186,10 +183,6 @@ questions:
     path: data/IG_incar_003/task_spec.json
     oss_url: ''
     description: Task specification for relaxation INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_003/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_IBRION
     value: IBRION = 1 or 2
@@ -220,9 +213,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR is a valid relaxation INCAR with NSW > 0, reasonable EDIFF and EDIFFG, POTIM setting, and MAGMOM for
-      Er magnetic moments.
+    criterion: 'Generated INCAR is a valid relaxation INCAR with NSW > 0, reasonable EDIFF and EDIFFG, POTIM setting, and
+      MAGMOM for Er magnetic moments.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -243,14 +237,17 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_004_20260401
+- id: IG_incar_004_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for HSE06 hybrid functional calculation of MOF C30H22N4O10Zn2. Accurate electronic structure and band
-    gap.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为金属有机框架(MOF) C30H22N4O10Zn2 生成一个 HSE06 杂化泛函静态计算的 VASP INCAR。需要精确的电子结构和带隙。 直接输出完整的 INCAR 内容。
+  intent: 'Generate VASP INCAR for HSE06 hybrid functional calculation of MOF C30H22N4O10Zn2. Accurate electronic structure
+    and band gap.
+
+    '
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为金属有机框架(MOF) C30H22N4O10Zn2 生成一个 HSE06 杂化泛函静态计算的 VASP INCAR。需要精确的电子结构和带隙。
+    直接输出完整的 INCAR 内容。
+
+    '
   tags:
   - incar_generation
   - hse06
@@ -264,10 +261,6 @@ questions:
     path: data/IG_incar_004/task_spec.json
     oss_url: ''
     description: Task specification for HSE06 INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_004/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_LHFCALC
     value: LHFCALC = .TRUE.
@@ -298,9 +291,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR is a valid HSE06 INCAR with NSW=0, ISMEAR=0 for semiconductor, reasonable ENCUT (>=400), PREC=Accurate,
+    criterion: 'Generated INCAR is a valid HSE06 INCAR with NSW=0, ISMEAR=0 for semiconductor, reasonable ENCUT (>=400), PREC=Accurate,
       and no conflicting parameters.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -321,14 +315,14 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_005_20260401
+- id: IG_incar_005_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for DFT+U calculation of RbPmMo2O8 with Hubbard U on Mo d-orbitals. Spin-polarized.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为含稀土和过渡金属的氧化物 RbPmMo2O8 生成一个 DFT+U 计算的 VASP INCAR。需要对 Mo 的 d 轨道施加 Hubbard U 校正。 元素顺序为 Rb, Pm,
-    Mo, O。体系为磁性(ISPIN=2)。 直接输出完整的 INCAR 内容。
+  intent: 'Generate VASP INCAR for DFT+U calculation of RbPmMo2O8 with Hubbard U on Mo d-orbitals. Spin-polarized.
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为含稀土和过渡金属的氧化物 RbPmMo2O8 生成一个 DFT+U 计算的 VASP INCAR。需要对 Mo 的 d 轨道施加 Hubbard
+    U 校正。元素顺序为 Rb, Pm, Mo, O。体系为磁性体系。直接输出完整的 INCAR 内容。
   tags:
   - incar_generation
   - dft_plus_u
@@ -342,10 +336,6 @@ questions:
     path: data/IG_incar_005/task_spec.json
     oss_url: ''
     description: Task specification for DFT+U INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_005/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_LDAU
     value: LDAU = .TRUE.
@@ -376,9 +366,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR includes correct LDAUL, LDAUU, LDAUJ arrays matching element order (Rb, Pm, Mo, O) with U applied to
-      Mo d-orbitals (l=2), and reasonable ENCUT, EDIFF, MAGMOM settings.
+    criterion: 'Generated INCAR includes correct LDAUL, LDAUU, LDAUJ arrays matching element order (Rb, Pm, Mo, O) with U
+      applied to Mo d-orbitals (l=2), and reasonable ENCUT, EDIFF, MAGMOM settings.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -399,13 +390,16 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_006_20260401
+- id: IG_incar_006_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for SCAN metaGGA calculation of intermetallic Tm2ZnGa2. Tm has f electrons; spin-polarized.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为金属间化合物 Tm2ZnGa2 生成一个 SCAN metaGGA 泛函静态计算的 VASP INCAR。Tm 含 f 电子，需要自旋极化。 直接输出完整的 INCAR 内容。
+  intent: 'Generate VASP INCAR for SCAN metaGGA calculation of intermetallic Tm2ZnGa2. Tm has f electrons; spin-polarized.
+
+    '
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为金属间化合物 Tm2ZnGa2 生成一个 SCAN metaGGA 泛函静态计算的 VASP INCAR。Tm 含 f 电子，需要自旋极化。 直接输出完整的
+    INCAR 内容。
+
+    '
   tags:
   - incar_generation
   - metagga
@@ -419,10 +413,6 @@ questions:
     path: data/IG_incar_006/task_spec.json
     oss_url: ''
     description: Task specification for metaGGA SCAN INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_006/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_METAGGA
     value: METAGGA = SCAN
@@ -453,9 +443,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR is a valid SCAN metaGGA INCAR with NSW=0, reasonable ENCUT (>=400), MAGMOM for Tm, and no conflicting
-      GGA/hybrid settings.
+    criterion: 'Generated INCAR is a valid SCAN metaGGA INCAR with NSW=0, reasonable ENCUT (>=400), MAGMOM for Tm, and no
+      conflicting GGA/hybrid settings.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -476,14 +467,17 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_007_20260401
+- id: IG_incar_007_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for Born-Oppenheimer molecular dynamics of Heusler alloy MnNaPm2. Mn is magnetic; timestep 0.5 fs.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为 Heusler 合金 MnNaPm2 生成一个分子动力学(MD) 计算的 VASP INCAR。Mn 含磁性，需要自旋极化。MD 时间步长设为 0.5 fs。 直接输出完整的 INCAR
-    内容。
+  intent: 'Generate VASP INCAR for Born-Oppenheimer molecular dynamics of Heusler alloy MnNaPm2. Mn is magnetic; timestep
+    0.5 fs.
+
+    '
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为 Heusler 合金 MnNaPm2 生成一个分子动力学(MD) 计算的 VASP INCAR。Mn 含磁性，需要自旋极化。MD 时间步长设为
+    0.5 fs。 直接输出完整的 INCAR 内容。
+
+    '
   tags:
   - incar_generation
   - molecular_dynamics
@@ -497,10 +491,6 @@ questions:
     path: data/IG_incar_007/task_spec.json
     oss_url: ''
     description: Task specification for MD INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_007/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_IBRION_0
     value: IBRION = 0
@@ -531,9 +521,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR is a valid MD INCAR with SMASS or MDALGO/TEBEG for thermostat, NSW >= 1000 for adequate MD steps, ISIF=2 for NVT or ISIF=3 for NpT,
-      ISYM=0 (required for MD), ISMEAR=1 or 0 (NEVER -5 for MD), and MAGMOM for Mn.
+    criterion: 'Generated INCAR is a valid MD INCAR with SMASS or MDALGO/TEBEG for thermostat, NSW >= 1000 for adequate MD
+      steps, ISIF=2 for NVT or ISIF=3 for NpT, ISYM=0 (required for MD), ISMEAR=1 or 0 (NEVER -5 for MD), and MAGMOM for Mn.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -554,14 +545,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_008_20260401
+- id: IG_incar_008_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for elastic constants calculation of perovskite BaZrO3. Finite-difference method (IBRION=6), displacement
-    0.015 A.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为钙钛矿 BaZrO3 生成一个弹性常数计算的 VASP INCAR。 使用有限差分法(IBRION=6)计算弹性张量，位移幅度 0.015 A。 直接输出完整的 INCAR 内容。
+  intent: 'Generate VASP INCAR for elastic constants calculation of perovskite BaZrO3. Finite-difference method (IBRION=6),
+    displacement 0.015 A.
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 BaZrO3 生成一个弹性常数计算的 VASP INCAR。使用有限差分法计算弹性张量，位移幅度 0.015 A。直接输出完整的 INCAR
+    内容。
   tags:
   - incar_generation
   - elastic_constants
@@ -575,10 +567,6 @@ questions:
     path: data/IG_incar_008/task_spec.json
     oss_url: ''
     description: Task specification for elastic constants INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_008/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_IBRION_6
     value: IBRION = 6
@@ -609,9 +597,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR has POTIM around 0.015 for displacement, reasonable EDIFF, appropriate ISMEAR for insulator (0 or -5),
-      and ENCUT >= 400.
+    criterion: 'Generated INCAR has POTIM around 0.015 for displacement, reasonable EDIFF, appropriate ISMEAR for insulator
+      (0 or -5), and ENCUT >= 400.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -632,15 +621,17 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_009_20260401
+- id: IG_incar_009_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for DFPT dielectric constant calculation of C8H12HfO4. Compute dielectric tensor and Born effective
+  intent: 'Generate VASP INCAR for DFPT dielectric constant calculation of C8H12HfO4. Compute dielectric tensor and Born effective
     charges.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为有机金属氧化物 C8H12HfO4 生成一个 DFPT(密度泛函微扰理论) 介电常数计算的 VASP INCAR。需要计算介电张量和 Born 有效电荷。 直接输出完整的 INCAR
-    内容。
+
+    '
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为有机金属氧化物 C8H12HfO4 生成一个 DFPT(密度泛函微扰理论) 介电常数计算的 VASP INCAR。需要计算介电张量和 Born
+    有效电荷。 直接输出完整的 INCAR 内容。
+
+    '
   tags:
   - incar_generation
   - dfpt
@@ -654,10 +645,6 @@ questions:
     path: data/IG_incar_009/task_spec.json
     oss_url: ''
     description: Task specification for DFPT dielectric INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_009/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_IBRION_8
     value: IBRION = 8
@@ -688,9 +675,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR is a valid DFPT INCAR with reasonable EDIFF (<=1e-4 for DFPT), PREC=Accurate, appropriate ENCUT, and
-      no conflicting relaxation settings.
+    criterion: 'Generated INCAR is a valid DFPT INCAR with reasonable EDIFF (<=1e-4 for DFPT), PREC=Accurate, appropriate
+      ENCUT, and no conflicting relaxation settings.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -711,14 +699,16 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_010_20260401
+- id: IG_incar_010_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for spin-orbit coupling calculation of heavy-element halide Br6H6Pb2S2. Pb SOC is significant.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为含重元素 Pb 的卤化物 Br6H6Pb2S2 生成一个 自旋轨道耦合(SOC)计算的 VASP INCAR。Pb 的 SOC 效应显著，需要高精度设置。 直接输出完整的 INCAR
-    内容。
+  intent: 'Generate VASP INCAR for spin-orbit coupling calculation of heavy-element halide Br6H6Pb2S2. Pb SOC is significant.
+
+    '
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为含重元素 Pb 的卤化物 Br6H6Pb2S2 生成一个 自旋轨道耦合(SOC)计算的 VASP INCAR。Pb 的 SOC 效应显著，需要高精度设置。
+    直接输出完整的 INCAR 内容。
+
+    '
   tags:
   - incar_generation
   - soc
@@ -732,10 +722,6 @@ questions:
     path: data/IG_incar_010/task_spec.json
     oss_url: ''
     description: Task specification for SOC INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_010/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_LSORBIT
     value: LSORBIT = .TRUE.
@@ -766,9 +752,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR is a valid SOC INCAR with LMAXMIX >= 4 for d/f elements, ISMEAR = 0 for semiconductor, appropriate MAGMOM
-      with 3-component spinor format or standard format, and sufficient NBANDS.
+    criterion: 'Generated INCAR is a valid SOC INCAR with LMAXMIX >= 4 for d/f elements, ISMEAR = 0 for semiconductor, appropriate
+      MAGMOM with 3-component spinor format or standard format, and sufficient NBANDS.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -789,13 +776,16 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_011_20260401
+- id: IG_incar_011_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for density of states calculation of ternary intermetallic CdOs3Pt. Magnetic metal; needs PDOS.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为三元金属间化合物 CdOs3Pt 生成一个 高精度态密度(DOS)计算的 VASP INCAR。体系为磁性金属，需要投影态密度(PDOS)。 直接输出完整的 INCAR 内容。
+  intent: 'Generate VASP INCAR for density of states calculation of ternary intermetallic CdOs3Pt. Magnetic metal; needs PDOS.
+
+    '
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为三元金属间化合物 CdOs3Pt 生成一个 高精度态密度(DOS)计算的 VASP INCAR。体系为磁性金属，需要投影态密度(PDOS)。 直接输出完整的
+    INCAR 内容。
+
+    '
   tags:
   - incar_generation
   - dos
@@ -809,10 +799,6 @@ questions:
     path: data/IG_incar_011/task_spec.json
     oss_url: ''
     description: Task specification for DOS INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_011/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_LORBIT_11
     value: LORBIT = 11
@@ -843,9 +829,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR has tight EDIFF (<=1e-6), ISPIN=2 for magnetic system, NEDOS for DOS resolution, IBRION=-1, and no conflicting
-      relaxation parameters.
+    criterion: 'Generated INCAR has tight EDIFF (<=1e-6), ISPIN=2 for magnetic system, NEDOS for DOS resolution, IBRION=-1,
+      and no conflicting relaxation parameters.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -866,14 +853,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_012_20260401
+- id: IG_incar_012_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Fe magnetic, NUPDOWN=20.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。Fe 含磁性， 需要固定总磁矩(NUPDOWN=20)。使用
-    ALGO=Conjugate 适配 HSE+NEB。 直接输出完整的 INCAR 内容。
+  intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Fe magnetic,
+    NUPDOWN=20.
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。Fe
+    含磁性，需要固定总磁矩。直接输出完整的 INCAR 内容。
   tags:
   - incar_generation
   - neb
@@ -888,10 +876,6 @@ questions:
     path: data/IG_incar_012/task_spec.json
     oss_url: ''
     description: Task specification for NEB INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_012/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_IBRION
     value: IBRION = 1 or 3
@@ -922,9 +906,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR is a valid NEB+HSE06 INCAR with NSW >> 0, ISIF=2, IMAGES or SPRING tag, ALGO=Conjugate or Damped, EDIFFG
-      for force convergence, MAGMOM for Fe, and NUPDOWN for fixed magnetization.
+    criterion: 'Generated INCAR is a valid NEB+HSE06 INCAR with NSW >> 0, ISIF=2, IMAGES or SPRING tag, ALGO=Conjugate or
+      Damped, EDIFFG for force convergence, MAGMOM for Fe, and NUPDOWN for fixed magnetization.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -945,14 +930,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_013_20260401
+- id: IG_incar_013_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for surface relaxation of ternary carbide (Ta,V)2C surface (C33O2Ta16V16). Fixed cell (ISIF=2), metallic.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为三元碳化物表面 (Ta,V)2C (C33O2Ta16V16) 生成一个 表面弛豫计算的 VASP INCAR。表面计算需要固定晶胞(ISIF=2)，仅优化离子位置。体系为金属。
-    直接输出完整的 INCAR 内容。
+  intent: 'Generate VASP INCAR for surface relaxation of ternary carbide (Ta,V)2C surface (C33O2Ta16V16). Fixed cell (ISIF=2),
+    metallic.
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元碳化物表面 (Ta,V)2C (C33O2Ta16V16) 生成一个表面弛豫计算的 VASP INCAR。表面计算需要固定晶胞形状，体系为金属。直接输出完整的
+    INCAR 内容。
   tags:
   - incar_generation
   - surface
@@ -967,10 +953,6 @@ questions:
     path: data/IG_incar_013/task_spec.json
     oss_url: ''
     description: Task specification for surface relaxation INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_013/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_ISIF_2
     value: ISIF = 2
@@ -997,13 +979,15 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: has_ISMEAR
-    criterion: INCAR uses ISMEAR = 1 or 2 (Methfessel-Paxton) appropriate for metallic surface relaxation. ISMEAR=-5 is NOT acceptable for relaxation.
+    criterion: INCAR uses ISMEAR = 1 or 2 (Methfessel-Paxton) appropriate for metallic surface relaxation. ISMEAR=-5 is NOT
+      acceptable for relaxation.
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR has NSW > 0, EDIFFG for force convergence (e.g. -0.01), reasonable ENCUT (>=400), EDIFF, LREAL=Auto
+    criterion: 'Generated INCAR has NSW > 0, EDIFFG for force convergence (e.g. -0.01), reasonable ENCUT (>=400), EDIFF, LREAL=Auto
       for large slab, and no conflicting cell optimization.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -1024,14 +1008,14 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_014_20260401
+- id: IG_incar_014_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for static calculation of hydrogen-passivated SiO2 slab H16O24Si12. Insulator, fixed cell (ISIF=2).
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为氢钝化的 SiO2 slab 模型 H16O24Si12 生成一个 静态计算的 VASP INCAR。体系是绝缘体 slab，需要固定晶胞(ISIF=2)。 直接输出完整的 INCAR
-    内容。
+  intent: 'Generate VASP INCAR for static calculation of hydrogen-passivated SiO2 slab H16O24Si12. Insulator, fixed cell (ISIF=2).
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为氢钝化的 SiO2 slab 模型 H16O24Si12 生成一个静态计算的 VASP INCAR。体系是绝缘体 slab，需要固定晶胞形状。直接输出完整的
+    INCAR 内容。
   tags:
   - incar_generation
   - slab
@@ -1046,10 +1030,6 @@ questions:
     path: data/IG_incar_014/task_spec.json
     oss_url: ''
     description: Task specification for slab INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_014/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_ISIF_2
     value: ISIF = 2
@@ -1080,9 +1060,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR has PREC=Accurate, reasonable ENCUT (>=400), tight EDIFF, LREAL=Auto for large slab, small SIGMA for
-      insulator, and no spin polarization (ISPIN=1 for SiO2).
+    criterion: 'Generated INCAR has PREC=Accurate, reasonable ENCUT (>=400), tight EDIFF, LREAL=Auto for large slab, small
+      SIGMA for insulator, and no spin polarization (ISPIN=1 for SiO2).
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -1103,14 +1084,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_015_20260401
+- id: IG_incar_015_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for defect calculation of I-on-S substitution in BiSI with HSE06+SOC. Heavy element Bi requires SOC.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为 BiSI 中 I 替位 S 缺陷体系生成一个 HSE06+SOC 缺陷计算的 VASP INCAR。含重元素 Bi 需要 SOC，缺陷计算需要固定晶胞(ISIF=2)， 使用 HSE06
-    获取准确缺陷能级。需要离子弛豫(IBRION=2)。 直接输出完整的 INCAR 内容。
+  intent: 'Generate VASP INCAR for defect calculation of I-on-S substitution in BiSI with HSE06+SOC. Heavy element Bi requires
+    SOC.
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 BiSI 中 I 替位 S 缺陷体系生成一个 HSE06+SOC 缺陷计算的 VASP INCAR。含重元素 Bi 需要自旋轨道耦合，缺陷计算需要固定晶胞形状，使用
+    HSE06 获取准确缺陷能级。需要离子弛豫。直接输出完整的 INCAR 内容。
   tags:
   - incar_generation
   - defect
@@ -1125,10 +1107,6 @@ questions:
     path: data/IG_incar_015/task_spec.json
     oss_url: ''
     description: Task specification for defect INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_015/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_ISIF_2
     value: ISIF = 2
@@ -1159,9 +1137,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR has IBRION=2 for ion relaxation, ISPIN=2, ALGO=All for HSE, EDIFFG for force convergence, PREC=Accurate,
-      and reasonable ENCUT.
+    criterion: 'Generated INCAR has IBRION=2 for ion relaxation, ISPIN=2, ALGO=All for HSE, EDIFFG for force convergence,
+      PREC=Accurate, and reasonable ENCUT.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -1182,15 +1161,17 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_016_20260401
+- id: IG_incar_016_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for GW precursor SCF of rare-earth selenide DySe. Dy has f electrons (MAGMOM~7); save wavefunctions
+  intent: 'Generate VASP INCAR for GW precursor SCF of rare-earth selenide DySe. Dy has f electrons (MAGMOM~7); save wavefunctions
     for subsequent GW.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为稀土硒化物 DySe 生成一个 GW 计算前驱步骤的 SCF VASP INCAR。Dy 含 f 电子(MAGMOM~7)，需要保存高质量波函数供后续 GW 使用。 直接输出完整的
-    INCAR 内容。
+
+    '
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为稀土硒化物 DySe 生成一个 GW 计算前驱步骤的 SCF VASP INCAR。Dy 含 f 电子(MAGMOM~7)，需要保存高质量波函数供后续
+    GW 使用。 直接输出完整的 INCAR 内容。
+
+    '
   tags:
   - incar_generation
   - gw
@@ -1204,10 +1185,6 @@ questions:
     path: data/IG_incar_016/task_spec.json
     oss_url: ''
     description: Task specification for GW precursor SCF INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_016/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_NSW_0
     value: NSW = 0
@@ -1238,9 +1215,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR saves charge density (LCHARG=.TRUE.) for GW, has MAGMOM for Dy (f7 ~7.0), ENCUT >= 400, ISMEAR = -5,
-      and LORBIT=11.
+    criterion: 'Generated INCAR saves charge density (LCHARG=.TRUE.) for GW, has MAGMOM for Dy (f7 ~7.0), ENCUT >= 400, ISMEAR
+      = -5, and LORBIT=11.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -1261,14 +1239,14 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_017_20260401
+- id: IG_incar_017_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for high-precision structure optimization of Al as BSE precursor. PREC=Accurate, ISIF=3.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为简单金属 Al (FCC) 生成一个高精度结构优化的 VASP INCAR，作为后续 BSE(Bethe-Salpeter Equation)光学计算的前驱步骤。 需要 PREC=Accurate
-    和 ISIF=3 优化晶胞参数。 直接输出完整的 INCAR 内容。
+  intent: 'Generate VASP INCAR for high-precision structure optimization of Al as BSE precursor. PREC=Accurate, ISIF=3.
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为简单金属 Al (FCC) 生成一个高精度结构优化的 VASP INCAR，作为后续光学计算的前驱步骤。需要高精度设置和完全优化晶胞参数。直接输出完整的
+    INCAR 内容。
   tags:
   - incar_generation
   - bse_precursor
@@ -1282,10 +1260,6 @@ questions:
     path: data/IG_incar_017/task_spec.json
     oss_url: ''
     description: Task specification for BSE precursor relax INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_017/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_IBRION
     value: IBRION = 1 or 2
@@ -1316,9 +1290,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR has PREC=Accurate, tight EDIFF (<=1e-6), EDIFFG for force convergence, NSW > 0, ENCUT >= 400, and ISPIN=1
-      (Al is non-magnetic).
+    criterion: 'Generated INCAR has PREC=Accurate, tight EDIFF (<=1e-6), EDIFFG for force convergence, NSW > 0, ENCUT >= 400,
+      and ISPIN=1 (Al is non-magnetic).
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -1339,14 +1314,14 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_018_20260401
+- id: IG_incar_018_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for magnetic SCF calculation of double perovskite Ca4TaOs. 5d transition metals (Ta, Os); spin-polarized
+  intent: 'Generate VASP INCAR for magnetic SCF calculation of double perovskite Ca4TaOs. 5d transition metals (Ta, Os); spin-polarized
     with MAGMOM.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为双钙钛矿 Ca4TaOs 生成一个磁性自洽(SCF) 计算的 VASP INCAR。体系含 5d 过渡金属(Ta, Os)，需要自旋极化(ISPIN=2)和 适当的初始磁矩(MAGMOM)。直接输出完整的
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为双钙钛矿 Ca4TaOs 生成一个磁性自洽(SCF)计算的 VASP INCAR。体系含 5d 过渡金属(Ta, Os)，需要自旋极化和适当的初始磁矩。直接输出完整的
     INCAR 内容。
   tags:
   - incar_generation
@@ -1361,10 +1336,6 @@ questions:
     path: data/IG_incar_018/task_spec.json
     oss_url: ''
     description: Task specification for magnetic SCF INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_018/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_ISPIN_2
     value: ISPIN = 2
@@ -1395,8 +1366,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR has LORBIT=11 for projected DOS, tight EDIFF (<= 1e-6), reasonable ENCUT (>=400), and appropriate ALGO.
+    criterion: 'Generated INCAR has LORBIT=11 for projected DOS, tight EDIFF (<= 1e-6), reasonable ENCUT (>=400), and appropriate
+      ALGO.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -1417,14 +1390,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_019_20260401
+- id: IG_incar_019_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for non-magnetic insulator static SCF calculation of cesium borate B12Cs4O20. Non-magnetic (ISPIN=1),
-    wide-gap insulator.
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为硼酸铯 B12Cs4O20 生成一个非磁性绝缘体的 静态 SCF 计算 VASP INCAR。体系为非磁性(ISPIN=1)，宽带隙绝缘体。 直接输出完整的 INCAR 内容。
+  intent: 'Generate VASP INCAR for non-magnetic insulator static SCF calculation of cesium borate B12Cs4O20. Non-magnetic
+    (ISPIN=1), wide-gap insulator.
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为硼酸铯 B12Cs4O20 生成一个非磁性绝缘体的静态 SCF 计算 VASP INCAR。体系为非磁性，宽带隙绝缘体。直接输出完整的 INCAR
+    内容。
   tags:
   - incar_generation
   - scf
@@ -1438,10 +1412,6 @@ questions:
     path: data/IG_incar_019/task_spec.json
     oss_url: ''
     description: Task specification for non-magnetic SCF INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_019/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_ISPIN_1
     value: ISPIN = 1 or omitted
@@ -1472,9 +1442,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR has reasonable ENCUT (>=400), ALGO=FAST or Normal, LORBIT=11, and no unnecessary spin or relaxation
+    criterion: 'Generated INCAR has reasonable ENCUT (>=400), ALGO=FAST or Normal, LORBIT=11, and no unnecessary spin or relaxation
       settings.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
@@ -1495,15 +1466,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_020_20260401
+- id: IG_incar_020_20260402
   capability: input_generation
   domain: incar
-  intent: >
-    Generate VASP INCAR for magnetic metal SCF calculation of ternary selenide Na3AlSe. Spin-polarized (ISPIN=2) with PDOS
-    (LORBIT=11).
-  human_prompt_seed: >
-    读取 `task_spec.json` 中的任务描述。为三元硒化物 Na3AlSe 生成一个磁性金属体系的 静态 SCF 计算 VASP INCAR。体系为磁性(ISPIN=2)金属，需要投影态密度(LORBIT=11)。 直接输出完整的
-    INCAR 内容。
+  intent: 'Generate VASP INCAR for magnetic metal SCF calculation of ternary selenide Na3AlSe. Spin-polarized (ISPIN=2) with
+    PDOS (LORBIT=11).
+
+    '
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元硒化物 Na3AlSe 生成一个磁性金属体系的静态 SCF 计算 VASP INCAR。体系为磁性金属，需要投影态密度。直接输出完整的 INCAR
+    内容。
   tags:
   - incar_generation
   - magnetic_metal
@@ -1517,10 +1488,6 @@ questions:
     path: data/IG_incar_020/task_spec.json
     oss_url: ''
     description: Task specification for magnetic metal SCF INCAR generation.
-  - key: reference_incar
-    path: data/IG_incar_020/reference_incar.txt
-    oss_url: ''
-    description: Reference INCAR from NOMAD for evaluation comparison.
   reference_answers:
   - key: has_ISPIN_2
     value: ISPIN = 2
@@ -1551,8 +1518,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: incar_quality
-    criterion: >
-      Generated INCAR has NSW=0, tight EDIFF (<= 1e-6), MAGMOM for magnetic atoms, reasonable ENCUT (>=400), and IBRION=-1.
+    criterion: 'Generated INCAR has NSW=0, tight EDIFF (<= 1e-6), MAGMOM for magnetic atoms, reasonable ENCUT (>=400), and
+      IBRION=-1.
+
+      '
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
