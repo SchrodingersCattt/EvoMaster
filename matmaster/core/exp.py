@@ -20,13 +20,14 @@ import inspect
 import logging
 import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.bus import MessageBus
 from matmaster.core.context_builder import ContextBuilder
+from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.core.hooks import EventEmitterHook
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
@@ -155,36 +156,49 @@ class Exp:
         source_override: str | None = None,
         spawn_id: str | None = None,
     ) -> AgentRuntime:
-        """Resource creation: assemble -> tools -> prompt -> kernel."""
+        """Resource creation: assemble -> tools -> prompt -> kernel.
+
+        Phase 34 ESIN-04: Constructs FullToolRunner + ToolCatalog +
+        RuntimeTopology as the default execution path.
+        """
         spec = await self.assemble(ctx)
 
-        # 1. Register ALL tools before building system prompt
+        # 1. Register ALL builtin tools
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
         if builtin_cfg and ctx.session is not None:
             self._init_builtin_tools(ctx, registry, builtin_cfg)
 
-        # 2. Skills: runtime-injected (must be before system prompt)
-        if skills or self._config.skills.enabled:
-            self._init_skill_tools(ctx, registry, skills_config=skills)
-        # 3. System prompt via ContextBuilder
-        builder = ContextBuilder()
-        system_prompt = builder.build(
-            ctx,
-            registry,
-            system_prompt=self._config.system_prompt,
-            identity=self._config.developer_instructions,
-            skill_registry=self._skill_registry,
+        # 2. Build ToolCatalog wrapping registry (before skill init for overlay)
+        from matmaster.core.capability_policy import DefaultCapabilityPolicy
+        from matmaster.core.structural_validation import StructuralValidation
+        from matmaster.core.tool_runner import FullToolRunner
+        from matmaster.core.tool_scheduler import ToolScheduler
+        from matmaster.tools.tool_catalog import ToolCatalog
+        from matmaster.tools.tool_compiler import ToolCompiler
+        from matmaster.types.topology import RuntimeTopology, SessionCapabilities
+
+        session_caps = SessionCapabilities()
+        if ctx.session is not None and hasattr(ctx.session, 'capabilities'):
+            caps = ctx.session.capabilities
+            if isinstance(caps, SessionCapabilities):
+                session_caps = caps
+
+        topology = RuntimeTopology(
+            session_kind=getattr(ctx, 'session_type', None) or 'local',
+            control_root=str(ctx.workdir),
+            workspace_root=str(ctx.execution_workdir),
+            session_capabilities=session_caps,
         )
 
-        # 4. Hooks
-        hooks = list(spec.hooks)
-        if bus is not None:
-            emitter_source = source_override or self.exp_name
-            emitter_hook = EventEmitterHook(bus, emitter_source, spawn_id=spawn_id)
-            hooks.append(emitter_hook)
+        compiler = ToolCompiler()
+        catalog = ToolCatalog(registry, compiler=compiler, topology=topology)
 
-        # 4b. SpawnTool: register with spawn_fn if "spawn" in config
+        # 3. Skills: runtime-injected (pass catalog for overlay registration)
+        if skills or self._config.skills.enabled:
+            self._init_skill_tools(ctx, registry, skills_config=skills, catalog=catalog)
+
+        # 4. SpawnTool: register after skills but before system prompt
         if ("spawn" in builtin_cfg or builtin_cfg == ["*"]) and ctx.session is not None:
             from matmaster.config.loader import list_available_exps
             from matmaster.tools.builtin.spawn_tool import SpawnTool
@@ -198,7 +212,24 @@ class Exp:
             )
             registry.register(spawn_tool, source='builtin')
 
-        # 5. Compaction: unchanged, managed by separate process
+        # 5. System prompt via ContextBuilder
+        builder = ContextBuilder()
+        system_prompt = builder.build(
+            ctx,
+            registry,
+            system_prompt=self._config.system_prompt,
+            identity=self._config.developer_instructions,
+            skill_registry=self._skill_registry,
+        )
+
+        # 6. Hooks
+        hooks = list(spec.hooks)
+        if bus is not None:
+            emitter_source = source_override or self.exp_name
+            emitter_hook = EventEmitterHook(bus, emitter_source, spawn_id=spawn_id)
+            hooks.append(emitter_hook)
+
+        # 7. Compaction: event_sink=None, _run_items() injects local sink at runtime
         compactor = None
         if spec.compaction.enabled and spec.llm_provider is not None:
             from matmaster.core.context_compactor import ContextCompactor
@@ -221,12 +252,33 @@ class Exp:
             compactor = ContextCompactor(
                 config=spec.compaction,
                 summary_provider=summary_provider,
-                bus=bus,
+                event_sink=None,  # _run_items() injects a local deque-backed sink
             )
 
+        # 8. Build FullToolRunner (ESIN-04: default execution path)
+        structural_validation = StructuralValidation()
+        guard_pipeline_for_runner = spec.guards
+        capability_policy = DefaultCapabilityPolicy()
+        scheduler = ToolScheduler()
+
+        full_runner = FullToolRunner(
+            catalog=catalog,
+            structural_validation=structural_validation,
+            guard_pipeline=GuardPipeline(guard_pipeline_for_runner),
+            capability_policy=capability_policy,
+            scheduler=scheduler,
+            topology=topology,
+        )
+
+        # 9. Assemble final spec with all v2 fields
         spec = spec.model_copy(
             update={
                 'tool_registry': registry,
+                'tool_catalog': catalog,
+                'tool_runner': full_runner,
+                'runtime_topology': topology,
+                'capability_policy': capability_policy,
+                'structural_validation': structural_validation,
                 'system_prompt': system_prompt,
                 'hooks': hooks,
                 'compactor': compactor,
@@ -302,6 +354,50 @@ class Exp:
                 runtime.spec, task, history=history, stop_event=stop_event
             )
             return result.result
+        finally:
+            await self._run_cleanup_callbacks()
+
+    # ── Phase 3b: run_stream ──────────────────────────────
+
+    async def run_stream(
+        self,
+        ctx: PlaygroundContext,
+        task: str,
+        *,
+        bus: MessageBus | None = None,
+        history: list[Message] | None = None,
+        stop_event: threading.Event | None = None,
+        skills: dict[str, Any] | None = None,
+        source_override: str | None = None,
+        spawn_id: str | None = None,
+    ) -> AsyncIterator[Any]:
+        """build_runtime -> kernel.run_stream -> cleanup.
+
+        Async generator that yields BusEvent from the kernel generator.
+        try/finally ensures cleanup runs on normal completion, break,
+        and exception.
+        """
+        try:
+            runtime = await self.build_runtime(
+                ctx,
+                bus=bus,
+                skills=skills,
+                source_override=source_override,
+                spawn_id=spawn_id,
+            )
+            if ctx.session is not None:
+                ctx.session._stop_event = stop_event
+
+            # Inject stop_event into tools for cancel propagation
+            tool_registry = getattr(runtime.spec, "tool_registry", None)
+            if stop_event is not None and tool_registry is not None:
+                for tool in tool_registry.all_tools:
+                    tool._stop_event = stop_event
+
+            async for event in runtime.kernel.run_stream(
+                runtime.spec, task, history=history, stop_event=stop_event
+            ):
+                yield event
         finally:
             await self._run_cleanup_callbacks()
 
@@ -413,8 +509,14 @@ class Exp:
         ctx: PlaygroundContext,
         registry: ToolRegistry,
         skills_config: dict[str, Any] | None = None,
+        catalog: Any | None = None,
     ) -> None:
-        """Initialize skill tools with lazy MCP schema injection."""
+        """Initialize skill tools with lazy MCP schema injection.
+
+        When catalog is provided, on_skill_hit uses catalog.register_overlay()
+        for version-bumped tool injection (ESIN-05). Falls back to
+        registry.register() when catalog is None (backward compat).
+        """
         skills_cfg = self._config.skills
         if not skills_cfg.enabled:
             return
@@ -506,7 +608,11 @@ class Exp:
                     input_schema=tool_schema.get('input_schema', {}),
                     connector=connector,
                 )
-                registry.register(lazy_tool, source='mcp')
+                # ESIN-05: Use catalog.register_overlay() for version-bumped injection
+                if catalog is not None:
+                    catalog.register_overlay(lazy_tool, source='mcp')
+                else:
+                    registry.register(lazy_tool, source='mcp')
 
         skill_tool = SkillTool(
             skill_registry, session=ctx.session, on_skill_hit=on_skill_hit

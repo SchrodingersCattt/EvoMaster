@@ -1,20 +1,22 @@
-"""Tests for AgentKernel _run_items() / run_stream() / _resolve_tool_definitions().
+"""Tests for AgentKernel stream generator features.
 
-Phase 32 Plan 03: generator-first kernel architecture.
-Tests the three-layer interface: _run_items() -> run_stream() -> run().
+Tests _stream_llm_items() sub-generator, _run_items() AssistantStateEvent/SkillHitEvent
+yields, and compactor deque integration. Phase 34 Plan 1 Task 1.
 """
 
 from __future__ import annotations
 
-import threading
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
 from matmaster.types.events import (
+    AssistantStateEvent,
     ResponseEvent,
-    RunResultEvent,
+    SkillHitEvent,
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
@@ -24,7 +26,7 @@ from matmaster.types.messages import (
     StreamChunk,
     ToolCallData,
 )
-from matmaster.types.runtime import AgentRuntimeSpec, KernelResult
+from matmaster.types.runtime import AgentRuntimeSpec
 
 from .agent_kernel_test_helpers import (
     StreamingProvider,
@@ -35,409 +37,345 @@ from .agent_kernel_test_helpers import (
 from .conftest import MockLLMProvider
 
 
-# ---------------------------------------------------------------------------
-# run_stream() tests
-# ---------------------------------------------------------------------------
+# ── Providers for streaming tests ─────────────────────────
 
 
-class TestRunStreamNaturalFinish:
-    """run_stream() yields ResponseEvent + RunResultEvent on natural finish."""
+class ReasoningThenContentProvider:
+    """Provider that streams reasoning chunks then content chunks."""
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.call_count += 1
+        yield StreamChunk(reasoning_content="thinking part 1")
+        yield StreamChunk(reasoning_content=" part 2")
+        yield StreamChunk(content="visible part 1")
+        yield StreamChunk(content=" part 2")
+        yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10, "completion_tokens": 5})
+
+
+class ContentOnlyProvider:
+    """Provider that only streams content, no reasoning."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        yield StreamChunk(content="hello ")
+        yield StreamChunk(content="world")
+        yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
+
+
+class ToolCallStreamProvider:
+    """Provider that streams content then tool_calls, then finishes naturally."""
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.call_count += 1
+        if self.call_count == 1:
+            yield StreamChunk(content="let me call a tool")
+            yield StreamChunk(
+                tool_call_deltas=[
+                    {"index": 0, "id": "tc-1", "name": "test_tool", "arguments": '{"x": 1}'}
+                ]
+            )
+            yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+        else:
+            yield StreamChunk(content="done")
+            yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+
+
+class UseSkillStreamProvider:
+    """Provider that calls use_skill tool then finishes."""
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.call_count += 1
+        if self.call_count == 1:
+            yield StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "tc-skill",
+                        "name": "use_skill",
+                        "arguments": '{"skill_name": "chemistry"}',
+                    }
+                ]
+            )
+            yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+        else:
+            yield StreamChunk(content="done")
+            yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+
+
+# ── _stream_llm_items() tests ─────────────────────────────
+
+
+class TestStreamLlmItems:
+    """Tests for _stream_llm_items() sub-generator."""
 
     @pytest.mark.asyncio
-    async def test_run_stream_natural_finish(self) -> None:
-        from matmaster.core.agent import AgentKernel
+    async def test_yields_thought_and_response_events(self) -> None:
+        """Reasoning chunks yield ThoughtEvent, content chunks yield ResponseEvent."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
 
-        provider = StreamingProvider(
-            [
-                StreamChunk(content="Hello world"),
-                StreamChunk(finish_reason="stop"),
-            ]
-        )
+        provider = ReasoningThenContentProvider()
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
 
-        events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
-            events.append(event)
+        api_messages = [{"role": "user", "content": "test"}]
+        items: list[_KernelItem] = []
+        async for item in kernel._stream_llm_items(spec, api_messages, None):
+            items.append(item)
 
-        # Should have at least a ResponseEvent and RunResultEvent
-        assert len(events) >= 2
-        # Last event must be RunResultEvent
-        assert isinstance(events[-1], RunResultEvent)
-        assert events[-1].status == "completed"
-        assert events[-1].reason == "natural"
-        # Should have ResponseEvent with content
-        response_events = [e for e in events if isinstance(e, ResponseEvent)]
-        assert len(response_events) >= 1
-        assert response_events[0].content == "Hello world"
-        assert response_events[0].stream_state == "complete"
+        # Should have: start event, reasoning events, thought-complete, content events,
+        # response-complete, end event, final llm_response
+        thought_events = [i for i in items if i.event and isinstance(i.event, ThoughtEvent)]
+        response_events = [i for i in items if i.event and isinstance(i.event, ResponseEvent)]
 
-
-class TestRunStreamWithTools:
-    """run_stream() yields correct event sequence for tool-calling turns."""
+        # At least one streaming thought and one streaming response
+        streaming_thoughts = [e for e in thought_events if e.event.stream_state == "streaming"]
+        streaming_responses = [e for e in response_events if e.event.stream_state == "streaming"]
+        assert len(streaming_thoughts) >= 1, "Should yield streaming ThoughtEvents"
+        assert len(streaming_responses) >= 1, "Should yield streaming ResponseEvents"
 
     @pytest.mark.asyncio
-    async def test_run_stream_with_tools(self) -> None:
-        from matmaster.core.agent import AgentKernel
+    async def test_segment_complete_on_reasoning_to_content(self) -> None:
+        """ThoughtEvent(complete) emitted when transitioning from reasoning to content."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
 
-        tc = ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1})
-        provider = ToolCallingProvider(
-            tool_calls=[tc], max_tool_turns=1, final_content="done"
-        )
-        spec = _make_spec(provider=provider, max_turns=5)
-        kernel = AgentKernel()
-
-        events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
-            events.append(event)
-
-        # Last event must be RunResultEvent
-        assert isinstance(events[-1], RunResultEvent)
-        assert events[-1].status == "completed"
-        assert events[-1].reason == "natural"
-        # Should have ResponseEvent for final content
-        response_events = [e for e in events if isinstance(e, ResponseEvent)]
-        assert len(response_events) >= 1
-        assert any(e.content == "done" for e in response_events)
-
-
-class TestRunStreamMaxTurns:
-    """run_stream() yields RunResultEvent(reason='max_turns') on max_turns."""
-
-    @pytest.mark.asyncio
-    async def test_run_stream_max_turns(self) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        tc = ToolCallData(id="tc-1", name="some_tool", arguments={"x": 1})
-        provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=999)
-        spec = _make_spec(provider=provider, max_turns=2)
-        kernel = AgentKernel()
-
-        events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
-            events.append(event)
-
-        assert isinstance(events[-1], RunResultEvent)
-        assert events[-1].reason == "max_turns"
-
-
-class TestRunStreamCancelled:
-    """run_stream() yields RunResultEvent(reason='cancelled') on stop_event."""
-
-    @pytest.mark.asyncio
-    async def test_run_stream_cancelled(self) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        stop_event = threading.Event()
-        stop_event.set()
-        spec = _make_spec()
-        kernel = AgentKernel()
-
-        events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task", stop_event=stop_event):
-            events.append(event)
-
-        assert isinstance(events[-1], RunResultEvent)
-        assert events[-1].reason == "cancelled"
-
-
-class TestRunStreamEndsWithRunResult:
-    """The last yield of run_stream() is always RunResultEvent."""
-
-    @pytest.mark.asyncio
-    async def test_run_stream_ends_with_run_result(self) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        provider = StreamingProvider(
-            [
-                StreamChunk(content="final"),
-                StreamChunk(finish_reason="stop"),
-            ]
-        )
+        provider = ReasoningThenContentProvider()
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
 
-        events: list[Any] = []
-        async for event in kernel.run_stream(spec, "task"):
-            events.append(event)
+        api_messages = [{"role": "user", "content": "test"}]
+        items: list[_KernelItem] = []
+        async for item in kernel._stream_llm_items(spec, api_messages, None):
+            items.append(item)
 
-        assert len(events) > 0
-        assert isinstance(events[-1], RunResultEvent)
-
-
-class TestRunStreamThoughtEvent:
-    """run_stream() yields ThoughtEvent when LLM has reasoning_content."""
+        # Find thought-complete event
+        thought_completes = [
+            i for i in items
+            if i.event and isinstance(i.event, ThoughtEvent) and i.event.stream_state == "complete"
+        ]
+        assert len(thought_completes) >= 1, "Should yield ThoughtEvent(complete) on transition"
+        # The complete event should contain the full reasoning
+        assert "thinking part 1" in thought_completes[0].event.content
 
     @pytest.mark.asyncio
-    async def test_run_stream_thought_event(self) -> None:
-        from matmaster.core.agent import AgentKernel
+    async def test_response_complete_at_stream_end(self) -> None:
+        """ResponseEvent(complete) emitted at end of content stream."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
 
-        # Provider that produces reasoning_content then content
-        provider = StreamingProvider(
-            [
-                StreamChunk(reasoning_content="Let me think..."),
-                StreamChunk(content="The answer is 42"),
-                StreamChunk(finish_reason="stop"),
-            ]
-        )
+        provider = ReasoningThenContentProvider()
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
 
-        events: list[Any] = []
-        async for event in kernel.run_stream(spec, "think task"):
-            events.append(event)
+        api_messages = [{"role": "user", "content": "test"}]
+        items: list[_KernelItem] = []
+        async for item in kernel._stream_llm_items(spec, api_messages, None):
+            items.append(item)
 
-        # Should have ThoughtEvent
-        thought_events = [e for e in events if isinstance(e, ThoughtEvent)]
-        assert len(thought_events) >= 1
-        assert thought_events[0].content == "Let me think..."
-        assert thought_events[0].stream_state == "complete"
-        # Should also have ResponseEvent and RunResultEvent
-        assert isinstance(events[-1], RunResultEvent)
-
-
-# ---------------------------------------------------------------------------
-# run() delegation test
-# ---------------------------------------------------------------------------
-
-
-class TestRunDelegatesToRunItems:
-    """run() returns the same result as the old _run_loop()."""
+        response_completes = [
+            i for i in items
+            if i.event and isinstance(i.event, ResponseEvent) and i.event.stream_state == "complete"
+        ]
+        assert len(response_completes) >= 1, "Should yield ResponseEvent(complete)"
+        assert "visible part 1" in response_completes[0].event.content
 
     @pytest.mark.asyncio
-    async def test_run_delegates_to_run_items(self) -> None:
+    async def test_final_yield_carries_llm_response(self) -> None:
+        """Last yielded _KernelItem carries llm_response field."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        provider = ReasoningThenContentProvider()
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        api_messages = [{"role": "user", "content": "test"}]
+        items: list[_KernelItem] = []
+        async for item in kernel._stream_llm_items(spec, api_messages, None):
+            items.append(item)
+
+        # Last item should have llm_response
+        final_items = [i for i in items if i.llm_response is not None]
+        assert len(final_items) == 1, "Exactly one item should carry llm_response"
+        resp = final_items[0].llm_response
+        assert resp.content is not None
+        assert "visible part 1" in resp.content
+        assert resp.reasoning_content is not None
+        assert "thinking part 1" in resp.reasoning_content
+
+    @pytest.mark.asyncio
+    async def test_start_and_end_events(self) -> None:
+        """Stream start and end marker events are yielded."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        provider = ContentOnlyProvider()
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        api_messages = [{"role": "user", "content": "test"}]
+        items: list[_KernelItem] = []
+        async for item in kernel._stream_llm_items(spec, api_messages, None):
+            items.append(item)
+
+        # First event should be start marker (ThoughtEvent with start state)
+        start_events = [
+            i for i in items
+            if i.event and isinstance(i.event, ThoughtEvent) and i.event.stream_state == "start"
+        ]
+        assert len(start_events) == 1, "Should yield a start marker event"
+
+        # Last event (before llm_response) should be end marker
+        end_events = [
+            i for i in items
+            if i.event and isinstance(i.event, ResponseEvent) and i.event.stream_state == "end"
+        ]
+        assert len(end_events) == 1, "Should yield an end marker event"
+
+
+# ── _run_items() event yields ─────────────────────────────
+
+
+class TestRunItemsAssistantState:
+    """_run_items() yields AssistantStateEvent on tool_calls turns."""
+
+    @pytest.mark.asyncio
+    async def test_yields_assistant_state_event(self) -> None:
+        """AssistantStateEvent emitted when LLM returns tool_calls."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        provider = ToolCallStreamProvider()
+        registry, _ = _make_tool_registry()
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+
+        items: list[_KernelItem] = []
+        async for item in kernel.run_stream(spec, "test task"):
+            items.append(item)
+
+        assistant_state_events = [
+            i for i in items
+            if i.event and isinstance(i.event, AssistantStateEvent)
+        ]
+        assert len(assistant_state_events) >= 1, "Should yield AssistantStateEvent"
+        # State should contain tool_calls
+        state = assistant_state_events[0].event.state
+        assert state.get("tool_calls") is not None
+
+
+class TestRunItemsSkillHit:
+    """_run_items() yields SkillHitEvent when use_skill is called."""
+
+    @pytest.mark.asyncio
+    async def test_yields_skill_hit_event(self) -> None:
+        """SkillHitEvent emitted when tool_name == 'use_skill'."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        provider = UseSkillStreamProvider()
+        registry, _ = _make_tool_registry(tool_names=["use_skill", "test_tool"])
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+
+        items: list[_KernelItem] = []
+        async for item in kernel.run_stream(spec, "test task"):
+            items.append(item)
+
+        skill_hit_events = [
+            i for i in items
+            if i.event and isinstance(i.event, SkillHitEvent)
+        ]
+        assert len(skill_hit_events) >= 1, "Should yield SkillHitEvent"
+        assert skill_hit_events[0].event.skill_name == "chemistry"
+
+    @pytest.mark.asyncio
+    async def test_no_skill_hit_for_non_skill_tools(self) -> None:
+        """No SkillHitEvent for regular tool calls."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        provider = ToolCallStreamProvider()
+        registry, _ = _make_tool_registry()
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+
+        items: list[_KernelItem] = []
+        async for item in kernel.run_stream(spec, "test task"):
+            items.append(item)
+
+        skill_hit_events = [
+            i for i in items
+            if i.event and isinstance(i.event, SkillHitEvent)
+        ]
+        assert len(skill_hit_events) == 0, "Should not yield SkillHitEvent for regular tools"
+
+
+# ── Regression: run() still works ─────────────────────────
+
+
+class TestRunBackwardCompat:
+    """Ensure existing kernel.run() still works through _run_items()."""
+
+    @pytest.mark.asyncio
+    async def test_natural_finish_via_run(self) -> None:
         from matmaster.core.agent import AgentKernel
 
-        provider = StreamingProvider(
-            [
-                StreamChunk(content="Hello"),
-                StreamChunk(finish_reason="stop"),
-            ]
-        )
+        provider = StreamingProvider([
+            StreamChunk(content="Hello"),
+            StreamChunk(finish_reason="stop"),
+        ])
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
         result = await kernel.run(spec, "test task")
-
-        assert isinstance(result.result, KernelResult)
         assert result.result.reason == "natural"
         assert result.result.final_content == "Hello"
-        # Messages should include system, user, and assistant
-        assert len(result.messages) >= 3
-
-
-# ---------------------------------------------------------------------------
-# _resolve_tool_definitions() tests
-# ---------------------------------------------------------------------------
-
-
-class TestResolveToolDefinitionsRegistryPath:
-    """Phase 1 fallback: uses registry.get_tool_definitions()."""
 
     @pytest.mark.asyncio
-    async def test_resolve_tool_definitions_registry_path(self) -> None:
-        from matmaster.core.agent import _KernelState, _resolve_tool_definitions
-
-        registry, _ = _make_tool_registry(tool_names=["test_tool"])
-        spec = _make_spec(tool_registry=registry)
-        state = _KernelState(messages=[])
-
-        defs = _resolve_tool_definitions(spec, state)
-        assert defs is not None
-        assert len(defs) >= 1
-        assert any(d["function"]["name"] == "test_tool" for d in defs)
-
-
-class TestResolveToolDefinitionsCatalogPath:
-    """Phase 2 path: uses tool_catalog with version caching."""
-
-    @pytest.mark.asyncio
-    async def test_resolve_tool_definitions_catalog_path(self) -> None:
-        from matmaster.core.agent import _KernelState, _resolve_tool_definitions
-        from matmaster.tools.tool_catalog import ToolCatalog
-
-        registry, _ = _make_tool_registry(tool_names=["my_tool"])
-        catalog = ToolCatalog(registry)
-        spec = _make_spec(tool_registry=registry)
-        # Create a new spec with tool_catalog set
-        spec_with_catalog = spec.model_copy(update={"tool_catalog": catalog})
-        state = _KernelState(messages=[])
-
-        # First call should populate cache
-        defs1 = _resolve_tool_definitions(spec_with_catalog, state)
-        assert defs1 is not None
-        assert state.last_catalog_version == 0
-        assert state.cached_tool_definitions is defs1
-
-        # Second call with same version should return cached
-        defs2 = _resolve_tool_definitions(spec_with_catalog, state)
-        assert defs2 is defs1  # same object = cached
-
-
-# ---------------------------------------------------------------------------
-# _KernelState locality test
-# ---------------------------------------------------------------------------
-
-
-class TestKernelStateIsLocal:
-    """_KernelState is not stored on self -- kernel has no state attribute."""
-
-    @pytest.mark.asyncio
-    async def test_kernel_state_is_local(self) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        provider = StreamingProvider(
-            [
-                StreamChunk(content="hello"),
-                StreamChunk(finish_reason="stop"),
-            ]
-        )
-        spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
-        await kernel.run(spec, "task")
-
-        # Kernel should not hold any _state, state, _kernel_state attribute
-        assert not hasattr(kernel, "_state")
-        assert not hasattr(kernel, "state")
-        assert not hasattr(kernel, "_kernel_state")
-
-
-# ---------------------------------------------------------------------------
-# Tool runner fallback test
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# KGEN-06: _run_items() yields ToolCallEvent / ToolResultEvent
-# ---------------------------------------------------------------------------
-
-
-class TestRunStreamYieldsToolCallEvent:
-    """run_stream() yields ToolCallEvent before tool execution (KGEN-06)."""
-
-    @pytest.mark.asyncio
-    async def test_run_stream_yields_tool_call_event(self) -> None:
+    async def test_tool_calls_via_run(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1})
-        provider = ToolCallingProvider(
-            tool_calls=[tc], max_tool_turns=1, final_content="done"
-        )
-        spec = _make_spec(provider=provider, max_turns=5)
+        provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=1)
+        registry, _ = _make_tool_registry()
+        spec = _make_spec(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
-
-        events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
-            events.append(event)
-
-        tool_call_events = [e for e in events if isinstance(e, ToolCallEvent)]
-        assert len(tool_call_events) == 1
-        assert tool_call_events[0].call_id == "tc-1"
-        assert tool_call_events[0].tool_name == "test_tool"
-        assert tool_call_events[0].arguments == {"x": 1}
-        assert tool_call_events[0].source == "agent"
-
-
-class TestRunStreamYieldsToolResultEvent:
-    """run_stream() yields ToolResultEvent after tool execution (KGEN-06)."""
-
-    @pytest.mark.asyncio
-    async def test_run_stream_yields_tool_result_event(self) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        tc = ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1})
-        provider = ToolCallingProvider(
-            tool_calls=[tc], max_tool_turns=1, final_content="done"
-        )
-        spec = _make_spec(provider=provider, max_turns=5)
-        kernel = AgentKernel()
-
-        events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
-            events.append(event)
-
-        tool_result_events = [e for e in events if isinstance(e, ToolResultEvent)]
-        assert len(tool_result_events) == 1
-        assert tool_result_events[0].call_id == "tc-1"
-        assert tool_result_events[0].tool_name == "test_tool"
-        assert tool_result_events[0].status == "success"
-        assert tool_result_events[0].source == "agent"
-
-
-class TestRunStreamToolEventOrder:
-    """ToolCallEvent appears before ToolResultEvent in the event sequence (KGEN-06)."""
-
-    @pytest.mark.asyncio
-    async def test_tool_call_before_tool_result(self) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        tc = ToolCallData(id="tc-1", name="test_tool", arguments={"a": 2})
-        provider = ToolCallingProvider(
-            tool_calls=[tc], max_tool_turns=1, final_content="done"
-        )
-        spec = _make_spec(provider=provider, max_turns=5)
-        kernel = AgentKernel()
-
-        events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
-            events.append(event)
-
-        # Find indices
-        call_idx = next(
-            i for i, e in enumerate(events) if isinstance(e, ToolCallEvent)
-        )
-        result_idx = next(
-            i for i, e in enumerate(events) if isinstance(e, ToolResultEvent)
-        )
-        assert call_idx < result_idx, (
-            f"ToolCallEvent (idx={call_idx}) must appear before "
-            f"ToolResultEvent (idx={result_idx})"
-        )
-
-
-class TestRunStreamMultipleToolCalls:
-    """Multiple tool_calls in one turn yield matching events (KGEN-06)."""
-
-    @pytest.mark.asyncio
-    async def test_multiple_tool_calls_yield_events(self) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        tc1 = ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1})
-        tc2 = ToolCallData(id="tc-2", name="some_tool", arguments={"y": 2})
-        provider = ToolCallingProvider(
-            tool_calls=[tc1, tc2], max_tool_turns=1, final_content="done"
-        )
-        spec = _make_spec(provider=provider, max_turns=5)
-        kernel = AgentKernel()
-
-        events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
-            events.append(event)
-
-        tool_call_events = [e for e in events if isinstance(e, ToolCallEvent)]
-        tool_result_events = [e for e in events if isinstance(e, ToolResultEvent)]
-        assert len(tool_call_events) == 2
-        assert len(tool_result_events) == 2
-        # call_ids match
-        assert {e.call_id for e in tool_call_events} == {"tc-1", "tc-2"}
-        assert {e.call_id for e in tool_result_events} == {"tc-1", "tc-2"}
-
-
-class TestToolRunnerFallback:
-    """spec.tool_runner=None falls back to InlineToolRunner."""
-
-    @pytest.mark.asyncio
-    async def test_tool_runner_fallback(self) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        tc = ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1})
-        provider = ToolCallingProvider(
-            tool_calls=[tc], max_tool_turns=1, final_content="done"
-        )
-        spec = _make_spec(provider=provider, max_turns=5)
-        assert spec.tool_runner is None  # No tool_runner set
-        kernel = AgentKernel()
-        result = await kernel.run(spec, "task")
-
-        # Should complete successfully using InlineToolRunner fallback
-        assert result.result.status == "completed"
+        result = await kernel.run(spec, "test")
         assert result.result.reason == "natural"

@@ -62,22 +62,22 @@
 
 ### Exp/Service 层接入
 
-- [ ] **ESIN-01**: `Exp` 新增 `run_stream()`，透传 Kernel generator
+- [x] **ESIN-01**: `Exp` 新增 `run_stream()`，透传 Kernel generator — Phase 34 P01
 - [ ] **ESIN-02**: `AgentRunService` 新增 `run_agent_stream()`，消费 generator 事件
-- [ ] **ESIN-03**: `_do_stream_llm()` 改造为子 generator `_stream_llm_items()`，支持逐 chunk yield，达到与 EventEmitterHook 完全一致的 segment-complete 语义
-- [ ] **ESIN-04**: `Exp.build_runtime()` 构造 FullToolRunner（含 ToolCatalog + StructuralValidation + GuardPipeline + CapabilityPolicy + ToolScheduler + RuntimeTopology）并注入 AgentRuntimeSpec.tool_runner，FullToolRunner 成为默认执行路径（从 Phase 33 移入，原 D-10）
-- [ ] **ESIN-05**: `on_skill_hit` 路径改为通过 `ToolCatalog.register_overlay()` 注册 MCP 工具，使 catalog.version 递增触发 Kernel tool_definitions 刷新
+- [x] **ESIN-03**: `_do_stream_llm()` 改造为子 generator `_stream_llm_items()`，支持逐 chunk yield，达到与 EventEmitterHook 完全一致的 segment-complete 语义 — Phase 34 P01
+- [x] **ESIN-04**: `Exp.build_runtime()` 构造 FullToolRunner（含 ToolCatalog + StructuralValidation + GuardPipeline + CapabilityPolicy + ToolScheduler + RuntimeTopology）并注入 AgentRuntimeSpec.tool_runner，FullToolRunner 成为默认执行路径（从 Phase 33 移入，原 D-10）— Phase 34 P01
+- [x] **ESIN-05**: `on_skill_hit` 路径改为通过 `ToolCatalog.register_overlay()` 注册 MCP 工具，使 catalog.version 递增触发 Kernel tool_definitions 刷新 — Phase 34 P01
 - [ ] **ESIN-06**: `run_stream()` 产出的事件 source 归一化为 `MatMaster` 或 `MatMaster:{exp_name}` 格式，兼容 ChatHistoryConverter 的 source 过滤逻辑
 - [ ] **ESIN-07**: `ToolResult.payload/meta` 到 SSE/持久化前端契约的兼容映射（event_payloads.py 将 `payload` 映射为 `info` 字段），确保 test_chat_stream_direct.py 前端契约测试通过
 - [ ] **ESIN-08**: system prompt 工具枚举段移除或改为通用说明（消除与 tool_definitions 的不一致风险），或推迟到 Phase 35 随 ContextBuilder 迁移一起处理
 
 ### Hook 退役
 
-- [ ] **HRET-01**: `_run_items()` 产出等价 ThoughtEvent / ResponseEvent / ToolCallEvent / ToolResultEvent，替代 EventEmitterHook
-- [ ] **HRET-02**: `_run_items()` 在 tool_calls 轮次 yield AssistantStateEvent，替代 AssistantStateHook
-- [ ] **HRET-03**: `_run_items()` 产出等价 SkillHitEvent，替代 SkillHitHook
+- [x] **HRET-01**: `_run_items()` 产出等价 ThoughtEvent / ResponseEvent / ToolCallEvent / ToolResultEvent，替代 EventEmitterHook — Phase 34 P01
+- [x] **HRET-02**: `_run_items()` 在 tool_calls 轮次 yield AssistantStateEvent，替代 AssistantStateHook — Phase 34 P01
+- [x] **HRET-03**: `_run_items()` 产出等价 SkillHitEvent，替代 SkillHitHook — Phase 34 P01
 - [ ] **HRET-04**: OutputProcessorHook 功能迁移到 ToolRunner post-execute 阶段或消费侧 event transformer
-- [ ] **HRET-05**: ContextCompactor bus 依赖改为通过 Kernel yield ContextCompactionEvent
+- [x] **HRET-05**: ContextCompactor bus 依赖改为通过 Kernel yield ContextCompactionEvent — Phase 34 P01
 - [ ] **HRET-06**: 全部 5 个 Hook 退役后，移除 Hook → Bus 间接事件路径
 
 ### 约束迁移
@@ -156,19 +156,19 @@
 | SPEC-01 | Phase 32 | Complete |
 | TDEF-01 | Phase 32 | Complete |
 | KGEN-06 | Phase 33 (early) | Complete |
-| ESIN-01 | Phase 34 | Pending |
+| ESIN-01 | Phase 34 P01 | Complete |
 | ESIN-02 | Phase 34 | Pending |
-| ESIN-03 | Phase 34 | Pending |
-| ESIN-04 | Phase 34 | Pending |
-| ESIN-05 | Phase 34 | Pending |
+| ESIN-03 | Phase 34 P01 | Complete |
+| ESIN-04 | Phase 34 P01 | Complete |
+| ESIN-05 | Phase 34 P01 | Complete |
 | ESIN-06 | Phase 34 | Pending |
 | ESIN-07 | Phase 34 | Pending |
 | ESIN-08 | Phase 34/35 | Pending |
-| HRET-01 | Phase 34 | Pending |
-| HRET-02 | Phase 34 | Pending |
-| HRET-03 | Phase 34 | Pending |
+| HRET-01 | Phase 34 P01 | Complete |
+| HRET-02 | Phase 34 P01 | Complete |
+| HRET-03 | Phase 34 P01 | Complete |
 | HRET-04 | Phase 34 | Pending |
-| HRET-05 | Phase 34 | Pending |
+| HRET-05 | Phase 34 P01 | Complete |
 | HRET-06 | Phase 34 | Pending |
 | CMIG-01 | Phase 35 | Pending |
 | CMIG-02 | Phase 35 | Pending |
@@ -190,4 +190,4 @@
 
 ---
 *Requirements defined: 2026-04-02*
-*Last updated: 2026-04-02 after 32-01 completion (9 requirements)*
+*Last updated: 2026-04-02 after 34-01 completion (8 requirements: ESIN-01/03/04/05, HRET-01/02/03/05)*

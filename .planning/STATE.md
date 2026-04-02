@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
-status: planning
-stopped_at: Phase 34 context gathered
-last_updated: "2026-04-02T13:41:56.909Z"
-last_activity: 2026-04-02 -- Phase 33 complete
+status: executing
+stopped_at: Phase 34 Plan 1 complete
+last_updated: "2026-04-02T14:45:26Z"
+last_activity: 2026-04-02 -- Phase 34 Plan 1 complete
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
-  percent: 45
+  total_plans: 11
+  completed_plans: 9
+  percent: 50
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 34
-Plan: Not started
-Status: Ready to plan Phase 34
-Last activity: 2026-04-02 -- Phase 33 complete
+Phase: 34 (exp-service-hook) -- EXECUTING
+Plan: 2 of 3
+Status: Plan 1 complete, Plan 2 next
+Last activity: 2026-04-02 -- Phase 34 Plan 1 complete
 
-Progress: [████░░░░░░] 45%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [████░░░░░░] 45%
 *Updated after each plan completion*
 | Phase 32 P02 | 7min | 2 tasks | 6 files |
 | Phase 32 P03 | 6min | 1 tasks | 2 files |
+| Phase 34 P01 | 20min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,9 @@ v2.2 新决策:
 - [Advancement Plan]: 三波次推进策略——Wave A 纯实现不触碰 Exp/Service，Wave B 打通 generator 事件链后切默认，Wave C 约束迁移+降级
 - [Advancement Plan D-05]: ToolCompiler 是注册时一次性编译（非运行时解析），ToolCatalog 存储 ToolInstance
 - [Advancement Plan D-06]: execute_batch 逐工具返回结果，不整批失败
+- [Phase 34 P01]: run()/run_loop() backward compat path fully preserved; generator path is parallel, not replacement
+- [Phase 34 P01]: ContextCompactor bus= kept as deprecated kwarg wrapping bus.emit as event_sink
+- [Phase 34 P01]: _call_llm_streaming() collects items for incomplete-response retry, yields events immediately
 
 ### Pending Todos
 
@@ -88,6 +92,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02T13:41:56.905Z
-Stopped at: Phase 34 context gathered
-Resume file: .planning/phases/34-exp-service-hook/34-CONTEXT.md
+Last session: 2026-04-02T14:45:26Z
+Stopped at: Completed 34-01-PLAN.md
+Resume file: .planning/phases/34-exp-service-hook/34-02-PLAN.md

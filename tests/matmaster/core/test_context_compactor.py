@@ -457,6 +457,74 @@ class TestToolTruncationFallback:
         assert len(result_content) < len(original_content)
 
 
+class TestCompactorEventSink:
+    """Phase 34: event_sink callback replaces bus dependency."""
+
+    async def test_event_sink_receives_compaction_event(self) -> None:
+        """Compactor with event_sink calls sink with ContextCompactionEvent."""
+        from matmaster.core.context_compactor import ContextCompactor
+        from matmaster.types.events import ContextCompactionEvent
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        received_events: list = []
+
+        async def sink(event):
+            received_events.append(event)
+
+        msgs = _build_long_conversation(5)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=sink
+        )
+        compactor.update_message_count(len(msgs))
+
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+
+        assert len(received_events) == 1
+        event = received_events[0]
+        assert isinstance(event, ContextCompactionEvent)
+        assert event.payload["compaction_count"] == 1
+        assert event.payload["strategy"] == "summary"
+
+    async def test_no_event_when_no_sink(self) -> None:
+        """Compactor with event_sink=None does not error."""
+        from matmaster.core.context_compactor import ContextCompactor
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        msgs = _build_long_conversation(5)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=None
+        )
+        compactor.update_message_count(len(msgs))
+
+        # Should not raise
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+
+    async def test_no_bus_import_in_compactor(self) -> None:
+        """ContextCompactor module should not import MessageBus."""
+        import ast
+        import inspect
+
+        from matmaster.core import context_compactor
+
+        source = inspect.getsource(context_compactor)
+        tree = ast.parse(source)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                if node.module and "bus" in node.module:
+                    # Check it's specifically importing MessageBus
+                    for alias in node.names:
+                        assert alias.name != "MessageBus", (
+                            "ContextCompactor should not import MessageBus"
+                        )
+
+
 @pytest.mark.skip(
     reason="E2E test deferred to Phase 17-18 per D-08: requires Kernel async化"
 )

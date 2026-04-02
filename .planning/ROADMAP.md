@@ -133,7 +133,7 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 34-01-PLAN.md — Kernel/Exp 内核改造（_stream_llm_items + FullToolRunner 注入 + run_stream + skill overlay + ContextCompactor event_sink）
+- [x] 34-01-PLAN.md — Kernel/Exp 内核改造（_stream_llm_items + FullToolRunner 注入 + run_stream + skill overlay + ContextCompactor event_sink）
 - [ ] 34-02-PLAN.md — Service 层切流（run_agent_stream + source 归一化 + payload->info 映射验证）
 - [ ] 34-03-PLAN.md — Hook 退役（EventEmitterHook + AssistantStateHook + SkillHitHook + OutputProcessorHook 删除）
 
