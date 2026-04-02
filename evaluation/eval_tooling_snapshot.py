@@ -5,8 +5,8 @@ Primary path: :func:`snapshot_eval_tooling` loads
 (``matmaster/exps/{name}.toml``) — same as production / ``AgentRunService``. MCP paths resolve
 through ``[skills].config_dir`` (typically ``matmaster_config/`` in repo).
 
-:func:`snapshot_devshell_eval_tooling` uses production ``direct`` with the same skill-root
-narrowing as mm-devshell default (see :mod:`matmaster.devshell.exp_patch`).
+:func:`snapshot_devshell_eval_tooling` uses production ``direct`` with the same skill roots and
+``mcp_runtime_patch`` as mm-devshell default (see :mod:`matmaster.devshell.exp_patch`).
 
 Used to populate ingest ``extra.eval_tooling`` so runs can be correlated with the
 registered builtin list, skill catalog, and MCP server keys from config.
