@@ -18,6 +18,10 @@ from typing import Any, ClassVar
 
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_decision import ToolDecision
+from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+from matmaster.types.tool_runner_state import ToolRunnerState
+from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
+from matmaster.types.topology import ToolPlane
 
 
 class BuiltinTool(ABC):
@@ -35,8 +39,17 @@ class BuiltinTool(ABC):
     """
 
     name: ClassVar[str]
-    description: ClassVar[str]
+    description: ClassVar[str] = ""
     json_schema: ClassVar[dict[str, Any]]
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = ()
+    capabilities: ClassVar[frozenset[str]] = frozenset()
+    effect_level: ClassVar[str] = "local_mutation"
+    fast_path_eligible: ClassVar[bool] = False
+    max_result_chars: ClassVar[int] = 0
+    plane: ClassVar[ToolPlane] = ToolPlane.CONTROL_PLANE
+    state_mode: ClassVar[str] = "stateless"
+    stop_mode: ClassVar[str] = "cancellable"
+    exposed_to_model: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -56,7 +69,28 @@ class BuiltinTool(ABC):
             self.logger.error('Tool %s failed: %s', self.name, e, exc_info=True)
             return f'Error: {e}'
 
-    async def validate_input(self, arguments: dict[str, Any]) -> ToolDecision | None:
+    def describe(self, ctx: ToolDescriptionContext | None = None) -> str:
+        return self.description
+
+    def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
+        return None
+
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: ToolExecutionContext | None,
+    ) -> str | ToolResult:
+        try:
+            return await asyncio.to_thread(self._execute, arguments)
+        except Exception as e:
+            self.logger.error('Tool %s failed: %s', self.name, e, exc_info=True)
+            return f'Error: {e}'
+
+    async def validate_input(
+        self,
+        arguments: dict[str, Any],
+        runner_state: ToolRunnerState | None = None,
+    ) -> ToolDecision | None:
         """Tool-specific semantic input validation.
 
         Override to reject invalid arguments before execution.

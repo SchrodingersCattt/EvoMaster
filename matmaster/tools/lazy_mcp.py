@@ -11,9 +11,12 @@ import asyncio
 import json
 import logging
 import threading
-from typing import Any
+from typing import Any, ClassVar
 
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
+from matmaster.types.topology import ToolPlane
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,16 @@ class LazyMCPTool:
     On first execute(), obtains an MCPConnection from LazyMCPConnector and
     calls MCPConnection.call_tool directly -- no MCPTool intermediate layer.
     """
+
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = ()
+    capabilities: ClassVar[frozenset[str]] = frozenset()
+    effect_level: ClassVar[str] = "local_mutation"
+    fast_path_eligible: ClassVar[bool] = False
+    max_result_chars: ClassVar[int] = 0
+    plane: ClassVar[ToolPlane] = ToolPlane.CONTROL_PLANE
+    state_mode: ClassVar[str] = "stateless"
+    stop_mode: ClassVar[str] = "best_effort"
+    exposed_to_model: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -55,6 +68,12 @@ class LazyMCPTool:
     @property
     def description(self) -> str:
         return self._description
+
+    def describe(self, ctx: ToolDescriptionContext | None = None) -> str:
+        return self.description
+
+    def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
+        return None
 
     @property
     def json_schema(self) -> dict[str, Any]:
@@ -91,6 +110,13 @@ class LazyMCPTool:
         except RuntimeError as e:
             # MCPConnection.call_tool raises RuntimeError on isError=True
             return ToolResult(status="error", content=str(e))
+
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: ToolExecutionContext | None,
+    ) -> ToolResult:
+        return await self.execute(arguments)
 
     def _format_result(self, result_content: list) -> str:
         """Format MCPConnection.call_tool result content list to string.

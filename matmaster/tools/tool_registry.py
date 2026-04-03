@@ -12,12 +12,17 @@ backend via ToolCatalog.registry.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from matmaster.tools.tool_result import ToolResult
+    from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+    from matmaster.types.tool_spec import ResourceClaim
+    from matmaster.types.topology import ToolPlane
 
 logger = logging.getLogger(__name__)
+
+EffectLevel = Literal["none", "local_mutation", "external_effect"]
 
 
 @runtime_checkable
@@ -34,8 +39,39 @@ class Tool(Protocol):
     @property
     def description(self) -> str: ...
 
+    def describe(self, ctx: ToolDescriptionContext) -> str: ...
+
+    def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None: ...
+
     @property
     def json_schema(self) -> dict[str, Any]: ...
+
+    @property
+    def resource_claims(self) -> tuple[ResourceClaim, ...]: ...
+
+    @property
+    def capabilities(self) -> frozenset[str]: ...
+
+    @property
+    def effect_level(self) -> EffectLevel: ...
+
+    @property
+    def fast_path_eligible(self) -> bool: ...
+
+    @property
+    def max_result_chars(self) -> int: ...
+
+    @property
+    def plane(self) -> ToolPlane: ...
+
+    @property
+    def state_mode(self) -> Literal["stateless", "persistent"]: ...
+
+    @property
+    def stop_mode(self) -> Literal["cancellable", "best_effort", "non_cancellable"]: ...
+
+    @property
+    def exposed_to_model(self) -> bool: ...
 
     async def execute(self, arguments: dict[str, Any]) -> str | ToolResult | None: ...
 
@@ -72,6 +108,10 @@ class ToolRegistry:
     def all_tools(self) -> list[Tool]:
         """Return all registered Tool instances."""
         return list(self._tools.values())
+
+    def get_raw(self, name: str) -> Tool | None:
+        """Return the registered tool instance by name, or None."""
+        return self._tools.get(name)
 
     def __len__(self) -> int:
         return len(self._tools)

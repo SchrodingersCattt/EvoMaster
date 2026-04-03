@@ -107,3 +107,16 @@ class TestToolRegistryProperties:
         registry.register(MockTool(name="present"), source="builtin")
         assert "present" in registry
         assert "absent" not in registry
+
+    def test_get_raw_returns_tool(self) -> None:
+        registry = ToolRegistry()
+        tool = MockTool(name="test")
+
+        registry.register(tool, source="builtin")
+
+        assert registry.get_raw("test") is tool
+
+    def test_get_raw_returns_none(self) -> None:
+        registry = ToolRegistry()
+
+        assert registry.get_raw("missing") is None

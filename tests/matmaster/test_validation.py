@@ -10,6 +10,7 @@ from matmaster.tools.tool_registry import Tool
 from matmaster.types.guards import Guard, GuardContext, GuardResult
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
+from matmaster.types.topology import ToolPlane
 from matmaster.validation import validate_async_protocol
 
 # -- Sync mocks (deliberately wrong for async Protocol) --
@@ -24,6 +25,16 @@ class SyncLLMProvider:
 
 
 class SyncTool:
+    resource_claims = ()
+    capabilities = frozenset()
+    effect_level = "local_mutation"
+    fast_path_eligible = False
+    max_result_chars = 0
+    plane = ToolPlane.CONTROL_PLANE
+    state_mode = "stateless"
+    stop_mode = "cancellable"
+    exposed_to_model = True
+
     @property
     def name(self) -> str:
         return "sync_tool"
@@ -35,6 +46,12 @@ class SyncTool:
     @property
     def json_schema(self) -> dict[str, Any]:
         return {}
+
+    def describe(self, ctx: Any) -> str:
+        return self.description
+
+    def prompt(self, ctx: Any | None = None) -> str | None:
+        return None
 
     def execute(self, arguments: dict[str, Any]) -> str:
         return "sync"
@@ -101,6 +118,16 @@ class AsyncLLMProviderCoroutineOnly:
 
 
 class AsyncToolOK:
+    resource_claims = ()
+    capabilities = frozenset()
+    effect_level = "local_mutation"
+    fast_path_eligible = False
+    max_result_chars = 0
+    plane = ToolPlane.CONTROL_PLANE
+    state_mode = "stateless"
+    stop_mode = "cancellable"
+    exposed_to_model = True
+
     @property
     def name(self) -> str:
         return "async_tool"
@@ -112,6 +139,12 @@ class AsyncToolOK:
     @property
     def json_schema(self) -> dict[str, Any]:
         return {}
+
+    def describe(self, ctx: Any) -> str:
+        return self.description
+
+    def prompt(self, ctx: Any | None = None) -> str | None:
+        return None
 
     async def execute(self, arguments: dict[str, Any]) -> str:
         return "async"

@@ -8,6 +8,7 @@ import pytest
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_registry import Tool
+from matmaster.types.topology import ToolPlane
 
 
 class ConcreteBuiltinTool(BuiltinTool):
@@ -79,3 +80,48 @@ class TestExecuteTemplateMethod:
         tool = FailingBuiltinTool()
         result = await tool.execute({})
         assert "something went wrong" in result
+
+
+def test_builtin_default_metadata() -> None:
+    tool = ConcreteBuiltinTool()
+
+    assert tool.resource_claims == ()
+    assert tool.capabilities == frozenset()
+    assert tool.effect_level == "local_mutation"
+    assert tool.fast_path_eligible is False
+    assert tool.max_result_chars == 0
+    assert tool.plane == ToolPlane.CONTROL_PLANE
+    assert tool.state_mode == "stateless"
+    assert tool.stop_mode == "cancellable"
+    assert tool.exposed_to_model is True
+
+
+def test_builtin_describe_returns_description() -> None:
+    tool = ConcreteBuiltinTool()
+
+    assert tool.describe(None) == tool.description
+
+
+def test_builtin_prompt_returns_none() -> None:
+    tool = ConcreteBuiltinTool()
+
+    assert tool.prompt() is None
+
+
+@pytest.mark.asyncio
+async def test_builtin_execute_with_context_delegates() -> None:
+    tool = ConcreteBuiltinTool()
+
+    result = await tool.execute_with_context({"x": 1}, None)
+
+    assert "executed with" in str(result)
+
+
+@pytest.mark.asyncio
+async def test_builtin_validate_input_accepts_runner_state() -> None:
+    from matmaster.types.tool_runner_state import ToolRunnerState
+
+    tool = ConcreteBuiltinTool()
+    result = await tool.validate_input({"x": 1}, runner_state=ToolRunnerState())
+
+    assert result is None
