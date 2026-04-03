@@ -266,7 +266,7 @@ class Exp:
         full_runner = FullToolRunner(
             catalog=catalog,
             structural_validation=structural_validation,
-            guard_pipeline=GuardPipeline(guards),
+            guard_pipeline=GuardPipeline(guards, read_tracker=self._read_tracker),
             capability_policy=capability_policy,
             scheduler=scheduler,
             topology=topology,
