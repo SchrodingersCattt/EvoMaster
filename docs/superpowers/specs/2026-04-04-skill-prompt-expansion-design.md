@@ -157,6 +157,13 @@ def __init__(
 - **Exp._init_skill_tools** (`exp.py`): `on_skill_hit` callback logic unchanged.
   SkillTool construction updated to remove `session` parameter.
 - **SkillRegistry** (`registry.py`): Discovery, filtering, override logic unchanged.
+- **Skill class methods** (`registry.py`): `get_reference()`, `get_script_path()`,
+  `_scan_scripts()` are kept. They lose their only caller (SkillTool) in this PR but
+  remain as part of the Skill public API for potential future use (e.g., BashTool
+  integration). No dead-code removal in this PR.
+- **System prompt skill listing**: `get_meta_info_context()` output format stays as
+  `[Skill: name] description`. The new `skill_type` field is not surfaced in the listing
+  -- intentional for first version, can be added as a follow-up.
 - **script_env.py**: Untouched. Will be integrated into BashTool/session layer in a
   separate PR.
 - **SKILL.md files**: No content changes required. LLM interprets existing instructions
@@ -169,7 +176,7 @@ def __init__(
 | `tests/test_skill_registry.py` | Update `extras.get('mcp_server')` assertions to `meta_info.mcp_server` |
 | `tests/test_skill_tool.py` | Rewrite: test single-entry expansion, `${SKILL_DIR}` substitution, base directory header, on_skill_hit triggering |
 | `tests/matmaster/tools/test_skill_meta_extras.py` | Update: `mcp_server` no longer in extras |
-| `tests/matmaster/tools/test_skill_tool_callback.py` | Minor: `on_skill_hit` trigger path uses `meta_info.mcp_server` instead of `extras.get()` |
+| `tests/matmaster/tools/test_skill_tool_callback.py` | Update: remove `session` param from SkillTool construction + `on_skill_hit` trigger path uses `meta_info.mcp_server` instead of `extras.get()` |
 
 ## Files Modified
 
@@ -190,11 +197,13 @@ def __init__(
   auto-injected env vars when LLM runs scripts via `execute_bash`. Mitigation: separate PR
   to integrate credential injection into BashTool/session layer. Until then, credentials
   can be manually exported by the user or injected via session env setup.
-- **Legacy instructions in SKILL.md**: Some SKILL.md bodies contain literal
-  `use_skill action=get_reference` or `run_script` instructions. After this change, the
+- **Legacy instructions in SKILL.md**: At least 12 SKILL.md files contain literal
+  `use_skill action=get_reference` or `run_script` instructions (~25+ occurrences),
+  concentrated in high-frequency skills: `bohrium-job`, `deep-survey`,
+  `manuscript-scribe`, `input-manual-helper`, `structure-manager`. After this change, the
   `use_skill` schema no longer accepts these parameters. The LLM will receive the expanded
   content including these old instructions but will adapt using available tools (Read,
-  execute_bash) and the base directory path. No SKILL.md changes required.
+  execute_bash) and the base directory path. No SKILL.md changes required in this PR.
 
 ## Out of Scope
 
