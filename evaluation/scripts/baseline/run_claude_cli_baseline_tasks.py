@@ -93,10 +93,6 @@ def _run_claude_p(
         "--max-turns",
         str(max_turns),
         "--bare",
-        "--append-system-prompt",
-        "All output files MUST be written to the current working directory (cwd). "
-        "Never create files in absolute paths like /home/... or /tmp/... outside cwd. "
-        "Use relative paths only.",
     ]
     if model:
         cmd.extend(["--model", model])
@@ -284,6 +280,12 @@ def _run_single_task(
     prompt = prompt_file.read_text(encoding="utf-8").strip()
     if not prompt:
         return False, {"error": "empty prompt"}
+
+    # Ensure agent writes all output files in workspace (cwd), not absolute paths
+    prompt += (
+        "\n\n【重要】所有输出文件必须写在当前工作目录下，使用相对路径。"
+        "禁止写入 /home/...、/tmp/... 等绝对路径。"
+    )
 
     # 1. Mark start
     _mark_task_start(workspace)
