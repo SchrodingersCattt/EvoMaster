@@ -34,7 +34,7 @@ class SkillTool:
     """
 
     resource_claims: ClassVar[tuple[ResourceClaim, ...]] = ()
-    capabilities: ClassVar[frozenset[str]] = frozenset()
+    capabilities: ClassVar[frozenset[str]] = frozenset({"skill.dispatch"})
     effect_level: ClassVar[str] = "local_mutation"
     fast_path_eligible: ClassVar[bool] = False
     max_result_chars: ClassVar[int] = 0

@@ -11,7 +11,7 @@ import asyncio
 import json
 import logging
 import threading
-from typing import Any, ClassVar
+from typing import Any
 
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
@@ -19,6 +19,16 @@ from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 from matmaster.types.topology import ToolPlane
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_claims(raw_claims: Any) -> tuple[ResourceClaim, ...]:
+    claims: list[ResourceClaim] = []
+    for raw in raw_claims or ():
+        if isinstance(raw, ResourceClaim):
+            claims.append(raw)
+        elif isinstance(raw, dict):
+            claims.append(ResourceClaim(**raw))
+    return tuple(claims)
 
 
 class LazyMCPTool:
@@ -31,16 +41,6 @@ class LazyMCPTool:
     calls MCPConnection.call_tool directly -- no MCPTool intermediate layer.
     """
 
-    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = ()
-    capabilities: ClassVar[frozenset[str]] = frozenset()
-    effect_level: ClassVar[str] = "local_mutation"
-    fast_path_eligible: ClassVar[bool] = False
-    max_result_chars: ClassVar[int] = 0
-    plane: ClassVar[ToolPlane] = ToolPlane.CONTROL_PLANE
-    state_mode: ClassVar[str] = "stateless"
-    stop_mode: ClassVar[str] = "best_effort"
-    exposed_to_model: ClassVar[bool] = True
-
     def __init__(
         self,
         server_name: str,
@@ -52,14 +52,28 @@ class LazyMCPTool:
         runtime_meta: dict[str, Any] | None = None,
     ) -> None:
         self._name = tool_name
-        self._description = description
+        self._static_description = description
         self._input_schema = input_schema
         self._server_name = server_name
         self._remote_tool_name = remote_tool_name
         self._connector = connector
         self._connection: Any | None = None
         self._path_adaptor: Any | None = None
-        self.tool_runtime_meta: dict[str, Any] = runtime_meta or {}
+
+        meta = runtime_meta or {}
+        self._plane = (
+            ToolPlane(meta["plane"])
+            if meta.get("plane")
+            else ToolPlane.EXTERNAL_SERVICE
+        )
+        self._effect_level: str = meta.get("effect_level", "external_effect")
+        self._capabilities = frozenset(meta.get("capabilities", ()))
+        self._fast_path_eligible = bool(meta.get("fast_path_eligible", False))
+        self._exposed_to_model = meta.get("exposed_to_model", True)
+        self._resource_claims = _parse_claims(meta.get("resource_claims", ()))
+        self._max_result_chars = int(meta.get("max_result_chars", 0) or 0)
+        self._stop_mode = meta.get("stop_mode", "best_effort")
+        self._state_mode = meta.get("state_mode", "stateless")
 
     @property
     def name(self) -> str:
@@ -67,10 +81,10 @@ class LazyMCPTool:
 
     @property
     def description(self) -> str:
-        return self._description
+        return self._static_description
 
     def describe(self, ctx: ToolDescriptionContext | None = None) -> str:
-        return self.description
+        return self._static_description
 
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return None
@@ -78,6 +92,42 @@ class LazyMCPTool:
     @property
     def json_schema(self) -> dict[str, Any]:
         return self._input_schema
+
+    @property
+    def resource_claims(self) -> tuple[ResourceClaim, ...]:
+        return self._resource_claims
+
+    @property
+    def capabilities(self) -> frozenset[str]:
+        return self._capabilities
+
+    @property
+    def effect_level(self) -> str:
+        return self._effect_level
+
+    @property
+    def fast_path_eligible(self) -> bool:
+        return self._fast_path_eligible
+
+    @property
+    def max_result_chars(self) -> int:
+        return self._max_result_chars
+
+    @property
+    def plane(self) -> ToolPlane:
+        return self._plane
+
+    @property
+    def state_mode(self) -> str:
+        return self._state_mode
+
+    @property
+    def stop_mode(self) -> str:
+        return self._stop_mode
+
+    @property
+    def exposed_to_model(self) -> bool:
+        return self._exposed_to_model
 
     async def execute(self, arguments: dict[str, Any]) -> ToolResult:
         if self._connection is None:
@@ -94,7 +144,7 @@ class LazyMCPTool:
                     args=arguments,
                     tool_name=self._name,
                     server_name=self._server_name,
-                    tool_description=self._description,
+                    tool_description=self._static_description,
                     input_schema=self._input_schema,
                     session=getattr(self._connector, "session", None),
                 )

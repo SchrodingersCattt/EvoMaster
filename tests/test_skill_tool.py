@@ -435,3 +435,16 @@ class TestToolProtocol:
             "run_script",
         }
         assert set(schema["required"]) == {"skill_name", "action"}
+
+    def test_metadata_defaults(self, tmp_path: Path) -> None:
+        from matmaster.skills.registry import SkillRegistry
+        from matmaster.tools.skill_tool import SkillTool
+        from matmaster.types.topology import ToolPlane
+
+        registry = SkillRegistry(tmp_path)
+        tool = SkillTool(registry, _mock_session())
+
+        assert tool.capabilities == frozenset({"skill.dispatch"})
+        assert tool.effect_level == "local_mutation"
+        assert tool.plane == ToolPlane.CONTROL_PLANE
+        assert tool.stop_mode == "cancellable"
