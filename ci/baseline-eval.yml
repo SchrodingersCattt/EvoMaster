@@ -128,10 +128,10 @@ baseline-eval-build:
 # 与镜像构建并行运行（同在 build stage），只需 Python + PyYAML
 generate-eval-pipeline:
   stage: build
-  image: $REGISTRY/public/python:3.13-slim
+  image: $REGISTRY/public/ubuntu:gitlab-docker
   script:
-    - pip install pyyaml -q
-    - python ci/generate_eval_child_pipeline.py
+    - apt-get update -qq && apt-get install -y -qq python3 python3-yaml >/dev/null 2>&1
+    - python3 ci/generate_eval_child_pipeline.py
     - echo "--- generated child pipeline ---"
     - cat ci/generated-eval-child.yml
   artifacts:
