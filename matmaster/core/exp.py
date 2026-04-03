@@ -418,9 +418,11 @@ class Exp:
         # 2. Evo adapter tools (source="builtin_evo")
         #    Retain legacy science-specific tools that have not been ported natively.
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
+        from playground.mat_master.tools.web_search import get_web_search_tool
 
         evo_tools = [
             MonitorJobTool(),
+            get_web_search_tool(),
         ]
         registered_evo: list[Any] = []
         for tool in evo_tools:
