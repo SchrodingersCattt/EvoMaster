@@ -87,7 +87,7 @@ class CompactionContext:
     messages_before: int      # 压缩前 len(messages)
     messages_after: int       # 压缩后 len(messages)
     trigger_tokens: int       # 触发压缩时的 token 估算值，直接映射 ContextCompactionEvent.payload["trigger_tokens"]
-    strategy: str             # "summarize" | "sliding_window"，映射 payload["strategy"]
+    strategy: str             # "summary" | "sliding_window" | "tool_truncation"，映射 payload["strategy"]
 
 @dataclass(frozen=True)
 class UserPromptContext:
