@@ -22,10 +22,17 @@
 | `matmaster/core/tool_runner.py` | Modify (lines 26-31, 200-206, 274-286) | PRE_TOOL_CALL + POST_TOOL_CALL in FullToolRunner; remove D-01 constraint; clean up imports |
 | `matmaster/core/agent.py` | Modify (lines 39-42, 188-224) | USER_PROMPT_SUBMIT + CONTEXT_COMPACTION hooks; remove old run_pre_llm_call/run_should_continue |
 | `matmaster/devshell/stream_hook.py` | Modify (all) | Remove BaseHook inheritance and old hook methods; keep on_event() |
+| `matmaster/devshell/event_observer.py` | Modify (all) | Remove BaseHook inheritance and old hook methods from DevEventHook |
 | `matmaster/core/__init__.py` | Modify (lines 7-24) | Update re-exports |
 | `matmaster/hooks/__init__.py` | Delete | Empty module, hooks retired |
 | `tests/matmaster/core/test_hooks.py` | Rewrite | Tests for HookExecutor |
 | `tests/matmaster/core/test_hook_wiring.py` | Create | Integration tests for hook call sites |
+| `tests/conftest.py` | Modify | Remove HookAction import and old hook mocks |
+| `tests/matmaster/types/test_runtime.py` | Modify | Update spec.hooks -> spec.hook_executor references |
+| `tests/matmaster/core/test_tool_runner.py` | Modify | Remove BaseHook/HookAction imports |
+| `tests/matmaster/core/agent_kernel_test_helpers.py` | Modify | Remove old hook helper references |
+| `tests/matmaster/services/test_agent_run_stream.py` | Modify | Update spec.hooks = [] to hook_executor |
+| `tests/matmaster/test_validation.py` | Modify | Remove Hook/HookAction imports |
 
 ---
 
@@ -165,10 +172,9 @@ from matmaster.tools.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
 
-TContext = TypeVar("TContext")
-T = TypeVar("T")
-
 # ── Handler type aliases ────────────────────────────────
+# Using Any for parameters — type safety is enforced by runtime convention,
+# not compile-time generics. See spec "类型安全说明" section.
 
 ObserveHandler = Callable[[Any], Awaitable[None]]
 InterceptHandler = Callable[[Any], Awaitable["HookResult"]]
@@ -624,12 +630,32 @@ In `matmaster/core/__init__.py`:
 - Add: `from .hooks import HookEvent, HookExecutor, HookOutcome, HookResult`
 - Update `__all__` accordingly
 
-- [ ] **Step 3: Fix all import errors**
+- [ ] **Step 3: Fix all import errors in source files**
 
 Search for and update all files importing the old symbols:
 - `matmaster/core/agent.py:39-42` — remove `run_pre_llm_call, run_should_continue` imports
 - `matmaster/core/tool_runner.py:26-31` — remove `HookAction, run_guard_blocked, run_post_tool_call, run_pre_tool_call` imports
 - `matmaster/devshell/stream_hook.py:9` — remove `from matmaster.core.hooks import BaseHook, HookAction`
+- `matmaster/devshell/event_observer.py:26` — remove `from matmaster.core.hooks import BaseHook, HookAction`
+
+- [ ] **Step 3b: Fix all import errors in test files (prevent breakage window)**
+
+Run: `grep -rn "from matmaster.core.hooks import\|from matmaster.core import.*BaseHook\|from matmaster.core import.*HookAction\|from matmaster.core import.*Hook\b\|spec\.hooks" --include="*.py" tests/ 2>&1 | head -30`
+
+Update every match:
+- Replace `from matmaster.core.hooks import Hook, HookAction, BaseHook, ...` with `from matmaster.core.hooks import HookExecutor, HookEvent, HookOutcome, HookResult`
+- Replace `spec.hooks = [...]` or `spec.hooks` references with `spec.hook_executor = None` or equivalent
+- Replace `from matmaster.core import BaseHook, Hook, HookAction` with new symbols
+- Remove or update mock classes that implement the old Hook Protocol
+
+Key files to update:
+- `tests/conftest.py` — remove HookAction import, update mock hooks
+- `tests/matmaster/types/test_runtime.py` — update all `spec.hooks` references
+- `tests/matmaster/core/test_tool_runner.py` — remove BaseHook/HookAction imports
+- `tests/matmaster/core/agent_kernel_test_helpers.py` — remove old hook helper references
+- `tests/matmaster/services/test_agent_run_stream.py` — update `spec.hooks = []`
+- `tests/matmaster/test_validation.py` — remove Hook/HookAction imports
+- `tests/matmaster/devshell/test_stream_hook.py` — remove HookAction import
 
 - [ ] **Step 4: Run import check**
 
@@ -705,7 +731,8 @@ In `matmaster/core/exp.py`, in `build_runtime()`:
   # 6. HookExecutor
   hook_executor = HookExecutor()
   ```
-- In the final `spec.model_copy(update={...})` at line 309, replace `'hooks': hooks,` with `'hook_executor': hook_executor,`
+- In the final `spec.model_copy(update={...})`, replace `'hooks': hooks,` with `'hook_executor': hook_executor,`
+- Also inject session_id into `spec.meta` so the kernel can access it: add `'meta': {**spec.meta, 'session_id': ctx.session_id or ''},` to the update dict (needed for USER_PROMPT_SUBMIT context)
 
 - [ ] **Step 4: Wire RUN_START/END in run_stream**
 
@@ -774,29 +801,42 @@ with:
             await self._run_cleanup_callbacks()
 ```
 
-Note: For RUN_END, we need the spec reference in the finally block. Store it after build_runtime:
+The pattern for run_stream is:
 
 ```python
-        runtime_spec = None
+        hook_executor = None
+        last_reason = "error"  # safe default if generator aborts before terminal event
         try:
             runtime = await self.build_runtime(...)
-            runtime_spec = runtime.spec
-            ...
+            hook_executor = runtime.spec.hook_executor
+            ...existing stop_event/catalog injection...
+
             # Hook: RUN_START
-            if runtime_spec.hook_executor is not None:
-                await runtime_spec.hook_executor.emit(
+            if hook_executor is not None:
+                await hook_executor.emit(
                     HookEvent.RUN_START,
-                    RunContext(task_id=ctx.task_id, session_id=ctx.session_id or "", reason="startup"),
+                    RunContext(
+                        task_id=ctx.task_id,
+                        session_id=ctx.session_id or "",
+                        reason="startup",
+                    ),
                 )
+
             async for event in runtime.kernel.run_stream(...):
+                # Track terminal reason for RUN_END
+                if hasattr(event, 'reason'):
+                    last_reason = event.reason
                 yield event
         finally:
             # Hook: RUN_END
-            if runtime_spec is not None and runtime_spec.hook_executor is not None:
-                reason = "completed"  # Default; can be refined from terminal event
-                await runtime_spec.hook_executor.emit(
+            if hook_executor is not None:
+                await hook_executor.emit(
                     HookEvent.RUN_END,
-                    RunContext(task_id=ctx.task_id, session_id=ctx.session_id or "", reason=reason),
+                    RunContext(
+                        task_id=ctx.task_id,
+                        session_id=ctx.session_id or "",
+                        reason=last_reason,
+                    ),
                 )
             await self._run_cleanup_callbacks()
 ```
@@ -880,7 +920,7 @@ git commit -m "feat(hooks): wire HookExecutor creation, RUN_START/END, SUBAGENT_
 
 - [ ] **Step 1: Update FullToolRunner to accept HookExecutor**
 
-Add `hook_executor` parameter to `FullToolRunner.__init__`:
+Add `hook_executor` parameter to `FullToolRunner.__init__` (preserve all existing parameters):
 
 ```python
 def __init__(
@@ -893,9 +933,11 @@ def __init__(
     topology: RuntimeTopology,
     hook_executor: HookExecutor | None = None,
 ) -> None:
-    ...
+    # Keep all existing field assignments, just add:
     self._hook_executor = hook_executor
 ```
+
+Note: The actual codebase `__init__` may have additional parameters (e.g. `state`). Preserve them all -- only ADD `hook_executor`.
 
 Update the docstring to remove D-01 reference:
 
@@ -939,6 +981,10 @@ After each tool result is produced in Phase 2 (the `_execute_one` or gather resu
 
 ```python
             # Hook: POST_TOOL_CALL (rewrite then observe)
+            # Note: When multiple tools execute in parallel (asyncio.gather in Phase 2),
+            # each tool's POST_TOOL_CALL rewrite chain runs independently. The serial
+            # guarantee is per-tool (rewriters within one chain execute sequentially),
+            # not cross-tool. This is correct — each tool result is independent.
             if self._hook_executor is not None:
                 post_ctx = PostToolCallContext(
                     tool_name=tc.name,
@@ -950,7 +996,8 @@ After each tool result is produced in Phase 2 (the `_execute_one` or gather resu
                 tr = await self._hook_executor.emit_rewrite(
                     HookEvent.POST_TOOL_CALL, post_ctx, tr
                 )
-                # Update context with final result for observers
+                # Rebuild context with final result for observers.
+                # Required because PostToolCallContext is frozen — cannot mutate result field.
                 post_ctx_final = PostToolCallContext(
                     tool_name=tc.name,
                     tool_call_id=tc.id,
@@ -978,15 +1025,11 @@ from matmaster.core.hooks import (
 In `matmaster/core/exp.py` `build_runtime()`, where FullToolRunner is created (line 299):
 
 ```python
-        full_runner = FullToolRunner(
-            catalog=catalog,
-            structural_validation=structural_validation,
-            guard_pipeline=GuardPipeline(guards, read_tracker=self._read_tracker),
-            capability_policy=capability_policy,
-            scheduler=scheduler,
-            topology=topology,
-            hook_executor=hook_executor,
-        )
+        # Add hook_executor= to the EXISTING FullToolRunner(...) construction.
+        # Do NOT change any other arguments. The actual call already has
+        # catalog, structural_validation, guard_pipeline, capability_policy,
+        # scheduler, topology (and possibly state). Just append:
+        #     hook_executor=hook_executor,
 ```
 
 - [ ] **Step 6: Remove old hook imports from tool_runner.py**
@@ -1028,15 +1071,15 @@ In `_run_items()`, before line 191 (`UserMessage(content=task)`):
 
 ```python
         # Hook: USER_PROMPT_SUBMIT (rewrite then observe)
+        # session_id is accessed via spec.meta.get("session_id", "")
+        # which is populated by Exp.build_runtime from ctx.session_id
         if spec.hook_executor is not None:
-            prompt_ctx = UserPromptContext(
-                prompt=task,
-                session_id="",  # kernel doesn't have session_id; leave empty
-            )
+            _sid = spec.meta.get("session_id", "")
+            prompt_ctx = UserPromptContext(prompt=task, session_id=_sid)
             task = await spec.hook_executor.emit_rewrite(
                 HookEvent.USER_PROMPT_SUBMIT, prompt_ctx, task
             )
-            prompt_ctx_final = UserPromptContext(prompt=task, session_id="")
+            prompt_ctx_final = UserPromptContext(prompt=task, session_id=_sid)
             await spec.hook_executor.emit(HookEvent.USER_PROMPT_SUBMIT, prompt_ctx_final)
 
         state = _KernelState(
@@ -1136,6 +1179,14 @@ In `matmaster/devshell/stream_hook.py`:
 - Delete all old hook methods: `on_stream_chunk`, `pre_tool_call`, `post_tool_call`, `on_guard_blocked`, `on_segment_complete`
 - Keep `on_event()` and `__init__` intact
 
+- [ ] **Step 1b: Strip BaseHook from DevEventHook**
+
+In `matmaster/devshell/event_observer.py`:
+- Remove `from matmaster.core.hooks import BaseHook, HookAction`
+- Change class declaration from `class DevEventHook(BaseHook):` to `class DevEventHook:`
+- Delete all old hook methods: `pre_tool_call`, `post_tool_call`, `on_segment_complete`
+- Keep `on_event()` and `__init__` intact
+
 - [ ] **Step 2: Remove InlineToolRunner hook calls**
 
 In `matmaster/core/tool_runner.py`, if InlineToolRunner still exists:
@@ -1145,6 +1196,11 @@ In `matmaster/core/tool_runner.py`, if InlineToolRunner still exists:
 
 - [ ] **Step 3: Delete matmaster/hooks/ directory**
 
+First verify no active imports exist:
+```bash
+grep -rn "from matmaster.hooks" --include="*.py" matmaster/ src/ tests/
+```
+Expected: No matches. Then delete:
 ```bash
 rm -rf matmaster/hooks/
 ```
