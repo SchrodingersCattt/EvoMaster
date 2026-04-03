@@ -307,7 +307,6 @@ class TestMatMasterRunAgentE2E:
                     send_cb=mock_send_cb,
                     stop_event=threading.Event(),
                     mode='direct',
-                    reply_queue=None,
                     task_id='task-1',
                 )
             )
@@ -420,7 +419,6 @@ class TestMatMasterRunAgentE2E:
                     send_cb=AsyncMock(),
                     stop_event=threading.Event(),
                     mode='direct',
-                    reply_queue=None,
                     task_id=current_task_id,
                 )
             )
@@ -490,7 +488,6 @@ class TestMatMasterRunAgentE2E:
                     send_cb=mock_send_cb,
                     stop_event=threading.Event(),
                     mode='direct',
-                    reply_queue=None,
                     task_id='task-events-table-error',
                 )
             )
@@ -620,7 +617,6 @@ class TestMatMasterRunAgentE2E:
                     send_cb=mock_send_cb,
                     stop_event=threading.Event(),
                     mode='direct',
-                    reply_queue=None,
                     task_id='task-bohrium-event',
                 )
             )
@@ -707,7 +703,6 @@ class TestMatMasterRunAgentE2E:
                     send_cb=AsyncMock(),
                     stop_event=threading.Event(),
                     mode='direct',
-                    reply_queue=None,
                     task_id='task-bohrium-abort',
                 )
             )
@@ -783,7 +778,6 @@ class TestMatMasterRunAgentE2E:
                     send_cb=mock_send_cb,
                     stop_event=threading.Event(),
                     mode='direct',
-                    reply_queue=None,
                     task_id='task-bohrium-error',
                 )
             )

@@ -411,7 +411,6 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
                 send_cb=AsyncMock(),
                 stop_event=threading.Event(),
                 mode='direct',
-                reply_queue=None,
                 task_id='task-spec-order',
             )
         )
@@ -514,7 +513,6 @@ def test_execution_binding_before_build_runtime(
                 send_cb=AsyncMock(),
                 stop_event=threading.Event(),
                 mode='direct',
-                reply_queue=None,
                 task_id='task-exec-bind',
             )
         )

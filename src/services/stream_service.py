@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
+from typing import Protocol, runtime_checkable
 
 from src.dao.redis_dao import (
     CONFIRMATION_CANCEL_VALUE,
@@ -21,7 +22,6 @@ from src.dao.redis_dao import (
 from src.models.chat import ChatSendRequest
 from src.services.agent_run_service import (
     AgentRunService,
-    ReplyQueueLike,
     get_agent_run_service,
 )
 from src.services.chat_history import ChatHistoryConverter
@@ -46,6 +46,17 @@ logger = logging.getLogger(__name__)
 
 # 进程内队列用的取消哨兵（get 时转为 None）
 _CANCEL_SENTINEL = object()
+
+
+@runtime_checkable
+class ReplyQueueLike(Protocol):
+    """Confirmation reply queue abstraction used by stream/chat endpoints."""
+
+    def put_content(self, content: str) -> None: ...
+
+    def put_cancel(self) -> None: ...
+
+    def get(self, timeout: float | None = None) -> str | None: ...
 
 
 def _should_emit_event_to_sse(event: dict) -> bool:

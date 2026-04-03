@@ -176,7 +176,6 @@ def _run_with_quota_mock(
                 send_cb=send_cb or AsyncMock(),
                 stop_event=stop_event or threading.Event(),
                 mode='direct',
-                reply_queue=None,
                 task_id='task-q',
             )
         )

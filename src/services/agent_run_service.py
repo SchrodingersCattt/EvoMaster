@@ -15,7 +15,6 @@ from collections.abc import Callable
 from contextlib import aclosing
 from functools import lru_cache
 from pathlib import Path
-from queue import Empty
 from typing import Any, Protocol, runtime_checkable
 
 from matmaster.core.playground import PlaygroundManager
@@ -98,23 +97,6 @@ def _build_workspace_upload_fn(
 
 
 @runtime_checkable
-class ReplyQueueLike(Protocol):
-    """Confirmation reply queue abstraction: put content/cancel, blocking get.
-
-    Used by _poll_reply_queue to bridge blocking queue reads into async context
-    via loop.run_in_executor.
-    """
-
-    def put_content(self, content: str) -> None: ...
-
-    def put_cancel(self) -> None: ...
-
-    def get(self, timeout: float | None = None) -> str | None:
-        """Blocking get. Returns None for cancel; raises queue.Empty on timeout."""
-        ...
-
-
-@runtime_checkable
 class StopEventLike(Protocol):
     """Stop signal abstraction: only requires is_set() -> bool.
 
@@ -122,22 +104,6 @@ class StopEventLike(Protocol):
     """
 
     def is_set(self) -> bool: ...
-
-
-async def _poll_reply_queue(
-    reply_queue: ReplyQueueLike, poll_sec: int = 1
-) -> str | None:
-    """Await a blocking reply queue in executor. Returns content or None for cancel.
-
-    Uses int poll_sec (not float) because RedisReplyQueue.get() coerces via
-    int(timeout) -- 0.5 becomes 0, triggering BLPOP timeout=0 (block forever).
-    """
-    loop = asyncio.get_running_loop()
-    while True:
-        try:
-            return await loop.run_in_executor(None, reply_queue.get, poll_sec)
-        except Empty:
-            continue
 
 
 async def _emit_error_and_close_fanout(
@@ -173,7 +139,6 @@ class AgentRunService:
         send_cb: Callable[[dict], Any],
         stop_event: StopEventLike,
         mode: str,
-        reply_queue: ReplyQueueLike | None,
         task_id: str,
         invocation_id: str | None = None,
         llm_override: str | None = None,

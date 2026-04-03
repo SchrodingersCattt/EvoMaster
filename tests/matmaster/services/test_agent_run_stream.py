@@ -11,6 +11,7 @@ all tests exercise run_agent() exclusively.
 from __future__ import annotations
 
 import asyncio
+import inspect
 from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -213,6 +214,18 @@ async def test_run_agent_stream_method_does_not_exist():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_signature_does_not_accept_reply_queue():
+    """Unused confirmation queue plumbing should not remain in run_agent()."""
+    from src.services.agent_run_service import AgentRunService
+
+    params = inspect.signature(AgentRunService.run_agent).parameters
+    assert 'reply_queue' not in params, (
+        "run_agent() should not accept reply_queue; "
+        "confirmation queue plumbing is no longer used"
+    )
+
+
+@pytest.mark.asyncio
 async def test_stream_events_reach_handlers_via_fanout():
     """Events from exp.run_stream() are dispatched through RunEventFanout to handlers."""
     thought = ThoughtEvent(source='agent', content='thinking...')
@@ -226,7 +239,6 @@ async def test_stream_events_reach_handlers_via_fanout():
             send_cb=AsyncMock(),
             stop_event=_make_stop_event(),
             mode='direct',
-            reply_queue=None,
             task_id='t1',
         )
 
@@ -251,7 +263,6 @@ async def test_source_normalization_on_events():
             send_cb=AsyncMock(),
             stop_event=_make_stop_event(),
             mode='direct',
-            reply_queue=None,
             task_id='t1',
         )
 
@@ -274,7 +285,6 @@ async def test_stream_closed_after_run_result():
             send_cb=AsyncMock(),
             stop_event=_make_stop_event(),
             mode='direct',
-            reply_queue=None,
             task_id='t1',
         )
 
@@ -297,7 +307,6 @@ async def test_cancelled_run_emits_cancelled_and_closed():
             send_cb=AsyncMock(),
             stop_event=_make_stop_event(),
             mode='direct',
-            reply_queue=None,
             task_id='t1',
         )
 
@@ -394,7 +403,6 @@ async def test_exception_emits_error_and_closed():
                 send_cb=AsyncMock(),
                 stop_event=_make_stop_event(),
                 mode='direct',
-                reply_queue=None,
                 task_id='t1',
             )
     finally:
@@ -416,7 +424,6 @@ async def test_successful_run_returns_true():
             send_cb=AsyncMock(),
             stop_event=_make_stop_event(),
             mode='direct',
-            reply_queue=None,
             task_id='t1',
         )
 
@@ -437,7 +444,6 @@ async def test_failed_run_returns_false_with_reason():
             send_cb=AsyncMock(),
             stop_event=_make_stop_event(),
             mode='direct',
-            reply_queue=None,
             task_id='t1',
         )
 
@@ -462,7 +468,6 @@ async def test_worker_mode_send_cb_receives_live_events():
             send_cb=AsyncMock(),
             stop_event=_make_stop_event(),
             mode='direct',
-            reply_queue=None,
             task_id='t1',
         )
 
@@ -488,7 +493,6 @@ async def test_persistence_receives_events():
             send_cb=AsyncMock(),
             stop_event=_make_stop_event(),
             mode='direct',
-            reply_queue=None,
             task_id='t1',
         )
 

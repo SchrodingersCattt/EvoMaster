@@ -3,9 +3,9 @@ event handler filtering, cross-pod reply queue.
 
 All external dependencies mocked per D-10.
 
-Phase 36 Plan 02: ConfirmationHook runtime plumbing removed. Confirmation
-recovery tests deleted. Reply-queue poll tests retained (dormant plumbing
-for future v2.3 bidirectional stream).
+Phase 36 Plan 02: confirmation runtime plumbing was removed from
+AgentRunService. Confirmation recovery tests are deleted and the old
+reply-queue poll bridge remains intentionally absent.
 """
 
 from __future__ import annotations
@@ -249,90 +249,17 @@ class TestEventHandlerPersistence:
 # -- Reply queue dormant plumbing (retained for v2.3) ----------------
 
 
-class _RedisCompatibleReplyQueue:
-    """Reply queue fake that enforces current Redis integer-timeout semantics."""
+def test_poll_reply_queue_removed_from_agent_run_service() -> None:
+    """Dead confirmation queue bridge should be removed from AgentRunService."""
+    module = pytest.importorskip(
+        "src.services.agent_run_service",
+        reason="src not available (isolation test)",
+    )
 
-    def __init__(self) -> None:
-        self._q: queue.Queue[str | None] = queue.Queue()
-        self.requested_timeouts: list[int] = []
-
-    def put_content(self, content: str) -> None:
-        self._q.put(content)
-
-    def put_cancel(self) -> None:
-        self._q.put(None)
-
-    def get(self, timeout: float | None = None) -> str | None:
-        if timeout is None or timeout < 1 or int(timeout) != timeout:
-            raise AssertionError(
-                "Redis-compatible bridge must poll with integer-second timeout"
-            )
-        sec = int(timeout)
-        self.requested_timeouts.append(sec)
-        try:
-            return self._q.get(timeout=sec)
-        except queue.Empty as exc:
-            raise queue.Empty("timeout") from exc
-
-
-class TestReplyQueueDormantPlumbing:
-    """_poll_reply_queue tests -- dormant plumbing for future v2.3 bidirectional stream."""
-
-    @pytest.mark.asyncio
-    async def test_poll_reply_queue_uses_integer_second_timeout(self) -> None:
-        _poll_reply_queue = pytest.importorskip(
-            "src.services.agent_run_service",
-            reason="src not available (isolation test)",
-        )._poll_reply_queue
-
-        reply_queue = _RedisCompatibleReplyQueue()
-        reply_queue.put_content("approved")
-
-        result = await _poll_reply_queue(reply_queue)
-
-        assert result == "approved"
-        assert 1 in reply_queue.requested_timeouts
-
-    @pytest.mark.asyncio
-    async def test_poll_reply_queue_cancel_returns_none(self) -> None:
-        _poll_reply_queue = pytest.importorskip(
-            "src.services.agent_run_service",
-            reason="src not available (isolation test)",
-        )._poll_reply_queue
-
-        reply_queue = _RedisCompatibleReplyQueue()
-        reply_queue.put_cancel()
-
-        result = await _poll_reply_queue(reply_queue)
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_poll_reply_queue_retries_on_empty(self) -> None:
-        _poll_reply_queue = pytest.importorskip(
-            "src.services.agent_run_service",
-            reason="src not available (isolation test)",
-        )._poll_reply_queue
-
-        reply_queue = _RedisCompatibleReplyQueue()
-        threading.Timer(0.05, reply_queue.put_content, args=("delayed",)).start()
-
-        result = await asyncio.wait_for(_poll_reply_queue(reply_queue), timeout=3.0)
-
-        assert result == "delayed"
-        assert len(reply_queue.requested_timeouts) >= 1
-
-    @pytest.mark.asyncio
-    async def test_poll_reply_queue_timeout_via_wait_for(self) -> None:
-        _poll_reply_queue = pytest.importorskip(
-            "src.services.agent_run_service",
-            reason="src not available (isolation test)",
-        )._poll_reply_queue
-
-        reply_queue = _RedisCompatibleReplyQueue()
-
-        with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(_poll_reply_queue(reply_queue), timeout=0.1)
+    assert not hasattr(module, "_poll_reply_queue"), (
+        "_poll_reply_queue should be removed; "
+        "AgentRunService no longer uses confirmation reply queues"
+    )
 
 
 # -- Negative assertion: ConfirmationHook no longer importable -------

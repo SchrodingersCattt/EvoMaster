@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
-from src.services.stream_service import RedisReplyQueue
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.build_info import get_build_version
@@ -194,7 +193,6 @@ def _run_worker_loop() -> None:
             # 不在此处写 DB：run_agent 内 event_callback 已写，此处再写会导致同一条事件落库两次
             redis_dao.publish_stream_event(_sid, p)
 
-        reply_queue: RedisReplyQueue = RedisReplyQueue(session_id)
         stop_ev = RedisBackedStopEvent(session_id, task_id)
         acquired = False
 
@@ -257,7 +255,6 @@ def _run_worker_loop() -> None:
                         send_cb=send_cb,
                         stop_event=stop_ev,
                         mode=mode,
-                        reply_queue=reply_queue,
                         task_id=task_id,
                         invocation_id=invocation_id,
                         llm_override=llm_override,
