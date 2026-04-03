@@ -1,9 +1,9 @@
 # 自动评测流水线（父子流水线架构）
 #
 # 架构说明：
-#   1. 父流水线：构建镜像 → 触发子流水线
-#   2. 子流水线（baseline-eval-child.yml）：每个 capability 一个独立 manual job
-#      镜像构建完成后，7 个能力类别各出一个手动触发的评测 job，按需点击运行。
+#   1. 父流水线：构建镜像 + 动态生成子流水线 YAML → 触发子流水线
+#   2. 子流水线（动态生成）：自动扫描 evaluation/question_bank/ 下的 capability，
+#      每个 capability 一个独立 manual job，按需点击运行。
 #
 # 评测模式（EVAL_RUNNER）：
 #   claude_cli（默认） — 外部 baseline：prepare workspace → claude -p 跑题 → finalize
@@ -124,17 +124,41 @@ baseline-eval-build:
     - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "baseline-eval"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "baseline-eval"'
 
-# ── Job 2: 触发子流水线（每个 capability 一个 manual job）──────────────────────
+# ── Job 2: 扫描题库，动态生成子流水线 YAML ───────────────────────────────────
+# 与镜像构建并行运行（同在 build stage），只需 Python + PyYAML
+generate-eval-pipeline:
+  stage: build
+  image: python:3.13-slim
+  script:
+    - pip install pyyaml -q
+    - python ci/generate_eval_child_pipeline.py
+    - echo "--- generated child pipeline ---"
+    - cat ci/generated-eval-child.yml
+  artifacts:
+    paths:
+      - ci/generated-eval-child.yml
+    expire_in: 1 day
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "baseline-eval"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "baseline-eval"'
+  tags:
+    - k8s-runner-ack
+
+# ── Job 3: 触发动态子流水线 ──────────────────────────────────────────────────
 baseline-eval-trigger:
   stage: sync-question-catalog
   needs:
     - job: baseline-eval-build
       artifacts: true
+    - job: generate-eval-pipeline
+      artifacts: true
   variables:
     DYNAMIC_IMAGE: $DYNAMIC_IMAGE
   trigger:
     include:
-      - local: ci/baseline-eval-child.yml
+      - artifact: ci/generated-eval-child.yml
+        job: generate-eval-pipeline
     strategy: depend
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
