@@ -47,6 +47,26 @@ BUILTIN_META: dict[str, tuple[ToolPlane, str, bool, int]] = {
     "monitor_job": (ToolPlane.SESSION_FS, "external_effect", False, 0),
 }
 
+BUILTIN_STOP_MODES: dict[str, tuple[str, str]] = {
+    # tool_name: (state_mode, stop_mode)
+    "execute_bash": ("stateless", "cancellable"),
+    "read_file": ("stateless", "cancellable"),
+    "write_file": ("stateless", "cancellable"),
+    "edit_file": ("stateless", "cancellable"),
+    "list_dir": ("stateless", "cancellable"),
+    "glob": ("stateless", "cancellable"),
+    "grep": ("stateless", "cancellable"),
+    "task_create": ("stateless", "cancellable"),
+    "task_get": ("stateless", "cancellable"),
+    "task_list": ("stateless", "cancellable"),
+    "task_update": ("stateless", "cancellable"),
+    "task_complete": ("stateless", "cancellable"),
+    "mm_web_search": ("stateless", "best_effort"),
+    "web_fetch": ("stateless", "best_effort"),
+    "spawn": ("persistent", "non_cancellable"),
+    "monitor_job": ("persistent", "best_effort"),
+}
+
 
 class ToolCompiler:
     """Compile a Tool plus topology metadata into a ToolInstance."""
@@ -86,10 +106,15 @@ class ToolCompiler:
             fast_path_eligible=fast_path,
             max_result_chars=max_result_chars,
         )
+        state_mode, stop_mode = BUILTIN_STOP_MODES.get(
+            tool.name, ("stateless", "cancellable")
+        )
         binding = ToolBinding(
             binding_key=f"{plane.value}:{tool.name}",
             plane=plane,
             resource_claims=claims,
+            state_mode=state_mode,
+            stop_mode=stop_mode,
         )
         validator = None
         if hasattr(tool, "validate_input") and callable(tool.validate_input):

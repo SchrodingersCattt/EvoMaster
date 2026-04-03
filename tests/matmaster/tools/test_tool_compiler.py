@@ -270,6 +270,52 @@ class TestToolCompilerInputValidator:
         assert instance.input_validator is None
 
 
+class TestToolCompilerStopModes:
+    """Verify ToolCompiler populates state_mode/stop_mode from BUILTIN_STOP_MODES."""
+
+    def test_compile_bash_stop_modes(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("execute_bash"), _make_topology(), source="builtin")
+        assert instance.tool_binding.state_mode == "stateless"
+        assert instance.tool_binding.stop_mode == "cancellable"
+
+    def test_compile_web_search_stop_modes(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("mm_web_search"), _make_topology(), source="builtin")
+        assert instance.tool_binding.state_mode == "stateless"
+        assert instance.tool_binding.stop_mode == "best_effort"
+
+    def test_compile_web_fetch_stop_modes(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("web_fetch"), _make_topology(), source="builtin")
+        assert instance.tool_binding.state_mode == "stateless"
+        assert instance.tool_binding.stop_mode == "best_effort"
+
+    def test_compile_spawn_stop_modes(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("spawn"), _make_topology(), source="builtin")
+        assert instance.tool_binding.state_mode == "persistent"
+        assert instance.tool_binding.stop_mode == "non_cancellable"
+
+    def test_compile_monitor_job_stop_modes(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("monitor_job"), _make_topology(), source="builtin")
+        assert instance.tool_binding.state_mode == "persistent"
+        assert instance.tool_binding.stop_mode == "best_effort"
+
+    def test_compile_read_file_stop_modes(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("read_file"), _make_topology(), source="builtin")
+        assert instance.tool_binding.state_mode == "stateless"
+        assert instance.tool_binding.stop_mode == "cancellable"
+
+    def test_compile_unknown_tool_default_stop_modes(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("custom_mcp_tool"), _make_topology(), source="mcp")
+        assert instance.tool_binding.state_mode == "stateless"
+        assert instance.tool_binding.stop_mode == "cancellable"
+
+
 class TestToolCatalogCompilerDelegation:
     def test_get_tool_uses_compiler(self) -> None:
         registry = ToolRegistry()
