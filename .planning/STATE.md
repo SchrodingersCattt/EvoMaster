@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
 status: Ready for next milestone
-stopped_at: Completed 35-03-PLAN.md
-last_updated: "2026-04-03T05:28:04.650Z"
+stopped_at: Phase 36 context gathered
+last_updated: "2026-04-03T05:47:39.726Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 5
@@ -52,6 +52,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-03T05:07:48.584Z
-Stopped at: Completed 35-03-PLAN.md
-Resume file: None
+Last session: 2026-04-03T05:47:39.721Z
+Stopped at: Phase 36 context gathered
+Resume file: .planning/phases/36-debus-scheduling/36-CONTEXT.md
