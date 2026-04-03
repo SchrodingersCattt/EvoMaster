@@ -13,6 +13,21 @@ from pathlib import Path
 from typing import Any
 
 
+class _SessionConfig:
+    """Minimal config object exposing workspace_path.
+
+    MCPTool.execute reads ``session.config.workspace_path`` to decide
+    whether the path adaptor should upload local files to OSS.  This
+    lightweight stand-in avoids pulling in the full evomaster
+    SessionConfig / Pydantic model.
+    """
+
+    __slots__ = ('workspace_path',)
+
+    def __init__(self, workspace_path: str) -> None:
+        self.workspace_path = workspace_path
+
+
 class LocalSession:
     """Local session executing commands via subprocess.
 
@@ -23,6 +38,7 @@ class LocalSession:
     def __init__(self, workspace_path: Path, *, timeout: int = 300) -> None:
         self._workspace_path = Path(workspace_path)
         self._timeout = timeout
+        self.config = _SessionConfig(str(self._workspace_path))
 
     def open(self) -> None:
         """No-op for local sessions."""
