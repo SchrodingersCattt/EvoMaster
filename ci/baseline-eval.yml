@@ -121,6 +121,8 @@ baseline-eval-build:
     expire_in: 1 day
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "baseline-eval"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "baseline-eval"'
 
 # ── Job 2: 触发子流水线（每个 capability 一个 manual job）──────────────────────
 baseline-eval-trigger:
@@ -136,3 +138,5 @@ baseline-eval-trigger:
     strategy: depend
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "baseline-eval"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "baseline-eval"'
