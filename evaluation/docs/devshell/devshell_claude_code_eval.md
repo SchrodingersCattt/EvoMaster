@@ -69,7 +69,7 @@ uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --
 
 1. 用 `read_file` 打开该题的 YAML，**从该题 `- id:` 一直读到下一题 `- id:`（或文件末尾）**，确保 `scoring_checklist` 与 `reference_answers` 全部载入；列出 **所有** checklist 条目并输出 **「checklist 共 N 条」** 作为自检（典型题包含 correctness → grounding → efficiency 三类 axis；`duration_budget` 与 `token_budget_total` 通常位于 checklist **末尾**，切勿因读取截断而遗漏）。
 2. 打开对应 **`workspaces/<task_id>/`**，对照题目输出要求**逐项核对**实际产物（文件名、格式、**内容**）。
-3. 再对照 `raw_runs.jsonl` 中该条的 `devshell_exit_code` 与 `devshell_summary`（辅助；不可替代第 2 步对文件的核对）。**效率类 checklist**（`duration_budget`、`token_budget_total`）的实测值也在此文件：`duration_ms` 对应耗时；**token** 与程序化评测、ingest 顶层 `tokens` 对齐：用 **`usage` 的 cache 调整后总量**（即 `total_tokens − cache_read_tokens`（或 OpenAI/Anthropic 等价字段），与 `pending_ingest` 里 `item.tokens` / `extra.tokens_effective` 同口径），**不要**仅用未扣 cache 的 `total_tokens` 与预算比。预算上限见题目 YAML `reference_answers` 中同名 key 的 `max` 字段（可能通过 YAML 锚点 `*idXXX` 引用首题定义）。
+3. 再对照 `raw_runs.jsonl` 中该条的 `devshell_exit_code` 与 `devshell_summary`（辅助；不可替代第 2 步对文件的核对）。**效率类 checklist**（`duration_budget`、`token_budget_total`）的实测值也在此文件：`duration_ms` 对应耗时；**token** 与程序化评测、ingest 顶层 `tokens` 对齐：用 **最后一轮 LLM** 的原始 `total_tokens`（**不**扣 cache；有 `usage_vendor_by_turn` 时取数组**最后一项**的 `total_tokens`，否则用整表 `usage.total_tokens`），与 `pending_ingest` 里 `item.tokens` / `extra.tokens_last_turn` 同口径。预算上限见题目 YAML `reference_answers` 中同名 key 的 `max` 字段（可能通过 YAML 锚点 `*idXXX` 引用首题定义）。
 4. 给出结论：**通过 / 部分通过 / 未通过**，逐条 checklist 说明证据（引用路径或摘录）。**写入 `score_reason`（第 4 节上报）时**，请使用 **Markdown**，每条 checklist 对应 **一条无序列表项**（见第 4 节「`score_reason` 格式」），**不要**写成一行里用分号串起来的长句（难读、难在工具里对比）。
 5. **百分制得分（必答）**：在结论末尾给出**一个具体分数**，与 MATTER 题库口径对齐，便于对比与记录。
    - 对单题：读取该题 `scoring_checklist` 中每条目的 `weight`（未写则按 **1.0**）。对每条判定 **通过 / 部分通过 / 未通过**（部分通过计 **0.5 × 该条 weight 的满分贡献**；仅当证据显示「明显朝目标推进但未完全满足」时使用，并一句话说明理由）。
@@ -112,7 +112,7 @@ uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --
 - **no_retries**：通过 — 日志无重复相同补氢
 - **efficiency_judge**：通过 — 流程直接
 - **duration_budget**：通过 — `duration_ms=116567` < 7200000
-- **token_budget_total**：通过 — `run_total_tokens_effective=17989`（或写明与 `item.tokens` 一致）< 50000
+- **token_budget_total**：通过 — `last_turn_total_tokens=17989`（或写明与 `item.tokens` 一致）< 50000
 ```
 
 **不推荐**：把上述信息压成一句「`checklist 共9条…；file_exists…；target_formula…；…`」——在报表里可读性差。

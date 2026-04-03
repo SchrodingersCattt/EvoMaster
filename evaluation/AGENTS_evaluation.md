@@ -150,7 +150,7 @@ evaluation/question_bank/
 | `event_type_called` | 检查事件类型是否被触发 |
 | `source_type_used` | 检查数据源类型 |
 | `call_count_range` | 分析工具调用次数（建议也配上 ref） |
-| `token_budget` | 用 **整次 run** 的 cache 调整后总量：``EvidenceBundle.token_usage_run.total_tokens_effective``（轨迹为各步 ``meta.usage`` 累加；无 run 数据时回退 ``token_usage_last_turn.total_tokens_effective``）。无轨迹、仅 devshell summary 时 ``token_usage_run`` 与 ``token_usage_last_turn`` 同为整表 ``usage``，与 ingest ``item["tokens"]`` / ``extract_total_tokens`` 口径对齐；建议配上 ref，格式同 `duration_budget`） |
+| `token_budget` | 用 **最后一轮 LLM** 的原始 ``total_tokens``（**不**扣 cache）：``EvidenceBundle.token_usage_last_turn.total_tokens``（轨迹取 max ``step_id`` 的 ``meta.usage``；无 ``total_tokens`` 时用 prompt+completion 推导）。ingest 顶层 ``item["tokens"]`` / ``extra["tokens_last_turn"]`` 与 :func:`evaluation.eval_ingest_client.extract_ingest_tokens` 对齐：有 ``usage_vendor_by_turn`` 时取最后一项的 ``total_tokens``，否则用 ``summary.usage.total_tokens``（整表累加标量）。建议配上 ref，格式同 `duration_budget`） |
 
 ---
 

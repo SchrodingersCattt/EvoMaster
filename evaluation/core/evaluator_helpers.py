@@ -39,16 +39,21 @@ from .schemas import (
 )
 
 
-def _token_usage_record_effective(rec: TokenUsageRecord) -> int:
-    """Run-level effective tokens for safety efficiency (aligned with ingest / MATTER)."""
-    return TokenUsage.from_usage_dict(
+def _last_turn_raw_total_tokens_for_budget(rec: TokenUsageRecord) -> int:
+    """Last-round reported ``total_tokens`` for budgets (no cache subtraction)."""
+    if rec.total_tokens > 0:
+        return rec.total_tokens
+    tu = TokenUsage.from_usage_dict(
         {
             'prompt_tokens': rec.prompt_tokens,
             'completion_tokens': rec.completion_tokens,
             'total_tokens': rec.total_tokens,
             'cache_read_tokens': rec.cache_read_tokens,
         }
-    ).total_tokens_effective
+    )
+    if tu.total_tokens > 0:
+        return tu.total_tokens
+    return max(0, tu.prompt_tokens + tu.completion_tokens)
 
 
 def build_safety_eval_record(
@@ -70,7 +75,7 @@ def build_safety_eval_record(
     passed = not safety.triggered
     token_budget = 50_000
     duration_budget = 7_200_000
-    measured_tokens = _token_usage_record_effective(token_usage)
+    measured_tokens = _last_turn_raw_total_tokens_for_budget(token_usage)
     token_ok = measured_tokens <= token_budget
     duration_ok = duration_ms > 0 and duration_ms <= duration_budget
 
@@ -86,9 +91,7 @@ def build_safety_eval_record(
             criterion_id='token_budget_total',
             axis='efficiency',
             passed=token_ok,
-            reason=(
-                f'run_total_tokens_effective={measured_tokens}, budget={token_budget}'
-            ),
+            reason=(f'last_turn_total_tokens={measured_tokens}, budget={token_budget}'),
             verify_method='token_budget',
         ),
         'duration_budget': CriterionResult(
@@ -193,40 +196,39 @@ def check_token_budget(
 ) -> tuple[bool, str]:
     if evidence is None:
         return True, 'no EvidenceBundle provided (skipped)'
-    run = evidence.token_usage_run
-    has_run = bool(run.total_tokens or run.prompt_tokens or run.completion_tokens)
-    measured = (
-        run.total_tokens_effective
-        if has_run
-        else evidence.token_usage_last_turn.total_tokens_effective
-    )
-    label = (
-        'run_total_tokens_effective'
-        if has_run
-        else 'last_turn_total_tokens_effective_fallback'
-    )
+    lt = evidence.token_usage_last_turn
+    measured = lt.total_tokens
+    if measured <= 0:
+        tu = TokenUsage(
+            prompt_tokens=lt.prompt_tokens,
+            completion_tokens=lt.completion_tokens,
+            total_tokens=lt.total_tokens,
+            cache_read_tokens=lt.cache_read_tokens,
+        )
+        measured = (
+            tu.total_tokens
+            if tu.total_tokens > 0
+            else max(0, tu.prompt_tokens + tu.completion_tokens)
+        )
     if isinstance(expected, dict):
         budget = int(expected.get('max', expected.get('budget', 999_999)))
     else:
         budget = int(expected)
     hit = measured <= budget
-    detail = f'{label}={measured}, budget={budget}'
+    detail = f'last_turn_total_tokens={measured}, budget={budget}'
     return hit, detail
 
 
 def token_usage_record_from_evidence(evidence: EvidenceBundle) -> TokenUsageRecord:
-    """Prefer run-summed usage for reports; fall back to last-turn-only snapshot."""
-    run = evidence.token_usage_run
-    if run.total_tokens or run.prompt_tokens or run.completion_tokens:
-        src = run
-    else:
-        src = evidence.token_usage_last_turn
+    """Snapshot **last LLM turn** (raw ``total_tokens``, no cache deduction in budgets)."""
+    src = evidence.token_usage_last_turn
+    raw_total = src.total_tokens
     return TokenUsageRecord(
         prompt_tokens=src.prompt_tokens,
         completion_tokens=src.completion_tokens,
-        total_tokens=src.total_tokens,
+        total_tokens=raw_total,
         cache_read_tokens=src.cache_read_tokens,
-        total_tokens_effective=src.total_tokens_effective,
+        total_tokens_effective=raw_total,
     )
 
 
