@@ -34,6 +34,7 @@ from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.messages import ToolCallData
+from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import ToolExecutionContext as _ExecCtx, ToolInstance
 from matmaster.types.topology import RuntimeTopology
 
@@ -213,6 +214,7 @@ class FullToolRunner:
         capability_policy: CapabilityPolicy,
         scheduler: ToolScheduler,
         topology: RuntimeTopology,
+        state: ToolRunnerState | None = None,
     ) -> None:
         self._catalog = catalog
         self._validation = structural_validation
@@ -220,6 +222,11 @@ class FullToolRunner:
         self._policy = capability_policy
         self._scheduler = scheduler
         self._topology = topology
+        self._state = state or ToolRunnerState()
+
+    @property
+    def state(self) -> ToolRunnerState:
+        return self._state
 
     def _truncate_result(
         self, tr: ToolResult, max_chars: int, tool_call_id: str
@@ -323,7 +330,10 @@ class FullToolRunner:
             # 2b. input_validator
             if instance.input_validator is not None:
                 try:
-                    iv_decision = await instance.input_validator(effective_args)
+                    iv_decision = await instance.input_validator(
+                        effective_args,
+                        self._state,
+                    )
                 except Exception as exc:
                     tr = ToolResult(
                         status="error",
@@ -383,7 +393,10 @@ class FullToolRunner:
 
         # ── Phase 2: Concurrent execution ──────────────────
         if approved:
-            exec_ctx = _ExecCtx(stop_event=ctx.stop_event)
+            exec_ctx = _ExecCtx(
+                stop_event=ctx.stop_event,
+                runner_state=self._state,
+            )
             await asyncio.gather(
                 *(
                     self._execute_one(

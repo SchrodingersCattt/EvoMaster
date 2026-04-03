@@ -7,6 +7,7 @@ from typing import Any, ClassVar
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.builtin.task._store import TaskStore
+from matmaster.types.tool_spec import ResourceClaim
 
 
 class TaskUpdateTool(BuiltinTool):
@@ -38,6 +39,10 @@ class TaskUpdateTool(BuiltinTool):
         },
         "required": ["task_id", "subtask_index", "status"],
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="task-store", mode="exclusive"),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset({"task.write"})
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         if self._workdir is None:

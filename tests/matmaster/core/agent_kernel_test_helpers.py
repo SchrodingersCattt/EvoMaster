@@ -252,12 +252,10 @@ class _SimpleTestToolRunner:
         catalog: ToolCatalog,
         guards: list[Any] | None = None,
         hooks: list[Any] | None = None,
-        read_tracker: Any = None,
     ) -> None:
         self._catalog = catalog
         self._guards = guards or []
         self._hooks = hooks or []
-        self._read_tracker = read_tracker
 
     async def execute_batch(
         self,
@@ -275,7 +273,7 @@ class _SimpleTestToolRunner:
         )
         from matmaster.tools.tool_result import normalize_tool_result
 
-        guard_pipeline = GuardPipeline(self._guards, read_tracker=self._read_tracker)
+        guard_pipeline = GuardPipeline(self._guards)
 
         results: list[tuple[ToolCallData, ToolResult]] = []
         for tc in tool_calls:
@@ -355,6 +353,7 @@ def _make_spec(
         llm_provider=provider or MockLLMProvider(),
         tool_catalog=catalog,
         tool_runner=runner,
+        runtime_topology=catalog._topology,
         guards=guards or [],
         hooks=hooks or [],
         max_turns=max_turns,

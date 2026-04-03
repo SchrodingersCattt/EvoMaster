@@ -8,9 +8,11 @@ import pytest
 from pydantic import ValidationError
 
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import (
     ResourceClaim,
     ToolBinding,
+    ToolExecutionContext,
     ToolInstance,
     ToolSpec,
 )
@@ -146,6 +148,15 @@ class TestToolInstance:
         assert instance.tool_spec.tool_name == "bash"
         assert instance.tool_binding.plane == ToolPlane.SESSION_SHELL
         assert callable(instance.tool_executor)
+
+
+class TestToolExecutionContext:
+    def test_tool_execution_context_accepts_runner_state(self) -> None:
+        state = ToolRunnerState()
+
+        ctx = ToolExecutionContext(runner_state=state)
+
+        assert ctx.runner_state is state
 
 
 class TestToolSpecNewFields:

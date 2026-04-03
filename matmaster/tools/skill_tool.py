@@ -15,7 +15,11 @@ import logging
 import shlex
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
+
+from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
+from matmaster.types.topology import ToolPlane
 
 if TYPE_CHECKING:
     from matmaster.skills.registry import Skill, SkillRegistry
@@ -28,6 +32,16 @@ class SkillTool:
 
     Satisfies the matmaster ``Tool`` Protocol (name/description/json_schema/execute).
     """
+
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = ()
+    capabilities: ClassVar[frozenset[str]] = frozenset({"skill.dispatch"})
+    effect_level: ClassVar[str] = "local_mutation"
+    fast_path_eligible: ClassVar[bool] = False
+    max_result_chars: ClassVar[int] = 0
+    plane: ClassVar[ToolPlane] = ToolPlane.CONTROL_PLANE
+    state_mode: ClassVar[str] = "stateless"
+    stop_mode: ClassVar[str] = "cancellable"
+    exposed_to_model: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -53,6 +67,12 @@ class SkillTool:
             "'get_reference' fetches a specific reference file, "
             "'run_script' executes a script from the skill."
         )
+
+    def describe(self, ctx: ToolDescriptionContext | None = None) -> str:
+        return self.description
+
+    def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
+        return None
 
     @property
     def json_schema(self) -> dict[str, Any]:
@@ -94,6 +114,13 @@ class SkillTool:
 
     async def execute(self, arguments: dict[str, Any]) -> str:
         return await asyncio.to_thread(self._execute_sync, arguments)
+
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: ToolExecutionContext | None,
+    ) -> str:
+        return await self.execute(arguments)
 
     def _execute_sync(self, arguments: dict[str, Any]) -> str:
         """Synchronous execution body -- wrapped by execute() via to_thread."""

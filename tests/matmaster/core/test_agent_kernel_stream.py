@@ -473,6 +473,7 @@ class TestGap3CatalogVersionInvalidation:
         from unittest.mock import MagicMock, PropertyMock
 
         from matmaster.core.agent import AgentKernel
+        from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 
         provider = ContentOnlyProvider()
         registry, _ = _make_tool_registry()
@@ -495,6 +496,8 @@ class TestGap3CatalogVersionInvalidation:
         # Catalog's build_definitions should have been called
         assert mock_catalog.build_definitions.called, \
             "tool_catalog.build_definitions() should be called when catalog is present"
+        args, _ = mock_catalog.build_definitions.call_args
+        assert isinstance(args[0], ToolDescriptionContext)
 
     @pytest.mark.asyncio
     async def test_catalog_version_no_refresh_when_unchanged(self) -> None:
@@ -502,6 +505,7 @@ class TestGap3CatalogVersionInvalidation:
         from unittest.mock import MagicMock, PropertyMock
 
         from matmaster.core.agent import AgentKernel
+        from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 
         # Provider that makes 2 turns (tool call then natural finish)
         provider = ToolCallStreamProvider()
@@ -526,3 +530,5 @@ class TestGap3CatalogVersionInvalidation:
         build_calls = mock_catalog.build_definitions.call_count
         assert build_calls == 1, \
             f"build_definitions should be called once (caching), got {build_calls}"
+        args, _ = mock_catalog.build_definitions.call_args
+        assert isinstance(args[0], ToolDescriptionContext)

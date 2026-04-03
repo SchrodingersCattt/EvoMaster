@@ -8,6 +8,8 @@ from typing import Any, ClassVar
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
 
 from ._constants import _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS
 from ._lifecycle import _run_lifecycle
@@ -106,6 +108,15 @@ class MonitorJobTool(BuiltinTool):
         },
         'required': ['job_id', 'software'],
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource='workspace+artifact-sync', mode='exclusive'),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset(
+        {'job.monitor', 'artifact.download'}
+    )
+    effect_level: ClassVar[str] = 'external_effect'
+    plane: ClassVar[ToolPlane] = ToolPlane.EXTERNAL_SERVICE
+    stop_mode: ClassVar[str] = 'best_effort'
 
     def _execute(self, arguments: dict[str, Any]) -> ToolResult:
         session = self._require_session()

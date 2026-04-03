@@ -12,6 +12,7 @@ from matmaster.tools.lazy_mcp import (
 )
 from matmaster.tools.tool_registry import Tool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.topology import ToolPlane
 
 
 class FakeConnector:
@@ -57,6 +58,35 @@ class TestLazyMCPToolProtocol:
         assert tool.name == "mat_sg_build_bulk"
         assert tool.description == "Build bulk structure"
         assert tool.json_schema == schema
+
+    def test_protocol_properties_come_from_runtime_meta(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="t",
+            remote_tool_name="t",
+            description="d",
+            input_schema={},
+            connector=connector,
+            runtime_meta={
+                "plane": "external_service",
+                "effect_level": "external_effect",
+                "capabilities": ["materials.build"],
+                "resource_claims": [
+                    {"resource": "web", "mode": "counted", "max_concurrent": 2}
+                ],
+                "stop_mode": "best_effort",
+                "max_result_chars": 123,
+            },
+        )
+
+        assert tool.plane == ToolPlane.EXTERNAL_SERVICE
+        assert tool.effect_level == "external_effect"
+        assert tool.capabilities == frozenset({"materials.build"})
+        assert tool.stop_mode == "best_effort"
+        assert tool.max_result_chars == 123
+        assert tool.describe(None) == "d"
+        assert tool.prompt() is None
 
 
 class TestLazyMCPToolExecution:

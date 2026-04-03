@@ -14,8 +14,24 @@ import yaml as _yaml
 
 from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 from matmaster.core.exp import Exp
+from matmaster.tools.tool_result import normalize_tool_result
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
+
+
+async def _execute_use_skill(
+    registry: ToolRegistry,
+    *,
+    skill_name: str,
+    action: str = "get_info",
+):
+    """Execute use_skill through the registered tool instance."""
+    skill_tool = registry.get_raw("use_skill")
+    assert skill_tool is not None
+    raw_result = await skill_tool.execute(
+        {"skill_name": skill_name, "action": action}
+    )
+    return normalize_tool_result(raw_result)
 
 
 class TestLazyMCPIntegration:
@@ -87,9 +103,7 @@ class TestLazyMCPIntegration:
         assert 'mat_sg_build_bulk' not in registry
 
         # Simulate skill trigger via use_skill tool
-        result = await registry.execute(
-            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
-        )
+        result = await _execute_use_skill(registry, skill_name="test-skill")
 
         # Verify use_skill returned successfully
         assert result.status == 'success', f"use_skill failed: {result.content}"
@@ -136,15 +150,11 @@ class TestLazyMCPIntegration:
         exp._init_skill_tools(ctx, registry)
 
         # Trigger first skill
-        await registry.execute(
-            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
-        )
+        await _execute_use_skill(registry, skill_name="test-skill")
         assert "mat_sg_build_bulk" in registry
 
         # Trigger second skill — should NOT duplicate
-        await registry.execute(
-            "use_skill", {"skill_name": "second-skill", "action": "get_info"}
-        )
+        await _execute_use_skill(registry, skill_name="second-skill")
         # Still only one mat_sg_build_bulk
         assert 'mat_sg_build_bulk' in registry
 
@@ -189,9 +199,7 @@ class TestLazyMCPIntegration:
         exp._init_skill_tools(ctx, registry)
 
         # Trigger skill with uncached server
-        result = await registry.execute(
-            "use_skill", {"skill_name": "uncached-skill", "action": "get_info"}
-        )
+        result = await _execute_use_skill(registry, skill_name="uncached-skill")
         assert result.status == "success"
 
         # No tools injected (cache miss)
@@ -249,9 +257,7 @@ class TestExpMCPSelfLoad:
         assert 'use_skill' in registry
 
         # Trigger skill to verify lazy tools get injected
-        result = await registry.execute(
-            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
-        )
+        result = await _execute_use_skill(registry, skill_name="test-skill")
         assert result.status == "success", f"use_skill failed: {result.content}"
         assert "mat_sg_build_bulk" in registry
 

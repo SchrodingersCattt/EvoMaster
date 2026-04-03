@@ -15,6 +15,9 @@ import asyncio
 import sys
 from typing import Any, ClassVar
 
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
+
 from .base import BuiltinTool
 
 # Proxy clear prefix -- injected before each new command to prevent
@@ -31,13 +34,7 @@ class BashTool(BuiltinTool):
     """Execute bash commands in the session shell."""
 
     name: ClassVar[str] = 'execute_bash'
-    description: ClassVar[str] = (
-        'Execute a bash command in the session shell.\n\n'
-        'Do not use bash for: cat/head/tail/sed/awk/find/ls/grep/rg/echo. '
-        'Use read_file, edit_file, write_file, glob, grep instead.\n\n'
-        'Paths: local/devshell cwd is the task workspace; do not assume /share exists. '
-        'Bohrium SSH: shared storage is usually /share, not /workspace.'
-    )
+    description: ClassVar[str] = 'Execute a bash command in the session shell.'
     json_schema: ClassVar[dict[str, Any]] = {
         'type': 'object',
         'properties': {
@@ -57,6 +54,21 @@ class BashTool(BuiltinTool):
         },
         'required': ['command'],
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="session", mode="exclusive"),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset({"shell.execute"})
+    effect_level: ClassVar[str] = "local_mutation"
+    max_result_chars: ClassVar[int] = 12000
+    plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
+
+    def prompt(self, ctx: Any | None = None) -> str | None:
+        return (
+            'Do not use bash for: cat/head/tail/sed/awk/find/ls/grep/rg/echo. '
+            'Use read_file, edit_file, write_file, glob, grep instead.\n\n'
+            'Paths: local/devshell cwd is the task workspace; do not assume /share exists. '
+            'Bohrium SSH: shared storage is usually /share, not /workspace.'
+        )
 
     async def execute(self, arguments: dict[str, Any]) -> str:
         """Dual-path execute: native async for matmaster LocalSession, sync fallback otherwise."""

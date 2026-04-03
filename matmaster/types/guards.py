@@ -41,7 +41,6 @@ class GuardContext:
     current_turn: int
     max_turns: int
     recent_calls: list[RecentCall] = field(default_factory=list)
-    read_tracker: Any | None = None  # Actual type: ReadTracker (avoid circular import)
 
 
 @dataclass

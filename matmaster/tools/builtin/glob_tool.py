@@ -10,6 +10,9 @@ from __future__ import annotations
 import posixpath
 from typing import Any, ClassVar
 
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
+
 from .base import BuiltinTool
 
 
@@ -38,6 +41,14 @@ class GlobTool(BuiltinTool):
         },
         'required': ['pattern'],
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource='session', mode='exclusive'),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset({'workspace.search.path'})
+    effect_level: ClassVar[str] = 'none'
+    fast_path_eligible: ClassVar[bool] = True
+    max_result_chars: ClassVar[int] = 8000
+    plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
 
     def _resolve_safe_path(self, user_path: str) -> str:
         """Resolve user-provided path to a safe absolute path within workdir.

@@ -14,6 +14,8 @@ import httpx
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
 
 SEARCH_API_ENDPOINT = "https://www.searchapi.io/api/v1/search"
 
@@ -86,6 +88,13 @@ class WebSearchTool(BuiltinTool):
         },
         "required": ["query"],
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="web", mode="counted", max_concurrent=3),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset({"web.search"})
+    effect_level: ClassVar[str] = "external_effect"
+    plane: ClassVar[ToolPlane] = ToolPlane.EXTERNAL_SERVICE
+    stop_mode: ClassVar[str] = "best_effort"
 
     def _execute(self, arguments: dict[str, Any]) -> ToolResult:
         query = (arguments.get("query") or "").strip()

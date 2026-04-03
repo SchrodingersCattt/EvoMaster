@@ -15,6 +15,7 @@ from matmaster.core.hooks import HookAction
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.guards import GuardResult
 from matmaster.types.messages import LLMResponse, Message, StreamChunk, ToolCallData
+from matmaster.types.topology import ToolPlane
 
 
 class MockAsyncLLMProvider:
@@ -69,6 +70,15 @@ class MockAsyncTool:
         self._name = name
         self._result = result
         self._description = description
+        self.resource_claims = ()
+        self.capabilities = frozenset()
+        self.effect_level = "local_mutation"
+        self.fast_path_eligible = False
+        self.max_result_chars = 0
+        self.plane = ToolPlane.CONTROL_PLANE
+        self.state_mode = "stateless"
+        self.stop_mode = "cancellable"
+        self.exposed_to_model = True
 
     @property
     def name(self) -> str:
@@ -81,6 +91,12 @@ class MockAsyncTool:
     @property
     def json_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {}}
+
+    def describe(self, ctx: Any) -> str:
+        return self.description
+
+    def prompt(self, ctx: Any | None = None) -> str | None:
+        return None
 
     async def execute(self, arguments: dict[str, Any]) -> str:
         return self._result

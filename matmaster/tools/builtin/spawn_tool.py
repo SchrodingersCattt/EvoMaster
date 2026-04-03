@@ -16,6 +16,7 @@ from typing import Any, ClassVar
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_spec import ResourceClaim
 
 
 class SpawnTool(BuiltinTool):
@@ -60,6 +61,10 @@ class SpawnTool(BuiltinTool):
         },
         "required": ["exp_name", "task"],
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="spawn", mode="counted", max_concurrent=2),
+    )
+    stop_mode: ClassVar[str] = "non_cancellable"
 
     def __init__(
         self,
