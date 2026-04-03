@@ -223,6 +223,16 @@ def _run_devshell_task(
 
 
 def main() -> int:
+    # Load .env files so OSS / SERVICE_ENV / etc. are available to post-processing
+    # (same logic as matmaster.devshell.cli)
+    from dotenv import find_dotenv, load_dotenv
+
+    load_dotenv(REPO_ROOT / ".env")
+    current_env = os.environ.get("SERVICE_ENV", "test")
+    env_file = find_dotenv(f".env.{current_env}")
+    if env_file:
+        load_dotenv(env_file, override=True)
+
     parser = argparse.ArgumentParser(
         description="Run MATTER question bank through mm-devshell (matmaster devshell run).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
