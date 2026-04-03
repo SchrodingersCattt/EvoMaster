@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
 status: executing
-stopped_at: Phase 35 context gathered
-last_updated: "2026-04-03T03:58:34.291Z"
-last_activity: 2026-04-02
+stopped_at: Completed 35-02-PLAN.md
+last_updated: "2026-04-03T04:32:22.364Z"
+last_activity: 2026-04-03
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 12
-  completed_plans: 12
+  total_plans: 15
+  completed_plans: 13
   percent: 50
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 34 — exp-service-hook
+**Current focus:** Phase 35 — toolregistry
 
 ## Current Position
 
-Phase: 35
-Plan: Not started
-Status: Executing Phase 34
-Last activity: 2026-04-02
+Phase: 35 (toolregistry) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-04-03
 
 Progress: [█████░░░░░] 50%
 
@@ -58,6 +58,7 @@ Progress: [█████░░░░░] 50%
 | Phase 34 P02 | 10min | 2 tasks | 5 files |
 | Phase 34 P03 | 8min | 2 tasks | 14 files |
 | Phase 34 P04 | 10min | 1 tasks | 3 files |
+| Phase 35 P02 | 4min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,7 @@ v2.2 新决策:
 - [Phase 34]: FullToolRunner path bypasses entire legacy guard/hook block (FullToolRunner has its own seven-step chain)
 - [Phase 34]: run_stream() yields BusEvent directly via _consume_and_yield() inner generator, callers never see _KernelItem
 - [Phase 34]: Catalog version sentinel last_catalog_version=-1 ensures first-turn build_definitions always fires
+- [Phase 35]: Cancel check moved after catalog lookup to access stop_mode metadata on ToolBinding
 
 ### Pending Todos
 
@@ -101,6 +103,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-03T03:58:34.285Z
-Stopped at: Phase 35 context gathered
-Resume file: .planning/phases/35-toolregistry/35-CONTEXT.md
+Last session: 2026-04-03T04:32:22.361Z
+Stopped at: Completed 35-02-PLAN.md
+Resume file: None

@@ -148,11 +148,11 @@ Plans:
   3. ToolBinding 的 state_mode/stop_mode 字段被 Scheduler 实际消费，SessionCapabilities 变化时调度策略随之调整
   4. ToolRegistry 不再被 ContextBuilder / SkillTool / MCP 注入路径直接调用，所有上层消费通过 ToolCatalog
   5. ContextBuilder 工具来源从 `tool_registry.all_tools` 迁移到 ToolCatalog，或移除 system prompt 工具枚举段
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 35-01-PLAN.md — 约束迁移：ReadBeforeModifyGuard + CapabilityPolicy bash 安全检查 + 工具内检查删除
-- [ ] 35-02-PLAN.md — state_mode/stop_mode 启用：ToolCompiler 填充 + FullToolRunner 取消策略
+- [x] 35-02-PLAN.md — state_mode/stop_mode 启用：ToolCompiler 填充 + FullToolRunner 取消策略
 - [ ] 35-03-PLAN.md — ToolRegistry 降级 + ContextBuilder 改造 + 全量回归
 
 ### Phase 36: 去总线化 + 高级调度
@@ -207,5 +207,5 @@ Phases 32-36 execute in numeric order. Phase 34 depends on both 32 and 33. Phase
 | 32. Kernel Generator + Tool Runtime v2 核心骨架 | v2.2 | 3/3 | Complete    | 2026-04-02 |
 | 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 5/5 | Complete    | 2026-04-02 |
 | 34. Exp/Service 接入 + Hook 退役 | v2.2 | 4/4 | Complete    | 2026-04-02 |
-| 35. 约束迁移 + ToolRegistry 降级 | v2.2 | 0/3 | Not started | - |
+| 35. 约束迁移 + ToolRegistry 降级 | v2.2 | 1/3 | In Progress|  |
 | 36. 去总线化 + 高级调度 | v2.2 | 0/? | Not started | - |
