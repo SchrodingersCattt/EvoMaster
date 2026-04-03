@@ -31,6 +31,7 @@
 | prompt 拼接位置 | 追加在 TOML prompt 之后 / 占位符替换 | 追加 | 简单直接，不增加 TOML 作者心智负担 |
 | MCP/Skill 元数据 | 统一为属性 / 保留 dict | 统一为属性 | 消灭 `getattr(tool, "tool_runtime_meta")` hack |
 | 异步方案 | state_mutations on ToolResult / execute_with_context 统一路径 | execute_with_context | 不需要扩展 ToolResult，读写状态都走 exec_ctx.runner_state |
+| description 接口形式 | property 改 method / property 保留 + 新增 describe(ctx) | 保留 property + 新增 describe(ctx) | 避免破坏 `@runtime_checkable` isinstance 检查和现存 `tool.description` 属性访问 |
 
 ## 3. New Tool Protocol
 
@@ -59,10 +60,17 @@ class Tool(Protocol):
 
     async def execute(self, arguments: dict[str, Any]) -> str | ToolResult | None: ...
 
-    # -- Description (P1: static -> dynamic) --
-    def description(self, ctx: ToolDescriptionContext | None = None) -> str:
-        """Dynamic description. ctx=None returns static default.
-        build_definitions() passes ctx for one-time evaluation."""
+    # -- Description (P1) --
+    # `description` remains a @property for backward compatibility with
+    # @runtime_checkable isinstance checks and existing `tool.description`
+    # attribute access (no parens). Returns the static default.
+    @property
+    def description(self) -> str: ...
+
+    def describe(self, ctx: ToolDescriptionContext) -> str:
+        """Dynamic description for build_definitions(ctx).
+        Default implementation returns self.description (static).
+        Override for session-kind-dependent descriptions."""
         ...
 
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
@@ -124,10 +132,14 @@ class BuiltinTool(ABC):
     json_schema: ClassVar[dict[str, Any]]
 
     # -- Description (P1) --
-    _description: ClassVar[str] = ""
+    # `description` stays as ClassVar[str] (satisfies Protocol @property).
+    # No rename needed — ClassVar str satisfies @property str for isinstance checks.
+    description: ClassVar[str] = ""
 
-    def description(self, ctx: ToolDescriptionContext | None = None) -> str:
-        return self._description
+    def describe(self, ctx: ToolDescriptionContext) -> str:
+        """Dynamic description. Default returns static self.description.
+        Override for session-kind-dependent descriptions."""
+        return self.description
 
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return None
@@ -137,7 +149,7 @@ class BuiltinTool(ABC):
     capabilities: ClassVar[frozenset[str]] = frozenset()
     effect_level: ClassVar[EffectLevel] = "local_mutation"
     fast_path_eligible: ClassVar[bool] = False
-    max_result_chars: ClassVar[int] = 0
+    max_result_chars: ClassVar[int] = 0  # 0 means no truncation
 
     # -- Execution Binding (P0) --
     plane: ClassVar[ToolPlane] = ToolPlane.CONTROL_PLANE
@@ -183,7 +195,7 @@ Each tool moves its metadata from ToolCompiler lookup tables to ClassVar declara
 ```python
 class ReadTool(BuiltinTool):
     name: ClassVar[str] = "read_file"
-    _description: ClassVar[str] = (
+    description: ClassVar[str] = (
         "Read file contents with line numbers (cat -n format).\n\n"
         "Usage:\n"
         "- ALWAYS use read_file to read files. NEVER use cat/head/tail via execute_bash.\n"
@@ -217,7 +229,7 @@ class ReadTool(BuiltinTool):
 ```python
 class BashTool(BuiltinTool):
     name: ClassVar[str] = "execute_bash"
-    _description: ClassVar[str] = "Execute a bash command in the session shell."
+    description: ClassVar[str] = "Execute a bash command in the session shell."
 
     resource_claims: ClassVar = (ResourceClaim(resource="session", mode="exclusive"),)
     capabilities: ClassVar = frozenset({"shell.execute"})
@@ -234,12 +246,12 @@ class BashTool(BuiltinTool):
         )
 ```
 
-### WriteTool / EditTool
+### WriteTool
 
 ```python
 class WriteTool(BuiltinTool):
     name: ClassVar[str] = "write_file"
-    _description: ClassVar[str] = "..."
+    description: ClassVar[str] = "..."
 
     resource_claims: ClassVar = (ResourceClaim(resource="workspace", mode="exclusive"),)
     capabilities: ClassVar = frozenset({"workspace.write"})
@@ -247,39 +259,98 @@ class WriteTool(BuiltinTool):
     plane: ClassVar = ToolPlane.SESSION_FS
 
     # tracker parameter removed from __init__
+    # validate_input() RETAINED for workspace boundary enforcement (path safety check).
+    # Only the tracker-based read-before-modify check moves to execute_with_context.
+
+    async def validate_input(self, arguments):
+        """Path boundary check (retained). Read-before-modify moved to execute_with_context."""
+        from pathlib import PurePosixPath
+        file_path = arguments.get("file_path", "")
+        if not file_path:
+            return ToolDecision(decision="deny", reason="file_path is required")
+        if self._workdir is None:
+            return ToolDecision(decision="deny", reason="workdir not set")
+        try:
+            resolved = PurePosixPath(posixpath.normpath(file_path))
+            if not resolved.is_relative_to(self._workdir):
+                return ToolDecision(decision="deny", reason=f"file_path outside workspace")
+        except (TypeError, ValueError):
+            return ToolDecision(decision="deny", reason=f"invalid file_path")
+        return None
 
     async def execute_with_context(self, arguments, exec_ctx):
+        """Read-before-modify check via runner_state (replaces tracker)."""
+        if exec_ctx.runner_state and self._session is not None:
+            path = posixpath.normpath(arguments.get("file_path", ""))
+            if self._session.path_exists(arguments.get("file_path", "")):
+                read_files = exec_ctx.runner_state.get("read_files", set())
+                if path and path not in read_files:
+                    return ToolResult(
+                        status="error",
+                        content=f"File '{path}' must be read before overwrite",
+                    )
+        return await asyncio.to_thread(self._execute, arguments)
+```
+
+### EditTool
+
+```python
+class EditTool(BuiltinTool):
+    name: ClassVar[str] = "edit_file"
+    description: ClassVar[str] = "..."
+
+    resource_claims: ClassVar = (ResourceClaim(resource="workspace", mode="exclusive"),)
+    capabilities: ClassVar = frozenset({"workspace.write"})
+    effect_level: ClassVar = "local_mutation"
+    plane: ClassVar = ToolPlane.SESSION_FS
+
+    # tracker parameter removed from __init__
+    # validate_input() RETAINED for old_str/new_str semantic checks.
+    # Read-before-modify (previously in ReadBeforeModifyGuard) moves here.
+
+    async def validate_input(self, arguments):
+        """Semantic checks (retained from current)."""
+        old_str = arguments.get("old_str", "")
+        new_str = arguments.get("new_str", "")
+        if not old_str:
+            return ToolDecision(decision="deny", reason="old_str must not be empty")
+        if old_str == new_str:
+            return ToolDecision(decision="deny", reason="old_str and new_str are identical")
+        return None
+
+    async def execute_with_context(self, arguments, exec_ctx):
+        """Read-before-modify check (replaces ReadBeforeModifyGuard)."""
         if exec_ctx.runner_state:
             read_files = exec_ctx.runner_state.get("read_files", set())
             path = posixpath.normpath(arguments.get("file_path", ""))
             if path and path not in read_files:
                 return ToolResult(
                     status="error",
-                    content=f"Must read_file before writing: {path}",
+                    content=f"File '{path}' must be read before editing",
                 )
         return await asyncio.to_thread(self._execute, arguments)
 ```
 
 ### Full Metadata Table
 
-| Tool | plane | effect_level | fast_path | max_chars | claims | stop_mode |
-|------|-------|-------------|-----------|-----------|--------|-----------|
-| execute_bash | SESSION_SHELL | local_mutation | False | 12000 | exclusive:session | cancellable |
-| list_dir | SESSION_SHELL | none | True | 8000 | exclusive:session | cancellable |
-| glob | SESSION_SHELL | none | True | 8000 | exclusive:session | cancellable |
-| grep | SESSION_SHELL | none | True | 8000 | exclusive:session | cancellable |
-| read_file | SESSION_FS | none | True | 12000 | shared_read:workspace | cancellable |
-| write_file | SESSION_FS | local_mutation | False | 0 | exclusive:workspace | cancellable |
-| edit_file | SESSION_FS | local_mutation | False | 0 | exclusive:workspace | cancellable |
-| task_create | CONTROL_PLANE | local_mutation | False | 0 | exclusive:task-store | cancellable |
-| task_get | CONTROL_PLANE | none | True | 0 | shared_read:task-store | cancellable |
-| task_list | CONTROL_PLANE | none | True | 0 | shared_read:task-store | cancellable |
-| task_update | CONTROL_PLANE | local_mutation | False | 0 | exclusive:task-store | cancellable |
-| task_complete | CONTROL_PLANE | local_mutation | False | 0 | exclusive:task-store | cancellable |
-| mm_web_search | EXTERNAL_SERVICE | external_effect | False | 0 | counted:web(3) | best_effort |
-| web_fetch | EXTERNAL_SERVICE | external_effect | False | 16000 | counted:web(3) | best_effort |
-| spawn | CONTROL_PLANE | local_mutation | False | 0 | counted:spawn(2) | non_cancellable |
-| monitor_job | EXTERNAL_SERVICE | external_effect | False | 0 | exclusive:workspace+artifact-sync | best_effort |
+| Tool | plane | effect_level | fast_path | max_chars | claims | capabilities | stop_mode |
+|------|-------|-------------|-----------|-----------|--------|-------------|-----------|
+| execute_bash | SESSION_SHELL | local_mutation | False | 12000 | exclusive:session | shell.execute | cancellable |
+| list_dir | SESSION_SHELL | none | True | 8000 | exclusive:session | workspace.list | cancellable |
+| glob | SESSION_SHELL | none | True | 8000 | exclusive:session | workspace.search.path | cancellable |
+| grep | SESSION_SHELL | none | True | 8000 | exclusive:session | workspace.search.content | cancellable |
+| read_file | SESSION_FS | none | True | 12000 | shared_read:workspace | workspace.read | cancellable |
+| write_file | SESSION_FS | local_mutation | False | 0 | exclusive:workspace | workspace.write | cancellable |
+| edit_file | SESSION_FS | local_mutation | False | 0 | exclusive:workspace | workspace.write | cancellable |
+| task_create | CONTROL_PLANE | local_mutation | False | 0 | exclusive:task-store | task.write | cancellable |
+| task_get | CONTROL_PLANE | none | True | 0 | shared_read:task-store | task.read | cancellable |
+| task_list | CONTROL_PLANE | none | True | 0 | shared_read:task-store | task.read | cancellable |
+| task_update | CONTROL_PLANE | local_mutation | False | 0 | exclusive:task-store | task.write | cancellable |
+| task_complete | CONTROL_PLANE | local_mutation | False | 0 | exclusive:task-store | task.write | cancellable |
+| mm_web_search | EXTERNAL_SERVICE | external_effect | False | 0 | counted:web(3) | web.search | best_effort |
+| web_fetch | EXTERNAL_SERVICE | external_effect | False | 16000 | counted:web(3) | web.fetch | best_effort |
+| spawn | CONTROL_PLANE | local_mutation | False | 0 | counted:spawn(2) | *(none)* | non_cancellable |
+| monitor_job | EXTERNAL_SERVICE | external_effect | False | 0 | exclusive:workspace+artifact-sync | job.monitor, artifact.download | best_effort |
 
 ## 6. LazyMCPTool Adaptation
 
@@ -316,16 +387,58 @@ class LazyMCPTool:
         self._state_mode = meta.get("state_mode", "stateless")
 
     # All Protocol properties implemented as @property returning self._xxx
-    # description(ctx) returns self._static_description
-    # prompt(ctx) returns None
+
+    @property
+    def description(self) -> str:
+        return self._static_description
+
+    def describe(self, ctx) -> str:
+        return self._static_description         # MCP tools: always static
+
+    def prompt(self, ctx=None) -> str | None:
+        return None
+
+    async def execute_with_context(self, arguments, exec_ctx):
+        return await self.execute(arguments)    # delegate to existing execute
+
     # execute() unchanged
-    # execute_with_context() delegates to execute()
 ```
 
 Default values for MCP tools differ from builtins:
 - `plane=EXTERNAL_SERVICE` (not CONTROL_PLANE)
 - `effect_level="external_effect"` (not "local_mutation")
 - `stop_mode="best_effort"` (not "cancellable")
+
+### SkillTool Adaptation
+
+SkillTool (`matmaster/tools/skill_tool.py`) is a dispatcher tool (`use_skill`) that
+currently satisfies the minimal 4-property Tool Protocol. It needs all new Protocol
+properties with conservative defaults matching its role as a control-plane dispatcher:
+
+```python
+class SkillTool:
+    # Existing: name, description (@property), json_schema, execute -- unchanged
+
+    # New Protocol properties (fixed values, not configurable):
+    resource_claims = ()                          # no resource contention
+    capabilities = frozenset({"skill.dispatch"})
+    effect_level: EffectLevel = "local_mutation"
+    fast_path_eligible = False
+    max_result_chars = 0
+    plane = ToolPlane.CONTROL_PLANE
+    state_mode = "stateless"
+    stop_mode = "cancellable"
+    exposed_to_model = True
+
+    def describe(self, ctx) -> str:
+        return self.description                   # static
+
+    def prompt(self, ctx=None) -> str | None:
+        return None
+
+    async def execute_with_context(self, arguments, exec_ctx):
+        return await self.execute(arguments)      # delegate to existing execute
+```
 
 ## 7. ToolCompiler Simplification
 
@@ -347,7 +460,7 @@ class ToolCompiler:
 
         spec = ToolSpec(
             tool_name=tool.name,
-            description=tool.description(),
+            description=tool.description,     # property access (static)
             args_schema=tool.json_schema,
             source=source,
             capabilities=tool.capabilities,
@@ -396,9 +509,11 @@ def build_definitions(self, ctx: ToolDescriptionContext | None = None) -> list[d
         if inst is None or not inst.tool_spec.exposed_to_model:
             continue
 
+        # Dynamic description: describe(ctx) when ctx provided,
+        # else fall back to compiled static snapshot.
         if ctx is not None:
-            raw_tool = self._registry._tools[name]
-            desc = raw_tool.description(ctx)
+            raw_tool = self._registry.get_raw(name)
+            desc = raw_tool.describe(ctx) if raw_tool else inst.tool_spec.description
         else:
             desc = inst.tool_spec.description
 
@@ -413,6 +528,10 @@ def build_definitions(self, ctx: ToolDescriptionContext | None = None) -> list[d
     return definitions
 ```
 
+Note: `build_definitions(ctx=None)` uses the compiled-time static snapshot.
+`build_definitions(ctx=something)` calls `tool.describe(ctx)` for dynamic values.
+Both paths return a description string — the source differs.
+
 ### collect_prompts(ctx)
 
 ```python
@@ -422,12 +541,17 @@ def collect_prompts(self, ctx: ToolDescriptionContext | None = None) -> str:
         inst = self.get_tool(name)
         if inst is None or not inst.tool_spec.exposed_to_model:
             continue
-        raw_tool = self._registry._tools[name]
+        raw_tool = self._registry.get_raw(name)
+        if raw_tool is None:
+            continue
         p = raw_tool.prompt(ctx)
         if p:
             parts.append(p)
     return "\n\n".join(parts)
 ```
+
+Note: ToolRegistry gains a `get_raw(name) -> Tool | None` method to avoid
+`_registry._tools[name]` private attribute access from ToolCatalog.
 
 ## 9. Context Modifier: ToolRunnerState
 
@@ -436,7 +560,16 @@ def collect_prompts(self, ctx: ToolDescriptionContext | None = None) -> str:
 ```python
 @dataclass
 class ToolRunnerState:
-    """Runner-level mutable shared state. Tools read/write via exec_ctx."""
+    """Runner-level mutable shared state. Tools read/write via exec_ctx.
+
+    THREAD SAFETY CONTRACT:
+    - runner_state MUST only be accessed in the asyncio event loop thread,
+      i.e., AFTER `await asyncio.to_thread()` returns.
+    - NEVER access runner_state inside sync `_execute()` methods or in
+      any code running in the thread pool.
+    - asyncio is cooperative single-threaded concurrency: between await
+      points, no other coroutine runs, so dict reads/writes are atomic.
+    """
     data: dict[str, Any] = field(default_factory=dict)
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -555,21 +688,21 @@ self._register_cleanup(runner_state.clear)
 ### New Files (2)
 
 - `matmaster/types/tool_desc_ctx.py` -- ToolDescriptionContext
-- `matmaster/core/tool_runner_state.py` -- ToolRunnerState
+- `matmaster/types/tool_runner_state.py` -- ToolRunnerState (colocated with ToolExecutionContext in types/)
 
-### Modified Files (25)
+### Modified Files (27)
 
 | File | Change |
 |------|--------|
-| `matmaster/tools/tool_registry.py` | Tool Protocol expansion (+12 attrs/methods) |
+| `matmaster/tools/tool_registry.py` | Tool Protocol expansion (+12 attrs, +describe method), add `get_raw()` public method |
 | `matmaster/tools/tool_compiler.py` | Delete 4 lookup tables, simplify compile() |
-| `matmaster/tools/tool_catalog.py` | build_definitions(ctx), collect_prompts(ctx) |
+| `matmaster/tools/tool_catalog.py` | build_definitions(ctx) with describe(), collect_prompts(ctx), use registry.get_raw() |
 | `matmaster/tools/tool_result.py` | No change |
-| `matmaster/tools/builtin/base.py` | ABC expansion (defaults, execute_with_context, _description) |
+| `matmaster/tools/builtin/base.py` | ABC expansion (defaults, execute_with_context, describe()) |
 | `matmaster/tools/builtin/bash_tool.py` | Metadata ClassVars, prompt() override |
 | `matmaster/tools/builtin/read_tool.py` | Metadata ClassVars, execute_with_context, remove tracker |
-| `matmaster/tools/builtin/write_tool.py` | Metadata ClassVars, execute_with_context, remove tracker |
-| `matmaster/tools/builtin/edit_tool.py` | Metadata ClassVars, execute_with_context, remove tracker |
+| `matmaster/tools/builtin/write_tool.py` | Metadata ClassVars, execute_with_context (read-before-modify), retain validate_input (path safety) |
+| `matmaster/tools/builtin/edit_tool.py` | Metadata ClassVars, execute_with_context (read-before-modify), retain validate_input (semantic checks) |
 | `matmaster/tools/builtin/listdir_tool.py` | Metadata ClassVars |
 | `matmaster/tools/builtin/glob_tool.py` | Metadata ClassVars |
 | `matmaster/tools/builtin/grep_tool.py` | Metadata ClassVars |
@@ -582,11 +715,12 @@ self._register_cleanup(runner_state.clear)
 | `matmaster/tools/builtin/task/task_list.py` | Metadata ClassVars |
 | `matmaster/tools/builtin/task/task_update.py` | Metadata ClassVars |
 | `matmaster/tools/builtin/task/task_complete.py` | Metadata ClassVars |
-| `matmaster/tools/lazy_mcp.py` | Expand runtime_meta to properties |
+| `matmaster/tools/lazy_mcp.py` | Expand runtime_meta to properties, add describe()/prompt()/execute_with_context |
+| `matmaster/tools/skill_tool.py` | Add Protocol properties (resource_claims, capabilities, plane, etc.), add describe()/prompt()/execute_with_context |
 | `matmaster/types/tool_spec.py` | ToolExecutionContext +runner_state |
 | `matmaster/core/tool_runner.py` | FullToolRunner +ToolRunnerState, inject exec_ctx |
 | `matmaster/core/exp.py` | Remove ReadTracker, add desc_ctx/tool_prompts/ToolRunnerState |
-| `matmaster/core/agent.py` | build_definitions(desc_ctx) |
+| `matmaster/core/agent.py` | build_definitions(desc_ctx) at both call sites (line ~425, ~685) |
 | `matmaster/core/guard_pipeline.py` | Remove ReadBeforeModifyGuard |
 
 ### Deleted Files (1)
