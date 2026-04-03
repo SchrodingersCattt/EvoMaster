@@ -13,6 +13,16 @@ from matmaster.types.topology import RuntimeTopology, SessionCapabilities, ToolP
 
 
 class _FakeTool:
+    resource_claims: tuple[ResourceClaim, ...] = ()
+    capabilities: frozenset[str] = frozenset()
+    effect_level = "local_mutation"
+    fast_path_eligible = False
+    max_result_chars = 0
+    exposed_to_model = True
+    plane = ToolPlane.CONTROL_PLANE
+    state_mode = "stateless"
+    stop_mode = "cancellable"
+
     def __init__(self, name: str) -> None:
         self._name = name
 
