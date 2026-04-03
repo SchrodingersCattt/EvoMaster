@@ -429,7 +429,7 @@ def _make_full_runner_with_tool(
     # But we need to control the stop_mode, so we'll directly construct.
     from matmaster.types.tool_spec import ResourceClaim, ToolBinding, ToolInstance, ToolSpec
 
-    async def _executor(args: dict[str, Any]) -> ToolResult:
+    async def _executor(args: dict[str, Any], exec_ctx: Any) -> ToolResult:
         return ToolResult(content=result_content)
 
     spec = ToolSpec(

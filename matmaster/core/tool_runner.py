@@ -288,8 +288,18 @@ class FullToolRunner:
             # 1b. Cancel check (stop_mode-aware)
             if ctx.stop_event is not None and ctx.stop_event.is_set():
                 stop_mode = instance.tool_binding.stop_mode
-                if stop_mode in ("cancellable", "best_effort"):
+                if stop_mode == "cancellable":
                     tr = ToolResult(status="cancelled", content="Run cancelled.")
+                    results[idx] = (tc, tr)
+                    continue
+                if stop_mode == "best_effort":
+                    tr = ToolResult(
+                        status="cancelled",
+                        content=(
+                            "Cancellation requested (best-effort). "
+                            "Tool may have partially completed."
+                        ),
+                    )
                     results[idx] = (tc, tr)
                     continue
 
