@@ -117,7 +117,7 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
             skills_root=["matmaster/skills/lazymcp/mcp-mat-sg"],
             mcp_runtime_patch={
                 "tool_include_only": {
-                    "mat_sg": ["build_surface_slab", "generate_ordered_replicas"],
+                    "mat_sg": ["generate_ordered_replicas"],
                 },
             },
             cache_dir="matmaster/cache",
@@ -138,7 +138,7 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
             use_skill = next(t for t in reg.all_tools if t.name == "use_skill")
             await use_skill.execute({"skill_name": "mcp-mat-sg", "action": "get_info"})
             names = _tool_names(reg)
-            assert "mat_sg_build_surface_slab" in names
+            assert "mat_sg_build_surface_slab" not in names
             assert "mat_sg_generate_ordered_replicas" in names
             assert "mat_sg_get_structure_info" not in names
         finally:
