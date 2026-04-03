@@ -318,6 +318,9 @@ class AgentKernel:
                             status=status,
                             reason=reason,
                             final_content=item.terminal.final_content,
+                            num_turns=item.terminal.num_turns,
+                            usage=item.terminal.usage,
+                            messages=item.terminal.messages,
                         )
                         return
                     if item.event is not None:

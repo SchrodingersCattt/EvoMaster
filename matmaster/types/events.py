@@ -83,6 +83,12 @@ class RunResultEvent(EventBase):
     status: str = "completed"  # 'completed' | 'failed' | 'cancelled'
     reason: str = ""
     final_content: str | None = None
+    num_turns: int = 0
+    usage: dict[str, int] = Field(default_factory=dict)
+    # exclude=True: messages carries the full conversation transcript
+    # (including system prompt) for internal drain consumers only.
+    # model_dump() excludes it, so SSE/frontend never sees it.
+    messages: list[Any] = Field(default_factory=list, exclude=True)
 
 
 class ErrorEvent(EventBase):
