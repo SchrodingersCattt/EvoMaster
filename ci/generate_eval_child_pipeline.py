@@ -275,9 +275,11 @@ def generate_capabilities(caps: list[str]) -> str:
 
 
 def generate_questions() -> str:
+    # INIT_JOB_* 里用 {{ }} 是为了 str.format 转义成单层 { }；此处必须 .format()，否则会生成
+    # ${{VAR}} 字面量，Alpine sh 报 bad substitution。
     parts: list[str] = [
         HEADER_QUESTIONS,
-        INIT_JOB_QUESTIONS_TEMPLATE,
+        INIT_JOB_QUESTIONS_TEMPLATE.format(),
         QUESTIONS_EVAL_JOB,
     ]
     return "".join(parts)
