@@ -18,7 +18,7 @@ MessageBus + EventRouter 物理删除。Service 层事件分发改为 async fano
 - **D-02:** 所有 bus.emit / bus.emit_nowait 调用点改为 fanout 直连 handler。包括 run_agent_stream() 主循环、后处理事件（CancelledEvent / StreamClosedEvent）、以及 BohriumSetupService._make_event_bridge() 的线程安全桥接。
 
 ### Bohrium 事件桥接（线程安全）
-- **D-11:** `agent_run_bohrium.py` L360-414 的 `_make_event_bridge()` 当前通过 `loop.call_soon_threadsafe(bus.emit_nowait)` 从 Bohrium 工作���程推送 ErrorEvent/StreamClosedEvent/BohriumNodeEvent。Bus 删除后此路径必须同步改造。替代方案：`_make_event_bridge()` 接受 fanout 的同步入口（`loop.call_soon_threadsafe` 调度一个将事件送入 fanout 的闭包），或者 BohriumSetupService 接受 `event_sink: Callable` 替代 `bus` 参数。此改造直接关系 ROADMAP 成功标准 3（Kernel 外事件通过 async fanout 直连消费者）。
+- **D-11:** `agent_run_bohrium.py` L360-414 的 `_make_event_bridge()` 当前通过 `loop.call_soon_threadsafe(bus.emit_nowait)` 从 Bohrium 工作线程推送 ErrorEvent/StreamClosedEvent/BohriumNodeEvent。Bus 删除后此路径必须同步改造。替代方案：`_make_event_bridge()` 接受 fanout 的同步入口（`loop.call_soon_threadsafe` 调度一个将事件送入 fanout 的闭包），或者 BohriumSetupService 接受 `event_sink: Callable` 替代 `bus` 参数。此改造直接关系 ROADMAP 成功标准 3（Kernel 外事件通过 async fanout 直连消费者）。
 
 ### ConfirmationHook 处置
 - **D-03:** ConfirmationHook 直接删除。不改造为 event_sink 模式。当前确认功能前端未使用，后续在 generator 双向流设计中重建（v2.3+）。
@@ -84,11 +84,13 @@ MessageBus + EventRouter 物理删除。Service 层事件分发改为 async fano
 
 ### 测试面影响（blast radius）
 - `tests/matmaster/core/test_bus.py` — 整文件删除
-- `tests/matmaster/integration/test_event_router.py` — 整文件删除
+- `tests/matmaster/integration/test_event_router.py` — EventRouter 相关用例删除，SSEHandler/PersistenceHandler 回归用例拆分迁移（保留 SSE 过滤规则、持久化过滤规则、sync/async send_cb 分发等关键回归保护）
 - `tests/matmaster/services/test_agent_run_stream.py` — bus/router mock 改造
 - `tests/matmaster/test_bohrium_setup_injection.py` — bus 注入 mock 改造
 - `tests/matmaster/devshell/test_integration.py` — MessageBus 依赖替换
 - `tests/matmaster/devshell/test_compaction_via_devshell.py` — bus 依赖替换
+- `tests/matmaster/core/test_context_compactor.py` L297 — bus= 兼容分支测试改造
+- `tests/matmaster/integration/test_compaction_real_api.py` L231 — bus= 兼容层测试改造
 - 其他导入 MessageBus/EventRouter 的测试文件需全面审计（DBUS-01）
 
 ### Phase 34-35 产出（参考）
