@@ -102,7 +102,7 @@ class TestWriteToolValidateInput:
         """Existing file not read -> deny."""
         mock_session.path_exists.return_value = True
         tracker = ReadTracker()
-        tool = WriteTool(session=mock_session, tracker=tracker)
+        tool = WriteTool(session=mock_session, workdir="/workspace", tracker=tracker)
         decision = await tool.validate_input(
             {"file_path": "/workspace/exist.py", "content": "data"}
         )
@@ -115,7 +115,7 @@ class TestWriteToolValidateInput:
         mock_session.path_exists.return_value = True
         tracker = ReadTracker()
         tracker.mark_read("/workspace/exist.py")
-        tool = WriteTool(session=mock_session, tracker=tracker)
+        tool = WriteTool(session=mock_session, workdir="/workspace", tracker=tracker)
         decision = await tool.validate_input(
             {"file_path": "/workspace/exist.py", "content": "data"}
         )
@@ -125,7 +125,7 @@ class TestWriteToolValidateInput:
         """New file (path_exists=False) -> allow (None)."""
         mock_session.path_exists.return_value = False
         tracker = ReadTracker()
-        tool = WriteTool(session=mock_session, tracker=tracker)
+        tool = WriteTool(session=mock_session, workdir="/workspace", tracker=tracker)
         decision = await tool.validate_input(
             {"file_path": "/workspace/new.py", "content": "data"}
         )
@@ -134,7 +134,7 @@ class TestWriteToolValidateInput:
     async def test_validate_input_no_tracker(self, mock_session: MagicMock) -> None:
         """No tracker -> allow (None)."""
         mock_session.path_exists.return_value = True
-        tool = WriteTool(session=mock_session, tracker=None)
+        tool = WriteTool(session=mock_session, workdir="/workspace", tracker=None)
         decision = await tool.validate_input(
             {"file_path": "/workspace/exist.py", "content": "data"}
         )
@@ -143,7 +143,7 @@ class TestWriteToolValidateInput:
     async def test_validate_input_no_session(self) -> None:
         """No session -> allow (None, cannot check path_exists)."""
         tracker = ReadTracker()
-        tool = WriteTool(tracker=tracker)
+        tool = WriteTool(workdir="/workspace", tracker=tracker)
         decision = await tool.validate_input(
             {"file_path": "/workspace/exist.py", "content": "data"}
         )

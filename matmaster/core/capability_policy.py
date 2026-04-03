@@ -90,7 +90,39 @@ class DefaultCapabilityPolicy:
     Currently handles:
     - execute_bash: dangerous command pattern detection
     - execute_bash + python -c: Python content safety scanning
+    - effect_level: external_effect tools blocked without EXTERNAL_SERVICE plane
     """
+
+    def evaluate(
+        self,
+        runtime_topology: Any,
+        tool_instance: Any,
+        tool_args: dict[str, Any],
+    ) -> ToolDecision:
+        """Evaluate tool call against capability policy.
+
+        Dispatches to tool-specific checks based on tool_name.
+        """
+        spec = tool_instance.tool_spec
+        tool_name = spec.tool_name
+
+        # 1. effect_level constraint
+        if spec.effect_level == "external_write":
+            active_planes = getattr(runtime_topology, "active_planes", set())
+            from matmaster.types.topology import ToolPlane
+
+            if ToolPlane.EXTERNAL_SERVICE not in active_planes:
+                return ToolDecision(
+                    decision="deny",
+                    reason="External effect tools are not allowed in current topology",
+                    guidance="This tool makes external service calls. Ensure the session topology permits external access.",
+                )
+
+        # 2. Tool-specific safety checks
+        if tool_name == "execute_bash":
+            return self.check_bash_safety(tool_args)
+
+        return ToolDecision(decision="allow")
 
     def check_bash_safety(self, tool_args: dict[str, Any]) -> ToolDecision:
         """Check bash command safety. Returns ToolDecision.
