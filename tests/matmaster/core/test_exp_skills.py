@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
@@ -65,6 +65,7 @@ class TestExpInitSkillTools:
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         exp._init_skill_tools(ctx, registry)
 
@@ -110,6 +111,7 @@ class TestExpInitSkillTools:
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         exp._init_skill_tools(ctx, registry)
 
@@ -129,3 +131,42 @@ class TestExpInitSkillTools:
 
         lazy = registry._tools["mat_sg_build_bulk"]
         assert isinstance(lazy, LazyMCPTool)
+
+    def test_passes_execution_workdir_to_lazy_mcp_connector(self, tmp_path):
+        """Connector should receive ctx.execution_workdir for path adaptor uploads."""
+        skills_root = _make_skill_dir(tmp_path)
+        cache_dir = _make_cache(tmp_path)
+        _make_mcp_yaml(tmp_path)
+        (tmp_path / "mcp_config.json").write_text('{"mcpServers": {}}')
+
+        cfg = ExpConfig.model_validate(
+            {
+                "name": "test",
+                "skills": {
+                    "enabled": True,
+                    "skills_root": str(skills_root),
+                    "cache_dir": str(cache_dir),
+                    "config_dir": str(tmp_path),
+                    "mcp_config_file": "mcp_config.json",
+                    "mcp_runtime_file": "mcp.yaml",
+                },
+            }
+        )
+        exp = Exp(cfg)
+        registry = ToolRegistry()
+        ctx = MagicMock(spec=PlaygroundContext)
+        ctx.session = MagicMock()
+        ctx.execution_workdir = "/workspace/session-1"
+
+        with patch("matmaster.tools.lazy_mcp.LazyMCPConnector") as mock_connector:
+            exp._init_skill_tools(ctx, registry)
+
+        mock_connector.assert_called_once_with(
+            mcp_server_config={},
+            mcp_config={
+                "path_adaptor": "calculation",
+                "calculation_servers": ["mat_sg"],
+            },
+            session=ctx.session,
+            workspace_path=ctx.execution_workdir,
+        )
