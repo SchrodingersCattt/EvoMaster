@@ -4,7 +4,7 @@ milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
 status: verifying
 stopped_at: Completed 36-04-PLAN.md
-last_updated: "2026-04-03T09:41:46.037Z"
+last_updated: "2026-04-03T09:54:41.189Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 5
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 ## Current Position
 
-Phase: 36 (debus-scheduling) — EXECUTING
-Plan: 4 of 4
+Phase: 36
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-04-03
 
