@@ -14,7 +14,6 @@ from matmaster.devshell.config import DevConfig
 from matmaster.devshell.stream_hook import DevStreamHook
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import Message, UserMessage
-from matmaster.types.runtime import KernelRunResult
 
 if TYPE_CHECKING:
     from matmaster.devshell.event_observer import DevEventObserver
@@ -115,45 +114,46 @@ class DevRunner:
         *,
         stop_event: threading.Event | None = None,
         event_observer: DevEventObserver | None = None,
-    ) -> KernelRunResult:
+    ) -> DrainResult:
         """Execute a single agent run.
 
-        Returns KernelRunResult with event and message transcript.
+        Returns DrainResult with terminal data and message transcript.
         Appends run messages to history for multi-turn accumulation.
 
-        Args:
-            task: User prompt text.
-            stop_event: Threading event for cancellation.
-            event_observer: Optional DevEventObserver for local event collection.
+        Real-time event forwarding: intermediate events are forwarded
+        to DevStreamHook and DevEventObserver via the on_event callback
+        during drain, replacing the old hook-based streaming path.
         """
+        from matmaster.core.stream_drain import DrainResult, drain_run_stream
+
         exp = Exp(self._exp_config)
 
-        async def _run_once() -> KernelRunResult:
+        async def _run_once() -> DrainResult:
             try:
                 runtime = await exp.build_runtime(self._pg_ctx)
-                hooks = [*runtime.spec.hooks, self._stream_hook]
-                extra_kwargs: dict[str, Any] = {}
+                spec = runtime.spec
 
-                if event_observer is not None:
-                    hooks.append(event_observer.hook)
-                    # Wire compactor event_sink if compactor exists
-                    if runtime.spec.compactor is not None:
-                        runtime.spec.compactor._event_sink = (
-                            event_observer.make_event_sink()
-                        )
+                # Build on_event callback for real-time forwarding
+                def _on_event(event: Any) -> None:
+                    self._stream_hook.on_event(event)
+                    if event_observer is not None:
+                        event_observer.emit(event)
 
-                spec = runtime.spec.model_copy(update={"hooks": hooks})
-                return await runtime.kernel.run(
-                    spec, task, history=self.history, stop_event=stop_event
+                return await drain_run_stream(
+                    runtime.kernel.run_stream(
+                        spec, task, history=self.history, stop_event=stop_event
+                    ),
+                    on_event=_on_event,
                 )
             finally:
                 await exp._run_cleanup_callbacks()
 
         result = asyncio.run(_run_once())
+
         # Accumulate history for non-cancelled runs.
         # Message layout: [System, *history, User(task), ...new_messages]
         # We skip System + existing history + User to extract only new messages.
-        if result.result.status != "cancelled":
+        if result.status != "cancelled":
             skip_count = 1 + len(self.history) + 1  # System + history + User
             new_messages = result.messages[skip_count:]
             self.history.append(UserMessage(content=task))
@@ -161,6 +161,12 @@ class DevRunner:
 
         # Emit RunResultEvent for observer
         if event_observer is not None:
-            event_observer.emit(result.result.to_run_result_event())
+            from matmaster.types.events import RunResultEvent
+            event_observer.emit(RunResultEvent(
+                source="agent",
+                status=result.status,
+                reason=result.reason,
+                final_content=result.final_content,
+            ))
 
         return result
