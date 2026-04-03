@@ -1,7 +1,8 @@
 """EditTool -- str_replace editing via session.
 
 Performs exact string replacement with unique-match enforcement.
-Enforces Read-Before-Modify protocol (D-02) via ReadTracker.
+Read-Before-Modify is now enforced by ReadBeforeModifyGuard in the
+GuardPipeline (Phase 35-01 migration). EditTool is a pure execution layer.
 No insert/undo_edit commands (D-01: str_replace only).
 Editor helpers inlined (originally from evomaster).
 
@@ -89,12 +90,6 @@ class EditTool(BuiltinTool):
         file_path: str = arguments.get("file_path", "")
         old_str: str = arguments.get("old_str", "")
         new_str: str = arguments.get("new_str", "")
-
-        # Read-Before-Modify check (D-02, D-03)
-        if self._tracker is not None and not self._tracker.has_been_read(
-            posixpath.normpath(file_path)
-        ):
-            return f"Error: file '{file_path}' must be read before modify"
 
         # No-op check
         if old_str == new_str:

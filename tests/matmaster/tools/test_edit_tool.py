@@ -126,8 +126,11 @@ class TestEditToolExecution:
         written = mock_session.write_file.call_args[0][1]
         assert "xxx" in written
 
-    async def test_read_before_modify(self, mock_session: MagicMock) -> None:
-        """Without prior read -- returns Read-Before-Modify error."""
+    async def test_read_before_modify_now_in_guard(self, mock_session: MagicMock) -> None:
+        """Read-Before-Modify is now handled by ReadBeforeModifyGuard, not EditTool.
+
+        EditTool._execute() no longer checks tracker; it proceeds to edit.
+        """
         tracker = ReadTracker()  # Not pre-marked
         tool = EditTool(session=mock_session, tracker=tracker)
         result = await tool.execute(
@@ -137,11 +140,12 @@ class TestEditToolExecution:
                 "new_str": "xxx",
             }
         )
-        assert "must be read before modify" in result
-        mock_session.write_file.assert_not_called()
+        # EditTool now proceeds without checking tracker
+        assert "has been edited" in result
+        mock_session.write_file.assert_called_once()
 
     async def test_no_tracker(self, mock_session: MagicMock) -> None:
-        """No tracker -- edits without Read-Before-Modify check."""
+        """No tracker -- edits normally (tracker not consulted by _execute)."""
         tool = EditTool(session=mock_session, tracker=None)
         result = await tool.execute(
             {
@@ -165,8 +169,8 @@ class TestEditToolExecution:
         assert "Error:" in result
         assert "session" in result.lower()
 
-    async def test_error_message_exact_format(self, mock_session: MagicMock) -> None:
-        """Verify exact D-03 error string for Read-Before-Modify violation."""
+    async def test_edit_proceeds_without_tracker_check(self, mock_session: MagicMock) -> None:
+        """EditTool._execute() no longer checks tracker; Guard layer handles it."""
         tracker = ReadTracker()
         tool = EditTool(session=mock_session, tracker=tracker)
         result = await tool.execute(
@@ -176,7 +180,8 @@ class TestEditToolExecution:
                 "new_str": "xxx",
             }
         )
-        assert result == "Error: file '/workspace/test.py' must be read before modify"
+        # Proceeds to edit (Guard layer would have blocked before reaching _execute)
+        assert "has been edited" in result
 
     async def test_snippet_includes_context_lines(
         self, mock_session: MagicMock, tracker_marked: ReadTracker

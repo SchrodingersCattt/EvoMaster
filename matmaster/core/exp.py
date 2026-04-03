@@ -51,6 +51,7 @@ class Exp:
         self._config = config
         self._cleanup_callbacks: list[Callable[[], Any]] = []
         self._skill_registry: Any = None
+        self._read_tracker: Any = None  # Set by _init_builtin_tools, used in build_runtime
         self.logger = logging.getLogger(self.__class__.__name__)
 
     # ── Properties ───────────────────────────────────────
@@ -224,12 +225,21 @@ class Exp:
                 bus=bus,
             )
 
+        # 6. Guards: inject ReadBeforeModifyGuard if tracker exists
+        guards = list(spec.guards)
+        if self._read_tracker is not None:
+            from matmaster.core.guard_pipeline import ReadBeforeModifyGuard
+
+            guards.append(ReadBeforeModifyGuard())
+
         spec = spec.model_copy(
             update={
                 'tool_registry': registry,
                 'system_prompt': system_prompt,
                 'hooks': hooks,
                 'compactor': compactor,
+                'guards': guards,
+                'read_tracker': self._read_tracker,
             }
         )
 
@@ -355,8 +365,11 @@ class Exp:
             WriteTool,
         )
 
-        # Create ReadTracker shared instance for Read-Before-Modify protocol
+        # Create ReadTracker shared instance for Read-Before-Modify protocol.
+        # Shared between: ReadTool (marks reads), WriteTool (validate_input),
+        # GuardPipeline (via ReadBeforeModifyGuard for edit_file).
         tracker = ReadTracker()
+        self._read_tracker = tracker  # Expose for build_runtime guard injection
 
         exec_wd = Path(ctx.execution_workdir)
         native_tools = [
