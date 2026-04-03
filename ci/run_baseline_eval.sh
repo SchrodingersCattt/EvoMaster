@@ -83,7 +83,8 @@ if [[ "${EVAL_RUNNER}" == "devshell" ]]; then
 
     echo ""
     echo "[STEP 1] DevShell 跑题（prepare + agent run + ingest 一步完成）..."
-    "${DEVSHELL_CMD[@]}"
+    DEVSHELL_EXIT=0
+    "${DEVSHELL_CMD[@]}" || DEVSHELL_EXIT=$?
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Claude CLI 模式
@@ -237,3 +238,9 @@ fi
 echo ""
 echo "=== 评测完成（${EVAL_RUNNER}）==="
 echo "  查看详细产物请下载 CI artifact: results/"
+
+# 传递 devshell 退出码（部分题目失败时仍需收集 artifact 后再退出）
+if [[ "${EVAL_RUNNER}" == "devshell" && "${DEVSHELL_EXIT:-0}" -ne 0 ]]; then
+    echo "[CI] devshell 有题目失败，退出码: ${DEVSHELL_EXIT}"
+    exit "${DEVSHELL_EXIT}"
+fi

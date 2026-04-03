@@ -807,7 +807,7 @@ def main() -> int:
     print(f"Wrote {raw_path}", file=sys.stderr)
 
     if not args.no_export_review:
-        export_script = REPO_ROOT / "scripts" / "export_devshell_review_bundle.py"
+        export_script = REPO_ROOT / "evaluation" / "scripts" / "devshell" / "export_devshell_review_bundle.py"
         review_md = run_dir / "claude_review.md"
         export_cmd: list[str | Path] = [
             py,
