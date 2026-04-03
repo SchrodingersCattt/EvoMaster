@@ -155,13 +155,19 @@ baseline-eval-trigger:
       artifacts: true
   variables:
     DYNAMIC_IMAGE: $DYNAMIC_IMAGE
+    EVAL_RUNNER: $EVAL_RUNNER
+    BASELINE_MODES: $BASELINE_MODES
+    BASELINE_LIMIT: $BASELINE_LIMIT
+    BASELINE_MAX_TURNS: $BASELINE_MAX_TURNS
+    BASELINE_TIMEOUT: $BASELINE_TIMEOUT
+    BASELINE_MODEL: $BASELINE_MODEL
+    BASELINE_RUN_LABEL: $BASELINE_RUN_LABEL
+    BASELINE_PENDING_ONLY: $BASELINE_PENDING_ONLY
   trigger:
     include:
       - artifact: ci/generated-eval-child.yml
         job: generate-eval-pipeline
     strategy: depend
-    forward:
-      pipeline_variables: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
     - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "baseline-eval"'
