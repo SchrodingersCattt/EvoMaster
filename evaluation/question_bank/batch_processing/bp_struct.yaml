@@ -196,7 +196,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_003_20260331
+- id: BP_struct_003_20260403
   capability: batch_processing
   domain: struct
   intent: Generate 5 VASP INCAR input files for Al ENCUT convergence test (280, 300,
@@ -244,7 +244,8 @@ questions:
   - key: incar_format_valid
     value: VASP INCAR key=value format
   - key: single_variable_control
-    value: Only ENCUT differs across the 5 files
+    value: Only ENCUT differs across the 5 files (SYSTEM tag and comment lines may
+      also vary as they are cosmetic, not computational)
   - key: grounding_config_used
     value: Parameters from convergence_encut.json
   - key: duration_budget
@@ -258,7 +259,9 @@ questions:
     verify: numerical_range
   - id: encut_sweep_values
     criterion: 'The 5 INCAR files contain ENCUT values 280, 300, 320, 340, 360 eV
-      respectively, and ENCUT is the only parameter that differs across files.'
+      respectively, and ENCUT is the only computational parameter that differs across
+      files. Cosmetic fields such as SYSTEM tags, comment lines, or filename references
+      may also vary and should not be counted as violations.'
     axis: correctness
     verify: llm_binary_judge
   - id: kpoint_mesh_constant
@@ -275,8 +278,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: single_variable_control
-    criterion: Comparing any two of the 5 INCAR files, the only line that differs
-      is the ENCUT value. All other lines are byte-identical.
+    criterion: Comparing any two of the 5 INCAR files, ENCUT is the only computational
+      parameter that differs. All other computational parameters (ISMEAR, SIGMA, NSW,
+      EDIFF, PREC, etc.) are identical. Cosmetic differences in SYSTEM tags, comment
+      lines, or first-line labels are acceptable.
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_config_used
