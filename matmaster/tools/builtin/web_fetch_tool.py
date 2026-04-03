@@ -24,6 +24,8 @@ from bs4 import BeautifulSoup
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
 
 try:
     import fitz  # PyMuPDF
@@ -270,6 +272,14 @@ class WebFetchTool(BuiltinTool):
         },
         "required": ["url"],
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="web", mode="counted", max_concurrent=3),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset({"web.fetch"})
+    effect_level: ClassVar[str] = "external_effect"
+    max_result_chars: ClassVar[int] = 16000
+    plane: ClassVar[ToolPlane] = ToolPlane.EXTERNAL_SERVICE
+    stop_mode: ClassVar[str] = "best_effort"
 
     def __init__(self, *, workdir: Path | None = None) -> None:
         super().__init__(workdir=workdir)

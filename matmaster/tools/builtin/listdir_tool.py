@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
+
 from .base import BuiltinTool
 
 
@@ -29,6 +32,14 @@ class ListDirTool(BuiltinTool):
             },
         },
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource='session', mode='exclusive'),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset({'workspace.list'})
+    effect_level: ClassVar[str] = 'none'
+    fast_path_eligible: ClassVar[bool] = True
+    max_result_chars: ClassVar[int] = 8000
+    plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         session = self._require_session()
