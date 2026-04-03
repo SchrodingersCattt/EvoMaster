@@ -42,7 +42,7 @@ not tool endpoints.
 class SkillMetaInfo(BaseModel):
     name: str = Field(description="Skill name (kebab-case)")
     description: str = Field(description="Short description")
-    skill_type: Literal["operator", "mcp-loader"] | None = Field(
+    skill_type: Literal["operator", "mcp-loader", "orchestrator"] | None = Field(
         default=None, description="Skill category"
     )
     mcp_server: str | None = Field(
@@ -85,19 +85,24 @@ Old schema (6 parameters, 2 required):
 }
 ```
 
-New schema (2 parameters, 1 required):
+New schema (1 parameter, 1 required):
 
 ```python
 {
     'skill_name': str,   # required -- kebab-case skill name
-    'args': str,         # optional -- arguments passed to the skill
 }
 ```
 
 #### SkillTool.execute() new logic
 
+Execution is wrapped via `asyncio.to_thread` to avoid blocking the event loop on
+file I/O (first-call SKILL.md read before cache kicks in).
+
 ```python
 async def execute(self, arguments: dict[str, Any]) -> str:
+    return await asyncio.to_thread(self._execute_sync, arguments)
+
+def _execute_sync(self, arguments: dict[str, Any]) -> str:
     skill_name = arguments['skill_name']
     skill = self._registry.get_skill(skill_name)
     if skill is None:
@@ -139,20 +144,18 @@ async def execute(self, arguments: dict[str, Any]) -> str:
 def __init__(
     self,
     skill_registry: SkillRegistry,
-    session: Any,  # retained for backward compat, unused after run_script removal
     on_skill_hit: Callable[[str], None] | None = None,
 ) -> None:
 ```
 
-`session` parameter is kept for now to avoid changing the call site in `Exp._init_skill_tools`.
-Can be removed in a follow-up cleanup.
+`session` parameter removed. Call site in `Exp._init_skill_tools` updated accordingly.
 
 ### 3. Unchanged Components
 
 - **ContextBuilder** (`context_builder.py`): No changes. `get_meta_info_context()` output
   format unchanged.
 - **Exp._init_skill_tools** (`exp.py`): `on_skill_hit` callback logic unchanged.
-  SkillTool construction unchanged.
+  SkillTool construction updated to remove `session` parameter.
 - **SkillRegistry** (`registry.py`): Discovery, filtering, override logic unchanged.
 - **script_env.py**: Untouched. Will be integrated into BashTool/session layer in a
   separate PR.
@@ -173,11 +176,25 @@ Can be removed in a follow-up cleanup.
 | File | Nature of change |
 |------|-----------------|
 | `matmaster/skills/registry.py` | SkillMetaInfo fields + `_parse_meta_info` parsing |
-| `matmaster/tools/skill_tool.py` | Rewrite execute logic, remove 3-action dispatch |
+| `matmaster/tools/skill_tool.py` | Rewrite execute logic, remove 3-action dispatch, remove session param |
+| `matmaster/core/exp.py` | Update SkillTool construction (remove session arg) |
 | `tests/test_skill_registry.py` | Adapt assertions |
 | `tests/test_skill_tool.py` | Rewrite |
 | `tests/matmaster/tools/test_skill_meta_extras.py` | Adapt assertions |
 | `tests/matmaster/tools/test_skill_tool_callback.py` | Minor adaptation |
+
+## Known Risks
+
+- **Credential injection gap**: Removing `run_script` means `script_env.inject()` has no
+  caller. Operator skills that need Bohrium credentials (e.g., `bohrium-job`) will lack
+  auto-injected env vars when LLM runs scripts via `execute_bash`. Mitigation: separate PR
+  to integrate credential injection into BashTool/session layer. Until then, credentials
+  can be manually exported by the user or injected via session env setup.
+- **Legacy instructions in SKILL.md**: Some SKILL.md bodies contain literal
+  `use_skill action=get_reference` or `run_script` instructions. After this change, the
+  `use_skill` schema no longer accepts these parameters. The LLM will receive the expanded
+  content including these old instructions but will adapt using available tools (Read,
+  execute_bash) and the base directory path. No SKILL.md changes required.
 
 ## Out of Scope
 
