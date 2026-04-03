@@ -5,10 +5,9 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from matmaster.core.hooks import Hook, HookAction
 from matmaster.tools.tool_registry import Tool
 from matmaster.types.llm_provider import LLMProvider
-from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
+from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.topology import ToolPlane
 from matmaster.validation import validate_async_protocol
 
@@ -54,26 +53,6 @@ class SyncTool:
 
     def execute(self, arguments: dict[str, Any]) -> str:
         return "sync"
-
-
-class SyncHook:
-    def pre_tool_call(self, tool_call):
-        return HookAction.CONTINUE
-
-    def post_tool_call(self, tool_call, result):
-        pass
-
-    def pre_llm_call(self, messages, turn):
-        pass
-
-    def should_continue(self, messages, turn):
-        return True
-
-    def on_stream_chunk(self, chunk):
-        pass
-
-    def on_segment_complete(self, segment_type, content, stream_id):
-        pass
 
 
 # -- Async mocks (correct for async Protocol) --
@@ -146,26 +125,6 @@ class AsyncToolOK:
         return "async"
 
 
-class AsyncHookOK:
-    async def pre_tool_call(self, tool_call):
-        return HookAction.CONTINUE
-
-    async def post_tool_call(self, tool_call, result):
-        pass
-
-    async def pre_llm_call(self, messages, turn):
-        pass
-
-    async def should_continue(self, messages, turn):
-        return True
-
-    async def on_stream_chunk(self, chunk):
-        pass
-
-    async def on_segment_complete(self, segment_type, content, stream_id):
-        pass
-
-
 # -- Tests --
 
 
@@ -198,15 +157,6 @@ class TestValidateAsyncProtocol:
 
     def test_passes_async_tool(self) -> None:
         errors = validate_async_protocol(AsyncToolOK(), Tool)
-        assert errors == []
-
-    def test_detects_sync_mismatch_on_hook(self) -> None:
-        """Sync Hook fails -- all 6 methods should report mismatch."""
-        errors = validate_async_protocol(SyncHook(), Hook)
-        assert len(errors) == 6
-
-    def test_passes_async_hook(self) -> None:
-        errors = validate_async_protocol(AsyncHookOK(), Hook)
         assert errors == []
 
     def test_missing_method(self) -> None:
@@ -269,16 +219,6 @@ class TestAsyncTestInfrastructure:
         result = await tool.execute({"key": "value"})
         assert result == "ok"
 
-    async def test_async_mock_hook_works(self) -> None:
-        from tests.conftest import MockAsyncHook
-
-        hook = MockAsyncHook()
-        action = await hook.pre_tool_call(
-            ToolCallData(id="tc-1", name="test", arguments={})
-        )
-        assert action == HookAction.CONTINUE
-
-
 class TestValidationWithConftest:
     def test_mock_async_provider_passes_validation(self) -> None:
         from tests.conftest import MockAsyncLLMProvider
@@ -292,8 +232,3 @@ class TestValidationWithConftest:
         errors = validate_async_protocol(MockAsyncTool(), Tool)
         assert errors == []
 
-    def test_mock_async_hook_passes_validation(self) -> None:
-        from tests.conftest import MockAsyncHook
-
-        errors = validate_async_protocol(MockAsyncHook(), Hook)
-        assert errors == []

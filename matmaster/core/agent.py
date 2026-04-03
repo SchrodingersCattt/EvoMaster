@@ -9,7 +9,6 @@ Termination conditions:
 - max_turns: turn counter reaches spec.max_turns
 - cancelled: stop_event is set (checked each turn, during stream chunks, retry
   backoff, and between serial tool_calls)
-- hook_stopped: should_continue hook returns False
 """
 
 from __future__ import annotations
@@ -37,8 +36,10 @@ if TYPE_CHECKING:
     from matmaster.types.runtime import AgentRuntimeSpec
 
 from matmaster.core.hooks import (
-    run_pre_llm_call,
-    run_should_continue,
+    CompactionContext,
+    HookEvent,
+    RunContext,
+    UserPromptContext,
 )
 from matmaster.types.messages import (
     AssistantMessage,
@@ -123,11 +124,14 @@ class AgentKernel:
                 sp = spec.compactor._summary_provider
                 if sp is not spec.llm_provider:
                     _summary_provider = sp
+            last_reason: str | None = None
 
             async def _consume_and_yield():
+                nonlocal last_reason
                 async for item in self._run_items(spec, task, history, stop_event):
                     if item.terminal is not None:
                         reason = item.terminal.reason
+                        last_reason = reason
                         status = 'cancelled' if reason == 'cancelled' else (
                             'failed' if reason == 'invalid_finish' else 'completed'
                         )
@@ -144,13 +148,41 @@ class AgentKernel:
                     if item.event is not None:
                         yield item.event
 
-            if _summary_provider is not None:
-                async with _summary_provider:
+            if spec.hook_executor is not None:
+                await spec.hook_executor.emit(
+                    HookEvent.RUN_START,
+                    RunContext(
+                        task_id=spec.meta.get("task_id", ""),
+                        session_id=spec.meta.get("session_id", ""),
+                        reason="startup",
+                    ),
+                )
+
+            try:
+                if _summary_provider is not None:
+                    async with _summary_provider:
+                        async for event in _consume_and_yield():
+                            yield event
+                else:
                     async for event in _consume_and_yield():
                         yield event
-            else:
-                async for event in _consume_and_yield():
-                    yield event
+            except BaseException as exc:
+                if last_reason is None:
+                    if isinstance(exc, (GeneratorExit, asyncio.CancelledError)):
+                        last_reason = 'cancelled'
+                    else:
+                        last_reason = 'error'
+                raise
+            finally:
+                if spec.hook_executor is not None:
+                    await spec.hook_executor.emit(
+                        HookEvent.RUN_END,
+                        RunContext(
+                            task_id=spec.meta.get("task_id", ""),
+                            session_id=spec.meta.get("session_id", ""),
+                            reason=last_reason or 'error',
+                        ),
+                    )
 
     @staticmethod
     def _terminal(
@@ -179,10 +211,22 @@ class AgentKernel:
     ) -> AsyncIterator[_KernelItem]:
         """Core generator loop: yields _KernelItem for each event.
 
-        Yields events for streaming, AssistantState, and SkillHit. Hook paths
-        (pre_llm_call, should_continue) are still invoked internally.
+        Yields events for streaming, AssistantState, and SkillHit.
         """
         from matmaster.core.tool_runner import ToolExecutionContext
+
+        if spec.hook_executor is not None:
+            session_id = spec.meta.get("session_id", "")
+            prompt_ctx = UserPromptContext(prompt=task, session_id=session_id)
+            task = await spec.hook_executor.emit_rewrite(
+                HookEvent.USER_PROMPT_SUBMIT,
+                prompt_ctx,
+                task,
+            )
+            await spec.hook_executor.emit(
+                HookEvent.USER_PROMPT_SUBMIT,
+                UserPromptContext(prompt=task, session_id=session_id),
+            )
 
         state = _KernelState(
             messages=[
@@ -192,10 +236,14 @@ class AgentKernel:
             ]
         )
 
-        compactor_events: deque = deque()
+        compactor_events: deque[tuple[Any, int, int]] = deque()
+        compaction_prev_count = len(state.messages)
 
         async def _compactor_sink(event: Any) -> None:
-            compactor_events.append(event)
+            nonlocal compaction_prev_count
+            messages_after = len(state.messages)
+            compactor_events.append((event, compaction_prev_count, messages_after))
+            compaction_prev_count = messages_after
 
         if spec.compactor:
             spec.compactor._event_sink = _compactor_sink
@@ -210,18 +258,31 @@ class AgentKernel:
 
             state.turn += 1
 
-            await run_pre_llm_call(spec.hooks, state.messages, state.turn)
-
-            if not await run_should_continue(spec.hooks, state.messages, state.turn):
-                yield self._terminal(state, 'hook_stopped', turn_offset=-1)
-                return
-
             if spec.compactor:
+                compaction_prev_count = len(state.messages)
                 await spec.compactor.compact_if_needed(
                     state.messages, turn_usage, state.turn
                 )
                 while compactor_events:
-                    yield _KernelItem(event=compactor_events.popleft())
+                    (
+                        compaction_event,
+                        messages_before,
+                        messages_after,
+                    ) = compactor_events.popleft()
+                    yield _KernelItem(event=compaction_event)
+                    if spec.hook_executor is not None and hasattr(
+                        compaction_event, "payload"
+                    ):
+                        payload = getattr(compaction_event, "payload", {}) or {}
+                        await spec.hook_executor.emit(
+                            HookEvent.CONTEXT_COMPACTION,
+                            CompactionContext(
+                                messages_before=messages_before,
+                                messages_after=messages_after,
+                                trigger_tokens=payload.get("trigger_tokens", 0),
+                                strategy=payload.get("strategy", "unknown"),
+                            ),
+                        )
 
             # ── Tool definitions resolution (version-aware caching) ──
             if (

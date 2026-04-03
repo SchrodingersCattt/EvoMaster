@@ -1,13 +1,11 @@
 """DevEventObserver -- SimpleQueue-backed local event observer for DevShell.
 
 Replaces the MessageBus dependency in DevShell with a thread-safe local
-observer that converts hook callbacks into structured event objects for
-EventLogger consumption.
+observer that forwards generator events to EventLogger consumption.
 
 Components:
 - DevEventObserver: SimpleQueue-backed event collector (thread-safe)
-- DevEventHook: BaseHook subclass that converts kernel hook callbacks
-  into ThoughtEvent/ResponseEvent/ToolCallEvent/ToolResultEvent objects
+- DevEventHook: lightweight adapter with on_event() for compatibility
 
 Usage pattern:
     observer = DevEventObserver()
@@ -22,18 +20,6 @@ from __future__ import annotations
 import uuid
 from queue import Empty, SimpleQueue
 from typing import Any
-
-from matmaster.core.hooks import BaseHook, HookAction
-from matmaster.tools.tool_result import ToolResult
-from matmaster.types.events import (
-    ContextCompactionEvent,
-    ResponseEvent,
-    RunResultEvent,
-    ThoughtEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-)
-from matmaster.types.messages import StreamChunk, ToolCallData
 
 _SOURCE = "devshell"
 
@@ -77,64 +63,11 @@ class DevEventObserver:
         return _sink
 
 
-class DevEventHook(BaseHook):
-    """Hook that converts kernel callbacks into event objects for DevEventObserver.
-
-    Converts:
-    - on_segment_complete(thought) -> ThoughtEvent
-    - on_segment_complete(response) -> ResponseEvent
-    - pre_tool_call -> ToolCallEvent
-    - post_tool_call -> ToolResultEvent
-    """
+class DevEventHook:
+    """Compatibility adapter that forwards generator events to the observer."""
 
     def __init__(self, observer: DevEventObserver) -> None:
         self._observer = observer
 
-    async def on_segment_complete(
-        self, segment_type: str, content: str, stream_id: str | None
-    ) -> None:
-        """Convert completed thought/response segments into events."""
-        if segment_type == "thought":
-            self._observer.emit(
-                ThoughtEvent(
-                    source=_SOURCE,
-                    content=content,
-                    stream_state="complete",
-                    stream_id=stream_id,
-                )
-            )
-        elif segment_type == "response":
-            self._observer.emit(
-                ResponseEvent(
-                    source=_SOURCE,
-                    content=content,
-                    stream_state="complete",
-                    stream_id=stream_id,
-                )
-            )
-
-    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
-        """Emit ToolCallEvent before tool execution."""
-        self._observer.emit(
-            ToolCallEvent(
-                source=_SOURCE,
-                call_id=tool_call.id,
-                tool_name=tool_call.name,
-                arguments=tool_call.arguments,
-            )
-        )
-        return HookAction.CONTINUE
-
-    async def post_tool_call(
-        self, tool_call: ToolCallData, result: ToolResult
-    ) -> None:
-        """Emit ToolResultEvent after tool execution."""
-        self._observer.emit(
-            ToolResultEvent(
-                source=_SOURCE,
-                call_id=tool_call.id,
-                tool_name=tool_call.name,
-                result=result.content,
-                is_error=result.status == "error",
-            )
-        )
+    def on_event(self, event: Any) -> None:
+        self._observer.emit(event)

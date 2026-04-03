@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.context_builder import ContextBuilder
+from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
@@ -94,6 +95,7 @@ class Exp:
     def _make_spawn_fn(
         ctx: PlaygroundContext,
         source_prefix: str,
+        hook_executor: HookExecutor | None = None,
     ) -> Any:
         """Create async spawn_fn closure capturing parent runtime context.
 
@@ -114,20 +116,41 @@ class Exp:
             child_exp = Exp(child_config)
             child_source = f'{source_prefix}:{exp_name}'
             child_spawn_id = uuid.uuid4().hex[:16]
-            drain = await drain_run_stream(
-                child_exp.run_stream(
-                    ctx,
-                    task,
-                    stop_event=stop_event,
-                    source_override=child_source,
-                    spawn_id=child_spawn_id,
+            parent_session_id = ctx.run_meta.get("session_id", "")
+            if hook_executor is not None:
+                await hook_executor.emit(
+                    HookEvent.SUBAGENT_START,
+                    SubagentContext(
+                        agent_id=child_spawn_id,
+                        agent_type=exp_name,
+                        parent_session_id=parent_session_id,
+                        task_preview=task[:200],
+                    ),
                 )
-            )
+            try:
+                drain = await drain_run_stream(
+                    child_exp.run_stream(
+                        ctx,
+                        task,
+                        stop_event=stop_event,
+                        source_override=child_source,
+                        spawn_id=child_spawn_id,
+                    )
+                )
+            finally:
+                if hook_executor is not None:
+                    await hook_executor.emit(
+                        HookEvent.SUBAGENT_STOP,
+                        SubagentContext(
+                            agent_id=child_spawn_id,
+                            agent_type=exp_name,
+                            parent_session_id=parent_session_id,
+                            task_preview=task[:200],
+                        ),
+                    )
             if drain.status == "completed" and drain.final_content:
                 return drain.final_content
-            return (
-                f"SubAgent finished with status={drain.status}, reason={drain.reason}"
-            )
+            return f"SubAgent finished with status={drain.status}, reason={drain.reason}"
 
         return spawn_fn
 
@@ -223,6 +246,7 @@ class Exp:
 
         compiler = ToolCompiler()
         catalog = ToolCatalog(registry, compiler=compiler, topology=topology)
+        hook_executor = HookExecutor()
 
         # 3. Skills: runtime-injected (pass catalog for overlay registration)
         if skills or self._config.skills.enabled:
@@ -233,7 +257,11 @@ class Exp:
             from matmaster.config.loader import list_available_exps
             from matmaster.tools.builtin.spawn_tool import SpawnTool
 
-            spawn_fn = self._make_spawn_fn(ctx, source_prefix='MatMaster')
+            spawn_fn = self._make_spawn_fn(
+                ctx,
+                source_prefix='MatMaster',
+                hook_executor=hook_executor,
+            )
             spawn_tool = SpawnTool(
                 session=ctx.session,
                 workdir=Path(ctx.execution_workdir),
@@ -264,10 +292,7 @@ class Exp:
         if tool_prompts:
             system_prompt = f"{system_prompt}\n\n{tool_prompts}"
 
-        # 6. Hooks (EventEmitterHook retired in Phase 34; generator events replace it)
-        hooks = list(spec.hooks)
-
-        # 7. Compaction: event_sink=None, _run_items() injects local sink at runtime
+        # 6. Compaction: event_sink=None, _run_items() injects local sink at runtime
         compactor = None
         if spec.compaction.enabled and spec.llm_provider is not None:
             from matmaster.core.context_compactor import ContextCompactor
@@ -293,7 +318,7 @@ class Exp:
                 event_sink=None,  # _run_items() injects a local deque-backed sink
             )
 
-        # 8. Build FullToolRunner (ESIN-04: default execution path)
+        # 7. Build FullToolRunner (ESIN-04: default execution path)
         structural_validation = StructuralValidation()
         capability_policy = DefaultCapabilityPolicy()
         scheduler = ToolScheduler()
@@ -306,10 +331,12 @@ class Exp:
             capability_policy=capability_policy,
             scheduler=scheduler,
             topology=topology,
+            hook_executor=hook_executor,
             state=runner_state,
         )
 
         # 9. Assemble final spec with all v2 fields
+        run_meta = getattr(ctx, "run_meta", {}) or {}
         spec = spec.model_copy(
             update={
                 'tool_catalog': catalog,
@@ -318,8 +345,13 @@ class Exp:
                 'capability_policy': capability_policy,
                 'structural_validation': structural_validation,
                 'system_prompt': system_prompt,
-                'hooks': hooks,
+                'hook_executor': hook_executor,
                 'compactor': compactor,
+                'meta': {
+                    **spec.meta,
+                    'task_id': run_meta.get('task_id', ''),
+                    'session_id': run_meta.get('session_id', ''),
+                },
             }
         )
 

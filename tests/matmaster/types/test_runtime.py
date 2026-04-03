@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from matmaster.core.hooks import BaseHook, Hook
+from matmaster.core.hooks import HookExecutor
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -114,7 +114,7 @@ class TestAgentRuntimeSpec:
 
         )
         assert spec.max_turns == 100
-        assert spec.hooks == []
+        assert spec.hook_executor is None
         assert spec.system_prompt == ""
         assert isinstance(spec.compaction, CompactionConfig)
         assert "guards" not in AgentRuntimeSpec.model_fields
@@ -148,7 +148,7 @@ class TestAgentRuntimeSpec:
         assert data["system_prompt"] == "You are a scientist."
         assert "llm_provider" in data
         assert "guards" not in data
-        assert "hooks" in data
+        assert "hook_executor" in data
         assert "compaction" in data
 
     # ── New typed field tests ──────────────────────────
@@ -164,28 +164,15 @@ class TestAgentRuntimeSpec:
         )
         assert isinstance(spec.llm_provider, LLMProvider)
 
-    def test_hooks_typed_as_hook_protocol(self) -> None:
-        """hooks field accepts list of Hook Protocol-conforming objects."""
-        hook = BaseHook()
-        assert isinstance(hook, Hook)
-
+    def test_hook_executor_accepts_executor_instance(self) -> None:
+        """hook_executor field accepts HookExecutor instances."""
+        executor = HookExecutor()
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-
-            hooks=[hook],
-        )
-        assert len(spec.hooks) == 1
-        assert all(isinstance(h, Hook) for h in spec.hooks)
-
-    def test_with_mock_provider_and_hooks(self) -> None:
-        """AgentRuntimeSpec with MockLLMProvider and BaseHook constructs successfully."""
-        spec = AgentRuntimeSpec(
-            llm_provider=_MockLLMProvider(),
-
-            hooks=[BaseHook(), BaseHook()],
+            hook_executor=executor,
         )
         assert isinstance(spec.llm_provider, LLMProvider)
-        assert len(spec.hooks) == 2
+        assert spec.hook_executor is executor
 
 
 class TestAgentRuntimeSpecCompactor:
@@ -231,7 +218,7 @@ class TestAgentRuntimeSpecDefaults:
         )
         assert spec.max_turns == 100
         assert spec.system_prompt == ""
-        assert spec.hooks == []
+        assert spec.hook_executor is None
         assert "guards" not in AgentRuntimeSpec.model_fields
 
 
@@ -338,7 +325,7 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
         """Existing _make_spec() pattern (no new fields) still works."""
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            hooks=[],
+            hook_executor=None,
             max_turns=10,
             system_prompt="You are a test agent",
         )

@@ -1,157 +1,182 @@
-"""Hook Protocol, BaseHook defaults, HookAction enum, and run_* helper functions.
+"""Unified hook dispatch for the matmaster runtime.
 
-Hooks allow external code to observe and intercept the kernel execution loop.
-Six hook points are defined:
-
-- pre_tool_call: intercept before tool execution (CONTINUE/SKIP)
-- post_tool_call: observe after tool execution (no return)
-- pre_llm_call: observe before LLM call (no return)
-- should_continue: intercept loop continuation (True/False)
-- on_stream_chunk: observe streaming chunks (no return)
-- on_segment_complete: observe completed logical thought/response segments
-
-Intercepting hooks (pre_tool_call, should_continue) short-circuit on the first
-non-default return. Observation hooks (post_tool_call, pre_llm_call,
-on_stream_chunk, on_segment_complete) execute all hooks without short-circuit.
+The hook system centers on HookExecutor with three capabilities:
+- observe: fire-and-forget event observation
+- intercept: parallel veto checks with aggregated results
+- rewrite: serial transformation chains
 """
 
 from __future__ import annotations
 
+import asyncio
 import enum
-from typing import Protocol, runtime_checkable
+import logging
+from collections import defaultdict
+from copy import deepcopy
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, TypeVar
 
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.messages import Message, StreamChunk, ToolCallData
+
+logger = logging.getLogger(__name__)
+
+ObserveHandler = Callable[[Any], Awaitable[None]]
+InterceptHandler = Callable[[Any], Awaitable["HookResult"]]
+RewriteHandler = Callable[[Any, Any], Awaitable[Any]]
+T = TypeVar("T")
 
 
-class HookAction(enum.Enum):
-    """Action returned by intercepting hooks."""
-
-    CONTINUE = "continue"
-    SKIP = "skip"
+def _clone_hook_value(value: T) -> T:
+    """Return an isolated snapshot for hook execution."""
+    return deepcopy(value)
 
 
-@runtime_checkable
-class Hook(Protocol):
-    """Hook interface for observing and intercepting kernel execution.
-
-    All hook methods are async. Use BaseHook as a base class
-    to get default implementations for all hook points.
-    """
-
-    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction: ...
-
-    async def post_tool_call(
-        self, tool_call: ToolCallData, result: ToolResult
-    ) -> ToolResult | None: ...
-
-    async def pre_llm_call(self, messages: list[Message], turn: int) -> None: ...
-
-    async def should_continue(self, messages: list[Message], turn: int) -> bool: ...
-
-    async def on_stream_chunk(self, chunk: StreamChunk) -> None: ...
-
-    async def on_segment_complete(
-        self, segment_type: str, content: str, stream_id: str | None
-    ) -> None: ...
+class HookEvent(str, enum.Enum):
+    RUN_START = "run_start"
+    RUN_END = "run_end"
+    PRE_TOOL_CALL = "pre_tool_call"
+    POST_TOOL_CALL = "post_tool_call"
+    SUBAGENT_START = "subagent_start"
+    SUBAGENT_STOP = "subagent_stop"
+    CONTEXT_COMPACTION = "context_compaction"
+    USER_PROMPT_SUBMIT = "user_prompt_submit"
 
 
-class BaseHook:
-    """Default hook implementation -- all methods are async no-ops or return defaults.
-
-    Subclass and override specific methods to customize behavior.
-    """
-
-    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
-        """Default: allow tool call to proceed."""
-        return HookAction.CONTINUE
-
-    async def post_tool_call(
-        self, tool_call: ToolCallData, result: ToolResult
-    ) -> ToolResult | None:
-        """Default: return None (no replacement)."""
-        return None
-
-    async def pre_llm_call(self, messages: list[Message], turn: int) -> None:
-        """Default: no-op observation."""
-
-    async def should_continue(self, messages: list[Message], turn: int) -> bool:
-        """Default: continue execution."""
-        return True
-
-    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
-        """Default: no-op observation."""
-
-    async def on_segment_complete(
-        self, segment_type: str, content: str, stream_id: str | None
-    ) -> None:
-        """Default: no-op observation."""
+class HookOutcome(str, enum.Enum):
+    SUCCESS = "success"
+    BLOCK = "block"
+    ERROR = "error"
 
 
-# ── run_* helper functions ────────────────────────────
+@dataclass
+class HookResult:
+    outcome: HookOutcome = HookOutcome.SUCCESS
+    message: str = ""
+    data: Any = None
 
 
-async def run_pre_tool_call(hooks: list[Hook], tool_call: ToolCallData) -> HookAction:
-    """Run pre_tool_call on all hooks with short-circuit on SKIP.
-
-    If any hook returns SKIP, immediately return SKIP without calling
-    remaining hooks. If all return CONTINUE, return CONTINUE.
-    """
-    for hook in hooks:
-        action = await hook.pre_tool_call(tool_call)
-        if action == HookAction.SKIP:
-            return HookAction.SKIP
-    return HookAction.CONTINUE
+@dataclass(frozen=True)
+class RunContext:
+    task_id: str
+    session_id: str
+    reason: str
 
 
-async def run_should_continue(
-    hooks: list[Hook], messages: list[Message], turn: int
-) -> bool:
-    """Run should_continue on all hooks with short-circuit on False.
-
-    If any hook returns False, immediately return False without calling
-    remaining hooks. If all return True, return True.
-    """
-    for hook in hooks:
-        if not await hook.should_continue(messages, turn):
-            return False
-    return True
+@dataclass(frozen=True)
+class PreToolCallContext:
+    tool_name: str
+    tool_call_id: str
+    arguments: dict[str, Any]
+    turn: int
 
 
-async def run_pre_llm_call(
-    hooks: list[Hook], messages: list[Message], turn: int
-) -> None:
-    """Run pre_llm_call on all hooks (observation, no short-circuit)."""
-    for hook in hooks:
-        await hook.pre_llm_call(messages, turn)
+@dataclass(frozen=True)
+class PostToolCallContext:
+    tool_name: str
+    tool_call_id: str
+    arguments: dict[str, Any]
+    result: ToolResult
+    turn: int
 
 
-async def run_post_tool_call(
-    hooks: list[Hook], tool_call: ToolCallData, result: ToolResult
-) -> ToolResult:
-    """Run post_tool_call hooks as a serial rewrite chain.
-
-    Each hook receives the current result and may return a replacement.
-    If a hook returns None, the current result is unchanged.
-    Returns the final (possibly rewritten) ToolResult.
-    """
-    current = result
-    for hook in hooks:
-        replacement = await hook.post_tool_call(tool_call, current)
-        if replacement is not None:
-            current = replacement
-    return current
+@dataclass(frozen=True)
+class SubagentContext:
+    agent_id: str
+    agent_type: str
+    parent_session_id: str
+    task_preview: str = ""
 
 
-async def run_on_stream_chunk(hooks: list[Hook], chunk: StreamChunk) -> None:
-    """Run on_stream_chunk on all hooks (observation, no short-circuit)."""
-    for hook in hooks:
-        await hook.on_stream_chunk(chunk)
+@dataclass(frozen=True)
+class CompactionContext:
+    messages_before: int
+    messages_after: int
+    trigger_tokens: int
+    strategy: str
 
 
-async def run_on_segment_complete(
-    hooks: list[Hook], segment_type: str, content: str, stream_id: str | None
-) -> None:
-    """Run on_segment_complete on all hooks (observation, no short-circuit)."""
-    for hook in hooks:
-        await hook.on_segment_complete(segment_type, content, stream_id)
+@dataclass(frozen=True)
+class UserPromptContext:
+    prompt: str
+    session_id: str
+
+
+class HookExecutor:
+    """Unified hook dispatch: observe, intercept, and rewrite."""
+
+    def __init__(self) -> None:
+        self._observers: dict[HookEvent, list[ObserveHandler]] = defaultdict(list)
+        self._interceptors: dict[HookEvent, list[InterceptHandler]] = defaultdict(list)
+        self._rewriters: dict[HookEvent, list[RewriteHandler]] = defaultdict(list)
+
+    def on(self, event: HookEvent, handler: ObserveHandler) -> None:
+        self._observers[event].append(handler)
+
+    def intercept(self, event: HookEvent, handler: InterceptHandler) -> None:
+        self._interceptors[event].append(handler)
+
+    def rewrite(self, event: HookEvent, handler: RewriteHandler) -> None:
+        self._rewriters[event].append(handler)
+
+    async def emit(self, event: HookEvent, ctx: Any) -> None:
+        handlers = self._observers.get(event, [])
+        if not handlers:
+            return
+        results = await asyncio.gather(
+            *(handler(_clone_hook_value(ctx)) for handler in handlers),
+            return_exceptions=True,
+        )
+        for index, result in enumerate(results):
+            if isinstance(result, BaseException):
+                logger.warning("Hook %s raised: %s", handlers[index], result)
+
+    async def emit_intercept(self, event: HookEvent, ctx: Any) -> HookResult:
+        handlers = self._interceptors.get(event, [])
+        if not handlers:
+            return HookResult()
+
+        results = await asyncio.gather(
+            *(
+                self._safe_intercept(handler, _clone_hook_value(ctx))
+                for handler in handlers
+            )
+        )
+        blocks = [result for result in results if result.outcome == HookOutcome.BLOCK]
+        if blocks:
+            message = "; ".join(block.message for block in blocks if block.message)
+            return HookResult(outcome=HookOutcome.BLOCK, message=message)
+        return HookResult()
+
+    async def emit_rewrite(self, event: HookEvent, ctx: Any, data: T) -> T:
+        for handler in self._rewriters.get(event, []):
+            try:
+                modified = await handler(
+                    _clone_hook_value(ctx),
+                    _clone_hook_value(data),
+                )
+                if modified is not None:
+                    data = modified
+            except Exception as exc:
+                logger.warning("Rewrite hook %s raised: %s", handler, exc)
+        return data
+
+    async def _safe_intercept(self, handler: InterceptHandler, ctx: Any) -> HookResult:
+        try:
+            return await handler(ctx)
+        except Exception as exc:
+            logger.warning("Intercept hook %s raised: %s", handler, exc)
+            return HookResult(outcome=HookOutcome.ERROR, message=str(exc))
+
+
+__all__ = [
+    "CompactionContext",
+    "HookEvent",
+    "HookExecutor",
+    "HookOutcome",
+    "HookResult",
+    "PostToolCallContext",
+    "PreToolCallContext",
+    "RunContext",
+    "SubagentContext",
+    "UserPromptContext",
+]

@@ -48,6 +48,15 @@ class _SimpleTool:
     def __init__(self, name: str, result: str = "ok") -> None:
         self._name = name
         self._result = result
+        self.resource_claims: tuple[ResourceClaim, ...] = ()
+        self.capabilities = frozenset()
+        self.effect_level = "none"
+        self.fast_path_eligible = False
+        self.max_result_chars = 0
+        self.plane = ToolPlane.CONTROL_PLANE
+        self.state_mode = "stateless"
+        self.stop_mode = "cancellable"
+        self.exposed_to_model = True
 
     @property
     def name(self) -> str:
@@ -61,6 +70,12 @@ class _SimpleTool:
     def json_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {}}
 
+    def describe(self, ctx: Any | None = None) -> str:
+        return self.description
+
+    def prompt(self, ctx: Any | None = None) -> str | None:
+        return None
+
     async def execute(self, arguments: dict[str, Any]) -> ToolResult:
         return ToolResult(content=self._result)
 
@@ -70,6 +85,15 @@ class _ErrorTool:
 
     def __init__(self, name: str) -> None:
         self._name = name
+        self.resource_claims: tuple[ResourceClaim, ...] = ()
+        self.capabilities = frozenset()
+        self.effect_level = "none"
+        self.fast_path_eligible = False
+        self.max_result_chars = 0
+        self.plane = ToolPlane.CONTROL_PLANE
+        self.state_mode = "stateless"
+        self.stop_mode = "cancellable"
+        self.exposed_to_model = True
 
     @property
     def name(self) -> str:
@@ -82,6 +106,12 @@ class _ErrorTool:
     @property
     def json_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {}}
+
+    def describe(self, ctx: Any | None = None) -> str:
+        return self.description
+
+    def prompt(self, ctx: Any | None = None) -> str | None:
+        return None
 
     async def execute(self, arguments: dict[str, Any]) -> ToolResult:
         raise RuntimeError("boom")
@@ -554,6 +584,9 @@ class _StringReturnTool:
             self.fast_path_eligible = False
             self.max_result_chars = 0
             self.plane = ToolPlane.SESSION_FS
+        self.state_mode = "stateless"
+        self.stop_mode = "cancellable"
+        self.exposed_to_model = True
 
     @property
     def name(self) -> str:
@@ -566,6 +599,12 @@ class _StringReturnTool:
     @property
     def json_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {}}
+
+    def describe(self, ctx: Any | None = None) -> str:
+        return self.description
+
+    def prompt(self, ctx: Any | None = None) -> str | None:
+        return None
 
     async def execute(self, arguments: dict[str, Any]) -> str:
         return self._result
@@ -601,6 +640,15 @@ class TestNormalizeAndTruncation:
             fast_path_eligible = True
             max_result_chars = 12000
             plane = ToolPlane.SESSION_FS
+            state_mode = "stateless"
+            stop_mode = "cancellable"
+            exposed_to_model = True
+
+            def describe(self, ctx: Any | None = None) -> str:
+                return self.description
+
+            def prompt(self, ctx: Any | None = None) -> str | None:
+                return None
 
             async def execute(self, arguments: dict[str, Any]) -> None:
                 return None
@@ -674,6 +722,17 @@ class TestNormalizeAndTruncation:
         class _SlowReadTool:
             def __init__(self, name: str) -> None:
                 self._name = name
+                self.resource_claims = (
+                    ResourceClaim(resource="workspace", mode="shared_read"),
+                )
+                self.capabilities = frozenset({"workspace.read"})
+                self.effect_level = "none"
+                self.fast_path_eligible = True
+                self.max_result_chars = 12000
+                self.plane = ToolPlane.SESSION_FS
+                self.state_mode = "stateless"
+                self.stop_mode = "cancellable"
+                self.exposed_to_model = True
 
             @property
             def name(self) -> str:
@@ -686,6 +745,12 @@ class TestNormalizeAndTruncation:
             @property
             def json_schema(self) -> dict[str, Any]:
                 return {"type": "object", "properties": {}}
+
+            def describe(self, ctx: Any | None = None) -> str:
+                return self.description
+
+            def prompt(self, ctx: Any | None = None) -> str | None:
+                return None
 
             async def execute(self, arguments: dict[str, Any]) -> ToolResult:
                 nonlocal started_count
@@ -757,6 +822,21 @@ class TestNormalizeAndTruncation:
             name = "ctx_tool"
             description = "capture"
             json_schema: dict[str, Any] = {"type": "object", "properties": {}}
+            resource_claims = ()
+            capabilities = frozenset()
+            effect_level = "none"
+            fast_path_eligible = False
+            max_result_chars = 0
+            plane = ToolPlane.CONTROL_PLANE
+            state_mode = "stateless"
+            stop_mode = "cancellable"
+            exposed_to_model = True
+
+            def describe(self, ctx: Any | None = None) -> str:
+                return self.description
+
+            def prompt(self, ctx: Any | None = None) -> str | None:
+                return None
 
             async def execute_with_context(
                 self, arguments: dict[str, Any], exec_ctx: ExecCtx
@@ -891,6 +971,15 @@ class TestInputValidatorInRunner:
             fast_path_eligible = True
             max_result_chars = 12000
             plane = ToolPlane.SESSION_FS
+            state_mode = "stateless"
+            stop_mode = "cancellable"
+            exposed_to_model = True
+
+            def describe(self, ctx: Any | None = None) -> str:
+                return self.description
+
+            def prompt(self, ctx: Any | None = None) -> str | None:
+                return None
 
             async def execute(self, arguments: dict[str, Any]) -> ToolResult:
                 captured_args.update(arguments)

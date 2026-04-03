@@ -6,16 +6,17 @@ Note: Exp is lazy-imported via __getattr__ to avoid circular import
 
 from .agent import AgentKernel
 from .context_builder import ContextBuilder
-from .hooks import BaseHook, Hook, HookAction
+from .hooks import HookEvent, HookExecutor, HookOutcome, HookResult
 from .playground import Playground, PlaygroundManager
 
 __all__ = [
     "AgentKernel",
-    "BaseHook",
     "ContextBuilder",
     "Exp",
-    "Hook",
-    "HookAction",
+    "HookEvent",
+    "HookExecutor",
+    "HookOutcome",
+    "HookResult",
     "Playground",
     "PlaygroundManager",
 ]

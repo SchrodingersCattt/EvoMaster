@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matmaster.core.hooks import Hook
+from matmaster.core.hooks import HookExecutor
 
 from .llm_provider import LLMProvider
 
@@ -56,8 +56,8 @@ class AgentRuntimeSpec(BaseModel):
     # Termination (CONT-05: simplified to max_turns field)
     max_turns: int = 100
 
-    # Hooks (Phase 2: typed as Hook Protocol)
-    hooks: list[Hook] = Field(default_factory=list)
+    # Hook executor
+    hook_executor: HookExecutor | None = None
 
     # Context
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)

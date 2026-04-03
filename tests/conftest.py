@@ -1,8 +1,4 @@
-"""Root conftest -- async mock factories for Protocol testing.
-
-Provides MockAsyncLLMProvider, MockAsyncTool, MockAsyncHook that satisfy
-the async Protocol definitions. Used across all test suites for Phase 12+.
-"""
+"""Root conftest -- async mock factories for protocol testing."""
 
 from __future__ import annotations
 
@@ -11,9 +7,7 @@ from typing import Any
 
 import pytest
 
-from matmaster.core.hooks import HookAction
-from matmaster.tools.tool_result import ToolResult
-from matmaster.types.messages import LLMResponse, Message, StreamChunk, ToolCallData
+from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.topology import ToolPlane
 
 
@@ -101,30 +95,6 @@ class MockAsyncTool:
         return self._result
 
 
-class MockAsyncHook:
-    """Async mock satisfying Hook Protocol for testing."""
-
-    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
-        return HookAction.CONTINUE
-
-    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
-        pass
-
-    async def pre_llm_call(self, messages: list[Message], turn: int) -> None:
-        pass
-
-    async def should_continue(self, messages: list[Message], turn: int) -> bool:
-        return True
-
-    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
-        pass
-
-    async def on_segment_complete(
-        self, segment_type: str, content: str, stream_id: str | None
-    ) -> None:
-        pass
-
-
 # -- Fixtures --
 
 
@@ -137,7 +107,3 @@ def async_llm_provider() -> MockAsyncLLMProvider:
 def async_tool() -> MockAsyncTool:
     return MockAsyncTool()
 
-
-@pytest.fixture
-def async_hook() -> MockAsyncHook:
-    return MockAsyncHook()

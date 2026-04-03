@@ -18,6 +18,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from matmaster.core.hooks import (
+    HookEvent,
+    HookExecutor,
+    HookOutcome,
+    PostToolCallContext,
+    PreToolCallContext,
+)
 from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
@@ -68,7 +75,6 @@ class ToolRunner(Protocol):
 class FullToolRunner:
     """Complete ToolRunner: Catalog -> Validation -> Policy -> Scheduler -> Execute -> Release.
 
-    Per D-01: Does not call pre_hook/post_hook.
     Per D-05: Strictly follows spec section 9.1 execution chain.
     Per D-06: Each layer produces ToolResult with meta["layer"] marking failure source.
     """
@@ -80,6 +86,7 @@ class FullToolRunner:
         capability_policy: CapabilityPolicy,
         scheduler: ToolScheduler,
         topology: RuntimeTopology,
+        hook_executor: HookExecutor | None = None,
         state: ToolRunnerState | None = None,
     ) -> None:
         self._catalog = catalog
@@ -87,6 +94,7 @@ class FullToolRunner:
         self._policy = capability_policy
         self._scheduler = scheduler
         self._topology = topology
+        self._hook_executor = hook_executor
         self._state = state or ToolRunnerState()
 
     @property
@@ -156,6 +164,28 @@ class FullToolRunner:
                 if on_result:
                     await on_result(tc, tr)
                 continue
+
+            if self._hook_executor is not None:
+                pre_ctx = PreToolCallContext(
+                    tool_name=tc.name,
+                    tool_call_id=tc.id,
+                    arguments=tc.arguments,
+                    turn=ctx.turn,
+                )
+                await self._hook_executor.emit(HookEvent.PRE_TOOL_CALL, pre_ctx)
+                hook_result = await self._hook_executor.emit_intercept(
+                    HookEvent.PRE_TOOL_CALL, pre_ctx
+                )
+                if hook_result.outcome == HookOutcome.BLOCK:
+                    tr = ToolResult(
+                        status="blocked",
+                        content=hook_result.message or "Blocked by hook",
+                        meta={"layer": "hook"},
+                    )
+                    results[idx] = (tc, tr)
+                    if on_result:
+                        await on_result(tc, tr)
+                    continue
 
             # 1b. Cancel check (stop_mode-aware)
             if ctx.stop_event is not None and ctx.stop_event.is_set():
@@ -308,6 +338,26 @@ class FullToolRunner:
         max_chars = instance.tool_spec.max_result_chars
         if max_chars > 0 and len(tr.content) > max_chars:
             tr = self._truncate_result(tr, max_chars, tc.id)
+
+        if self._hook_executor is not None:
+            post_ctx = PostToolCallContext(
+                tool_name=tc.name,
+                tool_call_id=tc.id,
+                arguments=tc.arguments,
+                result=tr,
+                turn=batch_ctx.turn,
+            )
+            tr = await self._hook_executor.emit_rewrite(
+                HookEvent.POST_TOOL_CALL, post_ctx, tr
+            )
+            post_ctx_final = PostToolCallContext(
+                tool_name=tc.name,
+                tool_call_id=tc.id,
+                arguments=tc.arguments,
+                result=tr,
+                turn=batch_ctx.turn,
+            )
+            await self._hook_executor.emit(HookEvent.POST_TOOL_CALL, post_ctx_final)
 
         results[idx] = (tc, tr)
         if on_result:

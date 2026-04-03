@@ -214,32 +214,56 @@ class TestShowTools:
 
 
 class TestDevStreamHookSegment:
-    async def test_on_segment_complete_thought_verbose(self) -> None:
+    def test_on_event_thought_streaming_writes_content(self) -> None:
         import io
 
         from matmaster.devshell.stream_hook import DevStreamHook
+        from matmaster.types.events import ThoughtEvent
 
         out = io.StringIO()
         hook = DevStreamHook(output=out, verbose=True)
-        await hook.on_segment_complete("thought", "some thought", "s1")
-        assert "thought complete" in out.getvalue()
+        hook.on_event(
+            ThoughtEvent(
+                source="agent",
+                content="some thought",
+                stream_state="streaming",
+                stream_id="s1",
+            )
+        )
+        assert out.getvalue() == "some thought"
 
-    async def test_on_segment_complete_thought_non_verbose(self) -> None:
+    def test_on_event_thought_end_writes_newline(self) -> None:
         import io
 
         from matmaster.devshell.stream_hook import DevStreamHook
+        from matmaster.types.events import ThoughtEvent
 
         out = io.StringIO()
         hook = DevStreamHook(output=out, verbose=False)
-        await hook.on_segment_complete("thought", "some thought", "s1")
-        assert out.getvalue() == ""
+        hook.on_event(
+            ThoughtEvent(
+                source="agent",
+                content="",
+                stream_state="end",
+                stream_id="s1",
+            )
+        )
+        assert out.getvalue() == "\n"
 
-    async def test_on_segment_complete_response_silent(self) -> None:
+    def test_on_event_response_complete_writes_content(self) -> None:
         import io
 
         from matmaster.devshell.stream_hook import DevStreamHook
+        from matmaster.types.events import ResponseEvent
 
         out = io.StringIO()
         hook = DevStreamHook(output=out, verbose=True)
-        await hook.on_segment_complete("response", "content", "s1")
-        assert out.getvalue() == ""
+        hook.on_event(
+            ResponseEvent(
+                source="agent",
+                content="content",
+                stream_state="complete",
+                stream_id="s1",
+            )
+        )
+        assert out.getvalue() == "content"

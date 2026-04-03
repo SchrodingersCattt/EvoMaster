@@ -347,6 +347,21 @@ class TestSkillOverlayCatalog:
             name = "server_tool1"
             description = "test tool"
             json_schema = {"type": "object", "properties": {}}
+            resource_claims = ()
+            capabilities = frozenset()
+            effect_level = "none"
+            fast_path_eligible = False
+            max_result_chars = 0
+            plane = "control_plane"
+            state_mode = "stateless"
+            stop_mode = "cancellable"
+            exposed_to_model = True
+
+            def describe(self, ctx=None):
+                return self.description
+
+            def prompt(self, ctx=None):
+                return None
 
             async def execute(self, arguments):
                 return "result"

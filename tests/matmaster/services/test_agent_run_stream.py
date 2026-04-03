@@ -78,7 +78,7 @@ class _FakeExp:
     async def build_runtime(self, *args: Any, **kwargs: Any) -> Any:
         runtime = MagicMock()
         spec = MagicMock()
-        spec.hooks = []
+        spec.hook_executor = None
         spec.tool_catalog = None
         runtime.spec = spec
         return runtime

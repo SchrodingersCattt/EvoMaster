@@ -9,6 +9,7 @@ import pytest
 
 from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
+from matmaster.core.hooks import HookExecutor
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import (
@@ -143,15 +144,15 @@ class TestExpBuildRuntime:
         sig = inspect.signature(exp.build_runtime)
         assert 'bus' not in sig.parameters
 
-    async def test_no_hooks_by_default(self) -> None:
-        """No hooks in spec.hooks when none are injected."""
+    async def test_build_runtime_creates_hook_executor(self) -> None:
+        """build_runtime() always injects a HookExecutor."""
         exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert len(runtime.spec.hooks) == 0
+        assert isinstance(runtime.spec.hook_executor, HookExecutor)
 
     async def test_runtime_has_cleanup_callable(self) -> None:
         """AgentRuntime.cleanup is a callable."""

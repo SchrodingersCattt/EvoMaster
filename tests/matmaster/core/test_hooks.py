@@ -1,286 +1,350 @@
-"""Tests for matmaster.core.hooks -- Hook Protocol, BaseHook, HookAction, run_* helpers."""
+"""Tests for the redesigned hook system."""
 
 from __future__ import annotations
 
 import pytest
 
 from matmaster.core.hooks import (
-    BaseHook,
-    Hook,
-    HookAction,
-    run_on_stream_chunk,
-    run_post_tool_call,
-    run_pre_llm_call,
-    run_pre_tool_call,
-    run_should_continue,
+    CompactionContext,
+    HookEvent,
+    HookExecutor,
+    HookOutcome,
+    HookResult,
+    PostToolCallContext,
+    PreToolCallContext,
+    RunContext,
+    SubagentContext,
+    UserPromptContext,
 )
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.messages import (
-    Message,
-    StreamChunk,
-    SystemMessage,
-    ToolCallData,
-    UserMessage,
-)
-
-# ── Fixtures ──────────────────────────────────────────
 
 
-@pytest.fixture
-def sample_tool_call() -> ToolCallData:
-    return ToolCallData(id="tc-1", name="test_tool", arguments={"key": "value"})
+class TestHookEvent:
+    def test_all_events_defined(self) -> None:
+        assert len(HookEvent) == 8
+
+    def test_values_are_strings(self) -> None:
+        assert HookEvent.RUN_START == "run_start"
+        assert HookEvent.RUN_END == "run_end"
+        assert HookEvent.PRE_TOOL_CALL == "pre_tool_call"
+        assert HookEvent.POST_TOOL_CALL == "post_tool_call"
+        assert HookEvent.SUBAGENT_START == "subagent_start"
+        assert HookEvent.SUBAGENT_STOP == "subagent_stop"
+        assert HookEvent.CONTEXT_COMPACTION == "context_compaction"
+        assert HookEvent.USER_PROMPT_SUBMIT == "user_prompt_submit"
 
 
-@pytest.fixture
-def sample_messages() -> list[Message]:
-    return [
-        SystemMessage(content="You are a test agent"),
-        UserMessage(content="hello"),
-    ]
+class TestHookOutcome:
+    def test_outcomes(self) -> None:
+        assert HookOutcome.SUCCESS == "success"
+        assert HookOutcome.BLOCK == "block"
+        assert HookOutcome.ERROR == "error"
 
 
-@pytest.fixture
-def sample_chunk() -> StreamChunk:
-    return StreamChunk(
-        content="hello",
-        stream_state="streaming",
-        stream_id="s1",
-        reasoning_content="thinking",
-    )
+class TestHookResult:
+    def test_defaults(self) -> None:
+        result = HookResult()
+        assert result.outcome == HookOutcome.SUCCESS
+        assert result.message == ""
+        assert result.data is None
+
+    def test_block_with_message(self) -> None:
+        result = HookResult(outcome=HookOutcome.BLOCK, message="blocked")
+        assert result.outcome == HookOutcome.BLOCK
+        assert result.message == "blocked"
 
 
-# ── Hook Protocol conformance ────────────────────────
+class TestContextDataclasses:
+    def test_run_context_frozen(self) -> None:
+        ctx = RunContext(task_id="t1", session_id="s1", reason="startup")
+        with pytest.raises(AttributeError):
+            ctx.reason = "other"  # type: ignore[misc]
 
-
-class TestHookProtocol:
-    def test_base_hook_satisfies_protocol(self) -> None:
-        hook = BaseHook()
-        assert isinstance(hook, Hook)
-
-    async def test_base_hook_pre_tool_call_default(
-        self, sample_tool_call: ToolCallData
-    ) -> None:
-        hook = BaseHook()
-        result = await hook.pre_tool_call(sample_tool_call)
-        assert result == HookAction.CONTINUE
-
-    async def test_base_hook_post_tool_call_default(
-        self, sample_tool_call: ToolCallData
-    ) -> None:
-        hook = BaseHook()
-        result = await hook.post_tool_call(
-            sample_tool_call, ToolResult(content="result")
+    def test_pre_tool_call_context(self) -> None:
+        ctx = PreToolCallContext(
+            tool_name="bash",
+            tool_call_id="tc1",
+            arguments={"cmd": "ls"},
+            turn=1,
         )
-        assert result is None
+        assert ctx.tool_name == "bash"
+        assert ctx.turn == 1
 
-    async def test_base_hook_pre_llm_call_default(
-        self, sample_messages: list[Message]
-    ) -> None:
-        hook = BaseHook()
-        result = await hook.pre_llm_call(sample_messages, 1)
-        assert result is None
-
-    async def test_base_hook_should_continue_default(
-        self, sample_messages: list[Message]
-    ) -> None:
-        hook = BaseHook()
-        result = await hook.should_continue(sample_messages, 1)
-        assert result is True
-
-    async def test_base_hook_on_stream_chunk_default(
-        self, sample_chunk: StreamChunk
-    ) -> None:
-        hook = BaseHook()
-        result = await hook.on_stream_chunk(sample_chunk)
-        assert result is None
-
-    async def test_base_hook_on_segment_complete_default(self) -> None:
-        hook = BaseHook()
-        result = await hook.on_segment_complete("thought", "done", "s1")
-        assert result is None
-
-
-# ── Custom hook overrides ─────────────────────────────
-
-
-class SkipHook(BaseHook):
-    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
-        return HookAction.SKIP
-
-
-class StopHook(BaseHook):
-    async def should_continue(self, messages: list[Message], turn: int) -> bool:
-        return False
-
-
-class TestCustomHookOverrides:
-    async def test_pre_tool_call_skip(self, sample_tool_call: ToolCallData) -> None:
-        hook = SkipHook()
-        assert await hook.pre_tool_call(sample_tool_call) == HookAction.SKIP
-
-    async def test_should_continue_false(self, sample_messages: list[Message]) -> None:
-        hook = StopHook()
-        assert await hook.should_continue(sample_messages, 1) is False
-
-
-# ── Hook short-circuit helpers ────────────────────────
-
-
-class TrackingHook(BaseHook):
-    """Hook that tracks whether each method was called."""
-
-    def __init__(self) -> None:
-        self.pre_tool_call_called = False
-        self.post_tool_call_called = False
-        self.pre_llm_call_called = False
-        self.should_continue_called = False
-        self.on_stream_chunk_called = False
-
-    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
-        self.pre_tool_call_called = True
-        return HookAction.CONTINUE
-
-    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
-        self.post_tool_call_called = True
-
-    async def pre_llm_call(self, messages: list[Message], turn: int) -> None:
-        self.pre_llm_call_called = True
-
-    async def should_continue(self, messages: list[Message], turn: int) -> bool:
-        self.should_continue_called = True
-        return True
-
-    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
-        self.on_stream_chunk_called = True
-
-
-class TrackingSkipHook(TrackingHook):
-    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
-        self.pre_tool_call_called = True
-        return HookAction.SKIP
-
-
-class TrackingStopHook(TrackingHook):
-    async def should_continue(self, messages: list[Message], turn: int) -> bool:
-        self.should_continue_called = True
-        return False
-
-
-class TestHookShortCircuit:
-    async def test_pre_tool_call_skip_first(
-        self, sample_tool_call: ToolCallData
-    ) -> None:
-        """First hook skips -> second hook not called."""
-        skip_hook = TrackingSkipHook()
-        continue_hook = TrackingHook()
-        result = await run_pre_tool_call([skip_hook, continue_hook], sample_tool_call)
-        assert result == HookAction.SKIP
-        assert skip_hook.pre_tool_call_called is True
-        assert continue_hook.pre_tool_call_called is False
-
-    async def test_pre_tool_call_skip_second(
-        self, sample_tool_call: ToolCallData
-    ) -> None:
-        """First continues, second skips -> returns SKIP."""
-        continue_hook = TrackingHook()
-        skip_hook = TrackingSkipHook()
-        result = await run_pre_tool_call([continue_hook, skip_hook], sample_tool_call)
-        assert result == HookAction.SKIP
-        assert continue_hook.pre_tool_call_called is True
-        assert skip_hook.pre_tool_call_called is True
-
-    async def test_pre_tool_call_all_continue(
-        self, sample_tool_call: ToolCallData
-    ) -> None:
-        """All hooks continue -> returns CONTINUE."""
-        h1 = TrackingHook()
-        h2 = TrackingHook()
-        result = await run_pre_tool_call([h1, h2], sample_tool_call)
-        assert result == HookAction.CONTINUE
-
-    async def test_should_continue_false_first(
-        self, sample_messages: list[Message]
-    ) -> None:
-        """First hook returns False -> second not called."""
-        stop_hook = TrackingStopHook()
-        continue_hook = TrackingHook()
-        result = await run_should_continue(
-            [stop_hook, continue_hook], sample_messages, 1
+    def test_post_tool_call_context(self) -> None:
+        result = ToolResult(status="success", content="ok")
+        ctx = PostToolCallContext(
+            tool_name="bash",
+            tool_call_id="tc1",
+            arguments={},
+            result=result,
+            turn=2,
         )
-        assert result is False
-        assert stop_hook.should_continue_called is True
-        assert continue_hook.should_continue_called is False
+        assert ctx.result.status == "success"
 
-    async def test_post_tool_call_calls_all(
-        self, sample_tool_call: ToolCallData
-    ) -> None:
-        """Observation hook -- both hooks called (no short-circuit)."""
-        h1 = TrackingHook()
-        h2 = TrackingHook()
-        await run_post_tool_call(
-            [h1, h2], sample_tool_call, ToolResult(content="result")
+    def test_subagent_context_default_task_preview(self) -> None:
+        ctx = SubagentContext(
+            agent_id="a1",
+            agent_type="direct",
+            parent_session_id="s1",
         )
-        assert h1.post_tool_call_called is True
-        assert h2.post_tool_call_called is True
+        assert ctx.task_preview == ""
 
-    async def test_post_tool_call_returns_rewritten_result(
-        self, sample_tool_call: ToolCallData
-    ) -> None:
-        """post_tool_call hook can rewrite the ToolResult."""
-
-        class RewritingHook(BaseHook):
-            async def post_tool_call(
-                self, tool_call: ToolCallData, result: ToolResult
-            ) -> ToolResult | None:
-                return ToolResult(content=result.content + " :: rewritten")
-
-        rewritten = await run_post_tool_call(
-            [RewritingHook()], sample_tool_call, ToolResult(content="raw")
+    def test_compaction_context(self) -> None:
+        ctx = CompactionContext(
+            messages_before=100,
+            messages_after=20,
+            trigger_tokens=8000,
+            strategy="summary",
         )
-        assert rewritten.content == "raw :: rewritten"
+        assert ctx.trigger_tokens == 8000
 
-    async def test_post_tool_call_chain_rewrite(
-        self, sample_tool_call: ToolCallData
-    ) -> None:
-        """Multiple hooks chain rewrites sequentially."""
+    def test_user_prompt_context(self) -> None:
+        ctx = UserPromptContext(prompt="hello", session_id="s1")
+        assert ctx.prompt == "hello"
 
-        class AppendHook(BaseHook):
-            def __init__(self, suffix: str) -> None:
-                self._suffix = suffix
 
-            async def post_tool_call(
-                self, tool_call: ToolCallData, result: ToolResult
-            ) -> ToolResult | None:
-                return ToolResult(content=result.content + self._suffix)
+class TestHookExecutorEmit:
+    async def test_emit_no_handlers(self) -> None:
+        executor = HookExecutor()
+        await executor.emit(HookEvent.RUN_START, RunContext("t1", "s1", "startup"))
 
-        result = await run_post_tool_call(
-            [AppendHook(" A"), AppendHook(" B")],
-            sample_tool_call,
-            ToolResult(content="raw"),
+    async def test_emit_calls_all_observers(self) -> None:
+        executor = HookExecutor()
+        calls: list[tuple[str, str]] = []
+
+        async def obs1(ctx: RunContext) -> None:
+            calls.append(("obs1", ctx.reason))
+
+        async def obs2(ctx: RunContext) -> None:
+            calls.append(("obs2", ctx.reason))
+
+        executor.on(HookEvent.RUN_START, obs1)
+        executor.on(HookEvent.RUN_START, obs2)
+
+        await executor.emit(HookEvent.RUN_START, RunContext("t1", "s1", "startup"))
+
+        assert ("obs1", "startup") in calls
+        assert ("obs2", "startup") in calls
+
+    async def test_emit_swallows_exceptions(self, caplog: pytest.LogCaptureFixture) -> None:
+        executor = HookExecutor()
+        caplog.set_level("WARNING")
+        good_called = False
+
+        async def bad_hook(ctx: RunContext) -> None:
+            raise ValueError("boom")
+
+        async def good_hook(ctx: RunContext) -> None:
+            nonlocal good_called
+            good_called = True
+
+        executor.on(HookEvent.RUN_START, bad_hook)
+        executor.on(HookEvent.RUN_START, good_hook)
+
+        await executor.emit(HookEvent.RUN_START, RunContext("t1", "s1", "startup"))
+
+        assert good_called is True
+        assert "boom" in caplog.text
+
+    async def test_emit_ignores_other_events(self) -> None:
+        executor = HookExecutor()
+        called = False
+
+        async def obs(ctx: RunContext) -> None:
+            nonlocal called
+            called = True
+
+        executor.on(HookEvent.RUN_START, obs)
+        await executor.emit(HookEvent.RUN_END, RunContext("t1", "s1", "completed"))
+        assert called is False
+
+
+class TestHookExecutorIntercept:
+    async def test_intercept_no_handlers_returns_success(self) -> None:
+        executor = HookExecutor()
+        result = await executor.emit_intercept(
+            HookEvent.PRE_TOOL_CALL,
+            PreToolCallContext("bash", "tc1", {}, 1),
         )
-        assert result.content == "raw A B"
+        assert result.outcome == HookOutcome.SUCCESS
 
-    async def test_post_tool_call_none_preserves_result(
-        self, sample_tool_call: ToolCallData
-    ) -> None:
-        """Hook returning None preserves the current result."""
-        result = await run_post_tool_call(
-            [BaseHook()], sample_tool_call, ToolResult(content="unchanged")
+    async def test_intercept_single_block(self) -> None:
+        executor = HookExecutor()
+
+        async def blocker(ctx: PreToolCallContext) -> HookResult:
+            return HookResult(outcome=HookOutcome.BLOCK, message="denied")
+
+        executor.intercept(HookEvent.PRE_TOOL_CALL, blocker)
+        result = await executor.emit_intercept(
+            HookEvent.PRE_TOOL_CALL,
+            PreToolCallContext("bash", "tc1", {}, 1),
         )
-        assert result.content == "unchanged"
 
-    async def test_pre_llm_call_calls_all(self, sample_messages: list[Message]) -> None:
-        """Observation hook -- both hooks called (no short-circuit)."""
-        h1 = TrackingHook()
-        h2 = TrackingHook()
-        await run_pre_llm_call([h1, h2], sample_messages, 1)
-        assert h1.pre_llm_call_called is True
-        assert h2.pre_llm_call_called is True
+        assert result.outcome == HookOutcome.BLOCK
+        assert result.message == "denied"
 
-    async def test_on_stream_chunk_calls_all(self, sample_chunk: StreamChunk) -> None:
-        """Observation hook -- both hooks called (no short-circuit)."""
-        h1 = TrackingHook()
-        h2 = TrackingHook()
-        await run_on_stream_chunk([h1, h2], sample_chunk)
-        assert h1.on_stream_chunk_called is True
-        assert h2.on_stream_chunk_called is True
+    async def test_intercept_multiple_blocks_aggregate_messages(self) -> None:
+        executor = HookExecutor()
+
+        async def blocker1(ctx: PreToolCallContext) -> HookResult:
+            return HookResult(outcome=HookOutcome.BLOCK, message="reason1")
+
+        async def blocker2(ctx: PreToolCallContext) -> HookResult:
+            return HookResult(outcome=HookOutcome.BLOCK, message="reason2")
+
+        executor.intercept(HookEvent.PRE_TOOL_CALL, blocker1)
+        executor.intercept(HookEvent.PRE_TOOL_CALL, blocker2)
+        result = await executor.emit_intercept(
+            HookEvent.PRE_TOOL_CALL,
+            PreToolCallContext("bash", "tc1", {}, 1),
+        )
+
+        assert result.outcome == HookOutcome.BLOCK
+        assert "reason1" in result.message
+        assert "reason2" in result.message
+
+    async def test_intercept_all_success(self) -> None:
+        executor = HookExecutor()
+
+        async def allow(ctx: PreToolCallContext) -> HookResult:
+            return HookResult()
+
+        executor.intercept(HookEvent.PRE_TOOL_CALL, allow)
+        result = await executor.emit_intercept(
+            HookEvent.PRE_TOOL_CALL,
+            PreToolCallContext("bash", "tc1", {}, 1),
+        )
+
+        assert result.outcome == HookOutcome.SUCCESS
+
+    async def test_intercept_exception_becomes_error(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        executor = HookExecutor()
+        caplog.set_level("WARNING")
+
+        async def bad(ctx: PreToolCallContext) -> HookResult:
+            raise RuntimeError("oops")
+
+        executor.intercept(HookEvent.PRE_TOOL_CALL, bad)
+        result = await executor.emit_intercept(
+            HookEvent.PRE_TOOL_CALL,
+            PreToolCallContext("bash", "tc1", {}, 1),
+        )
+
+        assert result.outcome == HookOutcome.SUCCESS
+        assert "oops" in caplog.text
+
+
+class TestHookExecutorRewrite:
+    async def test_rewrite_no_handlers_returns_original(self) -> None:
+        executor = HookExecutor()
+        result = await executor.emit_rewrite(
+            HookEvent.USER_PROMPT_SUBMIT,
+            UserPromptContext("hello", "s1"),
+            "hello",
+        )
+        assert result == "hello"
+
+    async def test_rewrite_single_modifier(self) -> None:
+        executor = HookExecutor()
+
+        async def add_prefix(ctx: UserPromptContext, prompt: str) -> str:
+            return f"[modified] {prompt}"
+
+        executor.rewrite(HookEvent.USER_PROMPT_SUBMIT, add_prefix)
+        result = await executor.emit_rewrite(
+            HookEvent.USER_PROMPT_SUBMIT,
+            UserPromptContext("hello", "s1"),
+            "hello",
+        )
+
+        assert result == "[modified] hello"
+
+    async def test_rewrite_chain_passes_previous_output(self) -> None:
+        executor = HookExecutor()
+
+        async def step1(ctx: UserPromptContext, data: str) -> str:
+            return f"({data})"
+
+        async def step2(ctx: UserPromptContext, data: str) -> str:
+            return f"[{data}]"
+
+        executor.rewrite(HookEvent.USER_PROMPT_SUBMIT, step1)
+        executor.rewrite(HookEvent.USER_PROMPT_SUBMIT, step2)
+        result = await executor.emit_rewrite(
+            HookEvent.USER_PROMPT_SUBMIT,
+            UserPromptContext("x", "s1"),
+            "x",
+        )
+
+        assert result == "[(x)]"
+
+    async def test_rewrite_none_means_no_change(self) -> None:
+        executor = HookExecutor()
+
+        async def noop(ctx: UserPromptContext, data: str) -> None:
+            return None
+
+        async def modify(ctx: UserPromptContext, data: str) -> str:
+            return f"[{data}]"
+
+        executor.rewrite(HookEvent.USER_PROMPT_SUBMIT, noop)
+        executor.rewrite(HookEvent.USER_PROMPT_SUBMIT, modify)
+        result = await executor.emit_rewrite(
+            HookEvent.USER_PROMPT_SUBMIT,
+            UserPromptContext("x", "s1"),
+            "x",
+        )
+
+        assert result == "[x]"
+
+    async def test_rewrite_none_discards_in_place_mutation(self) -> None:
+        executor = HookExecutor()
+        original = ToolResult(content="original")
+
+        async def mutate_but_return_none(
+            ctx: PostToolCallContext, data: ToolResult
+        ) -> None:
+            data.content = "mutated"
+            return None
+
+        executor.rewrite(HookEvent.POST_TOOL_CALL, mutate_but_return_none)
+        result = await executor.emit_rewrite(
+            HookEvent.POST_TOOL_CALL,
+            PostToolCallContext(
+                tool_name="bash",
+                tool_call_id="tc1",
+                arguments={},
+                result=original,
+                turn=1,
+            ),
+            original,
+        )
+
+        assert result.content == "original"
+
+    async def test_rewrite_exception_swallowed(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        executor = HookExecutor()
+        caplog.set_level("WARNING")
+
+        async def bad(ctx: UserPromptContext, data: str) -> str:
+            raise ValueError("fail")
+
+        async def good(ctx: UserPromptContext, data: str) -> str:
+            return f"[{data}]"
+
+        executor.rewrite(HookEvent.USER_PROMPT_SUBMIT, bad)
+        executor.rewrite(HookEvent.USER_PROMPT_SUBMIT, good)
+        result = await executor.emit_rewrite(
+            HookEvent.USER_PROMPT_SUBMIT,
+            UserPromptContext("x", "s1"),
+            "x",
+        )
+
+        assert result == "[x]"
+        assert "fail" in caplog.text
