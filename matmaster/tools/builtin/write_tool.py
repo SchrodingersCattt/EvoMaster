@@ -5,7 +5,8 @@ Read-Before-Modify for existing files is enforced via validate_input()
 session capability check that Guard layer should not depend on.
 New files (path_exists=False) are written without restriction.
 
-When tracker is None, protocol enforcement is disabled (backward compat).
+When runner_state is None, read-before-modify enforcement is disabled
+for backward compatibility during the migration.
 """
 
 from __future__ import annotations
@@ -14,6 +15,9 @@ import posixpath
 from typing import Any, ClassVar
 
 from matmaster.types.tool_decision import ToolDecision
+from matmaster.types.tool_runner_state import ToolRunnerState
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
 
 from .base import BuiltinTool
 from .read_tracker import ReadTracker
@@ -44,6 +48,12 @@ class WriteTool(BuiltinTool):
         },
         "required": ["file_path", "content"],
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="workspace", mode="exclusive"),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset({"workspace.write"})
+    effect_level: ClassVar[str] = "local_mutation"
+    plane: ClassVar[ToolPlane] = ToolPlane.SESSION_FS
 
     def __init__(
         self,
@@ -53,9 +63,14 @@ class WriteTool(BuiltinTool):
         tracker: ReadTracker | None = None,
     ) -> None:
         super().__init__(session=session, workdir=workdir)
-        self._tracker = tracker
+        # Temporary compatibility: accept tracker until Exp stops passing it.
+        self._compat_tracker = tracker
 
-    async def validate_input(self, arguments: dict[str, Any]) -> ToolDecision | None:
+    async def validate_input(
+        self,
+        arguments: dict[str, Any],
+        runner_state: ToolRunnerState | None = None,
+    ) -> ToolDecision | None:
         from pathlib import PurePosixPath
 
         file_path = arguments.get("file_path", "")
@@ -75,16 +90,16 @@ class WriteTool(BuiltinTool):
             return ToolDecision(decision="deny", reason=f"invalid file_path: '{file_path}'")
 
         # Read-before-modify check for existing files
-        if self._tracker is not None and self._session is not None:
+        if runner_state is not None and self._session is not None:
             normalized = posixpath.normpath(file_path)
-            if self._session.path_exists(file_path) and not self._tracker.has_been_read(
-                normalized
-            ):
-                return ToolDecision(
-                    decision="deny",
-                    reason=f"File '{file_path}' must be read before overwrite",
-                    guidance="Read the file first using read_file.",
-                )
+            if self._session.path_exists(file_path):
+                read_files = runner_state.get("read_files", set())
+                if normalized not in read_files:
+                    return ToolDecision(
+                        decision="deny",
+                        reason=f"File '{file_path}' must be read before overwrite",
+                        guidance="Read the file first using read_file.",
+                    )
         return None
 
     def _execute(self, arguments: dict[str, Any]) -> str:
