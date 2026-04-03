@@ -18,18 +18,18 @@
 |------|--------|---------------|
 | `matmaster/core/hooks.py` | Rewrite | HookEvent enum, 6 context dataclasses, HookOutcome, HookResult, handler type aliases, HookExecutor |
 | `matmaster/types/runtime.py` | Modify (line 19, 68) | Replace `hooks: list[Hook]` with `hook_executor: HookExecutor \| None` |
-| `matmaster/core/exp.py` | Modify (lines 95-134, 259, 317, 356-394) | Create HookExecutor in build_runtime; RUN_START/END in run_stream; SUBAGENT hooks in _make_spawn_fn |
-| `matmaster/core/tool_runner.py` | Modify (lines 26-31, 200-206, 274-286) | PRE_TOOL_CALL + POST_TOOL_CALL in FullToolRunner; remove D-01 constraint; clean up imports |
-| `matmaster/core/agent.py` | Modify (lines 39-42, 188-224) | USER_PROMPT_SUBMIT + CONTEXT_COMPACTION hooks; remove old run_pre_llm_call/run_should_continue |
+| `matmaster/core/exp.py` | Modify | Create HookExecutor in build_runtime (before _make_spawn_fn); SUBAGENT hooks in _make_spawn_fn; inject run_meta into spec.meta |
+| `matmaster/core/tool_runner.py` | Modify | PRE_TOOL_CALL + POST_TOOL_CALL in FullToolRunner; remove D-01 constraint; clean up imports |
+| `matmaster/core/agent.py` | Modify | RUN_START/END in AgentKernel.run_stream; USER_PROMPT_SUBMIT + CONTEXT_COMPACTION in _run_items; remove old run_pre_llm_call/run_should_continue |
 | `matmaster/devshell/stream_hook.py` | Modify (all) | Remove BaseHook inheritance and old hook methods; keep on_event() |
 | `matmaster/devshell/event_observer.py` | Modify (all) | Remove BaseHook inheritance and old hook methods from DevEventHook |
 | `matmaster/core/__init__.py` | Modify (lines 7-24) | Update re-exports |
-| `matmaster/hooks/__init__.py` | Delete | Empty module, hooks retired |
+| `matmaster/hooks/__init__.py` | Keep (update docstring) | Retain empty package for backward compat (`import matmaster.hooks` tested in test_upstream_scenarios) |
 | `tests/matmaster/core/test_hooks.py` | Rewrite | Tests for HookExecutor |
 | `tests/matmaster/core/test_hook_wiring.py` | Create | Integration tests for hook call sites |
 | `tests/conftest.py` | Modify | Remove HookAction import and old hook mocks |
 | `tests/matmaster/types/test_runtime.py` | Modify | Update spec.hooks -> spec.hook_executor references |
-| `tests/matmaster/core/test_tool_runner.py` | Modify | Remove BaseHook/HookAction imports |
+| `tests/matmaster/core/test_full_tool_runner.py` | Modify | Remove BaseHook/HookAction imports |
 | `tests/matmaster/core/agent_kernel_test_helpers.py` | Modify | Remove old hook helper references |
 | `tests/matmaster/services/test_agent_run_stream.py` | Modify | Update spec.hooks = [] to hook_executor |
 | `tests/matmaster/test_validation.py` | Modify | Remove Hook/HookAction imports |
@@ -141,7 +141,7 @@ class TestContextDataclasses:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -m pytest tests/matmaster/core/test_hooks.py -v --no-header -x 2>&1 | head -30`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/core/test_hooks.py -v --no-header -x 2>&1 | head -30`
 Expected: ImportError (new types don't exist yet)
 
 - [ ] **Step 3: Implement types in hooks.py**
@@ -262,7 +262,7 @@ class UserPromptContext:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -m pytest tests/matmaster/core/test_hooks.py -v --no-header -x 2>&1 | head -40`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/core/test_hooks.py -v --no-header -x 2>&1 | head -40`
 Expected: All tests PASS
 
 - [ ] **Step 5: Commit**
@@ -345,7 +345,7 @@ class TestHookExecutorEmit:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -m pytest tests/matmaster/core/test_hooks.py::TestHookExecutorEmit -v --no-header -x 2>&1 | head -20`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/core/test_hooks.py::TestHookExecutorEmit -v --no-header -x 2>&1 | head -20`
 Expected: ImportError (HookExecutor not defined)
 
 - [ ] **Step 3: Write failing tests for HookExecutor.emit_intercept**
@@ -597,7 +597,7 @@ class HookExecutor:
 
 - [ ] **Step 6: Run all tests**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -m pytest tests/matmaster/core/test_hooks.py -v --no-header 2>&1 | tail -20`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/core/test_hooks.py -v --no-header 2>&1 | tail -20`
 Expected: All tests PASS
 
 - [ ] **Step 7: Commit**
@@ -659,7 +659,7 @@ Key files to update:
 
 - [ ] **Step 4: Run import check**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -c "from matmaster.types.runtime import AgentRuntimeSpec; print('OK')"`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run python -c "from matmaster.types.runtime import AgentRuntimeSpec; print('OK')"`
 Expected: OK
 
 - [ ] **Step 5: Commit**
@@ -671,68 +671,27 @@ git commit -m "refactor(hooks): migrate AgentRuntimeSpec.hooks to hook_executor"
 
 ---
 
-### Task 4: Exp Assembly — Create HookExecutor & RUN_START/END
+### Task 4: Exp Assembly, Kernel RUN_START/END, Subagent Hooks
 
 **Files:**
-- Modify: `matmaster/core/exp.py:259,317,95-134,356-394`
+- Modify: `matmaster/core/exp.py`
+- Modify: `matmaster/core/agent.py` (AgentKernel.run_stream for RUN_START/END)
 - Test: `tests/matmaster/core/test_hook_wiring.py` (create)
 
-- [ ] **Step 1: Write failing test for RUN_START/END**
+**Critical context:**
+- `PlaygroundContext` does NOT have `task_id` or `session_id`. Use `ctx.run_meta.get("task_id", "")` / `ctx.run_meta.get("session_id", "")`.
+- `devshell/runner.py` bypasses `Exp.run_stream()`, calling `kernel.run_stream()` directly. RUN_START/END must go in `AgentKernel.run_stream()`.
+- `_make_spawn_fn()` is called BEFORE the hooks section in `build_runtime()`. Create `hook_executor` early.
 
-```python
-# tests/matmaster/core/test_hook_wiring.py
-"""Integration tests for hook call sites across the execution chain."""
+- [ ] **Step 1: Wire HookExecutor creation at TOP of build_runtime**
 
-import pytest
+In `matmaster/core/exp.py`, `build_runtime()`:
 
-from matmaster.core.hooks import HookEvent, HookExecutor, RunContext
-
-
-class TestRunLifecycleHooks:
-    """Verify RUN_START and RUN_END fire from Exp.run_stream."""
-
-    @pytest.mark.asyncio
-    async def test_run_start_and_end_emitted(self, tmp_path):
-        """RUN_START fires after build_runtime, RUN_END fires in finally."""
-        events = []
-
-        async def capture(ctx: RunContext):
-            events.append((ctx.reason,))
-
-        # Create a minimal Exp that emits hooks
-        # This test verifies the hook_executor on the spec receives events
-        ex = HookExecutor()
-        ex.on(HookEvent.RUN_START, capture)
-        ex.on(HookEvent.RUN_END, capture)
-
-        await ex.emit(HookEvent.RUN_START, RunContext("t1", "s1", "startup"))
-        await ex.emit(HookEvent.RUN_END, RunContext("t1", "s1", "completed"))
-
-        assert len(events) == 2
-        assert events[0] == ("startup",)
-        assert events[1] == ("completed",)
-```
-
-- [ ] **Step 2: Run test to verify it passes** (this is a unit-level smoke test)
-
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -m pytest tests/matmaster/core/test_hook_wiring.py::TestRunLifecycleHooks -v --no-header -x`
-Expected: PASS
-
-- [ ] **Step 3: Wire HookExecutor creation in build_runtime**
-
-In `matmaster/core/exp.py`, in `build_runtime()`:
-- After line 258 (comment about hooks), replace:
-  ```python
-  # 6. Hooks (EventEmitterHook retired in Phase 34; generator events replace it)
-  hooks = list(spec.hooks)
-  ```
-  with:
-  ```python
-  # 6. HookExecutor
-  hook_executor = HookExecutor()
-  ```
-- In the final `spec.model_copy(update={...})`, replace `'hooks': hooks,` with `'hook_executor': hook_executor,`
-- Also inject session_id into `spec.meta` so the kernel can access it: add `'meta': {**spec.meta, 'session_id': ctx.session_id or ''},` to the update dict (needed for USER_PROMPT_SUBMIT context)
+1. Create `hook_executor = HookExecutor()` at the TOP of `build_runtime`, BEFORE `_make_spawn_fn` call
+2. Delete the old hooks section: `hooks = list(spec.hooks)`
+3. In `spec.model_copy(update={...})`:
+   - Replace `'hooks': hooks,` with `'hook_executor': hook_executor,`
+   - Inject IDs into meta: `'meta': {**spec.meta, 'task_id': ctx.run_meta.get('task_id', ''), 'session_id': ctx.run_meta.get('session_id', '')},`
 
 - [ ] **Step 4: Wire RUN_START/END in run_stream**
 
@@ -801,47 +760,52 @@ with:
             await self._run_cleanup_callbacks()
 ```
 
-The pattern for run_stream is:
+- [ ] **Step 2: Wire RUN_START/END in AgentKernel.run_stream (NOT Exp.run_stream)**
+
+In `matmaster/core/agent.py`, `AgentKernel.run_stream()` — this is the true common entry point called by Exp.run_stream, devshell/runner.py, and spawn sub-agents:
+
+Add RUN_START at the beginning (after `async with spec.llm_provider`), and RUN_END in a finally block. Track terminal reason from `_run_items` terminal items:
 
 ```python
-        hook_executor = None
-        last_reason = "error"  # safe default if generator aborts before terminal event
-        try:
-            runtime = await self.build_runtime(...)
-            hook_executor = runtime.spec.hook_executor
-            ...existing stop_event/catalog injection...
+    async def run_stream(self, spec, task, history=None, stop_event=None):
+        from matmaster.types.events import RunResultEvent
+
+        async with spec.llm_provider:
+            ...existing _summary_provider setup...
+
+            last_reason = "error"
 
             # Hook: RUN_START
-            if hook_executor is not None:
-                await hook_executor.emit(
+            if spec.hook_executor is not None:
+                await spec.hook_executor.emit(
                     HookEvent.RUN_START,
                     RunContext(
-                        task_id=ctx.task_id,
-                        session_id=ctx.session_id or "",
+                        task_id=spec.meta.get("task_id", ""),
+                        session_id=spec.meta.get("session_id", ""),
                         reason="startup",
                     ),
                 )
 
-            async for event in runtime.kernel.run_stream(...):
-                # Track terminal reason for RUN_END
-                if hasattr(event, 'reason'):
-                    last_reason = event.reason
-                yield event
-        finally:
-            # Hook: RUN_END
-            if hook_executor is not None:
-                await hook_executor.emit(
-                    HookEvent.RUN_END,
-                    RunContext(
-                        task_id=ctx.task_id,
-                        session_id=ctx.session_id or "",
-                        reason=last_reason,
-                    ),
-                )
-            await self._run_cleanup_callbacks()
+            try:
+                # ...existing _consume_and_yield logic...
+                # When processing terminal items, capture reason:
+                #   last_reason = item.terminal.reason
+                ...
+            finally:
+                if spec.hook_executor is not None:
+                    await spec.hook_executor.emit(
+                        HookEvent.RUN_END,
+                        RunContext(
+                            task_id=spec.meta.get("task_id", ""),
+                            session_id=spec.meta.get("session_id", ""),
+                            reason=last_reason,
+                        ),
+                    )
 ```
 
-- [ ] **Step 5: Wire SUBAGENT_START/STOP in _make_spawn_fn**
+Note: Integrate with the EXISTING `_consume_and_yield` pattern — add `last_reason` tracking where terminal items are processed, and wrap the existing generator consumption in try/finally.
+
+- [ ] **Step 3: Wire SUBAGENT_START/STOP in _make_spawn_fn**
 
 In `matmaster/core/exp.py`, `_make_spawn_fn` method (line 95+), the `spawn_fn` closure needs the HookExecutor. Change `_make_spawn_fn` signature to accept it:
 
@@ -888,27 +852,28 @@ After `drain_run_stream` completes (before return):
 
 Update the call site in `build_runtime` where `_make_spawn_fn` is called to pass `hook_executor`.
 
-- [ ] **Step 6: Add imports to exp.py**
+- [ ] **Step 4: Add imports**
 
+In `exp.py`:
 ```python
-from matmaster.core.hooks import (
-    HookEvent,
-    HookExecutor,
-    RunContext,
-    SubagentContext,
-)
+from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
 ```
 
-- [ ] **Step 7: Run existing tests to verify no regressions**
+In `agent.py`:
+```python
+from matmaster.core.hooks import HookEvent, RunContext
+```
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -m pytest tests/matmaster/core/ -v --no-header -x 2>&1 | tail -20`
-Expected: All tests PASS (some may need spec.hooks -> spec.hook_executor adjustments)
+- [ ] **Step 5: Run tests**
 
-- [ ] **Step 8: Commit**
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/core/ -v --no-header -x 2>&1 | tail -20`
+Expected: PASS
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add matmaster/core/exp.py tests/matmaster/core/test_hook_wiring.py
-git commit -m "feat(hooks): wire HookExecutor creation, RUN_START/END, SUBAGENT_START/STOP in Exp"
+git add matmaster/core/exp.py matmaster/core/agent.py
+git commit -m "feat(hooks): wire HookExecutor creation, RUN_START/END, SUBAGENT_START/STOP"
 ```
 
 ---
@@ -1048,7 +1013,7 @@ Remove any remaining references to old hook functions in InlineToolRunner (if it
 
 - [ ] **Step 7: Run tests**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -m pytest tests/matmaster/core/ -v --no-header -x 2>&1 | tail -30`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/core/ -v --no-header -x 2>&1 | tail -30`
 Expected: PASS (fix any test failures from spec.hooks migration)
 
 - [ ] **Step 8: Commit**
@@ -1071,8 +1036,8 @@ In `_run_items()`, before line 191 (`UserMessage(content=task)`):
 
 ```python
         # Hook: USER_PROMPT_SUBMIT (rewrite then observe)
-        # session_id is accessed via spec.meta.get("session_id", "")
-        # which is populated by Exp.build_runtime from ctx.session_id
+        # session_id comes from spec.meta, populated by Exp.build_runtime
+        # from ctx.run_meta.get("session_id", "")
         if spec.hook_executor is not None:
             _sid = spec.meta.get("session_id", "")
             prompt_ctx = UserPromptContext(prompt=task, session_id=_sid)
@@ -1149,7 +1114,7 @@ from matmaster.core.hooks import (
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -m pytest tests/matmaster/core/ -v --no-header -x 2>&1 | tail -30`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/core/ -v --no-header -x 2>&1 | tail -30`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
@@ -1194,15 +1159,19 @@ In `matmaster/core/tool_runner.py`, if InlineToolRunner still exists:
 - Remove `self._spec.hooks` reference
 - Or if InlineToolRunner is only used in tests, leave it but remove hook calls
 
-- [ ] **Step 3: Delete matmaster/hooks/ directory**
+- [ ] **Step 3: Update matmaster/hooks/__init__.py (do NOT delete)**
 
-First verify no active imports exist:
-```bash
-grep -rn "from matmaster.hooks" --include="*.py" matmaster/ src/ tests/
-```
-Expected: No matches. Then delete:
-```bash
-rm -rf matmaster/hooks/
+`tests/matmaster/integration/test_upstream_scenarios.py` explicitly tests `import matmaster.hooks`. Keep the empty package for backward compatibility. Update the docstring to reference the new system:
+
+```python
+"""Hook infrastructure has moved to matmaster.core.hooks (HookExecutor).
+
+This package is retained for backward compatibility. All business hooks
+were retired in Phase 34. The new HookExecutor replaces the old
+Hook Protocol / BaseHook system.
+"""
+
+__all__: list[str] = []
 ```
 
 - [ ] **Step 4: Clean up devshell/cli.py and runner.py**
@@ -1211,7 +1180,7 @@ Check if `cli.py` or `runner.py` reference `spec.hooks` and remove those referen
 
 - [ ] **Step 5: Run full test suite**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -m pytest tests/ -v --no-header -x 2>&1 | tail -40`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/ -v --no-header -x 2>&1 | tail -40`
 Expected: PASS (fix any remaining failures)
 
 - [ ] **Step 6: Commit**
@@ -1242,7 +1211,7 @@ Fix all remaining references.
 
 - [ ] **Step 3: Run full test suite**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -m pytest tests/ -v --no-header 2>&1 | tail -40`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/ -v --no-header 2>&1 | tail -40`
 Expected: All PASS
 
 - [ ] **Step 4: Commit**
@@ -1258,7 +1227,7 @@ git commit -m "test(hooks): update tests for new HookExecutor system"
 
 - [ ] **Step 1: Run full test suite one final time**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -m pytest tests/ -v --no-header 2>&1 | tail -50`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/ -v --no-header 2>&1 | tail -50`
 Expected: All PASS
 
 - [ ] **Step 2: Verify no remaining references to old hook system**
@@ -1268,7 +1237,7 @@ Expected: No matches (except possibly in comments)
 
 - [ ] **Step 3: Verify import health**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && python -c "from matmaster.core.hooks import HookExecutor, HookEvent, HookOutcome, HookResult; from matmaster.types.runtime import AgentRuntimeSpec; print('All imports OK')"`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run python -c "from matmaster.core.hooks import HookExecutor, HookEvent, HookOutcome, HookResult; from matmaster.types.runtime import AgentRuntimeSpec; print('All imports OK')"`
 Expected: "All imports OK"
 
 - [ ] **Step 4: Final commit (if any remaining fixes)**

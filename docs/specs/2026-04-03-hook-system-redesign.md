@@ -22,7 +22,7 @@ matmaster 现有 hook 系统（`matmaster/core/hooks.py`）存在以下问题：
 | 注册时机 | build_runtime 阶段一次性注册，运行时不再修改 | HookExecutor 内部持有可变字典，但 frozen AgentRuntimeSpec 只阻止字段重新赋值。注册完成后不再调用 on/intercept/rewrite，靠协议保证而非类型强制 |
 | 旧 hook 删除安全性 | `pre_llm_call` 和 `should_continue` 可安全删除 | 当前唯一的 BaseHook 子类是 DevStreamHook，其 `pre_llm_call` 为空操作（继承 BaseHook 默认实现），`should_continue` 无活跃实现。删除调用点不影响运行时行为 |
 | 废除 D-01 约束 | FullToolRunner 重新接入 hook 调用 | D-01 约束（"Does not call pre_hook/post_hook"）是旧 Hook Protocol 时代的决策，因 FullToolRunner 采用了新的分层校验架构而跳过了旧 hook。本次重新设计 hook 系统后，HookExecutor 的调用点明确插入 Phase 1 catalog lookup 后、validation 前，以及 Phase 2 之后 |
-| 接线层级 | hook 调用点位于 Exp.run_stream / kernel / FullToolRunner 内部 | agent_run_service 是仅覆盖 HTTP/worker 的外层，devshell 和 spawn 子 agent 走不同入口。Exp.run_stream 是所有路径的公共入口，在此层注入 hook 确保三条路径统一覆盖 |
+| 接线层级 | hook 调用点位于 AgentKernel.run_stream / _run_items / FullToolRunner 内部 | agent_run_service 和 devshell/runner.py 走不同路径，但都最终调用 `kernel.run_stream()`。RUN_START/END 放在 kernel.run_stream 确保三条路径（agent_run_service 经 Exp.run_stream、devshell 经 build_runtime + kernel.run_stream、spawn 子 agent）统一覆盖 |
 | 事件命名 | RUN_START/RUN_END 而非 SESSION_START/END | 每次 run_agent/run_stream 调用是一个 run，不是一个 session。一个 session 可包含多次 run |
 | USER_PROMPT_SUBMIT 改写持久化 | 瞬时改写，不更新持久化历史 | prompt 在进 worker 前已被 stream_service 持久化，chat_history 从持久化事件重建 UserMessage。改写只影响当前执行，回放使用原始 prompt。持久化改写需改动 chat_history 层，当前无此场景需求 |
 | PRE_TOOL_CALL 位置 | catalog lookup 之后、validation 之前 | 确保所有被尝试调用的工具（含后续被 guard/policy 拒绝的）都能被 hook 观察和拦截。若放在 Phase 1 末尾，早期 deny（structural/input/guard/policy）的工具调用对 hook 不可见 |
@@ -251,14 +251,15 @@ class AgentRuntimeSpec:
 所有 hook 调用点位于 `Exp.run_stream` / kernel / FullToolRunner 边界内，确保 agent_run_service、devshell、spawn 子 agent 三条执行路径统一覆盖。
 
 ```
-Exp.run_stream(task, history, stop_event)     ← 所有路径的公共入口
+Exp.run_stream(task, history, stop_event) / devshell runner.py
 |
 +- build_runtime()
-|  +- 创建 HookExecutor，注入 AgentRuntimeSpec
+|  +- 创建 HookExecutor（在 _make_spawn_fn 之前），注入 AgentRuntimeSpec
+|  +- 注入 task_id/session_id 到 spec.meta（从 ctx.run_meta 提取）
 |
-+- emit(RUN_START, RunContext(task_id, session_id, reason="startup"))
-|
-+- kernel.run_stream(spec, task, history, stop_event):
++- kernel.run_stream(spec, task, history, stop_event)   ← 所有路径的真正公共入口
+|  |
+|  +- emit(RUN_START, RunContext(task_id, session_id, reason="startup"))
 |  |
 |  +- AgentKernel._run_items() 循环:
 |  |  |
@@ -283,8 +284,11 @@ Exp.run_stream(task, history, stop_event)     ← 所有路径的公共入口
 |  |  +- ContextCompactor.compact_if_needed() 完成后:
 |  |     +- emit(CONTEXT_COMPACTION, ctx)
 |
-+- finally 块, _run_cleanup_callbacks 前:
-   +- emit(RUN_END, RunContext(task_id, session_id, reason=终止原因))
+|  +- finally 块:
+|     +- emit(RUN_END, RunContext(task_id, session_id, reason=终止原因))
+|
++- Exp finally 块:
+   +- _run_cleanup_callbacks()
 ```
 
 执行顺序语义：
@@ -299,9 +303,9 @@ Exp.run_stream(task, history, stop_event)     ← 所有路径的公共入口
 |------|---------|
 | `matmaster/core/hooks.py` | **重写**：删除旧 Hook Protocol / BaseHook / run_* helpers，放入 HookEvent、context dataclasses、HookOutcome、HookResult、handler 类型别名、HookExecutor |
 | `matmaster/types/runtime.py` | `AgentRuntimeSpec.hooks: list[Hook]` -> `hook_executor: HookExecutor \| None` |
-| `matmaster/core/exp.py` | `build_runtime()` 中创建 HookExecutor 实例并注入 spec；`run_stream()` 入口加 RUN_START，finally 加 RUN_END；`_make_spawn_fn` 闭包内加 SUBAGENT_START/STOP |
+| `matmaster/core/exp.py` | `build_runtime()` 中创建 HookExecutor 实例（在 _make_spawn_fn 之前）并注入 spec；`_make_spawn_fn` 闭包内加 SUBAGENT_START/STOP；注入 task_id/session_id 到 spec.meta |
 | `matmaster/core/tool_runner.py` | FullToolRunner Phase 1 catalog lookup 后、validation 前加 PRE_TOOL_CALL hook 调用，Phase 2 后加 POST_TOOL_CALL hook 调用。废除 D-01 约束（docstring 中 "Does not call pre_hook/post_hook" 需删除） |
-| `matmaster/core/agent.py` | `_run_items` 中：构造 UserMessage 前加 USER_PROMPT_SUBMIT hook 调用；压缩完成后加 CONTEXT_COMPACTION hook 调用；删除旧 `run_pre_llm_call` / `run_should_continue` 调用 |
+| `matmaster/core/agent.py` | `run_stream` 中加 RUN_START/RUN_END（kernel 是所有路径的公共入口）；`_run_items` 中：构造 UserMessage 前加 USER_PROMPT_SUBMIT hook 调用；压缩完成后加 CONTEXT_COMPACTION hook 调用；删除旧 `run_pre_llm_call` / `run_should_continue` 调用 |
 | `matmaster/devshell/stream_hook.py` | 删除旧 Hook Protocol 方法（pre_tool_call 等），保留 on_event() 直接回调。删除 BaseHook 继承 |
 | `matmaster/devshell/cli.py` | 删除向 `spec.hooks` list 添加 DevStreamHook 的代码 |
 | `matmaster/devshell/runner.py` | 同上 |
@@ -325,7 +329,7 @@ DevStreamHook 有两个职责，迁移策略不同：
 | `run_pre_tool_call()` 等 6 个 helper 函数 | `matmaster/core/hooks.py` |
 | `AgentRuntimeSpec.hooks: list[Hook]` 字段 | `matmaster/types/runtime.py` |
 | `InlineToolRunner` 中的 hook 调用 | `matmaster/core/tool_runner.py`（如果 InlineToolRunner 仍存在） |
-| `matmaster/hooks/__init__.py` | 仅含退役说明注释和空 `__all__`，整个目录删除 |
+| `matmaster/hooks/__init__.py` | 更新 docstring 指向新系统，保留空包（`import matmaster.hooks` 在 test_upstream_scenarios 中被测试） |
 
 ## 不在范围内
 
