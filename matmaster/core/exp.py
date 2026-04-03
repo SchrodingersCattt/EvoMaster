@@ -6,7 +6,7 @@ and executes the agent loop (run).
 
 Three-phase lifecycle:
 1. assemble(ctx) -- pure data transform: config + ctx -> AgentRuntimeSpec
-2. build_runtime(ctx, bus) -- resource creation: tools, prompt, kernel -> AgentRuntime
+2. build_runtime(ctx) -- resource creation: tools, prompt, kernel -> AgentRuntime
 3. run(ctx, task, ...) -- build_runtime -> kernel.run -> cleanup
 
 Cleanup: Exp owns capability resource cleanup via _cleanup_callbacks.
@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
-from matmaster.core.bus import MessageBus
 from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.tools.tool_registry import ToolRegistry
@@ -96,14 +95,13 @@ class Exp:
     @staticmethod
     def _make_spawn_fn(
         ctx: PlaygroundContext,
-        bus: MessageBus | None,
         source_prefix: str,
     ) -> Any:
         """Create async spawn_fn closure capturing parent runtime context.
 
         The returned async callable creates a child Exp from exp_name,
-        runs it via child_exp.run() with the parent's PlaygroundContext
-        and MessageBus, and returns the result.
+        runs it via child_exp.run() with the parent's PlaygroundContext,
+        and returns the result.
         """
 
         async def spawn_fn(
@@ -120,7 +118,6 @@ class Exp:
             result = await child_exp.run(
                 ctx,
                 task,
-                bus=bus,
                 stop_event=stop_event,
                 source_override=child_source,
                 spawn_id=child_spawn_id,
@@ -151,7 +148,6 @@ class Exp:
         self,
         ctx: PlaygroundContext,
         *,
-        bus: MessageBus | None = None,
         skills: dict[str, Any] | None = None,
         source_override: str | None = None,
         spawn_id: str | None = None,
@@ -203,7 +199,7 @@ class Exp:
             from matmaster.config.loader import list_available_exps
             from matmaster.tools.builtin.spawn_tool import SpawnTool
 
-            spawn_fn = self._make_spawn_fn(ctx, bus, source_prefix='MatMaster')
+            spawn_fn = self._make_spawn_fn(ctx, source_prefix='MatMaster')
             spawn_tool = SpawnTool(
                 session=ctx.session,
                 workdir=Path(ctx.execution_workdir),
@@ -325,7 +321,6 @@ class Exp:
         ctx: PlaygroundContext,
         task: str,
         *,
-        bus: MessageBus | None = None,
         history: list[Message] | None = None,
         stop_event: threading.Event | None = None,
         skills: dict[str, Any] | None = None,
@@ -340,7 +335,6 @@ class Exp:
         try:
             runtime = await self.build_runtime(
                 ctx,
-                bus=bus,
                 skills=skills,
                 source_override=source_override,
                 spawn_id=spawn_id,
@@ -366,7 +360,6 @@ class Exp:
         ctx: PlaygroundContext,
         task: str,
         *,
-        bus: MessageBus | None = None,
         history: list[Message] | None = None,
         stop_event: threading.Event | None = None,
         skills: dict[str, Any] | None = None,
@@ -382,7 +375,6 @@ class Exp:
         try:
             runtime = await self.build_runtime(
                 ctx,
-                bus=bus,
                 skills=skills,
                 source_override=source_override,
                 spawn_id=spawn_id,

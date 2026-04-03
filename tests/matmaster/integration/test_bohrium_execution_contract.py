@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import matmaster.config.loader as matmaster_loader
-from matmaster.core.bus import MessageBus
 from matmaster.types.context import PlaygroundContext
 from tests.matmaster.core.conftest import MockLLMProvider
 
@@ -51,7 +50,7 @@ def _make_pg(original_session: MagicMock) -> MagicMock:
 def _make_bohrium_service(sessions_service: Any | None = None) -> BohriumSetupService:
     return BohriumSetupService(
         sessions_service=sessions_service or MagicMock(),
-        bus=MessageBus(),
+        event_sink=lambda event: None,
     )
 
 
@@ -467,22 +466,23 @@ def test_execution_binding_before_build_runtime(
     mock_build_provider.return_value = mock_llm
     mock_load_llm.return_value = MagicMock()
 
-    mock_runtime = MagicMock()
-    mock_runtime.spec = MagicMock()
-    mock_runtime.spec.hooks = []
-    mock_runtime.spec.tool_catalog = None
-    mock_runtime.spec.model_copy.return_value = mock_runtime.spec
-    mock_kernel_result = MagicMock()
-    mock_run_evt = MagicMock()
-    mock_run_evt.reason = 'natural'
-    mock_run_evt.status = 'completed'
-    mock_run_evt.final_content = None
-    mock_run_evt.source = 'MatMaster'
-    mock_kernel_result.result.to_run_result_event.return_value = mock_run_evt
-    mock_runtime.kernel.run = AsyncMock(return_value=mock_kernel_result)
+    from matmaster.types.events import RunResultEvent
+
+    mock_run_result_event = RunResultEvent(
+        source='MatMaster',
+        status='completed',
+        reason='natural',
+    )
+
+    captured_run_stream_args: dict[str, Any] = {}
+
+    async def _mock_run_stream(*args, **kwargs):
+        captured_run_stream_args['ctx'] = args[0] if args else None
+        captured_run_stream_args['kwargs'] = kwargs
+        yield mock_run_result_event
 
     mock_exp_inst = MagicMock()
-    mock_exp_inst.build_runtime = AsyncMock(return_value=mock_runtime)
+    mock_exp_inst.run_stream = _mock_run_stream
     mock_exp_inst._run_cleanup_callbacks = AsyncMock()
 
     with (
@@ -519,7 +519,7 @@ def test_execution_binding_before_build_runtime(
             )
         )
 
-    pg_passed = mock_exp_inst.build_runtime.call_args[0][0]
+    pg_passed = captured_run_stream_args['ctx']
     assert pg_passed.session is mock_exec
     assert pg_passed.session_type == 'ssh'
     assert pg_passed.execution_workdir == '/remote/ws'

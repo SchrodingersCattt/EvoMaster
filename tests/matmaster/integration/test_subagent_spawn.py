@@ -57,7 +57,7 @@ class TestSpawnFnLifecycle:
             patch.object(Exp, "run", new_callable=AsyncMock, return_value=mock_kr),
         ):
             mock_load.return_value = ExpConfig(name="explore")
-            spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
             result = await spawn_fn("explore", "find test files")
 
         assert result == "found 3 files"
@@ -74,7 +74,7 @@ class TestSpawnFnLifecycle:
             patch.object(Exp, "_run_cleanup_callbacks", mock_cleanup),
         ):
             mock_load.return_value = ExpConfig(name="explore")
-            spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
             await spawn_fn("explore", "task")
 
         # Cleanup is managed inside Exp.run()'s try/finally.
@@ -95,7 +95,7 @@ class TestSpawnFnLifecycle:
             ),
         ):
             mock_load.return_value = ExpConfig(name="explore")
-            spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
             with pytest.raises(RuntimeError, match="kernel crashed"):
                 await spawn_fn("explore", "task")
 
@@ -111,7 +111,7 @@ class TestSpawnFnLifecycle:
             ) as mock_run,
         ):
             mock_load.return_value = ExpConfig(name="explore")
-            spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
             await spawn_fn("explore", "task")
 
         # Verify run was called with the SAME ctx object
@@ -130,7 +130,7 @@ class TestSpawnFnLifecycle:
             ) as mock_run,
         ):
             mock_load.return_value = ExpConfig(name="explore")
-            spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
             await spawn_fn("explore", "task")
 
         # Verify source_override is "MatMaster:explore"
@@ -150,7 +150,7 @@ class TestSpawnFnLifecycle:
             ) as mock_run,
         ):
             mock_load.return_value = ExpConfig(name="explore")
-            spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
             await spawn_fn("explore", "task")
 
         call_kwargs = mock_run.call_args[1]
@@ -166,7 +166,7 @@ class TestSpawnFnLifecycle:
             ) as mock_run,
         ):
             mock_load.return_value = ExpConfig(name="explore")
-            spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
             await spawn_fn("explore", "task")
 
         sid2 = mock_run.call_args[1]["spawn_id"]
@@ -191,7 +191,7 @@ class TestStopEventPropagation:
             ) as mock_run,
         ):
             mock_load.return_value = ExpConfig(name="explore")
-            spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
             await spawn_fn("explore", "task", stop_event)
 
         # Verify Exp.run received the stop_event

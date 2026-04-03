@@ -11,7 +11,6 @@ from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.messages import ToolCallData
 from matmaster.types.runtime import (
     AgentRuntime,
     AgentRuntimeSpec,
@@ -136,24 +135,17 @@ class TestExpBuildRuntime:
 
         assert runtime.spec.llm_provider is ctx.llm_provider
 
-    async def test_bus_no_longer_adds_event_emitter_hook(self) -> None:
-        """After Phase 34, EventEmitterHook is retired -- bus does not add hooks."""
-        from matmaster.core.bus import MessageBus
-        from matmaster.core.hooks import BaseHook
-
+    async def test_build_runtime_has_no_bus_parameter(self) -> None:
+        """build_runtime() no longer accepts bus parameter (Phase 36 de-bus)."""
         exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx(with_llm=True)
-        bus = MessageBus()
 
-        with patch("matmaster.core.agent.AgentKernel"):
-            runtime = await exp.build_runtime(ctx, bus=bus)
+        import inspect
+        sig = inspect.signature(exp.build_runtime)
+        assert 'bus' not in sig.parameters
 
-        # No hooks should be auto-added by build_runtime (only spec-injected ones)
-        base_hooks = [h for h in runtime.spec.hooks if isinstance(h, BaseHook)]
-        assert len(base_hooks) == 0
-
-    async def test_no_bus_no_hooks(self) -> None:
-        """Without bus, no hooks in spec.hooks."""
+    async def test_no_hooks_by_default(self) -> None:
+        """No hooks in spec.hooks when none are injected."""
         exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx(with_llm=True)
 
@@ -201,7 +193,6 @@ class TestExpRun:
 
         mock_br.assert_called_once_with(
             ctx,
-            bus=None,
             skills=None,
             source_override=None,
             spawn_id=None,
@@ -211,37 +202,13 @@ class TestExpRun:
         )
         assert result is mock_kr
 
-    async def test_run_forwards_bus(self) -> None:
-        """run() passes bus to build_runtime."""
-        from matmaster.core.bus import MessageBus
+    async def test_run_no_bus_parameter(self) -> None:
+        """run() no longer accepts bus parameter (Phase 36 de-bus)."""
+        import inspect
 
         exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        bus = MessageBus()
-        mock_kr = KernelResult(status='completed', reason='natural')
-
-        mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(
-            return_value=KernelRunResult(result=mock_kr, messages=[])
-        )
-        mock_spec = MagicMock(spec=AgentRuntimeSpec)
-        mock_cleanup = MagicMock()
-        mock_runtime = AgentRuntime(
-            kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
-        )
-
-        with patch.object(
-            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
-        ) as mock_br:
-            await exp.run(ctx, "task", bus=bus)
-
-        mock_br.assert_called_once_with(
-            ctx,
-            bus=bus,
-            skills=None,
-            source_override=None,
-            spawn_id=None,
-        )
+        sig = inspect.signature(exp.run)
+        assert 'bus' not in sig.parameters
 
     async def test_run_forwards_history_and_stop_event(self) -> None:
         """run() passes history and stop_event to kernel.run."""
