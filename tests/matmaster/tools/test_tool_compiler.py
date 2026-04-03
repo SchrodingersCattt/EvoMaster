@@ -9,7 +9,7 @@ from matmaster.tools.tool_compiler import ToolCompiler
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_spec import ResourceClaim
-from matmaster.types.topology import RuntimeTopology, ToolPlane
+from matmaster.types.topology import RuntimeTopology, SessionCapabilities, ToolPlane
 
 
 class _FakeTool:
@@ -125,6 +125,119 @@ class TestToolCompilerMaxResultChars:
         compiler = ToolCompiler()
         instance = compiler.compile(_FakeTool("custom"), _make_topology(), source="mcp")
         assert instance.tool_spec.max_result_chars == 0
+
+
+def _make_local_stateless_topology() -> RuntimeTopology:
+    return RuntimeTopology(
+        session_kind="local",
+        control_root="/tmp/control",
+        workspace_root="/tmp/workspace",
+        active_planes=frozenset(ToolPlane),
+        session_capabilities=SessionCapabilities(
+            shell_persistence="stateless",
+            file_ops="native",
+        ),
+    )
+
+def _make_ssh_stateless_topology() -> RuntimeTopology:
+    return RuntimeTopology(
+        session_kind="ssh",
+        control_root="/tmp/control",
+        workspace_root="/remote/workspace",
+        active_planes=frozenset(ToolPlane),
+        session_capabilities=SessionCapabilities(
+            shell_persistence="stateless",
+            file_ops="sftp",
+        ),
+    )
+
+
+class TestTopologyDependentBinding:
+    def test_glob_local_stateless_shared_read(self) -> None:
+        """Local + stateless -> glob gets shared_read claim."""
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _FakeTool("glob"), _make_local_stateless_topology(), source="builtin"
+        )
+        assert instance.tool_binding.resource_claims == (
+            ResourceClaim(resource_id="session", mode="shared_read"),
+        )
+
+    def test_grep_local_stateless_shared_read(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _FakeTool("grep"), _make_local_stateless_topology(), source="builtin"
+        )
+        assert instance.tool_binding.resource_claims == (
+            ResourceClaim(resource_id="session", mode="shared_read"),
+        )
+
+    def test_list_dir_local_stateless_shared_read(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _FakeTool("list_dir"), _make_local_stateless_topology(), source="builtin"
+        )
+        assert instance.tool_binding.resource_claims == (
+            ResourceClaim(resource_id="session", mode="shared_read"),
+        )
+
+    def test_glob_ssh_stays_exclusive(self) -> None:
+        """SSH session -> glob stays exclusive even if stateless."""
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _FakeTool("glob"), _make_ssh_stateless_topology(), source="builtin"
+        )
+        assert instance.tool_binding.resource_claims == (
+            ResourceClaim(resource_id="session", mode="exclusive"),
+        )
+
+    def test_glob_local_no_caps_stays_exclusive(self) -> None:
+        """Local but session_capabilities=None -> no relaxation."""
+        compiler = ToolCompiler()
+        topo = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp/c",
+            workspace_root="/tmp/w",
+        )
+        instance = compiler.compile(_FakeTool("glob"), topo, source="builtin")
+        assert instance.tool_binding.resource_claims == (
+            ResourceClaim(resource_id="session", mode="exclusive"),
+        )
+
+    def test_bash_local_stays_exclusive(self) -> None:
+        """execute_bash is never relaxed."""
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _FakeTool("execute_bash"), _make_local_stateless_topology(), source="builtin"
+        )
+        assert instance.tool_binding.resource_claims == (
+            ResourceClaim(resource_id="session", mode="exclusive"),
+        )
+
+    def test_custom_tool_unaffected(self) -> None:
+        """Non-builtin tools are not affected by relaxation."""
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _FakeTool("my_mcp_tool"), _make_local_stateless_topology(), source="mcp"
+        )
+        assert instance.tool_binding.resource_claims == ()
+
+
+class TestFastPathEligibleFix:
+    def test_glob_fast_path_eligible(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("glob"), _make_topology(), source="builtin")
+        assert instance.tool_spec.fast_path_eligible is True
+
+    def test_grep_fast_path_eligible(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("grep"), _make_topology(), source="builtin")
+        assert instance.tool_spec.fast_path_eligible is True
+
+    def test_list_dir_fast_path_eligible(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("list_dir"), _make_topology(), source="builtin")
+        assert instance.tool_spec.fast_path_eligible is True
 
 
 class TestToolCatalogCompilerDelegation:

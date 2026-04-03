@@ -30,9 +30,9 @@ BUILTIN_CLAIMS: dict[str, tuple[ResourceClaim, ...]] = {
 
 BUILTIN_META: dict[str, tuple[ToolPlane, str, bool, int]] = {
     "execute_bash": (ToolPlane.SESSION_SHELL, "local_mutation", False, 12000),
-    "list_dir": (ToolPlane.SESSION_SHELL, "pure_read", False, 8000),
-    "glob": (ToolPlane.SESSION_SHELL, "pure_read", False, 8000),
-    "grep": (ToolPlane.SESSION_SHELL, "pure_read", False, 8000),
+    "list_dir": (ToolPlane.SESSION_SHELL, "pure_read", True, 8000),
+    "glob": (ToolPlane.SESSION_SHELL, "pure_read", True, 8000),
+    "grep": (ToolPlane.SESSION_SHELL, "pure_read", True, 8000),
     "read_file": (ToolPlane.SESSION_FS, "pure_read", True, 12000),
     "write_file": (ToolPlane.SESSION_FS, "local_mutation", False, 0),
     "edit_file": (ToolPlane.SESSION_FS, "local_mutation", False, 0),
@@ -63,8 +63,16 @@ class ToolCompiler:
         The current builtin rules are topology-independent, but the topology is
         part of the API so future compilers can specialize bindings by session.
         """
-        _ = topology
         claims = BUILTIN_CLAIMS.get(tool.name, ())
+
+        # Topology-dependent binding relaxation (spec 8.2)
+        if (
+            topology.session_kind == "local"
+            and topology.session_capabilities is not None
+            and topology.session_capabilities.shell_persistence == "stateless"
+            and tool.name in ("list_dir", "glob", "grep")
+        ):
+            claims = (ResourceClaim(resource_id="session", mode="shared_read"),)
         plane, effect_level, fast_path, max_result_chars = BUILTIN_META.get(
             tool.name,
             (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
