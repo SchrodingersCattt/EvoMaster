@@ -281,12 +281,6 @@ def _run_single_task(
     if not prompt:
         return False, {"error": "empty prompt"}
 
-    # Ensure agent writes all output files in workspace (cwd), not absolute paths
-    prompt += (
-        "\n\n【重要】所有输出文件必须写在当前工作目录下，使用相对路径。"
-        "禁止写入 /home/...、/tmp/... 等绝对路径。"
-    )
-
     # 1. Mark start
     _mark_task_start(workspace)
 
