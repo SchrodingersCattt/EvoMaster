@@ -19,13 +19,28 @@ import asyncio
 
 import pytest
 
-from matmaster.core.bus import MessageBus
 from matmaster.core.context_compactor import (
     ContextCompactor,
     estimate_tokens,
     parse_turns,
 )
 from matmaster.types.events import ContextCompactionEvent
+
+
+class _EventCollector:
+    """Simple event collector replacing MessageBus for compaction tests."""
+
+    def __init__(self):
+        self.events: list = []
+
+    async def sink(self, event):
+        self.events.append(event)
+
+    def get_nowait(self):
+        if not self.events:
+            import asyncio
+            raise asyncio.QueueEmpty
+        return self.events.pop(0)
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -354,14 +369,14 @@ class TestEventEmission:
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
         provider = MockSummaryProvider()
-        bus = MessageBus()
+        collector = _EventCollector()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(config=config, summary_provider=provider, event_sink=collector.sink)
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
-        event = bus.get_nowait()
+        event = collector.get_nowait()
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["compaction_count"] == 1
         assert event.payload["strategy"] == "summary"
@@ -374,14 +389,14 @@ class TestEventEmission:
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
         provider = FailingSummaryProvider()
-        bus = MessageBus()
+        collector = _EventCollector()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(config=config, summary_provider=provider, event_sink=collector.sink)
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
-        event = bus.get_nowait()
+        event = collector.get_nowait()
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["strategy"] == "sliding_window"
 
@@ -392,7 +407,7 @@ class TestEventEmission:
         )
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=None)
+        compactor = ContextCompactor(config=config, summary_provider=provider, event_sink=None)
         compactor.update_message_count(len(msgs))
 
         # 应正常执行不抛异常
@@ -410,10 +425,10 @@ class TestMultipleCompactions:
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
-        bus = MessageBus()
+        collector = _EventCollector()
         provider = MockSummaryProvider()
         msgs = _build_conversation(8)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(config=config, summary_provider=provider, event_sink=collector.sink)
         compactor.update_message_count(len(msgs))
 
         # 第一次压缩 at turn=3
@@ -449,7 +464,7 @@ class TestMultipleCompactions:
         events = []
         while True:
             try:
-                events.append(bus.get_nowait())
+                events.append(collector.get_nowait())
             except asyncio.QueueEmpty:
                 break
         assert len(events) == 2
@@ -515,14 +530,13 @@ class TestToolTruncationFallback:
 
     async def test_truncation_when_single_turn_exceeds_threshold(self) -> None:
         """1 个 turn 就超限 -> 无可压缩旧 turn -> 截断大 tool result。"""
-        from matmaster.core.bus import MessageBus
         from matmaster.types.events import ContextCompactionEvent
 
         config = CompactionConfig(
             enabled=True, context_window_tokens=500, trigger_ratio=0.9
         )
         provider = MockSummaryProvider()
-        bus = MessageBus()
+        collector = _EventCollector()
 
         # 构造：1 turn with 3 大 tool results (每个 2000+ chars)
         msgs = [
@@ -552,7 +566,7 @@ class TestToolTruncationFallback:
             ),
         ]
 
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(config=config, summary_provider=provider, event_sink=collector.sink)
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
@@ -576,7 +590,7 @@ class TestToolTruncationFallback:
             assert len(m.content) < 2000
 
         # 事件 strategy=tool_truncation
-        event = bus.get_nowait()
+        event = collector.get_nowait()
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["strategy"] == "tool_truncation"
 
@@ -697,11 +711,11 @@ class TestKernelIntegration:
 
         registry.register(DummyTool(), source="test")
 
-        bus = MessageBus()
+        collector = _EventCollector()
         compactor = ContextCompactor(
             config=compaction_cfg,
             summary_provider=provider,
-            bus=bus,
+            event_sink=collector.sink,
         )
 
         from matmaster.types.runtime import AgentRuntimeSpec
@@ -734,7 +748,7 @@ class TestKernelIntegration:
         events = []
         while True:
             try:
-                events.append(bus.get_nowait())
+                events.append(collector.get_nowait())
             except asyncio.QueueEmpty:
                 break
         compaction_events = [e for e in events if isinstance(e, ContextCompactionEvent)]

@@ -93,10 +93,9 @@ class TestRunInterruptedDetection:
         """
         mock_llm = _QuickMockLLM()
         pg_ctx = _make_ctx(tmp_path, llm_provider=mock_llm)
-        bus = MessageBus()
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = await exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx)
 
         # Pre-set stop_event: kernel checks before first LLM call
         stop_event = threading.Event()
@@ -113,10 +112,9 @@ class TestRunInterruptedDetection:
         """Verify stop_event from Redis stop key detected (same mechanism)."""
         mock_llm = _QuickMockLLM()
         pg_ctx = _make_ctx(tmp_path, llm_provider=mock_llm)
-        bus = MessageBus()
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = await exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx)
 
         # Simulate Redis-backed stop event: already set before run starts
         stop_event = threading.Event()

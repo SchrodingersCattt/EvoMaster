@@ -123,7 +123,7 @@ class DevRunner:
 
         async def _run_once() -> KernelRunResult:
             try:
-                runtime = await exp.build_runtime(self._pg_ctx, bus=bus)
+                runtime = await exp.build_runtime(self._pg_ctx)
                 # Inject DevStreamHook (same pattern as AgentRunService)
                 spec = runtime.spec.model_copy(
                     update={"hooks": [*runtime.spec.hooks, self._stream_hook]}
