@@ -44,7 +44,25 @@ BUILTIN_META: dict[str, tuple[ToolPlane, str, bool, int]] = {
     "mm_web_search": (ToolPlane.EXTERNAL_SERVICE, "external_effect", False, 0),
     "web_fetch": (ToolPlane.EXTERNAL_SERVICE, "external_effect", False, 16000),
     "spawn": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
-    "monitor_job": (ToolPlane.SESSION_FS, "external_effect", False, 0),
+    "monitor_job": (ToolPlane.EXTERNAL_SERVICE, "external_effect", False, 0),
+}
+
+BUILTIN_CAPABILITIES: dict[str, frozenset[str]] = {
+    "execute_bash": frozenset({"shell.execute"}),
+    "read_file": frozenset({"workspace.read"}),
+    "write_file": frozenset({"workspace.write"}),
+    "edit_file": frozenset({"workspace.write"}),
+    "list_dir": frozenset({"workspace.list"}),
+    "glob": frozenset({"workspace.search.path"}),
+    "grep": frozenset({"workspace.search.content"}),
+    "task_get": frozenset({"task.read"}),
+    "task_list": frozenset({"task.read"}),
+    "task_create": frozenset({"task.write"}),
+    "task_update": frozenset({"task.write"}),
+    "task_complete": frozenset({"task.write"}),
+    "mm_web_search": frozenset({"web.search"}),
+    "web_fetch": frozenset({"web.fetch"}),
+    "monitor_job": frozenset({"job.monitor", "artifact.download"}),
 }
 
 BUILTIN_STOP_MODES: dict[str, tuple[str, str]] = {
@@ -102,6 +120,7 @@ class ToolCompiler:
             description=tool.description,
             args_schema=tool.json_schema,
             source=source,
+            capabilities=BUILTIN_CAPABILITIES.get(tool.name, frozenset()),
             effect_level=effect_level,
             fast_path_eligible=fast_path,
             max_result_chars=max_result_chars,

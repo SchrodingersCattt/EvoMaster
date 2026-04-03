@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from matmaster.types.tool_decision import ToolDecision
+from matmaster.types.topology import ToolPlane
 
 # ---- Bash Safety Patterns (migrated from bash_tool.py) ----
 
@@ -106,16 +107,17 @@ class DefaultCapabilityPolicy:
         spec = tool_instance.tool_spec
         tool_name = spec.tool_name
 
-        # 1. effect_level constraint
-        if spec.effect_level == "external_write":
-            active_planes = getattr(runtime_topology, "active_planes", set())
-            from matmaster.types.topology import ToolPlane
-
+        # 1. effect_level constraint: external_effect tools require EXTERNAL_SERVICE plane
+        if (
+            spec.effect_level == "external_effect"
+            and tool_instance.tool_binding.plane == ToolPlane.EXTERNAL_SERVICE
+        ):
+            active_planes = getattr(runtime_topology, "active_planes", frozenset())
             if ToolPlane.EXTERNAL_SERVICE not in active_planes:
                 return ToolDecision(
                     decision="deny",
                     reason="External effect tools are not allowed in current topology",
-                    guidance="This tool makes external service calls. Ensure the session topology permits external access.",
+                    guidance="Activate the external service plane or choose a local/control-plane tool.",
                 )
 
         # 2. Tool-specific safety checks

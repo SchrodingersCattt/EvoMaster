@@ -100,6 +100,36 @@ class TestToolCompiler:
         assert instance.tool_spec.source == "mcp"
 
 
+class TestToolCompilerCapabilities:
+    def test_execute_bash_compiles_shell_execute_capability(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _FakeTool("execute_bash"), _make_topology(), source="builtin"
+        )
+        assert instance.tool_spec.capabilities == frozenset({"shell.execute"})
+
+    def test_read_file_compiles_workspace_read_capability(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _FakeTool("read_file"), _make_topology(), source="builtin"
+        )
+        assert instance.tool_spec.capabilities == frozenset({"workspace.read"})
+
+    def test_monitor_job_plane_is_external_service(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _FakeTool("monitor_job"), _make_topology(), source="builtin"
+        )
+        assert instance.tool_binding.plane == ToolPlane.EXTERNAL_SERVICE
+
+    def test_unknown_tool_has_empty_capabilities(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _FakeTool("custom_tool"), _make_topology(), source="mcp"
+        )
+        assert instance.tool_spec.capabilities == frozenset()
+
+
 class TestToolCompilerMaxResultChars:
     def test_read_file_max_result_chars(self) -> None:
         compiler = ToolCompiler()
