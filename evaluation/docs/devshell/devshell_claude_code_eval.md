@@ -173,9 +173,9 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 
 > 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：跑 `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 --questions SC_struct_007 --limit 1 --export-review-with-questions --eval-ingest-pending-only`，然后按文档判分、给 **`百分制得分：XX/100`** 和改进建议，并按**第 4 节**上报。
 
-**多题 + 宏平均**
+**多题号 / 批量跑 + 宏平均**
 
-> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：依次跑 `... --modes direct --jobs 4 --questions SC_struct_007 SC_struct_008 --eval-ingest-pending-only`（题号按需改）。**每题 devshell 结束后立刻**对该 task 判 checklist、给 **百分制**，**马上**用第 4 节 `eval_ingest_submit_pending.py` 上报；**不要**两题都跑完再一起判、一起报。全部上报后给 **`宏平均：XX/100`** 与共性改进点。
+> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：依次跑 `... --modes direct --jobs 4 --questions SC_struct_007 SC_struct_008 --eval-ingest-pending-only`（题号与数量按需改，可列 1 个或多个）。**每题 devshell 结束后立刻**对该 task 判 checklist、给 **百分制**，**马上**用第 4 节 `eval_ingest_submit_pending.py` 上报；**不要**等同一次 run 内全部题目都结束再集中判分、集中上报。全部上报后给 **`宏平均：XX/100`** 与共性改进点。
 
 **结构生成类（`structure_construction`）：批量全量（或 `--limit`）+ 判分 + 延迟入库**
 
