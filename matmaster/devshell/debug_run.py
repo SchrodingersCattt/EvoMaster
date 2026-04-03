@@ -88,12 +88,11 @@ def main(prompt: str | None = None) -> None:
     result = runner.run(task, stop_event=stop_event, event_observer=observer)
 
     # Print summary
-    kr = result.result
     print(f"\n{'='*60}")
-    print(f"Status: {kr.status} | Reason: {kr.reason} | Turns: {kr.num_turns}")
-    print(f"Usage: {kr.usage}")
-    if kr.final_content:
-        print(f"\n--- Final Content ---\n{kr.final_content}")
+    print(f"Status: {result.status} | Reason: {result.reason} | Turns: {result.num_turns}")
+    print(f"Usage: {result.usage}")
+    if result.final_content:
+        print(f"\n--- Final Content ---\n{result.final_content}")
 
 
 if __name__ == "__main__":
