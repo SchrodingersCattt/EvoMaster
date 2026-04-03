@@ -146,3 +146,21 @@ class TestToolInstance:
         assert instance.tool_spec.tool_name == "bash"
         assert instance.tool_binding.plane == ToolPlane.SESSION_SHELL
         assert callable(instance.tool_executor)
+
+
+class TestToolSpecNewFields:
+    def test_max_result_chars_default_zero(self) -> None:
+        spec = ToolSpec(tool_name="test")
+        assert spec.max_result_chars == 0
+
+    def test_max_result_chars_set(self) -> None:
+        spec = ToolSpec(tool_name="test", max_result_chars=12000)
+        assert spec.max_result_chars == 12000
+
+    def test_usage_hint_default_empty(self) -> None:
+        spec = ToolSpec(tool_name="test")
+        assert spec.usage_hint == ""
+
+    def test_usage_hint_set(self) -> None:
+        spec = ToolSpec(tool_name="test", usage_hint="Use for reading files")
+        assert spec.usage_hint == "Use for reading files"

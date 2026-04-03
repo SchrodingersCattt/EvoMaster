@@ -32,7 +32,7 @@ from matmaster.core.hooks import (
 from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
-from matmaster.tools.tool_result import ToolResult
+from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.messages import ToolCallData
 from matmaster.types.topology import RuntimeTopology
 
@@ -199,6 +199,37 @@ class FullToolRunner:
         self._scheduler = scheduler
         self._topology = topology
 
+    def _truncate_result(
+        self, tr: ToolResult, max_chars: int, tool_call_id: str
+    ) -> ToolResult:
+        """Truncate oversized content, save full result to disk."""
+        from pathlib import Path
+
+        # Save full content to control_root (always local)
+        results_dir = Path(self._topology.control_root) / ".tool_results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        full_path = results_dir / f"{tool_call_id}.txt"
+        full_path.write_text(tr.content, encoding="utf-8")
+
+        # Truncate
+        tail_len = min(2000, max_chars // 4)
+        head = tr.content[: max_chars // 2]
+        tail = tr.content[-tail_len:] if tail_len > 0 else ""
+        truncated_chars = len(tr.content) - len(head) - len(tail)
+        notice = (
+            f"\n\n... [{truncated_chars} chars truncated; "
+            f"re-run with more specific parameters to see full output] ...\n\n"
+        )
+        truncated_content = head + notice + tail
+
+        new_meta = {**tr.meta, "full_result_path": str(full_path), "truncated": True}
+        return ToolResult(
+            status=tr.status,
+            content=truncated_content,
+            payload=tr.payload,
+            meta=new_meta,
+        )
+
     async def execute_batch(
         self,
         tool_calls: list[ToolCallData],
@@ -217,6 +248,7 @@ class FullToolRunner:
         6. Fast path check
         7. Scheduler acquire (skipped for fast path)
         8. Execute + Release
+        9. Normalize + Truncate
 
         Returns list of (ToolCallData, ToolResult) in input order.
         """
@@ -316,6 +348,14 @@ class FullToolRunner:
             finally:
                 if ticket is not None:
                     await self._scheduler.release(ticket)
+
+            # 9a. Normalize (builtins may return str or None)
+            tr = normalize_tool_result(tr)
+
+            # 9b. Truncate oversized content
+            max_chars = instance.tool_spec.max_result_chars
+            if max_chars > 0 and len(tr.content) > max_chars:
+                tr = self._truncate_result(tr, max_chars, tc.id)
 
             results.append((tc, tr))
             if on_result:

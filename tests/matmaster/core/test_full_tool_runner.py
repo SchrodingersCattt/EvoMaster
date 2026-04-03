@@ -517,3 +517,132 @@ class TestHappyPath:
         assert results[0][1].content == "result_a"
         assert results[1][1].content == "result_b"
         assert results[2][1].content == "result_c"
+
+
+# ── Normalize + Truncation ──────────────────────────────
+
+
+class _StringReturnTool:
+    """Tool that returns a plain string (not ToolResult)."""
+
+    def __init__(self, name: str, result: str = "ok") -> None:
+        self._name = name
+        self._result = result
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def description(self) -> str:
+        return f"string tool {self._name}"
+
+    @property
+    def json_schema(self) -> dict[str, Any]:
+        return {"type": "object", "properties": {}}
+
+    async def execute(self, arguments: dict[str, Any]) -> str:
+        return self._result
+
+
+class TestNormalizeAndTruncation:
+    @pytest.mark.asyncio
+    async def test_string_return_is_normalized(self) -> None:
+        """Executor returning str is normalized to ToolResult."""
+        registry = ToolRegistry()
+        registry.register(_StringReturnTool("read_file", result="some content"), source="builtin")
+        catalog = ToolCatalog(registry)
+        runner = _make_runner(catalog)
+        ctx = _make_ctx()
+
+        results = await runner.execute_batch([_make_tc("read_file")], ctx)
+        _, tr = results[0]
+        assert isinstance(tr, ToolResult)
+        assert tr.content == "some content"
+        assert tr.status == "success"
+
+    @pytest.mark.asyncio
+    async def test_none_return_is_normalized(self) -> None:
+        """Executor returning None is normalized to empty ToolResult."""
+
+        class _NoneReturnTool:
+            name = "read_file"
+            description = "none tool"
+            json_schema: dict[str, Any] = {"type": "object", "properties": {}}
+
+            async def execute(self, arguments: dict[str, Any]) -> None:
+                return None
+
+        registry = ToolRegistry()
+        registry.register(_NoneReturnTool(), source="builtin")
+        catalog = ToolCatalog(registry)
+        runner = _make_runner(catalog)
+        ctx = _make_ctx()
+
+        results = await runner.execute_batch([_make_tc("read_file")], ctx)
+        _, tr = results[0]
+        assert isinstance(tr, ToolResult)
+        assert tr.content == ""
+
+    @pytest.mark.asyncio
+    async def test_truncation_triggers_on_oversized_content(self, tmp_path: "Path") -> None:
+        """Content exceeding max_result_chars is truncated."""
+        from pathlib import Path
+
+        long_content = "A" * 20000
+        registry = ToolRegistry()
+        registry.register(_StringReturnTool("read_file", result=long_content), source="builtin")
+        topology_with_tmp = RuntimeTopology(
+            session_kind="local",
+            control_root=str(tmp_path),
+            workspace_root="/tmp/ws",
+            active_planes=frozenset(ToolPlane),
+        )
+        catalog = ToolCatalog(registry)
+        runner = _make_runner(catalog, topology=topology_with_tmp)
+        ctx = _make_ctx()
+
+        results = await runner.execute_batch([_make_tc("read_file", call_id="call_123")], ctx)
+        _, tr = results[0]
+
+        assert len(tr.content) < 20000
+        assert "truncated" in tr.content
+        assert tr.meta.get("truncated") is True
+        assert "full_result_path" in tr.meta
+
+        # Verify disk file
+        disk_path = Path(tr.meta["full_result_path"])
+        assert disk_path.exists()
+        assert disk_path.read_text() == long_content
+
+    @pytest.mark.asyncio
+    async def test_no_truncation_when_under_limit(self) -> None:
+        """Content under max_result_chars is not truncated."""
+        short_content = "short"
+        registry = ToolRegistry()
+        registry.register(_StringReturnTool("read_file", result=short_content), source="builtin")
+        catalog = ToolCatalog(registry)
+        runner = _make_runner(catalog)
+        ctx = _make_ctx()
+
+        results = await runner.execute_batch([_make_tc("read_file")], ctx)
+        _, tr = results[0]
+
+        assert tr.content == short_content
+        assert "truncated" not in tr.meta
+
+    @pytest.mark.asyncio
+    async def test_no_truncation_when_max_result_chars_zero(self) -> None:
+        """Tools with max_result_chars=0 are never truncated."""
+        long_content = "B" * 100000
+        registry = ToolRegistry()
+        registry.register(_StringReturnTool("write_file", result=long_content), source="builtin")
+        catalog = ToolCatalog(registry)
+        runner = _make_runner(catalog)
+        ctx = _make_ctx()
+
+        results = await runner.execute_batch([_make_tc("write_file")], ctx)
+        _, tr = results[0]
+
+        assert tr.content == long_content
+        assert "truncated" not in tr.meta

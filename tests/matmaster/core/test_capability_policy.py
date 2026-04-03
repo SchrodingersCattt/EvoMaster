@@ -127,7 +127,7 @@ class TestEffectLevelWithRealBuiltinMeta:
         from matmaster.tools.tool_catalog import BUILTIN_META
 
         for tool_name in ("mm_web_search", "web_fetch", "monitor_job"):
-            _plane, effect_level, _fast = BUILTIN_META[tool_name]
+            _plane, effect_level, _fast, *_rest = BUILTIN_META[tool_name]
             assert effect_level == "external_write", (
                 f"{tool_name} effect_level={effect_level!r}, "
                 "expected 'external_write'"
@@ -137,7 +137,7 @@ class TestEffectLevelWithRealBuiltinMeta:
         """Policy deny still triggers when using real builtin metadata."""
         from matmaster.tools.tool_catalog import BUILTIN_META
 
-        plane, effect_level, _fast = BUILTIN_META["mm_web_search"]
+        plane, effect_level, _fast, *_rest = BUILTIN_META["mm_web_search"]
         instance = _make_instance(effect_level=effect_level, plane=plane)
         topo = RuntimeTopology(
             session_kind="local",

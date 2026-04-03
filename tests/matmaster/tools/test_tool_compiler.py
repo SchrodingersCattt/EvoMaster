@@ -100,6 +100,33 @@ class TestToolCompiler:
         assert instance.tool_spec.source == "mcp"
 
 
+class TestToolCompilerMaxResultChars:
+    def test_read_file_max_result_chars(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("read_file"), _make_topology(), source="builtin")
+        assert instance.tool_spec.max_result_chars == 12000
+
+    def test_execute_bash_max_result_chars(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("execute_bash"), _make_topology(), source="builtin")
+        assert instance.tool_spec.max_result_chars == 12000
+
+    def test_glob_max_result_chars(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("glob"), _make_topology(), source="builtin")
+        assert instance.tool_spec.max_result_chars == 8000
+
+    def test_web_fetch_max_result_chars(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("web_fetch"), _make_topology(), source="builtin")
+        assert instance.tool_spec.max_result_chars == 16000
+
+    def test_unknown_tool_max_result_chars_zero(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(_FakeTool("custom"), _make_topology(), source="mcp")
+        assert instance.tool_spec.max_result_chars == 0
+
+
 class TestToolCatalogCompilerDelegation:
     def test_get_tool_uses_compiler(self) -> None:
         registry = ToolRegistry()

@@ -28,23 +28,23 @@ BUILTIN_CLAIMS: dict[str, tuple[ResourceClaim, ...]] = {
     ),
 }
 
-BUILTIN_META: dict[str, tuple[ToolPlane, str, bool]] = {
-    "execute_bash": (ToolPlane.SESSION_SHELL, "local_mutation", False),
-    "list_dir": (ToolPlane.SESSION_SHELL, "pure_read", False),
-    "glob": (ToolPlane.SESSION_SHELL, "pure_read", False),
-    "grep": (ToolPlane.SESSION_SHELL, "pure_read", False),
-    "read_file": (ToolPlane.SESSION_FS, "pure_read", True),
-    "write_file": (ToolPlane.SESSION_FS, "local_mutation", False),
-    "edit_file": (ToolPlane.SESSION_FS, "local_mutation", False),
-    "task_create": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
-    "task_get": (ToolPlane.CONTROL_PLANE, "pure_read", True),
-    "task_list": (ToolPlane.CONTROL_PLANE, "pure_read", True),
-    "task_update": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
-    "task_complete": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
-    "mm_web_search": (ToolPlane.EXTERNAL_SERVICE, "external_write", False),
-    "web_fetch": (ToolPlane.EXTERNAL_SERVICE, "external_write", False),
-    "spawn": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
-    "monitor_job": (ToolPlane.SESSION_FS, "external_write", False),
+BUILTIN_META: dict[str, tuple[ToolPlane, str, bool, int]] = {
+    "execute_bash": (ToolPlane.SESSION_SHELL, "local_mutation", False, 12000),
+    "list_dir": (ToolPlane.SESSION_SHELL, "pure_read", False, 8000),
+    "glob": (ToolPlane.SESSION_SHELL, "pure_read", False, 8000),
+    "grep": (ToolPlane.SESSION_SHELL, "pure_read", False, 8000),
+    "read_file": (ToolPlane.SESSION_FS, "pure_read", True, 12000),
+    "write_file": (ToolPlane.SESSION_FS, "local_mutation", False, 0),
+    "edit_file": (ToolPlane.SESSION_FS, "local_mutation", False, 0),
+    "task_create": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
+    "task_get": (ToolPlane.CONTROL_PLANE, "pure_read", True, 0),
+    "task_list": (ToolPlane.CONTROL_PLANE, "pure_read", True, 0),
+    "task_update": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
+    "task_complete": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
+    "mm_web_search": (ToolPlane.EXTERNAL_SERVICE, "external_write", False, 0),
+    "web_fetch": (ToolPlane.EXTERNAL_SERVICE, "external_write", False, 16000),
+    "spawn": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
+    "monitor_job": (ToolPlane.SESSION_FS, "external_write", False, 0),
 }
 
 
@@ -65,9 +65,9 @@ class ToolCompiler:
         """
         _ = topology
         claims = BUILTIN_CLAIMS.get(tool.name, ())
-        plane, effect_level, fast_path = BUILTIN_META.get(
+        plane, effect_level, fast_path, max_result_chars = BUILTIN_META.get(
             tool.name,
-            (ToolPlane.CONTROL_PLANE, "local_mutation", False),
+            (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
         )
         spec = ToolSpec(
             tool_name=tool.name,
@@ -76,6 +76,7 @@ class ToolCompiler:
             source=source,
             effect_level=effect_level,
             fast_path_eligible=fast_path,
+            max_result_chars=max_result_chars,
         )
         binding = ToolBinding(
             binding_key=f"{plane.value}:{tool.name}",

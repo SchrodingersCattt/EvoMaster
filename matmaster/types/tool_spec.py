@@ -44,6 +44,8 @@ class ToolSpec(BaseModel):
     effect_level: str = "local_mutation"  # "pure_read" | "local_mutation" | "external_write"
     exposed_to_model: bool = True
     fast_path_eligible: bool = False
+    max_result_chars: int = 0
+    usage_hint: str = ""
 
 
 class ResourceClaim(BaseModel):
