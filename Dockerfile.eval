@@ -36,7 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && claude --version || true
 
 # 评测 validators 需要 numpy（主镜像仅装核心依赖，不含 calculation 可选组）
-RUN . /app/.venv/bin/activate && pip install numpy
+RUN . /app/.venv/bin/activate && uv pip install numpy
 
 # claude --dangerously-skip-permissions 拒绝在 root 下运行，创建非 root 用户
 RUN useradd -m -s /bin/bash appuser && \
