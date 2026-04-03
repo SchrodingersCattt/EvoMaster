@@ -1,8 +1,8 @@
 """EditTool -- str_replace editing via session.
 
 Performs exact string replacement with unique-match enforcement.
-Read-Before-Modify is now enforced by ReadBeforeModifyGuard in the
-GuardPipeline (Phase 35-01 migration). EditTool is a pure execution layer.
+Read-Before-Modify is enforced in validate_input() via runner_state.
+_execute() remains a pure execution layer once validation has passed.
 No insert/undo_edit commands (D-01: str_replace only).
 Editor helpers inlined (originally from evomaster).
 
@@ -17,6 +17,9 @@ import re
 from typing import Any, ClassVar
 
 from matmaster.types.tool_decision import ToolDecision
+from matmaster.types.tool_runner_state import ToolRunnerState
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
 
 from .base import BuiltinTool
 from .read_tracker import ReadTracker
@@ -75,6 +78,12 @@ class EditTool(BuiltinTool):
         },
         "required": ["file_path", "old_str", "new_str"],
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="workspace", mode="exclusive"),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset({"workspace.write"})
+    effect_level: ClassVar[str] = "local_mutation"
+    plane: ClassVar[ToolPlane] = ToolPlane.SESSION_FS
 
     def __init__(
         self,
@@ -84,9 +93,14 @@ class EditTool(BuiltinTool):
         tracker: ReadTracker | None = None,
     ) -> None:
         super().__init__(session=session, workdir=workdir)
-        self._tracker = tracker
+        # Temporary compatibility: accept tracker until Exp stops passing it.
+        self._compat_tracker = tracker
 
-    async def validate_input(self, arguments: dict[str, Any]) -> ToolDecision | None:
+    async def validate_input(
+        self,
+        arguments: dict[str, Any],
+        runner_state: ToolRunnerState | None = None,
+    ) -> ToolDecision | None:
         old_str = arguments.get("old_str", "")
         new_str = arguments.get("new_str", "")
         if not old_str:
@@ -96,6 +110,15 @@ class EditTool(BuiltinTool):
                 decision="deny",
                 reason="old_str and new_str are identical, no edit needed",
             )
+        if runner_state is not None:
+            read_files = runner_state.get("read_files", set())
+            path = posixpath.normpath(arguments.get("file_path", ""))
+            if path and path not in read_files:
+                return ToolDecision(
+                    decision="deny",
+                    reason=f"File '{path}' must be read before editing",
+                    guidance="Read the file first using read_file.",
+                )
         return None
 
     def _execute(self, arguments: dict[str, Any]) -> str:

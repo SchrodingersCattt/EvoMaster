@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from matmaster.tools.builtin.edit_tool import EditTool
-from matmaster.tools.builtin.read_tracker import ReadTracker
 from matmaster.tools.tool_registry import Tool
+from matmaster.types.tool_runner_state import ToolRunnerState
 
 
 @pytest.fixture()
@@ -17,14 +17,6 @@ def mock_session() -> MagicMock:
     session = MagicMock()
     session.read_file.return_value = "aaa\nbbb\nccc"
     return session
-
-
-@pytest.fixture()
-def tracker_marked() -> ReadTracker:
-    """ReadTracker pre-marked for /workspace/test.py."""
-    tracker = ReadTracker()
-    tracker.mark_read("/workspace/test.py")
-    return tracker
 
 
 class TestEditToolBasic:
@@ -42,11 +34,9 @@ class TestEditToolBasic:
 class TestEditToolExecution:
     """EditTool str_replace behavior."""
 
-    async def test_str_replace_unique(
-        self, mock_session: MagicMock, tracker_marked: ReadTracker
-    ) -> None:
+    async def test_str_replace_unique(self, mock_session: MagicMock) -> None:
         """Single match replaces and returns snippet with new text."""
-        tool = EditTool(session=mock_session, tracker=tracker_marked)
+        tool = EditTool(session=mock_session)
         result = await tool.execute(
             {
                 "file_path": "/workspace/test.py",
@@ -61,11 +51,9 @@ class TestEditToolExecution:
         written = mock_session.write_file.call_args[0][1]
         assert written == "aaa\nxxx\nccc"
 
-    async def test_str_replace_no_match(
-        self, mock_session: MagicMock, tracker_marked: ReadTracker
-    ) -> None:
+    async def test_str_replace_no_match(self, mock_session: MagicMock) -> None:
         """No match returns error about old_str not found."""
-        tool = EditTool(session=mock_session, tracker=tracker_marked)
+        tool = EditTool(session=mock_session)
         result = await tool.execute(
             {
                 "file_path": "/workspace/test.py",
@@ -76,12 +64,10 @@ class TestEditToolExecution:
         assert "did not appear verbatim" in result
         mock_session.write_file.assert_not_called()
 
-    async def test_str_replace_multi_match(
-        self, mock_session: MagicMock, tracker_marked: ReadTracker
-    ) -> None:
+    async def test_str_replace_multi_match(self, mock_session: MagicMock) -> None:
         """Multiple matches returns error with line numbers."""
         mock_session.read_file.return_value = "hello world\nfoo bar\nhello world\n"
-        tool = EditTool(session=mock_session, tracker=tracker_marked)
+        tool = EditTool(session=mock_session)
         result = await tool.execute(
             {
                 "file_path": "/workspace/test.py",
@@ -95,11 +81,9 @@ class TestEditToolExecution:
         assert "3" in result
         mock_session.write_file.assert_not_called()
 
-    async def test_str_replace_same_strings(
-        self, mock_session: MagicMock, tracker_marked: ReadTracker
-    ) -> None:
+    async def test_str_replace_same_strings(self, mock_session: MagicMock) -> None:
         """old_str == new_str returns error about no-op."""
-        tool = EditTool(session=mock_session, tracker=tracker_marked)
+        tool = EditTool(session=mock_session)
         result = await tool.execute(
             {
                 "file_path": "/workspace/test.py",
@@ -110,11 +94,9 @@ class TestEditToolExecution:
         assert "must be different" in result
         mock_session.write_file.assert_not_called()
 
-    async def test_str_replace_strip_fallback(
-        self, mock_session: MagicMock, tracker_marked: ReadTracker
-    ) -> None:
+    async def test_str_replace_strip_fallback(self, mock_session: MagicMock) -> None:
         """old_str with extra whitespace falls back to stripped version."""
-        tool = EditTool(session=mock_session, tracker=tracker_marked)
+        tool = EditTool(session=mock_session)
         result = await tool.execute(
             {
                 "file_path": "/workspace/test.py",
@@ -126,13 +108,11 @@ class TestEditToolExecution:
         written = mock_session.write_file.call_args[0][1]
         assert "xxx" in written
 
-    async def test_read_before_modify_now_in_guard(self, mock_session: MagicMock) -> None:
-        """Read-Before-Modify is now handled by ReadBeforeModifyGuard, not EditTool.
-
-        EditTool._execute() no longer checks tracker; it proceeds to edit.
-        """
-        tracker = ReadTracker()  # Not pre-marked
-        tool = EditTool(session=mock_session, tracker=tracker)
+    async def test_execute_does_not_enforce_read_before_modify(
+        self, mock_session: MagicMock
+    ) -> None:
+        """Execution stays pure; read-before-modify is enforced in validate_input."""
+        tool = EditTool(session=mock_session)
         result = await tool.execute(
             {
                 "file_path": "/workspace/test.py",
@@ -140,12 +120,11 @@ class TestEditToolExecution:
                 "new_str": "xxx",
             }
         )
-        # EditTool now proceeds without checking tracker
         assert "has been edited" in result
         mock_session.write_file.assert_called_once()
 
     async def test_no_tracker(self, mock_session: MagicMock) -> None:
-        """No tracker -- edits normally (tracker not consulted by _execute)."""
+        """Compatibility tracker param is accepted and ignored."""
         tool = EditTool(session=mock_session, tracker=None)
         result = await tool.execute(
             {
@@ -169,28 +148,12 @@ class TestEditToolExecution:
         assert "Error:" in result
         assert "session" in result.lower()
 
-    async def test_edit_proceeds_without_tracker_check(self, mock_session: MagicMock) -> None:
-        """EditTool._execute() no longer checks tracker; Guard layer handles it."""
-        tracker = ReadTracker()
-        tool = EditTool(session=mock_session, tracker=tracker)
-        result = await tool.execute(
-            {
-                "file_path": "/workspace/test.py",
-                "old_str": "bbb",
-                "new_str": "xxx",
-            }
-        )
-        # Proceeds to edit (Guard layer would have blocked before reaching _execute)
-        assert "has been edited" in result
-
-    async def test_snippet_includes_context_lines(
-        self, mock_session: MagicMock, tracker_marked: ReadTracker
-    ) -> None:
+    async def test_snippet_includes_context_lines(self, mock_session: MagicMock) -> None:
         """Snippet output includes surrounding context lines."""
         mock_session.read_file.return_value = (
             "line1\nline2\nline3\nline4\ntarget\nline6\nline7\nline8\nline9\nline10"
         )
-        tool = EditTool(session=mock_session, tracker=tracker_marked)
+        tool = EditTool(session=mock_session)
         result = await tool.execute(
             {
                 "file_path": "/workspace/test.py",
@@ -201,3 +164,34 @@ class TestEditToolExecution:
         assert "replaced" in result
         # Snippet should include context lines around the replacement
         assert "cat -n" in result
+
+
+class TestEditToolValidateInput:
+    async def test_edit_blocks_unread_file_via_runner_state(
+        self, mock_session: MagicMock
+    ) -> None:
+        tool = EditTool(session=mock_session, workdir="/workspace")
+        state = ToolRunnerState()
+
+        decision = await tool.validate_input(
+            {"file_path": "/workspace/test.py", "old_str": "bbb", "new_str": "xxx"},
+            runner_state=state,
+        )
+
+        assert decision is not None
+        assert decision.decision == "deny"
+        assert "must be read" in decision.reason.lower()
+
+    async def test_edit_allows_read_file_via_runner_state(
+        self, mock_session: MagicMock
+    ) -> None:
+        tool = EditTool(session=mock_session, workdir="/workspace")
+        state = ToolRunnerState()
+        state.set("read_files", {"/workspace/test.py"})
+
+        decision = await tool.validate_input(
+            {"file_path": "/workspace/test.py", "old_str": "bbb", "new_str": "xxx"},
+            runner_state=state,
+        )
+
+        assert decision is None
