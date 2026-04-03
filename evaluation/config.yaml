@@ -35,7 +35,7 @@ axis_weights:
 
 evaluator_llm:
   provider: "openai"
-  model: "gemini-2.5-flash"
+  model: "cds/GPT-5.4"
   api_key: "${LITELLM_PROXY_API_KEY}"
   base_url: "${LITELLM_PROXY_API_BASE}"
   temperature: 0.0
