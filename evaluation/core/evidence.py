@@ -12,7 +12,8 @@ Design principles
 * ``ArtifactRecord`` – output files / data produced during the run
 * ``TokenUsage``     – scalar usage snapshot; on the bundle, ``token_usage_last_turn``
   holds the **last** model turn (max ``step_id``; tie-break by later record) and
-  ``token_usage_run`` holds the sum over all turns.
+  ``token_usage_run`` holds the sum over all turns. Checklist ``token_budget`` and
+  ingest ``item["tokens"]`` use **last-turn** raw ``total_tokens`` (no cache subtraction).
 * ``EvidenceBundle`` – single input to the evaluator
 * ``EvidenceExtractor`` – converts trajectory JSON → EvidenceBundle
 
@@ -242,15 +243,18 @@ class EvidenceBundle(BaseModel):
     )
     token_usage_last_turn: TokenUsage = Field(
         default_factory=TokenUsage,
-        description='Token usage for the last model turn in the trajectory (max step_id)',
+        description=(
+            'Token usage for the last model turn in the trajectory (max step_id). '
+            '``token_budget`` compares this snapshot’s raw ``total_tokens`` '
+            '(not cache-adjusted) to the reference ceiling.'
+        ),
     )
     token_usage_run: TokenUsage = Field(
         default_factory=TokenUsage,
         description=(
             'Summed usage over all model turns in the trajectory, or the whole-run '
             'aggregate when the bundle is built from devshell summary only. '
-            '``token_budget`` checklist compares ``total_tokens_effective`` here '
-            '(cache-read deducted) to the reference ceiling.'
+            'Informational for reports; ``token_budget`` uses ``token_usage_last_turn``.'
         ),
     )
     total_steps: int = Field(default=0, description='Total number of agent steps')

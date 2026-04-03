@@ -127,10 +127,10 @@ def test_extractor_tie_same_step_id_prefers_later(tmp_path: Path) -> None:
     assert ev.token_usage_last_turn.prompt_tokens == 2
 
 
-def test_extractor_token_usage_run_total_tokens_effective_matches_budget_check(
+def test_extractor_token_usage_last_turn_raw_total_matches_budget_check(
     tmp_path: Path,
 ) -> None:
-    """Run-level effective tokens (total − cache_read) drive ``token_budget``."""
+    """``token_budget`` uses last turn raw ``total_tokens`` (no cache subtraction)."""
     traj = [
         {
             'status': 'completed',
@@ -172,11 +172,12 @@ def test_extractor_token_usage_run_total_tokens_effective_matches_budget_check(
     p = tmp_path / 'traj.json'
     p.write_text(json.dumps(traj), encoding='utf-8')
     ev = EvidenceExtractor().extract(p, task_id='t1', final_answer='')
+    assert ev.token_usage_last_turn.total_tokens == 200
     assert ev.token_usage_run.total_tokens_effective == (5000 - 4000) + 200
-    ok, reason = check_token_budget(evidence=ev, expected={'max': 1500})
+    ok, reason = check_token_budget(evidence=ev, expected={'max': 250})
     assert ok is True
-    assert 'run_total_tokens_effective=1200' in reason
-    ok2, _ = check_token_budget(evidence=ev, expected={'max': 1000})
+    assert 'last_turn_total_tokens=200' in reason
+    ok2, _ = check_token_budget(evidence=ev, expected={'max': 150})
     assert ok2 is False
 
 

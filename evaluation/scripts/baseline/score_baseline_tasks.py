@@ -239,12 +239,19 @@ def _build_evidence(
     summary_path = workspace / "_devshell_summary.json"
     duration_ms = _compute_duration_ms(workspace, summary_path)
 
-    # Build token usage from summary
+    # Build token usage from summary (last vendor round vs whole-run aggregate)
     usage_raw = summary.get("usage", {})
     if isinstance(usage_raw, dict):
         summary_usage = TokenUsage.from_usage_dict(usage_raw)
     else:
         summary_usage = TokenUsage()
+
+    last_turn_usage = summary_usage
+    uvt = summary.get("usage_vendor_by_turn")
+    if isinstance(uvt, list) and uvt:
+        ld = uvt[-1]
+        if isinstance(ld, dict) and ld:
+            last_turn_usage = TokenUsage.from_usage_dict(ld)
 
     # Collect workspace artifacts for artifact_exists checks
     from evaluation.core.evidence import ArtifactRecord
@@ -267,7 +274,7 @@ def _build_evidence(
         final_answer=answer,
         workspace_dir=str(workspace.resolve()),
         duration_ms=duration_ms,
-        token_usage_last_turn=summary_usage,
+        token_usage_last_turn=last_turn_usage,
         token_usage_run=summary_usage,
         artifacts=artifacts,
         model_name=model_name if isinstance(model_name, str) else None,

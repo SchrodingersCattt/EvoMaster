@@ -26,8 +26,10 @@ shared by all tasks in the batch; it is not uploaded whole. ``extra`` is stored 
 opaque JSON. When devshell ``summary.usage`` is present, ``extra`` includes a JSON-safe copy as
 ``usage`` (run-level **accumulated scalars**). ``summary.usage_vendor_by_turn`` lists
 one vendor-native usage dict per LLM round (possibly ``{}``); when present it is
-copied into ``extra["usage_vendor_by_turn"]``. ``tokens_effective`` matches top-level
-``item["tokens"]`` (cache-read–adjusted / ``total_tokens_uncached`` when set).
+copied into ``extra["usage_vendor_by_turn"]``. Top-level ``item["tokens"]`` and
+``extra["tokens_last_turn"]`` use the **last LLM round** raw ``total_tokens`` when
+``usage_vendor_by_turn`` is present; otherwise ``summary.usage.total_tokens`` (whole-run
+accumulated scalar, **not** cache-adjusted). Neither path subtracts cache reads.
 Optional ``eval_tooling`` (from
 :func:`evaluation.eval_tooling_snapshot.snapshot_eval_tooling`) records builtin /
 skill / MCP server config for batch analysis. Optional ``events_timeline`` (from
@@ -181,28 +183,45 @@ def _json_safe_usage_tree(obj: Any) -> Any:
     return str(obj)
 
 
-def extract_total_tokens(usage: Any) -> int | None:
-    """Token total for ingest ``item["tokens"]``: billing-style, **cache read deducted** when applicable.
+def extract_ingest_tokens(summary: Any) -> int | None:
+    """Token count for ingest ``item["tokens"]``: **last round** raw ``total_tokens``, no cache deduction.
 
-    Prefers ``total_tokens_uncached`` when the provider supplies it; otherwise uses
-    :class:`evaluation.core.evidence.TokenUsage` (same rules as MATTER
-    ``total_tokens_effective``), including ``cache_read_input_tokens`` and Claude-style
-    ``input_tokens`` / ``output_tokens`` fields.
+    1. If ``summary["usage_vendor_by_turn"]`` is a non-empty list, use
+       ``int(last_entry["total_tokens"])`` when set.
+    2. Else use ``summary["usage"]["total_tokens"]`` (whole-run accumulated from kernel).
+    3. Else derive from ``usage`` via :class:`evaluation.core.evidence.TokenUsage` (still
+       **no** cache subtraction — uses reported ``total_tokens`` or ``prompt+completion``).
     """
-    if not usage or not isinstance(usage, dict):
+    if not summary or not isinstance(summary, dict):
         return None
-    uncached = usage.get("total_tokens_uncached")
-    if uncached is not None:
-        try:
-            v = int(uncached)
-            if v >= 0:
-                return v
-        except (TypeError, ValueError):
-            pass
-    tu = TokenUsage.from_usage_dict(usage)
-    if tu.total_tokens == 0 and tu.prompt_tokens == 0 and tu.completion_tokens == 0:
-        return None
-    return max(0, tu.total_tokens_effective)
+    turns = summary.get("usage_vendor_by_turn")
+    if isinstance(turns, list) and turns:
+        last = turns[-1]
+        if isinstance(last, dict):
+            tt = last.get("total_tokens")
+            if tt is not None:
+                try:
+                    v = int(tt)
+                    if v >= 0:
+                        return v
+                except (TypeError, ValueError):
+                    pass
+    usage = summary.get("usage")
+    if isinstance(usage, dict) and usage:
+        raw_tt = usage.get("total_tokens")
+        if raw_tt is not None:
+            try:
+                v = int(raw_tt)
+                if v >= 0:
+                    return v
+            except (TypeError, ValueError):
+                pass
+        tu = TokenUsage.from_usage_dict(usage)
+        if tu.total_tokens > 0:
+            return tu.total_tokens
+        if tu.prompt_tokens or tu.completion_tokens:
+            return max(0, tu.prompt_tokens + tu.completion_tokens)
+    return None
 
 
 def score_for_eval_ingest(
@@ -488,7 +507,7 @@ def build_ingest_item(
     raw_summary = summary if isinstance(summary, dict) else None
     s: dict[str, Any] = raw_summary if raw_summary is not None else {}
     usage = s.get("usage")
-    tokens = extract_total_tokens(usage)
+    tokens = extract_ingest_tokens(s)
     preview: str | None = None
     fc = s.get("final_content")
     if isinstance(fc, str) and fc:
@@ -533,7 +552,7 @@ def build_ingest_item(
             for x in uv_turns
         ]
     if tokens is not None:
-        extra["tokens_effective"] = int(tokens)
+        extra["tokens_last_turn"] = int(tokens)
 
     item: dict[str, Any] = {
         "question_id": question_id,
