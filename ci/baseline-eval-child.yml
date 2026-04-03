@@ -21,11 +21,6 @@ child-pipeline-ready:
     - echo "模式    ：${BASELINE_MODES:-direct}"
     - echo "每类题数限制：${BASELINE_LIMIT:-0}"
     - echo ""
-    - echo "--- 网络探测 ---"
-    - apk add --no-cache curl >/dev/null 2>&1 || true
-    - 'curl -s -o /dev/null -w "litellm.dp.tech => HTTP %{http_code} (%{time_connect}s)\n" --connect-timeout 5 https://litellm.dp.tech/health || echo "litellm.dp.tech => UNREACHABLE"'
-    - 'curl -s -o /dev/null -w "api.minimaxi.com => HTTP %{http_code} (%{time_connect}s)\n" --connect-timeout 5 https://api.minimaxi.com || echo "api.minimaxi.com => UNREACHABLE"'
-    - echo ""
     - echo "请在下方手动触发需要评测的 capability job。"
   tags:
     - k8s-runner-ack
