@@ -5,7 +5,6 @@ Note: Exp is lazy-imported via __getattr__ to avoid circular import
 """
 
 from .agent import AgentKernel
-from .bus import MessageBus
 from .context_builder import ContextBuilder
 from .guard_pipeline import GuardPipeline, LoopDetectionGuard
 from .hooks import BaseHook, Hook, HookAction
@@ -20,7 +19,6 @@ __all__ = [
     "Hook",
     "HookAction",
     "LoopDetectionGuard",
-    "MessageBus",
     "Playground",
     "PlaygroundManager",
 ]
@@ -31,4 +29,8 @@ def __getattr__(name: str):
         from .exp import Exp
 
         return Exp
+    if name == "exp":
+        import importlib
+
+        return importlib.import_module("matmaster.core.exp")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
