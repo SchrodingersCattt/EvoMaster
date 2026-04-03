@@ -73,8 +73,8 @@ variables:
   BASELINE_RUN_LABEL: "baseline_cc_ci"
   BASELINE_PENDING_ONLY: "1"
 
-# ── Job 1: 构建评测专用镜像（含 Node.js + Claude CLI）─────────────────────────
-# 使用 Dockerfile.eval，在主镜像基础上叠加评测工具链
+# ── Job 1: 构建镜像 + 动态生成子流水线 YAML ──────────────────────────────────
+# 使用 Dockerfile.eval 构建评测镜像，然后扫描题库生成子流水线 YAML
 baseline-eval-build:
   stage: build
   image: $REGISTRY/public/ubuntu:gitlab-docker
@@ -112,29 +112,17 @@ baseline-eval-build:
         --cache-to type=inline,mode=max \
         . --push
       echo "DYNAMIC_IMAGE=${EVAL_IMAGE}" >> ${CI_PROJECT_DIR}/build.env
+    - |
+      echo "--- 动态生成子流水线 YAML ---"
+      apt-get update -qq && apt-get install -y -qq python3 python3-yaml >/dev/null 2>&1
+      python3 ci/generate_eval_child_pipeline.py
+      cat ci/generated-eval-child.yml
   retry: 1
   tags:
     - k8s-runner-ack
   artifacts:
     reports:
       dotenv: ${CI_PROJECT_DIR}/build.env
-    expire_in: 1 day
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
-    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "baseline-eval"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "baseline-eval"'
-
-# ── Job 2: 扫描题库，动态生成子流水线 YAML ───────────────────────────────────
-# 与镜像构建并行运行（同在 build stage），只需 Python + PyYAML
-generate-eval-pipeline:
-  stage: build
-  image: $REGISTRY/public/ubuntu:gitlab-docker
-  script:
-    - apt-get update -qq && apt-get install -y -qq python3 python3-yaml >/dev/null 2>&1
-    - python3 ci/generate_eval_child_pipeline.py
-    - echo "--- generated child pipeline ---"
-    - cat ci/generated-eval-child.yml
-  artifacts:
     paths:
       - ci/generated-eval-child.yml
     expire_in: 1 day
@@ -142,16 +130,12 @@ generate-eval-pipeline:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
     - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "baseline-eval"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "baseline-eval"'
-  tags:
-    - k8s-runner-ack
 
-# ── Job 3: 触发动态子流水线 ──────────────────────────────────────────────────
+# ── Job 2: 触发动态子流水线 ──────────────────────────────────────────────────
 baseline-eval-trigger:
   stage: sync-question-catalog
   needs:
     - job: baseline-eval-build
-      artifacts: true
-    - job: generate-eval-pipeline
       artifacts: true
   variables:
     DYNAMIC_IMAGE: $DYNAMIC_IMAGE
@@ -166,7 +150,7 @@ baseline-eval-trigger:
   trigger:
     include:
       - artifact: ci/generated-eval-child.yml
-        job: generate-eval-pipeline
+        job: baseline-eval-build
     strategy: depend
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
