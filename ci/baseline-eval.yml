@@ -1,4 +1,9 @@
-# Claude Code Baseline 自动评测流水线
+# Claude Code Baseline 自动评测流水线（父子流水线架构）
+#
+# 架构说明：
+#   1. 父流水线：构建镜像 → 触发子流水线
+#   2. 子流水线（baseline-eval-child.yml）：每个 capability 一个独立 manual job
+#      镜像构建完成后，7 个能力类别各出一个手动触发的评测 job，按需点击运行。
 #
 # 触发方式（任选，在 .gitlab-ci.yml 的 include 后生效）：
 #   1. 推送到分支 baseline-eval          → 立即触发
@@ -11,27 +16,28 @@
 #
 # 所需 GitLab CI Variables（Settings → CI/CD → Variables，Protected + Masked）：
 #   必须:
-#     ANTHROPIC_BASE_URL                 — Claude CLI 代理地址（如 LiteLLM/DeepSeek/MiniMax 兼容端点）
-#     ANTHROPIC_AUTH_TOKEN               — 代理 API Key（与 ANTHROPIC_BASE_URL 配套）
-#     MATMASTER_TOOLS_SERVER             — ingest URL 前缀
-#     MATMASTER_TOOLS_EVALUATION_BEARER  — tools-server Bearer token
+#     ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN — Claude CLI 鉴权（二选一）
+#     ANTHROPIC_BASE_URL                       — Claude CLI 端点（如 gpugeek/MiniMax/DeepSeek 兼容端点）
+#     MATMASTER_TOOLS_SERVER                   — ingest URL 前缀
+#     MATMASTER_TOOLS_EVALUATION_BEARER        — tools-server Bearer token
 #   可选:
-#     ANTHROPIC_API_KEY                  — 若直接用 Anthropic 官方 API 时填写（与 BASE_URL 二选一）
-#     ANTHROPIC_MODEL                    — 指定模型名（如 deepseek-chat、minimax-text-01）
-#     LITELLM_PROXY_API_KEY              — evaluator LLM judge 鉴权
-#     LITELLM_PROXY_API_BASE             — evaluator LLM base_url
-#     REGISTRY_USERNAME / REGISTRY_PASSWORD — 拉取/推送私有镜像
+#     ANTHROPIC_MODEL                          — 指定模型名
+#     ANTHROPIC_DEFAULT_HAIKU_MODEL            — Haiku 模型覆盖
+#     ANTHROPIC_DEFAULT_SONNET_MODEL           — Sonnet 模型覆盖
+#     ANTHROPIC_DEFAULT_OPUS_MODEL             — Opus 模型覆盖
+#     LITELLM_PROXY_API_KEY                    — evaluator LLM judge 鉴权
+#     LITELLM_PROXY_API_BASE                   — evaluator LLM base_url
+#     REGISTRY_USERNAME / REGISTRY_PASSWORD    — 拉取/推送私有镜像
 #
 # Claude CLI 代理配置说明：
-#   Claude CLI 支持通过环境变量把请求路由到任意 Anthropic 格式兼容端点，无需真实 Anthropic key。
-#   方案 A（DeepSeek）: ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic + ANTHROPIC_AUTH_TOKEN=sk-xxx
-#   方案 B（LiteLLM）:  ANTHROPIC_BASE_URL=http://your-litellm/ + ANTHROPIC_AUTH_TOKEN=litellm-key
-#   方案 C（官方）:     ANTHROPIC_API_KEY=sk-ant-xxx（不设 BASE_URL）
+#   方案 A（gpugeek）:  ANTHROPIC_API_KEY=xxx + ANTHROPIC_BASE_URL=https://api.gpugeek.com
+#   方案 B（MiniMax）:  ANTHROPIC_AUTH_TOKEN=sk-xxx + ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
+#   方案 C（DeepSeek）: ANTHROPIC_AUTH_TOKEN=sk-xxx + ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+#   方案 D（官方）:     ANTHROPIC_API_KEY=sk-ant-xxx（不设 BASE_URL）
 #
 # 可覆盖变量（手动触发时在 UI 传入，或在 schedule 的 Variables 中填写）：
-#   BASELINE_CAPABILITIES  — 逗号分隔，默认 structure_construction
 #   BASELINE_MODES         — direct 或 planner，默认 direct
-#   BASELINE_LIMIT         — 限制题数（0=不限），CI 默认 5（小批量节省费用）
+#   BASELINE_LIMIT         — 限制每个 capability 的题数（0=不限），默认 2
 #   BASELINE_MAX_TURNS     — 每题最大轮数，默认 50
 #   BASELINE_TIMEOUT       — 每题超时秒数，默认 900
 #   BASELINE_MODEL         — 模型名（空=claude 默认）
@@ -50,7 +56,6 @@ variables:
   ANTHROPIC_DEFAULT_OPUS_MODEL: "Vendor2/Claude-4.6-Opus"
   ANTHROPIC_DEFAULT_SONNET_MODEL: "Vendor2/Claude-4.6-Opus"
   ANTHROPIC_MODEL: "Vendor2/Claude-4.6-Opus"
-  BASELINE_CAPABILITIES: "structure_construction"
   BASELINE_MODES: "direct"
   BASELINE_LIMIT: "2"
   BASELINE_MAX_TURNS: "50"
@@ -78,10 +83,7 @@ baseline-eval-build:
       }
       EOF
   script:
-    # 先拉取最新主镜像（Dockerfile.eval FROM 需要它）
-    # 用 main 分支最新 CI 镜像作为基础；若要精确版本可改为 tag
     - |
-      # 构建主镜像（与 docker-build-mr-main 逻辑相同，供 Dockerfile.eval 继承）
       MAIN_TAG="ci${CI_PIPELINE_ID}"
       MAIN_IMAGE="${REGISTRY}/flow/matmaster-evo:${MAIN_TAG}"
       git rev-parse HEAD > ${CI_PROJECT_DIR}/.build-version
@@ -91,7 +93,6 @@ baseline-eval-build:
         --cache-to type=inline,mode=max \
         . --push
       echo "MAIN_IMAGE=${MAIN_IMAGE}" >> build.env
-    # 在主镜像基础上构建评测镜像（加 Node.js + Claude CLI）
     - |
       EVAL_TAG="eval-${CI_PIPELINE_ID}"
       EVAL_IMAGE="${REGISTRY}/flow/matmaster-eval:${EVAL_TAG}"
@@ -112,66 +113,17 @@ baseline-eval-build:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
 
-
-# ── Job 2: 跑题主体（长时 job）────────────────────────────────────────────────
-baseline-eval-run:
-  stage: sync-question-catalog  # 复用已有 stage，在 build 之后
-  image: $REGISTRY/public/ubuntu:gitlab-docker
-  variables:
-    DOCKER_HOST: tcp://docker-build-service:32375
+# ── Job 2: 触发子流水线（每个 capability 一个 manual job）──────────────────────
+baseline-eval-trigger:
+  stage: sync-question-catalog
   needs:
     - job: baseline-eval-build
       artifacts: true
-  timeout: 4h
-  before_script:
-    - |
-      cat > /root/.docker/config.json <<EOF
-      {
-        "auths": {
-          "registry.dp.tech": {
-            "auth": "$(echo -n ${REGISTRY_USERNAME}:${REGISTRY_PASSWORD} | base64)"
-          }
-        }
-      }
-      EOF
-    - docker pull "${DYNAMIC_IMAGE}"
-  script:
-    - |
-      docker rm -f baseline-eval-runner 2>/dev/null || true
-      docker create --name baseline-eval-runner \
-        -e ANTHROPIC_API_KEY \
-        -e ANTHROPIC_AUTH_TOKEN \
-        -e ANTHROPIC_BASE_URL \
-        -e ANTHROPIC_MODEL \
-        -e MATMASTER_TOOLS_SERVER \
-        -e MATMASTER_TOOLS_EVALUATION_BEARER \
-        -e LITELLM_PROXY_API_KEY \
-        -e LITELLM_PROXY_API_BASE \
-        -e BASELINE_CAPABILITIES="${BASELINE_CAPABILITIES}" \
-        -e BASELINE_MODES="${BASELINE_MODES}" \
-        -e BASELINE_LIMIT="${BASELINE_LIMIT}" \
-        -e BASELINE_MAX_TURNS="${BASELINE_MAX_TURNS}" \
-        -e BASELINE_TIMEOUT="${BASELINE_TIMEOUT}" \
-        -e BASELINE_MODEL="${BASELINE_MODEL}" \
-        -e BASELINE_RUN_LABEL="${BASELINE_RUN_LABEL}" \
-        -e BASELINE_PENDING_ONLY="${BASELINE_PENDING_ONLY}" \
-        "${DYNAMIC_IMAGE}" \
-        bash /app/ci/run_baseline_eval.sh
-    - docker start -a baseline-eval-runner
-    - docker cp baseline-eval-runner:/app/results ./ci_results || true
-    - docker cp baseline-eval-runner:/app/baseline_run.env ./baseline_run.env || true
-    - docker rm baseline-eval-runner || true
-  after_script:
-    - docker rm -f baseline-eval-runner 2>/dev/null || true
-  artifacts:
-    paths:
-      - ci_results/
-      - baseline_run.env
-    reports:
-      dotenv: baseline_run.env
-    expire_in: 30 days
-    when: always
-  tags:
-    - k8s-runner-ack
+  variables:
+    DYNAMIC_IMAGE: $DYNAMIC_IMAGE
+  trigger:
+    include:
+      - local: ci/baseline-eval-child.yml
+    strategy: depend
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
