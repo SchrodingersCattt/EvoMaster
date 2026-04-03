@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import logging
 import sys
@@ -240,24 +239,26 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
 
 
 def _run_with_event_log(runner: Any, prompt: str, log_dir: Path) -> tuple[Any, Path]:
-    """Run one task with MessageBus + EventLogger (same JSONL shape as REPL).
+    """Run one task with DevEventObserver + EventLogger (same JSONL shape as REPL).
 
     Writes ``log_dir/events_YYYYMMDD_HHMMSS.jsonl``.
     """
-    from matmaster.core.bus import MessageBus
+    from queue import Empty
+
     from matmaster.devshell.event_logger import EventLogger
+    from matmaster.devshell.event_observer import DevEventObserver
 
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
     event_logger = EventLogger(log_file, run_id="run-001")
-    bus = MessageBus()
+    observer = DevEventObserver()
 
     result_holder: list[Any] = []
     error_holder: list[BaseException] = []
 
     def _worker() -> None:
         try:
-            r = runner.run(prompt, bus=bus)
+            r = runner.run(prompt, event_observer=observer)
             result_holder.append(r)
         except BaseException as e:
             error_holder.append(e)
@@ -267,18 +268,15 @@ def _run_with_event_log(runner: Any, prompt: str, log_dir: Path) -> tuple[Any, P
 
     while worker.is_alive():
         try:
-            event = bus.get_nowait()
+            event = observer.get_nowait()
             event_logger.log_event(event)
-        except asyncio.QueueEmpty:
+        except Empty:
             time.sleep(0.1)
             continue
 
-    while True:
-        try:
-            event = bus.get_nowait()
-            event_logger.log_event(event)
-        except asyncio.QueueEmpty:
-            break
+    # Drain remaining events
+    for event in observer.drain():
+        event_logger.log_event(event)
 
     worker.join()
 
@@ -288,7 +286,6 @@ def _run_with_event_log(runner: Any, prompt: str, log_dir: Path) -> tuple[Any, P
         if not result_holder:
             raise RuntimeError("run produced no result")
         result = result_holder[0]
-        event_logger.log_event(result.result.to_run_result_event())
         return result, log_file
     finally:
         event_logger.close()

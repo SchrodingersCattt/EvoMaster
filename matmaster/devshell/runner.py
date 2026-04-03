@@ -6,16 +6,18 @@ import asyncio
 import logging
 import threading
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig, ExpToolsConfig
-from matmaster.core.bus import MessageBus
 from matmaster.core.exp import Exp
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.stream_hook import DevStreamHook
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import Message, UserMessage
 from matmaster.types.runtime import KernelRunResult
+
+if TYPE_CHECKING:
+    from matmaster.devshell.event_observer import DevEventObserver
 
 logger = logging.getLogger(__name__)
 
@@ -112,22 +114,35 @@ class DevRunner:
         task: str,
         *,
         stop_event: threading.Event | None = None,
-        bus: MessageBus | None = None,
+        event_observer: DevEventObserver | None = None,
     ) -> KernelRunResult:
         """Execute a single agent run.
 
         Returns KernelRunResult with event and message transcript.
         Appends run messages to history for multi-turn accumulation.
+
+        Args:
+            task: User prompt text.
+            stop_event: Threading event for cancellation.
+            event_observer: Optional DevEventObserver for local event collection.
         """
         exp = Exp(self._exp_config)
 
         async def _run_once() -> KernelRunResult:
             try:
                 runtime = await exp.build_runtime(self._pg_ctx)
-                # Inject DevStreamHook (same pattern as AgentRunService)
-                spec = runtime.spec.model_copy(
-                    update={"hooks": [*runtime.spec.hooks, self._stream_hook]}
-                )
+                hooks = [*runtime.spec.hooks, self._stream_hook]
+                extra_kwargs: dict[str, Any] = {}
+
+                if event_observer is not None:
+                    hooks.append(event_observer.hook)
+                    # Wire compactor event_sink if compactor exists
+                    if runtime.spec.compactor is not None:
+                        runtime.spec.compactor._event_sink = (
+                            event_observer.make_event_sink()
+                        )
+
+                spec = runtime.spec.model_copy(update={"hooks": hooks})
                 return await runtime.kernel.run(
                     spec, task, history=self.history, stop_event=stop_event
                 )
@@ -143,4 +158,9 @@ class DevRunner:
             new_messages = result.messages[skip_count:]
             self.history.append(UserMessage(content=task))
             self.history.extend(new_messages)
+
+        # Emit RunResultEvent for observer
+        if event_observer is not None:
+            event_observer.emit(result.result.to_run_result_event())
+
         return result

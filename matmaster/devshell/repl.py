@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import signal
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from queue import Empty
 from typing import Any
 
-from matmaster.core.bus import MessageBus
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.event_logger import EventLogger
+from matmaster.devshell.event_observer import DevEventObserver
 from matmaster.devshell.runner import DevRunner
 
 BUILTIN_COMMANDS = {"help", "config", "tools", "clear", "history", "verbose"}
@@ -128,7 +128,7 @@ def run_repl(
         run_id = f"run-{run_counter:03d}"
         event_logger.set_run_id(run_id)
 
-        bus = MessageBus()
+        observer = DevEventObserver()
         stop_event = threading.Event()
 
         original_handler = signal.getsignal(signal.SIGINT)
@@ -151,12 +151,12 @@ def run_repl(
             def _worker(
                 task: str = user_input,
                 ev: threading.Event = stop_event,
-                b: MessageBus = bus,
+                obs: DevEventObserver = observer,
                 rh: list[Any] = result_holder,
                 eh: list[Exception] = error_holder,
             ) -> None:
                 try:
-                    result = runner.run(task, stop_event=ev, bus=b)
+                    result = runner.run(task, stop_event=ev, event_observer=obs)
                     rh.append(result)
                 except Exception as e:
                     eh.append(e)
@@ -166,27 +166,20 @@ def run_repl(
 
             while worker.is_alive():
                 try:
-                    event = bus.get_nowait()
+                    event = observer.get_nowait()
                     event_logger.log_event(event)
-                except asyncio.QueueEmpty:
+                except Empty:
                     time.sleep(0.1)
                     continue
 
             # Drain remaining events
-            while True:
-                try:
-                    event = bus.get_nowait()
-                    event_logger.log_event(event)
-                except asyncio.QueueEmpty:
-                    break
+            for event in observer.drain():
+                event_logger.log_event(event)
 
             worker.join()
 
             if error_holder:
                 print(f"\nerror: {error_holder[0]}\n")
-            elif result_holder:
-                result = result_holder[0]
-                event_logger.log_event(result.result.to_run_result_event())
 
         finally:
             signal.signal(signal.SIGINT, original_handler)

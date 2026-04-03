@@ -12,7 +12,7 @@ import sys
 import threading
 from pathlib import Path
 
-# ── Config ───────────────────────────────────────────────────────────────
+# -- Config --
 PROMPT = "Build the nitroprusside anion. Export as `nitroprusside.xyz`. In the final answer, explicitly report: (1) whether `nitroprusside.xyz` exists; (2) the formula, written as `FeC5N6O`; (3) Fe coordination number; (4) the counts of Fe-C bonds shorter than 2.0 A and Fe-N bonds shorter than 2.0 A; (5) one representative N-O bond length and Fe-N-O angle; (6) one representative C-N bond length and Fe-C-N angle."  # <-- change this freely
 WORKDIR = Path(__file__).resolve().parent.parent.parent / "debug_workspace"
 LOG_DIR = WORKDIR / "logs"
@@ -20,7 +20,7 @@ LLM_CONFIG: Path | None = None  # None = auto-detect config/llm_config.yaml
 MODEL_OVERRIDE: str | None = "claude-opus-4-6"  # e.g. "claude-sonnet-4-6"
 CONFIG_FILE: Path | None = None  # None = use DevConfig defaults
 VERBOSE = True
-# ─────────────────────────────────────────────────────────────────────────
+# --
 
 
 def main(prompt: str | None = None) -> None:
@@ -66,7 +66,7 @@ def main(prompt: str | None = None) -> None:
     )
 
     # Runner
-    from matmaster.core.bus import MessageBus
+    from matmaster.devshell.event_observer import DevEventObserver
     from matmaster.devshell.runner import DevRunner
     from matmaster.devshell.stream_hook import DevStreamHook
 
@@ -81,11 +81,11 @@ def main(prompt: str | None = None) -> None:
     )
 
     task = prompt or PROMPT
-    bus = MessageBus()
+    observer = DevEventObserver()
     stop_event = threading.Event()
 
-    # ── Breakpoint-friendly: step into runner.run() ──
-    result = runner.run(task, stop_event=stop_event, bus=bus)
+    # -- Breakpoint-friendly: step into runner.run() --
+    result = runner.run(task, stop_event=stop_event, event_observer=observer)
 
     # Print summary
     kr = result.result
