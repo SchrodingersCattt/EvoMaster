@@ -95,23 +95,43 @@ baseline-eval-build:
     - |
       MAIN_TAG="ci${CI_PIPELINE_ID}"
       MAIN_IMAGE="${REGISTRY}/flow/matmaster-evo:${MAIN_TAG}"
+      MAIN_CACHE="${REGISTRY}/flow/matmaster-evo:latest"
       git rev-parse HEAD > ${CI_PROJECT_DIR}/.build-version
+      docker pull "${MAIN_CACHE}" || true
       docker buildx build --progress=plain \
         -f ${CI_PROJECT_DIR}/Dockerfile \
+        --cache-from "${MAIN_CACHE}" \
         -t ${MAIN_IMAGE} \
+        -t ${MAIN_CACHE} \
         --cache-to type=inline,mode=max \
         . --push
       echo "MAIN_IMAGE=${MAIN_IMAGE}" >> build.env
     - |
       EVAL_TAG="eval-${CI_PIPELINE_ID}"
       EVAL_IMAGE="${REGISTRY}/flow/matmaster-eval:${EVAL_TAG}"
+      EVAL_CACHE="${REGISTRY}/flow/matmaster-eval:latest"
+      docker pull "${EVAL_CACHE}" || true
       docker buildx build --progress=plain \
         -f ${CI_PROJECT_DIR}/Dockerfile.eval \
         --build-arg BASE_IMAGE="${MAIN_IMAGE}" \
+        --cache-from "${EVAL_CACHE}" \
         -t ${EVAL_IMAGE} \
+        -t ${EVAL_CACHE} \
         --cache-to type=inline,mode=max \
         . --push
       echo "DYNAMIC_IMAGE=${EVAL_IMAGE}" >> ${CI_PROJECT_DIR}/build.env
+    - |
+      echo "--- 写入评测变量到 dotenv ---"
+      ENV_FILE="${CI_PROJECT_DIR}/build.env"
+      echo "EVAL_RUNNER=${EVAL_RUNNER}" >> "${ENV_FILE}"
+      echo "BASELINE_MODES=${BASELINE_MODES}" >> "${ENV_FILE}"
+      echo "BASELINE_LIMIT=${BASELINE_LIMIT}" >> "${ENV_FILE}"
+      echo "BASELINE_MAX_TURNS=${BASELINE_MAX_TURNS}" >> "${ENV_FILE}"
+      echo "BASELINE_TIMEOUT=${BASELINE_TIMEOUT}" >> "${ENV_FILE}"
+      echo "BASELINE_MODEL=${BASELINE_MODEL}" >> "${ENV_FILE}"
+      echo "BASELINE_RUN_LABEL=${BASELINE_RUN_LABEL}" >> "${ENV_FILE}"
+      echo "BASELINE_PENDING_ONLY=${BASELINE_PENDING_ONLY}" >> "${ENV_FILE}"
+      cat "${ENV_FILE}"
     - |
       echo "--- 动态生成子流水线 YAML ---"
       apt-get update -qq && apt-get install -y -qq python3 python3-yaml >/dev/null 2>&1
