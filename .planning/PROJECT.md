@@ -51,16 +51,11 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 
 ### Active
 
-（v2.2 里程碑内全部需求已完成，无 Active 需求）
+（v2.2 完成归档，等待下一里程碑需求定义）
 
-## Current Milestone: v2.2 AgentKernel Generator-First + Tool Runtime v2
+## Shipped: v2.2 AgentKernel Generator-First + Tool Runtime v2 (2026-04-03)
 
-**Goal:** 将 AgentKernel 改造为 generator-first 架构，同步建立 Tool Runtime v2 核心骨架，贯穿 Kernel → Exp → Service 全链路，最终移除 Hook→Bus 间接路径并评估去总线化
-
-**Target features:**
-- Phase 1: Kernel generator 改造 + Tool Runtime v2 核心骨架（ToolSpec/ToolBinding/ToolCatalog/ToolRunner/ToolScheduler + 三层约束）
-- Phase 2: Exp/Service 接入 + 约束迁移 + Hook 退役 + ToolRegistry 降级
-- Phase 3: 去总线化评估与实施 + 调度边界固化（ASCH-01 defer）
+AgentKernel 改造为 generator-first 架构，Tool Runtime v2 七步执行链全链路贯穿，MessageBus/EventRouter 物理删除，5 个 Hook 退役。详见 milestones/v2.2-ROADMAP.md。
 
 ## Shipped: v2.1 matmaster/ 完全独立化 (2026-04-02)
 
@@ -80,10 +75,10 @@ matmaster/ 运行时路径完全独立于 evomaster/playground/src。三方向�
 
 ### Current State
 
-**As of 2026-04-03:** Phase 36 complete — v2.2 里程碑最后一个 phase。MessageBus/EventRouter/ConfirmationHook 物理删除，RunEventFanout 替代 queue-based transport 实现 SSE-first 直连 dispatch。bus.py 全部删除，Exp/ContextCompactor 的 `bus=` 参数清除，DevShell 改用 SimpleQueue-backed DevEventObserver。单一 `run_agent()` 入口替代 `run_agent()`/`run_agent_stream()` 双入口。stateless SessionCapabilities 调度边界通过显式回归测试固化，persistent shell 并发延后到 ASCH-01。
+**As of 2026-04-03:** v2.2 milestone shipped。AgentKernel 以 generator-first 模式运行（`_run_items()` → `run_stream()` → `run()`），FullToolRunner 七步执行链作为默认工具执行路径。三层约束模型（StructuralValidation + ReadBeforeModifyGuard + CapabilityPolicy）替代工具内部分散检查。MessageBus/EventRouter/5 个 Hook 全部物理删除，RunEventFanout 直连 SSE + Persistence。ToolCatalog 成为唯一上层工具消费接口。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
-Source: 15,839 LOC (matmaster/).
+Source: 40,803 LOC (matmaster/), 131 commits in v2.2.
 
 Architecture (current):
 - `matmaster/core/` — AgentKernel, GuardPipeline, Hooks, Exp (config-driven), ContextBuilder, ContextCompactor, Playground
@@ -94,17 +89,20 @@ Architecture (current):
 - `matmaster/sessions/` — Session Protocol, LocalSession, SSHSession (原生 paramiko)
 - `matmaster/types/` — PlaygroundContext, AgentRuntimeSpec, AgentEvent, CompactionConfig, KernelRunResult, Guards, LLMProvider, Messages, WorkerRegistry, ToolPlane/SessionCapabilities/RuntimeTopology (topology), ToolSpec/ToolBinding/ResourceClaim/ToolInstance (tool_spec), ToolDecision (tool_decision)
 - `matmaster/providers/` — OpenAIProvider, llm_factory
-- `matmaster/hooks/` — BaseHook (OutputProcessorHook, SkillHitHook, AssistantStateHook 已退役)
-- `matmaster/integration/` — RunEventFanout, EventPayloads, PersistenceHandler, SSEHandler, WorkspaceHandler, BohriumSetupService, bohrium_env, workspace_resolver
+- `matmaster/hooks/` — BaseHook（全部业务 Hook 已退役删除）
+- `matmaster/integration/` — RunEventFanout, EventPayloads, PersistenceHandler, SSEHandler, WorkspaceHandler, BohriumSetupService, bohrium_env, workspace_resolver（MessageBus/EventRouter 已删除）
 - `matmaster/calculation/` — env_config, oss_io, job_service, path_adaptor
 - `matmaster/devshell/` — DevConfig, DevRunner, DevStreamHook, EventLogger, REPL, CLI
 - `matmaster/skills/` — registry 与 lazymcp skill roots
 
 ### Known Tech Debt
 
-- `config.yaml` 中 `~/.evomaster-skills` 文件系统路径待 v2.2 清理（非代码依赖）
+- `config.yaml` 中 `~/.evomaster-skills` 文件系统路径待清理（非代码依赖）
 - `oss_io.py` 含 `evomaster/calculation` OSS 前缀字符串常量（非 import，仅 storage key）
 - `tests/test_streaming_thought_protocol.py` 收集失败待纳入质量门禁
+- `agent.py _run_items()` L352 有未使用的 guard_pipeline 死代码（待清理）
+- `_run_loop()` (DevShell) 每次 LLM 调用重建 tool_definitions（无版本缓存，FUTR-03 统一）
+- 3 个 real-API compaction 测试因外部 LiteLLM proxy Bedrock 权限问题失败
 
 ## Constraints
 
@@ -135,7 +133,7 @@ Architecture (current):
 | Exp.assemble() 中初始化 MCP/Skill | assemble 时用 ctx.workdir 初始化 | ✓ Good |
 | TYPE_CHECKING + lazy import 解决循环导入 | 运行时惰性加载 AgentKernel | ✓ Good |
 | Retry at Protocol level (chat_with_retry) | 每个 provider 实现自己的重试逻辑 | ✓ Good |
-| Guard shells 已删除，未来业务 guard 用 Hook | Phase 6 决策 | ⚠️ Revisit |
+| Guard shells 已删除，未来业务 guard 用 Hook | Phase 6 决策 | ✓ Resolved (v2.2 三层约束模型替代) |
 | Playground 参数化构造（5 keyword-only params）替代 config_path 构造 | 避免 EvoMasterConfig 耦合，直接传入运行参数 | ✓ Good |
 | SSHSession + SSHEnv 合并为单类直持 paramiko.SSHClient | 消除 Env 中间层，简化生命周期 | ✓ Good |
 | BohriumSetupService 回调注入替代 sessions_service 注入 | 4 个 callable 替代整个 service 对象，打破 src 反向依赖 | ✓ Good |
@@ -147,6 +145,14 @@ Architecture (current):
 | EventRouter 拆分为 SRP 模块 | event_router.py 300+ 行 → 4 个单职责模块，可独立测试 | ✓ Good |
 | ContextCompactor 用 summary 策略 | LLM 摘要压缩旧对话，sliding_window 兜底，保留最近 3+ turn | ✓ Good |
 | DevShell 独立于 src/ 服务层 | 纯 matmaster/ 层开发验证，不依赖 FastAPI/Redis/MySQL | ✓ Good |
+| _run_items() generator-first 替代 _run_loop() | 单一执行路径产出事件流，run()/run_stream() 共享 | ✓ Good |
+| FullToolRunner 七步执行链替代分散 guard/hook/execute | 查找→校验→Guard→Policy→调度→执行→释放，集中管控 | ✓ Good |
+| ToolCatalog base+overlay 两层结构 | base 编译时不可变，overlay 承载 MCP 懒注入，version 驱动缓存刷新 | ✓ Good |
+| 三层约束模型替代工具内部检查 | StructuralValidation/RunStateGuard/CapabilityPolicy 集中，工具变为纯执行层 | ✓ Good |
+| RunEventFanout 替代 MessageBus/EventRouter | SSE-first 直连 + background persistence，消除 queue 中间层 | ✓ Good |
+| ConfirmationHook 删除，reply-queue dormant | v2.3 再设计交互式确认流程，不阻碍去总线化 | ✓ Good |
+| DevShell 改用 SimpleQueue-backed DevEventObserver | 线程安全事件传递，不依赖 async transport | ✓ Good |
+| ESIN-08 用户废弃，CMIG-05 覆盖 | system prompt 工具枚举改为通用说明，消除不一致风险 | ✓ Good |
 
 ## Evolution
 
@@ -166,4 +172,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-03 after Phase 36 completion (v2.2 milestone final phase)*
+*Last updated: 2026-04-03 after v2.2 milestone completion*

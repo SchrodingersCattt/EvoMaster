@@ -92,6 +92,56 @@
 
 ---
 
+## Milestone: v2.2 — AgentKernel Generator-First + Tool Runtime v2
+
+**Shipped:** 2026-04-03
+**Phases:** 5 | **Plans:** 19
+
+### What Was Built
+- AgentKernel generator-first 改造：_run_items() AsyncGenerator 作为唯一执行路径，run_stream() yield BusEvent
+- Tool Runtime v2 完整类型体系：8 frozen 类型 + ToolCatalog base+overlay + ToolCompiler
+- FullToolRunner 七步执行链：Catalog→Validation→Guard→Policy→Scheduler→Execute→Release
+- ToolScheduler 资源调度：exclusive/shared_read/counted 三种模式，纯 asyncio 原语
+- 三层约束模型统一迁入：ReadBeforeModifyGuard + CapabilityPolicy bash safety，工具变为纯执行层
+- Generator 全链路贯穿：Kernel → Exp → Service → RunEventFanout → SSE/Persistence
+- 去总线化：MessageBus/EventRouter 物理删除，RunEventFanout SSE-first 直连替代
+- 5 个 Hook 退役删除（EventEmitter/AssistantState/SkillHit/OutputProcessor/Confirmation）
+- ToolRegistry 降级为纯存储，ToolCatalog 成为唯一上层消费接口
+
+### What Worked
+- Phase 32 的 frozen 类型体系设计为后续 phase 提供了稳定的编译时契约，Phase 33-36 全部基于此构建无需回退
+- Gap closure 反馈循环持续有效：Phase 33 的 effect_level canonicalization、Phase 34 的 FullToolRunner activation、Phase 35 的 GuardPipeline read_tracker 注入都通过 VERIFICATION→gap plan 路径发现并修复
+- YOLO mode + quality profile 配合：快速迭代的同时保持高质量验证
+- 约束迁移策略：先建立新路径（三层约束），再删除旧路径（工具内部检查），零中断
+- 去总线化分步推进：先建 fanout → 再删 bus stub → 最后物理清除，每步有回归测试保障
+
+### What Was Inefficient
+- REQUIREMENTS.md 状态同步仍有遗漏：CMIG-01/CMIG-02 实现完成后 checkbox 未更新，ESIN-08 废弃后未标记 Dropped
+- Phase 34 Nyquist VALIDATION.md 停留在 draft 状态未补齐
+- _run_items() 中遗留了一个从不被调用的 guard_pipeline 死代码变量，应在重构时立即清理
+- 33-VERIFICATION.md 中 effect_level 术语描述（external_write）与实际代码（external_effect）不一致，文档未随代码迭代更新
+
+### Patterns Established
+- Generator-first 执行模型：_run_items() → run_stream() → run()，内部 generator 驱动外部多种消费模式
+- ToolCatalog base+overlay 两层结构 + version 驱动缓存刷新：解决 MCP 懒注入的一致性问题
+- 三层约束模型（Structural → State → Capability）：将安全检查从工具实现中抽离，集中管控
+- RunEventFanout SSE-first + background persistence：直连替代 queue transport，消除中间层
+- ToolCompiler 集中编译：工具元数据（plane/effect/resource/stop_mode）从分散硬编码改为编译时统一产出
+
+### Key Lessons
+1. 类型体系先行在 generator 改造中尤为重要：frozen 类型确保了 5 个 phase 间的接口稳定性
+2. 去总线化不应一步到位：分 4 个 plan（建 fanout → stub → 物理删除 → DevShell 迁移）降低了每步风险
+3. REQUIREMENTS.md 状态同步应纳入每个 plan 的 SUMMARY 生成流程，而非依赖手动维护
+4. 约束迁移（从分散到集中）需要同步验证"旧路径已删除"和"新路径已激活"两个条件
+5. 死代码应在引入新路径时立即清理，不要等到后续 phase——agent.py 的 guard_pipeline 变量就是反例
+
+### Cost Observations
+- Model mix: quality profile (opus for planning/execution/verification, sonnet for integration checker)
+- Sessions: ~4 个 session 完成 v2.2 全部 5 个 phase
+- Notable: 2 天完成 5 阶段 19 个 plan，+30K/-6K lines，131 commits
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -100,6 +150,7 @@
 |-----------|--------|-------|------------|
 | v1 | 7 | 21 | 契约驱动重构，TDD + 阶段验证反馈循环 |
 | v2.1 | 7 | 19 | 分层解耦 + AST import audit 门禁 + 物理删除策略 |
+| v2.2 | 5 | 19 | Generator-first + Tool Runtime v2 + 去总线化 |
 
 ### Cumulative Quality
 
@@ -107,6 +158,7 @@
 |-----------|-------|--------------|--------------------|
 | v1 | 380 | core/tools/types/hooks/integration/providers | Pydantic v2 (existing), stdlib only |
 | v2.1 | 1,294 | +sessions/mcp/calculation/integration (原生化) | paramiko (existing), stdlib only |
+| v2.2 | 1,400+ | +ToolCatalog/ToolCompiler/FullToolRunner/RunEventFanout, -MessageBus/EventRouter/5 Hooks | jsonschema (validation), stdlib only |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -114,3 +166,5 @@
 2. 阶段验证 + 里程碑审计是发现集成 gap 的关键机制
 3. 每个 phase 完成时立即同步文档，不要积累到里程碑末尾
 4. 回调注入比 service 注入更适合打破反向依赖
+5. 类型体系先行为多 phase 改造提供稳定接口，避免跨 phase 回退
+6. 大型移除（去总线化、Hook 退役）应分步推进：建新路径→验证→删旧路径

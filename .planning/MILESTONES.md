@@ -1,5 +1,33 @@
 # Milestones
 
+## v2.2 AgentKernel Generator-First + Tool Runtime v2 (Shipped: 2026-04-03)
+
+**Phases completed:** 5 phases, 19 plans, 35 tasks
+
+**Key accomplishments:**
+
+- 8 frozen types + 1 enum defining Tool Runtime v2 object model, plus ToolResult info->payload+meta upgrade with full consumer chain sync
+- ToolRunner Protocol with InlineToolRunner 3-phase execution chain, ToolCatalog base+overlay facade, and AgentRuntimeSpec 5-field extension for Tool Runtime v2
+- _run_items() AsyncGenerator replaces _run_loop(), run_stream() yields BusEvent for streaming consumers, run() delegates unchanged -- 50 kernel tests pass (39 existing zero-modification + 11 new)
+- Layer A stateless args/topology validation (jsonschema) + Layer C effect_level/capability policy (@runtime_checkable Protocol) with 22 passing tests
+- ResourceClaim-based tool scheduling with _RWLock (exclusive/shared_read) and asyncio.Semaphore (counted), pure asyncio primitives, 199 LOC
+- FullToolRunner seven-step execution chain (Catalog->Validation->Guard->Policy->Scheduler->Execute->Release) with BUILTIN_CLAIMS/BUILTIN_META lookup tables for 16 builtin tools
+- Canonical effect_level semantics now line up across ToolCatalog metadata, FullToolRunner fast path, and CapabilityPolicy, with regression tests anchored to real builtin metadata
+- Session implementations now expose explicit runtime capabilities, and ToolCatalog compiles tools through a dedicated ToolCompiler instead of hand-building ToolInstance metadata inline
+- _stream_llm_items() sub-generator + _run_items() direct event yields + Exp.build_runtime() FullToolRunner injection + run_stream() generator chain
+- AgentRunService.run_agent_stream() consumes Exp.run_stream() generator, bridges events to bus/EventRouter with source normalization and StreamClosedEvent lifecycle
+- Deleted 4 Hook classes (EventEmitterHook + 3 business hooks) and cleaned Exp/Service creation paths -- generator events are now the sole event source
+- FullToolRunner activated as default execution path + run_stream() yields BusEvent + ToolCatalog version-aware cache invalidation
+- Read-before-modify and bash safety checks migrated from tool internals to three-layer constraint model (GuardPipeline + CapabilityPolicy), tools become pure execution layers
+- BUILTIN_STOP_MODES mapping table + FullToolRunner stop_mode-aware cancel strategy for 16 builtin tools
+- ToolRegistry demoted to pure storage, ToolCatalog becomes sole upper-layer facade with self-contained build_definitions and inject_stop_event
+- Per-run async fanout owner with SSE-first dispatch replacing EventRouter transport, plus Bohrium thread-safe event_sink bridge
+- 1. [Rule 3 - Blocking] bus.py retained as deprecated stub instead of physical deletion
+- 1. [Rule 1 - Bug] Fixed BohriumSetupResult 5-field signature in abort test
+- SimpleQueue-backed DevEventObserver replaces DevShell MessageBus, bus.py physically deleted, repo-wide transport audit confirms zero remaining MessageBus/EventRouter Python imports, stateless scheduling boundary locked with explicit regression tests
+
+---
+
 ## v2.1 — matmaster/ 完全独立化
 
 **Shipped:** 2026-04-02

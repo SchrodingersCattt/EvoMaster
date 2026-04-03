@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
-status: verifying
-stopped_at: Completed 36-04-PLAN.md
-last_updated: "2026-04-03T09:54:41.189Z"
+status: shipped
+stopped_at: Milestone v2.2 completed and archived
+last_updated: "2026-04-03"
 last_activity: 2026-04-03
 progress:
   total_phases: 5
@@ -18,16 +18,16 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-02)
+See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 36 — debus-scheduling
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 36
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: --
+Plan: --
+Status: v2.2 milestone shipped — ready for next milestone
 Last activity: 2026-04-03
 
 Progress: [====================] 100%
@@ -36,18 +36,7 @@ Progress: [====================] 100%
 
 ### Decisions
 
-(v2.1 决策已归档到 milestones/v2.1-ROADMAP.md，清空以备下一里程碑)
-
-- [Phase 35]: write_file excluded from ReadBeforeModifyGuard._MODIFY_TOOLS; uses validate_input (needs session.path_exists)
-- [Phase 35]: AgentRuntimeSpec gains read_tracker field; agent.py passes it to GuardPipeline constructor
-- [Phase 35]: ToolCatalog is sole upper-layer facade; ContextBuilder generic tools section; _SimpleTestToolRunner for kernel test compatibility
-- [Phase 36]: EventHandler Protocol moved to fanout.py for post-deletion survival
-- [Phase 36]: BohriumSetupService takes event_sink: Callable instead of bus: MessageBus
-- [Phase 36]: set[asyncio.Task] for pending persistence (Python 3.10 compat, no TaskGroup)
-- [Phase 36]: bus.py retained as deprecated stub: exp.py/devshell still import MessageBus; physical deletion deferred to Plan 03/04
-- [Phase 36]: ConfirmationHook fully deleted (D-03/D-04); confirmation_request event type preserved; reply-queue dormant for v2.3
-- [Phase 36]: Exp and ContextCompactor bus= parameters fully removed; DevShell runner keeps bus param in run() signature (unused) for Plan 04
-- [Phase 36]: DevEventObserver uses queue.SimpleQueue for thread-safe DevShell event handoff; bus.py physically deleted; stateless scheduling boundary locked
+(v2.2 决策已归档到 milestones/v2.2-ROADMAP.md，清空以备下一里程碑)
 
 ### Pending Todos
 
@@ -59,6 +48,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-03T09:41:46.032Z
-Stopped at: Completed 36-04-PLAN.md
+Last session: 2026-04-03
+Stopped at: Milestone v2.2 completed and archived
 Resume file: None
