@@ -191,3 +191,6 @@ docs/plans/
 
 # Worktrees
 .worktrees/
+
+# CI generated artifacts
+ci/generated-eval-child.yml
