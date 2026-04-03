@@ -61,7 +61,6 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
     evaluator = BinaryEvaluator(
         llm_cfg=config.evaluator_llm,
         axis_weights=dict(config.axis_weights),
-        bank_dir=bank_dir,
     )
     # The core extractor is runtime-agnostic. EvoMaster-specific tool/event
     # compatibility is injected here by the current runner.

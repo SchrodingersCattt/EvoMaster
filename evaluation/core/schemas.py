@@ -64,8 +64,6 @@ VerifyLiteral = Literal[
     'struct_file_count',
     # surface termination check
     'struct_file_surface_termination',
-    # VASP INCAR parameter comparison against reference
-    'incar_param_compare',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']

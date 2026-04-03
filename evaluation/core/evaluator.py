@@ -11,7 +11,6 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from evomaster.utils.llm import LLMConfig, create_llm
@@ -71,10 +70,8 @@ class BinaryEvaluator:
         self,
         llm_cfg: LLMRuntimeConfig | None = None,
         axis_weights: dict[str, float] | None = None,
-        bank_dir: str | Path | None = None,
     ) -> None:
         self._llm = None
-        self._bank_dir = Path(bank_dir) if bank_dir else None
         if llm_cfg is not None:
             cfg = LLMConfig(
                 provider=llm_cfg.provider,
@@ -446,14 +443,6 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return _STRUCT_FILE_DISPATCH[item.verify](evidence=evidence, ref=ref)
-
-        # --- VASP INCAR parameter comparison ---
-        if item.verify == 'incar_param_compare':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_incar_param_compare(
-                evidence=evidence, answer=answer, ref=ref,
-            )
 
         if item.verify == 'llm_binary_judge':
             return self.judge_binary(
@@ -961,82 +950,6 @@ class BinaryEvaluator:
             True,
             f'batch calls consistent: {len(matching_calls)} calls, pattern={pattern}',
         )
-
-    # ------------------------------------------------------------------
-    # INCAR parameter comparison
-    # ------------------------------------------------------------------
-
-    def _check_incar_param_compare(
-        self,
-        *,
-        evidence: EvidenceBundle | None,
-        answer: str,
-        ref: ReferenceAnswer,
-    ) -> tuple[bool, str]:
-        """Compare agent INCAR against reference using structured parsing.
-
-        ``ref.value`` is a dict with:
-        - ``ref_incar``: path to reference INCAR relative to question bank root
-        - ``key_tags``: list of core tag names to track (optional)
-        - ``mode``: ``"key_only"`` or ``"full"`` (default ``"full"``)
-        - ``pass_threshold``: float 0-1 (default 0.6)
-        """
-        from .incar_parser import (
-            compare_incar,
-            extract_incar_from_text,
-            parse_incar,
-        )
-
-        cfg = ref.value if isinstance(ref.value, dict) else {}
-        ref_incar_rel = cfg.get('ref_incar', '')
-        key_tags = cfg.get('key_tags', [])
-        mode = cfg.get('mode', 'full')
-        pass_threshold = float(cfg.get('pass_threshold', 0.6))
-
-        # --- Resolve reference INCAR path ---
-        ref_incar_path: Path | None = None
-        if self._bank_dir and ref_incar_rel:
-            ref_incar_path = self._bank_dir / ref_incar_rel
-        if ref_incar_path is None or not ref_incar_path.is_file():
-            return False, f'reference INCAR not found: {ref_incar_rel}'
-
-        ref_text = ref_incar_path.read_text(encoding='utf-8')
-        ref_parsed = parse_incar(ref_text)
-
-        # --- Get agent INCAR ---
-        agent_text: str | None = None
-
-        # Try workspace file first
-        if evidence and evidence.workspace_dir:
-            ws = Path(evidence.workspace_dir)
-            incar_file = ws / 'INCAR'
-            if incar_file.is_file():
-                agent_text = incar_file.read_text(encoding='utf-8')
-
-        # Fallback: extract from final_content
-        if not agent_text and answer:
-            agent_text = extract_incar_from_text(answer)
-
-        if not agent_text:
-            return False, 'no INCAR found in workspace or agent output'
-
-        agent_parsed = parse_incar(agent_text)
-
-        # --- Compare ---
-        result = compare_incar(
-            ref_parsed,
-            agent_parsed,
-            key_tags=key_tags if key_tags else None,
-        )
-
-        # --- Determine pass/fail ---
-        if mode == 'key_only' and key_tags:
-            score = result.key_score
-        else:
-            score = result.full_score
-
-        passed = score >= pass_threshold
-        return passed, result.summary()
 
     # ------------------------------------------------------------------
     # Utilities
