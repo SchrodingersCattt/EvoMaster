@@ -31,10 +31,12 @@ questions:
           - "slab_layers"
           - "vacuum_thickness"
           - "adsorption_site"
+      - key: "turn_budget"
+        value: {max: 10}
       - key: "duration_budget"
         value: {max: 3600000}
       - key: "token_budget_total"
-        value: {max: 30000}
+        value: {max: 8000}
     scoring_checklist:
       - id: "slab_layers"
         criterion: "Slab has 4 layers as specified."
@@ -56,6 +58,10 @@ questions:
         criterion: "No repeated identical slab construction calls."
         axis: "efficiency"
         verify: "no_retries"
+      - id: "turn_budget"
+        criterion: "Agent completes the task within the turn (step) budget."
+        axis: "efficiency"
+        verify: "turn_budget"
       - id: "efficiency_judge"
         criterion: "Adsorption structure built in direct workflow without unnecessary rebuilds."
         axis: "efficiency"

@@ -39,10 +39,15 @@ questions:
           - "chemical_potentials"
           - "formation_energy"
           - "volume_change"
+      - key: "turn_budget"
+        value: &id000
+          max: 18
       - key: "duration_budget"
-        value: {max: 7200000}
+        value: &id001
+          max: 7200000
       - key: "token_budget_total"
-        value: {max: 50000}
+        value: &id002
+          max: 8000
     scoring_checklist:
       - id: "formation_energy_eV"
         criterion: "Doping formation energy is computed correctly from mock energies (~0.88 eV)."
@@ -60,6 +65,10 @@ questions:
         criterion: "NFPP structure uses correct Pna2₁ lattice parameters; mock energies used as specified; chemical potentials explicitly defined."
         axis: "grounding"
         verify: "llm_binary_judge"
+      - id: "turn_budget"
+        criterion: "Agent completes the task within the turn (step) budget."
+        axis: "efficiency"
+        verify: "turn_budget"
       - id: "efficiency_judge"
         criterion: "Workflow (fetch → build supercell → dope → compute E_f with mock values) completes without redundant steps."
         axis: "efficiency"
@@ -105,10 +114,12 @@ questions:
           - "mu_Na"
           - "voltage"
           - "voltage_formula"
+      - key: "turn_budget"
+        value: *id000
       - key: "duration_budget"
-        value: {max: 7200000}
+        value: *id001
       - key: "token_budget_total"
-        value: {max: 50000}
+        value: *id002
     scoring_checklist:
       - id: "avg_voltage_V"
         criterion: "Average voltage is computed correctly from mock energies (~3.4 V)."
@@ -122,6 +133,10 @@ questions:
         criterion: "Voltage is computed with explicitly defined mock energies and chemical potential."
         axis: "grounding"
         verify: "llm_binary_judge"
+      - id: "turn_budget"
+        criterion: "Agent completes the task within the turn (step) budget."
+        axis: "efficiency"
+        verify: "turn_budget"
       - id: "efficiency_judge"
         criterion: "Voltage workflow (fetch → build 2 states → compute with mock values) completes linearly."
         axis: "efficiency"

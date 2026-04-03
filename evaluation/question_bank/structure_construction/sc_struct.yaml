@@ -49,12 +49,15 @@ questions:
     - interlayer_distance_A
     - stacking
     - vacuum_A
+  - key: turn_budget
+    value: &id000
+      max: 20
   - key: duration_budget
     value: &id001
       max: 7200000
   - key: token_budget_total
     value: &id002
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: mismatch_percent
     criterion: Lattice mismatch is below 2%.
@@ -85,6 +88,10 @@ questions:
     criterion: No excessive retries with the same parameter set during structure construction.
     axis: efficiency
     verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: Heterostructure construction completes in a direct workflow without
       redundant structure rebuilds.
@@ -162,6 +169,8 @@ questions:
       unit_cell_atoms: 144
       slab_atoms: 576
       layers: 4
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -196,6 +205,10 @@ questions:
     criterion: No repeated identical slab or cut operations with wrong parameters.
     axis: efficiency
     verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The (110) slab construction and integrity check complete without excessive
       exploratory calls.
@@ -266,6 +279,8 @@ questions:
     - hydrogen_count
     - si_h_bond_length_A
     - all_si_four_coordination
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -304,6 +319,10 @@ questions:
     criterion: Slab construction and passivation run without repeated identical attempts.
     axis: efficiency
     verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: Passivation workflow completes in a direct pipeline without unnecessary
       intermediate structure rebuilds.
@@ -359,6 +378,8 @@ questions:
     - stoichiometry_verified
     - layer_thickness_A
     - vacuum_A
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -387,6 +408,10 @@ questions:
     criterion: No repeated identical exfoliation or slab cuts with the same parameters.
     axis: efficiency
     verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: Monolayer exfoliation and stoichiometry verification complete in a
       direct workflow.
@@ -463,6 +488,8 @@ questions:
     value:
       min: 5
       max: 20
+  - key: turn_budget
+    value: *id000
   - key: token_budget_total
     value:
       max: 35000
@@ -496,6 +523,10 @@ questions:
     criterion: No repeated identical tool calls are made for the same structure.
     axis: efficiency
     verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: tool_call_budget
     criterion: The whole 5-structure workflow stays within a modest tool-call budget.
     axis: efficiency
@@ -564,6 +595,8 @@ questions:
       expected_deg: 109.48
       tolerance_deg: 8.0
       cutoff_A: 1.5
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -599,6 +632,10 @@ questions:
     criterion: Hydrogen addition is not repeated with identical parameters.
     axis: efficiency
     verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The hydrogenation and validation workflow completes directly without
       redundant exploratory steps.
@@ -714,6 +751,8 @@ questions:
     - fe_no_angle
     - cn_bond_length
     - fe_cn_angle
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -771,6 +810,10 @@ questions:
     criterion: No repeated identical molecule-build attempts with the same parameters.
     axis: efficiency
     verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The nitroprusside construction and validation workflow completes directly
       without redundant trial-and-error.
@@ -850,6 +893,8 @@ questions:
     - octahedral_alo
     - min_distance_check
     - max_force
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -895,6 +940,10 @@ questions:
     criterion: Bulk construction and relaxation are not repeated with identical parameters.
     axis: efficiency
     verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The gamma-alumina construction and relaxation workflow completes without
       redundant exploratory detours.
@@ -967,6 +1016,8 @@ questions:
     - symmetry_check
     - outermost_O_termination
     - ce_o_ratio
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -1008,6 +1059,10 @@ questions:
     criterion: No repeated identical slab construction with the same parameters.
     axis: efficiency
     verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The CeO2(111) slab construction and validation workflow completes without
       unnecessary exploratory calls.

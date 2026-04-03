@@ -34,12 +34,15 @@ questions:
     - gap_type
     - gap_value
     - uncertainty_note
+  - key: turn_budget
+    value: &id000
+      max: 18
   - key: duration_budget
     value: &id001
       max: 7200000
   - key: token_budget_total
     value: &id002
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: gap_type
     criterion: Band-gap type is correctly identified as indirect (not direct).
@@ -69,6 +72,10 @@ questions:
       k-path.
     axis: efficiency
     verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: Si band structure workflow (fetch → SCF → bands → report) completes
       without redundant intermediate steps.
@@ -116,6 +123,8 @@ questions:
     - acceleration_strategy
     - gap_extraction
     - cost_note
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -150,6 +159,10 @@ questions:
       identical parameters.
     axis: efficiency
     verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: Liquid water gap workflow (build box → SCF/hybrid → DOS → report) is
       executed without redundant intermediate calculations.

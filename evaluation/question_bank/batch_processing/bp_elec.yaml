@@ -60,10 +60,12 @@ questions:
           - "activity_ranking"
       - key: "batch_efficiency"
         value: "H2 reference computed once, shared across 3 metals"
+      - key: "turn_budget"
+        value: {max: 20}
       - key: "duration_budget"
         value: {max: 7200000}
       - key: "token_budget_total"
-        value: {max: 80000}
+        value: {max: 12000}
     scoring_checklist:
       - id: "E_ads_Cu"
         criterion: "Cu adsorption energy is computed correctly from mock energies (~-0.62 eV)."
@@ -93,6 +95,10 @@ questions:
         criterion: "Batch workflow is organized efficiently without redundant steps."
         axis: "efficiency"
         verify: "llm_binary_judge"
+      - id: "turn_budget"
+        criterion: "Agent completes the task within the turn (step) budget."
+        axis: "efficiency"
+        verify: "turn_budget"
       - id: "duration_budget"
         criterion: "Wall-clock run duration does not exceed benchmark ceiling."
         axis: "efficiency"

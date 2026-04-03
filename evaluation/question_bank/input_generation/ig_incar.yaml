@@ -61,12 +61,15 @@ questions:
     value: "PREC = Low"
   - key: param_SIGMA
     value: "SIGMA = 0.100000"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_EDIFF
     criterion: "INCAR sets EDIFF = 1.00e-10"
@@ -149,6 +152,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -232,12 +239,15 @@ questions:
     value: "SIGMA = 0.010000"
   - key: param_SYMPREC
     value: "SYMPREC = 1.00e-08"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ADDGRID
     criterion: "INCAR sets ADDGRID = .FALSE."
@@ -328,6 +338,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -424,12 +438,15 @@ questions:
     value: "SIGMA = 0.2"
   - key: param_SYMPREC
     value: "SYMPREC = 1e-05"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = FAST"
@@ -552,6 +569,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -645,12 +666,15 @@ questions:
     value: "VDW_A2 = 5.685000"
   - key: param_VDW_S8
     value: "VDW_S8 = 2.310000"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = All"
@@ -761,6 +785,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -849,12 +877,15 @@ questions:
     value: "PSTRESS = 0.000000"
   - key: param_SYMPREC
     value: "SYMPREC = 1.00e-04"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = A"
@@ -961,6 +992,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -1040,12 +1075,15 @@ questions:
     value: "PREC = High"
   - key: param_SYMPREC
     value: "SYMPREC = 1.00e-04"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = A"
@@ -1132,6 +1170,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -1233,12 +1275,15 @@ questions:
     value: "TEBEG = 300"
   - key: param_TEEND
     value: "TEEND = 300"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = FAST"
@@ -1365,6 +1410,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -1441,12 +1490,15 @@ questions:
     value: "PREC = High"
   - key: param_SIGMA
     value: "SIGMA = 0.02"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = Normal"
@@ -1529,6 +1581,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -1596,12 +1652,15 @@ questions:
     value: "SIGMA = 0.01"
   - key: param_ZAB_VDW
     value: "ZAB_VDW = -1.8867"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_AGGAC
     criterion: "INCAR sets AGGAC = 0.0000"
@@ -1660,6 +1719,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -1768,12 +1831,15 @@ questions:
     value: "PSTRESS = 0"
   - key: param_SIGMA
     value: "SIGMA = 0.025"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = N"
@@ -1916,6 +1982,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -1991,12 +2061,15 @@ questions:
     value: "PSTRESS = 0.000000"
   - key: param_SYMPREC
     value: "SYMPREC = 1.00e-08"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = Fast"
@@ -2075,6 +2148,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -2173,12 +2250,15 @@ questions:
     value: "SIGMA = 0.02"
   - key: param_SYSTEM
     value: "SYSTEM = VASPcalc"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = Conjugate"
@@ -2301,6 +2381,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -2376,12 +2460,15 @@ questions:
     value: "POTIM = 0.2"
   - key: param_SIGMA
     value: "SIGMA = 0.2"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_EDIFF
     criterion: "INCAR sets EDIFF = 0.1E-05"
@@ -2460,6 +2547,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -2552,12 +2643,15 @@ questions:
     value: "SIGMA = 0.03"
   - key: param_SYSTEM
     value: "SYSTEM = SiO2"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ADDGRID
     criterion: "INCAR sets ADDGRID = T"
@@ -2672,6 +2766,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -2754,12 +2852,15 @@ questions:
     value: "SAXIS = 0.0000 0.0000 1.0000"
   - key: param_SYSTEM
     value: "SYSTEM = BiIS-acdcd16c0d76_scf_ncl"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = Normal"
@@ -2850,6 +2951,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -2925,12 +3030,15 @@ questions:
     value: "NSW = 0"
   - key: param_PREC
     value: "PREC = MED"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = FAST"
@@ -3005,6 +3113,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -3090,12 +3202,15 @@ questions:
     value: "PREC = Accurate"
   - key: param_SIGMA
     value: "SIGMA = 0.1"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_EDIFF
     criterion: "INCAR sets EDIFF = 1E-06"
@@ -3198,6 +3313,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -3274,12 +3393,15 @@ questions:
     value: "PSTRESS = 0.000000"
   - key: param_SYMPREC
     value: "SYMPREC = 1.00e-04"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = A"
@@ -3362,6 +3484,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -3438,12 +3564,15 @@ questions:
     value: "NSW = 0"
   - key: param_PREC
     value: "PREC = MED"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = FAST"
@@ -3526,6 +3655,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
@@ -3600,12 +3733,15 @@ questions:
     value: "PSTRESS = 0.000000"
   - key: param_SYMPREC
     value: "SYMPREC = 1.00e-08"
+  - key: turn_budget
+    value:
+      max: 8
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: param_ALGO
     criterion: "INCAR sets ALGO = Fast"
@@ -3684,6 +3820,10 @@ questions:
       calculation type, element order) rather than hallucinated.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: efficiency_judge
     criterion: The agent produced the INCAR efficiently without unnecessary tool calls, redundant queries,
       or irrelevant exploration.
