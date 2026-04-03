@@ -78,7 +78,7 @@ matmaster/ 运行时路径完全独立于 evomaster/playground/src。三方向�
 
 ### Current State
 
-**As of 2026-04-02:** Phase 34 complete — Generator 事件流贯穿 Kernel→Exp→Service 全链路，FullToolRunner 激活为默认执行路径，4 个 Hook 全部退役（assistant_state/skill_hit/output_processor/tool_result_hook），run_stream() 输出 BusEvent（含 RunResultEvent 终止事件），ToolCatalog version 变更触发 tool_definitions 缓存刷新。Phase 35 接下来负责约束迁移（read-before-modify → RunStateGuard）+ ToolRegistry 降级。
+**As of 2026-04-03:** Phase 35 complete — 工具安全检查统一迁入三层约束模型：ReadBeforeModifyGuard 拦截未读文件编辑，CapabilityPolicy 接管 bash 危险命令检测，工具内部安全代码全部删除。ToolBinding state_mode/stop_mode 启用（ToolCompiler 填充，FullToolRunner 消费）。ToolRegistry 降级为纯存储层，ToolCatalog 成为唯一上层消费接口，ContextBuilder 工具枚举改为通用 function calling 说明。Phase 36 接下来负责去总线化 + 高级调度。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 Source: 15,839 LOC (matmaster/).
@@ -164,4 +164,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-02 after Phase 33 completion*
+*Last updated: 2026-04-03 after Phase 35 completion*
