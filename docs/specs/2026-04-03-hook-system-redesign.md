@@ -21,7 +21,12 @@ matmaster 现有 hook 系统（`matmaster/core/hooks.py`）存在以下问题：
 | 超时 | 不需要 | 纯内部 callback，执行时间可控，由 hook 实现者自行负责 |
 | 注册时机 | build_runtime 阶段一次性注册，运行时不再修改 | HookExecutor 内部持有可变字典，但 frozen AgentRuntimeSpec 只阻止字段重新赋值。注册完成后不再调用 on/intercept/rewrite，靠协议保证而非类型强制 |
 | 旧 hook 删除安全性 | `pre_llm_call` 和 `should_continue` 可安全删除 | 当前唯一的 BaseHook 子类是 DevStreamHook，其 `pre_llm_call` 为空操作（继承 BaseHook 默认实现），`should_continue` 无活跃实现。删除调用点不影响运行时行为 |
-| 废除 D-01 约束 | FullToolRunner 重新接入 hook 调用 | D-01 约束（"Does not call pre_hook/post_hook"）是旧 Hook Protocol 时代的决策，因 FullToolRunner 采用了新的分层校验架构而跳过了旧 hook。本次重新设计 hook 系统后，HookExecutor 的调用点明确插入 Phase 1 末尾和 Phase 2 之后，取代旧的 InlineToolRunner hook 路径 |
+| 废除 D-01 约束 | FullToolRunner 重新接入 hook 调用 | D-01 约束（"Does not call pre_hook/post_hook"）是旧 Hook Protocol 时代的决策，因 FullToolRunner 采用了新的分层校验架构而跳过了旧 hook。本次重新设计 hook 系统后，HookExecutor 的调用点明确插入 Phase 1 catalog lookup 后、validation 前，以及 Phase 2 之后 |
+| 接线层级 | hook 调用点位于 Exp.run_stream / kernel / FullToolRunner 内部 | agent_run_service 是仅覆盖 HTTP/worker 的外层，devshell 和 spawn 子 agent 走不同入口。Exp.run_stream 是所有路径的公共入口，在此层注入 hook 确保三条路径统一覆盖 |
+| 事件命名 | RUN_START/RUN_END 而非 SESSION_START/END | 每次 run_agent/run_stream 调用是一个 run，不是一个 session。一个 session 可包含多次 run |
+| USER_PROMPT_SUBMIT 改写持久化 | 瞬时改写，不更新持久化历史 | prompt 在进 worker 前已被 stream_service 持久化，chat_history 从持久化事件重建 UserMessage。改写只影响当前执行，回放使用原始 prompt。持久化改写需改动 chat_history 层，当前无此场景需求 |
+| PRE_TOOL_CALL 位置 | catalog lookup 之后、validation 之前 | 确保所有被尝试调用的工具（含后续被 guard/policy 拒绝的）都能被 hook 观察和拦截。若放在 Phase 1 末尾，早期 deny（structural/input/guard/policy）的工具调用对 hook 不可见 |
+| SUBAGENT hook 调用点 | Exp._make_spawn_fn 闭包内部，而非 SpawnTool.execute | 闭包内可直接访问 child_spawn_id（作为 SubagentContext.agent_id）和 HookExecutor。SpawnTool.execute 只拿到最终字符串结果，无法填充 SubagentContext |
 
 ## 事件模型
 
@@ -29,8 +34,8 @@ matmaster 现有 hook 系统（`matmaster/core/hooks.py`）存在以下问题：
 
 | 事件 | 能力 | 执行策略 |
 |------|------|---------|
-| `SESSION_START` | 观察 | 并行 |
-| `SESSION_END` | 观察 | 并行 |
+| `RUN_START` | 观察 | 并行 |
+| `RUN_END` | 观察 | 并行 |
 | `PRE_TOOL_CALL` | 观察 + 拦截 | 先 emit 观察（并行），再 emit_intercept 拦截（并行+聚合）。观察 handler 始终执行，不受拦截结果影响 |
 | `POST_TOOL_CALL` | 观察 + 改写 | 先 emit_rewrite 改写（串行链），再 emit 观察（并行）。观察 handler 看到的是改写后的 result |
 | `SUBAGENT_START` | 观察 | 并行 |
@@ -40,8 +45,8 @@ matmaster 现有 hook 系统（`matmaster/core/hooks.py`）存在以下问题：
 
 ```python
 class HookEvent(str, Enum):
-    SESSION_START = "session_start"
-    SESSION_END = "session_end"
+    RUN_START = "run_start"
+    RUN_END = "run_end"
     PRE_TOOL_CALL = "pre_tool_call"
     POST_TOOL_CALL = "post_tool_call"
     SUBAGENT_START = "subagent_start"
@@ -56,7 +61,8 @@ class HookEvent(str, Enum):
 
 ```python
 @dataclass(frozen=True)
-class SessionContext:
+class RunContext:
+    task_id: str
     session_id: str
     reason: str  # "startup" | "resume" | "cancelled" | "completed" | "max_turns" | "error"
 
@@ -136,9 +142,9 @@ RewriteHandler = Callable[[TContext, T], Awaitable[T | None]]
 使用示例：
 
 ```python
-# 观察：会话开始时记日志
-async def log_session_start(ctx: SessionContext) -> None:
-    logger.info(f"Session {ctx.session_id} started: {ctx.reason}")
+# 观察：运行开始时记日志
+async def log_run_start(ctx: RunContext) -> None:
+    logger.info(f"Run {ctx.task_id} started: {ctx.reason}")
 
 # 拦截：禁止执行危险命令
 async def block_dangerous_bash(ctx: PreToolCallContext) -> HookResult:
@@ -242,41 +248,50 @@ class AgentRuntimeSpec:
 
 ### 注入位置
 
+所有 hook 调用点位于 `Exp.run_stream` / kernel / FullToolRunner 边界内，确保 agent_run_service、devshell、spawn 子 agent 三条执行路径统一覆盖。
+
 ```
-agent_run_service.run_agent()
+Exp.run_stream(task, history, stop_event)     ← 所有路径的公共入口
 |
-+- Exp.build_runtime() 完成后
-|  +- emit(SESSION_START, SessionContext(reason="startup"))
++- build_runtime()
+|  +- 创建 HookExecutor，注入 AgentRuntimeSpec
 |
-+- AgentKernel._run_items() 循环:
-|  |
-|  +- 构造 UserMessage 前 (agent_run_service 内, exp.run_stream 调用前)
-|  |  +- prompt = emit_rewrite(USER_PROMPT_SUBMIT, ctx, prompt)  # 改写先行
-|  |  +- emit(USER_PROMPT_SUBMIT, ctx_with_final_prompt)         # 观察看到最终值
-|  |
-|  +- FullToolRunner.execute_batch() Phase 1 串行校验末尾:
-|  |  +- emit(PRE_TOOL_CALL, ctx)                                # 观察始终执行，无论后续拦截结果
-|  |  +- result = emit_intercept(PRE_TOOL_CALL, ctx)             # 拦截决策（观察已完成，不回滚）
-|  |     +- BLOCK -> ToolResult(status="blocked"), 跳过 Phase 2
-|  |
-|  +- FullToolRunner Phase 2 完成后:
-|  |  +- result = emit_rewrite(POST_TOOL_CALL, ctx, result)      # 改写先行
-|  |  +- emit(POST_TOOL_CALL, ctx_with_final_result)             # 观察看到最终值
-|  |
-|  +- SpawnTool.execute() 前后:
-|  |  +- emit(SUBAGENT_START, ctx)
-|  |  +- emit(SUBAGENT_STOP, ctx)
-|  |
-|  +- ContextCompactor.compact_if_needed() 完成后:
-|     +- emit(CONTEXT_COMPACTION, ctx)
++- emit(RUN_START, RunContext(task_id, session_id, reason="startup"))
 |
-+- finally 块, cleanup 前:
-   +- emit(SESSION_END, SessionContext(reason=终止原因))
++- kernel.run_stream(spec, task, history, stop_event):
+|  |
+|  +- AgentKernel._run_items() 循环:
+|  |  |
+|  |  +- 构造 UserMessage 前:
+|  |  |  +- prompt = emit_rewrite(USER_PROMPT_SUBMIT, ctx, prompt)  # 改写先行
+|  |  |  +- emit(USER_PROMPT_SUBMIT, ctx_with_final_prompt)         # 观察看到最终值
+|  |  |
+|  |  +- FullToolRunner.execute_batch() Phase 1, catalog lookup 之后、validation 之前:
+|  |  |  +- emit(PRE_TOOL_CALL, ctx)                                # 观察始终执行，无论后续拦截结果
+|  |  |  +- result = emit_intercept(PRE_TOOL_CALL, ctx)             # 拦截决策（观察已完成，不回滚）
+|  |  |     +- BLOCK -> ToolResult(status="blocked"), 跳过后续 validation 和 Phase 2
+|  |  |
+|  |  +- FullToolRunner Phase 2 完成后:
+|  |  |  +- result = emit_rewrite(POST_TOOL_CALL, ctx, result)      # 改写先行
+|  |  |  +- emit(POST_TOOL_CALL, ctx_with_final_result)             # 观察看到最终值
+|  |  |
+|  |  +- Exp._make_spawn_fn 闭包内部（非 SpawnTool.execute）:
+|  |  |  +- emit(SUBAGENT_START, SubagentContext(agent_id=child_spawn_id, ...))
+|  |  |  +- ... 子 agent 执行 ...
+|  |  |  +- emit(SUBAGENT_STOP, ctx)
+|  |  |
+|  |  +- ContextCompactor.compact_if_needed() 完成后:
+|  |     +- emit(CONTEXT_COMPACTION, ctx)
+|
++- finally 块, _run_cleanup_callbacks 前:
+   +- emit(RUN_END, RunContext(task_id, session_id, reason=终止原因))
 ```
 
 执行顺序语义：
-- **PRE_TOOL_CALL**: 先观察再拦截。观察 handler 始终执行，不受拦截结果影响（观察者需要知道"有人尝试调用了这个工具"）。
-- **POST_TOOL_CALL / USER_PROMPT_SUBMIT**: 先改写再观察。观察 handler 看到的是改写后的最终数据（观察者需要知道"最终生效的是什么"）。
+- **PRE_TOOL_CALL**: 先观察再拦截。位于 catalog lookup 之后、structural/input/guard/policy validation 之前，确保所有被尝试调用的工具（含后续被 guard 拒绝的）都能被 hook 观察和拦截。观察 handler 始终执行，不受拦截结果影响。
+- **POST_TOOL_CALL / USER_PROMPT_SUBMIT**: 先改写再观察。观察 handler 看到的是改写后的最终数据。
+- **SUBAGENT_START/STOP**: 在 `_make_spawn_fn` 闭包内部触发，而非 SpawnTool.execute 中。闭包内可直接访问 `child_spawn_id` 和 HookExecutor。
+- **USER_PROMPT_SUBMIT**: 改写是瞬时的，只影响当前执行，不更新持久化历史。下次回放仍使用原始 prompt。这是有意的设计——持久化改写需要改动 chat_history 层，当前无此场景需求。
 
 ### 改动文件清单
 
@@ -284,19 +299,21 @@ agent_run_service.run_agent()
 |------|---------|
 | `matmaster/core/hooks.py` | **重写**：删除旧 Hook Protocol / BaseHook / run_* helpers，放入 HookEvent、context dataclasses、HookOutcome、HookResult、handler 类型别名、HookExecutor |
 | `matmaster/types/runtime.py` | `AgentRuntimeSpec.hooks: list[Hook]` -> `hook_executor: HookExecutor \| None` |
-| `matmaster/core/exp.py` | `build_runtime()` 中创建 HookExecutor 实例并注入 spec |
-| `matmaster/core/tool_runner.py` | FullToolRunner Phase 1 末尾加 pre_tool hook 调用，Phase 2 后加 post_tool hook 调用。废除 D-01 约束（docstring 中 "Does not call pre_hook/post_hook" 需删除） |
-| `matmaster/core/agent.py` | `_run_items` 中压缩完成后加 compaction hook 调用；删除旧 `run_pre_llm_call` / `run_should_continue` 调用 |
-| `matmaster/tools/builtin/spawn_tool.py` | execute 前后加 subagent start/stop hook 调用 |
-| `src/services/agent_run_service.py` | run_agent 入口加 session_start，finally 加 session_end；user_prompt_submit hook 在 exp.run_stream 调用前注入 |
-| `matmaster/devshell/stream_hook.py` | 删除旧 Hook Protocol 方法（pre_tool_call 等），迁移为 HookExecutor observer 注册 |
-| `matmaster/devshell/cli.py` | 将 DevStreamHook 从 `spec.hooks` list 注册改为 HookExecutor.on() 注册 |
-| `matmaster/devshell/runner.py` | 同上，DevStreamHook 注册方式迁移 |
+| `matmaster/core/exp.py` | `build_runtime()` 中创建 HookExecutor 实例并注入 spec；`run_stream()` 入口加 RUN_START，finally 加 RUN_END；`_make_spawn_fn` 闭包内加 SUBAGENT_START/STOP |
+| `matmaster/core/tool_runner.py` | FullToolRunner Phase 1 catalog lookup 后、validation 前加 PRE_TOOL_CALL hook 调用，Phase 2 后加 POST_TOOL_CALL hook 调用。废除 D-01 约束（docstring 中 "Does not call pre_hook/post_hook" 需删除） |
+| `matmaster/core/agent.py` | `_run_items` 中：构造 UserMessage 前加 USER_PROMPT_SUBMIT hook 调用；压缩完成后加 CONTEXT_COMPACTION hook 调用；删除旧 `run_pre_llm_call` / `run_should_continue` 调用 |
+| `matmaster/devshell/stream_hook.py` | 删除旧 Hook Protocol 方法（pre_tool_call 等），保留 on_event() 直接回调。删除 BaseHook 继承 |
+| `matmaster/devshell/cli.py` | 删除向 `spec.hooks` list 添加 DevStreamHook 的代码 |
+| `matmaster/devshell/runner.py` | 同上 |
 | `matmaster/core/__init__.py` | 删除 `BaseHook`, `Hook`, `HookAction` 的 re-export，新增 `HookExecutor`, `HookEvent` 等 |
 
 ### DevStreamHook 迁移
 
-DevStreamHook 当前实现的是流式输出观察（on_stream_chunk、on_event），不在本次 hook 事件范围内。保持现有直接回调方式，不阻塞本次设计。后续如需纳入可新增 `STREAM_CHUNK` 事件。
+DevStreamHook 有两个职责，迁移策略不同：
+
+1. **流式输出观察**（`on_event()` 处理 ThoughtEvent/ResponseEvent/ToolCallEvent/ToolResultEvent）：这是 DevStreamHook 的主要数据通路，由 `devshell/runner.py` 直接喂事件。**保留现有直接回调方式**，不纳入 HookExecutor。两者是互补的——`on_event()` 负责流式渲染，HookExecutor 负责生命周期控制。
+
+2. **旧 Hook Protocol 方法**（`pre_tool_call`、`post_tool_call`、`on_guard_blocked` 等继承自 BaseHook 的方法）：当前未被 FullToolRunner 调用，已是死代码。**直接删除**，不迁移到 HookExecutor。如果 devshell 未来需要工具级 hook，通过 `HookExecutor.on(PRE_TOOL_CALL, ...)` 注册。
 
 ## 删除清单
 
@@ -319,4 +336,5 @@ DevStreamHook 当前实现的是流式输出观察（on_stream_chunk、on_event�
 - LLM 调用前后观察（不在用户需求中）
 - should_continue 循环控制（不在用户需求中）
 - handler 动态去注册（当前仅需 build_runtime 阶段一次性注册）
-- GUARD_BLOCKED 独立事件（guard 拦截信息可通过 PRE_TOOL_CALL 拦截机制覆盖，或从 ToolResult(status="blocked") 中获取）
+- GUARD_BLOCKED 独立事件（PRE_TOOL_CALL 位于 validation 之前，guard deny 的工具已可被 hook 观察；guard 拒绝原因可从后续 ToolResult(status="blocked") 中获取）
+- USER_PROMPT_SUBMIT 改写的持久化（当前改写为瞬时的，不更新 chat_history 持久化记录）
