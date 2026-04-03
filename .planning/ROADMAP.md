@@ -77,7 +77,7 @@ Full details: milestones/v2.1-ROADMAP.md
 - [x] **Phase 33: ToolRunner 完整实现 + ToolScheduler** - 完整 ToolRunner 执行链（查找/校验/调度/执行/释放）+ ToolScheduler 资源调度 + StructuralValidation/CapabilityPolicy + ToolCompiler + Session.capabilities (completed 2026-04-02)
 - [x] **Phase 34: Exp/Service 接入 + Hook 退役** - Exp.run_stream() + AgentRunService.run_agent_stream() 接入 generator + _stream_llm_items() 子 generator + 5 个 Hook 逐步退役 (gap closure in progress) (completed 2026-04-02)
 - [x] **Phase 35: 约束迁移 + ToolRegistry 降级** - read-before-modify/bash 危险命令迁入三层约束模型 + ToolBinding 字段启用 + ToolRegistry 降级为纯存储 (completed 2026-04-03)
-- [ ] **Phase 36: 去总线化 + 调度边界固化** - MessageBus/EventRouter 消费者审计 + async fanout 替代 + Bus 移除 + 当前 stateless SessionCapabilities 边界固化（ASCH-01 defer）
+- [x] **Phase 36: 去总线化 + 调度边界固化** - MessageBus/EventRouter 消费者审计 + async fanout 替代 + Bus 移除 + 当前 stateless SessionCapabilities 边界固化（ASCH-01 defer） (completed 2026-04-03)
 
 ## Phase Details
 
@@ -208,4 +208,4 @@ Phases 32-36 execute in numeric order. Phase 34 depends on both 32 and 33. Phase
 | 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 5/5 | Complete    | 2026-04-02 |
 | 34. Exp/Service 接入 + Hook 退役 | v2.2 | 4/4 | Complete    | 2026-04-02 |
 | 35. 约束迁移 + ToolRegistry 降级 | v2.2 | 3/3 | Complete    | 2026-04-03 |
-| 36. 去总线化 + 调度边界固化 | v2.2 | 3/4 | In Progress|  |
+| 36. 去总线化 + 调度边界固化 | v2.2 | 4/4 | Complete   | 2026-04-03 |
