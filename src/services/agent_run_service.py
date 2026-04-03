@@ -1,8 +1,8 @@
 """Agent execution service: matmaster pipeline orchestration.
 
-Pipeline: Playground.prepare() -> get_chat_events_table() -> EventRouter ->
+Pipeline: Playground.prepare() -> get_chat_events_table() -> RunEventFanout ->
 Bohrium -> WorkspaceHandler -> Exp.assemble() -> ChatHistory ->
-Kernel.run() -> post-processing.
+Kernel.run_stream() -> post-processing.
 """
 
 import asyncio
@@ -26,6 +26,7 @@ from matmaster.integration import (
     SSEHandler,
     WorkspaceHandler,
 )
+from matmaster.integration.fanout import RunEventFanout
 from src.services.agent_run_bohrium import (
     BohriumSetupService,
     derive_skill_sync_spec,
@@ -33,6 +34,7 @@ from src.services.agent_run_bohrium import (
 from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.types.events import (
+    BusEvent,
     CancelledEvent,
     ErrorEvent,
     RunResultEvent,
@@ -173,9 +175,24 @@ async def _poll_reply_queue(
 async def _emit_error_and_close(
     bus: MessageBus, message: str, source: str = 'System'
 ) -> None:
-    """Emit ErrorEvent + StreamClosedEvent(treat_as_failure) pair."""
+    """Emit ErrorEvent + StreamClosedEvent(treat_as_failure) pair via legacy bus."""
     await bus.emit(ErrorEvent(source=source, message=message))
     await bus.emit(
+        StreamClosedEvent(
+            source=source,
+            end_reason='error',
+            task_completed=False,
+            treat_as_failure=True,
+        )
+    )
+
+
+async def _emit_error_and_close_fanout(
+    fanout: RunEventFanout, message: str, source: str = 'System'
+) -> None:
+    """Dispatch ErrorEvent + StreamClosedEvent(treat_as_failure) pair via fanout."""
+    await fanout.dispatch(ErrorEvent(source=source, message=message))
+    await fanout.dispatch(
         StreamClosedEvent(
             source=source,
             end_reason='error',
@@ -482,13 +499,14 @@ class AgentRunService:
         llm_override: str | None = None,
         model_override: str | None = None,
     ) -> tuple[bool | tuple[bool, str], int]:
-        """Execute agent pipeline using generator event stream.
+        """Execute agent pipeline using generator event stream with fanout dispatch.
 
-        Same pipeline as run_agent() Stages 1-5 but uses
-        Exp.run_stream() -> bus bridge at Stage 6 instead of
-        kernel.run() + Hook event emission. Events flow:
+        Events flow through RunEventFanout directly to handlers:
         kernel._run_items() -> kernel.run_stream() -> exp.run_stream()
-        -> source normalization -> bus.emit_nowait()
+        -> source normalization -> fanout.dispatch()
+
+        SSE handler is awaited first (low latency), persistence runs as
+        background tasks, WorkspaceHandler receives events inline.
         """
 
         def _elapsed_ms() -> int:
@@ -506,8 +524,7 @@ class AgentRunService:
             prompt_preview,
         )
         run_started_at = time.monotonic()
-        bus = MessageBus()
-        router = None
+        fanout: RunEventFanout | None = None
         exp = None
         bohrium_svc = None
         ssh_attached = False
@@ -528,31 +545,29 @@ class AgentRunService:
                 events_table = get_chat_events_table()
             except Exception:
                 logger.exception(
-                    'run_agent_stream pre-router setup failed: session_id=%s',
+                    'run_agent_stream pre-handler setup failed: session_id=%s',
                     session_id,
                 )
                 return ((False, 'pre_router_setup_failed'), 0)
 
-            # -- Stage 2: EventRouter bootstrap --
-            router = EventRouter(
-                bus=bus,
-                handlers=[
-                    SSEHandler(
-                        send_cb,
-                        session_id,
-                        task_id,
-                        invocation_id,
-                        mode,
-                    ),
-                    PersistenceHandler(
-                        events_table,
-                        session_id,
-                        task_id,
-                        invocation_id,
-                    ),
-                ],
+            # -- Stage 2: RunEventFanout bootstrap --
+            # SSE handler first for lower frontend latency,
+            # persistence as background tasks.
+            fanout = RunEventFanout(
+                sse_handler=SSEHandler(
+                    send_cb,
+                    session_id,
+                    task_id,
+                    invocation_id,
+                    mode,
+                ),
+                persistence_handler=PersistenceHandler(
+                    events_table,
+                    session_id,
+                    task_id,
+                    invocation_id,
+                ),
             )
-            await router.start()
 
             exp_name = mode or 'direct'
             from matmaster.config.loader import load_exp_config
@@ -563,9 +578,18 @@ class AgentRunService:
             )
 
             # -- Stage 3: Bohrium credentials + SSH --
+            # Thread-safe event sink: Bohrium worker-thread callbacks
+            # schedule fanout.dispatch() onto the event loop.
+            loop = asyncio.get_running_loop()
+
+            def _dispatch_from_thread(event: BusEvent) -> None:
+                loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(fanout.dispatch(event))
+                )
+
             bohrium_svc = BohriumSetupService(
                 self._sessions_service,
-                bus=bus,
+                event_sink=_dispatch_from_thread,
             )
             bohrium_result = await bohrium_svc.run_setup(
                 session_id=session_id,
@@ -587,7 +611,8 @@ class AgentRunService:
                     session_type=session_type,
                     execution_workdir=execution_workdir,
                 )
-            router.add_handler(
+            # Workspace handling depends on the finalized Bohrium/archival context.
+            fanout.add_handler(
                 WorkspaceHandler(
                     session_id=session_id,
                     task_id=task_id,
@@ -621,21 +646,6 @@ class AgentRunService:
 
             exp = Exp(exp_config)
 
-            # For generator path: only ConfirmationHook is still needed
-            # (AssistantStateHook, SkillHitHook, OutputProcessorHook are
-            # replaced by generator events yielded through the stream).
-            # ConfirmationHook still requires bus + reply_queue bridge.
-            stream_hooks: list[Any] = []
-            if mode == 'direct' and reply_queue is not None and _CONFIRM_TOOLS:
-                from matmaster.hooks.confirmation import ConfirmationHook
-
-                confirmation_hook = ConfirmationHook(
-                    bus=bus,
-                    confirm_tools=set(_CONFIRM_TOOLS),
-                    get_reply=lambda: _poll_reply_queue(reply_queue),
-                )
-                stream_hooks.append(confirmation_hook)
-
             if pg_ctx.session is not None:
                 pg_ctx.session._stop_event = stop_event
 
@@ -657,7 +667,6 @@ class AgentRunService:
             async with aclosing(exp.run_stream(
                 pg_ctx,
                 user_prompt,
-                bus=bus,
                 history=history,
                 stop_event=stop_event,
                 skills=pg_ctx.run_meta.get('skill_config'),
@@ -670,7 +679,7 @@ class AgentRunService:
                         if event.source != normalized:
                             event = event.model_copy(update={'source': normalized})
 
-                    bus.emit_nowait(event)
+                    await fanout.dispatch(event)
 
                     # Detect terminal event
                     if isinstance(event, RunResultEvent):
@@ -678,14 +687,16 @@ class AgentRunService:
 
             # -- Post-processing --
             if run_result_event is None:
-                await _emit_error_and_close(bus, 'Generator terminated without result')
+                await _emit_error_and_close_fanout(
+                    fanout, 'Generator terminated without result'
+                )
                 return ((False, 'no_result'), _elapsed_ms())
 
             if run_result_event.reason == 'cancelled':
-                bus.emit_nowait(
+                await fanout.dispatch(
                     CancelledEvent(source='System', reason='Task cancelled by user.')
                 )
-                bus.emit_nowait(
+                await fanout.dispatch(
                     StreamClosedEvent(
                         source='System',
                         end_reason='cancelled',
@@ -694,7 +705,7 @@ class AgentRunService:
                 )
                 return ((False, 'cancelled'), _elapsed_ms())
             else:
-                bus.emit_nowait(
+                await fanout.dispatch(
                     StreamClosedEvent(
                         source='System',
                         task_completed=run_result_event.reason == 'natural',
@@ -714,10 +725,11 @@ class AgentRunService:
 
         except Exception as exc:
             logger.exception('run_agent_stream error: session_id=%s', session_id)
-            try:
-                await _emit_error_and_close(bus, str(exc))
-            except Exception:
-                pass
+            if fanout is not None:
+                try:
+                    await _emit_error_and_close_fanout(fanout, str(exc))
+                except Exception:
+                    pass
             return ((False, str(exc)), _elapsed_ms())
         finally:
             elapsed = time.monotonic() - run_started_at
@@ -726,6 +738,8 @@ class AgentRunService:
                 session_id,
                 elapsed,
             )
+            # Cleanup order matters:
+            # 1. Bohrium FIRST -- cleanup can still emit events via event bridge
             if bohrium_svc:
                 try:
                     await bohrium_svc.run_cleanup(
@@ -735,16 +749,21 @@ class AgentRunService:
                     )
                 except Exception:
                     logger.warning('Bohrium cleanup error', exc_info=True)
+            # 2. Exp cleanup (with timeout to prevent worker hangs)
             if exp is not None:
                 try:
                     await asyncio.wait_for(exp._run_cleanup_callbacks(), timeout=30)
                 except Exception:
                     logger.warning('Exp cleanup failed', exc_info=True)
-            if router is not None:
+            # 3. Fanout LAST -- drains pending persistence and calls handler close()
+            if fanout is not None:
                 try:
-                    await asyncio.wait_for(router.stop(), timeout=10)
+                    await asyncio.wait_for(fanout.drain_and_close(), timeout=10)
                 except Exception:
-                    logger.warning('router.stop() failed during cleanup', exc_info=True)
+                    logger.warning(
+                        'fanout.drain_and_close() failed during cleanup',
+                        exc_info=True,
+                    )
             get_redis_dao().delete_stop_requested(session_id, task_id)
             self._pg_manager.release(session_id)
             gc.collect(0)

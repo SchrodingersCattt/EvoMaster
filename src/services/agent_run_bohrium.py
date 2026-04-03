@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from matmaster.config.exp import ExpConfig
-from matmaster.core.bus import MessageBus
 from matmaster.integration.workspace_resolver import (
     get_remote_session_workspace_root,
     load_workspace_config_dict,
@@ -303,10 +302,10 @@ class BohriumSetupService:
     def __init__(
         self,
         sessions_service: Any,
-        bus: MessageBus | None = None,
+        event_sink: Callable[..., None] | None = None,
     ) -> None:
         self._sessions_service = sessions_service
-        self._bus = bus
+        self._event_sink = event_sink
 
     def _load_run_credentials(
         self, session_id: str
@@ -361,23 +360,29 @@ class BohriumSetupService:
         self,
         loop: asyncio.AbstractEventLoop,
     ) -> Callable[..., None]:
-        """Create a thread-safe callback that bridges bohrium events into the bus."""
+        """Create a thread-safe callback that bridges bohrium events into event_sink.
+
+        Maps callback types to concrete BusEvent objects:
+        - 'error' -> ErrorEvent + StreamClosedEvent
+        - 'stream_closed' -> StreamClosedEvent
+        - all others -> BohriumNodeEvent
+        """
         from matmaster.types.events import (
             BohriumNodeEvent,
             ErrorEvent,
             StreamClosedEvent,
         )
 
-        bus = self._bus
-        assert bus is not None  # noqa: S101 -- caller guarantees
+        sink = self._event_sink
+        assert sink is not None  # noqa: S101 -- caller guarantees
 
         def _cb(source: Any, event_type: str, content: Any, **extra: Any) -> None:
             def _do_emit() -> None:
                 try:
                     if event_type == 'error':
                         msg = content if isinstance(content, str) else str(content)
-                        bus.emit_nowait(ErrorEvent(source=str(source), message=msg))
-                        bus.emit_nowait(
+                        sink(ErrorEvent(source=str(source), message=msg))
+                        sink(
                             StreamClosedEvent(
                                 source=str(source),
                                 end_reason='error',
@@ -388,7 +393,7 @@ class BohriumSetupService:
                         return
                     if event_type == 'stream_closed':
                         body = '' if content is None else str(content)
-                        bus.emit_nowait(
+                        sink(
                             StreamClosedEvent(
                                 source=str(source),
                                 content=body,
@@ -398,7 +403,7 @@ class BohriumSetupService:
                             )
                         )
                         return
-                    bus.emit_nowait(
+                    sink(
                         BohriumNodeEvent(
                             source=str(source),
                             payload={
