@@ -210,12 +210,14 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_003_20260401b
+- id: SC_struct_SiH_20260403
   capability: structure_construction
   domain: struct
-  intent: Passivate dangling bonds on Si(100) surface slab bottom with hydrogen atoms.
-  human_prompt_seed: '读取 `hydrogen_cap_spec.json`，对 Si(100) slab 底部的悬挂键进行氢饱和。 要求：识别底部欠配位
-    Si 原子，添加 H 使其达到四配位。 Si-H 键长约 1.48 A。输出 POSCAR 并报告添加的 H 原子数。
+  intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab
+    with hydrogen atoms.
+  human_prompt_seed: '读取 `hydrogen_cap_spec.json`，对 Si(100) slab 上下两个表面的悬挂键进行氢饱和。
+    要求：识别 slab 顶部和底部所有欠配位 Si 原子，添加 H 使其达到四配位。 Si-H 键长约 1.48 A。输出 POSCAR 并报告添加的
+    H 原子总数。
 
     '
   tags:
@@ -230,7 +232,7 @@ questions:
   - key: hydrogen_cap_spec
     path: data/SC_struct_003/hydrogen_cap_spec.json
     oss_url: ''
-    description: Specification for Si(100) surface hydrogen passivation.
+    description: Specification for Si(100) surface hydrogen passivation (both surfaces).
   reference_answers:
   - key: si_h_bond_length_A
     value:
@@ -262,7 +264,7 @@ questions:
     - structure_file
     - hydrogen_count
     - si_h_bond_length_A
-    - bottom_si_four_coordination
+    - all_si_four_coordination
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -273,8 +275,9 @@ questions:
     axis: correctness
     verify: struct_file_bond_length
   - id: si_coordination
-    criterion: The mean coordination number of Si atoms in the POSCAR (cutoff 2.6 A)
-      is 4, confirming that bottom dangling bonds are fully saturated.
+    criterion: The mean coordination number of ALL Si atoms in the POSCAR (cutoff
+      2.6 A) is 4, confirming that dangling bonds on both top and bottom surfaces
+      are fully saturated.
     axis: correctness
     verify: struct_file_coordination
   - id: si_si_h_angle_deg
@@ -284,14 +287,16 @@ questions:
     axis: correctness
     verify: struct_file_bond_angle
   - id: required_fields
-    criterion: Output includes structure file, number of added H atoms, representative
-      Si-H bond length, and an explicit check that bottom Si atoms reach four coordination.
+    criterion: Output includes structure file, total number of added H atoms (covering
+      both surfaces), representative Si-H bond length, and an explicit check that
+      all Si atoms (top and bottom) reach four coordination.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer cites the structural physics (Si(100) facets, dangling bonds,
-      target coordination, Si–H bond length) and ties passivation checks to the delivered
-      POSCAR—not only generic semiconductor chemistry recall or tool names.
+    criterion: The answer cites the structural physics (Si(100) facets, dangling bonds
+      on both surfaces, target coordination, Si-H bond length) and ties passivation
+      checks to the delivered POSCAR—not only generic semiconductor chemistry recall
+      or tool names.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
