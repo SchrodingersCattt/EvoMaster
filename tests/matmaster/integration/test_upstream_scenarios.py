@@ -1,7 +1,11 @@
 """Upstream scenario tests: run interruption, workspace upload, Bohrium lifecycle,
-event router filtering, cross-pod reply queue, x_master rejection.
+event handler filtering, cross-pod reply queue.
 
 All external dependencies mocked per D-10.
+
+Phase 36 Plan 02: ConfirmationHook runtime plumbing removed. Confirmation
+recovery tests deleted. Reply-queue poll tests retained (dormant plumbing
+for future v2.3 bidirectional stream).
 """
 
 from __future__ import annotations
@@ -9,9 +13,7 @@ from __future__ import annotations
 import asyncio
 import queue
 import threading
-from collections.abc import AsyncIterator
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -25,7 +27,6 @@ from matmaster.core.hooks import BaseHook, HookAction
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
-from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import (
     AssistantStateEvent,
@@ -50,50 +51,6 @@ BohriumSetupService = _src_services.BohriumSetupService
 SkillSyncSpec = _src_services.SkillSyncSpec
 
 # -- Mock helpers ------------------------------------------------
-
-
-class _SlowMockLLM:
-    """Mock LLM that takes time to respond (checks stop_event between turns)."""
-
-    def __init__(self, turns: int = 3) -> None:
-        self._turns = turns
-        self._call_count = 0
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        pass
-
-    async def chat(self, messages, tools=None) -> LLMResponse:
-        return LLMResponse(content="done", finish_reason="stop")
-
-    async def chat_stream(self, messages, tools=None, *, timeout=None):
-        self._call_count += 1
-        # Add a small delay to give stop_event time to be set
-        await asyncio.sleep(0.05)
-        yield StreamChunk(content=f"Turn {self._call_count}", finish_reason="stop")
-
-
-class _NeverFinishLLM:
-    """Mock LLM that always returns tool calls, never natural finish."""
-
-    def __init__(self) -> None:
-        self._call_count = 0
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        pass
-
-    async def chat(self, messages, tools=None) -> LLMResponse:
-        return LLMResponse(content="loop", finish_reason="stop")
-
-    async def chat_stream(self, messages, tools=None, *, timeout=None):
-        self._call_count += 1
-        # Always yield a natural finish to avoid infinite loop
-        yield StreamChunk(content=f"Turn {self._call_count}", finish_reason="stop")
 
 
 class _QuickMockLLM:
@@ -309,13 +266,13 @@ class TestBohriumSetupLifecycle:
         assert mock_cleanup.called
 
 
-# -- QUAL-04: Event router persistence ---------------------------
+# -- QUAL-04: Event handler persistence ---------------------------
 
 
-class TestEventRouterPersistence:
+class TestEventHandlerPersistence:
     """Verify PersistenceHandler filtering and persistence behavior."""
 
-    async def test_event_router_persistence_on_standard_events(self) -> None:
+    async def test_event_persistence_on_standard_events(self) -> None:
         """Verify PersistenceHandler persists tool_call, tool_result, finish events."""
         mock_events_table = MagicMock()
 
@@ -340,7 +297,7 @@ class TestEventRouterPersistence:
 
         assert mock_events_table.add_event.call_count == 3
 
-    async def test_event_router_sse_push_filtering(self) -> None:
+    async def test_sse_push_filtering(self) -> None:
         """Verify SSEHandler pushes events except assistant_state and mode-filtered thoughts."""
         payloads = []
 
@@ -381,7 +338,7 @@ class TestEventRouterPersistence:
         assert len(thought_payloads) == 1  # only streaming one
 
 
-# -- QUAL-04: Cross-pod reply queue ------------------------------
+# -- Reply queue dormant plumbing (retained for v2.3) ----------------
 
 
 class _RedisCompatibleReplyQueue:
@@ -410,212 +367,8 @@ class _RedisCompatibleReplyQueue:
             raise queue.Empty("timeout") from exc
 
 
-class _SingleToolTurnProvider:
-    """Emit one execute_bash tool turn, then finish naturally."""
-
-    def __init__(self) -> None:
-        self._call_count = 0
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        pass
-
-    async def chat(self, messages, tools=None) -> LLMResponse:
-        return LLMResponse(content="unused", finish_reason="stop")
-
-    async def chat_stream(
-        self,
-        messages,
-        tools=None,
-        *,
-        timeout: float | None = None,
-    ) -> AsyncIterator[StreamChunk]:
-        self._call_count += 1
-        if self._call_count == 1:
-            yield StreamChunk(
-                tool_call_deltas=[
-                    {
-                        "index": 0,
-                        "id": "tc-bash-1",
-                        "name": "execute_bash",
-                        "arguments": '{"command":"echo ok"}',
-                    }
-                ]
-            )
-            yield StreamChunk(finish_reason="stop")
-        else:
-            yield StreamChunk(content="done", finish_reason="stop")
-
-
-class _RecordingAsyncTool:
-    """Async spy tool for service-layer confirmation recovery tests."""
-
-    def __init__(self) -> None:
-        self.calls: list[dict[str, Any]] = []
-
-    @property
-    def name(self) -> str:
-        return "execute_bash"
-
-    @property
-    def description(self) -> str:
-        return "test execute_bash tool"
-
-    @property
-    def json_schema(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {"command": {"type": "string"}},
-            "required": ["command"],
-        }
-
-    async def execute(self, arguments: dict[str, Any]) -> str:
-        self.calls.append(arguments)
-        return "approved execution"
-
-
-class _RecordingRuntimeHook(BaseHook):
-    """Records whether runtime.spec hooks run before confirmation gate."""
-
-    def __init__(self) -> None:
-        self.pre_tool_call_count = 0
-
-    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
-        self.pre_tool_call_count += 1
-        return HookAction.CONTINUE
-
-
-def _make_confirmation_runtime(
-    provider: _SingleToolTurnProvider,
-    tool: _RecordingAsyncTool,
-    runtime_hook: _RecordingRuntimeHook,
-) -> AgentRuntime:
-    from matmaster.tools.tool_catalog import ToolCatalog
-    from tests.matmaster.core.agent_kernel_test_helpers import _SimpleTestToolRunner
-
-    registry = ToolRegistry()
-    registry.register(tool, source="test")
-    catalog = ToolCatalog(registry)
-    runner = _SimpleTestToolRunner(catalog)
-    spec = AgentRuntimeSpec(
-        llm_provider=provider,
-        tool_catalog=catalog,
-        tool_runner=runner,
-        hooks=[runtime_hook],
-        max_turns=5,
-        system_prompt="You are a confirmation recovery test agent",
-    )
-    return AgentRuntime(kernel=AgentKernel(), spec=spec, cleanup=lambda: None)
-
-
-class TestAgentRunServiceConfirmationRecovery:
-    """QUAL-04: service-layer confirmation recovery under Worker + Redis semantics."""
-
-    def _make_playground(self, tmp_path: Path) -> tuple[MagicMock, PlaygroundContext]:
-        mock_pg = MagicMock()
-        mock_pg_ctx = _make_ctx(tmp_path)
-        mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("config/config.yaml")
-        mock_pg.config = SimpleNamespace()
-        mock_pg.session = None
-        return mock_pg, mock_pg_ctx
-
-    def _run_with_runtime(
-        self,
-        tmp_path: Path,
-        *,
-        reply_queue: _RedisCompatibleReplyQueue,
-        reply_fn,
-    ) -> tuple[
-        tuple[bool | tuple[bool, str], int],
-        list[dict[str, Any]],
-        _RecordingAsyncTool,
-        _RecordingRuntimeHook,
-    ]:
-        AgentRunService = pytest.importorskip(
-            "src.services.agent_run_service",
-            reason="src not available (isolation test)",
-        ).AgentRunService
-
-        svc = AgentRunService(sessions_service=MagicMock())
-        svc._sessions_service.get_session_user_id.return_value = None
-
-        provider = _SingleToolTurnProvider()
-        tool = _RecordingAsyncTool()
-        runtime_hook = _RecordingRuntimeHook()
-        runtime = _make_confirmation_runtime(provider, tool, runtime_hook)
-        mock_pg, _ = self._make_playground(tmp_path)
-        payloads: list[dict[str, Any]] = []
-
-        async def send_cb(payload: dict[str, Any]) -> None:
-            payloads.append(payload)
-
-        async def _fake_build_runtime(self, pg_ctx, bus=None, skills=None):
-            return runtime
-
-        mock_bohrium_result = MagicMock()
-        mock_bohrium_result.ssh_attached = False
-        mock_bohrium_result.abort_result = None
-        mock_bohrium_result.execution_session = None
-        mock_bohrium_result.execution_workdir = None
-        mock_bohrium_result.session_type = None
-        mock_bohrium_result._asdict.return_value = {
-            "ssh_attached": False,
-            "abort_result": None,
-            "execution_session": None,
-            "execution_workdir": None,
-            "session_type": None,
-        }
-
-        mock_events_table = MagicMock()
-        mock_events_table.get_session_events.return_value = []
-
-        with (
-            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
-            patch(
-                "src.services.agent_run_service.BohriumSetupService"
-            ) as mock_bohrium_cls,
-            patch(
-                "src.services.agent_run_service.get_chat_events_table",
-                return_value=mock_events_table,
-            ),
-            patch(
-                "src.services.agent_run_service.get_redis_dao",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "matmaster.config.loader.load_llm_config",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "matmaster.providers.llm_factory.build_provider",
-                return_value=provider,
-            ),
-            patch.object(Exp, "build_runtime", _fake_build_runtime),
-        ):
-            mock_bohrium_svc = mock_bohrium_cls.return_value
-            mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
-            mock_bohrium_svc.run_setup = AsyncMock(return_value=mock_bohrium_result)
-            mock_bohrium_svc.run_cleanup = AsyncMock()
-
-            responder = threading.Thread(target=reply_fn, daemon=True)
-            responder.start()
-            result = asyncio.run(
-                svc.run_agent(
-                    session_id="sess-confirmation",
-                    user_prompt="run command",
-                    send_cb=send_cb,
-                    stop_event=threading.Event(),
-                    mode="direct",
-                    reply_queue=reply_queue,
-                    task_id="task-confirmation",
-                )
-            )
-            responder.join(timeout=2.0)
-
-        return result, payloads, tool, runtime_hook
+class TestReplyQueueDormantPlumbing:
+    """_poll_reply_queue tests -- dormant plumbing for future v2.3 bidirectional stream."""
 
     @pytest.mark.asyncio
     async def test_poll_reply_queue_uses_integer_second_timeout(self) -> None:
@@ -673,31 +426,21 @@ class TestAgentRunServiceConfirmationRecovery:
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(_poll_reply_queue(reply_queue), timeout=0.1)
 
-    def test_run_agent_executes_tool_without_confirmation(self, tmp_path: Path) -> None:
-        """With _CONFIRM_TOOLS empty, tools execute directly without confirmation gate."""
-        reply_queue = _RedisCompatibleReplyQueue()
 
-        def noop() -> None:
-            pass
+# -- Negative assertion: ConfirmationHook no longer importable -------
 
-        result, payloads, tool, runtime_hook = self._run_with_runtime(
-            tmp_path,
-            reply_queue=reply_queue,
-            reply_fn=noop,
-        )
 
-        assert result[0] is True
-        assert len(tool.calls) == 1
-        assert runtime_hook.pre_tool_call_count == 1
-        # No confirmation events when _CONFIRM_TOOLS is empty
-        confirmation_events = [
-            payload
-            for payload in payloads
-            if payload.get("type") == "confirmation_request"
-        ]
-        assert len(confirmation_events) == 0
-        assert not any(
-            payload.get("type") == "error"
-            and "AttributeError" in str(payload.get("message"))
-            for payload in payloads
-        )
+def test_confirmation_hook_not_in_hooks_package():
+    """ConfirmationHook runtime path must be fully removed (D-03/D-04)."""
+    import matmaster.hooks
+
+    assert not hasattr(matmaster.hooks, "ConfirmationHook"), \
+        "ConfirmationHook should not be exported from matmaster.hooks"
+
+
+def test_confirmation_hook_module_absent():
+    """matmaster/hooks/confirmation.py must be physically deleted."""
+    import importlib
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("matmaster.hooks.confirmation")
