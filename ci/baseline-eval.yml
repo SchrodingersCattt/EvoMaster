@@ -128,7 +128,7 @@ baseline-eval-build:
 # 与镜像构建并行运行（同在 build stage），只需 Python + PyYAML
 generate-eval-pipeline:
   stage: build
-  image: python:3.13-slim
+  image: $REGISTRY/public/python:3.13-slim
   script:
     - pip install pyyaml -q
     - python ci/generate_eval_child_pipeline.py
