@@ -142,6 +142,33 @@ class Exp:
             meta={},
         )
 
+    # ── Active planes derivation ────────────────────────
+
+    @staticmethod
+    def _derive_active_planes(
+        *,
+        has_session: bool,
+        builtin_cfg: list[str],
+        skills_enabled: bool,
+    ) -> frozenset:
+        """Derive active tool planes from runtime capabilities.
+
+        Always activates CONTROL_PLANE. Activates SESSION_SHELL and
+        SESSION_FS when a session is present. Activates EXTERNAL_SERVICE
+        when skills are enabled or external-effect builtins are configured.
+        """
+        from matmaster.types.topology import ToolPlane
+
+        planes: set[ToolPlane] = {ToolPlane.CONTROL_PLANE}
+        if has_session:
+            planes |= {ToolPlane.SESSION_SHELL, ToolPlane.SESSION_FS}
+        if skills_enabled or any(
+            name in builtin_cfg or "*" in builtin_cfg
+            for name in ("mm_web_search", "web_fetch", "monitor_job")
+        ):
+            planes.add(ToolPlane.EXTERNAL_SERVICE)
+        return frozenset(planes)
+
     # ── Phase 2: build_runtime ───────────────────────────
 
     async def build_runtime(
@@ -180,10 +207,17 @@ class Exp:
             if isinstance(caps, SessionCapabilities):
                 session_caps = caps
 
+        active_planes = self._derive_active_planes(
+            has_session=ctx.session is not None,
+            builtin_cfg=self._config.tools.builtin,
+            skills_enabled=self._config.skills.enabled,
+        )
+
         topology = RuntimeTopology(
             session_kind=getattr(ctx, 'session_type', None) or 'local',
             control_root=str(ctx.workdir),
             workspace_root=str(ctx.execution_workdir),
+            active_planes=active_planes,
             session_capabilities=session_caps,
         )
 

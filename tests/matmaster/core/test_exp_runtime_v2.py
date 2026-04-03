@@ -166,6 +166,55 @@ class TestBuildRuntimeFullToolRunner:
         assert isinstance(runtime.spec.runtime_topology, RuntimeTopology)
 
     @pytest.mark.asyncio
+    async def test_build_runtime_derives_active_planes_for_local_session(self) -> None:
+        """build_runtime() derives active_planes from session and builtin config."""
+        from matmaster.core.exp import Exp
+        from matmaster.types.topology import ToolPlane
+
+        config = _make_exp_config(tools={"builtin": ["read_file"]})
+        exp = Exp(config)
+        ctx = _make_playground_context()
+
+        runtime = await exp.build_runtime(ctx)
+        topology = runtime.spec.runtime_topology
+
+        assert topology.active_planes == frozenset(
+            {
+                ToolPlane.CONTROL_PLANE,
+                ToolPlane.SESSION_SHELL,
+                ToolPlane.SESSION_FS,
+            }
+        )
+
+    @pytest.mark.asyncio
+    async def test_build_runtime_runner_can_execute_read_file(self) -> None:
+        """Default build_runtime path can execute read_file without plane errors."""
+        from matmaster.core.exp import Exp
+        from matmaster.core.tool_runner import ToolExecutionContext
+        from matmaster.types.messages import ToolCallData
+
+        class _ReadableSession(_MockSession):
+            def path_exists(self, path):
+                return True
+
+            def is_file(self, path):
+                return True
+
+            def read_file(self, path, encoding="utf-8"):
+                return "hello from test"
+
+        config = _make_exp_config(tools={"builtin": ["read_file"]})
+        exp = Exp(config)
+        ctx = _make_playground_context(session=_ReadableSession())
+
+        runtime = await exp.build_runtime(ctx)
+        results = await runtime.spec.tool_runner.execute_batch(
+            [ToolCallData(id="c1", name="read_file", arguments={"file_path": "/tmp/test-exec/test.txt"})],
+            ToolExecutionContext(turn=1, max_turns=10),
+        )
+        assert results[0][1].status == "success"
+
+    @pytest.mark.asyncio
     async def test_topology_has_correct_paths(self) -> None:
         """RuntimeTopology paths match PlaygroundContext."""
         from matmaster.core.exp import Exp
