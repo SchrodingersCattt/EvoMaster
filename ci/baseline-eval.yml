@@ -2,10 +2,12 @@
 #
 # 架构说明：
 #   1. 父流水线：构建镜像 + 动态生成子流水线 YAML → 触发子流水线
-#   2. 子流水线（动态生成）：
-#      - capabilities（默认）：每个 capability 一个 manual job。
-#      - questions：仅 eval-question-list 一个 manual job；题目来自 ci/baseline_eval_preset.yaml
-#        的 question_ids，或 CI 变量 BASELINE_QUESTIONS（逗号分隔）。此模式忽略 BASELINE_LIMIT。
+#   2. 子流水线（动态生成）：布局由 ci/baseline_eval_preset.yaml 的 child_pipeline 决定
+#      （capabilities | questions），除非在 Run pipeline / 项目 CI Variables 中设置了
+#      BASELINE_CHILD_PIPELINE（该变量会覆盖预设文件）。
+#      - capabilities：每个 capability 一个 manual job。
+#      - questions：仅 eval-question-list 一个 manual job；题目来自预设 question_ids 或
+#        BASELINE_QUESTIONS（逗号分隔）。此模式忽略 BASELINE_LIMIT。
 #
 # 评测模式（EVAL_RUNNER）：
 #   claude_cli（默认） — 外部 baseline：prepare workspace → claude -p 跑题 → finalize
@@ -52,8 +54,8 @@
 #   BASELINE_TIMEOUT       — 每题超时秒数，默认 1200（仅 claude_cli）
 #   BASELINE_MODEL         — 模型标识（claude_cli: 模型名如 opus；devshell: llm_config route key 如 claude-sonnet-4-6）
 #   BASELINE_PENDING_ONLY  — 1=pending等人工阅卷，0=proxy自动入库，默认 1
-#   BASELINE_CHILD_PIPELINE — capabilities（默认）或 questions；覆盖预设文件 child_pipeline
-#   BASELINE_QUESTIONS     — 逗号分隔 question id；questions 布局下可覆盖预设 question_ids
+#   BASELINE_CHILD_PIPELINE — 非空时覆盖 ci/baseline_eval_preset.yaml 的 child_pipeline
+#   BASELINE_QUESTIONS     — 非空时覆盖预设 question_ids（逗号分隔 id）
 
 variables:
   EVAL_RUNNER: "devshell"  # claude_cli 或 devshell
@@ -76,8 +78,6 @@ variables:
   BASELINE_MODEL: ""
   BASELINE_RUN_LABEL: "baseline_cc_ci"
   BASELINE_PENDING_ONLY: "1"
-  BASELINE_CHILD_PIPELINE: "capabilities"
-  BASELINE_QUESTIONS: ""
 
 # ── Job 1: 构建镜像 + 动态生成子流水线 YAML ──────────────────────────────────
 # 使用 Dockerfile.eval 构建评测镜像，然后扫描题库生成子流水线 YAML
@@ -143,6 +143,7 @@ baseline-eval-build:
     - |
       echo "--- 动态生成子流水线 YAML ---"
       apt-get update -qq && apt-get install -y -qq python3 python3-yaml >/dev/null 2>&1
+      echo "effective child_pipeline (BASELINE_CHILD_PIPELINE 非空则优先生效，否则读预设文件): $(python3 ci/baseline_eval_preset.py child-pipeline)"
       python3 ci/generate_eval_child_pipeline.py
       cat ci/generated-eval-child.yml
   retry: 1

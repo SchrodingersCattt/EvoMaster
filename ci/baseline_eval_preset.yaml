@@ -5,7 +5,9 @@
 #   questions    — single manual job ``eval-question-list``; runs only question_ids.
 #                  BASELINE_LIMIT is ignored in this layout.
 #
-# Override at Run pipeline: BASELINE_CHILD_PIPELINE, BASELINE_QUESTIONS (comma-separated).
+# Override: Run pipeline / 项目 CI Variables 中的 BASELINE_CHILD_PIPELINE、BASELINE_QUESTIONS
+#（非空时优先于本文件）。勿在 ci/baseline-eval.yml 的 variables 里写死 BASELINE_CHILD_PIPELINE，
+# 否则预设永远不会生效。
 
 child_pipeline: questions
 
