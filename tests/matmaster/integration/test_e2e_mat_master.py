@@ -1,4 +1,4 @@
-"""E2E pipeline tests for mat_master: Playground.prepare() -> Exp.assemble() -> Kernel.run().
+"""E2E pipeline tests for mat_master: Playground.prepare() -> Exp.assemble() -> Kernel.run_stream().
 
 All external dependencies mocked per D-10. Tests verify pipeline connectivity
 and correct event flow without requiring real LLM/Redis/Bohrium.
@@ -26,13 +26,9 @@ from matmaster.types.events import (
     ToolResultEvent,
 )
 from matmaster.types.messages import (
-    AssistantMessage,
     LLMResponse,
-    Message,
     StreamChunk,
-    UserMessage,
 )
-from matmaster.types.runtime import KernelResult
 
 # ── Mock LLM provider ────────────────────────────────
 
@@ -220,34 +216,6 @@ class TestMatMasterE2EPipeline:
         assert len(tool_call_events) >= 1
         assert len(tool_result_events) >= 1
         assert tool_call_events[0].tool_name == 'echo'
-
-    async def test_mat_master_e2e_with_history(self, tmp_path: Path) -> None:
-        """E2E: Pipeline with multi-turn history injection."""
-        mock_llm = MockLLMProviderCapturingMessages()
-        pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
-
-        history: list[Message] = [
-            UserMessage(content='old question'),
-            AssistantMessage(content='old answer'),
-        ]
-
-        exp = Exp(self._EXP_CONFIG)
-        runtime = await exp.build_runtime(pg_ctx)
-
-        kernel = AgentKernel()
-        finish = await kernel.run(runtime.spec, 'new task', history=history)
-
-        assert finish.result.reason == "natural"
-        # Verify messages passed to LLM include history
-        assert len(mock_llm.captured_messages) == 1
-        llm_messages = mock_llm.captured_messages[0]
-        # Structure: SystemMessage, old question, old answer, new task
-        roles = [m['role'] for m in llm_messages]
-        assert roles == ['system', 'user', 'assistant', 'user']
-        assert llm_messages[1]['content'] == 'old question'
-        assert llm_messages[2]['content'] == 'old answer'
-        assert llm_messages[3]['content'] == 'new task'
-
 
 class TestMatMasterRunAgentE2E:
     """QUAL-02: run_agent() with mock LLM provider injected."""

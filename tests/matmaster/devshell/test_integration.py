@@ -142,8 +142,8 @@ class TestDevShellIntegration:
         event_logger.close()
 
         # Verify result (tool call happened because provider returns text on 2nd call)
-        assert result.result.reason == 'natural'
-        assert result.result.final_content == 'Done! I executed the command.'
+        assert result.reason == 'natural'
+        assert result.final_content == 'Done! I executed the command.'
 
         # Verify terminal output contains the final response
         terminal_output = output.getvalue()
@@ -205,7 +205,7 @@ class TestDevShellIntegration:
         stop.set()
         result = runner.run('should cancel', stop_event=stop)
 
-        assert result.result.reason == 'cancelled'
+        assert result.reason == 'cancelled'
         assert len(runner.history) == 0
 
     def test_run_without_observer_works(self, tmp_path: Path) -> None:
@@ -213,4 +213,4 @@ class TestDevShellIntegration:
         runner = _make_runner(tmp_path, provider=SimpleProvider())
 
         result = runner.run('hello')
-        assert result.result.reason == 'natural'
+        assert result.reason == 'natural'

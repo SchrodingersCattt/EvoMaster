@@ -14,19 +14,13 @@ import asyncio
 import queue
 import threading
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from matmaster.config.exp import ExpConfig
-from matmaster.core.agent import AgentKernel
-from matmaster.core.exp import Exp
-from matmaster.core.hooks import BaseHook, HookAction
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
-from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import (
     AssistantStateEvent,
     FinishEvent,
@@ -34,12 +28,6 @@ from matmaster.types.events import (
     ToolCallEvent,
     ToolResultEvent,
 )
-from matmaster.types.messages import (
-    LLMResponse,
-    StreamChunk,
-    ToolCallData,
-)
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
 
 _src_services = pytest.importorskip(
     "src.services.agent_run_bohrium",
@@ -48,82 +36,6 @@ _src_services = pytest.importorskip(
 BohriumSetupResult = _src_services.BohriumSetupResult
 BohriumSetupService = _src_services.BohriumSetupService
 SkillSyncSpec = _src_services.SkillSyncSpec
-
-# -- Mock helpers ------------------------------------------------
-
-
-class _QuickMockLLM:
-    """Simplest mock LLM: single turn, immediate finish."""
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        pass
-
-    async def chat(self, messages, tools=None) -> LLMResponse:
-        return LLMResponse(content="quick", finish_reason="stop")
-
-    async def chat_stream(self, messages, tools=None, *, timeout=None):
-        yield StreamChunk(content="quick", finish_reason="stop")
-
-
-def _make_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
-    return PlaygroundContext(
-        workdir=tmp_path / "workspace",
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        run_meta={"run_dir": str(tmp_path), "task_id": "test"},
-        llm_provider=llm_provider,
-    )
-
-
-# -- QUAL-04: Run interrupted detection -------------------------
-
-
-class TestRunInterruptedDetection:
-    """Verify stop_event.is_set() detected during kernel loop."""
-
-    _EXP_CONFIG: ExpConfig = ExpConfig(name="direct")
-
-    async def test_run_interrupted_detection_deploy(self, tmp_path: Path) -> None:
-        """Verify stop_event.is_set() detected before kernel turn.
-        Uses pre-set stop_event to guarantee detection on first check.
-        """
-        mock_llm = _QuickMockLLM()
-        pg_ctx = _make_ctx(tmp_path, llm_provider=mock_llm)
-
-        exp = Exp(self._EXP_CONFIG)
-        runtime = await exp.build_runtime(pg_ctx)
-
-        # Pre-set stop_event: kernel checks before first LLM call
-        stop_event = threading.Event()
-        stop_event.set()
-
-        kernel = AgentKernel()
-        finish = await kernel.run(runtime.spec, "long task", stop_event=stop_event)
-
-        assert isinstance(finish.result, KernelResult)
-        assert finish.result.reason == "cancelled"
-        assert finish.result.status == "cancelled"
-
-    async def test_run_interrupted_detection_restart(self, tmp_path: Path) -> None:
-        """Verify stop_event from Redis stop key detected (same mechanism)."""
-        mock_llm = _QuickMockLLM()
-        pg_ctx = _make_ctx(tmp_path, llm_provider=mock_llm)
-
-        exp = Exp(self._EXP_CONFIG)
-        runtime = await exp.build_runtime(pg_ctx)
-
-        # Simulate Redis-backed stop event: already set before run starts
-        stop_event = threading.Event()
-        stop_event.set()
-
-        kernel = AgentKernel()
-        finish = await kernel.run(runtime.spec, "restart task", stop_event=stop_event)
-
-        assert finish.result.reason == "cancelled"
-
 
 # -- QUAL-04: Workspace upload scenarios -------------------------
 

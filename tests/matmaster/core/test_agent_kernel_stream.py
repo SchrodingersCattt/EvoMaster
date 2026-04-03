@@ -6,8 +6,6 @@ yields, and compactor deque integration. Phase 34 Plan 1 Task 1.
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import AsyncIterator
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -18,8 +16,6 @@ from matmaster.types.events import (
     ResponseEvent,
     SkillHitEvent,
     ThoughtEvent,
-    ToolCallEvent,
-    ToolResultEvent,
 )
 from matmaster.types.messages import (
     LLMResponse,
@@ -29,12 +25,9 @@ from matmaster.types.messages import (
 from matmaster.types.runtime import AgentRuntimeSpec
 
 from .agent_kernel_test_helpers import (
-    StreamingProvider,
-    ToolCallingProvider,
     _make_spec,
     _make_tool_registry,
 )
-from .conftest import MockLLMProvider
 
 
 # ── Providers for streaming tests ─────────────────────────
@@ -346,39 +339,6 @@ class TestRunItemsSkillHit:
             if isinstance(e, SkillHitEvent)
         ]
         assert len(skill_hit_events) == 0, "Should not yield SkillHitEvent for regular tools"
-
-
-# ── Regression: run() still works ─────────────────────────
-
-
-class TestRunBackwardCompat:
-    """Ensure existing kernel.run() still works through _run_items()."""
-
-    @pytest.mark.asyncio
-    async def test_natural_finish_via_run(self) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        provider = StreamingProvider([
-            StreamChunk(content="Hello"),
-            StreamChunk(finish_reason="stop"),
-        ])
-        spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
-        result = await kernel.run(spec, "test task")
-        assert result.result.reason == "natural"
-        assert result.result.final_content == "Hello"
-
-    @pytest.mark.asyncio
-    async def test_tool_calls_via_run(self) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        tc = ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1})
-        provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=1)
-        registry, _ = _make_tool_registry()
-        spec = _make_spec(provider=provider, tool_registry=registry)
-        kernel = AgentKernel()
-        result = await kernel.run(spec, "test")
-        assert result.result.reason == "natural"
 
 
 # ── Gap Closure tests (Phase 34 Plan 4) ────────────────────

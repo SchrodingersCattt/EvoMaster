@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -14,8 +14,6 @@ from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import (
     AgentRuntime,
     AgentRuntimeSpec,
-    KernelResult,
-    KernelRunResult,
 )
 from matmaster.types.session import Session
 from tests.matmaster.core.conftest import MockLLMProvider
@@ -165,139 +163,11 @@ class TestExpBuildRuntime:
         assert callable(runtime.cleanup)
 
 
-# ── TestExpRun ──────────────────────────────────────────
-
-
-class TestExpRun:
-    """run() calls build_runtime then kernel.run with proper args."""
-
-    async def test_run_calls_build_runtime_then_kernel(self) -> None:
-        """run() delegates to build_runtime then kernel.run."""
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        mock_kr = KernelResult(status='completed', reason='natural')
-        mock_kernel_result = KernelRunResult(result=mock_kr, messages=[])
-
-        mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(return_value=mock_kernel_result)
-        mock_spec = MagicMock(spec=AgentRuntimeSpec)
-        mock_cleanup = MagicMock()
-        mock_runtime = AgentRuntime(
-            kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
-        )
-
-        with patch.object(
-            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
-        ) as mock_br:
-            result = await exp.run(ctx, "do something")
-
-        mock_br.assert_called_once_with(
-            ctx,
-            skills=None,
-            source_override=None,
-            spawn_id=None,
-        )
-        mock_kernel.run.assert_called_once_with(
-            mock_spec, 'do something', history=None, stop_event=None
-        )
-        assert result is mock_kr
-
-    async def test_run_no_bus_parameter(self) -> None:
-        """run() no longer accepts bus parameter (Phase 36 de-bus)."""
-        import inspect
-
-        exp = Exp(ExpConfig(name='test'))
-        sig = inspect.signature(exp.run)
-        assert 'bus' not in sig.parameters
-
-    async def test_run_forwards_history_and_stop_event(self) -> None:
-        """run() passes history and stop_event to kernel.run."""
-        import threading
-
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        mock_kr = KernelResult(status='completed', reason='natural')
-        stop = threading.Event()
-        history = [MagicMock()]
-
-        mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(
-            return_value=KernelRunResult(result=mock_kr, messages=[])
-        )
-        mock_spec = MagicMock(spec=AgentRuntimeSpec)
-        mock_cleanup = MagicMock()
-        mock_runtime = AgentRuntime(
-            kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
-        )
-
-        with patch.object(
-            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
-        ):
-            await exp.run(ctx, "task", history=history, stop_event=stop)
-
-        mock_kernel.run.assert_called_once_with(
-            mock_spec, 'task', history=history, stop_event=stop
-        )
-
-
 # ── TestExpCleanup ───────────────────────────────────────
 
 
 class TestExpCleanup:
     """Cleanup callbacks are guaranteed to execute via _run_cleanup_callbacks()."""
-
-    async def test_cleanup_runs_on_success(self) -> None:
-        """Cleanup is called after successful kernel.run via run()."""
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        mock_kr = KernelResult(status='completed', reason='natural')
-
-        mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(
-            return_value=KernelRunResult(result=mock_kr, messages=[])
-        )
-        mock_spec = MagicMock(spec=AgentRuntimeSpec)
-        mock_cleanup = MagicMock()
-        mock_runtime = AgentRuntime(
-            kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
-        )
-
-        # Register a cleanup callback before run() so we can verify it gets called
-        cleanup_cb = MagicMock()
-        exp._register_cleanup(cleanup_cb)
-
-        with patch.object(
-            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
-        ):
-            await exp.run(ctx, "task")
-
-        cleanup_cb.assert_called_once()
-        assert exp._cleanup_callbacks == []  # cleared after execution
-
-    async def test_cleanup_runs_on_error(self) -> None:
-        """Cleanup is called even when kernel.run() raises."""
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-
-        mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(side_effect=RuntimeError("kernel exploded"))
-        mock_spec = MagicMock(spec=AgentRuntimeSpec)
-        mock_cleanup = MagicMock()
-        mock_runtime = AgentRuntime(
-            kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
-        )
-
-        cleanup_cb = MagicMock()
-        exp._register_cleanup(cleanup_cb)
-
-        with patch.object(
-            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
-        ):
-            with pytest.raises(RuntimeError, match="kernel exploded"):
-                await exp.run(ctx, "task")
-
-        cleanup_cb.assert_called_once()
-        assert exp._cleanup_callbacks == []
 
     async def test_multiple_cleanups_all_execute(self) -> None:
         """All registered cleanup callbacks run even if one raises."""
