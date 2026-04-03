@@ -90,7 +90,7 @@ class _RWLock:
 class SchedulerTicket:
     """Acquire receipt -- tracks which resources were locked and how.
 
-    resource_locks is a list of (resource_id, mode) tuples, recorded
+    resource_locks is a list of (resource, mode) tuples, recorded
     in acquisition order. Release iterates in reverse order.
     """
 
@@ -111,29 +111,29 @@ class ToolScheduler:
         self._rw_locks: dict[str, _RWLock] = {}
         self._semaphores: dict[str, asyncio.Semaphore] = {}
 
-    def _get_rw_lock(self, resource_id: str) -> _RWLock:
-        """Get or lazily create a _RWLock for the given resource_id."""
-        if resource_id not in self._rw_locks:
-            self._rw_locks[resource_id] = _RWLock()
-        return self._rw_locks[resource_id]
+    def _get_rw_lock(self, resource: str) -> _RWLock:
+        """Get or lazily create a _RWLock for the given resource."""
+        if resource not in self._rw_locks:
+            self._rw_locks[resource] = _RWLock()
+        return self._rw_locks[resource]
 
-    def _get_semaphore(self, resource_id: str, limit: int) -> asyncio.Semaphore:
-        """Get or lazily create a Semaphore for the given resource_id.
+    def _get_semaphore(self, resource: str, max_concurrent: int) -> asyncio.Semaphore:
+        """Get or lazily create a Semaphore for the given resource.
 
-        If limit is None or <= 0, defensively defaults to 1 with a warning.
-        Once created, the semaphore for a resource_id is reused (limit from
-        first creation wins).
+        If max_concurrent is <= 0, defensively defaults to 1 with a warning.
+        Once created, the semaphore for a resource is reused (max_concurrent
+        from first creation wins).
         """
-        if resource_id not in self._semaphores:
-            if limit is None or limit <= 0:
+        if resource not in self._semaphores:
+            if max_concurrent <= 0:
                 logger.warning(
-                    "counted resource %r has limit=%r, defaulting to 1",
-                    resource_id,
-                    limit,
+                    "counted resource %r has max_concurrent=%r, defaulting to 1",
+                    resource,
+                    max_concurrent,
                 )
-                limit = 1
-            self._semaphores[resource_id] = asyncio.Semaphore(limit)
-        return self._semaphores[resource_id]
+                max_concurrent = 1
+            self._semaphores[resource] = asyncio.Semaphore(max_concurrent)
+        return self._semaphores[resource]
 
     async def acquire(
         self,
@@ -148,7 +148,7 @@ class ToolScheduler:
         if timeout is None:
             timeout = self._default_timeout
 
-        acquired: list[tuple[str, str]] = []  # (resource_id, mode)
+        acquired: list[tuple[str, str]] = []  # (resource, mode)
 
         for claim in claims:
             ok = await self._acquire_single(claim, timeout)
@@ -156,23 +156,23 @@ class ToolScheduler:
                 # Rollback already acquired
                 await self._release_acquired(acquired)
                 return None
-            acquired.append((claim.resource_id, claim.mode))
+            acquired.append((claim.resource, claim.mode))
 
         return SchedulerTicket(resource_locks=acquired)
 
     async def release(self, ticket: SchedulerTicket) -> None:
         """Release all resources held by the ticket, in reverse acquisition order."""
-        for resource_id, mode in reversed(ticket.resource_locks):
-            await self._release_single(resource_id, mode)
+        for resource, mode in reversed(ticket.resource_locks):
+            await self._release_single(resource, mode)
 
     async def _acquire_single(self, claim: ResourceClaim, timeout: float) -> bool:
         """Acquire a single resource claim. Returns True on success."""
         if claim.mode == "exclusive":
-            return await self._get_rw_lock(claim.resource_id).acquire_write(timeout)
+            return await self._get_rw_lock(claim.resource).acquire_write(timeout)
         elif claim.mode == "shared_read":
-            return await self._get_rw_lock(claim.resource_id).acquire_read(timeout)
+            return await self._get_rw_lock(claim.resource).acquire_read(timeout)
         elif claim.mode == "counted":
-            sem = self._get_semaphore(claim.resource_id, claim.limit or 1)
+            sem = self._get_semaphore(claim.resource, claim.max_concurrent or 1)
             try:
                 await asyncio.wait_for(sem.acquire(), timeout=timeout)
                 return True
@@ -182,18 +182,18 @@ class ToolScheduler:
             logger.error("Unknown claim mode: %r", claim.mode)
             return False
 
-    async def _release_single(self, resource_id: str, mode: str) -> None:
+    async def _release_single(self, resource: str, mode: str) -> None:
         """Release a single resource by id and mode."""
         if mode == "exclusive":
-            await self._rw_locks[resource_id].release_write()
+            await self._rw_locks[resource].release_write()
         elif mode == "shared_read":
-            await self._rw_locks[resource_id].release_read()
+            await self._rw_locks[resource].release_read()
         elif mode == "counted":
-            self._semaphores[resource_id].release()
+            self._semaphores[resource].release()
         else:
-            logger.error("Unknown release mode: %r for resource %r", mode, resource_id)
+            logger.error("Unknown release mode: %r for resource %r", mode, resource)
 
     async def _release_acquired(self, acquired: list[tuple[str, str]]) -> None:
         """Rollback: release resources in reverse order."""
-        for resource_id, mode in reversed(acquired):
-            await self._release_single(resource_id, mode)
+        for resource, mode in reversed(acquired):
+            await self._release_single(resource, mode)

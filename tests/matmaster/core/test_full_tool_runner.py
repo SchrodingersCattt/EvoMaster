@@ -289,7 +289,7 @@ class TestSchedulerTimeout:
 class TestFastPath:
     @pytest.mark.asyncio
     async def test_fast_path_skips_scheduler(self) -> None:
-        """Fast path: effect_level='pure_read', shared_read, fast_path_eligible -> skip Scheduler."""
+        """Fast path: effect_level='none', shared_read, fast_path_eligible -> skip Scheduler."""
         registry = ToolRegistry()
         registry.register(_SimpleTool("fast_tool", "fast_result"), source="builtin")
         catalog = ToolCatalog(registry)
@@ -307,14 +307,14 @@ class TestFastPath:
                 description="fast tool",
                 args_schema={},
                 source="builtin",
-                effect_level="pure_read",
+                effect_level="none",
                 fast_path_eligible=True,
             )
             binding = ToolBinding(
                 binding_key=f"session_fs:{name}",
                 plane=ToolPlane.SESSION_FS,
                 resource_claims=(
-                    ResourceClaim(resource_id="workspace", mode="shared_read"),
+                    ResourceClaim(resource="workspace", mode="shared_read"),
                 ),
             )
             return ToolInstance(
@@ -373,14 +373,14 @@ class TestFastPath:
                 description="fast tool",
                 args_schema={},
                 source="builtin",
-                effect_level="pure_read",
+                effect_level="none",
                 fast_path_eligible=True,
             )
             binding = ToolBinding(
                 binding_key=f"session_fs:{name}",
                 plane=ToolPlane.SESSION_FS,
                 resource_claims=(
-                    ResourceClaim(resource_id="workspace", mode="shared_read"),
+                    ResourceClaim(resource="workspace", mode="shared_read"),
                 ),
             )
             return ToolInstance(

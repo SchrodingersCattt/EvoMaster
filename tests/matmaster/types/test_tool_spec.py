@@ -30,7 +30,7 @@ class TestToolSpec:
         assert spec.capabilities == frozenset()
         assert spec.effect_level == "local_mutation"
         assert spec.exposed_to_model is True
-        assert spec.fast_path_eligible is False
+        assert spec.fast_path_eligible is True
         assert spec.description == ""
         assert spec.args_schema == {}
         assert spec.source == "unknown"
@@ -43,7 +43,7 @@ class TestToolSpec:
             args_schema={"path": {"type": "string"}},
             source="builtin",
             capabilities=frozenset({"file_read"}),
-            effect_level="pure_read",
+            effect_level="none",
             exposed_to_model=True,
             fast_path_eligible=True,
         )
@@ -54,22 +54,22 @@ class TestToolSpec:
 class TestResourceClaim:
     def test_resource_claim_modes(self) -> None:
         """ResourceClaim supports three modes."""
-        exclusive = ResourceClaim(resource_id="r1", mode="exclusive")
+        exclusive = ResourceClaim(resource="r1", mode="exclusive")
         assert exclusive.mode == "exclusive"
-        assert exclusive.limit is None
+        assert exclusive.max_concurrent == 1
 
-        shared = ResourceClaim(resource_id="r2", mode="shared_read")
+        shared = ResourceClaim(resource="r2", mode="shared_read")
         assert shared.mode == "shared_read"
 
-        counted = ResourceClaim(resource_id="r3", mode="counted", limit=5)
+        counted = ResourceClaim(resource="r3", mode="counted", max_concurrent=5)
         assert counted.mode == "counted"
-        assert counted.limit == 5
+        assert counted.max_concurrent == 5
 
     def test_resource_claim_frozen(self) -> None:
         """ResourceClaim is frozen."""
-        claim = ResourceClaim(resource_id="r1", mode="exclusive")
+        claim = ResourceClaim(resource="r1", mode="exclusive")
         with pytest.raises(ValidationError):
-            claim.resource_id = "r2"
+            claim.resource = "r2"
 
 
 class TestToolBinding:
@@ -90,21 +90,21 @@ class TestToolBinding:
         )
         assert binding.resource_claims == ()
         assert binding.state_mode == "stateless"
-        assert binding.stop_mode == "immediate"
+        assert binding.stop_mode == "cancellable"
 
     def test_tool_binding_with_resource_claims(self) -> None:
         """ToolBinding can hold resource claims."""
-        claim = ResourceClaim(resource_id="shell", mode="exclusive")
+        claim = ResourceClaim(resource="shell", mode="exclusive")
         binding = ToolBinding(
             binding_key="session_shell:bash",
             plane=ToolPlane.SESSION_SHELL,
             resource_claims=(claim,),
-            state_mode="session_scoped",
-            stop_mode="graceful",
+            state_mode="persistent",
+            stop_mode="best_effort",
         )
         assert len(binding.resource_claims) == 1
-        assert binding.state_mode == "session_scoped"
-        assert binding.stop_mode == "graceful"
+        assert binding.state_mode == "persistent"
+        assert binding.stop_mode == "best_effort"
 
 
 class TestToolInstance:

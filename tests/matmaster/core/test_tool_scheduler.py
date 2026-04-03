@@ -1,12 +1,12 @@
 """Tests for ToolScheduler -- resource-aware tool scheduling.
 
 Tests cover:
-- Exclusive mode: mutual exclusion on same resource_id
+- Exclusive mode: mutual exclusion on same resource
 - SharedRead mode: concurrent reads allowed, exclusive blocked during read
 - Counted mode: semaphore-based concurrency control
 - Timeout behavior: acquire returns None on timeout
 - MultiResource: multiple claims in single acquire
-- CountedLimitNone: defensive handling when limit is None
+- CountedMaxConcurrentZero: defensive handling when max_concurrent <= 0
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ class TestExclusive:
     async def test_second_exclusive_times_out_while_first_held(self) -> None:
         """Two exclusive claims on same resource: second times out while first held."""
         scheduler = ToolScheduler()
-        claim = ResourceClaim(resource_id="shell", mode="exclusive")
+        claim = ResourceClaim(resource="shell", mode="exclusive")
 
         ticket1 = await scheduler.acquire((claim,), timeout=1.0)
         assert ticket1 is not None
@@ -37,7 +37,7 @@ class TestExclusive:
     async def test_second_exclusive_succeeds_after_release(self) -> None:
         """After first release, second exclusive acquire succeeds."""
         scheduler = ToolScheduler()
-        claim = ResourceClaim(resource_id="shell", mode="exclusive")
+        claim = ResourceClaim(resource="shell", mode="exclusive")
 
         ticket1 = await scheduler.acquire((claim,), timeout=1.0)
         assert ticket1 is not None
@@ -55,7 +55,7 @@ class TestSharedRead:
     async def test_concurrent_shared_reads_succeed(self) -> None:
         """Two shared_read claims on same resource both succeed concurrently."""
         scheduler = ToolScheduler()
-        claim = ResourceClaim(resource_id="file:data.csv", mode="shared_read")
+        claim = ResourceClaim(resource="file:data.csv", mode="shared_read")
 
         async def acquire_shared() -> SchedulerTicket | None:
             return await scheduler.acquire((claim,), timeout=1.0)
@@ -69,8 +69,8 @@ class TestSharedRead:
     async def test_exclusive_blocked_while_shared_read_held(self) -> None:
         """Exclusive acquire times out while shared_read is held."""
         scheduler = ToolScheduler()
-        read_claim = ResourceClaim(resource_id="file:data.csv", mode="shared_read")
-        write_claim = ResourceClaim(resource_id="file:data.csv", mode="exclusive")
+        read_claim = ResourceClaim(resource="file:data.csv", mode="shared_read")
+        write_claim = ResourceClaim(resource="file:data.csv", mode="exclusive")
 
         ticket_read = await scheduler.acquire((read_claim,), timeout=1.0)
         assert ticket_read is not None
@@ -82,8 +82,8 @@ class TestSharedRead:
     async def test_exclusive_succeeds_after_all_shared_reads_released(self) -> None:
         """Exclusive acquire succeeds after all shared_read tickets released."""
         scheduler = ToolScheduler()
-        read_claim = ResourceClaim(resource_id="file:data.csv", mode="shared_read")
-        write_claim = ResourceClaim(resource_id="file:data.csv", mode="exclusive")
+        read_claim = ResourceClaim(resource="file:data.csv", mode="shared_read")
+        write_claim = ResourceClaim(resource="file:data.csv", mode="exclusive")
 
         t1 = await scheduler.acquire((read_claim,), timeout=1.0)
         t2 = await scheduler.acquire((read_claim,), timeout=1.0)
@@ -104,7 +104,7 @@ class TestCounted:
     async def test_within_limit_succeeds(self) -> None:
         """First N acquires within limit succeed."""
         scheduler = ToolScheduler()
-        claim = ResourceClaim(resource_id="api:openai", mode="counted", limit=2)
+        claim = ResourceClaim(resource="api:openai", mode="counted", max_concurrent=2)
 
         t1 = await scheduler.acquire((claim,), timeout=1.0)
         t2 = await scheduler.acquire((claim,), timeout=1.0)
@@ -121,7 +121,7 @@ class TestCounted:
     async def test_release_allows_next_acquire(self) -> None:
         """After release, blocked acquire can succeed."""
         scheduler = ToolScheduler()
-        claim = ResourceClaim(resource_id="api:openai", mode="counted", limit=2)
+        claim = ResourceClaim(resource="api:openai", mode="counted", max_concurrent=2)
 
         t1 = await scheduler.acquire((claim,), timeout=1.0)
         t2 = await scheduler.acquire((claim,), timeout=1.0)
@@ -145,7 +145,7 @@ class TestTimeout:
     async def test_exclusive_acquire_timeout(self) -> None:
         """Exclusive acquire with short timeout returns None."""
         scheduler = ToolScheduler()
-        claim = ResourceClaim(resource_id="shell", mode="exclusive")
+        claim = ResourceClaim(resource="shell", mode="exclusive")
 
         ticket1 = await scheduler.acquire((claim,), timeout=1.0)
         assert ticket1 is not None
@@ -163,31 +163,31 @@ class TestMultiResource:
         """Acquire with claims on two different resources returns ticket with both."""
         scheduler = ToolScheduler()
         claims = (
-            ResourceClaim(resource_id="shell", mode="exclusive"),
-            ResourceClaim(resource_id="file:data.csv", mode="shared_read"),
+            ResourceClaim(resource="shell", mode="exclusive"),
+            ResourceClaim(resource="file:data.csv", mode="shared_read"),
         )
 
         ticket = await scheduler.acquire(claims, timeout=1.0)
         assert ticket is not None
         assert len(ticket.resource_locks) == 2
 
-        # Verify resource_ids in ticket
-        resource_ids = {r_id for r_id, _ in ticket.resource_locks}
-        assert "shell" in resource_ids
-        assert "file:data.csv" in resource_ids
+        # Verify resources in ticket
+        resources = {res for res, _ in ticket.resource_locks}
+        assert "shell" in resources
+        assert "file:data.csv" in resources
 
         await scheduler.release(ticket)
 
 
-class TestCountedLimitNone:
-    """Defensive handling of counted mode with limit=None."""
+class TestCountedMaxConcurrentZero:
+    """Defensive handling of counted mode with max_concurrent <= 0."""
 
-    async def test_limit_none_treated_as_one(self) -> None:
-        """counted mode with limit=None is defensively treated as limit=1."""
+    async def test_max_concurrent_zero_treated_as_one(self) -> None:
+        """counted mode with max_concurrent=0 is defensively treated as 1."""
         scheduler = ToolScheduler()
-        claim = ResourceClaim(resource_id="api:test", mode="counted", limit=None)
+        claim = ResourceClaim(resource="api:test", mode="counted", max_concurrent=0)
 
-        # First acquire should succeed (treated as limit=1)
+        # First acquire should succeed (treated as max_concurrent=1)
         t1 = await scheduler.acquire((claim,), timeout=1.0)
         assert t1 is not None
 

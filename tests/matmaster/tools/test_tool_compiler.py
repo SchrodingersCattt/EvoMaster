@@ -53,7 +53,7 @@ class TestToolCompiler:
         assert instance.tool_binding.plane == ToolPlane.SESSION_SHELL
         assert instance.tool_spec.effect_level == "local_mutation"
         assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource_id="session", mode="exclusive"),
+            ResourceClaim(resource="session", mode="exclusive"),
         )
 
     def test_compile_builtin_read_file(self) -> None:
@@ -65,10 +65,10 @@ class TestToolCompiler:
         )
 
         assert instance.tool_binding.plane == ToolPlane.SESSION_FS
-        assert instance.tool_spec.effect_level == "pure_read"
+        assert instance.tool_spec.effect_level == "none"
         assert instance.tool_spec.fast_path_eligible is True
         assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource_id="workspace", mode="shared_read"),
+            ResourceClaim(resource="workspace", mode="shared_read"),
         )
 
     def test_compile_builtin_web_search(self) -> None:
@@ -80,9 +80,9 @@ class TestToolCompiler:
         )
 
         assert instance.tool_binding.plane == ToolPlane.EXTERNAL_SERVICE
-        assert instance.tool_spec.effect_level == "external_write"
+        assert instance.tool_spec.effect_level == "external_effect"
         assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource_id="web", mode="counted", limit=3),
+            ResourceClaim(resource="web", mode="counted", max_concurrent=3),
         )
 
     def test_compile_unknown_tool(self) -> None:
@@ -160,7 +160,7 @@ class TestTopologyDependentBinding:
             _FakeTool("glob"), _make_local_stateless_topology(), source="builtin"
         )
         assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource_id="session", mode="shared_read"),
+            ResourceClaim(resource="session", mode="shared_read"),
         )
 
     def test_grep_local_stateless_shared_read(self) -> None:
@@ -169,7 +169,7 @@ class TestTopologyDependentBinding:
             _FakeTool("grep"), _make_local_stateless_topology(), source="builtin"
         )
         assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource_id="session", mode="shared_read"),
+            ResourceClaim(resource="session", mode="shared_read"),
         )
 
     def test_list_dir_local_stateless_shared_read(self) -> None:
@@ -178,7 +178,7 @@ class TestTopologyDependentBinding:
             _FakeTool("list_dir"), _make_local_stateless_topology(), source="builtin"
         )
         assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource_id="session", mode="shared_read"),
+            ResourceClaim(resource="session", mode="shared_read"),
         )
 
     def test_glob_ssh_stays_exclusive(self) -> None:
@@ -188,7 +188,7 @@ class TestTopologyDependentBinding:
             _FakeTool("glob"), _make_ssh_stateless_topology(), source="builtin"
         )
         assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource_id="session", mode="exclusive"),
+            ResourceClaim(resource="session", mode="exclusive"),
         )
 
     def test_glob_local_no_caps_stays_exclusive(self) -> None:
@@ -201,7 +201,7 @@ class TestTopologyDependentBinding:
         )
         instance = compiler.compile(_FakeTool("glob"), topo, source="builtin")
         assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource_id="session", mode="exclusive"),
+            ResourceClaim(resource="session", mode="exclusive"),
         )
 
     def test_bash_local_stays_exclusive(self) -> None:
@@ -211,7 +211,7 @@ class TestTopologyDependentBinding:
             _FakeTool("execute_bash"), _make_local_stateless_topology(), source="builtin"
         )
         assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource_id="session", mode="exclusive"),
+            ResourceClaim(resource="session", mode="exclusive"),
         )
 
     def test_custom_tool_unaffected(self) -> None:

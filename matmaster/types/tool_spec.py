@@ -41,9 +41,9 @@ class ToolSpec(BaseModel):
     args_schema: dict[str, Any] = Field(default_factory=dict)
     source: str = "unknown"  # "builtin" | "mcp" | "skill" | "unknown"
     capabilities: frozenset[str] = frozenset()
-    effect_level: str = "local_mutation"  # "pure_read" | "local_mutation" | "external_write"
+    effect_level: str = "local_mutation"  # "none" | "local_mutation" | "external_effect"
     exposed_to_model: bool = True
-    fast_path_eligible: bool = False
+    fast_path_eligible: bool = True
     max_result_chars: int = 0
     usage_hint: str = ""
 
@@ -53,14 +53,14 @@ class ResourceClaim(BaseModel):
 
     - exclusive: tool needs sole access (e.g., shell for interactive command)
     - shared_read: concurrent reads allowed (e.g., file read)
-    - counted: up to `limit` concurrent users (e.g., API rate limiting)
+    - counted: up to `max_concurrent` concurrent users (e.g., API rate limiting)
     """
 
     model_config = ConfigDict(frozen=True)
 
-    resource_id: str
+    resource: str
     mode: Literal["exclusive", "shared_read", "counted"]
-    limit: int | None = None  # only meaningful when mode="counted"
+    max_concurrent: int = 1  # only meaningful when mode="counted"
 
 
 class ToolBinding(BaseModel):
@@ -74,8 +74,8 @@ class ToolBinding(BaseModel):
     binding_key: str  # "{plane}:{tool_name}"
     plane: ToolPlane
     resource_claims: tuple[ResourceClaim, ...] = ()
-    state_mode: str = "stateless"  # "stateless" | "turn_scoped" | "session_scoped"
-    stop_mode: str = "immediate"  # "immediate" | "graceful" | "detached"
+    state_mode: Literal["stateless", "persistent"] = "stateless"
+    stop_mode: Literal["cancellable", "best_effort", "non_cancellable"] = "cancellable"
 
 
 # Import ToolResult for the executor type signature

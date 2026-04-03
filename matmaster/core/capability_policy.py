@@ -5,7 +5,7 @@ whether a tool call is permitted based on effect_level constraints
 and fine-grained capability matching.
 
 DefaultCapabilityPolicy implements Phase 1 policy:
-1. effect_level="external_write" requires EXTERNAL_SERVICE plane active
+1. effect_level="external_effect" requires EXTERNAL_SERVICE plane active
 2. Capability matching against SessionCapabilities (artifact.download,
    shell.execute, etc.)
 
@@ -64,7 +64,7 @@ class DefaultCapabilityPolicy:
         spec = tool_instance.tool_spec
 
         # 1. effect_level constraint
-        if spec.effect_level == "external_write":
+        if spec.effect_level == "external_effect":
             if ToolPlane.EXTERNAL_SERVICE not in runtime_topology.active_planes:
                 return ToolDecision(
                     decision="deny",

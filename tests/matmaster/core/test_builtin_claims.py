@@ -59,13 +59,13 @@ def _make_catalog(*tool_names: str) -> ToolCatalog:
 
 class TestBashClaim:
     def test_execute_bash_has_session_exclusive(self) -> None:
-        """execute_bash -> ResourceClaim(resource_id='session', mode='exclusive')."""
+        """execute_bash -> ResourceClaim(resource='session', mode='exclusive')."""
         catalog = _make_catalog("execute_bash")
         instance = catalog.get_tool("execute_bash")
 
         assert instance is not None
         claims = instance.tool_binding.resource_claims
-        assert ResourceClaim(resource_id="session", mode="exclusive") in claims
+        assert ResourceClaim(resource="session", mode="exclusive") in claims
 
     def test_execute_bash_plane_session_shell(self) -> None:
         """execute_bash plane is SESSION_SHELL."""
@@ -81,13 +81,13 @@ class TestBashClaim:
 
 class TestWriteClaim:
     def test_write_file_has_workspace_exclusive(self) -> None:
-        """write_file -> ResourceClaim(resource_id='workspace', mode='exclusive')."""
+        """write_file -> ResourceClaim(resource='workspace', mode='exclusive')."""
         catalog = _make_catalog("write_file")
         instance = catalog.get_tool("write_file")
 
         assert instance is not None
         claims = instance.tool_binding.resource_claims
-        assert ResourceClaim(resource_id="workspace", mode="exclusive") in claims
+        assert ResourceClaim(resource="workspace", mode="exclusive") in claims
 
 
 # ── Read ─────────────────────────────────────────────────
@@ -95,13 +95,13 @@ class TestWriteClaim:
 
 class TestReadClaim:
     def test_read_file_has_workspace_shared_read(self) -> None:
-        """read_file -> ResourceClaim(resource_id='workspace', mode='shared_read')."""
+        """read_file -> ResourceClaim(resource='workspace', mode='shared_read')."""
         catalog = _make_catalog("read_file")
         instance = catalog.get_tool("read_file")
 
         assert instance is not None
         claims = instance.tool_binding.resource_claims
-        assert ResourceClaim(resource_id="workspace", mode="shared_read") in claims
+        assert ResourceClaim(resource="workspace", mode="shared_read") in claims
 
 
 # ── Edit ─────────────────────────────────────────────────
@@ -109,13 +109,13 @@ class TestReadClaim:
 
 class TestEditClaim:
     def test_edit_file_has_workspace_exclusive(self) -> None:
-        """edit_file -> ResourceClaim(resource_id='workspace', mode='exclusive')."""
+        """edit_file -> ResourceClaim(resource='workspace', mode='exclusive')."""
         catalog = _make_catalog("edit_file")
         instance = catalog.get_tool("edit_file")
 
         assert instance is not None
         claims = instance.tool_binding.resource_claims
-        assert ResourceClaim(resource_id="workspace", mode="exclusive") in claims
+        assert ResourceClaim(resource="workspace", mode="exclusive") in claims
 
 
 # ── Glob/Grep/ListDir ────────────────────────────────────
@@ -124,13 +124,13 @@ class TestEditClaim:
 class TestGlobGrepListDir:
     @pytest.mark.parametrize("tool_name", ["glob", "grep", "list_dir"])
     def test_session_exclusive(self, tool_name: str) -> None:
-        """glob/grep/list_dir -> ResourceClaim(resource_id='session', mode='exclusive')."""
+        """glob/grep/list_dir -> ResourceClaim(resource='session', mode='exclusive')."""
         catalog = _make_catalog(tool_name)
         instance = catalog.get_tool(tool_name)
 
         assert instance is not None
         claims = instance.tool_binding.resource_claims
-        assert ResourceClaim(resource_id="session", mode="exclusive") in claims
+        assert ResourceClaim(resource="session", mode="exclusive") in claims
 
 
 # ── Web Tools ────────────────────────────────────────────
@@ -139,14 +139,14 @@ class TestGlobGrepListDir:
 class TestWebTools:
     @pytest.mark.parametrize("tool_name", ["mm_web_search", "web_fetch"])
     def test_web_counted(self, tool_name: str) -> None:
-        """mm_web_search/web_fetch -> ResourceClaim(resource_id='web', mode='counted', limit=3)."""
+        """mm_web_search/web_fetch -> ResourceClaim(resource='web', mode='counted', max_concurrent=3)."""
         catalog = _make_catalog(tool_name)
         instance = catalog.get_tool(tool_name)
 
         assert instance is not None
         claims = instance.tool_binding.resource_claims
         assert (
-            ResourceClaim(resource_id="web", mode="counted", limit=3) in claims
+            ResourceClaim(resource="web", mode="counted", max_concurrent=3) in claims
         )
 
 
@@ -155,14 +155,14 @@ class TestWebTools:
 
 class TestSpawn:
     def test_spawn_counted(self) -> None:
-        """spawn -> ResourceClaim(resource_id='spawn', mode='counted', limit=2)."""
+        """spawn -> ResourceClaim(resource='spawn', mode='counted', max_concurrent=2)."""
         catalog = _make_catalog("spawn")
         instance = catalog.get_tool("spawn")
 
         assert instance is not None
         claims = instance.tool_binding.resource_claims
         assert (
-            ResourceClaim(resource_id="spawn", mode="counted", limit=2) in claims
+            ResourceClaim(resource="spawn", mode="counted", max_concurrent=2) in claims
         )
 
 
@@ -177,14 +177,14 @@ class TestFastPathEligible:
 
         assert instance is not None
         assert instance.tool_spec.fast_path_eligible is True
-        assert instance.tool_spec.effect_level == "pure_read"
+        assert instance.tool_spec.effect_level == "none"
 
 
 class TestEffectLevelConsistency:
     """Builtin effect levels should match the canonical ToolSpec enum."""
 
     def test_all_effect_levels_are_canonical(self) -> None:
-        canonical = {"pure_read", "local_mutation", "external_write"}
+        canonical = {"none", "local_mutation", "external_effect"}
 
         for tool_name, (_plane, effect_level, _fast, *_rest) in BUILTIN_META.items():
             assert effect_level in canonical, (

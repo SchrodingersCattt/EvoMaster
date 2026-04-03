@@ -7,44 +7,44 @@ from matmaster.types.tool_spec import ResourceClaim, ToolBinding, ToolInstance, 
 from matmaster.types.topology import RuntimeTopology, ToolPlane
 
 BUILTIN_CLAIMS: dict[str, tuple[ResourceClaim, ...]] = {
-    "execute_bash": (ResourceClaim(resource_id="session", mode="exclusive"),),
-    "list_dir": (ResourceClaim(resource_id="session", mode="exclusive"),),
-    "glob": (ResourceClaim(resource_id="session", mode="exclusive"),),
-    "grep": (ResourceClaim(resource_id="session", mode="exclusive"),),
-    "read_file": (ResourceClaim(resource_id="workspace", mode="shared_read"),),
-    "write_file": (ResourceClaim(resource_id="workspace", mode="exclusive"),),
-    "edit_file": (ResourceClaim(resource_id="workspace", mode="exclusive"),),
-    "task_create": (ResourceClaim(resource_id="task-store", mode="exclusive"),),
-    "task_get": (ResourceClaim(resource_id="task-store", mode="shared_read"),),
-    "task_list": (ResourceClaim(resource_id="task-store", mode="shared_read"),),
-    "task_update": (ResourceClaim(resource_id="task-store", mode="exclusive"),),
-    "task_complete": (ResourceClaim(resource_id="task-store", mode="exclusive"),),
-    "mm_web_search": (ResourceClaim(resource_id="web", mode="counted", limit=3),),
-    "web_fetch": (ResourceClaim(resource_id="web", mode="counted", limit=3),),
-    "spawn": (ResourceClaim(resource_id="spawn", mode="counted", limit=2),),
+    "execute_bash": (ResourceClaim(resource="session", mode="exclusive"),),
+    "list_dir": (ResourceClaim(resource="session", mode="exclusive"),),
+    "glob": (ResourceClaim(resource="session", mode="exclusive"),),
+    "grep": (ResourceClaim(resource="session", mode="exclusive"),),
+    "read_file": (ResourceClaim(resource="workspace", mode="shared_read"),),
+    "write_file": (ResourceClaim(resource="workspace", mode="exclusive"),),
+    "edit_file": (ResourceClaim(resource="workspace", mode="exclusive"),),
+    "task_create": (ResourceClaim(resource="task-store", mode="exclusive"),),
+    "task_get": (ResourceClaim(resource="task-store", mode="shared_read"),),
+    "task_list": (ResourceClaim(resource="task-store", mode="shared_read"),),
+    "task_update": (ResourceClaim(resource="task-store", mode="exclusive"),),
+    "task_complete": (ResourceClaim(resource="task-store", mode="exclusive"),),
+    "mm_web_search": (ResourceClaim(resource="web", mode="counted", max_concurrent=3),),
+    "web_fetch": (ResourceClaim(resource="web", mode="counted", max_concurrent=3),),
+    "spawn": (ResourceClaim(resource="spawn", mode="counted", max_concurrent=2),),
     "monitor_job": (
-        ResourceClaim(resource_id="workspace", mode="exclusive"),
-        ResourceClaim(resource_id="artifact-sync", mode="exclusive"),
+        ResourceClaim(resource="workspace", mode="exclusive"),
+        ResourceClaim(resource="artifact-sync", mode="exclusive"),
     ),
 }
 
 BUILTIN_META: dict[str, tuple[ToolPlane, str, bool, int]] = {
     "execute_bash": (ToolPlane.SESSION_SHELL, "local_mutation", False, 12000),
-    "list_dir": (ToolPlane.SESSION_SHELL, "pure_read", True, 8000),
-    "glob": (ToolPlane.SESSION_SHELL, "pure_read", True, 8000),
-    "grep": (ToolPlane.SESSION_SHELL, "pure_read", True, 8000),
-    "read_file": (ToolPlane.SESSION_FS, "pure_read", True, 12000),
+    "list_dir": (ToolPlane.SESSION_SHELL, "none", True, 8000),
+    "glob": (ToolPlane.SESSION_SHELL, "none", True, 8000),
+    "grep": (ToolPlane.SESSION_SHELL, "none", True, 8000),
+    "read_file": (ToolPlane.SESSION_FS, "none", True, 12000),
     "write_file": (ToolPlane.SESSION_FS, "local_mutation", False, 0),
     "edit_file": (ToolPlane.SESSION_FS, "local_mutation", False, 0),
     "task_create": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
-    "task_get": (ToolPlane.CONTROL_PLANE, "pure_read", True, 0),
-    "task_list": (ToolPlane.CONTROL_PLANE, "pure_read", True, 0),
+    "task_get": (ToolPlane.CONTROL_PLANE, "none", True, 0),
+    "task_list": (ToolPlane.CONTROL_PLANE, "none", True, 0),
     "task_update": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
     "task_complete": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
-    "mm_web_search": (ToolPlane.EXTERNAL_SERVICE, "external_write", False, 0),
-    "web_fetch": (ToolPlane.EXTERNAL_SERVICE, "external_write", False, 16000),
+    "mm_web_search": (ToolPlane.EXTERNAL_SERVICE, "external_effect", False, 0),
+    "web_fetch": (ToolPlane.EXTERNAL_SERVICE, "external_effect", False, 16000),
     "spawn": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
-    "monitor_job": (ToolPlane.SESSION_FS, "external_write", False, 0),
+    "monitor_job": (ToolPlane.SESSION_FS, "external_effect", False, 0),
 }
 
 
@@ -72,7 +72,7 @@ class ToolCompiler:
             and topology.session_capabilities.shell_persistence == "stateless"
             and tool.name in ("list_dir", "glob", "grep")
         ):
-            claims = (ResourceClaim(resource_id="session", mode="shared_read"),)
+            claims = (ResourceClaim(resource="session", mode="shared_read"),)
         plane, effect_level, fast_path, max_result_chars = BUILTIN_META.get(
             tool.name,
             (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),

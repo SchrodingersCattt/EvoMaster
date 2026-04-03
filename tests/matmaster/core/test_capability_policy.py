@@ -78,7 +78,7 @@ class TestEffectLevel:
 
     def test_deny_external_write_without_external_plane(self) -> None:
         """external_write effect with no EXTERNAL_SERVICE plane -> deny + guidance."""
-        instance = _make_instance(effect_level="external_write")
+        instance = _make_instance(effect_level="external_effect")
         topo = _make_topology(
             active_planes=frozenset({ToolPlane.CONTROL_PLANE}),
         )
@@ -91,7 +91,7 @@ class TestEffectLevel:
 
     def test_allow_external_write_with_external_plane(self) -> None:
         """external_write effect with EXTERNAL_SERVICE plane active -> allow."""
-        instance = _make_instance(effect_level="external_write")
+        instance = _make_instance(effect_level="external_effect")
         topo = _make_topology(
             active_planes=frozenset({
                 ToolPlane.CONTROL_PLANE,
@@ -104,7 +104,7 @@ class TestEffectLevel:
 
     def test_allow_pure_read(self) -> None:
         """pure_read effect -> allow."""
-        instance = _make_instance(effect_level="pure_read")
+        instance = _make_instance(effect_level="none")
         topo = _make_topology()
         result = self.policy.evaluate(topo, instance, {})
 
@@ -128,7 +128,7 @@ class TestEffectLevelWithRealBuiltinMeta:
 
         for tool_name in ("mm_web_search", "web_fetch", "monitor_job"):
             _plane, effect_level, _fast, *_rest = BUILTIN_META[tool_name]
-            assert effect_level == "external_write", (
+            assert effect_level == "external_effect", (
                 f"{tool_name} effect_level={effect_level!r}, "
                 "expected 'external_write'"
             )
