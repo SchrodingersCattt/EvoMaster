@@ -10,7 +10,6 @@ from matmaster.tools.builtin.glob_tool import GlobTool
 from matmaster.tools.builtin.grep_tool import GrepTool
 from matmaster.tools.builtin.listdir_tool import ListDirTool
 from matmaster.tools.builtin.read_tool import ReadTool
-from matmaster.tools.builtin.read_tracker import ReadTracker
 from matmaster.tools.builtin.spawn_tool import SpawnTool
 from matmaster.tools.builtin.task import (
     TaskCompleteTool,
@@ -31,7 +30,6 @@ __all__ = [
     "GrepTool",
     "ListDirTool",
     "ReadTool",
-    "ReadTracker",
     "SpawnTool",
     "WriteTool",
     "TaskCompleteTool",

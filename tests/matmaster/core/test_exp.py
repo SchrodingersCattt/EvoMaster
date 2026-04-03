@@ -16,6 +16,7 @@ from matmaster.types.runtime import (
     AgentRuntimeSpec,
 )
 from matmaster.types.session import Session
+from matmaster.types.tool_runner_state import ToolRunnerState
 from tests.matmaster.core.conftest import MockLLMProvider
 
 
@@ -161,6 +162,57 @@ class TestExpBuildRuntime:
             runtime = await exp.build_runtime(ctx)
 
         assert callable(runtime.cleanup)
+
+    async def test_tool_runner_state_cleanup_registered(self, tmp_path: Path) -> None:
+        exp = Exp(
+            ExpConfig(
+                name="test",
+                tools=ExpToolsConfig(builtin=["read_file"]),
+            )
+        )
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=MagicMock(spec=Session),
+            llm_provider=MockLLMProvider(),
+        )
+
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
+
+        assert exp._cleanup_callbacks
+        state = runtime.spec.tool_runner.state
+        assert isinstance(state, ToolRunnerState)
+
+        matching_callbacks = [
+            cb for cb in exp._cleanup_callbacks if getattr(cb, "__self__", None) is state
+        ]
+        assert matching_callbacks
+
+    async def test_collects_tool_prompts_into_system_prompt(self, tmp_path: Path) -> None:
+        exp = Exp(
+            ExpConfig(
+                name="test",
+                system_prompt="Base persona text.",
+                tools=ExpToolsConfig(builtin=["execute_bash"]),
+            )
+        )
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=MagicMock(spec=Session),
+            llm_provider=MockLLMProvider(),
+        )
+
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
+
+        assert "Base persona text." in runtime.spec.system_prompt
+        assert "Do not use bash for:" in runtime.spec.system_prompt
 
 
 # ── TestExpCleanup ───────────────────────────────────────
@@ -333,18 +385,6 @@ class TestExpBuiltinTools:
         """WebSearchTool is registered as native builtin (not evo adapter)."""
         _, registry = self._build_registry(tmp_path)
         assert 'mm_web_search' in registry
-
-    def test_read_tracker_cleanup_registered(self, tmp_path: Path) -> None:
-        """ReadTracker.clear is registered as a cleanup callback after _init_builtin_tools."""
-        exp, _ = self._build_registry(tmp_path)
-        # At least one cleanup callback should be registered (ReadTracker.clear)
-        assert len(exp._cleanup_callbacks) >= 1
-        # The callback should be the bound clear method of a ReadTracker instance
-        cb = exp._cleanup_callbacks[-1]
-        assert hasattr(cb, '__self__')
-        from matmaster.tools.builtin import ReadTracker
-
-        assert isinstance(cb.__self__, ReadTracker)
 
     def test_init_builtin_tools_no_session(self, tmp_path: Path) -> None:
         """session=None skips all tool registration."""

@@ -65,10 +65,10 @@ class TestWriteToolExecution:
         assert "File written successfully" in result
         mock_session.write_file.assert_called_once()
 
-    async def test_write_no_tracker(self, mock_session: MagicMock) -> None:
-        """No tracker -- writes without enforcement."""
+    async def test_write_without_runner_state_executes(self, mock_session: MagicMock) -> None:
+        """Execution path stays independent from runner_state enforcement."""
         mock_session.path_exists.return_value = True
-        tool = WriteTool(session=mock_session, tracker=None)
+        tool = WriteTool(session=mock_session)
         result = await tool.execute(
             {"file_path": "/workspace/exist.py", "content": "anything"}
         )

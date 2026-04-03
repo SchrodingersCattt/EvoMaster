@@ -123,9 +123,9 @@ class TestEditToolExecution:
         assert "has been edited" in result
         mock_session.write_file.assert_called_once()
 
-    async def test_no_tracker(self, mock_session: MagicMock) -> None:
-        """Compatibility tracker param is accepted and ignored."""
-        tool = EditTool(session=mock_session, tracker=None)
+    async def test_execute_without_runner_state_argument(self, mock_session: MagicMock) -> None:
+        """Execution path stays independent from runner_state enforcement."""
+        tool = EditTool(session=mock_session)
         result = await tool.execute(
             {
                 "file_path": "/workspace/test.py",

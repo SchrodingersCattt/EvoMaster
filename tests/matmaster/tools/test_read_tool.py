@@ -251,8 +251,8 @@ class TestValidation:
         assert "Error" in result
         assert "session" in result.lower()
 
-    async def test_no_tracker(self, mock_session: MagicMock) -> None:
-        tool = ReadTool(session=mock_session, tracker=None)
+    async def test_execute_without_extra_state_argument(self, mock_session: MagicMock) -> None:
+        tool = ReadTool(session=mock_session)
         result = await tool.execute({"file_path": "/workspace/a.py"})
         assert "cat -n" in result
 

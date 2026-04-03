@@ -50,7 +50,6 @@ class Exp:
         self._config = config
         self._cleanup_callbacks: list[Callable[[], Any]] = []
         self._skill_registry: Any = None
-        self._read_tracker: Any = None  # Set by _init_builtin_tools, used in build_runtime
         self.logger = logging.getLogger(self.__class__.__name__)
 
     # ── Properties ───────────────────────────────────────
@@ -255,6 +254,18 @@ class Exp:
             skill_registry=self._skill_registry,
         )
 
+        from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+        from matmaster.types.tool_runner_state import ToolRunnerState
+
+        desc_ctx = ToolDescriptionContext(
+            session_kind=topology.session_kind,
+            workspace_root=topology.workspace_root,
+            topology=topology,
+        )
+        tool_prompts = catalog.collect_prompts(desc_ctx)
+        if tool_prompts:
+            system_prompt = f"{system_prompt}\n\n{tool_prompts}"
+
         # 6. Hooks (EventEmitterHook retired in Phase 34; generator events replace it)
         hooks = list(spec.hooks)
 
@@ -284,25 +295,23 @@ class Exp:
                 event_sink=None,  # _run_items() injects a local deque-backed sink
             )
 
-        # 6. Guards: inject ReadBeforeModifyGuard if tracker exists
         guards = list(spec.guards)
-        if self._read_tracker is not None:
-            from matmaster.core.guard_pipeline import ReadBeforeModifyGuard
-
-            guards.append(ReadBeforeModifyGuard())
 
         # 8. Build FullToolRunner (ESIN-04: default execution path)
         structural_validation = StructuralValidation()
         capability_policy = DefaultCapabilityPolicy()
         scheduler = ToolScheduler()
+        runner_state = ToolRunnerState()
+        self._register_cleanup(runner_state.clear)
 
         full_runner = FullToolRunner(
             catalog=catalog,
             structural_validation=structural_validation,
-            guard_pipeline=GuardPipeline(guards, read_tracker=self._read_tracker),
+            guard_pipeline=GuardPipeline(guards),
             capability_policy=capability_policy,
             scheduler=scheduler,
             topology=topology,
+            state=runner_state,
         )
 
         # 9. Assemble final spec with all v2 fields
@@ -317,7 +326,6 @@ class Exp:
                 'hooks': hooks,
                 'compactor': compactor,
                 'guards': guards,
-                'read_tracker': self._read_tracker,
             }
         )
 
@@ -431,7 +439,6 @@ class Exp:
             GrepTool,
             ListDirTool,
             ReadTool,
-            ReadTracker,
             TaskCompleteTool,
             TaskCreateTool,
             TaskGetTool,
@@ -442,19 +449,13 @@ class Exp:
             WriteTool,
         )
 
-        # Create ReadTracker shared instance for Read-Before-Modify protocol.
-        # Shared between: ReadTool (marks reads), WriteTool (validate_input),
-        # GuardPipeline (via ReadBeforeModifyGuard for edit_file).
-        tracker = ReadTracker()
-        self._read_tracker = tracker  # Expose for build_runtime guard injection
-
         exec_wd = Path(ctx.execution_workdir)
         native_tools = [
             BashTool(session=ctx.session, workdir=exec_wd),
             ListDirTool(session=ctx.session, workdir=exec_wd),
-            ReadTool(session=ctx.session, workdir=exec_wd, tracker=tracker),
-            WriteTool(session=ctx.session, workdir=exec_wd, tracker=tracker),
-            EditTool(session=ctx.session, workdir=exec_wd, tracker=tracker),
+            ReadTool(session=ctx.session, workdir=exec_wd),
+            WriteTool(session=ctx.session, workdir=exec_wd),
+            EditTool(session=ctx.session, workdir=exec_wd),
             GlobTool(session=ctx.session, workdir=exec_wd),
             GrepTool(session=ctx.session, workdir=exec_wd),
             # Task tools stay on the local control-plane workdir (not execution_workdir):
@@ -473,11 +474,6 @@ class Exp:
             if _want(tool.name):
                 registry.register(tool, source='builtin')
                 registered_native.append(tool)
-
-        # Register tracker cleanup only when tracker-dependent tools are active
-        _TRACKER_NAMES = {'read_file', 'write_file', 'edit_file'}
-        if any(t.name in _TRACKER_NAMES for t in registered_native):
-            self._register_cleanup(tracker.clear)
 
         # 2. Additional builtin tools (science-specific, per D-10)
         from matmaster.tools.builtin.monitor_job import MonitorJobTool

@@ -18,7 +18,6 @@ from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 from matmaster.types.topology import ToolPlane
 
 from .base import BuiltinTool
-from .read_tracker import ReadTracker
 
 MAX_READ_LINES = 2000
 MAX_READ_CHARS = 200_000
@@ -74,11 +73,8 @@ class ReadTool(BuiltinTool):
         *,
         session: Any | None = None,
         workdir: Any | None = None,
-        tracker: ReadTracker | None = None,
     ) -> None:
         super().__init__(session=session, workdir=workdir)
-        # Temporary compatibility: accept tracker until Exp stops passing it.
-        self._compat_tracker = tracker
 
     # ------------------------------------------------------------------
     # Core execution

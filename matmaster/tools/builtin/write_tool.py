@@ -20,7 +20,6 @@ from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
 from .base import BuiltinTool
-from .read_tracker import ReadTracker
 
 
 class WriteTool(BuiltinTool):
@@ -60,11 +59,8 @@ class WriteTool(BuiltinTool):
         *,
         session: Any | None = None,
         workdir: Any | None = None,
-        tracker: ReadTracker | None = None,
     ) -> None:
         super().__init__(session=session, workdir=workdir)
-        # Temporary compatibility: accept tracker until Exp stops passing it.
-        self._compat_tracker = tracker
 
     async def validate_input(
         self,

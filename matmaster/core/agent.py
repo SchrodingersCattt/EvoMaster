@@ -237,7 +237,18 @@ class AgentKernel:
                     spec.tool_catalog is not None
                     and hasattr(spec.tool_catalog, 'build_definitions')
                 ):
-                    state.cached_tool_definitions = spec.tool_catalog.build_definitions()
+                    from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+
+                    desc_ctx = None
+                    if spec.runtime_topology is not None:
+                        desc_ctx = ToolDescriptionContext(
+                            session_kind=spec.runtime_topology.session_kind,
+                            workspace_root=spec.runtime_topology.workspace_root,
+                            topology=spec.runtime_topology,
+                        )
+                    state.cached_tool_definitions = spec.tool_catalog.build_definitions(
+                        desc_ctx
+                    )
 
             tool_defs = state.cached_tool_definitions
 

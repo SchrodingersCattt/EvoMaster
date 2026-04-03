@@ -9,6 +9,28 @@ from matmaster.core.capability_policy import (
     is_dangerous_bash_command,
     is_dangerous_python_content,
 )
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
+
+
+class _ExternalEffectTool:
+    """Self-describing external tool for capability-policy tests."""
+
+    name = "web_fetch"
+    description = "fetch"
+    json_schema: dict = {"type": "object", "properties": {}}
+    resource_claims = (ResourceClaim(resource="network", mode="shared_read"),)
+    capabilities = frozenset({"network.read"})
+    effect_level = "external_effect"
+    fast_path_eligible = False
+    max_result_chars = 12000
+    plane = ToolPlane.EXTERNAL_SERVICE
+    state_mode = "stateless"
+    stop_mode = "best_effort"
+    exposed_to_model = True
+
+    async def execute(self, arguments):
+        return "ok"
 
 
 # ── is_dangerous_bash_command unit tests ─────────────────
@@ -119,7 +141,7 @@ class TestCapabilityPolicyExternalEffect:
     def test_external_effect_tool_denied_without_external_service_plane(self) -> None:
         """external_effect tools denied when EXTERNAL_SERVICE plane is not active."""
         from matmaster.tools.tool_compiler import ToolCompiler
-        from matmaster.types.topology import RuntimeTopology, ToolPlane
+        from matmaster.types.topology import RuntimeTopology
 
         topology_without_external = RuntimeTopology(
             session_kind="local",
@@ -128,21 +150,17 @@ class TestCapabilityPolicyExternalEffect:
             active_planes=frozenset({ToolPlane.CONTROL_PLANE, ToolPlane.SESSION_FS}),
         )
 
-        class _FakeTool:
-            name = "web_fetch"
-            description = "fetch"
-            json_schema: dict = {"type": "object", "properties": {}}
-
-            async def execute(self, arguments):
-                return "ok"
-
         topology_for_compile = RuntimeTopology(
             session_kind="local",
             control_root="/tmp/ctrl",
             workspace_root="/tmp/ws",
             active_planes=frozenset(ToolPlane),
         )
-        instance = ToolCompiler().compile(_FakeTool(), topology_for_compile, source="builtin")
+        instance = ToolCompiler().compile(
+            _ExternalEffectTool(),
+            topology_for_compile,
+            source="builtin",
+        )
 
         policy = DefaultCapabilityPolicy()
         decision = policy.evaluate(topology_without_external, instance, {})
@@ -151,7 +169,7 @@ class TestCapabilityPolicyExternalEffect:
     def test_external_effect_tool_allowed_with_external_service_plane(self) -> None:
         """external_effect tools allowed when EXTERNAL_SERVICE plane is active."""
         from matmaster.tools.tool_compiler import ToolCompiler
-        from matmaster.types.topology import RuntimeTopology, ToolPlane
+        from matmaster.types.topology import RuntimeTopology
 
         topology_with_external = RuntimeTopology(
             session_kind="local",
@@ -159,16 +177,11 @@ class TestCapabilityPolicyExternalEffect:
             workspace_root="/tmp/ws",
             active_planes=frozenset(ToolPlane),
         )
-
-        class _FakeTool:
-            name = "web_fetch"
-            description = "fetch"
-            json_schema: dict = {"type": "object", "properties": {}}
-
-            async def execute(self, arguments):
-                return "ok"
-
-        instance = ToolCompiler().compile(_FakeTool(), topology_with_external, source="builtin")
+        instance = ToolCompiler().compile(
+            _ExternalEffectTool(),
+            topology_with_external,
+            source="builtin",
+        )
 
         policy = DefaultCapabilityPolicy()
         decision = policy.evaluate(topology_with_external, instance, {})
