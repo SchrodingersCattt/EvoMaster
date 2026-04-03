@@ -1,14 +1,16 @@
-"""ESIN-02 / DBUS-02: Integration tests for AgentRunService.run_agent_stream().
+"""DBUS-03: Integration tests for AgentRunService.run_agent() (single entrypoint).
 
 Verifies the generator event -> fanout dispatch, source normalization,
 StreamClosedEvent emission, error handling, and worker-mode send_cb
 live delivery through SSEHandler.
+
+After Plan 02 collapse, run_agent_stream() no longer exists;
+all tests exercise run_agent() exclusively.
 """
 
 from __future__ import annotations
 
 import asyncio
-import threading
 from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -85,11 +87,11 @@ class _FakeExp:
 
 
 # ---------------------------------------------------------------------------
-# Patches: Isolate run_agent_stream from heavy infrastructure
+# Patches: Isolate run_agent from heavy infrastructure
 # ---------------------------------------------------------------------------
 
 def _standard_patches():
-    """Return a list of patch context managers for isolating run_agent_stream."""
+    """Return a list of patch context managers for isolating run_agent."""
     return [
         patch('src.services.agent_run_service.PlaygroundManager'),
         patch('src.services.agent_run_service.get_chat_events_table'),
@@ -109,7 +111,7 @@ def _standard_patches():
 async def _patched_service(events: list[Any], *, send_cb: Any = None):
     """Set up an AgentRunService with all infra patched.
 
-    Yields (service, fanout_spy) where fanout_spy captures dispatched events.
+    Yields (service, sse_received, persist_received).
     """
     patches = _standard_patches()
     mocks = []
@@ -198,8 +200,16 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
 
 
 # ---------------------------------------------------------------------------
-# Tests: Event dispatch through fanout
+# Tests: All via run_agent() -- no run_agent_stream() alias
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_agent_stream_method_does_not_exist():
+    """After Plan 02, run_agent_stream() must not exist on AgentRunService."""
+    from src.services.agent_run_service import AgentRunService
+    assert not hasattr(AgentRunService, 'run_agent_stream'), \
+        "run_agent_stream() should be removed; run_agent() is the sole entrypoint"
 
 
 @pytest.mark.asyncio
@@ -210,7 +220,7 @@ async def test_stream_events_reach_handlers_via_fanout():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([thought, response, run_result]) as (svc, sse_events, persist_events):
-        result = await svc.run_agent_stream(
+        result = await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
@@ -235,7 +245,7 @@ async def test_source_normalization_on_events():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([thought, run_result]) as (svc, sse_events, _):
-        await svc.run_agent_stream(
+        await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
@@ -258,7 +268,7 @@ async def test_stream_closed_after_run_result():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([run_result]) as (svc, sse_events, _):
-        await svc.run_agent_stream(
+        await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
@@ -281,7 +291,7 @@ async def test_cancelled_run_emits_cancelled_and_closed():
     run_result = RunResultEvent(source='agent', status='cancelled', reason='cancelled')
 
     async with _patched_service([run_result]) as (svc, sse_events, _):
-        result = await svc.run_agent_stream(
+        result = await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
@@ -378,7 +388,7 @@ async def test_exception_emits_error_and_closed():
             svc._sessions_service = MagicMock()
             svc._pg_manager = pg_mgr
 
-            result = await svc.run_agent_stream(
+            result = await svc.run_agent(
                 session_id='s1',
                 user_prompt='hi',
                 send_cb=AsyncMock(),
@@ -400,7 +410,7 @@ async def test_successful_run_returns_true():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([run_result]) as (svc, _, __):
-        result = await svc.run_agent_stream(
+        result = await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
@@ -421,7 +431,7 @@ async def test_failed_run_returns_false_with_reason():
     run_result = RunResultEvent(source='agent', status='failed', reason='max_turns')
 
     async with _patched_service([run_result]) as (svc, _, __):
-        result = await svc.run_agent_stream(
+        result = await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
@@ -446,7 +456,7 @@ async def test_worker_mode_send_cb_receives_live_events():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([thought, run_result]) as (svc, sse_events, _):
-        result = await svc.run_agent_stream(
+        result = await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
@@ -472,7 +482,7 @@ async def test_persistence_receives_events():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([thought, run_result]) as (svc, _, persist_events):
-        result = await svc.run_agent_stream(
+        result = await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
