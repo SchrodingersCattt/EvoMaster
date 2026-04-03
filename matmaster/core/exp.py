@@ -2,16 +2,16 @@
 
 Exp is a concrete class that transforms an ExpConfig + PlaygroundContext
 into an AgentRuntimeSpec (assemble), builds runtime resources (build_runtime),
-and executes the agent loop (run).
+and executes the agent loop (run_stream).
 
 Three-phase lifecycle:
 1. assemble(ctx) -- pure data transform: config + ctx -> AgentRuntimeSpec
 2. build_runtime(ctx) -- resource creation: tools, prompt, kernel -> AgentRuntime
-3. run(ctx, task, ...) -- build_runtime -> kernel.run -> cleanup
+3. run_stream(ctx, task, ...) -- build_runtime -> kernel.run_stream -> cleanup
 
 Cleanup: Exp owns capability resource cleanup via _cleanup_callbacks.
-run() wraps kernel.run in try/finally to guarantee cleanup even when the
-kernel raises.
+run_stream() wraps kernel.run_stream in try/finally to guarantee cleanup
+even when the kernel raises.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
+from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
 
 if TYPE_CHECKING:
     from matmaster.types.messages import Message
@@ -43,7 +43,7 @@ class Exp:
 
     assemble() is a pure data transform: config + ctx -> AgentRuntimeSpec.
     build_runtime() creates resources (ToolRegistry, ContextBuilder, Kernel).
-    run() delegates to build_runtime then kernel.run with cleanup guarantee.
+    run_stream() delegates to build_runtime then kernel.run_stream with cleanup guarantee.
     """
 
     def __init__(self, config: ExpConfig) -> None:
@@ -351,46 +351,7 @@ class Exp:
             'timeout': profile.timeout,
         }
 
-    # ── Phase 3: run ─────────────────────────────────────
-
-    async def run(
-        self,
-        ctx: PlaygroundContext,
-        task: str,
-        *,
-        history: list[Message] | None = None,
-        stop_event: threading.Event | None = None,
-        skills: dict[str, Any] | None = None,
-        source_override: str | None = None,
-        spawn_id: str | None = None,
-    ) -> KernelResult:
-        """build_runtime -> kernel.run -> cleanup.
-
-        try/finally starts before build_runtime so that partial build
-        failures (callbacks already registered) still trigger cleanup.
-        """
-        try:
-            runtime = await self.build_runtime(
-                ctx,
-                skills=skills,
-                source_override=source_override,
-                spawn_id=spawn_id,
-            )
-            if ctx.session is not None:
-                ctx.session._stop_event = stop_event
-
-            # Inject stop_event into tools for cancel propagation.
-            catalog = getattr(runtime.spec, "tool_catalog", None)
-            if stop_event is not None and catalog is not None:
-                catalog.inject_stop_event(stop_event)
-            result = await runtime.kernel.run(
-                runtime.spec, task, history=history, stop_event=stop_event
-            )
-            return result.result
-        finally:
-            await self._run_cleanup_callbacks()
-
-    # ── Phase 3b: run_stream ──────────────────────────────
+    # ── Phase 3: run_stream ────────────────────────────────
 
     async def run_stream(
         self,
