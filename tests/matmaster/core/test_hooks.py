@@ -220,6 +220,52 @@ class TestHookShortCircuit:
         assert h1.post_tool_call_called is True
         assert h2.post_tool_call_called is True
 
+    async def test_post_tool_call_returns_rewritten_result(
+        self, sample_tool_call: ToolCallData
+    ) -> None:
+        """post_tool_call hook can rewrite the ToolResult."""
+
+        class RewritingHook(BaseHook):
+            async def post_tool_call(
+                self, tool_call: ToolCallData, result: ToolResult
+            ) -> ToolResult | None:
+                return ToolResult(content=result.content + " :: rewritten")
+
+        rewritten = await run_post_tool_call(
+            [RewritingHook()], sample_tool_call, ToolResult(content="raw")
+        )
+        assert rewritten.content == "raw :: rewritten"
+
+    async def test_post_tool_call_chain_rewrite(
+        self, sample_tool_call: ToolCallData
+    ) -> None:
+        """Multiple hooks chain rewrites sequentially."""
+
+        class AppendHook(BaseHook):
+            def __init__(self, suffix: str) -> None:
+                self._suffix = suffix
+
+            async def post_tool_call(
+                self, tool_call: ToolCallData, result: ToolResult
+            ) -> ToolResult | None:
+                return ToolResult(content=result.content + self._suffix)
+
+        result = await run_post_tool_call(
+            [AppendHook(" A"), AppendHook(" B")],
+            sample_tool_call,
+            ToolResult(content="raw"),
+        )
+        assert result.content == "raw A B"
+
+    async def test_post_tool_call_none_preserves_result(
+        self, sample_tool_call: ToolCallData
+    ) -> None:
+        """Hook returning None preserves the current result."""
+        result = await run_post_tool_call(
+            [BaseHook()], sample_tool_call, ToolResult(content="unchanged")
+        )
+        assert result.content == "unchanged"
+
     async def test_pre_llm_call_calls_all(self, sample_messages: list[Message]) -> None:
         """Observation hook -- both hooks called (no short-circuit)."""
         h1 = TrackingHook()

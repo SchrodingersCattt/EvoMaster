@@ -107,6 +107,15 @@ class SkillHitEvent(EventBase):
     skill_name: str
 
 
+class ToolProgressEvent(EventBase):
+    """Streamed progress from a running tool (e.g., bash stdout lines)."""
+
+    type: Literal["tool_progress"] = "tool_progress"
+    call_id: str
+    tool_name: str
+    content: str = ""
+
+
 # ── SystemEvent: service-layer events ───────────────────
 
 
@@ -211,6 +220,7 @@ AgentEvent = Annotated[
         ErrorEvent,
         AssistantStateEvent,
         SkillHitEvent,
+        ToolProgressEvent,
     ],
     Field(discriminator="type"),
 ]
@@ -242,6 +252,7 @@ BusEvent = Annotated[
         ErrorEvent,
         AssistantStateEvent,
         SkillHitEvent,
+        ToolProgressEvent,
         # SystemEvent types
         ConfirmationRequestEvent,
         ConfirmationTimeoutEvent,

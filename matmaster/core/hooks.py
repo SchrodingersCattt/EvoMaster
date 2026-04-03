@@ -46,7 +46,7 @@ class Hook(Protocol):
 
     async def post_tool_call(
         self, tool_call: ToolCallData, result: ToolResult
-    ) -> None: ...
+    ) -> ToolResult | None: ...
 
     async def pre_llm_call(self, messages: list[Message], turn: int) -> None: ...
 
@@ -73,8 +73,11 @@ class BaseHook:
         """Default: allow tool call to proceed."""
         return HookAction.CONTINUE
 
-    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
-        """Default: no-op observation."""
+    async def post_tool_call(
+        self, tool_call: ToolCallData, result: ToolResult
+    ) -> ToolResult | None:
+        """Default: return None (no replacement)."""
+        return None
 
     async def pre_llm_call(self, messages: list[Message], turn: int) -> None:
         """Default: no-op observation."""
@@ -137,10 +140,19 @@ async def run_pre_llm_call(
 
 async def run_post_tool_call(
     hooks: list[Hook], tool_call: ToolCallData, result: ToolResult
-) -> None:
-    """Run post_tool_call on all hooks (observation, no short-circuit)."""
+) -> ToolResult:
+    """Run post_tool_call hooks as a serial rewrite chain.
+
+    Each hook receives the current result and may return a replacement.
+    If a hook returns None, the current result is unchanged.
+    Returns the final (possibly rewritten) ToolResult.
+    """
+    current = result
     for hook in hooks:
-        await hook.post_tool_call(tool_call, result)
+        replacement = await hook.post_tool_call(tool_call, current)
+        if replacement is not None:
+            current = replacement
+    return current
 
 
 async def run_on_stream_chunk(hooks: list[Hook], chunk: StreamChunk) -> None:
