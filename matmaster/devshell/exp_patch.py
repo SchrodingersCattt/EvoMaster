@@ -3,8 +3,8 @@
 ``load_exp_config("direct")`` is the single source of truth for tools / max_turns /
 developer text. We override ``[skills].skills_root`` to struct-DB + structure-gen
 lazymcp stubs (no ``playground/mat_master/skills`` scan), and set
-``mcp_runtime_patch.tool_include_only.mat_sg`` so only ``build_surface_slab`` and
-``generate_ordered_replicas`` are exposed from the structure-generator MCP server.
+``mcp_runtime_patch.tool_include_only.mat_sg`` so only ``generate_ordered_replicas``
+is exposed from the structure-generator MCP server.
 
 - **Omit ``--exp`` or ``--exp devshell``**: ``direct`` + patch below.
 - **``--exp direct``**: unpatched ``direct.toml`` (same as production skill trees).
@@ -18,11 +18,8 @@ from matmaster.config.exp import ExpConfig
 STRUCT_DB_LAZYMCP_ROOT = "matmaster/skills/lazymcp/mcp-mat-struct-db"
 STRUCT_GEN_LAZYMCP_ROOT = "matmaster/skills/lazymcp/mcp-mat-sg"
 
-# Devshell: surface/slab + ordered replicas from mat_sg (sync tools, local-friendly).
-DEVSHELL_MAT_SG_TOOLS = (
-    "build_surface_slab",
-    "generate_ordered_replicas",
-)
+# Devshell: ordered replicas from mat_sg (sync, local-friendly); no surface/slab cut tool.
+DEVSHELL_MAT_SG_TOOLS = ("generate_ordered_replicas",)
 
 
 def patch_direct_skills_for_devshell_default(exp_cfg: ExpConfig) -> ExpConfig:
