@@ -1,7 +1,7 @@
 """ReadTool -- read remote file content via session.
 
 Returns line-numbered output (cat -n format). Supports offset/limit
-for partial reads. Conditional mark_read via ReadTracker:
+for partial reads. Conditional mark_read via ToolRunnerState:
 - Full-read within limit: mark_read
 - Full-read overlimit (error + preview): no mark_read
 - Ranged read (offset/limit): mark_read only if not char-truncated
@@ -9,8 +9,13 @@ for partial reads. Conditional mark_read via ReadTracker:
 
 from __future__ import annotations
 
+import asyncio
 import posixpath
 from typing import Any, ClassVar
+
+from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
+from matmaster.types.topology import ToolPlane
 
 from .base import BuiltinTool
 from .read_tracker import ReadTracker
@@ -55,6 +60,14 @@ class ReadTool(BuiltinTool):
         },
         "required": ["file_path"],
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="workspace", mode="shared_read"),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset({"workspace.read"})
+    effect_level: ClassVar[str] = "none"
+    fast_path_eligible: ClassVar[bool] = True
+    max_result_chars: ClassVar[int] = 12000
+    plane: ClassVar[ToolPlane] = ToolPlane.SESSION_FS
 
     def __init__(
         self,
@@ -64,13 +77,33 @@ class ReadTool(BuiltinTool):
         tracker: ReadTracker | None = None,
     ) -> None:
         super().__init__(session=session, workdir=workdir)
-        self._tracker = tracker
+        # Temporary compatibility: accept tracker until Exp stops passing it.
+        self._compat_tracker = tracker
 
     # ------------------------------------------------------------------
     # Core execution
     # ------------------------------------------------------------------
 
     def _execute(self, arguments: dict[str, Any]) -> str:
+        return self._execute_internal(arguments).content
+
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: ToolExecutionContext | None,
+    ) -> ToolResult:
+        result = await asyncio.to_thread(self._execute_internal, arguments)
+
+        if exec_ctx is not None and exec_ctx.runner_state is not None:
+            if result.meta.get("mark_read"):
+                path = posixpath.normpath(arguments.get("file_path", ""))
+                read_files = set(exec_ctx.runner_state.get("read_files", set()))
+                read_files.add(path)
+                exec_ctx.runner_state.set("read_files", read_files)
+
+        return result
+
+    def _execute_internal(self, arguments: dict[str, Any]) -> ToolResult:
         session = self._require_session()
 
         file_path: str = arguments.get("file_path", "")
@@ -79,13 +112,16 @@ class ReadTool(BuiltinTool):
 
         # --- parameter validation ---
         if offset is not None and offset < 1:
-            return "Error: offset must be >= 1."
+            return ToolResult(status="error", content="Error: offset must be >= 1.")
         if limit is not None and limit < 1:
-            return "Error: limit must be >= 1."
+            return ToolResult(status="error", content="Error: limit must be >= 1.")
 
         # --- file check ---
         if not session.is_file(file_path):
-            return f"Error: {file_path} is not a file"
+            return ToolResult(
+                status="error",
+                content=f"Error: {file_path} is not a file",
+            )
 
         # --- read content ---
         content: str = session.read_file(file_path)
@@ -103,13 +139,13 @@ class ReadTool(BuiltinTool):
     # Full-read mode
     # ------------------------------------------------------------------
 
-    def _full_read(self, file_path: str, lines: list[str], total: int) -> str:
+    def _full_read(self, file_path: str, lines: list[str], total: int) -> ToolResult:
         if total <= MAX_READ_LINES:
             output = self._format_lines(lines, file_path, init_line=1)
             truncated, result = self._apply_char_limit(output)
             if not truncated:
-                self._mark(file_path)
-            return result
+                return ToolResult(content=result, meta={"mark_read": True})
+            return ToolResult(content=result)
 
         # Overlimit: error + preview (no mark_read regardless)
         preview = lines[:PREVIEW_LINES]
@@ -122,7 +158,7 @@ class ReadTool(BuiltinTool):
             f"Preview (first {PREVIEW_LINES} lines):\n"
             f"{preview_text}"
         )
-        return result
+        return ToolResult(status="error", content=result)
 
     # ------------------------------------------------------------------
     # Ranged-read mode
@@ -135,11 +171,14 @@ class ReadTool(BuiltinTool):
         total: int,
         offset: int | None,
         limit: int | None,
-    ) -> str:
+    ) -> ToolResult:
         start = offset if offset is not None else 1
 
         if start < 1 or start > total:
-            return f"Error: offset {start} is out of range [1, {total}]."
+            return ToolResult(
+                status="error",
+                content=f"Error: offset {start} is out of range [1, {total}].",
+            )
 
         remaining = total - start + 1
         requested = limit if limit is not None else remaining
@@ -158,16 +197,12 @@ class ReadTool(BuiltinTool):
 
         truncated, result = self._apply_char_limit(output)
         if not truncated:
-            self._mark(file_path)
-        return result
+            return ToolResult(content=result, meta={"mark_read": True})
+        return ToolResult(content=result)
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
-    def _mark(self, file_path: str) -> None:
-        if self._tracker is not None:
-            self._tracker.mark_read(posixpath.normpath(file_path))
 
     @staticmethod
     def _format_lines(lines: list[str], descriptor: str, init_line: int = 1) -> str:

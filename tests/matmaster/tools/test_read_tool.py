@@ -12,8 +12,9 @@ from matmaster.tools.builtin.read_tool import (
     PREVIEW_LINES,
     ReadTool,
 )
-from matmaster.tools.builtin.read_tracker import ReadTracker
 from matmaster.tools.tool_registry import Tool
+from matmaster.types.tool_runner_state import ToolRunnerState
+from matmaster.types.tool_spec import ToolExecutionContext
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -92,22 +93,24 @@ class TestFullRead:
         # Does NOT contain lines beyond preview
         assert f"line{PREVIEW_LINES + 1}" not in result
 
-    async def test_tracker_marked_on_within_limit(
+    async def test_runner_state_marked_on_within_limit(
         self, mock_session: MagicMock
     ) -> None:
-        tracker = ReadTracker()
-        tool = ReadTool(session=mock_session, tracker=tracker)
-        await tool.execute({"file_path": "/workspace/a.py"})
-        assert tracker.has_been_read("/workspace/a.py") is True
+        tool = ReadTool(session=mock_session)
+        state = ToolRunnerState()
+        exec_ctx = ToolExecutionContext(runner_state=state)
+        await tool.execute_with_context({"file_path": "/workspace/a.py"}, exec_ctx)
+        assert "/workspace/a.py" in state.get("read_files", set())
 
-    async def test_tracker_not_marked_on_overlimit(self) -> None:
+    async def test_runner_state_not_marked_on_overlimit(self) -> None:
         session = MagicMock()
         session.is_file.return_value = True
         session.read_file.return_value = _make_content(MAX_READ_LINES + 100)
-        tracker = ReadTracker()
-        tool = ReadTool(session=session, tracker=tracker)
-        await tool.execute({"file_path": "/workspace/big.py"})
-        assert tracker.has_been_read("/workspace/big.py") is False
+        tool = ReadTool(session=session)
+        state = ToolRunnerState()
+        exec_ctx = ToolExecutionContext(runner_state=state)
+        await tool.execute_with_context({"file_path": "/workspace/big.py"}, exec_ctx)
+        assert "/workspace/big.py" not in state.get("read_files", set())
 
     async def test_read_empty_file(self) -> None:
         session = MagicMock()
@@ -192,11 +195,17 @@ class TestRangedRead:
         assert "cat -n" in result
         assert "[Note:" in result
 
-    async def test_tracker_marked_on_ranged_read(self, mock_session: MagicMock) -> None:
-        tracker = ReadTracker()
-        tool = ReadTool(session=mock_session, tracker=tracker)
-        await tool.execute({"file_path": "/workspace/a.py", "offset": 1, "limit": 3})
-        assert tracker.has_been_read("/workspace/a.py") is True
+    async def test_runner_state_marked_on_ranged_read(
+        self, mock_session: MagicMock
+    ) -> None:
+        tool = ReadTool(session=mock_session)
+        state = ToolRunnerState()
+        exec_ctx = ToolExecutionContext(runner_state=state)
+        await tool.execute_with_context(
+            {"file_path": "/workspace/a.py", "offset": 1, "limit": 3},
+            exec_ctx,
+        )
+        assert "/workspace/a.py" in state.get("read_files", set())
 
 
 # ---------------------------------------------------------------------------
@@ -208,11 +217,16 @@ class TestValidation:
     """Parameter validation."""
 
     async def test_offset_out_of_range(self, mock_session: MagicMock) -> None:
-        tracker = ReadTracker()
-        tool = ReadTool(session=mock_session, tracker=tracker)
-        result = await tool.execute({"file_path": "/workspace/a.py", "offset": 100})
-        assert "Error" in result
-        assert tracker.has_been_read("/workspace/a.py") is False
+        tool = ReadTool(session=mock_session)
+        state = ToolRunnerState()
+        exec_ctx = ToolExecutionContext(runner_state=state)
+        result = await tool.execute_with_context(
+            {"file_path": "/workspace/a.py", "offset": 100},
+            exec_ctx,
+        )
+        content = result.content if hasattr(result, "content") else result
+        assert "Error" in content
+        assert "/workspace/a.py" not in state.get("read_files", set())
 
     async def test_offset_zero_rejected(self, mock_session: MagicMock) -> None:
         tool = ReadTool(session=mock_session)
@@ -268,10 +282,13 @@ class TestCharLimit:
         session.is_file.return_value = True
         huge_line = "x" * (MAX_READ_CHARS // 5)
         session.read_file.return_value = "\n".join([huge_line] * 10)
-        tracker = ReadTracker()
-        tool = ReadTool(session=session, tracker=tracker)
-        result = await tool.execute(
-            {"file_path": "/workspace/huge.json", "offset": 1, "limit": 10}
+        tool = ReadTool(session=session)
+        state = ToolRunnerState()
+        exec_ctx = ToolExecutionContext(runner_state=state)
+        result = await tool.execute_with_context(
+            {"file_path": "/workspace/huge.json", "offset": 1, "limit": 10},
+            exec_ctx,
         )
-        assert "[Output truncated" in result
-        assert tracker.has_been_read("/workspace/huge.json") is False
+        content = result.content if hasattr(result, "content") else result
+        assert "[Output truncated" in content
+        assert "/workspace/huge.json" not in state.get("read_files", set())
