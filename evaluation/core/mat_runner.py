@@ -73,14 +73,18 @@ def run_mat_task(
     t0 = time.monotonic()
 
     async def _run() -> Any:
+        from matmaster.core.stream_drain import drain_run_stream
+
         try:
             runtime = await exp.build_runtime(pg_ctx)
-            return await runtime.kernel.run(runtime.spec, prompt)
+            return await drain_run_stream(
+                runtime.kernel.run_stream(runtime.spec, prompt)
+            )
         finally:
             await exp._run_cleanup_callbacks()
 
     try:
-        kernel_run_result = asyncio.run(_run())
+        drain_result = asyncio.run(_run())
     finally:
         try:
             session.close()
@@ -88,10 +92,9 @@ def run_mat_task(
             pass
     duration_ms = int((time.monotonic() - t0) * 1000)
 
-    # 6. Extract answer and tool calls from kernel result
-    result_obj = kernel_run_result.result
-    answer = result_obj.final_content or ""
-    tool_calls = _extract_tool_calls_from_messages(kernel_run_result.messages)
+    # 6. Extract answer and tool calls from drain result
+    answer = drain_result.final_content or ""
+    tool_calls = _extract_tool_calls_from_messages(drain_result.messages)
 
     # 7. Fallback: try trajectory file if answer is empty
     trajectory_path = _guess_trajectory_file(run_dir=run_dir, task_id=task_id)
@@ -108,13 +111,13 @@ def run_mat_task(
         "answer": answer,
         "tool_calls": tool_calls,
         "result": {
-            "status": result_obj.status,
-            "reason": result_obj.reason,
-            "num_turns": result_obj.num_turns,
-            "usage": result_obj.usage,
+            "status": drain_result.status,
+            "reason": drain_result.reason,
+            "num_turns": drain_result.num_turns,
+            "usage": drain_result.usage,
         },
         "trajectory_path": str(trajectory_path) if trajectory_path else "",
-        "status": result_obj.status,
+        "status": drain_result.status,
         "duration_ms": duration_ms,
     }
 
