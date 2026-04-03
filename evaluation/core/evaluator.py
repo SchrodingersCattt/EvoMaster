@@ -39,6 +39,7 @@ from .evaluator_helpers import (
     check_struct_file_stoichiometry_ratio,
     check_struct_file_surface_termination,
     check_token_budget,
+    check_turn_budget,
 )
 from .evaluator_prompts import BINARY_JUDGE_SYSTEM_PROMPT as _BINARY_JUDGE_SYSTEM_PROMPT
 from .evaluator_prompts import SAFETY_EVAL_SYSTEM_PROMPT as _SAFETY_EVAL_SYSTEM_PROMPT
@@ -417,6 +418,10 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return check_token_budget(evidence=evidence, expected=ref.value)
+        if item.verify == 'turn_budget':
+            if ref is None:
+                return False, 'missing reference answer'
+            return check_turn_budget(evidence=evidence, expected=ref.value)
         if item.verify == 'duration_budget':
             if ref is None:
                 return False, 'missing reference answer'

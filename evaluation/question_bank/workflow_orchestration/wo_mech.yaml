@@ -45,12 +45,15 @@ questions:
     value:
       min: 5
       max: 12
+  - key: turn_budget
+    value: &id000
+      max: 18
   - key: duration_budget
     value: &id001
       max: 7200000
   - key: token_budget_total
     value: &id002
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: a0_A
     criterion: Equilibrium lattice constant is in range.
@@ -89,6 +92,10 @@ questions:
     criterion: EOS workflow is completed without unnecessary exploration or redundant intermediate steps.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
       per deployment).
@@ -129,6 +136,8 @@ questions:
     - unit_consistency
     - velocity
     - pressure
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -155,6 +164,10 @@ questions:
     criterion: Kamlet-Jacobs calculation is performed in a single computation step without unnecessary tool exploration.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
       per deployment).

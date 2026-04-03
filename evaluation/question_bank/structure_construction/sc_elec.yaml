@@ -32,10 +32,12 @@ questions:
           - "Au_O_distance"
           - "slab_layers"
           - "vacuum_thickness"
+      - key: "turn_budget"
+        value: {max: 12}
       - key: "duration_budget"
         value: {max: 7200000}
       - key: "token_budget_total"
-        value: {max: 50000}
+        value: {max: 8000}
     scoring_checklist:
       - id: "required_fields"
         criterion: "Output includes a structure file, total atom count, Au fractional coordinate, nearest Au-O distance, slab layer count, and vacuum thickness."
@@ -53,6 +55,10 @@ questions:
         criterion: "No repeated identical slab construction calls."
         axis: "efficiency"
         verify: "no_retries"
+      - id: "turn_budget"
+        criterion: "Agent completes the task within the turn (step) budget."
+        axis: "efficiency"
+        verify: "turn_budget"
       - id: "efficiency_judge"
         criterion: "Single-atom catalyst model is built in a direct workflow (fetch ZnO → build slab → add Au → report) without unnecessary rebuilds."
         axis: "efficiency"
@@ -95,10 +101,12 @@ questions:
           - "surface_atoms"
           - "layer_composition"
           - "lattice_parameters"
+      - key: "turn_budget"
+        value: {max: 12}
       - key: "duration_budget"
         value: {max: 7200000}
       - key: "token_budget_total"
-        value: {max: 50000}
+        value: {max: 8000}
     scoring_checklist:
       - id: "required_fields"
         criterion: "Output includes structure file, total atom count, Zn:Pd ratio, surface-exposed atom species, per-layer composition, and lattice parameters."
@@ -116,6 +124,10 @@ questions:
         criterion: "No repeated identical structure retrieval or slab construction calls."
         axis: "efficiency"
         verify: "no_retries"
+      - id: "turn_budget"
+        criterion: "Agent completes the task within the turn (step) budget."
+        axis: "efficiency"
+        verify: "turn_budget"
       - id: "efficiency_judge"
         criterion: "Alloy slab is built in a direct workflow without redundant intermediate steps."
         axis: "efficiency"

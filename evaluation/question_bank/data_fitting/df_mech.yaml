@@ -31,12 +31,15 @@ questions:
     - v0
     - b0
     - fit_quality
+  - key: turn_budget
+    value: &id000
+      max: 8
   - key: duration_budget
     value: &id001
       max: 7200000
   - key: token_budget_total
     value: &id002
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: v0_A3
     criterion: V0 is within tolerance.
@@ -59,6 +62,10 @@ questions:
     criterion: EOS fitting is accomplished in a single fitting step without redundant re-runs or parameter sweeps.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
       per deployment).
@@ -103,6 +110,8 @@ questions:
     - cj_pressure
     - hugoniot_fit
     - rayleigh_line
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -129,6 +138,10 @@ questions:
     criterion: Hugoniot fitting and C-J determination are performed in a direct computation pipeline without unnecessary retries.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
       per deployment).

@@ -43,6 +43,7 @@ VerifyLiteral = Literal[
     'no_retries',
     'artifact_exists',
     'token_budget',
+    'turn_budget',
     'duration_budget',
     'molcrys_slab_molecular_integrity',
     'sc005_disorder_formulas',
@@ -229,6 +230,7 @@ class QuestionItem(BaseModel):
             'batch_tool_args_constant',
             'batch_consistent_calls',
             'duration_budget',
+            'turn_budget',
             'molcrys_slab_molecular_integrity',
             'sc005_disorder_formulas',
         }

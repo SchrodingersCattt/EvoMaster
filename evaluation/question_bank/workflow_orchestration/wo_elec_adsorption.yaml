@@ -35,10 +35,12 @@ questions:
           - "E_adsorbed"
           - "E_ads"
           - "adsorption_site"
+      - key: "turn_budget"
+        value: {max: 18}
       - key: "duration_budget"
         value: {max: 7200000}
       - key: "token_budget_total"
-        value: {max: 50000}
+        value: {max: 8000}
     scoring_checklist:
       - id: "adsorption_energy_eV"
         criterion: "Adsorption energy is computed correctly from mock energies (~-0.2 eV)."
@@ -52,6 +54,10 @@ questions:
         criterion: "Adsorption energy computed with specified mock energies; structures built with physically correct parameters (lattice constant, bond length, slab geometry)."
         axis: "grounding"
         verify: "llm_binary_judge"
+      - id: "turn_budget"
+        criterion: "Agent completes the task within the turn (step) budget."
+        axis: "efficiency"
+        verify: "turn_budget"
       - id: "efficiency_judge"
         criterion: "Adsorption energy workflow (build slab → build molecule → place adsorbate → compute with mock values) completes without redundant steps."
         axis: "efficiency"
