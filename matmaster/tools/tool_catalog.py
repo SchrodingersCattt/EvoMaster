@@ -104,21 +104,25 @@ class ToolCatalog:
     def build_definitions(self) -> list[dict[str, Any]]:
         """Return tool definitions in OpenAI function calling format.
 
-        Iterates over all registered tools and formats them as function
-        calling definitions. Previously delegated to ToolRegistry; now
-        self-contained after Registry was demoted to pure storage.
+        Uses compiled ToolInstance data (not raw registry) so that
+        exposed_to_model filtering and metadata are authoritative.
         """
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.json_schema,
-                },
-            }
-            for t in self._registry.all_tools
-        ]
+        definitions: list[dict[str, Any]] = []
+        for name in sorted(self._registry._tools):
+            inst = self.get_tool(name)
+            if inst is None or not inst.tool_spec.exposed_to_model:
+                continue
+            definitions.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": inst.tool_spec.tool_name,
+                        "description": inst.tool_spec.description,
+                        "parameters": inst.tool_spec.args_schema,
+                    },
+                }
+            )
+        return definitions
 
     def inject_stop_event(self, stop_event: threading.Event) -> None:
         """Inject stop_event into all registered tools for cancel propagation."""

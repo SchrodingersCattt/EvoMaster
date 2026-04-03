@@ -121,15 +121,32 @@ class ToolCompiler:
             tool.name,
             (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
         )
+        capabilities = BUILTIN_CAPABILITIES.get(tool.name, frozenset())
+        exposed_to_model = True
+
+        # Apply tool-level runtime metadata overrides (lazy MCP overlay)
+        meta = getattr(tool, "tool_runtime_meta", None) or {}
+        if meta.get("plane"):
+            plane = ToolPlane(meta["plane"])
+        if meta.get("effect_level"):
+            effect_level = meta["effect_level"]
+        if meta.get("capabilities"):
+            capabilities = frozenset(meta["capabilities"])
+        if meta.get("fast_path_eligible") is not None:
+            fast_path = meta["fast_path_eligible"]
+        if meta.get("exposed_to_model") is not None:
+            exposed_to_model = meta["exposed_to_model"]
+
         spec = ToolSpec(
             tool_name=tool.name,
             description=tool.description,
             args_schema=tool.json_schema,
             source=source,
-            capabilities=BUILTIN_CAPABILITIES.get(tool.name, frozenset()),
+            capabilities=capabilities,
             effect_level=effect_level,
             fast_path_eligible=fast_path,
             max_result_chars=max_result_chars,
+            exposed_to_model=exposed_to_model,
         )
         state_mode, stop_mode = BUILTIN_STOP_MODES.get(
             tool.name, ("stateless", "cancellable")

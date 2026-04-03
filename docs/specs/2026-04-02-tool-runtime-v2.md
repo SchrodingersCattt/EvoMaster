@@ -1188,3 +1188,21 @@ input_validator 让每个工具自己决定什么输入是语义上合法的，T
 ToolCompiler 在 build_runtime() 阶段根据 RuntimeTopology（包含 session_kind 和 session_capabilities）动态决定 ToolBinding 的 resource_claims。同一个 ToolSpec 在不同 topology 下产出不同的 ToolBinding——这正是 Spec/Binding 分离的核心价值。
 
 静态常量方案（如 BUILTIN_CLAIMS 表）无法区分这种拓扑依赖性，只能取最保守的值，导致 local session 下的搜索工具不必要地串行化。
+
+## Implementation Status
+
+Gap closure plan executed 2026-04-03. Key closures:
+
+- `active_planes` is now derived in `Exp.build_runtime()` from session presence and builtin config
+- BUILTIN_CAPABILITIES map provides semantic capability tags for all builtins
+- `capability_policy` correctly checks `external_effect` (was `external_write`) for EXTERNAL_SERVICE plane
+- `monitor_job` plane corrected from SESSION_FS to EXTERNAL_SERVICE
+- `ToolDecision.modified_args` wired through Layer A -> input_validator -> policy -> executor
+- `StructuralValidation` normalizes relative paths to workspace root and rejects traversals
+- FullToolRunner executes approved calls concurrently after serial validation (two-phase model)
+- `ToolExecutionContext` (executor-level) provides stop_event and on_progress to individual executors
+- `ToolProgressEvent` (type="tool_progress") added to agent event hierarchy
+- `run_post_tool_call` upgraded to serial rewrite chain (hooks can replace ToolResult)
+- `ToolCatalog.build_definitions()` uses compiled ToolInstance data with `exposed_to_model` filtering
+- Overlay tool runtime metadata (`tool_runtime_meta`) consumed by ToolCompiler for plane/effect/capability overrides
+- Current stable tool name is `mm_web_search` (spec draft used `web_search`)

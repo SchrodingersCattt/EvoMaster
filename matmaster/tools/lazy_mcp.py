@@ -36,6 +36,7 @@ class LazyMCPTool:
         description: str,
         input_schema: dict,
         connector: Any,
+        runtime_meta: dict[str, Any] | None = None,
     ) -> None:
         self._name = tool_name
         self._description = description
@@ -45,6 +46,7 @@ class LazyMCPTool:
         self._connector = connector
         self._connection: Any | None = None
         self._path_adaptor: Any | None = None
+        self.tool_runtime_meta: dict[str, Any] = runtime_meta or {}
 
     @property
     def name(self) -> str:

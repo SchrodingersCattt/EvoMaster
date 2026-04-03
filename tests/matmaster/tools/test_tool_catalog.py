@@ -163,3 +163,64 @@ class TestCatalogContainer:
         registry = ToolRegistry()
         catalog = ToolCatalog(registry)
         assert catalog.registry is registry
+
+
+# ── Compiled definitions and exposed_to_model ─────────────
+
+
+class TestCatalogCompiledDefinitions:
+    def test_build_definitions_uses_compiled_instances(self) -> None:
+        """build_definitions() uses compiled ToolInstance data, not raw registry."""
+        catalog = _make_catalog("alpha")
+        defs = catalog.build_definitions()
+        assert len(defs) == 1
+        assert defs[0]["function"]["name"] == "alpha"
+
+    def test_hidden_overlay_not_in_definitions(self) -> None:
+        """Tool with exposed_to_model=False is excluded from build_definitions()."""
+
+        class _HiddenTool:
+            name = "hidden_overlay"
+            description = "hidden"
+            json_schema: dict[str, Any] = {"type": "object", "properties": {}}
+            tool_runtime_meta: dict[str, Any] = {"exposed_to_model": False}
+
+            async def execute(self, arguments):
+                return "ok"
+
+        catalog = _make_catalog("visible")
+        catalog.register_overlay(_HiddenTool(), source="mcp")
+        defs = catalog.build_definitions()
+        names = {d["function"]["name"] for d in defs}
+        assert "visible" in names
+        assert "hidden_overlay" not in names
+
+
+class TestMCPOverlayRuntimeMeta:
+    def test_mcp_tool_respects_runtime_metadata_overrides(self) -> None:
+        """Compiler uses tool_runtime_meta to override plane/effect_level."""
+        from matmaster.tools.tool_compiler import ToolCompiler
+        from matmaster.types.topology import RuntimeTopology, ToolPlane
+
+        class _MetaTool:
+            name = "mat_sg_build_bulk"
+            description = "build bulk"
+            json_schema: dict[str, Any] = {"type": "object", "properties": {}}
+            tool_runtime_meta: dict[str, Any] = {
+                "plane": "external_service",
+                "effect_level": "external_effect",
+            }
+
+            async def execute(self, arguments):
+                return "ok"
+
+        topology = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp/ctrl",
+            workspace_root="/tmp/ws",
+            active_planes=frozenset(ToolPlane),
+        )
+        compiler = ToolCompiler()
+        instance = compiler.compile(_MetaTool(), topology, source="mcp")
+        assert instance.tool_binding.plane == ToolPlane.EXTERNAL_SERVICE
+        assert instance.tool_spec.effect_level == "external_effect"
