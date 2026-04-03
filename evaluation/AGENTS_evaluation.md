@@ -150,7 +150,7 @@ evaluation/question_bank/
 | `event_type_called` | 检查事件类型是否被触发 |
 | `source_type_used` | 检查数据源类型 |
 | `call_count_range` | 分析工具调用次数（建议也配上 ref） |
-| `token_budget` | 检查 token 用量（建议配上 ref，格式同 `duration_budget`） |
+| `token_budget` | 用 **整次 run** 的 cache 调整后总量：``EvidenceBundle.token_usage_run.total_tokens_effective``（轨迹为各步 ``meta.usage`` 累加；无 run 数据时回退 ``token_usage_last_turn.total_tokens_effective``）。无轨迹、仅 devshell summary 时 ``token_usage_run`` 与 ``token_usage_last_turn`` 同为整表 ``usage``，与 ingest ``item["tokens"]`` / ``extract_total_tokens`` 口径对齐；建议配上 ref，格式同 `duration_budget`） |
 
 ---
 

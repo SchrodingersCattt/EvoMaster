@@ -23,7 +23,7 @@ def test_duration_budget_passes_when_under_ceiling() -> None:
     ev = EvidenceBundle(
         task_id='t1',
         duration_ms=1000,
-        token_usage=TokenUsage(total_tokens=10),
+        token_usage_last_turn=TokenUsage(total_tokens=10),
     )
     ok, reason = check_duration_budget(evidence=ev, expected={'max': 5000})
     assert ok is True

@@ -69,12 +69,14 @@ sys.path.insert(0, str(REPO_ROOT))
 import yaml  # noqa: E402
 
 from evaluation.core.evaluator import BinaryEvaluator  # noqa: E402
+from evaluation.core.evaluator_helpers import (  # noqa: E402
+    token_usage_record_from_evidence,
+)
 from evaluation.core.evidence import EvidenceBundle, TokenUsage  # noqa: E402
 from evaluation.core.runner import load_question_banks  # noqa: E402
 from evaluation.core.schemas import (  # noqa: E402
     LLMRuntimeConfig,
     QuestionItem,
-    TokenUsageRecord,
 )
 
 # ---------------------------------------------------------------------------
@@ -240,9 +242,9 @@ def _build_evidence(
     # Build token usage from summary
     usage_raw = summary.get("usage", {})
     if isinstance(usage_raw, dict):
-        token_usage = TokenUsage.from_usage_dict(usage_raw)
+        summary_usage = TokenUsage.from_usage_dict(usage_raw)
     else:
-        token_usage = TokenUsage()
+        summary_usage = TokenUsage()
 
     # Collect workspace artifacts for artifact_exists checks
     from evaluation.core.evidence import ArtifactRecord
@@ -265,7 +267,8 @@ def _build_evidence(
         final_answer=answer,
         workspace_dir=str(workspace.resolve()),
         duration_ms=duration_ms,
-        token_usage=token_usage,
+        token_usage_last_turn=summary_usage,
+        token_usage_run=summary_usage,
         artifacts=artifacts,
         model_name=model_name if isinstance(model_name, str) else None,
         # No events or tool_calls — trajectory-dependent checks will fail gracefully
@@ -322,14 +325,7 @@ def score_task(
         answer=answer,
     )
 
-    # Build TokenUsageRecord from evidence token_usage (evaluator schema)
-    token_usage = TokenUsageRecord(
-        prompt_tokens=evidence.token_usage.prompt_tokens,
-        completion_tokens=evidence.token_usage.completion_tokens,
-        total_tokens=evidence.token_usage.total_tokens,
-        cache_read_tokens=evidence.token_usage.cache_read_tokens,
-        total_tokens_effective=evidence.token_usage.total_tokens_effective,
-    )
+    usage_record = token_usage_record_from_evidence(evidence)
 
     mode = str(meta.get("mode", "direct"))
     repeat_idx = int(meta.get("repeat_idx", 0))
@@ -346,7 +342,7 @@ def score_task(
             prompt=str(meta.get("prompt", "")),
             run_status=run_status,
             model_name=evidence.model_name,
-            token_usage=token_usage,
+            token_usage=usage_record,
             duration_ms=evidence.duration_ms,
         )
     except Exception as exc:

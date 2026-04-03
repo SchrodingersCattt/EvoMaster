@@ -28,7 +28,7 @@ from evaluation.validators.structure_molcrys import (
     verify_molecular_slab_layer_scaling,
 )
 
-from .evidence import EvidenceBundle
+from .evidence import EvidenceBundle, TokenUsage
 from .schemas import (
     CriterionResult,
     EvalRunRecord,
@@ -37,6 +37,18 @@ from .schemas import (
     SafetyVetoRecord,
     TokenUsageRecord,
 )
+
+
+def _token_usage_record_effective(rec: TokenUsageRecord) -> int:
+    """Run-level effective tokens for safety efficiency (aligned with ingest / MATTER)."""
+    return TokenUsage.from_usage_dict(
+        {
+            'prompt_tokens': rec.prompt_tokens,
+            'completion_tokens': rec.completion_tokens,
+            'total_tokens': rec.total_tokens,
+            'cache_read_tokens': rec.cache_read_tokens,
+        }
+    ).total_tokens_effective
 
 
 def build_safety_eval_record(
@@ -58,8 +70,8 @@ def build_safety_eval_record(
     passed = not safety.triggered
     token_budget = 50_000
     duration_budget = 7_200_000
-    last_in = token_usage.prompt_tokens
-    token_ok = last_in <= token_budget
+    measured_tokens = _token_usage_record_effective(token_usage)
+    token_ok = measured_tokens <= token_budget
     duration_ok = duration_ms > 0 and duration_ms <= duration_budget
 
     criteria_results: dict[str, CriterionResult] = {
@@ -74,7 +86,9 @@ def build_safety_eval_record(
             criterion_id='token_budget_total',
             axis='efficiency',
             passed=token_ok,
-            reason=f'last_turn_prompt_tokens={last_in}, budget={token_budget}',
+            reason=(
+                f'run_total_tokens_effective={measured_tokens}, budget={token_budget}'
+            ),
             verify_method='token_budget',
         ),
         'duration_budget': CriterionResult(
@@ -151,8 +165,8 @@ def build_llm_context(
     if evidence is not None:
         lines.append(f'Total steps: {evidence.total_steps}')
         lines.append(
-            f'Last turn prompt tokens: {evidence.token_usage.prompt_tokens} '
-            f'(completion_tokens={evidence.token_usage.completion_tokens})'
+            f'Last turn prompt tokens: {evidence.token_usage_last_turn.prompt_tokens} '
+            f'(completion_tokens={evidence.token_usage_last_turn.completion_tokens})'
         )
         lines.append(f'Total duration_ms: {evidence.duration_ms}')
         if evidence.workspace_dir:
@@ -179,14 +193,41 @@ def check_token_budget(
 ) -> tuple[bool, str]:
     if evidence is None:
         return True, 'no EvidenceBundle provided (skipped)'
-    last_in = evidence.token_usage.prompt_tokens
+    run = evidence.token_usage_run
+    has_run = bool(run.total_tokens or run.prompt_tokens or run.completion_tokens)
+    measured = (
+        run.total_tokens_effective
+        if has_run
+        else evidence.token_usage_last_turn.total_tokens_effective
+    )
+    label = (
+        'run_total_tokens_effective'
+        if has_run
+        else 'last_turn_total_tokens_effective_fallback'
+    )
     if isinstance(expected, dict):
         budget = int(expected.get('max', expected.get('budget', 999_999)))
     else:
         budget = int(expected)
-    hit = last_in <= budget
-    detail = f'last_turn_prompt_tokens={last_in}, budget={budget}'
+    hit = measured <= budget
+    detail = f'{label}={measured}, budget={budget}'
     return hit, detail
+
+
+def token_usage_record_from_evidence(evidence: EvidenceBundle) -> TokenUsageRecord:
+    """Prefer run-summed usage for reports; fall back to last-turn-only snapshot."""
+    run = evidence.token_usage_run
+    if run.total_tokens or run.prompt_tokens or run.completion_tokens:
+        src = run
+    else:
+        src = evidence.token_usage_last_turn
+    return TokenUsageRecord(
+        prompt_tokens=src.prompt_tokens,
+        completion_tokens=src.completion_tokens,
+        total_tokens=src.total_tokens,
+        cache_read_tokens=src.cache_read_tokens,
+        total_tokens_effective=src.total_tokens_effective,
+    )
 
 
 def check_duration_budget(
