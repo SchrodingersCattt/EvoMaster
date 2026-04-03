@@ -2,6 +2,8 @@
 
 本文档与 **MATTER 评测**（`evaluation/`）同属一条链路：批量跑题用 `evaluation/scripts/devshell/run_devshell_eval.py`，**判读**由对话里的 Agent 读题库与产物完成。
 
+若需要 **Claude Agent SDK** 程序化外层循环（多轮跑题、改仓库、再跑），见同目录 [devshell_agent_sdk_loop.md](devshell_agent_sdk_loop.md)。
+
 目标：**由你在对话里（Claude Code）执行终端命令**，跑通一条评测，再**根据题库与产物自行判断**是否完成任务；未通过时给出可操作的改进建议（含本仓库代码 vs 任务工作区脚本）。
 
 这与「写 Python 脚本替你自动打分」不同：判读与结论由 **Claude Code 本轮对话**完成。

@@ -39,6 +39,10 @@ dependencies = [
 bohrium-open = [
     "bohrium-open-sdk>=1.0.0",
 ]
+# DevShell 外层「跑评测 → 判分 → 改提示词/工具」编排（Claude Agent SDK + 内置 Claude Code 工具集）
+eval-agent = [
+    "claude-agent-sdk>=0.1.0",
+]
 dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=0.24.0",
