@@ -41,7 +41,7 @@ See matmaster-tools-server ``docs/apifox-evaluation-openapi.json`` for the schem
 
 Usage (from repository root)::
 
-    uv run python evaluation/scripts/devshell/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --model cds/GPT-5.4 --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --capabilities structure_construction --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
@@ -264,8 +264,11 @@ def main() -> int:
     parser.add_argument(
         "--model",
         type=str,
-        default=None,
-        help="LLM route key passed to ``mm-devshell run --model`` (see llm_config.yaml routes)",
+        default="cds/GPT-5.4",
+        help=(
+            "LLM route key passed to ``mm-devshell run --model`` (see llm_config.yaml routes; "
+            "default: cds/GPT-5.4, proxy route with prompt cache)"
+        ),
     )
     parser.add_argument(
         "--exp",
