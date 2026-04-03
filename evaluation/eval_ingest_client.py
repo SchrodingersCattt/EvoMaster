@@ -508,10 +508,6 @@ def build_ingest_item(
     s: dict[str, Any] = raw_summary if raw_summary is not None else {}
     usage = s.get("usage")
     tokens = extract_ingest_tokens(s)
-    preview: str | None = None
-    fc = s.get("final_content")
-    if isinstance(fc, str) and fc:
-        preview = fc[:2000]
 
     extra: dict[str, Any] = {
         "task_id": task_id,
@@ -531,8 +527,6 @@ def build_ingest_item(
         for k in ("error", "missing_file", "empty_file"):
             if k in s:
                 extra[k] = s[k]
-    if preview is not None:
-        extra["final_content_preview"] = preview
 
     if eval_tooling is not None:
         extra["eval_tooling"] = eval_tooling
