@@ -14,11 +14,70 @@ Only `run_stream` is used by the production main flow (`agent_run_service` -> `E
 
 ## Decision
 
-Eliminate the `run()` path entirely. `run_stream()` becomes the sole public API. All callers migrate to consume the event stream.
+Eliminate the `run()` path entirely. `run_stream()` becomes the sole public API. All callers migrate to consume the event stream via a shared drain helper.
 
 ## Changes
 
-### AgentKernel (matmaster/core/agent.py)
+### 1. Extend terminal contract (matmaster/types/events.py)
+
+Extend `RunResultEvent` with fields currently only available through `KernelRunResult`:
+
+```python
+class RunResultEvent(EventBase):
+    type: Literal["run_result", "finish"] = "run_result"
+    status: str = "completed"
+    reason: str = ""
+    final_content: str | None = None
+    # New fields
+    num_turns: int = 0
+    usage: dict[str, int] = Field(default_factory=dict)
+    messages: list[Any] = Field(default_factory=list)
+```
+
+- `num_turns` and `usage`: from `_KernelState.turn` and `_KernelState.total_usage`
+- `messages`: from `_KernelState.messages`, the complete conversation transcript
+
+Data source: `_run_items()` terminal `_KernelItem` already has access to `state`. Extend `_TerminalItem` to carry `num_turns`, `usage`, `messages`, then `run_stream()` passes them through to `RunResultEvent`.
+
+### 2. Shared drain helper (matmaster/core/stream_drain.py — new file)
+
+A single `drain_run_stream()` function that all non-streaming callers use:
+
+```python
+@dataclass
+class DrainResult:
+    status: str
+    reason: str
+    final_content: str | None
+    num_turns: int
+    usage: dict[str, int]
+    messages: list[Any]
+    events: list[Any]  # all intermediate events collected during drain
+
+async def drain_run_stream(
+    stream: AsyncIterator[Any],
+) -> DrainResult:
+    """Consume run_stream() to completion, return structured result."""
+    events = []
+    async for event in stream:
+        if isinstance(event, RunResultEvent):
+            return DrainResult(
+                status=event.status,
+                reason=event.reason,
+                final_content=event.final_content,
+                num_turns=event.num_turns,
+                usage=event.usage,
+                messages=event.messages,
+                events=events,
+            )
+        events.append(event)
+    # Stream ended without terminal event — treat as error
+    raise RuntimeError("run_stream ended without RunResultEvent")
+```
+
+This eliminates drain duplication across callers and standardizes error handling.
+
+### 3. AgentKernel (matmaster/core/agent.py)
 
 Delete:
 - `run()` method
@@ -28,48 +87,50 @@ Delete:
 - `_do_stream_llm()` method (only called by `_call_llm`)
 - Module-level docstring reference to `_finish()` — update to reflect `_run_items` as sole path
 
-Retain:
-- `run_stream()` — unchanged, sole public entry point
-- `_run_items()` — core generator loop, unchanged
-- `_call_llm_streaming()` and retry logic — unchanged
+Modify:
+- `_TerminalItem`: add `num_turns`, `usage`, `messages` fields
+- `run_stream()`: pass new `_TerminalItem` fields through to `RunResultEvent`
+
+Retain (unchanged):
+- `run_stream()` signature and public behavior
+- `_run_items()` — core generator loop
+- `_call_llm_streaming()` and retry logic
 - `_is_valid_natural_finish()` — used by `_run_items`
 
-### Types (matmaster/types/runtime.py)
+### 4. Types (matmaster/types/runtime.py)
 
 Delete:
-- `KernelRunResult` dataclass — no remaining consumers after migration
+- `KernelRunResult` dataclass — replaced by `RunResultEvent` + `DrainResult`
 
-### Exp (matmaster/core/exp.py)
+### 5. Exp (matmaster/core/exp.py)
 
 Delete:
 - `Exp.run()` method (Phase 3a, ~360-388)
 
 Modify `_make_spawn_fn()`:
-- `spawn_fn` internally drains `child_exp.run_stream()` instead of calling `child_exp.run()`
-- Extracts `final_content` from the terminal `RunResultEvent`
+- `spawn_fn` calls `drain_run_stream(child_exp.run_stream(...))` instead of `child_exp.run()`
+- Extracts `final_content` from `DrainResult`
 - External signature unchanged: `async (exp_name, task, stop_event) -> str`
 - Child agent events are consumed and discarded within `spawn_fn` (signature returns `str` only)
 
-### Evaluation (evaluation/core/mat_runner.py)
+### 6. Evaluation (evaluation/core/mat_runner.py)
 
 Modify `MatRunner`:
-- Switch from `kernel.run()` to consuming `kernel.run_stream()` or `Exp.run_stream()`
-- Drain event stream, extract `final_content` from terminal `RunResultEvent`
-- Tool call extraction currently uses `KernelRunResult.messages` — rebuild from `ToolCallEvent`/`ToolResultEvent` in the stream instead
+- Use `drain_run_stream()` to consume `run_stream()`
+- `DrainResult` provides `final_content`, `num_turns`, `usage`
+- Tool call extraction: use `DrainResult.events` to filter `ToolCallEvent`/`ToolResultEvent` instead of walking `KernelRunResult.messages`
 
-### DevShell (matmaster/devshell/runner.py)
+### 7. DevShell (matmaster/devshell/runner.py)
 
 Modify `DevRunner.run()`:
-- Switch from `await runtime.kernel.run(...)` to consuming `runtime.kernel.run_stream(...)`
-- DevShell drains the event stream and extracts the final result itself
-- No wrapper method provided at the Kernel level
-- History accumulation: currently relies on `KernelRunResult.messages` to extract new messages — rebuild from `AssistantStateEvent` and `ToolResultEvent` in the stream, or maintain a shadow messages list within DevRunner
+- Use `drain_run_stream()` to consume `kernel.run_stream(...)`
+- History accumulation: use `DrainResult.messages` to extract new messages — same logic as current `KernelRunResult.messages` approach
 - `DevStreamHook`/`DevEventHook` callbacks (`on_stream_chunk`, `on_segment_complete`, `pre_tool_call`, `post_tool_call`) will no longer be triggered since `_run_items` yields events instead of calling hooks — DevShell must switch to consuming yielded events for real-time output
 
 Modify `debug_run.py`:
-- Hard-codes `KernelRunResult` field access (`result.result.status`, `.reason`, `.num_turns`, `.usage`, `.final_content`) — adapt to new return type from `DevRunner.run()`
+- Switch from `KernelRunResult` field access to `DrainResult` fields (same names, direct mapping)
 
-### Tests
+### 8. Tests
 
 Delete entire files:
 - `tests/matmaster/core/test_agent_kernel.py`
@@ -92,9 +153,10 @@ No test migration — these cases are not rewritten for `run_stream`.
 
 ## What Does NOT Change
 
-- `run_stream()`, `_run_items()`, `_call_llm_streaming()` and retry logic
+- `run_stream()` public signature, `_run_items()`, `_call_llm_streaming()` and retry logic
 - `Exp.run_stream()`
 - DevShell CLI/REPL upper-layer call structure (adapts to `DevRunner.run()` return value change)
+- Production main flow (`agent_run_service` -> `Exp.run_stream` -> `kernel.run_stream`)
 
 ## Stale References to Clean Up
 
@@ -102,4 +164,3 @@ No test migration — these cases are not rewritten for `run_stream`.
 - `matmaster/types/llm_provider.py`: docstring references `Kernel._call_llm()` — update
 - `matmaster/types/runtime.py`: `KernelResult` docstring references `AgentKernel.run()` — update to `run_stream`
 - `matmaster/core/agent.py`: module-level docstring references `_finish()` — update
-- Production main flow (`agent_run_service` -> `Exp.run_stream` -> `kernel.run_stream`)
