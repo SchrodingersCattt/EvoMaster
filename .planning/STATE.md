@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.1
-milestone_name: matmaster/ 完全独立化
-status: completed
-stopped_at: Milestone v2.1 archived
-last_updated: "2026-04-02"
+milestone: v1.1
+milestone_name: milestone
+status: Ready for next milestone
+stopped_at: Completed 35-01-PLAN.md
+last_updated: "2026-04-03T04:38:27.693Z"
 last_activity: 2026-04-02
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 19
-  completed_plans: 19
+  total_phases: 25
+  completed_phases: 24
+  total_plans: 55
+  completed_plans: 56
   percent: 100
 ---
 
@@ -38,6 +38,9 @@ Progress: [====================] 100%
 
 (v2.1 决策已归档到 milestones/v2.1-ROADMAP.md，清空以备下一里程碑)
 
+- [Phase 35]: write_file excluded from ReadBeforeModifyGuard._MODIFY_TOOLS; uses validate_input (needs session.path_exists)
+- [Phase 35]: AgentRuntimeSpec gains read_tracker field; agent.py passes it to GuardPipeline constructor
+
 ### Pending Todos
 
 None.
@@ -48,6 +51,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-02
-Stopped at: Milestone v2.1 archived
+Last session: 2026-04-03T04:38:27.691Z
+Stopped at: Completed 35-01-PLAN.md
 Resume file: None
