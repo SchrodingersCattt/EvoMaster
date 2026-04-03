@@ -372,19 +372,19 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
         assert spec.tool_runner is None
         assert spec.tool_catalog is None
 
-    def test_tool_runner_field_accepts_inline_runner(self) -> None:
-        """tool_runner field accepts InlineToolRunner instance."""
-        from matmaster.core.tool_runner import InlineToolRunner
-        from matmaster.tools.tool_catalog import ToolCatalog
+    def test_tool_runner_field_accepts_protocol_implementation(self) -> None:
+        """tool_runner field accepts a ToolRunner-compatible implementation."""
 
-        registry = ToolRegistry()
-        catalog = ToolCatalog(registry)
-        spec_for_runner = AgentRuntimeSpec(tool_catalog=catalog)
-        runner = InlineToolRunner(spec_for_runner, [])
+        class _StubToolRunner:
+            async def execute_batch(
+                self, tool_calls, ctx, *, on_result=None
+            ) -> list[tuple[Any, Any]]:
+                return []
 
-        spec = AgentRuntimeSpec(
-            tool_runner=runner,
-        )
+        runner = _StubToolRunner()
+
+        spec = AgentRuntimeSpec(tool_runner=runner)
+
         assert spec.tool_runner is runner
 
     def test_tool_catalog_field_accepts_catalog(self) -> None:

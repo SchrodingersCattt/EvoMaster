@@ -9,6 +9,7 @@ Verifies:
 - Fast path skips Scheduler but not CapabilityPolicy
 - Executor exception -> ToolResult.from_error() + ticket released
 - Cancel semantics -> skip remaining tool_calls
+- stop_mode-aware cancellation behavior
 - Happy path -> executor result + on_result callback
 - isinstance(FullToolRunner(...), ToolRunner) check
 """
@@ -954,3 +955,122 @@ class TestInputValidatorInRunner:
 
         assert tr.status == "success"
         assert tr.content == "written ok"
+
+
+def _make_runner_with_stop_mode(
+    tool_name: str,
+    stop_mode: str = "cancellable",
+    state_mode: str = "stateless",
+    result_content: str = "executed",
+) -> FullToolRunner:
+    """Build a FullToolRunner with a single tool using the requested stop mode."""
+
+    async def _executor(args: dict[str, Any], exec_ctx: Any) -> ToolResult:
+        return ToolResult(content=result_content)
+
+    spec = ToolSpec(
+        tool_name=tool_name,
+        description=f"test {tool_name}",
+        args_schema={"type": "object", "properties": {}},
+        source="test",
+        effect_level="none",
+        fast_path_eligible=True,
+    )
+    binding = ToolBinding(
+        binding_key=f"control_plane:{tool_name}",
+        plane=ToolPlane.CONTROL_PLANE,
+        resource_claims=(),
+        state_mode=state_mode,
+        stop_mode=stop_mode,
+    )
+    instance = ToolInstance(
+        tool_spec=spec,
+        tool_binding=binding,
+        tool_executor=_executor,
+    )
+
+    registry = ToolRegistry()
+    topology = RuntimeTopology(
+        session_kind="local",
+        control_root="/tmp/control",
+        workspace_root="/tmp/workspace",
+        active_planes=frozenset(ToolPlane),
+    )
+    catalog = ToolCatalog(registry, topology=topology)
+    catalog._compiled_tools[tool_name] = instance
+    catalog._version += 1
+
+    return FullToolRunner(
+        catalog=catalog,
+        structural_validation=StructuralValidation(),
+        guard_pipeline=GuardPipeline([]),
+        capability_policy=DefaultCapabilityPolicy(),
+        scheduler=ToolScheduler(),
+        topology=topology,
+    )
+
+
+class TestStopModeCancel:
+    """FullToolRunner uses stop_mode to decide cancel behavior."""
+
+    @pytest.mark.asyncio
+    async def test_cancellable_tool_cancelled_when_stop_set(self) -> None:
+        runner = _make_runner_with_stop_mode("test_tool", stop_mode="cancellable")
+        stop = threading.Event()
+        stop.set()
+        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+
+        results = await runner.execute_batch([_make_tc("test_tool")], ctx)
+
+        assert len(results) == 1
+        assert results[0][1].status == "cancelled"
+        assert "cancelled" in results[0][1].content.lower()
+
+    @pytest.mark.asyncio
+    async def test_best_effort_tool_cancelled_with_message(self) -> None:
+        runner = _make_runner_with_stop_mode("web_tool", stop_mode="best_effort")
+        stop = threading.Event()
+        stop.set()
+        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+
+        results = await runner.execute_batch([_make_tc("web_tool")], ctx)
+
+        assert len(results) == 1
+        assert results[0][1].status == "cancelled"
+        assert (
+            "best-effort" in results[0][1].content.lower()
+            or "best_effort" in results[0][1].content.lower()
+        )
+
+    @pytest.mark.asyncio
+    async def test_non_cancellable_tool_executes_when_stop_set(self) -> None:
+        runner = _make_runner_with_stop_mode(
+            "spawn_tool",
+            stop_mode="non_cancellable",
+            result_content="spawn_done",
+        )
+        stop = threading.Event()
+        stop.set()
+        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+
+        results = await runner.execute_batch([_make_tc("spawn_tool")], ctx)
+
+        assert len(results) == 1
+        assert results[0][1].status == "success"
+        assert results[0][1].content == "spawn_done"
+
+    @pytest.mark.asyncio
+    async def test_no_stop_event_all_modes_execute(self) -> None:
+        for mode in ("cancellable", "best_effort", "non_cancellable"):
+            runner = _make_runner_with_stop_mode(
+                f"tool_{mode}",
+                stop_mode=mode,
+                result_content=f"result_{mode}",
+            )
+            ctx = ToolExecutionContext(turn=1, max_turns=10)
+
+            results = await runner.execute_batch([_make_tc(f"tool_{mode}")], ctx)
+
+            assert len(results) == 1
+            assert results[0][1].status == "success", f"Failed for mode={mode}"
+            assert results[0][1].content == f"result_{mode}"
