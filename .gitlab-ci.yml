@@ -24,6 +24,7 @@ include:
   - local: ".deploy-ci.yml"
   - local: "ci/pre-commit-job.yml"
   - local: "ci/sync_question_catalog_jobs.yml"
+  - local: "ci/baseline-eval.yml"
 
 # 合并到 main：先 build 镜像再跑 pre-commit（与子流水线一致，复用镜像内 hook；不与 sync-question-catalog 的 docker-build 同名）
 docker-build-mr-main:

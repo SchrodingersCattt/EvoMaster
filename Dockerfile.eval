@@ -1,0 +1,46 @@
+# Baseline 评测专用镜像
+# 在主服务镜像基础上叠加 Node.js 20 + Claude Code CLI。
+# 仅用于 CI baseline eval job，不部署到生产。
+#
+# 构建（CI 内部使用 --build-arg）：
+#   docker build -f Dockerfile.eval \
+#     --build-arg BASE_IMAGE=registry.dp.tech/flow/matmaster-evo:ci12345 \
+#     -t registry.dp.tech/flow/matmaster-eval:eval-12345 .
+#
+# 本地快速验证：
+#   docker build -f Dockerfile.eval \
+#     --build-arg BASE_IMAGE=registry.dp.tech/flow/matmaster-evo:latest \
+#     -t matmaster-eval:local .
+
+ARG BASE_IMAGE=registry.dp.tech/flow/matmaster-evo:latest
+FROM ${BASE_IMAGE}
+
+USER root
+
+# 与主 Dockerfile 一致：若基础镜像仍是官方 Debian 源，换清华镜像加速 apt（国内/CI）
+RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true && \
+    sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
+
+# 安装 Node.js 20 LTS + Claude Code CLI
+# nodesource 脚本负责添加 apt 源并安装 nodejs（含 npm）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && node --version \
+    && npm --version \
+    && npm install -g @anthropic-ai/claude-code \
+    && claude --version || true
+
+# 评测 validators 需要 numpy（主镜像仅装核心依赖，不含 calculation 可选组）
+RUN . /app/.venv/bin/activate && uv pip install numpy
+
+# claude --dangerously-skip-permissions 拒绝在 root 下运行，创建非 root 用户
+RUN useradd -m -s /bin/bash appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+WORKDIR /app
