@@ -169,7 +169,9 @@ def generate(caps: list[str]) -> str:
 
 def main() -> int:
     if not QUESTION_BANK_DIR.is_dir():
-        print(f"Error: question bank dir not found: {QUESTION_BANK_DIR}", file=sys.stderr)
+        print(
+            f"Error: question bank dir not found: {QUESTION_BANK_DIR}", file=sys.stderr
+        )
         return 1
 
     caps = discover_capabilities(QUESTION_BANK_DIR)
