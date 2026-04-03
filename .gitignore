@@ -192,9 +192,5 @@ docs/plans/
 # Worktrees
 .worktrees/
 
-ABACUS-APNS-PPORBs-v1
-Dockerfile.eval-test
-test.txt
-
 # CI generated artifacts
 ci/generated-eval-child.yml
