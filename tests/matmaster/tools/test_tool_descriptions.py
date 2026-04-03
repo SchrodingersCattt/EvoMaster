@@ -40,6 +40,10 @@ def test_all_descriptions_nonempty_with_usage_pattern():
     for tool_cls in ALL_TOOLS:
         desc = tool_cls.description
         assert desc, f"{tool_cls.__name__} has empty description"
+        if tool_cls is BashTool:
+            prompt = BashTool().prompt() or ""
+            assert "read_file" in prompt
+            continue
         has_usage = "Usage:" in desc or "When to use:" in desc or "When to Use:" in desc
         is_substantive = len(desc) > 50
         assert has_usage or is_substantive, (
@@ -71,10 +75,10 @@ def test_schema_param_descriptions():
 
 
 def test_bash_routes_all_dedicated_tools():
-    """BashTool.description mentions all 5 dedicated tool routing targets."""
-    desc = BashTool.description
+    """BashTool.prompt mentions all 5 dedicated tool routing targets."""
+    desc = BashTool().prompt() or ""
     for target in ["read_file", "write_file", "edit_file", "glob", "grep"]:
-        assert target in desc, f"BashTool.description missing routing target '{target}'"
+        assert target in desc, f"BashTool.prompt missing routing target '{target}'"
 
 
 def test_dedicated_tools_have_routing_declaration():
@@ -91,7 +95,7 @@ def test_routing_consistency():
     """Bash routing targets correspond to matching declarations in dedicated tools.
 
     For each bash command -> dedicated tool mapping, verify both:
-    1. BashTool.description mentions the bash command
+    1. BashTool.prompt mentions the bash command
     2. The corresponding tool has a routing declaration
     """
     routing_map = {
@@ -101,10 +105,10 @@ def test_routing_consistency():
         "find": ("glob", GlobTool),
         "grep": ("grep", GrepTool),
     }
-    bash_desc = BashTool.description
+    bash_desc = BashTool().prompt() or ""
     for bash_cmd, (tool_name, tool_cls) in routing_map.items():
         assert bash_cmd in bash_desc, (
-            f"BashTool.description missing bash command '{bash_cmd}' "
+            f"BashTool.prompt missing bash command '{bash_cmd}' "
             f"for routing to '{tool_name}'"
         )
         tool_desc = tool_cls.description

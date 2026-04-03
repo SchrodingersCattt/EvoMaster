@@ -11,6 +11,7 @@ import pytest
 from matmaster.sessions.local import LocalSession
 from matmaster.tools.builtin.bash_tool import BashTool
 from matmaster.tools.tool_registry import Tool
+from matmaster.types.topology import ToolPlane
 
 
 @pytest.fixture()
@@ -45,6 +46,20 @@ class TestBashToolBasic:
         assert "_DANGEROUS_COMMAND_PATTERNS" not in source
         assert "is_dangerous_bash_command" not in source
         assert "is_dangerous_python_content" not in source
+
+    def test_prompt_returns_usage_guidance(self) -> None:
+        prompt = BashTool().prompt()
+
+        assert prompt is not None
+        assert "read_file" in prompt
+        assert "cat" in prompt
+
+    def test_metadata(self) -> None:
+        tool = BashTool()
+
+        assert tool.plane == ToolPlane.SESSION_SHELL
+        assert tool.effect_level == "local_mutation"
+        assert tool.max_result_chars == 12000
 
 
 class TestBashToolExecution:
