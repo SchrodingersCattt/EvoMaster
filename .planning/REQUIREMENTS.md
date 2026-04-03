@@ -94,10 +94,6 @@
 - [ ] **DBUS-02**: 设计并实现消费侧 async fanout 替代方案，确保 SSE 先发、持久化不阻塞 token 流
 - [ ] **DBUS-03**: 移除 MessageBus + EventRouter，generator 事件直连消费者
 
-### 高级调度
-
-- [ ] **ASCH-01**: ToolScheduler 根据 SessionCapabilities 动态调整并发策略（如 persistent shell 下支持 shell 并发）
-
 ### 回归兼容
 
 - [x] **REGR-01**: 全量现有 `kernel.run()` 测试（50+）零修改通过
@@ -178,7 +174,6 @@
 | DBUS-01 | Phase 36 | Pending |
 | DBUS-02 | Phase 36 | Pending |
 | DBUS-03 | Phase 36 | Pending |
-| ASCH-01 | Phase 36 | Pending |
 | REGR-01 | Phase 32 | Complete |
 | REGR-02 | Phase 34 | Complete |
 | REGR-03 | Phase 32 | Complete |

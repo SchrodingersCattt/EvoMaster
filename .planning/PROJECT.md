@@ -50,7 +50,7 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 
 - [ ] 约束迁移（read-before-modify → RunStateGuard，bash 危险命令 → CapabilityPolicy）
 - [ ] 去总线化评估与实施（MessageBus + EventRouter）
-- [ ] 高级调度（persistent shell 并发、SessionCapabilities 自适应）
+- [ ] 调度边界固化（当前 stateless SessionCapabilities 行为回归锁定）
 
 ## Current Milestone: v2.2 AgentKernel Generator-First + Tool Runtime v2
 
@@ -59,7 +59,7 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 **Target features:**
 - Phase 1: Kernel generator 改造 + Tool Runtime v2 核心骨架（ToolSpec/ToolBinding/ToolCatalog/ToolRunner/ToolScheduler + 三层约束）
 - Phase 2: Exp/Service 接入 + 约束迁移 + Hook 退役 + ToolRegistry 降级
-- Phase 3: 去总线化评估与实施 + 高级调度
+- Phase 3: 去总线化评估与实施 + 调度边界固化（ASCH-01 defer）
 
 ## Shipped: v2.1 matmaster/ 完全独立化 (2026-04-02)
 
@@ -73,12 +73,13 @@ matmaster/ 运行时路径完全独立于 evomaster/playground/src。三方向�
 - P3: 路径命名规范化（OSS 前缀、skill 文件系统路径中的 evomaster 残留）
 - P4: 独立打包（matmaster 具备独立 pip install 方案）
 - P5: 归档处置（.planning/phases/ 历史目录管理）
+- ASCH-01: SessionCapabilities 自适应高级调度（含 persistent shell 并发）—— deferred until a persistent-shell runtime exists
 
 ## Context
 
 ### Current State
 
-**As of 2026-04-03:** Phase 35 complete — 工具安全检查统一迁入三层约束模型：ReadBeforeModifyGuard 拦截未读文件编辑，CapabilityPolicy 接管 bash 危险命令检测，工具内部安全代码全部删除。ToolBinding state_mode/stop_mode 启用（ToolCompiler 填充，FullToolRunner 消费）。ToolRegistry 降级为纯存储层，ToolCatalog 成为唯一上层消费接口，ContextBuilder 工具枚举改为通用 function calling 说明。Phase 36 接下来负责去总线化 + 高级调度。
+**As of 2026-04-03:** Phase 35 complete — 工具安全检查统一迁入三层约束模型：ReadBeforeModifyGuard 拦截未读文件编辑，CapabilityPolicy 接管 bash 危险命令检测，工具内部安全代码全部删除。ToolBinding state_mode/stop_mode 启用（ToolCompiler 填充，FullToolRunner 消费）。ToolRegistry 降级为纯存储层，ToolCatalog 成为唯一上层消费接口，ContextBuilder 工具枚举改为通用 function calling 说明。Phase 36 接下来负责去总线化 + 调度边界固化；ASCH-01（persistent shell 并发、SessionCapabilities 自适应）已明确延后到 future phase。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 Source: 15,839 LOC (matmaster/).

@@ -77,7 +77,7 @@ Full details: milestones/v2.1-ROADMAP.md
 - [x] **Phase 33: ToolRunner 完整实现 + ToolScheduler** - 完整 ToolRunner 执行链（查找/校验/调度/执行/释放）+ ToolScheduler 资源调度 + StructuralValidation/CapabilityPolicy + ToolCompiler + Session.capabilities (completed 2026-04-02)
 - [x] **Phase 34: Exp/Service 接入 + Hook 退役** - Exp.run_stream() + AgentRunService.run_agent_stream() 接入 generator + _stream_llm_items() 子 generator + 5 个 Hook 逐步退役 (gap closure in progress) (completed 2026-04-02)
 - [x] **Phase 35: 约束迁移 + ToolRegistry 降级** - read-before-modify/bash 危险命令迁入三层约束模型 + ToolBinding 字段启用 + ToolRegistry 降级为纯存储 (completed 2026-04-03)
-- [ ] **Phase 36: 去总线化 + 高级调度** - MessageBus/EventRouter 消费者审计 + async fanout 替代 + Bus 移除 + SessionCapabilities 自适应调度
+- [ ] **Phase 36: 去总线化 + 调度边界固化** - MessageBus/EventRouter 消费者审计 + async fanout 替代 + Bus 移除 + 当前 stateless SessionCapabilities 边界固化（ASCH-01 defer）
 
 ## Phase Details
 
@@ -155,15 +155,15 @@ Plans:
 - [x] 35-02-PLAN.md — state_mode/stop_mode 启用：ToolCompiler 填充 + FullToolRunner 取消策略
 - [x] 35-03-PLAN.md — ToolRegistry 降级 + ContextBuilder 改造 + 全量回归
 
-### Phase 36: 去总线化 + 高级调度
-**Goal**: MessageBus/EventRouter 中间层移除（或确认保留的理由），Kernel 外事件通过 async fanout 直连消费者，ToolScheduler 支持 session 自适应
+### Phase 36: 去总线化 + 调度边界固化
+**Goal**: MessageBus/EventRouter 中间层移除，Kernel 外事件通过 async fanout 直连消费者；当前 stateless SessionCapabilities 调度边界显式固化，persistent shell 并发调度延后
 **Depends on**: Phase 34, Phase 35
-**Requirements**: DBUS-01, DBUS-02, DBUS-03, ASCH-01
+**Requirements**: DBUS-01, DBUS-02, DBUS-03
 **Success Criteria** (what must be TRUE):
   1. MessageBus (bus.py) 和 EventRouter (event_router.py) 已删除或明确记录保留理由并附降级方案
   2. SSE 推送和持久化写入在 Bus 移除后事件数量与移除前基准一致（零事件丢失）
   3. Kernel 外事件（ErrorEvent / CancelledEvent / McpConnectEvent / BohriumNodeEvent 等）通过 async fanout 函数直连 SSEHandler + PersistenceHandler
-  4. ToolScheduler 根据 SessionCapabilities 动态调整并发策略（如 persistent shell 场景下支持 shell 级并发）
+  4. 当前 stateless SessionCapabilities 调度边界有显式回归测试锁定，并在规划文档中记录 ASCH-01 defer 至后续具备 persistent shell 的 phase
 **Plans**: TBD
 
 ## Progress
@@ -208,4 +208,4 @@ Phases 32-36 execute in numeric order. Phase 34 depends on both 32 and 33. Phase
 | 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 5/5 | Complete    | 2026-04-02 |
 | 34. Exp/Service 接入 + Hook 退役 | v2.2 | 4/4 | Complete    | 2026-04-02 |
 | 35. 约束迁移 + ToolRegistry 降级 | v2.2 | 3/3 | Complete    | 2026-04-03 |
-| 36. 去总线化 + 高级调度 | v2.2 | 0/? | Not started | - |
+| 36. 去总线化 + 调度边界固化 | v2.2 | 0/? | Not started | - |
