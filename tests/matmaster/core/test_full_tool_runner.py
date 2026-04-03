@@ -35,6 +35,7 @@ from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.messages import ToolCallData
 from matmaster.types.tool_decision import ToolDecision
+from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import ResourceClaim, ToolBinding, ToolInstance, ToolSpec
 from matmaster.types.topology import RuntimeTopology, SessionCapabilities, ToolPlane
 
@@ -123,6 +124,7 @@ def _make_runner(
     topology: RuntimeTopology | None = None,
     policy: Any | None = None,
     scheduler: ToolScheduler | None = None,
+    state: ToolRunnerState | None = None,
 ) -> FullToolRunner:
     return FullToolRunner(
         catalog=catalog,
@@ -131,6 +133,7 @@ def _make_runner(
         capability_policy=policy or DefaultCapabilityPolicy(),
         scheduler=scheduler or ToolScheduler(default_timeout=1.0),
         topology=topology or _make_topology(),
+        state=state,
     )
 
 
@@ -147,6 +150,21 @@ class TestFullToolRunnerProtocol:
         catalog = _make_catalog("test")
         runner = _make_runner(catalog)
         assert isinstance(runner, ToolRunner)
+
+    def test_uses_explicit_state(self) -> None:
+        catalog = _make_catalog("test")
+        state = ToolRunnerState()
+
+        runner = _make_runner(catalog, state=state)
+
+        assert runner.state is state
+
+    def test_creates_default_state(self) -> None:
+        catalog = _make_catalog("test")
+
+        runner = _make_runner(catalog)
+
+        assert runner.state is not None
 
 
 # ── Catalog Miss ─────────────────────────────────────────
@@ -528,6 +546,24 @@ class _StringReturnTool:
     def __init__(self, name: str, result: str = "ok") -> None:
         self._name = name
         self._result = result
+        if name == "read_file":
+            self.resource_claims = (
+                ResourceClaim(resource="workspace", mode="shared_read"),
+            )
+            self.capabilities = frozenset({"workspace.read"})
+            self.effect_level = "none"
+            self.fast_path_eligible = True
+            self.max_result_chars = 12000
+            self.plane = ToolPlane.SESSION_FS
+        elif name == "write_file":
+            self.resource_claims = (
+                ResourceClaim(resource="workspace", mode="exclusive"),
+            )
+            self.capabilities = frozenset({"workspace.write"})
+            self.effect_level = "local_mutation"
+            self.fast_path_eligible = False
+            self.max_result_chars = 0
+            self.plane = ToolPlane.SESSION_FS
 
     @property
     def name(self) -> str:
@@ -569,6 +605,12 @@ class TestNormalizeAndTruncation:
             name = "read_file"
             description = "none tool"
             json_schema: dict[str, Any] = {"type": "object", "properties": {}}
+            resource_claims = (ResourceClaim(resource="workspace", mode="shared_read"),)
+            capabilities = frozenset({"workspace.read"})
+            effect_level = "none"
+            fast_path_eligible = True
+            max_result_chars = 12000
+            plane = ToolPlane.SESSION_FS
 
             async def execute(self, arguments: dict[str, Any]) -> None:
                 return None
@@ -779,7 +821,10 @@ class TestInputValidatorInRunner:
         assert instance is not None
 
         # Patch the catalog to return a ToolInstance with a deny validator.
-        async def _deny_validator(args: dict[str, Any]) -> ToolDecision:
+        async def _deny_validator(
+            args: dict[str, Any],
+            runner_state: ToolRunnerState | None,
+        ) -> ToolDecision:
             return ToolDecision(decision="deny", reason="path outside boundary")
 
         executor_called = False
@@ -819,7 +864,10 @@ class TestInputValidatorInRunner:
         runner = _make_runner(catalog)
         ctx = _make_ctx()
 
-        async def _exploding_validator(args: dict[str, Any]) -> None:
+        async def _exploding_validator(
+            args: dict[str, Any],
+            runner_state: ToolRunnerState | None,
+        ) -> None:
             raise ValueError("validator kaboom")
 
         instance = catalog.get_tool("write_file")
@@ -847,6 +895,12 @@ class TestInputValidatorInRunner:
             name = "read_file"
             description = "capture"
             json_schema: dict[str, Any] = {"type": "object", "properties": {}}
+            resource_claims = (ResourceClaim(resource="workspace", mode="shared_read"),)
+            capabilities = frozenset({"workspace.read"})
+            effect_level = "none"
+            fast_path_eligible = True
+            max_result_chars = 12000
+            plane = ToolPlane.SESSION_FS
 
             async def execute(self, arguments: dict[str, Any]) -> ToolResult:
                 captured_args.update(arguments)
@@ -880,7 +934,10 @@ class TestInputValidatorInRunner:
         runner = _make_runner(catalog)
         ctx = _make_ctx()
 
-        async def _allow_validator(args: dict[str, Any]) -> None:
+        async def _allow_validator(
+            args: dict[str, Any],
+            runner_state: ToolRunnerState | None,
+        ) -> None:
             return None
 
         instance = catalog.get_tool("write_file")
