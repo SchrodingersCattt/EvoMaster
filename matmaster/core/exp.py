@@ -611,6 +611,12 @@ class Exp:
                     mcp_server,
                 )
                 return
+            tool_timeouts = mcp_config.get('tool_timeouts', {})
+            server_timeout = (
+                tool_timeouts.get(mcp_server)
+                if isinstance(tool_timeouts, dict)
+                else None
+            )
             for tool_schema in schemas:
                 original_name = tool_schema['name']
                 prefixed_name = f'{mcp_server}_{original_name}'
@@ -623,6 +629,7 @@ class Exp:
                     description=tool_schema.get('description', ''),
                     input_schema=tool_schema.get('input_schema', {}),
                     connector=connector,
+                    timeout=server_timeout,
                 )
                 # ESIN-05: Use catalog.register_overlay() for version-bumped injection
                 if catalog is not None:

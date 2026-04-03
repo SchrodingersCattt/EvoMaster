@@ -31,7 +31,7 @@
 - Modify: `matmaster/tools/lazy_mcp.py:132-163`
 - Test: `tests/matmaster/tools/test_lazy_mcp.py`
 
-- [ ] **Step 1: Write failing test for `_do_call` existence**
+- [x] **Step 1: Write failing test for `_do_call` existence**
 
 ```python
 # In tests/matmaster/tools/test_lazy_mcp.py, add to TestLazyMCPToolExecution:
@@ -47,12 +47,12 @@ async def test_do_call_returns_tool_result(self):
     assert result.status == "success"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/tools/test_lazy_mcp.py::TestLazyMCPToolExecution::test_do_call_returns_tool_result -v`
 Expected: FAIL with `AttributeError: 'LazyMCPTool' object has no attribute '_do_call'`
 
-- [ ] **Step 3: Extract `_do_call()` from `execute()`**
+- [x] **Step 3: Extract `_do_call()` from `execute()`**
 
 In `matmaster/tools/lazy_mcp.py`, extract the connection setup + path_adaptor + call_tool + format logic from `execute()` into `_do_call()`:
 
@@ -92,7 +92,7 @@ async def execute(self, arguments: dict[str, Any]) -> ToolResult:
     return await self._do_call(arguments)
 ```
 
-- [ ] **Step 4: Run full existing test suite to verify no regression**
+- [x] **Step 4: Run full existing test suite to verify no regression**
 
 Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/tools/test_lazy_mcp.py -v`
 Expected: ALL PASS (including the new test)
@@ -112,7 +112,7 @@ git commit -m "refactor: extract LazyMCPTool._do_call() from execute()"
 - Modify: `matmaster/tools/lazy_mcp.py:34-76`
 - Test: `tests/matmaster/tools/test_lazy_mcp.py`
 
-- [ ] **Step 1: Write failing test for timeout param**
+- [x] **Step 1: Write failing test for timeout param**
 
 ```python
 # In tests/matmaster/tools/test_lazy_mcp.py, add new test class:
@@ -156,12 +156,12 @@ class TestLazyMCPToolTimeout:
         assert tool._timeout == 45.0
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/tools/test_lazy_mcp.py::TestLazyMCPToolTimeout -v`
 Expected: FAIL (no `timeout` parameter, no `_timeout` attribute)
 
-- [ ] **Step 3: Add timeout parameter to `__init__`**
+- [x] **Step 3: Add timeout parameter to `__init__`**
 
 In `matmaster/tools/lazy_mcp.py`, add module-level constant and modify `__init__`:
 
@@ -191,7 +191,7 @@ class LazyMCPTool:
             self._timeout = _DEFAULT_MCP_TOOL_TIMEOUT
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/tools/test_lazy_mcp.py -v`
 Expected: ALL PASS
@@ -211,7 +211,7 @@ git commit -m "feat: add per-tool timeout parameter to LazyMCPTool"
 - Modify: `matmaster/tools/lazy_mcp.py:164-169`
 - Test: `tests/matmaster/tools/test_lazy_mcp.py`
 
-- [ ] **Step 1: Write failing tests for timeout and stop_event**
+- [x] **Step 1: Write failing tests for timeout and stop_event**
 
 ```python
 # In tests/matmaster/tools/test_lazy_mcp.py, add:
@@ -340,12 +340,12 @@ class TestLazyMCPToolExecuteWithContext:
         assert result.status in ("error", "cancelled")
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/tools/test_lazy_mcp.py::TestLazyMCPToolExecuteWithContext -v`
 Expected: FAIL (current `execute_with_context` ignores exec_ctx)
 
-- [ ] **Step 3: Implement the race logic**
+- [x] **Step 3: Implement the race logic**
 
 In `matmaster/tools/lazy_mcp.py`, add the stop_event polling helper and rewrite `execute_with_context`:
 
@@ -424,7 +424,7 @@ def _cancelled_result(self) -> ToolResult:
     )
 ```
 
-- [ ] **Step 4: Run all tests**
+- [x] **Step 4: Run all tests**
 
 Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/tools/test_lazy_mcp.py -v`
 Expected: ALL PASS
@@ -446,7 +446,7 @@ git commit -m "feat: add timeout + stop_event race logic to LazyMCPTool.execute_
 - Modify: `matmaster/core/exp.py:619-626`
 - Test: `tests/matmaster/integration/test_lazy_mcp_integration.py`
 
-- [ ] **Step 1: Write failing integration test**
+- [x] **Step 1: Write failing integration test**
 
 ```python
 # In tests/matmaster/integration/test_lazy_mcp_integration.py, add:
@@ -544,12 +544,12 @@ class TestLazyMCPTimeoutThreading:
         assert lazy._timeout == _DEFAULT_MCP_TOOL_TIMEOUT
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/integration/test_lazy_mcp_integration.py::TestLazyMCPTimeoutThreading -v`
 Expected: FAIL (`_timeout` is always default because exp.py doesn't pass timeout)
 
-- [ ] **Step 3: Modify Exp to pass timeout**
+- [x] **Step 3: Modify Exp to pass timeout**
 
 In `matmaster/core/exp.py`, inside the `on_skill_hit` closure (around line 606-631), read `tool_timeouts` from `mcp_config` and pass to `LazyMCPTool`:
 
@@ -583,12 +583,12 @@ def on_skill_hit(mcp_server: str) -> None:
             registry.register(lazy_tool, source='mcp')
 ```
 
-- [ ] **Step 4: Run all integration tests**
+- [x] **Step 4: Run all integration tests**
 
 Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/integration/test_lazy_mcp_integration.py -v`
 Expected: ALL PASS
 
-- [ ] **Step 5: Run full lazy_mcp test suite for regression**
+- [x] **Step 5: Run full lazy_mcp test suite for regression**
 
 Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo && uv run pytest tests/matmaster/tools/test_lazy_mcp.py tests/matmaster/integration/test_lazy_mcp_integration.py -v`
 Expected: ALL PASS

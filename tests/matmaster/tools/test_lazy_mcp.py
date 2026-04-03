@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,6 +14,7 @@ from matmaster.tools.lazy_mcp import (
 )
 from matmaster.tools.tool_registry import Tool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_spec import ToolExecutionContext
 from matmaster.types.topology import ToolPlane
 
 
@@ -29,6 +32,18 @@ class FakeConnector:
     async def ensure_connection(self, server_name: str) -> dict:
         self.ensure_calls.append(server_name)
         return {"connection": self._mock_conn, "path_adaptor": self._path_adaptor}
+
+
+class SlowConnector(FakeConnector):
+    """Connector whose call_tool waits indefinitely."""
+
+    def __init__(self):
+        super().__init__()
+
+        async def _sleep_forever(*_args, **_kwargs):
+            await asyncio.sleep(9999)
+
+        self._mock_conn.call_tool = AsyncMock(side_effect=_sleep_forever)
 
 
 class TestLazyMCPToolProtocol:
@@ -90,6 +105,20 @@ class TestLazyMCPToolProtocol:
 
 
 class TestLazyMCPToolExecution:
+    async def test_do_call_returns_tool_result(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+        )
+        result = await tool._do_call({"key": "val"})
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+
     async def test_first_execute_connects(self):
         connector = FakeConnector()
         tool = LazyMCPTool(
@@ -169,6 +198,203 @@ class TestLazyMCPToolExecution:
         result = await tool.execute({})
         assert result.status == "error"
         assert "remote failure" in result.content
+
+
+class TestLazyMCPToolTimeout:
+    def test_default_timeout(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+        )
+        assert tool._timeout == 120.0
+
+    def test_custom_timeout_via_constructor(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+            timeout=300.0,
+        )
+        assert tool._timeout == 300.0
+
+    def test_runtime_meta_timeout_overrides_default(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+            runtime_meta={"timeout": 60},
+        )
+        assert tool._timeout == 60.0
+
+    def test_runtime_meta_timeout_beats_constructor(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+            timeout=300.0,
+            runtime_meta={"timeout": 45},
+        )
+        assert tool._timeout == 45.0
+
+
+class TestLazyMCPToolExecuteWithContext:
+    async def test_timeout_fires_on_hung_server(self):
+        connector = SlowConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+            timeout=0.5,
+        )
+        exec_ctx = ToolExecutionContext()
+        result = await tool.execute_with_context({}, exec_ctx)
+        assert result.status == "error"
+        assert "timed out" in result.content
+
+    async def test_stop_event_before_call(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+        )
+        stop = threading.Event()
+        stop.set()
+        exec_ctx = ToolExecutionContext(stop_event=stop)
+        result = await tool.execute_with_context({}, exec_ctx)
+        assert result.status == "cancelled"
+
+    async def test_stop_event_during_call(self):
+        connector = SlowConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+            timeout=30.0,
+        )
+        stop = threading.Event()
+        exec_ctx = ToolExecutionContext(stop_event=stop)
+
+        async def set_stop_later():
+            await asyncio.sleep(0.2)
+            stop.set()
+
+        stopper = asyncio.create_task(set_stop_later())
+        result = await tool.execute_with_context({}, exec_ctx)
+        await stopper
+        assert result.status == "cancelled"
+
+    async def test_best_effort_cancel_message(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+            runtime_meta={"stop_mode": "best_effort"},
+        )
+        stop = threading.Event()
+        stop.set()
+        exec_ctx = ToolExecutionContext(stop_event=stop)
+        result = await tool.execute_with_context({}, exec_ctx)
+        assert "best-effort" in result.content
+
+    async def test_cancellable_cancel_message(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+            runtime_meta={"stop_mode": "cancellable"},
+        )
+        stop = threading.Event()
+        stop.set()
+        exec_ctx = ToolExecutionContext(stop_event=stop)
+        result = await tool.execute_with_context({}, exec_ctx)
+        assert result.content == "Run cancelled."
+
+    async def test_normal_execution_still_works(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+        )
+        exec_ctx = ToolExecutionContext()
+        result = await tool.execute_with_context({"key": "val"}, exec_ctx)
+        assert result.status == "success"
+
+    async def test_no_context_uses_timeout_only(self):
+        connector = SlowConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+            timeout=0.5,
+        )
+        result = await tool.execute_with_context({}, None)
+        assert result.status == "error"
+        assert "timed out" in result.content
+
+    async def test_race_timeout_and_stop_simultaneous(self):
+        connector = SlowConnector()
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+            timeout=0.3,
+        )
+        stop = threading.Event()
+        exec_ctx = ToolExecutionContext(stop_event=stop)
+
+        async def set_stop_later():
+            await asyncio.sleep(0.3)
+            stop.set()
+
+        stopper = asyncio.create_task(set_stop_later())
+        result = await tool.execute_with_context({}, exec_ctx)
+        await stopper
+        assert result.status in ("error", "cancelled")
 
 
 class TestLazyMCPToolFormatResult:

@@ -20,6 +20,9 @@ from matmaster.types.topology import ToolPlane
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_MCP_TOOL_TIMEOUT = 120.0
+_STOP_POLL_INTERVAL = 0.5
+
 
 def _parse_claims(raw_claims: Any) -> tuple[ResourceClaim, ...]:
     claims: list[ResourceClaim] = []
@@ -29,6 +32,12 @@ def _parse_claims(raw_claims: Any) -> tuple[ResourceClaim, ...]:
         elif isinstance(raw, dict):
             claims.append(ResourceClaim(**raw))
     return tuple(claims)
+
+
+async def _wait_for_stop(stop_event: threading.Event) -> None:
+    """Poll a threading.Event from async code until it is set."""
+    while not stop_event.is_set():
+        await asyncio.sleep(_STOP_POLL_INTERVAL)
 
 
 class LazyMCPTool:
@@ -50,6 +59,7 @@ class LazyMCPTool:
         input_schema: dict,
         connector: Any,
         runtime_meta: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> None:
         self._name = tool_name
         self._static_description = description
@@ -74,6 +84,12 @@ class LazyMCPTool:
         self._max_result_chars = int(meta.get("max_result_chars", 0) or 0)
         self._stop_mode = meta.get("stop_mode", "best_effort")
         self._state_mode = meta.get("state_mode", "stateless")
+        if meta.get("timeout") is not None:
+            self._timeout = float(meta["timeout"])
+        elif timeout is not None:
+            self._timeout = float(timeout)
+        else:
+            self._timeout = _DEFAULT_MCP_TOOL_TIMEOUT
 
     @property
     def name(self) -> str:
@@ -129,7 +145,8 @@ class LazyMCPTool:
     def exposed_to_model(self) -> bool:
         return self._exposed_to_model
 
-    async def execute(self, arguments: dict[str, Any]) -> ToolResult:
+    async def _do_call(self, arguments: dict[str, Any]) -> ToolResult:
+        """Raw MCP call: connect + resolve args + call_tool + format."""
         if self._connection is None:
             conn_info = await self._connector.ensure_connection(self._server_name)
             self._connection = conn_info["connection"]
@@ -161,12 +178,66 @@ class LazyMCPTool:
             # MCPConnection.call_tool raises RuntimeError on isError=True
             return ToolResult(status="error", content=str(e))
 
+    async def execute(self, arguments: dict[str, Any]) -> ToolResult:
+        return await self._do_call(arguments)
+
     async def execute_with_context(
         self,
         arguments: dict[str, Any],
         exec_ctx: ToolExecutionContext | None,
     ) -> ToolResult:
-        return await self.execute(arguments)
+        stop_event = getattr(exec_ctx, "stop_event", None) if exec_ctx else None
+
+        if stop_event is not None and stop_event.is_set():
+            return self._cancelled_result()
+
+        call_coro = asyncio.wait_for(self._do_call(arguments), timeout=self._timeout)
+
+        if stop_event is None:
+            try:
+                return await call_coro
+            except asyncio.TimeoutError:
+                return self._timeout_result()
+
+        call_task = asyncio.create_task(call_coro)
+        stop_task = asyncio.create_task(_wait_for_stop(stop_event))
+        done, pending = await asyncio.wait(
+            {call_task, stop_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+
+        if call_task in done:
+            try:
+                return call_task.result()
+            except asyncio.TimeoutError:
+                return self._timeout_result()
+
+        return self._cancelled_result()
+
+    def _timeout_result(self) -> ToolResult:
+        timeout_text = f"{self._timeout:g}"
+        return ToolResult(
+            status="error",
+            content=f"MCP tool {self._name} timed out after {timeout_text}s",
+            meta={"layer": "tool"},
+        )
+
+    def _cancelled_result(self) -> ToolResult:
+        if self._stop_mode == "cancellable":
+            return ToolResult(status="cancelled", content="Run cancelled.")
+        return ToolResult(
+            status="cancelled",
+            content=(
+                "Cancellation requested (best-effort). "
+                "Tool may have partially completed."
+            ),
+        )
 
     def _format_result(self, result_content: list) -> str:
         """Format MCPConnection.call_tool result content list to string.
