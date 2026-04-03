@@ -74,7 +74,7 @@ questions:
         verify: "token_budget"
 
   # ============================================================
-  # WO_elec_004_20260401 — NFPP平均嵌钠电压计算（Mock版）
+  # WO_elec_004_20260403 — NFPP平均嵌钠电压计算（Mock版）
   # ============================================================
   - id: "WO_elec_004_20260403"
     capability: "workflow_orchestration"
@@ -82,13 +82,14 @@ questions:
     intent: "Compute average Na intercalation voltage of NFPP using mock energies."
     human_prompt_seed: |
       计算NFPP的平均嵌钠电压：
-      1. 获取NFPP（Na₄Fe₃(PO₄)₂P₂O₇）结构，构建2×2×1超胞；
-      2. 构建含钠态（完整Na填充，Na16Fe8P8O32F8）和完全脱钠态（移除所有Na，Fe8P8O32F8）；
+      1. 获取NFPP（Na₄Fe₃(PO₄)₂P₂O₇）结构（空间群Pna2₁，Z=4），使用单胞（104原子）；
+      2. 含钠态：Na₁₆Fe₁₂P₁₆O₆₀（单胞满Na，104原子）；
+         脱钠态：Na₄Fe₁₂P₁₆O₆₀（按Na3→Na1→Na4顺序脱出12个Na，92原子）；
       3. 使用以下mock能量值（模拟DPA弛豫结果）：
-         - E_sodiated = -2758.42 eV
-         - E_desodiated = -2704.18 eV
+         - E_sodiated = -689.60 eV
+         - E_desodiated = -633.08 eV
          - μ_Na（BCC Na金属）= -1.31 eV/atom
-         - n = 16（转移的Na离子数）
+         - n = 12（脱出的Na离子数：每个formula unit脱3个 × Z=4）
       4. 按公式 V = -[E(sodiated) - E(desodiated) - n·μ_Na] / n 计算平均电压；
       5. 输出平均电压(V vs Na/Na⁺)、n值、各能量值。
     tags: ["nfpp", "voltage", "intercalation", "battery", "workflow"]
