@@ -12,6 +12,8 @@ from __future__ import annotations
 import posixpath
 from typing import Any, ClassVar
 
+from matmaster.types.tool_decision import ToolDecision
+
 from .base import BuiltinTool
 from .read_tracker import ReadTracker
 
@@ -51,6 +53,26 @@ class WriteTool(BuiltinTool):
     ) -> None:
         super().__init__(session=session, workdir=workdir)
         self._tracker = tracker
+
+    async def validate_input(self, arguments: dict[str, Any]) -> ToolDecision | None:
+        from pathlib import PurePosixPath
+
+        file_path = arguments.get("file_path", "")
+        if not file_path:
+            return ToolDecision(decision="deny", reason="file_path is required")
+        if self._workdir is None:
+            return ToolDecision(decision="deny", reason="workdir not set, cannot validate path")
+        # Parent-child containment via PurePosixPath.is_relative_to (not string prefix)
+        try:
+            resolved = PurePosixPath(posixpath.normpath(file_path))
+            if not resolved.is_relative_to(self._workdir):
+                return ToolDecision(
+                    decision="deny",
+                    reason=f"file_path '{file_path}' is outside workspace boundary",
+                )
+        except (TypeError, ValueError):
+            return ToolDecision(decision="deny", reason=f"invalid file_path: '{file_path}'")
+        return None
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         session = self._require_session()

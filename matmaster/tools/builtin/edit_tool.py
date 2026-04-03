@@ -15,6 +15,8 @@ import posixpath
 import re
 from typing import Any, ClassVar
 
+from matmaster.types.tool_decision import ToolDecision
+
 from .base import BuiltinTool
 from .read_tracker import ReadTracker
 
@@ -82,6 +84,18 @@ class EditTool(BuiltinTool):
     ) -> None:
         super().__init__(session=session, workdir=workdir)
         self._tracker = tracker
+
+    async def validate_input(self, arguments: dict[str, Any]) -> ToolDecision | None:
+        old_str = arguments.get("old_str", "")
+        new_str = arguments.get("new_str", "")
+        if not old_str:
+            return ToolDecision(decision="deny", reason="old_str must not be empty")
+        if old_str == new_str:
+            return ToolDecision(
+                decision="deny",
+                reason="old_str and new_str are identical, no edit needed",
+            )
+        return None
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         session = self._require_session()

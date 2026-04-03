@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_decision import ToolDecision
 
 
 class BuiltinTool(ABC):
@@ -54,6 +55,14 @@ class BuiltinTool(ABC):
         except Exception as e:
             self.logger.error('Tool %s failed: %s', self.name, e, exc_info=True)
             return f'Error: {e}'
+
+    async def validate_input(self, arguments: dict[str, Any]) -> ToolDecision | None:
+        """Tool-specific semantic input validation.
+
+        Override to reject invalid arguments before execution.
+        Return None to allow, ToolDecision(decision='deny', ...) to reject.
+        """
+        return None
 
     @abstractmethod
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:

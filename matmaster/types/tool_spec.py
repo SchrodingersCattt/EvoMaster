@@ -80,6 +80,7 @@ class ToolBinding(BaseModel):
 
 # Import ToolResult for the executor type signature
 from matmaster.tools.tool_result import ToolResult  # noqa: E402
+from matmaster.types.tool_decision import ToolDecision  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -87,9 +88,15 @@ class ToolInstance:
     """Frozen unit combining spec + binding + executor.
 
     This is what ToolCatalog stores and ToolRunner consumes.
-    The executor is an async callable: dict[str, Any] -> Awaitable[ToolResult].
+
+    NOTE: tool_executor annotation says Awaitable[ToolResult] but builtins
+    may return str | ToolResult | None at runtime. FullToolRunner calls
+    normalize_tool_result() after execution to handle this. The annotation
+    is historical type debt -- fixing it to Awaitable[str | ToolResult | None]
+    is deferred to avoid changing the executor contract in this plan.
     """
 
     tool_spec: ToolSpec
     tool_binding: ToolBinding
     tool_executor: Callable[[dict[str, Any]], Awaitable[ToolResult]]
+    input_validator: Callable[[dict[str, Any]], Awaitable[ToolDecision | None]] | None = None

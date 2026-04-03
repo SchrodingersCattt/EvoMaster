@@ -289,6 +289,31 @@ class FullToolRunner:
                     await on_result(tc, tr)
                 continue
 
+            # 3b. input_validator (tool-specific semantic check)
+            if instance.input_validator is not None:
+                try:
+                    iv_decision = await instance.input_validator(tc.arguments)
+                except Exception as exc:
+                    tr = ToolResult(
+                        status="error",
+                        content=str(exc),
+                        meta={"layer": "input_validation"},
+                    )
+                    results.append((tc, tr))
+                    if on_result:
+                        await on_result(tc, tr)
+                    continue
+                if iv_decision is not None and iv_decision.decision == "deny":
+                    tr = ToolResult(
+                        status="error",
+                        content=iv_decision.reason,
+                        meta={"layer": "input_validation"},
+                    )
+                    results.append((tc, tr))
+                    if on_result:
+                        await on_result(tc, tr)
+                    continue
+
             # 4. RunStateGuard (Layer B)
             guard_result = self._guard_pipeline.evaluate(tc, ctx.turn, ctx.max_turns)
             if not guard_result.allowed:

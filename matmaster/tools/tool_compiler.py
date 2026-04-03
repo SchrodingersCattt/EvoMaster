@@ -91,8 +91,13 @@ class ToolCompiler:
             plane=plane,
             resource_claims=claims,
         )
+        validator = None
+        if hasattr(tool, "validate_input") and callable(tool.validate_input):
+            validator = tool.validate_input
+
         return ToolInstance(
             tool_spec=spec,
             tool_binding=binding,
             tool_executor=tool.execute,
+            input_validator=validator,
         )

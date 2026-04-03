@@ -240,6 +240,36 @@ class TestFastPathEligibleFix:
         assert instance.tool_spec.fast_path_eligible is True
 
 
+class TestToolCompilerInputValidator:
+    def test_tool_with_validate_input_gets_bound(self) -> None:
+        """Tools with validate_input get input_validator on ToolInstance."""
+
+        class _ValidatableTool:
+            name = "write_file"
+            description = "validatable"
+            json_schema: dict[str, Any] = {"type": "object", "properties": {}}
+
+            async def execute(self, arguments: dict[str, Any]) -> ToolResult:
+                return ToolResult(content="ok")
+
+            async def validate_input(self, arguments: dict[str, Any]):
+                return None
+
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _ValidatableTool(), _make_topology(), source="builtin"
+        )
+        assert instance.input_validator is not None
+
+    def test_tool_without_validate_input_gets_none(self) -> None:
+        """Regular tools get input_validator=None."""
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _FakeTool("read_file"), _make_topology(), source="builtin"
+        )
+        assert instance.input_validator is None
+
+
 class TestToolCatalogCompilerDelegation:
     def test_get_tool_uses_compiler(self) -> None:
         registry = ToolRegistry()

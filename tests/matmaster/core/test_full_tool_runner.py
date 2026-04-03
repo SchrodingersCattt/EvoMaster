@@ -646,3 +646,110 @@ class TestNormalizeAndTruncation:
 
         assert tr.content == long_content
         assert "truncated" not in tr.meta
+
+
+# ── Input Validator in Runner ───────────────────────────
+
+
+class TestInputValidatorInRunner:
+    @pytest.mark.asyncio
+    async def test_deny_validator_returns_error(self) -> None:
+        """input_validator deny -> error ToolResult, executor not called."""
+        registry = ToolRegistry()
+        tool = _SimpleTool("write_file", result="should not reach")
+        registry.register(tool, source="builtin")
+        catalog = ToolCatalog(registry)
+        runner = _make_runner(catalog)
+        ctx = _make_ctx()
+
+        # Inject a validator that denies
+        instance = catalog.get_tool("write_file")
+        assert instance is not None
+
+        # Patch the catalog to return a ToolInstance with a deny validator.
+        async def _deny_validator(args: dict[str, Any]) -> ToolDecision:
+            return ToolDecision(decision="deny", reason="path outside boundary")
+
+        executor_called = False
+        original_executor = instance.tool_executor
+
+        async def _tracking_executor(args: dict[str, Any]) -> ToolResult:
+            nonlocal executor_called
+            executor_called = True
+            return await original_executor(args)
+
+        patched = ToolInstance(
+            tool_spec=instance.tool_spec,
+            tool_binding=instance.tool_binding,
+            tool_executor=_tracking_executor,
+            input_validator=_deny_validator,
+        )
+
+        # Patch catalog to return our custom instance
+        original_get = catalog.get_tool
+        catalog.get_tool = lambda name: patched if name == "write_file" else original_get(name)
+
+        results = await runner.execute_batch([_make_tc("write_file")], ctx)
+        _, tr = results[0]
+
+        assert tr.status == "error"
+        assert "path outside boundary" in tr.content
+        assert tr.meta.get("layer") == "input_validation"
+        assert not executor_called
+
+    @pytest.mark.asyncio
+    async def test_validator_exception_returns_error(self) -> None:
+        """input_validator raising exception -> error ToolResult."""
+        registry = ToolRegistry()
+        tool = _SimpleTool("write_file", result="should not reach")
+        registry.register(tool, source="builtin")
+        catalog = ToolCatalog(registry)
+        runner = _make_runner(catalog)
+        ctx = _make_ctx()
+
+        async def _exploding_validator(args: dict[str, Any]) -> None:
+            raise ValueError("validator kaboom")
+
+        instance = catalog.get_tool("write_file")
+        patched = ToolInstance(
+            tool_spec=instance.tool_spec,
+            tool_binding=instance.tool_binding,
+            tool_executor=instance.tool_executor,
+            input_validator=_exploding_validator,
+        )
+        catalog.get_tool = lambda name: patched if name == "write_file" else None
+
+        results = await runner.execute_batch([_make_tc("write_file")], ctx)
+        _, tr = results[0]
+
+        assert tr.status == "error"
+        assert "validator kaboom" in tr.content
+        assert tr.meta.get("layer") == "input_validation"
+
+    @pytest.mark.asyncio
+    async def test_allow_validator_lets_execution_proceed(self) -> None:
+        """input_validator returning None -> execution proceeds normally."""
+        registry = ToolRegistry()
+        tool = _SimpleTool("write_file", result="written ok")
+        registry.register(tool, source="builtin")
+        catalog = ToolCatalog(registry)
+        runner = _make_runner(catalog)
+        ctx = _make_ctx()
+
+        async def _allow_validator(args: dict[str, Any]) -> None:
+            return None
+
+        instance = catalog.get_tool("write_file")
+        patched = ToolInstance(
+            tool_spec=instance.tool_spec,
+            tool_binding=instance.tool_binding,
+            tool_executor=instance.tool_executor,
+            input_validator=_allow_validator,
+        )
+        catalog.get_tool = lambda name: patched if name == "write_file" else None
+
+        results = await runner.execute_batch([_make_tc("write_file")], ctx)
+        _, tr = results[0]
+
+        assert tr.status == "success"
+        assert tr.content == "written ok"
