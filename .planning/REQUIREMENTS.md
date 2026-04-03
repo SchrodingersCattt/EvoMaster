@@ -90,8 +90,8 @@
 
 ### 去总线化
 
-- [ ] **DBUS-01**: 审计 MessageBus + EventRouter 的全部消费者（SSEHandler / PersistenceHandler / DevShell EventLogger / 其他）
-- [ ] **DBUS-02**: 设计并实现消费侧 async fanout 替代方案，确保 SSE 先发、持久化不阻塞 token 流
+- [x] **DBUS-01**: 审计 MessageBus + EventRouter 的全部消费者（SSEHandler / PersistenceHandler / DevShell EventLogger / 其他）
+- [x] **DBUS-02**: 设计并实现消费侧 async fanout 替代方案，确保 SSE 先发、持久化不阻塞 token 流
 - [ ] **DBUS-03**: 移除 MessageBus + EventRouter，generator 事件直连消费者
 
 ### 回归兼容
@@ -171,8 +171,8 @@
 | CMIG-03 | Phase 35 | Complete |
 | CMIG-04 | Phase 35 | Complete |
 | CMIG-05 | Phase 35 | Complete |
-| DBUS-01 | Phase 36 | Pending |
-| DBUS-02 | Phase 36 | Pending |
+| DBUS-01 | Phase 36 | Complete |
+| DBUS-02 | Phase 36 | Complete |
 | DBUS-03 | Phase 36 | Pending |
 | REGR-01 | Phase 32 | Complete |
 | REGR-02 | Phase 34 | Complete |
