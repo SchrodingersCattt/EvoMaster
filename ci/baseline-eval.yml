@@ -160,6 +160,8 @@ baseline-eval-trigger:
       - artifact: ci/generated-eval-child.yml
         job: generate-eval-pipeline
     strategy: depend
+    forward:
+      pipeline_variables: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
     - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "baseline-eval"'
