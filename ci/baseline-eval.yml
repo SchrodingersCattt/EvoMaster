@@ -52,7 +52,7 @@
 #   BASELINE_PENDING_ONLY  — 1=pending等人工阅卷，0=proxy自动入库，默认 1
 
 variables:
-  EVAL_RUNNER: "claude_cli"  # claude_cli 或 devshell
+  EVAL_RUNNER: "devshell"  # claude_cli 或 devshell
   # ⚠️ 临时测试用，验证通过后务必删除以下几行，改用 GitLab CI Variables 注入
   # [minimax] 当前使用（仅 claude_cli 模式需要）
   ANTHROPIC_API_KEY: "sk-cp-TGM8jt_jQj6k_K8nCqJGLqoeaBrc61y2E2V-Kfs1KWkfMzmyKLeySXWFXfKCSFqqI9pWftgYzygvxDKM-G2D33ybu-BT77ty0cVnyHCewd6j5W_AscyYRns"
