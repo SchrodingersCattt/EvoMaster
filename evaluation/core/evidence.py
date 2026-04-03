@@ -10,8 +10,10 @@ Design principles
 * ``EventRecord``   – abstract, agent-action-level events (used by rule-based checks)
 * ``ToolCallRecord`` – raw tool call log with name + description (used by LLM judge)
 * ``ArtifactRecord`` – output files / data produced during the run
-* ``TokenUsage``     – from trajectory: **last model turn** only (max ``step_id``;
-  tie-break by later record). ``prompt_tokens`` = input to that call.
+* ``TokenUsage``     – scalar usage snapshot; on the bundle, ``token_usage_last_turn``
+  holds the **last** model turn (max ``step_id``; tie-break by later record) and
+  ``token_usage_run`` holds the sum over all turns. Checklist ``token_budget`` and
+  ingest ``item["tokens"]`` use **last-turn** raw ``total_tokens`` (no cache subtraction).
 * ``EvidenceBundle`` – single input to the evaluator
 * ``EvidenceExtractor`` – converts trajectory JSON → EvidenceBundle
 
@@ -239,9 +241,21 @@ class EvidenceBundle(BaseModel):
         default=None,
         description='Base model name used during the run (from LLM config or API response)',
     )
-    token_usage: TokenUsage = Field(
+    token_usage_last_turn: TokenUsage = Field(
         default_factory=TokenUsage,
-        description='Token usage for the last model turn (see TokenUsage docstring)',
+        description=(
+            'Token usage for the last model turn in the trajectory (max step_id). '
+            '``token_budget`` compares this snapshot’s raw ``total_tokens`` '
+            '(not cache-adjusted) to the reference ceiling.'
+        ),
+    )
+    token_usage_run: TokenUsage = Field(
+        default_factory=TokenUsage,
+        description=(
+            'Summed usage over all model turns in the trajectory, or the whole-run '
+            'aggregate when the bundle is built from devshell summary only. '
+            'Informational for reports; ``token_budget`` uses ``token_usage_last_turn``.'
+        ),
     )
     total_steps: int = Field(default=0, description='Total number of agent steps')
     run_status: str = Field(
@@ -385,6 +399,7 @@ class EvidenceExtractor:
         # Last model turn only: max step_id with usage (tie: later in file wins)
         best_usage_key: tuple[int, int] = (-1, -1)
         best_usage: dict[str, Any] | None = None
+        run_usage = TokenUsage()
         step_serial = 0
 
         events: list[EventRecord] = []
@@ -415,6 +430,15 @@ class EvidenceExtractor:
                     if best_usage is None or key > best_usage_key:
                         best_usage_key = key
                         best_usage = usage
+                    tu_step = TokenUsage.from_usage_dict(usage)
+                    run_usage.add(
+                        {
+                            'prompt_tokens': tu_step.prompt_tokens,
+                            'completion_tokens': tu_step.completion_tokens,
+                            'total_tokens': tu_step.total_tokens,
+                            'cache_read_tokens': tu_step.cache_read_tokens,
+                        }
+                    )
 
                 # Collect tool responses indexed by call_id
                 tool_responses = step_dict.get('tool_responses', [])
@@ -474,7 +498,7 @@ class EvidenceExtractor:
                     if event:
                         events.append(event)
 
-        token_usage = (
+        last_turn_usage = (
             TokenUsage.from_usage_dict(best_usage)
             if best_usage is not None
             else TokenUsage()
@@ -486,7 +510,8 @@ class EvidenceExtractor:
             events=events,
             tool_calls=tool_calls,
             model_name=model_name,
-            token_usage=token_usage,
+            token_usage_last_turn=last_turn_usage,
+            token_usage_run=run_usage,
             total_steps=total_steps,
             run_status=run_status,
         )

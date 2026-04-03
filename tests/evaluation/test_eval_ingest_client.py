@@ -11,7 +11,7 @@ from evaluation.eval_ingest_client import (
     build_ingest_item,
     clip_ingest_text_field,
     eval_run_zip_should_skip_arcname,
-    extract_total_tokens,
+    extract_ingest_tokens,
     load_devshell_events_timeline,
     normalize_baseline_channel,
     normalize_pending_item_for_submission,
@@ -37,11 +37,69 @@ def test_prompt_sha256_stable() -> None:
     assert h != prompt_sha256("hello ")
 
 
-def test_extract_total_tokens() -> None:
-    assert extract_total_tokens(None) is None
-    assert extract_total_tokens({}) is None
-    assert extract_total_tokens({"total_tokens": 42}) == 42
-    assert extract_total_tokens({"prompt_tokens": 10, "completion_tokens": 5}) == 15
+def test_extract_ingest_tokens() -> None:
+    assert extract_ingest_tokens(None) is None
+    assert extract_ingest_tokens({}) is None
+    assert extract_ingest_tokens({"usage": {"total_tokens": 42}}) == 42
+    assert (
+        extract_ingest_tokens({"usage": {"prompt_tokens": 10, "completion_tokens": 5}})
+        == 15
+    )
+    # Raw total_tokens: do not subtract cache (OpenAI-style devshell summary)
+    assert (
+        extract_ingest_tokens(
+            {
+                "usage": {
+                    "prompt_tokens": 70949,
+                    "completion_tokens": 930,
+                    "total_tokens": 71879,
+                    "cache_read_tokens": 32000,
+                }
+            }
+        )
+        == 71879
+    )
+    assert (
+        extract_ingest_tokens({"usage": {"total_tokens": 100, "cache_read_tokens": 20}})
+        == 100
+    )
+    # Anthropic-style keys → ``from_usage_dict`` sets total = input + cache_read + output
+    assert (
+        extract_ingest_tokens(
+            {
+                "usage": {
+                    "input_tokens": 1000,
+                    "output_tokens": 100,
+                    "cache_read_input_tokens": 400,
+                }
+            }
+        )
+        == 1500
+    )
+
+
+def test_extract_ingest_tokens_prefers_last_vendor_turn() -> None:
+    assert (
+        extract_ingest_tokens(
+            {
+                "usage": {"total_tokens": 1000},
+                "usage_vendor_by_turn": [
+                    {"total_tokens": 100},
+                    {"total_tokens": 200},
+                ],
+            }
+        )
+        == 200
+    )
+
+
+def test_extract_ingest_tokens_empty_vendor_list_uses_usage() -> None:
+    assert (
+        extract_ingest_tokens(
+            {"usage": {"total_tokens": 42}, "usage_vendor_by_turn": []}
+        )
+        == 42
+    )
 
 
 def test_score_for_eval_ingest_explicit() -> None:
@@ -96,6 +154,61 @@ def test_build_ingest_item_minimal() -> None:
     assert item["num_turns"] == 3
     assert item["extra"]["task_id"] == "Q1_direct_r0"
     assert item["extra"]["reason"] == "natural"
+    assert item["extra"]["usage"] == {"total_tokens": 100}
+    assert item["extra"]["tokens_last_turn"] == 100
+    assert "usage_vendor_by_turn" not in item["extra"]
+
+
+def test_build_ingest_item_usage_vendor_by_turn_nested_in_extra() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "usage": {"total_tokens": 50, "prompt_tokens": 40, "completion_tokens": 10},
+            "usage_vendor_by_turn": [
+                {
+                    "prompt_tokens": 40,
+                    "completion_tokens": 10,
+                    "total_tokens": 50,
+                    "prompt_tokens_details": {"cached_tokens": 32000},
+                }
+            ],
+        },
+        duration_ms=1,
+    )
+    assert item["extra"]["usage_vendor_by_turn"][0]["prompt_tokens_details"] == {
+        "cached_tokens": 32000
+    }
+    assert item["tokens"] == 50
+
+
+def test_build_ingest_item_usage_vendor_by_turn_in_extra() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "usage": {"total_tokens": 30},
+            "usage_vendor_by_turn": [
+                {"prompt_tokens": 10, "total_tokens": 10},
+                {},
+                {"prompt_tokens": 20, "total_tokens": 20},
+            ],
+        },
+        duration_ms=1,
+    )
+    assert len(item["extra"]["usage_vendor_by_turn"]) == 3
+    assert item["extra"]["usage_vendor_by_turn"][1] == {}
+    assert item["extra"]["usage_vendor_by_turn"][2]["prompt_tokens"] == 20
+    assert item["tokens"] == 20
+    assert item["extra"]["tokens_last_turn"] == 20
     assert "model" not in item["extra"]
     assert "num_turns" not in item["extra"]
 
