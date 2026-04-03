@@ -208,4 +208,4 @@ Phases 32-36 execute in numeric order. Phase 34 depends on both 32 and 33. Phase
 | 33. ToolRunner 完整实现 + ToolScheduler | v2.2 | 5/5 | Complete    | 2026-04-02 |
 | 34. Exp/Service 接入 + Hook 退役 | v2.2 | 4/4 | Complete    | 2026-04-02 |
 | 35. 约束迁移 + ToolRegistry 降级 | v2.2 | 3/3 | Complete    | 2026-04-03 |
-| 36. 去总线化 + 调度边界固化 | v2.2 | 2/4 | In Progress|  |
+| 36. 去总线化 + 调度边界固化 | v2.2 | 3/4 | In Progress|  |

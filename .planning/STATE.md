@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: AgentKernel Generator-First + Tool Runtime v2
 status: executing
-stopped_at: Completed 36-02-PLAN.md
-last_updated: "2026-04-03T09:03:27.937Z"
+stopped_at: Completed 36-03-PLAN.md
+last_updated: "2026-04-03T09:24:38.406Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 19
-  completed_plans: 17
+  completed_plans: 18
   percent: 100
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 36 (debus-scheduling) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-04-03
 
@@ -46,6 +46,7 @@ Progress: [====================] 100%
 - [Phase 36]: set[asyncio.Task] for pending persistence (Python 3.10 compat, no TaskGroup)
 - [Phase 36]: bus.py retained as deprecated stub: exp.py/devshell still import MessageBus; physical deletion deferred to Plan 03/04
 - [Phase 36]: ConfirmationHook fully deleted (D-03/D-04); confirmation_request event type preserved; reply-queue dormant for v2.3
+- [Phase 36]: Exp and ContextCompactor bus= parameters fully removed; DevShell runner keeps bus param in run() signature (unused) for Plan 04
 
 ### Pending Todos
 
@@ -57,6 +58,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-03T09:03:27.934Z
-Stopped at: Completed 36-02-PLAN.md
+Last session: 2026-04-03T09:24:38.403Z
+Stopped at: Completed 36-03-PLAN.md
 Resume file: None
