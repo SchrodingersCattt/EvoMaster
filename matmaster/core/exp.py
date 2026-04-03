@@ -100,8 +100,8 @@ class Exp:
         """Create async spawn_fn closure capturing parent runtime context.
 
         The returned async callable creates a child Exp from exp_name,
-        runs it via child_exp.run() with the parent's PlaygroundContext,
-        and returns the result.
+        runs it via child_exp.run_stream() with the parent's PlaygroundContext,
+        drains the event stream, and returns the final content.
         """
 
         async def spawn_fn(
@@ -110,22 +110,25 @@ class Exp:
             stop_event: threading.Event | None = None,
         ) -> str:
             from matmaster.config.loader import load_exp_config
+            from matmaster.core.stream_drain import drain_run_stream
 
             child_config = load_exp_config(exp_name)
             child_exp = Exp(child_config)
             child_source = f'{source_prefix}:{exp_name}'
             child_spawn_id = uuid.uuid4().hex[:16]
-            result = await child_exp.run(
-                ctx,
-                task,
-                stop_event=stop_event,
-                source_override=child_source,
-                spawn_id=child_spawn_id,
+            drain = await drain_run_stream(
+                child_exp.run_stream(
+                    ctx,
+                    task,
+                    stop_event=stop_event,
+                    source_override=child_source,
+                    spawn_id=child_spawn_id,
+                )
             )
-            if result.status == "completed" and result.final_content:
-                return result.final_content
+            if drain.status == "completed" and drain.final_content:
+                return drain.final_content
             return (
-                f"SubAgent finished with status={result.status}, reason={result.reason}"
+                f"SubAgent finished with status={drain.status}, reason={drain.reason}"
             )
 
         return spawn_fn
