@@ -179,7 +179,11 @@ class BuiltinTool(ABC):
             self.logger.error('Tool %s failed: %s', self.name, e, exc_info=True)
             return f'Error: {e}'
 
-    async def validate_input(self, arguments: dict[str, Any]) -> ToolDecision | None:
+    async def validate_input(
+        self, arguments: dict[str, Any], runner_state: ToolRunnerState | None = None,
+    ) -> ToolDecision | None:
+        """Phase 1 (serial) validation. runner_state enables cross-tool checks
+        like read-before-modify without concurrency timing issues."""
         return None
 
     @abstractmethod
@@ -214,14 +218,32 @@ class ReadTool(BuiltinTool):
 
     # tracker parameter removed from __init__
 
+    def _execute(self, arguments):
+        # ... existing read logic unchanged ...
+        # Key change: _mark() now returns ToolResult with explicit signal
+        # instead of side-effecting a shared ReadTracker.
+        #
+        # _full_read: mark_read=True only when not truncated and within limit
+        # _ranged_read: mark_read=True only when not char-truncated
+        # overlimit (error + preview): mark_read=False always
+        #
+        # Example for full_read success path:
+        #   return ToolResult(content=output, meta={"mark_read": True})
+        # Example for overlimit/truncated:
+        #   return ToolResult(content=error_msg)  # no mark_read
+
     async def execute_with_context(self, arguments, exec_ctx):
         result = await asyncio.to_thread(self._execute, arguments)
-        if exec_ctx.runner_state and not str(result).startswith("Error"):
+        tr = normalize_tool_result(result)
+        # Only mark as read when _execute explicitly signals mark_read=True.
+        # Preserves current semantics: overlimit preview and char-truncated
+        # reads are NOT counted as "file has been read".
+        if exec_ctx.runner_state and tr.meta.get("mark_read"):
             path = posixpath.normpath(arguments.get("file_path", ""))
             read_set = exec_ctx.runner_state.get("read_files", set())
             read_set.add(path)
             exec_ctx.runner_state.set("read_files", read_set)
-        return result
+        return tr
 ```
 
 ### BashTool
@@ -259,37 +281,37 @@ class WriteTool(BuiltinTool):
     plane: ClassVar = ToolPlane.SESSION_FS
 
     # tracker parameter removed from __init__
-    # validate_input() RETAINED for workspace boundary enforcement (path safety check).
-    # Only the tracker-based read-before-modify check moves to execute_with_context.
+    # validate_input() handles BOTH path boundary check AND read-before-modify.
+    # Both run in Phase 1 (serial), preserving deterministic behavior.
+    # No execute_with_context override needed (base class default suffices).
 
-    async def validate_input(self, arguments):
-        """Path boundary check (retained). Read-before-modify moved to execute_with_context."""
+    async def validate_input(self, arguments, runner_state=None):
+        """Phase 1: path boundary + read-before-modify (deterministic, serial)."""
         from pathlib import PurePosixPath
         file_path = arguments.get("file_path", "")
         if not file_path:
             return ToolDecision(decision="deny", reason="file_path is required")
         if self._workdir is None:
             return ToolDecision(decision="deny", reason="workdir not set")
+        # Path boundary check (retained from current)
         try:
             resolved = PurePosixPath(posixpath.normpath(file_path))
             if not resolved.is_relative_to(self._workdir):
                 return ToolDecision(decision="deny", reason=f"file_path outside workspace")
         except (TypeError, ValueError):
             return ToolDecision(decision="deny", reason=f"invalid file_path")
-        return None
-
-    async def execute_with_context(self, arguments, exec_ctx):
-        """Read-before-modify check via runner_state (replaces tracker)."""
-        if exec_ctx.runner_state and self._session is not None:
-            path = posixpath.normpath(arguments.get("file_path", ""))
-            if self._session.path_exists(arguments.get("file_path", "")):
-                read_files = exec_ctx.runner_state.get("read_files", set())
-                if path and path not in read_files:
-                    return ToolResult(
-                        status="error",
-                        content=f"File '{path}' must be read before overwrite",
+        # Read-before-modify check (replaces tracker, runs in Phase 1)
+        if runner_state is not None and self._session is not None:
+            normalized = posixpath.normpath(file_path)
+            if self._session.path_exists(file_path):
+                read_files = runner_state.get("read_files", set())
+                if normalized not in read_files:
+                    return ToolDecision(
+                        decision="deny",
+                        reason=f"File '{file_path}' must be read before overwrite",
+                        guidance="Read the file first using read_file.",
                     )
-        return await asyncio.to_thread(self._execute, arguments)
+        return None
 ```
 
 ### EditTool
@@ -305,30 +327,29 @@ class EditTool(BuiltinTool):
     plane: ClassVar = ToolPlane.SESSION_FS
 
     # tracker parameter removed from __init__
-    # validate_input() RETAINED for old_str/new_str semantic checks.
-    # Read-before-modify (previously in ReadBeforeModifyGuard) moves here.
+    # validate_input() handles semantic checks AND read-before-modify.
+    # Both run in Phase 1 (serial), preserving deterministic behavior.
+    # No execute_with_context override needed (base class default suffices).
 
-    async def validate_input(self, arguments):
-        """Semantic checks (retained from current)."""
+    async def validate_input(self, arguments, runner_state=None):
+        """Phase 1: semantic checks + read-before-modify (deterministic, serial)."""
         old_str = arguments.get("old_str", "")
         new_str = arguments.get("new_str", "")
         if not old_str:
             return ToolDecision(decision="deny", reason="old_str must not be empty")
         if old_str == new_str:
             return ToolDecision(decision="deny", reason="old_str and new_str are identical")
-        return None
-
-    async def execute_with_context(self, arguments, exec_ctx):
-        """Read-before-modify check (replaces ReadBeforeModifyGuard)."""
-        if exec_ctx.runner_state:
-            read_files = exec_ctx.runner_state.get("read_files", set())
+        # Read-before-modify (replaces ReadBeforeModifyGuard, runs in Phase 1)
+        if runner_state is not None:
+            read_files = runner_state.get("read_files", set())
             path = posixpath.normpath(arguments.get("file_path", ""))
             if path and path not in read_files:
-                return ToolResult(
-                    status="error",
-                    content=f"File '{path}' must be read before editing",
+                return ToolDecision(
+                    decision="deny",
+                    reason=f"File '{path}' must be read before editing",
+                    guidance="Read the file first using read_file.",
                 )
-        return await asyncio.to_thread(self._execute, arguments)
+        return None
 ```
 
 ### Full Metadata Table
@@ -447,7 +468,17 @@ class ToolCompiler:
     """Compile a Tool into ToolInstance -- pure assembly, no lookup tables."""
 
     def compile(self, tool: Tool, topology: RuntimeTopology, *, source: str = "unknown") -> ToolInstance:
-        claims = tool.resource_claims
+        # Read metadata from tool with getattr fallback for minimal Protocol tools.
+        # Defaults are conservative: CONTROL_PLANE, local_mutation, not fast_path.
+        claims = getattr(tool, "resource_claims", ())
+        capabilities = getattr(tool, "capabilities", frozenset())
+        effect_level = getattr(tool, "effect_level", "local_mutation")
+        fast_path = getattr(tool, "fast_path_eligible", False)
+        max_result_chars = getattr(tool, "max_result_chars", 0)
+        exposed = getattr(tool, "exposed_to_model", True)
+        plane = getattr(tool, "plane", ToolPlane.CONTROL_PLANE)
+        state_mode = getattr(tool, "state_mode", "stateless")
+        stop_mode = getattr(tool, "stop_mode", "cancellable")
 
         # Topology-dependent binding relaxation (retained)
         if (
@@ -463,18 +494,18 @@ class ToolCompiler:
             description=tool.description,     # property access (static)
             args_schema=tool.json_schema,
             source=source,
-            capabilities=tool.capabilities,
-            effect_level=tool.effect_level,
-            fast_path_eligible=tool.fast_path_eligible,
-            max_result_chars=tool.max_result_chars,
-            exposed_to_model=tool.exposed_to_model,
+            capabilities=capabilities,
+            effect_level=effect_level,
+            fast_path_eligible=fast_path,
+            max_result_chars=max_result_chars,
+            exposed_to_model=exposed,
         )
         binding = ToolBinding(
-            binding_key=f"{tool.plane.value}:{tool.name}",
-            plane=tool.plane,
+            binding_key=f"{plane.value}:{tool.name}",
+            plane=plane,
             resource_claims=claims,
-            state_mode=tool.state_mode,
-            stop_mode=tool.stop_mode,
+            state_mode=state_mode,
+            stop_mode=stop_mode,
         )
 
         # Prefer execute_with_context (provides runner_state access).
@@ -613,7 +644,32 @@ class FullToolRunner:
         return self._state
 ```
 
-In `_execute_one()`:
+**Phase 1 (serial) — input_validator now receives runner_state:**
+
+```python
+# In execute_batch(), Phase 1 serial validation:
+
+# 2b. input_validator (extended signature)
+if instance.input_validator is not None:
+    iv_decision = await instance.input_validator(effective_args, self._state)
+    # ... deny handling unchanged ...
+```
+
+This ensures read-before-modify checks run in Phase 1 (deterministic, serial),
+not Phase 2 (concurrent). Same-batch `read_file + edit_file` is correctly
+denied because read_file hasn't executed yet — identical to current behavior.
+
+**ToolInstance input_validator type change:**
+
+```python
+# In ToolInstance:
+input_validator: Callable[
+    [dict[str, Any], ToolRunnerState | None],  # args + runner_state
+    Awaitable[ToolDecision | None],
+] | None = None
+```
+
+**Phase 2 (concurrent) — exec_ctx with runner_state for ReadTool writes:**
 
 ```python
 exec_ctx = _ExecCtx(
@@ -624,16 +680,26 @@ exec_ctx = _ExecCtx(
 
 ### Thread Safety
 
-All `runner_state` reads/writes happen after `await asyncio.to_thread()` returns,
-in the asyncio event loop thread. asyncio is single-threaded cooperative concurrency,
-so no data races.
+**Phase 1 reads**: validate_input reads runner_state in the serial loop. No concurrency.
+
+**Phase 2 writes**: ReadTool's execute_with_context writes runner_state after
+`await asyncio.to_thread()` returns — back in the event loop thread. asyncio is
+single-threaded cooperative concurrency, so no data races between concurrent tools.
+
+**Forbidden**: Never access runner_state inside sync `_execute()` methods or in
+any code running in the thread pool.
 
 ## 10. Exp Integration
 
 ### System Prompt Assembly
 
+Tool prompts are appended AFTER the full TOML-assembled system prompt
+(which includes identity, skills, and generic tools sections in their
+existing fixed order). This is deliberate: tool-specific usage guidance
+is supplementary to the main prompt, not interleaved into it.
+
 ```python
-# In Exp.build_runtime():
+# In Exp.build_runtime(), AFTER existing system prompt assembly:
 desc_ctx = ToolDescriptionContext(
     session_kind=topology.session_kind,
     workspace_root=topology.workspace_root,
@@ -682,7 +748,7 @@ self._register_cleanup(runner_state.clear)
 | Item | Location | Reason |
 |------|----------|--------|
 | `ReadTracker` class | `matmaster/tools/builtin/read_tracker.py` | Replaced by ToolRunnerState |
-| `ReadBeforeModifyGuard` | `matmaster/core/guard_pipeline.py` | Replaced by WriteTool/EditTool execute_with_context |
+| `ReadBeforeModifyGuard` | `matmaster/core/guard_pipeline.py` | Replaced by WriteTool/EditTool validate_input with runner_state |
 | `BUILTIN_CLAIMS` | `matmaster/tools/tool_compiler.py` | Moved to tool ClassVars |
 | `BUILTIN_META` | `matmaster/tools/tool_compiler.py` | Moved to tool ClassVars |
 | `BUILTIN_CAPABILITIES` | `matmaster/tools/tool_compiler.py` | Moved to tool ClassVars |
@@ -709,8 +775,8 @@ self._register_cleanup(runner_state.clear)
 | `matmaster/tools/builtin/base.py` | ABC expansion (defaults, execute_with_context, describe()) |
 | `matmaster/tools/builtin/bash_tool.py` | Metadata ClassVars, prompt() override |
 | `matmaster/tools/builtin/read_tool.py` | Metadata ClassVars, execute_with_context, remove tracker |
-| `matmaster/tools/builtin/write_tool.py` | Metadata ClassVars, execute_with_context (read-before-modify), retain validate_input (path safety) |
-| `matmaster/tools/builtin/edit_tool.py` | Metadata ClassVars, execute_with_context (read-before-modify), retain validate_input (semantic checks) |
+| `matmaster/tools/builtin/write_tool.py` | Metadata ClassVars, validate_input extended (path safety + read-before-modify via runner_state), remove tracker |
+| `matmaster/tools/builtin/edit_tool.py` | Metadata ClassVars, validate_input extended (semantic checks + read-before-modify via runner_state), remove tracker |
 | `matmaster/tools/builtin/listdir_tool.py` | Metadata ClassVars |
 | `matmaster/tools/builtin/glob_tool.py` | Metadata ClassVars |
 | `matmaster/tools/builtin/grep_tool.py` | Metadata ClassVars |
@@ -725,8 +791,8 @@ self._register_cleanup(runner_state.clear)
 | `matmaster/tools/builtin/task/task_complete.py` | Metadata ClassVars |
 | `matmaster/tools/lazy_mcp.py` | Expand runtime_meta to properties, add describe()/prompt()/execute_with_context |
 | `matmaster/tools/skill_tool.py` | Add Protocol properties (resource_claims, capabilities, plane, etc.), add describe()/prompt()/execute_with_context |
-| `matmaster/types/tool_spec.py` | ToolExecutionContext +runner_state |
-| `matmaster/core/tool_runner.py` | FullToolRunner +ToolRunnerState, inject exec_ctx |
+| `matmaster/types/tool_spec.py` | ToolExecutionContext +runner_state, ToolInstance.input_validator signature change |
+| `matmaster/core/tool_runner.py` | FullToolRunner +ToolRunnerState, inject exec_ctx, pass runner_state to input_validator in Phase 1 |
 | `matmaster/core/exp.py` | Remove ReadTracker, add desc_ctx/tool_prompts/ToolRunnerState |
 | `matmaster/core/agent.py` | build_definitions(desc_ctx) at both call sites (line ~425, ~685) |
 | `matmaster/core/guard_pipeline.py` | Remove ReadBeforeModifyGuard |
@@ -746,3 +812,16 @@ self._register_cleanup(runner_state.clear)
 | ReadTool tests | Remove tracker construction, add runner_state write verification |
 | WriteTool/EditTool tests | Remove tracker construction, add runner_state read-before-modify verification |
 | Exp integration tests | Update tool construction (no tracker param), verify prompt assembly |
+| validate_input signature | All existing validate_input implementations need runner_state param |
+
+## 14. Known Limitations
+
+**MCP tool metadata source of truth**: MCP protocol does not define resource_claims,
+capabilities, or execution plane. The current schema cache and skill injection paths
+only pass name/description/input_schema to LazyMCPTool. MCP tools will continue to
+use LazyMCPTool's conservative defaults (EXTERNAL_SERVICE, external_effect, best_effort).
+
+This is an improvement over the current state (defaults hidden in a central lookup
+table fallback) because defaults are now explicit on LazyMCPTool itself. A future
+enhancement could add per-server metadata overrides in mcp_config.yaml, but that is
+out of scope for this spec.
