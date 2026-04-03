@@ -132,6 +132,7 @@ class AgentKernel:
         turn_usage: dict[str, int] = {}
         total_usage: dict[str, int] = {}
         last_stop_reason: str | None = None
+        usage_vendor_by_turn: list[dict[str, Any]] = []
 
         while turn < spec.max_turns:
             # External cancel check (before each turn)
@@ -142,6 +143,7 @@ class AgentKernel:
                     num_turns=turn,
                     stop_reason=last_stop_reason,
                     usage=total_usage,
+                    usage_vendor_by_turn=usage_vendor_by_turn,
                 )
 
             turn += 1
@@ -157,6 +159,7 @@ class AgentKernel:
                     num_turns=turn - 1,
                     stop_reason=last_stop_reason,
                     usage=total_usage,
+                    usage_vendor_by_turn=usage_vendor_by_turn,
                 )
 
             # Context compaction check
@@ -173,9 +176,13 @@ class AgentKernel:
                     num_turns=turn,
                     stop_reason=last_stop_reason,
                     usage=total_usage,
+                    usage_vendor_by_turn=usage_vendor_by_turn,
                 )
             turn_usage = response.usage
             self._accumulate_usage(total_usage, response.usage)
+            usage_vendor_by_turn.append(
+                dict(response.usage_vendor) if response.usage_vendor else {}
+            )
             last_stop_reason = response.finish_reason
             if spec.compactor:
                 spec.compactor.update_message_count(len(messages))
@@ -189,6 +196,7 @@ class AgentKernel:
                         num_turns=turn,
                         stop_reason=last_stop_reason,
                         usage=total_usage,
+                        usage_vendor_by_turn=usage_vendor_by_turn,
                     )
                 messages.append(
                     AssistantMessage(
@@ -203,6 +211,7 @@ class AgentKernel:
                     num_turns=turn,
                     stop_reason=response.finish_reason,
                     usage=total_usage,
+                    usage_vendor_by_turn=usage_vendor_by_turn,
                 )
 
             # Has tool_calls: append assistant message then process each serially
@@ -226,6 +235,7 @@ class AgentKernel:
                         num_turns=turn,
                         stop_reason=last_stop_reason,
                         usage=total_usage,
+                        usage_vendor_by_turn=usage_vendor_by_turn,
                     )
                 guard_result = guard_pipeline.evaluate(tc, turn, spec.max_turns)
                 if not guard_result.allowed:
@@ -317,6 +327,7 @@ class AgentKernel:
             num_turns=turn,
             stop_reason=last_stop_reason,
             usage=total_usage,
+            usage_vendor_by_turn=usage_vendor_by_turn,
         )
 
     async def _call_llm(
@@ -496,6 +507,7 @@ class AgentKernel:
         finish_reason: str | None = None
         stream_id = f'turn-{len(api_messages)}'
         usage: dict[str, int] = {}
+        usage_vendor: dict[str, Any] | None = None
         producing_reasoning = False
         producing_content = False
 
@@ -554,6 +566,8 @@ class AgentKernel:
                     finish_reason = chunk.finish_reason
                 if chunk.usage:
                     usage = chunk.usage
+                if chunk.usage_vendor:
+                    usage_vendor = dict(chunk.usage_vendor)
                 if chunk.tool_call_deltas:
                     if producing_reasoning:
                         await run_on_segment_complete(
@@ -640,6 +654,7 @@ class AgentKernel:
             tool_calls=tool_calls,
             finish_reason=finish_reason,
             usage=usage,
+            usage_vendor=usage_vendor,
         )
 
     @staticmethod
@@ -675,6 +690,7 @@ class AgentKernel:
         num_turns: int = 0,
         stop_reason: str | None = None,
         usage: dict[str, int] | None = None,
+        usage_vendor_by_turn: list[dict[str, Any]] | None = None,
     ) -> KernelRunResult:
         """Unified exit path -- all termination goes through here."""
         if reason == 'cancelled':
@@ -688,6 +704,8 @@ class AgentKernel:
             KernelRunResult,
         )
 
+        turns_t = tuple(dict(d) for d in (usage_vendor_by_turn or []))
+
         result = KernelResult(
             status=status,
             reason=reason,
@@ -695,5 +713,6 @@ class AgentKernel:
             num_turns=num_turns,
             stop_reason=stop_reason,
             usage=dict(usage) if usage else {},
+            usage_vendor_by_turn=turns_t,
         )
         return KernelRunResult(result=result, messages=list(messages))

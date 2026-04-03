@@ -341,6 +341,7 @@ def _run_single(
         "final_content": kr.final_content,
         "num_turns": kr.num_turns,
         "usage": dict(kr.usage) if kr.usage else {},
+        "usage_vendor_by_turn": [dict(x) for x in kr.usage_vendor_by_turn],
     }
     line = json.dumps(summary, ensure_ascii=False)
     print(line)

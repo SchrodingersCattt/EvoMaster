@@ -228,7 +228,7 @@ class TestBuildEvidence:
             answer="done",
         )
         # prompt_tokens = input_tokens + cache_creation + cache_read = 50+100+850 = 1000
-        assert evidence.token_usage.prompt_tokens == 1000
+        assert evidence.token_usage_last_turn.prompt_tokens == 1000
 
     def test_artifacts_listed_from_workspace(self, tmp_workspace: Path) -> None:
         (tmp_workspace / "output.cif").write_text("data_", encoding="utf-8")

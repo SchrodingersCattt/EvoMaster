@@ -23,7 +23,12 @@ before POST. Artifact upload only includes the current task under that run:
 ``workspaces/<task_id>`` and ``logs/<task_id>`` (see
 :func:`upload_eval_task_artifacts_to_oss`). The parent ``devshell_eval_*`` folder is
 shared by all tasks in the batch; it is not uploaded whole. ``extra`` is stored as
-opaque JSON. Optional ``eval_tooling`` (from
+opaque JSON. When devshell ``summary.usage`` is present, ``extra`` includes a JSON-safe copy as
+``usage`` (run-level **accumulated scalars**). ``summary.usage_vendor_by_turn`` lists
+one vendor-native usage dict per LLM round (possibly ``{}``); when present it is
+copied into ``extra["usage_vendor_by_turn"]``. ``tokens_effective`` matches top-level
+``item["tokens"]`` (cache-read–adjusted / ``total_tokens_uncached`` when set).
+Optional ``eval_tooling`` (from
 :func:`evaluation.eval_tooling_snapshot.snapshot_eval_tooling`) records builtin /
 skill / MCP server config for batch analysis. Optional ``events_timeline`` (from
 :func:`load_devshell_events_timeline`) is a short list of step labels in order, e.g.
@@ -55,6 +60,7 @@ from typing import Any, Literal
 import httpx
 
 import utils.env
+from evaluation.core.evidence import TokenUsage
 
 logger = logging.getLogger(__name__)
 
@@ -156,43 +162,47 @@ def load_devshell_events_timeline(log_dir: Path) -> list[str] | None:
     return out if out else None
 
 
+def _json_safe_usage_tree(obj: Any) -> Any:
+    """Recursively coerce usage payloads to JSON-serializable structures for ingest ``extra``."""
+    if obj is None or isinstance(obj, (bool, int, float, str)):
+        return obj
+    if isinstance(obj, dict):
+        return {str(k): _json_safe_usage_tree(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe_usage_tree(x) for x in obj]
+    try:
+        return int(obj)
+    except (TypeError, ValueError):
+        pass
+    try:
+        return float(obj)
+    except (TypeError, ValueError):
+        pass
+    return str(obj)
+
+
 def extract_total_tokens(usage: Any) -> int | None:
+    """Token total for ingest ``item["tokens"]``: billing-style, **cache read deducted** when applicable.
+
+    Prefers ``total_tokens_uncached`` when the provider supplies it; otherwise uses
+    :class:`evaluation.core.evidence.TokenUsage` (same rules as MATTER
+    ``total_tokens_effective``), including ``cache_read_input_tokens`` and Claude-style
+    ``input_tokens`` / ``output_tokens`` fields.
+    """
     if not usage or not isinstance(usage, dict):
         return None
-    # Prefer cache-adjusted total (aligned with Claude Code accounting)
     uncached = usage.get("total_tokens_uncached")
     if uncached is not None:
         try:
-            return int(uncached)
+            v = int(uncached)
+            if v >= 0:
+                return v
         except (TypeError, ValueError):
             pass
-    raw = usage.get("total_tokens")
-    if raw is not None:
-        try:
-            val = int(raw)
-            # Subtract cache_read_tokens if available
-            cache_read = usage.get("cache_read_tokens")
-            if cache_read is not None:
-                try:
-                    adjusted = val - int(cache_read)
-                    if adjusted >= 0:
-                        return adjusted
-                except (TypeError, ValueError):
-                    pass
-            if val >= 0:
-                return val
-        except (TypeError, ValueError):
-            pass
-    pt = usage.get("prompt_tokens")
-    ct = usage.get("completion_tokens")
-    if pt is not None and ct is not None:
-        try:
-            total = int(pt) + int(ct)
-            if total >= 0:
-                return total
-        except (TypeError, ValueError):
-            pass
-    return None
+    tu = TokenUsage.from_usage_dict(usage)
+    if tu.total_tokens == 0 and tu.prompt_tokens == 0 and tu.completion_tokens == 0:
+        return None
+    return max(0, tu.total_tokens_effective)
 
 
 def score_for_eval_ingest(
@@ -509,6 +519,21 @@ def build_ingest_item(
         extra["eval_tooling"] = eval_tooling
     if events_timeline:
         extra["events_timeline"] = list(events_timeline)
+
+    if isinstance(usage, dict) and usage:
+        extra["usage"] = _json_safe_usage_tree(dict(usage))
+    uv_turns = s.get("usage_vendor_by_turn")
+    if isinstance(uv_turns, list) and uv_turns:
+        extra["usage_vendor_by_turn"] = [
+            (
+                _json_safe_usage_tree(dict(x))
+                if isinstance(x, dict)
+                else _json_safe_usage_tree(x)
+            )
+            for x in uv_turns
+        ]
+    if tokens is not None:
+        extra["tokens_effective"] = int(tokens)
 
     item: dict[str, Any] = {
         "question_id": question_id,
