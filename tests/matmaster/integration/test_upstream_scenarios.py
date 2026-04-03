@@ -207,11 +207,10 @@ class TestBohriumSetupLifecycle:
     @pytest.mark.asyncio
     async def test_bohrium_setup_lifecycle(self) -> None:
         """Verify run_setup/run_cleanup delegate to the owned runtime methods."""
-        bus = MessageBus()
         mock_sessions = MagicMock()
         svc = BohriumSetupService(
             sessions_service=mock_sessions,
-            bus=bus,
+            event_sink=MagicMock(),
         )
 
         skill_sync_spec = SkillSyncSpec(
