@@ -70,10 +70,13 @@ child-pipeline-ready:
         -e BASELINE_PENDING_ONLY="${BASELINE_PENDING_ONLY}" \
         "${DYNAMIC_IMAGE}" \
         bash /app/ci/run_baseline_eval.sh
-    - docker start -a "${RUNNER_NAME}"
-    - docker cp "${RUNNER_NAME}:/app/results" "./ci_results_${EVAL_CAP}" || true
-    - docker cp "${RUNNER_NAME}:/app/baseline_run.env" "./baseline_run_${EVAL_CAP}.env" || true
-    - docker rm "${RUNNER_NAME}" || true
+      EVAL_EXIT=0
+      docker start -a "${RUNNER_NAME}" || EVAL_EXIT=$?
+      echo "[CI] 容器退出码: ${EVAL_EXIT}"
+      docker cp "${RUNNER_NAME}:/app/results" "./ci_results_${EVAL_CAP}" || true
+      docker cp "${RUNNER_NAME}:/app/baseline_run.env" "./baseline_run_${EVAL_CAP}.env" || true
+      docker rm "${RUNNER_NAME}" || true
+      exit ${EVAL_EXIT}
   after_script:
     - docker rm -f "eval-${EVAL_CAP}-runner" 2>/dev/null || true
   artifacts:
@@ -106,10 +109,10 @@ eval-data-diagnosis:
   variables:
     EVAL_CAP: data_diagnosis
 
-eval-data-fitting:
+eval-property-prediction:
   extends: .eval-template
   variables:
-    EVAL_CAP: data_fitting
+    EVAL_CAP: property_prediction
 
 eval-safety-refusal:
   extends: .eval-template
