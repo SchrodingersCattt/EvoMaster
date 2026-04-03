@@ -39,7 +39,7 @@ class Tool(Protocol):
     @property
     def description(self) -> str: ...
 
-    def describe(self, ctx: ToolDescriptionContext) -> str: ...
+    def describe(self, ctx: ToolDescriptionContext | None = None) -> str: ...
 
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None: ...
 
@@ -112,6 +112,10 @@ class ToolRegistry:
     def get_raw(self, name: str) -> Tool | None:
         """Return the registered tool instance by name, or None."""
         return self._tools.get(name)
+
+    def get_source(self, name: str) -> str:
+        """Return the registration source for a tool, or 'unknown'."""
+        return self._sources.get(name, "unknown")
 
     def __len__(self) -> int:
         return len(self._tools)

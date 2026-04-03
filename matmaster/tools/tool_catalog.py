@@ -58,7 +58,7 @@ class ToolCatalog:
         if raw_tool is None:
             return None
 
-        source = self._registry._sources.get(tool_name, "unknown")
+        source = self._registry.get_source(tool_name)
         compiled = self._compiler.compile(
             raw_tool,
             self._topology,
