@@ -2,15 +2,14 @@ version: v5
 capability: input_generation
 domain: incar
 questions:
-- id: IG_incar_001_20260402
+- id: IG_incar_001_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for a band structure calculation of Lu4N4. Non-self-consistent run reading existing charge
     density (ICHARG=11), with projected band output (LORBIT=11).
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 Lu4N4 体系生成一个能带结构计算的 VASP INCAR 文件。要求：非自洽计算，从已有电荷密度读取，输出投影能带。将完整的 INCAR 写入当前目录下的
-    `INCAR` 文件。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 Lu4N4 体系生成一个能带结构计算的 VASP INCAR 文件。要求：非自洽计算，从已有电荷密度读取，输出投影能带。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - band_structure
@@ -42,9 +41,6 @@ questions:
       ref_incar: data/IG_incar_001/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -53,12 +49,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（IBRION, ISIF, ISMEAR, ISPIN, ISYM, NEDOS 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（IBRION, ISIF, ISMEAR, ISPIN 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -75,15 +71,18 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_002_20260402
+
+- id: IG_incar_002_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for a static SCF calculation of organic-inorganic hybrid perovskite C26H28Cl4N4Pb2. Semiconductor,
     high-precision convergence.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为有机-无机杂化钙钛矿 C26H28Cl4N4Pb2 生成一个 静态自洽(SCF)计算的 VASP INCAR 文件。体系是半导体，需要高精度收敛。
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为有机-无机杂化钙钛矿 C26H28Cl4N4Pb2 生成一个 静态自洽(SCF)计算的 VASP INCAR 文件。体系是半导体，需要高精度收敛。
     将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+
+    '
   tags:
   - incar_generation
   - scf
@@ -115,9 +114,6 @@ questions:
       ref_incar: data/IG_incar_002/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -126,12 +122,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（ISMEAR, ISYM, IVDW, LASPH, NSW, NUPDOWN 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（ISMEAR, ISYM, IVDW, LASPH 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -148,15 +144,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_003_20260402
+
+- id: IG_incar_003_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for structure relaxation of perovskite ErNaO3. Full cell+ion optimization (ISIF=3), spin-polarized
     (Er3+ f electrons).
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 ErNaO3 生成一个结构弛豫(relaxation)计算的 VASP INCAR。需要同时优化离子位置和晶胞参数。Er 含 f 电子，需要自旋极化。将完整的
-    INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 ErNaO3 生成一个结构弛豫(relaxation)计算的 VASP INCAR。需要同时优化离子位置和晶胞参数。Er 含 f 电子，需要自旋极化。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - relaxation
@@ -193,9 +189,6 @@ questions:
       ref_incar: data/IG_incar_003/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -204,12 +197,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（AMIX, BMIX, IBRION, ISIF, ISMEAR, ISPIN 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（AMIX, BMIX, IBRION, ISIF 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -226,15 +219,18 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_004_20260402
+
+- id: IG_incar_004_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for HSE06 hybrid functional calculation of MOF C30H22N4O10Zn2. Accurate electronic structure
     and band gap.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为金属有机框架(MOF) C30H22N4O10Zn2 生成一个 HSE06 杂化泛函静态计算的 VASP INCAR。需要精确的电子结构和带隙。
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为金属有机框架(MOF) C30H22N4O10Zn2 生成一个 HSE06 杂化泛函静态计算的 VASP INCAR。需要精确的电子结构和带隙。
     将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+
+    '
   tags:
   - incar_generation
   - hse06
@@ -271,9 +267,6 @@ questions:
       ref_incar: data/IG_incar_004/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -282,12 +275,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（HFSCREEN, ISMEAR, ISYM, IVDW, LASPH, LHFCALC 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（HFSCREEN, ISMEAR, ISYM, IVDW 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -304,7 +297,8 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_005_20260402
+
+- id: IG_incar_005_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for DFT+U calculation of RbPmMo2O8 with Hubbard U on Mo d-orbitals. Spin-polarized.
@@ -348,9 +342,6 @@ questions:
       ref_incar: data/IG_incar_005/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -359,12 +350,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（IBRION, ISPIN, ISYM, LDAU, LDAUJ, LDAUL 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（IBRION, ISPIN, ISYM, LDAU 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -381,14 +372,16 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_006_20260402
+
+- id: IG_incar_006_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for SCAN metaGGA calculation of intermetallic Tm2ZnGa2. Tm has f electrons; spin-polarized.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为金属间化合物 Tm2ZnGa2 生成一个 SCAN metaGGA 泛函静态计算的 VASP INCAR。Tm 含 f 电子，需要自旋极化。 将完整的
-    INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为金属间化合物 Tm2ZnGa2 生成一个 SCAN metaGGA 泛函静态计算的 VASP INCAR。Tm 含 f 电子，需要自旋极化。 将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+
+    '
   tags:
   - incar_generation
   - metagga
@@ -422,9 +415,6 @@ questions:
       ref_incar: data/IG_incar_006/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -433,12 +423,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（IBRION, ISPIN, ISYM, LASPH, LMAXTAU, MAGMOM 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（IBRION, ISPIN, ISYM, LASPH 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -455,15 +445,18 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_007_20260402
+
+- id: IG_incar_007_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for Born-Oppenheimer molecular dynamics of Heusler alloy MnNaPm2. Mn is magnetic; timestep
     0.5 fs.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 Heusler 合金 MnNaPm2 生成一个分子动力学(MD) 计算的 VASP INCAR。Mn 含磁性，需要自旋极化。MD 时间步长设为
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为 Heusler 合金 MnNaPm2 生成一个分子动力学(MD) 计算的 VASP INCAR。Mn 含磁性，需要自旋极化。MD 时间步长设为
     0.5 fs。 将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+
+    '
   tags:
   - incar_generation
   - molecular_dynamics
@@ -503,9 +496,6 @@ questions:
       ref_incar: data/IG_incar_007/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -514,12 +504,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（AMIX, BMIX, IBRION, ISIF, ISMEAR, ISPIN 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（AMIX, BMIX, IBRION, ISIF 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -536,15 +526,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_008_20260402
+
+- id: IG_incar_008_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for elastic constants calculation of perovskite BaZrO3. Finite-difference method (IBRION=6),
     displacement 0.015 A.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 BaZrO3 生成一个弹性常数计算的 VASP INCAR。使用有限差分法计算弹性张量，位移幅度 0.015 A。将完整的 INCAR 写入当前目录下的
-    `INCAR` 文件。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 BaZrO3 生成一个弹性常数计算的 VASP INCAR。使用有限差分法计算弹性张量，位移幅度 0.015 A。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - elastic_constants
@@ -578,9 +568,6 @@ questions:
       ref_incar: data/IG_incar_008/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -589,12 +576,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（EDIFFG, IBRION, ISIF, ISMEAR, ISPIN, NFREE 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（EDIFFG, IBRION, ISIF, ISMEAR 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -611,15 +598,18 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_009_20260402
+
+- id: IG_incar_009_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for DFPT dielectric constant calculation of C8H12HfO4. Compute dielectric tensor and Born effective
     charges.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为有机金属氧化物 C8H12HfO4 生成一个 DFPT(密度泛函微扰理论) 介电常数计算的 VASP INCAR。需要计算介电张量和 Born 有效电荷。
-    将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为有机金属氧化物 C8H12HfO4 生成一个 DFPT(密度泛函微扰理论) 介电常数计算的 VASP INCAR。需要计算介电张量和 Born
+    有效电荷。 将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+
+    '
   tags:
   - incar_generation
   - dfpt
@@ -653,9 +643,6 @@ questions:
       ref_incar: data/IG_incar_009/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -664,12 +651,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（AGGAC, IBRION, ISMEAR, LEPSILON, LPEAD, LUSE_VDW 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（AGGAC, IBRION, ISMEAR, LEPSILON 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -686,14 +673,17 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_010_20260402
+
+- id: IG_incar_010_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for spin-orbit coupling calculation of heavy-element halide Br6H6Pb2S2. Pb SOC is significant.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为含重元素 Pb 的卤化物 Br6H6Pb2S2 生成一个 自旋轨道耦合(SOC)计算的 VASP INCAR。Pb 的 SOC 效应显著，需要高精度设置。
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为含重元素 Pb 的卤化物 Br6H6Pb2S2 生成一个 自旋轨道耦合(SOC)计算的 VASP INCAR。Pb 的 SOC 效应显著，需要高精度设置。
     将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+
+    '
   tags:
   - incar_generation
   - soc
@@ -732,9 +722,6 @@ questions:
       ref_incar: data/IG_incar_010/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -743,12 +730,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（GGA_COMPAT, IBRION, IDIPOL, ISIF, ISMEAR, ISYM 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（GGA_COMPAT, IBRION, IDIPOL, ISIF 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -765,14 +752,16 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_011_20260402
+
+- id: IG_incar_011_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for density of states calculation of ternary intermetallic CdOs3Pt. Magnetic metal; needs PDOS.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元金属间化合物 CdOs3Pt 生成一个 高精度态密度(DOS)计算的 VASP INCAR。体系为磁性金属，需要投影态密度(PDOS)。 将完整的
-    INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为三元金属间化合物 CdOs3Pt 生成一个 高精度态密度(DOS)计算的 VASP INCAR。体系为磁性金属，需要投影态密度(PDOS)。 将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+
+    '
   tags:
   - incar_generation
   - dos
@@ -804,9 +793,6 @@ questions:
       ref_incar: data/IG_incar_011/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -815,12 +801,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（IBRION, ISMEAR, ISPIN, ISYM, MAGMOM, NSW 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（IBRION, ISMEAR, ISPIN, ISYM 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -837,7 +823,8 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_012_20260402
+
+- id: IG_incar_012_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Fe magnetic,
@@ -888,9 +875,6 @@ questions:
       ref_incar: data/IG_incar_012/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -899,12 +883,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（EDIFFG, HFSCREEN, IBRION, ISIF, ISMEAR, ISPIN 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（EDIFFG, HFSCREEN, IBRION, ISIF 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -921,15 +905,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_013_20260402
+
+- id: IG_incar_013_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for surface relaxation of ternary carbide (Ta,V)2C surface (C33O2Ta16V16). Fixed cell (ISIF=2),
     metallic.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元碳化物表面 (Ta,V)2C (C33O2Ta16V16) 生成一个表面弛豫计算的 VASP INCAR。表面计算需要固定晶胞形状，体系为金属。将完整的
-    INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元碳化物表面 (Ta,V)2C (C33O2Ta16V16) 生成一个表面弛豫计算的 VASP INCAR。表面计算需要固定晶胞形状，体系为金属。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - surface
@@ -964,9 +948,6 @@ questions:
       ref_incar: data/IG_incar_013/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -975,12 +956,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（EDIFFG, IALGO, IBRION, INIWAV, ISIF, ISMEAR 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（EDIFFG, IALGO, IBRION, INIWAV 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -997,14 +978,14 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_014_20260402
+
+- id: IG_incar_014_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for static calculation of hydrogen-passivated SiO2 slab H16O24Si12. Insulator, fixed cell (ISIF=2).
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为氢钝化的 SiO2 slab 模型 H16O24Si12 生成一个静态计算的 VASP INCAR。体系是绝缘体 slab，需要固定晶胞形状。将完整的
-    INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为氢钝化的 SiO2 slab 模型 H16O24Si12 生成一个静态计算的 VASP INCAR。体系是绝缘体 slab，需要固定晶胞形状。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - slab
@@ -1042,9 +1023,6 @@ questions:
       ref_incar: data/IG_incar_014/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -1053,12 +1031,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（EDIFFG, IBRION, ISIF, ISMEAR, ISPIN, ISYM 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（EDIFFG, IBRION, ISIF, ISMEAR 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -1075,7 +1053,8 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_015_20260402
+
+- id: IG_incar_015_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for defect calculation of I-on-S substitution in BiSI with HSE06+SOC. Heavy element Bi requires
@@ -1118,9 +1097,6 @@ questions:
       ref_incar: data/IG_incar_015/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -1129,12 +1105,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（IBRION, ISMEAR, ISPIN, LMAXMIX, LSORBIT, MAGMOM 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（IBRION, ISMEAR, ISPIN, LMAXMIX 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -1151,15 +1127,18 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_016_20260402
+
+- id: IG_incar_016_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for GW precursor SCF of rare-earth selenide DySe. Dy has f electrons (MAGMOM~7); save wavefunctions
     for subsequent GW.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为稀土硒化物 DySe 生成一个 GW 计算前驱步骤的 SCF VASP INCAR。Dy 含 f 电子(MAGMOM~7)，需要保存高质量波函数供后续
+  human_prompt_seed: '读取 `task_spec.json` 中的任务描述。为稀土硒化物 DySe 生成一个 GW 计算前驱步骤的 SCF VASP INCAR。Dy 含 f 电子(MAGMOM~7)，需要保存高质量波函数供后续
     GW 使用。 将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+
+    '
   tags:
   - incar_generation
   - gw
@@ -1190,9 +1169,6 @@ questions:
       ref_incar: data/IG_incar_016/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -1201,12 +1177,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（ISMEAR, ISPIN, LHVAR, MAGMOM, NSW 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（ISMEAR, ISPIN, LHVAR, MAGMOM 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -1223,14 +1199,14 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_017_20260402
+
+- id: IG_incar_017_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for high-precision structure optimization of Al as BSE precursor. PREC=Accurate, ISIF=3.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为简单金属 Al (FCC) 生成一个高精度结构优化的 VASP INCAR，作为后续光学计算的前驱步骤。需要高精度设置和完全优化晶胞参数。将完整的
-    INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为简单金属 Al (FCC) 生成一个高精度结构优化的 VASP INCAR，作为后续光学计算的前驱步骤。需要高精度设置和完全优化晶胞参数。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - bse_precursor
@@ -1267,9 +1243,6 @@ questions:
       ref_incar: data/IG_incar_017/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -1278,12 +1251,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（EDIFFG, IBRION, ISIF, ISMEAR, ISPIN, ISYM 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（EDIFFG, IBRION, ISIF, ISMEAR 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -1300,15 +1273,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_018_20260402
+
+- id: IG_incar_018_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for magnetic SCF calculation of double perovskite Ca4TaOs. 5d transition metals (Ta, Os); spin-polarized
     with MAGMOM.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为双钙钛矿 Ca4TaOs 生成一个磁性自洽(SCF)计算的 VASP INCAR。体系含 5d 过渡金属(Ta, Os)，需要自旋极化和适当的初始磁矩。将完整的
-    INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为双钙钛矿 Ca4TaOs 生成一个磁性自洽(SCF)计算的 VASP INCAR。体系含 5d 过渡金属(Ta, Os)，需要自旋极化和适当的初始磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - magnetic
@@ -1339,9 +1312,6 @@ questions:
       ref_incar: data/IG_incar_018/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -1350,12 +1320,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（IBRION, ISPIN, ISYM, MAGMOM, NSW 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（IBRION, ISPIN, ISYM, MAGMOM 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -1372,15 +1342,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_019_20260402
+
+- id: IG_incar_019_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for non-magnetic insulator static SCF calculation of cesium borate B12Cs4O20. Non-magnetic
     (ISPIN=1), wide-gap insulator.
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为硼酸铯 B12Cs4O20 生成一个非磁性绝缘体的静态 SCF 计算 VASP INCAR。体系为非磁性，宽带隙绝缘体。将完整的 INCAR 写入当前目录下的
-    `INCAR` 文件。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为硼酸铯 B12Cs4O20 生成一个非磁性绝缘体的静态 SCF 计算 VASP INCAR。体系为非磁性，宽带隙绝缘体。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - scf
@@ -1410,9 +1380,6 @@ questions:
       ref_incar: data/IG_incar_019/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -1421,12 +1388,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（ISMEAR, ISPIN, LHVAR, NSW 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（ISMEAR, ISPIN, LHVAR, NSW 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0
@@ -1443,15 +1410,15 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: IG_incar_020_20260402
+
+- id: IG_incar_020_20260403
   capability: input_generation
   domain: incar
   intent: 'Generate VASP INCAR for magnetic metal SCF calculation of ternary selenide Na3AlSe. Spin-polarized (ISPIN=2) with
     PDOS (LORBIT=11).
 
     '
-  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元硒化物 Na3AlSe 生成一个磁性金属体系的静态 SCF 计算 VASP INCAR。体系为磁性金属，需要投影态密度。将完整的 INCAR
-    写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元硒化物 Na3AlSe 生成一个磁性金属体系的静态 SCF 计算 VASP INCAR。体系为磁性金属，需要投影态密度。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - incar_generation
   - magnetic_metal
@@ -1483,9 +1450,6 @@ questions:
       ref_incar: data/IG_incar_020/reference_incar.txt
       mode: full
       pass_threshold: 0.5
-  - key: required_fields
-    value:
-    - INCAR_content
   - key: duration_budget
     value:
       max: 7200000
@@ -1494,12 +1458,12 @@ questions:
       max: 50000
   scoring_checklist:
   - id: key_params_match
-    criterion: Agent INCAR 的核心参数（IBRION, ISMEAR, ISPIN, ISYM, MAGMOM, NSW 等）与 reference INCAR 一致。
+    criterion: "Agent INCAR 的核心参数与 reference INCAR 一致（IBRION, ISMEAR, ISPIN, ISYM 等）。"
     axis: correctness
     verify: incar_param_compare
     weight: 3.0
   - id: full_incar_quality
-    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标（≥60%）。
+    criterion: Agent INCAR 的全部参数与 reference INCAR 整体匹配度达标。
     axis: grounding
     verify: incar_param_compare
     weight: 2.0

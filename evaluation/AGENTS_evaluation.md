@@ -139,6 +139,7 @@ evaluation/question_bank/
 | `struct_file_layer_count` | `{"filename": str, "expected": int, "tolerance": float, "axis": str, "gap_threshold_A": float}` | 沿指定轴用间距聚类统计原子层数 |
 | `struct_file_count` | `{"pattern": str, "expected": int, "tolerance": int}` | 统计 workspace 中匹配 glob 的文件数（无需 pymatgen） |
 | `struct_file_surface_termination` | `{"filename": str, "element": str, "axis": "x"\|"y"\|"z", "side": "top"\|"bottom"\|"both", "layer_tol_A": float}` | 检查 slab 最外层（top/bottom/both）是否由指定元素构成；用于验证 O-terminated 或其他特定终止面（如 CeO2(111) 的 O 终止）|
+| `incar_param_compare` | `{"ref_incar": str, "key_tags": list[str], "mode": "key_only"\|"full", "pass_threshold": float}` | 用 `evaluation/core/incar_parser.py` 解析 agent 生成的 INCAR 与 `ref_incar`（相对 `question_bank/` 的路径）做结构化参数对比；`mode=key_only` 时只比 `key_tags` 列表中的参数，`mode=full` 比全部参数；匹配率 ≥ `pass_threshold` 判 pass |
 
 ### 不需要对应 `reference_answers` 条目
 
