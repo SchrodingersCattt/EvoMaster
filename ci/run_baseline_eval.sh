@@ -50,31 +50,51 @@ if ! command -v claude &>/dev/null; then
 fi
 echo "[CI] claude CLI: $(claude --version 2>/dev/null || echo 'unknown')"
 
-# ── 写入 claude settings.json（注入 MiniMax/代理 配置）────────────────────────
-# Claude CLI 优先读 ~/.claude/settings.json 里的 env，而非系统环境变量
-# CI 通过 GitLab Variables 注入 ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_MODEL
+# ── 写入 claude settings.json（注入代理/模型配置）──────────────────────────────
+# Claude CLI 优先读 ~/.claude/settings.json 里的 env。
+# 支持三种鉴权方式：
+#   1. AUTH_TOKEN + BASE_URL（MiniMax/DeepSeek 等 proxy）
+#   2. API_KEY + BASE_URL（gpugeek 等兼容端点）
+#   3. API_KEY（官方 Anthropic，无 BASE_URL）
+CLAUDE_HOME="${HOME}/.claude"
+mkdir -p "${CLAUDE_HOME}"
+
 if [[ -n "${ANTHROPIC_BASE_URL:-}" && -n "${ANTHROPIC_AUTH_TOKEN:-}" ]]; then
-    CLAUDE_HOME="${HOME}/.claude"
-    mkdir -p "${CLAUDE_HOME}"
     cat > "${CLAUDE_HOME}/settings.json" <<EOF
 {
   "env": {
     "ANTHROPIC_AUTH_TOKEN": "${ANTHROPIC_AUTH_TOKEN}",
     "ANTHROPIC_BASE_URL": "${ANTHROPIC_BASE_URL}",
-    "ANTHROPIC_MODEL": "${ANTHROPIC_MODEL:-MiniMax-M2.7}",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "${ANTHROPIC_MODEL:-MiniMax-M2.7}",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "${ANTHROPIC_MODEL:-MiniMax-M2.7}",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "${ANTHROPIC_MODEL:-MiniMax-M2.7}",
+    "ANTHROPIC_MODEL": "${ANTHROPIC_MODEL:-}",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "${ANTHROPIC_DEFAULT_HAIKU_MODEL:-${ANTHROPIC_MODEL:-}}",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "${ANTHROPIC_DEFAULT_SONNET_MODEL:-${ANTHROPIC_MODEL:-}}",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "${ANTHROPIC_DEFAULT_OPUS_MODEL:-${ANTHROPIC_MODEL:-}}",
     "API_TIMEOUT_MS": "3000000",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": 1
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   }
 }
 EOF
-    echo "[CI] claude settings.json 已写入（BASE_URL=${ANTHROPIC_BASE_URL}, MODEL=${ANTHROPIC_MODEL:-MiniMax-M2.7}）"
+    echo "[CI] settings.json 已写入（AUTH_TOKEN + BASE_URL=${ANTHROPIC_BASE_URL}, MODEL=${ANTHROPIC_MODEL:-<default>}）"
+elif [[ -n "${ANTHROPIC_API_KEY:-}" && -n "${ANTHROPIC_BASE_URL:-}" ]]; then
+    cat > "${CLAUDE_HOME}/settings.json" <<EOF
+{
+  "env": {
+    "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
+    "ANTHROPIC_BASE_URL": "${ANTHROPIC_BASE_URL}",
+    "ANTHROPIC_MODEL": "${ANTHROPIC_MODEL:-}",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "${ANTHROPIC_DEFAULT_HAIKU_MODEL:-${ANTHROPIC_MODEL:-}}",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "${ANTHROPIC_DEFAULT_SONNET_MODEL:-${ANTHROPIC_MODEL:-}}",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "${ANTHROPIC_DEFAULT_OPUS_MODEL:-${ANTHROPIC_MODEL:-}}",
+    "API_TIMEOUT_MS": "3000000",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}
+EOF
+    echo "[CI] settings.json 已写入（API_KEY + BASE_URL=${ANTHROPIC_BASE_URL}, MODEL=${ANTHROPIC_MODEL:-<default>}）"
 elif [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-    echo "[CI] 使用 ANTHROPIC_API_KEY（官方 Anthropic API）"
+    echo "[CI] 使用 ANTHROPIC_API_KEY（官方 Anthropic API，无自定义 BASE_URL）"
 else
-    echo "[ERROR] 未检测到 ANTHROPIC_BASE_URL+ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY，Claude CLI 无法鉴权"
+    echo "[ERROR] 未检测到有效鉴权：需要 ANTHROPIC_AUTH_TOKEN+BASE_URL 或 ANTHROPIC_API_KEY"
     exit 1
 fi
 
