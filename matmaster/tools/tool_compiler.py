@@ -12,88 +12,9 @@ from matmaster.types.tool_spec import (
 )
 from matmaster.types.topology import RuntimeTopology, ToolPlane
 
-BUILTIN_CLAIMS: dict[str, tuple[ResourceClaim, ...]] = {
-    "execute_bash": (ResourceClaim(resource="session", mode="exclusive"),),
-    "list_dir": (ResourceClaim(resource="session", mode="exclusive"),),
-    "glob": (ResourceClaim(resource="session", mode="exclusive"),),
-    "grep": (ResourceClaim(resource="session", mode="exclusive"),),
-    "read_file": (ResourceClaim(resource="workspace", mode="shared_read"),),
-    "write_file": (ResourceClaim(resource="workspace", mode="exclusive"),),
-    "edit_file": (ResourceClaim(resource="workspace", mode="exclusive"),),
-    "task_create": (ResourceClaim(resource="task-store", mode="exclusive"),),
-    "task_get": (ResourceClaim(resource="task-store", mode="shared_read"),),
-    "task_list": (ResourceClaim(resource="task-store", mode="shared_read"),),
-    "task_update": (ResourceClaim(resource="task-store", mode="exclusive"),),
-    "task_complete": (ResourceClaim(resource="task-store", mode="exclusive"),),
-    "mm_web_search": (ResourceClaim(resource="web", mode="counted", max_concurrent=3),),
-    "web_fetch": (ResourceClaim(resource="web", mode="counted", max_concurrent=3),),
-    "spawn": (ResourceClaim(resource="spawn", mode="counted", max_concurrent=2),),
-    "monitor_job": (
-        ResourceClaim(resource="workspace", mode="exclusive"),
-        ResourceClaim(resource="artifact-sync", mode="exclusive"),
-    ),
-}
-
-BUILTIN_META: dict[str, tuple[ToolPlane, str, bool, int]] = {
-    "execute_bash": (ToolPlane.SESSION_SHELL, "local_mutation", False, 12000),
-    "list_dir": (ToolPlane.SESSION_SHELL, "none", True, 8000),
-    "glob": (ToolPlane.SESSION_SHELL, "none", True, 8000),
-    "grep": (ToolPlane.SESSION_SHELL, "none", True, 8000),
-    "read_file": (ToolPlane.SESSION_FS, "none", True, 12000),
-    "write_file": (ToolPlane.SESSION_FS, "local_mutation", False, 0),
-    "edit_file": (ToolPlane.SESSION_FS, "local_mutation", False, 0),
-    "task_create": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
-    "task_get": (ToolPlane.CONTROL_PLANE, "none", True, 0),
-    "task_list": (ToolPlane.CONTROL_PLANE, "none", True, 0),
-    "task_update": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
-    "task_complete": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
-    "mm_web_search": (ToolPlane.EXTERNAL_SERVICE, "external_effect", False, 0),
-    "web_fetch": (ToolPlane.EXTERNAL_SERVICE, "external_effect", False, 16000),
-    "spawn": (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
-    "monitor_job": (ToolPlane.EXTERNAL_SERVICE, "external_effect", False, 0),
-}
-
-BUILTIN_CAPABILITIES: dict[str, frozenset[str]] = {
-    "execute_bash": frozenset({"shell.execute"}),
-    "read_file": frozenset({"workspace.read"}),
-    "write_file": frozenset({"workspace.write"}),
-    "edit_file": frozenset({"workspace.write"}),
-    "list_dir": frozenset({"workspace.list"}),
-    "glob": frozenset({"workspace.search.path"}),
-    "grep": frozenset({"workspace.search.content"}),
-    "task_get": frozenset({"task.read"}),
-    "task_list": frozenset({"task.read"}),
-    "task_create": frozenset({"task.write"}),
-    "task_update": frozenset({"task.write"}),
-    "task_complete": frozenset({"task.write"}),
-    "mm_web_search": frozenset({"web.search"}),
-    "web_fetch": frozenset({"web.fetch"}),
-    "monitor_job": frozenset({"job.monitor", "artifact.download"}),
-}
-
-BUILTIN_STOP_MODES: dict[str, tuple[str, str]] = {
-    # tool_name: (state_mode, stop_mode)
-    "execute_bash": ("stateless", "cancellable"),
-    "read_file": ("stateless", "cancellable"),
-    "write_file": ("stateless", "cancellable"),
-    "edit_file": ("stateless", "cancellable"),
-    "list_dir": ("stateless", "cancellable"),
-    "glob": ("stateless", "cancellable"),
-    "grep": ("stateless", "cancellable"),
-    "task_create": ("stateless", "cancellable"),
-    "task_get": ("stateless", "cancellable"),
-    "task_list": ("stateless", "cancellable"),
-    "task_update": ("stateless", "cancellable"),
-    "task_complete": ("stateless", "cancellable"),
-    "mm_web_search": ("stateless", "best_effort"),
-    "web_fetch": ("stateless", "best_effort"),
-    "spawn": ("persistent", "non_cancellable"),
-    "monitor_job": ("persistent", "best_effort"),
-}
-
 
 class ToolCompiler:
-    """Compile a Tool plus topology metadata into a ToolInstance."""
+    """Compile a Tool into ToolInstance using self-describing metadata."""
 
     def compile(
         self,
@@ -102,14 +23,20 @@ class ToolCompiler:
         *,
         source: str = "unknown",
     ) -> ToolInstance:
-        """Compile a tool into its bound runtime representation.
+        claims = tuple(getattr(tool, "resource_claims", ()))
+        capabilities = frozenset(getattr(tool, "capabilities", frozenset()))
+        effect_level = getattr(tool, "effect_level", "local_mutation")
+        fast_path = getattr(tool, "fast_path_eligible", False)
+        max_result_chars = getattr(tool, "max_result_chars", 0)
+        exposed_to_model = getattr(tool, "exposed_to_model", True)
+        plane = getattr(tool, "plane", ToolPlane.CONTROL_PLANE)
+        state_mode = getattr(tool, "state_mode", "stateless")
+        stop_mode = getattr(tool, "stop_mode", "cancellable")
 
-        The current builtin rules are topology-independent, but the topology is
-        part of the API so future compilers can specialize bindings by session.
-        """
-        claims = BUILTIN_CLAIMS.get(tool.name, ())
+        if not isinstance(plane, ToolPlane):
+            plane = ToolPlane(plane)
 
-        # Topology-dependent binding relaxation (spec 8.2)
+        # Keep the local+stateless relaxation for shell-backed read/search tools.
         if (
             topology.session_kind == "local"
             and topology.session_capabilities is not None
@@ -117,25 +44,6 @@ class ToolCompiler:
             and tool.name in ("list_dir", "glob", "grep")
         ):
             claims = (ResourceClaim(resource="session", mode="shared_read"),)
-        plane, effect_level, fast_path, max_result_chars = BUILTIN_META.get(
-            tool.name,
-            (ToolPlane.CONTROL_PLANE, "local_mutation", False, 0),
-        )
-        capabilities = BUILTIN_CAPABILITIES.get(tool.name, frozenset())
-        exposed_to_model = True
-
-        # Apply tool-level runtime metadata overrides (lazy MCP overlay)
-        meta = getattr(tool, "tool_runtime_meta", None) or {}
-        if meta.get("plane"):
-            plane = ToolPlane(meta["plane"])
-        if meta.get("effect_level"):
-            effect_level = meta["effect_level"]
-        if meta.get("capabilities"):
-            capabilities = frozenset(meta["capabilities"])
-        if meta.get("fast_path_eligible") is not None:
-            fast_path = meta["fast_path_eligible"]
-        if meta.get("exposed_to_model") is not None:
-            exposed_to_model = meta["exposed_to_model"]
 
         spec = ToolSpec(
             tool_name=tool.name,
@@ -148,9 +56,6 @@ class ToolCompiler:
             max_result_chars=max_result_chars,
             exposed_to_model=exposed_to_model,
         )
-        state_mode, stop_mode = BUILTIN_STOP_MODES.get(
-            tool.name, ("stateless", "cancellable")
-        )
         binding = ToolBinding(
             binding_key=f"{plane.value}:{tool.name}",
             plane=plane,
@@ -158,7 +63,7 @@ class ToolCompiler:
             state_mode=state_mode,
             stop_mode=stop_mode,
         )
-        # Wrap executor to unified (args, exec_ctx) signature
+
         if hasattr(tool, "execute_with_context"):
             tool_executor = tool.execute_with_context
         else:

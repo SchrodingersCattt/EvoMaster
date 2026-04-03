@@ -1,42 +1,19 @@
-"""ToolCatalog -- facade over ToolRegistry with BUILTIN_CLAIMS and BUILTIN_META.
-
-Provides base+overlay structure with version tracking for lazy MCP tool
-injection. get_tool() injects ResourceClaim, ToolPlane, effect_level, and
-fast_path_eligible metadata for known builtin tools (per D-09).
-
-Unknown tools (MCP/skill overlay) fall back to default empty claims
-and CONTROL_PLANE placement.
-
-Also provides inject_stop_event() for cancel propagation to all tools,
-and build_definitions() for OpenAI function calling format (previously
-delegated to ToolRegistry, now self-contained).
-"""
+"""ToolCatalog -- facade over ToolRegistry with compiled tool instances."""
 
 from __future__ import annotations
 
 import threading
 from typing import Any
 
-from matmaster.tools.tool_compiler import BUILTIN_CLAIMS, BUILTIN_META, ToolCompiler
+from matmaster.tools.tool_compiler import ToolCompiler
 from matmaster.tools.tool_registry import Tool, ToolRegistry
+from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ToolInstance
 from matmaster.types.topology import RuntimeTopology
 
 
 class ToolCatalog:
-    """Facade over ToolRegistry with builtin claims and metadata injection.
-
-    Per D-04: All operations delegate to internal ToolRegistry.
-    ContextBuilder / SkillTool / MCP injection paths unchanged.
-
-    Per D-09: get_tool() injects ResourceClaim, ToolPlane, effect_level,
-    and fast_path_eligible from BUILTIN_CLAIMS and BUILTIN_META lookup
-    tables for known builtin tools.
-
-    version starts at 0 and increments on each register_overlay() call.
-    Kernel compares version each turn to decide whether to refresh
-    tool_definitions for the LLM.
-    """
+    """Facade over ToolRegistry with versioned overlay registration."""
 
     def __init__(
         self,
@@ -53,23 +30,17 @@ class ToolCatalog:
             workspace_root="/tmp/workspace",
         )
         self._compiled_tools: dict[str, ToolInstance] = {}
-        self._version: int = 0
+        self._version = 0
 
     @property
     def version(self) -> int:
-        """Current catalog version. Incremented on overlay registrations."""
         return self._version
 
     @property
     def registry(self) -> ToolRegistry:
-        """Expose internal registry for backward-compatible access paths."""
         return self._registry
 
     def register_overlay(self, tool: Tool, *, source: str = "mcp") -> None:
-        """Register a tool in the overlay layer (MCP/skill lazy injection).
-
-        Increments version so Kernel can detect tool set changes.
-        """
         self._registry.register(tool, source=source)
         self._compiled_tools[tool.name] = self._compiler.compile(
             tool,
@@ -79,19 +50,14 @@ class ToolCatalog:
         self._version += 1
 
     def get_tool(self, tool_name: str) -> ToolInstance | None:
-        """Look up tool and wrap as ToolInstance with claims/meta injection.
-
-        For builtin tools listed in BUILTIN_CLAIMS and BUILTIN_META,
-        injects correct ResourceClaim, ToolPlane, effect_level, and
-        fast_path_eligible. Unknown tools get default empty claims.
-        """
         cached = self._compiled_tools.get(tool_name)
         if cached is not None:
             return cached
 
-        raw_tool = self._registry._tools.get(tool_name)
+        raw_tool = self._registry.get_raw(tool_name)
         if raw_tool is None:
             return None
+
         source = self._registry._sources.get(tool_name, "unknown")
         compiled = self._compiler.compile(
             raw_tool,
@@ -101,31 +67,60 @@ class ToolCatalog:
         self._compiled_tools[tool_name] = compiled
         return compiled
 
-    def build_definitions(self) -> list[dict[str, Any]]:
-        """Return tool definitions in OpenAI function calling format.
-
-        Uses compiled ToolInstance data (not raw registry) so that
-        exposed_to_model filtering and metadata are authoritative.
-        """
+    def build_definitions(
+        self,
+        ctx: ToolDescriptionContext | None = None,
+    ) -> list[dict[str, Any]]:
         definitions: list[dict[str, Any]] = []
-        for name in sorted(self._registry._tools):
+
+        for name in sorted(tool.name for tool in self._registry.all_tools):
             inst = self.get_tool(name)
             if inst is None or not inst.tool_spec.exposed_to_model:
                 continue
+
+            if ctx is not None:
+                raw_tool = self._registry.get_raw(name)
+                describe = getattr(raw_tool, "describe", None) if raw_tool else None
+                if callable(describe):
+                    description = describe(ctx)
+                else:
+                    description = inst.tool_spec.description
+            else:
+                description = inst.tool_spec.description
+
             definitions.append(
                 {
                     "type": "function",
                     "function": {
                         "name": inst.tool_spec.tool_name,
-                        "description": inst.tool_spec.description,
+                        "description": description,
                         "parameters": inst.tool_spec.args_schema,
                     },
                 }
             )
+
         return definitions
 
+    def collect_prompts(self, ctx: ToolDescriptionContext | None = None) -> str:
+        parts: list[str] = []
+
+        for name in sorted(tool.name for tool in self._registry.all_tools):
+            inst = self.get_tool(name)
+            if inst is None or not inst.tool_spec.exposed_to_model:
+                continue
+
+            raw_tool = self._registry.get_raw(name)
+            prompt = getattr(raw_tool, "prompt", None) if raw_tool else None
+            if not callable(prompt):
+                continue
+
+            value = prompt(ctx)
+            if value:
+                parts.append(value)
+
+        return "\n\n".join(parts)
+
     def inject_stop_event(self, stop_event: threading.Event) -> None:
-        """Inject stop_event into all registered tools for cancel propagation."""
         for tool in self._registry.all_tools:
             tool._stop_event = stop_event  # type: ignore[attr-defined]
 

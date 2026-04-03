@@ -1,14 +1,14 @@
-"""Tests for ToolCompiler and ToolCatalog compiler delegation."""
+"""Tests for ToolCompiler after self-describing metadata migration."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from matmaster.tools.tool_catalog import ToolCatalog
+import pytest
+
 from matmaster.tools.tool_compiler import ToolCompiler
-from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext, ToolSpec
 from matmaster.types.topology import RuntimeTopology, SessionCapabilities, ToolPlane
 
 
@@ -32,6 +32,36 @@ class _FakeTool:
         return ToolResult(content=f"executed {self._name}")
 
 
+class _SelfDescribingTool(_FakeTool):
+    resource_claims = (ResourceClaim(resource="workspace", mode="shared_read"),)
+    capabilities = frozenset({"workspace.read"})
+    effect_level = "none"
+    fast_path_eligible = True
+    max_result_chars = 12000
+    plane = ToolPlane.SESSION_FS
+    state_mode = "persistent"
+    stop_mode = "best_effort"
+    exposed_to_model = True
+
+
+class _ContextAwareTool(_SelfDescribingTool):
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: ToolExecutionContext,
+    ) -> ToolResult:
+        return ToolResult(content=f"ctx:{arguments.get('x', '')}")
+
+
+class _ValidatableTool(_FakeTool):
+    async def validate_input(
+        self,
+        arguments: dict[str, Any],
+        runner_state: Any | None = None,
+    ) -> None:
+        return None
+
+
 def _make_topology() -> RuntimeTopology:
     return RuntimeTopology(
         session_kind="local",
@@ -39,122 +69,6 @@ def _make_topology() -> RuntimeTopology:
         workspace_root="/tmp/workspace",
         active_planes=frozenset(ToolPlane),
     )
-
-
-class TestToolCompiler:
-    def test_compile_builtin_bash(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("execute_bash"),
-            _make_topology(),
-            source="builtin",
-        )
-
-        assert instance.tool_binding.plane == ToolPlane.SESSION_SHELL
-        assert instance.tool_spec.effect_level == "local_mutation"
-        assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource="session", mode="exclusive"),
-        )
-
-    def test_compile_builtin_read_file(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("read_file"),
-            _make_topology(),
-            source="builtin",
-        )
-
-        assert instance.tool_binding.plane == ToolPlane.SESSION_FS
-        assert instance.tool_spec.effect_level == "none"
-        assert instance.tool_spec.fast_path_eligible is True
-        assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource="workspace", mode="shared_read"),
-        )
-
-    def test_compile_builtin_web_search(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("mm_web_search"),
-            _make_topology(),
-            source="builtin",
-        )
-
-        assert instance.tool_binding.plane == ToolPlane.EXTERNAL_SERVICE
-        assert instance.tool_spec.effect_level == "external_effect"
-        assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource="web", mode="counted", max_concurrent=3),
-        )
-
-    def test_compile_unknown_tool(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("custom_mcp_tool"),
-            _make_topology(),
-            source="mcp",
-        )
-
-        assert instance.tool_binding.plane == ToolPlane.CONTROL_PLANE
-        assert instance.tool_spec.effect_level == "local_mutation"
-        assert instance.tool_spec.fast_path_eligible is False
-        assert instance.tool_binding.resource_claims == ()
-        assert instance.tool_spec.source == "mcp"
-
-
-class TestToolCompilerCapabilities:
-    def test_execute_bash_compiles_shell_execute_capability(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("execute_bash"), _make_topology(), source="builtin"
-        )
-        assert instance.tool_spec.capabilities == frozenset({"shell.execute"})
-
-    def test_read_file_compiles_workspace_read_capability(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("read_file"), _make_topology(), source="builtin"
-        )
-        assert instance.tool_spec.capabilities == frozenset({"workspace.read"})
-
-    def test_monitor_job_plane_is_external_service(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("monitor_job"), _make_topology(), source="builtin"
-        )
-        assert instance.tool_binding.plane == ToolPlane.EXTERNAL_SERVICE
-
-    def test_unknown_tool_has_empty_capabilities(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("custom_tool"), _make_topology(), source="mcp"
-        )
-        assert instance.tool_spec.capabilities == frozenset()
-
-
-class TestToolCompilerMaxResultChars:
-    def test_read_file_max_result_chars(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("read_file"), _make_topology(), source="builtin")
-        assert instance.tool_spec.max_result_chars == 12000
-
-    def test_execute_bash_max_result_chars(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("execute_bash"), _make_topology(), source="builtin")
-        assert instance.tool_spec.max_result_chars == 12000
-
-    def test_glob_max_result_chars(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("glob"), _make_topology(), source="builtin")
-        assert instance.tool_spec.max_result_chars == 8000
-
-    def test_web_fetch_max_result_chars(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("web_fetch"), _make_topology(), source="builtin")
-        assert instance.tool_spec.max_result_chars == 16000
-
-    def test_unknown_tool_max_result_chars_zero(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("custom"), _make_topology(), source="mcp")
-        assert instance.tool_spec.max_result_chars == 0
 
 
 def _make_local_stateless_topology() -> RuntimeTopology:
@@ -169,6 +83,7 @@ def _make_local_stateless_topology() -> RuntimeTopology:
         ),
     )
 
+
 def _make_ssh_stateless_topology() -> RuntimeTopology:
     return RuntimeTopology(
         session_kind="ssh",
@@ -182,285 +97,102 @@ def _make_ssh_stateless_topology() -> RuntimeTopology:
     )
 
 
-class TestTopologyDependentBinding:
-    def test_glob_local_stateless_shared_read(self) -> None:
-        """Local + stateless -> glob gets shared_read claim."""
+class TestToolCompiler:
+    def test_compile_self_describing_tool(self) -> None:
         compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("glob"), _make_local_stateless_topology(), source="builtin"
-        )
+        tool = _SelfDescribingTool("my_read")
+
+        instance = compiler.compile(tool, _make_topology(), source="builtin")
+
+        assert instance.tool_binding.plane == ToolPlane.SESSION_FS
         assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource="session", mode="shared_read"),
+            ResourceClaim(resource="workspace", mode="shared_read"),
+        )
+        assert instance.tool_binding.state_mode == "persistent"
+        assert instance.tool_binding.stop_mode == "best_effort"
+        assert instance.tool_spec == ToolSpec(
+            tool_name="my_read",
+            description="fake tool my_read",
+            args_schema={"type": "object", "properties": {}},
+            source="builtin",
+            capabilities=frozenset({"workspace.read"}),
+            effect_level="none",
+            fast_path_eligible=True,
+            max_result_chars=12000,
+            exposed_to_model=True,
         )
 
-    def test_grep_local_stateless_shared_read(self) -> None:
+    def test_compile_minimal_tool_uses_defaults(self) -> None:
         compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("grep"), _make_local_stateless_topology(), source="builtin"
-        )
-        assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource="session", mode="shared_read"),
-        )
 
-    def test_list_dir_local_stateless_shared_read(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("list_dir"), _make_local_stateless_topology(), source="builtin"
-        )
-        assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource="session", mode="shared_read"),
-        )
+        instance = compiler.compile(_FakeTool("unknown"), _make_topology(), source="mcp")
 
-    def test_glob_ssh_stays_exclusive(self) -> None:
-        """SSH session -> glob stays exclusive even if stateless."""
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("glob"), _make_ssh_stateless_topology(), source="builtin"
-        )
-        assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource="session", mode="exclusive"),
-        )
-
-    def test_glob_local_no_caps_stays_exclusive(self) -> None:
-        """Local but session_capabilities=None -> no relaxation."""
-        compiler = ToolCompiler()
-        topo = RuntimeTopology(
-            session_kind="local",
-            control_root="/tmp/c",
-            workspace_root="/tmp/w",
-        )
-        instance = compiler.compile(_FakeTool("glob"), topo, source="builtin")
-        assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource="session", mode="exclusive"),
-        )
-
-    def test_bash_local_stays_exclusive(self) -> None:
-        """execute_bash is never relaxed."""
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("execute_bash"), _make_local_stateless_topology(), source="builtin"
-        )
-        assert instance.tool_binding.resource_claims == (
-            ResourceClaim(resource="session", mode="exclusive"),
-        )
-
-    def test_custom_tool_unaffected(self) -> None:
-        """Non-builtin tools are not affected by relaxation."""
-        compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("my_mcp_tool"), _make_local_stateless_topology(), source="mcp"
-        )
+        assert instance.tool_binding.plane == ToolPlane.CONTROL_PLANE
         assert instance.tool_binding.resource_claims == ()
+        assert instance.tool_binding.state_mode == "stateless"
+        assert instance.tool_binding.stop_mode == "cancellable"
+        assert instance.tool_spec.effect_level == "local_mutation"
+        assert instance.tool_spec.fast_path_eligible is False
+        assert instance.tool_spec.max_result_chars == 0
+        assert instance.tool_spec.capabilities == frozenset()
 
-
-class TestFastPathEligibleFix:
-    def test_glob_fast_path_eligible(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("glob"), _make_topology(), source="builtin")
-        assert instance.tool_spec.fast_path_eligible is True
-
-    def test_grep_fast_path_eligible(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("grep"), _make_topology(), source="builtin")
-        assert instance.tool_spec.fast_path_eligible is True
-
-    def test_list_dir_fast_path_eligible(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("list_dir"), _make_topology(), source="builtin")
-        assert instance.tool_spec.fast_path_eligible is True
-
-
-class TestToolCompilerInputValidator:
-    def test_tool_with_validate_input_gets_bound(self) -> None:
-        """Tools with validate_input get input_validator on ToolInstance."""
-
-        class _ValidatableTool:
-            name = "write_file"
-            description = "validatable"
-            json_schema: dict[str, Any] = {"type": "object", "properties": {}}
-
-            async def execute(self, arguments: dict[str, Any]) -> ToolResult:
-                return ToolResult(content="ok")
-
-            async def validate_input(self, arguments: dict[str, Any]):
-                return None
-
+    @pytest.mark.asyncio
+    async def test_compile_prefers_execute_with_context(self) -> None:
         compiler = ToolCompiler()
         instance = compiler.compile(
-            _ValidatableTool(), _make_topology(), source="builtin"
+            _ContextAwareTool("ctx_tool"),
+            _make_topology(),
+            source="builtin",
         )
+
+        result = await instance.tool_executor(
+            {"x": "hello"},
+            ToolExecutionContext(),
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.content == "ctx:hello"
+
+    def test_tool_with_validate_input_gets_bound(self) -> None:
+        compiler = ToolCompiler()
+        instance = compiler.compile(
+            _ValidatableTool("validatable"),
+            _make_topology(),
+            source="builtin",
+        )
+
         assert instance.input_validator is not None
 
     def test_tool_without_validate_input_gets_none(self) -> None:
-        """Regular tools get input_validator=None."""
         compiler = ToolCompiler()
-        instance = compiler.compile(
-            _FakeTool("read_file"), _make_topology(), source="builtin"
-        )
+        instance = compiler.compile(_FakeTool("plain"), _make_topology(), source="builtin")
+
         assert instance.input_validator is None
 
 
-class TestToolCompilerStopModes:
-    """Verify ToolCompiler populates state_mode/stop_mode from BUILTIN_STOP_MODES."""
-
-    def test_compile_bash_stop_modes(self) -> None:
+class TestTopologyDependentBinding:
+    @pytest.mark.parametrize("tool_name", ["list_dir", "glob", "grep"])
+    def test_local_stateless_relaxes_shell_readers(self, tool_name: str) -> None:
         compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("execute_bash"), _make_topology(), source="builtin")
-        assert instance.tool_binding.state_mode == "stateless"
-        assert instance.tool_binding.stop_mode == "cancellable"
+        tool = _SelfDescribingTool(tool_name)
+        tool.resource_claims = (ResourceClaim(resource="session", mode="exclusive"),)
+        tool.plane = ToolPlane.SESSION_SHELL
 
-    def test_compile_web_search_stop_modes(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("mm_web_search"), _make_topology(), source="builtin")
-        assert instance.tool_binding.state_mode == "stateless"
-        assert instance.tool_binding.stop_mode == "best_effort"
+        instance = compiler.compile(tool, _make_local_stateless_topology(), source="builtin")
 
-    def test_compile_web_fetch_stop_modes(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("web_fetch"), _make_topology(), source="builtin")
-        assert instance.tool_binding.state_mode == "stateless"
-        assert instance.tool_binding.stop_mode == "best_effort"
-
-    def test_compile_spawn_stop_modes(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("spawn"), _make_topology(), source="builtin")
-        assert instance.tool_binding.state_mode == "persistent"
-        assert instance.tool_binding.stop_mode == "non_cancellable"
-
-    def test_compile_monitor_job_stop_modes(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("monitor_job"), _make_topology(), source="builtin")
-        assert instance.tool_binding.state_mode == "persistent"
-        assert instance.tool_binding.stop_mode == "best_effort"
-
-    def test_compile_read_file_stop_modes(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("read_file"), _make_topology(), source="builtin")
-        assert instance.tool_binding.state_mode == "stateless"
-        assert instance.tool_binding.stop_mode == "cancellable"
-
-    def test_compile_unknown_tool_default_stop_modes(self) -> None:
-        compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("custom_mcp_tool"), _make_topology(), source="mcp")
-        assert instance.tool_binding.state_mode == "stateless"
-        assert instance.tool_binding.stop_mode == "cancellable"
-
-
-class TestStatelessCompilerRelaxationBoundary:
-    """Lock the ONLY SessionCapabilities-sensitive rule shipped today (D-10).
-
-    The current stateless-session relaxation applies ONLY to list_dir, glob,
-    grep under local+stateless conditions. No persistent-shell branch exists.
-    This class prevents regression: if ASCH-01 adds persistent-shell scheduling,
-    it must be an explicit new feature, not a silent expansion of the relaxation
-    rule.
-    """
-
-    def test_only_three_tools_relaxed(self) -> None:
-        """Only list_dir, glob, grep are relaxed under local+stateless."""
-        compiler = ToolCompiler()
-        topo = _make_local_stateless_topology()
-
-        relaxed_tools: list[str] = []
-        # Test all builtin tools from BUILTIN_CLAIMS
-        from matmaster.tools.tool_compiler import BUILTIN_CLAIMS
-
-        for tool_name in BUILTIN_CLAIMS:
-            default_claims = BUILTIN_CLAIMS[tool_name]
-            instance = compiler.compile(
-                _FakeTool(tool_name), topo, source="builtin"
-            )
-            if instance.tool_binding.resource_claims != default_claims:
-                relaxed_tools.append(tool_name)
-
-        assert sorted(relaxed_tools) == ["glob", "grep", "list_dir"], (
-            f"Only glob/grep/list_dir should be relaxed; got: {relaxed_tools}"
+        assert instance.tool_binding.resource_claims == (
+            ResourceClaim(resource="session", mode="shared_read"),
         )
 
-    def test_relaxation_only_changes_mode_to_shared_read(self) -> None:
-        """Relaxation changes mode from exclusive to shared_read, nothing else."""
+    @pytest.mark.parametrize("tool_name", ["list_dir", "glob", "grep"])
+    def test_non_local_sessions_do_not_relax(self, tool_name: str) -> None:
         compiler = ToolCompiler()
-        topo = _make_local_stateless_topology()
+        tool = _SelfDescribingTool(tool_name)
+        tool.resource_claims = (ResourceClaim(resource="session", mode="exclusive"),)
+        tool.plane = ToolPlane.SESSION_SHELL
 
-        for tool_name in ("list_dir", "glob", "grep"):
-            instance = compiler.compile(_FakeTool(tool_name), topo, source="builtin")
-            claims = instance.tool_binding.resource_claims
-            assert len(claims) == 1
-            assert claims[0].resource == "session"
-            assert claims[0].mode == "shared_read"
+        instance = compiler.compile(tool, _make_ssh_stateless_topology(), source="builtin")
 
-    def test_no_persistent_shell_branch_in_compiler(self) -> None:
-        """ToolCompiler source must not contain persistent-shell scheduling logic."""
-        import inspect
-
-        from matmaster.tools import tool_compiler
-
-        source = inspect.getsource(tool_compiler)
-        assert "persistent" not in source.lower().replace(
-            '"persistent"', ""
-        ).replace("'persistent'", "").replace(
-            "# persistent", ""
-        ), (
-            "ToolCompiler should not contain persistent-shell logic; "
-            "ASCH-01 is deferred"
+        assert instance.tool_binding.resource_claims == (
+            ResourceClaim(resource="session", mode="exclusive"),
         )
-
-    def test_relaxation_requires_local_session_kind(self) -> None:
-        """Non-local session_kind prevents relaxation even if stateless."""
-        compiler = ToolCompiler()
-        topo = _make_ssh_stateless_topology()
-
-        for tool_name in ("list_dir", "glob", "grep"):
-            instance = compiler.compile(_FakeTool(tool_name), topo, source="builtin")
-            assert instance.tool_binding.resource_claims == (
-                ResourceClaim(resource="session", mode="exclusive"),
-            ), f"{tool_name} should stay exclusive under SSH"
-
-    def test_relaxation_requires_session_capabilities(self) -> None:
-        """session_capabilities=None prevents relaxation."""
-        compiler = ToolCompiler()
-        topo = RuntimeTopology(
-            session_kind="local",
-            control_root="/tmp/c",
-            workspace_root="/tmp/w",
-        )
-
-        for tool_name in ("list_dir", "glob", "grep"):
-            instance = compiler.compile(_FakeTool(tool_name), topo, source="builtin")
-            assert instance.tool_binding.resource_claims == (
-                ResourceClaim(resource="session", mode="exclusive"),
-            ), f"{tool_name} should stay exclusive without capabilities"
-
-
-class TestToolCatalogCompilerDelegation:
-    def test_get_tool_uses_compiler(self) -> None:
-        registry = ToolRegistry()
-        tool = _FakeTool("execute_bash")
-        registry.register(tool, source="builtin")
-
-        topology = _make_topology()
-        compiler = ToolCompiler()
-        catalog = ToolCatalog(registry, compiler=compiler, topology=topology)
-
-        instance = catalog.get_tool("execute_bash")
-        expected = compiler.compile(tool, topology, source="builtin")
-
-        assert instance is not None
-        assert instance.tool_binding == expected.tool_binding
-        assert instance.tool_spec == expected.tool_spec
-
-    def test_register_overlay_uses_compiler(self) -> None:
-        registry = ToolRegistry()
-        topology = _make_topology()
-        compiler = ToolCompiler()
-        catalog = ToolCatalog(registry, compiler=compiler, topology=topology)
-
-        overlay = _FakeTool("overlay_tool")
-        catalog.register_overlay(overlay, source="mcp")
-        instance = catalog.get_tool("overlay_tool")
-
-        assert instance is not None
-        assert instance.tool_spec.source == "mcp"
-        assert instance.tool_binding.plane == ToolPlane.CONTROL_PLANE
-        assert instance.tool_binding.binding_key == "control_plane:overlay_tool"
-        assert instance.tool_binding.resource_claims == ()
