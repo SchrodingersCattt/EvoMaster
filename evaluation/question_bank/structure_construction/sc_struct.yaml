@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: struct
 questions:
-- id: SC_struct_001_20260401
+- id: SC_struct_hetero_20260403
   capability: structure_construction
   domain: struct
   intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled
@@ -32,7 +32,7 @@ questions:
   - key: hetero_formula
     value:
       filename: '*.cif'
-      formula: B2C2N2
+      formula: BC2N
   - key: interlayer_distance_A
     value:
       filename: '*.cif'
