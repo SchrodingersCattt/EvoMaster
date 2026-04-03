@@ -1,10 +1,10 @@
-"""Event type hierarchy for the matmaster bus system.
+"""Event type hierarchy for the matmaster event system.
 
 Defines all 18 event types in two categories:
 - AgentEvent (8 types): emitted by the kernel during agent execution
 - SystemEvent (10 types): emitted by service-layer components
 
-BusEvent = AgentEvent | SystemEvent -- the unified type for MessageBus transport.
+BusEvent = AgentEvent | SystemEvent -- the unified event union type.
 
 All events use Pydantic discriminated union with the ``type`` field (Literal)
 as the discriminator, enabling type-safe deserialization from dicts/JSON.

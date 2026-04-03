@@ -316,6 +316,92 @@ class TestToolCompilerStopModes:
         assert instance.tool_binding.stop_mode == "cancellable"
 
 
+class TestStatelessCompilerRelaxationBoundary:
+    """Lock the ONLY SessionCapabilities-sensitive rule shipped today (D-10).
+
+    The current stateless-session relaxation applies ONLY to list_dir, glob,
+    grep under local+stateless conditions. No persistent-shell branch exists.
+    This class prevents regression: if ASCH-01 adds persistent-shell scheduling,
+    it must be an explicit new feature, not a silent expansion of the relaxation
+    rule.
+    """
+
+    def test_only_three_tools_relaxed(self) -> None:
+        """Only list_dir, glob, grep are relaxed under local+stateless."""
+        compiler = ToolCompiler()
+        topo = _make_local_stateless_topology()
+
+        relaxed_tools: list[str] = []
+        # Test all builtin tools from BUILTIN_CLAIMS
+        from matmaster.tools.tool_compiler import BUILTIN_CLAIMS
+
+        for tool_name in BUILTIN_CLAIMS:
+            default_claims = BUILTIN_CLAIMS[tool_name]
+            instance = compiler.compile(
+                _FakeTool(tool_name), topo, source="builtin"
+            )
+            if instance.tool_binding.resource_claims != default_claims:
+                relaxed_tools.append(tool_name)
+
+        assert sorted(relaxed_tools) == ["glob", "grep", "list_dir"], (
+            f"Only glob/grep/list_dir should be relaxed; got: {relaxed_tools}"
+        )
+
+    def test_relaxation_only_changes_mode_to_shared_read(self) -> None:
+        """Relaxation changes mode from exclusive to shared_read, nothing else."""
+        compiler = ToolCompiler()
+        topo = _make_local_stateless_topology()
+
+        for tool_name in ("list_dir", "glob", "grep"):
+            instance = compiler.compile(_FakeTool(tool_name), topo, source="builtin")
+            claims = instance.tool_binding.resource_claims
+            assert len(claims) == 1
+            assert claims[0].resource == "session"
+            assert claims[0].mode == "shared_read"
+
+    def test_no_persistent_shell_branch_in_compiler(self) -> None:
+        """ToolCompiler source must not contain persistent-shell scheduling logic."""
+        import inspect
+
+        from matmaster.tools import tool_compiler
+
+        source = inspect.getsource(tool_compiler)
+        assert "persistent" not in source.lower().replace(
+            '"persistent"', ""
+        ).replace("'persistent'", "").replace(
+            "# persistent", ""
+        ), (
+            "ToolCompiler should not contain persistent-shell logic; "
+            "ASCH-01 is deferred"
+        )
+
+    def test_relaxation_requires_local_session_kind(self) -> None:
+        """Non-local session_kind prevents relaxation even if stateless."""
+        compiler = ToolCompiler()
+        topo = _make_ssh_stateless_topology()
+
+        for tool_name in ("list_dir", "glob", "grep"):
+            instance = compiler.compile(_FakeTool(tool_name), topo, source="builtin")
+            assert instance.tool_binding.resource_claims == (
+                ResourceClaim(resource="session", mode="exclusive"),
+            ), f"{tool_name} should stay exclusive under SSH"
+
+    def test_relaxation_requires_session_capabilities(self) -> None:
+        """session_capabilities=None prevents relaxation."""
+        compiler = ToolCompiler()
+        topo = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp/c",
+            workspace_root="/tmp/w",
+        )
+
+        for tool_name in ("list_dir", "glob", "grep"):
+            instance = compiler.compile(_FakeTool(tool_name), topo, source="builtin")
+            assert instance.tool_binding.resource_claims == (
+                ResourceClaim(resource="session", mode="exclusive"),
+            ), f"{tool_name} should stay exclusive without capabilities"
+
+
 class TestToolCatalogCompilerDelegation:
     def test_get_tool_uses_compiler(self) -> None:
         registry = ToolRegistry()

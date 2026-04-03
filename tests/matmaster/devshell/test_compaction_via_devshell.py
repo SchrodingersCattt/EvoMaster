@@ -7,7 +7,7 @@
 4. 冷却机制: 连续 turn 不触发
 5. 摘要策略: summary provider 正常 → [Compacted Context] 摘要
 6. 滑动窗口回退: summary provider 失败 → sliding_window 截断
-7. 事件发射: MessageBus 收到 ContextCompactionEvent
+7. 事件发射: event_sink 收到 ContextCompactionEvent
 8. 多轮压缩: 首次压缩后继续积累，再次触发
 9. retained turns 选择: 3 轮最低保留 + token budget 约束
 10. Kernel 集成: 完整 kernel loop 中压缩触发且结果正确
@@ -28,7 +28,7 @@ from matmaster.types.events import ContextCompactionEvent
 
 
 class _EventCollector:
-    """Simple event collector replacing MessageBus for compaction tests."""
+    """Simple event collector for compaction tests."""
 
     def __init__(self):
         self.events: list = []
@@ -362,7 +362,7 @@ class TestSlidingWindowFallback:
 
 
 class TestEventEmission:
-    """验证 MessageBus 收到 ContextCompactionEvent。"""
+    """验证 event_sink 收到 ContextCompactionEvent。"""
 
     async def test_emits_compaction_event(self) -> None:
         config = CompactionConfig(

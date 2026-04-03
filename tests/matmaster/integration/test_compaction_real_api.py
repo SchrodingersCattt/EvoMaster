@@ -4,7 +4,7 @@
 1. 单轮不触发（context 未满）
 2. 多轮工具调用积累后触发 summary 压缩
 3. 压缩后 kernel 继续正常运行至 natural finish
-4. 压缩事件通过 MessageBus 正确发射
+4. 压缩事件通过 event_sink 正确发射
 5. 压缩后摘要内容合理（非空、包含关键信息）
 
 使用 haiku 做主 LLM（低成本），compaction profile (gemini-flash) 做压缩摘要。

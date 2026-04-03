@@ -196,3 +196,59 @@ class TestCountedMaxConcurrentZero:
         assert t2 is None
 
         await scheduler.release(t1)
+
+
+class TestStatelessSchedulingBoundary:
+    """Lock the stateless scheduling boundary per D-10 / ASCH-01 defer.
+
+    ToolScheduler is intentionally generic over ResourceClaim. It does NOT
+    inspect SessionCapabilities, shell_persistence, or any session-level
+    attribute. All session-aware binding decisions live in ToolCompiler.
+
+    This class exists to prevent regression: if a future phase needs
+    persistent-shell scheduling, it must be a new feature, not a silent
+    change to ToolScheduler internals.
+    """
+
+    def test_scheduler_does_not_import_session_capabilities(self) -> None:
+        """ToolScheduler module must not import SessionCapabilities."""
+        import ast
+        import inspect
+
+        from matmaster.core import tool_scheduler
+
+        source = inspect.getsource(tool_scheduler)
+        tree = ast.parse(source)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                if node.names:
+                    for alias in node.names:
+                        assert alias.name != "SessionCapabilities", (
+                            "ToolScheduler must remain capability-agnostic; "
+                            "SessionCapabilities belongs in ToolCompiler"
+                        )
+
+    def test_scheduler_does_not_reference_shell_persistence(self) -> None:
+        """ToolScheduler source must not contain shell_persistence references."""
+        import inspect
+
+        from matmaster.core import tool_scheduler
+
+        source = inspect.getsource(tool_scheduler)
+        assert "shell_persistence" not in source, (
+            "ToolScheduler must not inspect shell_persistence; "
+            "that logic belongs in ToolCompiler"
+        )
+
+    def test_scheduler_api_is_claim_generic(self) -> None:
+        """ToolScheduler.acquire() accepts any ResourceClaim tuple, no session args."""
+        import inspect
+
+        sig = inspect.signature(ToolScheduler.acquire)
+        param_names = set(sig.parameters.keys())
+        # Only self, claims, timeout -- no session/capabilities/topology
+        assert "session" not in param_names
+        assert "capabilities" not in param_names
+        assert "topology" not in param_names
+        assert "shell_persistence" not in param_names

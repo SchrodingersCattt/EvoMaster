@@ -21,7 +21,6 @@ import pytest
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
-from matmaster.core.bus import MessageBus
 from matmaster.core.exp import Exp
 from matmaster.core.hooks import BaseHook, HookAction
 from matmaster.integration.persistence_handler import PersistenceHandler
