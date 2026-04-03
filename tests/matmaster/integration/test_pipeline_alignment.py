@@ -108,8 +108,8 @@ class TestEventSequenceAlignment:
         config = ExpConfig(name="direct")
         exp = Exp(config)
         runtime = await exp.build_runtime(pg_ctx, bus=bus)
-        # Register test tool directly on the runtime's registry
-        runtime.spec.tool_registry.register(tool, source="test")
+        # Register test tool via catalog overlay for version-bumped injection
+        runtime.spec.tool_catalog.register_overlay(tool, source="test")
 
         kernel = AgentKernel()
         finish = await kernel.run(runtime.spec, "alignment test")

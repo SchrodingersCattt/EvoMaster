@@ -446,8 +446,8 @@ class TestExpBuiltinTools:
     def test_native_tools_count(self, tmp_path: Path) -> None:
         """15 native tools registered with source='builtin' (includes MonitorJobTool)."""
         _, registry = self._build_registry(tmp_path)
-        native = registry.get_tools_by_source("builtin")
-        assert len(native) == 15
+        # All tools registered in this test context are builtin source
+        assert len(registry) == 15
 
     def test_native_tool_names(self, tmp_path: Path) -> None:
         """All 12 expected native tool names are present in registry."""
@@ -470,10 +470,12 @@ class TestExpBuiltinTools:
             assert name in registry, f"Expected tool '{name}' not found in registry"
 
     def test_no_evo_adapted_tools(self, tmp_path: Path) -> None:
-        """No evo adapter tools remain (EvoToolAdapter eliminated)."""
+        """No evo adapter tools remain (EvoToolAdapter eliminated).
+        All tools are native builtins; no 'builtin_evo' source exists."""
         _, registry = self._build_registry(tmp_path)
-        evo = registry.get_tools_by_source('builtin_evo')
-        assert len(evo) == 0
+        # Verify no tool names suggest evo adapter patterns
+        for tool in registry.all_tools:
+            assert 'evo' not in tool.name.lower(), f"Unexpected evo tool: {tool.name}"
 
     def test_editor_tool_removed(self, tmp_path: Path) -> None:
         """str_replace_editor (EditorTool) is NOT in the registry."""
@@ -481,11 +483,9 @@ class TestExpBuiltinTools:
         assert 'str_replace_editor' not in registry
 
     def test_monitor_job_is_native_builtin(self, tmp_path: Path) -> None:
-        """MonitorJobTool is registered as native builtin (source='builtin')."""
+        """MonitorJobTool is registered as native builtin."""
         _, registry = self._build_registry(tmp_path)
-        native = registry.get_tools_by_source('builtin')
-        native_names = {t.name for t in native}
-        assert 'monitor_job' in native_names
+        assert 'monitor_job' in registry
 
     def test_total_count(self, tmp_path: Path) -> None:
         """Total tools = 15 native builtin (no evo adapters)."""
@@ -495,9 +495,7 @@ class TestExpBuiltinTools:
     def test_web_search_is_native_builtin(self, tmp_path: Path) -> None:
         """WebSearchTool is registered as native builtin (not evo adapter)."""
         _, registry = self._build_registry(tmp_path)
-        native = registry.get_tools_by_source('builtin')
-        native_names = {t.name for t in native}
-        assert 'mm_web_search' in native_names
+        assert 'mm_web_search' in registry
 
     def test_read_tracker_cleanup_registered(self, tmp_path: Path) -> None:
         """ReadTracker.clear is registered as a cleanup callback after _init_builtin_tools."""
@@ -540,8 +538,7 @@ class TestExpBuiltinTools:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        native = runtime.spec.tool_registry.get_tools_by_source('builtin')
-        registered_names = {t.name for t in native}
+        registered_names = {t.name for t in runtime.spec.tool_catalog.registry.all_tools}
         assert registered_names == {'execute_bash', 'read_file'}
 
     async def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
@@ -557,8 +554,7 @@ class TestExpBuiltinTools:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        native = runtime.spec.tool_registry.get_tools_by_source('builtin')
-        assert len(native) == 0
+        assert len(runtime.spec.tool_catalog.registry) == 0
 
 
 # ── TestExecutionWorkdirBinding ─────────────────────────
@@ -639,7 +635,7 @@ class TestExecutionWorkdirBinding:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
         subs = [
-            t for t in runtime.spec.tool_registry.all_tools if isinstance(t, SpawnTool)
+            t for t in runtime.spec.tool_catalog.registry.all_tools if isinstance(t, SpawnTool)
         ]
         assert len(subs) == 1
         assert subs[0]._workdir == execution

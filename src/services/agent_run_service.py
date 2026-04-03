@@ -368,9 +368,9 @@ class AgentRunService:
                 pg_ctx.session._stop_event = stop_event
 
             # Inject stop_event into tools for cancel propagation.
-            if stop_event is not None and spec.tool_registry is not None:
-                for tool in spec.tool_registry.all_tools:
-                    tool._stop_event = stop_event
+            catalog = getattr(spec, "tool_catalog", None)
+            if stop_event is not None and catalog is not None:
+                catalog.inject_stop_event(stop_event)
 
             # -- Stage 5: History --
             raw_events = (

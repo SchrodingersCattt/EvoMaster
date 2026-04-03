@@ -82,7 +82,7 @@ class _FakeExp:
         runtime = MagicMock()
         spec = MagicMock()
         spec.hooks = []
-        spec.tool_registry = None
+        spec.tool_catalog = None
         runtime.spec = spec
         return runtime
 

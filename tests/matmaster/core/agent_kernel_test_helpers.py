@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from matmaster.core.hooks import BaseHook, HookAction
+from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.errors import LLMError
@@ -239,6 +240,100 @@ class SegmentRecordingHook(BaseHook):
         self.segments.append((segment_type, content, stream_id))
 
 
+class _SimpleTestToolRunner:
+    """Minimal ToolRunner for kernel tests.
+
+    Executes tools via ToolCatalog.registry lookup with GuardPipeline
+    support for guard/hook-aware tests.
+    """
+
+    def __init__(
+        self,
+        catalog: ToolCatalog,
+        guards: list[Any] | None = None,
+        hooks: list[Any] | None = None,
+        read_tracker: Any = None,
+    ) -> None:
+        self._catalog = catalog
+        self._guards = guards or []
+        self._hooks = hooks or []
+        self._read_tracker = read_tracker
+
+    async def execute_batch(
+        self,
+        tool_calls: list[ToolCallData],
+        ctx: Any,
+        *,
+        on_result: Any = None,
+    ) -> list[tuple[ToolCallData, ToolResult]]:
+        from matmaster.core.guard_pipeline import GuardPipeline
+        from matmaster.core.hooks import (
+            HookAction,
+            run_guard_blocked,
+            run_post_tool_call,
+            run_pre_tool_call,
+        )
+        from matmaster.tools.tool_result import normalize_tool_result
+
+        guard_pipeline = GuardPipeline(self._guards, read_tracker=self._read_tracker)
+
+        results: list[tuple[ToolCallData, ToolResult]] = []
+        for tc in tool_calls:
+            # Cancel check
+            if ctx.stop_event is not None and ctx.stop_event.is_set():
+                tr = ToolResult(status="cancelled", content="Run cancelled.")
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            # Guard check
+            guard_result = guard_pipeline.evaluate(tc, ctx.turn, ctx.max_turns)
+            if not guard_result.allowed:
+                await run_guard_blocked(self._hooks, tc, guard_result)
+                blocked_content = f"BLOCKED: {guard_result.reason}"
+                if guard_result.guidance:
+                    blocked_content += f"\n{guard_result.guidance}"
+                tr = ToolResult(status="blocked", content=blocked_content)
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            # Pre-hook
+            action = await run_pre_tool_call(self._hooks, tc)
+            if action == HookAction.SKIP:
+                tr = ToolResult(status="skipped", content="Tool call skipped by hook.")
+                results.append((tc, tr))
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
+            # Execute
+            raw_tool = self._catalog.registry._tools.get(tc.name)
+            if raw_tool is None:
+                available = ", ".join(sorted(self._catalog.registry._tools))
+                tr = ToolResult(
+                    status="error",
+                    content=f"Error: Tool '{tc.name}' not found. Available: {available}",
+                )
+            else:
+                try:
+                    raw = await raw_tool.execute(tc.arguments)
+                    tr = normalize_tool_result(raw)
+                except Exception as e:
+                    tr = ToolResult.from_error(tc.name, e)
+
+            results.append((tc, tr))
+
+            # Post-hook
+            await run_post_tool_call(self._hooks, tc, tr)
+
+            if on_result:
+                await on_result(tc, tr)
+        return results
+
+
 def _make_spec(
     *,
     provider: Any | None = None,
@@ -250,9 +345,16 @@ def _make_spec(
 ) -> AgentRuntimeSpec:
     if tool_registry is None:
         tool_registry, _ = _make_tool_registry()
+    catalog = ToolCatalog(tool_registry)
+    runner = _SimpleTestToolRunner(
+        catalog,
+        guards=guards,
+        hooks=hooks,
+    )
     return AgentRuntimeSpec(
         llm_provider=provider or MockLLMProvider(),
-        tool_registry=tool_registry,
+        tool_catalog=catalog,
+        tool_runner=runner,
         guards=guards or [],
         hooks=hooks or [],
         max_turns=max_turns,

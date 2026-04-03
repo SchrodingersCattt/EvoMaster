@@ -492,11 +492,17 @@ def _make_confirmation_runtime(
     tool: _RecordingAsyncTool,
     runtime_hook: _RecordingRuntimeHook,
 ) -> AgentRuntime:
+    from matmaster.tools.tool_catalog import ToolCatalog
+    from tests.matmaster.core.agent_kernel_test_helpers import _SimpleTestToolRunner
+
     registry = ToolRegistry()
     registry.register(tool, source="test")
+    catalog = ToolCatalog(registry)
+    runner = _SimpleTestToolRunner(catalog)
     spec = AgentRuntimeSpec(
         llm_provider=provider,
-        tool_registry=registry,
+        tool_catalog=catalog,
+        tool_runner=runner,
         hooks=[runtime_hook],
         max_turns=5,
         system_prompt="You are a confirmation recovery test agent",

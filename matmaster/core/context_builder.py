@@ -9,13 +9,16 @@ Section order: system_prompt -> identity -> skills -> tools -> memory -> task
 All static text (system_prompt, identity) comes from the caller (toml config).
 ContextBuilder has no default text of its own -- empty string means the
 section is skipped entirely.
+
+Tools section: generic guidance directing the LLM to use function calling
+definitions (tool names/descriptions/schemas are already provided in the
+API tool_definitions parameter). No per-tool enumeration in the system prompt.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
 
 
@@ -36,7 +39,7 @@ class ContextBuilder:
     def build(
         self,
         ctx: PlaygroundContext,
-        tool_registry: ToolRegistry,
+        tool_registry: Any = None,
         *,
         system_prompt: str = "",
         identity: str = "",
@@ -49,7 +52,7 @@ class ContextBuilder:
 
         Args:
             ctx: PlaygroundContext from Playground.prepare().
-            tool_registry: ToolRegistry with registered tools.
+            tool_registry: Accepted for backward compat, no longer used.
             system_prompt: Universal base text from _base.toml.
             identity: Identity text from toml developer_instructions.
             skill_registry: Optional skill registry with get_meta_info_context().
@@ -73,7 +76,6 @@ class ContextBuilder:
                 system_prompt=system_prompt,
                 identity=identity,
                 skill_registry=skill_registry,
-                tool_registry=tool_registry,
                 memory_context=memory_context,
                 task_context=task_context,
             )
@@ -90,7 +92,6 @@ class ContextBuilder:
         system_prompt: str,
         identity: str,
         skill_registry: Any,
-        tool_registry: ToolRegistry,
         memory_context: str | None,
         task_context: str | None,
     ) -> str:
@@ -102,7 +103,7 @@ class ContextBuilder:
         if name == "skills":
             return self._build_skills(skill_registry)
         if name == "tools":
-            return self._build_tools(tool_registry)
+            return self._build_tools()
         if name == "memory":
             return self._build_memory(memory_context)
         if name == "task":
@@ -139,13 +140,19 @@ class ContextBuilder:
         return f"# Skills\n\n{context}"
 
     @staticmethod
-    def _build_tools(tool_registry: ToolRegistry) -> str:
-        """Build the available tools section."""
-        tools = tool_registry.all_tools
-        if not tools:
-            return ""
-        lines = [f"- {tool.name}: {tool.description}" for tool in tools]
-        return "# Available Tools\n\n" + "\n".join(lines)
+    def _build_tools() -> str:
+        """Build the available tools section -- generic guidance only.
+
+        Tool names, descriptions, and parameter schemas are already provided
+        in the API function calling definitions. The system prompt only needs
+        a general directive pointing the LLM to use them.
+        """
+        return (
+            "# Tools\n\n"
+            "Use the tools declared in function calling. "
+            "Each tool's name, description, and parameter schema are "
+            "provided in the function definitions."
+        )
 
     @staticmethod
     def _build_memory(memory_context: str | None) -> str:

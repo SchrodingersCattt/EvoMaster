@@ -225,8 +225,8 @@ class TestMatMasterE2EPipeline:
 
         exp = Exp(self._EXP_CONFIG)
         runtime = await exp.build_runtime(pg_ctx, bus=bus)
-        # Register echo tool directly on the runtime's registry
-        runtime.spec.tool_registry.register(echo_tool, source='test')
+        # Register echo tool via catalog overlay for version-bumped injection
+        runtime.spec.tool_catalog.register_overlay(echo_tool, source='test')
 
         kernel = AgentKernel()
         finish = await kernel.run(runtime.spec, 'call echo tool')

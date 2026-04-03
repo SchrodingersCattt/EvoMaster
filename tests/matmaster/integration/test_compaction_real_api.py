@@ -241,9 +241,15 @@ class TestRealAPICompaction:
                 "After all analyses, provide a brief final summary."
             )
 
+        from matmaster.tools.tool_catalog import ToolCatalog
+        from tests.matmaster.core.agent_kernel_test_helpers import _SimpleTestToolRunner
+
+        catalog = ToolCatalog(registry)
+        runner = _SimpleTestToolRunner(catalog)
         spec = AgentRuntimeSpec(
             llm_provider=main_provider,
-            tool_registry=registry,
+            tool_catalog=catalog,
+            tool_runner=runner,
             max_turns=max_turns,
             system_prompt=system_prompt,
             compaction=compaction_cfg,

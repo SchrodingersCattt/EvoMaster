@@ -2,7 +2,7 @@
 
 Verifies:
 - Initial version == 0
-- build_definitions() delegates to registry.get_tool_definitions()
+- build_definitions() returns OpenAI function calling format
 - register_overlay() increments version
 - get_tool() returns ToolInstance
 - get_tool() returns None for missing tool
@@ -82,8 +82,8 @@ class TestCatalogVersion:
 
 
 class TestCatalogBuildDefinitions:
-    def test_delegates_to_registry(self) -> None:
-        """build_definitions() returns same output as registry.get_tool_definitions()."""
+    def test_returns_openai_function_format(self) -> None:
+        """build_definitions() returns OpenAI function calling format."""
         catalog = _make_catalog("alpha", "beta")
         defs = catalog.build_definitions()
         assert len(defs) == 2

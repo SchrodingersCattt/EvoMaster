@@ -470,7 +470,7 @@ def test_execution_binding_before_build_runtime(
     mock_runtime = MagicMock()
     mock_runtime.spec = MagicMock()
     mock_runtime.spec.hooks = []
-    mock_runtime.spec.tool_registry = None
+    mock_runtime.spec.tool_catalog = None
     mock_runtime.spec.model_copy.return_value = mock_runtime.spec
     mock_kernel_result = MagicMock()
     mock_run_evt = MagicMock()

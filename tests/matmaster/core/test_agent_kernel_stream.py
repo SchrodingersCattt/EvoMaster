@@ -425,27 +425,26 @@ class TestGap1FullToolRunnerActivation:
             "Second arg to execute_batch should be ToolExecutionContext"
 
     @pytest.mark.asyncio
-    async def test_run_items_falls_back_to_registry_without_tool_runner(self) -> None:
-        """When spec.tool_runner is None, _run_items() uses spec.tool_registry.execute()."""
+    async def test_run_items_raises_without_tool_runner(self) -> None:
+        """When spec.tool_runner is None, _run_items() raises RuntimeError."""
         from matmaster.core.agent import AgentKernel
+        from matmaster.tools.tool_catalog import ToolCatalog
 
         provider = ToolCallStreamProvider()
-        registry, tools = _make_tool_registry()
-        spec = _make_spec(provider=provider, tool_registry=registry)
-        # tool_runner is None by default
+        registry, _tools = _make_tool_registry()
+        catalog = ToolCatalog(registry)
+        spec = AgentRuntimeSpec(
+            llm_provider=provider,
+            tool_catalog=catalog,
+            # tool_runner intentionally None
+            max_turns=5,
+            system_prompt="test",
+        )
 
         kernel = AgentKernel()
-        events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
-            events.append(event)
-
-        # Tool should have been executed via registry (tools record calls)
-        tool_result_events = [
-            e for e in events
-            if isinstance(e, ToolResultEvent)
-        ]
-        assert len(tool_result_events) >= 1, \
-            "Should yield ToolResultEvent from registry fallback path"
+        with pytest.raises(RuntimeError, match="No tool_runner"):
+            async for _event in kernel.run_stream(spec, "test task"):
+                pass
 
 
 class TestGap2RunStreamYieldsBusEvent:

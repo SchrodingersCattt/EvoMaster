@@ -114,15 +114,14 @@ class TestAgentRuntimeSpec:
         provider = _MockLLMProvider()
         spec = AgentRuntimeSpec(
             llm_provider=provider,
-            tool_registry=ToolRegistry(),
+
         )
         assert spec.llm_provider is not None
-        assert spec.tool_registry is not None
 
     def test_defaults(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
+
         )
         assert spec.guards == []
         assert spec.max_turns == 100
@@ -133,7 +132,7 @@ class TestAgentRuntimeSpec:
     def test_frozen(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
+
         )
         with pytest.raises(ValidationError):
             spec.max_turns = 50
@@ -142,7 +141,7 @@ class TestAgentRuntimeSpec:
         """CONT-05: TerminationPolicy simplified to AgentRuntimeSpec.max_turns."""
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
+
         )
         assert isinstance(spec.max_turns, int)
         assert spec.max_turns == 100
@@ -153,7 +152,7 @@ class TestAgentRuntimeSpec:
 
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
+
             guards=[guard],
         )
         assert len(spec.guards) == 1
@@ -162,7 +161,7 @@ class TestAgentRuntimeSpec:
     def test_serialization(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
+
             max_turns=50,
             system_prompt="You are a scientist.",
         )
@@ -170,7 +169,6 @@ class TestAgentRuntimeSpec:
         assert data["max_turns"] == 50
         assert data["system_prompt"] == "You are a scientist."
         assert "llm_provider" in data
-        assert "tool_registry" in data
         assert "guards" in data
         assert "hooks" in data
         assert "compaction" in data
@@ -184,7 +182,7 @@ class TestAgentRuntimeSpec:
 
         spec = AgentRuntimeSpec(
             llm_provider=provider,
-            tool_registry=ToolRegistry(),
+
         )
         assert isinstance(spec.llm_provider, LLMProvider)
 
@@ -195,7 +193,7 @@ class TestAgentRuntimeSpec:
 
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
+
             hooks=[hook],
         )
         assert len(spec.hooks) == 1
@@ -205,7 +203,7 @@ class TestAgentRuntimeSpec:
         """AgentRuntimeSpec with MockLLMProvider and BaseHook constructs successfully."""
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
+
             hooks=[BaseHook(), BaseHook()],
             guards=[_MockGuard()],
         )
@@ -241,7 +239,7 @@ class TestAgentRuntimeSpecFrozenRejectMutation:
     def test_agent_runtime_spec_frozen_reject_mutation(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
+
             guards=[_MockGuard()],
         )
         with pytest.raises(ValidationError):
@@ -261,21 +259,17 @@ class TestAgentRuntimeSpecDefaults:
         assert spec.system_prompt == ""
         assert spec.guards == []
         assert spec.hooks == []
-        assert spec.tool_registry is None
 
 
 class TestAgentRuntimeSpecArbitraryTypes:
-    """QUAL-01: LLMProvider and ToolRegistry accepted as arbitrary types."""
+    """QUAL-01: LLMProvider accepted as arbitrary type."""
 
     def test_agent_runtime_spec_arbitrary_types(self) -> None:
         provider = _MockLLMProvider()
-        registry = ToolRegistry()
         spec = AgentRuntimeSpec(
             llm_provider=provider,
-            tool_registry=registry,
         )
         assert spec.llm_provider is provider
-        assert spec.tool_registry is registry
         assert isinstance(spec.llm_provider, LLMProvider)
 
 
@@ -421,7 +415,7 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
         """Existing _make_spec() pattern (no new fields) still works."""
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
+
             guards=[_MockGuard()],
             hooks=[],
             max_turns=10,
@@ -434,13 +428,14 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
     def test_tool_runner_field_accepts_inline_runner(self) -> None:
         """tool_runner field accepts InlineToolRunner instance."""
         from matmaster.core.tool_runner import InlineToolRunner
+        from matmaster.tools.tool_catalog import ToolCatalog
 
         registry = ToolRegistry()
-        spec_for_runner = AgentRuntimeSpec(tool_registry=registry)
+        catalog = ToolCatalog(registry)
+        spec_for_runner = AgentRuntimeSpec(tool_catalog=catalog)
         runner = InlineToolRunner(spec_for_runner, [])
 
         spec = AgentRuntimeSpec(
-            tool_registry=registry,
             tool_runner=runner,
         )
         assert spec.tool_runner is runner
@@ -453,7 +448,7 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
         catalog = ToolCatalog(registry)
 
         spec = AgentRuntimeSpec(
-            tool_registry=registry,
+
             tool_catalog=catalog,
         )
         assert spec.tool_catalog is catalog

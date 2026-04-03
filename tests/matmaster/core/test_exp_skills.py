@@ -116,10 +116,14 @@ class TestExpInitSkillTools:
         # Before skill trigger: no MCP tools
         assert "mat_sg_build_bulk" not in registry
 
-        # Trigger via use_skill
-        result = await registry.execute(
-            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
+        # Trigger via use_skill (execute tool directly from registry storage)
+        from matmaster.tools.tool_result import normalize_tool_result
+
+        skill_tool = registry._tools["use_skill"]
+        raw_result = await skill_tool.execute(
+            {"skill_name": "test-skill", "action": "get_info"}
         )
+        result = normalize_tool_result(raw_result)
         assert result.status == "success", f"use_skill failed: {result.content}"
 
         # After skill trigger: mat_sg tools should be injected

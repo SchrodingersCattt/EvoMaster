@@ -220,9 +220,9 @@ def _show_tools(runner: DevRunner) -> None:
     _loop = asyncio.new_event_loop()
     try:
         runtime = _loop.run_until_complete(exp.build_runtime(runner._pg_ctx))
-        registry = runtime.spec.tool_registry
-        if registry and registry.all_tools:
-            for tool in registry.all_tools:
+        catalog = runtime.spec.tool_catalog
+        if catalog and catalog.registry.all_tools:
+            for tool in catalog.registry.all_tools:
                 desc = getattr(tool, "description", "")
                 name = getattr(tool, "name", str(tool))
                 print(f"  - {name}: {desc}")

@@ -275,7 +275,6 @@ class Exp:
         # 9. Assemble final spec with all v2 fields
         spec = spec.model_copy(
             update={
-                'tool_registry': registry,
                 'tool_catalog': catalog,
                 'tool_runner': full_runner,
                 'runtime_topology': topology,
@@ -350,10 +349,9 @@ class Exp:
                 ctx.session._stop_event = stop_event
 
             # Inject stop_event into tools for cancel propagation.
-            tool_registry = getattr(runtime.spec, "tool_registry", None)
-            if stop_event is not None and tool_registry is not None:
-                for tool in tool_registry.all_tools:
-                    tool._stop_event = stop_event
+            catalog = getattr(runtime.spec, "tool_catalog", None)
+            if stop_event is not None and catalog is not None:
+                catalog.inject_stop_event(stop_event)
             result = await runtime.kernel.run(
                 runtime.spec, task, history=history, stop_event=stop_event
             )
@@ -393,10 +391,9 @@ class Exp:
                 ctx.session._stop_event = stop_event
 
             # Inject stop_event into tools for cancel propagation
-            tool_registry = getattr(runtime.spec, "tool_registry", None)
-            if stop_event is not None and tool_registry is not None:
-                for tool in tool_registry.all_tools:
-                    tool._stop_event = stop_event
+            catalog = getattr(runtime.spec, "tool_catalog", None)
+            if stop_event is not None and catalog is not None:
+                catalog.inject_stop_event(stop_event)
 
             async for event in runtime.kernel.run_stream(
                 runtime.spec, task, history=history, stop_event=stop_event
