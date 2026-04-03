@@ -28,6 +28,7 @@ from matmaster.core.tool_runner import (
     ToolExecutionContext,
     ToolRunner,
 )
+from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.guards import GuardContext, GuardResult
@@ -113,8 +114,9 @@ def _make_spec(
     guards: list[Any] | None = None,
     hooks: list[Any] | None = None,
 ) -> AgentRuntimeSpec:
+    catalog = ToolCatalog(registry)
     return AgentRuntimeSpec(
-        tool_registry=registry,
+        tool_catalog=catalog,
         guards=guards or [],
         hooks=hooks or [],
     )

@@ -75,9 +75,11 @@ class ToolRunner(Protocol):
 
 
 class InlineToolRunner:
-    """Phase 1 transition: wraps current agent.py guard->hook->execute->hook chain.
+    """DEPRECATED: Phase 1 transition runner. Use FullToolRunner instead.
 
-    Extracts the logic from agent.py L217-311 into a standalone ToolRunner.
+    Retained for test compatibility. Will be removed in future cleanup.
+
+    Original design: wraps agent.py guard->hook->execute->hook chain.
     The three-phase execution model is preserved:
 
     Phase 1 (serial): Guard evaluation + pre_hook gating
@@ -147,7 +149,21 @@ class InlineToolRunner:
 
             async def _exec(tc: ToolCallData) -> ToolResult:
                 try:
-                    return await self._spec.tool_registry.execute(tc.name, tc.arguments)
+                    # Use tool_catalog.registry for tool lookup + execute
+                    catalog = getattr(self._spec, 'tool_catalog', None)
+                    if catalog is not None:
+                        registry = catalog.registry
+                    else:
+                        raise RuntimeError("No tool_catalog in spec (InlineToolRunner is DEPRECATED)")
+                    raw_tool = registry._tools.get(tc.name)
+                    if raw_tool is None:
+                        available = ", ".join(sorted(registry._tools))
+                        return ToolResult(
+                            status="error",
+                            content=f"Error: Tool '{tc.name}' not found. Available: {available}",
+                        )
+                    result = await raw_tool.execute(tc.arguments)
+                    return normalize_tool_result(result)
                 except Exception as e:
                     logger.exception("Tool execution failed: %s", tc.name)
                     return ToolResult.from_error(tc.name, e)

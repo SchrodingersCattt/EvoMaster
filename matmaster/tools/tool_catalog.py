@@ -6,10 +6,15 @@ fast_path_eligible metadata for known builtin tools (per D-09).
 
 Unknown tools (MCP/skill overlay) fall back to default empty claims
 and CONTROL_PLANE placement.
+
+Also provides inject_stop_event() for cancel propagation to all tools,
+and build_definitions() for OpenAI function calling format (previously
+delegated to ToolRegistry, now self-contained).
 """
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from matmaster.tools.tool_compiler import BUILTIN_CLAIMS, BUILTIN_META, ToolCompiler
@@ -97,8 +102,28 @@ class ToolCatalog:
         return compiled
 
     def build_definitions(self) -> list[dict[str, Any]]:
-        """Delegate to registry for OpenAI function calling format."""
-        return self._registry.get_tool_definitions()
+        """Return tool definitions in OpenAI function calling format.
+
+        Iterates over all registered tools and formats them as function
+        calling definitions. Previously delegated to ToolRegistry; now
+        self-contained after Registry was demoted to pure storage.
+        """
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.json_schema,
+                },
+            }
+            for t in self._registry.all_tools
+        ]
+
+    def inject_stop_event(self, stop_event: threading.Event) -> None:
+        """Inject stop_event into all registered tools for cancel propagation."""
+        for tool in self._registry.all_tools:
+            tool._stop_event = stop_event  # type: ignore[attr-defined]
 
     def __len__(self) -> int:
         return len(self._registry)

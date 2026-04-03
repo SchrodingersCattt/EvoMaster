@@ -21,7 +21,7 @@ import time
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field as dc_field
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any
 
 from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.tools.tool_result import ToolResult
@@ -39,13 +39,9 @@ if TYPE_CHECKING:
     from matmaster.types.runtime import AgentRuntimeSpec, KernelRunResult
 
 from matmaster.core.hooks import (
-    HookAction,
-    run_guard_blocked,
     run_on_segment_complete,
     run_on_stream_chunk,
-    run_post_tool_call,
     run_pre_llm_call,
-    run_pre_tool_call,
     run_should_continue,
 )
 from matmaster.types.messages import (
@@ -103,15 +99,6 @@ class _KernelState:
 
 class _KernelStopRequested(Exception):
     """Internal: stop_event became set during LLM stream or retry backoff."""
-
-
-class _ToolOutcome(NamedTuple):
-    """Result of guard + pre-hook gating for a single tool call."""
-
-    tc: ToolCallData
-    tool_msg: ToolMessage | None
-    tool_result: ToolResult | None
-    needs_post_hook: bool
 
 
 class AgentKernel:
@@ -258,101 +245,28 @@ class AgentKernel:
                 )
             )
 
-            # Phase 1: Serial — guard denials and hook skips must resolve before execution to avoid wasted work
-            outcomes: list[_ToolOutcome] = []
-            approved_indices: list[int] = []
+            # Delegate tool execution to ToolRunner (FullToolRunner in production).
+            if spec.tool_runner is None:
+                raise RuntimeError("No tool_runner in AgentRuntimeSpec")
 
-            for _i, tc in enumerate(response.tool_calls):
-                if stop_event and stop_event.is_set():
-                    return self._finish(
-                        messages,
-                        'cancelled',
-                        num_turns=turn,
-                        stop_reason=last_stop_reason,
-                        usage=total_usage,
-                    )
-                guard_result = guard_pipeline.evaluate(tc, turn, spec.max_turns)
-                if not guard_result.allowed:
-                    await run_guard_blocked(spec.hooks, tc, guard_result)
-                    blocked_content = f'BLOCKED: {guard_result.reason}'
-                    if guard_result.guidance:
-                        blocked_content += f'\n{guard_result.guidance}'
-                    outcomes.append(
-                        _ToolOutcome(
-                            tc=tc,
-                            tool_msg=ToolMessage(
-                                tool_call_id=tc.id,
-                                tool_name=tc.name,
-                                content=blocked_content,
-                            ),
-                            tool_result=None,
-                            needs_post_hook=False,
-                        )
-                    )
-                    continue
+            from matmaster.core.tool_runner import ToolExecutionContext
 
-                action = await run_pre_tool_call(spec.hooks, tc)
-                if action == HookAction.SKIP:
-                    outcomes.append(
-                        _ToolOutcome(
-                            tc=tc,
-                            tool_msg=ToolMessage(
-                                tool_call_id=tc.id,
-                                tool_name=tc.name,
-                                content='Tool call skipped by hook.',
-                            ),
-                            tool_result=None,
-                            needs_post_hook=False,
-                        )
-                    )
-                    continue
-
-                approved_indices.append(len(outcomes))
-                outcomes.append(
-                    _ToolOutcome(
-                        tc=tc, tool_msg=None, tool_result=None, needs_post_hook=True
+            exec_ctx = ToolExecutionContext(
+                turn=turn,
+                max_turns=spec.max_turns,
+                stop_event=stop_event,
+            )
+            runner_results = await spec.tool_runner.execute_batch(
+                response.tool_calls, exec_ctx
+            )
+            for tc, tool_result in runner_results:
+                messages.append(
+                    ToolMessage(
+                        tool_call_id=tc.id,
+                        tool_name=tc.name,
+                        content=tool_result.content,
                     )
                 )
-
-            # Phase 2: Parallel — approved tools are independent, concurrent execution reduces latency
-            if approved_indices:
-                approved_tcs = [outcomes[idx][0] for idx in approved_indices]
-
-                async def _execute_tool(tc: ToolCallData) -> ToolResult:
-                    try:
-                        return await spec.tool_registry.execute(tc.name, tc.arguments)
-                    except Exception as e:
-                        logger.exception('Tool execution failed: %s', tc.name)
-                        return ToolResult.from_error(tc.name, e)
-
-                results = await asyncio.gather(
-                    *[_execute_tool(tc) for tc in approved_tcs],
-                    return_exceptions=True,
-                )
-
-                for result_idx, outcome_idx in enumerate(approved_indices):
-                    tc = outcomes[outcome_idx].tc
-                    raw = results[result_idx]
-                    if isinstance(raw, BaseException):
-                        tool_result = ToolResult.from_error(tc.name, raw)
-                    else:
-                        tool_result = raw
-                    outcomes[outcome_idx] = _ToolOutcome(
-                        tc=tc,
-                        tool_msg=ToolMessage(
-                            tool_call_id=tc.id,
-                            tool_name=tc.name,
-                            content=tool_result.content,
-                        ),
-                        tool_result=tool_result,
-                        needs_post_hook=True,
-                    )
-
-            # Phase 3: Append in original order — LLM expects tool results to match request order
-            for tc, tool_msg, tool_result, needs_post_hook in outcomes:
-                messages.append(tool_msg)
-                if needs_post_hook and tool_result is not None:
-                    await run_post_tool_call(spec.hooks, tc, tool_result)
 
         # max_turns exhausted
         return self._finish(
@@ -493,11 +407,6 @@ class AgentKernel:
                     and hasattr(spec.tool_catalog, 'build_definitions')
                 ):
                     state.cached_tool_definitions = spec.tool_catalog.build_definitions()
-                elif (
-                    spec.tool_registry is not None
-                    and hasattr(spec.tool_registry, 'get_tool_definitions')
-                ):
-                    state.cached_tool_definitions = spec.tool_registry.get_tool_definitions()
 
             tool_defs = state.cached_tool_definitions
 
@@ -582,167 +491,48 @@ class AgentKernel:
                     )
                 )
 
-            if spec.tool_runner is not None:
-                # ── FullToolRunner path (Gap 1 closure) ──
-                # Bypass legacy guard/hook gating: FullToolRunner has its own
-                # GuardPipeline + StructuralValidation + CapabilityPolicy chain.
-                from matmaster.core.tool_runner import ToolExecutionContext
+            # ── FullToolRunner path (sole execution path) ──
+            if spec.tool_runner is None:
+                raise RuntimeError("No tool_runner in AgentRuntimeSpec")
 
-                all_tcs = response.tool_calls
-                exec_ctx = ToolExecutionContext(
-                    turn=state.turn,
-                    max_turns=spec.max_turns,
-                    stop_event=stop_event,
-                )
-                runner_results = await spec.tool_runner.execute_batch(
-                    all_tcs, exec_ctx
-                )
+            from matmaster.core.tool_runner import ToolExecutionContext
 
-                for tc, tool_result in runner_results:
-                    state.messages.append(ToolMessage(
-                        tool_call_id=tc.id,
+            all_tcs = response.tool_calls
+            exec_ctx = ToolExecutionContext(
+                turn=state.turn,
+                max_turns=spec.max_turns,
+                stop_event=stop_event,
+            )
+            runner_results = await spec.tool_runner.execute_batch(
+                all_tcs, exec_ctx
+            )
+
+            for tc, tool_result in runner_results:
+                state.messages.append(ToolMessage(
+                    tool_call_id=tc.id,
+                    tool_name=tc.name,
+                    content=tool_result.content,
+                ))
+                yield _KernelItem(
+                    event=ToolResultEvent(
+                        source="agent",
+                        call_id=tc.id,
                         tool_name=tc.name,
-                        content=tool_result.content,
-                    ))
-                    yield _KernelItem(
-                        event=ToolResultEvent(
-                            source="agent",
-                            call_id=tc.id,
-                            tool_name=tc.name,
-                            result=tool_result.content,
-                            status=tool_result.status,
-                            payload=tool_result.payload,
-                        )
+                        result=tool_result.content,
+                        status=tool_result.status,
+                        payload=tool_result.payload,
                     )
-                    # HRET-03: SkillHitEvent
-                    if tc.name == "use_skill":
-                        skill_name = tc.arguments.get("skill_name")
-                        if isinstance(skill_name, str) and skill_name:
-                            yield _KernelItem(
-                                event=SkillHitEvent(
-                                    source="agent",
-                                    skill_name=skill_name,
-                                )
-                            )
-            else:
-                # ── Legacy path: guard + pre_hook + registry.execute + post_hook ──
-                outcomes: list[_ToolOutcome] = []
-                approved_indices: list[int] = []
-
-                for _i, tc in enumerate(response.tool_calls):
-                    if stop_event and stop_event.is_set():
+                )
+                # HRET-03: SkillHitEvent
+                if tc.name == "use_skill":
+                    skill_name = tc.arguments.get("skill_name")
+                    if isinstance(skill_name, str) and skill_name:
                         yield _KernelItem(
-                            terminal=_TerminalItem(reason='cancelled')
-                        )
-                        return
-
-                    guard_result = guard_pipeline.evaluate(tc, state.turn, spec.max_turns)
-                    if not guard_result.allowed:
-                        await run_guard_blocked(spec.hooks, tc, guard_result)
-                        blocked_content = f'BLOCKED: {guard_result.reason}'
-                        if guard_result.guidance:
-                            blocked_content += f'\n{guard_result.guidance}'
-                        outcomes.append(
-                            _ToolOutcome(
-                                tc=tc,
-                                tool_msg=ToolMessage(
-                                    tool_call_id=tc.id,
-                                    tool_name=tc.name,
-                                    content=blocked_content,
-                                ),
-                                tool_result=None,
-                                needs_post_hook=False,
-                            )
-                        )
-                        continue
-
-                    action = await run_pre_tool_call(spec.hooks, tc)
-                    if action == HookAction.SKIP:
-                        outcomes.append(
-                            _ToolOutcome(
-                                tc=tc,
-                                tool_msg=ToolMessage(
-                                    tool_call_id=tc.id,
-                                    tool_name=tc.name,
-                                    content='Tool call skipped by hook.',
-                                ),
-                                tool_result=None,
-                                needs_post_hook=False,
-                            )
-                        )
-                        continue
-
-                    approved_indices.append(len(outcomes))
-                    outcomes.append(
-                        _ToolOutcome(
-                            tc=tc, tool_msg=None, tool_result=None, needs_post_hook=True
-                        )
-                    )
-
-                # Parallel execution of approved tools
-                if approved_indices:
-                    approved_tcs = [outcomes[idx][0] for idx in approved_indices]
-
-                    async def _execute_tool(tc: ToolCallData) -> ToolResult:
-                        try:
-                            return await spec.tool_registry.execute(tc.name, tc.arguments)
-                        except Exception as e:
-                            logger.exception('Tool execution failed: %s', tc.name)
-                            return ToolResult.from_error(tc.name, e)
-
-                    results = await asyncio.gather(
-                        *[_execute_tool(tc) for tc in approved_tcs],
-                        return_exceptions=True,
-                    )
-
-                    for result_idx, outcome_idx in enumerate(approved_indices):
-                        tc = outcomes[outcome_idx].tc
-                        raw = results[result_idx]
-                        if isinstance(raw, BaseException):
-                            tool_result = ToolResult.from_error(tc.name, raw)
-                        else:
-                            tool_result = raw
-                        outcomes[outcome_idx] = _ToolOutcome(
-                            tc=tc,
-                            tool_msg=ToolMessage(
-                                tool_call_id=tc.id,
-                                tool_name=tc.name,
-                                content=tool_result.content,
-                            ),
-                            tool_result=tool_result,
-                            needs_post_hook=True,
-                        )
-
-                # Append tool results in order + yield ToolResultEvents + SkillHitEvents
-                for tc, tool_msg, tool_result, needs_post_hook in outcomes:
-                    state.messages.append(tool_msg)
-
-                    # Yield ToolResultEvent
-                    if tool_result is not None:
-                        yield _KernelItem(
-                            event=ToolResultEvent(
+                            event=SkillHitEvent(
                                 source="agent",
-                                call_id=tc.id,
-                                tool_name=tc.name,
-                                result=tool_result.content,
-                                status=tool_result.status,
-                                payload=tool_result.payload,
+                                skill_name=skill_name,
                             )
                         )
-
-                    if needs_post_hook and tool_result is not None:
-                        await run_post_tool_call(spec.hooks, tc, tool_result)
-
-                    # HRET-03: yield SkillHitEvent (replaces SkillHitHook)
-                    if tool_result is not None and tc.name == "use_skill":
-                        skill_name = tc.arguments.get("skill_name")
-                        if isinstance(skill_name, str) and skill_name:
-                            yield _KernelItem(
-                                event=SkillHitEvent(
-                                    source="agent",
-                                    skill_name=skill_name,
-                                )
-                            )
 
         # max_turns exhausted
         yield _KernelItem(
@@ -853,9 +643,9 @@ class AgentKernel:
         # Serialize once — messages don't change between retries
         api_messages = [m.to_api_dict() for m in messages]
         tool_defs = (
-            spec.tool_registry.get_tool_definitions()
-            if spec.tool_registry
-            and hasattr(spec.tool_registry, 'get_tool_definitions')
+            spec.tool_catalog.build_definitions()
+            if spec.tool_catalog is not None
+            and hasattr(spec.tool_catalog, 'build_definitions')
             else None
         )
 

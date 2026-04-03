@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matmaster.core.hooks import Hook
-from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.events import RunResultEvent
 from matmaster.types.messages import Message
 
@@ -56,9 +55,6 @@ class AgentRuntimeSpec(BaseModel):
     # None is allowed during the assemble phase (ctx.llm_provider may be None);
     # build_runtime guarantees a real provider before kernel execution.
     llm_provider: LLMProvider | None = None
-
-    # Tools (Phase 3: typed as ToolRegistry)
-    tool_registry: ToolRegistry | None = None
 
     # Guards
     guards: list[Guard] = Field(default_factory=list)

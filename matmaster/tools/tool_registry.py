@@ -1,19 +1,21 @@
-"""Tool Protocol and ToolRegistry -- unified tool management for the assembly layer.
+"""Tool Protocol and ToolRegistry -- pure storage layer for the assembly layer.
 
 Tool is the @runtime_checkable Protocol each tool must satisfy (name, description,
 json_schema, execute). ToolRegistry provides flat-namespace registration with source
-tags (builtin/mcp/skill), same-name override with warning, execute dispatch, and
-OpenAI function calling format definitions.
+tags (builtin/mcp/skill) and same-name override with warning.
 
-Consumed by AgentKernel via AgentRuntimeSpec.tool_registry.
+Upper-layer operations (execute dispatch, OpenAI definitions, stop_event injection)
+are handled by ToolCatalog and FullToolRunner. Registry is consumed only as a storage
+backend via ToolCatalog.registry.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from matmaster.tools.tool_result import ToolResult, normalize_tool_result
+if TYPE_CHECKING:
+    from matmaster.tools.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +41,14 @@ class Tool(Protocol):
 
 
 class ToolRegistry:
-    """Flat-namespace tool registry with source tracking.
+    """Pure storage: flat-namespace tool registry with source tracking.
 
     Registration order determines override: assemble() registers
     builtin -> MCP -> skill, so skill tools take final precedence.
     Same-name registration overwrites the previous entry with a warning log.
+
+    Upper-layer operations (execute, definitions, stop_event) live in
+    ToolCatalog and FullToolRunner -- not here.
     """
 
     def __init__(self) -> None:
@@ -62,39 +67,6 @@ class ToolRegistry:
             )
         self._tools[tool.name] = tool
         self._sources[tool.name] = source
-
-    async def execute(self, name: str, arguments: dict[str, Any]) -> ToolResult:
-        """Dispatch execution to the named tool.
-
-        Returns error ToolResult if tool name not found, listing available tools.
-        """
-        tool = self._tools.get(name)
-        if tool is None:
-            available = ", ".join(sorted(self._tools))
-            return ToolResult(
-                status="error",
-                content=f"Error: Tool '{name}' not found. Available: {available}",
-            )
-        result = await tool.execute(arguments)
-        return normalize_tool_result(result)
-
-    def get_tool_definitions(self) -> list[dict[str, Any]]:
-        """Return tool definitions in OpenAI function calling format."""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.json_schema,
-                },
-            }
-            for t in self._tools.values()
-        ]
-
-    def get_tools_by_source(self, source: str) -> list[Tool]:
-        """Return tools registered under the given source label."""
-        return [self._tools[name] for name, s in self._sources.items() if s == source]
 
     @property
     def all_tools(self) -> list[Tool]:
