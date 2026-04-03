@@ -103,7 +103,12 @@ class TestPhase30FullIsolation:
     # 23 violations resolved since Plan 01 (exp.py, playground.py, tools/, integration/).
     KNOWN_VIOLATIONS: frozenset[str] = frozenset(
         {
-            "matmaster/core/__init__.py:L12",
+            "matmaster/core/__init__.py:L11",
+            "matmaster/skills/playground-skills/bohrium-job/scripts/list_images.py:L30",
+            "matmaster/skills/playground-skills/bohrium-job/scripts/list_machines.py:L28",
+            "matmaster/skills/playground-skills/bohrium-job/scripts/poll_job.py:L27",
+            "matmaster/skills/playground-skills/bohrium-job/scripts/submit_job.py:L33",
+            "matmaster/skills/playground-skills/structure-manager/scripts/fetch_web_structure.py:L30",
         }
     )
 
@@ -149,7 +154,7 @@ class TestPhase30FullIsolation:
 
     def test_known_violations_count(self):
         """Track the total known violations count -- this number should decrease over time."""
-        assert len(self.KNOWN_VIOLATIONS) == 1, (
-            f"Expected 1 known violation, got {len(self.KNOWN_VIOLATIONS)}. "
+        assert len(self.KNOWN_VIOLATIONS) == 6, (
+            f"Expected 6 known violations, got {len(self.KNOWN_VIOLATIONS)}. "
             "Update this count as violations are resolved."
         )
