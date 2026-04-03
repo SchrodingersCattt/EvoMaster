@@ -6,27 +6,29 @@
 
 这与「写 Python 脚本替你自动打分」不同：判读与结论由 **Claude Code 本轮对话**完成。
 
-**本文档约定：默认只跑 `direct` 模式，默认并行数为 `2`。** 所有命令都显式带 `--modes direct --jobs 2`；若某个历史 run 里同时混有 `planner` 任务，判分时只看 `task_id` 形如 `*_direct_r*` 的记录。
+**本文档约定：默认只跑 `direct` 模式，默认并行数为 `4`。** 所有命令都显式带 `--modes direct --jobs 4`；若某个历史 run 里同时混有 `planner` 任务，判分时只看 `task_id` 形如 `*_direct_r*` 的记录。
+
+**判分与入库节奏（重要）：** 采用 **「跑完一个、判一个、报一个」**。每个 `task_id` 在 devshell 侧结束时，脚本会立刻写出 `pending_ingest/<task_id>.json`（并往 stderr 打 `[ingest-pending] …`）；**应马上**按第 3 节判分、按第 4 节 POST，**不要**等同一次 run 里其余题目全部跑完再集中评测/打分/上报。宏平均与共性改进只在**该批已全部判完并上报后**作收尾汇总即可。若你希望执行顺序上也严格「一题结束再开下一题」，可把 `--jobs` 改为 `1`，或多次调用脚本每次只跑一题（如 `--limit 1` / 单 `--questions`）。
 
 ## 1. 跑一条测例（在仓库根目录、uv 环境）
 
 ```bash
 cd <repo-root>
 # 需要判分后再写入 matmaster-tools-server 时，加 --eval-ingest-pending-only（推荐）
-uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 --questions <QUESTION_ID> --limit 1 --eval-ingest-pending-only
+uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 --questions <QUESTION_ID> --limit 1 --eval-ingest-pending-only
 ```
 
-单题**较快**示例：`--modes direct --jobs 2 --questions SC_struct_007 --limit 1`（`structure_construction`，比批量结构题等更省时间）。其他题号按需替换。
+单题**较快**示例：`--modes direct --jobs 4 --questions SC_struct_007 --limit 1`（`structure_construction`，比批量结构题等更省时间）。其他题号按需替换。
 
 **按能力筛「结构生成 / 结构构建」整类题：** 题库 YAML 里 `capability: structure_construction` 的题目会全部进入计划；用 `--capabilities structure_construction` 过滤，**不必**再手写题号列表。可与 `--limit` 联用做冒烟（只跑展开后的前 N 条 **direct** 任务）。
 
 ```bash
 # 结构生成类：先跑前 3 条 direct（示例）
-uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 \
+uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 \
   --capabilities structure_construction --limit 3 --eval-ingest-pending-only
 
 # 该类全部 direct（不传 --limit）
-uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 \
+uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 \
   --capabilities structure_construction --eval-ingest-pending-only
 ```
 
@@ -36,9 +38,9 @@ uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --
 
 **跑前清空 `results/`（默认）：** 不加额外参数时，脚本在创建本次 run 目录之前会删除仓库根下 **`results/` 目录内的全部文件与子目录**（不删 `results` 文件夹本身）。若要**保留**历史产物、与旧 run 并列存放，请加 **`--no-clean-results`**。
 
-**与 tools-server 入库：** 使用 `--eval-ingest-pending-only` 时，跑题阶段**不会** POST；会在 `pending_ingest/<task_id>.json` 里写好除 `score`（及人工判词字段）外的字段。你在对话里按第 3 节判分后，直接用命令行把 `score`、`score_reason`、`suggestion` 传给第 4 节的 `eval_ingest_submit_pending.py` 即可。若不加该 flag 且配置了 `MATMASTER_TOOLS_SERVER`，脚本会在每题结束时即时入库（此时 `score` 仍是代理分，不是 checklist 百分制）。
+**与 tools-server 入库：** 使用 `--eval-ingest-pending-only` 时，跑题阶段**不会** POST；**每题一结束**就会在 `pending_ingest/<task_id>.json` 里写好除 `score`（及人工判词字段）外的字段。你在对话里应在该文件出现后 **尽快** 按第 3 节判分、按第 4 节 `eval_ingest_submit_pending.py` 上报，**不要**攒到整批任务全部结束再处理。若不加该 flag 且配置了 `MATMASTER_TOOLS_SERVER`，脚本会在每题结束时即时入库（此时 `score` 仍是代理分，不是 checklist 百分制）。
 
-跑完后记下终端里打印的 **`Run directory:`**（即 `results/devshell_eval_*`）。
+记下终端里打印的 **`Run directory:`**（即 `results/devshell_eval_*`）。批量跑题时 stderr 会随完成顺序打印每题的 `[ingest-pending]` / `[ok|fail]`；**以题为粒度**跟进判分与上报，无需等脚本整次退出后再开始。
 
 ## 2. 你要读哪些文件（判分依据）
 
@@ -71,13 +73,15 @@ uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --
    - 对单题：读取该题 `scoring_checklist` 中每条目的 `weight`（未写则按 **1.0**）。对每条判定 **通过 / 部分通过 / 未通过**（部分通过计 **0.5 × 该条 weight 的满分贡献**；仅当证据显示「明显朝目标推进但未完全满足」时使用，并一句话说明理由）。
    - 公式：**得分 = 100 × (Σ 本条贡献) / (Σ weight)**，其中「通过」的贡献 = `weight`，「部分通过」= `0.5 × weight`，「未通过」= `0`。
    - 得分按上式算出后**四舍五入为 0–100 的整数**；输出格式示例（放在判读最后一行，便于复制）：`**百分制得分：73/100**`；若用户一次跑多题，可写每题分数并给 **宏平均**：`**宏平均：68/100**`。
-   - 若本次跑题使用了 `--eval-ingest-pending-only`：在给出百分制整数后，**紧接着按第 4 节执行上报命令**（每个 `task_id` 一次），不要把「判分完成」当成流程结束。
+   - 若本次跑题使用了 `--eval-ingest-pending-only`：**该题**判出百分制整数后，**立刻**按第 4 节执行上报（该 `task_id` 一次）；多题时 **一题一报**，**禁止**等本 run 内所有题都判完再批量 POST。全部上报结束后，如有需要再输出宏平均等汇总。
 6. 若未通过：区分
    - **环境/路径类**（如误用 `/share`、工作区理解错误）
    - **实现类**（脚本逻辑、参数、依赖）
    并给出**下一步修改建议**（可指向具体文件路径）。
 
 ## 4. 判分后上报 matmaster-tools-server（延迟入库）
+
+此处的「延迟」指：**相对**「不用 pending、由脚本按代理分即时 POST」而言，需你先判出百分制再 POST；**不是**指「整批跑完再一次性入库」。每题 `pending_ingest/<task_id>.json` 生成后，**应尽快**完成本节提交。
 
 适用：第 1 节使用了 `--eval-ingest-pending-only`，且环境已配置 `MATMASTER_TOOLS_SERVER`（及 OSS 相关变量，以便 `item.artifact` 字段完整）。
 
@@ -113,7 +117,7 @@ uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --
 
 **如何传入多行 Markdown**：`--score-reason` 的字符串可含换行；在 shell 里可用 heredoc（`--score-reason "$(cat <<'EOF' … EOF)"`）或先把正文写入临时文件再 `$(cat ...)` 展开，避免一行里硬塞整条判词。
 
-3. 在**仓库根目录**执行（每题一条）：
+3. 在**仓库根目录**执行（**每题一结**：某题的 `pending_ingest/<task_id>.json` 一旦生成且你已判分，就执行一次；不必等同 run 其他题结束）：
 
 ```bash
 uv run python evaluation/scripts/eval_ingest_submit_pending.py \
@@ -123,7 +127,7 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
   --suggestion "<改进建议，可省略整个参数>"
 ```
 
-多题则对每个 `pending_ingest/*.json` 各提交一次。成功时终端会打印 `ingest ok`。单字段长度超过 16384 时客户端会截断后再 POST。
+多题时：**每完成一题、判分后立刻**对应该 `pending_ingest/<task_id>.json` 提交一次（不要等所有 `*.json` 都齐再集中提交）。成功时终端会打印 `ingest ok`。单字段长度超过 16384 时客户端会截断后再 POST。
 
 **注意：** 未使用 `--eval-ingest-pending-only` 时，一般无需执行本节（除非你要手动补 POST）；若希望完全不上报，跑题时使用 `--no-eval-ingest`。
 
@@ -135,9 +139,9 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 ## 6. 用户一句话触发示例
 
 用户可说：「按 `devshell-claude-code-eval` 工作流，对 question `<ID>` 跑一轮并判分。」
-你应先**执行第 1 节命令**（若需 tools-server 真实分数，使用 `--eval-ingest-pending-only`），再按第 3 节输出结构化结论；若使用了 pending-only，**必须再执行第 4 节上报**。
+你应先**执行第 1 节命令**（若需 tools-server 真实分数，使用 `--eval-ingest-pending-only`）；**每题跑完即**按第 3 节判分、第 4 节上报（见上文「跑完一个、判一个、报一个」），单题场景下跑完该题后立刻收尾即可。
 
-用户可说：「按该文档跑 5 / 10 / 20 题或全部。」→ 话术与命令见**第 7 节**「批量：5 / 10 / 20 / 全部」。
+用户可说：「按该文档跑多题或全部。」→ 见第 7 节 **`--limit` 与「全部」**（`--limit N` 跑前 N 条 **direct**）及 **「批量：全部题目」**；执行时遵守 **「跑完一个、判一个、报一个」**，宏平均与共性改进**仅**在所有题上报结束后汇总。
 
 若未自动带入上下文，用户可在句首加：**请先阅读本文件并按其中步骤执行。**
 
@@ -147,72 +151,42 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 
 以下可直接粘贴；默认快例题为 **`SC_struct_007`**；将 `<route>`、题号列表等按需替换。文档路径（便于 @）：`evaluation/docs/devshell/devshell_claude_code_eval.md`。
 
-**`--limit` 与「全部」：** 本文档统一显式使用 `--modes direct --jobs 2`。在此前提下，`run_devshell_eval.py` 会先筛出 **direct** 任务列表，再以 **2 路并行** 调度，并应用 `--limit N`；因此 `--limit 5` 表示只跑前 **5 条 direct 任务**。**不传 `--limit`** 则跑当前筛选条件下的**全部 direct** 题目。批量命令同样可加 `--model <route>`、`--export-review-with-questions` 等，与下文单题话术一致。
+**`--limit` 与「全部」：** 本文档统一显式使用 `--modes direct --jobs 4`。在此前提下，`run_devshell_eval.py` 会先筛出 **direct** 任务列表，再以 **4 路并行** 调度，并应用 `--limit N`；因此 `--limit 5` 表示只跑前 **5 条 direct 任务**。**不传 `--limit`** 则跑当前筛选条件下的**全部 direct** 题目。无论一次启动多少题，**判分与入库**仍遵守文档开头的 **「跑完一个、判一个、报一个」**：并行时多题可能交错结束，以 stderr 的 `[ingest-pending]` 与 `pending_ingest/` 为准逐题处理，**不要**等脚本进程结束再集中判分/POST。批量命令同样可加 `--model <route>`、`--export-review-with-questions` 等，与下文单题话术一致。
 
 **`--no-clean-results`：** 见第 1 节；需要与历史 `devshell_eval_*` 并存时再追加。
 
-**批量：5 题（判分 + 延迟入库 + 宏平均）**
+**批量：全部题目（判分 + 延迟入库 + 宏平均，不加 `--limit`）**
 
 > 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：在仓库根执行
-> `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 --limit 5 --eval-ingest-pending-only`
-> 记下 `Run directory`，按第 2、3 节**逐题**判分并输出每题 **`百分制得分：XX/100`**，**每题按第 4 节** `eval_ingest_submit_pending.py` 上报；最后给 **`宏平均：XX/100`** 与共性改进点。
-
-**批量：10 题（同上）**
-
-> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：在仓库根执行
-> `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 --limit 10 --eval-ingest-pending-only`
-> 记下 `Run directory`，按第 2、3 节**逐题**判分并输出每题 **`百分制得分：XX/100`**，**每题按第 4 节** `eval_ingest_submit_pending.py` 上报；最后给 **`宏平均：XX/100`** 与共性改进点。
-
-**批量：20 题（同上）**
-
-> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：在仓库根执行
-> `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 --limit 20 --eval-ingest-pending-only`
-> 记下 `Run directory`，按第 2、3 节**逐题**判分并输出每题 **`百分制得分：XX/100`**，**每题按第 4 节** `eval_ingest_submit_pending.py` 上报；最后给 **`宏平均：XX/100`** 与共性改进点。
-
-**批量：全部题目（同上，不加 `--limit`）**
-
-> 同上，命令改为：
-> `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 --eval-ingest-pending-only`
-> （不传 `--limit` 即跑当前筛选条件下的全部 **direct** 题目；判分与上报仍按第 2–4 节。）
-
-**批量：仅本地、不落库（5 / 10 / 20 / 全部）**
-
-> 与上文批量命令相同，把 `--eval-ingest-pending-only` 换成 `--no-eval-ingest`（或不配置 tools-server）（示例：`--modes direct --jobs 2 --limit 5 --no-eval-ingest`）；无需第 4 节。
+> `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 --eval-ingest-pending-only`
+> 记下 `Run directory`。不传 `--limit` 即跑当前筛选条件下的全部 **direct** 题目；**每题完成即判即报**（第 2–4 节），**不要**等全部跑完再集中处理；全部上报后给 **`宏平均：XX/100`** 与共性改进点。
 
 **最短（单题 + 判分 + 改进 + 延迟入库上报）**
 
-> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md` 执行：在仓库根用 `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 --questions SC_struct_007 --limit 1 --eval-ingest-pending-only` 跑一轮，记下 `Run directory`，再按第 2、3 节判分，**最后一行输出 `百分制得分：XX/100`**；然后按**第 4 节**用 `eval_ingest_submit_pending.py --pending ... --score ...` 上报，并把判分依据放进 **`--score-reason`**、可操作改进放进 **`--suggestion`**。
-
-**最短（单题 + 判分 + 改进，仅本地不落库）**
-
-> 同上，但跑题时用 `--no-eval-ingest`（或不要配置 tools-server），只做判分与改进建议，无需第 4 节。
+> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md` 执行：在仓库根用 `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 --questions SC_struct_007 --limit 1 --eval-ingest-pending-only` 跑一轮，记下 `Run directory`，再按第 2、3 节判分，**最后一行输出 `百分制得分：XX/100`**；然后按**第 4 节**用 `eval_ingest_submit_pending.py --pending ... --score ...` 上报，并把判分依据放进 **`--score-reason`**、可操作改进放进 **`--suggestion`**。
 
 **带模型路由**
 
-> 按 `devshell-claude-code-eval`（见 `evaluation/docs/devshell/devshell_claude_code_eval.md`）：先 `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 --questions SC_struct_007 --limit 1 --model <route> --eval-ingest-pending-only`，再完整判分（含百分制与改进建议），并按第 4 节上报。
+> 按 `devshell-claude-code-eval`（见 `evaluation/docs/devshell/devshell_claude_code_eval.md`）：先 `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 --questions SC_struct_007 --limit 1 --model <route> --eval-ingest-pending-only`，再完整判分（含百分制与改进建议），并按第 4 节上报。
 
 **需要 `claude_review.md` 里带上题库原文**
 
-> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：跑 `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 --questions SC_struct_007 --limit 1 --export-review-with-questions --eval-ingest-pending-only`，然后按文档判分、给 **`百分制得分：XX/100`** 和改进建议，并按**第 4 节**上报。
+> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：跑 `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 --questions SC_struct_007 --limit 1 --export-review-with-questions --eval-ingest-pending-only`，然后按文档判分、给 **`百分制得分：XX/100`** 和改进建议，并按**第 4 节**上报。
 
-**多题 + 宏平均**
+**多题号 / 批量跑 + 宏平均**
 
-> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：依次跑 `... --modes direct --jobs 2 --questions SC_struct_007 SC_struct_008 --limit 2 --eval-ingest-pending-only`（题号按需改），对每个 task 单独判 checklist 并给 **每题百分制**；**每题按第 4 节** `eval_ingest_submit_pending.py` 上报对应分数；最后给 **`宏平均：XX/100`**，并汇总共性改进点。
+> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：依次跑 `... --modes direct --jobs 4 --questions SC_struct_007 SC_struct_008 --eval-ingest-pending-only`。**每题 devshell 结束后立刻**对该 task 判 checklist、给 **百分制**，**马上**用第 4 节 `eval_ingest_submit_pending.py` 上报；**不要**等同一次 run 内全部题目都结束再集中判分、集中上报。全部上报后给 **`宏平均：XX/100`** 与共性改进点。
 
-**结构生成类（`structure_construction`）：批量全量（或 `--limit`）+ 判分 + 延迟入库**
+**结构生成类（`structure_construction`）：批量全量 + 判分 + 延迟入库**
 
 > 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：在仓库根执行
 > `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 --capabilities structure_construction --eval-ingest-pending-only`
-> （若只需子集可加 `--limit N`；不传则跑**全部**结构生成类 direct 任务。）记下 `Run directory`，按第 2、3 节**逐题**判分、`百分制得分` 与第 4 节上报，最后可给 **宏平均** 与共性改进点。
-
-**结构生成类：仅本地不落库（前 N 题）**
-
-> 同上，将 `--eval-ingest-pending-only` 换成 `--no-eval-ingest`；`--limit` 按需调整。
+> 记下 `Run directory`。**每题完成即判即报**，不要等整类全跑完再集中评测/入库；收尾再给 **宏平均** 与共性改进点。
 
 **按 capability 冒烟一条（固定题号，与「整类筛选」二选一即可）**
 
-> 按 `devshell-claude-code-eval` 规则：用 `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 --capabilities structure_construction --questions SC_struct_007 --limit 1 --eval-ingest-pending-only` 跑一条（`--capabilities` 在此可省略，因题号已唯一确定），再按该 run 目录和对应 YAML 判分、输出 **百分制** 与建议，并按**第 4 节**上报。
+> 按 `devshell-claude-code-eval` 规则：用 `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 --capabilities structure_construction --questions SC_struct_007 --limit 1 --eval-ingest-pending-only` 跑一条（`--capabilities` 在此可省略，因题号已唯一确定），再按该 run 目录和对应 YAML 判分、输出 **百分制** 与建议，并按**第 4 节**上报。
 
 **与 checklist / 百分制对齐的完整版**
 
-> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：**先**在仓库根跑 `SC_struct_007` 单题（`--modes direct --jobs 2 --limit 1 --eval-ingest-pending-only`），**再**根据题库 `scoring_checklist` 对照产物判断是否完成；输出 **通过/部分通过/未通过** 的定性结论、**逐条证据**、**`百分制得分：XX/100`**（按文档里的 weight 公式）；然后**第 4 节上报**；若未达标，给**环境类 vs 实现类**的改进建议。
+> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：**先**在仓库根跑 `SC_struct_007` 单题（`--modes direct --jobs 4 --limit 1 --eval-ingest-pending-only`），**再**根据题库 `scoring_checklist` 对照产物判断是否完成；输出 **通过/部分通过/未通过** 的定性结论、**逐条证据**、**`百分制得分：XX/100`**（按文档里的 weight 公式）；然后**第 4 节上报**；若未达标，给**环境类 vs 实现类**的改进建议。

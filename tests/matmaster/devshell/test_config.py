@@ -1,10 +1,6 @@
-"""Tests for DevConfig model and loading."""
+"""Tests for DevConfig model."""
 
 from __future__ import annotations
-
-from pathlib import Path
-
-import pytest
 
 
 class TestDevConfig:
@@ -41,78 +37,3 @@ class TestDevConfig:
 
         cfg2 = DevConfig.model_validate({"agent": {"identity": "I am a scientist."}})
         assert cfg2.agent.identity == "I am a scientist."
-
-
-class TestLoadDevConfig:
-    def test_load_from_yaml(self, tmp_path: Path) -> None:
-        from matmaster.devshell.config import load_dev_config
-
-        yaml_content = """
-agent:
-  max_turns: 10
-  identity: "Test bot"
-"""
-        config_file = tmp_path / "dev.yaml"
-        config_file.write_text(yaml_content)
-        cfg = load_dev_config(config_file)
-        assert cfg.agent.max_turns == 10
-        assert cfg.agent.identity == "Test bot"
-
-    def test_env_var_expansion(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from matmaster.devshell.config import load_dev_config
-
-        monkeypatch.setenv("TEST_IDENTITY", "from-env")
-        yaml_content = """
-agent:
-  identity: ${TEST_IDENTITY}
-"""
-        config_file = tmp_path / "dev.yaml"
-        config_file.write_text(yaml_content)
-        cfg = load_dev_config(config_file)
-        assert cfg.agent.identity == "from-env"
-
-    def test_file_not_found(self) -> None:
-        from matmaster.devshell.config import load_dev_config
-
-        with pytest.raises(FileNotFoundError):
-            load_dev_config(Path("/nonexistent/dev.yaml"))
-
-    def test_defaults_when_no_file(self) -> None:
-        from matmaster.devshell.config import DevConfig
-
-        cfg = DevConfig()
-        assert cfg.agent.name == "general"
-
-
-class TestLLMConfigExtended:
-    def test_timeout_defaults(self) -> None:
-        from matmaster.devshell.config import DevConfig
-
-        cfg = DevConfig()
-        assert cfg.llm.timeout == 300.0
-        assert cfg.llm.stream_timeout is None
-        assert cfg.llm.stream_idle_timeout is None
-        assert cfg.llm.max_retries == 3
-        assert cfg.llm.retry_delay == 1.0
-
-    def test_custom_timeout_from_dict(self) -> None:
-        from matmaster.devshell.config import DevConfig
-
-        cfg = DevConfig.model_validate(
-            {
-                "llm": {
-                    "timeout": 60.0,
-                    "stream_timeout": 30.0,
-                    "stream_idle_timeout": 10.0,
-                    "max_retries": 5,
-                    "retry_delay": 2.0,
-                }
-            }
-        )
-        assert cfg.llm.timeout == 60.0
-        assert cfg.llm.stream_timeout == 30.0
-        assert cfg.llm.stream_idle_timeout == 10.0
-        assert cfg.llm.max_retries == 5
-        assert cfg.llm.retry_delay == 2.0

@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from matmaster.config.exp import ExpConfig, ExpToolsConfig
+from matmaster.config.exp import ExpConfig, ExpSkillsConfig, ExpToolsConfig
 from matmaster.core.bus import MessageBus
 from matmaster.core.exp import Exp
 from matmaster.devshell.config import DevConfig
@@ -36,6 +36,7 @@ class DevRunner:
         llm_config: Any = None,
         resolved_route: Any = None,
         stream_hook: DevStreamHook | None = None,
+        exp_config: ExpConfig | None = None,
     ) -> None:
         self._config = config
         self._workdir = workdir
@@ -60,8 +61,10 @@ class DevRunner:
             run_meta={"source": "devshell"},
         )
 
-        # Exp config dict
-        self._exp_config = self._build_exp_config(config)
+        # Exp config: always from matmaster/exps/*.toml (``--exp`` or default ``direct``).
+        self._exp_config = (
+            exp_config if exp_config is not None else self._build_exp_config(config)
+        )
         # Local devshell is not Bohrium SSH; avoid model defaulting to /share from tool hints.
         if config.session.type == "local":
             wd = str(workdir.resolve())
@@ -101,6 +104,7 @@ class DevRunner:
             name=config.agent.name,
             max_turns=config.agent.max_turns,
             tools=ExpToolsConfig(builtin=config.tools.builtin),
+            skills=ExpSkillsConfig(),
             compaction=config.compaction,
             developer_instructions=config.agent.identity or "",
             system_prompt=system_prompt,

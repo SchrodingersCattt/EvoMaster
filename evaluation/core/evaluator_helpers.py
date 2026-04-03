@@ -383,13 +383,20 @@ def check_struct_file_layer_count(
     if err:
         return False, err
     cfg = _cfg(ref)
+    if 'layer_tol_A' in cfg:
+        layer_tol = float(cfg['layer_tol_A'])
+    elif 'gap_threshold_A' in cfg:
+        # Legacy key from older rubrics; now interpreted as plane-merge tolerance (Å).
+        layer_tol = float(cfg['gap_threshold_A'])
+    else:
+        layer_tol = 0.25
     return check_layer_count(
         ws,
         filename=cfg.get('filename', '*.cif'),
         expected=int(cfg.get('expected', 0)),
         tolerance=float(cfg.get('tolerance', 0)),
         axis=str(cfg.get('axis', 'z')),
-        gap_threshold_A=float(cfg.get('gap_threshold_A', 1.0)),
+        layer_tol_A=layer_tol,
     )
 
 

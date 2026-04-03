@@ -1,8 +1,12 @@
-"""Static snapshot of tools / skills configuration for devshell-backed evaluation.
+"""Static snapshot of tools / skills for devshell-backed evaluation.
 
-Mirrors how :class:`matmaster.devshell.runner.DevRunner` builds
-:class:`~matmaster.config.exp.ExpConfig` from :class:`~matmaster.devshell.config.DevConfig`
-(no merge with ``matmaster/exps/direct.toml`` unless devshell is changed to load it).
+Primary path: :func:`snapshot_eval_tooling` loads
+:class:`~matmaster.config.exp.ExpConfig` via :func:`~matmaster.config.loader.load_exp_config`
+(``matmaster/exps/{name}.toml``) — same as production / ``AgentRunService``. MCP paths resolve
+through ``[skills].config_dir`` (typically ``matmaster_config/`` in repo).
+
+:func:`snapshot_devshell_eval_tooling` uses production ``direct`` with the same skill roots and
+``mcp_runtime_patch`` as mm-devshell default (see :mod:`matmaster.devshell.exp_patch`).
 
 Used to populate ingest ``extra.eval_tooling`` so runs can be correlated with the
 registered builtin list, skill catalog, and MCP server keys from config.
@@ -15,7 +19,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from matmaster.config.exp import ExpSkillsConfig
+from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +40,24 @@ _BUILTIN_WHEN_STAR: list[str] = [
     "monitor_job",
     "web-search",
 ]
+
+
+def _matmaster_config_session_type(repo_root: Path) -> str | None:
+    """``session.type`` from ``matmaster_config/config.yaml`` (informational for ingest)."""
+    from matmaster.config.loader import _load_raw
+
+    path = repo_root / "matmaster_config" / "config.yaml"
+    if not path.is_file():
+        return None
+    try:
+        raw = _load_raw(path)
+    except OSError:
+        return None
+    sess = raw.get("session") or {}
+    if not isinstance(sess, dict):
+        return None
+    t = sess.get("type")
+    return str(t).strip() if t else None
 
 
 def _resolve_builtin_tool_names(builtin_cfg: list[str]) -> list[str]:
@@ -115,15 +137,16 @@ def _mcp_server_names(
         return []
 
 
-def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
-    """Return a JSON-serializable dict describing devshell-aligned tooling (default DevConfig)."""
-    from matmaster.devshell.config import DevConfig
-    from matmaster.devshell.runner import DevRunner
-
+def _build_eval_tooling_dict(
+    *,
+    repo_root: Path,
+    exp_cfg: ExpConfig,
+    matmaster_exp_reported: str,
+) -> dict[str, Any]:
+    """JSON-serializable tooling snapshot from an already-resolved :class:`ExpConfig`."""
     repo_root = repo_root.resolve()
-    dev = DevConfig()
+    session_type = _matmaster_config_session_type(repo_root) or "local"
 
-    exp_cfg = DevRunner._build_exp_config(dev)
     builtin_cfg = list(exp_cfg.tools.builtin)
     builtin_names = _resolve_builtin_tool_names(builtin_cfg)
 
@@ -149,10 +172,12 @@ def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
 
     return {
         "schema": "matmaster_eval_tooling_v1",
-        "devshell_agent_name": dev.agent.name,
-        "devshell_max_turns": dev.agent.max_turns,
-        "session_type": dev.session.type,
+        "matmaster_exp": matmaster_exp_reported,
+        "devshell_agent_name": exp_cfg.name,
+        "devshell_max_turns": exp_cfg.max_turns,
+        "session_type": session_type,
         "exp_config_name": exp_cfg.name,
+        "max_turns": exp_cfg.max_turns,
         "tools_builtin_config": builtin_cfg,
         "tools_mcp_pattern": exp_cfg.tools.mcp,
         "builtin_tool_names": builtin_names,
@@ -161,4 +186,37 @@ def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
         "skills_roots": skills_roots_str,
         "skill_names": skill_names,
         "mcp_server_names": mcp_servers,
+        "skills_skill_names_filter": list(exp_cfg.skills.skill_names),
     }
+
+
+def snapshot_eval_tooling(
+    *,
+    repo_root: Path,
+    exp_name: str = "direct",
+) -> dict[str, Any]:
+    """Snapshot from ``matmaster/exps/{exp_name}.toml`` (production-aligned).
+
+    ``matmaster_exp`` in the output equals *exp_name*.
+    """
+    from matmaster.config.loader import load_exp_config
+
+    name = exp_name.strip()
+    exp_cfg = load_exp_config(name)
+    return _build_eval_tooling_dict(
+        repo_root=repo_root,
+        exp_cfg=exp_cfg,
+        matmaster_exp_reported=name,
+    )
+
+
+def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
+    """Snapshot for mm-devshell default: ``direct`` + narrowed ``skills_root`` (see ``exp_patch``)."""
+    from matmaster.devshell.exp_patch import devshell_default_exp_config
+
+    exp_cfg = devshell_default_exp_config()
+    return _build_eval_tooling_dict(
+        repo_root=repo_root,
+        exp_cfg=exp_cfg,
+        matmaster_exp_reported="devshell",
+    )

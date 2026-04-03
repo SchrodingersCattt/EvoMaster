@@ -111,3 +111,25 @@ class TestDevRunner:
         stop.set()
         result = runner.run("test", stop_event=stop)
         assert result.result.reason == "cancelled"
+
+    def test_exp_config_override_uses_toml(self, tmp_path: Path) -> None:
+        from matmaster.config.loader import load_exp_config
+        from matmaster.devshell.config import DevConfig
+        from matmaster.devshell.runner import DevRunner
+
+        workdir = tmp_path / "workspace"
+        workdir.mkdir()
+        exp = load_exp_config("direct")
+        with patch(
+            "matmaster.devshell.runner.DevRunner._create_session"
+        ) as mock_session:
+            mock_session.return_value = MagicMock()
+            runner = DevRunner(
+                config=DevConfig(),
+                workdir=workdir,
+                llm_provider=MockProvider(),
+                exp_config=exp,
+            )
+        assert runner._exp_config.name == "direct"
+        assert runner._exp_config.skills.enabled is True
+        assert runner._exp_config.max_turns == exp.max_turns

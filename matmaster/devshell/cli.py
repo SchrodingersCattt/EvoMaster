@@ -66,10 +66,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Event log directory",
     )
     common.add_argument(
-        "--config",
-        type=Path,
+        "--exp",
+        type=str,
         default=None,
-        help="Optional devshell YAML (agent/session/tools only; LLM comes from matmaster_config/llm_config.yaml)",
+        metavar="NAME",
+        help=(
+            "matmaster/exps/{NAME}.toml. Omit or ``devshell``: load ``direct`` but narrow "
+            "skills_root to struct-DB + mcp-mat-sg lazymcp stubs; mat_sg tools narrowed to "
+            "generate_ordered_replicas only. ``direct``: unpatched production toml. "
+            "MCP paths use [skills].config_dir (typically matmaster_config/)."
+        ),
     )
     common.add_argument(
         "--model",
@@ -194,19 +200,21 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     current_env = os.getenv("SERVICE_ENV", "test")
     load_dotenv(find_dotenv(f".env.{current_env}"))
 
-    from matmaster.devshell.config import DevConfig, load_dev_config
+    from matmaster.config.loader import load_exp_config
+    from matmaster.devshell.config import DevConfig
+    from matmaster.devshell.exp_patch import devshell_default_exp_config
 
-    if args.config:
-        try:
-            config = load_dev_config(args.config)
-        except FileNotFoundError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
-        except Exception as e:
-            print(f"Error loading config: {e}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        config = DevConfig()
+    exp_opt = (getattr(args, "exp", None) or "").strip() or None
+    try:
+        if not exp_opt or exp_opt == "devshell":
+            exp_override = devshell_default_exp_config()
+        else:
+            exp_override = load_exp_config(exp_opt)
+    except (FileNotFoundError, ValueError) as e:
+        label = exp_opt or "devshell"
+        print(f"Error loading exp '{label}': {e}", file=sys.stderr)
+        sys.exit(1)
+    config = DevConfig()
 
     if args.session:
         config = config.model_copy(
@@ -235,6 +243,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
         llm_config=llm_config,
         resolved_route=resolved,
         stream_hook=stream_hook,
+        exp_config=exp_override,
     )
     return runner, config, llm_config, resolved
 

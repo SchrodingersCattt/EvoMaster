@@ -37,6 +37,31 @@ if TYPE_CHECKING:
     from matmaster.types.messages import Message
 
 
+def _merge_mcp_runtime_config(
+    base: dict[str, Any] | None,
+    patch: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Shallow-merge *patch* into *base*; merge ``tool_include_only`` dicts by server key."""
+    if not patch:
+        return dict(base or {})
+    out = dict(base or {})
+    for key, val in patch.items():
+        if (
+            key == "tool_include_only"
+            and isinstance(val, dict)
+            and isinstance(out.get("tool_include_only"), dict)
+        ):
+            merged_io = dict(out["tool_include_only"])
+            for srv, tools in val.items():
+                merged_io[srv] = (
+                    list(tools) if isinstance(tools, (list, tuple)) else tools
+                )
+            out["tool_include_only"] = merged_io
+        else:
+            out[key] = val
+    return out
+
+
 class Exp:
     """Config-driven assembly layer.
 
@@ -442,7 +467,8 @@ class Exp:
             )
             return
 
-        skill_registry = SkillRegistry(roots)
+        name_filter = skills_cfg.skill_names if skills_cfg.skill_names else None
+        skill_registry = SkillRegistry(roots, skills=name_filter)
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
 
         # MCP runtime config: ALWAYS self-load from config_dir.
@@ -452,12 +478,17 @@ class Exp:
 
         mcp_runtime_path = Path(skills_cfg.config_dir) / skills_cfg.mcp_runtime_file
         if mcp_runtime_path.exists():
-            mcp_config = _load_raw(mcp_runtime_path)
+            raw_mcp = _load_raw(mcp_runtime_path)
+            mcp_config = raw_mcp if isinstance(raw_mcp, dict) else {}
         else:
             raise FileNotFoundError(
                 f'MCP runtime config not found: {mcp_runtime_path}. '
                 f'Required when skills.enabled=true.'
             )
+
+        mcp_config = _merge_mcp_runtime_config(
+            mcp_config, skills_cfg.mcp_runtime_patch or {}
+        )
 
         mcp_config_file = mcp_config.get('config_file', skills_cfg.mcp_config_file)
         config_path = Path(mcp_config_file)
@@ -496,6 +527,11 @@ class Exp:
                     mcp_server,
                 )
                 return
+            include_only = mcp_config.get("tool_include_only") or {}
+            allowed = include_only.get(mcp_server)
+            if isinstance(allowed, (list, tuple)) and allowed:
+                allow_set = set(allowed)
+                schemas = [t for t in schemas if t.get("name") in allow_set]
             for tool_schema in schemas:
                 original_name = tool_schema['name']
                 prefixed_name = f'{mcp_server}_{original_name}'
