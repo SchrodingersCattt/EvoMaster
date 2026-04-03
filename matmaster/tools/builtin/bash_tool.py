@@ -71,6 +71,20 @@ class BashTool(BuiltinTool):
 
         return await super().execute(arguments)
 
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: Any,
+    ) -> str:
+        """Context-aware execution entry point.
+
+        Captures the stop_event from ToolExecutionContext for cancellation
+        support, then delegates to the standard execute() path.
+        """
+        if exec_ctx is not None and hasattr(exec_ctx, "stop_event"):
+            self._stop_event = exec_ctx.stop_event
+        return await self.execute(arguments)
+
     async def _execute_async(self, arguments: dict[str, Any]) -> str:
         """Native async subprocess execution for matmaster LocalSession.
 

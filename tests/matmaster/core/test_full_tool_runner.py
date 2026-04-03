@@ -632,6 +632,118 @@ class TestNormalizeAndTruncation:
         assert "truncated" not in tr.meta
 
     @pytest.mark.asyncio
+    async def test_execute_batch_runs_shared_read_calls_concurrently(self) -> None:
+        """Two shared_read tools execute concurrently in the two-phase model."""
+        import asyncio as _aio
+
+        started_count = 0
+        release = _aio.Event()
+
+        class _SlowReadTool:
+            def __init__(self, name: str) -> None:
+                self._name = name
+
+            @property
+            def name(self) -> str:
+                return self._name
+
+            @property
+            def description(self) -> str:
+                return "slow"
+
+            @property
+            def json_schema(self) -> dict[str, Any]:
+                return {"type": "object", "properties": {}}
+
+            async def execute(self, arguments: dict[str, Any]) -> ToolResult:
+                nonlocal started_count
+                started_count += 1
+                await release.wait()
+                return ToolResult(content="ok")
+
+        registry = ToolRegistry()
+        registry.register(_SlowReadTool("read_a"), source="builtin")
+        registry.register(_SlowReadTool("read_b"), source="builtin")
+        catalog = ToolCatalog(registry)
+
+        # Patch get_tool to return shared_read fast-path instances
+        original_get = catalog.get_tool
+
+        def fast_read_get(name: str):
+            inst = original_get(name)
+            if inst is None:
+                return None
+            spec = ToolSpec(
+                tool_name=name,
+                description="fast",
+                args_schema={},
+                source="builtin",
+                effect_level="none",
+                fast_path_eligible=True,
+            )
+            binding = ToolBinding(
+                binding_key=f"session_fs:{name}",
+                plane=ToolPlane.SESSION_FS,
+                resource_claims=(ResourceClaim(resource="workspace", mode="shared_read"),),
+            )
+            return ToolInstance(
+                tool_spec=spec,
+                tool_binding=binding,
+                tool_executor=inst.tool_executor,
+            )
+
+        catalog.get_tool = fast_read_get  # type: ignore
+
+        runner = _make_runner(catalog)
+        ctx = _make_ctx()
+
+        async def run_batch():
+            return await runner.execute_batch(
+                [_make_tc("read_a"), _make_tc("read_b")], ctx
+            )
+
+        task = _aio.create_task(run_batch())
+        # Wait briefly for both to start
+        for _ in range(50):
+            if started_count >= 2:
+                break
+            await _aio.sleep(0.01)
+
+        assert started_count == 2, f"Expected 2 concurrent starts, got {started_count}"
+        release.set()
+        results = await task
+        assert len(results) == 2
+
+    @pytest.mark.asyncio
+    async def test_executor_receives_stop_event_from_execution_context(self) -> None:
+        """Executor receives ToolExecutionContext with stop_event from batch context."""
+        from matmaster.types.tool_spec import ToolExecutionContext as ExecCtx
+
+        captured: dict[str, Any] = {}
+
+        class _CtxCaptureTool:
+            name = "ctx_tool"
+            description = "capture"
+            json_schema: dict[str, Any] = {"type": "object", "properties": {}}
+
+            async def execute_with_context(
+                self, arguments: dict[str, Any], exec_ctx: ExecCtx
+            ) -> ToolResult:
+                captured["stop_event"] = exec_ctx.stop_event
+                return ToolResult(content="ok")
+
+        registry = ToolRegistry()
+        registry.register(_CtxCaptureTool(), source="builtin")
+        catalog = ToolCatalog(registry)
+        runner = _make_runner(catalog)
+
+        stop = threading.Event()
+        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+
+        await runner.execute_batch([_make_tc("ctx_tool")], ctx)
+        assert captured["stop_event"] is stop
+
+    @pytest.mark.asyncio
     async def test_no_truncation_when_max_result_chars_zero(self) -> None:
         """Tools with max_result_chars=0 are never truncated."""
         long_content = "B" * 100000

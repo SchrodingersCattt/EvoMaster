@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from matmaster.tools.tool_registry import Tool
-from matmaster.types.tool_spec import ResourceClaim, ToolBinding, ToolInstance, ToolSpec
+from matmaster.types.tool_spec import (
+    ResourceClaim,
+    ToolBinding,
+    ToolExecutionContext,
+    ToolInstance,
+    ToolSpec,
+)
 from matmaster.types.topology import RuntimeTopology, ToolPlane
 
 BUILTIN_CLAIMS: dict[str, tuple[ResourceClaim, ...]] = {
@@ -135,6 +141,15 @@ class ToolCompiler:
             state_mode=state_mode,
             stop_mode=stop_mode,
         )
+        # Wrap executor to unified (args, exec_ctx) signature
+        if hasattr(tool, "execute_with_context"):
+            tool_executor = tool.execute_with_context
+        else:
+            _execute = tool.execute
+
+            async def tool_executor(args, exec_ctx):  # type: ignore[misc]
+                return await _execute(args)
+
         validator = None
         if hasattr(tool, "validate_input") and callable(tool.validate_input):
             validator = tool.validate_input
@@ -142,6 +157,6 @@ class ToolCompiler:
         return ToolInstance(
             tool_spec=spec,
             tool_binding=binding,
-            tool_executor=tool.execute,
+            tool_executor=tool_executor,
             input_validator=validator,
         )

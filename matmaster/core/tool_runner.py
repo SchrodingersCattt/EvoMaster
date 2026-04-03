@@ -34,6 +34,7 @@ from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.messages import ToolCallData
+from matmaster.types.tool_spec import ToolExecutionContext as _ExecCtx, ToolInstance
 from matmaster.types.topology import RuntimeTopology
 
 if TYPE_CHECKING:
@@ -45,8 +46,8 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ToolExecutionContext:
-    """Per-batch execution context passed to ToolRunner.
+class BatchExecutionContext:
+    """Per-batch execution context used internally by FullToolRunner.
 
     Carries the current turn number, max turns for guard evaluation,
     and an optional stop event for cancellation.
@@ -55,6 +56,11 @@ class ToolExecutionContext:
     turn: int
     max_turns: int
     stop_event: threading.Event | None = None
+    progress_sink: Callable[[str, str, str], Awaitable[None]] | None = None
+
+
+# Backward-compatible alias
+ToolExecutionContext = BatchExecutionContext
 
 
 @runtime_checkable
@@ -253,25 +259,20 @@ class FullToolRunner:
         *,
         on_result: Callable[[ToolCallData, ToolResult], Awaitable[None]] | None = None,
     ) -> list[tuple[ToolCallData, ToolResult]]:
-        """Execute tool calls through the seven-step chain.
+        """Two-phase tool execution.
 
-        For each tool_call, sequentially:
-        1. Catalog lookup
-        1b. Cancel check (stop_mode-aware: cancellable->cancel, best_effort->cancel, non_cancellable->skip)
-        2. StructuralValidation (Layer A)
-        3. RunStateGuard (Layer B) via GuardPipeline
-        4. CapabilityPolicy (Layer C)
-        5. Fast path check
-        6. Scheduler acquire (skipped for fast path)
-        7. Execute + Release
-        8. Normalize + Truncate
+        Phase 1 (serial): validate each call through the constraint layers.
+        Phase 2 (concurrent): execute all approved calls via asyncio.gather.
 
         Returns list of (ToolCallData, ToolResult) in input order.
         """
-        results: list[tuple[ToolCallData, ToolResult]] = []
+        n = len(tool_calls)
+        results: list[tuple[ToolCallData, ToolResult] | None] = [None] * n
+        approved: list[tuple[int, ToolCallData, ToolInstance, dict[str, Any], bool]] = []
 
-        for tc in tool_calls:
-            # 1 + 2. Catalog lookup first, then stop_mode-aware cancel check
+        # ── Phase 1: Serial validation ─────────────────────
+        for idx, tc in enumerate(tool_calls):
+            # 1. Catalog lookup
             instance = self._catalog.get_tool(tc.name)
             if instance is None:
                 tr = ToolResult(
@@ -279,29 +280,20 @@ class FullToolRunner:
                     content=f"Unknown tool: {tc.name}",
                     meta={"layer": "catalog"},
                 )
-                results.append((tc, tr))
+                results[idx] = (tc, tr)
                 if on_result:
                     await on_result(tc, tr)
                 continue
 
-            # 1b. Cancel check (stop_mode-aware, after catalog lookup)
-            # Cancelled results do NOT fire on_result — cancel path is silent.
+            # 1b. Cancel check (stop_mode-aware)
             if ctx.stop_event is not None and ctx.stop_event.is_set():
                 stop_mode = instance.tool_binding.stop_mode
-                if stop_mode == "cancellable":
+                if stop_mode in ("cancellable", "best_effort"):
                     tr = ToolResult(status="cancelled", content="Run cancelled.")
-                    results.append((tc, tr))
+                    results[idx] = (tc, tr)
                     continue
-                elif stop_mode == "best_effort":
-                    tr = ToolResult(
-                        status="cancelled",
-                        content="Cancellation requested (best-effort). Tool may have partially completed.",
-                    )
-                    results.append((tc, tr))
-                    continue
-                # stop_mode == "non_cancellable": skip cancel, let tool execute
 
-            # 3. StructuralValidation (Layer A)
+            # 2. StructuralValidation (Layer A)
             decision = self._validation.validate(
                 self._topology, instance, tc.arguments
             )
@@ -311,15 +303,14 @@ class FullToolRunner:
                     content=decision.reason,
                     meta={"layer": "structural"},
                 )
-                results.append((tc, tr))
+                results[idx] = (tc, tr)
                 if on_result:
                     await on_result(tc, tr)
                 continue
 
-            # Use modified_args from structural validation if provided
             effective_args = decision.modified_args or tc.arguments
 
-            # 3b. input_validator (tool-specific semantic check)
+            # 2b. input_validator
             if instance.input_validator is not None:
                 try:
                     iv_decision = await instance.input_validator(effective_args)
@@ -329,7 +320,7 @@ class FullToolRunner:
                         content=str(exc),
                         meta={"layer": "input_validation"},
                     )
-                    results.append((tc, tr))
+                    results[idx] = (tc, tr)
                     if on_result:
                         await on_result(tc, tr)
                     continue
@@ -339,12 +330,12 @@ class FullToolRunner:
                         content=iv_decision.reason,
                         meta={"layer": "input_validation"},
                     )
-                    results.append((tc, tr))
+                    results[idx] = (tc, tr)
                     if on_result:
                         await on_result(tc, tr)
                     continue
 
-            # 4. RunStateGuard (Layer B)
+            # 3. RunStateGuard (Layer B)
             guard_result = self._guard_pipeline.evaluate(tc, ctx.turn, ctx.max_turns)
             if not guard_result.allowed:
                 tr = ToolResult(
@@ -352,12 +343,12 @@ class FullToolRunner:
                     content=guard_result.reason or "Guard denied",
                     meta={"layer": "guard"},
                 )
-                results.append((tc, tr))
+                results[idx] = (tc, tr)
                 if on_result:
                     await on_result(tc, tr)
                 continue
 
-            # 5. CapabilityPolicy (Layer C)
+            # 4. CapabilityPolicy (Layer C)
             decision = self._policy.evaluate(self._topology, instance, effective_args)
             if decision.decision == "deny":
                 tr = ToolResult(
@@ -365,12 +356,12 @@ class FullToolRunner:
                     content=decision.reason,
                     meta={"layer": "policy", "guidance": decision.guidance},
                 )
-                results.append((tc, tr))
+                results[idx] = (tc, tr)
                 if on_result:
                     await on_result(tc, tr)
                 continue
 
-            # 6. Fast path check (per D-08)
+            # 5. Fast path check
             claims = instance.tool_binding.resource_claims
             is_fast = (
                 instance.tool_spec.effect_level == "none"
@@ -378,42 +369,71 @@ class FullToolRunner:
                 and instance.tool_spec.fast_path_eligible
             )
 
-            # 7. Scheduler acquire (skip for fast path)
-            ticket: SchedulerTicket | None = None
-            if not is_fast:
-                ticket = await self._scheduler.acquire(
-                    claims, timeout=self._scheduler._default_timeout
-                )
-                if ticket is None:
-                    tr = ToolResult(
-                        status="error",
-                        content="Scheduling timeout",
-                        meta={"layer": "scheduler"},
+            approved.append((idx, tc, instance, effective_args, is_fast))
+
+        # ── Phase 2: Concurrent execution ──────────────────
+        if approved:
+            exec_ctx = _ExecCtx(stop_event=ctx.stop_event)
+            await asyncio.gather(
+                *(
+                    self._execute_one(
+                        idx, tc, instance, effective_args, is_fast,
+                        exec_ctx, ctx, results, on_result,
                     )
-                    results.append((tc, tr))
-                    if on_result:
-                        await on_result(tc, tr)
-                    continue
+                    for idx, tc, instance, effective_args, is_fast in approved
+                )
+            )
 
-            # 8. Execute + Release
-            try:
-                tr = await instance.tool_executor(effective_args)
-            except Exception as e:
-                tr = ToolResult.from_error(tc.name, e)
-            finally:
-                if ticket is not None:
-                    await self._scheduler.release(ticket)
+        return [pair for pair in results if pair is not None]
 
-            # 9a. Normalize (builtins may return str or None)
-            tr = normalize_tool_result(tr)
+    async def _execute_one(
+        self,
+        idx: int,
+        tc: ToolCallData,
+        instance: ToolInstance,
+        effective_args: dict[str, Any],
+        is_fast: bool,
+        exec_ctx: _ExecCtx,
+        batch_ctx: BatchExecutionContext,
+        results: list[tuple[ToolCallData, ToolResult] | None],
+        on_result: Callable[[ToolCallData, ToolResult], Awaitable[None]] | None,
+    ) -> None:
+        """Execute a single approved tool call (scheduler + executor + normalize)."""
+        # Scheduler acquire (skip for fast path)
+        ticket: SchedulerTicket | None = None
+        if not is_fast:
+            claims = instance.tool_binding.resource_claims
+            ticket = await self._scheduler.acquire(
+                claims, timeout=self._scheduler._default_timeout
+            )
+            if ticket is None:
+                tr = ToolResult(
+                    status="error",
+                    content="Scheduling timeout",
+                    meta={"layer": "scheduler"},
+                )
+                results[idx] = (tc, tr)
+                if on_result:
+                    await on_result(tc, tr)
+                return
 
-            # 9b. Truncate oversized content
-            max_chars = instance.tool_spec.max_result_chars
-            if max_chars > 0 and len(tr.content) > max_chars:
-                tr = self._truncate_result(tr, max_chars, tc.id)
+        # Execute + Release
+        try:
+            tr = await instance.tool_executor(effective_args, exec_ctx)
+        except Exception as e:
+            tr = ToolResult.from_error(tc.name, e)
+        finally:
+            if ticket is not None:
+                await self._scheduler.release(ticket)
 
-            results.append((tc, tr))
-            if on_result:
-                await on_result(tc, tr)
+        # Normalize
+        tr = normalize_tool_result(tr)
 
-        return results
+        # Truncate
+        max_chars = instance.tool_spec.max_result_chars
+        if max_chars > 0 and len(tr.content) > max_chars:
+            tr = self._truncate_result(tr, max_chars, tc.id)
+
+        results[idx] = (tc, tr)
+        if on_result:
+            await on_result(tc, tr)

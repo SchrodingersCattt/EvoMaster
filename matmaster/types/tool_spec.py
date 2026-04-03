@@ -18,6 +18,7 @@ All Pydantic models are frozen=True. ToolInstance is a frozen dataclass.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -78,6 +79,19 @@ class ToolBinding(BaseModel):
     stop_mode: Literal["cancellable", "best_effort", "non_cancellable"] = "cancellable"
 
 
+@dataclass(frozen=True)
+class ToolExecutionContext:
+    """Per-call execution context passed to tool executors.
+
+    Provides cancellation and progress reporting to individual tool
+    executions. Distinct from the batch-level BatchExecutionContext
+    used by FullToolRunner.
+    """
+
+    stop_event: threading.Event | None = None
+    on_progress: Callable[[str], Awaitable[None]] | None = None
+
+
 # Import ToolResult for the executor type signature
 from matmaster.tools.tool_result import ToolResult  # noqa: E402
 from matmaster.types.tool_decision import ToolDecision  # noqa: E402
@@ -89,14 +103,14 @@ class ToolInstance:
 
     This is what ToolCatalog stores and ToolRunner consumes.
 
-    NOTE: tool_executor annotation says Awaitable[ToolResult] but builtins
-    may return str | ToolResult | None at runtime. FullToolRunner calls
-    normalize_tool_result() after execution to handle this. The annotation
-    is historical type debt -- fixing it to Awaitable[str | ToolResult | None]
-    is deferred to avoid changing the executor contract in this plan.
+    tool_executor signature: (tool_args, exec_ctx) -> ToolResult | str | None.
+    ToolCompiler wraps plain execute(args) tools to match this signature.
     """
 
     tool_spec: ToolSpec
     tool_binding: ToolBinding
-    tool_executor: Callable[[dict[str, Any]], Awaitable[ToolResult]]
+    tool_executor: Callable[
+        [dict[str, Any], ToolExecutionContext],
+        Awaitable[ToolResult | str | None],
+    ]
     input_validator: Callable[[dict[str, Any]], Awaitable[ToolDecision | None]] | None = None
