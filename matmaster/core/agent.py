@@ -70,6 +70,9 @@ class _TerminalItem:
 
     reason: str
     final_content: str | None = None
+    num_turns: int = 0
+    usage: dict[str, int] = dc_field(default_factory=dict)
+    messages: list[Any] = dc_field(default_factory=list)
 
 
 @dataclass
@@ -367,7 +370,12 @@ class AgentKernel:
             # External cancel check
             if stop_event and stop_event.is_set():
                 yield _KernelItem(
-                    terminal=_TerminalItem(reason='cancelled')
+                    terminal=_TerminalItem(
+                        reason='cancelled',
+                        num_turns=state.turn,
+                        usage=dict(state.total_usage),
+                        messages=list(state.messages),
+                    )
                 )
                 return
 
@@ -379,7 +387,12 @@ class AgentKernel:
             # should_continue hook (intercepting)
             if not await run_should_continue(spec.hooks, state.messages, state.turn):
                 yield _KernelItem(
-                    terminal=_TerminalItem(reason='hook_stopped')
+                    terminal=_TerminalItem(
+                        reason='hook_stopped',
+                        num_turns=state.turn - 1,
+                        usage=dict(state.total_usage),
+                        messages=list(state.messages),
+                    )
                 )
                 return
 
@@ -424,14 +437,24 @@ class AgentKernel:
                         yield item
             except _KernelStopRequested:
                 yield _KernelItem(
-                    terminal=_TerminalItem(reason='cancelled')
+                    terminal=_TerminalItem(
+                        reason='cancelled',
+                        num_turns=state.turn,
+                        usage=dict(state.total_usage),
+                        messages=list(state.messages),
+                    )
                 )
                 return
 
             if llm_response is None:
                 # Should not happen, but guard
                 yield _KernelItem(
-                    terminal=_TerminalItem(reason='invalid_finish')
+                    terminal=_TerminalItem(
+                        reason='invalid_finish',
+                        num_turns=state.turn,
+                        usage=dict(state.total_usage),
+                        messages=list(state.messages),
+                    )
                 )
                 return
 
@@ -446,7 +469,12 @@ class AgentKernel:
             if not response.tool_calls:
                 if not self._is_valid_natural_finish(response):
                     yield _KernelItem(
-                        terminal=_TerminalItem(reason='invalid_finish')
+                        terminal=_TerminalItem(
+                            reason='invalid_finish',
+                            num_turns=state.turn,
+                            usage=dict(state.total_usage),
+                            messages=list(state.messages),
+                        )
                     )
                     return
                 state.messages.append(
@@ -459,6 +487,9 @@ class AgentKernel:
                     terminal=_TerminalItem(
                         reason='natural',
                         final_content=response.content,
+                        num_turns=state.turn,
+                        usage=dict(state.total_usage),
+                        messages=list(state.messages),
                     )
                 )
                 return
@@ -536,7 +567,12 @@ class AgentKernel:
 
         # max_turns exhausted
         yield _KernelItem(
-            terminal=_TerminalItem(reason='max_turns')
+            terminal=_TerminalItem(
+                reason='max_turns',
+                num_turns=state.turn,
+                usage=dict(state.total_usage),
+                messages=list(state.messages),
+            )
         )
 
     async def _call_llm_streaming(
