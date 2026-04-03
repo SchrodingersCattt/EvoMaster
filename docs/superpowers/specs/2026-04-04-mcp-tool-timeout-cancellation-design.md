@@ -89,7 +89,14 @@ _DEFAULT_MCP_TOOL_TIMEOUT: float = 120.0  # seconds
 class LazyMCPTool:
     def __init__(self, ..., timeout: float | None = None):
         ...
-        self._timeout: float = timeout if timeout is not None else _DEFAULT_MCP_TOOL_TIMEOUT
+        meta = runtime_meta or {}
+        # Resolution: runtime_meta (per-tool) > constructor param (per-server) > default
+        if meta.get("timeout") is not None:
+            self._timeout = float(meta["timeout"])
+        elif timeout is not None:
+            self._timeout = float(timeout)
+        else:
+            self._timeout = _DEFAULT_MCP_TOOL_TIMEOUT
 ```
 
 Timeout resolution order (first non-None wins):
