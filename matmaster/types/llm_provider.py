@@ -20,7 +20,7 @@ class LLMProvider(Protocol):
     and provide non-streaming (chat) and streaming (chat_stream) methods.
     Both are async. Provider lifecycle is managed via async context manager:
     __aenter__ initializes the client, __aexit__ closes connections.
-    Retry logic lives in Kernel._call_llm(), not in the provider.
+    Retry logic lives in Kernel._call_llm_streaming(), not in the provider.
     """
 
     async def __aenter__(self) -> LLMProvider: ...

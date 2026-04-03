@@ -165,10 +165,8 @@ class AgentKernel:
     ) -> AsyncIterator[_KernelItem]:
         """Core generator loop: yields _KernelItem for each event.
 
-        Mirrors _run_loop() logic but yields events instead of calling hooks
-        for streaming, AssistantState, and SkillHit. Hook paths (pre_llm_call,
-        should_continue, pre_tool_call, post_tool_call, guard_blocked) are
-        still invoked for backward compat.
+        Yields events for streaming, AssistantState, and SkillHit. Hook paths
+        (pre_llm_call, should_continue) are still invoked internally.
         """
         state = _KernelState(
             messages=[
@@ -408,7 +406,7 @@ class AgentKernel:
         *,
         stop_event: threading.Event | None = None,
     ) -> AsyncIterator[_KernelItem]:
-        """Retry wrapper around _stream_llm_items, same retry semantics as _call_llm."""
+        """Retry wrapper around _stream_llm_items with timeout-doubling retry on transient errors."""
         provider = spec.llm_provider
         current_timeout = getattr(provider, 'stream_timeout', None) or getattr(
             provider, '_timeout', 300.0
@@ -519,7 +517,7 @@ class AgentKernel:
 
         Replaces the EventEmitterHook path with direct yields of
         ThoughtEvent/ResponseEvent. Final yield carries the assembled
-        LLMResponse. Keeps all accumulation logic from _do_stream_llm().
+        LLMResponse. Keeps all accumulation logic from the streaming LLM call.
         """
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
@@ -583,7 +581,7 @@ class AgentKernel:
                         )
                     )
 
-                # Accumulate parts (same logic as _do_stream_llm)
+                # Accumulate parts (standard streaming accumulation)
                 if chunk.reasoning_content:
                     reasoning_parts.append(chunk.reasoning_content)
                     producing_reasoning = True

@@ -4,7 +4,7 @@ Provides OpenAIProvider that satisfies the LLMProvider Protocol, wrapping
 the openai.AsyncOpenAI client for async chat and streaming calls.
 Client lifecycle is managed via async context manager: __aenter__ creates
 the AsyncOpenAI + httpx.AsyncClient, __aexit__ closes connections.
-Retry strategy is handled by Kernel._call_llm(), not by the provider.
+Retry strategy is handled by Kernel._call_llm_streaming(), not by the provider.
 """
 
 from __future__ import annotations
