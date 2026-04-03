@@ -25,6 +25,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.topology import ToolPlane
 
 
@@ -90,6 +91,7 @@ class ToolExecutionContext:
 
     stop_event: threading.Event | None = None
     on_progress: Callable[[str], Awaitable[None]] | None = None
+    runner_state: ToolRunnerState | None = None
 
 
 # Import ToolResult for the executor type signature
@@ -113,4 +115,7 @@ class ToolInstance:
         [dict[str, Any], ToolExecutionContext],
         Awaitable[ToolResult | str | None],
     ]
-    input_validator: Callable[[dict[str, Any]], Awaitable[ToolDecision | None]] | None = None
+    input_validator: Callable[
+        [dict[str, Any], ToolRunnerState | None],
+        Awaitable[ToolDecision | None],
+    ] | None = None
