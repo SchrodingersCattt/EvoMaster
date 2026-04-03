@@ -72,7 +72,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         help=(
             "matmaster/exps/{NAME}.toml. Omit or ``devshell``: load ``direct`` but narrow "
-            "skills_root to struct-DB lazymcp stub only. ``direct``: unpatched production toml. "
+            "skills_root to struct-DB + mcp-mat-sg lazymcp stubs; mat_sg tools narrowed to "
+            "generate_ordered_replicas only. ``direct``: unpatched production toml. "
             "MCP paths use [skills].config_dir (typically matmaster_config/)."
         ),
     )

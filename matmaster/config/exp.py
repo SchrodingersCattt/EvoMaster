@@ -12,6 +12,8 @@ Usage::
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from matmaster.types.runtime import CompactionConfig
@@ -36,6 +38,9 @@ class ExpSkillsConfig(BaseModel):
     config_dir: str = ""
     mcp_config_file: str = ""
     mcp_runtime_file: str = "mcp.yaml"
+    # Merged into loaded mcp runtime YAML (after read from config_dir). Used by
+    # devshell to narrow per-server tools without duplicating mcp.yaml.
+    mcp_runtime_patch: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExpConfig(BaseModel):
