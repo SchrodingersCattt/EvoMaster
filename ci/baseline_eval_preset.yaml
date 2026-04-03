@@ -1,0 +1,13 @@
+# Baseline eval CI preset — edit and push so child pipeline + run use the same commit.
+#
+# child_pipeline:
+#   capabilities — dynamic child jobs: one manual job per capability (default).
+#   questions    — single manual job ``eval-question-list``; runs only question_ids.
+#                  BASELINE_LIMIT is ignored in this layout.
+#
+# Override at Run pipeline: BASELINE_CHILD_PIPELINE, BASELINE_QUESTIONS (comma-separated).
+
+child_pipeline: capabilities
+
+# Used when child_pipeline is ``questions`` (v5 question ``id`` from bank YAML).
+question_ids: []

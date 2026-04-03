@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Load ``ci/baseline_eval_preset.yaml`` for baseline-eval CI.
+
+Used by ``generate_eval_child_pipeline.py`` and ``run_baseline_eval.sh`` (via CLI).
+
+Resolution order:
+
+* ``BASELINE_CHILD_PIPELINE`` env: ``capabilities`` | ``questions`` (overrides file).
+* Else preset key ``child_pipeline`` (default ``capabilities``).
+
+Question IDs (for ``questions`` layout):
+
+* ``BASELINE_QUESTIONS`` env: comma-separated ids (overrides file list).
+* Else preset key ``question_ids`` (list of strings).
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+import yaml
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_PRESET_PATH = REPO_ROOT / "ci" / "baseline_eval_preset.yaml"
+
+
+def load_preset_file(path: Path | None = None) -> dict:
+    p = path or DEFAULT_PRESET_PATH
+    if not p.is_file():
+        return {}
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
+def resolve_child_pipeline() -> str:
+    env = os.environ.get("BASELINE_CHILD_PIPELINE", "").strip().lower()
+    if env in ("capabilities", "questions"):
+        return env
+    data = load_preset_file()
+    cp = str(data.get("child_pipeline", "capabilities")).strip().lower()
+    if cp in ("capabilities", "questions"):
+        return cp
+    return "capabilities"
+
+
+def resolve_question_ids() -> list[str]:
+    env_q = os.environ.get("BASELINE_QUESTIONS", "").strip()
+    if env_q:
+        return [x.strip() for x in env_q.split(",") if x.strip()]
+    data = load_preset_file()
+    raw = data.get("question_ids") or []
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    return []
+
+
+def main() -> int:
+    if len(sys.argv) < 2:
+        print("usage: baseline_eval_preset.py list-ids|child-pipeline", file=sys.stderr)
+        return 2
+    op = sys.argv[1]
+    if op == "list-ids":
+        for q in resolve_question_ids():
+            print(q)
+        return 0
+    if op == "child-pipeline":
+        print(resolve_child_pipeline())
+        return 0
+    print(f"unknown op: {op}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

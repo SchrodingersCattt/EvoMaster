@@ -2,8 +2,10 @@
 #
 # 架构说明：
 #   1. 父流水线：构建镜像 + 动态生成子流水线 YAML → 触发子流水线
-#   2. 子流水线（动态生成）：自动扫描 evaluation/question_bank/ 下的 capability，
-#      每个 capability 一个独立 manual job，按需点击运行。
+#   2. 子流水线（动态生成）：
+#      - capabilities（默认）：每个 capability 一个 manual job。
+#      - questions：仅 eval-question-list 一个 manual job；题目来自 ci/baseline_eval_preset.yaml
+#        的 question_ids，或 CI 变量 BASELINE_QUESTIONS（逗号分隔）。此模式忽略 BASELINE_LIMIT。
 #
 # 评测模式（EVAL_RUNNER）：
 #   claude_cli（默认） — 外部 baseline：prepare workspace → claude -p 跑题 → finalize
@@ -50,6 +52,8 @@
 #   BASELINE_TIMEOUT       — 每题超时秒数，默认 1200（仅 claude_cli）
 #   BASELINE_MODEL         — 模型标识（claude_cli: 模型名如 opus；devshell: llm_config route key 如 claude-sonnet-4-6）
 #   BASELINE_PENDING_ONLY  — 1=pending等人工阅卷，0=proxy自动入库，默认 1
+#   BASELINE_CHILD_PIPELINE — capabilities（默认）或 questions；覆盖预设文件 child_pipeline
+#   BASELINE_QUESTIONS     — 逗号分隔 question id；questions 布局下可覆盖预设 question_ids
 
 variables:
   EVAL_RUNNER: "devshell"  # claude_cli 或 devshell
@@ -72,6 +76,8 @@ variables:
   BASELINE_MODEL: ""
   BASELINE_RUN_LABEL: "baseline_cc_ci"
   BASELINE_PENDING_ONLY: "1"
+  BASELINE_CHILD_PIPELINE: "capabilities"
+  BASELINE_QUESTIONS: ""
 
 # ── Job 1: 构建镜像 + 动态生成子流水线 YAML ──────────────────────────────────
 # 使用 Dockerfile.eval 构建评测镜像，然后扫描题库生成子流水线 YAML
@@ -131,6 +137,8 @@ baseline-eval-build:
       echo "BASELINE_MODEL=${BASELINE_MODEL}" >> "${ENV_FILE}"
       echo "BASELINE_RUN_LABEL=${BASELINE_RUN_LABEL}" >> "${ENV_FILE}"
       echo "BASELINE_PENDING_ONLY=${BASELINE_PENDING_ONLY}" >> "${ENV_FILE}"
+      echo "BASELINE_CHILD_PIPELINE=${BASELINE_CHILD_PIPELINE}" >> "${ENV_FILE}"
+      echo "BASELINE_QUESTIONS=${BASELINE_QUESTIONS}" >> "${ENV_FILE}"
       cat "${ENV_FILE}"
     - |
       echo "--- 动态生成子流水线 YAML ---"
@@ -167,6 +175,8 @@ baseline-eval-trigger:
     BASELINE_MODEL: $BASELINE_MODEL
     BASELINE_RUN_LABEL: $BASELINE_RUN_LABEL
     BASELINE_PENDING_ONLY: $BASELINE_PENDING_ONLY
+    BASELINE_CHILD_PIPELINE: $BASELINE_CHILD_PIPELINE
+    BASELINE_QUESTIONS: $BASELINE_QUESTIONS
   trigger:
     include:
       - artifact: ci/generated-eval-child.yml

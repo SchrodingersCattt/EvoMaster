@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CI 内部执行脚本：支持 Claude CLI baseline 和 MatMaster DevShell 两种评测模式
-# 在项目 Docker 容器内运行，由 ci/baseline-eval-child.yml 的 job 调用。
+# 在项目 Docker 容器内运行，由动态生成的 ci/generated-eval-child.yml 中的 job 调用。
 #
 # 模式选择（EVAL_RUNNER）：
 #   claude_cli（默认） — prepare workspace → claude -p 跑题 → finalize
@@ -17,6 +17,12 @@
 #     BASELINE_MODEL                 — 模型标识（空=使用默认）
 #     BASELINE_RUN_LABEL             — run 目录前缀，默认 baseline_cc
 #     BASELINE_PENDING_ONLY          — 1=pending模式（人工阅卷），0=proxy自动入库，默认 1
+#   子流水线布局（由生成器 / docker -e 注入）:
+#     BASELINE_EVAL_LAYOUT           — capabilities（默认）或 questions
+#     BASELINE_QUESTIONS             — 逗号分隔 question id；覆盖 ci/baseline_eval_preset.yaml 的 question_ids
+#   题库与布局预设（仓库内文件，见 ci/baseline_eval_preset.yaml）:
+#     child_pipeline                 — capabilities | questions（可被 CI 变量 BASELINE_CHILD_PIPELINE 覆盖）
+#     question_ids                   — questions 布局下的题目列表（BASELINE_LIMIT 在此布局下忽略）
 #   Claude CLI 模式专用:
 #     ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN — Claude CLI 鉴权（二选一）
 #     ANTHROPIC_BASE_URL             — Claude CLI 端点（如 MiniMax/gpugeek 兼容端点）
@@ -32,6 +38,12 @@ set -euo pipefail
 APP_DIR="/app"
 cd "${APP_DIR}"
 
+if [[ -x "${APP_DIR}/.venv/bin/python" ]]; then
+    PY="${APP_DIR}/.venv/bin/python"
+else
+    PY="python3"
+fi
+
 # ── 通用参数解析 ─────────────────────────────────────────────────────────────
 EVAL_RUNNER="${EVAL_RUNNER:-claude_cli}"
 CAPABILITIES="${BASELINE_CAPABILITIES:-structure_construction}"
@@ -40,12 +52,27 @@ LIMIT="${BASELINE_LIMIT:-0}"
 MODEL="${BASELINE_MODEL:-}"
 RUN_LABEL="${BASELINE_RUN_LABEL:-baseline_cc}"
 PENDING_ONLY="${BASELINE_PENDING_ONLY:-1}"
+LAYOUT="${BASELINE_EVAL_LAYOUT:-capabilities}"
+
+Q_IDS=()
+if [[ "${LAYOUT}" == "questions" ]]; then
+    mapfile -t Q_IDS < <("${PY}" "${APP_DIR}/ci/baseline_eval_preset.py" list-ids)
+    if [[ ${#Q_IDS[@]} -eq 0 ]]; then
+        echo "[ERROR] BASELINE_EVAL_LAYOUT=questions 但未解析到任何 question id（检查 BASELINE_QUESTIONS 或 ci/baseline_eval_preset.yaml）"
+        exit 1
+    fi
+fi
 
 echo "=== CI Baseline Eval ==="
 echo "  runner       : ${EVAL_RUNNER}"
-echo "  capabilities : ${CAPABILITIES}"
+echo "  layout       : ${LAYOUT}"
+if [[ "${LAYOUT}" == "questions" ]]; then
+    echo "  question_ids : ${Q_IDS[*]}"
+else
+    echo "  capabilities : ${CAPABILITIES}"
+    echo "  limit        : ${LIMIT} (0=无限制)"
+fi
 echo "  modes        : ${MODES}"
-echo "  limit        : ${LIMIT} (0=无限制)"
 echo "  model        : ${MODEL:-<默认>}"
 echo "  run_label    : ${RUN_LABEL}"
 echo "  pending_only : ${PENDING_ONLY}"
@@ -68,11 +95,15 @@ if [[ "${EVAL_RUNNER}" == "devshell" ]]; then
         python evaluation/scripts/devshell/run_devshell_eval.py
         --run-label "${RUN_LABEL}"
         --modes ${MODES_ARGS}
-        --capabilities ${CAPS_ARGS}
         --no-clean-results
     )
-    if [[ "${LIMIT}" -gt 0 ]]; then
-        DEVSHELL_CMD+=(--limit "${LIMIT}")
+    if [[ "${LAYOUT}" == "questions" ]]; then
+        DEVSHELL_CMD+=(--questions "${Q_IDS[@]}")
+    else
+        DEVSHELL_CMD+=(--capabilities ${CAPS_ARGS})
+        if [[ "${LIMIT}" -gt 0 ]]; then
+            DEVSHELL_CMD+=(--limit "${LIMIT}")
+        fi
     fi
     if [[ -n "${MODEL}" ]]; then
         DEVSHELL_CMD+=(--model "${MODEL}")
@@ -153,12 +184,16 @@ EOF
         --prepare-cc-baseline
         --run-label "${RUN_LABEL}"
         --modes ${MODES_ARGS}
-        --capabilities ${CAPS_ARGS}
         --eval-ingest-pending-only
         --no-clean-results
     )
-    if [[ "${LIMIT}" -gt 0 ]]; then
-        PREPARE_CMD+=(--limit "${LIMIT}")
+    if [[ "${LAYOUT}" == "questions" ]]; then
+        PREPARE_CMD+=(--questions "${Q_IDS[@]}")
+    else
+        PREPARE_CMD+=(--capabilities ${CAPS_ARGS})
+        if [[ "${LIMIT}" -gt 0 ]]; then
+            PREPARE_CMD+=(--limit "${LIMIT}")
+        fi
     fi
 
     echo ""
