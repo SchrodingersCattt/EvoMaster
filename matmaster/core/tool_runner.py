@@ -240,28 +240,22 @@ class FullToolRunner:
         """Execute tool calls through the seven-step chain.
 
         For each tool_call, sequentially:
-        1. Cancel check
-        2. Catalog lookup
-        3. StructuralValidation (Layer A)
-        4. RunStateGuard (Layer B) via GuardPipeline
-        5. CapabilityPolicy (Layer C)
-        6. Fast path check
-        7. Scheduler acquire (skipped for fast path)
-        8. Execute + Release
-        9. Normalize + Truncate
+        1. Catalog lookup
+        1b. Cancel check (stop_mode-aware: cancellable->cancel, best_effort->cancel, non_cancellable->skip)
+        2. StructuralValidation (Layer A)
+        3. RunStateGuard (Layer B) via GuardPipeline
+        4. CapabilityPolicy (Layer C)
+        5. Fast path check
+        6. Scheduler acquire (skipped for fast path)
+        7. Execute + Release
+        8. Normalize + Truncate
 
         Returns list of (ToolCallData, ToolResult) in input order.
         """
         results: list[tuple[ToolCallData, ToolResult]] = []
 
         for tc in tool_calls:
-            # 1. Cancel check
-            if ctx.stop_event is not None and ctx.stop_event.is_set():
-                tr = ToolResult(status="cancelled", content="Run cancelled.")
-                results.append((tc, tr))
-                continue
-
-            # 2. Catalog lookup
+            # 1 + 2. Catalog lookup first, then stop_mode-aware cancel check
             instance = self._catalog.get_tool(tc.name)
             if instance is None:
                 tr = ToolResult(
@@ -273,6 +267,26 @@ class FullToolRunner:
                 if on_result:
                     await on_result(tc, tr)
                 continue
+
+            # 1b. Cancel check (stop_mode-aware, after catalog lookup)
+            if ctx.stop_event is not None and ctx.stop_event.is_set():
+                stop_mode = instance.tool_binding.stop_mode
+                if stop_mode == "cancellable":
+                    tr = ToolResult(status="cancelled", content="Run cancelled.")
+                    results.append((tc, tr))
+                    if on_result:
+                        await on_result(tc, tr)
+                    continue
+                elif stop_mode == "best_effort":
+                    tr = ToolResult(
+                        status="cancelled",
+                        content="Cancellation requested (best-effort). Tool may have partially completed.",
+                    )
+                    results.append((tc, tr))
+                    if on_result:
+                        await on_result(tc, tr)
+                    continue
+                # stop_mode == "non_cancellable": skip cancel, let tool execute
 
             # 3. StructuralValidation (Layer A)
             decision = self._validation.validate(

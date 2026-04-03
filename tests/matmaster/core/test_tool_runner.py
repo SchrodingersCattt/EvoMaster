@@ -1,4 +1,4 @@
-"""Tests for ToolRunner Protocol and InlineToolRunner implementation.
+"""Tests for ToolRunner Protocol, InlineToolRunner, and FullToolRunner implementations.
 
 Verifies:
 - ToolRunner is @runtime_checkable Protocol
@@ -9,6 +9,7 @@ Verifies:
 - execute_batch on_result callback fires
 - execute_batch post_hook called for executed tools
 - execute_batch preserves input order
+- FullToolRunner stop_mode-aware cancellation
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ import pytest
 
 from matmaster.core.hooks import BaseHook, HookAction
 from matmaster.core.tool_runner import (
+    FullToolRunner,
     InlineToolRunner,
     ToolExecutionContext,
     ToolRunner,
@@ -395,3 +397,142 @@ class TestExecuteBatchStopEvent:
         )
 
         assert all(r[1].status == "cancelled" for r in results)
+
+
+# ── FullToolRunner stop_mode-aware cancellation ─────────
+
+
+def _make_full_runner_with_tool(
+    tool_name: str,
+    stop_mode: str = "cancellable",
+    state_mode: str = "stateless",
+    result_content: str = "executed",
+) -> FullToolRunner:
+    """Build a minimal FullToolRunner with a single tool in its catalog."""
+    from matmaster.core.guard_pipeline import GuardPipeline
+    from matmaster.core.structural_validation import StructuralValidation
+    from matmaster.core.tool_scheduler import ToolScheduler
+    from matmaster.tools.tool_catalog import ToolCatalog
+    from matmaster.tools.tool_compiler import ToolCompiler
+    from matmaster.tools.tool_registry import ToolRegistry
+    from matmaster.types.topology import RuntimeTopology, ToolPlane
+
+    class _AllowPolicy:
+        def evaluate(self, runtime_topology, instance, arguments):
+            from matmaster.types.tool_decision import ToolDecision
+
+            return ToolDecision(decision="allow")
+
+    # Build a real catalog through the compiler to get proper stop_mode.
+    # But we need to control the stop_mode, so we'll directly construct.
+    from matmaster.types.tool_spec import ResourceClaim, ToolBinding, ToolInstance, ToolSpec
+
+    async def _executor(args: dict[str, Any]) -> ToolResult:
+        return ToolResult(content=result_content)
+
+    spec = ToolSpec(
+        tool_name=tool_name,
+        description=f"test {tool_name}",
+        args_schema={"type": "object", "properties": {}},
+        source="test",
+        effect_level="none",
+        fast_path_eligible=True,
+    )
+    binding = ToolBinding(
+        binding_key=f"control_plane:{tool_name}",
+        plane=ToolPlane.CONTROL_PLANE,
+        resource_claims=(),
+        state_mode=state_mode,
+        stop_mode=stop_mode,
+    )
+    instance = ToolInstance(
+        tool_spec=spec,
+        tool_binding=binding,
+        tool_executor=_executor,
+    )
+
+    # Use a ToolCatalog with pre-built instance (via register_overlay mock)
+    registry = ToolRegistry()
+    topology = RuntimeTopology(
+        session_kind="local",
+        control_root="/tmp/control",
+        workspace_root="/tmp/workspace",
+        active_planes=frozenset(ToolPlane),
+    )
+    compiler = ToolCompiler()
+    catalog = ToolCatalog(registry, compiler=compiler, topology=topology)
+    # Directly inject the instance into catalog compiled cache
+    catalog._compiled_tools[tool_name] = instance
+    catalog._version += 1
+
+    return FullToolRunner(
+        catalog=catalog,
+        structural_validation=StructuralValidation(),
+        guard_pipeline=GuardPipeline([]),
+        capability_policy=_AllowPolicy(),
+        scheduler=ToolScheduler(),
+        topology=topology,
+    )
+
+
+class TestFullToolRunnerStopModeCancel:
+    """FullToolRunner uses stop_mode to decide cancel behavior."""
+
+    @pytest.mark.asyncio
+    async def test_cancellable_tool_cancelled_when_stop_set(self) -> None:
+        """stop_event set + cancellable tool -> ToolResult(status='cancelled')."""
+        runner = _make_full_runner_with_tool("test_tool", stop_mode="cancellable")
+        stop = threading.Event()
+        stop.set()
+        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+
+        results = await runner.execute_batch([_make_tc("test_tool")], ctx)
+
+        assert len(results) == 1
+        assert results[0][1].status == "cancelled"
+        assert "cancelled" in results[0][1].content.lower()
+
+    @pytest.mark.asyncio
+    async def test_best_effort_tool_cancelled_with_message(self) -> None:
+        """stop_event set + best_effort tool -> cancelled with best-effort message."""
+        runner = _make_full_runner_with_tool("web_tool", stop_mode="best_effort")
+        stop = threading.Event()
+        stop.set()
+        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+
+        results = await runner.execute_batch([_make_tc("web_tool")], ctx)
+
+        assert len(results) == 1
+        assert results[0][1].status == "cancelled"
+        assert "best-effort" in results[0][1].content.lower() or "best_effort" in results[0][1].content.lower()
+
+    @pytest.mark.asyncio
+    async def test_non_cancellable_tool_executes_when_stop_set(self) -> None:
+        """stop_event set + non_cancellable tool -> tool executes normally."""
+        runner = _make_full_runner_with_tool(
+            "spawn_tool", stop_mode="non_cancellable", result_content="spawn_done"
+        )
+        stop = threading.Event()
+        stop.set()
+        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+
+        results = await runner.execute_batch([_make_tc("spawn_tool")], ctx)
+
+        assert len(results) == 1
+        assert results[0][1].status == "success"
+        assert results[0][1].content == "spawn_done"
+
+    @pytest.mark.asyncio
+    async def test_no_stop_event_all_modes_execute(self) -> None:
+        """No stop_event -> all tools execute regardless of stop_mode."""
+        for mode in ("cancellable", "best_effort", "non_cancellable"):
+            runner = _make_full_runner_with_tool(
+                f"tool_{mode}", stop_mode=mode, result_content=f"result_{mode}"
+            )
+            ctx = ToolExecutionContext(turn=1, max_turns=10)
+
+            results = await runner.execute_batch([_make_tc(f"tool_{mode}")], ctx)
+
+            assert len(results) == 1
+            assert results[0][1].status == "success", f"Failed for mode={mode}"
+            assert results[0][1].content == f"result_{mode}"
