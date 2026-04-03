@@ -1,9 +1,7 @@
 """Tool Runtime v2 decision type -- ToolDecision.
 
-ToolDecision is the result of a constraint evaluation (StructuralValidation,
-RunStateGuard, CapabilityPolicy). It replaces the old GuardResult for tool
-runtime purposes while GuardResult continues to serve the kernel-level
-GuardPipeline.
+ToolDecision is the result of a constraint evaluation
+(StructuralValidation, CapabilityPolicy) within the tool runtime pipeline.
 
 Frozen Pydantic model: immutable after construction.
 """

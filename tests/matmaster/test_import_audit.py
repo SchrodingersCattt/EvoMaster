@@ -103,7 +103,7 @@ class TestPhase30FullIsolation:
     # 23 violations resolved since Plan 01 (exp.py, playground.py, tools/, integration/).
     KNOWN_VIOLATIONS: frozenset[str] = frozenset(
         {
-            "matmaster/core/__init__.py:L11",
+            "matmaster/core/__init__.py:L10",
             "matmaster/skills/playground-skills/bohrium-job/scripts/list_images.py:L30",
             "matmaster/skills/playground-skills/bohrium-job/scripts/list_machines.py:L28",
             "matmaster/skills/playground-skills/bohrium-job/scripts/poll_job.py:L27",

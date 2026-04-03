@@ -1,6 +1,6 @@
 """AgentKernel -- pure async execution loop for the agent kernel.
 
-Consumes an AgentRuntimeSpec and executes the LLM -> guard -> hook -> tool
+Consumes an AgentRuntimeSpec and executes the LLM -> hook -> tool
 -> message accumulate -> loop cycle via run_stream(), the sole public API.
 run_stream() yields BusEvent objects through the _run_items() generator.
 
@@ -696,4 +696,3 @@ class AgentKernel:
         """Accumulate per-turn usage into running total."""
         for k, v in delta.items():
             total[k] = total.get(k, 0) + v
-

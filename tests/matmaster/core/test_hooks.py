@@ -8,7 +8,6 @@ from matmaster.core.hooks import (
     BaseHook,
     Hook,
     HookAction,
-    run_guard_blocked,
     run_on_stream_chunk,
     run_post_tool_call,
     run_pre_llm_call,
@@ -16,7 +15,6 @@ from matmaster.core.hooks import (
     run_should_continue,
 )
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.guards import GuardResult
 from matmaster.types.messages import (
     Message,
     StreamChunk,
@@ -94,6 +92,11 @@ class TestHookProtocol:
     ) -> None:
         hook = BaseHook()
         result = await hook.on_stream_chunk(sample_chunk)
+        assert result is None
+
+    async def test_base_hook_on_segment_complete_default(self) -> None:
+        hook = BaseHook()
+        result = await hook.on_segment_complete("thought", "done", "s1")
         assert result is None
 
 
@@ -281,44 +284,3 @@ class TestHookShortCircuit:
         await run_on_stream_chunk([h1, h2], sample_chunk)
         assert h1.on_stream_chunk_called is True
         assert h2.on_stream_chunk_called is True
-
-
-# ── run_guard_blocked ────────────────────────────────
-
-
-class TestRunGuardBlocked:
-    async def test_calls_all_hooks(self) -> None:
-        class RecordingGuardHook(BaseHook):
-            def __init__(self) -> None:
-                self.calls: list[tuple[str, str | None]] = []
-
-            async def on_guard_blocked(
-                self, tool_call: ToolCallData, result: GuardResult
-            ) -> None:
-                self.calls.append((tool_call.name, result.reason))
-
-        h1 = RecordingGuardHook()
-        h2 = RecordingGuardHook()
-        tc = ToolCallData(id="tc-1", name="dangerous", arguments={})
-        gr = GuardResult(allowed=False, reason="forbidden")
-
-        await run_guard_blocked([h1, h2], tc, gr)
-
-        assert len(h1.calls) == 1
-        assert h1.calls[0] == ("dangerous", "forbidden")
-        assert len(h2.calls) == 1
-
-    async def test_no_hooks_no_error(self) -> None:
-        tc = ToolCallData(id="tc-1", name="tool", arguments={})
-        gr = GuardResult(allowed=False, reason="blocked")
-        await run_guard_blocked([], tc, gr)  # Should not raise
-
-    async def test_base_hook_provides_on_guard_blocked(self) -> None:
-        """BaseHook provides all 7 methods including on_guard_blocked.
-
-        After Phase 15, getattr backward compat removed -- all hooks must
-        provide on_guard_blocked (BaseHook gives the default no-op).
-        """
-        tc = ToolCallData(id="tc-1", name="tool", arguments={})
-        gr = GuardResult(allowed=False, reason="blocked")
-        await run_guard_blocked([BaseHook()], tc, gr)  # Should not raise

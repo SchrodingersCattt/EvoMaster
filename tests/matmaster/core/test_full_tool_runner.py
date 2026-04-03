@@ -1,9 +1,8 @@
-"""Tests for FullToolRunner -- complete seven-step execution chain.
+"""Tests for FullToolRunner -- complete tool execution chain.
 
 Verifies:
 - Catalog miss -> ToolResult(status='error', meta={'layer': 'catalog'})
 - StructuralValidation deny -> ToolResult(status='error', meta={'layer': 'structural'})
-- GuardPipeline deny -> ToolResult(status='error', meta={'layer': 'guard'})
 - CapabilityPolicy deny -> ToolResult(status='error', meta={'layer': 'policy'})
 - Scheduler timeout -> ToolResult(status='error', meta={'layer': 'scheduler'})
 - Fast path skips Scheduler but not CapabilityPolicy
@@ -23,7 +22,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from matmaster.core.capability_policy import DefaultCapabilityPolicy
-from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.tool_runner import (
     FullToolRunner,
@@ -130,7 +128,6 @@ def _make_runner(
     return FullToolRunner(
         catalog=catalog,
         structural_validation=StructuralValidation(),
-        guard_pipeline=GuardPipeline(),
         capability_policy=policy or DefaultCapabilityPolicy(),
         scheduler=scheduler or ToolScheduler(default_timeout=1.0),
         topology=topology or _make_topology(),
@@ -214,34 +211,26 @@ class TestStructuralDeny:
         assert tr.meta["layer"] == "structural"
 
 
-# ── Guard Deny ───────────────────────────────────────────
+# ── Repeated Calls ───────────────────────────────────────
 
 
-class TestGuardDeny:
+class TestRepeatedCalls:
     @pytest.mark.asyncio
-    async def test_guard_pipeline_deny(self) -> None:
-        """GuardPipeline deny -> error with layer='guard'."""
+    async def test_repeated_identical_calls_still_execute(self) -> None:
+        """重复工具调用不再被 guard 层拦截。"""
         catalog = _make_catalog("looped_tool")
         topology = _make_topology()
-
-        # Trigger LoopDetectionGuard by repeating the same call
         runner = _make_runner(catalog, topology=topology)
         ctx = _make_ctx()
-
-        # First two identical calls should pass; the third should trigger loop
         tcs = [
             _make_tc("looped_tool", "c1"),
             _make_tc("looped_tool", "c2"),
             _make_tc("looped_tool", "c3"),
         ]
         results = await runner.execute_batch(tcs, ctx)
-
-        # The third call (or later) should be denied by loop detection
-        guard_denied = [
-            (tc, tr) for tc, tr in results if tr.meta.get("layer") == "guard"
-        ]
-        assert len(guard_denied) >= 1
-        assert guard_denied[0][1].status == "error"
+        assert len(results) == 3
+        assert all(tr.status != "error" for _, tr in results)
+        assert [tr.content for _, tr in results] == ["result_looped_tool"] * 3
 
 
 # ── Policy Deny ──────────────────────────────────────────
@@ -1003,7 +992,6 @@ def _make_runner_with_stop_mode(
     return FullToolRunner(
         catalog=catalog,
         structural_validation=StructuralValidation(),
-        guard_pipeline=GuardPipeline([]),
         capability_policy=DefaultCapabilityPolicy(),
         scheduler=ToolScheduler(),
         topology=topology,

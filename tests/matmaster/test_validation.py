@@ -7,7 +7,6 @@ from typing import Any
 
 from matmaster.core.hooks import Hook, HookAction
 from matmaster.tools.tool_registry import Tool
-from matmaster.types.guards import Guard, GuardContext, GuardResult
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
 from matmaster.types.topology import ToolPlane
@@ -74,9 +73,6 @@ class SyncHook:
         pass
 
     def on_segment_complete(self, segment_type, content, stream_id):
-        pass
-
-    def on_guard_blocked(self, tool_call, result):
         pass
 
 
@@ -169,19 +165,6 @@ class AsyncHookOK:
     async def on_segment_complete(self, segment_type, content, stream_id):
         pass
 
-    async def on_guard_blocked(self, tool_call, result):
-        pass
-
-
-class SyncGuardOK:
-    def evaluate(self, ctx: GuardContext) -> GuardResult:
-        return GuardResult(allowed=True)
-
-
-class AsyncGuardWrong:
-    async def evaluate(self, ctx: GuardContext) -> GuardResult:
-        return GuardResult(allowed=True)
-
 
 # -- Tests --
 
@@ -218,23 +201,13 @@ class TestValidateAsyncProtocol:
         assert errors == []
 
     def test_detects_sync_mismatch_on_hook(self) -> None:
-        """Sync Hook fails -- all 7 methods should report mismatch."""
+        """Sync Hook fails -- all 6 methods should report mismatch."""
         errors = validate_async_protocol(SyncHook(), Hook)
-        assert len(errors) == 7
+        assert len(errors) == 6
 
     def test_passes_async_hook(self) -> None:
         errors = validate_async_protocol(AsyncHookOK(), Hook)
         assert errors == []
-
-    def test_guard_sync_passes(self) -> None:
-        errors = validate_async_protocol(SyncGuardOK(), Guard)
-        assert errors == []
-
-    def test_guard_async_fails(self) -> None:
-        errors = validate_async_protocol(AsyncGuardWrong(), Guard)
-        assert len(errors) == 1
-        assert "evaluate()" in errors[0]
-        assert "expected def" in errors[0]
 
     def test_missing_method(self) -> None:
         class Empty:

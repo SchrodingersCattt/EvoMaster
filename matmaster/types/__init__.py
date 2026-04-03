@@ -26,7 +26,6 @@ from .events import (
     ToolResultEvent,
     WorkspaceUploadErrorEvent,
 )
-from .guards import Guard, GuardContext, GuardResult, RecentCall
 from .llm_provider import LLMProvider
 from .messages import (
     AssistantMessage,
@@ -73,11 +72,6 @@ __all__ = [
     "ToolCallEvent",
     "ToolResultEvent",
     "WorkspaceUploadErrorEvent",
-    # guards
-    "Guard",
-    "GuardContext",
-    "GuardResult",
-    "RecentCall",
     # llm
     "LLMProvider",
     # messages

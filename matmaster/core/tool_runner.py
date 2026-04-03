@@ -3,8 +3,8 @@
 ToolRunner defines the execution strategy interface for tool calls.
 
 FullToolRunner executes the Tool Runtime v2 pipeline:
-Catalog -> StructuralValidation -> RunStateGuard -> CapabilityPolicy ->
-fast path -> Scheduler -> executor -> release.
+Catalog -> StructuralValidation -> CapabilityPolicy -> fast path ->
+Scheduler -> executor -> release.
 
 ToolExecutionContext carries per-batch execution metadata (turn, max_turns,
 stop_event).
@@ -18,7 +18,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
@@ -36,8 +35,7 @@ if TYPE_CHECKING:
 class BatchExecutionContext:
     """Per-batch execution context used internally by FullToolRunner.
 
-    Carries the current turn number, max turns for guard evaluation,
-    and an optional stop event for cancellation.
+    Carries the current turn number and an optional stop event for cancellation.
     """
 
     turn: int
@@ -68,7 +66,7 @@ class ToolRunner(Protocol):
 
 
 class FullToolRunner:
-    """Complete ToolRunner: Catalog -> Validation -> Guard -> Policy -> Scheduler -> Execute -> Release.
+    """Complete ToolRunner: Catalog -> Validation -> Policy -> Scheduler -> Execute -> Release.
 
     Per D-01: Does not call pre_hook/post_hook.
     Per D-05: Strictly follows spec section 9.1 execution chain.
@@ -79,7 +77,6 @@ class FullToolRunner:
         self,
         catalog: ToolCatalog,
         structural_validation: StructuralValidation,
-        guard_pipeline: GuardPipeline,
         capability_policy: CapabilityPolicy,
         scheduler: ToolScheduler,
         topology: RuntimeTopology,
@@ -87,7 +84,6 @@ class FullToolRunner:
     ) -> None:
         self._catalog = catalog
         self._validation = structural_validation
-        self._guard_pipeline = guard_pipeline
         self._policy = capability_policy
         self._scheduler = scheduler
         self._topology = topology
@@ -224,20 +220,7 @@ class FullToolRunner:
                         await on_result(tc, tr)
                     continue
 
-            # 3. RunStateGuard (Layer B)
-            guard_result = self._guard_pipeline.evaluate(tc, ctx.turn, ctx.max_turns)
-            if not guard_result.allowed:
-                tr = ToolResult(
-                    status="error",
-                    content=guard_result.reason or "Guard denied",
-                    meta={"layer": "guard"},
-                )
-                results[idx] = (tc, tr)
-                if on_result:
-                    await on_result(tc, tr)
-                continue
-
-            # 4. CapabilityPolicy (Layer C)
+            # 3. CapabilityPolicy (Layer B)
             decision = self._policy.evaluate(self._topology, instance, effective_args)
             if decision.decision == "deny":
                 tr = ToolResult(
@@ -250,7 +233,7 @@ class FullToolRunner:
                     await on_result(tc, tr)
                 continue
 
-            # 5. Fast path check
+            # 4. Fast path check
             claims = instance.tool_binding.resource_claims
             is_fast = (
                 instance.tool_spec.effect_level == "none"

@@ -17,8 +17,8 @@ Each check returns a deny ToolDecision on failure. If all pass,
 returns allow.
 
 This layer is stateless: it does not track execution history or
-resource state. Those are handled by RunStateGuard (Layer B) and
-ToolScheduler respectively.
+resource state. Those are handled by CapabilityPolicy and ToolScheduler
+respectively.
 """
 
 from __future__ import annotations

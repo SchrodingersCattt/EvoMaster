@@ -13,7 +13,6 @@ import pytest
 
 from matmaster.core.hooks import HookAction
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.guards import GuardResult
 from matmaster.types.messages import LLMResponse, Message, StreamChunk, ToolCallData
 from matmaster.types.topology import ToolPlane
 
@@ -122,11 +121,6 @@ class MockAsyncHook:
 
     async def on_segment_complete(
         self, segment_type: str, content: str, stream_id: str | None
-    ) -> None:
-        pass
-
-    async def on_guard_blocked(
-        self, tool_call: ToolCallData, result: GuardResult
     ) -> None:
         pass
 

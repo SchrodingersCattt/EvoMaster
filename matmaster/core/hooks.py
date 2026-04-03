@@ -1,7 +1,7 @@
 """Hook Protocol, BaseHook defaults, HookAction enum, and run_* helper functions.
 
 Hooks allow external code to observe and intercept the kernel execution loop.
-Seven hook points are defined:
+Six hook points are defined:
 
 - pre_tool_call: intercept before tool execution (CONTINUE/SKIP)
 - post_tool_call: observe after tool execution (no return)
@@ -9,12 +9,10 @@ Seven hook points are defined:
 - should_continue: intercept loop continuation (True/False)
 - on_stream_chunk: observe streaming chunks (no return)
 - on_segment_complete: observe completed logical thought/response segments
-- on_guard_blocked: observe guard denials (no return)
 
 Intercepting hooks (pre_tool_call, should_continue) short-circuit on the first
 non-default return. Observation hooks (post_tool_call, pre_llm_call,
-on_stream_chunk, on_segment_complete, on_guard_blocked) execute all hooks
-without short-circuit.
+on_stream_chunk, on_segment_complete) execute all hooks without short-circuit.
 """
 
 from __future__ import annotations
@@ -23,7 +21,6 @@ import enum
 from typing import Protocol, runtime_checkable
 
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.guards import GuardResult
 from matmaster.types.messages import Message, StreamChunk, ToolCallData
 
 
@@ -58,10 +55,6 @@ class Hook(Protocol):
         self, segment_type: str, content: str, stream_id: str | None
     ) -> None: ...
 
-    async def on_guard_blocked(
-        self, tool_call: ToolCallData, result: GuardResult
-    ) -> None: ...
-
 
 class BaseHook:
     """Default hook implementation -- all methods are async no-ops or return defaults.
@@ -91,11 +84,6 @@ class BaseHook:
 
     async def on_segment_complete(
         self, segment_type: str, content: str, stream_id: str | None
-    ) -> None:
-        """Default: no-op observation."""
-
-    async def on_guard_blocked(
-        self, tool_call: ToolCallData, result: GuardResult
     ) -> None:
         """Default: no-op observation."""
 
@@ -167,11 +155,3 @@ async def run_on_segment_complete(
     """Run on_segment_complete on all hooks (observation, no short-circuit)."""
     for hook in hooks:
         await hook.on_segment_complete(segment_type, content, stream_id)
-
-
-async def run_guard_blocked(
-    hooks: list[Hook], tool_call: ToolCallData, result: GuardResult
-) -> None:
-    """Run on_guard_blocked on all hooks (observation, no short-circuit)."""
-    for hook in hooks:
-        await hook.on_guard_blocked(tool_call, result)

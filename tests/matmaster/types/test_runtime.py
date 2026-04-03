@@ -11,7 +11,6 @@ from pydantic import ValidationError
 
 from matmaster.core.hooks import BaseHook, Hook
 from matmaster.tools.tool_registry import ToolRegistry
-from matmaster.types.guards import Guard, GuardContext, GuardResult
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.runtime import (
@@ -48,13 +47,6 @@ class _MockLLMProvider:
         timeout: float | None = None,
     ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(content="mock", finish_reason="stop")
-
-
-class _MockGuard:
-    """A Guard implementation for testing."""
-
-    def evaluate(self, ctx: GuardContext) -> GuardResult:
-        return GuardResult(allowed=True)
 
 
 # ── CompactionConfig ────────────────────────────────────
@@ -121,11 +113,11 @@ class TestAgentRuntimeSpec:
             llm_provider=_MockLLMProvider(),
 
         )
-        assert spec.guards == []
         assert spec.max_turns == 100
         assert spec.hooks == []
         assert spec.system_prompt == ""
         assert isinstance(spec.compaction, CompactionConfig)
+        assert "guards" not in AgentRuntimeSpec.model_fields
 
     def test_frozen(self) -> None:
         spec = AgentRuntimeSpec(
@@ -144,18 +136,6 @@ class TestAgentRuntimeSpec:
         assert isinstance(spec.max_turns, int)
         assert spec.max_turns == 100
 
-    def test_with_guard(self) -> None:
-        guard = _MockGuard()
-        assert isinstance(guard, Guard)  # sanity: verify it satisfies Protocol
-
-        spec = AgentRuntimeSpec(
-            llm_provider=_MockLLMProvider(),
-
-            guards=[guard],
-        )
-        assert len(spec.guards) == 1
-        assert spec.guards[0] is guard
-
     def test_serialization(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
@@ -167,7 +147,7 @@ class TestAgentRuntimeSpec:
         assert data["max_turns"] == 50
         assert data["system_prompt"] == "You are a scientist."
         assert "llm_provider" in data
-        assert "guards" in data
+        assert "guards" not in data
         assert "hooks" in data
         assert "compaction" in data
 
@@ -203,11 +183,9 @@ class TestAgentRuntimeSpec:
             llm_provider=_MockLLMProvider(),
 
             hooks=[BaseHook(), BaseHook()],
-            guards=[_MockGuard()],
         )
         assert isinstance(spec.llm_provider, LLMProvider)
         assert len(spec.hooks) == 2
-        assert len(spec.guards) == 1
 
 
 class TestAgentRuntimeSpecCompactor:
@@ -237,8 +215,6 @@ class TestAgentRuntimeSpecFrozenRejectMutation:
     def test_agent_runtime_spec_frozen_reject_mutation(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-
-            guards=[_MockGuard()],
         )
         with pytest.raises(ValidationError):
             spec.max_turns = 50
@@ -255,8 +231,8 @@ class TestAgentRuntimeSpecDefaults:
         )
         assert spec.max_turns == 100
         assert spec.system_prompt == ""
-        assert spec.guards == []
         assert spec.hooks == []
+        assert "guards" not in AgentRuntimeSpec.model_fields
 
 
 class TestAgentRuntimeSpecArbitraryTypes:
@@ -362,8 +338,6 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
         """Existing _make_spec() pattern (no new fields) still works."""
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-
-            guards=[_MockGuard()],
             hooks=[],
             max_turns=10,
             system_prompt="You are a test agent",

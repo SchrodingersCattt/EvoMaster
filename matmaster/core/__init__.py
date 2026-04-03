@@ -6,7 +6,6 @@ Note: Exp is lazy-imported via __getattr__ to avoid circular import
 
 from .agent import AgentKernel
 from .context_builder import ContextBuilder
-from .guard_pipeline import GuardPipeline, LoopDetectionGuard
 from .hooks import BaseHook, Hook, HookAction
 from .playground import Playground, PlaygroundManager
 
@@ -15,10 +14,8 @@ __all__ = [
     "BaseHook",
     "ContextBuilder",
     "Exp",
-    "GuardPipeline",
     "Hook",
     "HookAction",
-    "LoopDetectionGuard",
     "Playground",
     "PlaygroundManager",
 ]

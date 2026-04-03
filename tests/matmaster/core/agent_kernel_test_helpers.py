@@ -13,7 +13,6 @@ from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.errors import LLMError
-from matmaster.types.guards import GuardContext, GuardResult
 from matmaster.types.messages import (
     LLMResponse,
     Message,
@@ -158,23 +157,6 @@ class ToolCallingProvider:
             yield StreamChunk(content=self._final_content, finish_reason='stop')
 
 
-class DenyGuard:
-    """Guard that denies a specific tool name."""
-
-    def __init__(self, deny_name: str, reason: str = 'forbidden') -> None:
-        self._deny_name = deny_name
-        self._reason = reason
-
-    def evaluate(self, ctx: GuardContext) -> GuardResult:
-        if ctx.tool_name == self._deny_name:
-            return GuardResult(
-                allowed=False,
-                reason=self._reason,
-                guidance='stop',
-            )
-        return GuardResult(allowed=True)
-
-
 class SkipHook(BaseHook):
     """Hook that returns SKIP for a specific tool name."""
 
@@ -243,18 +225,15 @@ class SegmentRecordingHook(BaseHook):
 class _SimpleTestToolRunner:
     """Minimal ToolRunner for kernel tests.
 
-    Executes tools via ToolCatalog.registry lookup with GuardPipeline
-    support for guard/hook-aware tests.
+    Executes tools via ToolCatalog.registry lookup with hook support.
     """
 
     def __init__(
         self,
         catalog: ToolCatalog,
-        guards: list[Any] | None = None,
         hooks: list[Any] | None = None,
     ) -> None:
         self._catalog = catalog
-        self._guards = guards or []
         self._hooks = hooks or []
 
     async def execute_batch(
@@ -264,35 +243,18 @@ class _SimpleTestToolRunner:
         *,
         on_result: Any = None,
     ) -> list[tuple[ToolCallData, ToolResult]]:
-        from matmaster.core.guard_pipeline import GuardPipeline
         from matmaster.core.hooks import (
             HookAction,
-            run_guard_blocked,
             run_post_tool_call,
             run_pre_tool_call,
         )
         from matmaster.tools.tool_result import normalize_tool_result
-
-        guard_pipeline = GuardPipeline(self._guards)
 
         results: list[tuple[ToolCallData, ToolResult]] = []
         for tc in tool_calls:
             # Cancel check
             if ctx.stop_event is not None and ctx.stop_event.is_set():
                 tr = ToolResult(status="cancelled", content="Run cancelled.")
-                results.append((tc, tr))
-                if on_result:
-                    await on_result(tc, tr)
-                continue
-
-            # Guard check
-            guard_result = guard_pipeline.evaluate(tc, ctx.turn, ctx.max_turns)
-            if not guard_result.allowed:
-                await run_guard_blocked(self._hooks, tc, guard_result)
-                blocked_content = f"BLOCKED: {guard_result.reason}"
-                if guard_result.guidance:
-                    blocked_content += f"\n{guard_result.guidance}"
-                tr = ToolResult(status="blocked", content=blocked_content)
                 results.append((tc, tr))
                 if on_result:
                     await on_result(tc, tr)
@@ -336,7 +298,6 @@ def _make_spec(
     *,
     provider: Any | None = None,
     tool_registry: ToolRegistry | None = None,
-    guards: list[Any] | None = None,
     hooks: list[Any] | None = None,
     max_turns: int = 10,
     system_prompt: str = 'You are a test agent',
@@ -346,7 +307,6 @@ def _make_spec(
     catalog = ToolCatalog(tool_registry)
     runner = _SimpleTestToolRunner(
         catalog,
-        guards=guards,
         hooks=hooks,
     )
     return AgentRuntimeSpec(
@@ -354,7 +314,6 @@ def _make_spec(
         tool_catalog=catalog,
         tool_runner=runner,
         runtime_topology=catalog._topology,
-        guards=guards or [],
         hooks=hooks or [],
         max_turns=max_turns,
         system_prompt=system_prompt,

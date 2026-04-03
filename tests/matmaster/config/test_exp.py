@@ -17,7 +17,6 @@ class TestExpConfig:
         cfg = ExpConfig()
         assert cfg.name == "direct"
         assert cfg.max_turns == 100
-        assert cfg.guards == []
         assert cfg.developer_instructions == ""
         assert cfg.tools.builtin == ["*"]
 
@@ -26,7 +25,6 @@ class TestExpConfig:
         data = {
             "name": "direct",
             "max_turns": 200,
-            "guards": [],
             "developer_instructions": "You are Mat Master.",
             "tools": {"builtin": ["*"], "mcp": "*"},
         }

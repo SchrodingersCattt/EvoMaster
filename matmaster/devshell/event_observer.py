@@ -33,7 +33,6 @@ from matmaster.types.events import (
     ToolCallEvent,
     ToolResultEvent,
 )
-from matmaster.types.guards import GuardResult
 from matmaster.types.messages import StreamChunk, ToolCallData
 
 _SOURCE = "devshell"

@@ -8,7 +8,6 @@ from typing import Any, TextIO
 
 from matmaster.core.hooks import BaseHook, HookAction
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.guards import GuardResult
 from matmaster.types.messages import StreamChunk, ToolCallData
 
 _MAX_RESULT_LEN = 1000
@@ -105,12 +104,6 @@ class DevStreamHook(BaseHook):
         if len(display) > _MAX_RESULT_LEN:
             display = display[:_MAX_RESULT_LEN] + "..."
         self._out.write(f"\n{prefix} {display}\n\n")
-        self._out.flush()
-
-    async def on_guard_blocked(
-        self, tool_call: ToolCallData, result: GuardResult
-    ) -> None:
-        self._out.write(f"\n\U0001f6e1\ufe0f guard_blocked: {result.reason}\n\n")
         self._out.flush()
 
     async def on_segment_complete(

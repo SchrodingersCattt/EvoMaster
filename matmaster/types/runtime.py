@@ -18,7 +18,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matmaster.core.hooks import Hook
 
-from .guards import Guard
 from .llm_provider import LLMProvider
 
 if TYPE_CHECKING:
@@ -54,9 +53,6 @@ class AgentRuntimeSpec(BaseModel):
     # build_runtime guarantees a real provider before kernel execution.
     llm_provider: LLMProvider | None = None
 
-    # Guards
-    guards: list[Guard] = Field(default_factory=list)
-
     # Termination (CONT-05: simplified to max_turns field)
     max_turns: int = 100
 
@@ -72,10 +68,9 @@ class AgentRuntimeSpec(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
     # ── Tool Runtime v2 fields (Phase 32, all optional for backward compat) ──
-    # Annotations are Any to avoid circular import (core/__init__ → agent →
-    # guard_pipeline → types.guards triggers types/__init__ → runtime →
-    # tool_runner → guard_pipeline). TYPE_CHECKING block provides static
-    # typing; model_validator below enforces runtime contracts.
+    # Annotations are Any to avoid circular imports across the runtime stack.
+    # TYPE_CHECKING block provides static typing; model_validator below
+    # enforces runtime contracts.
     tool_runner: Any | None = None
     tool_catalog: Any | None = None
     runtime_topology: Any | None = None
@@ -131,5 +126,4 @@ class AgentRuntime:
     kernel: Any  # AgentKernel (avoid circular import)
     spec: AgentRuntimeSpec
     cleanup: Callable[[], Any]
-
 

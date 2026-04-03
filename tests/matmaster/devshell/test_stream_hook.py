@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.guards import GuardResult
 from matmaster.types.messages import StreamChunk, ToolCallData
 
 
@@ -71,13 +70,3 @@ class TestDevStreamHook:
         output = buf.getvalue()
         assert "tool_error:" in output
         assert "Error: boom" in output
-
-    async def test_guard_blocked(self) -> None:
-        hook, buf = self._make_hook()
-        tc = ToolCallData(id="tc-1", name="rm_rf", arguments={})
-        gr = GuardResult(allowed=False, reason="dangerous operation")
-        await hook.on_guard_blocked(tc, gr)
-
-        output = buf.getvalue()
-        assert "guard_blocked:" in output
-        assert "dangerous operation" in output

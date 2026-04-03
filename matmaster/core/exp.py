@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.context_builder import ContextBuilder
-from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
@@ -139,7 +138,6 @@ class Exp:
         return AgentRuntimeSpec(
             llm_provider=ctx.llm_provider,
             max_turns=self._config.max_turns,
-            guards=[],  # Guard instantiation deferred to build_runtime
             compaction=self._config.compaction,
             meta={},
         )
@@ -295,8 +293,6 @@ class Exp:
                 event_sink=None,  # _run_items() injects a local deque-backed sink
             )
 
-        guards = list(spec.guards)
-
         # 8. Build FullToolRunner (ESIN-04: default execution path)
         structural_validation = StructuralValidation()
         capability_policy = DefaultCapabilityPolicy()
@@ -307,7 +303,6 @@ class Exp:
         full_runner = FullToolRunner(
             catalog=catalog,
             structural_validation=structural_validation,
-            guard_pipeline=GuardPipeline(guards),
             capability_policy=capability_policy,
             scheduler=scheduler,
             topology=topology,
@@ -325,7 +320,6 @@ class Exp:
                 'system_prompt': system_prompt,
                 'hooks': hooks,
                 'compactor': compactor,
-                'guards': guards,
             }
         )
 

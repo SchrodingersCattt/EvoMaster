@@ -86,12 +86,12 @@ class TestExpAssemble:
         spec = await exp.assemble(ctx)
         assert spec.max_turns == 100
 
-    async def test_guards_deferred(self) -> None:
-        """guards are deferred to build_runtime; assemble returns empty list."""
-        exp = Exp(ExpConfig(name='test', guards=['mock_guard']))
+    async def test_assemble_does_not_expose_guards_field(self) -> None:
+        """Guard 配置已移除，assemble 产出的 spec 不再暴露 guards 字段。"""
+        exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx()
         spec = await exp.assemble(ctx)
-        assert spec.guards == []
+        assert "guards" not in type(spec).model_fields
 
     async def test_meta_is_empty(self) -> None:
         """Meta bag is empty with new ExpConfig design."""
