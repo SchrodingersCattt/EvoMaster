@@ -45,12 +45,13 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 - ✓ _do_stream_llm() → _stream_llm_items() 子 generator 改造 — v2.2 Phase 34
 - ✓ Hook → Bus 间接路径退役（assistant_state/skill_hit/output_processor/tool_result_hook 全部退役）— v2.2 Phase 34
 - ✓ FullToolRunner 激活为默认执行路径 + run_stream() 输出 BusEvent + ToolCatalog version 消费 — v2.2 Phase 34
+- ✓ ToolRegistry 降级为纯存储层 + ToolCatalog 成为唯一上层消费接口 + ReadBeforeModifyGuard/CapabilityPolicy 迁入三层约束 — v2.2 Phase 35
+- ✓ 去总线化完成（MessageBus/EventRouter/ConfirmationHook 物理删除，RunEventFanout 替代，bus.py 删除）— v2.2 Phase 36
+- ✓ 调度边界固化（stateless SessionCapabilities 行为回归锁定，persistent shell 并发明确延后）— v2.2 Phase 36
 
 ### Active
 
-- [ ] 约束迁移（read-before-modify → RunStateGuard，bash 危险命令 → CapabilityPolicy）
-- [ ] 去总线化评估与实施（MessageBus + EventRouter）
-- [ ] 调度边界固化（当前 stateless SessionCapabilities 行为回归锁定）
+（v2.2 里程碑内全部需求已完成，无 Active 需求）
 
 ## Current Milestone: v2.2 AgentKernel Generator-First + Tool Runtime v2
 
@@ -79,13 +80,13 @@ matmaster/ 运行时路径完全独立于 evomaster/playground/src。三方向�
 
 ### Current State
 
-**As of 2026-04-03:** Phase 35 complete — 工具安全检查统一迁入三层约束模型：ReadBeforeModifyGuard 拦截未读文件编辑，CapabilityPolicy 接管 bash 危险命令检测，工具内部安全代码全部删除。ToolBinding state_mode/stop_mode 启用（ToolCompiler 填充，FullToolRunner 消费）。ToolRegistry 降级为纯存储层，ToolCatalog 成为唯一上层消费接口，ContextBuilder 工具枚举改为通用 function calling 说明。Phase 36 接下来负责去总线化 + 调度边界固化；ASCH-01（persistent shell 并发、SessionCapabilities 自适应）已明确延后到 future phase。
+**As of 2026-04-03:** Phase 36 complete — v2.2 里程碑最后一个 phase。MessageBus/EventRouter/ConfirmationHook 物理删除，RunEventFanout 替代 queue-based transport 实现 SSE-first 直连 dispatch。bus.py 全部删除，Exp/ContextCompactor 的 `bus=` 参数清除，DevShell 改用 SimpleQueue-backed DevEventObserver。单一 `run_agent()` 入口替代 `run_agent()`/`run_agent_stream()` 双入口。stateless SessionCapabilities 调度边界通过显式回归测试固化，persistent shell 并发延后到 ASCH-01。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 Source: 15,839 LOC (matmaster/).
 
 Architecture (current):
-- `matmaster/core/` — AgentKernel, GuardPipeline, Hooks, Exp (config-driven), ContextBuilder, ContextCompactor, MessageBus, Playground
+- `matmaster/core/` — AgentKernel, GuardPipeline, Hooks, Exp (config-driven), ContextBuilder, ContextCompactor, Playground
 - `matmaster/config/` — ExpConfig, LLMConfig (profiles/routes), loader (YAML + TOML)
 - `matmaster/exps/` — TOML exp 定义 (`direct.toml`, `explore.toml`)
 - `matmaster/tools/` — ToolRegistry, BuiltinTool (原生注册), LazyMCP, SkillTool
@@ -93,8 +94,8 @@ Architecture (current):
 - `matmaster/sessions/` — Session Protocol, LocalSession, SSHSession (原生 paramiko)
 - `matmaster/types/` — PlaygroundContext, AgentRuntimeSpec, AgentEvent, CompactionConfig, KernelRunResult, Guards, LLMProvider, Messages, WorkerRegistry, ToolPlane/SessionCapabilities/RuntimeTopology (topology), ToolSpec/ToolBinding/ResourceClaim/ToolInstance (tool_spec), ToolDecision (tool_decision)
 - `matmaster/providers/` — OpenAIProvider, llm_factory
-- `matmaster/hooks/` — ConfirmationHook, OutputProcessorHook, SkillHitHook, AssistantStateHook
-- `matmaster/integration/` — EventRouter, EventPayloads, PersistenceHandler, SSEHandler, WorkspaceHandler, BohriumSetupService, bohrium_env, workspace_resolver
+- `matmaster/hooks/` — BaseHook (OutputProcessorHook, SkillHitHook, AssistantStateHook 已退役)
+- `matmaster/integration/` — RunEventFanout, EventPayloads, PersistenceHandler, SSEHandler, WorkspaceHandler, BohriumSetupService, bohrium_env, workspace_resolver
 - `matmaster/calculation/` — env_config, oss_io, job_service, path_adaptor
 - `matmaster/devshell/` — DevConfig, DevRunner, DevStreamHook, EventLogger, REPL, CLI
 - `matmaster/skills/` — registry 与 lazymcp skill roots
@@ -165,4 +166,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-03 after Phase 35 completion*
+*Last updated: 2026-04-03 after Phase 36 completion (v2.2 milestone final phase)*
