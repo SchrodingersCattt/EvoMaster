@@ -93,6 +93,10 @@ def _run_claude_p(
         "--max-turns",
         str(max_turns),
         "--bare",
+        "--append-system-prompt",
+        "All output files MUST be written to the current working directory (cwd). "
+        "Never create files in absolute paths like /home/... or /tmp/... outside cwd. "
+        "Use relative paths only.",
     ]
     if model:
         cmd.extend(["--model", model])
