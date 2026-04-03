@@ -21,7 +21,6 @@ context_window_tokens 设为极小值以快速触发。
 
 from __future__ import annotations
 
-import asyncio
 import os
 import time
 from pathlib import Path
@@ -162,17 +161,6 @@ class VerboseTool:
 # ── Helpers ───────────────────────────────────────────────
 
 
-def _drain_bus(bus):
-    """Drain all events from bus."""
-    events = []
-    while True:
-        try:
-            events.append(bus.get_nowait())
-        except asyncio.QueueEmpty:
-            break
-    return events
-
-
 def _print_result(label, kr, compactor, elapsed=None):
     """Print structured test result."""
     print(f"\n{'='*60}")
@@ -211,9 +199,8 @@ class TestRealAPICompaction:
         max_turns: int = 12,
         system_prompt: str | None = None,
     ):
-        """构建启用压缩的 kernel + spec + bus。"""
+        """构建启用压缩的 kernel + spec + collected events list。"""
         from matmaster.core.agent import AgentKernel
-        from matmaster.core.bus import MessageBus
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.tools.tool_registry import ToolRegistry
         from matmaster.types.runtime import AgentRuntimeSpec, CompactionConfig
@@ -228,11 +215,15 @@ class TestRealAPICompaction:
         VerboseTool._call_count = 0
         registry.register(VerboseTool(), source="test")
 
-        bus = MessageBus()
+        collected_events: list = []
+
+        async def event_sink(event):
+            collected_events.append(event)
+
         compactor = ContextCompactor(
             config=compaction_cfg,
             summary_provider=compaction_provider,
-            bus=bus,
+            event_sink=event_sink,
         )
 
         if system_prompt is None:
@@ -257,7 +248,7 @@ class TestRealAPICompaction:
         )
 
         kernel = AgentKernel()
-        return kernel, spec, bus, compactor
+        return kernel, spec, collected_events, compactor
 
     async def test_compaction_triggers_with_real_api(
         self, main_provider, compaction_provider
@@ -273,7 +264,7 @@ class TestRealAPICompaction:
         from matmaster.types.events import ContextCompactionEvent
         from matmaster.types.messages import SystemMessage
 
-        kernel, spec, bus, compactor = self._build_kernel_with_compaction(
+        kernel, spec, collected_events, compactor = self._build_kernel_with_compaction(
             main_provider,
             compaction_provider,
             context_window=800,
@@ -311,8 +302,7 @@ class TestRealAPICompaction:
         )
 
         # ── 事件 ──
-        events = _drain_bus(bus)
-        compaction_events = [e for e in events if isinstance(e, ContextCompactionEvent)]
+        compaction_events = [e for e in collected_events if isinstance(e, ContextCompactionEvent)]
         print(f"  Compaction events: {len(compaction_events)}")
         for i, evt in enumerate(compaction_events):
             print(
@@ -349,7 +339,7 @@ class TestRealAPICompaction:
         self, main_provider, compaction_provider
     ) -> None:
         """大 context_window 下单轮问答不触发压缩。"""
-        kernel, spec, bus, compactor = self._build_kernel_with_compaction(
+        kernel, spec, collected_events, compactor = self._build_kernel_with_compaction(
             main_provider,
             compaction_provider,
             context_window=128000,
@@ -368,7 +358,7 @@ class TestRealAPICompaction:
         self, main_provider, compaction_provider
     ) -> None:
         """压缩后 kernel 仍能正常完成并产出有效回答。"""
-        kernel, spec, bus, compactor = self._build_kernel_with_compaction(
+        kernel, spec, collected_events, compactor = self._build_kernel_with_compaction(
             main_provider,
             compaction_provider,
             context_window=800,

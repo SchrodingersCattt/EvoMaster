@@ -137,20 +137,10 @@ class ContextCompactor:
         config: CompactionConfig,
         summary_provider: LLMProvider,
         event_sink: Callable[[Any], Awaitable[None]] | None = None,
-        *,
-        bus: Any | None = None,
     ) -> None:
         self._config = config
         self._summary_provider = summary_provider
-        # Phase 34: event_sink replaces bus dependency.
-        # bus= kept as deprecated kwarg for backward compat during migration.
-        if event_sink is not None:
-            self._event_sink = event_sink
-        elif bus is not None:
-            # Backward compat: wrap bus.emit as event_sink
-            self._event_sink = bus.emit
-        else:
-            self._event_sink = None
+        self._event_sink = event_sink
         self._last_llm_message_count: int = 0
         self._last_compaction_turn: int = 0
         self._compaction_count: int = 0

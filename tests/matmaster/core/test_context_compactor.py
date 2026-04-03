@@ -295,8 +295,7 @@ class TestCompactorMessageCount:
 
 
 class TestCompactorEventEmission:
-    async def test_emits_context_compaction_event(self) -> None:
-        from matmaster.core.bus import MessageBus
+    async def test_emits_context_compaction_event_via_sink(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.events import ContextCompactionEvent
 
@@ -304,20 +303,27 @@ class TestCompactorEventEmission:
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
         provider = MockSummaryProvider()
-        bus = MessageBus()
+        received: list = []
+
+        async def sink(event):
+            received.append(event)
+
         msgs = _build_long_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=sink
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
 
-        event = bus.get_nowait()
+        assert len(received) == 1
+        event = received[0]
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["compaction_count"] == 1
         assert event.payload["strategy"] == "summary"
         assert event.payload["trigger_tokens"] > 0
 
-    async def test_no_event_when_no_bus(self) -> None:
+    async def test_no_event_when_no_sink(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(
@@ -325,7 +331,9 @@ class TestCompactorEventEmission:
         )
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=None)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=None
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
@@ -336,7 +344,6 @@ class TestToolTruncationFallback:
 
     async def test_truncates_when_no_compressible_turns(self) -> None:
         """1 turn with huge tool results -> falls back to tool_truncation."""
-        from matmaster.core.bus import MessageBus
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.events import ContextCompactionEvent
 
@@ -344,7 +351,10 @@ class TestToolTruncationFallback:
             enabled=True, context_window_tokens=500, trigger_ratio=0.9
         )
         provider = MockSummaryProvider()
-        bus = MessageBus()
+        received: list = []
+
+        async def sink(event):
+            received.append(event)
 
         # 1 turn: Assistant with 3 tool calls + 3 large ToolMessages
         msgs = [
@@ -374,7 +384,9 @@ class TestToolTruncationFallback:
             ),
         ]
 
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=sink
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
@@ -394,7 +406,8 @@ class TestToolTruncationFallback:
         assert len(truncated_msgs) > 0
 
         # Event should have strategy=tool_truncation
-        event = bus.get_nowait()
+        assert len(received) == 1
+        event = received[0]
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["strategy"] == "tool_truncation"
 

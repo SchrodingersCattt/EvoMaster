@@ -6,7 +6,6 @@ expected pattern: thought -> [tool_call -> tool_result]* -> finish.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -14,7 +13,6 @@ from typing import Any
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
-from matmaster.core.bus import MessageBus
 from matmaster.core.exp import Exp
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -92,8 +90,8 @@ class TestEventSequenceAlignment:
     """Verify new pipeline emits events in expected order."""
 
     async def test_event_sequence_alignment(self, tmp_path: Path) -> None:
-        """Verify new pipeline emits events in expected order.
-        Expected: thought -> tool_call -> tool_result -> thought -> (finish via return)
+        """Verify pipeline emits events in expected order via run_stream().
+        Expected: thought -> tool_call -> tool_result -> thought -> run_result
         """
         mock_llm = _ToolCallThenFinishLLM()
         pg_ctx = PlaygroundContext(
@@ -102,34 +100,25 @@ class TestEventSequenceAlignment:
             cache_area=tmp_path / "cache",
             llm_provider=mock_llm,
         )
-        bus = MessageBus()
         tool = _SimpleTool()
 
         config = ExpConfig(name="direct")
         exp = Exp(config)
-        runtime = await exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx)
         # Register test tool via catalog overlay for version-bumped injection
         runtime.spec.tool_catalog.register_overlay(tool, source="test")
 
+        # Collect events from kernel.run_stream() generator
         kernel = AgentKernel()
-        finish = await kernel.run(runtime.spec, "alignment test")
-
-        assert finish.result.reason == "natural"
-
-        # Collect events from bus
         events = []
-        try:
-            while True:
-                events.append(bus.get_nowait())
-        except asyncio.QueueEmpty:
-            pass
+        async for event in kernel.run_stream(runtime.spec, "alignment test"):
+            events.append(event)
 
         # Extract event type sequence
         event_types = [e.type for e in events]
 
         # Expected pattern:
         # thought (stream from first turn) -> tool_call -> tool_result -> thought (second turn)
-        # FinishEvent is returned by kernel.run(), not emitted to bus
         assert "thought" in event_types, f"Missing thought event, got: {event_types}"
         assert (
             "tool_call" in event_types

@@ -329,7 +329,7 @@ class TestSkillOverlayCatalog:
 
 
 class TestBuildRuntimeCompactorEventSink:
-    """Compactor creation uses event_sink=None instead of bus=bus."""
+    """Compactor creation uses event_sink=None (bus parameter removed in Phase 36)."""
 
     @pytest.mark.asyncio
     async def test_compactor_uses_event_sink(self) -> None:
