@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: milestone
+milestone: v2.2
+milestone_name: AgentKernel Generator-First + Tool Runtime v2
 status: Ready for next milestone
-stopped_at: Completed 35-01-PLAN.md
-last_updated: "2026-04-03T04:38:27.693Z"
+stopped_at: Completed 35-03-PLAN.md
+last_updated: "2026-04-03T05:07:48.586Z"
 last_activity: 2026-04-02
 progress:
-  total_phases: 25
-  completed_phases: 24
-  total_plans: 55
-  completed_plans: 56
+  total_phases: 5
+  completed_phases: 4
+  total_plans: 15
+  completed_plans: 15
   percent: 100
 ---
 
@@ -40,6 +40,7 @@ Progress: [====================] 100%
 
 - [Phase 35]: write_file excluded from ReadBeforeModifyGuard._MODIFY_TOOLS; uses validate_input (needs session.path_exists)
 - [Phase 35]: AgentRuntimeSpec gains read_tracker field; agent.py passes it to GuardPipeline constructor
+- [Phase 35]: ToolCatalog is sole upper-layer facade; ContextBuilder generic tools section; _SimpleTestToolRunner for kernel test compatibility
 
 ### Pending Todos
 
@@ -51,6 +52,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-03T04:38:27.691Z
-Stopped at: Completed 35-01-PLAN.md
+Last session: 2026-04-03T05:07:48.584Z
+Stopped at: Completed 35-03-PLAN.md
 Resume file: None

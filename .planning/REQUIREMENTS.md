@@ -85,8 +85,8 @@
 - [ ] **CMIG-01**: 扩展 GuardContext 增加 ReadTracker，将 read-before-modify 检查从 WriteTool/EditTool 迁入 RunStateGuard
 - [ ] **CMIG-02**: 将 bash_tool 的 `_is_dangerous_command` 迁入 CapabilityPolicy
 - [x] **CMIG-03**: ToolBinding 的 state_mode / stop_mode 字段启用，Scheduler 根据 SessionCapabilities 调整策略
-- [ ] **CMIG-04**: ToolRegistry 降级为纯存储层，ToolCatalog 接管所有上层消费接口
-- [ ] **CMIG-05**: ContextBuilder 工具来源从 `tool_registry.all_tools` 迁移到 ToolCatalog，或移除 system prompt 工具枚举段（如 ESIN-08 未在 Phase 34 处理）
+- [x] **CMIG-04**: ToolRegistry 降级为纯存储层，ToolCatalog 接管所有上层消费接口
+- [x] **CMIG-05**: ContextBuilder 工具来源从 `tool_registry.all_tools` 迁移到 ToolCatalog，或移除 system prompt 工具枚举段（如 ESIN-08 未在 Phase 34 处理）
 
 ### 去总线化
 
@@ -173,8 +173,8 @@
 | CMIG-01 | Phase 35 | Pending |
 | CMIG-02 | Phase 35 | Pending |
 | CMIG-03 | Phase 35 | Complete |
-| CMIG-04 | Phase 35 | Pending |
-| CMIG-05 | Phase 35 | Pending |
+| CMIG-04 | Phase 35 | Complete |
+| CMIG-05 | Phase 35 | Complete |
 | DBUS-01 | Phase 36 | Pending |
 | DBUS-02 | Phase 36 | Pending |
 | DBUS-03 | Phase 36 | Pending |
