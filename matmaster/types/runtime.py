@@ -2,8 +2,8 @@
 
 Layer 2 boundary contracts:
 - AgentRuntimeSpec: Exp layer output built by Exp.assemble(ctx), consumed by
-  AgentKernel.run(spec, task). frozen=True guarantees immutability during
-  kernel execution.
+  AgentKernel.run_stream(spec, task). frozen=True guarantees immutability
+  during kernel execution.
 - AgentRuntime: runtime bundle returned by Exp.build_runtime(). Holds the
   kernel, assembled spec, and cleanup callable.
 """
@@ -17,8 +17,6 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matmaster.core.hooks import Hook
-from matmaster.types.events import RunResultEvent
-from matmaster.types.messages import Message
 
 from .guards import Guard
 from .llm_provider import LLMProvider
@@ -45,7 +43,7 @@ class AgentRuntimeSpec(BaseModel):
     """Exp 层输出的 agent 运行时规格契约。
 
     由 Exp.assemble(ctx: PlaygroundContext) 构建，
-    传递给 AgentKernel.run(spec, task)。
+    传递给 AgentKernel.run_stream(spec, task)。
     frozen=True 保证 kernel 运行期间规格不变。
     """
 
@@ -109,15 +107,13 @@ class AgentRuntimeSpec(BaseModel):
 
 @dataclass(frozen=True)
 class KernelResult:
-    """AgentKernel.run() 的终止结果摘要。
+    """AgentKernel 的终止结果摘要，由 run_stream 内部产生。
 
     内核层专属，不参与总线传输。总线事件 RunResultEvent
-    由上层（service / runner）从 KernelResult 按需构造。
+    在 run_stream() 中从 _TerminalItem 直接构造。
 
     num_turns 语义：已完成 LLM 调用的轮数。cancelled 路径在 turn 递增前退出，
     所以 num_turns 反映的是已完成的轮数，不含被中断的当前轮。
-
-    usage：最后一轮 LLM 调用的 token 统计（非多轮累加），与 MATTER Evidence / baseline 口径对齐。
     """
 
     status: str
@@ -126,15 +122,6 @@ class KernelResult:
     num_turns: int = 0
     stop_reason: str | None = None
     usage: dict[str, int] = field(default_factory=dict)
-
-    def to_run_result_event(self, source: str = "agent") -> RunResultEvent:
-        """构造总线事件。上层发总线时统一走这个方法。"""
-        return RunResultEvent(
-            source=source,
-            status=self.status,
-            reason=self.reason,
-            final_content=self.final_content,
-        )
 
 
 @dataclass(frozen=True)
@@ -150,13 +137,3 @@ class AgentRuntime:
     cleanup: Callable[[], Any]
 
 
-@dataclass(frozen=True)
-class KernelRunResult:
-    """Return value of AgentKernel.run().
-
-    Bundles the terminal result with the full message transcript,
-    enabling callers to extract conversation history for multi-turn.
-    """
-
-    result: KernelResult
-    messages: list[Message]
