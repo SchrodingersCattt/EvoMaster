@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.2
-milestone_name: AgentKernel Generator-First + Tool Runtime v2
-status: executing
-stopped_at: Completed 35-02-PLAN.md
-last_updated: "2026-04-03T04:32:22.364Z"
-last_activity: 2026-04-03
+milestone: v1.1
+milestone_name: milestone
+status: Ready for next milestone
+stopped_at: Completed 35-01-PLAN.md
+last_updated: "2026-04-03T04:38:27.693Z"
+last_activity: 2026-04-02
 progress:
-  total_phases: 5
-  completed_phases: 3
-  total_plans: 15
-  completed_plans: 13
-  percent: 50
+  total_phases: 25
+  completed_phases: 24
+  total_plans: 55
+  completed_plans: 56
+  percent: 100
 ---
 
 # Project State
@@ -21,73 +21,25 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 35 — toolregistry
+**Current focus:** v2.1 已归档，待启动下一里程碑
 
 ## Current Position
 
-Phase: 35 (toolregistry) — EXECUTING
-Plan: 2 of 3
-Status: Ready to execute
-Last activity: 2026-04-03
+Phase: Milestone v2.1 complete
+Plan: All archived
+Status: Ready for next milestone
+Last activity: 2026-04-02
 
-Progress: [█████░░░░░] 50%
-
-## Performance Metrics
-
-**Velocity:**
-
-- Total plans completed: 1
-- Average duration: 10min
-- Total execution time: 0.17 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 32 | 1 | 10min | 10min |
-
-**Recent Trend:**
-
-- Last 5 plans: 10min
-- Trend: starting
-
-*Updated after each plan completion*
-| Phase 32 P02 | 7min | 2 tasks | 6 files |
-| Phase 32 P03 | 6min | 1 tasks | 2 files |
-| Phase 34 P01 | 20min | 2 tasks | 11 files |
-| Phase 34 P02 | 10min | 2 tasks | 5 files |
-| Phase 34 P03 | 8min | 2 tasks | 14 files |
-| Phase 34 P04 | 10min | 1 tasks | 3 files |
-| Phase 35 P02 | 4min | 2 tasks | 4 files |
+Progress: [====================] 100%
 
 ## Accumulated Context
 
 ### Decisions
 
-(v2.1 决策已归档到 milestones/v2.1-ROADMAP.md)
+(v2.1 决策已归档到 milestones/v2.1-ROADMAP.md，清空以备下一里程碑)
 
-v2.2 新决策:
-
-- 采用方案 B（新 kernel generator + 适配层），平衡重构收益与迁移成本
-- Phase 32 核心骨架 25 个需求一体交付，因 Kernel generator 和 Tool Runtime v2 类型体系互相依赖无法拆分
-- ToolInstance 用 frozen dataclass 而非 Pydantic（持有 callable executor）
-- event_payloads.py 读 'payload' 输出 'info' 保持 SSE 前端兼容
-- [Phase 32]: ToolRunner/ToolCatalog/RuntimeTopology typed as Any at Pydantic runtime to avoid circular import, TYPE_CHECKING for static analysis
-- [Phase 32]: _run_items() uses local _KernelState preserving Kernel statelessness; Phase 1 only yields final-snapshot events (Hook path unchanged until Phase 34)
-- [Phase 33 D-10 revised]: Exp.build_runtime() 注入 FullToolRunner 从 Phase 33 移至 Phase 34（ESIN-04）。Phase 33 只实现+测试执行链。原因：_run_items() 缺 tool 事件 yield（KGEN-06，已修复）+ Hook→Bus 事件链未替代 + on_skill_hit 未走 catalog overlay
-- [Advancement Plan]: 三波次推进策略——Wave A 纯实现不触碰 Exp/Service，Wave B 打通 generator 事件链后切默认，Wave C 约束迁移+降级
-- [Advancement Plan D-05]: ToolCompiler 是注册时一次性编译（非运行时解析），ToolCatalog 存储 ToolInstance
-- [Advancement Plan D-06]: execute_batch 逐工具返回结果，不整批失败
-- [Phase 34 P01]: run()/run_loop() backward compat path fully preserved; generator path is parallel, not replacement
-- [Phase 34 P01]: ContextCompactor bus= kept as deprecated kwarg wrapping bus.emit as event_sink
-- [Phase 34 P01]: _call_llm_streaming() collects items for incomplete-response retry, yields events immediately
-- [Phase 34]: event_payloads.py dual-key info mapping: read 'info' first then 'payload' for generator/Hook backward compat
-- [Phase 34]: All 4 Hook deletions confirmed safe: Plan 1 generator events provide equivalent functionality
-- [Phase 34]: Pre-existing test failures (7 tests draining bus via run() path) documented as deferred items, not caused by Hook retirement
-- [Phase 34]: FullToolRunner path bypasses entire legacy guard/hook block (FullToolRunner has its own seven-step chain)
-- [Phase 34]: run_stream() yields BusEvent directly via _consume_and_yield() inner generator, callers never see _KernelItem
-- [Phase 34]: Catalog version sentinel last_catalog_version=-1 ensures first-turn build_definitions always fires
-- [Phase 35]: Cancel check moved after catalog lookup to access stop_mode metadata on ToolBinding
+- [Phase 35]: write_file excluded from ReadBeforeModifyGuard._MODIFY_TOOLS; uses validate_input (needs session.path_exists)
+- [Phase 35]: AgentRuntimeSpec gains read_tracker field; agent.py passes it to GuardPipeline constructor
 
 ### Pending Todos
 
@@ -96,13 +48,9 @@ None.
 ### Blockers/Concerns
 
 - tests/test_streaming_thought_protocol.py 的收集失败需要并入质量门禁
-- Phase 34 的 ConfirmationHook 双向流迁移路径需要单独研究（Research Summary 标记）
-- Phase 34 的 _stream_llm_items() 是 130+ 行状态机改造，需要建立事件捕获测试基线
-- [GPT Review 2026-04-02]: Phase 34 scope 扩大——ESIN-04~08（Exp 激活 + 5 个耦合点修复）。Phase 34 是 v2.2 最大的集成风险点
-- KGEN-06 已提前实现（commit 6f534fa6），Phase 34 scope 减少一项
 
 ## Session Continuity
 
-Last session: 2026-04-03T04:32:22.361Z
-Stopped at: Completed 35-02-PLAN.md
+Last session: 2026-04-03T04:38:27.691Z
+Stopped at: Completed 35-01-PLAN.md
 Resume file: None

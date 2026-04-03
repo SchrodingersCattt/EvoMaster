@@ -63,6 +63,10 @@ class AgentRuntimeSpec(BaseModel):
     # Guards
     guards: list[Guard] = Field(default_factory=list)
 
+    # ReadTracker for Read-Before-Modify enforcement via GuardPipeline
+    # Actual type: ReadTracker (avoid circular import, use Any)
+    read_tracker: Any | None = None
+
     # Termination (CONT-05: simplified to max_turns field)
     max_turns: int = 100
 

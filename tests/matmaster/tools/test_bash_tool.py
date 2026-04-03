@@ -1,4 +1,4 @@
-"""Tests for BashTool."""
+"""Tests for BashTool -- pure execution layer (safety checks in CapabilityPolicy)."""
 
 from __future__ import annotations
 
@@ -36,9 +36,19 @@ class TestBashToolBasic:
         tool = BashTool()
         assert isinstance(tool, Tool)
 
+    def test_no_dangerous_patterns_in_bash_tool(self) -> None:
+        """Verify bash_tool.py no longer contains danger patterns (migrated to CapabilityPolicy)."""
+        import inspect
+        import matmaster.tools.builtin.bash_tool as bash_mod
+
+        source = inspect.getsource(bash_mod)
+        assert "_DANGEROUS_COMMAND_PATTERNS" not in source
+        assert "is_dangerous_bash_command" not in source
+        assert "is_dangerous_python_content" not in source
+
 
 class TestBashToolExecution:
-    """BashTool command execution."""
+    """BashTool command execution (pure execution, no safety filtering)."""
 
     async def test_normal_command_returns_output_and_exit_code(
         self, mock_session: MagicMock
@@ -49,11 +59,13 @@ class TestBashToolExecution:
         assert "exit code 0" in result
         mock_session.exec_bash.assert_called_once()
 
-    async def test_dangerous_command_blocked(self, mock_session: MagicMock) -> None:
+    async def test_any_command_executes_now(self, mock_session: MagicMock) -> None:
+        """BashTool no longer blocks commands internally; CapabilityPolicy handles safety."""
         tool = BashTool(session=mock_session)
         result = await tool.execute({"command": "env"})
-        assert "Blocked:" in result
-        mock_session.exec_bash.assert_not_called()
+        # BashTool now executes all commands -- safety is CapabilityPolicy's job
+        assert "hello world" in result
+        mock_session.exec_bash.assert_called_once()
 
     async def test_session_not_injected_returns_error(self) -> None:
         tool = BashTool()
@@ -115,18 +127,23 @@ class TestBashToolAsyncSubprocess:
         mock_proc.kill.assert_called_once()
         mock_proc.wait.assert_awaited_once()
 
-    async def test_dangerous_blocked(self) -> None:
-        """Async path: dangerous commands blocked before subprocess creation."""
+    async def test_async_path_executes_all_commands(self) -> None:
+        """Async path: no longer blocks commands (CapabilityPolicy handles safety)."""
         tool = self._make_tool_with_local_session()
+
+        mock_proc = AsyncMock()
+        mock_proc.communicate = AsyncMock(return_value=(b"output", b""))
+        mock_proc.returncode = 0
 
         with patch(
             "matmaster.tools.builtin.bash_tool.asyncio.create_subprocess_exec",
             new_callable=AsyncMock,
+            return_value=mock_proc,
         ) as mock_create:
             result = await tool.execute({"command": "env"})
 
-        assert "Blocked:" in result
-        mock_create.assert_not_called()
+        assert "output" in result
+        mock_create.assert_called_once()
 
     async def test_session_dependent_fallback(self) -> None:
         """Non-LocalSession: falls back to session.exec_bash via base class to_thread."""

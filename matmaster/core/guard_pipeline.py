@@ -1,4 +1,4 @@
-"""GuardPipeline and LoopDetectionGuard for kernel tool call gating.
+"""GuardPipeline, LoopDetectionGuard, and ReadBeforeModifyGuard for kernel tool call gating.
 
 GuardPipeline chains a built-in LoopDetectionGuard (always first, not removable)
 with optional external guards. Evaluation short-circuits on first deny.
@@ -6,13 +6,20 @@ with optional external guards. Evaluation short-circuits on first deny.
 LoopDetectionGuard detects repeated identical tool calls (same name + args
 fingerprint) within a sliding window and blocks execution when the count
 reaches the threshold.
+
+ReadBeforeModifyGuard enforces the Read-Before-Modify protocol for edit_file:
+files must be read (tracked by ReadTracker) before they can be edited.
+write_file is excluded -- its read-before-modify check uses input_validator
+(needs session.path_exists, which Guard layer should not depend on).
 """
 
 from __future__ import annotations
 
 import json
+import posixpath
 import time
 from collections import deque
+from typing import Any
 
 from matmaster.types.guards import Guard, GuardContext, GuardResult, RecentCall
 from matmaster.types.messages import ToolCallData
@@ -69,6 +76,43 @@ class LoopDetectionGuard:
         return GuardResult(allowed=True)
 
 
+class ReadBeforeModifyGuard:
+    """Enforce Read-Before-Modify protocol for edit_file.
+
+    Only edit_file is in _MODIFY_TOOLS. write_file is excluded because its
+    new-file detection requires session.path_exists (a session capability
+    that Guard layer should not depend on). write_file uses input_validator
+    instead.
+
+    When read_tracker is None in GuardContext, enforcement is disabled
+    (backward compatibility).
+    """
+
+    _MODIFY_TOOLS: frozenset[str] = frozenset({"edit_file"})
+
+    def evaluate(self, ctx: GuardContext) -> GuardResult:
+        """Check that files are read before modify for edit_file calls."""
+        if ctx.tool_name not in self._MODIFY_TOOLS:
+            return GuardResult(allowed=True)
+
+        if ctx.read_tracker is None:
+            return GuardResult(allowed=True)
+
+        file_path = ctx.tool_args.get("file_path", "")
+        if not file_path:
+            return GuardResult(allowed=True)
+
+        normalized = posixpath.normpath(file_path)
+        if not ctx.read_tracker.has_been_read(normalized):
+            return GuardResult(
+                allowed=False,
+                reason=f"File '{file_path}' must be read before modify",
+                guidance="Read the file first using read_file before editing.",
+            )
+
+        return GuardResult(allowed=True)
+
+
 class GuardPipeline:
     """Pipeline that chains a built-in LoopDetectionGuard with external guards.
 
@@ -78,12 +122,17 @@ class GuardPipeline:
     Calls are recorded to recent_calls only after all guards pass.
     """
 
-    def __init__(self, external_guards: list[Guard] | None = None) -> None:
+    def __init__(
+        self,
+        external_guards: list[Guard] | None = None,
+        read_tracker: Any | None = None,
+    ) -> None:
         self._loop_guard = LoopDetectionGuard()
         self._guards: list[Guard] = [self._loop_guard]
         if external_guards:
             self._guards.extend(external_guards)
         self._recent_calls: deque[RecentCall] = deque(maxlen=LOOP_WINDOW)
+        self._read_tracker = read_tracker
 
     def evaluate(
         self, tool_call: ToolCallData, current_turn: int, max_turns: int
@@ -96,6 +145,7 @@ class GuardPipeline:
             current_turn=current_turn,
             max_turns=max_turns,
             recent_calls=list(self._recent_calls),
+            read_tracker=self._read_tracker,
         )
         for guard in self._guards:
             result = guard.evaluate(ctx)

@@ -1,7 +1,8 @@
 """WriteTool -- create/overwrite files via session.
 
-Enforces Read-Before-Modify protocol (D-02): existing files must be
-read (tracked by ReadTracker) before they can be overwritten.
+Read-Before-Modify for existing files is enforced via validate_input()
+(input_validator path in ToolInstance). This preserves the path_exists
+session capability check that Guard layer should not depend on.
 New files (path_exists=False) are written without restriction.
 
 When tracker is None, protocol enforcement is disabled (backward compat).
@@ -19,7 +20,7 @@ from .read_tracker import ReadTracker
 
 
 class WriteTool(BuiltinTool):
-    """Write content to a file. Enforces Read-Before-Modify for existing files."""
+    """Write content to a file. Read-Before-Modify via validate_input for existing files."""
 
     name: ClassVar[str] = "write_file"
     description: ClassVar[str] = (
@@ -72,6 +73,18 @@ class WriteTool(BuiltinTool):
                 )
         except (TypeError, ValueError):
             return ToolDecision(decision="deny", reason=f"invalid file_path: '{file_path}'")
+
+        # Read-before-modify check for existing files
+        if self._tracker is not None and self._session is not None:
+            normalized = posixpath.normpath(file_path)
+            if self._session.path_exists(file_path) and not self._tracker.has_been_read(
+                normalized
+            ):
+                return ToolDecision(
+                    decision="deny",
+                    reason=f"File '{file_path}' must be read before overwrite",
+                    guidance="Read the file first using read_file.",
+                )
         return None
 
     def _execute(self, arguments: dict[str, Any]) -> str:
@@ -79,14 +92,6 @@ class WriteTool(BuiltinTool):
 
         file_path: str = arguments.get("file_path", "")
         content: str = arguments.get("content", "")
-
-        # Read-Before-Modify check (D-02, D-03)
-        if (
-            self._tracker is not None
-            and session.path_exists(file_path)
-            and not self._tracker.has_been_read(posixpath.normpath(file_path))
-        ):
-            return f"Error: file '{file_path}' must be read before modify"
 
         session.write_file(file_path, content)
         return f"File written successfully to: {file_path}"

@@ -5,7 +5,7 @@
   "model_profile": "quality",
   "parallelization": true,
   "workflow": {
-    "_auto_chain_active": false,
+    "_auto_chain_active": true,
     "nyquist_validation": true,
     "plan_check": true,
     "research": true,

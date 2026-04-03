@@ -168,7 +168,7 @@ class AgentKernel:
             *(history or []),
             UserMessage(content=task),
         ]
-        guard_pipeline = GuardPipeline(spec.guards)
+        guard_pipeline = GuardPipeline(spec.guards, read_tracker=spec.read_tracker)
 
         turn = 0
         if spec.compactor:

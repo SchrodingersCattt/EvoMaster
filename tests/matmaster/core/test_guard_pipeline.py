@@ -1,4 +1,4 @@
-"""Tests for matmaster.core.guard_pipeline -- LoopDetectionGuard and GuardPipeline."""
+"""Tests for matmaster.core.guard_pipeline -- LoopDetectionGuard, ReadBeforeModifyGuard, and GuardPipeline."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ from typing import Any
 from matmaster.core.guard_pipeline import (
     GuardPipeline,
     LoopDetectionGuard,
+    ReadBeforeModifyGuard,
 )
+from matmaster.tools.builtin.read_tracker import ReadTracker
 from matmaster.types.guards import GuardContext, GuardResult, RecentCall
 from tests.matmaster.core.conftest import make_tool_call
 
@@ -225,3 +227,104 @@ class TestGuardPipeline:
         result = pipeline.evaluate(tc, current_turn=1, max_turns=10)
         assert result.allowed is False
         assert len(pipeline._recent_calls) == 0
+
+
+# ── ReadBeforeModifyGuard ────────────────────────────────
+
+
+class TestReadBeforeModifyGuard:
+    def test_read_before_modify_deny_unread_edit(self) -> None:
+        """edit_file on unread file -> deny."""
+        tracker = ReadTracker()
+        guard = ReadBeforeModifyGuard()
+        ctx = _make_context(
+            "edit_file",
+            {"file_path": "foo.py", "old_str": "a", "new_str": "b"},
+        )
+        ctx.read_tracker = tracker
+        result = guard.evaluate(ctx)
+        assert result.allowed is False
+        assert "must be read before modify" in (result.reason or "")
+        assert result.guidance is not None
+
+    def test_read_before_modify_allow_read_edit(self) -> None:
+        """edit_file on previously read file -> allow."""
+        tracker = ReadTracker()
+        tracker.mark_read("foo.py")
+        guard = ReadBeforeModifyGuard()
+        ctx = _make_context(
+            "edit_file",
+            {"file_path": "foo.py", "old_str": "a", "new_str": "b"},
+        )
+        ctx.read_tracker = tracker
+        result = guard.evaluate(ctx)
+        assert result.allowed is True
+
+    def test_read_before_modify_skip_non_modify(self) -> None:
+        """read_file is not a modify tool -> always allow."""
+        tracker = ReadTracker()
+        guard = ReadBeforeModifyGuard()
+        ctx = _make_context("read_file", {"file_path": "foo.py"})
+        ctx.read_tracker = tracker
+        result = guard.evaluate(ctx)
+        assert result.allowed is True
+
+    def test_read_before_modify_no_tracker(self) -> None:
+        """edit_file with no read_tracker -> allow (no enforcement)."""
+        guard = ReadBeforeModifyGuard()
+        ctx = _make_context(
+            "edit_file",
+            {"file_path": "foo.py", "old_str": "a", "new_str": "b"},
+        )
+        # read_tracker defaults to None
+        result = guard.evaluate(ctx)
+        assert result.allowed is True
+
+    def test_read_before_modify_write_file_not_in_modify_tools(self) -> None:
+        """write_file is NOT in _MODIFY_TOOLS -> always allow at guard level."""
+        tracker = ReadTracker()
+        guard = ReadBeforeModifyGuard()
+        ctx = _make_context(
+            "write_file",
+            {"file_path": "new.py", "content": "hello"},
+        )
+        ctx.read_tracker = tracker
+        result = guard.evaluate(ctx)
+        assert result.allowed is True
+
+    def test_read_before_modify_path_normalization(self) -> None:
+        """Paths are normalized before comparison."""
+        tracker = ReadTracker()
+        tracker.mark_read("/workspace/./foo/../bar.py")
+        guard = ReadBeforeModifyGuard()
+        ctx = _make_context(
+            "edit_file",
+            {"file_path": "/workspace/bar.py", "old_str": "a", "new_str": "b"},
+        )
+        ctx.read_tracker = tracker
+        result = guard.evaluate(ctx)
+        assert result.allowed is True
+
+
+class TestGuardPipelineReadTrackerInjection:
+    def test_pipeline_injects_read_tracker(self) -> None:
+        """GuardPipeline passes read_tracker to GuardContext."""
+        tracker = ReadTracker()
+        tracker.mark_read("test.py")
+
+        # Use a guard that inspects the context
+        class InspectorGuard:
+            def __init__(self):
+                self.received_tracker = None
+
+            def evaluate(self, ctx: GuardContext) -> GuardResult:
+                self.received_tracker = ctx.read_tracker
+                return GuardResult(allowed=True)
+
+        inspector = InspectorGuard()
+        pipeline = GuardPipeline(
+            external_guards=[inspector], read_tracker=tracker
+        )
+        tc = make_tool_call("fn", {"a": 1})
+        pipeline.evaluate(tc, current_turn=1, max_turns=10)
+        assert inspector.received_tracker is tracker
