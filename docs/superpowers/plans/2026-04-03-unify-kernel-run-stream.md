@@ -145,7 +145,10 @@ class RunResultEvent(EventBase):
     final_content: str | None = None
     num_turns: int = 0
     usage: dict[str, int] = Field(default_factory=dict)
-    messages: list[Any] = Field(default_factory=list)
+    # exclude=True: messages carries the full conversation transcript
+    # (including system prompt) for internal drain consumers only.
+    # model_dump() excludes it, so SSE/frontend never sees it.
+    messages: list[Any] = Field(default_factory=list, exclude=True)
 ```
 
 - [ ] **Step 2: Pass new fields through in `run_stream()._consume_and_yield()`**
@@ -198,7 +201,7 @@ git commit -m "feat: extend RunResultEvent with num_turns, usage, messages"
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -218,8 +221,15 @@ class DrainResult:
 
 async def drain_run_stream(
     stream: AsyncIterator[Any],
+    on_event: Callable[[Any], None] | None = None,
 ) -> DrainResult:
     """Consume run_stream() to completion, return structured result.
+
+    Args:
+        stream: AsyncIterator from kernel.run_stream() or Exp.run_stream().
+        on_event: Optional callback invoked for each intermediate event
+            as it arrives. Use this for real-time forwarding (e.g. DevShell
+            terminal output, event logging) without breaking the drain.
 
     Collects all intermediate events and extracts terminal RunResultEvent.
     Raises RuntimeError if stream ends without a terminal event.
@@ -239,6 +249,8 @@ async def drain_run_stream(
                 events=events,
             )
         events.append(event)
+        if on_event is not None:
+            on_event(event)
     raise RuntimeError("run_stream ended without RunResultEvent")
 ```
 
@@ -317,6 +329,11 @@ def run(
 
     Returns DrainResult with terminal data and message transcript.
     Appends run messages to history for multi-turn accumulation.
+
+    Real-time event forwarding: intermediate events (ThoughtEvent,
+    ResponseEvent, ToolCallEvent, ToolResultEvent, etc.) are forwarded
+    to DevStreamHook and DevEventObserver via the on_event callback
+    during drain, replacing the old hook-based streaming path.
     """
     from matmaster.core.stream_drain import DrainResult, drain_run_stream
 
@@ -325,20 +342,24 @@ def run(
     async def _run_once() -> DrainResult:
         try:
             runtime = await exp.build_runtime(self._pg_ctx)
-            hooks = [*runtime.spec.hooks, self._stream_hook]
+            # Hooks still used for pre_llm_call / should_continue
+            # (these are called inside _run_items, not replaced by events).
+            # DevStreamHook and DevEventObserver.hook are NO LONGER
+            # added to hooks — their on_stream_chunk / pre_tool_call /
+            # post_tool_call callbacks are replaced by on_event below.
+            spec = runtime.spec
 
-            if event_observer is not None:
-                hooks.append(event_observer.hook)
-                if runtime.spec.compactor is not None:
-                    runtime.spec.compactor._event_sink = (
-                        event_observer.make_event_sink()
-                    )
+            # Build on_event callback for real-time forwarding
+            def _on_event(event: Any) -> None:
+                self._stream_hook.on_event(event)
+                if event_observer is not None:
+                    event_observer.emit(event)
 
-            spec = runtime.spec.model_copy(update={"hooks": hooks})
             return await drain_run_stream(
                 runtime.kernel.run_stream(
                     spec, task, history=self.history, stop_event=stop_event
-                )
+                ),
+                on_event=_on_event,
             )
         finally:
             await exp._run_cleanup_callbacks()
@@ -364,6 +385,15 @@ def run(
 
     return result
 ```
+
+**Important:** `DevStreamHook` currently drives terminal output via hook callbacks
+(`on_stream_chunk`, `on_segment_complete`). After this migration, it needs an
+`on_event(event)` method that dispatches by event type:
+- `ThoughtEvent` / `ResponseEvent` with `stream_state` → replaces `on_stream_chunk`
+- `ToolCallEvent` → replaces `pre_tool_call` display
+- `ToolResultEvent` → replaces `post_tool_call` display
+
+This adaptation of `DevStreamHook` should be done in this same task.
 
 - [ ] **Step 2: Remove `KernelRunResult` import from runner.py**
 
