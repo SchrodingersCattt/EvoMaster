@@ -42,7 +42,7 @@ _SOURCE = "devshell"
 class DevEventObserver:
     """Thread-safe event collector using queue.SimpleQueue.
 
-    DevShell runs kernel.run() in a worker thread while the main thread
+    DevShell runs kernel.run_stream() in a worker thread while the main thread
     polls for events. SimpleQueue is the correct stdlib choice for
     cross-thread handoff (asyncio.Queue is not thread-safe).
     """

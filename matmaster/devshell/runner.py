@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 
 
 class DevRunner:
-    """Per-run assembly: build_runtime -> inject hooks -> kernel.run -> history.
+    """Per-run assembly: build_runtime -> kernel.run_stream -> drain -> history.
 
     Mirrors the split-call pattern of AgentRunService. REPL-agnostic:
-    accepts task string, returns KernelRunResult.
+    accepts task string, returns DrainResult.
     """
 
     def __init__(
