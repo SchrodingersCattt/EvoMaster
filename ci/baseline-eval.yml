@@ -38,10 +38,18 @@
 #   BASELINE_PENDING_ONLY  — 1=pending等人工阅卷，0=proxy自动入库，默认 1
 
 variables:
-  # ⚠️ 临时测试用，验证通过后务必删除以下 3 行，改用 GitLab CI Variables 注入
-  ANTHROPIC_AUTH_TOKEN: "sk-cp-TGM8jt_jQj6k_K8nCqJGLqoeaBrc61y2E2V-Kfs1KWkfMzmyKLeySXWFXfKCSFqqI9pWftgYzygvxDKM-G2D33ybu-BT77ty0cVnyHCewd6j5W_AscyYRns"
-  ANTHROPIC_BASE_URL: "https://api.minimaxi.com/anthropic"
-  ANTHROPIC_MODEL: "MiniMax-M2.7"
+  # ⚠️ 临时测试用，验证通过后务必删除以下几行，改用 GitLab CI Variables 注入
+  # [minimax] 已注释，暂时停用
+  # ANTHROPIC_AUTH_TOKEN: "sk-cp-TGM8jt_jQj6k_K8nCqJGLqoeaBrc61y2E2V-Kfs1KWkfMzmyKLeySXWFXfKCSFqqI9pWftgYzygvxDKM-G2D33ybu-BT77ty0cVnyHCewd6j5W_AscyYRns"
+  # ANTHROPIC_BASE_URL: "https://api.minimaxi.com/anthropic"
+  # ANTHROPIC_MODEL: "MiniMax-M2.7"
+  # [gpugeek] 当前使用
+  ANTHROPIC_API_KEY: "l0gkdqe9ht0d3u01000dhifz5fpd9xa1m0mtvwao"
+  ANTHROPIC_BASE_URL: "https://api.gpugeek.com"
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: "Vendor2/Claude-4.6-Opus"
+  ANTHROPIC_DEFAULT_OPUS_MODEL: "Vendor2/Claude-4.6-Opus"
+  ANTHROPIC_DEFAULT_SONNET_MODEL: "Vendor2/Claude-4.6-Opus"
+  ANTHROPIC_MODEL: "Vendor2/Claude-4.6-Opus"
   BASELINE_CAPABILITIES: "structure_construction"
   BASELINE_MODES: "direct"
   BASELINE_LIMIT: "2"
