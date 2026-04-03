@@ -727,6 +727,38 @@ class TestInputValidatorInRunner:
         assert tr.meta.get("layer") == "input_validation"
 
     @pytest.mark.asyncio
+    async def test_runner_uses_modified_args_from_structural_validation(self) -> None:
+        """Runner passes modified_args (from StructuralValidation) to executor."""
+        captured_args: dict[str, Any] = {}
+
+        class _CaptureTool:
+            name = "read_file"
+            description = "capture"
+            json_schema: dict[str, Any] = {"type": "object", "properties": {}}
+
+            async def execute(self, arguments: dict[str, Any]) -> ToolResult:
+                captured_args.update(arguments)
+                return ToolResult(content="ok")
+
+        registry = ToolRegistry()
+        registry.register(_CaptureTool(), source="builtin")
+        topology = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp/ctrl",
+            workspace_root="/tmp/ws",
+            active_planes=frozenset(ToolPlane),
+        )
+        catalog = ToolCatalog(registry, topology=topology)
+        runner = _make_runner(catalog, topology=topology)
+        ctx = _make_ctx()
+
+        await runner.execute_batch(
+            [_make_tc("read_file", file_path="src/app.py")], ctx
+        )
+
+        assert captured_args.get("file_path") == "/tmp/ws/src/app.py"
+
+    @pytest.mark.asyncio
     async def test_allow_validator_lets_execution_proceed(self) -> None:
         """input_validator returning None -> execution proceeds normally."""
         registry = ToolRegistry()

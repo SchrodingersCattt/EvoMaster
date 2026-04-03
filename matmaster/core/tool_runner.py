@@ -316,10 +316,13 @@ class FullToolRunner:
                     await on_result(tc, tr)
                 continue
 
+            # Use modified_args from structural validation if provided
+            effective_args = decision.modified_args or tc.arguments
+
             # 3b. input_validator (tool-specific semantic check)
             if instance.input_validator is not None:
                 try:
-                    iv_decision = await instance.input_validator(tc.arguments)
+                    iv_decision = await instance.input_validator(effective_args)
                 except Exception as exc:
                     tr = ToolResult(
                         status="error",
@@ -355,7 +358,7 @@ class FullToolRunner:
                 continue
 
             # 5. CapabilityPolicy (Layer C)
-            decision = self._policy.evaluate(self._topology, instance, tc.arguments)
+            decision = self._policy.evaluate(self._topology, instance, effective_args)
             if decision.decision == "deny":
                 tr = ToolResult(
                     status="error",
@@ -394,7 +397,7 @@ class FullToolRunner:
 
             # 8. Execute + Release
             try:
-                tr = await instance.tool_executor(tc.arguments)
+                tr = await instance.tool_executor(effective_args)
             except Exception as e:
                 tr = ToolResult.from_error(tc.name, e)
             finally:

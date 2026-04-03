@@ -23,6 +23,8 @@ ToolScheduler respectively.
 
 from __future__ import annotations
 
+import posixpath
+from pathlib import PurePosixPath
 from typing import Any
 
 import jsonschema
@@ -30,6 +32,8 @@ import jsonschema
 from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_spec import ToolInstance
 from matmaster.types.topology import RuntimeTopology, ToolPlane
+
+_PATH_KEYS = ("file_path", "path")
 
 
 class StructuralValidation:
@@ -91,4 +95,55 @@ class StructuralValidation:
                     ),
                 )
 
-        return ToolDecision(decision="allow")
+        # 4. Path normalization for workspace-bound tools only
+        _WORKSPACE_PLANES = {ToolPlane.SESSION_FS, ToolPlane.SESSION_SHELL}
+        modified_args: dict[str, Any] | None = None
+        if plane in _WORKSPACE_PLANES:
+            try:
+                modified_args = self._normalize_path_args(
+                    runtime_topology.workspace_root, tool_args
+                )
+            except ValueError as exc:
+                return ToolDecision(
+                    decision="deny",
+                    reason=f"Path {exc}",
+                )
+
+        return ToolDecision(decision="allow", modified_args=modified_args)
+
+    @staticmethod
+    def _normalize_workspace_path(root: str, raw_path: str) -> str:
+        """Resolve a raw path against workspace root and enforce boundary."""
+        root_path = PurePosixPath(posixpath.normpath(root))
+        if raw_path.startswith("/"):
+            normalized = PurePosixPath(posixpath.normpath(raw_path))
+        else:
+            normalized = PurePosixPath(
+                posixpath.normpath(posixpath.join(root, raw_path))
+            )
+        if not normalized.is_relative_to(root_path):
+            raise ValueError("outside workspace boundary")
+        return str(normalized)
+
+    @staticmethod
+    def _normalize_path_args(
+        workspace_root: str, tool_args: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Normalize file_path / path keys in tool_args.
+
+        Returns a new dict with normalized paths, or None if no path keys
+        are present or no normalization was needed. Raises ValueError if
+        any path escapes the workspace boundary.
+        """
+        updated: dict[str, Any] = {}
+        for key in _PATH_KEYS:
+            raw = tool_args.get(key)
+            if raw is not None and isinstance(raw, str):
+                resolved = StructuralValidation._normalize_workspace_path(
+                    workspace_root, raw
+                )
+                if resolved != raw:
+                    updated[key] = resolved
+        if not updated:
+            return None
+        return {**tool_args, **updated}

@@ -241,3 +241,73 @@ class TestCapabilities:
         result = self.validator.validate(topo, instance, {})
 
         assert result.decision == "allow"
+
+
+# ---------------------------------------------------------------------------
+# TestPathNormalization
+# ---------------------------------------------------------------------------
+
+class TestPathNormalization:
+    """Path normalization in Layer A structural validation."""
+
+    def setup_method(self) -> None:
+        self.validator = StructuralValidation()
+
+    def test_normalizes_relative_file_path_into_workspace_root(self) -> None:
+        """Relative file_path gets expanded to workspace_root/relative."""
+        instance = _make_instance(
+            tool_name="read_file",
+            plane=ToolPlane.SESSION_FS,
+        )
+        topo = _make_topology(
+            active_planes=frozenset({ToolPlane.SESSION_FS, ToolPlane.CONTROL_PLANE}),
+        )
+        result = self.validator.validate(topo, instance, {"file_path": "src/app.py"})
+
+        assert result.decision == "allow"
+        assert result.modified_args is not None
+        assert result.modified_args["file_path"] == "/tmp/workspace/src/app.py"
+
+    def test_denies_path_outside_workspace_root(self) -> None:
+        """Path traversal outside workspace -> deny."""
+        instance = _make_instance(
+            tool_name="read_file",
+            plane=ToolPlane.SESSION_FS,
+        )
+        topo = _make_topology(
+            active_planes=frozenset({ToolPlane.SESSION_FS, ToolPlane.CONTROL_PLANE}),
+        )
+        result = self.validator.validate(topo, instance, {"file_path": "../secret.txt"})
+
+        assert result.decision == "deny"
+        assert "outside workspace boundary" in result.reason
+
+    def test_absolute_path_within_workspace_passes(self) -> None:
+        """Absolute path within workspace -> allow, no modified_args."""
+        instance = _make_instance(
+            tool_name="read_file",
+            plane=ToolPlane.SESSION_FS,
+        )
+        topo = _make_topology(
+            active_planes=frozenset({ToolPlane.SESSION_FS, ToolPlane.CONTROL_PLANE}),
+        )
+        result = self.validator.validate(
+            topo, instance, {"file_path": "/tmp/workspace/foo.py"}
+        )
+
+        assert result.decision == "allow"
+
+    def test_normalizes_path_key(self) -> None:
+        """Also normalizes the 'path' argument key."""
+        instance = _make_instance(
+            tool_name="list_dir",
+            plane=ToolPlane.SESSION_SHELL,
+        )
+        topo = _make_topology(
+            active_planes=frozenset(ToolPlane),
+        )
+        result = self.validator.validate(topo, instance, {"path": "subdir"})
+
+        assert result.decision == "allow"
+        assert result.modified_args is not None
+        assert result.modified_args["path"] == "/tmp/workspace/subdir"
