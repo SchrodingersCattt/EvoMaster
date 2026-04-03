@@ -477,7 +477,15 @@ class ToolCompiler:
             stop_mode=tool.stop_mode,
         )
 
-        tool_executor = tool.execute_with_context
+        # Prefer execute_with_context (provides runner_state access).
+        # Fallback to wrapping execute() for third-party tools that only
+        # implement the minimal Protocol without execute_with_context.
+        if hasattr(tool, "execute_with_context"):
+            tool_executor = tool.execute_with_context
+        else:
+            _execute = tool.execute
+            async def tool_executor(args, exec_ctx):
+                return await _execute(args)
 
         validator = None
         if hasattr(tool, "validate_input") and callable(tool.validate_input):
@@ -494,8 +502,8 @@ class ToolCompiler:
 Changes from current:
 - 4 lookup tables deleted (~80 lines)
 - `getattr(tool, "tool_runtime_meta")` branch deleted
-- Executor wrapping reduced from 2 branches to 1 line
-- ~130 lines -> ~50 lines
+- Executor hasattr branch retained (for third-party Protocol-only tools)
+- ~130 lines -> ~60 lines
 
 ## 8. ToolCatalog Changes
 
