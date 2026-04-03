@@ -23,14 +23,11 @@ async def _execute_use_skill(
     registry: ToolRegistry,
     *,
     skill_name: str,
-    action: str = "get_info",
 ):
     """Execute use_skill through the registered tool instance."""
     skill_tool = registry.get_raw("use_skill")
     assert skill_tool is not None
-    raw_result = await skill_tool.execute(
-        {"skill_name": skill_name, "action": action}
-    )
+    raw_result = await skill_tool.execute({"skill_name": skill_name})
     return normalize_tool_result(raw_result)
 
 

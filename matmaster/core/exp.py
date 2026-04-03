@@ -630,9 +630,7 @@ class Exp:
                 else:
                     registry.register(lazy_tool, source='mcp')
 
-        skill_tool = SkillTool(
-            skill_registry, session=ctx.session, on_skill_hit=on_skill_hit
-        )
+        skill_tool = SkillTool(skill_registry, on_skill_hit=on_skill_hit)
         registry.register(skill_tool, source='skill')
 
         self._skill_registry = skill_registry

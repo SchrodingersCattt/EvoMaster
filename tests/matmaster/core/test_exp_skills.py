@@ -120,9 +120,7 @@ class TestExpInitSkillTools:
         from matmaster.tools.tool_result import normalize_tool_result
 
         skill_tool = registry._tools["use_skill"]
-        raw_result = await skill_tool.execute(
-            {"skill_name": "test-skill", "action": "get_info"}
-        )
+        raw_result = await skill_tool.execute({"skill_name": "test-skill"})
         result = normalize_tool_result(raw_result)
         assert result.status == "success", f"use_skill failed: {result.content}"
 
