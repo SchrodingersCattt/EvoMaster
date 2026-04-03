@@ -19,12 +19,10 @@ import logging
 import threading
 import time
 from collections import deque
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field as dc_field
 from typing import TYPE_CHECKING, Any
 
-from matmaster.core.guard_pipeline import GuardPipeline
-from matmaster.tools.tool_result import ToolResult
 from matmaster.types.errors import LLMError
 from matmaster.types.events import (
     AssistantStateEvent,
@@ -92,7 +90,6 @@ class _KernelState:
     messages: list[Any]
     turn: int = 0
     total_usage: dict[str, int] = dc_field(default_factory=dict)
-    last_stop_reason: str | None = None
     cached_tool_definitions: list[dict[str, Any]] | None = None
     last_catalog_version: int = -1
 
@@ -130,7 +127,6 @@ class AgentKernel:
             async def _consume_and_yield():
                 async for item in self._run_items(spec, task, history, stop_event):
                     if item.terminal is not None:
-                        # Convert terminal _KernelItem to RunResultEvent
                         reason = item.terminal.reason
                         status = 'cancelled' if reason == 'cancelled' else (
                             'failed' if reason == 'invalid_finish' else 'completed'
@@ -156,6 +152,24 @@ class AgentKernel:
                 async for event in _consume_and_yield():
                     yield event
 
+    @staticmethod
+    def _terminal(
+        state: _KernelState,
+        reason: str,
+        *,
+        final_content: str | None = None,
+        turn_offset: int = 0,
+    ) -> _KernelItem:
+        return _KernelItem(
+            terminal=_TerminalItem(
+                reason=reason,
+                final_content=final_content,
+                num_turns=state.turn + turn_offset,
+                usage=dict(state.total_usage),
+                messages=list(state.messages),
+            )
+        )
+
     async def _run_items(
         self,
         spec: AgentRuntimeSpec,
@@ -168,6 +182,8 @@ class AgentKernel:
         Yields events for streaming, AssistantState, and SkillHit. Hook paths
         (pre_llm_call, should_continue) are still invoked internally.
         """
+        from matmaster.core.tool_runner import ToolExecutionContext
+
         state = _KernelState(
             messages=[
                 SystemMessage(content=spec.system_prompt),
@@ -175,9 +191,7 @@ class AgentKernel:
                 UserMessage(content=task),
             ]
         )
-        guard_pipeline = GuardPipeline(spec.guards)
 
-        # Compactor deque: buffer events from ContextCompactor, yield after call
         compactor_events: deque = deque()
 
         async def _compactor_sink(event: Any) -> None:
@@ -190,36 +204,18 @@ class AgentKernel:
         turn_usage: dict[str, int] = {}
 
         while state.turn < spec.max_turns:
-            # External cancel check
             if stop_event and stop_event.is_set():
-                yield _KernelItem(
-                    terminal=_TerminalItem(
-                        reason='cancelled',
-                        num_turns=state.turn,
-                        usage=dict(state.total_usage),
-                        messages=list(state.messages),
-                    )
-                )
+                yield self._terminal(state, 'cancelled')
                 return
 
             state.turn += 1
 
-            # pre_llm_call hook (observation)
             await run_pre_llm_call(spec.hooks, state.messages, state.turn)
 
-            # should_continue hook (intercepting)
             if not await run_should_continue(spec.hooks, state.messages, state.turn):
-                yield _KernelItem(
-                    terminal=_TerminalItem(
-                        reason='hook_stopped',
-                        num_turns=state.turn - 1,
-                        usage=dict(state.total_usage),
-                        messages=list(state.messages),
-                    )
-                )
+                yield self._terminal(state, 'hook_stopped', turn_offset=-1)
                 return
 
-            # Context compaction
             if spec.compactor:
                 await spec.compactor.compact_if_needed(
                     state.messages, turn_usage, state.turn
@@ -228,7 +224,6 @@ class AgentKernel:
                     yield _KernelItem(event=compactor_events.popleft())
 
             # ── Tool definitions resolution (version-aware caching) ──
-            # Check catalog version for overlay changes (ESIN-05 gap closure)
             if (
                 spec.tool_catalog is not None
                 and hasattr(spec.tool_catalog, 'version')
@@ -246,7 +241,6 @@ class AgentKernel:
 
             tool_defs = state.cached_tool_definitions
 
-            # LLM call via _stream_llm_items sub-generator
             api_messages = [m.to_api_dict() for m in state.messages]
 
             llm_response: LLMResponse | None = None
@@ -259,46 +253,22 @@ class AgentKernel:
                     elif item.event is not None:
                         yield item
             except _KernelStopRequested:
-                yield _KernelItem(
-                    terminal=_TerminalItem(
-                        reason='cancelled',
-                        num_turns=state.turn,
-                        usage=dict(state.total_usage),
-                        messages=list(state.messages),
-                    )
-                )
+                yield self._terminal(state, 'cancelled')
                 return
 
             if llm_response is None:
-                # Should not happen, but guard
-                yield _KernelItem(
-                    terminal=_TerminalItem(
-                        reason='invalid_finish',
-                        num_turns=state.turn,
-                        usage=dict(state.total_usage),
-                        messages=list(state.messages),
-                    )
-                )
+                yield self._terminal(state, 'invalid_finish')
                 return
 
             response = llm_response
             turn_usage = response.usage
             self._accumulate_usage(state.total_usage, response.usage)
-            state.last_stop_reason = response.finish_reason
             if spec.compactor:
                 spec.compactor.update_message_count(len(state.messages))
 
-            # Natural finish: no tool_calls
             if not response.tool_calls:
                 if not self._is_valid_natural_finish(response):
-                    yield _KernelItem(
-                        terminal=_TerminalItem(
-                            reason='invalid_finish',
-                            num_turns=state.turn,
-                            usage=dict(state.total_usage),
-                            messages=list(state.messages),
-                        )
-                    )
+                    yield self._terminal(state, 'invalid_finish')
                     return
                 state.messages.append(
                     AssistantMessage(
@@ -306,18 +276,11 @@ class AgentKernel:
                         reasoning_content=response.reasoning_content,
                     )
                 )
-                yield _KernelItem(
-                    terminal=_TerminalItem(
-                        reason='natural',
-                        final_content=response.content,
-                        num_turns=state.turn,
-                        usage=dict(state.total_usage),
-                        messages=list(state.messages),
-                    )
+                yield self._terminal(
+                    state, 'natural', final_content=response.content
                 )
                 return
 
-            # Has tool_calls: append assistant message
             assistant_msg = AssistantMessage(
                 content=response.content,
                 tool_calls=response.tool_calls,
@@ -325,7 +288,6 @@ class AgentKernel:
             )
             state.messages.append(assistant_msg)
 
-            # HRET-02: yield AssistantStateEvent (replaces AssistantStateHook)
             if assistant_msg.tool_calls:
                 yield _KernelItem(
                     event=AssistantStateEvent(
@@ -334,7 +296,6 @@ class AgentKernel:
                     )
                 )
 
-            # Yield ToolCallEvents for each tool call
             for tc in response.tool_calls:
                 yield _KernelItem(
                     event=ToolCallEvent(
@@ -345,20 +306,16 @@ class AgentKernel:
                     )
                 )
 
-            # ── FullToolRunner path (sole execution path) ──
             if spec.tool_runner is None:
                 raise RuntimeError("No tool_runner in AgentRuntimeSpec")
 
-            from matmaster.core.tool_runner import ToolExecutionContext
-
-            all_tcs = response.tool_calls
             exec_ctx = ToolExecutionContext(
                 turn=state.turn,
                 max_turns=spec.max_turns,
                 stop_event=stop_event,
             )
             runner_results = await spec.tool_runner.execute_batch(
-                all_tcs, exec_ctx
+                response.tool_calls, exec_ctx
             )
 
             for tc, tool_result in runner_results:
@@ -377,7 +334,6 @@ class AgentKernel:
                         payload=tool_result.payload,
                     )
                 )
-                # HRET-03: SkillHitEvent
                 if tc.name == "use_skill":
                     skill_name = tc.arguments.get("skill_name")
                     if isinstance(skill_name, str) and skill_name:
@@ -388,15 +344,7 @@ class AgentKernel:
                             )
                         )
 
-        # max_turns exhausted
-        yield _KernelItem(
-            terminal=_TerminalItem(
-                reason='max_turns',
-                num_turns=state.turn,
-                usage=dict(state.total_usage),
-                messages=list(state.messages),
-            )
-        )
+        yield self._terminal(state, 'max_turns')
 
     async def _call_llm_streaming(
         self,
