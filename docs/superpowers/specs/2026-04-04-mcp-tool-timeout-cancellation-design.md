@@ -20,6 +20,7 @@ Built-in tools (e.g. BashTool) handle both timeout and stop_event correctly. MCP
 |--------|------|-------------|
 | MCP tool timeout + stop_event | `matmaster/tools/lazy_mcp.py` | `execute_with_context()` gains race logic |
 | Timeout configuration | `matmaster/tools/lazy_mcp.py` | Per-tool via `runtime_meta["timeout"]`, default 120s |
+| Pass runtime_meta at construction | `matmaster/core/exp.py` | `_setup_lazy_mcp_tools()` passes `runtime_meta` from MCP cache to `LazyMCPTool()` |
 | ToolRunner fallback timeout | `matmaster/core/tool_runner.py` | `_execute_one()` wraps executor with 600s fallback |
 
 | Not changed | Reason |
@@ -48,7 +49,7 @@ execute_with_context(arguments, exec_ctx)
   │     asyncio.wait_for(self._do_call(arguments), timeout=self._timeout)
   │     concurrently poll stop_event via bridge coroutine (0.5s interval)
   │     ├─ Normal completion → ToolResult
-  │     ├─ asyncio.TimeoutError → ToolResult(status="error", "MCP tool {name} timed out after {N}s")
+  │     ├─ asyncio.TimeoutError → ToolResult(status="error", "MCP tool {name} timed out after {N}s", meta={"layer": "tool"})
   │     └─ stop_event triggered → ToolResult(status="cancelled", "Run cancelled")
   │
   └─ 3. execute() remains unchanged (backward-compatible, no timeout, no cancellation)
@@ -86,6 +87,8 @@ class LazyMCPTool:
 
 Per-tool timeout is declared in `runtime_meta["timeout"]` (seconds). This is read from the lazy MCP cache / mcp_config and set at tool construction time.
 
+The construction call site in `Exp._setup_lazy_mcp_tools()` (exp.py:619-626) currently does not pass `runtime_meta`. This change adds `runtime_meta=tool_schema.get("runtime_meta")` to the `LazyMCPTool()` constructor call, threading per-tool metadata from the cached schema into the tool instance.
+
 #### Internal refactor
 
 Extract the raw `call_tool` + path_adaptor + format logic from `execute()` into a private `_do_call(arguments) -> ToolResult` method. Both `execute()` and `execute_with_context()` call `_do_call`:
@@ -122,7 +125,12 @@ except asyncio.TimeoutError:
     )
 except Exception as e:
     tr = ToolResult.from_error(tc.name, e)
+finally:
+    if ticket is not None:
+        await self._scheduler.release(ticket)
 ```
+
+The `finally` block ensures scheduler ticket release even on timeout — this preserves the existing release semantics from the current `try/finally` structure.
 
 This is a last-resort safety net. For MCP tools, the per-tool 120s timeout fires first. The 600s fallback catches pathological cases in any tool type.
 
@@ -159,4 +167,5 @@ MCP tool timeout (120s) fires well before runner fallback (600s). Built-in tools
 - Unit test: `LazyMCPTool.execute_with_context()` with stop_event set before call — verify immediate cancelled return.
 - Unit test: `LazyMCPTool.execute_with_context()` with stop_event set during call — verify cancelled return within ~0.5s.
 - Unit test: `FullToolRunner._execute_one()` with a mock executor that sleeps forever — verify 600s fallback (use short timeout in test).
+- Unit test: race between timeout and stop_event triggering near-simultaneously — verify deterministic behavior (no double-result, no unhandled exception).
 - Integration test: existing MCP tool tests continue to pass (execute() path unchanged).
