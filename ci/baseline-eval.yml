@@ -52,8 +52,8 @@
 #     AWS_DEFAULT_OUTPUT           — 默认 json（可改）
 #   Claude Code + Bedrock（claude_cli；须 AWS 凭证写入 default profile，见上）:
 #     触发（任一）: CLAUDE_CODE_USE_BEDROCK=1 / ANTHROPIC_PLATFORM=bedrock / BASELINE_CLAUDE_BEDROCK=1
-#     run_baseline_eval.sh 会 export 默认: AWS_PROFILE=default、ANTHROPIC_SMALL_FAST_MODEL、CLAUDE_CODE_EFFORT_LEVEL=max 等
-#     ANTHROPIC_MODEL 默认 us.anthropic.claude-opus-4-6-v1[1m]（可在 CI 覆盖）
+#     Bedrock 模型 ID 用 ANTHROPIC_BEDROCK_MODEL / ANTHROPIC_BEDROCK_SMALL_FAST_MODEL（勿用 ANTHROPIC_MODEL=Vendor2/…，那是 gpugeek 路由）
+#     未设时脚本默认 opus=us.anthropic.claude-opus-4-6-v1[1m]、haiku=us.anthropic.claude-haiku-4-5-20251001-v1:0
 #   finalize 上传评测产物 zip 到 OSS（见 src/dao/oss_io.py）— 须传入内层 docker 容器，已在子流水线 docker create 中 -e 透传:
 #     OSS_ENDPOINT, OSS_BUCKET_NAME, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET
 #

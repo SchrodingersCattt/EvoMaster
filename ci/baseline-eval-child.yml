@@ -62,6 +62,8 @@ child-pipeline-ready:
         -e ANTHROPIC_PLATFORM \
         -e AWS_PROFILE \
         -e CLAUDE_CODE_USE_BEDROCK \
+        -e ANTHROPIC_BEDROCK_MODEL \
+        -e ANTHROPIC_BEDROCK_SMALL_FAST_MODEL \
         -e ANTHROPIC_SMALL_FAST_MODEL \
         -e CLAUDE_CODE_EFFORT_LEVEL \
         -e BASELINE_CLAUDE_BEDROCK \

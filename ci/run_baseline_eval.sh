@@ -32,11 +32,11 @@
 #     ANTHROPIC_BASE_URL             — Claude CLI 端点（如 MiniMax/gpugeek 兼容端点）
 #     ANTHROPIC_MODEL                — Claude CLI 指定模型名
 #   Claude Code + AWS Bedrock（任选其一触发：CLAUDE_CODE_USE_BEDROCK=1 / ANTHROPIC_PLATFORM=bedrock / BASELINE_CLAUDE_BEDROCK=1）:
-#     须先有 AWS 凭证（见上方 AWS CLI）；未设置的变量由脚本填默认:
-#     ANTHROPIC_PLATFORM=bedrock、AWS_PROFILE=default、CLAUDE_CODE_USE_BEDROCK=1
-#     ANTHROPIC_MODEL（默认 us.anthropic.claude-opus-4-6-v1[1m]，可被 CI 覆盖）
-#     ANTHROPIC_SMALL_FAST_MODEL（默认 us.anthropic.claude-haiku-4-5-20251001-v1:0）
-#     CLAUDE_CODE_EFFORT_LEVEL（默认 max）
+#     须先有 AWS 凭证（见上方 AWS CLI）；Bedrock **不使用** ANTHROPIC_MODEL（那是 gpugeek/兼容 API 路由名），而用:
+#     ANTHROPIC_BEDROCK_MODEL（默认 us.anthropic.claude-opus-4-6-v1[1m]）
+#     ANTHROPIC_BEDROCK_SMALL_FAST_MODEL（默认 us.anthropic.claude-haiku-4-5-20251001-v1:0）
+#     脚本会 export 为 ANTHROPIC_MODEL / ANTHROPIC_SMALL_FAST_MODEL 供 Claude Code 读取
+#     ANTHROPIC_PLATFORM=bedrock、AWS_PROFILE=default、CLAUDE_CODE_USE_BEDROCK=1、CLAUDE_CODE_EFFORT_LEVEL（默认 max）
 #     BASELINE_MAX_TURNS             — 每题最大对话轮数，默认 50
 #     BASELINE_TIMEOUT               — 每题超时秒数，默认 900
 #     BASELINE_CLAUDE_JOBS           — 同时跑几道 claude -p（run_claude_cli_baseline_tasks.py --jobs），默认 4
@@ -156,8 +156,8 @@ _baseline_maybe_export_claude_bedrock_env() {
     export ANTHROPIC_PLATFORM="${ANTHROPIC_PLATFORM:-bedrock}"
     export AWS_PROFILE="${AWS_PROFILE:-default}"
     export CLAUDE_CODE_USE_BEDROCK=1
-    export ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-us.anthropic.claude-opus-4-6-v1[1m]}"
-    export ANTHROPIC_SMALL_FAST_MODEL="${ANTHROPIC_SMALL_FAST_MODEL:-us.anthropic.claude-haiku-4-5-20251001-v1:0}"
+    export ANTHROPIC_MODEL="${ANTHROPIC_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1[1m]}"
+    export ANTHROPIC_SMALL_FAST_MODEL="${ANTHROPIC_BEDROCK_SMALL_FAST_MODEL:-us.anthropic.claude-haiku-4-5-20251001-v1:0}"
     export CLAUDE_CODE_EFFORT_LEVEL="${CLAUDE_CODE_EFFORT_LEVEL:-max}"
     echo "[CI] Claude Code：Bedrock（AWS_PROFILE=${AWS_PROFILE} ANTHROPIC_MODEL=${ANTHROPIC_MODEL}）" >&2
 }
@@ -321,8 +321,8 @@ elif [[ "${EVAL_RUNNER}" == "claude_cli" ]]; then
     "ANTHROPIC_PLATFORM": "${ANTHROPIC_PLATFORM:-bedrock}",
     "AWS_PROFILE": "${AWS_PROFILE:-default}",
     "CLAUDE_CODE_USE_BEDROCK": "1",
-    "ANTHROPIC_MODEL": "${ANTHROPIC_MODEL:-us.anthropic.claude-opus-4-6-v1[1m]}",
-    "ANTHROPIC_SMALL_FAST_MODEL": "${ANTHROPIC_SMALL_FAST_MODEL:-us.anthropic.claude-haiku-4-5-20251001-v1:0}",
+    "ANTHROPIC_MODEL": "${ANTHROPIC_MODEL}",
+    "ANTHROPIC_SMALL_FAST_MODEL": "${ANTHROPIC_SMALL_FAST_MODEL}",
     "CLAUDE_CODE_EFFORT_LEVEL": "${CLAUDE_CODE_EFFORT_LEVEL:-max}",
     "API_TIMEOUT_MS": "3000000",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
