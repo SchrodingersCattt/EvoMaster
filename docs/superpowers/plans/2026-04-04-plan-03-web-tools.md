@@ -94,6 +94,45 @@ class TestDomainFiltering:
                 call_args = mock_client.get.call_args
                 params = call_args.kwargs.get("params") or call_args[1].get("params", {})
                 assert "site:docs.python.org" in params.get("q", "")
+
+    def test_blocked_domains_appended(self):
+        tool = WebSearchTool()
+        args = {"query": "python async", "blocked_domains": ["example.com"]}
+        with patch.dict(os.environ, {"SEARCHAPI_API_KEY": "fake"}):
+            with patch("matmaster.tools.builtin.web_search_tool.httpx") as mock_httpx:
+                mock_resp = MagicMock()
+                mock_resp.json.return_value = {"organic_results": []}
+                mock_resp.raise_for_status.return_value = None
+                mock_client = MagicMock()
+                mock_client.__enter__ = MagicMock(return_value=mock_client)
+                mock_client.__exit__ = MagicMock(return_value=False)
+                mock_client.get.return_value = mock_resp
+                mock_httpx.Client.return_value = mock_client
+                asyncio.run(tool.execute(args))
+                call_args = mock_client.get.call_args
+                params = call_args.kwargs.get("params") or call_args[1].get("params", {})
+                assert "-site:example.com" in params.get("q", "")
+
+
+class TestDomainMutualExclusion:
+    def test_allowed_and_blocked_rejects(self):
+        tool = WebSearchTool()
+        with patch.dict(os.environ, {"SEARCHAPI_API_KEY": "fake"}):
+            result = asyncio.run(tool.execute({
+                "query": "test",
+                "allowed_domains": ["a.com"],
+                "blocked_domains": ["b.com"],
+            }))
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert "both" in result.content.lower()
+
+    def test_short_query_rejected(self):
+        tool = WebSearchTool()
+        with patch.dict(os.environ, {"SEARCHAPI_API_KEY": "fake"}):
+            result = asyncio.run(tool.execute({"query": "x"}))
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
 ```
 
 - [ ] **Step 2: Implement `web_search_tool.py`**
@@ -171,8 +210,8 @@ class WebSearchTool(BuiltinTool):
 
     def _execute(self, arguments: dict[str, Any]) -> ToolResult:
         query = (arguments.get("query") or "").strip()
-        if not query:
-            return ToolResult(status="error", content="Error: query is required.")
+        if len(query) < 2:
+            return ToolResult(status="error", content="Error: query must be at least 2 characters.")
 
         api_key = _resolve_api_key()
         if not api_key:
@@ -184,6 +223,12 @@ class WebSearchTool(BuiltinTool):
         # Domain filtering via query modifiers (CC pattern)
         allowed = arguments.get("allowed_domains") or []
         blocked = arguments.get("blocked_domains") or []
+        # CC rejects simultaneous allowed + blocked (WebSearchTool.ts validateInput)
+        if allowed and blocked:
+            return ToolResult(
+                status="error",
+                content="Error: Cannot specify both allowed_domains and blocked_domains.",
+            )
         if allowed:
             query += " " + " OR ".join(f"site:{d}" for d in allowed)
         for d in blocked:
@@ -230,7 +275,7 @@ class WebSearchTool(BuiltinTool):
 - [ ] **Step 3: Run tests and commit**
 
 ```bash
-python -m pytest tests/matmaster/tools/builtin/test_web_search_tool.py -v
+uv run pytest tests/matmaster/tools/builtin/test_web_search_tool.py -v
 git add matmaster/tools/builtin/web_search_tool.py matmaster/tools/builtin/__init__.py tests/matmaster/tools/builtin/test_web_search_tool.py
 git commit -m "feat(tools): add WebSearchTool with SearchApi.io and domain filtering"
 ```
@@ -315,6 +360,52 @@ class TestWebFetchExecution:
             }))
             assert isinstance(result, ToolResult)
             assert result.payload.get("prompt") == "summarize this"
+
+
+class TestWebFetchUrlValidation:
+    def test_invalid_url_rejected(self):
+        tool = WebFetchTool()
+        result = asyncio.run(tool.execute({"url": "not-a-url"}))
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+
+    def test_private_ip_rejected(self):
+        tool = WebFetchTool()
+        result = asyncio.run(tool.execute({"url": "http://127.0.0.1/admin"}))
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert "private" in result.content.lower() or "internal" in result.content.lower()
+
+
+class TestDiskCache:
+    def test_cache_hit(self, tmp_path):
+        tool = WebFetchTool(workdir=tmp_path)
+        # Manually populate cache
+        import hashlib, json, time as _t
+        url = "https://example.com/page"
+        key = hashlib.sha256(url.encode()).hexdigest()[:16]
+        cache_dir = tmp_path / ".web_cache"
+        cache_dir.mkdir()
+        (cache_dir / f"{key}.json").write_text(json.dumps({
+            "url": url, "content": "cached content", "fetched_at": _t.time(),
+        }))
+        result = asyncio.run(tool.execute({"url": url}))
+        assert isinstance(result, ToolResult)
+        assert "cached content" in result.content
+
+    def test_cache_expired(self, tmp_path):
+        tool = WebFetchTool(workdir=tmp_path)
+        import hashlib, json
+        url = "https://example.com/expired"
+        key = hashlib.sha256(url.encode()).hexdigest()[:16]
+        cache_dir = tmp_path / ".web_cache"
+        cache_dir.mkdir()
+        (cache_dir / f"{key}.json").write_text(json.dumps({
+            "url": url, "content": "old", "fetched_at": 0,  # epoch = expired
+        }))
+        # Will try to fetch (and fail), proving cache was bypassed
+        result = asyncio.run(tool.execute({"url": url}))
+        assert "old" not in result.content  # should NOT return expired cache
 ```
 
 - [ ] **Step 2: Implement `web_fetch_tool.py`**
@@ -452,7 +543,7 @@ def _extract_content(text: str, content_type: str, raw_bytes: bytes) -> str:
         doc = fitz.open(stream=raw_bytes, filetype="pdf")
         content = "".join(page.get_text() for page in doc)
         doc.close()
-    elif text.strip().startswith("<"):
+    elif "text/html" in content_type or "application/xhtml" in content_type:
         try:
             soup = BeautifulSoup(text, "lxml")
         except Exception:
@@ -480,10 +571,46 @@ def _extract_content(text: str, content_type: str, raw_bytes: bytes) -> str:
     return content
 
 
+_MAX_HTTP_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB
+
+
 def _normalize_url(url: str) -> str:
     parsed = urlparse(url)
+    # Upgrade http to https (CC utils.ts:374-379)
+    scheme = "https" if parsed.scheme == "http" else parsed.scheme
     encoded_path = quote(unquote(parsed.path), safe="/")
-    return urlunparse(parsed._replace(path=encoded_path))
+    return urlunparse(parsed._replace(scheme=scheme, path=encoded_path))
+
+
+def _validate_url(url: str) -> str | None:
+    """Return error message if URL is invalid, None if OK."""
+    if len(url) > 2000:
+        return "URL too long (max 2000 characters)"
+    parsed = urlparse(url)
+    if not parsed.scheme or parsed.scheme not in ("http", "https"):
+        return "URL must use http or https scheme"
+    if not parsed.netloc or "." not in parsed.netloc:
+        return "Invalid URL: hostname must contain a dot"
+    if parsed.username or parsed.password:
+        return "URLs with embedded credentials are not allowed"
+    return None
+
+
+def _is_private_host(hostname: str) -> bool:
+    """Check if hostname resolves to a private/loopback/link-local address."""
+    import ipaddress
+    import socket
+    try:
+        addr = ipaddress.ip_address(hostname)
+        return addr.is_private or addr.is_loopback or addr.is_link_local
+    except ValueError:
+        pass
+    try:
+        resolved = socket.getaddrinfo(hostname, None)[0][4][0]
+        addr = ipaddress.ip_address(resolved)
+        return addr.is_private or addr.is_loopback or addr.is_link_local
+    except Exception:
+        return False
 
 
 # ── Tool class ───────────────────────────────────────────
@@ -537,7 +664,20 @@ class WebFetchTool(BuiltinTool):
         if not url:
             return ToolResult(status="error", content="Error: url is required.")
 
+        # URL validation (CC WebFetchTool.ts validateInput + utils.ts validateURL)
+        url_error = _validate_url(url)
+        if url_error:
+            return ToolResult(status="error", content=f"Error: {url_error}")
+
         url = _normalize_url(url)
+
+        # SSRF protection: reject private/loopback addresses
+        parsed = urlparse(url)
+        if _is_private_host(parsed.hostname or ""):
+            return ToolResult(
+                status="error",
+                content="Error: Requests to private/internal addresses are not allowed.",
+            )
 
         # Cache check
         if self._cache is not None:
@@ -548,16 +688,48 @@ class WebFetchTool(BuiltinTool):
                     payload={"prompt": prompt_text} if prompt_text else {},
                 )
 
-        # Fetch
+        # Fetch — same-host redirects only (CC utils.ts isPermittedRedirect)
         try:
-            with httpx.Client(timeout=15, follow_redirects=True) as client:
+            original_host = (parsed.hostname or "").lstrip("www.")
+            with httpx.Client(timeout=15, follow_redirects=False) as client:
                 response = client.get(url, headers=BROWSER_HEADERS)
+
+                # Handle redirects: only follow same-host
+                redirect_count = 0
+                while response.is_redirect and redirect_count < 5:
+                    redirect_url = str(response.next_request.url) if response.next_request else ""
+                    redirect_host = urlparse(redirect_url).hostname or ""
+                    if redirect_host.lstrip("www.") != original_host:
+                        return ToolResult(
+                            status="success",
+                            content=(
+                                f"REDIRECT DETECTED: {url} redirects to {redirect_url}\n"
+                                "The redirect crosses domains. Re-fetch the target URL if needed."
+                            ),
+                            payload={"prompt": prompt_text} if prompt_text else {},
+                        )
+                    response = client.get(redirect_url, headers=BROWSER_HEADERS)
+                    redirect_count += 1
+
                 if response.status_code in (403, 429):
                     _time.sleep(1.5)
                     response = client.get(url, headers=_ALTERNATE_UA_HEADERS)
+                    if response.status_code in (403, 429):
+                        return ToolResult(
+                            status="error",
+                            content=f"Error: HTTP {response.status_code} after retry.",
+                        )
                 response.raise_for_status()
         except Exception as exc:
             return ToolResult(status="error", content=f"Error: {type(exc).__name__}: {exc}")
+
+        # Response size check (CC utils.ts MAX_HTTP_CONTENT_LENGTH)
+        content_length = int(response.headers.get("content-length", 0))
+        if content_length > _MAX_HTTP_CONTENT_LENGTH or len(response.content) > _MAX_HTTP_CONTENT_LENGTH:
+            return ToolResult(
+                status="error",
+                content="Error: Response too large (>10MB).",
+            )
 
         content_type = response.headers.get("content-type", "").lower()
         content = _extract_content(response.text, content_type, response.content)
@@ -572,7 +744,7 @@ class WebFetchTool(BuiltinTool):
 - [ ] **Step 3: Run tests and commit**
 
 ```bash
-python -m pytest tests/matmaster/tools/builtin/test_web_fetch_tool.py -v
+uv run pytest tests/matmaster/tools/builtin/test_web_fetch_tool.py -v
 git add matmaster/tools/builtin/web_fetch_tool.py matmaster/tools/builtin/__init__.py tests/matmaster/tools/builtin/test_web_fetch_tool.py
 git commit -m "feat(tools): add WebFetchTool with HTML/PDF extraction and disk cache"
 ```

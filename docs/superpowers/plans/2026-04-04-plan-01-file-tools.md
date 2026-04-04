@@ -142,7 +142,7 @@ class TestReadToolRunnerState:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `python -m pytest tests/matmaster/tools/builtin/test_read_tool.py -v`
+Run: `uv run pytest tests/matmaster/tools/builtin/test_read_tool.py -v`
 Expected: FAIL (module not found)
 
 - [ ] **Step 3: Implement `read_tool.py`**
@@ -244,7 +244,11 @@ class ReadTool(BuiltinTool):
         arguments: dict[str, Any],
         exec_ctx: ToolExecutionContext | None,
     ) -> ToolResult:
-        result = await asyncio.to_thread(self._execute_internal, arguments)
+        try:
+            result = await asyncio.to_thread(self._execute_internal, arguments)
+        except Exception as e:
+            self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
+            return ToolResult(status="error", content=f"Error: {e}")
 
         if exec_ctx is not None and exec_ctx.runner_state is not None:
             if result.meta.get("mark_read"):
@@ -282,6 +286,15 @@ class ReadTool(BuiltinTool):
     # -- Full-read mode --
 
     def _full_read(self, file_path: str, lines: list[str], total: int) -> ToolResult:
+        if total == 0:
+            return ToolResult(
+                content=(
+                    f"<system-reminder>Warning: the file {file_path} exists "
+                    "but the contents are empty.</system-reminder>"
+                ),
+                meta={"mark_read": True},
+            )
+
         if total <= MAX_READ_LINES:
             output = self._format_lines(lines, file_path, init_line=1)
             truncated, result = self._apply_char_limit(output)
@@ -357,7 +370,7 @@ class ReadTool(BuiltinTool):
 
 - [ ] **Step 4: Run tests**
 
-Run: `python -m pytest tests/matmaster/tools/builtin/test_read_tool.py -v`
+Run: `uv run pytest tests/matmaster/tools/builtin/test_read_tool.py -v`
 Expected: all PASS
 
 - [ ] **Step 5: Update `__init__.py` and commit**
@@ -484,7 +497,7 @@ class TestEditExecution:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `python -m pytest tests/matmaster/tools/builtin/test_edit_tool.py -v`
+Run: `uv run pytest tests/matmaster/tools/builtin/test_edit_tool.py -v`
 
 - [ ] **Step 3: Implement `edit_tool.py`**
 
@@ -660,7 +673,7 @@ class EditTool(BuiltinTool):
 
 - [ ] **Step 4: Run tests**
 
-Run: `python -m pytest tests/matmaster/tools/builtin/test_edit_tool.py -v`
+Run: `uv run pytest tests/matmaster/tools/builtin/test_edit_tool.py -v`
 
 - [ ] **Step 5: Update `__init__.py` and commit**
 
@@ -755,7 +768,7 @@ class TestWriteExecution:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `python -m pytest tests/matmaster/tools/builtin/test_write_tool.py -v`
+Run: `uv run pytest tests/matmaster/tools/builtin/test_write_tool.py -v`
 
 - [ ] **Step 3: Implement `write_tool.py`**
 
@@ -870,7 +883,7 @@ class WriteTool(BuiltinTool):
 
 - [ ] **Step 4: Run tests**
 
-Run: `python -m pytest tests/matmaster/tools/builtin/test_write_tool.py -v`
+Run: `uv run pytest tests/matmaster/tools/builtin/test_write_tool.py -v`
 
 - [ ] **Step 5: Update `__init__.py` and commit**
 

@@ -32,7 +32,7 @@
 - **Name:** `Grep` (`tools/GrepTool/prompt.ts:4`)
 - **Description:** `getDescription()` — ripgrep-based search with output modes, regex, multiline
 - **Schema** (`GrepTool.ts:33-89`): `pattern`, `path?`, `glob?`, `output_mode?`, `-A?`, `-B?`, `-C?`, `context?`, `-n?`, `-i?`, `type?`, `head_limit?`, `offset?`, `multiline?`
-- **MatMaster adaptation:** Drop `type` and `multiline` (grep fallback doesn't support these). Keep all others.
+- **MatMaster adaptation:** Keep `type` and `multiline` for rg path; gracefully ignored in grep fallback. Keep all others.
 
 ---
 
@@ -195,8 +195,10 @@ class BashTool(BuiltinTool):
         )
 
     async def execute_with_context(self, arguments, exec_ctx):
-        if exec_ctx is not None and hasattr(exec_ctx, "stop_event"):
-            self._stop_event = exec_ctx.stop_event
+        if exec_ctx is not None:
+            cancel_token = getattr(exec_ctx, "cancel_token", None)
+            if cancel_token is not None:
+                self._cancel_token = cancel_token
         return await self.execute(arguments)
 
     def _execute(self, arguments: dict[str, Any]) -> str:
@@ -207,23 +209,23 @@ class BashTool(BuiltinTool):
             return "Error: command is required and must not be empty."
 
         timeout_ms = arguments.get("timeout", 120_000)
-        timeout_s = max(1, int(timeout_ms) // 1000) if timeout_ms and int(timeout_ms) > 0 else None
+        timeout_ms = min(int(timeout_ms), 600_000)  # cap at 10min
+        timeout_s = timeout_ms / 1000  # float division preserves sub-second
 
         result = session.exec_bash(
             command=command,
             timeout=timeout_s,
-            stop_event=self._stop_event_for_exec(),
+            cancel_token=self._cancel_token_for_exec(),
         )
 
         output = result.get("output", "") or result.get("stdout", "")
-        exit_code = result.get("exit_code", -1)
+        exit_code = result.get("exit_code", 0)
         working_dir = result.get("working_dir", "")
 
         obs = output
         if working_dir:
             obs += f"\n[Current working directory: {working_dir}]"
-        if exit_code != -1:
-            obs += f"\n[Command finished with exit code {exit_code}]"
+        obs += f"\n[Command finished with exit code {exit_code}]"
 
         return obs
 ```
@@ -231,7 +233,7 @@ class BashTool(BuiltinTool):
 - [ ] **Step 4: Run tests and commit**
 
 ```bash
-python -m pytest tests/matmaster/tools/builtin/test_bash_tool.py -v
+uv run pytest tests/matmaster/tools/builtin/test_bash_tool.py -v
 git add matmaster/tools/builtin/bash_tool.py matmaster/tools/builtin/__init__.py tests/matmaster/tools/builtin/test_bash_tool.py
 git commit -m "feat(tools): add BashTool with timeout and prompt guidance"
 ```
@@ -314,6 +316,9 @@ from matmaster.types.topology import ToolPlane
 from ._path_safety import resolve_safe_path, shell_escape
 from .base import BuiltinTool
 
+MAX_GLOB_RESULTS = 200
+
+# find-based excludes for VCS/build dirs
 VCS_EXCLUDES = (
     '-not -path "*/.git/*" '
     '-not -path "*/node_modules/*" '
@@ -326,6 +331,9 @@ class GlobTool(BuiltinTool):
     """Search file paths by glob pattern within the workspace.
 
     CC name: Glob (GlobTool)
+
+    Uses bash globstar (shopt -s globstar) for ** patterns, falls back to
+    find -path for simple patterns. Results sorted by modification time.
     """
 
     name: ClassVar[str] = "Glob"
@@ -367,20 +375,28 @@ class GlobTool(BuiltinTool):
         session = self._require_session()
 
         pattern: str = arguments.get("pattern", "")
+        if not pattern:
+            return "Error: pattern is required and must not be empty."
+
         path: str = arguments.get("path", "") or ""
         workdir = str(self._workdir) if self._workdir else "/workspace"
         safe_path = resolve_safe_path(path, workdir)
 
+        # Use bash globstar for ** support, sort by mtime (newest first),
+        # exclude VCS dirs via grep -v, limit results
         command = (
-            f"find {shell_escape(safe_path)} -type f "
-            f"-name {shell_escape(pattern)} "
-            f"{VCS_EXCLUDES} "
-            f"2>/dev/null | head -200"
+            f"cd {shell_escape(safe_path)} && "
+            f"shopt -s globstar nullglob && "
+            f"printf '%s\\n' {shell_escape(pattern)} 2>/dev/null | "
+            f"grep -v -E '/(\\.(git|svn)|node_modules|__pycache__)/' | "
+            f"head -{MAX_GLOB_RESULTS} | "
+            f"xargs -r ls -1t 2>/dev/null | "
+            f"head -{MAX_GLOB_RESULTS}"
         )
         result = session.exec_bash(
             command=command,
             timeout=30,
-            stop_event=self._stop_event_for_exec(),
+            cancel_token=self._cancel_token_for_exec(),
         )
 
         output = result.get("output", "") or result.get("stdout", "")
@@ -388,13 +404,20 @@ class GlobTool(BuiltinTool):
         if not output.strip():
             return f"No files matching pattern '{pattern}' found in {safe_path}"
 
+        lines = output.strip().splitlines()
+        if len(lines) >= MAX_GLOB_RESULTS:
+            output += (
+                f"\n(Results truncated at {MAX_GLOB_RESULTS}. "
+                "Consider using a more specific path or pattern.)"
+            )
+
         return output
 ```
 
 - [ ] **Step 4: Run tests and commit**
 
 ```bash
-python -m pytest tests/matmaster/tools/builtin/test_glob_tool.py -v
+uv run pytest tests/matmaster/tools/builtin/test_glob_tool.py -v
 git add matmaster/tools/builtin/glob_tool.py matmaster/tools/builtin/__init__.py tests/matmaster/tools/builtin/test_glob_tool.py
 git commit -m "feat(tools): add GlobTool with shell_escape protection"
 ```
@@ -571,7 +594,11 @@ class GrepTool(BuiltinTool):
             },
             "-C": {
                 "type": "integer",
-                "description": "Number of lines to show before and after each match.",
+                "description": "Alias for context.",
+            },
+            "context": {
+                "type": "integer",
+                "description": "Number of lines to show before and after each match. Takes precedence over -C.",
             },
             "-i": {
                 "type": "boolean",
@@ -580,6 +607,14 @@ class GrepTool(BuiltinTool):
             "-n": {
                 "type": "boolean",
                 "description": "Show line numbers in output. Defaults to true.",
+            },
+            "type": {
+                "type": "string",
+                "description": "File type to search (rg --type). E.g., \"py\", \"js\". Only works with rg.",
+            },
+            "multiline": {
+                "type": "boolean",
+                "description": "Enable multiline mode (rg -U --multiline-dotall). Only works with rg. Default: false.",
             },
             "head_limit": {
                 "type": "integer",
@@ -628,9 +663,15 @@ class GrepTool(BuiltinTool):
         output_mode: str = arguments.get("output_mode", "files_with_matches")
         after: int | None = arguments.get("-A")
         before: int | None = arguments.get("-B")
-        context: int | None = arguments.get("-C")
+        # context takes precedence over -C (CC behavior)
+        ctx_lines: int | None = arguments.get("context")
+        if ctx_lines is None:
+            ctx_lines = arguments.get("-C")
         case_insensitive: bool = arguments.get("-i", False)
-        head_limit: int = arguments.get("head_limit", DEFAULT_HEAD_LIMIT)
+        show_line_nums: bool = arguments.get("-n", True)
+        file_type: str = arguments.get("type", "") or ""
+        multiline: bool = arguments.get("multiline", False)
+        head_limit: int | None = arguments.get("head_limit")
         offset: int = arguments.get("offset", 0)
 
         workdir = str(self._workdir) if self._workdir else "/workspace"
@@ -640,24 +681,28 @@ class GrepTool(BuiltinTool):
         if use_rg:
             cmd = self._build_rg_command(
                 pattern, safe_path, file_glob, output_mode,
-                after, before, context, case_insensitive,
+                after, before, ctx_lines, case_insensitive,
+                show_line_nums, file_type, multiline,
             )
         else:
             cmd = self._build_grep_command(
                 pattern, safe_path, file_glob, output_mode,
-                after, before, context, case_insensitive,
+                after, before, ctx_lines, case_insensitive,
+                show_line_nums,
             )
 
         # Pagination
         if offset > 0:
             cmd += f" | tail -n +{offset + 1}"
-        effective_limit = head_limit if head_limit != 0 else None
-        if effective_limit is None:
-            effective_limit = DEFAULT_HEAD_LIMIT
-        cmd += f" | head -{effective_limit}"
+        # head_limit=0 means unlimited (CC behavior), None means use default
+        if head_limit is None:
+            cmd += f" | head -{DEFAULT_HEAD_LIMIT}"
+        elif head_limit > 0:
+            cmd += f" | head -{head_limit}"
+        # head_limit == 0: no head pipe (unlimited)
 
         result = session.exec_bash(
-            command=cmd, timeout=30, stop_event=self._stop_event_for_exec(),
+            command=cmd, timeout=30, cancel_token=self._cancel_token_for_exec(),
         )
         output = result.get("output", "") or result.get("stdout", "")
 
@@ -668,14 +713,16 @@ class GrepTool(BuiltinTool):
     def _build_rg_command(
         self, pattern, safe_path, file_glob, output_mode,
         after, before, context, case_insensitive,
+        show_line_nums, file_type, multiline,
     ) -> str:
-        flags = []
+        flags = ["--max-columns", "500"]  # prevent base64/minified pollution
         if output_mode == "files_with_matches":
             flags.append("--files-with-matches")
         elif output_mode == "count":
             flags.append("--count")
         else:
-            flags.append("-n")  # content mode, line numbers
+            if show_line_nums:
+                flags.append("-n")
             if after:
                 flags.append(f"-A {after}")
             if before:
@@ -686,6 +733,10 @@ class GrepTool(BuiltinTool):
             flags.append("--ignore-case")
         if file_glob:
             flags.append(f"--glob {shell_escape(file_glob)}")
+        if file_type:
+            flags.append(f"--type {shell_escape(file_type)}")
+        if multiline:
+            flags.extend(["-U", "--multiline-dotall"])
 
         flag_str = " ".join(flags)
         return f"rg {flag_str} {shell_escape(pattern)} {shell_escape(safe_path)} 2>/dev/null"
@@ -693,6 +744,7 @@ class GrepTool(BuiltinTool):
     def _build_grep_command(
         self, pattern, safe_path, file_glob, output_mode,
         after, before, context, case_insensitive,
+        show_line_nums,
     ) -> str:
         flags = ["-r"]
         if output_mode == "files_with_matches":
@@ -700,7 +752,8 @@ class GrepTool(BuiltinTool):
         elif output_mode == "count":
             flags.append("-c")
         else:
-            flags.append("-n")
+            if show_line_nums:
+                flags.append("-n")
             if after:
                 flags.append(f"-A {after}")
             if before:
@@ -722,7 +775,7 @@ class GrepTool(BuiltinTool):
 - [ ] **Step 4: Run tests and commit**
 
 ```bash
-python -m pytest tests/matmaster/tools/builtin/test_grep_tool.py -v
+uv run pytest tests/matmaster/tools/builtin/test_grep_tool.py -v
 git add matmaster/tools/builtin/grep_tool.py matmaster/tools/builtin/__init__.py tests/matmaster/tools/builtin/test_grep_tool.py
 git commit -m "feat(tools): add GrepTool with rg/grep dual-path and output modes"
 ```

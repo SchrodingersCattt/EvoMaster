@@ -488,6 +488,6 @@ git commit -m "feat(tools): add builtin package skeleton"
 
 Plans 01-04 all depend on this plan completing first. They will each append their tool class to `__init__.py` as they are implemented.
 
-**Plan-01 integration requirements** (must be addressed when implementing core file/shell tools):
-- **Replace inline `_resolve_safe_path`**: GlobTool and GrepTool each have an identical inline `_resolve_safe_path` method. Plan-01 must replace these with `from matmaster.tools.builtin._path_safety import resolve_safe_path`.
-- **Use `shell_escape` for command construction**: Current GlobTool/GrepTool interpolate user-supplied `pattern`, `glob`, and `path` directly into f-strings (e.g., `f'find "{safe_path}" -type f -name "{pattern}"'`). This is a shell injection vector. Plan-01 must use `shell_escape()` from `_path_safety` for all user parameters before shell interpolation.
+**Plan-02 integration requirements** (must be addressed when implementing Bash/Glob/Grep):
+- **Replace inline `_resolve_safe_path`**: GlobTool and GrepTool each have an identical inline `_resolve_safe_path` method. Plan-02 must replace these with `from matmaster.tools.builtin._path_safety import resolve_safe_path`.
+- **Use `shell_escape` for command construction**: Current GlobTool/GrepTool interpolate user-supplied `pattern`, `glob`, and `path` directly into f-strings (e.g., `f'find "{safe_path}" -type f -name "{pattern}"'`). This is a shell injection vector. Plan-02 must use `shell_escape()` from `_path_safety` for all user parameters before shell interpolation.

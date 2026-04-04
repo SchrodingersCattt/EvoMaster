@@ -61,15 +61,27 @@ class TestAgentToolMetadata:
 
 
 class TestAgentRecursionGuard:
-    def test_no_spawn_fn_error(self):
+    def test_no_spawn_fn_hidden_from_model(self):
+        """Schema-layer guard: exposed_to_model=False when spawn_fn=None."""
+        tool = AgentTool(spawn_fn=None)
+        assert tool.exposed_to_model is False
+
+    def test_no_spawn_fn_runtime_error(self):
+        """Runtime-layer guard: returns error even if somehow called."""
         tool = AgentTool(spawn_fn=None)
         result = asyncio.run(tool.execute({
             "description": "test", "prompt": "do something",
         }))
         assert "error" in result.lower() or "not available" in result.lower()
 
+    def test_with_spawn_fn_visible(self):
+        async def fake_spawn(exp_name, task, cancel_token=None):
+            return f"Result for: {task}"
+        tool = AgentTool(spawn_fn=fake_spawn)
+        assert tool.exposed_to_model is True
+
     def test_with_spawn_fn(self):
-        async def fake_spawn(exp_name, task, stop_event=None):
+        async def fake_spawn(exp_name, task, cancel_token=None):
             return f"Result for: {task}"
 
         tool = AgentTool(spawn_fn=fake_spawn)
@@ -77,6 +89,16 @@ class TestAgentRecursionGuard:
             "description": "test", "prompt": "do something",
         }))
         assert "Result for: do something" in result
+
+    def test_exp_name_passed_to_spawn(self):
+        async def fake_spawn(exp_name, task, cancel_token=None):
+            return f"Ran {exp_name}: {task}"
+
+        tool = AgentTool(spawn_fn=fake_spawn)
+        result = asyncio.run(tool.execute({
+            "description": "test", "prompt": "do x", "exp_name": "explore",
+        }))
+        assert "explore" in result
 
 
 class TestAgentDynamicSchema:
@@ -119,12 +141,12 @@ CC name: Agent
 
 from __future__ import annotations
 
-import threading
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any, ClassVar
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.tool_spec import ResourceClaim
 
 
@@ -133,7 +155,9 @@ class AgentTool(BuiltinTool):
 
     CC name: Agent (AgentTool)
 
-    Recursion guard: spawn_fn=None prevents child agents from spawning.
+    Recursion guard (two layers per spec):
+    1. Schema-layer: spawn_fn=None → exposed_to_model=False (LLM never sees tool)
+    2. Runtime-layer: execute() returns error when spawn_fn is None
     """
 
     name: ClassVar[str] = "Agent"
@@ -170,12 +194,15 @@ class AgentTool(BuiltinTool):
         *,
         session: Any | None = None,
         workdir: Any | None = None,
-        spawn_fn: Callable[..., str] | None = None,
+        spawn_fn: Callable[..., Awaitable[str]] | None = None,
         available_exps: list[tuple[str, str]] | None = None,
     ) -> None:
         super().__init__(session=session, workdir=workdir)
         self._spawn_fn = spawn_fn
-        self._stop_event: threading.Event | None = None
+
+        # Schema-layer recursion guard: hide from LLM when spawn not available
+        if spawn_fn is None:
+            self.exposed_to_model = False  # type: ignore[misc]
 
         if available_exps:
             self._apply_available_exps(available_exps)
@@ -251,7 +278,7 @@ class AgentTool(BuiltinTool):
             return "Error: prompt is required and must not be empty"
 
         try:
-            return await self._spawn_fn(exp_name, prompt, self._stop_event)
+            return await self._spawn_fn(exp_name, prompt, self._cancel_token_for_exec())
         except Exception as e:
             self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
             return f"Error: {e}"
@@ -263,7 +290,7 @@ class AgentTool(BuiltinTool):
 - [ ] **Step 3: Run tests and commit**
 
 ```bash
-python -m pytest tests/matmaster/tools/builtin/test_agent_tool.py -v
+uv run pytest tests/matmaster/tools/builtin/test_agent_tool.py -v
 git add matmaster/tools/builtin/agent_tool.py matmaster/tools/builtin/__init__.py tests/matmaster/tools/builtin/test_agent_tool.py
 git commit -m "feat(tools): add AgentTool with spawn_fn and recursion guard"
 ```
@@ -411,7 +438,9 @@ class TodoWriteTool(BuiltinTool):
     capabilities: ClassVar[frozenset[str]] = frozenset({"task.write"})
     effect_level: ClassVar[str] = "local_mutation"
 
-    _lock = threading.Lock()
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._lock = threading.Lock()  # instance-level, not class-level
 
     def prompt(self, ctx=None) -> str:
         return (
@@ -449,6 +478,11 @@ class TodoWriteTool(BuiltinTool):
                     status="error",
                     content=f"Error: invalid status '{todo['status']}'. Must be one of: {VALID_STATUSES}",
                 )
+            if "priority" in todo and todo["priority"] not in VALID_PRIORITIES:
+                return ToolResult(
+                    status="error",
+                    content=f"Error: invalid priority '{todo['priority']}'. Must be one of: {VALID_PRIORITIES}",
+                )
 
         path = Path(self._workdir) / ".todos.json"
 
@@ -472,14 +506,15 @@ class TodoWriteTool(BuiltinTool):
                 encoding="utf-8",
             )
 
-        # Compute summary
+        # Compute summary (spec: added N, updated N, removed N, completed N)
         old_ids = {t.get("id") for t in old_todos}
         new_ids = {t.get("id") for t in todos}
         added = len(new_ids - old_ids)
         removed = len(old_ids - new_ids)
+        updated = len(old_ids & new_ids)
         completed = sum(1 for t in todos if t["status"] == "completed")
 
-        summary = f"Todos updated: {added} added, {removed} removed, {completed} completed"
+        summary = f"Todos updated: {added} added, {updated} updated, {removed} removed, {completed} completed"
         if all_done:
             summary += " (all done, list cleared)"
 
@@ -489,7 +524,7 @@ class TodoWriteTool(BuiltinTool):
 - [ ] **Step 3: Run tests and commit**
 
 ```bash
-python -m pytest tests/matmaster/tools/builtin/test_todo_write_tool.py -v
+uv run pytest tests/matmaster/tools/builtin/test_todo_write_tool.py -v
 git add matmaster/tools/builtin/todo_write_tool.py matmaster/tools/builtin/__init__.py tests/matmaster/tools/builtin/test_todo_write_tool.py
 git commit -m "feat(tools): add TodoWriteTool with full-replacement semantics"
 ```
@@ -569,6 +604,17 @@ class TestSkillExecution:
         tool = SkillTool(skill_registry=make_registry(skill=skill))
         result = asyncio.run(tool.execute({"skill": "test-skill", "args": "some args"}))
         assert "some args" in result
+
+    def test_slash_prefix_stripped(self):
+        skill = make_skill()
+        tool = SkillTool(skill_registry=make_registry(skill=skill))
+        result = asyncio.run(tool.execute({"skill": "/test-skill"}))
+        assert "Test Skill" in result
+
+    def test_no_registry_error(self):
+        tool = SkillTool(skill_registry=None)
+        result = asyncio.run(tool.execute({"skill": "test-skill"}))
+        assert "error" in result.lower()
 ```
 
 - [ ] **Step 2: Implement `skill_tool.py` in builtin/**
@@ -587,7 +633,6 @@ Migrated from matmaster/tools/skill_tool.py. Now inherits BuiltinTool.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -669,18 +714,9 @@ class SkillTool(BuiltinTool):
         )
 
     async def execute(self, arguments: dict[str, Any]) -> str:
-        return await asyncio.to_thread(self._execute_sync, arguments)
-
-    async def execute_with_context(
-        self,
-        arguments: dict[str, Any],
-        exec_ctx: ToolExecutionContext | None,
-    ) -> str:
-        return await self.execute(arguments)
-
-    def _execute_sync(self, arguments: dict[str, Any]) -> str:
+        """Native async execute — bypasses _execute + to_thread (per spec 5.3)."""
         try:
-            skill_name = arguments.get("skill", "")
+            skill_name = (arguments.get("skill") or "").lstrip("/")  # strip slash prefix (CC behavior)
             args = arguments.get("args", "")
 
             if self._registry is None:
@@ -709,6 +745,14 @@ class SkillTool(BuiltinTool):
             logger.error("Skill tool failed: %s", e, exc_info=True)
             return f"Error: {e}"
 
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: ToolExecutionContext | None,
+    ) -> str:
+        # TODO: pass cancel_token when needed
+        return await self.execute(arguments)
+
     def _maybe_hit_mcp(self, skill: Skill) -> None:
         mcp_server = skill.meta_info.mcp_server
         if mcp_server and self._on_skill_hit:
@@ -721,7 +765,7 @@ class SkillTool(BuiltinTool):
 - [ ] **Step 3: Run tests and commit**
 
 ```bash
-python -m pytest tests/matmaster/tools/builtin/test_skill_tool.py -v
+uv run pytest tests/matmaster/tools/builtin/test_skill_tool.py -v
 git add matmaster/tools/builtin/skill_tool.py matmaster/tools/builtin/__init__.py tests/matmaster/tools/builtin/test_skill_tool.py
 git commit -m "feat(tools): add SkillTool migrated to builtin/ with CC naming"
 ```
