@@ -4,16 +4,16 @@ domain: "elec"
 
 questions:
   # ============================================================
-  # SC_elec_003_20260401 — NFPP Al掺杂超胞构建
+  # SC_elec_003_20260404b — NFPP Al掺杂超胞构建
   # ============================================================
-  - id: "SC_elec_003_20260404"
+  - id: "SC_elec_003_20260404b"
     capability: "structure_construction"
     domain: "elec"
-    intent: "Build NFPP Al-doped supercell by substituting P with Al."
+    intent: "Build 2×1×1 supercell of NFPP, then substitute one PO₄-site P with Al."
     human_prompt_seed: |
       构建NFPP的Al掺杂超胞：
       1. 获取NFPP（Na₄Fe₃(PO₄)₂P₂O₇）结构（空间群Pna2₁）；
-      2. 在P位（PO₄磷酸根位点）用Al替换一个P原子，构建2×1×1超胞；
+      2. 构建2×1×1超胞，然后在超胞中选一个PO₄磷酸根位点的P原子用Al替换；
       3. 输出掺杂结构文件，并报告：
          - 超胞化学式
          - 替换的P原子位置索引
@@ -23,7 +23,7 @@ questions:
     data_files: []
     reference_answers:
       - key: "doped_formula"
-        value: "Na16Al1Fe12P15O60"
+        value: "Na32Fe24Al1P31O120"
       - key: "required_fields"
         value:
           - "structure_file"
@@ -35,10 +35,10 @@ questions:
       - key: "duration_budget"
         value: {max: 3600000}
       - key: "token_budget_total"
-        value: {max: 8000}
+        value: {max: 25000}
     scoring_checklist:
       - id: "doped_formula"
-        criterion: "Reported doped supercell formula is Na16Al1Fe12P15O60."
+        criterion: "Reported doped supercell formula is Na32Fe24Al1P31O120 (208 atoms, 2×1×1 supercell with one Al substitution)."
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "required_fields"

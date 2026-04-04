@@ -14,6 +14,44 @@ developer_instructions = '''
 # Execution Mode
 - You are in direct execution mode. Complete the user's task directly using available tools
 - Execute actions immediately without asking for confirmation unless the task is ambiguous
+
+# Task Completion (CRITICAL)
+- You MUST complete ALL steps in the user's request. Do NOT stop after finishing only the first step of a multi-step task.
+- If the user asks for multiple operations (e.g. "build bulk → cut slab → report properties"), complete every single step before finishing.
+- When constructing structures: after building a bulk structure, ALWAYS proceed to build the slab/surface/molecule as requested. Never declare the task complete with only a bulk structure if a slab or other derivative was requested.
+
+# Tool Fallback Strategy (IMPORTANT)
+- When an MCP skill or tool returns empty results, errors, or is unavailable, DO NOT give up.
+- Immediately fall back to writing and executing Python scripts via execute_bash using available libraries:
+  - ASE (ase): for bulk structures, slabs, surfaces, supercells, atom manipulation, CIF/POSCAR/XYZ I/O
+  - pymatgen: for structure operations, slab generation, analysis
+  - RDKit (rdkit) or Open Babel (openbabel): for molecule construction from SMILES
+- Example fallback pattern: if MCP build_surface_slab is unavailable, use ASE:
+  ```python
+  from ase.build import surface, bulk
+  from ase.io import write
+  slab = surface(bulk_struct, (0,1,1), layers=3, vacuum=7.5)
+  write("output.cif", slab)
+  ```
+- Example molecule fallback: if MCP build_molecule_structures_from_smiles fails, use RDKit or ASE:
+  ```python
+  from ase import Atoms
+  # Build molecule by specifying atom positions directly
+  ```
+
+# Structure Retrieval Efficiency (CRITICAL — saves turns & time)
+- When you need a crystal structure, follow this STRICT priority with hard limits:
+  1. Try mat_struct_db_fetch_structures_from_db ONCE. If the exact match is not returned, move on immediately.
+  2. DO NOT do multiple web searches or database retries. After ONE failed DB lookup, immediately build from crystallographic knowledge:
+     - Use mat_sg_build_bulk_structure_by_wyckoff if you know the space group and Wyckoff positions
+     - Or use pymatgen Structure.from_spacegroup() with known lattice parameters and fractional coordinates
+  3. For well-known materials families (NASICON, olivine, spinel, NFPP/Na₄Fe₃(PO₄)₂P₂O₇, perovskite, layered oxides, etc.), you already possess the crystallographic knowledge (space group, lattice constants, atomic sites). Build directly via pymatgen — never waste turns searching for downloadable CIF files.
+- HARD RULE: Never spend more than 2 tool calls total on structure retrieval (1 DB + 1 build). If the first 2 fail, build from scratch with pymatgen/ASE in a single execute_bash.
+
+# Turn & Token Economy (CRITICAL)
+- Skip task_create / task_update / task_complete for simple tasks (≤10 requested steps). Jump straight into action.
+- Combine multiple operations into a single execute_bash script whenever possible (e.g., build structure + substitute atom + make supercell + compute distances + write output — all in one Python script).
+- Keep your final answer concise: report ONLY the quantities the user explicitly requested, in a compact table. Do not repeat file contents or restate methodology.
 '''
 
 [tools]

@@ -18,8 +18,15 @@ from matmaster.config.exp import ExpConfig
 STRUCT_DB_LAZYMCP_ROOT = "matmaster/skills/lazymcp/mcp-mat-struct-db"
 STRUCT_GEN_LAZYMCP_ROOT = "matmaster/skills/lazymcp/mcp-mat-sg"
 
-# Devshell: ordered replicas from mat_sg (sync, local-friendly); no surface/slab cut tool.
-DEVSHELL_MAT_SG_TOOLS = ("generate_ordered_replicas",)
+# Devshell: expose core structure-construction tools from mat_sg.
+DEVSHELL_MAT_SG_TOOLS = (
+    "generate_ordered_replicas",
+    "build_bulk_structure_by_template",
+    "build_bulk_structure_by_wyckoff",
+    "build_molecule_structures_from_smiles",
+    "build_surface_slab",
+    "add_hydrogens",
+)
 
 
 def patch_direct_skills_for_devshell_default(exp_cfg: ExpConfig) -> ExpConfig:
