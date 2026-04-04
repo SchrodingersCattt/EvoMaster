@@ -132,19 +132,25 @@ class CancellationToken:
         fut: asyncio.Future[bool] = loop.create_future()
 
         def _resolve() -> None:
+            def _safe_set() -> None:
+                if not fut.done():
+                    fut.set_result(True)
             try:
-                loop.call_soon_threadsafe(fut.set_result, True)
+                loop.call_soon_threadsafe(_safe_set)
             except RuntimeError:
                 pass  # event loop closed
 
         self.on_cancel(_resolve)
 
-        if timeout is not None:
-            try:
-                return await asyncio.wait_for(asyncio.ensure_future(fut), timeout)
-            except asyncio.TimeoutError:
-                return False
-        return await fut
+        try:
+            if timeout is not None:
+                try:
+                    return await asyncio.wait_for(asyncio.ensure_future(fut), timeout)
+                except asyncio.TimeoutError:
+                    return False
+            return await fut
+        except asyncio.CancelledError:
+            return self._event.is_set()
 
     def on_cancel(self, callback: Callable[[], None]) -> None:
         """Register callback. Fires immediately if already cancelled.
@@ -316,12 +322,35 @@ class TestWaitAsync:
                 pass
         assert call_task in done
         assert call_task.result() == "done"
+
+    @pytest.mark.asyncio
+    async def test_token_cancel_after_waiter_timeout_no_invalid_state(self):
+        """Regression: token cancel after wait_async timeout must not raise InvalidStateError."""
+        ctrl = CancellationController()
+        result = await ctrl.token.wait_async(timeout=0.05)
+        assert result is False
+        # Now cancel AFTER the future is already done/timed-out
+        ctrl.cancel()  # should not raise InvalidStateError
+
+    @pytest.mark.asyncio
+    async def test_token_cancel_after_task_cancel_no_invalid_state(self):
+        """Regression: token cancel after task.cancel() must not raise InvalidStateError."""
+        ctrl = CancellationController()
+        task = asyncio.create_task(ctrl.token.wait_async())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        # Now cancel AFTER the task was already cancelled
+        ctrl.cancel()  # should not raise InvalidStateError
 ```
 
 - [ ] **Step 8: Run tests, verify they pass**
 
 Run: `uv run pytest tests/matmaster/types/test_cancellation.py -v`
-Expected: 16 passed
+Expected: 18 passed
 
 - [ ] **Step 9: Commit**
 
@@ -901,11 +930,20 @@ In `matmaster/tools/builtin/bash_tool.py:86-98`:
 
 In `matmaster/tools/builtin/bash_tool.py:100-150`, update `_execute_async`:
 
-After `proc = await asyncio.create_subprocess_exec(...)` (line 116-123), add:
+Add `start_new_session=True` to `asyncio.create_subprocess_exec(...)` (line 116-123) to create a new process group, matching LocalSession's behavior.
+
+After the `create_subprocess_exec` call, add:
 ```python
         cancel_token = getattr(self, '_cancel_token', None)
+
+        def _kill_group():
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, OSError):
+                pass
+
         if cancel_token and cancel_token.is_cancelled:
-            proc.kill()
+            _kill_group()
             await proc.wait()
             obs = "Command cancelled."
             if wd:
@@ -914,8 +952,10 @@ After `proc = await asyncio.create_subprocess_exec(...)` (line 116-123), add:
             return obs
 
         if cancel_token:
-            cancel_token.on_cancel(proc.kill)
+            cancel_token.on_cancel(_kill_group)
 ```
+
+Add imports at top of file: `import os`, `import signal` (if not already present).
 
 After `await asyncio.wait_for(proc.communicate(), ...)` returns (before formatting), add:
 ```python
@@ -1058,25 +1098,44 @@ git add matmaster/core/exp.py
 git commit -m "refactor: Exp.run_stream uses cancel_token"
 ```
 
-### Task 13: Worker entry point
+### Task 13: Worker entry point + SIGTERM unification
 
 **Files:**
-- Modify: `src/worker/agent_worker.py:196-259`
+- Modify: `src/worker/agent_worker.py:42-44, 196-259, 457-471`
 
-- [ ] **Step 1: Replace stop_ev creation and usage**
+- [ ] **Step 1: Add module-level `_active_controller`**
 
-At line 196:
+At `src/worker/agent_worker.py`, near existing module-level variables (line 42-44):
+```python
+# Before:
+_drain_requested = False
+
+# After:
+_drain_requested = False
+_active_controller: CancellationController | None = None
+```
+
+- [ ] **Step 2: Replace stop_ev creation and register controller**
+
+At line 196, in the per-run function:
 ```python
 # Before:
         stop_ev = RedisBackedStopEvent(session_id, task_id)
 
 # After:
+        global _active_controller
         controller = CancellationController()
+        _active_controller = controller
         bridge = RedisCancellationBridge(controller, session_id, task_id)
         bridge.start()
 ```
 
-Add `bridge.stop()` to the existing `finally` block.
+Add to the existing `finally` block:
+```python
+        finally:
+            bridge.stop()
+            _active_controller = None
+```
 
 At line 256:
 ```python
@@ -1086,13 +1145,30 @@ At line 256:
                         cancel_token=controller.token,
 ```
 
-Update SIGTERM handler (if it references `stop_ev`) to call `controller.cancel()`.
+- [ ] **Step 3: Update SIGTERM handler to cancel active run**
 
-- [ ] **Step 2: Commit**
+At line 460 (`_on_sigterm`), add cancellation:
+```python
+    def _on_sigterm(_signum: int, _frame: object) -> None:
+        global _drain_requested
+        sid = _current_session_id
+        if sid:
+            _publish_run_interrupted_deploy(sid)
+        # Cancel the active run so agent loop exits immediately
+        ctrl = _active_controller
+        if ctrl is not None:
+            ctrl.cancel()
+        _drain_requested = True
+        logger.info(...)
+```
+
+This makes deploy SIGTERM and user stop walk the same cancel path: `controller.cancel()` → token fires → agent loop exits → bridge.stop() in finally.
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add src/worker/agent_worker.py
-git commit -m "refactor: Worker uses RedisCancellationBridge + CancellationController"
+git commit -m "refactor: Worker uses RedisCancellationBridge; SIGTERM cancels active run"
 ```
 
 ### Task 14: Service layer
@@ -1116,17 +1192,43 @@ git add src/services/agent_run_service.py
 git commit -m "refactor: AgentRunService uses cancel_token, delete StopEventLike"
 ```
 
-### Task 15: Devshell entry points
+### Task 15: Devshell entry points + cancel_token injection
 
 **Files:**
-- Modify: `matmaster/devshell/runner.py:114-115, 143-144`
+- Modify: `matmaster/devshell/runner.py:111-151`
 - Modify: `matmaster/devshell/debug_run.py:85-88`
 - Modify: `matmaster/devshell/repl.py:131-159`
 
-- [ ] **Step 1: Update runner.py**
+- [ ] **Step 1: Update runner.py signature and add inject logic**
 
 Line 115: `stop_event: threading.Event | None = None` → `cancel_token: CancellationToken | None = None`
-Line 144: `stop_event=stop_event` → `cancel_token=cancel_token`
+
+The devshell runner calls `runtime.kernel.run_stream()` directly (line 143), bypassing `Exp.run_stream()`. This means the inject logic that `Exp.run_stream()` does (session._cancel_token, catalog.inject_cancel_token) never executes. Without this, builtin tools (glob, grep, list_dir, monitor_job, spawn) won't receive the cancel_token.
+
+Add inject before `kernel.run_stream()` (after `runtime = await exp.build_runtime(...)`, before `drain_run_stream`):
+
+```python
+            runtime = await exp.build_runtime(self._pg_ctx)
+            spec = runtime.spec
+
+            # Inject cancel_token into tools and session (Exp.run_stream does
+            # this for the worker path; devshell runner bypasses Exp.run_stream
+            # so must do it here).
+            if cancel_token is not None:
+                catalog = getattr(spec, "tool_catalog", None)
+                if catalog is not None:
+                    catalog.inject_cancel_token(cancel_token)
+                session = self._pg_ctx.session
+                if session is not None:
+                    session._cancel_token = cancel_token
+
+            return await drain_run_stream(
+                runtime.kernel.run_stream(
+                    spec, task, history=self.history, cancel_token=cancel_token
+                ),
+                on_event=_on_event,
+            )
+```
 
 - [ ] **Step 2: Update debug_run.py**
 
@@ -1144,24 +1246,40 @@ SIGINT handler: change `ev.set()` to `controller.cancel()` (or create new contro
 
 ```bash
 git add matmaster/devshell/runner.py matmaster/devshell/debug_run.py matmaster/devshell/repl.py
-git commit -m "refactor: devshell entry points use CancellationController"
+git commit -m "refactor: devshell entry points use CancellationController with inject"
 ```
 
-### Task 16: Final cleanup + full test run
+### Task 16: Test file updates + final cleanup
 
-- [ ] **Step 1: Grep for remaining stop_event references**
+**Known test/helper files that reference `stop_event` and must be updated:**
+- `tests/matmaster/core/agent_kernel_test_helpers.py` (test helpers for agent kernel)
+- `tests/matmaster/tools/test_lazy_mcp.py` (LazyMcpTool tests)
+- `tests/matmaster/core/test_exp_runtime_v2.py` (Exp runtime tests)
+- `tests/matmaster/types/test_session_protocol.py` (Session protocol compliance)
+- `tests/matmaster/types/test_tool_spec.py` (ToolExecutionContext tests)
+- `tests/matmaster/tools/test_spawn_tool.py` (SpawnTool tests)
+- `tests/matmaster/core/test_full_tool_runner.py` (FullToolRunner tests)
+- Any service-layer tests (e.g. `tests/matmaster/services/test_agent_run_stream.py`)
 
-Run: `grep -rn 'stop_event\|_stop_event\|StopEventLike\|RedisBackedStopEvent' matmaster/ src/ --include='*.py' | grep -v __pycache__ | grep -v '.pyc'`
+- [ ] **Step 1: Grep for remaining stop_event references in tests**
+
+Run: `grep -rn 'stop_event\|_stop_event\|StopEventLike\|RedisBackedStopEvent' tests/ --include='*.py' | grep -v __pycache__`
+
+Update all references: `stop_event` → `cancel_token`, `threading.Event()` → `CancellationController()` / `.token`, etc.
+
+- [ ] **Step 2: Grep for remaining stop_event references in source**
+
+Run: `grep -rn 'stop_event\|_stop_event\|StopEventLike\|RedisBackedStopEvent' matmaster/ src/ --include='*.py' | grep -v __pycache__`
 
 Fix any remaining references.
 
-- [ ] **Step 2: Run full test suite**
+- [ ] **Step 3: Run full test suite**
 
 Run: `uv run pytest tests/ -v --timeout=120 -x`
 
 Fix any failures.
 
-- [ ] **Step 3: Commit any remaining fixes**
+- [ ] **Step 4: Commit any remaining fixes**
 
 ```bash
 git add -u

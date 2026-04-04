@@ -164,19 +164,25 @@ async def wait_async(self, timeout: float | None = None) -> bool:
     fut = loop.create_future()
 
     def _resolve():
+        def _safe_set():
+            if not fut.done():
+                fut.set_result(True)
         try:
-            loop.call_soon_threadsafe(fut.set_result, True)
+            loop.call_soon_threadsafe(_safe_set)
         except RuntimeError:
             pass  # event loop closed
 
     self.on_cancel(_resolve)
 
-    if timeout is not None:
-        try:
-            return await asyncio.wait_for(fut, timeout)
-        except asyncio.TimeoutError:
-            return False
-    return await fut
+    try:
+        if timeout is not None:
+            try:
+                return await asyncio.wait_for(fut, timeout)
+            except asyncio.TimeoutError:
+                return False
+        return await fut
+    except asyncio.CancelledError:
+        return self._event.is_set()
 ```
 
 Properties:
