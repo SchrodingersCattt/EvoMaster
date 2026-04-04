@@ -244,10 +244,10 @@ class TestStructuralDeny:
         assert tr.meta["layer"] == "structural"
 
     @pytest.mark.asyncio
-    async def test_execute_bash_allowed_for_stateless_local_session(
+    async def test_bash_allowed_for_stateless_local_session(
         self, tmp_path
     ) -> None:
-        """Real LocalSession capabilities should not structurally block execute_bash."""
+        """Real LocalSession capabilities should not structurally block Bash."""
         session = LocalSession(workspace_path=tmp_path)
         assert session.capabilities.shell_persistence == "stateless"
         assert session.capabilities.shell_input is False
@@ -262,13 +262,13 @@ class TestStructuralDeny:
         ctx = _make_ctx()
 
         results = await runner.execute_batch(
-            [_make_tc("execute_bash", command="echo runner_ok")],
+            [_make_tc("Bash", command="echo runner_ok")],
             ctx,
         )
 
         assert len(results) == 1
         tc, tr = results[0]
-        assert tc.name == "execute_bash"
+        assert tc.name == "Bash"
         assert tr.status == "success"
         assert "runner_ok" in tr.content
 
@@ -598,7 +598,7 @@ class _StringReturnTool:
     def __init__(self, name: str, result: str = "ok") -> None:
         self._name = name
         self._result = result
-        if name == "read_file":
+        if name == "Read":
             self.resource_claims = (
                 ResourceClaim(resource="workspace", mode="shared_read"),
             )
@@ -607,7 +607,7 @@ class _StringReturnTool:
             self.fast_path_eligible = True
             self.max_result_chars = 12000
             self.plane = ToolPlane.SESSION_FS
-        elif name == "write_file":
+        elif name == "Write":
             self.resource_claims = (
                 ResourceClaim(resource="workspace", mode="exclusive"),
             )
@@ -647,12 +647,12 @@ class TestNormalizeAndTruncation:
     async def test_string_return_is_normalized(self) -> None:
         """Executor returning str is normalized to ToolResult."""
         registry = ToolRegistry()
-        registry.register(_StringReturnTool("read_file", result="some content"), source="builtin")
+        registry.register(_StringReturnTool("Read", result="some content"), source="builtin")
         catalog = ToolCatalog(registry)
         runner = _make_runner(catalog)
         ctx = _make_ctx()
 
-        results = await runner.execute_batch([_make_tc("read_file")], ctx)
+        results = await runner.execute_batch([_make_tc("Read")], ctx)
         _, tr = results[0]
         assert isinstance(tr, ToolResult)
         assert tr.content == "some content"
@@ -663,7 +663,7 @@ class TestNormalizeAndTruncation:
         """Executor returning None is normalized to empty ToolResult."""
 
         class _NoneReturnTool:
-            name = "read_file"
+            name = "Read"
             description = "none tool"
             json_schema: dict[str, Any] = {"type": "object", "properties": {}}
             resource_claims = (ResourceClaim(resource="workspace", mode="shared_read"),)
@@ -691,7 +691,7 @@ class TestNormalizeAndTruncation:
         runner = _make_runner(catalog)
         ctx = _make_ctx()
 
-        results = await runner.execute_batch([_make_tc("read_file")], ctx)
+        results = await runner.execute_batch([_make_tc("Read")], ctx)
         _, tr = results[0]
         assert isinstance(tr, ToolResult)
         assert tr.content == ""
@@ -703,7 +703,7 @@ class TestNormalizeAndTruncation:
 
         long_content = "A" * 20000
         registry = ToolRegistry()
-        registry.register(_StringReturnTool("read_file", result=long_content), source="builtin")
+        registry.register(_StringReturnTool("Read", result=long_content), source="builtin")
         topology_with_tmp = RuntimeTopology(
             session_kind="local",
             control_root=str(tmp_path),
@@ -714,7 +714,7 @@ class TestNormalizeAndTruncation:
         runner = _make_runner(catalog, topology=topology_with_tmp)
         ctx = _make_ctx()
 
-        results = await runner.execute_batch([_make_tc("read_file", call_id="call_123")], ctx)
+        results = await runner.execute_batch([_make_tc("Read", call_id="call_123")], ctx)
         _, tr = results[0]
 
         assert len(tr.content) < 20000
@@ -732,12 +732,12 @@ class TestNormalizeAndTruncation:
         """Content under max_result_chars is not truncated."""
         short_content = "short"
         registry = ToolRegistry()
-        registry.register(_StringReturnTool("read_file", result=short_content), source="builtin")
+        registry.register(_StringReturnTool("Read", result=short_content), source="builtin")
         catalog = ToolCatalog(registry)
         runner = _make_runner(catalog)
         ctx = _make_ctx()
 
-        results = await runner.execute_batch([_make_tc("read_file")], ctx)
+        results = await runner.execute_batch([_make_tc("Read")], ctx)
         _, tr = results[0]
 
         assert tr.content == short_content
@@ -892,12 +892,12 @@ class TestNormalizeAndTruncation:
         """Tools with max_result_chars=0 are never truncated."""
         long_content = "B" * 100000
         registry = ToolRegistry()
-        registry.register(_StringReturnTool("write_file", result=long_content), source="builtin")
+        registry.register(_StringReturnTool("Write", result=long_content), source="builtin")
         catalog = ToolCatalog(registry)
         runner = _make_runner(catalog)
         ctx = _make_ctx()
 
-        results = await runner.execute_batch([_make_tc("write_file")], ctx)
+        results = await runner.execute_batch([_make_tc("Write")], ctx)
         _, tr = results[0]
 
         assert tr.content == long_content
@@ -912,14 +912,14 @@ class TestInputValidatorInRunner:
     async def test_deny_validator_returns_error(self) -> None:
         """input_validator deny -> error ToolResult, executor not called."""
         registry = ToolRegistry()
-        tool = _SimpleTool("write_file", result="should not reach")
+        tool = _SimpleTool("Write", result="should not reach")
         registry.register(tool, source="builtin")
         catalog = ToolCatalog(registry)
         runner = _make_runner(catalog)
         ctx = _make_ctx()
 
         # Inject a validator that denies
-        instance = catalog.get_tool("write_file")
+        instance = catalog.get_tool("Write")
         assert instance is not None
 
         # Patch the catalog to return a ToolInstance with a deny validator.
@@ -946,9 +946,9 @@ class TestInputValidatorInRunner:
 
         # Patch catalog to return our custom instance
         original_get = catalog.get_tool
-        catalog.get_tool = lambda name: patched if name == "write_file" else original_get(name)
+        catalog.get_tool = lambda name: patched if name == "Write" else original_get(name)
 
-        results = await runner.execute_batch([_make_tc("write_file")], ctx)
+        results = await runner.execute_batch([_make_tc("Write")], ctx)
         _, tr = results[0]
 
         assert tr.status == "error"
@@ -960,7 +960,7 @@ class TestInputValidatorInRunner:
     async def test_validator_exception_returns_error(self) -> None:
         """input_validator raising exception -> error ToolResult."""
         registry = ToolRegistry()
-        tool = _SimpleTool("write_file", result="should not reach")
+        tool = _SimpleTool("Write", result="should not reach")
         registry.register(tool, source="builtin")
         catalog = ToolCatalog(registry)
         runner = _make_runner(catalog)
@@ -972,16 +972,16 @@ class TestInputValidatorInRunner:
         ) -> None:
             raise ValueError("validator kaboom")
 
-        instance = catalog.get_tool("write_file")
+        instance = catalog.get_tool("Write")
         patched = ToolInstance(
             tool_spec=instance.tool_spec,
             tool_binding=instance.tool_binding,
             tool_executor=instance.tool_executor,
             input_validator=_exploding_validator,
         )
-        catalog.get_tool = lambda name: patched if name == "write_file" else None
+        catalog.get_tool = lambda name: patched if name == "Write" else None
 
-        results = await runner.execute_batch([_make_tc("write_file")], ctx)
+        results = await runner.execute_batch([_make_tc("Write")], ctx)
         _, tr = results[0]
 
         assert tr.status == "error"
@@ -994,7 +994,7 @@ class TestInputValidatorInRunner:
         captured_args: dict[str, Any] = {}
 
         class _CaptureTool:
-            name = "read_file"
+            name = "Read"
             description = "capture"
             json_schema: dict[str, Any] = {"type": "object", "properties": {}}
             resource_claims = (ResourceClaim(resource="workspace", mode="shared_read"),)
@@ -1030,7 +1030,7 @@ class TestInputValidatorInRunner:
         ctx = _make_ctx()
 
         await runner.execute_batch(
-            [_make_tc("read_file", file_path="src/app.py")], ctx
+            [_make_tc("Read", file_path="src/app.py")], ctx
         )
 
         assert captured_args.get("file_path") == "/tmp/ws/src/app.py"
@@ -1039,7 +1039,7 @@ class TestInputValidatorInRunner:
     async def test_allow_validator_lets_execution_proceed(self) -> None:
         """input_validator returning None -> execution proceeds normally."""
         registry = ToolRegistry()
-        tool = _SimpleTool("write_file", result="written ok")
+        tool = _SimpleTool("Write", result="written ok")
         registry.register(tool, source="builtin")
         catalog = ToolCatalog(registry)
         runner = _make_runner(catalog)
@@ -1051,16 +1051,16 @@ class TestInputValidatorInRunner:
         ) -> None:
             return None
 
-        instance = catalog.get_tool("write_file")
+        instance = catalog.get_tool("Write")
         patched = ToolInstance(
             tool_spec=instance.tool_spec,
             tool_binding=instance.tool_binding,
             tool_executor=instance.tool_executor,
             input_validator=_allow_validator,
         )
-        catalog.get_tool = lambda name: patched if name == "write_file" else None
+        catalog.get_tool = lambda name: patched if name == "Write" else None
 
-        results = await runner.execute_batch([_make_tc("write_file")], ctx)
+        results = await runner.execute_batch([_make_tc("Write")], ctx)
         _, tr = results[0]
 
         assert tr.status == "success"

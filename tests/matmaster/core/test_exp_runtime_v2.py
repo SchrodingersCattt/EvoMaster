@@ -171,7 +171,7 @@ class TestBuildRuntimeFullToolRunner:
         from matmaster.core.exp import Exp
         from matmaster.types.topology import ToolPlane
 
-        config = _make_exp_config(tools={"builtin": ["read_file"]})
+        config = _make_exp_config(tools={"builtin": ["Read"]})
         exp = Exp(config)
         ctx = _make_playground_context()
 
@@ -187,8 +187,8 @@ class TestBuildRuntimeFullToolRunner:
         )
 
     @pytest.mark.asyncio
-    async def test_build_runtime_runner_can_execute_read_file(self) -> None:
-        """Default build_runtime path can execute read_file without plane errors."""
+    async def test_build_runtime_runner_can_execute_read(self) -> None:
+        """Default build_runtime path can execute Read without plane errors."""
         from matmaster.core.exp import Exp
         from matmaster.core.tool_runner import ToolExecutionContext
         from matmaster.types.messages import ToolCallData
@@ -203,13 +203,13 @@ class TestBuildRuntimeFullToolRunner:
             def read_file(self, path, encoding="utf-8"):
                 return "hello from test"
 
-        config = _make_exp_config(tools={"builtin": ["read_file"]})
+        config = _make_exp_config(tools={"builtin": ["Read"]})
         exp = Exp(config)
         ctx = _make_playground_context(session=_ReadableSession())
 
         runtime = await exp.build_runtime(ctx)
         results = await runtime.spec.tool_runner.execute_batch(
-            [ToolCallData(id="c1", name="read_file", arguments={"file_path": "/tmp/test-exec/test.txt"})],
+            [ToolCallData(id="c1", name="Read", arguments={"file_path": "/tmp/test-exec/test.txt"})],
             ToolExecutionContext(turn=1, max_turns=10),
         )
         assert results[0][1].status == "success"

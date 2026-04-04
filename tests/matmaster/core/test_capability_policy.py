@@ -18,7 +18,7 @@ from matmaster.types.topology import ToolPlane
 class _ExternalEffectTool:
     """Self-describing external tool for capability-policy tests."""
 
-    name = "web_fetch"
+    name = "WebFetch"
     description = "fetch"
     json_schema: dict = {"type": "object", "properties": {}}
     resource_claims = (ResourceClaim(resource="network", mode="shared_read"),)

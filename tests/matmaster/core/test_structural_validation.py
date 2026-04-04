@@ -255,7 +255,7 @@ class TestPathNormalization:
     def test_normalizes_relative_file_path_into_workspace_root(self) -> None:
         """Relative file_path gets expanded to workspace_root/relative."""
         instance = _make_instance(
-            tool_name="read_file",
+            tool_name="Read",
             plane=ToolPlane.SESSION_FS,
         )
         topo = _make_topology(
@@ -270,7 +270,7 @@ class TestPathNormalization:
     def test_denies_path_outside_workspace_root(self) -> None:
         """Path traversal outside workspace -> deny."""
         instance = _make_instance(
-            tool_name="read_file",
+            tool_name="Read",
             plane=ToolPlane.SESSION_FS,
         )
         topo = _make_topology(
@@ -284,7 +284,7 @@ class TestPathNormalization:
     def test_absolute_path_within_workspace_passes(self) -> None:
         """Absolute path within workspace -> allow, no modified_args."""
         instance = _make_instance(
-            tool_name="read_file",
+            tool_name="Read",
             plane=ToolPlane.SESSION_FS,
         )
         topo = _make_topology(
@@ -299,7 +299,7 @@ class TestPathNormalization:
     def test_normalizes_path_key(self) -> None:
         """Also normalizes the 'path' argument key."""
         instance = _make_instance(
-            tool_name="list_dir",
+            tool_name="Glob",
             plane=ToolPlane.SESSION_SHELL,
         )
         topo = _make_topology(

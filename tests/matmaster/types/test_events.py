@@ -147,12 +147,12 @@ class TestToolProgressEvent:
         evt = ToolProgressEvent(
             source="agent",
             call_id="c1",
-            tool_name="execute_bash",
+            tool_name="Bash",
             content="line 1",
         )
         assert evt.type == "tool_progress"
         assert evt.call_id == "c1"
-        assert evt.tool_name == "execute_bash"
+        assert evt.tool_name == "Bash"
         assert evt.content == "line 1"
 
 

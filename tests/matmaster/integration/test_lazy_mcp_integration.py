@@ -24,10 +24,10 @@ async def _execute_use_skill(
     *,
     skill_name: str,
 ):
-    """Execute use_skill through the registered tool instance."""
-    skill_tool = registry.get_raw("use_skill")
+    """Execute Skill tool through the registered tool instance."""
+    skill_tool = registry.get_raw("Skill")
     assert skill_tool is not None
-    raw_result = await skill_tool.execute({"skill_name": skill_name})
+    raw_result = await skill_tool.execute({"skill": skill_name})
     return normalize_tool_result(raw_result)
 
 
@@ -93,8 +93,8 @@ class TestLazyMCPIntegration:
         # Initialize skill tools
         exp._init_skill_tools(ctx, registry)
 
-        # use_skill should be registered
-        assert 'use_skill' in registry
+        # Skill tool should be registered
+        assert 'Skill' in registry
 
         # Before skill trigger: no MCP tools
         assert 'mat_sg_build_bulk' not in registry
@@ -250,8 +250,8 @@ class TestExpMCPSelfLoad:
         # Run _init_skill_tools -- should self-load mcp.yaml
         exp._init_skill_tools(ctx, registry)
 
-        # use_skill registered means the full path worked
-        assert 'use_skill' in registry
+        # Skill tool registered means the full path worked
+        assert 'Skill' in registry
 
         # Trigger skill to verify lazy tools get injected
         result = await _execute_use_skill(registry, skill_name="test-skill")
