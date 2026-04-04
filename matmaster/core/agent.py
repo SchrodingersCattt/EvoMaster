@@ -406,8 +406,8 @@ class AgentKernel:
                         payload=tool_result.payload,
                     )
                 )
-                if tc.name == "use_skill":
-                    skill_name = tc.arguments.get("skill_name")
+                if tc.name == "Skill":
+                    skill_name = tc.arguments.get("skill")
                     if isinstance(skill_name, str) and skill_name:
                         yield _KernelItem(
                             event=SkillHitEvent(

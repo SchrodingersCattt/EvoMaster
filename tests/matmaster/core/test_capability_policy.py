@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from matmaster.core.capability_policy import (
@@ -135,6 +137,41 @@ class TestCapabilityPolicyBashSafety:
             {"command": "python -c 'print(42)'"}
         )
         assert decision.decision == "allow"
+
+
+class TestCapabilityPolicyEvaluateDispatch:
+    """evaluate() dispatches to check_bash_safety via CC name 'Bash'."""
+
+    def test_evaluate_dispatches_bash_tool_by_cc_name(self, tmp_path: Path) -> None:
+        """evaluate() recognises tool_name == 'Bash' and routes to check_bash_safety."""
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from matmaster.tools.builtin.bash_tool import BashTool
+        from matmaster.tools.tool_compiler import ToolCompiler
+        from matmaster.types.topology import RuntimeTopology
+
+        topology = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp/ctrl",
+            workspace_root="/tmp/ws",
+            active_planes=frozenset(ToolPlane),
+        )
+        session = MagicMock()
+        session.exec_bash.return_value = {"stdout": "", "stderr": "", "exit_code": 0}
+
+        instance = ToolCompiler().compile(
+            BashTool(session=session, workdir=tmp_path),
+            topology,
+            source="builtin",
+        )
+
+        decision = DefaultCapabilityPolicy().evaluate(
+            topology,
+            instance,
+            {"command": "rm -rf /"},
+        )
+        assert decision.decision == "deny"
 
 
 class TestCapabilityPolicyExternalEffect:

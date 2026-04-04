@@ -89,8 +89,8 @@ class DefaultCapabilityPolicy:
     """Layer C capability policy: tool-specific safety checks.
 
     Currently handles:
-    - execute_bash: dangerous command pattern detection
-    - execute_bash + python -c: Python content safety scanning
+    - Bash: dangerous command pattern detection
+    - Bash + python -c: Python content safety scanning
     - effect_level: external_effect tools blocked without EXTERNAL_SERVICE plane
     """
 
@@ -121,7 +121,7 @@ class DefaultCapabilityPolicy:
                 )
 
         # 2. Tool-specific safety checks
-        if tool_name == "execute_bash":
+        if tool_name == "Bash":
             return self.check_bash_safety(tool_args)
 
         return ToolDecision(decision="allow")
@@ -130,7 +130,7 @@ class DefaultCapabilityPolicy:
         """Check bash command safety. Returns ToolDecision.
 
         Extracted as public method for direct testing. Called internally
-        by evaluate() when tool_name == "execute_bash".
+        by evaluate() when tool_name == "Bash".
         """
         command = tool_args.get("command", "").strip()
 

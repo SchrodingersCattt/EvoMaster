@@ -69,7 +69,7 @@ class DevRunner:
             hint = (
                 "\n\n## Local session\n"
                 f"- Workspace directory: `{wd}`\n"
-                "- `execute_bash` uses this directory as cwd; file tools resolve relative paths under it.\n"
+                "- `Bash` uses this directory as cwd; file tools resolve relative paths under it.\n"
                 "- **Do not** assume `/share/...` exists here; that path is for **Bohrium remote SSH** "
                 "project storage, not for typical local runs.\n"
             )
