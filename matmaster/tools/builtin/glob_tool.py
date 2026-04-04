@@ -18,12 +18,12 @@ from .base import BuiltinTool
 
 MAX_GLOB_RESULTS = 200
 
-# find-based excludes for VCS/build dirs
+# find-based excludes for VCS/build dirs — portable across macOS/Linux
 VCS_EXCLUDES = (
-    '-not -path "*/.git/*" '
-    '-not -path "*/node_modules/*" '
-    '-not -path "*/__pycache__/*" '
-    '-not -path "*/.svn/*"'
+    r'-not -path "*/.git/*" '
+    r'-not -path "*/node_modules/*" '
+    r'-not -path "*/__pycache__/*" '
+    r'-not -path "*/.svn/*"'
 )
 
 
@@ -32,8 +32,9 @@ class GlobTool(BuiltinTool):
 
     CC name: Glob (GlobTool)
 
-    Uses bash globstar (shopt -s globstar) for ** patterns, falls back to
-    find -path for simple patterns. Results sorted by modification time.
+    Uses ``find`` with ``-path`` / ``-name`` matching for portable glob
+    expansion (no bash globstar dependency). Results sorted by modification
+    time (newest first).
     """
 
     name: ClassVar[str] = "Glob"
@@ -82,17 +83,7 @@ class GlobTool(BuiltinTool):
         workdir = str(self._workdir) if self._workdir else "/workspace"
         safe_path = resolve_safe_path(path, workdir)
 
-        # Use bash globstar for ** support, sort by mtime (newest first),
-        # exclude VCS dirs via grep -v, limit results
-        command = (
-            f"cd {shell_escape(safe_path)} && "
-            f"shopt -s globstar nullglob && "
-            f"printf '%s\\n' {shell_escape(pattern)} 2>/dev/null | "
-            f"grep -v -E '/(\\.(git|svn)|node_modules|__pycache__)/' | "
-            f"head -{MAX_GLOB_RESULTS} | "
-            f"xargs -r ls -1t 2>/dev/null | "
-            f"head -{MAX_GLOB_RESULTS}"
-        )
+        command = self._build_find_command(pattern, safe_path)
         result = session.exec_bash(
             command=command,
             timeout=30,
@@ -112,3 +103,73 @@ class GlobTool(BuiltinTool):
             )
 
         return output
+
+    @staticmethod
+    def _build_find_command(pattern: str, safe_path: str) -> str:
+        """Convert a glob pattern into a portable ``find`` command.
+
+        Translates common glob idioms into ``find -path`` / ``-name``
+        expressions that work on both macOS (BSD find) and Linux (GNU find)
+        without requiring bash globstar.
+
+        Handles three categories:
+        * Recursive (contains ``**``): ``**/*.py``, ``src/**/*.ts``
+        * Path pattern (contains ``/`` but no ``**``): ``src/*.py``
+        * Simple name pattern (no ``/``): ``*.py``
+        """
+        escaped_path = shell_escape(safe_path)
+
+        if "**" in pattern:
+            # --- recursive pattern ---
+            # Split on the first '**' to get prefix dir and suffix.
+            # e.g. "src/**/*.ts" -> prefix="src", rest="*.ts"
+            # e.g. "**/*.py"    -> prefix="", rest="*.py"
+            before, _, after = pattern.partition("**")
+            # Strip trailing / from prefix and leading / from suffix
+            prefix_dir = before.rstrip("/")
+            suffix = after.lstrip("/")
+
+            if prefix_dir:
+                # Search from subdirectory: cd into safe_path/prefix_dir
+                search_root = f"{escaped_path}/{shell_escape(prefix_dir)}"
+            else:
+                search_root = escaped_path
+
+            if suffix and "/" not in suffix:
+                # Simple filename after **: use -name for clarity
+                find_expr = f"-name {shell_escape(suffix)}"
+            elif suffix:
+                # Deeper suffix like "bar/*.ts": use -path with wildcard prefix
+                find_expr = f"-path {shell_escape('./*/' + suffix)}"
+            else:
+                # Bare "**" or "src/**" — match all files
+                find_expr = ""
+
+        elif "/" in pattern:
+            # --- path pattern without ** ---
+            # e.g. "src/*.py" -> search from safe_path, -path './src/*.py'
+            search_root = escaped_path
+            find_expr = f"-path {shell_escape('./' + pattern)}"
+
+        else:
+            # --- simple name pattern: *.py ---
+            # Non-recursive: only top-level files
+            search_root = escaped_path
+            find_expr = f"-maxdepth 1 -name {shell_escape(pattern)}"
+
+        parts = [
+            f"find {search_root} {find_expr} -type f".rstrip(),
+            VCS_EXCLUDES,
+            "2>/dev/null",
+        ]
+        find_cmd = " ".join(parts)
+
+        # Sort by mtime (newest first) and limit results.
+        # xargs ls -1td is portable; -r (--no-run-if-empty) is a GNU
+        # extension but harmless on macOS where xargs already skips empty.
+        return (
+            f"{find_cmd} | "
+            f"head -{MAX_GLOB_RESULTS} | "
+            f"xargs ls -1td 2>/dev/null | "
+            f"head -{MAX_GLOB_RESULTS}"
+        )
