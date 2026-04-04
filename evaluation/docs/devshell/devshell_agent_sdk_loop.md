@@ -29,7 +29,7 @@ uv run python evaluation/scripts/devshell/run_devshell_agent_loop.py \
 - **双 Agent（防作弊）**：主 Agent **禁止** Edit/Write `evaluation/question_bank/**`；若认为 `scoring_checklist` / `reference_answers` 不公或错误，应调用 MCP 工具 **`escalate_checklist_revision`**。编排器在本轮主会话结束后，若队列非空，再启**第二个** SDK 会话（checklist 专责）：`allowed_tools` 仅含 `report_checklist_revision` + 读写工具，系统提示约束**只能**改 `evaluation/question_bank/`。关闭：`--no-enable-checklist-agent`。
 - **判分与改仓库**：由 SDK 会话先调用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py --dry-run` 获取真实分数，再视需要检查低分任务的 workspace / events；原则与 [devshell_claude_code_eval.md](devshell_claude_code_eval.md) 一致。
 - **每轮结束**：模型应调用 `report_iteration_outcome`；外层在 `macro_mean_0_100 >= --target-mean-score` 或 `target_met` 时提前停止。
-- **每轮 ingest 上报**：在 **`--eval-ingest-pending-only`**（默认）下，外层在每轮 SDK 回合结束后，对本轮**最近一次** `run_devshell_eval` 的输出目录自动执行 `score_devshell_tasks.py --submit`（写回 `pending_ingest` 分数并 POST）。日志追加到会话目录 `ingest_submit.jsonl`。若内层已改为即时 POST（`--no-eval-ingest-pending-only`），则不再自动 `--submit`，以免重复。关闭自动上报：`--no-eval-ingest-submit-each-iteration`；超时：`--eval-ingest-submit-timeout`。
+- **每轮 ingest 上报**：在 **`--eval-ingest-pending-only`**（默认）下，外层在主 Agent 回合结束后、**checklist 专责回合开始前**，对本轮**每一次** `run_devshell_eval` 的输出目录（按顺序、去重）分别执行 `score_devshell_tasks.py --submit`（写回 `pending_ingest` 分数并 POST），保证题库尚未被 checklist 改写时与 `raw_runs` 中的 `question_id` 一致，且中间 tag（如先 `iter_01` 再 `iter_01b`）不会只上报最后一次。日志追加到会话目录 `ingest_submit.jsonl`。若内层已改为即时 POST（`--no-eval-ingest-pending-only`），则不再自动 `--submit`，以免重复。关闭自动上报：`--no-eval-ingest-submit-each-iteration`；超时：`--eval-ingest-submit-timeout`。
 
 ### Git：每改一次提交，无效则回滚
 
