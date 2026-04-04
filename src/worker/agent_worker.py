@@ -11,7 +11,9 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from typing import Any
 
+from matmaster.types.cancellation import CancellationController
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
@@ -54,16 +56,41 @@ def _session_url(session_id: str) -> str:
     return f'https://matmaster{suffix}.bohrium.com/matmaster/chat-evo/{sid}'
 
 
-class RedisBackedStopEvent:
-    """供 Worker 使用：is_set() 从 Redis 读取用户是否请求停止。"""
+class RedisCancellationBridge:
+    """Daemon thread that polls Redis stop flag and cancels a controller."""
 
-    def __init__(self, session_id: str, task_id: str):
+    def __init__(
+        self,
+        controller: CancellationController,
+        session_id: str,
+        task_id: str,
+        interval: float = 0.5,
+        *,
+        _dao_override: Any = None,
+    ) -> None:
+        self._controller = controller
         self._session_id = session_id
         self._task_id = task_id
-        self._dao = get_redis_dao()
+        self._interval = interval
+        self._dao = _dao_override or get_redis_dao()
+        self._shutdown = threading.Event()
+        self._thread: threading.Thread | None = None
 
-    def is_set(self) -> bool:
-        return self._dao.is_stop_requested(self._session_id, self._task_id)
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._shutdown.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+
+    def _poll(self) -> None:
+        while not self._shutdown.is_set() and not self._controller.token.is_cancelled:
+            if self._dao.is_stop_requested(self._session_id, self._task_id):
+                self._controller.cancel()
+                break
+            self._shutdown.wait(self._interval)
 
 
 def _publish_run_interrupted_deploy(session_id: str) -> None:
