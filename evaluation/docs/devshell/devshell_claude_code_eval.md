@@ -157,14 +157,6 @@ uv sync --extra calculation
 > `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <Run directory> --submit`。
 > 回复时给出该题 `score/100`、关键 pass/fail 条目，以及需要补充的改进建议。
 
-**单题只看分，不提交**
-
-> 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：先跑
-> `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 --questions SC_struct_007 --limit 1 --eval-ingest-pending-only`，
-> 再执行
-> `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <Run directory> --dry-run`。
-> 输出最终 `score/100` 和 `score_reason` 摘要，但先不要提交。
-
 **多题批量 + 宏平均**
 
 > 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：先跑
