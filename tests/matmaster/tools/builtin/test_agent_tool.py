@@ -102,3 +102,82 @@ class TestAgentValidation:
             )
         )
         assert "error" in result.lower()
+
+    def test_empty_exp_name_error_when_available_exps_set(self):
+        """exp_name 为空时，若已设置 available_exps，应返回错误并列出合法值。"""
+
+        async def fake_spawn(exp_name, task, cancel_token=None):
+            return "ok"
+
+        exps = [("explore", "Read-only exploration"), ("direct", "Full execution")]
+        tool = AgentTool(spawn_fn=fake_spawn, available_exps=exps)
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "description": "test",
+                    "prompt": "do something",
+                    "exp_name": "",
+                }
+            )
+        )
+        assert "error" in result.lower()
+        assert "explore" in result
+        assert "direct" in result
+
+    def test_invalid_exp_name_error_when_available_exps_set(self):
+        """exp_name 不在合法集合中时，应返回错误并列出合法值。"""
+
+        async def fake_spawn(exp_name, task, cancel_token=None):
+            return "ok"
+
+        exps = [("explore", "Read-only exploration"), ("direct", "Full execution")]
+        tool = AgentTool(spawn_fn=fake_spawn, available_exps=exps)
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "description": "test",
+                    "prompt": "do something",
+                    "exp_name": "nonexistent",
+                }
+            )
+        )
+        assert "error" in result.lower()
+        assert "explore" in result
+        assert "direct" in result
+
+    def test_valid_exp_name_passes_when_available_exps_set(self):
+        """exp_name 在合法集合中时，应正常调用 spawn_fn。"""
+
+        async def fake_spawn(exp_name, task, cancel_token=None):
+            return f"Ran {exp_name}"
+
+        exps = [("explore", "Read-only exploration"), ("direct", "Full execution")]
+        tool = AgentTool(spawn_fn=fake_spawn, available_exps=exps)
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "description": "test",
+                    "prompt": "do something",
+                    "exp_name": "explore",
+                }
+            )
+        )
+        assert result == "Ran explore"
+
+    def test_any_exp_name_allowed_when_no_available_exps(self):
+        """未设置 available_exps 时，任意 exp_name（包括空值）应正常通过。"""
+
+        async def fake_spawn(exp_name, task, cancel_token=None):
+            return f"Ran '{exp_name}'"
+
+        tool = AgentTool(spawn_fn=fake_spawn)
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "description": "test",
+                    "prompt": "do something",
+                    "exp_name": "",
+                }
+            )
+        )
+        assert "error" not in result.lower()

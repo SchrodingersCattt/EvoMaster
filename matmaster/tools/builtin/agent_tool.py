@@ -55,11 +55,13 @@ class AgentTool(BuiltinTool):
     ) -> None:
         super().__init__(session=session, workdir=workdir)
         self._spawn_fn = spawn_fn
+        self._valid_exp_names: frozenset[str] = frozenset()
 
         if spawn_fn is None:
             self.exposed_to_model = False
 
         if available_exps:
+            self._valid_exp_names = frozenset(name for name, _ in available_exps)
             self._apply_available_exps(available_exps)
 
     def _apply_available_exps(self, exps: list[tuple[str, str]]) -> None:
@@ -127,6 +129,10 @@ class AgentTool(BuiltinTool):
 
         if not prompt:
             return "Error: prompt is required and must not be empty"
+
+        if self._valid_exp_names and (not exp_name or exp_name not in self._valid_exp_names):
+            valid_list = ", ".join(sorted(self._valid_exp_names))
+            return f"Error: exp_name must be one of: {valid_list}"
 
         return await self._spawn_fn(
             exp_name,
