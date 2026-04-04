@@ -29,6 +29,10 @@ Examples::
     uv run python evaluation/scripts/baseline/run_claude_cli_baseline_tasks.py \\
       --run-dir "$RUN_DIR" --model opus
 
+    # Serial (default is --jobs 4)
+    uv run python evaluation/scripts/baseline/run_claude_cli_baseline_tasks.py \\
+      --run-dir "$RUN_DIR" -j 1
+
     # Auto-detect RUN_DIR from results/ and also finalize
     uv run python evaluation/scripts/baseline/run_claude_cli_baseline_tasks.py \\
       --run-label baseline_cc_struct --finalize --eval-ingest-pending-only
@@ -41,7 +45,9 @@ import json
 import shutil
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -306,6 +312,75 @@ def _run_single_task(
     return not is_error, summary
 
 
+def _stderr_line(msg: str, lock: threading.Lock | None) -> None:
+    if lock is not None:
+        with lock:
+            print(msg, file=sys.stderr)
+    else:
+        print(msg, file=sys.stderr)
+
+
+def _execute_task_slot(
+    slot: int,
+    n_total: int,
+    task_id: str,
+    workspace: Path,
+    *,
+    model: str | None,
+    max_turns: int,
+    timeout_seconds: int,
+    extra_args: list[str] | None,
+    print_lock: threading.Lock | None,
+) -> dict[str, Any]:
+    """Run one non-skipped task; return the same shape as entries in ``results``."""
+    progress = f"[{slot}/{n_total}]"
+    _stderr_line(f"{progress} {task_id}: running...", print_lock)
+    t0 = time.monotonic()
+    try:
+        ok, summary = _run_single_task(
+            task_id,
+            workspace,
+            model=model,
+            max_turns=max_turns,
+            timeout_seconds=timeout_seconds,
+            extra_args=extra_args,
+        )
+    except subprocess.TimeoutExpired:
+        _stderr_line(
+            f"{progress} {task_id}: TIMEOUT ({timeout_seconds}s)",
+            print_lock,
+        )
+        return {"task_id": task_id, "status": "timeout"}
+    except Exception as exc:
+        _stderr_line(f"{progress} {task_id}: ERROR: {exc}", print_lock)
+        return {"task_id": task_id, "status": "error", "error": str(exc)}
+
+    elapsed = time.monotonic() - t0
+    usage = summary.get("usage", {})
+    cost = usage.get("total_cost_usd", "?")
+    tag = "OK" if ok else "FAIL"
+    _stderr_line(
+        f"{progress} {task_id}: {tag} "
+        f"({elapsed:.0f}s, turns={summary.get('num_turns', '?')}, cost=${cost})",
+        print_lock,
+    )
+    if ok:
+        return {
+            "task_id": task_id,
+            "status": "ok",
+            "elapsed_s": round(elapsed, 1),
+            "num_turns": summary.get("num_turns"),
+            "cost_usd": usage.get("total_cost_usd"),
+        }
+    return {
+        "task_id": task_id,
+        "status": "fail",
+        "elapsed_s": round(elapsed, 1),
+        "num_turns": summary.get("num_turns"),
+        "cost_usd": usage.get("total_cost_usd"),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -376,7 +451,22 @@ def main() -> int:
         default=None,
         help="Extra arguments to pass to claude -p.",
     )
+    parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=4,
+        metavar="N",
+        help=(
+            "Concurrent claude -p processes (default: 4). "
+            "Each task uses its own workspace cwd; set to 1 to force serial. "
+            "Watch API rate limits when increasing."
+        ),
+    )
     args = parser.parse_args()
+    if args.jobs < 1:
+        print("error: --jobs must be >= 1", file=sys.stderr)
+        return 1
 
     # Resolve RUN_DIR
     if args.run_dir:
@@ -427,76 +517,76 @@ def main() -> int:
         print("error: no tasks to run", file=sys.stderr)
         return 1
 
-    print(f"Tasks to run: {len(selected)}/{len(all_tasks)}", file=sys.stderr)
+    n_sel = len(selected)
+    print(f"Tasks to run: {n_sel}/{len(all_tasks)}", file=sys.stderr)
+    if args.jobs > 1:
+        print(f"Parallel jobs: {args.jobs}", file=sys.stderr)
 
-    # Run tasks sequentially
-    results: list[dict[str, Any]] = []
-    n_ok = 0
-    n_fail = 0
-    for i, (task_id, workspace) in enumerate(selected, 1):
+    results: list[dict[str, Any] | None] = [None] * n_sel
+    to_run: list[tuple[int, str, Path]] = []
+
+    for i, (task_id, workspace) in enumerate(selected):
         summary_exists = (workspace / "_devshell_summary.json").is_file()
         if args.skip_completed and summary_exists:
+            slot = i + 1
             print(
-                f"[{i}/{len(selected)}] {task_id}: skipped (summary exists)",
+                f"[{slot}/{n_sel}] {task_id}: skipped (summary exists)",
                 file=sys.stderr,
             )
-            results.append({"task_id": task_id, "status": "skipped"})
-            continue
+            results[i] = {"task_id": task_id, "status": "skipped"}
+        else:
+            to_run.append((i, task_id, workspace))
 
-        print(f"[{i}/{len(selected)}] {task_id}: running...", file=sys.stderr)
-        t0 = time.monotonic()
-        try:
-            ok, summary = _run_single_task(
+    print_lock: threading.Lock | None = threading.Lock() if args.jobs > 1 else None
+
+    if to_run and (args.jobs <= 1 or len(to_run) == 1):
+        for i, task_id, workspace in to_run:
+            results[i] = _execute_task_slot(
+                i + 1,
+                n_sel,
                 task_id,
                 workspace,
                 model=args.model,
                 max_turns=args.max_turns,
                 timeout_seconds=args.timeout,
                 extra_args=args.claude_extra_args,
+                print_lock=print_lock,
             )
-        except subprocess.TimeoutExpired:
-            print(
-                f"[{i}/{len(selected)}] {task_id}: TIMEOUT ({args.timeout}s)",
-                file=sys.stderr,
-            )
-            n_fail += 1
-            results.append({"task_id": task_id, "status": "timeout"})
-            continue
-        except Exception as exc:
-            print(
-                f"[{i}/{len(selected)}] {task_id}: ERROR: {exc}",
-                file=sys.stderr,
-            )
-            n_fail += 1
-            results.append({"task_id": task_id, "status": "error", "error": str(exc)})
-            continue
-
-        elapsed = time.monotonic() - t0
-        usage = summary.get("usage", {})
-        cost = usage.get("total_cost_usd", "?")
-        tag = "OK" if ok else "FAIL"
-        print(
-            f"[{i}/{len(selected)}] {task_id}: {tag} "
-            f"({elapsed:.0f}s, turns={summary.get('num_turns', '?')}, cost=${cost})",
-            file=sys.stderr,
-        )
-        if ok:
-            n_ok += 1
-        else:
-            n_fail += 1
-        results.append(
-            {
-                "task_id": task_id,
-                "status": "ok" if ok else "fail",
-                "elapsed_s": round(elapsed, 1),
-                "num_turns": summary.get("num_turns"),
-                "cost_usd": usage.get("total_cost_usd"),
+    elif to_run:
+        workers = min(args.jobs, len(to_run))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            future_map = {
+                pool.submit(
+                    _execute_task_slot,
+                    i + 1,
+                    n_sel,
+                    task_id,
+                    workspace,
+                    model=args.model,
+                    max_turns=args.max_turns,
+                    timeout_seconds=args.timeout,
+                    extra_args=args.claude_extra_args,
+                    print_lock=print_lock,
+                ): i
+                for i, task_id, workspace in to_run
             }
-        )
+            for fut in as_completed(future_map):
+                idx = future_map[fut]
+                results[idx] = fut.result()
+
+    n_ok = n_fail = 0
+    for r in results:
+        if r is None:
+            continue
+        st = r.get("status")
+        if st == "ok":
+            n_ok += 1
+        elif st in ("fail", "timeout", "error"):
+            n_fail += 1
 
     print(
         f"\nDone: {n_ok} ok, {n_fail} failed, "
-        f"{len(selected) - n_ok - n_fail} skipped out of {len(selected)}",
+        f"{n_sel - n_ok - n_fail} skipped out of {n_sel}",
         file=sys.stderr,
     )
 

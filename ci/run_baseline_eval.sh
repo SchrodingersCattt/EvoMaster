@@ -31,6 +31,7 @@
 #     ANTHROPIC_MODEL                — Claude CLI 指定模型名
 #     BASELINE_MAX_TURNS             — 每题最大对话轮数，默认 50
 #     BASELINE_TIMEOUT               — 每题超时秒数，默认 900
+#     BASELINE_CLAUDE_JOBS           — 同时跑几道 claude -p（run_claude_cli_baseline_tasks.py --jobs），默认 4
 #   DevShell 模式专用:
 #     LITELLM_PROXY_API_KEY          — LiteLLM 鉴权（llm_config.yaml 中 ${LITELLM_PROXY_API_KEY}）
 #     LITELLM_PROXY_API_BASE         — LiteLLM base_url
@@ -130,8 +131,10 @@ if [[ "${EVAL_RUNNER}" == "devshell" ]]; then
 elif [[ "${EVAL_RUNNER}" == "claude_cli" ]]; then
     MAX_TURNS="${BASELINE_MAX_TURNS:-50}"
     TIMEOUT_S="${BASELINE_TIMEOUT:-900}"
+    CLAUDE_JOBS="${BASELINE_CLAUDE_JOBS:-4}"
     echo "  max_turns    : ${MAX_TURNS}"
     echo "  timeout(s)   : ${TIMEOUT_S}"
+    echo "  claude_jobs  : ${CLAUDE_JOBS} (parallel claude -p)"
     echo "  (claude_cli 模式：Claude Code CLI 跑题)"
     echo "======================================="
 
@@ -221,6 +224,7 @@ EOF
         --run-dir "${RUN_DIR}"
         --max-turns "${MAX_TURNS}"
         --timeout "${TIMEOUT_S}"
+        --jobs "${CLAUDE_JOBS}"
         --skip-completed
     )
     if [[ -n "${MODEL}" ]]; then
