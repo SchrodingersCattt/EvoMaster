@@ -13,7 +13,7 @@
 child_pipeline: questions
 
 # claude_cli | devshell — 与 run_baseline_eval.sh / EVAL_RUNNER 一致
-eval_runner: devshell
+eval_runner: claude_cli
 
 # Used when child_pipeline is ``questions`` (v5 question ``id`` from bank YAML).
 question_ids:
