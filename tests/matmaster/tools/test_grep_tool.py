@@ -9,6 +9,7 @@ import pytest
 
 from matmaster.tools.builtin.grep_tool import GrepTool
 from matmaster.tools.tool_registry import Tool
+from matmaster.types.cancellation import CancellationController
 
 
 @pytest.fixture()
@@ -91,6 +92,16 @@ class TestGrepToolExecution:
         call_kwargs = mock_session.exec_bash.call_args
         command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert "grep -rn" in command
+
+    async def test_passes_cancel_token_from_session(self, mock_session: MagicMock) -> None:
+        ctrl = CancellationController()
+        mock_session._cancel_token = ctrl.token
+        tool = GrepTool(session=mock_session, workdir=Path("/workspace"))
+
+        await tool.execute({"pattern": "import os"})
+
+        call_kwargs = mock_session.exec_bash.call_args.kwargs
+        assert call_kwargs["cancel_token"] is ctrl.token
 
 
 class TestGrepToolPathSafety:

@@ -8,6 +8,7 @@ import pytest
 
 from matmaster.tools.builtin.listdir_tool import ListDirTool
 from matmaster.tools.tool_registry import Tool
+from matmaster.types.cancellation import CancellationController
 
 
 @pytest.fixture()
@@ -63,6 +64,16 @@ class TestListDirToolExecution:
             "command", call_kwargs[1].get("command", "")
         )
         assert '"."' in command_sent or "'.'" in command_sent
+
+    async def test_passes_cancel_token_from_session(self, mock_session: MagicMock) -> None:
+        ctrl = CancellationController()
+        mock_session._cancel_token = ctrl.token
+        tool = ListDirTool(session=mock_session)
+
+        await tool.execute({"path": "/some/dir"})
+
+        call_kwargs = mock_session.exec_bash.call_args.kwargs
+        assert call_kwargs["cancel_token"] is ctrl.token
 
     async def test_session_not_injected_returns_error(self) -> None:
         tool = ListDirTool()

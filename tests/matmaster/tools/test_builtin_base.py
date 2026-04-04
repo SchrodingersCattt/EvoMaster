@@ -8,6 +8,7 @@ import pytest
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_registry import Tool
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.topology import ToolPlane
 
 
@@ -115,6 +116,23 @@ async def test_builtin_execute_with_context_delegates() -> None:
     result = await tool.execute_with_context({"x": 1}, None)
 
     assert "executed with" in str(result)
+
+
+def test_cancel_token_for_exec_prefers_tool_attribute() -> None:
+    session = type("SessionStub", (), {"_cancel_token": object()})()
+    tool = ConcreteBuiltinTool(session=session)
+    ctrl = CancellationController()
+    tool._cancel_token = ctrl.token
+
+    assert tool._cancel_token_for_exec() is ctrl.token
+
+
+def test_cancel_token_for_exec_falls_back_to_session() -> None:
+    ctrl = CancellationController()
+    session = type("SessionStub", (), {"_cancel_token": ctrl.token})()
+    tool = ConcreteBuiltinTool(session=session)
+
+    assert tool._cancel_token_for_exec() is ctrl.token
 
 
 @pytest.mark.asyncio

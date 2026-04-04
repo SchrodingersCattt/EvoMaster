@@ -11,6 +11,7 @@ import pytest
 from matmaster.sessions.local import LocalSession
 from matmaster.tools.builtin.bash_tool import BashTool
 from matmaster.tools.tool_registry import Tool
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.topology import ToolPlane
 
 
@@ -93,6 +94,18 @@ class TestBashToolExecution:
         result = await tool.execute({"command": "pwd"})
         assert "/tmp" in result
 
+    async def test_execute_with_context_passes_cancel_token(
+        self, mock_session: MagicMock
+    ) -> None:
+        tool = BashTool(session=mock_session)
+        ctrl = CancellationController()
+        exec_ctx = type("ExecCtx", (), {"cancel_token": ctrl.token})()
+
+        await tool.execute_with_context({"command": "echo hello"}, exec_ctx)
+
+        call_kwargs = mock_session.exec_bash.call_args.kwargs
+        assert call_kwargs["cancel_token"] is ctrl.token
+
 
 class TestBashToolAsyncSubprocess:
     """BashTool async subprocess path for matmaster LocalSession."""
@@ -120,6 +133,7 @@ class TestBashToolAsyncSubprocess:
         assert "hello world" in result
         assert "exit code 0" in result
         mock_create.assert_called_once()
+        assert mock_create.call_args.kwargs["start_new_session"] is True
 
     async def test_timeout(self) -> None:
         """Async path: timeout kills process and returns exit code 124."""

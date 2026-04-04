@@ -90,7 +90,7 @@ class GlobTool(BuiltinTool):
         result = session.exec_bash(
             command=command,
             timeout=30,
-            stop_event=self._stop_event_for_exec(),
+            cancel_token=self._cancel_token_for_exec(),
         )
 
         output = result.get('output', '') or result.get('stdout', '')

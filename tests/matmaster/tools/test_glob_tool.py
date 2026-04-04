@@ -9,6 +9,7 @@ import pytest
 
 from matmaster.tools.builtin.glob_tool import GlobTool
 from matmaster.tools.tool_registry import Tool
+from matmaster.types.cancellation import CancellationController
 
 
 @pytest.fixture()
@@ -75,6 +76,16 @@ class TestGlobToolExecution:
         call_kwargs = mock_session.exec_bash.call_args
         command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert "head -200" in command
+
+    async def test_passes_cancel_token_from_session(self, mock_session: MagicMock) -> None:
+        ctrl = CancellationController()
+        mock_session._cancel_token = ctrl.token
+        tool = GlobTool(session=mock_session, workdir=Path("/workspace"))
+
+        await tool.execute({"pattern": "*.py"})
+
+        call_kwargs = mock_session.exec_bash.call_args.kwargs
+        assert call_kwargs["cancel_token"] is ctrl.token
 
 
 class TestGlobToolPathSafety:

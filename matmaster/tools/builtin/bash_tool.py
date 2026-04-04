@@ -12,6 +12,8 @@ Dual-path execute:
 from __future__ import annotations
 
 import asyncio
+import os
+import signal
 import sys
 from typing import Any, ClassVar
 
@@ -90,11 +92,11 @@ class BashTool(BuiltinTool):
     ) -> str:
         """Context-aware execution entry point.
 
-        Captures the stop_event from ToolExecutionContext for cancellation
+        Captures the cancel_token from ToolExecutionContext for cancellation
         support, then delegates to the standard execute() path.
         """
-        if exec_ctx is not None and hasattr(exec_ctx, "stop_event"):
-            self._stop_event = exec_ctx.stop_event
+        if exec_ctx is not None and hasattr(exec_ctx, "cancel_token"):
+            self._cancel_token = exec_ctx.cancel_token
         return await self.execute(arguments)
 
     async def _execute_async(self, arguments: dict[str, Any]) -> str:
@@ -120,7 +122,27 @@ class BashTool(BuiltinTool):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=wd,
+            start_new_session=True,
         )
+        cancel_token = getattr(self, "_cancel_token", None)
+
+        def _kill_group() -> None:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, OSError):
+                pass
+
+        if cancel_token and cancel_token.is_cancelled:
+            _kill_group()
+            await proc.wait()
+            obs = "Command cancelled."
+            if wd:
+                obs += f"\n[Current working directory: {wd}]"
+            obs += "\n[Command finished with exit code 130]"
+            return obs
+
+        if cancel_token:
+            cancel_token.on_cancel(_kill_group)
 
         try:
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
@@ -137,6 +159,12 @@ class BashTool(BuiltinTool):
 
         stdout = stdout_bytes.decode(errors="replace") if stdout_bytes else ""
         stderr = stderr_bytes.decode(errors="replace") if stderr_bytes else ""
+        if cancel_token and cancel_token.is_cancelled:
+            obs = "Command cancelled."
+            if wd:
+                obs += f"\n[Current working directory: {wd}]"
+            obs += "\n[Command finished with exit code 130]"
+            return obs
         output = stdout
         if stderr:
             output = output + stderr if output else stderr
@@ -163,7 +191,7 @@ class BashTool(BuiltinTool):
         result = session.exec_bash(
             command=command,
             timeout=timeout,
-            stop_event=self._stop_event_for_exec(),
+            cancel_token=self._cancel_token_for_exec(),
         )
 
         output = result.get('output', '') or result.get('stdout', '')

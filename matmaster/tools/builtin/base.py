@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_runner_state import ToolRunnerState
@@ -109,11 +110,11 @@ class BuiltinTool(ABC):
             raise RuntimeError(f'{self.name} requires a session but none was injected')
         return self._session
 
-    def _stop_event_for_exec(self) -> Any:
+    def _cancel_token_for_exec(self) -> CancellationToken | None:
         """Cancel signal for session.exec_bash (injected on tool by Exp / AgentRunService)."""
-        ev = getattr(self, '_stop_event', None)
-        if ev is not None:
-            return ev
+        ct = getattr(self, '_cancel_token', None)
+        if ct is not None:
+            return ct
         if self._session is not None:
-            return getattr(self._session, '_stop_event', None)
+            return getattr(self._session, '_cancel_token', None)
         return None
