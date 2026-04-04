@@ -324,6 +324,7 @@ class TestLazyMCPTimeoutThreading:
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         exp._init_skill_tools(ctx, registry)
         await _execute_use_skill(registry, skill_name="test-skill")
@@ -373,6 +374,7 @@ class TestLazyMCPTimeoutThreading:
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         exp._init_skill_tools(ctx, registry)
         await _execute_use_skill(registry, skill_name="test-skill")

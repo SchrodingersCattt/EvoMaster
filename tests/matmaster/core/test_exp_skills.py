@@ -187,6 +187,7 @@ class TestExpInitSkillTools:
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         exp._init_skill_tools(ctx, registry)
 
