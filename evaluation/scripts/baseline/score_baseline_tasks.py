@@ -284,16 +284,43 @@ def _build_evidence(
     )
 
 
+_AXIS_SECTION_ORDER = ("correctness", "grounding", "efficiency")
+
+
 def _format_score_reason(record: Any) -> str:
-    """Format per-criterion results into a score_reason string."""
-    lines = []
-    for cid, result in sorted(record.criteria_results.items()):
-        status = "✓ pass" if result.passed else "✗ fail"
-        lines.append(
-            f"[{result.axis}] {cid} ({result.verify_method}): {status} — {result.reason}"
-        )
+    """Format per-criterion results into a Markdown score_reason string."""
+    by_axis: dict[str, list[tuple[str, Any]]] = {}
+    for cid, result in record.criteria_results.items():
+        by_axis.setdefault(result.axis, []).append((cid, result))
+    for axis in by_axis:
+        by_axis[axis].sort(key=lambda x: x[0])
+
+    ordered_axes: list[str] = []
+    for a in _AXIS_SECTION_ORDER:
+        if a in by_axis:
+            ordered_axes.append(a)
+    for a in sorted(by_axis.keys()):
+        if a not in _AXIS_SECTION_ORDER:
+            ordered_axes.append(a)
+
+    lines: list[str] = []
+    for axis in ordered_axes:
+        title = axis.replace("_", " ").title()
+        lines.append(f"### {title}")
+        lines.append("")
+        for cid, result in by_axis[axis]:
+            status = "✓ pass" if result.passed else "✗ fail"
+            lines.append(
+                f"- **`{cid}`** (`{result.verify_method}`): {status} — {result.reason}"
+            )
+        lines.append("")
+
+    while lines and lines[-1] == "":
+        lines.pop()
+
+    lines.append("")
     lines.append(
-        f"\nOverall weighted score: {record.overall_weighted_score:.3f} "
+        f"**Overall weighted score:** {record.overall_weighted_score:.3f} "
         f"({record.passed_count}/{record.total_count} criteria passed)"
     )
     return "\n".join(lines)

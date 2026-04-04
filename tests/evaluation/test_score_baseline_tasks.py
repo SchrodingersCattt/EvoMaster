@@ -328,6 +328,23 @@ class TestFormatScoreReason:
         assert "✓ pass" in reason
         assert "✗ fail" in reason
 
+    def test_format_markdown_sections_and_list_items(self) -> None:
+        record = self._make_mock_record(
+            {
+                "z_last": ("correctness", True, "z ok"),
+                "a_first": ("correctness", True, "a ok"),
+                "g_item": ("grounding", True, "g ok"),
+            }
+        )
+        reason = _format_score_reason(record)
+        assert "### Correctness" in reason
+        assert "### Grounding" in reason
+        assert "- **`a_first`**" in reason
+        assert "- **`z_last`**" in reason
+        # correctness block should list a_first before z_last
+        assert reason.index("a_first") < reason.index("z_last")
+        assert "**Overall weighted score:**" in reason
+
     def test_score_to_int_rounds_correctly(self) -> None:
         record = MagicMock()
         record.overall_weighted_score = 0.734
