@@ -151,7 +151,7 @@ evaluation/question_bank/
 | `event_type_called` | 检查事件类型是否被触发 |
 | `source_type_used` | 检查数据源类型 |
 | `call_count_range` | 分析工具调用次数（建议也配上 ref） |
-| `token_budget` | 检查 token 用量（建议配上 ref，格式同 `duration_budget`） |
+| `token_budget` | 用 **最后一轮 LLM** 的原始 ``total_tokens``（**不**扣 cache）：``EvidenceBundle.token_usage_last_turn.total_tokens``（轨迹取 max ``step_id`` 的 ``meta.usage``；无 ``total_tokens`` 时用 prompt+completion 推导）。ingest 顶层 ``item["tokens"]`` / ``extra["tokens_last_turn"]`` 与 :func:`evaluation.eval_ingest_client.extract_ingest_tokens` 对齐：有 ``usage_vendor_by_turn`` 时取最后一项的 ``total_tokens``，否则用 ``summary.usage.total_tokens``（整表累加标量）。建议配上 ref，格式同 `duration_budget`） |
 
 ---
 
@@ -235,6 +235,13 @@ scoring_checklist:
 - `reference_answers` 中的 `tool_name` / `tool_arg` 字段、`scoring_checklist.criterion` 中引用工具名均为**内部评分逻辑**，不发给 Agent，允许使用工具名。
 - `intent` 中可以使用通用术语（如"表面构建工具"、"结构优化器"），但同样不应包含具体 MCP tool identifier。
 - 新增或修改题目时，需检查 `human_prompt_seed` 中是否意外泄漏了工具名；审查方式：在所有 YAML 的 `human_prompt_seed` 文本中搜索 `mat_sg_`、`mat_dpa_`、`mat_struct_db_` 等前缀。
+
+---
+
+## DevShell 与 Claude Agent SDK 外层编排
+
+- 人工/IDE 流程：`evaluation/docs/devshell/devshell_claude_code_eval.md`（`run_devshell_eval.py` + 对话判分）。
+- **程序化**多轮「跑题 → 判分 → 改提示词/工具」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。
 
 ---
 

@@ -83,7 +83,9 @@ class KernelResult:
     num_turns 语义：已完成 LLM 调用的轮数。cancelled 路径在 turn 递增前退出，
     所以 num_turns 反映的是已完成的轮数，不含被中断的当前轮。
 
-    usage：最后一轮 LLM 调用的 token 统计（非多轮累加），与 MATTER Evidence / baseline 口径对齐。
+    usage：各轮 LLM 调用的标量用量累加（prompt / completion / total / cache_read 等）。
+    usage_vendor_by_turn：按 LLM 调用顺序，每轮一条供应商原生 usage（无则为 ``{}``），
+    与 ``num_turns`` 已完成的轮次一一对应。
     """
 
     status: str
@@ -92,6 +94,7 @@ class KernelResult:
     num_turns: int = 0
     stop_reason: str | None = None
     usage: dict[str, int] = field(default_factory=dict)
+    usage_vendor_by_turn: tuple[dict[str, Any], ...] = ()
 
     def to_run_result_event(self, source: str = "agent") -> RunResultEvent:
         """构造总线事件。上层发总线时统一走这个方法。"""
