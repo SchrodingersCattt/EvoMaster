@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import create_autospec, patch
 
+from matmaster.types.cancellation import CancellationController
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.event_logger import EventLogger
 from matmaster.devshell.event_observer import DevEventObserver
@@ -197,13 +198,11 @@ class TestDevShellIntegration:
 
     def test_cancelled_run_does_not_accumulate_history(self, tmp_path: Path) -> None:
         """Cancelled runs should not add messages to history."""
-        import threading
-
         runner = _make_runner(tmp_path, provider=SimpleProvider())
 
-        stop = threading.Event()
-        stop.set()
-        result = runner.run('should cancel', stop_event=stop)
+        controller = CancellationController()
+        controller.cancel()
+        result = runner.run('should cancel', cancel_token=controller.token)
 
         assert result.reason == 'cancelled'
         assert len(runner.history) == 0

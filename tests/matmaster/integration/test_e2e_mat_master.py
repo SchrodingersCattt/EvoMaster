@@ -19,6 +19,7 @@ import pytest
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
 from matmaster.core.exp import Exp
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import (
     ResponseEvent,
@@ -29,6 +30,8 @@ from matmaster.types.messages import (
     LLMResponse,
     StreamChunk,
 )
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
 
 # ── Mock LLM provider ────────────────────────────────
 
@@ -137,6 +140,16 @@ class MockLLMProviderCapturingMessages:
 class EchoTool:
     """Simple echo tool for E2E testing. Satisfies Tool Protocol."""
 
+    resource_claims: tuple[ResourceClaim, ...] = ()
+    capabilities = frozenset()
+    effect_level = "none"
+    fast_path_eligible = False
+    max_result_chars = 0
+    plane = ToolPlane.CONTROL_PLANE
+    state_mode = "stateless"
+    stop_mode = "cancellable"
+    exposed_to_model = True
+
     @property
     def name(self) -> str:
         return 'echo'
@@ -152,6 +165,12 @@ class EchoTool:
             'properties': {'text': {'type': 'string'}},
             'required': ['text'],
         }
+
+    def describe(self, ctx: Any | None = None) -> str:
+        return self.description
+
+    def prompt(self, ctx: Any | None = None) -> str | None:
+        return None
 
     async def execute(self, arguments: dict[str, Any]) -> str:
         return f"ECHO: {arguments.get('text', '')}"
@@ -305,7 +324,7 @@ class TestMatMasterRunAgentE2E:
                     session_id='sess-1',
                     user_prompt='test prompt',
                     send_cb=mock_send_cb,
-                    stop_event=threading.Event(),
+                    cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-1',
                 )
@@ -417,7 +436,7 @@ class TestMatMasterRunAgentE2E:
                     session_id='sess-1',
                     user_prompt='new question',
                     send_cb=AsyncMock(),
-                    stop_event=threading.Event(),
+                    cancel_token=CancellationController().token,
                     mode='direct',
                     task_id=current_task_id,
                 )
@@ -486,7 +505,7 @@ class TestMatMasterRunAgentE2E:
                     session_id='sess-events-table-error',
                     user_prompt='test prompt',
                     send_cb=mock_send_cb,
-                    stop_event=threading.Event(),
+                    cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-events-table-error',
                 )
@@ -615,7 +634,7 @@ class TestMatMasterRunAgentE2E:
                     session_id='sess-bohrium-event',
                     user_prompt='test prompt',
                     send_cb=mock_send_cb,
-                    stop_event=threading.Event(),
+                    cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-bohrium-event',
                 )
@@ -701,7 +720,7 @@ class TestMatMasterRunAgentE2E:
                     session_id='sess-bohrium-abort',
                     user_prompt='test prompt',
                     send_cb=AsyncMock(),
-                    stop_event=threading.Event(),
+                    cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-bohrium-abort',
                 )
@@ -776,7 +795,7 @@ class TestMatMasterRunAgentE2E:
                     session_id='sess-bohrium-error',
                     user_prompt='test prompt',
                     send_cb=mock_send_cb,
-                    stop_event=threading.Event(),
+                    cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-bohrium-error',
                 )

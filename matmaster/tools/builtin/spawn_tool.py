@@ -10,12 +10,12 @@ further children (schema-layer guard in TOML + runtime guard here).
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Callable
 from typing import Any, ClassVar
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.tool_spec import ResourceClaim
 
 
@@ -76,7 +76,7 @@ class SpawnTool(BuiltinTool):
     ) -> None:
         super().__init__(session=session, workdir=workdir)
         self._spawn_fn = spawn_fn
-        self._stop_event: threading.Event | None = None
+        self._cancel_token: CancellationToken | None = None
 
         # Override instance-level description/json_schema with available exps
         if available_exps:
@@ -145,7 +145,7 @@ class SpawnTool(BuiltinTool):
             return "Error: Both exp_name and task are required"
 
         try:
-            return await self._spawn_fn(exp_name, task, self._stop_event)
+            return await self._spawn_fn(exp_name, task, self._cancel_token)
         except Exception as e:
             self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
             return f"Error: {e}"

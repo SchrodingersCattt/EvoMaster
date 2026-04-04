@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.topology import ToolPlane
+
+_TEST_LOG_DIR = Path(tempfile.gettempdir()) / "matmaster-evo-test-logs"
+_TEST_LOG_DIR.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("LOG_DIR", str(_TEST_LOG_DIR))
 
 
 class MockAsyncLLMProvider:

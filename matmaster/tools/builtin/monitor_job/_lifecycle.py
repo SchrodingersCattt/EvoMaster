@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from matmaster.types.cancellation import CancellationToken
+
 from ._constants import (
     _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS,
     _LOG_PER_FILE_MAX_CHARS,
@@ -45,21 +47,6 @@ def _llm_decision_interval_at_poll(poll_index: int, base_interval: int) -> int:
         return 10
     return max(1, base_interval)
 
-
-def _sleep_until_stop(seconds: float, stop_event: Any) -> bool:
-    """Sleep up to `seconds`; return True if stop was requested (caller should exit)."""
-    is_set = getattr(stop_event, 'is_set', None)
-    if not callable(is_set):
-        time.sleep(seconds)
-        return False
-    end = time.time() + seconds
-    while time.time() < end:
-        if stop_event.is_set():
-            return True
-        time.sleep(min(1.0, max(0.1, end - time.time())))
-    return False
-
-
 def _run_lifecycle(
     job_id: str,
     software: str,
@@ -75,7 +62,7 @@ def _run_lifecycle(
     llm_timeout_seconds: int = _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS,
     decision_check_interval: int = 10,
     max_polls_per_call: int | None = None,
-    stop_event: Any = None,
+    cancel_token: CancellationToken | None = None,
 ) -> dict[str, Any]:
     # Lazy import: matmaster.adaptors.calculation (not triggered at module load time)
     from matmaster.adaptors.calculation.job_service import (
@@ -103,7 +90,7 @@ def _run_lifecycle(
     llm_decision_history: list[dict[str, Any]] = []
     last_llm_decision: dict[str, Any] | None = None
     while polls < max_polls:
-        if stop_event and getattr(stop_event, 'is_set', None) and stop_event.is_set():
+        if cancel_token and cancel_token.is_cancelled:
             return {
                 'status': 'cancelled',
                 'job_id': current_job_id,
@@ -270,14 +257,18 @@ def _run_lifecycle(
             )
             if failure_confirm_count >= _MAX_FAILURE_CONFIRMS:
                 break  # Confirmed failure -- proceed to log-tail and return
-            if _sleep_until_stop(min(poll_interval, 10), stop_event):
-                return {
-                    'status': 'cancelled',
-                    'job_id': current_job_id,
-                    'bohr_job_id': bohr_job_id,
-                    'message': 'User requested stop.',
-                    'llm_decision_history': llm_decision_history,
-                }
+            sleep_secs = min(poll_interval, 10)
+            if cancel_token:
+                if cancel_token.wait(sleep_secs):
+                    return {
+                        'status': 'cancelled',
+                        'job_id': current_job_id,
+                        'bohr_job_id': bohr_job_id,
+                        'message': 'User requested stop.',
+                        'llm_decision_history': llm_decision_history,
+                    }
+            else:
+                time.sleep(sleep_secs)
             continue
 
         # -- Unknown --
@@ -298,28 +289,35 @@ def _run_lifecycle(
                         '(from extra_info.bohr_job_id in the submit response).'
                     ),
                 }
-            if _sleep_until_stop(min(poll_interval, 10), stop_event):
-                return {
-                    'status': 'cancelled',
-                    'job_id': current_job_id,
-                    'bohr_job_id': bohr_job_id,
-                    'message': 'User requested stop.',
-                    'llm_decision_history': llm_decision_history,
-                }
+            sleep_secs = min(poll_interval, 10)
+            if cancel_token:
+                if cancel_token.wait(sleep_secs):
+                    return {
+                        'status': 'cancelled',
+                        'job_id': current_job_id,
+                        'bohr_job_id': bohr_job_id,
+                        'message': 'User requested stop.',
+                        'llm_decision_history': llm_decision_history,
+                    }
+            else:
+                time.sleep(sleep_secs)
             continue
 
         # -- Still running: reset failure counter --
         failure_confirm_count = 0
         unknown_count = 0
         if max_polls_per_call is None or (polls + 1) < max_polls:
-            if _sleep_until_stop(poll_interval, stop_event):
-                return {
-                    'status': 'cancelled',
-                    'job_id': current_job_id,
-                    'bohr_job_id': bohr_job_id,
-                    'message': 'User requested stop.',
-                    'llm_decision_history': llm_decision_history,
-                }
+            if cancel_token:
+                if cancel_token.wait(poll_interval):
+                    return {
+                        'status': 'cancelled',
+                        'job_id': current_job_id,
+                        'bohr_job_id': bohr_job_id,
+                        'message': 'User requested stop.',
+                        'llm_decision_history': llm_decision_history,
+                    }
+            else:
+                time.sleep(poll_interval)
         polls += 1
 
     # -- Loop ended: either confirmed failure (break) or max_polls exceeded --

@@ -54,7 +54,7 @@ class TestSessionProtocol:
 
         assert "cancel_token" in hints
         assert hints["cancel_token"] == CancellationToken | None
-        assert "stop_event" not in hints
+        assert all(not name.endswith("_event") for name in hints)
 
 
 class TestSessionConfig:

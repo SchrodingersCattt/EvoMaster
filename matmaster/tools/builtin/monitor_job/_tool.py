@@ -181,7 +181,7 @@ class MonitorJobTool(BuiltinTool):
         if max_ppc is None and timeout_minutes is not None:
             max_ppc = max(1, int(float(timeout_minutes) * 60 // poll_interval))
 
-        stop_ev = self._stop_event_for_exec()
+        cancel_token = self._cancel_token_for_exec()
 
         result = _run_lifecycle(
             job_id=job_id,
@@ -198,7 +198,7 @@ class MonitorJobTool(BuiltinTool):
             llm_timeout_seconds=llm_timeout_seconds,
             decision_check_interval=decision_check_interval,
             max_polls_per_call=max_ppc,
-            stop_event=stop_ev,
+            cancel_token=cancel_token,
         )
 
         output = json.dumps(result, indent=2, ensure_ascii=False)

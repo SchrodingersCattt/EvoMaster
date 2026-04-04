@@ -44,6 +44,7 @@ _WORKER_HEARTBEAT_INTERVAL = 10.0
 _current_session_id: str | None = None
 # 优雅退出：SIGTERM 时设为 True，主循环在「当前 run 结束后」或「空闲时」退出，不再接新任务
 _drain_requested = False
+_active_controller: CancellationController | None = None
 
 
 def _session_url(session_id: str) -> str:
@@ -163,7 +164,7 @@ def _worker_heartbeat_loop(stop_ev: threading.Event) -> None:
 
 
 def _run_worker_loop() -> None:
-    global _current_session_id
+    global _current_session_id, _active_controller
     redis_dao = get_redis_dao()
     if not redis_dao.create_client():
         logger.error(
@@ -220,7 +221,10 @@ def _run_worker_loop() -> None:
             # 不在此处写 DB：run_agent 内 event_callback 已写，此处再写会导致同一条事件落库两次
             redis_dao.publish_stream_event(_sid, p)
 
-        stop_ev = RedisBackedStopEvent(session_id, task_id)
+        controller = CancellationController()
+        _active_controller = controller
+        bridge = RedisCancellationBridge(controller, session_id, task_id)
+        bridge.start()
         acquired = False
 
         try:
@@ -280,7 +284,7 @@ def _run_worker_loop() -> None:
                         session_id=session_id,
                         user_prompt=user_prompt,
                         send_cb=send_cb,
-                        stop_event=stop_ev,
+                        cancel_token=controller.token,
                         mode=mode,
                         task_id=task_id,
                         invocation_id=invocation_id,
@@ -343,6 +347,8 @@ def _run_worker_loop() -> None:
                 except Exception:
                     pass
         finally:
+            bridge.stop()
+            _active_controller = None
             if acquired:
                 _current_session_id = None
                 LogContext.clear()

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +11,7 @@ from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.stream_hook import DevStreamHook
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import Message, UserMessage
 
@@ -112,7 +112,7 @@ class DevRunner:
         self,
         task: str,
         *,
-        stop_event: threading.Event | None = None,
+        cancel_token: CancellationToken | None = None,
         event_observer: DevEventObserver | None = None,
     ) -> DrainResult:
         """Execute a single agent run.
@@ -133,6 +133,16 @@ class DevRunner:
                 runtime = await exp.build_runtime(self._pg_ctx)
                 spec = runtime.spec
 
+                # Devshell bypasses Exp.run_stream(), so it must inject
+                # cancellation into the session and tool catalog itself.
+                if cancel_token is not None:
+                    catalog = getattr(spec, "tool_catalog", None)
+                    if catalog is not None:
+                        catalog.inject_cancel_token(cancel_token)
+                    session = self._pg_ctx.session
+                    if session is not None:
+                        session._cancel_token = cancel_token
+
                 # Build on_event callback for real-time forwarding
                 def _on_event(event: Any) -> None:
                     self._stream_hook.on_event(event)
@@ -141,7 +151,7 @@ class DevRunner:
 
                 return await drain_run_stream(
                     runtime.kernel.run_stream(
-                        spec, task, history=self.history, stop_event=stop_event
+                        spec, task, history=self.history, cancel_token=cancel_token
                     ),
                     on_event=_on_event,
                 )

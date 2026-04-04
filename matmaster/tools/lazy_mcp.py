@@ -21,7 +21,6 @@ from matmaster.types.topology import ToolPlane
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MCP_TOOL_TIMEOUT = 120.0
-_STOP_POLL_INTERVAL = 0.5
 
 
 def _parse_claims(raw_claims: Any) -> tuple[ResourceClaim, ...]:
@@ -32,13 +31,6 @@ def _parse_claims(raw_claims: Any) -> tuple[ResourceClaim, ...]:
         elif isinstance(raw, dict):
             claims.append(ResourceClaim(**raw))
     return tuple(claims)
-
-
-async def _wait_for_stop(stop_event: threading.Event) -> None:
-    """Poll a threading.Event from async code until it is set."""
-    while not stop_event.is_set():
-        await asyncio.sleep(_STOP_POLL_INTERVAL)
-
 
 class LazyMCPTool:
     """Placeholder MCP tool -- holds cached schema, connects on first execute.
@@ -186,21 +178,21 @@ class LazyMCPTool:
         arguments: dict[str, Any],
         exec_ctx: ToolExecutionContext | None,
     ) -> ToolResult:
-        stop_event = getattr(exec_ctx, "stop_event", None) if exec_ctx else None
+        cancel_token = getattr(exec_ctx, "cancel_token", None) if exec_ctx else None
 
-        if stop_event is not None and stop_event.is_set():
+        if cancel_token is not None and cancel_token.is_cancelled:
             return self._cancelled_result()
 
         call_coro = asyncio.wait_for(self._do_call(arguments), timeout=self._timeout)
 
-        if stop_event is None:
+        if cancel_token is None:
             try:
                 return await call_coro
             except asyncio.TimeoutError:
                 return self._timeout_result()
 
         call_task = asyncio.create_task(call_coro)
-        stop_task = asyncio.create_task(_wait_for_stop(stop_event))
+        stop_task = asyncio.create_task(cancel_token.wait_async())
         done, pending = await asyncio.wait(
             {call_task, stop_task}, return_when=asyncio.FIRST_COMPLETED
         )
@@ -223,7 +215,7 @@ class LazyMCPTool:
     def _timeout_result(self) -> ToolResult:
         timeout_text = f"{self._timeout:g}"
         return ToolResult(
-            status="error",
+            status="timeout",
             content=f"MCP tool {self._name} timed out after {timeout_text}s",
             meta={"layer": "tool"},
         )

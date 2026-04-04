@@ -1169,7 +1169,7 @@ class TestStopModeCancel:
         assert results[0][1].content == "spawn_done"
 
     @pytest.mark.asyncio
-    async def test_no_stop_event_all_modes_execute(self) -> None:
+    async def test_no_cancel_token_all_modes_execute(self) -> None:
         for mode in ("cancellable", "best_effort", "non_cancellable"):
             runner = _make_runner_with_stop_mode(
                 f"tool_{mode}",

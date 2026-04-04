@@ -4,7 +4,7 @@ Tool is the @runtime_checkable Protocol each tool must satisfy (name, descriptio
 json_schema, execute). ToolRegistry provides flat-namespace registration with source
 tags (builtin/mcp/skill) and same-name override with warning.
 
-Upper-layer operations (execute dispatch, OpenAI definitions, stop_event injection)
+Upper-layer operations (execute dispatch, OpenAI definitions, cancellation injection)
 are handled by ToolCatalog and FullToolRunner. Registry is consumed only as a storage
 backend via ToolCatalog.registry.
 """
@@ -83,7 +83,7 @@ class ToolRegistry:
     builtin -> MCP -> skill, so skill tools take final precedence.
     Same-name registration overwrites the previous entry with a warning log.
 
-    Upper-layer operations (execute, definitions, stop_event) live in
+    Upper-layer operations (execute, definitions, cancellation propagation) live in
     ToolCatalog and FullToolRunner -- not here.
     """
 

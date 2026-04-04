@@ -16,6 +16,8 @@ from matmaster.core.agent import AgentKernel
 from matmaster.core.exp import Exp
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
 
 
 class _ToolCallThenFinishLLM:
@@ -67,6 +69,16 @@ class _ToolCallThenFinishLLM:
 class _SimpleTool:
     """Simple tool for alignment tests. Satisfies Tool Protocol."""
 
+    resource_claims: tuple[ResourceClaim, ...] = ()
+    capabilities = frozenset()
+    effect_level = "none"
+    fast_path_eligible = False
+    max_result_chars = 0
+    plane = ToolPlane.CONTROL_PLANE
+    state_mode = "stateless"
+    stop_mode = "cancellable"
+    exposed_to_model = True
+
     @property
     def name(self) -> str:
         return "test_tool"
@@ -81,6 +93,12 @@ class _SimpleTool:
             "type": "object",
             "properties": {"input": {"type": "string"}},
         }
+
+    def describe(self, ctx: Any | None = None) -> str:
+        return self.description
+
+    def prompt(self, ctx: Any | None = None) -> str | None:
+        return None
 
     async def execute(self, arguments: dict[str, Any]) -> str:
         return f"result: {arguments.get('input', '')}"

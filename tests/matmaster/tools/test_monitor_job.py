@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import sys
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_registry import Tool
+from matmaster.types.cancellation import CancellationController
 
 
 class TestMonitorJobToolProtocolCompliance:
@@ -153,3 +155,27 @@ class TestMonitorJobToolImportCleanliness:
 
         leaked = [k for k in sys.modules if "evomaster.agent.session.ssh" in k]
         assert not leaked, f"evomaster.agent.session.ssh unexpectedly loaded: {leaked}"
+
+
+class TestMonitorJobCancellation:
+    def test_run_lifecycle_short_circuits_when_already_cancelled(self) -> None:
+        from matmaster.tools.builtin.monitor_job._lifecycle import _run_lifecycle
+
+        controller = CancellationController()
+        controller.cancel()
+
+        with patch(
+            "matmaster.adaptors.calculation.job_service.query_job_status"
+        ) as mock_query:
+            result = _run_lifecycle(
+                job_id="job-1",
+                software="abacus",
+                workspace=".",
+                session=MagicMock(),
+                cancel_token=controller.token,
+                max_polls_per_call=1,
+            )
+
+        assert result["status"] == "cancelled"
+        assert result["job_id"] == "job-1"
+        mock_query.assert_not_called()

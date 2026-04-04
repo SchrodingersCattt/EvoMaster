@@ -127,7 +127,7 @@ class AgentRunService:
         session_id: str,
         user_prompt: str,
         send_cb: Callable[[dict], Any],
-        stop_event: CancellationToken,
+        cancel_token: CancellationToken,
         mode: str,
         task_id: str,
         invocation_id: str | None = None,
@@ -285,7 +285,7 @@ class AgentRunService:
             exp = Exp(exp_config)
 
             if pg_ctx.session is not None:
-                pg_ctx.session._stop_event = stop_event
+                pg_ctx.session._cancel_token = cancel_token
 
             # -- Stage 5: History --
             raw_events = (
@@ -306,7 +306,7 @@ class AgentRunService:
                 pg_ctx,
                 user_prompt,
                 history=history,
-                stop_event=stop_event,
+                cancel_token=cancel_token,
                 skills=pg_ctx.run_meta.get('skill_config'),
                 source_override=exp_name,
             )) as stream:

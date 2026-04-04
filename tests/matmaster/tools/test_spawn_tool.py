@@ -13,21 +13,26 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
+from matmaster.types.cancellation import CancellationController
+
 
 class TestSpawnToolExecute:
     """Tests for SpawnTool._execute behavior."""
 
     async def test_execute_calls_spawn_fn(self) -> None:
-        """SpawnTool with mock spawn_fn calls it with (exp_name, task, stop_event)."""
+        """SpawnTool forwards the injected cancel_token to spawn_fn."""
         from matmaster.tools.builtin.spawn_tool import SpawnTool
 
         mock_spawn = AsyncMock(return_value="exploration result: found 3 files")
         tool = SpawnTool(spawn_fn=mock_spawn)
+        controller = CancellationController()
+        tool._cancel_token = controller.token
 
         result = await tool.execute({"exp_name": "explore", "task": "find files"})
 
-        # 3-arg call: (exp_name, task, _stop_event=None)
-        mock_spawn.assert_called_once_with("explore", "find files", None)
+        mock_spawn.assert_called_once_with(
+            "explore", "find files", controller.token
+        )
         assert result == "exploration result: found 3 files"
 
     async def test_recursion_guard_spawn_fn_none(self) -> None:
