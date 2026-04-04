@@ -3,6 +3,11 @@
 只保留 matmaster 实际使用的功能：add_server、_build_tools、cleanup。
 不含 runner task、重连、进度回调、ToolRegistry 注册等 evomaster 冗余逻辑。
 tools_by_server 存储轻量级 dict 而非 MCPTool 实例。
+
+Connection lifecycle:
+  每个 MCP 连接由一个 long-lived asyncio Task (_ManagedConn) 持有。
+  __aenter__ 和 __aexit__ 始终在同一个 Task 中执行，避免 anyio
+  cancel scope 跨 Task 报 RuntimeError 的问题。
 """
 
 from __future__ import annotations
@@ -24,6 +29,53 @@ _PER_CONN_SHUTDOWN_TIMEOUT = 1.0
 
 # 重试间隔（秒）
 _RETRY_DELAY = 2
+
+
+class _ManagedConn:
+    """Hold an MCPConnection context in a single long-lived Task.
+
+    anyio cancel scopes must be entered and exited in the same asyncio Task.
+    run_coroutine_threadsafe creates a NEW Task per call, so calling
+    __aenter__ in one call and __aexit__ in another triggers RuntimeError.
+
+    _ManagedConn solves this by running ``async with conn_ctx`` in one
+    persistent Task.  ``add_server`` awaits the ready future to get the
+    connection; ``cleanup`` sets the shutdown event which causes the
+    ``async with`` to exit -- both in the same Task.
+    """
+
+    def __init__(self, conn_ctx: MCPConnection) -> None:
+        self._conn_ctx = conn_ctx
+        self._shutdown = asyncio.Event()
+        self._ready: asyncio.Future[MCPConnection] = (
+            asyncio.get_running_loop().create_future()
+        )
+        self._task = asyncio.create_task(self._run())
+
+    async def _run(self) -> None:
+        try:
+            async with self._conn_ctx as conn:
+                self._ready.set_result(conn)
+                await self._shutdown.wait()
+        except BaseException as exc:
+            if not self._ready.done():
+                self._ready.set_exception(exc)
+
+    async def wait_ready(self, timeout: float) -> MCPConnection:
+        return await asyncio.wait_for(self._ready, timeout=timeout)
+
+    async def close(self, timeout: float) -> None:
+        self._shutdown.set()
+        try:
+            await asyncio.wait_for(self._task, timeout=timeout)
+        except asyncio.TimeoutError:
+            self._task.cancel()
+            try:
+                await self._task
+            except (asyncio.CancelledError, Exception):
+                pass
+        except Exception:
+            pass
 
 
 class MCPToolManager:
@@ -50,8 +102,8 @@ class MCPToolManager:
         #    "has_path_adaptor": bool}
         self.tools_by_server: dict[str, dict[str, dict[str, Any]]] = {}
 
-        # 保留 context manager 引用用于 cleanup
-        self._conn_ctxs: dict[str, MCPConnection] = {}
+        # Long-lived managed connections (enter/exit in same Task)
+        self._managed: dict[str, _ManagedConn] = {}
 
         # 需要 path adaptor 的 server 集合
         self.path_adaptor_servers: set[str] = set()
@@ -108,15 +160,13 @@ class MCPToolManager:
         last_error: Exception | None = None
 
         for attempt in range(1, _MAX_RETRIES + 1):
-            conn_ctx: MCPConnection | None = None
+            managed: _ManagedConn | None = None
             try:
                 conn_ctx = create_connection(transport=transport, **connection_kwargs)
+                managed = _ManagedConn(conn_ctx)
 
-                # 带超时的连接
-                conn = await asyncio.wait_for(
-                    conn_ctx.__aenter__(),
-                    timeout=MCP_CONNECT_TIMEOUT,
-                )
+                # 带超时的连接（__aenter__ 在 managed task 内执行）
+                conn = await managed.wait_ready(timeout=MCP_CONNECT_TIMEOUT)
 
                 # 带超时的 list_tools
                 try:
@@ -125,12 +175,12 @@ class MCPToolManager:
                         timeout=MCP_CONNECT_TIMEOUT,
                     )
                 except Exception:
-                    await conn_ctx.__aexit__(None, None, None)
+                    await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
                     raise
 
                 # 连接成功
                 self.connections[name] = conn
-                self._conn_ctxs[name] = conn_ctx
+                self._managed[name] = managed
 
                 logger.info(
                     "Found %d tools from MCP server '%s'", len(tools_info), name
@@ -298,31 +348,22 @@ class MCPToolManager:
     async def cleanup(self) -> None:
         """关闭所有 MCP 连接。
 
-        遍历所有连接的 context manager 并调用 __aexit__。
-        每个连接有独立的 shutdown budget，单个连接超时或失败只记录
-        warning，不阻断其他连接的清理。
+        通过 _ManagedConn.close() 触发 shutdown event，让持有连接的
+        long-lived task 正常退出 async with（__aexit__ 在同一个 Task 中）。
+        每个连接有独立的 shutdown budget。
         """
         logger.info("Cleaning up MCP connections")
 
-        for name, conn_ctx in list(self._conn_ctxs.items()):
+        for name, managed in list(self._managed.items()):
             try:
-                await asyncio.wait_for(
-                    conn_ctx.__aexit__(None, None, None),
-                    timeout=_PER_CONN_SHUTDOWN_TIMEOUT,
-                )
+                await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
                 logger.debug("Closed MCP connection: %s", name)
-            except asyncio.TimeoutError:
-                logger.warning(
-                    "MCP connection '%s' shutdown timed out after %.1fs, skipping",
-                    name,
-                    _PER_CONN_SHUTDOWN_TIMEOUT,
-                )
             except Exception as e:
                 logger.warning("Error closing MCP connection '%s': %s", name, e)
 
         self.connections.clear()
         self.tools_by_server.clear()
-        self._conn_ctxs.clear()
+        self._managed.clear()
         self._seen_tools.clear()
 
         logger.info("MCP cleanup complete")

@@ -6,7 +6,7 @@ Behavioral contract:
 - _build_tools populates tools_by_server[name] as a dict mapping prefixed_name -> tool_info dict.
 - tool_info dicts contain required keys: name, description, input_schema, remote_tool_name, connection.
 - _build_tools applies tool_include_only whitelist filtering.
-- cleanup clears connections, tools_by_server, _conn_ctxs.
+- cleanup clears connections, tools_by_server, _managed.
 - No evomaster imports in manager.py.
 """
 
@@ -203,77 +203,97 @@ class TestMCPToolManagerBuildTools:
         assert isinstance(tool_info, dict)
 
 
+class _FakeConnCtx:
+    """Minimal MCPConnection stand-in for cleanup tests."""
+
+    def __init__(self, *, hang: bool = False, fail: bool = False):
+        self._hang = hang
+        self._fail = fail
+        self.entered = False
+        self.exited = False
+
+    async def __aenter__(self):
+        self.entered = True
+        self.session = MagicMock()
+        self.session.initialize = AsyncMock()
+        await self.session.initialize()
+        return self
+
+    async def __aexit__(self, *args):
+        if self._hang:
+            await asyncio.get_event_loop().create_future()  # block forever
+        if self._fail:
+            raise RuntimeError("close failed")
+        self.exited = True
+
+    async def list_tools(self):
+        return []
+
+
+def _make_managed(m, name, *, hang=False, fail=False):
+    """Helper: create a _ManagedConn and register it in the manager."""
+    from matmaster.mcp.manager import _ManagedConn
+
+    ctx = _FakeConnCtx(hang=hang, fail=fail)
+    managed = _ManagedConn(ctx)
+    m._managed[name] = managed
+    m.connections[name] = ctx
+    return ctx, managed
+
+
 class TestMCPToolManagerCleanup:
     async def test_cleanup_clears_state(self):
         from matmaster.mcp.manager import MCPToolManager
 
         m = MCPToolManager()
-        # Inject a fake connection context
-        mock_conn_ctx = AsyncMock()
-        mock_conn_ctx.__aexit__ = AsyncMock(return_value=None)
-        m._conn_ctxs["fake_srv"] = mock_conn_ctx
-        m.connections["fake_srv"] = MagicMock()
+        ctx, managed = _make_managed(m, "fake_srv")
+        await managed.wait_ready(timeout=2)
         m.tools_by_server["fake_srv"] = {"fake_srv_tool": {}}
 
         await m.cleanup()
 
         assert len(m.connections) == 0
         assert len(m.tools_by_server) == 0
-        assert len(m._conn_ctxs) == 0
+        assert len(m._managed) == 0
+        assert ctx.exited
 
-    async def test_cleanup_calls_aexit_on_connections(self):
+    async def test_cleanup_exits_connection_context(self):
         from matmaster.mcp.manager import MCPToolManager
 
         m = MCPToolManager()
-        mock_conn_ctx = AsyncMock()
-        mock_conn_ctx.__aexit__ = AsyncMock(return_value=None)
-        m._conn_ctxs["srv"] = mock_conn_ctx
+        ctx, managed = _make_managed(m, "srv")
+        await managed.wait_ready(timeout=2)
 
         await m.cleanup()
 
-        mock_conn_ctx.__aexit__.assert_called_once_with(None, None, None)
+        assert ctx.exited
 
     async def test_cleanup_tolerates_aexit_error(self):
         """Cleanup should not raise even if a connection's __aexit__ fails."""
         from matmaster.mcp.manager import MCPToolManager
 
         m = MCPToolManager()
-        mock_conn_ctx = AsyncMock()
-        mock_conn_ctx.__aexit__ = AsyncMock(side_effect=RuntimeError("close failed"))
-        m._conn_ctxs["bad_srv"] = mock_conn_ctx
+        _ctx, managed = _make_managed(m, "bad_srv", fail=True)
+        await managed.wait_ready(timeout=2)
 
         # Should not raise
         await m.cleanup()
 
     async def test_cleanup_per_connection_timeout_isolation(self):
         """One hung connection must not prevent later connections from being attempted."""
-        import asyncio
-
         from matmaster.mcp.manager import MCPToolManager
 
         m = MCPToolManager()
-
-        # First connection hangs forever
-        hung_ctx = AsyncMock()
-        hung_future = asyncio.Future()  # never resolved
-
-        async def _hang(*args):
-            await hung_future
-
-        hung_ctx.__aexit__ = _hang
-
-        # Second connection closes normally
-        fast_ctx = AsyncMock()
-        fast_ctx.__aexit__ = AsyncMock(return_value=None)
-
-        m._conn_ctxs["hung_srv"] = hung_ctx
-        m._conn_ctxs["fast_srv"] = fast_ctx
+        _hung_ctx, hung_managed = _make_managed(m, "hung_srv", hang=True)
+        await hung_managed.wait_ready(timeout=2)
+        fast_ctx, fast_managed = _make_managed(m, "fast_srv")
+        await fast_managed.wait_ready(timeout=2)
 
         await m.cleanup()
 
-        # fast_srv must have been attempted despite hung_srv timing out
-        fast_ctx.__aexit__.assert_called_once_with(None, None, None)
-        assert len(m._conn_ctxs) == 0
+        # fast_srv must have been cleaned up despite hung_srv timing out
+        assert fast_ctx.exited
+        assert len(m._managed) == 0
 
 
 class TestNoEvoMasterImportsInManager:
