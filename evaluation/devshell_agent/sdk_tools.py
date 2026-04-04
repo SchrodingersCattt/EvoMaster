@@ -58,7 +58,7 @@ class MatmasterEvalMcpToolkit:
             "model": {
                 "type": "string",
                 "description": (
-                    "LLM route for inner mm-devshell --model (default: cds/GPT-5.4)."
+                    "LLM route for inner mm-devshell --model (default: claude-opus-4-6)."
                 ),
             },
             "exp": {

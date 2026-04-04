@@ -115,7 +115,7 @@ class DevshellAgentLoopCli:
         p.add_argument(
             "--model",
             type=str,
-            default="cds/GPT-5.4",
+            default="claude-opus-4-6",
             help="Forwarded to run_devshell_eval --model (inner mm-devshell route).",
         )
         p.add_argument(
