@@ -10,10 +10,12 @@ from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.builtin.bash_tool import BashTool
 from matmaster.tools.builtin.glob_tool import GlobTool
 from matmaster.tools.builtin.grep_tool import GrepTool
+from matmaster.tools.builtin.read_tool import ReadTool
 
 __all__ = [
     "BuiltinTool",
     "BashTool",
     "GlobTool",
     "GrepTool",
+    "ReadTool",
 ]
