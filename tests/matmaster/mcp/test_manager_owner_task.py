@@ -76,7 +76,9 @@ class _TracingConn:
             }
         ]
 
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> list[dict[str, str]]:
+    async def call_tool(
+        self, tool_name: str, arguments: dict[str, Any]
+    ) -> list[dict[str, str]]:
         self._record(f"call_tool:{tool_name}")
         if self.started_event is not None:
             self.started_event.set()
@@ -84,7 +86,9 @@ class _TracingConn:
             await self.release_event.wait()
         if self.call_delay:
             await asyncio.sleep(self.call_delay)
-        return [{"text": f"{self.server_name}:{tool_name}:{arguments.get('value', '')}"}]
+        return [
+            {"text": f"{self.server_name}:{tool_name}:{arguments.get('value', '')}"}
+        ]
 
 
 class TestManagerOwnerTaskLifecycle:
@@ -94,9 +98,7 @@ class TestManagerOwnerTaskLifecycle:
 
         with patch("matmaster.mcp.manager.create_connection", return_value=conn):
             await manager.add_server("srv", transport="http", url="http://srv")
-            result = await manager.call_tool(
-                "srv", "remote_tool", {"value": "payload"}
-            )
+            result = await manager.call_tool("srv", "remote_tool", {"value": "payload"})
             await manager.cleanup()
 
         assert result == [{"text": "srv:remote_tool:payload"}]
@@ -111,7 +113,9 @@ class TestManagerOwnerTaskLifecycle:
         manager = MCPToolManager()
         conn = _TracingConn("srv", startup_delay=0.05)
 
-        with patch("matmaster.mcp.manager.create_connection", return_value=conn) as create:
+        with patch(
+            "matmaster.mcp.manager.create_connection", return_value=conn
+        ) as create:
             await asyncio.gather(
                 manager.add_server("srv", transport="http", url="http://srv"),
                 manager.add_server("srv", transport="http", url="http://srv"),

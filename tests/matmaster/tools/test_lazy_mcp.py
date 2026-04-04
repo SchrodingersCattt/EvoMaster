@@ -517,9 +517,7 @@ class TestLazyMCPToolPathAdaptor:
         )
         original_args = {"input": "/local/file"}
         await tool.execute(original_args)
-        connector._call_tool.assert_awaited_once_with(
-            "mat_sg", "run", original_args
-        )
+        connector._call_tool.assert_awaited_once_with("mat_sg", "run", original_args)
 
     async def test_no_path_adaptor_passes_args_directly(self):
         connector = FakeConnector(path_adaptor=None)
