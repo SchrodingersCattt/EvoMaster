@@ -41,16 +41,23 @@ matmaster/tools/builtin/
 Satisfies the existing `Tool` Protocol. Core contract:
 
 - **Construction**: `__init__(*, session=None, workdir=None)`
-- **Execution**: `execute(arguments)` -- async, delegates `_execute(arguments)` via `asyncio.to_thread`
-- **Context execution**: `execute_with_context(arguments, exec_ctx)` -- default same as `execute()`, subclasses override for `stop_event` / `runner_state`
-- **Validation**: `validate_input(arguments, runner_state)` -- return `None` to allow, `ToolDecision(deny)` to reject
+- **Execution**: `async execute(arguments)` -- delegates `_execute(arguments)` via `asyncio.to_thread`
+- **Context execution**: `async execute_with_context(arguments, exec_ctx)` -- default same as `execute()`, subclasses override for `stop_event` / `runner_state`
+- **Validation**: `async validate_input(arguments, runner_state) -> ToolDecision | None` -- **must be async** (ToolRunner awaits `instance.input_validator(...)`)
 - **Subclass contract**: `_execute(arguments) -> str | ToolResult` -- sync, `@abstractmethod`
+- **Description**: `describe(ctx) -> str` -- default returns `self.description`
+- **Prompt injection**: `prompt(ctx) -> str | None` -- default returns `None`; subclasses override to inject LLM guidance (e.g. Bash tool usage hints)
 - **Helpers**: `_require_session()` raises `RuntimeError` if session is None; `_stop_event_for_exec()` resolves cancellation signal
+
+Attribute declaration: `name` and `description` are declared as `ClassVar[str]` on each subclass. The `Tool` Protocol expects them as properties; Python ClassVar attributes satisfy `@property` protocol checks at runtime.
+
+`json_schema` is declared as `ClassVar[dict[str, Any]]` on each subclass -- a hand-written JSON Schema dict matching the tool's parameters (same pattern as the existing `SkillTool`).
 
 ClassVar defaults:
 
 | Attribute | Default |
 |---|---|
+| `capabilities` | `frozenset()` |
 | `effect_level` | `"local_mutation"` |
 | `fast_path_eligible` | `False` |
 | `max_result_chars` | `0` |
@@ -74,6 +81,8 @@ Logic:
 
 Used by Glob and Grep. Write's boundary check lives in `validate_input` (needs `deny` not silent fallback).
 
+Interaction with StructuralValidation (Layer A): Layer A checks workspace boundary on `file_path`/`path` params before `_execute` is called, denying out-of-bounds paths. `resolve_safe_path` handles the remaining cases that pass Layer A: empty strings, `.`, and relative paths that need defaulting to workdir. The silent-fallback branch for absolute-path traversal is effectively dead code (Layer A catches it first) but retained as defense-in-depth.
+
 ### 1.3 __init__.py
 
 Exports: `BuiltinTool`, `BashTool`, `ReadTool`, `EditTool`, `WriteTool`, `GlobTool`, `GrepTool`, `WebSearchTool`, `WebFetchTool`, `AgentTool`, `TodoWriteTool`, `SkillTool`.
@@ -88,7 +97,7 @@ plane = SESSION_FS
 effect_level = "none"
 fast_path_eligible = True
 max_result_chars = 12_000
-resource = ResourceClaim("workspace", "shared_read")
+resource_claims = (ResourceClaim("workspace", "shared_read"),)
 ```
 
 Parameters:
@@ -96,7 +105,7 @@ Parameters:
 | Param | Type | Required | Description |
 |---|---|---|---|
 | `file_path` | string | yes | Absolute path |
-| `offset` | integer | no | Start line (0-indexed) |
+| `offset` | integer | no | Start line (0-indexed). Output line numbers start at `offset + 1` in cat -n format. |
 | `limit` | integer | no | Number of lines to read, default reads to EOF (cap 2000) |
 
 Behavior:
@@ -117,7 +126,7 @@ Behavior:
 name = "Edit"
 plane = SESSION_FS
 effect_level = "local_mutation"
-resource = ResourceClaim("workspace", "exclusive")
+resource_claims = (ResourceClaim("workspace", "exclusive"),)
 ```
 
 Parameters:
@@ -137,7 +146,7 @@ validate_input:
 _execute:
 1. `session.read_file(path)` for current content
 2. `re.finditer(re.escape(old_string), content)` to find matches
-3. Zero matches: try `old_string.strip()` fallback, still zero -> error
+3. Zero matches: try `old_string.strip()` fallback. If stripped version matches uniquely, use it as the replacement target (both old and new strings are stripped). Still zero -> error
 4. `replace_all=False`: multiple matches -> error with line numbers; single match -> replace
 5. `replace_all=True`: `content.replace(old_string, new_string)`, return replacement count
 6. `session.write_file(path, new_content)`
@@ -149,7 +158,7 @@ _execute:
 name = "Write"
 plane = SESSION_FS
 effect_level = "local_mutation"
-resource = ResourceClaim("workspace", "exclusive")
+resource_claims = (ResourceClaim("workspace", "exclusive"),)
 ```
 
 Parameters:
@@ -177,7 +186,7 @@ name = "Bash"
 plane = SESSION_SHELL
 effect_level = "local_mutation"
 max_result_chars = 30_000
-resource = ResourceClaim("session", "exclusive")
+resource_claims = (ResourceClaim("session", "exclusive"),)
 ```
 
 Parameters:
@@ -209,7 +218,7 @@ plane = SESSION_SHELL
 effect_level = "none"
 fast_path_eligible = True
 max_result_chars = 8_000
-resource = ResourceClaim("session", "shared_read")
+resource_claims = (ResourceClaim("session", "shared_read"),)
 ```
 
 Parameters:
@@ -234,7 +243,7 @@ plane = SESSION_SHELL
 effect_level = "none"
 fast_path_eligible = True
 max_result_chars = 20_000
-resource = ResourceClaim("session", "shared_read")
+resource_claims = (ResourceClaim("session", "shared_read"),)
 ```
 
 Parameters:
@@ -282,7 +291,7 @@ name = "WebSearch"
 plane = EXTERNAL_SERVICE
 effect_level = "external_effect"
 stop_mode = "best_effort"
-resource = ResourceClaim("web", "counted", max_concurrent=3)
+resource_claims = (ResourceClaim("web", "counted", max_concurrent=3),)
 ```
 
 Parameters:
@@ -313,7 +322,7 @@ plane = EXTERNAL_SERVICE
 effect_level = "external_effect"
 max_result_chars = 100_000
 stop_mode = "best_effort"
-resource = ResourceClaim("web", "counted", max_concurrent=3)
+resource_claims = (ResourceClaim("web", "counted", max_concurrent=3),)
 ```
 
 Parameters:
@@ -326,7 +335,7 @@ Parameters:
 _execute:
 1. Empty url -> error
 2. URL normalization: decode then re-encode path for special characters
-3. Disk cache check: `{workdir}/.web_cache/{url_sha256_16}.json`, TTL 15min
+3. Disk cache check: `{workdir}/.web_cache/{url_sha256_16}.json`, TTL 15min (checked on read; expired entries are re-fetched). On write, if entries exceed 200, evict oldest by mtime
 4. `httpx.Client(timeout=15, follow_redirects=True)` to fetch
 5. 403/429 -> retry once with alternate User-Agent
 6. Content extraction by content-type:
@@ -349,8 +358,10 @@ name = "Agent"
 plane = CONTROL_PLANE
 effect_level = "local_mutation"
 stop_mode = "non_cancellable"
-resource = ResourceClaim("spawn", "counted", max_concurrent=2)
+resource_claims = (ResourceClaim("spawn", "counted", max_concurrent=2),)
 ```
+
+Agent itself is non-cancellable (ensures spawn call completes), but the child agent receives `stop_event` and can be cancelled internally.
 
 Parameters:
 
@@ -390,8 +401,10 @@ execute() override (native async, bypasses `_execute` + `to_thread`):
 name = "TodoWrite"
 plane = CONTROL_PLANE
 effect_level = "local_mutation"
-resource = ResourceClaim("todo-store", "exclusive")
+resource_claims = (ResourceClaim("todo-store", "exclusive"),)
 ```
+
+ToolScheduler supports arbitrary resource names (bucket-by-name), no pre-registration needed.
 
 Parameters:
 
@@ -429,6 +442,8 @@ name = "Skill"
 plane = CONTROL_PLANE
 effect_level = "local_mutation"
 fast_path_eligible = False
+resource_claims = ()
+capabilities = frozenset({"skill.dispatch"})
 ```
 
 Parameters:
@@ -489,21 +504,50 @@ if ("Agent" in builtin_cfg or "*" in builtin_cfg) and ctx.session is not None:
     registry.register(agent_tool, source="builtin")
 ```
 
-Skill registered in `_init_skill_tools()` using new `builtin.SkillTool` class.
+Skill registered in `_init_skill_tools()` using new `builtin.SkillTool` class. Although `SkillTool` lives in the `builtin/` directory, it is NOT controlled by the `tools.builtin` TOML config list. Its registration depends on `skills.enabled` and happens in `_init_skill_tools()`, because it requires a `SkillRegistry` instance that is only available after skill initialization.
 
 MonitorJobTool: comment out import and registration with `# TODO: rebuild MonitorJobTool`.
+
+Task tool migration: The old 5 task tools (`task_create/get/list/update/complete`) stored data in `{workdir}/.tasks.json`. The new `TodoWrite` uses `{workdir}/.todos.json`. No migration of existing `.tasks.json` files is needed -- they can be ignored (old format is incompatible with the new full-replacement model).
 
 ### 6.2 Downstream reference updates
 
 | File | Change |
 |---|---|
-| `capability_policy.py` | `"execute_bash"` -> `"Bash"` |
+| `capability_policy.py:124` | `"execute_bash"` -> `"Bash"` (also update comments at lines 92-93) |
 | `agent.py:409` | `"use_skill"` -> `"Skill"`, `"skill_name"` -> `"skill"` |
-| `tool_compiler.py:36` | `("list_dir", "glob", "grep")` -> `("Glob", "Grep")` |
-| `eval_tooling_snapshot.py` | `_BUILTIN_WHEN_STAR` rewritten to new names; `"use_skill"` -> `"Skill"` |
+| `tool_compiler.py:36` | `("list_dir", "glob", "grep")` -> `("Glob", "Grep")`. Read uses `SESSION_FS` plane (not `SESSION_SHELL`), so it does not enter this relaxation check. |
 | `devshell/runner.py:72` | `"execute_bash"` -> `"Bash"` in description text |
-| `direct.toml` | `builtin = ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "TodoWrite", "Agent", "WebSearch", "WebFetch"]` |
-| `explore.toml` | tool names in builtin list and developer_instructions text |
+
+**eval_tooling_snapshot.py** -- full rewrite:
+```python
+_BUILTIN_WHEN_STAR: list[str] = [
+    "Bash", "Read", "Write", "Edit",
+    "Glob", "Grep", "TodoWrite",
+    "WebSearch", "WebFetch",
+]
+```
+Line 46: `+ ["spawn"]` -> `+ ["Agent"]`
+Line 136: `surface_tools.append("use_skill")` -> `surface_tools.append("Skill")`
+
+**direct.toml**:
+```toml
+builtin = [
+    "Bash", "Read", "Write", "Edit",
+    "Glob", "Grep", "TodoWrite",
+    "Agent", "WebSearch", "WebFetch",
+]
+```
+Note: `Skill` is absent from this list because its registration is controlled by `skills.enabled`, not `tools.builtin`.
+
+**explore.toml** -- full new builtin list:
+```toml
+builtin = [
+    "Bash", "Read", "Glob", "Grep",
+    "WebSearch", "WebFetch",
+]
+```
+Developer instructions text updates: `read_file` -> `Read`, `list_dir` -> `Glob` (or remove), `execute_bash` -> `Bash`, `mm_web_search` -> `WebSearch`, `web_fetch` -> `WebFetch`.
 
 ## 7. Implementation Order
 
