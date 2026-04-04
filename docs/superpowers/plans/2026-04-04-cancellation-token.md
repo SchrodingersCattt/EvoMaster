@@ -142,15 +142,12 @@ class CancellationToken:
 
         self.on_cancel(_resolve)
 
-        try:
-            if timeout is not None:
-                try:
-                    return await asyncio.wait_for(asyncio.ensure_future(fut), timeout)
-                except asyncio.TimeoutError:
-                    return False
-            return await fut
-        except asyncio.CancelledError:
-            return self._event.is_set()
+        if timeout is not None:
+            try:
+                return await asyncio.wait_for(asyncio.ensure_future(fut), timeout)
+            except asyncio.TimeoutError:
+                return False
+        return await fut
 
     def on_cancel(self, callback: Callable[[], None]) -> None:
         """Register callback. Fires immediately if already cancelled.
@@ -1009,6 +1006,10 @@ git commit -m "refactor: builtin tools use cancel_token; BashTool._execute_async
    - Line 191: `if cancel_token is not None and cancel_token.is_cancelled:`
    - Line 203: `stop_task = asyncio.create_task(cancel_token.wait_async())`
 3. In `_timeout_result()`, change `status="error"` to `status="timeout"`.
+4. In `tests/matmaster/tools/test_lazy_mcp.py`, update `test_timeout_fires_on_hung_server`:
+   `assert result.status == "error"` → `assert result.status == "timeout"`
+5. In `matmaster/devshell/stream_hook.py:60`, update error detection to include timeout:
+   `is_error = event.status == "error"` → `is_error = event.status in ("error", "timeout")`
 
 - [ ] **Step 2: Run lazy MCP tests**
 
@@ -1017,8 +1018,8 @@ Run: `uv run pytest tests/matmaster/tools/test_lazy_mcp.py -v --timeout=30`
 - [ ] **Step 3: Commit**
 
 ```bash
-git add matmaster/tools/lazy_mcp.py
-git commit -m "refactor: LazyMcpTool uses cancel_token.wait_async(), delete _wait_for_stop"
+git add matmaster/tools/lazy_mcp.py tests/matmaster/tools/test_lazy_mcp.py matmaster/devshell/stream_hook.py
+git commit -m "refactor: LazyMcpTool uses cancel_token.wait_async(), delete _wait_for_stop; timeout status"
 ```
 
 ### Task 11: SpawnTool + Monitor Job
@@ -1037,12 +1038,19 @@ In `matmaster/tools/builtin/spawn_tool.py`:
 - [ ] **Step 2: Update monitor_job/_lifecycle.py**
 
 1. Delete `_sleep_until_stop` function (line 49+).
-2. Replace three call sites (lines 273, 301, 315):
+2. Replace three call sites (lines 273, 301, 315). Must include `else: time.sleep()` fallback to prevent tight polling when no token is present:
 ```python
 # Before:
             if _sleep_until_stop(min(poll_interval, 10), stop_event):
+                return {'status': 'cancelled', ...}
+
 # After:
-            if cancel_token and cancel_token.wait(min(poll_interval, 10)):
+            sleep_secs = min(poll_interval, 10)
+            if cancel_token:
+                if cancel_token.wait(sleep_secs):
+                    return {'status': 'cancelled', ...}
+            else:
+                time.sleep(sleep_secs)
 ```
 3. Replace `getattr` defense checks:
 ```python
@@ -1145,24 +1153,15 @@ At line 256:
                         cancel_token=controller.token,
 ```
 
-- [ ] **Step 3: Update SIGTERM handler to cancel active run**
+- [ ] **Step 3: SIGTERM handler: drain only, do NOT cancel**
 
-At line 460 (`_on_sigterm`), add cancellation:
-```python
-    def _on_sigterm(_signum: int, _frame: object) -> None:
-        global _drain_requested
-        sid = _current_session_id
-        if sid:
-            _publish_run_interrupted_deploy(sid)
-        # Cancel the active run so agent loop exits immediately
-        ctrl = _active_controller
-        if ctrl is not None:
-            ctrl.cancel()
-        _drain_requested = True
-        logger.info(...)
-```
+The existing `_on_sigterm` stays as-is (drain + publish_run_interrupted_deploy). It does NOT call `controller.cancel()`. Rationale:
 
-This makes deploy SIGTERM and user stop walk the same cancel path: `controller.cancel()` → token fires → agent loop exits → bridge.stop() in finally.
+- SIGTERM is a deploy signal: "finish current work gracefully, then exit." It pushes a deploy-specific interruption event to the frontend ("任务因服务升级中断，请重新发送").
+- User stop is a cancel signal: "abort immediately." Detected by Redis bridge, triggers `controller.cancel()`, agent exits with reason `cancelled`.
+- If SIGTERM also cancelled, the agent would emit both `run_interrupted(deploy)` AND `CancelledEvent(reason='Task cancelled by user.')`, giving the frontend conflicting end reasons.
+
+The `_active_controller` variable is still needed for the bridge `finally` cleanup, but SIGTERM does not touch it. K8s SIGKILL after grace period is the hard stop if the run doesn't finish in time.
 
 - [ ] **Step 4: Commit**
 

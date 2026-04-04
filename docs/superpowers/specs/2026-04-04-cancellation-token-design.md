@@ -174,15 +174,12 @@ async def wait_async(self, timeout: float | None = None) -> bool:
 
     self.on_cancel(_resolve)
 
-    try:
-        if timeout is not None:
-            try:
-                return await asyncio.wait_for(fut, timeout)
-            except asyncio.TimeoutError:
-                return False
-        return await fut
-    except asyncio.CancelledError:
-        return self._event.is_set()
+    if timeout is not None:
+        try:
+            return await asyncio.wait_for(fut, timeout)
+        except asyncio.TimeoutError:
+            return False
+    return await fut
 ```
 
 Properties:
@@ -252,7 +249,7 @@ finally:
     bridge.stop()   # MUST be in finally to prevent thread leak on normal completion
 ```
 
-SIGTERM handler also calls `controller.cancel()`, unifying the stop path.
+SIGTERM handler does NOT call `controller.cancel()`. SIGTERM is a deploy signal (graceful drain) with its own `run_interrupted(deploy)` event; user stop is a cancel signal detected by the Redis bridge. Mixing them would produce conflicting end reasons for the same run.
 
 Local debug mode (mm-devshell) uses `CancellationController` directly with `signal.signal(SIGINT, ...)`, no bridge needed.
 
