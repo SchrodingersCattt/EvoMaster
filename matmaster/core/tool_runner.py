@@ -342,6 +342,12 @@ class FullToolRunner:
         # Normalize
         tr = normalize_tool_result(tr)
 
+        # Error-wrap: tag error content for LLM visibility
+        if tr.status == "error" and not tr.content.lstrip().startswith("<error>\n"):
+            tr = tr.model_copy(update={
+                "content": f"<error>\n{tr.content}\n</error>"
+            })
+
         # Truncate
         max_chars = instance.tool_spec.max_result_chars
         if max_chars > 0 and len(tr.content) > max_chars:
