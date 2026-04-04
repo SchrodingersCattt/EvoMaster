@@ -71,7 +71,9 @@ class WebSearchTool(BuiltinTool):
     def _execute(self, arguments: dict[str, Any]) -> ToolResult:
         query = (arguments.get("query") or "").strip()
         if len(query) < 2:
-            return ToolResult(status="error", content="Error: query must be at least 2 characters.")
+            return ToolResult(
+                status="error", content="Error: query must be at least 2 characters."
+            )
 
         api_key = _resolve_api_key()
         if not api_key:
@@ -110,7 +112,9 @@ class WebSearchTool(BuiltinTool):
                 response.raise_for_status()
                 payload = response.json()
         except Exception as exc:
-            return ToolResult(status="error", content=f"Error: {type(exc).__name__}: {exc}")
+            return ToolResult(
+                status="error", content=f"Error: {type(exc).__name__}: {exc}"
+            )
 
         organic = payload.get("organic_results", [])
         results = []
@@ -120,11 +124,13 @@ class WebSearchTool(BuiltinTool):
             link = str(item.get("link") or "").strip()
             if not link:
                 continue
-            results.append({
-                "title": str(item.get("title") or "").strip(),
-                "link": link,
-                "snippet": str(item.get("snippet") or "").strip(),
-            })
+            results.append(
+                {
+                    "title": str(item.get("title") or "").strip(),
+                    "link": link,
+                    "snippet": str(item.get("snippet") or "").strip(),
+                }
+            )
 
         return ToolResult(
             status="success",

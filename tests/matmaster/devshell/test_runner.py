@@ -145,11 +145,12 @@ class TestDevRunner:
         fake_exp.build_runtime = AsyncMock(return_value=runtime)
         fake_exp._run_cleanup_callbacks = AsyncMock()
 
-        with patch(
-            "matmaster.devshell.runner.Exp", return_value=fake_exp
-        ), patch(
-            "matmaster.core.stream_drain.drain_run_stream",
-            new=AsyncMock(return_value=fake_result),
+        with (
+            patch("matmaster.devshell.runner.Exp", return_value=fake_exp),
+            patch(
+                "matmaster.core.stream_drain.drain_run_stream",
+                new=AsyncMock(return_value=fake_result),
+            ),
         ):
             result = runner.run("test", cancel_token=controller.token)
 

@@ -219,6 +219,7 @@ class TestAsyncTestInfrastructure:
         result = await tool.execute({"key": "value"})
         assert result == "ok"
 
+
 class TestValidationWithConftest:
     def test_mock_async_provider_passes_validation(self) -> None:
         from tests.conftest import MockAsyncLLMProvider
@@ -231,4 +232,3 @@ class TestValidationWithConftest:
 
         errors = validate_async_protocol(MockAsyncTool(), Tool)
         assert errors == []
-

@@ -17,7 +17,6 @@ Usage pattern:
 
 from __future__ import annotations
 
-import uuid
 from queue import Empty, SimpleQueue
 from typing import Any
 

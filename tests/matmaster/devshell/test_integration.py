@@ -13,12 +13,12 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import create_autospec, patch
 
-from matmaster.types.cancellation import CancellationController
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.event_logger import EventLogger
 from matmaster.devshell.event_observer import DevEventObserver
 from matmaster.devshell.runner import DevRunner
 from matmaster.devshell.stream_hook import DevStreamHook
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import StreamChunk
 from matmaster.types.session import Session
 

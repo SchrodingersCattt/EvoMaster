@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from matmaster.tools.lazy_mcp import (
+    _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT,
     LazyMCPConnector,
     LazyMCPTool,
-    _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT,
     configure_mcp_manager,
     resolve_lazy_mcp_tool_timeout,
 )

@@ -9,8 +9,8 @@ import time
 import pytest
 
 from matmaster.types.cancellation import (
-    CancelledError,
     CancellationController,
+    CancelledError,
 )
 
 

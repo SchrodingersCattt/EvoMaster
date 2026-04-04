@@ -401,7 +401,7 @@ def __init__(self, *, session=None, workdir=None,
 - **Recursion guard** (two layers):
   1. **Schema-layer**: When `spawn_fn=None`, `AgentTool` is simply not registered in the child registry (the `if "Agent" in builtin_cfg` check in `_init_builtin_tools` passes `spawn_fn=None` → tool constructor detects this and sets `exposed_to_model=False`, or the tool is not instantiated at all). The LLM never sees the tool.
   2. **Runtime-layer**: Even if somehow called, `execute()` returns an error when `spawn_fn is None`.
-  
+
   **Integration requirement for `Exp.spawn_fn`**: The existing `Exp._make_spawn_fn()` builds a child Exp and calls `run_stream()`. When building the child runtime, it must pass `spawn_fn=None` to the child's `_init_builtin_tools` call. This is achieved by the child Exp not calling the Agent registration branch (either by omitting `"Agent"` from the child's builtin_cfg, or by passing `spawn_fn=None` explicitly). The implementation must verify this path in `Exp._make_spawn_fn()` and add the gating if absent.
 
 Dynamic schema:

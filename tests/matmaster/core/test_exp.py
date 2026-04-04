@@ -138,9 +138,10 @@ class TestExpBuildRuntime:
     async def test_build_runtime_has_no_bus_parameter(self) -> None:
         """build_runtime() no longer accepts bus parameter (Phase 36 de-bus)."""
         exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
+        _make_ctx(with_llm=True)
 
         import inspect
+
         sig = inspect.signature(exp.build_runtime)
         assert 'bus' not in sig.parameters
 
@@ -188,11 +189,15 @@ class TestExpBuildRuntime:
         assert isinstance(state, ToolRunnerState)
 
         matching_callbacks = [
-            cb for cb in exp._cleanup_callbacks if getattr(cb, "__self__", None) is state
+            cb
+            for cb in exp._cleanup_callbacks
+            if getattr(cb, "__self__", None) is state
         ]
         assert matching_callbacks
 
-    async def test_collects_tool_prompts_into_system_prompt(self, tmp_path: Path) -> None:
+    async def test_collects_tool_prompts_into_system_prompt(
+        self, tmp_path: Path
+    ) -> None:
         exp = Exp(
             ExpConfig(
                 name="test",
@@ -411,7 +416,9 @@ class TestExpBuiltinTools:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        registered_names = {t.name for t in runtime.spec.tool_catalog.registry.all_tools}
+        registered_names = {
+            t.name for t in runtime.spec.tool_catalog.registry.all_tools
+        }
         assert registered_names == {'Bash', 'Read'}
 
     async def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
@@ -486,7 +493,9 @@ class TestExecutionWorkdirBinding:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
         agents = [
-            t for t in runtime.spec.tool_catalog.registry.all_tools if isinstance(t, AgentTool)
+            t
+            for t in runtime.spec.tool_catalog.registry.all_tools
+            if isinstance(t, AgentTool)
         ]
         assert len(agents) == 1
         assert agents[0]._workdir == execution
@@ -526,7 +535,9 @@ class TestExpCompaction:
 
 
 @pytest.mark.asyncio
-async def test_build_runtime_registers_todowrite_without_session(tmp_path: Path) -> None:
+async def test_build_runtime_registers_todowrite_without_session(
+    tmp_path: Path,
+) -> None:
     """TodoWrite (sessionless tool) registers even when ctx.session is None."""
     exp = Exp(
         ExpConfig(

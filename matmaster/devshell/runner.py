@@ -16,6 +16,7 @@ from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import Message, UserMessage
 
 if TYPE_CHECKING:
+    from matmaster.core.stream_drain import DrainResult
     from matmaster.devshell.event_observer import DevEventObserver
 
 logger = logging.getLogger(__name__)
@@ -172,11 +173,14 @@ class DevRunner:
         # Emit RunResultEvent for observer
         if event_observer is not None:
             from matmaster.types.events import RunResultEvent
-            event_observer.emit(RunResultEvent(
-                source="agent",
-                status=result.status,
-                reason=result.reason,
-                final_content=result.final_content,
-            ))
+
+            event_observer.emit(
+                RunResultEvent(
+                    source="agent",
+                    status=result.status,
+                    reason=result.reason,
+                    final_content=result.final_content,
+                )
+            )
 
         return result

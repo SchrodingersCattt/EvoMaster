@@ -130,7 +130,9 @@ class AgentTool(BuiltinTool):
         if not prompt:
             return "Error: prompt is required and must not be empty"
 
-        if self._valid_exp_names and (not exp_name or exp_name not in self._valid_exp_names):
+        if self._valid_exp_names and (
+            not exp_name or exp_name not in self._valid_exp_names
+        ):
             valid_list = ", ".join(sorted(self._valid_exp_names))
             return f"Error: exp_name must be one of: {valid_list}"
 

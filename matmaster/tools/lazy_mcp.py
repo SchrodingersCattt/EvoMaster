@@ -34,6 +34,7 @@ def _parse_claims(raw_claims: Any) -> tuple[ResourceClaim, ...]:
             claims.append(ResourceClaim(**raw))
     return tuple(claims)
 
+
 class LazyMCPTool:
     """Placeholder MCP tool -- holds cached schema, connects on first execute.
 

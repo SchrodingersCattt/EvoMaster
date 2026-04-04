@@ -1,6 +1,8 @@
 """tests/matmaster/tools/builtin/test_grep_tool.py"""
+
 import asyncio
 from unittest.mock import MagicMock
+
 from matmaster.tools.builtin.grep_tool import GrepTool
 
 
@@ -35,26 +37,37 @@ class TestGrepExecution:
             session=make_session(output="/workspace/a.py\n/workspace/b.py"),
             workdir="/workspace",
         )
-        result = asyncio.run(tool.execute({
-            "pattern": "import",
-            "output_mode": "files_with_matches",
-        }))
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "pattern": "import",
+                    "output_mode": "files_with_matches",
+                }
+            )
+        )
         assert "a.py" in result
 
     def test_content_mode(self):
         output = "/workspace/a.py:1:import os"
         tool = GrepTool(session=make_session(output=output), workdir="/workspace")
-        result = asyncio.run(tool.execute({
-            "pattern": "import",
-            "output_mode": "content",
-        }))
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "pattern": "import",
+                    "output_mode": "content",
+                }
+            )
+        )
         assert "import os" in result
 
     def test_shell_escape_pattern(self):
         session = make_session(output="")
         tool = GrepTool(session=session, workdir="/workspace")
         asyncio.run(tool.execute({"pattern": "$(evil)"}))
-        cmd = session.exec_bash.call_args[1].get("command") or session.exec_bash.call_args[0][0]
+        cmd = (
+            session.exec_bash.call_args[1].get("command")
+            or session.exec_bash.call_args[0][0]
+        )
         assert "$(" not in cmd.split("'")[0]  # pattern should be escaped
 
 
@@ -66,7 +79,7 @@ class TestGrepRgDetection:
         rg_check.return_value = {"output": "/usr/bin/rg", "exit_code": 0}
         session.exec_bash.side_effect = [
             {"output": "/usr/bin/rg", "exit_code": 0},  # which rg
-            {"output": "", "exit_code": 1},               # actual grep
+            {"output": "", "exit_code": 1},  # actual grep
         ]
         tool = GrepTool(session=session, workdir="/workspace")
         asyncio.run(tool.execute({"pattern": "test"}))

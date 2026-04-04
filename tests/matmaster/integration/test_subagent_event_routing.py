@@ -75,5 +75,3 @@ def test_is_matmaster_source_other():
     assert _is_matmaster_source("System") is False
     assert _is_matmaster_source("direct") is False
     assert _is_matmaster_source("") is False
-
-

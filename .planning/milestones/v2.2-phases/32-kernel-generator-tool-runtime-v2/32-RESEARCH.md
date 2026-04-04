@@ -144,7 +144,7 @@ from pydantic import BaseModel, ConfigDict
 
 class SessionCapabilities(BaseModel):
     model_config = ConfigDict(frozen=True)
-    
+
     shell_persistence: Literal["stateless", "persistent"]
     shell_input: bool = False
     file_ops: Literal["native", "sftp"]
@@ -279,7 +279,7 @@ async def run(...) -> KernelRunResult:
 ### Pitfall 5: TYPE_CHECKING 块中的类型在运行时被引用
 **What goes wrong:** D-03 要求 AgentRuntimeSpec 使用具体类型注解而非 `Any`。如果 ToolRunner 等类型仅在 `TYPE_CHECKING` 中 import，但 Pydantic model 在运行时需要解析类型注解，会报 NameError。
 **Why it happens:** Pydantic v2 默认在类定义时评估注解。`from __future__ import annotations` 将注解变为字符串，延迟评估。但 Pydantic 使用 `model_rebuild()` 或 `__get_pydantic_core_schema__` 时仍可能触发。
-**How to avoid:** 
+**How to avoid:**
 1. 确保 `runtime.py` 文件顶部有 `from __future__ import annotations`
 2. 使用 `model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)` -- 已在现有 AgentRuntimeSpec 中配置
 3. 在实际运行时需要 isinstance 检查时，使用 lazy import

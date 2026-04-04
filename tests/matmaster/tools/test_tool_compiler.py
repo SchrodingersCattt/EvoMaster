@@ -135,7 +135,9 @@ class TestToolCompiler:
     def test_compile_minimal_tool_uses_defaults(self) -> None:
         compiler = ToolCompiler()
 
-        instance = compiler.compile(_FakeTool("unknown"), _make_topology(), source="mcp")
+        instance = compiler.compile(
+            _FakeTool("unknown"), _make_topology(), source="mcp"
+        )
 
         assert instance.tool_binding.plane == ToolPlane.CONTROL_PLANE
         assert instance.tool_binding.resource_claims == ()
@@ -175,7 +177,9 @@ class TestToolCompiler:
 
     def test_tool_without_validate_input_gets_none(self) -> None:
         compiler = ToolCompiler()
-        instance = compiler.compile(_FakeTool("plain"), _make_topology(), source="builtin")
+        instance = compiler.compile(
+            _FakeTool("plain"), _make_topology(), source="builtin"
+        )
 
         assert instance.input_validator is None
 
@@ -188,7 +192,9 @@ class TestTopologyDependentBinding:
         tool.resource_claims = (ResourceClaim(resource="session", mode="exclusive"),)
         tool.plane = ToolPlane.SESSION_SHELL
 
-        instance = compiler.compile(tool, _make_local_stateless_topology(), source="builtin")
+        instance = compiler.compile(
+            tool, _make_local_stateless_topology(), source="builtin"
+        )
 
         assert instance.tool_binding.resource_claims == (
             ResourceClaim(resource="session", mode="shared_read"),
@@ -201,7 +207,9 @@ class TestTopologyDependentBinding:
         tool.resource_claims = (ResourceClaim(resource="session", mode="exclusive"),)
         tool.plane = ToolPlane.SESSION_SHELL
 
-        instance = compiler.compile(tool, _make_ssh_stateless_topology(), source="builtin")
+        instance = compiler.compile(
+            tool, _make_ssh_stateless_topology(), source="builtin"
+        )
 
         assert instance.tool_binding.resource_claims == (
             ResourceClaim(resource="session", mode="exclusive"),

@@ -531,8 +531,6 @@ class TestCompactorEventSink:
                 if node.module and "bus" in node.module:
                     # Check it's specifically importing MessageBus
                     for alias in node.names:
-                        assert alias.name != "MessageBus", (
-                            "ContextCompactor should not import MessageBus"
-                        )
-
-
+                        assert (
+                            alias.name != "MessageBus"
+                        ), "ContextCompactor should not import MessageBus"

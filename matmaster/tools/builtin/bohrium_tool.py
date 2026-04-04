@@ -16,7 +16,6 @@ import json
 import logging
 import os
 import tempfile
-import time
 import zipfile
 from pathlib import Path
 from typing import Any, ClassVar
@@ -36,6 +35,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Bohrium API helpers (shared across actions)
 # ---------------------------------------------------------------------------
+
 
 def _resolve_env() -> tuple[str, int, str]:
     """Read Bohrium credentials from environment.
@@ -58,8 +58,13 @@ def _use_sandbox() -> bool:
     return os.environ.get('BOHRIUM_USE_SANDBOX', '1').strip() == '1'
 
 
-def _get(base_url: str, path: str, access_key: str,
-         params: dict | None = None, timeout: int = 30) -> dict:
+def _get(
+    base_url: str,
+    path: str,
+    access_key: str,
+    params: dict | None = None,
+    timeout: int = 30,
+) -> dict:
     resp = requests.get(
         f'{base_url}{path}',
         headers={'accessKey': access_key, 'Accept': 'application/json'},
@@ -70,8 +75,9 @@ def _get(base_url: str, path: str, access_key: str,
     return resp.json()
 
 
-def _post(base_url: str, path: str, access_key: str,
-          payload: dict, timeout: int = 30) -> dict:
+def _post(
+    base_url: str, path: str, access_key: str, payload: dict, timeout: int = 30
+) -> dict:
     resp = requests.post(
         f'{base_url}{path}',
         headers={'accessKey': access_key, 'Content-Type': 'application/json'},
@@ -87,9 +93,14 @@ def _post(base_url: str, path: str, access_key: str,
 # ---------------------------------------------------------------------------
 
 _STATUS_MAP = {
-    -10: 'Prepared', -2: 'Deleted', -1: 'Failed',
-    0: 'Pending', 1: 'Running', 2: 'Finished',
-    3: 'Scheduling', 6: 'Unknown',
+    -10: 'Prepared',
+    -2: 'Deleted',
+    -1: 'Failed',
+    0: 'Pending',
+    1: 'Running',
+    2: 'Finished',
+    3: 'Scheduling',
+    6: 'Unknown',
 }
 _SUCCESS_CODE = 2
 _RUNNING_CODES = {-10, 0, 1, 3}
@@ -99,6 +110,7 @@ _FAILURE_CODES = {-2, -1}
 # ═══════════════════════════════════════════════════════════════════════════
 # BohriumTool
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class BohriumTool(BuiltinTool):
     """Bohrium HPC platform operations via action-based dispatch."""
@@ -175,9 +187,12 @@ class BohriumTool(BuiltinTool):
     resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
         ResourceClaim(resource='bohrium-api', mode='counted', max_concurrent=3),
     )
-    capabilities: ClassVar[frozenset[str]] = frozenset({
-        'bohrium.submit', 'bohrium.query',
-    })
+    capabilities: ClassVar[frozenset[str]] = frozenset(
+        {
+            'bohrium.submit',
+            'bohrium.query',
+        }
+    )
     effect_level: ClassVar[str] = 'external_effect'
     fast_path_eligible: ClassVar[bool] = False
     plane: ClassVar[ToolPlane] = ToolPlane.EXTERNAL_SERVICE
@@ -220,7 +235,7 @@ class BohriumTool(BuiltinTool):
                 return ToolResult(
                     status='error',
                     content=f'Unknown action: {action!r}. '
-                            f'Must be one of: submit, poll, list_images, list_machines.',
+                    f'Must be one of: submit, poll, list_images, list_machines.',
                 )
 
     # ------------------------------------------------------------------
@@ -232,25 +247,33 @@ class BohriumTool(BuiltinTool):
         if not access_key:
             return ToolResult(status='error', content='BOHRIUM_ACCESS_KEY not set.')
         if project_id <= 0:
-            return ToolResult(status='error', content='BOHRIUM_PROJECT_ID not set or invalid.')
+            return ToolResult(
+                status='error', content='BOHRIUM_PROJECT_ID not set or invalid.'
+            )
 
         input_dir = args.get('input_dir', '')
         image = args.get('image', '')
         cmd = args.get('cmd', '')
 
         if not input_dir:
-            return ToolResult(status='error', content='Missing required parameter: input_dir')
+            return ToolResult(
+                status='error', content='Missing required parameter: input_dir'
+            )
         if not image:
-            return ToolResult(status='error', content='Missing required parameter: image')
+            return ToolResult(
+                status='error', content='Missing required parameter: image'
+            )
         if not cmd:
             return ToolResult(status='error', content='Missing required parameter: cmd')
 
         input_path = Path(input_dir)
         if not input_path.is_dir():
-            return ToolResult(status='error', content=f'input_dir not found: {input_dir}')
+            return ToolResult(
+                status='error', content=f'input_dir not found: {input_dir}'
+            )
 
         machine = args.get('machine', 'c32_m128_cpu')
-        job_name = args.get('job_name', f'matmaster-job')
+        job_name = args.get('job_name', 'matmaster-job')
         disk_size = args.get('disk_size', 50)
 
         # Auto-append log redirection
@@ -271,7 +294,9 @@ class BohriumTool(BuiltinTool):
 
             create_resp = _post(base_url, create_path, access_key, create_payload)
             if create_resp.get('code') != 0:
-                return ToolResult(status='error', content=f'job/create failed: {create_resp}')
+                return ToolResult(
+                    status='error', content=f'job/create failed: {create_resp}'
+                )
             create_data = create_resp['data']
 
             # Step 2: zip and upload
@@ -304,8 +329,13 @@ class BohriumTool(BuiltinTool):
                     custom_headers={'Authorization': f'Bearer {token}'},
                     progress_bar=False,
                 )
-                if isinstance(upload_resp, dict) and upload_resp.get('code') not in (0, None):
-                    return ToolResult(status='error', content=f'Upload failed: {upload_resp}')
+                if isinstance(upload_resp, dict) and upload_resp.get('code') not in (
+                    0,
+                    None,
+                ):
+                    return ToolResult(
+                        status='error', content=f'Upload failed: {upload_resp}'
+                    )
 
             # Build download URL for sandbox
             encoded_key = quote(oss_key, safe='/')
@@ -318,7 +348,9 @@ class BohriumTool(BuiltinTool):
             if sandbox:
                 create_job_id = str(create_data.get('jobId') or '').strip()
                 if not create_job_id:
-                    return ToolResult(status='error', content='sandbox job/create missing jobId')
+                    return ToolResult(
+                        status='error', content='sandbox job/create missing jobId'
+                    )
                 add_payload = {
                     'imageName': image,
                     'scassType': machine,
@@ -353,23 +385,30 @@ class BohriumTool(BuiltinTool):
             if sandbox:
                 raw_jid = add_data.get('jobId')
                 if raw_jid is None:
-                    return ToolResult(status='error', content='Missing jobId in response')
+                    return ToolResult(
+                        status='error', content='Missing jobId in response'
+                    )
                 job_id: int | str = str(raw_jid).strip()
                 bohr_raw = add_data.get('bohrJobId')
-                bohr_job_id = str(bohr_raw).strip() if bohr_raw not in (None, '', 0) else job_id
+                bohr_job_id = (
+                    str(bohr_raw).strip() if bohr_raw not in (None, '', 0) else job_id
+                )
             else:
                 job_id = int(add_data['jobId'])
                 bohr_job_id = int(add_data.get('bohrJobId') or add_data['jobId'])
 
             return ToolResult(
                 status='success',
-                content=json.dumps({
-                    'success': True,
-                    'job_id': job_id,
-                    'bohr_job_id': bohr_job_id,
-                    'status': 'Submitted',
-                    'use_sandbox': sandbox,
-                }, ensure_ascii=False),
+                content=json.dumps(
+                    {
+                        'success': True,
+                        'job_id': job_id,
+                        'bohr_job_id': bohr_job_id,
+                        'status': 'Submitted',
+                        'use_sandbox': sandbox,
+                    },
+                    ensure_ascii=False,
+                ),
             )
 
         except Exception as exc:
@@ -387,7 +426,9 @@ class BohriumTool(BuiltinTool):
 
         raw_job_id = args.get('job_id')
         if raw_job_id is None:
-            return ToolResult(status='error', content='Missing required parameter: job_id')
+            return ToolResult(
+                status='error', content='Missing required parameter: job_id'
+            )
 
         sandbox = _use_sandbox()
         job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
@@ -410,29 +451,39 @@ class BohriumTool(BuiltinTool):
             if code in _RUNNING_CODES:
                 return ToolResult(
                     status='success',
-                    content=json.dumps({
-                        'success': True,
-                        'job_id': job_id,
-                        'status': status_name,
-                        'message': f'Job is {status_name}. Call Bohrium(action="poll", job_id={job_id}) again later to check.',
-                    }, ensure_ascii=False),
+                    content=json.dumps(
+                        {
+                            'success': True,
+                            'job_id': job_id,
+                            'status': status_name,
+                            'message': f'Job is {status_name}. Call Bohrium(action="poll", job_id={job_id}) again later to check.',
+                        },
+                        ensure_ascii=False,
+                    ),
                 )
 
             # Finished — download results
             if code == _SUCCESS_CODE:
                 files, log_tail = self._download_results(
-                    job_id, detail_data, result_dir, access_key, base_url,
+                    job_id,
+                    detail_data,
+                    result_dir,
+                    access_key,
+                    base_url,
                 )
                 return ToolResult(
                     status='success',
-                    content=json.dumps({
-                        'success': True,
-                        'job_id': job_id,
-                        'status': 'Finished',
-                        'result_dir': str(result_dir),
-                        'files': files,
-                        'log_tail': log_tail,
-                    }, ensure_ascii=False),
+                    content=json.dumps(
+                        {
+                            'success': True,
+                            'job_id': job_id,
+                            'status': 'Finished',
+                            'result_dir': str(result_dir),
+                            'files': files,
+                            'log_tail': log_tail,
+                        },
+                        ensure_ascii=False,
+                    ),
                 )
 
             # Failed — try downloading whatever is available
@@ -441,32 +492,42 @@ class BohriumTool(BuiltinTool):
                 log_tail = ''
                 try:
                     files, log_tail = self._download_results(
-                        job_id, detail_data, result_dir, access_key, base_url,
+                        job_id,
+                        detail_data,
+                        result_dir,
+                        access_key,
+                        base_url,
                     )
                 except Exception:
                     pass
                 return ToolResult(
                     status='error',
-                    content=json.dumps({
-                        'success': False,
-                        'job_id': job_id,
-                        'status': status_name,
-                        'result_dir': str(result_dir) if files else '',
-                        'files': files,
-                        'log_tail': log_tail,
-                        'error': f'Job {status_name} on Bohrium.',
-                    }, ensure_ascii=False),
+                    content=json.dumps(
+                        {
+                            'success': False,
+                            'job_id': job_id,
+                            'status': status_name,
+                            'result_dir': str(result_dir) if files else '',
+                            'files': files,
+                            'log_tail': log_tail,
+                            'error': f'Job {status_name} on Bohrium.',
+                        },
+                        ensure_ascii=False,
+                    ),
                 )
 
             # Unknown status
             return ToolResult(
                 status='success',
-                content=json.dumps({
-                    'success': True,
-                    'job_id': job_id,
-                    'status': status_name,
-                    'message': f'Unexpected status code {code}. Retry poll or check Bohrium console.',
-                }, ensure_ascii=False),
+                content=json.dumps(
+                    {
+                        'success': True,
+                        'job_id': job_id,
+                        'status': status_name,
+                        'message': f'Unexpected status code {code}. Retry poll or check Bohrium console.',
+                    },
+                    ensure_ascii=False,
+                ),
             )
 
         except Exception as exc:
@@ -514,7 +575,7 @@ class BohriumTool(BuiltinTool):
         # Get file token
         token_resp = _post(
             base_url,
-            f'/openapi/v1/sandbox/job/file/token',
+            '/openapi/v1/sandbox/job/file/token',
             access_key,
             {'jobId': str(job_id)},
         )
@@ -618,7 +679,8 @@ class BohriumTool(BuiltinTool):
             # Filter by keyword
             if keyword:
                 filtered = [
-                    r for r in all_images
+                    r
+                    for r in all_images
                     if keyword in str(r.get('name') or r.get('imageName') or '').lower()
                     or keyword in str(r.get('description') or '').lower()
                 ]
@@ -636,8 +698,13 @@ class BohriumTool(BuiltinTool):
                         base_url,
                         f'/openapi/v2/image/public/{img_id}/version',
                         access_key,
-                        params={'current': 1, 'pageSize': 10, 'page': 1,
-                                'resourceType': '', 'version': ''},
+                        params={
+                            'current': 1,
+                            'pageSize': 10,
+                            'page': 1,
+                            'resourceType': '',
+                            'version': '',
+                        },
                     )
                     versions = (ver_data.get('data') or {}).get('items') or []
                 except Exception:
@@ -653,20 +720,25 @@ class BohriumTool(BuiltinTool):
                     if entry:
                         version_list.append(entry)
 
-                results.append({
-                    'id': img_id,
-                    'name': record.get('name') or record.get('imageName') or '',
-                    'versions': version_list,
-                })
+                results.append(
+                    {
+                        'id': img_id,
+                        'name': record.get('name') or record.get('imageName') or '',
+                        'versions': version_list,
+                    }
+                )
 
             return ToolResult(
                 status='success',
-                content=json.dumps({
-                    'success': True,
-                    'total_found': len(filtered),
-                    'returned': len(results),
-                    'images': results,
-                }, ensure_ascii=False),
+                content=json.dumps(
+                    {
+                        'success': True,
+                        'total_found': len(filtered),
+                        'returned': len(results),
+                        'images': results,
+                    },
+                    ensure_ascii=False,
+                ),
             )
 
         except Exception as exc:
@@ -692,8 +764,10 @@ class BohriumTool(BuiltinTool):
                 '/openapi/v1/calc/list',
                 access_key,
                 params={
-                    'page': 1, 'pageSize': 512,
-                    'scene': 'job', 'isVirtualNode': 'false',
+                    'page': 1,
+                    'pageSize': 512,
+                    'scene': 'job',
+                    'isVirtualNode': 'false',
                     'chooseType': choose_type,
                     'productLine': 'bohrium',
                 },
@@ -702,8 +776,10 @@ class BohriumTool(BuiltinTool):
 
             if keyword:
                 filtered = [
-                    r for r in all_machines
-                    if keyword in str(r.get('skuEnName') or r.get('skuName') or '').lower()
+                    r
+                    for r in all_machines
+                    if keyword
+                    in str(r.get('skuEnName') or r.get('skuName') or '').lower()
                 ]
             else:
                 filtered = all_machines
@@ -711,8 +787,15 @@ class BohriumTool(BuiltinTool):
             results = []
             for record in filtered[:max_results]:
                 entry: dict[str, Any] = {}
-                for key in ('skuEnName', 'cpuCoreNum', 'memory',
-                            'gpu', 'gpuCoreNum', 'price', 'hasStock'):
+                for key in (
+                    'skuEnName',
+                    'cpuCoreNum',
+                    'memory',
+                    'gpu',
+                    'gpuCoreNum',
+                    'price',
+                    'hasStock',
+                ):
                     val = record.get(key)
                     if val is not None and val != '':
                         entry[key] = val
@@ -721,13 +804,16 @@ class BohriumTool(BuiltinTool):
 
             return ToolResult(
                 status='success',
-                content=json.dumps({
-                    'success': True,
-                    'type': choose_type,
-                    'total_found': len(filtered),
-                    'returned': len(results),
-                    'machines': results,
-                }, ensure_ascii=False),
+                content=json.dumps(
+                    {
+                        'success': True,
+                        'type': choose_type,
+                        'total_found': len(filtered),
+                        'returned': len(results),
+                        'machines': results,
+                    },
+                    ensure_ascii=False,
+                ),
             )
 
         except Exception as exc:

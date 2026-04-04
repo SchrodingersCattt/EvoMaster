@@ -13,8 +13,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
 from matmaster.types.tool_spec import ResourceClaim
 

@@ -28,10 +28,11 @@ from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_result import ToolResult, normalize_tool_result
-from matmaster.types.messages import ToolCallData
 from matmaster.types.cancellation import CancellationToken
+from matmaster.types.messages import ToolCallData
 from matmaster.types.tool_runner_state import ToolRunnerState
-from matmaster.types.tool_spec import ToolExecutionContext as _ExecCtx, ToolInstance
+from matmaster.types.tool_spec import ToolExecutionContext as _ExecCtx
+from matmaster.types.tool_spec import ToolInstance
 from matmaster.types.topology import RuntimeTopology
 
 if TYPE_CHECKING:
@@ -148,7 +149,9 @@ class FullToolRunner:
         """
         n = len(tool_calls)
         results: list[tuple[ToolCallData, ToolResult] | None] = [None] * n
-        approved: list[tuple[int, ToolCallData, ToolInstance, dict[str, Any], bool]] = []
+        approved: list[tuple[int, ToolCallData, ToolInstance, dict[str, Any], bool]] = (
+            []
+        )
 
         # ── Phase 1: Serial validation ─────────────────────
         for idx, tc in enumerate(tool_calls):
@@ -206,9 +209,7 @@ class FullToolRunner:
                     continue
 
             # 2. StructuralValidation (Layer A)
-            decision = self._validation.validate(
-                self._topology, instance, tc.arguments
-            )
+            decision = self._validation.validate(self._topology, instance, tc.arguments)
             if decision.decision == "deny":
                 tr = ToolResult(
                     status="error",
@@ -282,8 +283,15 @@ class FullToolRunner:
             await asyncio.gather(
                 *(
                     self._execute_one(
-                        idx, tc, instance, effective_args, is_fast,
-                        exec_ctx, ctx, results, on_result,
+                        idx,
+                        tc,
+                        instance,
+                        effective_args,
+                        is_fast,
+                        exec_ctx,
+                        ctx,
+                        results,
+                        on_result,
                     )
                     for idx, tc, instance, effective_args, is_fast in approved
                 )

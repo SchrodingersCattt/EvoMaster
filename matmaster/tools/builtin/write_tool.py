@@ -84,7 +84,9 @@ class WriteTool(BuiltinTool):
                     reason=f"file_path '{file_path}' is outside workspace boundary",
                 )
         except (TypeError, ValueError):
-            return ToolDecision(decision="deny", reason=f"invalid file_path: '{file_path}'")
+            return ToolDecision(
+                decision="deny", reason=f"invalid file_path: '{file_path}'"
+            )
 
         if runner_state is not None and self._session is not None:
             normalized = posixpath.normpath(file_path)

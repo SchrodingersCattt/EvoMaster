@@ -102,9 +102,7 @@ class BuiltinTool(ABC):
     def _require_session(self) -> Any:
         """Guard: raise if session not injected."""
         if self._session is None:
-            raise RuntimeError(
-                f"{self.name} requires a session but none was injected"
-            )
+            raise RuntimeError(f"{self.name} requires a session but none was injected")
         return self._session
 
     def _cancel_token_for_exec(self) -> CancellationToken | None:

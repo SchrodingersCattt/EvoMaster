@@ -127,7 +127,7 @@ class LocalSession:
                 return
             try:
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except (ProcessLookupError, OSError):
+            except OSError:
                 pass
 
         cancel_token.on_cancel(_kill_group)

@@ -1,8 +1,9 @@
 """tests/matmaster/tools/builtin/test_web_fetch_tool.py"""
+
 import asyncio
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from matmaster.tools.builtin.web_fetch_tool import WebFetchTool, _extract_content
 from matmaster.tools.tool_result import ToolResult
 
@@ -48,8 +49,13 @@ class TestWebFetchExecution:
 
     def test_prompt_recorded_in_payload(self):
         tool = WebFetchTool(workdir=Path("/tmp/test_wf"))
-        with patch("matmaster.tools.builtin.web_fetch_tool._is_private_host", return_value=False), \
-             patch("matmaster.tools.builtin.web_fetch_tool.httpx") as mock_httpx:
+        with (
+            patch(
+                "matmaster.tools.builtin.web_fetch_tool._is_private_host",
+                return_value=False,
+            ),
+            patch("matmaster.tools.builtin.web_fetch_tool.httpx") as mock_httpx,
+        ):
             mock_resp = MagicMock()
             mock_resp.text = "<html><body>Content</body></html>"
             mock_resp.content = b"<html><body>Content</body></html>"
@@ -62,10 +68,14 @@ class TestWebFetchExecution:
             mock_client.__exit__ = MagicMock(return_value=False)
             mock_client.get.return_value = mock_resp
             mock_httpx.Client.return_value = mock_client
-            result = asyncio.run(tool.execute({
-                "url": "https://example.com",
-                "prompt": "summarize this",
-            }))
+            result = asyncio.run(
+                tool.execute(
+                    {
+                        "url": "https://example.com",
+                        "prompt": "summarize this",
+                    }
+                )
+            )
             assert isinstance(result, ToolResult)
             assert result.payload.get("prompt") == "summarize this"
 
@@ -82,36 +92,58 @@ class TestWebFetchUrlValidation:
         result = asyncio.run(tool.execute({"url": "http://127.0.0.1/admin"}))
         assert isinstance(result, ToolResult)
         assert result.status == "error"
-        assert "private" in result.content.lower() or "internal" in result.content.lower()
+        assert (
+            "private" in result.content.lower() or "internal" in result.content.lower()
+        )
 
 
 class TestDiskCache:
     def test_cache_hit(self, tmp_path):
         tool = WebFetchTool(workdir=tmp_path)
         # Manually populate cache
-        import hashlib, json, time as _t
+        import hashlib
+        import json
+        import time as _t
+
         url = "https://example.com/page"
         key = hashlib.sha256(url.encode()).hexdigest()[:16]
         cache_dir = tmp_path / ".web_cache"
         cache_dir.mkdir()
-        (cache_dir / f"{key}.json").write_text(json.dumps({
-            "url": url, "content": "cached content", "fetched_at": _t.time(),
-        }))
-        with patch("matmaster.tools.builtin.web_fetch_tool._is_private_host", return_value=False):
+        (cache_dir / f"{key}.json").write_text(
+            json.dumps(
+                {
+                    "url": url,
+                    "content": "cached content",
+                    "fetched_at": _t.time(),
+                }
+            )
+        )
+        with patch(
+            "matmaster.tools.builtin.web_fetch_tool._is_private_host",
+            return_value=False,
+        ):
             result = asyncio.run(tool.execute({"url": url}))
         assert isinstance(result, ToolResult)
         assert "cached content" in result.content
 
     def test_cache_expired(self, tmp_path):
         tool = WebFetchTool(workdir=tmp_path)
-        import hashlib, json
+        import hashlib
+        import json
+
         url = "https://example.com/expired"
         key = hashlib.sha256(url.encode()).hexdigest()[:16]
         cache_dir = tmp_path / ".web_cache"
         cache_dir.mkdir()
-        (cache_dir / f"{key}.json").write_text(json.dumps({
-            "url": url, "content": "old", "fetched_at": 0,  # epoch = expired
-        }))
+        (cache_dir / f"{key}.json").write_text(
+            json.dumps(
+                {
+                    "url": url,
+                    "content": "old",
+                    "fetched_at": 0,  # epoch = expired
+                }
+            )
+        )
         # Will try to fetch (and fail), proving cache was bypassed
         result = asyncio.run(tool.execute({"url": url}))
         assert "old" not in result.content  # should NOT return expired cache

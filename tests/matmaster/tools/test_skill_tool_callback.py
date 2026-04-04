@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+
 from matmaster.skills.registry import SkillRegistry
 from matmaster.tools.builtin.skill_tool import SkillTool
 
@@ -20,7 +21,9 @@ class TestSkillToolCallback:
         self._make_skill_dir(tmp_path, "test-skill", mcp_server="mat_sg")
         registry = SkillRegistry(tmp_path)
         hit_servers = []
-        tool = SkillTool(skill_registry=registry, on_skill_hit=lambda s: hit_servers.append(s))
+        tool = SkillTool(
+            skill_registry=registry, on_skill_hit=lambda s: hit_servers.append(s)
+        )
 
         asyncio.run(tool.execute({"skill": "test-skill"}))
         assert hit_servers == ["mat_sg"]
@@ -29,7 +32,9 @@ class TestSkillToolCallback:
         self._make_skill_dir(tmp_path, "plain-skill")
         registry = SkillRegistry(tmp_path)
         hit_servers = []
-        tool = SkillTool(skill_registry=registry, on_skill_hit=lambda s: hit_servers.append(s))
+        tool = SkillTool(
+            skill_registry=registry, on_skill_hit=lambda s: hit_servers.append(s)
+        )
 
         asyncio.run(tool.execute({"skill": "plain-skill"}))
         assert hit_servers == []

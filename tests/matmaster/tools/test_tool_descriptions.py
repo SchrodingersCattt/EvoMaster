@@ -69,9 +69,7 @@ def test_dedicated_tools_have_prompt_with_usage():
         desc = tool_cls.description
         prompt = tool_cls().prompt() or ""
         has_guidance = len(desc) > 10 or len(prompt) > 10
-        assert has_guidance, (
-            f"{tool_cls.__name__} lacks description or prompt content"
-        )
+        assert has_guidance, f"{tool_cls.__name__} lacks description or prompt content"
 
 
 def test_routing_consistency():

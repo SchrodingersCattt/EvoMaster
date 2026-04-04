@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import signal
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 
 class TestRedisCancellationBridge:
@@ -104,7 +104,9 @@ class TestAgentWorkerCancellationIntegration:
         bridge_events: dict[str, object] = {}
 
         class FakeBridge:
-            def __init__(self, controller, session_id, task_id, interval=0.5, **_kwargs):
+            def __init__(
+                self, controller, session_id, task_id, interval=0.5, **_kwargs
+            ):
                 bridge_events["controller"] = controller
                 bridge_events["session_id"] = session_id
                 bridge_events["task_id"] = task_id
@@ -115,28 +117,20 @@ class TestAgentWorkerCancellationIntegration:
             def stop(self) -> None:
                 bridge_events["stopped"] = True
 
-        with patch.object(mod, "_drain_requested", True), patch.object(
-            mod, "_current_session_id", None
-        ), patch.object(mod, "_active_controller", None, create=True), patch.object(
-            mod, "get_redis_dao", return_value=redis_dao
-        ), patch.object(
-            mod, "get_sessions_service", return_value=sessions_service
-        ), patch.object(
-            mod, "get_agent_run_service", return_value=agent_run_service
-        ), patch.object(
-            mod, "UserService"
-        ) as user_service_cls, patch.object(
-            mod, "get_worker_registry_service"
-        ) as registry_fn, patch.object(
-            mod, "notify_post_async"
-        ), patch.object(
-            mod, "send_session_complete_email_async"
-        ), patch.object(
-            mod, "LogContext"
-        ) as log_context, patch.object(
-            mod, "RedisCancellationBridge", FakeBridge
-        ), patch.object(
-            mod, "get_worker_id", return_value="worker-1"
+        with (
+            patch.object(mod, "_drain_requested", True),
+            patch.object(mod, "_current_session_id", None),
+            patch.object(mod, "_active_controller", None, create=True),
+            patch.object(mod, "get_redis_dao", return_value=redis_dao),
+            patch.object(mod, "get_sessions_service", return_value=sessions_service),
+            patch.object(mod, "get_agent_run_service", return_value=agent_run_service),
+            patch.object(mod, "UserService") as user_service_cls,
+            patch.object(mod, "get_worker_registry_service") as registry_fn,
+            patch.object(mod, "notify_post_async"),
+            patch.object(mod, "send_session_complete_email_async"),
+            patch.object(mod, "LogContext") as log_context,
+            patch.object(mod, "RedisCancellationBridge", FakeBridge),
+            patch.object(mod, "get_worker_id", return_value="worker-1"),
         ):
             user_service_cls.get_user_info_for_display.return_value = {
                 "user_id": "u1",
@@ -157,7 +151,9 @@ class TestAgentWorkerCancellationIntegration:
         assert mod._active_controller is None
         log_context.clear.assert_called()
 
-    def test_main_sigterm_handler_drains_without_cancelling_active_controller(self) -> None:
+    def test_main_sigterm_handler_drains_without_cancelling_active_controller(
+        self,
+    ) -> None:
         from src.worker import agent_worker as mod
 
         captured: dict[str, object] = {}
@@ -178,20 +174,16 @@ class TestAgentWorkerCancellationIntegration:
             handler = captured["handler"]
             handler(signal.SIGTERM, object())
 
-        with patch.object(mod, "_current_session_id", "sid-1"), patch.object(
-            mod, "_drain_requested", False
-        ), patch.object(mod, "_active_controller", active_controller, create=True), patch.object(
-            mod, "setup_logging"
-        ), patch.object(
-            mod.signal, "signal", side_effect=fake_signal
-        ), patch.object(
-            mod.threading, "Thread", FakeThread
-        ), patch.object(
-            mod, "_run_worker_loop", side_effect=fake_run_loop
-        ), patch.object(
-            mod, "_publish_run_interrupted_deploy"
-        ) as publish_mock, patch.object(
-            mod, "get_worker_id", return_value="worker-1"
+        with (
+            patch.object(mod, "_current_session_id", "sid-1"),
+            patch.object(mod, "_drain_requested", False),
+            patch.object(mod, "_active_controller", active_controller, create=True),
+            patch.object(mod, "setup_logging"),
+            patch.object(mod.signal, "signal", side_effect=fake_signal),
+            patch.object(mod.threading, "Thread", FakeThread),
+            patch.object(mod, "_run_worker_loop", side_effect=fake_run_loop),
+            patch.object(mod, "_publish_run_interrupted_deploy") as publish_mock,
+            patch.object(mod, "get_worker_id", return_value="worker-1"),
         ):
             mod.main()
 

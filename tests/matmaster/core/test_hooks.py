@@ -126,7 +126,9 @@ class TestHookExecutorEmit:
         assert ("obs1", "startup") in calls
         assert ("obs2", "startup") in calls
 
-    async def test_emit_swallows_exceptions(self, caplog: pytest.LogCaptureFixture) -> None:
+    async def test_emit_swallows_exceptions(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         executor = HookExecutor()
         caplog.set_level("WARNING")
         good_called = False

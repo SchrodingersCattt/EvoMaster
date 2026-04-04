@@ -35,9 +35,7 @@ class ReadTool(BuiltinTool):
         "properties": {
             "file_path": {
                 "type": "string",
-                "description": (
-                    "The absolute path to the file to read"
-                ),
+                "description": ("The absolute path to the file to read"),
             },
             "offset": {
                 "type": "integer",

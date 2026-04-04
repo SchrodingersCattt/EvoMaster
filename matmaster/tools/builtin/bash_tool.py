@@ -23,9 +23,7 @@ class BashTool(BuiltinTool):
     """
 
     name: ClassVar[str] = "Bash"
-    description: ClassVar[str] = (
-        "Executes a given bash command and returns its output."
-    )
+    description: ClassVar[str] = "Executes a given bash command and returns its output."
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {

@@ -26,6 +26,7 @@ def main(prompt: str | None = None) -> None:
     import os
 
     from dotenv import find_dotenv, load_dotenv
+
     from matmaster.types.cancellation import CancellationController
 
     load_dotenv()
@@ -85,13 +86,13 @@ def main(prompt: str | None = None) -> None:
     controller = CancellationController()
 
     # -- Breakpoint-friendly: step into runner.run() --
-    result = runner.run(
-        task, cancel_token=controller.token, event_observer=observer
-    )
+    result = runner.run(task, cancel_token=controller.token, event_observer=observer)
 
     # Print summary
     print(f"\n{'='*60}")
-    print(f"Status: {result.status} | Reason: {result.reason} | Turns: {result.num_turns}")
+    print(
+        f"Status: {result.status} | Reason: {result.reason} | Turns: {result.num_turns}"
+    )
     print(f"Usage: {result.usage}")
     if result.final_content:
         print(f"\n--- Final Content ---\n{result.final_content}")

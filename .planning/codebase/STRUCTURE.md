@@ -356,7 +356,7 @@ matmaster-evo/
 ```
 src/apis/         -> src/services/      -> src/dao/
                                         -> matmaster/
-                                        
+
 src/services/     -> matmaster/core/    (Playground, Exp, MessageBus)
                   -> matmaster/integration/ (EventRouter, handlers)
                   -> matmaster/config/  (loader)

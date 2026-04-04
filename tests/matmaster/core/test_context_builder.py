@@ -8,7 +8,6 @@ generic tools section (function calling guidance).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -89,9 +88,7 @@ def test_section_order_fixed(builder: ContextBuilder, ctx: PlaygroundContext) ->
     assert idx_system < idx_identity < idx_skills < idx_tools < idx_memory < idx_task
 
 
-def test_disable_section(
-    builder: ContextBuilder, ctx: PlaygroundContext
-) -> None:
+def test_disable_section(builder: ContextBuilder, ctx: PlaygroundContext) -> None:
     """disabled_sections={'tools'} -- tools section absent."""
     result = builder.build(ctx, disabled_sections={"tools"})
     assert "# Tools" not in result
@@ -111,9 +108,7 @@ def test_disable_multiple_sections(
     assert "# Memory" not in result
 
 
-def test_identity_custom(
-    builder: ContextBuilder, ctx: PlaygroundContext
-) -> None:
+def test_identity_custom(builder: ContextBuilder, ctx: PlaygroundContext) -> None:
     """identity='Custom Identity' -- output contains that text."""
     result = builder.build(ctx, identity="Custom Identity")
     assert "Custom Identity" in result
@@ -149,9 +144,7 @@ def test_memory_section_included_when_provided(
     builder: ContextBuilder, ctx: PlaygroundContext
 ) -> None:
     """memory_context='Previous conversation summary' -- output contains it."""
-    result = builder.build(
-        ctx, memory_context="Previous conversation summary"
-    )
+    result = builder.build(ctx, memory_context="Previous conversation summary")
     assert "# Memory" in result
     assert "Previous conversation summary" in result
 

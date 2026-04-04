@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -17,8 +17,6 @@ from matmaster.types.messages import (
     LLMResponse,
     StreamChunk,
 )
-from matmaster.types.runtime import AgentRuntimeSpec
-
 
 # ── Minimal mocks for Exp.build_runtime() tests ──────────
 
@@ -56,6 +54,7 @@ class _MockSession:
     @property
     def capabilities(self):
         from matmaster.types.topology import SessionCapabilities
+
         return SessionCapabilities()
 
 
@@ -209,7 +208,13 @@ class TestBuildRuntimeFullToolRunner:
 
         runtime = await exp.build_runtime(ctx)
         results = await runtime.spec.tool_runner.execute_batch(
-            [ToolCallData(id="c1", name="Read", arguments={"file_path": "/tmp/test-exec/test.txt"})],
+            [
+                ToolCallData(
+                    id="c1",
+                    name="Read",
+                    arguments={"file_path": "/tmp/test-exec/test.txt"},
+                )
+            ],
             ToolExecutionContext(turn=1, max_turns=10),
         )
         assert results[0][1].status == "success"
@@ -262,8 +267,9 @@ class TestRunStream:
         assert len(events) > 0
         # All events should have 'type' attribute (BusEvent contract)
         for event in events:
-            assert hasattr(event, 'type'), \
-                f"Yielded object missing 'type' attribute: {type(event).__name__}"
+            assert hasattr(
+                event, 'type'
+            ), f"Yielded object missing 'type' attribute: {type(event).__name__}"
         terminal_events = [e for e in events if isinstance(e, RunResultEvent)]
         assert len(terminal_events) == 1
         assert terminal_events[0].reason == "natural"
@@ -316,7 +322,9 @@ class TestRunStream:
         assert cleanup_called, "Cleanup should run on explicit aclose"
 
     @pytest.mark.asyncio
-    async def test_run_stream_injects_cancel_token_into_session_and_catalog(self) -> None:
+    async def test_run_stream_injects_cancel_token_into_session_and_catalog(
+        self,
+    ) -> None:
         from matmaster.core.exp import Exp
 
         config = _make_exp_config()

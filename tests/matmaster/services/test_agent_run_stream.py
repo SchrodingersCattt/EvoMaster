@@ -10,7 +10,6 @@ all tests exercise run_agent() exclusively.
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 from contextlib import asynccontextmanager
 from typing import Any
@@ -20,18 +19,15 @@ import pytest
 
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import (
-    CancelledEvent,
-    ErrorEvent,
     ResponseEvent,
     RunResultEvent,
-    StreamClosedEvent,
     ThoughtEvent,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_playground(pg_ctx: Any) -> Any:
     """Build a mock Playground that returns the given PlaygroundContext."""
@@ -92,6 +88,7 @@ class _FakeExp:
 # Patches: Isolate run_agent from heavy infrastructure
 # ---------------------------------------------------------------------------
 
+
 def _standard_patches():
     """Return a list of patch context managers for isolating run_agent."""
     return [
@@ -105,7 +102,9 @@ def _standard_patches():
         patch('src.services.agent_run_service.ChatHistoryConverter'),
         patch('src.services.agent_run_service.get_redis_dao'),
         patch('src.services.agent_run_service.use_quota', new_callable=AsyncMock),
-        patch('src.services.agent_run_service._get_agent_default_llm', return_value=None),
+        patch(
+            'src.services.agent_run_service._get_agent_default_llm', return_value=None
+        ),
     ]
 
 
@@ -127,7 +126,7 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         persistence_handler_cls = mocks[3]
         workspace_handler_cls = mocks[4]
         bohrium_cls = mocks[5]
-        derive_fn = mocks[6]
+        mocks[6]
         history_cls = mocks[7]
         redis_fn = mocks[8]
 
@@ -141,13 +140,17 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         # SSEHandler mock -- records events it receives
         sse_received: list[Any] = []
         sse_inst = MagicMock()
-        sse_inst.handle = AsyncMock(side_effect=lambda event: sse_received.append(event))
+        sse_inst.handle = AsyncMock(
+            side_effect=lambda event: sse_received.append(event)
+        )
         sse_handler_cls.return_value = sse_inst
 
         # PersistenceHandler mock
         persist_received: list[Any] = []
         persist_inst = MagicMock()
-        persist_inst.handle = AsyncMock(side_effect=lambda event: persist_received.append(event))
+        persist_inst.handle = AsyncMock(
+            side_effect=lambda event: persist_received.append(event)
+        )
         persistence_handler_cls.return_value = persist_inst
 
         # WorkspaceHandler mock
@@ -162,7 +165,10 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         bohrium_result.ssh_attached = False
         bohrium_result.abort_result = None
         bohrium_result.execution_session = None
-        bohrium_result._asdict.return_value = {'ssh_attached': False, 'abort_result': None}
+        bohrium_result._asdict.return_value = {
+            'ssh_attached': False,
+            'abort_result': None,
+        }
         bohrium_inst.run_setup = AsyncMock(return_value=bohrium_result)
         bohrium_inst.run_cleanup = AsyncMock()
         bohrium_cls.return_value = bohrium_inst
@@ -182,10 +188,15 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         # Patch Exp to use our fake events
         fake_exp = _FakeExp(events)
 
-        with patch('matmaster.config.loader.load_exp_config', return_value=MagicMock()), \
-             patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()), \
-             patch('matmaster.providers.llm_factory.build_provider', return_value=MagicMock()), \
-             patch('matmaster.core.exp.Exp', new=lambda config: fake_exp):
+        with (
+            patch('matmaster.config.loader.load_exp_config', return_value=MagicMock()),
+            patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()),
+            patch(
+                'matmaster.providers.llm_factory.build_provider',
+                return_value=MagicMock(),
+            ),
+            patch('matmaster.core.exp.Exp', new=lambda config: fake_exp),
+        ):
 
             from src.services.agent_run_service import AgentRunService
 
@@ -212,8 +223,10 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
 async def test_run_agent_stream_method_does_not_exist():
     """After Plan 02, run_agent_stream() must not exist on AgentRunService."""
     from src.services.agent_run_service import AgentRunService
-    assert not hasattr(AgentRunService, 'run_agent_stream'), \
-        "run_agent_stream() should be removed; run_agent() is the sole entrypoint"
+
+    assert not hasattr(
+        AgentRunService, 'run_agent_stream'
+    ), "run_agent_stream() should be removed; run_agent() is the sole entrypoint"
 
 
 @pytest.mark.asyncio
@@ -255,8 +268,12 @@ async def test_stream_events_reach_handlers_via_fanout():
     response = ResponseEvent(source='agent', content='hello')
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
-    async with _patched_service([thought, response, run_result]) as (svc, sse_events, persist_events):
-        result = await svc.run_agent(
+    async with _patched_service([thought, response, run_result]) as (
+        svc,
+        sse_events,
+        persist_events,
+    ):
+        await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
@@ -311,7 +328,9 @@ async def test_stream_closed_after_run_result():
             task_id='t1',
         )
 
-    stream_closed = [e for e in sse_events if getattr(e, 'type', None) == 'stream_closed']
+    stream_closed = [
+        e for e in sse_events if getattr(e, 'type', None) == 'stream_closed'
+    ]
     assert len(stream_closed) == 1
     sc = stream_closed[0]
     assert sc.task_completed is True
@@ -377,7 +396,9 @@ async def test_exception_emits_error_and_closed():
         # SSE handler mock
         sse_received: list[Any] = []
         sse_inst = MagicMock()
-        sse_inst.handle = AsyncMock(side_effect=lambda event: sse_received.append(event))
+        sse_inst.handle = AsyncMock(
+            side_effect=lambda event: sse_received.append(event)
+        )
         sse_handler_cls.return_value = sse_inst
 
         # Persistence handler mock
@@ -396,7 +417,10 @@ async def test_exception_emits_error_and_closed():
         bohrium_result.ssh_attached = False
         bohrium_result.abort_result = None
         bohrium_result.execution_session = None
-        bohrium_result._asdict.return_value = {'ssh_attached': False, 'abort_result': None}
+        bohrium_result._asdict.return_value = {
+            'ssh_attached': False,
+            'abort_result': None,
+        }
         bohrium_inst.run_setup = AsyncMock(return_value=bohrium_result)
         bohrium_inst.run_cleanup = AsyncMock()
         bohrium_cls.return_value = bohrium_inst
@@ -409,10 +433,15 @@ async def test_exception_emits_error_and_closed():
 
         error_exp = _ErrorExp([])
 
-        with patch('matmaster.config.loader.load_exp_config', return_value=MagicMock()), \
-             patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()), \
-             patch('matmaster.providers.llm_factory.build_provider', return_value=MagicMock()), \
-             patch('matmaster.core.exp.Exp', new=lambda config: error_exp):
+        with (
+            patch('matmaster.config.loader.load_exp_config', return_value=MagicMock()),
+            patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()),
+            patch(
+                'matmaster.providers.llm_factory.build_provider',
+                return_value=MagicMock(),
+            ),
+            patch('matmaster.core.exp.Exp', new=lambda config: error_exp),
+        ):
 
             from src.services.agent_run_service import AgentRunService
 
@@ -485,7 +514,7 @@ async def test_worker_mode_send_cb_receives_live_events():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([thought, run_result]) as (svc, sse_events, _):
-        result = await svc.run_agent(
+        await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
@@ -510,7 +539,7 @@ async def test_persistence_receives_events():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([thought, run_result]) as (svc, _, persist_events):
-        result = await svc.run_agent(
+        await svc.run_agent(
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),

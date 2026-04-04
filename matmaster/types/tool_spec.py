@@ -43,7 +43,9 @@ class ToolSpec(BaseModel):
     args_schema: dict[str, Any] = Field(default_factory=dict)
     source: str = "unknown"  # "builtin" | "mcp" | "skill" | "unknown"
     capabilities: frozenset[str] = frozenset()
-    effect_level: str = "local_mutation"  # "none" | "local_mutation" | "external_effect"
+    effect_level: str = (
+        "local_mutation"  # "none" | "local_mutation" | "external_effect"
+    )
     exposed_to_model: bool = True
     fast_path_eligible: bool = True
     max_result_chars: int = 0
@@ -115,7 +117,10 @@ class ToolInstance:
         [dict[str, Any], ToolExecutionContext],
         Awaitable[ToolResult | str | None],
     ]
-    input_validator: Callable[
-        [dict[str, Any], ToolRunnerState | None],
-        Awaitable[ToolDecision | None],
-    ] | None = None
+    input_validator: (
+        Callable[
+            [dict[str, Any], ToolRunnerState | None],
+            Awaitable[ToolDecision | None],
+        ]
+        | None
+    ) = None

@@ -1,9 +1,9 @@
 """tests/matmaster/tools/builtin/test_web_search_tool.py"""
+
 import asyncio
-import json
 import os
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from matmaster.tools.builtin.web_search_tool import WebSearchTool
 from matmaster.tools.tool_result import ToolResult
 
@@ -49,7 +49,9 @@ class TestDomainFiltering:
                 mock_httpx.Client.return_value = mock_client
                 asyncio.run(tool.execute(args))
                 call_args = mock_client.get.call_args
-                params = call_args.kwargs.get("params") or call_args[1].get("params", {})
+                params = call_args.kwargs.get("params") or call_args[1].get(
+                    "params", {}
+                )
                 assert "site:docs.python.org" in params.get("q", "")
 
     def test_blocked_domains_appended(self):
@@ -67,7 +69,9 @@ class TestDomainFiltering:
                 mock_httpx.Client.return_value = mock_client
                 asyncio.run(tool.execute(args))
                 call_args = mock_client.get.call_args
-                params = call_args.kwargs.get("params") or call_args[1].get("params", {})
+                params = call_args.kwargs.get("params") or call_args[1].get(
+                    "params", {}
+                )
                 assert "-site:example.com" in params.get("q", "")
 
 
@@ -75,11 +79,15 @@ class TestDomainMutualExclusion:
     def test_allowed_and_blocked_rejects(self):
         tool = WebSearchTool()
         with patch.dict(os.environ, {"SEARCHAPI_API_KEY": "fake"}):
-            result = asyncio.run(tool.execute({
-                "query": "test",
-                "allowed_domains": ["a.com"],
-                "blocked_domains": ["b.com"],
-            }))
+            result = asyncio.run(
+                tool.execute(
+                    {
+                        "query": "test",
+                        "allowed_domains": ["a.com"],
+                        "blocked_domains": ["b.com"],
+                    }
+                )
+            )
         assert isinstance(result, ToolResult)
         assert result.status == "error"
         assert "both" in result.content.lower()

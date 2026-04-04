@@ -1,8 +1,10 @@
 """tests/matmaster/tools/builtin/test_bash_tool.py"""
+
 import asyncio
-import pytest
 from unittest.mock import MagicMock
+
 from matmaster.tools.builtin.bash_tool import BashTool
+from matmaster.tools.tool_result import ToolResult
 
 
 def make_session(output="hello", exit_code=0, working_dir="/workspace"):
@@ -21,6 +23,7 @@ class TestBashToolMetadata:
 
     def test_plane(self):
         from matmaster.types.topology import ToolPlane
+
         assert BashTool.plane == ToolPlane.SESSION_SHELL
 
     def test_has_prompt(self):
@@ -45,7 +48,9 @@ class TestBashExecution:
         session = make_session(exit_code=1)
         tool = BashTool(session=session)
         result = asyncio.run(tool.execute({"command": "false"}))
-        assert "exit code 1" in result.lower()
+        # After fix: non-zero exit returns ToolResult, not str
+        assert isinstance(result, ToolResult)
+        assert "exit code 1" in result.content.lower()
 
     def test_timeout_conversion_ms_to_s(self):
         session = make_session()
@@ -58,3 +63,29 @@ class TestBashExecution:
         tool = BashTool()
         result = asyncio.run(tool.execute({"command": "ls"}))
         assert "error" in result.lower()
+
+
+class TestBashErrorStatus:
+    def test_nonzero_exit_returns_error_status(self):
+        session = make_session(output="Traceback...\nModuleNotFoundError: No module named 'pymatgen'", exit_code=1)
+        tool = BashTool(session=session, workdir="/workspace")
+        result = asyncio.run(tool.execute({"command": "python -c 'import pymatgen'"}))
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert "exit code 1" in result.content.lower()
+
+    def test_nonzero_exit_preserves_full_content(self):
+        session = make_session(output="some output", exit_code=2, working_dir="/tmp")
+        tool = BashTool(session=session, workdir="/workspace")
+        result = asyncio.run(tool.execute({"command": "exit 2"}))
+        assert isinstance(result, ToolResult)
+        assert "some output" in result.content
+        assert "/tmp" in result.content
+        assert "exit code 2" in result.content
+
+    def test_zero_exit_returns_success_string(self):
+        session = make_session(output="hello", exit_code=0)
+        tool = BashTool(session=session, workdir="/workspace")
+        result = asyncio.run(tool.execute({"command": "echo hello"}))
+        assert isinstance(result, str)
+        assert "hello" in result

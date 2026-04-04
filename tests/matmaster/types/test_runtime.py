@@ -104,14 +104,12 @@ class TestAgentRuntimeSpec:
         provider = _MockLLMProvider()
         spec = AgentRuntimeSpec(
             llm_provider=provider,
-
         )
         assert spec.llm_provider is not None
 
     def test_defaults(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-
         )
         assert spec.max_turns == 100
         assert spec.hook_executor is None
@@ -122,7 +120,6 @@ class TestAgentRuntimeSpec:
     def test_frozen(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-
         )
         with pytest.raises(ValidationError):
             spec.max_turns = 50
@@ -131,7 +128,6 @@ class TestAgentRuntimeSpec:
         """CONT-05: TerminationPolicy simplified to AgentRuntimeSpec.max_turns."""
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-
         )
         assert isinstance(spec.max_turns, int)
         assert spec.max_turns == 100
@@ -139,7 +135,6 @@ class TestAgentRuntimeSpec:
     def test_serialization(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-
             max_turns=50,
             system_prompt="You are a scientist.",
         )
@@ -160,7 +155,6 @@ class TestAgentRuntimeSpec:
 
         spec = AgentRuntimeSpec(
             llm_provider=provider,
-
         )
         assert isinstance(spec.llm_provider, LLMProvider)
 
@@ -356,7 +350,6 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
         catalog = ToolCatalog(registry)
 
         spec = AgentRuntimeSpec(
-
             tool_catalog=catalog,
         )
         assert spec.tool_catalog is catalog
@@ -399,7 +392,9 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
 
     def test_runtime_topology_rejects_invalid_type(self) -> None:
         """runtime_topology field rejects non-RuntimeTopology objects."""
-        with pytest.raises(ValidationError, match="runtime_topology must be RuntimeTopology"):
+        with pytest.raises(
+            ValidationError, match="runtime_topology must be RuntimeTopology"
+        ):
             AgentRuntimeSpec(runtime_topology=42)
 
 
@@ -410,17 +405,20 @@ class TestTypesReExport:
     """Phase 32 types importable from matmaster.types package."""
 
     def test_topology_types(self) -> None:
-        from matmaster.types import ToolPlane, SessionCapabilities, RuntimeTopology
+        from matmaster.types import RuntimeTopology, SessionCapabilities, ToolPlane
+
         assert hasattr(ToolPlane, "SESSION_SHELL")
         assert hasattr(SessionCapabilities, "model_fields")
         assert hasattr(RuntimeTopology, "model_fields")
 
     def test_tool_spec_types(self) -> None:
-        from matmaster.types import ToolSpec, ResourceClaim, ToolBinding, ToolInstance
+        from matmaster.types import ResourceClaim, ToolBinding, ToolSpec
+
         assert hasattr(ToolSpec, "model_fields")
         assert hasattr(ResourceClaim, "model_fields")
         assert hasattr(ToolBinding, "model_fields")
 
     def test_tool_decision_type(self) -> None:
         from matmaster.types import ToolDecision
+
         assert hasattr(ToolDecision, "model_fields")

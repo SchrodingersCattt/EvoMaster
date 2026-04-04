@@ -1,8 +1,8 @@
 # Self-Describing Tool Protocol
 
-> Status: Approved  
-> Date: 2026-04-03  
-> Branch: refactor/async-agent  
+> Status: Approved
+> Date: 2026-04-03
+> Branch: refactor/async-agent
 > Scope: P0 (元数据自描述) + P1 (动态描述/prompt 注入) + P2 (Context Modifier)
 
 ## 1. Problem

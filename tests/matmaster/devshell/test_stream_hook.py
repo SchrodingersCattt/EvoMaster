@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import io
 
-from matmaster.types.events import ResponseEvent, ThoughtEvent, ToolCallEvent, ToolResultEvent
+from matmaster.types.events import (
+    ResponseEvent,
+    ThoughtEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
 
 
 class TestDevStreamHook:
@@ -18,16 +23,38 @@ class TestDevStreamHook:
     def test_on_event_writes_stream_content(self) -> None:
         hook, buf = self._make_hook()
 
-        hook.on_event(ThoughtEvent(source="agent", content="Hello", stream_state="streaming", stream_id="s1"))
-        hook.on_event(ResponseEvent(source="agent", content=" world", stream_state="streaming", stream_id="s1"))
+        hook.on_event(
+            ThoughtEvent(
+                source="agent",
+                content="Hello",
+                stream_state="streaming",
+                stream_id="s1",
+            )
+        )
+        hook.on_event(
+            ResponseEvent(
+                source="agent",
+                content=" world",
+                stream_state="streaming",
+                stream_id="s1",
+            )
+        )
 
         assert buf.getvalue() == "Hello world"
 
     def test_on_event_handles_start_and_end_markers(self) -> None:
         hook, buf = self._make_hook()
 
-        hook.on_event(ThoughtEvent(source="agent", content="", stream_state="start", stream_id="s1"))
-        hook.on_event(ResponseEvent(source="agent", content="", stream_state="end", stream_id="s1"))
+        hook.on_event(
+            ThoughtEvent(
+                source="agent", content="", stream_state="start", stream_id="s1"
+            )
+        )
+        hook.on_event(
+            ResponseEvent(
+                source="agent", content="", stream_state="end", stream_id="s1"
+            )
+        )
 
         assert buf.getvalue() == "\n"
 

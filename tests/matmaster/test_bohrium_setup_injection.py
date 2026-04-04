@@ -202,7 +202,9 @@ class TestBohriumSetupServiceLocation:
         # Walk up from test file to find the directory containing both src/ and matmaster/
         candidate = Path(__file__).resolve().parent
         for _ in range(10):
-            if (candidate / "src" / "services").is_dir() and (candidate / "matmaster").is_dir():
+            if (candidate / "src" / "services").is_dir() and (
+                candidate / "matmaster"
+            ).is_dir():
                 return candidate
             candidate = candidate.parent
         raise RuntimeError("Could not find project root")

@@ -1,6 +1,6 @@
 """tests/matmaster/tools/builtin/test_path_safety.py"""
-import pytest
-from matmaster.tools.builtin._path_safety import resolve_safe_path
+
+from matmaster.tools.builtin._path_safety import resolve_safe_path, shell_escape
 
 
 class TestResolveSafePath:
@@ -34,9 +34,6 @@ class TestResolveSafePath:
     def test_prefix_collision_not_subdir(self):
         # /workspacex is NOT a subdirectory of /workspace
         assert resolve_safe_path("/workspacex/foo", "/workspace") == "/workspace"
-
-
-from matmaster.tools.builtin._path_safety import shell_escape
 
 
 class TestShellEscape:

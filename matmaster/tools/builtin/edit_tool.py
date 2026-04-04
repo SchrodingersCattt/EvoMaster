@@ -45,8 +45,7 @@ class EditTool(BuiltinTool):
             "new_string": {
                 "type": "string",
                 "description": (
-                    "The text to replace it with "
-                    "(must be different from old_string)"
+                    "The text to replace it with " "(must be different from old_string)"
                 ),
             },
             "replace_all": {

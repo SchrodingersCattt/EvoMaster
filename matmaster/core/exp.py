@@ -151,7 +151,9 @@ class Exp:
                     )
             if drain.status == "completed" and drain.final_content:
                 return drain.final_content
-            return f"SubAgent finished with status={drain.status}, reason={drain.reason}"
+            return (
+                f"SubAgent finished with status={drain.status}, reason={drain.reason}"
+            )
 
         return spawn_fn
 
@@ -272,7 +274,11 @@ class Exp:
                 available_exps = list_available_exps()
             agent_tool = AgentTool(
                 session=ctx.session,
-                workdir=Path(ctx.execution_workdir) if ctx.session is not None else ctx.workdir,
+                workdir=(
+                    Path(ctx.execution_workdir)
+                    if ctx.session is not None
+                    else ctx.workdir
+                ),
                 spawn_fn=spawn_fn,
                 available_exps=available_exps,
             )
@@ -490,11 +496,25 @@ class Exp:
                 GlobTool(session=ctx.session, workdir=exec_wd),
                 GrepTool(session=ctx.session, workdir=exec_wd),
             ]
-        elif allow_all or allowed and allowed & {
-            'execute_bash', 'Bash', 'read_file', 'Read',
-            'write_file', 'Write', 'edit_file', 'Edit',
-            'glob', 'Glob', 'grep', 'Grep',
-        }:
+        elif (
+            allow_all
+            or allowed
+            and allowed
+            & {
+                'execute_bash',
+                'Bash',
+                'read_file',
+                'Read',
+                'write_file',
+                'Write',
+                'edit_file',
+                'Edit',
+                'glob',
+                'Glob',
+                'grep',
+                'Grep',
+            }
+        ):
             self.logger.debug(
                 'No session in PlaygroundContext, skipping session-requiring tools'
             )

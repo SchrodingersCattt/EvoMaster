@@ -59,6 +59,7 @@ _NOISE_PATTERN = re.compile(r"cookie|banner|sidebar|menu", re.I)
 
 # ── Disk Cache ───────────────────────────────────────────
 
+
 class _WebpageDiskCache:
     TTL: int = 900
     MAX_ENTRIES: int = 200
@@ -88,8 +89,11 @@ class _WebpageDiskCache:
         target = self._dir / f"{self._key(url)}.json"
         try:
             fd = tempfile.NamedTemporaryFile(
-                mode="w", dir=str(self._dir), suffix=".tmp",
-                delete=False, encoding="utf-8",
+                mode="w",
+                dir=str(self._dir),
+                suffix=".tmp",
+                delete=False,
+                encoding="utf-8",
             )
             try:
                 json.dump(entry, fd, ensure_ascii=False)
@@ -105,7 +109,9 @@ class _WebpageDiskCache:
     def _maybe_evict(self) -> None:
         with self._evict_lock:
             try:
-                entries = sorted(self._dir.glob("*.json"), key=lambda p: p.stat().st_mtime)
+                entries = sorted(
+                    self._dir.glob("*.json"), key=lambda p: p.stat().st_mtime
+                )
             except Exception:
                 return
             excess = len(entries) - self.MAX_ENTRIES
@@ -119,6 +125,7 @@ class _WebpageDiskCache:
 
 
 # ── Content extraction ───────────────────────────────────
+
 
 def _extract_content(text: str, content_type: str, raw_bytes: bytes) -> str:
     is_pdf = "application/pdf" in content_type or (
@@ -135,7 +142,9 @@ def _extract_content(text: str, content_type: str, raw_bytes: bytes) -> str:
             soup = BeautifulSoup(text, "lxml")
         except Exception:
             soup = BeautifulSoup(text, "html.parser")
-        for tag in soup(["script", "style", "nav", "footer", "aside", "noscript", "iframe"]):
+        for tag in soup(
+            ["script", "style", "nav", "footer", "aside", "noscript", "iframe"]
+        ):
             tag.decompose()
         for tag in soup.find_all(attrs={"class": _NOISE_PATTERN}):
             tag.decompose()
@@ -143,7 +152,10 @@ def _extract_content(text: str, content_type: str, raw_bytes: bytes) -> str:
             tag.decompose()
         try:
             import markdownify as _md
-            content = _md.markdownify(str(soup), heading_style="ATX", strip=["img", "svg"])
+
+            content = _md.markdownify(
+                str(soup), heading_style="ATX", strip=["img", "svg"]
+            )
             content = re.sub(r"\n{3,}", "\n\n", content)
         except Exception:
             lines = (line.strip() for line in soup.get_text().splitlines())
@@ -187,6 +199,7 @@ def _is_private_host(hostname: str) -> bool:
     """Check if hostname resolves to a private/loopback/link-local address."""
     import ipaddress
     import socket
+
     try:
         addr = ipaddress.ip_address(hostname)
         return addr.is_private or addr.is_loopback or addr.is_link_local
@@ -201,6 +214,7 @@ def _is_private_host(hostname: str) -> bool:
 
 
 # ── Tool class ───────────────────────────────────────────
+
 
 class WebFetchTool(BuiltinTool):
     """Fetch and extract text content from web pages.
@@ -271,22 +285,25 @@ class WebFetchTool(BuiltinTool):
             cached = self._cache.get(url)
             if cached is not None:
                 return ToolResult(
-                    status="success", content=cached,
+                    status="success",
+                    content=cached,
                     payload={"prompt": prompt_text} if prompt_text else {},
                 )
 
         # Fetch — same-host redirects only (CC utils.ts isPermittedRedirect)
         try:
-            original_host = (parsed.hostname or "").lstrip("www.")
+            original_host = (parsed.hostname or "").removeprefix("www.")
             with httpx.Client(timeout=15, follow_redirects=False) as client:
                 response = client.get(url, headers=BROWSER_HEADERS)
 
                 # Handle redirects: only follow same-host
                 redirect_count = 0
                 while response.is_redirect and redirect_count < 5:
-                    redirect_url = str(response.next_request.url) if response.next_request else ""
+                    redirect_url = (
+                        str(response.next_request.url) if response.next_request else ""
+                    )
                     redirect_host = urlparse(redirect_url).hostname or ""
-                    if redirect_host.lstrip("www.") != original_host:
+                    if redirect_host.removeprefix("www.") != original_host:
                         return ToolResult(
                             status="success",
                             content=(
@@ -308,11 +325,16 @@ class WebFetchTool(BuiltinTool):
                         )
                 response.raise_for_status()
         except Exception as exc:
-            return ToolResult(status="error", content=f"Error: {type(exc).__name__}: {exc}")
+            return ToolResult(
+                status="error", content=f"Error: {type(exc).__name__}: {exc}"
+            )
 
         # Response size check (CC utils.ts MAX_HTTP_CONTENT_LENGTH)
         content_length = int(response.headers.get("content-length", 0))
-        if content_length > _MAX_HTTP_CONTENT_LENGTH or len(response.content) > _MAX_HTTP_CONTENT_LENGTH:
+        if (
+            content_length > _MAX_HTTP_CONTENT_LENGTH
+            or len(response.content) > _MAX_HTTP_CONTENT_LENGTH
+        ):
             return ToolResult(
                 status="error",
                 content="Error: Response too large (>10MB).",

@@ -8,8 +8,8 @@ from typing import get_type_hints
 import pytest
 
 from matmaster.sessions.local import LocalSession
-from matmaster.types.cancellation import CancellationToken
 from matmaster.sessions.tmux import PS1_BEGIN, PS1_END, PS1_PATTERN, BashMetadata
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.session import (
     LocalSessionConfig,
     Session,

@@ -21,9 +21,7 @@ from matmaster.core.hooks import HookExecutor
 from .llm_provider import LLMProvider
 
 if TYPE_CHECKING:
-    from matmaster.core.tool_runner import ToolRunner
-    from matmaster.tools.tool_catalog import ToolCatalog
-    from matmaster.types.topology import RuntimeTopology
+    pass
 
 
 class CompactionConfig(BaseModel):
@@ -126,4 +124,3 @@ class AgentRuntime:
     kernel: Any  # AgentKernel (avoid circular import)
     spec: AgentRuntimeSpec
     cleanup: Callable[[], Any]
-

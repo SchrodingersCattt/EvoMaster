@@ -33,8 +33,8 @@ from matmaster.types.messages import (
     StreamChunk,
     UserMessage,
 )
-from matmaster.types.topology import ToolPlane
 from matmaster.types.runtime import AgentRuntimeSpec
+from matmaster.types.topology import ToolPlane
 from tests.conftest import MockAsyncTool
 
 from .conftest import MockLLMProvider
@@ -208,12 +208,15 @@ class TestExpWiring:
                 reason="natural",
             )
 
-        with patch(
-            "matmaster.config.loader.load_exp_config",
-            return_value=ExpConfig(name="direct"),
-        ), patch(
-            "matmaster.core.stream_drain.drain_run_stream",
-            side_effect=fake_drain_run_stream,
+        with (
+            patch(
+                "matmaster.config.loader.load_exp_config",
+                return_value=ExpConfig(name="direct"),
+            ),
+            patch(
+                "matmaster.core.stream_drain.drain_run_stream",
+                side_effect=fake_drain_run_stream,
+            ),
         ):
             spawn_fn = Exp._make_spawn_fn(
                 ctx,
@@ -402,7 +405,7 @@ class TestAgentKernelHookWiring:
         kernel = AgentKernel()
         stream = kernel.run_stream(spec, "original")
 
-        _first_event = await anext(stream)
+        await anext(stream)
         await stream.aclose()
 
         assert seen_end_reasons == ["cancelled"]
@@ -430,7 +433,7 @@ class TestAgentKernelHookWiring:
         )
 
         kernel = AgentKernel()
-        _events = [event async for event in kernel.run_stream(spec, "original")]
+        [event async for event in kernel.run_stream(spec, "original")]
 
         assert provider.seen_messages[0][-1]["content"] == "original rewritten"
         assert seen_prompts == ["original rewritten"]
@@ -455,7 +458,7 @@ class TestAgentKernelHookWiring:
         )
 
         kernel = AgentKernel()
-        _events = [event async for event in kernel.run_stream(spec, "original")]
+        [event async for event in kernel.run_stream(spec, "original")]
 
         assert seen == [
             CompactionContext(
@@ -486,7 +489,7 @@ class TestAgentKernelHookWiring:
         )
 
         kernel = AgentKernel()
-        _events = [
+        [
             event
             async for event in kernel.run_stream(
                 spec,
@@ -558,12 +561,15 @@ class TestSpawnGuardWiring:
             llm_provider=MockLLMProvider(),
         )
 
-        with patch(
-            "matmaster.config.loader.load_exp_config",
-            return_value=ExpConfig(name="direct"),
-        ), patch(
-            "matmaster.core.stream_drain.drain_run_stream",
-            side_effect=fake_drain_run_stream,
+        with (
+            patch(
+                "matmaster.config.loader.load_exp_config",
+                return_value=ExpConfig(name="direct"),
+            ),
+            patch(
+                "matmaster.core.stream_drain.drain_run_stream",
+                side_effect=fake_drain_run_stream,
+            ),
         ):
             spawn_fn = original_exp._make_spawn_fn(
                 ctx,

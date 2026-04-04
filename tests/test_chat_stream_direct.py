@@ -258,7 +258,7 @@ async def test_sse_frames_match_frontend_contract_without_mysql():
             call_id='call-1',
             tool_name='bash',
             result={'status': 'success', 'stdout': 'ok'},
-                payload={'auto_save': True},
+            payload={'auto_save': True},
         ),
         ConfirmationRequestEvent(
             source='MatMaster',

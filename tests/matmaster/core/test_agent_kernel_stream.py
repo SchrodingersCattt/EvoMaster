@@ -7,7 +7,6 @@ yields, and compactor deque integration. Phase 34 Plan 1 Task 1.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -27,11 +26,10 @@ from matmaster.types.messages import (
 from matmaster.types.runtime import AgentRuntimeSpec
 
 from .agent_kernel_test_helpers import (
+    StreamingProvider,
     _make_spec,
     _make_tool_registry,
-    StreamingProvider,
 )
-
 
 # ── Providers for streaming tests ─────────────────────────
 
@@ -57,7 +55,9 @@ class ReasoningThenContentProvider:
         yield StreamChunk(reasoning_content=" part 2")
         yield StreamChunk(content="visible part 1")
         yield StreamChunk(content=" part 2")
-        yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10, "completion_tokens": 5})
+        yield StreamChunk(
+            finish_reason="stop", usage={"prompt_tokens": 10, "completion_tokens": 5}
+        )
 
 
 class ContentOnlyProvider:
@@ -99,7 +99,12 @@ class ToolCallStreamProvider:
             yield StreamChunk(content="let me call a tool")
             yield StreamChunk(
                 tool_call_deltas=[
-                    {"index": 0, "id": "tc-1", "name": "test_tool", "arguments": '{"x": 1}'}
+                    {
+                        "index": 0,
+                        "id": "tc-1",
+                        "name": "test_tool",
+                        "arguments": '{"x": 1}',
+                    }
                 ]
             )
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
@@ -164,12 +169,20 @@ class TestStreamLlmItems:
 
         # Should have: start event, reasoning events, thought-complete, content events,
         # response-complete, end event, final llm_response
-        thought_events = [i for i in items if i.event and isinstance(i.event, ThoughtEvent)]
-        response_events = [i for i in items if i.event and isinstance(i.event, ResponseEvent)]
+        thought_events = [
+            i for i in items if i.event and isinstance(i.event, ThoughtEvent)
+        ]
+        response_events = [
+            i for i in items if i.event and isinstance(i.event, ResponseEvent)
+        ]
 
         # At least one streaming thought and one streaming response
-        streaming_thoughts = [e for e in thought_events if e.event.stream_state == "streaming"]
-        streaming_responses = [e for e in response_events if e.event.stream_state == "streaming"]
+        streaming_thoughts = [
+            e for e in thought_events if e.event.stream_state == "streaming"
+        ]
+        streaming_responses = [
+            e for e in response_events if e.event.stream_state == "streaming"
+        ]
         assert len(streaming_thoughts) >= 1, "Should yield streaming ThoughtEvents"
         assert len(streaming_responses) >= 1, "Should yield streaming ResponseEvents"
 
@@ -189,10 +202,15 @@ class TestStreamLlmItems:
 
         # Find thought-complete event
         thought_completes = [
-            i for i in items
-            if i.event and isinstance(i.event, ThoughtEvent) and i.event.stream_state == "complete"
+            i
+            for i in items
+            if i.event
+            and isinstance(i.event, ThoughtEvent)
+            and i.event.stream_state == "complete"
         ]
-        assert len(thought_completes) >= 1, "Should yield ThoughtEvent(complete) on transition"
+        assert (
+            len(thought_completes) >= 1
+        ), "Should yield ThoughtEvent(complete) on transition"
         # The complete event should contain the full reasoning
         assert "thinking part 1" in thought_completes[0].event.content
 
@@ -211,8 +229,11 @@ class TestStreamLlmItems:
             items.append(item)
 
         response_completes = [
-            i for i in items
-            if i.event and isinstance(i.event, ResponseEvent) and i.event.stream_state == "complete"
+            i
+            for i in items
+            if i.event
+            and isinstance(i.event, ResponseEvent)
+            and i.event.stream_state == "complete"
         ]
         assert len(response_completes) >= 1, "Should yield ResponseEvent(complete)"
         assert "visible part 1" in response_completes[0].event.content
@@ -256,15 +277,21 @@ class TestStreamLlmItems:
 
         # First event should be start marker (ThoughtEvent with start state)
         start_events = [
-            i for i in items
-            if i.event and isinstance(i.event, ThoughtEvent) and i.event.stream_state == "start"
+            i
+            for i in items
+            if i.event
+            and isinstance(i.event, ThoughtEvent)
+            and i.event.stream_state == "start"
         ]
         assert len(start_events) == 1, "Should yield a start marker event"
 
         # Last event (before llm_response) should be end marker
         end_events = [
-            i for i in items
-            if i.event and isinstance(i.event, ResponseEvent) and i.event.stream_state == "end"
+            i
+            for i in items
+            if i.event
+            and isinstance(i.event, ResponseEvent)
+            and i.event.stream_state == "end"
         ]
         assert len(end_events) == 1, "Should yield an end marker event"
 
@@ -273,27 +300,29 @@ class TestStreamLlmItems:
         """Normal argument streaming for one tool call must not be split."""
         from matmaster.core.agent import AgentKernel, _KernelItem
 
-        provider = StreamingProvider([
-            StreamChunk(
-                tool_call_deltas=[
-                    {
-                        "index": 0,
-                        "id": "tc-1",
-                        "name": "Bash",
-                        "arguments": '{"command": "which ',
-                    }
-                ]
-            ),
-            StreamChunk(
-                tool_call_deltas=[
-                    {
-                        "index": 0,
-                        "arguments": 'python3 && python3 --version"}',
-                    }
-                ]
-            ),
-            StreamChunk(finish_reason="stop"),
-        ])
+        provider = StreamingProvider(
+            [
+                StreamChunk(
+                    tool_call_deltas=[
+                        {
+                            "index": 0,
+                            "id": "tc-1",
+                            "name": "Bash",
+                            "arguments": '{"command": "which ',
+                        }
+                    ]
+                ),
+                StreamChunk(
+                    tool_call_deltas=[
+                        {
+                            "index": 0,
+                            "arguments": 'python3 && python3 --version"}',
+                        }
+                    ]
+                ),
+                StreamChunk(finish_reason="stop"),
+            ]
+        )
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
 
@@ -337,8 +366,7 @@ class TestRunItemsAssistantState:
             events.append(event)
 
         assistant_state_events = [
-            e for e in events
-            if isinstance(e, AssistantStateEvent)
+            e for e in events if isinstance(e, AssistantStateEvent)
         ]
         assert len(assistant_state_events) >= 1, "Should yield AssistantStateEvent"
         # State should contain tool_calls
@@ -363,10 +391,7 @@ class TestRunItemsSkillHit:
         async for event in kernel.run_stream(spec, "test task"):
             events.append(event)
 
-        skill_hit_events = [
-            e for e in events
-            if isinstance(e, SkillHitEvent)
-        ]
+        skill_hit_events = [e for e in events if isinstance(e, SkillHitEvent)]
         assert len(skill_hit_events) >= 1, "Should yield SkillHitEvent"
         assert skill_hit_events[0].skill_name == "chemistry"
 
@@ -384,11 +409,10 @@ class TestRunItemsSkillHit:
         async for event in kernel.run_stream(spec, "test task"):
             events.append(event)
 
-        skill_hit_events = [
-            e for e in events
-            if isinstance(e, SkillHitEvent)
-        ]
-        assert len(skill_hit_events) == 0, "Should not yield SkillHitEvent for regular tools"
+        skill_hit_events = [e for e in events if isinstance(e, SkillHitEvent)]
+        assert (
+            len(skill_hit_events) == 0
+        ), "Should not yield SkillHitEvent for regular tools"
 
 
 # ── Gap Closure tests (Phase 34 Plan 4) ────────────────────
@@ -411,10 +435,14 @@ class TestGap1FullToolRunnerActivation:
 
         # Mock ToolRunner that records calls
         mock_runner = MagicMock()
-        mock_runner.execute_batch = AsyncMock(return_value=[
-            (ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1}),
-             TR(status="success", content="runner result"))
-        ])
+        mock_runner.execute_batch = AsyncMock(
+            return_value=[
+                (
+                    ToolCallData(id="tc-1", name="test_tool", arguments={"x": 1}),
+                    TR(status="success", content="runner result"),
+                )
+            ]
+        )
 
         spec = _make_spec(provider=provider, tool_registry=registry)
         # Inject tool_runner via model_copy (frozen model)
@@ -426,13 +454,15 @@ class TestGap1FullToolRunnerActivation:
             items.append(item)
 
         # FullToolRunner.execute_batch should have been called
-        assert mock_runner.execute_batch.called, \
-            "spec.tool_runner.execute_batch() should be called when tool_runner is present"
+        assert (
+            mock_runner.execute_batch.called
+        ), "spec.tool_runner.execute_batch() should be called when tool_runner is present"
         # Verify ToolExecutionContext was passed
         call_args = mock_runner.execute_batch.call_args
         ctx_arg = call_args[0][1]  # second positional arg
-        assert isinstance(ctx_arg, ToolExecutionContext), \
-            "Second arg to execute_batch should be ToolExecutionContext"
+        assert isinstance(
+            ctx_arg, ToolExecutionContext
+        ), "Second arg to execute_batch should be ToolExecutionContext"
 
     @pytest.mark.asyncio
     async def test_run_items_raises_without_tool_runner(self) -> None:
@@ -476,17 +506,20 @@ class TestGap2RunStreamYieldsBusEvent:
 
         # No event should be a _KernelItem
         for event in events:
-            assert not isinstance(event, _KernelItem), \
-                f"run_stream() yielded _KernelItem: {event!r}. Must yield BusEvent."
+            assert not isinstance(
+                event, _KernelItem
+            ), f"run_stream() yielded _KernelItem: {event!r}. Must yield BusEvent."
 
         # All events should have 'type' attribute (BusEvent signature)
         for event in events:
-            assert hasattr(event, 'type'), \
-                f"Yielded object missing 'type' attribute: {type(event).__name__}"
+            assert hasattr(
+                event, 'type'
+            ), f"Yielded object missing 'type' attribute: {type(event).__name__}"
 
         # Last event should be RunResultEvent
-        assert isinstance(events[-1], RunResultEvent), \
-            f"Last event should be RunResultEvent, got {type(events[-1]).__name__}"
+        assert isinstance(
+            events[-1], RunResultEvent
+        ), f"Last event should be RunResultEvent, got {type(events[-1]).__name__}"
         assert events[-1].status == "completed"
 
     @pytest.mark.asyncio
@@ -505,13 +538,16 @@ class TestGap2RunStreamYieldsBusEvent:
             events.append(event)
 
         for event in events:
-            assert not isinstance(event, _KernelItem), \
-                f"run_stream() yielded _KernelItem: {event!r}"
-            assert hasattr(event, 'type'), \
-                f"Missing 'type' attribute: {type(event).__name__}"
+            assert not isinstance(
+                event, _KernelItem
+            ), f"run_stream() yielded _KernelItem: {event!r}"
+            assert hasattr(
+                event, 'type'
+            ), f"Missing 'type' attribute: {type(event).__name__}"
 
-        assert isinstance(events[-1], RunResultEvent), \
-            f"Last event should be RunResultEvent, got {type(events[-1]).__name__}"
+        assert isinstance(
+            events[-1], RunResultEvent
+        ), f"Last event should be RunResultEvent, got {type(events[-1]).__name__}"
 
 
 class TestGap3CatalogVersionInvalidation:
@@ -531,9 +567,11 @@ class TestGap3CatalogVersionInvalidation:
         # Mock ToolCatalog with controllable version
         mock_catalog = MagicMock()
         type(mock_catalog).version = PropertyMock(return_value=1)
-        mock_catalog.build_definitions = MagicMock(return_value=[
-            {"type": "function", "function": {"name": "test", "parameters": {}}}
-        ])
+        mock_catalog.build_definitions = MagicMock(
+            return_value=[
+                {"type": "function", "function": {"name": "test", "parameters": {}}}
+            ]
+        )
 
         spec = _make_spec(provider=provider, tool_registry=registry)
         spec = spec.model_copy(update={"tool_catalog": mock_catalog})
@@ -544,8 +582,9 @@ class TestGap3CatalogVersionInvalidation:
             events.append(event)
 
         # Catalog's build_definitions should have been called
-        assert mock_catalog.build_definitions.called, \
-            "tool_catalog.build_definitions() should be called when catalog is present"
+        assert (
+            mock_catalog.build_definitions.called
+        ), "tool_catalog.build_definitions() should be called when catalog is present"
         args, _ = mock_catalog.build_definitions.call_args
         assert isinstance(args[0], ToolDescriptionContext)
 
@@ -563,9 +602,14 @@ class TestGap3CatalogVersionInvalidation:
 
         mock_catalog = MagicMock()
         type(mock_catalog).version = PropertyMock(return_value=1)
-        mock_catalog.build_definitions = MagicMock(return_value=[
-            {"type": "function", "function": {"name": "test_tool", "parameters": {}}}
-        ])
+        mock_catalog.build_definitions = MagicMock(
+            return_value=[
+                {
+                    "type": "function",
+                    "function": {"name": "test_tool", "parameters": {}},
+                }
+            ]
+        )
 
         spec = _make_spec(provider=provider, tool_registry=registry)
         spec = spec.model_copy(update={"tool_catalog": mock_catalog})
@@ -578,15 +622,18 @@ class TestGap3CatalogVersionInvalidation:
         # build_definitions called once on first turn, but NOT re-called
         # on second turn since version unchanged
         build_calls = mock_catalog.build_definitions.call_count
-        assert build_calls == 1, \
-            f"build_definitions should be called once (caching), got {build_calls}"
+        assert (
+            build_calls == 1
+        ), f"build_definitions should be called once (caching), got {build_calls}"
         args, _ = mock_catalog.build_definitions.call_args
         assert isinstance(args[0], ToolDescriptionContext)
 
 
 class TestCancellationTokenSupport:
     @pytest.mark.asyncio
-    async def test_run_stream_returns_cancelled_when_token_already_cancelled(self) -> None:
+    async def test_run_stream_returns_cancelled_when_token_already_cancelled(
+        self,
+    ) -> None:
         from matmaster.core.agent import AgentKernel
 
         provider = ContentOnlyProvider()
@@ -596,7 +643,9 @@ class TestCancellationTokenSupport:
         ctrl.cancel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task", cancel_token=ctrl.token):
+        async for event in kernel.run_stream(
+            spec, "test task", cancel_token=ctrl.token
+        ):
             events.append(event)
 
         assert isinstance(events[-1], RunResultEvent)

@@ -8,10 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from matmaster.core.structural_validation import StructuralValidation
-from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_spec import ToolBinding, ToolInstance, ToolSpec
 from matmaster.types.topology import (
     RuntimeTopology,
@@ -19,10 +16,10 @@ from matmaster.types.topology import (
     ToolPlane,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _noop_executor(args: dict[str, Any]) -> Any:
     """Dummy executor for ToolInstance construction."""
@@ -71,6 +68,7 @@ def _make_topology(
 # ---------------------------------------------------------------------------
 # TestArgsSchema
 # ---------------------------------------------------------------------------
+
 
 class TestArgsSchema:
     """args_schema validation using jsonschema."""
@@ -136,6 +134,7 @@ class TestArgsSchema:
 # TestPlaneCheck
 # ---------------------------------------------------------------------------
 
+
 class TestPlaneCheck:
     """Plane activation validation."""
 
@@ -178,6 +177,7 @@ class TestPlaneCheck:
 # ---------------------------------------------------------------------------
 # TestSessionShellExecution
 # ---------------------------------------------------------------------------
+
 
 class TestCapabilities:
     """Session capability inputs do not block one-shot shell execution."""
@@ -245,6 +245,7 @@ class TestCapabilities:
 # ---------------------------------------------------------------------------
 # TestPathNormalization
 # ---------------------------------------------------------------------------
+
 
 class TestPathNormalization:
     """Path normalization in Layer A structural validation."""

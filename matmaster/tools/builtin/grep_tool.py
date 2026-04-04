@@ -164,14 +164,28 @@ class GrepTool(BuiltinTool):
 
         if use_rg:
             cmd = self._build_rg_command(
-                pattern, safe_path, file_glob, output_mode,
-                after, before, ctx_lines, case_insensitive,
-                show_line_nums, file_type, multiline,
+                pattern,
+                safe_path,
+                file_glob,
+                output_mode,
+                after,
+                before,
+                ctx_lines,
+                case_insensitive,
+                show_line_nums,
+                file_type,
+                multiline,
             )
         else:
             cmd = self._build_grep_command(
-                pattern, safe_path, file_glob, output_mode,
-                after, before, ctx_lines, case_insensitive,
+                pattern,
+                safe_path,
+                file_glob,
+                output_mode,
+                after,
+                before,
+                ctx_lines,
+                case_insensitive,
                 show_line_nums,
             )
 
@@ -186,7 +200,9 @@ class GrepTool(BuiltinTool):
         # head_limit == 0: no head pipe (unlimited)
 
         result = session.exec_bash(
-            command=cmd, timeout=30, cancel_token=self._cancel_token_for_exec(),
+            command=cmd,
+            timeout=30,
+            cancel_token=self._cancel_token_for_exec(),
         )
         output = result.get("output", "") or result.get("stdout", "")
 
@@ -195,9 +211,18 @@ class GrepTool(BuiltinTool):
         return output
 
     def _build_rg_command(
-        self, pattern, safe_path, file_glob, output_mode,
-        after, before, context, case_insensitive,
-        show_line_nums, file_type, multiline,
+        self,
+        pattern,
+        safe_path,
+        file_glob,
+        output_mode,
+        after,
+        before,
+        context,
+        case_insensitive,
+        show_line_nums,
+        file_type,
+        multiline,
     ) -> str:
         flags = ["--max-columns", "500"]  # prevent base64/minified pollution
         if output_mode == "files_with_matches":
@@ -226,8 +251,15 @@ class GrepTool(BuiltinTool):
         return f"rg {flag_str} {shell_escape(pattern)} {shell_escape(safe_path)} 2>/dev/null"
 
     def _build_grep_command(
-        self, pattern, safe_path, file_glob, output_mode,
-        after, before, context, case_insensitive,
+        self,
+        pattern,
+        safe_path,
+        file_glob,
+        output_mode,
+        after,
+        before,
+        context,
+        case_insensitive,
         show_line_nums,
     ) -> str:
         flags = ["-r"]

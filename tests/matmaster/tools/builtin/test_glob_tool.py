@@ -1,8 +1,9 @@
 """tests/matmaster/tools/builtin/test_glob_tool.py"""
+
 import asyncio
 from unittest.mock import MagicMock
 
-from matmaster.tools.builtin.glob_tool import GlobTool, MAX_GLOB_RESULTS
+from matmaster.tools.builtin.glob_tool import MAX_GLOB_RESULTS, GlobTool
 
 
 def make_session(output="", exit_code=0):

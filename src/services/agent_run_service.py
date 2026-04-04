@@ -18,16 +18,12 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.core.playground import PlaygroundManager
-from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.event_payloads import _normalize_public_source
+from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.cancellation import CancellationToken
-from src.services.agent_run_bohrium import (
-    BohriumSetupService,
-    derive_skill_sync_spec,
-)
 from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.events import (
     BusEvent,
@@ -38,6 +34,10 @@ from matmaster.types.events import (
 )
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
+from src.services.agent_run_bohrium import (
+    BohriumSetupService,
+    derive_skill_sync_spec,
+)
 from src.services.chat_history import ChatHistoryConverter
 from src.services.quota_service import use_quota
 from src.services.sessions_service import get_sessions_service
@@ -95,6 +95,7 @@ def _build_workspace_upload_fn(
         upload_dir_to_oss(workspace_path, key_prefix)
 
     return _do_upload
+
 
 async def _emit_error_and_close_fanout(
     fanout: RunEventFanout, message: str, source: str = 'System'
@@ -302,14 +303,16 @@ class AgentRunService:
 
             # -- Stage 6: Generator event stream --
             run_result_event = None
-            async with aclosing(exp.run_stream(
-                pg_ctx,
-                user_prompt,
-                history=history,
-                cancel_token=cancel_token,
-                skills=pg_ctx.run_meta.get('skill_config'),
-                source_override=exp_name,
-            )) as stream:
+            async with aclosing(
+                exp.run_stream(
+                    pg_ctx,
+                    user_prompt,
+                    history=history,
+                    cancel_token=cancel_token,
+                    skills=pg_ctx.run_meta.get('skill_config'),
+                    source_override=exp_name,
+                )
+            ) as stream:
                 async for event in stream:
                     # Source normalization (ESIN-06)
                     if hasattr(event, 'source'):

@@ -60,9 +60,7 @@ class TestSkillExecution:
     def test_args_appended(self):
         skill = make_skill()
         tool = SkillTool(skill_registry=make_registry(skill=skill))
-        result = asyncio.run(
-            tool.execute({"skill": "test-skill", "args": "some args"})
-        )
+        result = asyncio.run(tool.execute({"skill": "test-skill", "args": "some args"}))
         assert "some args" in result
 
     def test_slash_prefix_stripped(self):

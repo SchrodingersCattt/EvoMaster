@@ -17,14 +17,22 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from matmaster.core.context_compactor import (
     ContextCompactor,
     estimate_tokens,
     parse_turns,
 )
 from matmaster.types.events import ContextCompactionEvent
+from matmaster.types.messages import (
+    AssistantMessage,
+    LLMResponse,
+    StreamChunk,
+    SystemMessage,
+    ToolCallData,
+    ToolMessage,
+    UserMessage,
+)
+from matmaster.types.runtime import CompactionConfig
 
 
 class _EventCollector:
@@ -39,18 +47,10 @@ class _EventCollector:
     def get_nowait(self):
         if not self.events:
             import asyncio
+
             raise asyncio.QueueEmpty
         return self.events.pop(0)
-from matmaster.types.messages import (
-    AssistantMessage,
-    LLMResponse,
-    StreamChunk,
-    SystemMessage,
-    ToolCallData,
-    ToolMessage,
-    UserMessage,
-)
-from matmaster.types.runtime import CompactionConfig
+
 
 # ── Fixtures ──────────────────────────────────────────────
 
@@ -371,7 +371,9 @@ class TestEventEmission:
         provider = MockSummaryProvider()
         collector = _EventCollector()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, event_sink=collector.sink)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=collector.sink
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
@@ -391,7 +393,9 @@ class TestEventEmission:
         provider = FailingSummaryProvider()
         collector = _EventCollector()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, event_sink=collector.sink)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=collector.sink
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
@@ -407,7 +411,9 @@ class TestEventEmission:
         )
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, event_sink=None)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=None
+        )
         compactor.update_message_count(len(msgs))
 
         # 应正常执行不抛异常
@@ -428,7 +434,9 @@ class TestMultipleCompactions:
         collector = _EventCollector()
         provider = MockSummaryProvider()
         msgs = _build_conversation(8)
-        compactor = ContextCompactor(config=config, summary_provider=provider, event_sink=collector.sink)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=collector.sink
+        )
         compactor.update_message_count(len(msgs))
 
         # 第一次压缩 at turn=3
@@ -566,7 +574,9 @@ class TestToolTruncationFallback:
             ),
         ]
 
-        compactor = ContextCompactor(config=config, summary_provider=provider, event_sink=collector.sink)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=collector.sink
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)

@@ -112,9 +112,7 @@ class RunEventFanout:
         """
         # 1. Drain all pending persistence tasks
         if self._pending_persistence:
-            await asyncio.gather(
-                *self._pending_persistence, return_exceptions=True
-            )
+            await asyncio.gather(*self._pending_persistence, return_exceptions=True)
 
         # 2. Close all handlers
         all_handlers = [self._sse, *self._extra_handlers, self._persistence]

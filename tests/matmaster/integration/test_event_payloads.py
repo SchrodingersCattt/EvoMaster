@@ -111,47 +111,59 @@ class TestToolResultPayloadMapping:
 
     def test_tool_result_payload_maps_to_info(self) -> None:
         """ESIN-07: ToolResult.payload maps to SSE 'info' field."""
-        result = _public_content_for_event('tool_result', {
-            'call_id': 'call-1',
-            'tool_name': 'bash',
-            'result': 'output text',
-            'status': 'success',
-            'payload': {'exit_code': 0, 'cwd': '/tmp'},
-        })
+        result = _public_content_for_event(
+            'tool_result',
+            {
+                'call_id': 'call-1',
+                'tool_name': 'bash',
+                'result': 'output text',
+                'status': 'success',
+                'payload': {'exit_code': 0, 'cwd': '/tmp'},
+            },
+        )
         assert result['info'] == {'exit_code': 0, 'cwd': '/tmp'}
         assert result['status'] == 'success'
         assert result['name'] == 'bash'
 
     def test_tool_result_none_payload_maps_to_empty_info(self) -> None:
         """ESIN-07: None payload -> empty info dict."""
-        result = _public_content_for_event('tool_result', {
-            'call_id': 'call-2',
-            'tool_name': 'read',
-            'result': 'file content',
-            'status': 'success',
-            'payload': None,
-        })
+        result = _public_content_for_event(
+            'tool_result',
+            {
+                'call_id': 'call-2',
+                'tool_name': 'read',
+                'result': 'file content',
+                'status': 'success',
+                'payload': None,
+            },
+        )
         assert result['info'] == {}
 
     def test_tool_result_missing_payload_maps_to_empty_info(self) -> None:
         """ESIN-07: Missing payload key -> empty info dict."""
-        result = _public_content_for_event('tool_result', {
-            'call_id': 'call-3',
-            'tool_name': 'write',
-            'result': 'written',
-            'status': 'success',
-        })
+        result = _public_content_for_event(
+            'tool_result',
+            {
+                'call_id': 'call-3',
+                'tool_name': 'write',
+                'result': 'written',
+                'status': 'success',
+            },
+        )
         assert result['info'] == {}
 
     def test_tool_result_payload_with_meta_flags(self) -> None:
         """ESIN-07: payload with auto_save/summarize flags preserved in info."""
-        result = _public_content_for_event('tool_result', {
-            'call_id': 'call-4',
-            'tool_name': 'write_file',
-            'result': 'saved',
-            'status': 'success',
-            'payload': {'auto_save': True, 'file': '/tmp/out.txt'},
-        })
+        result = _public_content_for_event(
+            'tool_result',
+            {
+                'call_id': 'call-4',
+                'tool_name': 'write_file',
+                'result': 'saved',
+                'status': 'success',
+                'payload': {'auto_save': True, 'file': '/tmp/out.txt'},
+            },
+        )
         assert result['info']['auto_save'] is True
         assert result['info']['file'] == '/tmp/out.txt'
 
@@ -159,13 +171,16 @@ class TestToolResultPayloadMapping:
         """ESIN-07: ToolResultEvent.model_dump() uses 'info' key, must map correctly."""
         # When ToolResultEvent.model_dump() is used, 'info' key is in the dict
         # (not 'payload'). This tests the generator event path.
-        result = _public_content_for_event('tool_result', {
-            'call_id': 'call-5',
-            'tool_name': 'bash',
-            'result': 'output',
-            'status': 'success',
-            'info': {'exit_code': 0, 'signal': None},
-        })
+        result = _public_content_for_event(
+            'tool_result',
+            {
+                'call_id': 'call-5',
+                'tool_name': 'bash',
+                'result': 'output',
+                'status': 'success',
+                'info': {'exit_code': 0, 'signal': None},
+            },
+        )
         assert result['info'] == {'exit_code': 0, 'signal': None}
 
 

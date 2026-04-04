@@ -18,11 +18,12 @@ import logging
 import time
 from collections import deque
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from typing import TYPE_CHECKING, Any
 
-from matmaster.types.errors import LLMError
 from matmaster.types.cancellation import CancellationToken
+from matmaster.types.errors import LLMError
 from matmaster.types.events import (
     AssistantStateEvent,
     ResponseEvent,
@@ -132,8 +133,12 @@ class AgentKernel:
                     if item.terminal is not None:
                         reason = item.terminal.reason
                         last_reason = reason
-                        status = 'cancelled' if reason == 'cancelled' else (
-                            'failed' if reason == 'invalid_finish' else 'completed'
+                        status = (
+                            'cancelled'
+                            if reason == 'cancelled'
+                            else (
+                                'failed' if reason == 'invalid_finish' else 'completed'
+                            )
                         )
                         yield RunResultEvent(
                             source="agent",
@@ -294,9 +299,8 @@ class AgentKernel:
                 state.last_catalog_version = spec.tool_catalog.version
 
             if state.cached_tool_definitions is None:
-                if (
-                    spec.tool_catalog is not None
-                    and hasattr(spec.tool_catalog, 'build_definitions')
+                if spec.tool_catalog is not None and hasattr(
+                    spec.tool_catalog, 'build_definitions'
                 ):
                     from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 
@@ -348,9 +352,7 @@ class AgentKernel:
                         reasoning_content=response.reasoning_content,
                     )
                 )
-                yield self._terminal(
-                    state, 'natural', final_content=response.content
-                )
+                yield self._terminal(state, 'natural', final_content=response.content)
                 return
 
             assistant_msg = AssistantMessage(
@@ -391,11 +393,13 @@ class AgentKernel:
             )
 
             for tc, tool_result in runner_results:
-                state.messages.append(ToolMessage(
-                    tool_call_id=tc.id,
-                    tool_name=tc.name,
-                    content=tool_result.content,
-                ))
+                state.messages.append(
+                    ToolMessage(
+                        tool_call_id=tc.id,
+                        tool_name=tc.name,
+                        content=tool_result.content,
+                    )
+                )
                 yield _KernelItem(
                     event=ToolResultEvent(
                         source="agent",
@@ -443,8 +447,11 @@ class AgentKernel:
                 # Collect all items to handle incomplete-response retry
                 items: list[_KernelItem] = []
                 async for item in self._stream_llm_items(
-                    spec, api_messages, tool_defs,
-                    timeout=current_timeout, cancel_token=cancel_token,
+                    spec,
+                    api_messages,
+                    tool_defs,
+                    timeout=current_timeout,
+                    cancel_token=cancel_token,
                 ):
                     items.append(item)
                     # Yield event items immediately (streaming)
@@ -460,9 +467,11 @@ class AgentKernel:
                         logger.warning(
                             "LLM returned reasoning without content "
                             "(attempt %d/%d, elapsed=%.1fs), retrying.",
-                            attempt + 1, max_retries, elapsed,
+                            attempt + 1,
+                            max_retries,
+                            elapsed,
                         )
-                        backoff = retry_delay * (2 ** attempt)
+                        backoff = retry_delay * (2**attempt)
                         await self._sleep_backoff_with_cancel(backoff, cancel_token)
                         continue
 
@@ -483,10 +492,15 @@ class AgentKernel:
                     raise
                 last_error = e
                 current_timeout = current_timeout * 2
-                backoff = retry_delay * (2 ** attempt) if attempt < max_retries - 1 else 0.0
+                backoff = (
+                    retry_delay * (2**attempt) if attempt < max_retries - 1 else 0.0
+                )
                 logger.warning(
                     "LLM call failed (attempt %d/%d): %s (backoff=%.1fs)",
-                    attempt + 1, max_retries, e, backoff,
+                    attempt + 1,
+                    max_retries,
+                    e,
+                    backoff,
                 )
                 if attempt < max_retries - 1:
                     await self._sleep_backoff_with_cancel(backoff, cancel_token)

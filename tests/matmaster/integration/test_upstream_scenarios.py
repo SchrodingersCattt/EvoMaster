@@ -10,11 +10,8 @@ reply-queue poll bridge remains intentionally absent.
 
 from __future__ import annotations
 
-import asyncio
-import queue
-import threading
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -269,8 +266,9 @@ def test_confirmation_hook_not_in_hooks_package():
     """ConfirmationHook runtime path must be fully removed (D-03/D-04)."""
     import matmaster.hooks
 
-    assert not hasattr(matmaster.hooks, "ConfirmationHook"), \
-        "ConfirmationHook should not be exported from matmaster.hooks"
+    assert not hasattr(
+        matmaster.hooks, "ConfirmationHook"
+    ), "ConfirmationHook should not be exported from matmaster.hooks"
 
 
 def test_confirmation_hook_module_absent():

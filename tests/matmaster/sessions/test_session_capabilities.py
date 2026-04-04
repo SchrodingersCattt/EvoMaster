@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from matmaster.sessions.local import LocalSession
-from matmaster.types.session import SSHSessionConfig, Session
+from matmaster.types.session import Session, SSHSessionConfig
 from matmaster.types.topology import SessionCapabilities
 
 

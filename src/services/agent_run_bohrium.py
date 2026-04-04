@@ -641,12 +641,16 @@ def _setup_bohrium_for_run(
                 nodes_table.delete_by_node(user_id_for_ak, org_id, project_id, nid)
                 try:
                     node_svc.destroy_node(
-                        access_key, nid, project_id, creator_id=creator_id,
+                        access_key,
+                        nid,
+                        project_id,
+                        creator_id=creator_id,
                     )
                 except Exception as destroy_err:
                     logger.warning(
                         'run_agent: destroy outdated node_id=%s failed: %s',
-                        nid, destroy_err,
+                        nid,
+                        destroy_err,
                     )
 
             if row:

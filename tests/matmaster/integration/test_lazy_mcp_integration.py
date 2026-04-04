@@ -14,8 +14,8 @@ import yaml as _yaml
 
 from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 from matmaster.core.exp import Exp
-from matmaster.tools.tool_result import normalize_tool_result
 from matmaster.tools.tool_registry import ToolRegistry
+from matmaster.tools.tool_result import normalize_tool_result
 from matmaster.types.context import PlaygroundContext
 
 
@@ -374,11 +374,10 @@ class TestLazyMCPTimeoutThreading:
         await _execute_use_skill(registry, skill_name="test-skill")
 
         from matmaster.tools.lazy_mcp import (
-            LazyMCPTool,
             _DEFAULT_MCP_TOOL_TIMEOUT,
+            LazyMCPTool,
         )
 
         lazy = registry._tools['mat_sg_build_bulk']
         assert isinstance(lazy, LazyMCPTool)
         assert lazy._timeout == _DEFAULT_MCP_TOOL_TIMEOUT
-

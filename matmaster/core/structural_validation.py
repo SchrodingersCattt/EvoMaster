@@ -69,10 +69,7 @@ class StructuralValidation:
         if plane not in runtime_topology.active_planes:
             return ToolDecision(
                 decision="deny",
-                reason=(
-                    f"Plane '{plane.value}' is not active "
-                    f"in current topology"
-                ),
+                reason=(f"Plane '{plane.value}' is not active " f"in current topology"),
             )
 
         # 3. Path normalization for workspace-bound tools only.

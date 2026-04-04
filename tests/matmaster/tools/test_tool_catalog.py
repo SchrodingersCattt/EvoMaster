@@ -117,7 +117,9 @@ class TestCatalogGetTool:
 
 
 class TestCatalogBuildDefinitions:
-    def test_build_definitions_without_ctx_uses_compiled_static_description(self) -> None:
+    def test_build_definitions_without_ctx_uses_compiled_static_description(
+        self,
+    ) -> None:
         catalog = _make_catalog(_DynamicTool("alpha"))
 
         defs = catalog.build_definitions()
@@ -168,7 +170,7 @@ class TestCatalogCancelInjection:
 
         catalog.inject_cancel_token(ctrl.token)
 
-        assert getattr(tool, "_cancel_token") is ctrl.token
+        assert tool._cancel_token is ctrl.token
 
 
 class TestCatalogContainer:

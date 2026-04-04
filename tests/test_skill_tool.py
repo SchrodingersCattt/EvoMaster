@@ -45,7 +45,9 @@ def _make_tool(tmp_path: Path, on_skill_hit=None) -> SkillTool:
 
 
 class TestPromptExpansion:
-    async def test_returns_body_with_base_directory_header(self, tmp_path: Path) -> None:
+    async def test_returns_body_with_base_directory_header(
+        self, tmp_path: Path
+    ) -> None:
         skill_dir = _make_skill(tmp_path, "alpha", body="Workflow instructions here.")
         tool = _make_tool(tmp_path)
 

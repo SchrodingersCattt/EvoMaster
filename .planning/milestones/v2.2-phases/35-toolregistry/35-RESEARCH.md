@@ -81,28 +81,28 @@ FullToolRunner 七步链中，Phase 35 改动集中在 Step 4 (Layer B) 和 Step
 # matmaster/core/guard_pipeline.py (新增)
 class ReadBeforeModifyGuard:
     """Enforces read-before-modify for write/edit tools.
-    
+
     Checks GuardContext.read_tracker to verify that target files
     have been read before write/edit operations.
     """
-    
+
     _MODIFY_TOOLS = frozenset({"write_file", "edit_file"})
-    
+
     def evaluate(self, ctx: GuardContext) -> GuardResult:
         if ctx.tool_name not in self._MODIFY_TOOLS:
             return GuardResult(allowed=True)
-        
+
         tracker = ctx.read_tracker
         if tracker is None:
             return GuardResult(allowed=True)  # No tracker = no enforcement
-        
+
         file_path = ctx.tool_args.get("file_path", "")
         if not file_path:
             return GuardResult(allowed=True)  # No path = structural validation's job
-        
+
         import posixpath
         normalized = posixpath.normpath(file_path)
-        
+
         # write_file: only check existing files (new files are always OK)
         # Note: we cannot check path_exists here (no session access).
         # For write_file, the read-tracker check is sufficient:
@@ -114,9 +114,9 @@ class ReadBeforeModifyGuard:
         # This is MORE restrictive than the original (which allowed new files).
         # Solution: for write_file, check if the tool is creating a new file
         # by looking at tool_args or delegating to a different path.
-        # 
+        #
         # CRITICAL DESIGN POINT: See Common Pitfalls section for resolution.
-        
+
         if not tracker.has_been_read(normalized):
             return GuardResult(
                 allowed=False,
@@ -137,19 +137,19 @@ class ReadBeforeModifyGuard:
 class DefaultCapabilityPolicy:
     def evaluate(self, runtime_topology, tool_instance, tool_args):
         spec = tool_instance.tool_spec
-        
+
         # 1. effect_level constraint (existing)
         ...
-        
+
         # 2. Fine-grained capability matching (existing)
         ...
-        
+
         # 3. Phase 2: tool-specific safety checks
         if spec.tool_name == "execute_bash":
             return self._check_bash_safety(tool_args)
-        
+
         return ToolDecision(decision="allow")
-    
+
     def _check_bash_safety(self, tool_args):
         command = tool_args.get("command", "").strip()
         is_dangerous, reason = is_dangerous_bash_command(command)
@@ -252,7 +252,7 @@ def _build_tools(tool_registry=None) -> str:
 
 **Why it happens:** _run_loop() 中直接调用 `spec.tool_registry.execute()`（L323），_run_items() 中有 registry fallback（L500, L688）。_call_llm() 中也有 registry.get_tool_definitions() 调用（L856）。
 
-**How to avoid:** 
+**How to avoid:**
 
 - _run_loop() 中的工具执行必须改走 FullToolRunner（或直接删除 _run_loop，因为 run() 可以通过 _run_items() + 收集模式实现）
 - _run_items() 中的 elif registry fallback（L496-500）删除，只保留 catalog 路径
@@ -326,7 +326,7 @@ class GuardPipeline:
             self._guards.extend(external_guards)
         self._recent_calls: deque[RecentCall] = deque(maxlen=LOOP_WINDOW)
         self._read_tracker = read_tracker  # Injected into GuardContext
-    
+
     def evaluate(self, tool_call, current_turn, max_turns):
         ctx = GuardContext(
             tool_name=tool_call.name,
@@ -346,7 +346,7 @@ class GuardPipeline:
 # matmaster/types/tool_spec.py
 class ToolBinding(BaseModel):
     model_config = ConfigDict(frozen=True)
-    
+
     binding_key: str
     plane: ToolPlane
     resource_claims: tuple[ResourceClaim, ...] = ()
@@ -406,15 +406,15 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
         self._sources: dict[str, str] = {}
-    
+
     def register(self, tool: Tool, *, source: str = "unknown") -> None: ...
-    
+
     @property
     def all_tools(self) -> list[Tool]: ...
-    
+
     def __len__(self) -> int: ...
     def __contains__(self, name: str) -> bool: ...
-    
+
     # DELETED: execute(), get_tool_definitions(), get_tools_by_source()
 ```
 

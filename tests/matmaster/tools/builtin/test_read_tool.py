@@ -1,10 +1,12 @@
 """tests/matmaster/tools/builtin/test_read_tool.py"""
+
 import asyncio
 from unittest.mock import MagicMock
+
 from matmaster.tools.builtin.read_tool import ReadTool
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.tool_spec import ToolExecutionContext
 from matmaster.types.tool_runner_state import ToolRunnerState
+from matmaster.types.tool_spec import ToolExecutionContext
 
 
 def make_session(content="line1\nline2\nline3", is_file=True):
@@ -58,22 +60,30 @@ class TestReadToolExecution:
     def test_ranged_read(self):
         content = "\n".join(f"line {i}" for i in range(100))
         tool = ReadTool(session=make_session(content=content))
-        result = asyncio.run(tool.execute({
-            "file_path": "/workspace/f.py",
-            "offset": 10,
-            "limit": 5,
-        }))
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "file_path": "/workspace/f.py",
+                    "offset": 10,
+                    "limit": 5,
+                }
+            )
+        )
         assert isinstance(result, ToolResult)
         assert result.meta.get("mark_read") is True
 
     def test_ranged_read_marks_read(self):
         content = "\n".join(f"line {i}" for i in range(100))
         tool = ReadTool(session=make_session(content=content))
-        result = asyncio.run(tool.execute({
-            "file_path": "/workspace/f.py",
-            "offset": 0,
-            "limit": 5,
-        }))
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "file_path": "/workspace/f.py",
+                    "offset": 0,
+                    "limit": 5,
+                }
+            )
+        )
         assert isinstance(result, ToolResult)
         assert result.meta.get("mark_read") is True
 
@@ -84,7 +94,5 @@ class TestReadToolRunnerState:
         tool = ReadTool(session=make_session(content=content))
         state = ToolRunnerState()
         ctx = ToolExecutionContext(runner_state=state)
-        asyncio.run(tool.execute_with_context(
-            {"file_path": "/workspace/f.py"}, ctx
-        ))
+        asyncio.run(tool.execute_with_context({"file_path": "/workspace/f.py"}, ctx))
         assert "/workspace/f.py" in state.get("read_files", set())

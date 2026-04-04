@@ -236,6 +236,7 @@ class TestMatMasterE2EPipeline:
         assert len(tool_result_events) >= 1
         assert tool_call_events[0].tool_name == 'echo'
 
+
 class TestMatMasterRunAgentE2E:
     """QUAL-02: run_agent() with mock LLM provider injected."""
 
@@ -698,7 +699,9 @@ class TestMatMasterRunAgentE2E:
             mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
 
             async def _mock_setup(**kwargs):
-                return BohriumSetupResult(False, ((False, reason), 10), None, None, None)
+                return BohriumSetupResult(
+                    False, ((False, reason), 10), None, None, None
+                )
 
             mock_bohrium_svc.run_setup = AsyncMock(side_effect=_mock_setup)
             mock_bohrium_svc.run_cleanup = AsyncMock()
