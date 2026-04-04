@@ -1,9 +1,4 @@
-"""Lazy MCP tool loading -- placeholder tools + on-demand connector.
-
-LazyMCPTool satisfies the matmaster Tool Protocol using cached schemas.
-On first execute(), it connects to the MCP server via LazyMCPConnector,
-then calls MCPConnection.call_tool directly (no MCPTool intermediate layer).
-"""
+"""Lazy MCP tool loading via per-server owner-task routing."""
 
 from __future__ import annotations
 
@@ -40,14 +35,7 @@ def _parse_claims(raw_claims: Any) -> tuple[ResourceClaim, ...]:
 
 
 class LazyMCPTool:
-    """Placeholder MCP tool -- holds cached schema, connects on first execute.
-
-    Implements matmaster Tool Protocol (name, description, json_schema, execute).
-    Can be registered directly into ToolRegistry.
-
-    On first execute(), obtains an MCPConnection from LazyMCPConnector and
-    calls MCPConnection.call_tool directly -- no MCPTool intermediate layer.
-    """
+    """Placeholder MCP tool that delegates runtime work to LazyMCPConnector."""
 
     def __init__(
         self,
@@ -66,8 +54,6 @@ class LazyMCPTool:
         self._server_name = server_name
         self._remote_tool_name = remote_tool_name
         self._connector = connector
-        self._connection: Any | None = None
-        self._path_adaptor: Any | None = None
 
         meta = runtime_meta or {}
         self._plane = (
@@ -145,17 +131,12 @@ class LazyMCPTool:
         return self._exposed_to_model
 
     async def _do_call(self, arguments: dict[str, Any]) -> ToolResult:
-        """Raw MCP call: connect + resolve args + call_tool + format."""
-        if self._connection is None:
-            conn_info = await self._connector.ensure_connection(self._server_name)
-            self._connection = conn_info["connection"]
-            self._path_adaptor = conn_info.get("path_adaptor")
-
-        # path_adaptor resolve (if configured for this server)
+        """Raw MCP call: resolve args + actor-routed call_tool + format."""
         resolved_args = arguments
-        if self._path_adaptor:
+        path_adaptor = await self._connector.get_path_adaptor(self._server_name)
+        if path_adaptor:
             try:
-                resolved_args = self._path_adaptor.resolve_args(
+                resolved_args = path_adaptor.resolve_args(
                     workspace_path=self._connector.workspace_path,
                     args=arguments,
                     tool_name=self._name,
@@ -168,8 +149,10 @@ class LazyMCPTool:
                 logger.warning("path_adaptor resolve_args failed: %s", e)
 
         try:
-            result_content = await self._connection.call_tool(
-                self._remote_tool_name, resolved_args
+            result_content = await self._connector.call_tool(
+                self._server_name,
+                self._remote_tool_name,
+                resolved_args,
             )
             content = self._format_result(result_content)
             return ToolResult(status="success", content=content)
@@ -348,7 +331,7 @@ class LazyMCPConnector:
 
     Creates a background asyncio event loop thread on first connect.
     Applies domain-specific config via configure_mcp_manager().
-    Returns MCPConnection instances directly (not MCPTool).
+    Routes requests to per-server owner tasks on that loop.
     """
 
     def __init__(
@@ -364,6 +347,8 @@ class LazyMCPConnector:
         self._manager: Any | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._loop_thread: threading.Thread | None = None
+        self._path_adaptors: dict[str, Any] = {}
+        self._closing = False
         self.session = session
         self.workspace_path = workspace_path
         configured_connect_timeout = (
@@ -403,45 +388,73 @@ class LazyMCPConnector:
         )
         return self._manager
 
-    async def ensure_connection(self, server_name: str) -> dict[str, Any]:
-        """Ensure MCP server is connected and return connection info.
-
-        Returns a dict with:
-            - "connection": MCPConnection instance for call_tool
-            - "path_adaptor": CalculationPathAdaptor or None
-
-        Connects on first call for a given server_name, reuses after.
-        """
+    async def _await_on_manager_loop(
+        self,
+        coro: Any,
+        *,
+        timeout: float | None = None,
+    ) -> Any:
         manager = self._ensure_manager()
+        fut = asyncio.run_coroutine_threadsafe(coro, manager.loop)
+        wrapped = asyncio.wrap_future(fut)
+        wrapped = asyncio.shield(wrapped)
+        if timeout is not None:
+            return await asyncio.wait_for(wrapped, timeout=timeout)
+        return await wrapped
 
-        if server_name not in manager.connections:
-            server_cfg = self._server_config.get(server_name)
-            if not server_cfg:
-                raise ValueError(f"MCP server '{server_name}' not in config")
-            fut = asyncio.run_coroutine_threadsafe(
-                manager.add_server(name=server_name, **server_cfg),
-                manager.loop,
-            )
-            wrapped = asyncio.wrap_future(fut)
-            try:
-                await asyncio.wait_for(wrapped, timeout=self._connect_timeout)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
-                fut.cancel()
-                raise
+    async def ensure_actor(self, server_name: str) -> None:
+        if self._closing:
+            raise RuntimeError("LazyMCPConnector is closing")
 
-        conn = manager.connections[server_name]
+        manager = self._ensure_manager()
+        if server_name in manager.connections:
+            return
 
-        # Check if this server needs a path_adaptor
-        path_adaptor = None
-        if manager.path_adaptor_factory and server_name in manager.path_adaptor_servers:
-            path_adaptor = manager.path_adaptor_factory()
+        server_cfg = self._server_config.get(server_name)
+        if not server_cfg:
+            raise ValueError(f"MCP server '{server_name}' not in config")
 
-        return {"connection": conn, "path_adaptor": path_adaptor}
+        await self._await_on_manager_loop(
+            manager.add_server(name=server_name, **server_cfg),
+            timeout=self._connect_timeout,
+        )
+
+    async def get_path_adaptor(self, server_name: str) -> Any | None:
+        manager = self._ensure_manager()
+        if not (
+            manager.path_adaptor_factory and server_name in manager.path_adaptor_servers
+        ):
+            return None
+
+        if server_name not in self._path_adaptors:
+            self._path_adaptors[server_name] = manager.path_adaptor_factory()
+        return self._path_adaptors[server_name]
+
+    async def call_tool(
+        self,
+        server_name: str,
+        remote_tool_name: str,
+        arguments: dict[str, Any],
+    ) -> list[Any]:
+        if self._closing:
+            raise RuntimeError("LazyMCPConnector is closing")
+
+        await self.ensure_actor(server_name)
+        manager = self._ensure_manager()
+        return await self._await_on_manager_loop(
+            manager.call_tool(server_name, remote_tool_name, arguments)
+        )
+
+    async def ensure_connection(self, server_name: str) -> dict[str, Any]:
+        """Compatibility shim for legacy tests; avoid exposing raw connection use."""
+        await self.ensure_actor(server_name)
+        path_adaptor = await self.get_path_adaptor(server_name)
+        return {"path_adaptor": path_adaptor}
 
     def connect_and_get_tool(self, server_name: str, remote_tool_name: str) -> Any:
         """Legacy sync method -- kept for backward compatibility.
 
-        Prefer ensure_connection() for the new async direct-call path.
+        Prefer call_tool() for the new async runtime path.
         """
         manager = self._ensure_manager()
 
@@ -459,6 +472,7 @@ class LazyMCPConnector:
 
     async def cleanup(self) -> None:
         try:
+            self._closing = True
             if self._manager and self._loop and not self._loop.is_closed():
                 try:
                     fut = asyncio.run_coroutine_threadsafe(
@@ -476,6 +490,8 @@ class LazyMCPConnector:
                 self._loop.call_soon_threadsafe(self._loop.stop)
             if self._loop_thread:
                 self._loop_thread.join(timeout=_MCP_LOOP_JOIN_TIMEOUT)
+            self._path_adaptors.clear()
             self._manager = None
             self._loop = None
             self._loop_thread = None
+            self._closing = False

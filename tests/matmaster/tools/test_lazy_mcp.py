@@ -24,19 +24,28 @@ from matmaster.types.topology import ToolPlane
 
 
 class FakeConnector:
-    """Fake LazyMCPConnector for testing the new direct-call architecture."""
+    """Fake LazyMCPConnector for actor-routed tool tests."""
 
     def __init__(self, path_adaptor=None, *, session=None):
         self.workspace_path = "/fake/workspace"
         self.session = session
-        self.ensure_calls: list[str] = []
-        self._mock_conn = AsyncMock()
-        self._mock_conn.call_tool.return_value = [MagicMock(text="result_text")]
         self._path_adaptor = path_adaptor
+        self.path_adaptor_calls: list[str] = []
+        self.call_tool_calls: list[tuple[str, str, dict]] = []
+        self._call_tool = AsyncMock(return_value=[MagicMock(text="result_text")])
 
-    async def ensure_connection(self, server_name: str) -> dict:
-        self.ensure_calls.append(server_name)
-        return {"connection": self._mock_conn, "path_adaptor": self._path_adaptor}
+    async def get_path_adaptor(self, server_name: str):
+        self.path_adaptor_calls.append(server_name)
+        return self._path_adaptor
+
+    async def call_tool(
+        self,
+        server_name: str,
+        remote_tool_name: str,
+        arguments: dict,
+    ) -> list:
+        self.call_tool_calls.append((server_name, remote_tool_name, arguments))
+        return await self._call_tool(server_name, remote_tool_name, arguments)
 
 
 class SlowConnector(FakeConnector):
@@ -48,7 +57,7 @@ class SlowConnector(FakeConnector):
         async def _sleep_forever(*_args, **_kwargs):
             await asyncio.sleep(9999)
 
-        self._mock_conn.call_tool = AsyncMock(side_effect=_sleep_forever)
+        self._call_tool = AsyncMock(side_effect=_sleep_forever)
 
 
 class TestLazyMCPToolProtocol:
@@ -135,10 +144,9 @@ class TestLazyMCPToolExecution:
             connector=connector,
         )
         await tool.execute({"param": "value"})
-        assert len(connector.ensure_calls) == 1
-        assert connector.ensure_calls[0] == "mat_sg"
-        connector._mock_conn.call_tool.assert_called_once_with(
-            "build_bulk", {"param": "value"}
+        assert connector.path_adaptor_calls == ["mat_sg"]
+        connector._call_tool.assert_awaited_once_with(
+            "mat_sg", "build_bulk", {"param": "value"}
         )
 
     async def test_second_execute_reuses_connection(self):
@@ -153,14 +161,12 @@ class TestLazyMCPToolExecution:
         )
         await tool.execute({"a": "1"})
         await tool.execute({"a": "2"})
-        # Only connected once
-        assert len(connector.ensure_calls) == 1
-        # But called tool twice
-        assert connector._mock_conn.call_tool.call_count == 2
+        assert "_connection" not in tool.__dict__
+        assert connector._call_tool.await_count == 2
 
     async def test_execute_returns_string_content(self):
         connector = FakeConnector()
-        connector._mock_conn.call_tool.return_value = [MagicMock(text="hello world")]
+        connector._call_tool.return_value = [MagicMock(text="hello world")]
         tool = LazyMCPTool(
             server_name="s",
             tool_name="s_t",
@@ -176,7 +182,7 @@ class TestLazyMCPToolExecution:
 
     async def test_execute_returns_json_content(self):
         connector = FakeConnector()
-        connector._mock_conn.call_tool.return_value = [MagicMock(text='{"key": "val"}')]
+        connector._call_tool.return_value = [MagicMock(text='{"key": "val"}')]
         tool = LazyMCPTool(
             server_name="s",
             tool_name="s_t",
@@ -191,7 +197,7 @@ class TestLazyMCPToolExecution:
     async def test_execute_error_from_call_tool(self):
         """MCPConnection.call_tool raises RuntimeError on isError=True."""
         connector = FakeConnector()
-        connector._mock_conn.call_tool.side_effect = RuntimeError("remote failure")
+        connector._call_tool.side_effect = RuntimeError("remote failure")
         tool = LazyMCPTool(
             server_name="s",
             tool_name="s_t",
@@ -475,9 +481,8 @@ class TestLazyMCPToolPathAdaptor:
         )
         await tool.execute({"input": "/local/file"})
         mock_adaptor.resolve_args.assert_called_once()
-        # call_tool should receive resolved args
-        connector._mock_conn.call_tool.assert_called_once_with(
-            "run", {"resolved": "path"}
+        connector._call_tool.assert_awaited_once_with(
+            "mat_sg", "run", {"resolved": "path"}
         )
 
     async def test_path_adaptor_receives_connector_session(self):
@@ -512,8 +517,9 @@ class TestLazyMCPToolPathAdaptor:
         )
         original_args = {"input": "/local/file"}
         await tool.execute(original_args)
-        # Should fall back to original args
-        connector._mock_conn.call_tool.assert_called_once_with("run", original_args)
+        connector._call_tool.assert_awaited_once_with(
+            "mat_sg", "run", original_args
+        )
 
     async def test_no_path_adaptor_passes_args_directly(self):
         connector = FakeConnector(path_adaptor=None)
@@ -527,7 +533,7 @@ class TestLazyMCPToolPathAdaptor:
         )
         args = {"param": "value"}
         await tool.execute(args)
-        connector._mock_conn.call_tool.assert_called_once_with("t", args)
+        connector._call_tool.assert_awaited_once_with("s", "t", args)
 
 
 class FakeMCPManager:

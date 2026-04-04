@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from .connection import MCP_CONNECT_TIMEOUT, MCPConnection, create_connection
@@ -31,6 +32,19 @@ _PER_CONN_SHUTDOWN_TIMEOUT = 1.0
 _RETRY_DELAY = 2
 
 
+@dataclass
+class _StartupState:
+    connection: MCPConnection
+    tools_info: list[dict[str, Any]]
+
+
+@dataclass
+class _CallToolRequest:
+    tool_name: str
+    arguments: dict[str, Any]
+    result: asyncio.Future[Any]
+
+
 class _ManagedConn:
     """Hold an MCPConnection context in a single long-lived Task.
 
@@ -39,33 +53,76 @@ class _ManagedConn:
     __aenter__ in one call and __aexit__ in another triggers RuntimeError.
 
     _ManagedConn solves this by running ``async with conn_ctx`` in one
-    persistent Task.  ``add_server`` awaits the ready future to get the
-    connection; ``cleanup`` sets the shutdown event which causes the
-    ``async with`` to exit -- both in the same Task.
+    persistent Task. Startup (`list_tools`), request handling (`call_tool`),
+    and shutdown all stay inside that same Task.
     """
 
     def __init__(self, conn_ctx: MCPConnection) -> None:
         self._conn_ctx = conn_ctx
-        self._shutdown = asyncio.Event()
-        self._ready: asyncio.Future[MCPConnection] = (
+        self._ready: asyncio.Future[_StartupState] = (
             asyncio.get_running_loop().create_future()
         )
+        self._requests: asyncio.Queue[_CallToolRequest | None] = asyncio.Queue()
+        self._closed = False
         self._task = asyncio.create_task(self._run())
 
     async def _run(self) -> None:
         try:
             async with self._conn_ctx as conn:
-                self._ready.set_result(conn)
-                await self._shutdown.wait()
+                tools_info = await asyncio.wait_for(
+                    conn.list_tools(), timeout=MCP_CONNECT_TIMEOUT
+                )
+                self._ready.set_result(
+                    _StartupState(connection=conn, tools_info=tools_info)
+                )
+
+                while True:
+                    request = await self._requests.get()
+                    if request is None:
+                        return
+
+                    try:
+                        result = await conn.call_tool(
+                            request.tool_name, request.arguments
+                        )
+                    except Exception as exc:
+                        if not request.result.done():
+                            request.result.set_exception(exc)
+                    else:
+                        if not request.result.done():
+                            request.result.set_result(result)
         except BaseException as exc:
             if not self._ready.done():
                 self._ready.set_exception(exc)
+            else:
+                while not self._requests.empty():
+                    request = self._requests.get_nowait()
+                    if request is not None and not request.result.done():
+                        request.result.set_exception(exc)
+        finally:
+            self._closed = True
 
-    async def wait_ready(self, timeout: float) -> MCPConnection:
+    async def wait_ready(self, timeout: float) -> _StartupState:
         return await asyncio.wait_for(self._ready, timeout=timeout)
 
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        if self._closed:
+            raise RuntimeError("MCP connection is closed")
+
+        loop = asyncio.get_running_loop()
+        result: asyncio.Future[Any] = loop.create_future()
+        await self._requests.put(
+            _CallToolRequest(
+                tool_name=tool_name,
+                arguments=arguments,
+                result=result,
+            )
+        )
+        return await result
+
     async def close(self, timeout: float) -> None:
-        self._shutdown.set()
+        if not self._task.done():
+            await self._requests.put(None)
         try:
             await asyncio.wait_for(self._task, timeout=timeout)
         except asyncio.TimeoutError:
@@ -105,6 +162,9 @@ class MCPToolManager:
         # Long-lived managed connections (enter/exit in same Task)
         self._managed: dict[str, _ManagedConn] = {}
 
+        # In-flight startup tasks keyed by server.
+        self._startup_tasks: dict[str, asyncio.Task[None]] = {}
+
         # 需要 path adaptor 的 server 集合
         self.path_adaptor_servers: set[str] = set()
 
@@ -124,6 +184,7 @@ class MCPToolManager:
 
         # 全局去重追踪（同名 tool 只保留第一个 server 的）
         self._seen_tools: set[str] = set()
+        self._closing = False
 
     async def add_server(
         self, name: str, transport: str, **connection_kwargs: Any
@@ -138,8 +199,29 @@ class MCPToolManager:
             transport: 传输方式（stdio/sse/http）
             **connection_kwargs: 传递给 create_connection 的参数
         """
+        if self._closing:
+            raise RuntimeError("MCP manager is closing")
         if name in self.connections:
-            raise ValueError(f"MCP server '{name}' already exists")
+            return
+
+        startup = self._startup_tasks.get(name)
+        if startup is None:
+            startup = asyncio.create_task(
+                self._add_server_once(name, transport, **connection_kwargs)
+            )
+            self._startup_tasks[name] = startup
+
+        try:
+            await startup
+        finally:
+            if self._startup_tasks.get(name) is startup and startup.done():
+                self._startup_tasks.pop(name, None)
+
+    async def _add_server_once(
+        self, name: str, transport: str, **connection_kwargs: Any
+    ) -> None:
+        if name in self.connections:
+            return
 
         logger.info("Adding MCP server: %s (%s)", name, transport)
 
@@ -162,35 +244,38 @@ class MCPToolManager:
         for attempt in range(1, _MAX_RETRIES + 1):
             managed: _ManagedConn | None = None
             try:
+                if self._closing:
+                    raise RuntimeError("MCP manager is closing")
+
                 conn_ctx = create_connection(transport=transport, **connection_kwargs)
                 managed = _ManagedConn(conn_ctx)
-
-                # 带超时的连接（__aenter__ 在 managed task 内执行）
-                conn = await managed.wait_ready(timeout=MCP_CONNECT_TIMEOUT)
-
-                # 带超时的 list_tools
-                try:
-                    tools_info = await asyncio.wait_for(
-                        conn.list_tools(),
-                        timeout=MCP_CONNECT_TIMEOUT,
-                    )
-                except Exception:
-                    await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
-                    raise
-
-                # 连接成功
-                self.connections[name] = conn
                 self._managed[name] = managed
 
+                # 带超时的连接与 list_tools（均在 managed owner task 内执行）
+                startup = await managed.wait_ready(timeout=MCP_CONNECT_TIMEOUT)
+
+                # 连接成功
+                self.connections[name] = startup.connection
+
                 logger.info(
-                    "Found %d tools from MCP server '%s'", len(tools_info), name
+                    "Found %d tools from MCP server '%s'",
+                    len(startup.tools_info),
+                    name,
                 )
-                self._build_tools(name, conn, tools_info)
+                self._build_tools(name, startup.connection, startup.tools_info)
                 logger.info("Successfully added MCP server '%s'", name)
                 return
 
+            except asyncio.CancelledError:
+                if managed is not None:
+                    await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
+                    self._managed.pop(name, None)
+                raise
             except _retry_exc as e:
                 last_error = e
+                if managed is not None:
+                    await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
+                    self._managed.pop(name, None)
                 if attempt < _MAX_RETRIES:
                     logger.warning(
                         "MCP server '%s' connection failed (attempt %d/%d), "
@@ -209,11 +294,29 @@ class MCPToolManager:
                         _MAX_RETRIES,
                         e,
                     )
+            except Exception:
+                if managed is not None:
+                    await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
+                    self._managed.pop(name, None)
+                raise
 
         # 所有重试失败
         raise RuntimeError(
             f"Failed to connect MCP server '{name}' after {_MAX_RETRIES} attempts"
         ) from last_error
+
+    async def call_tool(
+        self, server_name: str, remote_tool_name: str, arguments: dict[str, Any]
+    ) -> Any:
+        startup = self._startup_tasks.get(server_name)
+        if startup is not None:
+            await startup
+
+        managed = self._managed.get(server_name)
+        if managed is None:
+            raise ValueError(f"MCP server '{server_name}' is not connected")
+
+        return await managed.call_tool(remote_tool_name, arguments)
 
     def _build_tools(
         self,
@@ -353,6 +456,11 @@ class MCPToolManager:
         每个连接有独立的 shutdown budget。
         """
         logger.info("Cleaning up MCP connections")
+        self._closing = True
+
+        startup_tasks = list(self._startup_tasks.values())
+        for task in startup_tasks:
+            task.cancel()
 
         for name, managed in list(self._managed.items()):
             try:
@@ -361,9 +469,13 @@ class MCPToolManager:
             except Exception as e:
                 logger.warning("Error closing MCP connection '%s': %s", name, e)
 
+        if startup_tasks:
+            await asyncio.gather(*startup_tasks, return_exceptions=True)
+
         self.connections.clear()
         self.tools_by_server.clear()
         self._managed.clear()
+        self._startup_tasks.clear()
         self._seen_tools.clear()
 
         logger.info("MCP cleanup complete")
