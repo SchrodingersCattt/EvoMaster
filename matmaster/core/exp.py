@@ -188,7 +188,7 @@ class Exp:
             planes |= {ToolPlane.SESSION_SHELL, ToolPlane.SESSION_FS}
         if skills_enabled or any(
             name in builtin_cfg or "*" in builtin_cfg
-            for name in ("WebSearch", "WebFetch", "mm_web_search", "web_fetch", "monitor_job")
+            for name in ("WebSearch", "WebFetch", "mm_web_search", "web_fetch")
         ):
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
@@ -539,9 +539,9 @@ class Exp:
         from pathlib import Path
 
         from matmaster.skills.registry import SkillRegistry
+        from matmaster.tools.builtin.skill_tool import SkillTool
         from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
         from matmaster.tools.schema_cache import ToolSchemaCache
-        from matmaster.tools.skill_tool import SkillTool
 
         # Build root list from str | list[str]
         roots_raw = skills_cfg.skills_root
@@ -635,7 +635,10 @@ class Exp:
                 else:
                     registry.register(lazy_tool, source='mcp')
 
-        skill_tool = SkillTool(skill_registry, on_skill_hit=on_skill_hit)
+        skill_tool = SkillTool(
+            skill_registry=skill_registry,
+            on_skill_hit=on_skill_hit,
+        )
         registry.register(skill_tool, source='skill')
 
         self._skill_registry = skill_registry

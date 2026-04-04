@@ -68,8 +68,12 @@ class TestExpInitSkillTools:
 
         exp._init_skill_tools(ctx, registry)
 
-        # use_skill tool should be registered
-        assert "use_skill" in registry
+        assert "Skill" in registry
+
+        from matmaster.tools.builtin.skill_tool import SkillTool as BuiltinSkillTool
+
+        skill_tool = registry._tools["Skill"]
+        assert isinstance(skill_tool, BuiltinSkillTool)
 
     def test_skill_tools_skipped_when_disabled(self, tmp_path):
         cfg = ExpConfig.model_validate(
@@ -84,7 +88,7 @@ class TestExpInitSkillTools:
 
         exp._init_skill_tools(ctx, registry)
 
-        assert "use_skill" not in registry
+        assert "Skill" not in registry
 
     async def test_skill_trigger_injects_lazy_tools(self, tmp_path):
         """Simulating skill hit triggers lazy MCP tool injection."""
@@ -116,13 +120,14 @@ class TestExpInitSkillTools:
         # Before skill trigger: no MCP tools
         assert "mat_sg_build_bulk" not in registry
 
-        # Trigger via use_skill (execute tool directly from registry storage)
+        assert "Skill" in registry
+        skill_tool = registry._tools["Skill"]
+
         from matmaster.tools.tool_result import normalize_tool_result
 
-        skill_tool = registry._tools["use_skill"]
-        raw_result = await skill_tool.execute({"skill_name": "test-skill"})
+        raw_result = await skill_tool.execute({"skill": "test-skill"})
         result = normalize_tool_result(raw_result)
-        assert result.status == "success", f"use_skill failed: {result.content}"
+        assert result.status == "success"
 
         # After skill trigger: mat_sg tools should be injected
         assert "mat_sg_build_bulk" in registry

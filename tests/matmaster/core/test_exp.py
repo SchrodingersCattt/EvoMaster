@@ -168,7 +168,7 @@ class TestExpBuildRuntime:
         exp = Exp(
             ExpConfig(
                 name="test",
-                tools=ExpToolsConfig(builtin=["read_file"]),
+                tools=ExpToolsConfig(builtin=["Read"]),
             )
         )
         ctx = PlaygroundContext(
@@ -197,7 +197,7 @@ class TestExpBuildRuntime:
             ExpConfig(
                 name="test",
                 system_prompt="Base persona text.",
-                tools=ExpToolsConfig(builtin=["execute_bash"]),
+                tools=ExpToolsConfig(builtin=["Bash"]),
             )
         )
         ctx = PlaygroundContext(
@@ -213,7 +213,7 @@ class TestExpBuildRuntime:
             runtime = await exp.build_runtime(ctx)
 
         assert "Base persona text." in runtime.spec.system_prompt
-        assert "Do not use bash for:" in runtime.spec.system_prompt
+        assert "Avoid using this tool to run" in runtime.spec.system_prompt
 
 
 # ── TestExpCleanup ───────────────────────────────────────
@@ -313,7 +313,7 @@ class TestSystemPromptOverride:
 
 
 class TestExpBuiltinTools:
-    """_init_builtin_tools native registration: 15 builtin tools (no evo adapter)."""
+    """_init_builtin_tools CC-name registration: 9 builtin tools."""
 
     def _make_ctx_with_session(self, tmp_path: Path) -> PlaygroundContext:
         """Create PlaygroundContext with a mock session for builtin tool tests."""
@@ -334,27 +334,23 @@ class TestExpBuiltinTools:
         return exp, registry
 
     def test_native_tools_count(self, tmp_path: Path) -> None:
-        """15 native tools registered with source='builtin' (includes MonitorJobTool)."""
+        """9 native tools registered with source='builtin' (CC names)."""
         _, registry = self._build_registry(tmp_path)
-        # All tools registered in this test context are builtin source
-        assert len(registry) == 15
+        assert len(registry) == 9
 
     def test_native_tool_names(self, tmp_path: Path) -> None:
-        """All 12 expected native tool names are present in registry."""
+        """All 9 expected CC-name tools are present in registry."""
         _, registry = self._build_registry(tmp_path)
         expected_native = {
-            'execute_bash',
-            'list_dir',
-            'read_file',
-            'write_file',
-            'edit_file',
-            'glob',
-            'grep',
-            'task_create',
-            'task_get',
-            'task_list',
-            'task_update',
-            'task_complete',
+            'Bash',
+            'Read',
+            'Write',
+            'Edit',
+            'Glob',
+            'Grep',
+            'TodoWrite',
+            'WebSearch',
+            'WebFetch',
         }
         for name in expected_native:
             assert name in registry, f"Expected tool '{name}' not found in registry"
@@ -363,7 +359,6 @@ class TestExpBuiltinTools:
         """No evo adapter tools remain (EvoToolAdapter eliminated).
         All tools are native builtins; no 'builtin_evo' source exists."""
         _, registry = self._build_registry(tmp_path)
-        # Verify no tool names suggest evo adapter patterns
         for tool in registry.all_tools:
             assert 'evo' not in tool.name.lower(), f"Unexpected evo tool: {tool.name}"
 
@@ -372,20 +367,15 @@ class TestExpBuiltinTools:
         _, registry = self._build_registry(tmp_path)
         assert 'str_replace_editor' not in registry
 
-    def test_monitor_job_is_native_builtin(self, tmp_path: Path) -> None:
-        """MonitorJobTool is registered as native builtin."""
-        _, registry = self._build_registry(tmp_path)
-        assert 'monitor_job' in registry
-
     def test_total_count(self, tmp_path: Path) -> None:
-        """Total tools = 15 native builtin (no evo adapters)."""
+        """Total tools = 9 native builtin (CC names, no legacy tools)."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 15
+        assert len(registry) == 9
 
     def test_web_search_is_native_builtin(self, tmp_path: Path) -> None:
-        """WebSearchTool is registered as native builtin (not evo adapter)."""
+        """WebSearchTool is registered as native builtin with CC name."""
         _, registry = self._build_registry(tmp_path)
-        assert 'mm_web_search' in registry
+        assert 'WebSearch' in registry
 
     def test_init_builtin_tools_no_session(self, tmp_path: Path) -> None:
         """session=None registers only sessionless tools (TodoWrite, WebSearch, WebFetch)."""
@@ -411,7 +401,7 @@ class TestExpBuiltinTools:
         exp = Exp(
             ExpConfig(
                 name='test',
-                tools=ExpToolsConfig(builtin=['execute_bash', 'read_file']),
+                tools=ExpToolsConfig(builtin=['Bash', 'Read']),
             )
         )
         ctx = self._make_ctx_with_session(tmp_path)
@@ -420,7 +410,7 @@ class TestExpBuiltinTools:
             runtime = await exp.build_runtime(ctx)
 
         registered_names = {t.name for t in runtime.spec.tool_catalog.registry.all_tools}
-        assert registered_names == {'execute_bash', 'read_file'}
+        assert registered_names == {'Bash', 'Read'}
 
     async def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
         """Empty builtin list skips _init_builtin_tools entirely."""
@@ -473,53 +463,31 @@ class TestExecutionWorkdirBinding:
         exp._init_builtin_tools(ctx, registry, ['*'])
         by_name = {t.name: t for t in registry.all_tools}
         for name in (
-            'execute_bash',
-            'list_dir',
-            'read_file',
-            'write_file',
-            'edit_file',
-            'glob',
-            'grep',
+            'Bash',
+            'Read',
+            'Write',
+            'Edit',
+            'Glob',
+            'Grep',
         ):
             assert by_name[name]._workdir == execution, name
 
-    def test_task_tools_use_local_workdir(self, tmp_path: Path) -> None:
-        from matmaster.tools.tool_registry import ToolRegistry
+    async def test_agent_tool_uses_execution_workdir(self, tmp_path: Path) -> None:
+        from matmaster.tools.builtin.agent_tool import AgentTool
 
         control = tmp_path / 'control'
         execution = tmp_path / 'execution'
         control.mkdir()
         execution.mkdir()
         ctx = self._ctx(tmp_path, control=control, execution=execution)
-        exp = Exp(ExpConfig(name='test'))
-        registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry, ['*'])
-        by_name = {t.name: t for t in registry.all_tools}
-        for name in (
-            'task_create',
-            'task_get',
-            'task_list',
-            'task_update',
-            'task_complete',
-        ):
-            assert by_name[name]._workdir == control, name
-
-    async def test_spawn_tool_uses_execution_workdir(self, tmp_path: Path) -> None:
-        from matmaster.tools.builtin.spawn_tool import SpawnTool
-
-        control = tmp_path / 'control'
-        execution = tmp_path / 'execution'
-        control.mkdir()
-        execution.mkdir()
-        ctx = self._ctx(tmp_path, control=control, execution=execution)
-        exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=["*"])))
+        exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=["Agent"])))
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
-        subs = [
-            t for t in runtime.spec.tool_catalog.registry.all_tools if isinstance(t, SpawnTool)
+        agents = [
+            t for t in runtime.spec.tool_catalog.registry.all_tools if isinstance(t, AgentTool)
         ]
-        assert len(subs) == 1
-        assert subs[0]._workdir == execution
+        assert len(agents) == 1
+        assert agents[0]._workdir == execution
 
 
 class TestExpCompaction:
@@ -577,6 +545,33 @@ async def test_build_runtime_registers_todowrite_without_session(tmp_path: Path)
         runtime = await exp.build_runtime(ctx)
 
     assert runtime.spec.tool_catalog.get_tool("TodoWrite") is not None
+
+
+# ── TestAgentRegistration ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_registers_agent_by_cc_name(tmp_path: Path) -> None:
+    """Agent registers with CC name when enabled in builtin config."""
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["Agent"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=MagicMock(spec=Session),
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    assert runtime.spec.tool_catalog.get_tool("Agent") is not None
 
 
 # ── TestSpawnGuard ─────────────────────────────────────
