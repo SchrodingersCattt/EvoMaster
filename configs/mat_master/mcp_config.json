@@ -3,47 +3,47 @@
     "mat_compdart": {
       "headers": {},
       "transport": "http",
-      "url": "https://dart-uuid1754393230.appspace.bohrium.com/mcp?token=b3a955c99823427683843616328023d8"
+      "url": "${MAT_COMPDART_MCP_URL}"
     },
     "mat_doc": {
       "headers": {},
       "transport": "http",
-      "url": "http://pfmx1355864.bohrium.tech:50001/mcp"
+      "url": "${MAT_DOC_MCP_URL}"
     },
     "mat_dpa": {
       "headers": {},
       "transport": "http",
-      "url": "https://dpa-uuid1750659890.appspace.bohrium.com/mcp?token=b2b94c52d10141e992514f9d17bcca23"
+      "url": "${MAT_DPA_MCP_URL}"
     },
     "mat_electron_microscope": {
       "headers": {},
       "transport": "sse",
-      "url": "http://root@pkfz1410356.bohrium.tech:50002/sse"
+      "url": "${MAT_ELECTRON_MICROSCOPE_MCP_URL}"
     },
     "mat_nmr": {
       "headers": {},
       "transport": "sse",
-      "url": "https://nmr-server-matmaster-uuid1764741165.appspace.bohrium.com/sse?token=1467bc01801642c09273966fcd04e3a6"
+      "url": "${MAT_NMR_MCP_URL}"
     },
     "mat_sg": {
       "headers": {},
       "transport": "http",
-      "url": "https://structure-generator-uuid1767674194.appspace.bohrium.com/mcp?token=a297dc122dc74368af3d2e725991d559"
+      "url": "${MAT_SG_MCP_URL}"
     },
     "mat_sn": {
       "headers": {},
       "transport": "sse",
-      "url": "http://bohrium-mcp-internal.dp.tech:11003/sse"
+      "url": "${MAT_SN_MCP_URL}"
     },
     "mat_struct_db": {
       "headers": {},
       "transport": "http",
-      "url": "https://mrdice-uuid1772180309.appspace.bohrium.com/mcp?token=a0d973885b6441eca858e165e90ae9c7"
+      "url": "${MAT_STRUCT_DB_MCP_URL}"
     },
     "mat_xrd": {
       "headers": {},
       "transport": "sse",
-      "url": "http://root@pkfz1410356.bohrium.tech:50001/sse"
+      "url": "${MAT_XRD_MCP_URL}"
     }
   }
 }

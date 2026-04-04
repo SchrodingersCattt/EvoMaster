@@ -1,7 +1,7 @@
 [project]
-name = "matmaster-evo"
+name = "evomaster"
 version = "0.1.0"
-description = "The Universal Infrastructure for Building Evolving Autonomous Scientific Research Agents"
+description = "Lightweight open-source scientific research agent framework for alloy design: literature search, composition optimization (DART), computational materials, and writing."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -13,35 +13,31 @@ dependencies = [
     "google-genai",
     "mcp",
     "python-dotenv",
-    # Calculation path adaptor (mat_master) needs OSS upload for local file -> URL
+    # Calculation path adaptor: OSS upload for local file -> remote URL (Bohrium jobs)
     "oss2",
-    # MatMaster web service (FastAPI + WebSocket)
+    # Remote SSH session for Bohrium / HPC job submission
+    "paramiko>=4.0.0",
+    # Bohrium cloud compute SDK
+    "bohrium-sdk>=0.15.0",
+    # Local web UI (playground/mat_master/service/)
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.22.0",
     "websockets>=11.0",
-    "pymysql>=1.1.2",
-    "gunicorn>=25.0.3",
-    "redis>=5.0.0",
-    "bohrium-sdk>=0.15.0",
+    # Document processing
     "python-docx>=1.2.0",
+    "pymupdf",
+    # HTTP / web tools
     "httpx>=0.28.1",
-    "paramiko>=4.0.0",
     "requests",
     "beautifulsoup4",
     "lxml",
-    "pymupdf",
     "markdownify>=0.14.1",
     "tiktoken>=0.7.0",
-    "pre-commit>=4.5.1",
 ]
 
 [project.optional-dependencies]
 bohrium-open = [
     "bohrium-open-sdk>=1.0.0",
-]
-# DevShell 外层「跑评测 → 判分 → 改提示词/工具」编排（Claude Agent SDK + 内置 Claude Code 工具集）
-eval-agent = [
-    "claude-agent-sdk>=0.1.0",
 ]
 dev = [
     "pytest>=9.0.2",

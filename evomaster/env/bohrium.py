@@ -10,17 +10,16 @@ import copy
 import os
 from typing import Any
 
-from src.utils.constant import BOHRIUM_OPENAPI_HOST
+BOHRIUM_OPENAPI_HOST: str = os.getenv("BOHRIUM_BASE_URL", "https://open.bohrium.com")
 
 
 def build_bohrium_skill_remote_env(session: Any) -> dict[str, str]:
     """从 ``session._bohrium_credentials`` 生成远程 skill 脚本所需的 ``BOHRIUM_*`` 环境变量。
 
     与 :class:`~evomaster.agent.tools.mcp.mcp.MCPTool`、`monitor_job` 使用同一凭证来源
-    （由 ``apply_run_credentials_to_session`` 或 WebSocket 入口写入 session）。
+    （由 WebSocket 入口写入 session）。
 
-    ``BOHRIUM_BASE_URL`` 取自 ``src.utils.constant.BOHRIUM_OPENAPI_HOST``（与节点服务、
-    OpenAPI 调用一致：含按环境的默认 host，且可被 ``BOHRIUM_BASE_URL`` 环境变量覆盖）。
+    ``BOHRIUM_BASE_URL`` 取自 ``BOHRIUM_BASE_URL`` 环境变量（默认 https://open.bohrium.com）。
 
     Returns:
         非空时包含 ``BOHRIUM_ACCESS_KEY``、``BOHRIUM_PROJECT_ID``、``BOHRIUM_BASE_URL``；

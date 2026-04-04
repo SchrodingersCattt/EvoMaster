@@ -2,129 +2,168 @@
 
 [English](README.md) | [简体中文](README-zh.md)
 
-EvoMaster is a framework for building scientific agents. It provides MCP tooling, skills, and multi-agent coordination so you can focus on domain logic. The main application in this repository is **MatMaster**, a materials-science agent with a web UI.
+**EvoMaster** is a lightweight open-source framework for building scientific research agents. This repository includes **MatMaster**, an LLM-based agent for alloy design, as described in our paper on INVAR alloy discovery.
+
+MatMaster brings together literature search, composition optimization (DART genetic algorithm), computational materials tools (DPA machine learning potentials), and structured writing — all accessible through natural-language interaction, with no coding required.
 
 ---
 
-## MatMaster-Evo
+## Quick Start
 
-MatMaster is a scientific agent for materials research, with a Next.js frontend and FastAPI backend. Development runs backend and frontend together via a single script.
+### 1. Install
 
-### Two backends (entrypoints and ports)
+```bash
+git clone https://github.com/SchrodingersCattt/EvoMaster.git
+cd EvoMaster
+pip install -e .
+```
 
-This repo exposes **two HTTP stacks** for MatMaster-related work. Do not mix up ports or treat the local dev server as the production API:
+Or with [uv](https://github.com/astral-sh/uv):
 
-| | **Platform API (`src/` + root `app.py`)** | **Local MatMaster Web (`playground/mat_master/service/server`)** |
-|------|-------------------------------------------|-------------------------------------------------------------------|
-| **Role** | Production-style integration: DB sessions, SSE, Redis + Worker | Local debugging: Next dashboard under `playground/mat_master`, WebSocket chat, in-memory sessions, fixed workspace |
-| **Typical entry** | `uv run python app.py` (default **8000**) | `python -m playground.mat_master.service.server` or `start_dev.sh` (default **BACKEND_PORT=50001**) |
-| **Protocol** | REST + SSE (e.g. `/api/v1/.../chat/sessions/...`) | WebSocket `/ws/chat`, etc. |
-| **Notes** | Multi-process layout: see **Service architecture** in `AGENTS.md` | See [playground/mat_master/README_WEB.md](playground/mat_master/README_WEB.md) |
+```bash
+uv sync
+```
 
-The platform API and the local Web stack use **different `run_agent_sync` implementations** (persistence, OSS, Bohrium, event push rules, etc.). See [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md).
+### 2. Configure
 
-The **Start development** section below refers to the **local Web** stack (default port 50001).
+Copy the environment template and fill in your credentials:
 
-### Start development (frontend + backend)
+```bash
+cp .env.example .env
+```
 
-From the project root:
+Edit `.env` with at minimum:
+
+| Variable | Description |
+|----------|-------------|
+| `LITELLM_PROXY_API_BASE` | Your LLM API base URL (OpenAI-compatible; or use `OPENAI_API_BASE` directly). |
+| `LITELLM_PROXY_API_KEY` | Your LLM API key. |
+
+For Bohrium job submission (remote GPU/CPU compute):
+
+| Variable | Description |
+|----------|-------------|
+| `BOHRIUM_ACCESS_KEY` | Bohrium access key — Personal Center → Access Key. |
+| `BOHRIUM_PROJECT_ID` | Your Bohrium project ID. |
+| `BOHRIUM_USER_ID` | Your Bohrium user ID. |
+
+For OSS file upload (needed by calculation MCP tools):
+
+| Variable | Description |
+|----------|-------------|
+| `OSS_ENDPOINT` | Aliyun OSS endpoint (e.g. `https://oss-cn-zhangjiakou.aliyuncs.com`). |
+| `OSS_BUCKET_NAME` | Your OSS bucket name. |
+| `OSS_ACCESS_KEY_ID` | Aliyun AccessKey ID. |
+| `OSS_ACCESS_KEY_SECRET` | Aliyun AccessKey secret. |
+
+### 3. Configure MCP servers
+
+```bash
+cp configs/mat_master/mcp_config.example.json configs/mat_master/mcp_config.json
+```
+
+Edit `mcp_config.json` to point to your MCP server instances, or set the corresponding environment variables (e.g. `MAT_SN_MCP_URL`, `MAT_COMPDART_MCP_URL`). See `configs/mat_master/mcp_config.example.json` for the full list of servers and their descriptions.
+
+---
+
+## Running MatMaster
+
+### Web UI (recommended)
+
+Start the local web interface (FastAPI backend + Next.js frontend):
 
 ```bash
 cd playground/mat_master/
 bash start_dev.sh
 ```
 
-Then open the dashboard at `http://<host>:<FRONTEND_PORT>` (default `http://127.0.0.1:50004`). Backend API runs on `BACKEND_PORT` (default `50001`; on Windows/Git Bash the script uses `8000` unless you set `BACKEND_PORT`).
-
-### Start with a custom work directory (CLI)
-
-Install the project in editable mode, then run the full stack (backend + frontend) with a **custom work directory** that is used as a **shared workspace**: the frontend file tree and agent outputs use `work_dir` directly (no per-session `workspaces/` subfolders). Logs and run data also go under `work_dir`. This lets you point MatMaster at any local path (e.g. a manuscript or project folder).
-
-```bash
-pip install -e .
-matmaster run ./myproject
-```
-
-You can run `matmaster` from any directory; authentication still comes from the **repository root `.env`** (no need to copy `.env` into the work dir).
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `work_dir` | (required) | Shared workspace directory: file tree, agent outputs, and logs all go here. |
-| `--backend-port` | `8000` (Windows) / `50001` (others) | Backend port. |
-| `--frontend-port` | `50004` | Frontend port. |
-| `--public-host` | Auto-detect | Host for API/WS URLs (e.g. for remote access). |
-
-**With uv:** From the repo, run `uv run matmaster run /path/to/work_dir`. Or activate the project venv (`source .venv/bin/activate` or `.venv\Scripts\activate` on Windows), then run `matmaster run work_dir` from any directory.
-
-### Environment variables used by `start_dev.sh`
+Then open `http://127.0.0.1:50004` in your browser.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BACKEND_PORT` | `50001` (Windows: `8000`) | FastAPI server port. |
-| `FRONTEND_PORT` | `50004` | Next.js dev server port. |
-| `PUBLIC_HOST` | Host IP or `127.0.0.1` | Host used for API/WS URLs shown to the frontend. Set this when accessing from another machine (e.g. `PUBLIC_HOST=your-host.example.com`). |
-| `NEXT_PUBLIC_API_URL` | `http://<PUBLIC_HOST>:<BACKEND_PORT>` | Override the API base URL the frontend calls. |
-| `NEXT_PUBLIC_WS_URL` | `ws://<PUBLIC_HOST>:<BACKEND_PORT>/ws/chat` | Set automatically from `NEXT_PUBLIC_API_URL` if not provided. |
+| `BACKEND_PORT` | `50001` | FastAPI backend port. |
+| `FRONTEND_PORT` | `50004` | Next.js frontend port. |
+| `PUBLIC_HOST` | Auto-detect | Host for API/WS URLs (set for remote access). |
 
-**Local run without Redis:** Do not set `REDIS_URL` in `.env`. The backend will start in single-process mode: stop and stream work in-process only. This is enough for local dev and tracemalloc baseline/diff on one process.
-
----
-
-## Bohrium authentication
-
-MatMaster and calculation MCP tools need Bohrium credentials. Copy the template and fill in your values:
+### CLI
 
 ```bash
-cp .env.template .env
+# Run a task directly
+python run.py --agent mat_master --config configs/mat_master/config.yaml --task "Optimize INVAR alloy composition for low CTE"
+
+# Interactive mode
+python run.py --agent mat_master --config configs/mat_master/config.yaml --interactive
+
+# Planner mode (multi-step planning)
+python run.py --agent mat_master --config configs/mat_master/config.yaml --mode planner --task "Your task"
+
+# Or use the CLI shortcut
+matmaster run ./myproject
 ```
-
-Edit `.env` and set at least:
-
-| Variable | Description |
-|----------|-------------|
-| `BOHRIUM_ACCESS_KEY` | Access key from Bohrium. In the console: **Personal Center → Access Key** (create or copy). See [Access Key (ak-1, ak-2)](docs/images/ak-1.png) and [ak-2](docs/images/ak-2.png). |
-| `BOHRIUM_USER_ID` | Your user ID. In the console: **Personal Center → Account**. See [User ID](docs/images/userID.png). |
-
-Optional for full calculation/storage: `BOHRIUM_PROJECT_ID`, `BOHRIUM_EMAIL`, `BOHRIUM_PASSWORD`. `SERVICE_ENV` selects the Bohrium environment (`prod`, `uat`, `test`); auth is taken from the corresponding site (e.g. https://www.test.bohrium.com/ for `test`).
 
 ---
 
-## Project layout
+## What MatMaster Can Do
+
+MatMaster implements the agent used in our INVAR alloy design paper. Key capabilities:
+
+| Skill | Description |
+|-------|-------------|
+| `composition-optimization` | DART genetic algorithm for alloy composition search |
+| `deep-survey` | Systematic literature retrieval with evidence collection |
+| `lit-data-organizer` | Build structured literature tables from evidence |
+| `manuscript-scribe` | Write and assemble research reports |
+| `structure-manager` | Generate and validate crystal structures |
+| `bohrium-job` | Submit and monitor computational jobs on Bohrium |
+| `input-manual-helper` | Generate DFT/MD input files |
+| `result-analysis` | Analyze and summarize simulation results |
+| `ask-human` | Human-in-the-loop review and approval |
+
+---
+
+## Project Layout
 
 ```
 EvoMaster/
-├── evomaster/           # Core (agent, session, tools, skills, LLM)
+├── evomaster/              # Core agent framework (loop, tools, MCP, skills, sessions)
+├── matmaster/              # MatMaster tool layer (registry, builtins, devshell)
 ├── playground/
-│   └── mat_master/      # MatMaster app (frontend + service + start_dev.sh)
-├── configs/mat_master/  # MatMaster YAML + mcp_config*.json
-└── docs/                # Documentation
+│   └── mat_master/
+│       ├── core/           # Agent, planner, callbacks
+│       ├── prompts/        # System prompts and tool rules
+│       ├── skills/         # Domain skills (see table above)
+│       ├── tools/          # Web search, webpage, aissq
+│       ├── service/        # Local FastAPI+WebSocket dev server
+│       ├── frontend/       # Next.js local web UI
+│       └── cli/            # matmaster CLI entry
+├── configs/
+│   └── mat_master/
+│       ├── config.yaml           # Main agent configuration
+│       ├── mcp_config.json       # MCP server endpoints (fill in yours)
+│       └── mcp_config.example.json  # Template with descriptions
+├── evaluation/             # MATTER evaluation framework + question bank
+├── docs/                   # Architecture and API documentation
+└── .env.example            # Environment variable template
 ```
 
 ---
 
-## CLI (optional)
+## Citation
 
-You can run agents from the command line without the web UI.
+If you use EvoMaster or MatMaster in your research, please cite our paper:
 
-**Prerequisites:** `uv sync` (or `pip install -e .`). Configure LLM and Bohrium in `.env` and/or in `configs/mat_master/config.yaml` (and MCP JSON as needed).
-
-```bash
-# MatMaster agent (default config under configs/mat_master/)
-python run.py --agent mat_master --config configs/mat_master/config.yaml --task "Your task"
-
-# Task from file
-python run.py --agent mat_master --config configs/mat_master/config.yaml --task task.txt
-
-# Interactive
-python run.py --agent mat_master --config configs/mat_master/config.yaml --interactive
-
-# Planner vs direct mode (MatMaster)
-python run.py --agent mat_master --config configs/mat_master/config.yaml --mode planner --task "Your task"
+```bibtex
+@article{evomaster2025,
+  title   = {EvoMaster: A Framework for Evolving Autonomous Scientific Research Agents},
+  author  = {TODO},
+  year    = {2025},
+}
 ```
 
 ---
 
 ## Links
 
-- [SciMaster](https://scimaster.bohrium.com/chat/)
-- [Bohrium](https://www.bohrium.com/)
+- [EvoMaster upstream framework](https://github.com/sjtu-sai-agents/EvoMaster)
+- [Bohrium cloud platform](https://www.bohrium.com/)
+- [bohr-agent-sdk (MCP server side)](https://github.com/dptech-corp/bohr-agent-sdk)

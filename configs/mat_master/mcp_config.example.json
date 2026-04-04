@@ -1,0 +1,59 @@
+{
+  "_comment": "Copy this file to mcp_config.json and fill in your MCP server URLs. Each key under 'mcpServers' is a server name that becomes the tool prefix (e.g. mat_sn_search-papers-enhanced). Set the corresponding env vars in your .env file, or replace the ${...} placeholders with actual URLs.",
+  "mcpServers": {
+    "mat_compdart": {
+      "_comment": "DART composition optimization GA engine. Set MAT_COMPDART_MCP_URL. Supports Bohrium AppSpace deployments.",
+      "headers": {},
+      "transport": "http",
+      "url": "${MAT_COMPDART_MCP_URL}"
+    },
+    "mat_doc": {
+      "_comment": "PDF/document parser for extracting material data from literature. Set MAT_DOC_MCP_URL.",
+      "headers": {},
+      "transport": "http",
+      "url": "${MAT_DOC_MCP_URL}"
+    },
+    "mat_dpa": {
+      "_comment": "DPA machine learning potential for property prediction. Set MAT_DPA_MCP_URL.",
+      "headers": {},
+      "transport": "http",
+      "url": "${MAT_DPA_MCP_URL}"
+    },
+    "mat_electron_microscope": {
+      "_comment": "Electron microscopy image recognition. Set MAT_ELECTRON_MICROSCOPE_MCP_URL. Uses SSE transport.",
+      "headers": {},
+      "transport": "sse",
+      "url": "${MAT_ELECTRON_MICROSCOPE_MCP_URL}"
+    },
+    "mat_nmr": {
+      "_comment": "NMR search, prediction, and reverse prediction tools. Set MAT_NMR_MCP_URL. Uses SSE transport.",
+      "headers": {},
+      "transport": "sse",
+      "url": "${MAT_NMR_MCP_URL}"
+    },
+    "mat_sg": {
+      "_comment": "Structure generator: bulk, surface, defect, supercell, adsorption, etc. Set MAT_SG_MCP_URL.",
+      "headers": {},
+      "transport": "http",
+      "url": "${MAT_SG_MCP_URL}"
+    },
+    "mat_sn": {
+      "_comment": "Science Navigator: literature paper search (enhanced/normal/scholar). Set MAT_SN_MCP_URL. Uses SSE transport.",
+      "headers": {},
+      "transport": "sse",
+      "url": "${MAT_SN_MCP_URL}"
+    },
+    "mat_struct_db": {
+      "_comment": "Structure database retrieval. Set MAT_STRUCT_DB_MCP_URL.",
+      "headers": {},
+      "transport": "http",
+      "url": "${MAT_STRUCT_DB_MCP_URL}"
+    },
+    "mat_xrd": {
+      "_comment": "XRD phase identification. Set MAT_XRD_MCP_URL. Uses SSE transport.",
+      "headers": {},
+      "transport": "sse",
+      "url": "${MAT_XRD_MCP_URL}"
+    }
+  }
+}

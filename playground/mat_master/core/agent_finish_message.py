@@ -137,7 +137,7 @@ def generate_finish_report(
 
     tmp_path = None
     try:
-        from src.dao.oss_io import upload_file_to_oss  # noqa: PLC0415
+        from evomaster.adaptors.calculation.oss_io import upload_file_to_oss  # noqa: PLC0415
 
         fd, tmp_path = tempfile.mkstemp(suffix='_finish_report.md')
         try:
@@ -151,8 +151,9 @@ def generate_finish_report(
             raise
 
         report_url = upload_file_to_oss(
-            tmp_path,
-            key_prefix='matmaster_evo/finish_reports',
+            Path(tmp_path),
+            workspace_root=Path(tmp_path).parent,
+            oss_prefix='matmaster_evo/finish_reports',
         )
         logger.info('Finish report uploaded: %s', report_url)
         return report_url, normalised

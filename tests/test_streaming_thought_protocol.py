@@ -10,7 +10,7 @@ from playground.mat_master.core.solvers._research_planner_runtime import (
 )
 from playground.mat_master.service.confirm import ConfirmMode
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
-from src.utils.chat_event_source import normalize_event_source
+from playground.mat_master.service.server.chat_utils import normalize_event_source
 
 
 def test_streaming_agent_emits_thought_stream_events():

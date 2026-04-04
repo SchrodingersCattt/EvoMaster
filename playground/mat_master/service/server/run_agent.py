@@ -30,8 +30,10 @@ from playground.mat_master.core.workspace_resolver import (
     get_remote_session_workspace_root,
     load_workspace_config_dict,
 )
-from src.services.chat_history import ChatHistoryConverter
-from src.utils.chat_event_source import normalize_event_source
+from playground.mat_master.service.server.chat_utils import (
+    ChatHistoryConverter,
+    normalize_event_source,
+)
 
 from . import persistence, state
 from .bootstrap import PROJECT_ROOT
@@ -107,7 +109,6 @@ def _run_agent_sync(
                 pass
 
     pg = None
-    bohrium_node_id = None
     _ssh_attached = False
     access_key = ''
     try:
@@ -139,79 +140,14 @@ def _run_agent_sync(
 
         access_key = (bohrium_access_key or '').strip()
         if access_key and bohrium_project_id is not None:
-            try:
-                from src.services.bohrium_node_service import get_bohrium_node_service
-
-                node_svc = get_bohrium_node_service()
-                node_info = node_svc.create_node(access_key, int(bohrium_project_id))
-                bohrium_node_id = node_info.get('node_id')
-                if bohrium_node_id is not None:
-                    event_callback(
-                        'System',
-                        'bohrium_node',
-                        {
-                            'node_id': bohrium_node_id,
-                            'status': 'created',
-                            'message': '节点已创建，正在等待就绪...',
-                        },
-                    )
-                    node_info = node_svc.wait_until_ready(access_key, bohrium_node_id)
-                    node_ip = node_info.get('ip')
-                    node_domain = node_info.get('domain') or ''
-                    node_pwd = node_info.get('password')
-                    node_user = node_info.get('node_user') or 'root'
-                    ssh_host = node_domain or node_ip
-                    event_callback(
-                        'System',
-                        'bohrium_node',
-                        {
-                            'node_id': bohrium_node_id,
-                            'status': 'ready',
-                            'ip': node_ip,
-                            'domain': node_domain,
-                            'message': 'Bohrium 节点已就绪',
-                        },
-                    )
-                    if ssh_host:
-                        pg.attach_ssh_session(
-                            host=ssh_host,
-                            username=node_user,
-                            password=node_pwd,
-                            working_dir=_REMOTE_WORKSPACE_ROOT,
-                        )
-                        _ssh_attached = True
-                        logger.info(
-                            'SSH session attached to Bohrium node host=%s workspace=%s',
-                            ssh_host,
-                            _REMOTE_WORKSPACE_ROOT,
-                        )
-                        event_callback(
-                            'System', 'status', f'已连接到 Bohrium 节点 {ssh_host}'
-                        )
-                        pg.session._bohrium_credentials = {
-                            'access_key': access_key,
-                            'project_id': int(bohrium_project_id),
-                        }
-                        logger.info(
-                            'Bohrium credentials stored on session (_bohrium_credentials) '
-                            'for skill remote env injection'
-                        )
-                        try:
-                            pg.sync_skills_to_remote()
-                            event_callback(
-                                'System', 'status', 'Skills 已同步到远程节点'
-                            )
-                        except Exception as e:
-                            logger.warning(
-                                'sync_skills_to_remote failed: %s', e, exc_info=True
-                            )
-            except Exception as e:
-                logger.warning('Auto create Bohrium node failed: %s', e, exc_info=True)
-                event_callback(
-                    'System',
-                    'status',
-                    f'自动创建 Bohrium 节点失败: {e}，继续使用当前环境运行',
-                )
+            # Store Bohrium credentials on session for skill env injection.
+            # Production node-pool management (auto-create/destroy Bohrium nodes)
+            # is not included in the OSS release; credentials are stored directly.
+            pg.session._bohrium_credentials = {
+                'access_key': access_key,
+                'project_id': int(bohrium_project_id),
+            }
+            logger.info('Bohrium credentials stored on session for skill env injection')
 
         base = pg.agent
         config_dict = pg.config.model_dump()
@@ -296,27 +232,6 @@ def _run_agent_sync(
                 logger.info('SSH session detached, default session restored')
             except Exception as e:
                 logger.warning('Session restore failed: %s', e)
-        if bohrium_node_id is not None:
-            try:
-                from src.services.bohrium_node_service import get_bohrium_node_service
-
-                get_bohrium_node_service().destroy_node(
-                    access_key,
-                    int(bohrium_node_id),
-                    int(bohrium_project_id or 0),
-                )
-                logger.info('Bohrium node destroyed node_id=%s', bohrium_node_id)
-                event_callback(
-                    'System',
-                    'bohrium_node',
-                    {
-                        'node_id': bohrium_node_id,
-                        'status': 'destroyed',
-                        'message': '节点已销毁',
-                    },
-                )
-            except Exception as e:
-                logger.warning('Auto destroy Bohrium node failed: %s', e, exc_info=True)
         if run_done is not None:
             run_done.set()
         state._run_stop_events.pop(session_id, None)

@@ -7,7 +7,7 @@ import traceback as _tb
 from typing import Any, Callable
 
 from evomaster.utils.types import AssistantMessage, ToolMessage
-from src.utils.chat_event_source import normalize_event_source
+from playground.mat_master.service.server.chat_utils import normalize_event_source
 
 from ..core.agent import MatMasterAgent
 

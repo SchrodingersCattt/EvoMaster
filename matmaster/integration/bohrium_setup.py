@@ -1,31 +1,23 @@
-"""BohriumSetupService -- thin wrapper around agent_run_bohrium functions.
+"""BohriumSetupService -- Bohrium node lifecycle utilities.
 
-Wraps the 4 top-level functions in src/services/agent_run_bohrium.py
-into a two-phase setup/cleanup API for use by the new service pipeline.
+The full production node-pool management (setup_bohrium_for_run, cleanup, etc.)
+was part of the hosted backend (src/services/agent_run_bohrium.py) which is not
+included in the open-source release. Only the skill-sync utility and a stub class
+are kept here for API compatibility.
 
-This is a thin delegation layer -- all logic remains in agent_run_bohrium.py.
-The wrapper provides:
-1. A class-based API instead of module-level functions
-2. Optional MessageBus for progress event emission
-3. Clean constructor injection of sessions_service
+Direct Bohrium job submission via the `bohrium-job` skill and `bohrium-sdk`
+is fully supported and does not require this service.
 """
 
 from __future__ import annotations
 
-import asyncio
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from matmaster.config.exp import ExpConfig
     from matmaster.core.bus import MessageBus
-    from src.services.agent_run_bohrium import BohriumSetupResult
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -76,206 +68,44 @@ def derive_skill_sync_spec(
     )
 
 
-class BohriumSetupService:
-    """Thin wrapper around agent_run_bohrium.py functions.
+class BohriumSetupResult:
+    """Placeholder for the production BohriumSetupResult type."""
 
-    Provides setup/cleanup two-phase API for Bohrium node lifecycle.
-    Delegates all logic to existing module-level functions.
+
+class BohriumSetupService:
+    """Bohrium node lifecycle service.
+
+    In the open-source release the full production node-pool orchestration
+    (provision/teardown of remote Bohrium compute nodes via the hosted backend)
+    is not included. Direct Bohrium job submission via the `bohrium-job` skill
+    and the `bohrium-sdk` package is still fully supported.
     """
 
     def __init__(
         self,
-        sessions_service: Any,
+        sessions_service: Any = None,
         bus: MessageBus | None = None,
     ) -> None:
         self._sessions_service = sessions_service
         self._bus = bus
 
-    def load_credentials(
-        self, session_id: str
-    ) -> tuple[dict[str, Any], str | None, str]:
-        """Load run credentials from session store.
-
-        Delegates to agent_run_bohrium.load_run_credentials().
-        """
-        from src.services.agent_run_bohrium import load_run_credentials
-
-        return load_run_credentials(self._sessions_service, session_id)
+    def load_credentials(self, session_id: str) -> tuple[dict[str, Any], str | None, str]:
+        raise NotImplementedError(
+            "Production Bohrium node management is not included in the OSS release. "
+            "Use the bohrium-job skill for direct job submission."
+        )
 
     def apply_credentials(self, session: Any, run_creds: dict[str, Any]) -> None:
-        """Attach transient Bohrium credentials to active session.
+        raise NotImplementedError("Production Bohrium node management not included.")
 
-        Delegates to agent_run_bohrium.apply_run_credentials_to_session().
-        """
-        from src.services.agent_run_bohrium import apply_run_credentials_to_session
+    def setup(self, **kwargs: Any) -> BohriumSetupResult:
+        raise NotImplementedError("Production Bohrium node management not included.")
 
-        apply_run_credentials_to_session(session, run_creds)
+    def cleanup(self, **kwargs: Any) -> None:
+        raise NotImplementedError("Production Bohrium node management not included.")
 
-    def setup(
-        self,
-        *,
-        session_id: str,
-        pg: Any,
-        skill_sync_spec: SkillSyncSpec | None,
-        run_creds: dict[str, Any],
-        user_id_for_ak: str | None,
-        org_id: str,
-        event_callback: Callable[..., None],
-        run_started_at: float,
-    ) -> BohriumSetupResult:
-        """Prepare Bohrium node and SSH session for the run.
+    async def run_setup(self, **kwargs: Any) -> BohriumSetupResult:
+        raise NotImplementedError("Production Bohrium node management not included.")
 
-        Delegates to agent_run_bohrium.setup_bohrium_for_run().
-        Returns BohriumSetupResult including execution binding fields (Task 2+).
-        """
-        from src.services.agent_run_bohrium import setup_bohrium_for_run
-
-        return setup_bohrium_for_run(
-            session_id=session_id,
-            pg=pg,
-            skill_sync_spec=skill_sync_spec,
-            run_creds=run_creds,
-            user_id_for_ak=user_id_for_ak,
-            org_id=org_id,
-            event_callback=event_callback,
-            run_started_at=run_started_at,
-        )
-
-    def cleanup(
-        self,
-        *,
-        session_id: str,
-        event_callback: Callable[..., None],
-        pg_for_run: Any,
-        ssh_attached: bool,
-    ) -> None:
-        """Restore session state and cleanup Bohrium node.
-
-        Delegates to agent_run_bohrium.cleanup_bohrium_after_run().
-        """
-        from src.services.agent_run_bohrium import cleanup_bohrium_after_run
-
-        cleanup_bohrium_after_run(
-            session_id=session_id,
-            sessions_service=self._sessions_service,
-            event_callback=event_callback,
-            pg_for_run=pg_for_run,
-            ssh_attached=ssh_attached,
-        )
-
-    # ── High-level async entry point ─────────────────────
-
-    def _make_event_bridge(
-        self,
-        loop: asyncio.AbstractEventLoop,
-    ) -> Callable[..., None]:
-        """Create a thread-safe callback that bridges bohrium events into the bus.
-
-        Runs from executor thread, uses call_soon_threadsafe to emit safely.
-        Requires self._bus to be set.
-        """
-        from matmaster.types.events import (
-            BohriumNodeEvent,
-            ErrorEvent,
-            StreamClosedEvent,
-        )
-
-        bus = self._bus
-        assert bus is not None  # noqa: S101 -- caller guarantees
-
-        def _cb(source: Any, event_type: str, content: Any, **extra: Any) -> None:
-            def _do_emit() -> None:
-                try:
-                    if event_type == 'error':
-                        msg = content if isinstance(content, str) else str(content)
-                        bus.emit_nowait(ErrorEvent(source=str(source), message=msg))
-                        bus.emit_nowait(
-                            StreamClosedEvent(
-                                source=str(source),
-                                end_reason='error',
-                                task_completed=False,
-                                treat_as_failure=True,
-                            )
-                        )
-                        return
-                    if event_type == 'stream_closed':
-                        body = '' if content is None else str(content)
-                        bus.emit_nowait(
-                            StreamClosedEvent(
-                                source=str(source),
-                                content=body,
-                                task_completed=False,
-                                end_reason='error',
-                                treat_as_failure=True,
-                            )
-                        )
-                        return
-                    bus.emit_nowait(
-                        BohriumNodeEvent(
-                            source=str(source),
-                            payload={
-                                'type': event_type,
-                                'content': content,
-                                **extra,
-                            },
-                        )
-                    )
-                except Exception:
-                    logger.debug('bohrium event bridge error type=%s', event_type)
-
-            loop.call_soon_threadsafe(_do_emit)
-
-        return _cb
-
-    async def run_setup(
-        self,
-        *,
-        session_id: str,
-        playground: Any,
-        skill_sync_spec: SkillSyncSpec | None,
-        run_started_at: float,
-    ) -> BohriumSetupResult:
-        """High-level async entry: credentials + event bridge + setup in executor.
-
-        Encapsulates the full bohrium setup orchestration that was previously
-        scattered in agent_run_service.
-        """
-        run_creds, user_id_for_ak, org_id = self.load_credentials(session_id)
-
-        loop = asyncio.get_running_loop()
-        event_cb = self._make_event_bridge(loop)
-
-        return await loop.run_in_executor(
-            None,
-            lambda: self.setup(
-                session_id=session_id,
-                pg=playground,
-                skill_sync_spec=skill_sync_spec,
-                run_creds=run_creds,
-                user_id_for_ak=user_id_for_ak,
-                org_id=org_id,
-                event_callback=event_cb,
-                run_started_at=run_started_at,
-            ),
-        )
-
-    async def run_cleanup(
-        self,
-        *,
-        session_id: str,
-        pg_for_run: Any,
-        ssh_attached: bool,
-    ) -> None:
-        """High-level async cleanup: event bridge + cleanup in executor."""
-        loop = asyncio.get_running_loop()
-        event_cb = self._make_event_bridge(loop)
-
-        await loop.run_in_executor(
-            None,
-            lambda: self.cleanup(
-                session_id=session_id,
-                event_callback=event_cb,
-                pg_for_run=pg_for_run,
-                ssh_attached=ssh_attached,
-            ),
-        )
+    async def run_cleanup(self, **kwargs: Any) -> None:
+        raise NotImplementedError("Production Bohrium node management not included.")

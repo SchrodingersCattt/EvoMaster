@@ -8,7 +8,7 @@ import pytest
 from playground.mat_master.core.solvers._research_planner_runtime import (
     ResearchPlannerRuntimeMixin,
 )
-from src.utils.chat_event_source import normalize_event_source
+from playground.mat_master.service.server.chat_utils import normalize_event_source
 
 
 def test_normalize_event_source_collapses_internal_labels():

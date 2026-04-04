@@ -23,14 +23,7 @@ except ImportError:
     pass
 
 ACCESS_KEY = os.environ.get('BOHRIUM_ACCESS_KEY', '').strip()
-try:
-    from src.utils.constant import BOHRIUM_OPENAPI_HOST
-
-    OPENAPI_BASE = BOHRIUM_OPENAPI_HOST
-except ImportError:
-    OPENAPI_BASE = os.environ.get(
-        'BOHRIUM_BASE_URL', 'https://open.bohrium.com'
-    ).rstrip('/')
+OPENAPI_BASE = os.environ.get('BOHRIUM_BASE_URL', 'https://open.bohrium.com').rstrip('/')
 
 _HEADER = {'accessKey': ACCESS_KEY}
 _JSON_HEADER = {'accessKey': ACCESS_KEY, 'Content-Type': 'application/json'}

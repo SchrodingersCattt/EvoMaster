@@ -192,5 +192,12 @@ docs/plans/
 # Worktrees
 .worktrees/
 
+# Local transient / scratch dirs
+_debug/
+_tmp/
+_propaganda/
+workspaces/
+.vscode/
+
 # CI generated artifacts
 ci/generated-eval-child.yml
