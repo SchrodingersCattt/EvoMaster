@@ -38,9 +38,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 评测 validators：numpy + pymatgen（struct_file_*，见 score_baseline_tasks / BinaryEvaluator）
 RUN . /app/.venv/bin/activate && uv pip install numpy "pymatgen>=2024.1"
 
-# claude --dangerously-skip-permissions 拒绝在 root 下运行，创建非 root 用户
+# claude --dangerously-skip-permissions 拒绝在 root 下运行，创建非 root 用户。
+# 不对 /app 整树 chown：.venv 与源码小文件极多，递归改属主在 overlay 上极慢（CI 可数十秒）。
+# 默认 pip/uv 安装为 755/644，others 可读可执行，appuser 可直接用 /app/.venv。
+# 仅将 /app 目录本身交给 appuser，便于在仓库根创建 results/、baseline_run.env（见 ci/run_baseline_eval.sh）。
 RUN useradd -m -s /bin/bash appuser && \
-    chown -R appuser:appuser /app
+    chown appuser:appuser /app
 
 USER appuser
 WORKDIR /app
