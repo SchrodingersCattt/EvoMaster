@@ -105,6 +105,28 @@ class DevshellAgentLoopCli:
             default=120.0,
             help="HTTP timeout (seconds) per ingest POST during automatic --submit.",
         )
+        p.add_argument(
+            "--enable-checklist-agent",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help=(
+                "After each main iteration, run a second SDK session that may only "
+                "edit evaluation/question_bank/ when the main agent called "
+                "escalate_checklist_revision."
+            ),
+        )
+        p.add_argument(
+            "--max-checklist-sdk-turns",
+            type=int,
+            default=60,
+            help="Max SDK turns for the checklist-only follow-up session.",
+        )
+        p.add_argument(
+            "--checklist-permission-mode",
+            type=str,
+            default="",
+            help="ClaudeAgentOptions.permission_mode for checklist agent (default: same as --permission-mode).",
+        )
 
         p.add_argument(
             "--modes",
@@ -237,6 +259,9 @@ class DevshellAgentLoopCli:
                 args.eval_ingest_submit_each_iteration
             ),
             eval_ingest_submit_timeout=max(1.0, float(args.eval_ingest_submit_timeout)),
+            enable_checklist_agent=bool(args.enable_checklist_agent),
+            max_checklist_sdk_turns=max(1, int(args.max_checklist_sdk_turns)),
+            checklist_permission_mode=str(args.checklist_permission_mode or ""),
         )
 
         print(f"Session directory: {session_dir}", file=sys.stderr)

@@ -241,7 +241,7 @@ scoring_checklist:
 ## DevShell 与 Claude Agent SDK 外层编排
 
 - DevShell / IDE 流程：`evaluation/docs/devshell/devshell_claude_code_eval.md`（`run_devshell_eval.py` + `score_devshell_tasks.py` 自动评分）。
-- **程序化**多轮「跑题 → 判分 → 改提示词/工具」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。自迭代时模型侧约定「每处修改单独 commit、无效则 revert」；编排层可用 `--no-git-reset-on-regression` 关闭「较上一轮退步则 reset 到本轮起点」的保险。默认在 **`--eval-ingest-pending-only`** 下每轮结束后自动 `score_devshell_tasks.py --submit` 上报 ingest（见该文档）；`--no-eval-ingest-submit-each-iteration` 可关。
+- **程序化**多轮「跑题 → 判分 → 改提示词/工具」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。自迭代时模型侧约定「每处修改单独 commit、无效则 revert」；编排层可用 `--no-git-reset-on-regression` 关闭「较上一轮退步则 reset 到本轮起点」的保险。默认在 **`--eval-ingest-pending-only`** 下每轮结束后自动 `score_devshell_tasks.py --submit` 上报 ingest（见该文档）；`--no-eval-ingest-submit-each-iteration` 可关。**双 Agent**：主 Agent 不得改 `evaluation/question_bank/`；题库/checklist 调整经 `escalate_checklist_revision` 由专责会话处理（见该文档）。
 
 ---
 
