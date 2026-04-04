@@ -14,7 +14,6 @@ Termination conditions:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 from collections import deque
@@ -96,96 +95,12 @@ class _KernelState:
     last_catalog_version: int = -1
 
 
-@dataclass
-class _ToolCallAccumulator:
-    """Streaming accumulator for one logical tool call."""
-
-    index: int
-    id: str = ""
-    name: str = ""
-    arguments: str = ""
-
-    def has_payload(self) -> bool:
-        return bool(self.arguments)
-
-
 class _KernelStopRequested(Exception):
     """Internal: cancel_token became set during LLM stream or retry backoff."""
 
 
 class AgentKernel:
     """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""
-
-    @staticmethod
-    def _is_complete_json_document(raw: str) -> bool:
-        """Return True when *raw* is exactly one complete JSON document."""
-        text = raw.strip()
-        if not text:
-            return False
-        try:
-            _, end = json.JSONDecoder().raw_decode(text)
-        except ValueError:
-            return False
-        return text[end:].strip() == ""
-
-    @classmethod
-    def _should_start_new_tool_call_segment(
-        cls,
-        current: _ToolCallAccumulator,
-        delta: dict[str, Any],
-    ) -> bool:
-        """Detect same-index collisions without breaking normal streaming chunks."""
-        if not current.has_payload():
-            return False
-
-        new_id = delta.get("id")
-        if new_id and current.id and new_id != current.id:
-            return True
-
-        new_name = delta.get("name")
-        if new_name and current.name and new_name != current.name:
-            return True
-
-        new_arguments = delta.get("arguments")
-        if isinstance(new_arguments, str) and new_arguments.lstrip().startswith(("{", "[")):
-            return cls._is_complete_json_document(current.arguments)
-
-        return False
-
-    @classmethod
-    def _append_tool_call_delta(
-        cls,
-        ordered_calls: list[_ToolCallAccumulator],
-        active_calls: dict[int, _ToolCallAccumulator],
-        delta: dict[str, Any],
-    ) -> None:
-        """Append a streaming tool-call delta with collision-aware segmentation."""
-        idx = delta.get("index", 0)
-        current = active_calls.get(idx)
-        if current is None:
-            current = _ToolCallAccumulator(index=idx)
-            ordered_calls.append(current)
-            active_calls[idx] = current
-        elif cls._should_start_new_tool_call_segment(current, delta):
-            logger.warning(
-                "Detected tool_call index collision; splitting segment "
-                "(index=%s, prev_id=%s, new_id=%s, prev_name=%s, new_name=%s)",
-                idx,
-                current.id or "-",
-                delta.get("id") or "-",
-                current.name or "-",
-                delta.get("name") or "-",
-            )
-            current = _ToolCallAccumulator(index=idx)
-            ordered_calls.append(current)
-            active_calls[idx] = current
-
-        if delta.get("id"):
-            current.id = delta["id"]
-        if delta.get("name"):
-            current.name = delta["name"]
-        if delta.get("arguments"):
-            current.arguments += delta["arguments"]
 
     async def run_stream(
         self,
@@ -620,8 +535,7 @@ class AgentKernel:
         """
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
-        tool_calls_acc: list[_ToolCallAccumulator] = []
-        active_tool_calls_by_index: dict[int, _ToolCallAccumulator] = {}
+        tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
         stream_id = f'turn-{len(api_messages)}'
         usage: dict[str, int] = {}
@@ -731,11 +645,19 @@ class AgentKernel:
                         )
                         producing_content = False
                     for delta in chunk.tool_call_deltas:
-                        self._append_tool_call_delta(
-                            tool_calls_acc,
-                            active_tool_calls_by_index,
-                            delta,
-                        )
+                        idx = delta.get('index', 0)
+                        if idx not in tool_calls_acc:
+                            tool_calls_acc[idx] = {
+                                'id': '',
+                                'name': '',
+                                'arguments': '',
+                            }
+                        if delta.get('id'):
+                            tool_calls_acc[idx]['id'] = delta['id']
+                        if delta.get('name'):
+                            tool_calls_acc[idx]['name'] = delta['name']
+                        if delta.get('arguments'):
+                            tool_calls_acc[idx]['arguments'] += delta['arguments']
         finally:
             # Emit segment-complete for any in-progress segments
             if producing_reasoning:
@@ -790,10 +712,10 @@ class AgentKernel:
         tool_calls: list[ToolCallData] | None = None
         if tool_calls_acc:
             tool_calls = []
-            for call in tool_calls_acc:
-                args = parse_tool_arguments(call.arguments)
+            for _, v in sorted(tool_calls_acc.items()):
+                args = parse_tool_arguments(v['arguments'])
                 tool_calls.append(
-                    ToolCallData(id=call.id, name=call.name, arguments=args)
+                    ToolCallData(id=v['id'], name=v['name'], arguments=args)
                 )
 
         yield _KernelItem(
