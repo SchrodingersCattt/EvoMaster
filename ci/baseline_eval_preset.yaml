@@ -17,4 +17,7 @@ eval_runner: claude_cli
 
 # Used when child_pipeline is ``questions`` (v5 question ``id`` from bank YAML).
 question_ids:
-- SC_struct_007_20260402
+- SC_elec_004_20260403
+- SC_struct_009_20260402
+- SC_struct_hetero_20260403
+- SC_struct_SiH_20260403
