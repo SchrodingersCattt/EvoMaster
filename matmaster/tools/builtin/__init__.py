@@ -15,6 +15,8 @@ from matmaster.tools.builtin.grep_tool import GrepTool
 from matmaster.tools.builtin.read_tool import ReadTool
 from matmaster.tools.builtin.skill_tool import SkillTool
 from matmaster.tools.builtin.todo_write_tool import TodoWriteTool
+from matmaster.tools.builtin.web_fetch_tool import WebFetchTool
+from matmaster.tools.builtin.web_search_tool import WebSearchTool
 from matmaster.tools.builtin.write_tool import WriteTool
 
 __all__ = [
@@ -27,5 +29,7 @@ __all__ = [
     "ReadTool",
     "SkillTool",
     "TodoWriteTool",
+    "WebFetchTool",
+    "WebSearchTool",
     "WriteTool",
 ]
