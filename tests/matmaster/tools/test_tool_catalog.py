@@ -7,12 +7,23 @@ from typing import Any
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ToolInstance
 from matmaster.types.topology import RuntimeTopology, ToolPlane
 
 
 class _MinimalTool:
+    resource_claims = ()
+    capabilities = frozenset()
+    effect_level = "local_mutation"
+    fast_path_eligible = True
+    max_result_chars = 0
+    plane = ToolPlane.CONTROL_PLANE
+    state_mode = "stateless"
+    stop_mode = "cancellable"
+    exposed_to_model = True
+
     def __init__(self, name: str) -> None:
         self._name = name
 
@@ -147,6 +158,17 @@ class TestCatalogPrompts:
         prompts = catalog.collect_prompts(_make_ctx())
 
         assert prompts == "prompt:alpha:/tmp/workspace"
+
+
+class TestCatalogCancelInjection:
+    def test_inject_cancel_token_sets_tool_attribute(self) -> None:
+        tool = _MinimalTool("alpha")
+        catalog = _make_catalog(tool)
+        ctrl = CancellationController()
+
+        catalog.inject_cancel_token(ctrl.token)
+
+        assert getattr(tool, "_cancel_token") is ctrl.token
 
 
 class TestCatalogContainer:
