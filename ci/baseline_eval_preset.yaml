@@ -5,11 +5,15 @@
 #   questions    — single manual job ``eval-question-list``; runs only question_ids.
 #                  BASELINE_LIMIT is ignored in this layout.
 #
-# Override: Run pipeline / 项目 CI Variables 中的 BASELINE_CHILD_PIPELINE、BASELINE_QUESTIONS
-#（非空时优先于本文件）。勿在 ci/baseline-eval.yml 的 variables 里写死 BASELINE_CHILD_PIPELINE，
-# 否则预设永远不会生效。
+# Override: Run pipeline / 项目 CI Variables 中非空则优先于本文件：
+#   BASELINE_CHILD_PIPELINE、BASELINE_QUESTIONS、EVAL_RUNNER
+# 勿在 ci/baseline-eval.yml 的 variables 里写死 BASELINE_CHILD_PIPELINE / EVAL_RUNNER，
+# 否则对应预设字段不会生效。
 
 child_pipeline: questions
+
+# claude_cli | devshell — 与 run_baseline_eval.sh / EVAL_RUNNER 一致
+eval_runner: devshell
 
 # Used when child_pipeline is ``questions`` (v5 question ``id`` from bank YAML).
 question_ids:

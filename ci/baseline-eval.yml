@@ -9,9 +9,10 @@
 #      - questions：仅 eval-question-list 一个 manual job；题目来自预设 question_ids 或
 #        BASELINE_QUESTIONS（逗号分隔）。此模式忽略 BASELINE_LIMIT。
 #
-# 评测模式（EVAL_RUNNER）：
-#   claude_cli（默认） — 外部 baseline：prepare workspace → claude -p 跑题 → finalize
-#   devshell           — 内部评测：MatMaster Agent（run_devshell_eval.py）一步跑题
+# 评测引擎（EVAL_RUNNER）：默认由 ci/baseline_eval_preset.yaml 的 eval_runner 决定；
+#   Run pipeline / 项目 CI Variables 中 EVAL_RUNNER 非空时覆盖。
+#   claude_cli — 外部 baseline：prepare → claude -p 跑题 → finalize
+#   devshell   — MatMaster Agent（run_devshell_eval.py）一步跑题
 #
 # 触发方式（任选，在 .gitlab-ci.yml 的 include 后生效）：
 #   1. 推送到分支 baseline-eval          → 立即触发
@@ -47,7 +48,7 @@
 #   方案 D（官方）:     ANTHROPIC_API_KEY=sk-ant-xxx（不设 BASE_URL）
 #
 # 可覆盖变量（手动触发时在 UI 传入，或在 schedule 的 Variables 中填写）：
-#   EVAL_RUNNER            — claude_cli 或 devshell，默认 claude_cli
+#   EVAL_RUNNER            — 非空时覆盖预设 eval_runner（claude_cli | devshell）
 #   BASELINE_MODES         — direct 或 planner，默认 direct
 #   BASELINE_LIMIT         — 限制每个 capability 的题数（0=不限），默认 2
 #   BASELINE_MAX_TURNS     — 每题最大轮数，默认 50（仅 claude_cli）
@@ -58,7 +59,6 @@
 #   BASELINE_QUESTIONS     — 非空时覆盖预设 question_ids（逗号分隔 id）
 
 variables:
-  EVAL_RUNNER: "devshell"  # claude_cli 或 devshell
   # ⚠️ 临时测试用，验证通过后务必删除以下几行，改用 GitLab CI Variables 注入
   # [minimax] 当前使用（仅 claude_cli 模式需要）
   # ANTHROPIC_API_KEY: "sk-cp-TGM8jt_jQj6k_K8nCqJGLqoeaBrc61y2E2V-Kfs1KWkfMzmyKLeySXWFXfKCSFqqI9pWftgYzygvxDKM-G2D33ybu-BT77ty0cVnyHCewd6j5W_AscyYRns"
@@ -127,9 +127,11 @@ baseline-eval-build:
         . --push
       echo "DYNAMIC_IMAGE=${EVAL_IMAGE}" >> ${CI_PROJECT_DIR}/build.env
     - |
+      apt-get update -qq && apt-get install -y -qq python3 python3-yaml >/dev/null 2>&1
       echo "--- 写入评测变量到 dotenv ---"
       ENV_FILE="${CI_PROJECT_DIR}/build.env"
-      echo "EVAL_RUNNER=${EVAL_RUNNER}" >> "${ENV_FILE}"
+      echo "EVAL_RUNNER=$(python3 ci/baseline_eval_preset.py eval-runner)" >> "${ENV_FILE}"
+      echo "effective EVAL_RUNNER（EVAL_RUNNER 非空则优先，否则预设 eval_runner）: $(python3 ci/baseline_eval_preset.py eval-runner)"
       echo "BASELINE_MODES=${BASELINE_MODES}" >> "${ENV_FILE}"
       echo "BASELINE_LIMIT=${BASELINE_LIMIT}" >> "${ENV_FILE}"
       echo "BASELINE_MAX_TURNS=${BASELINE_MAX_TURNS}" >> "${ENV_FILE}"

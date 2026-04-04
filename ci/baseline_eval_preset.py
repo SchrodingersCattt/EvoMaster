@@ -12,6 +12,11 @@ Question IDs (for ``questions`` layout):
 
 * ``BASELINE_QUESTIONS`` env: comma-separated ids (overrides file list).
 * Else preset key ``question_ids`` (list of strings).
+
+Eval runner:
+
+* ``EVAL_RUNNER`` env: ``claude_cli`` | ``devshell`` (overrides file).
+* Else preset key ``eval_runner`` (default ``devshell``).
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PRESET_PATH = REPO_ROOT / "ci" / "baseline_eval_preset.yaml"
+_VALID_RUNNERS = frozenset({"claude_cli", "devshell"})
 
 
 def load_preset_file(path: Path | None = None) -> dict:
@@ -56,9 +62,23 @@ def resolve_question_ids() -> list[str]:
     return []
 
 
+def resolve_eval_runner() -> str:
+    env = os.environ.get("EVAL_RUNNER", "").strip().lower()
+    if env in _VALID_RUNNERS:
+        return env
+    data = load_preset_file()
+    er = str(data.get("eval_runner", "devshell")).strip().lower()
+    if er in _VALID_RUNNERS:
+        return er
+    return "devshell"
+
+
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: baseline_eval_preset.py list-ids|child-pipeline", file=sys.stderr)
+        print(
+            "usage: baseline_eval_preset.py list-ids|child-pipeline|eval-runner",
+            file=sys.stderr,
+        )
         return 2
     op = sys.argv[1]
     if op == "list-ids":
@@ -67,6 +87,9 @@ def main() -> int:
         return 0
     if op == "child-pipeline":
         print(resolve_child_pipeline())
+        return 0
+    if op == "eval-runner":
+        print(resolve_eval_runner())
         return 0
     print(f"unknown op: {op}", file=sys.stderr)
     return 2
