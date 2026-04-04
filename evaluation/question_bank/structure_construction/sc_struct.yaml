@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: struct
 questions:
-- id: SC_struct_hetero_20260403
+- id: SC_struct_hetero_20260404
   capability: structure_construction
   domain: struct
   intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled
@@ -107,7 +107,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_002_20260401
+- id: SC_struct_002_20260404
   capability: structure_construction
   domain: struct
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular
@@ -224,7 +224,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260403
+- id: SC_struct_SiH_20260404
   capability: structure_construction
   domain: struct
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab
@@ -338,7 +338,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_004_20260401
+- id: SC_struct_004_20260404
   capability: structure_construction
   domain: struct
   intent: Exfoliate a MoS2 monolayer from bulk 2H-MoS2 and verify the 2D structure.
@@ -427,7 +427,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260401
+- id: SC_struct_005_20260404
   capability: structure_construction
   domain: struct
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and
@@ -545,7 +545,7 @@ questions:
       a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-- id: SC_struct_006_20260401
+- id: SC_struct_006_20260404
   capability: structure_construction
   domain: struct
   intent: Add missing hydrogens to the monomethylammonium perchlorate crystal MEAPER
@@ -651,7 +651,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_007_20260402
+- id: SC_struct_007_20260404
   capability: structure_construction
   domain: struct
   intent: Build the nitroprusside anion and validate its coordination, bond lengths,
@@ -829,7 +829,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008_20260401
+- id: SC_struct_008_20260404
   capability: structure_construction
   domain: struct
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
@@ -959,7 +959,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260402
+- id: SC_struct_009_20260404
   capability: structure_construction
   domain: struct
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce

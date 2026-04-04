@@ -6,7 +6,7 @@ questions:
   # ============================================================
   # SC_elec_001_20260401 — ZnO 载体单原子催化剂建模
   # ============================================================
-  - id: "SC_elec_001_20260401"
+  - id: "SC_elec_001_20260404"
     capability: "structure_construction"
     domain: "elec"
     intent: "Build ZnO(001) surface slab with a single Au atom adsorbed at a bridge site for single-atom catalyst modeling."
@@ -75,7 +75,7 @@ questions:
   # ============================================================
   # SC_elec_002_20260401 — 合金 slab 建模
   # ============================================================
-  - id: "SC_elec_002_20260401"
+  - id: "SC_elec_002_20260404"
     capability: "structure_construction"
     domain: "elec"
     intent: "Build an alloy surface slab from a given binary alloy structure for electrocatalysis modeling."

@@ -2,7 +2,7 @@ version: v5
 capability: property_prediction
 domain: elec
 questions:
-- id: DF_elec_001
+- id: DF_elec_001_20260404
   capability: property_prediction
   domain: elec
   intent: Determine band-gap type and value from given band-edge dataset.

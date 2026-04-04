@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: elec
 questions:
-- id: WO_elec_001
+- id: WO_elec_001_20260404
   capability: workflow_orchestration
   domain: elec
   intent: 'Run band-structure workflow for Si: locate structure, compute bands along
@@ -91,7 +91,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_elec_002
+- id: WO_elec_002_20260404
   capability: workflow_orchestration
   domain: elec
   intent: 'Build and execute periodic liquid water gap workflow: construct 64-water

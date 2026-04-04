@@ -6,7 +6,7 @@ questions:
   # ============================================================
   # BP_elec_001_20260401 — 多金属表面批量吸附能计算（Mock版）
   # ============================================================
-  - id: "BP_elec_001_20260401"
+  - id: "BP_elec_001_20260404"
     capability: "batch_processing"
     domain: "elec"
     intent: "Batch-compute H adsorption energy on 3 different metal (001) surfaces using mock energies to test batch workflow efficiency."
