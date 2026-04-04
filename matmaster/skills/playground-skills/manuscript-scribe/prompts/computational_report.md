@@ -66,7 +66,7 @@ Every symbol explained on first appearance in the text.
 
 ## De-AIGC rules (mandatory — full apply)
 
-Full guide: `use_skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
+Full guide: `Skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
 
 **Key rules for computational reports:**
 1. Replace "The results demonstrate the superior performance of..." → state what the results show numerically.

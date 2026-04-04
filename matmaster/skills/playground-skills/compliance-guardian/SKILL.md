@@ -1,6 +1,6 @@
 ---
 name: compliance-guardian
-description: Validates task safety, software licensing, and research ethics. Use before executing restricted software or providing sensitive technical details. Tool via use_skill run_script check_compliance.py "<plan_description>" "<intended_command>". Returns JSON with allowed, reason, suggestion. Redirects VASP→ABACUS/remote, Gaussian→ORCA/remote; blocks synthesis recipes for energetic materials; blocks dangerous shell commands.
+description: Validates task safety, software licensing, and research ethics. Use before executing restricted software or providing sensitive technical details. Tool via Skill run_script check_compliance.py "<plan_description>" "<intended_command>". Returns JSON with allowed, reason, suggestion. Redirects VASP→ABACUS/remote, Gaussian→ORCA/remote; blocks synthesis recipes for energetic materials; blocks dangerous shell commands.
 skill_type: operator
 ---
 
@@ -12,10 +12,10 @@ A mandatory filter for sensitive operations. It acts as a gatekeeper for:
 2. **Research safety / dual-use**: Distinguishes theoretical research (allowed) from practical manufacturing/synthesis of dangerous substances (restricted). Energetic materials: DFT, detonation physics, literature, crystal structure — allowed. Synthesis recipes, formulation ratios, step-by-step manufacturing — denied. Drugs/toxins: interaction simulation allowed; synthesis denied.
 3. **System security**: Blocks dangerous shell commands (e.g. rm -rf /, destructive syscalls).
 
-## Tool (via use_skill)
+## Tool (via Skill)
 
 - **run_script** with **script_name**: `check_compliance.py`, **script_args**: two arguments — plan description and intended command (quote if containing spaces).
-  - Example: `use_skill` with action=`run_script`, script_name=`check_compliance.py`, script_args=`"optimize structure with VASP locally" "vasp_std"`
+  - Example: Invoke `Skill` with action=`run_script`, script_name=`check_compliance.py`, script_args=`"optimize structure with VASP locally" "vasp_std"`
   - Output: JSON string with `allowed` (bool), `reason` (str), `suggestion` (str).
 
 ## Rules

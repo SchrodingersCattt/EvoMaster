@@ -37,7 +37,7 @@ Extracts data from open-source simulation logs and turns parsed or user-provided
 * "Plot the energy convergence for my paper." -> `plot_publication.py` with convergence JSON.
 * "Generate an EOS figure." -> `plot_publication.py` with eos JSON (volumes, energies).
 
-## Tool (via use_skill)
+## Tool (via Skill)
 
 - **run_script** with **script_name**: `parse_results.py` or `plot_publication.py`; **script_args**: e.g. `--file log.lammps --type lammps` or `--data out.json --plot_type convergence --output fig.png`.
 

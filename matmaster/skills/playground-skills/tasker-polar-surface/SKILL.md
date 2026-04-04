@@ -51,7 +51,7 @@ When cutting a surface slab from a bulk crystal (especially ionic or oxide), app
 ### Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）
 
 - **根据用户或文献需求传参**：用户明确要求的层数、厚度、真空、扩胞、电荷等，必须通过 script_args 传给脚本，不要只用默认值。
-- Call `use_skill` with `action=run_script`, `script_name=build_slab_tasker_fix.py`, and script args (choose one mode):
+- Invoke `Skill` with `action=run_script`, `script_name=build_slab_tasker_fix.py`, and script args (choose one mode):
   - by layers: `-i <bulk_path> -m <h> <k> <l> -L <repeat_layers> -v <vacuum> -o <slab_path>`
   - by thickness: `-i <bulk_path> -m <h> <k> <l> -T <thickness_A> -v <vacuum> -o <slab_path>`
 - Optional tiling (用户或文献要求超胞/最小尺寸时必传):
@@ -61,12 +61,12 @@ When cutting a surface slab from a bulk crystal (especially ionic or oxide), app
 - If the script exits non-zero (e.g. "No nonpolar solution found"), **do not hide it**. Report failure to user, include reason, and ask whether to:
   1) manually adjust termination/layers and retry, or
   2) temporarily accept a polar slab and continue.
-- Only when this script clearly cannot satisfy the case, fall back to ad-hoc `execute_bash` custom Python.
+- Only when this script clearly cannot satisfy the case, fall back to ad-hoc `Bash` custom Python.
 
 ### Step 3 — 校验与分型收敛（必做）
 
 - Run **check_slab_tasker.py** on the generated file:
-  `use_skill` … `script_name=check_slab_tasker.py`, `script_args="--file <slab_path> --tasker_type <provisional_type>"` (and `--formula`, `--miller` if known).
+  Invoke `Skill` … `script_name=check_slab_tasker.py`, `script_args="--file <slab_path> --tasker_type <provisional_type>"` (and `--formula`, `--miller` if known).
   Require `compliant: true`; if not, adjust n_layers or termination (from literature) and rebuild.
 - Run **structure-manager** `assess_structure.py` on the same file for dimensionality and sanity.
 Only after both checks pass (and optionally literature/lookup consistency) proceed to finish.
@@ -87,7 +87,7 @@ script_args="-i bulk1.cif bulk2.cif bulk3.vasp -m 1 0 0 -L 8 -v 15 --output-dir 
 
 #### 模式 B：`--batch` JSON 配置文件
 
-先用 `execute_bash` 或 `write_file` 生成 config.json：
+先用 `Bash` 或 `Write` 生成 config.json：
 ```json
 [
   {"input": "bulk1.cif", "miller": [1,0,0], "repeat_layers": 8, "vacuum": 15, "output": "slab1.vasp"},
@@ -122,7 +122,7 @@ script_args="-i bulk1.cif bulk2.cif bulk3.vasp -m 1 0 0 -L 8 -v 15 --output-dir 
 
 ### 1. Run the checker script (required)
 
-Call `use_skill` with `skill_name=tasker-polar-surface`, `action=run_script`, `script_name=check_slab_tasker.py`, and script args:
+Invoke `Skill` with `skill=tasker-polar-surface`, `action=run_script`, `script_name=check_slab_tasker.py`, and script args:
 
 - **Minimum**: `--file <path_to_slab_file> --tasker_type <1|2|3>` (same Tasker type used when building).
 - **Recommended when material and surface are known**: add `--formula <formula>` and `--miller "<h k l>"` (e.g. `--formula ZnO --miller "0 0 0 1"`). The script will load `reference/tasker_lookup.yaml` and add `literature_expected_type`, `literature_note`, `literature_ref`, and `literature_consistent` to the JSON. Use this to cross-check that the chosen Tasker type matches known classifications.

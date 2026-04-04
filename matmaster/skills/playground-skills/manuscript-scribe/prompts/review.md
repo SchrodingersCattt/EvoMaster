@@ -66,7 +66,7 @@ If the caller provides a `collected.json` or survey report from the `deep-survey
 
 ## De-AIGC rules (mandatory — full apply)
 
-Full guide: `use_skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
+Full guide: `Skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
 
 **Review-specific priorities:**
 1. Replace "the field has seen significant advances" → cite specific advances with numbers and years.

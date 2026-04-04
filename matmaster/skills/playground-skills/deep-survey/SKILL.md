@@ -23,7 +23,7 @@ All depths produce `collected.json` (structured evidence skeleton). The differen
 | `standard` | 6-8 | `collected.json` + Concise MD report (Executive Summary + References) | User wants a short survey file, or as an intermediate step with evidence persistence |
 | `deep` | 10-15+ | `collected.json` + Full 5-section report (Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References) | Standalone comprehensive review request |
 
-For depth-specific facet counts and retrieval budgets, fetch: `use_skill action=get_reference skill_name="deep-survey" reference_name="search_facets_and_rounds.md"`.
+For depth-specific facet counts and retrieval budgets, fetch: `Skill action=get_reference skill="deep-survey" reference_name="search_facets_and_rounds.md"`.
 
 ## When to use deep-survey vs on-the-fly
 
@@ -47,7 +47,7 @@ Quick orientation (authoritative detail is in the per-depth prompt files):
 - **standard**: 6-8 retrieval calls → `collected.json` + concise Markdown report (Executive Summary + References).
 - **deep**: 10-15+ retrieval calls → `collected.json` + full 5-section review (Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References).
 
-For depth-specific facet counts and retrieval budgets, fetch: `use_skill action=get_reference skill_name="deep-survey" reference_name="search_facets_and_rounds.md"`.
+For depth-specific facet counts and retrieval budgets, fetch: `Skill action=get_reference skill="deep-survey" reference_name="search_facets_and_rounds.md"`.
 
 ## Output and citation format
 
@@ -109,7 +109,7 @@ Compiles collected findings into the final structured Markdown report.
 - "Summarize methods for Y" (short file) → `run_survey.py --depth standard`
 - "What are the common failures in VASP relaxation?" (short answer) → MCP search + answer in chat; do **not** use this skill.
 
-## Tool (via use_skill)
+## Tool (via Skill)
 
 - **run_script** with **script_name**: `run_survey.py`, `summarize_paper.py`, `collect_evidence.py`, or `write_survey_report.py`; **script_args**: as in Usage above. Use `assign_facet.py` only for legacy repair.
 

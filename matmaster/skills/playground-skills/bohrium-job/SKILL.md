@@ -26,7 +26,7 @@ The submit JSON includes **`use_sandbox`** (boolean) so logs can confirm which m
 2. **Look up image / machine / command** — Check the Software Reference table below. If the software **is not listed**, or you need a different version/machine, you **MUST** run `list_images.py` and/or `list_machines.py` to query the Bohrium platform — **never** conclude that a software or machine is unavailable without running these scripts first.
 3. **Submit only** (returns `job_id`):
    ```
-   use_skill bohrium-job run_script submit_job.py \
+   Skill bohrium-job run_script submit_job.py \
      --input-dir <output_dir from input-manual-helper> \
      --image <image> \
      --cmd "<command>" \
@@ -43,13 +43,13 @@ The submit JSON includes **`use_sandbox`** (boolean) so logs can confirm which m
    ```json
    {
      "action": "run_script",
-     "skill_name": "bohrium-job",
+     "skill": "bohrium-job",
      "script_name": "poll_job.py",
     "script_args": "--job-id <job_id> [--max-polls 2880] [--poll-interval 30] [--result-dir results/run_xxx]",
     "script_timeout": 86400
   }
   ```
-  > **IMPORTANT**: `script_timeout` is a **`use_skill` tool parameter** (not part of `script_args`). Always set it to `max_polls × poll_interval` (default 2880 × 30 = **86400 s**). Without it, the session default timeout (60 s) will kill the script before the first poll completes.
+  > **IMPORTANT**: `script_timeout` is a **`Skill` tool parameter** (not part of `script_args`). Always set it to `max_polls × poll_interval` (default 2880 × 30 = **86400 s**). Without it, the session default timeout (60 s) will kill the script before the first poll completes.
   >
   > ⚠️ **Do NOT reduce `--max-polls` below 2880** unless the user explicitly requests a shorter timeout. HPC jobs can take many hours; underestimating will cause poll timeout before the job finishes. When in doubt, keep the default (`--max-polls 2880`, `script_timeout 86400`).
 
@@ -57,7 +57,7 @@ The submit JSON includes **`use_sandbox`** (boolean) so logs can confirm which m
    stdout JSON (success): `{"success": true, "job_id": ..., "status": "Finished", "result_dir": "...", "files": [...], "log_tail": "..."}`.
    stdout JSON (failed): `{"success": false, "job_id": ..., "status": "Failed", "result_dir": "...", "files": [...], "log_tail": "<error from log file>", "error": "..."}`.
 
-> **CRITICAL**: Do NOT call the built-in tool `monitor_job` for this workflow. Always use `use_skill bohrium-job run_script poll_job.py`. The built-in `monitor_job` tool is a different system and will not produce the expected output format.
+> **CRITICAL**: Do NOT call the built-in tool `monitor_job` for this workflow. Always invoke `Skill` for bohrium-job `run_script poll_job.py`. The built-in `monitor_job` tool is a different system and will not produce the expected output format.
 
 ## Dynamic Discovery: Images & Machines
 
@@ -66,7 +66,7 @@ The submit JSON includes **`use_sandbox`** (boolean) so logs can confirm which m
 ### list_images.py — Query available Docker images
 
 ```
-use_skill bohrium-job run_script list_images.py \
+Skill bohrium-job run_script list_images.py \
   [--keyword <name>] \
   [--max-results 20]
 ```
@@ -81,7 +81,7 @@ Use the `url` value from the versions list as the `--image` argument to `submit_
 ### list_machines.py — Query available machine types
 
 ```
-use_skill bohrium-job run_script list_machines.py \
+Skill bohrium-job run_script list_machines.py \
   [--type cpu|gpu] \
   [--keyword <name>] \
   [--max-results 50]
@@ -246,18 +246,18 @@ python submit_job.py \
 
 Universal monitor script — software-agnostic.
 
-**Usage** (via `use_skill`, shown as tool call parameters):
+**Usage** (via `Skill`, shown as tool call parameters):
 ```json
 {
   "action": "run_script",
-  "skill_name": "bohrium-job",
+  "skill": "bohrium-job",
   "script_name": "poll_job.py",
   "script_args": "--job-id <id> [--result-dir results/run_xxx] [--max-polls 2880] [--poll-interval 30]",
   "script_timeout": 86400
 }
 ```
 
-> **CRITICAL**: `script_timeout` is a **`use_skill` tool parameter** — do NOT put it inside `script_args`. It controls the session-level process timeout, not a script CLI flag.
+> **CRITICAL**: `script_timeout` is a **`Skill` tool parameter** — do NOT put it inside `script_args`. It controls the session-level process timeout, not a script CLI flag.
 
 **`script_args` flags** (passed to `poll_job.py` command line):
 - `--job-id`: Bohrium job id returned by `submit_job.py`. Required.
@@ -266,7 +266,7 @@ Universal monitor script — software-agnostic.
 - `--poll-interval`: Seconds between polls. Default: 30.
 - `--timeout-minutes`: Optional convenience shortcut. Computes `max_polls = max(1, timeout_minutes * 60 / poll_interval)` and overrides `--max-polls`. Use this instead of manually computing `--max-polls` when you want a wall-time cap (e.g. `--timeout-minutes 60` → 120 polls at 30 s).
 
-**`script_timeout`** (`use_skill` parameter, not a script flag): Always set to `max_polls × poll_interval` (default **86400 s** = 2880 × 30). Without it the session kills the process after 60 s.
+**`script_timeout`** (`Skill` parameter, not a script flag): Always set to `max_polls × poll_interval` (default **86400 s** = 2880 × 30). Without it the session kills the process after 60 s.
 
 > ⚠️ **Do NOT reduce `--max-polls` below 2880** unless the user explicitly requests a shorter timeout. HPC jobs can take many hours; underestimating `--max-polls` will cause the poll loop to exhaust before the job finishes. When in doubt, always use the defaults: `--max-polls 2880`, `script_timeout: 86400`.
 
@@ -356,7 +356,7 @@ python list_machines.py [--type cpu|gpu] [--keyword <name>] [--max-results 50]
 2. **Input files land in `oss_downloaded_files/`**, not in the local staging path used during input generation. Always `dir oss_downloaded_files` (Windows) or `ls oss_downloaded_files` to confirm the actual filename before constructing `--cmd`.
 3. **Match MPI `-np` count** in `--cmd` to the machine's core count (e.g. 32 for `c32_m128_cpu`).
 4. **Check `"success": true`** in JSON output before proceeding to the next step.
-5. Run `submit_job.py` first, then pass the returned `job_id` into `poll_job.py`. **Never call the built-in `monitor_job` tool** — always use `use_skill bohrium-job run_script poll_job.py`.
+5. Run `submit_job.py` first, then pass the returned `job_id` into `poll_job.py`. **Never call the built-in `monitor_job` tool** — always invoke `Skill` for bohrium-job `run_script poll_job.py`.
 6. **Log redirection must be unified**: in every software command, always use `> log 2>&1`. Do not use per-case filenames (for example `> orca.out`, `> qe.log`, `> caffeine.out`). This keeps `poll_job.py` log-tail behavior stable.
 7. **Unknown software/version**: If the software is not in the Software Reference table, run `list_images.py --keyword <software>` to find the image, and `list_machines.py` to find a suitable machine type.
 

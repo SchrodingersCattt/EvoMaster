@@ -1,6 +1,6 @@
 ---
 name: structure-manager
-description: "Skill for searching, obtaining, validating, and converting atomic structures. Capabilities: (1) Literature-based structure search — search papers (mat_sn_*), fetch full pages (extract_info_from_webpage), extract crystal data (space group, lattice, CCDC/ICSD ID), attempt CIF download or report identifiers. (2) Download a CIF/POSCAR from a direct file URL (fetch_web_structure.py --url). (3) Scan an HTML page for structure file links and download (fetch_web_structure.py --page). (4) Validate: dimensionality, sanity, formula (assess_structure.py). (5) Convert between formats: CIF/POSCAR/LAMMPS/XYZ/etc. (convert_format.py). For any structure retrieval beyond a trivial open-DB formula lookup, call use_skill get_info first."
+description: "Skill for searching, obtaining, validating, and converting atomic structures. Capabilities: (1) Literature-based structure search — search papers (mat_sn_*), fetch full pages (extract_info_from_webpage), extract crystal data (space group, lattice, CCDC/ICSD ID), attempt CIF download or report identifiers. (2) Download a CIF/POSCAR from a direct file URL (fetch_web_structure.py --url). (3) Scan an HTML page for structure file links and download (fetch_web_structure.py --page). (4) Validate: dimensionality, sanity, formula (assess_structure.py). (5) Convert between formats: CIF/POSCAR/LAMMPS/XYZ/etc. (convert_format.py). For any structure retrieval beyond a trivial open-DB formula lookup, invoke Skill get_info first."
 skill_type: operator
 depends_on: mcp-mat-struct-db, mcp-mat-sg, mcp-mat-sn, mcp-mat-doc
 ---
@@ -88,7 +88,7 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 * "Check if this structure is reasonable" → `assess_structure.py`.
 * "Convert this CIF to POSCAR" / "Convert POSCAR to LAMMPS data" → `convert_format.py`.
 
-## Tool (via use_skill)
+## Tool (via Skill)
 
 - **run_script** with **script_name**: `fetch_web_structure.py`, `assess_structure.py`, or `convert_format.py`; **script_args**: as in the usage examples above.
 
