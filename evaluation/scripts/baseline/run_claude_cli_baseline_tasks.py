@@ -47,6 +47,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -320,6 +321,102 @@ def _stderr_line(msg: str, lock: threading.Lock | None) -> None:
         print(msg, file=sys.stderr)
 
 
+def _run_finalize_only_task(
+    run_dir: Path,
+    task_id: str,
+    *,
+    pending_only: bool,
+    baseline_channel: str | None,
+) -> int:
+    cmd = [
+        sys.executable,
+        str(
+            REPO_ROOT
+            / "evaluation"
+            / "scripts"
+            / "baseline"
+            / "finalize_external_baseline_ingest.py"
+        ),
+        "--run-dir",
+        str(run_dir),
+        "--only-tasks",
+        task_id,
+    ]
+    if pending_only:
+        cmd.append("--eval-ingest-pending-only")
+    if baseline_channel:
+        cmd.extend(["--baseline-channel", baseline_channel])
+    return subprocess.run(cmd, cwd=str(REPO_ROOT)).returncode
+
+
+def _run_score_submit_only_task(
+    run_dir: Path,
+    task_id: str,
+    *,
+    eval_config: Path | None,
+    ingest_timeout: int,
+) -> int:
+    cmd = [
+        sys.executable,
+        str(
+            REPO_ROOT
+            / "evaluation"
+            / "scripts"
+            / "baseline"
+            / "score_baseline_tasks.py"
+        ),
+        "--run-dir",
+        str(run_dir),
+        "--tasks",
+        task_id,
+        "--submit",
+        "--eval-ingest-timeout",
+        str(ingest_timeout),
+    ]
+    if eval_config is not None:
+        cmd.extend(["--eval-config", str(eval_config)])
+    return subprocess.run(cmd, cwd=str(REPO_ROOT)).returncode
+
+
+def _per_task_finalize_and_maybe_score(
+    task_id: str,
+    *,
+    run_dir: Path,
+    pending_only: bool,
+    baseline_channel: str | None,
+    score_submit: bool,
+    eval_config: Path | None,
+    score_ingest_timeout: int,
+    print_lock: threading.Lock | None,
+) -> bool:
+    """Run finalize for one task; optionally score + ingest POST. Returns success."""
+    _stderr_line(f"  [finalize] {task_id} (--only-tasks)...", print_lock)
+    rc = _run_finalize_only_task(
+        run_dir,
+        task_id,
+        pending_only=pending_only,
+        baseline_channel=baseline_channel,
+    )
+    if rc != 0:
+        _stderr_line(f"  [finalize] {task_id} failed (exit {rc})", print_lock)
+        return False
+    if score_submit:
+        _stderr_line(f"  [score+ingest] {task_id}...", print_lock)
+        rc2 = _run_score_submit_only_task(
+            run_dir,
+            task_id,
+            eval_config=eval_config,
+            ingest_timeout=score_ingest_timeout,
+        )
+        if rc2 != 0:
+            _stderr_line(
+                f"  [score+ingest] {task_id} failed (exit {rc2})",
+                print_lock,
+            )
+            return False
+    return True
+
+
 def _execute_task_slot(
     slot: int,
     n_total: int,
@@ -331,6 +428,7 @@ def _execute_task_slot(
     timeout_seconds: int,
     extra_args: list[str] | None,
     print_lock: threading.Lock | None,
+    after: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Run one non-skipped task; return the same shape as entries in ``results``."""
     progress = f"[{slot}/{n_total}]"
@@ -350,10 +448,16 @@ def _execute_task_slot(
             f"{progress} {task_id}: TIMEOUT ({timeout_seconds}s)",
             print_lock,
         )
-        return {"task_id": task_id, "status": "timeout"}
+        out: dict[str, Any] = {"task_id": task_id, "status": "timeout"}
+        if after:
+            after(task_id)
+        return out
     except Exception as exc:
         _stderr_line(f"{progress} {task_id}: ERROR: {exc}", print_lock)
-        return {"task_id": task_id, "status": "error", "error": str(exc)}
+        out = {"task_id": task_id, "status": "error", "error": str(exc)}
+        if after:
+            after(task_id)
+        return out
 
     elapsed = time.monotonic() - t0
     usage = summary.get("usage", {})
@@ -365,20 +469,24 @@ def _execute_task_slot(
         print_lock,
     )
     if ok:
-        return {
+        out = {
             "task_id": task_id,
             "status": "ok",
             "elapsed_s": round(elapsed, 1),
             "num_turns": summary.get("num_turns"),
             "cost_usd": usage.get("total_cost_usd"),
         }
-    return {
-        "task_id": task_id,
-        "status": "fail",
-        "elapsed_s": round(elapsed, 1),
-        "num_turns": summary.get("num_turns"),
-        "cost_usd": usage.get("total_cost_usd"),
-    }
+    else:
+        out = {
+            "task_id": task_id,
+            "status": "fail",
+            "elapsed_s": round(elapsed, 1),
+            "num_turns": summary.get("num_turns"),
+            "cost_usd": usage.get("total_cost_usd"),
+        }
+    if after:
+        after(task_id)
+    return out
 
 
 def main() -> int:
@@ -429,12 +537,47 @@ def main() -> int:
     parser.add_argument(
         "--finalize",
         action="store_true",
-        help="Run finalize_external_baseline_ingest.py after all tasks complete.",
+        help=(
+            "Run finalize_external_baseline_ingest.py once after all tasks complete. "
+            "Ignored if --finalize-per-task is set."
+        ),
+    )
+    parser.add_argument(
+        "--finalize-per-task",
+        action="store_true",
+        help=(
+            "After each task, run finalize with --only-tasks <task_id> "
+            "(merges raw_runs.jsonl). Replaces the single end-of-run --finalize."
+        ),
+    )
+    parser.add_argument(
+        "--score-submit-per-task",
+        action="store_true",
+        help=(
+            "After each task's finalize, run score_baseline_tasks.py --submit for that task. "
+            "Requires --finalize-per-task and --eval-ingest-pending-only."
+        ),
+    )
+    parser.add_argument(
+        "--eval-config",
+        type=Path,
+        default=None,
+        help="Passed to score_baseline_tasks.py when using --score-submit-per-task.",
+    )
+    parser.add_argument(
+        "--score-ingest-timeout",
+        type=int,
+        default=120,
+        metavar="SEC",
+        help=(
+            "HTTP timeout (seconds) for each per-task ingest POST via "
+            "score_baseline_tasks.py (default: 120)."
+        ),
     )
     parser.add_argument(
         "--eval-ingest-pending-only",
         action="store_true",
-        help="Pass --eval-ingest-pending-only to finalize (requires --finalize).",
+        help="Pass --eval-ingest-pending-only to finalize (batch or per-task).",
     )
     parser.add_argument(
         "--baseline-channel",
@@ -467,6 +610,19 @@ def main() -> int:
     if args.jobs < 1:
         print("error: --jobs must be >= 1", file=sys.stderr)
         return 1
+    if args.score_submit_per_task:
+        if not args.finalize_per_task:
+            print(
+                "error: --score-submit-per-task requires --finalize-per-task",
+                file=sys.stderr,
+            )
+            return 1
+        if not args.eval_ingest_pending_only:
+            print(
+                "error: --score-submit-per-task requires --eval-ingest-pending-only",
+                file=sys.stderr,
+            )
+            return 1
 
     # Resolve RUN_DIR
     if args.run_dir:
@@ -539,6 +695,41 @@ def main() -> int:
 
     print_lock: threading.Lock | None = threading.Lock() if args.jobs > 1 else None
 
+    pipeline_failures: list[str] = []
+    after_cb: Callable[[str], None] | None = None
+    pipeline_serial_lock: threading.Lock | None = None
+    if args.finalize_per_task:
+        if args.finalize:
+            print(
+                "note: --finalize-per-task replaces end-of-run --finalize; "
+                "ignoring --finalize",
+                file=sys.stderr,
+            )
+        pipeline_serial_lock = threading.Lock() if args.jobs > 1 else None
+
+        def _after_task(task_id: str) -> None:
+            def _run() -> None:
+                ok = _per_task_finalize_and_maybe_score(
+                    task_id,
+                    run_dir=run_dir,
+                    pending_only=args.eval_ingest_pending_only,
+                    baseline_channel=args.baseline_channel,
+                    score_submit=args.score_submit_per_task,
+                    eval_config=args.eval_config,
+                    score_ingest_timeout=args.score_ingest_timeout,
+                    print_lock=print_lock,
+                )
+                if not ok:
+                    pipeline_failures.append(task_id)
+
+            if pipeline_serial_lock is not None:
+                with pipeline_serial_lock:
+                    _run()
+            else:
+                _run()
+
+        after_cb = _after_task
+
     if to_run and (args.jobs <= 1 or len(to_run) == 1):
         for i, task_id, workspace in to_run:
             results[i] = _execute_task_slot(
@@ -551,6 +742,7 @@ def main() -> int:
                 timeout_seconds=args.timeout,
                 extra_args=args.claude_extra_args,
                 print_lock=print_lock,
+                after=after_cb,
             )
     elif to_run:
         workers = min(args.jobs, len(to_run))
@@ -567,6 +759,7 @@ def main() -> int:
                     timeout_seconds=args.timeout,
                     extra_args=args.claude_extra_args,
                     print_lock=print_lock,
+                    after=after_cb,
                 ): i
                 for i, task_id, workspace in to_run
             }
@@ -589,9 +782,14 @@ def main() -> int:
         f"{n_sel - n_ok - n_fail} skipped out of {n_sel}",
         file=sys.stderr,
     )
+    if pipeline_failures:
+        print(
+            f"Per-task finalize/score failed for: {pipeline_failures}",
+            file=sys.stderr,
+        )
 
-    # Finalize
-    if args.finalize:
+    # Finalize (batch) — not used together with --finalize-per-task
+    if args.finalize and not args.finalize_per_task:
         print("\nRunning finalize...", file=sys.stderr)
         finalize_cmd = [
             sys.executable,
@@ -614,7 +812,7 @@ def main() -> int:
             print(f"finalize exited with code {rc}", file=sys.stderr)
             return rc
 
-    return 1 if n_fail > 0 else 0
+    return 1 if n_fail > 0 or bool(pipeline_failures) else 0
 
 
 if __name__ == "__main__":

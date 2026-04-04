@@ -3,7 +3,7 @@
 # 在项目 Docker 容器内运行，由动态生成的 ci/generated-eval-child.yml 中的 job 调用。
 #
 # 模式选择（EVAL_RUNNER）：
-#   claude_cli（默认） — prepare → claude -p 跑题 → finalize →（默认）阶段二评分并 POST ingest
+#   claude_cli（默认） — prepare → claude -p 跑题 → 默认每题 finalize +（pending 时）评分并 POST；或整轮 finalize + STEP3
 #   devshell           — run_devshell_eval.py 一步完成（MatMaster Agent 内部跑题）→（默认）阶段二同上
 #
 # 环境变量（须在 GitLab CI Variables 中配置）：
@@ -32,10 +32,11 @@
 #     BASELINE_MAX_TURNS             — 每题最大对话轮数，默认 50
 #     BASELINE_TIMEOUT               — 每题超时秒数，默认 900
 #     BASELINE_CLAUDE_JOBS           — 同时跑几道 claude -p（run_claude_cli_baseline_tasks.py --jobs），默认 4
+#     BASELINE_CLAUDE_PER_TASK_PIPELINE — 1（默认）每题结束后 finalize（--only-tasks 合并 raw_runs）+ pending 时逐题 score+ingest；0=整轮结束再 finalize，阶段二仍走 STEP3
 #   DevShell 模式专用:
 #     LITELLM_PROXY_API_KEY          — LiteLLM 鉴权（llm_config.yaml 中 ${LITELLM_PROXY_API_KEY}）
 #     LITELLM_PROXY_API_BASE         — LiteLLM base_url
-#   阶段二（BinaryEvaluator 评分 + ingest POST，仅 BASELINE_PENDING_ONLY=1 且存在 pending_ingest/*.json）:
+#   阶段二（BinaryEvaluator 评分 + ingest POST；claude_cli 且 BASELINE_CLAUDE_PER_TASK_PIPELINE=1 时在 STEP2 逐题完成，跳过本节）:
 #     BASELINE_SCORE_SUBMIT          — 1（默认）执行 score_baseline_tasks.py --submit；0 跳过
 #     BASELINE_SCORE_EVAL_CONFIG     — 可选，覆盖 evaluation/config.yaml 路径（容器内绝对路径或相对 /app）
 #     BASELINE_SCORE_EVAL_INGEST_TIMEOUT — 可选，每题 ingest HTTP 超时秒数，默认 120
@@ -132,9 +133,12 @@ elif [[ "${EVAL_RUNNER}" == "claude_cli" ]]; then
     MAX_TURNS="${BASELINE_MAX_TURNS:-50}"
     TIMEOUT_S="${BASELINE_TIMEOUT:-900}"
     CLAUDE_JOBS="${BASELINE_CLAUDE_JOBS:-4}"
+    CLAUDE_PER_TASK_PIPELINE="${BASELINE_CLAUDE_PER_TASK_PIPELINE:-1}"
+    SCORE_INGEST_TIMEOUT="${BASELINE_SCORE_EVAL_INGEST_TIMEOUT:-120}"
     echo "  max_turns    : ${MAX_TURNS}"
     echo "  timeout(s)   : ${TIMEOUT_S}"
     echo "  claude_jobs  : ${CLAUDE_JOBS} (parallel claude -p)"
+    echo "  per_task_ff  : ${CLAUDE_PER_TASK_PIPELINE} (1=每题 finalize+评分上报)"
     echo "  (claude_cli 模式：Claude Code CLI 跑题)"
     echo "======================================="
 
@@ -230,10 +234,24 @@ EOF
     if [[ -n "${MODEL}" ]]; then
         RUN_CMD+=(--model "${MODEL}")
     fi
-    if [[ "${PENDING_ONLY}" == "1" ]]; then
-        RUN_CMD+=(--finalize --eval-ingest-pending-only)
+    if [[ "${CLAUDE_PER_TASK_PIPELINE}" == "1" ]]; then
+        RUN_CMD+=(--finalize-per-task)
+        if [[ "${PENDING_ONLY}" == "1" ]]; then
+            RUN_CMD+=(--eval-ingest-pending-only)
+            if [[ "${BASELINE_SCORE_SUBMIT:-1}" == "1" ]]; then
+                RUN_CMD+=(--score-submit-per-task)
+                RUN_CMD+=(--score-ingest-timeout "${SCORE_INGEST_TIMEOUT}")
+                if [[ -n "${BASELINE_SCORE_EVAL_CONFIG:-}" ]]; then
+                    RUN_CMD+=(--eval-config "${BASELINE_SCORE_EVAL_CONFIG}")
+                fi
+            fi
+        fi
     else
-        RUN_CMD+=(--finalize)
+        if [[ "${PENDING_ONLY}" == "1" ]]; then
+            RUN_CMD+=(--finalize --eval-ingest-pending-only)
+        else
+            RUN_CMD+=(--finalize)
+        fi
     fi
 
     echo ""
@@ -254,26 +272,31 @@ fi
 BASELINE_SCORE_SUBMIT="${BASELINE_SCORE_SUBMIT:-1}"
 SCORE_TIMEOUT="${BASELINE_SCORE_EVAL_INGEST_TIMEOUT:-120}"
 if [[ "${BASELINE_SCORE_SUBMIT}" == "1" && "${PENDING_ONLY}" == "1" && -n "${RUN_DIR:-}" ]]; then
-    PENDING_DIR="${RUN_DIR}/pending_ingest"
-    if [[ -d "${PENDING_DIR}" ]]; then
-        shopt -s nullglob
-        PENDING_JSONS=("${PENDING_DIR}"/*.json)
-        shopt -u nullglob
-        if ((${#PENDING_JSONS[@]} > 0)); then
-            echo ""
-            echo "[STEP 3] BinaryEvaluator 评分 + ingest 提交（score_baseline_tasks.py --submit）..."
-            SCORE_CMD=(
-                python evaluation/scripts/baseline/score_baseline_tasks.py
-                --run-dir "${RUN_DIR}"
-                --submit
-                --eval-ingest-timeout "${SCORE_TIMEOUT}"
-            )
-            if [[ -n "${BASELINE_SCORE_EVAL_CONFIG:-}" ]]; then
-                SCORE_CMD+=(--eval-config "${BASELINE_SCORE_EVAL_CONFIG}")
+    if [[ "${EVAL_RUNNER}" == "claude_cli" && "${BASELINE_CLAUDE_PER_TASK_PIPELINE:-1}" == "1" ]]; then
+        echo ""
+        echo "[INFO] claude_cli 已在 STEP 2 逐题评分并 POST（BASELINE_CLAUDE_PER_TASK_PIPELINE=1），跳过 STEP 3"
+    else
+        PENDING_DIR="${RUN_DIR}/pending_ingest"
+        if [[ -d "${PENDING_DIR}" ]]; then
+            shopt -s nullglob
+            PENDING_JSONS=("${PENDING_DIR}"/*.json)
+            shopt -u nullglob
+            if ((${#PENDING_JSONS[@]} > 0)); then
+                echo ""
+                echo "[STEP 3] BinaryEvaluator 评分 + ingest 提交（score_baseline_tasks.py --submit）..."
+                SCORE_CMD=(
+                    python evaluation/scripts/baseline/score_baseline_tasks.py
+                    --run-dir "${RUN_DIR}"
+                    --submit
+                    --eval-ingest-timeout "${SCORE_TIMEOUT}"
+                )
+                if [[ -n "${BASELINE_SCORE_EVAL_CONFIG:-}" ]]; then
+                    SCORE_CMD+=(--eval-config "${BASELINE_SCORE_EVAL_CONFIG}")
+                fi
+                "${SCORE_CMD[@]}"
+            else
+                echo "[WARN] pending_only=1 但 pending_ingest 下无 .json，跳过阶段二"
             fi
-            "${SCORE_CMD[@]}"
-        else
-            echo "[WARN] pending_only=1 但 pending_ingest 下无 .json，跳过阶段二"
         fi
     fi
 fi
