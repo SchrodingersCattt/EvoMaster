@@ -28,9 +28,9 @@ class SessionConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     timeout: int = Field(default=300, description="Default execution timeout (seconds)")
-    workspace_path: str = Field(default="/workspace", description="Workspace root path")
+    workspace_path: str = Field(default="/share", description="Workspace root path")
     working_dir: str = Field(
-        default="/workspace", description="Working directory inside session"
+        default="/share", description="Working directory inside session"
     )
 
 
