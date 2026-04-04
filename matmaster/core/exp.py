@@ -46,8 +46,9 @@ class Exp:
     run_stream() delegates to build_runtime then kernel.run_stream with cleanup guarantee.
     """
 
-    def __init__(self, config: ExpConfig) -> None:
+    def __init__(self, config: ExpConfig, *, allow_spawn: bool = True) -> None:
         self._config = config
+        self._allow_spawn = allow_spawn
         self._cleanup_callbacks: list[Callable[[], Any]] = []
         self._skill_registry: Any = None
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -113,7 +114,7 @@ class Exp:
             from matmaster.core.stream_drain import drain_run_stream
 
             child_config = load_exp_config(exp_name)
-            child_exp = Exp(child_config)
+            child_exp = Exp(child_config, allow_spawn=False)
             child_source = f'{source_prefix}:{exp_name}'
             child_spawn_id = uuid.uuid4().hex[:16]
             parent_session_id = ctx.run_meta.get("session_id", "")
@@ -187,7 +188,7 @@ class Exp:
             planes |= {ToolPlane.SESSION_SHELL, ToolPlane.SESSION_FS}
         if skills_enabled or any(
             name in builtin_cfg or "*" in builtin_cfg
-            for name in ("mm_web_search", "web_fetch", "monitor_job")
+            for name in ("WebSearch", "WebFetch", "mm_web_search", "web_fetch", "monitor_job")
         ):
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
@@ -212,7 +213,7 @@ class Exp:
         # 1. Register ALL builtin tools
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
-        if builtin_cfg and ctx.session is not None:
+        if builtin_cfg:
             self._init_builtin_tools(ctx, registry, builtin_cfg)
 
         # 2. Build ToolCatalog wrapping registry (before skill init for overlay)
@@ -252,23 +253,30 @@ class Exp:
         if skills or self._config.skills.enabled:
             self._init_skill_tools(ctx, registry, skills_config=skills, catalog=catalog)
 
-        # 4. SpawnTool: register after skills but before system prompt
-        if ("spawn" in builtin_cfg or builtin_cfg == ["*"]) and ctx.session is not None:
+        # 4. AgentTool: register after skills but before system prompt.
+        # AgentTool replaces the legacy SpawnTool. When allow_spawn is False
+        # (child Exp), spawn_fn is None which causes AgentTool to set
+        # exposed_to_model=False (hidden from LLM but still in catalog).
+        if "Agent" in builtin_cfg or "*" in builtin_cfg:
             from matmaster.config.loader import list_available_exps
-            from matmaster.tools.builtin.spawn_tool import SpawnTool
+            from matmaster.tools.builtin import AgentTool
 
-            spawn_fn = self._make_spawn_fn(
-                ctx,
-                source_prefix='MatMaster',
-                hook_executor=hook_executor,
-            )
-            spawn_tool = SpawnTool(
+            spawn_fn = None
+            available_exps = None
+            if self._allow_spawn:
+                spawn_fn = self._make_spawn_fn(
+                    ctx,
+                    source_prefix='MatMaster',
+                    hook_executor=hook_executor,
+                )
+                available_exps = list_available_exps()
+            agent_tool = AgentTool(
                 session=ctx.session,
-                workdir=Path(ctx.execution_workdir),
+                workdir=Path(ctx.execution_workdir) if ctx.session is not None else ctx.workdir,
                 spawn_fn=spawn_fn,
-                available_exps=list_available_exps(),
+                available_exps=available_exps,
             )
-            registry.register(spawn_tool, source='builtin')
+            registry.register(agent_tool, source='builtin')
 
         # 5. System prompt via ContextBuilder
         builder = ContextBuilder()
@@ -440,84 +448,74 @@ class Exp:
         (original behaviour).  Otherwise only tools whose ``name`` appears
         in the list are registered, cutting prompt-token overhead.
 
-        Native tools (14): BashTool, ListDirTool, ReadTool, WriteTool, EditTool,
-        GlobTool, GrepTool, TaskCreate/Get/List/Update/Complete,
-        WebSearchTool, WebFetchTool.
-        Additional (1): MonitorJobTool (science-specific, native BuiltinTool).
-        """
-        if ctx.session is None:
-            self.logger.warning(
-                'No session in PlaygroundContext, skipping builtin tools'
-            )
-            return
+        Tools are split into two categories:
+        - Session-requiring: BashTool, ReadTool, WriteTool, EditTool,
+          GlobTool, GrepTool (need ctx.session for execution)
+        - Sessionless: TodoWriteTool, WebSearchTool, WebFetchTool
+          (operate without a session; AgentTool is registered separately
+          in build_runtime)
 
+        When ctx.session is None, only sessionless tools are registered.
+        """
         allow_all = '*' in builtin_cfg
         allowed: set[str] | None = None if allow_all else set(builtin_cfg)
 
         def _want(name: str) -> bool:
             return allowed is None or name in allowed
 
-        # 1. Native builtin tools (source="builtin")
         from matmaster.tools.builtin import (
             BashTool,
             EditTool,
             GlobTool,
             GrepTool,
-            ListDirTool,
             ReadTool,
-            TaskCompleteTool,
-            TaskCreateTool,
-            TaskGetTool,
-            TaskListTool,
-            TaskUpdateTool,
+            TodoWriteTool,
             WebFetchTool,
             WebSearchTool,
             WriteTool,
         )
 
         exec_wd = Path(ctx.execution_workdir)
-        native_tools = [
-            BashTool(session=ctx.session, workdir=exec_wd),
-            ListDirTool(session=ctx.session, workdir=exec_wd),
-            ReadTool(session=ctx.session, workdir=exec_wd),
-            WriteTool(session=ctx.session, workdir=exec_wd),
-            EditTool(session=ctx.session, workdir=exec_wd),
-            GlobTool(session=ctx.session, workdir=exec_wd),
-            GrepTool(session=ctx.session, workdir=exec_wd),
-            # Task tools stay on the local control-plane workdir (not execution_workdir):
-            # .tasks.json must remain local to the session/task ledger.
-            TaskCreateTool(workdir=ctx.workdir),
-            TaskGetTool(workdir=ctx.workdir),
-            TaskListTool(workdir=ctx.workdir),
-            TaskUpdateTool(workdir=ctx.workdir),
-            TaskCompleteTool(workdir=ctx.workdir),
-            # Web tools: control-plane HTTP, no session dependency
+        has_session = ctx.session is not None
+
+        # 1. Session-requiring tools (only when session is present)
+        session_tools: list[Any] = []
+        if has_session:
+            session_tools = [
+                BashTool(session=ctx.session, workdir=exec_wd),
+                ReadTool(session=ctx.session, workdir=exec_wd),
+                WriteTool(session=ctx.session, workdir=exec_wd),
+                EditTool(session=ctx.session, workdir=exec_wd),
+                GlobTool(session=ctx.session, workdir=exec_wd),
+                GrepTool(session=ctx.session, workdir=exec_wd),
+            ]
+        elif allow_all or allowed and allowed & {
+            'execute_bash', 'Bash', 'read_file', 'Read',
+            'write_file', 'Write', 'edit_file', 'Edit',
+            'glob', 'Glob', 'grep', 'Grep',
+        }:
+            self.logger.debug(
+                'No session in PlaygroundContext, skipping session-requiring tools'
+            )
+
+        # 2. Sessionless tools (always available)
+        sessionless_tools: list[Any] = [
+            TodoWriteTool(workdir=ctx.workdir),
             WebSearchTool(),
             WebFetchTool(workdir=ctx.workdir),
         ]
-        registered_native: list[Any] = []
-        for tool in native_tools:
+
+        registered: list[Any] = []
+        for tool in session_tools + sessionless_tools:
             if _want(tool.name):
                 registry.register(tool, source='builtin')
-                registered_native.append(tool)
-
-        # 2. Additional builtin tools (science-specific, per D-10)
-        from matmaster.tools.builtin.monitor_job import MonitorJobTool
-
-        additional_builtins = [
-            MonitorJobTool(session=ctx.session, workdir=exec_wd),
-        ]
-        registered_additional: list[Any] = []
-        for tool in additional_builtins:
-            if _want(tool.name):
-                registry.register(tool, source='builtin')
-                registered_additional.append(tool)
+                registered.append(tool)
 
         self.logger.debug(
-            'Registered %d native + %d additional builtin tools (cfg=%s)',
-            len(registered_native),
-            len(registered_additional),
+            'Registered %d builtin tools (cfg=%s, session=%s)',
+            len(registered),
             builtin_cfg,
+            'present' if has_session else 'absent',
         )
 
     def _init_skill_tools(

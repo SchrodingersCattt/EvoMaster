@@ -472,3 +472,36 @@ class TestBuildRuntimeCompactorEventSink:
         assert hasattr(runtime.spec.compactor, "_event_sink")
         # event_sink should be None (set later by _run_items)
         assert runtime.spec.compactor._event_sink is None
+
+
+# ── Active planes with new CC tool names ─────────────────
+
+
+class TestActivePlanesNewNames:
+    """_derive_active_planes recognises new CC-style tool names."""
+
+    @pytest.mark.asyncio
+    async def test_build_runtime_adds_external_service_plane_for_websearch(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """WebSearch in builtin_cfg activates EXTERNAL_SERVICE plane."""
+        from matmaster.config.exp import ExpConfig
+        from matmaster.core.exp import Exp
+        from matmaster.types.context import PlaygroundContext
+        from matmaster.types.topology import ToolPlane
+
+        config = ExpConfig(name="test", tools={"builtin": ["WebSearch"]})
+        exp = Exp(config)
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=None,
+            llm_provider=_MockProvider(),
+        )
+
+        runtime = await exp.build_runtime(ctx)
+
+        assert ToolPlane.EXTERNAL_SERVICE in runtime.spec.runtime_topology.active_planes

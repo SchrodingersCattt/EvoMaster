@@ -388,7 +388,7 @@ class TestExpBuiltinTools:
         assert 'mm_web_search' in registry
 
     def test_init_builtin_tools_no_session(self, tmp_path: Path) -> None:
-        """session=None skips all tool registration."""
+        """session=None registers only sessionless tools (TodoWrite, WebSearch, WebFetch)."""
         from matmaster.tools.tool_registry import ToolRegistry
 
         exp = Exp(ExpConfig(name='test'))
@@ -401,7 +401,10 @@ class TestExpBuiltinTools:
         )
         registry = ToolRegistry()
         exp._init_builtin_tools(ctx, registry, ['*'])
-        assert len(registry) == 0
+        assert len(registry) == 3
+        assert "TodoWrite" in registry
+        assert "WebSearch" in registry
+        assert "WebFetch" in registry
 
     async def test_explicit_builtin_config_filters_tools(self, tmp_path: Path) -> None:
         """Non-empty explicit tool list registers only the requested tools."""
@@ -547,3 +550,60 @@ class TestExpCompaction:
             runtime = await exp.build_runtime(ctx)
 
         assert runtime.spec.compactor is None
+
+
+# ── TestSessionlessBuiltins ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_registers_todowrite_without_session(tmp_path: Path) -> None:
+    """TodoWrite (sessionless tool) registers even when ctx.session is None."""
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["TodoWrite"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=None,
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    assert runtime.spec.tool_catalog.get_tool("TodoWrite") is not None
+
+
+# ── TestSpawnGuard ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_hides_agent_when_allow_spawn_false(tmp_path: Path) -> None:
+    """Agent tool is hidden (exposed_to_model=False) when allow_spawn=False."""
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["Agent"]),
+        ),
+        allow_spawn=False,
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=MagicMock(spec=Session),
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    tool = runtime.spec.tool_catalog.get_tool("Agent")
+    assert tool is not None
+    assert tool.tool_spec.exposed_to_model is False
