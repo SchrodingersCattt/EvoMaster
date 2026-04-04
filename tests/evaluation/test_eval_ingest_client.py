@@ -106,6 +106,18 @@ def test_extract_ingest_tokens_empty_vendor_list_uses_usage() -> None:
     )
 
 
+def test_extract_ingest_tokens_can_approximate_last_turn_from_total_and_num_turns() -> (
+    None
+):
+    assert (
+        extract_ingest_tokens(
+            {"usage": {"total_tokens": 120}, "num_turns": 3},
+            approximate_last_turn_from_total=True,
+        )
+        == 40
+    )
+
+
 def test_score_for_eval_ingest_explicit() -> None:
     assert score_for_eval_ingest({"score": 0.73}, 1) == 0.73
     assert score_for_eval_ingest({"eval_score": 88}, 0) == 88.0
@@ -299,6 +311,21 @@ def test_build_ingest_item_model_top_level() -> None:
     assert item["score"] == 100.0
     assert "model" not in item["extra"]
     assert "num_turns" not in item["extra"]
+
+
+def test_build_ingest_item_can_approximate_last_turn_tokens() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={"usage": {"total_tokens": 120}, "num_turns": 3},
+        duration_ms=None,
+        approximate_last_turn_from_total=True,
+    )
+    assert item["tokens"] == 40
+    assert item["extra"]["tokens_last_turn"] == 40
 
 
 def test_build_ingest_item_explicit_score_overrides_exit() -> None:

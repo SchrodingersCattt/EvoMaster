@@ -369,6 +369,7 @@ def main() -> int:
                 duration_ms=duration_ms,
                 artifact=artifact,
                 eval_tooling=eval_tooling,
+                approximate_last_turn_from_total=True,
             )
             extra = ingest_item.get("extra")
             if isinstance(extra, dict):
@@ -446,7 +447,9 @@ def main() -> int:
                         "耗时：仅认客观墙钟 — workspace 须有 _cc_baseline_task_start.json（见 "
                         "mark_external_baseline_task_start.py），duration_ms = 该文件时间戳至 _devshell_summary.json "
                         "mtime；缺则 item 无 duration_ms。"
-                        " tokens 以 summary.usage 为准；若缺失须在 score_reason 中说明。"
+                        " tokens 默认按最后一轮口径；若 baseline 仅有总 usage，则按 "
+                        "summary.usage.total_tokens / num_turns 近似最后一轮。若缺失须在 "
+                        "score_reason 中说明。"
                         "上报命令: uv run python "
                         f"evaluation/scripts/eval_ingest_submit_pending.py --pending {pend_path} "
                         "--score <0-100> --score-reason \"...\" [--suggestion \"...\"]"

@@ -219,16 +219,48 @@ class TestBuildEvidence:
         assert evidence.workspace_dir == str(tmp_workspace.resolve())
 
     def test_token_usage_from_summary(self, tmp_workspace: Path) -> None:
-        _write_summary(tmp_workspace)
-        summary = _load_summary(tmp_workspace)
+        summary = {
+            "num_turns": 3,
+            "usage": {
+                "prompt_tokens": 1000,
+                "completion_tokens": 200,
+                "total_tokens": 1200,
+            },
+            "usage_vendor_by_turn": [
+                {"prompt_tokens": 500, "completion_tokens": 100, "total_tokens": 600},
+                {"prompt_tokens": 800, "completion_tokens": 150, "total_tokens": 950},
+                {"prompt_tokens": 1000, "completion_tokens": 200, "total_tokens": 1200},
+            ],
+        }
         evidence = _build_evidence(
             task_id="test_task",
             workspace=tmp_workspace,
             summary=summary,
             answer="done",
         )
-        # prompt_tokens = input_tokens + cache_creation + cache_read = 50+100+850 = 1000
+        # When vendor turn snapshots exist, last-turn usage should stay exact.
         assert evidence.token_usage_last_turn.prompt_tokens == 1000
+
+    def test_token_usage_last_turn_approximated_from_total_when_no_vendor_turns(
+        self, tmp_workspace: Path
+    ) -> None:
+        summary = {
+            "num_turns": 3,
+            "usage": {
+                "prompt_tokens": 900,
+                "completion_tokens": 300,
+                "total_tokens": 1200,
+            },
+        }
+        evidence = _build_evidence(
+            task_id="test_task",
+            workspace=tmp_workspace,
+            summary=summary,
+            answer="done",
+        )
+        assert evidence.token_usage_last_turn.prompt_tokens == 300
+        assert evidence.token_usage_last_turn.completion_tokens == 100
+        assert evidence.token_usage_last_turn.total_tokens == 400
 
     def test_artifacts_listed_from_workspace(self, tmp_workspace: Path) -> None:
         (tmp_workspace / "output.cif").write_text("data_", encoding="utf-8")

@@ -72,7 +72,11 @@ from evaluation.core.evaluator import BinaryEvaluator  # noqa: E402
 from evaluation.core.evaluator_helpers import (  # noqa: E402
     token_usage_record_from_evidence,
 )
-from evaluation.core.evidence import EvidenceBundle, TokenUsage  # noqa: E402
+from evaluation.core.evidence import (  # noqa: E402
+    EvidenceBundle,
+    TokenUsage,
+    approximate_last_turn_usage_from_run_summary,
+)
 from evaluation.core.runner import load_question_banks  # noqa: E402
 from evaluation.core.schemas import (  # noqa: E402
     LLMRuntimeConfig,
@@ -252,6 +256,13 @@ def _build_evidence(
         ld = uvt[-1]
         if isinstance(ld, dict) and ld:
             last_turn_usage = TokenUsage.from_usage_dict(ld)
+    else:
+        approx_last_turn = approximate_last_turn_usage_from_run_summary(
+            usage_raw if isinstance(usage_raw, dict) else None,
+            summary.get("num_turns"),
+        )
+        if approx_last_turn is not None:
+            last_turn_usage = approx_last_turn
 
     # Collect workspace artifacts for artifact_exists checks
     from evaluation.core.evidence import ArtifactRecord

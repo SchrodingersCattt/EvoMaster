@@ -227,3 +227,70 @@ def test_finalize_only_tasks_merges_raw_runs(tmp_path) -> None:
     assert len(lines) == 2
     ids = {json.loads(ln)["task_id"] for ln in lines}
     assert ids == {t1, t2}
+
+
+def test_finalize_pending_ingest_approximates_last_turn_tokens(tmp_path) -> None:
+    run_dir = (tmp_path / "run").resolve()
+    tid = "Q_pending_direct_r0"
+    ws = run_dir / "workspaces" / tid
+    ws.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "eval_tooling": {"schema": "test"},
+                "eval_ingest_url": "http://example.com/api/v1/evaluation/ingest",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (ws / "_eval_task_meta.json").write_text(
+        json.dumps(
+            {
+                "schema": "matmaster_eval_task_meta_v1",
+                "task_id": tid,
+                "question_id": "Q_pending",
+                "capability": "x",
+                "domain": "y",
+                "mode": "direct",
+                "repeat_idx": 0,
+                "prompt": "hello",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    summary = {
+        "model": "test-model",
+        "profile_key": "cc",
+        "status": "completed",
+        "reason": "natural",
+        "final_content": "done",
+        "num_turns": 4,
+        "usage": {"total_tokens": 120},
+    }
+    (ws / "_devshell_summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(FINALIZE),
+            "--run-dir",
+            str(run_dir),
+            "--eval-ingest-pending-only",
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+    pending = run_dir / "pending_ingest" / f"{tid}.json"
+    payload = json.loads(pending.read_text(encoding="utf-8"))
+    assert payload["item"]["tokens"] == 30
+    assert payload["item"]["extra"]["tokens_last_turn"] == 30

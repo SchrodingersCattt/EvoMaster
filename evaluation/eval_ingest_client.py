@@ -28,8 +28,10 @@ opaque JSON. When devshell ``summary.usage`` is present, ``extra`` includes a JS
 one vendor-native usage dict per LLM round (possibly ``{}``); when present it is
 copied into ``extra["usage_vendor_by_turn"]``. Top-level ``item["tokens"]`` and
 ``extra["tokens_last_turn"]`` use the **last LLM round** raw ``total_tokens`` when
-``usage_vendor_by_turn`` is present; otherwise ``summary.usage.total_tokens`` (whole-run
-accumulated scalar, **not** cache-adjusted). Neither path subtracts cache reads.
+``usage_vendor_by_turn`` is present; for external baseline flows that opt in to
+approximation they use ``summary.usage.total_tokens / num_turns``; otherwise they
+fall back to ``summary.usage.total_tokens`` (whole-run accumulated scalar,
+**not** cache-adjusted). Neither path subtracts cache reads.
 Optional ``eval_tooling`` (from
 :func:`evaluation.eval_tooling_snapshot.snapshot_eval_tooling`) records builtin /
 skill / MCP server config for batch analysis. Optional ``events_timeline`` (from
@@ -62,7 +64,10 @@ from typing import Any, Literal
 import httpx
 
 import utils.env
-from evaluation.core.evidence import TokenUsage
+from evaluation.core.evidence import (
+    TokenUsage,
+    approximate_last_turn_usage_from_run_summary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -196,13 +201,18 @@ def _json_safe_usage_tree(obj: Any) -> Any:
     return str(obj)
 
 
-def extract_ingest_tokens(summary: Any) -> int | None:
+def extract_ingest_tokens(
+    summary: Any, *, approximate_last_turn_from_total: bool = False
+) -> int | None:
     """Token count for ingest ``item["tokens"]``: **last round** raw ``total_tokens``, no cache deduction.
 
     1. If ``summary["usage_vendor_by_turn"]`` is a non-empty list, use
        ``int(last_entry["total_tokens"])`` when set.
-    2. Else use ``summary["usage"]["total_tokens"]`` (whole-run accumulated from kernel).
-    3. Else derive from ``usage`` via :class:`evaluation.core.evidence.TokenUsage` (still
+    2. Else, if ``approximate_last_turn_from_total`` is true and ``num_turns > 0``,
+       approximate last-turn usage as ``summary["usage"] / num_turns`` and use that
+       raw ``total_tokens``.
+    3. Else use ``summary["usage"]["total_tokens"]`` (whole-run accumulated from kernel).
+    4. Else derive from ``usage`` via :class:`evaluation.core.evidence.TokenUsage` (still
        **no** cache subtraction — uses reported ``total_tokens`` or ``prompt+completion``).
     """
     if not summary or not isinstance(summary, dict):
@@ -221,6 +231,13 @@ def extract_ingest_tokens(summary: Any) -> int | None:
                     pass
     usage = summary.get("usage")
     if isinstance(usage, dict) and usage:
+        if approximate_last_turn_from_total:
+            approx_last_turn = approximate_last_turn_usage_from_run_summary(
+                usage,
+                summary.get("num_turns"),
+            )
+            if approx_last_turn is not None and approx_last_turn.total_tokens >= 0:
+                return approx_last_turn.total_tokens
         raw_tt = usage.get("total_tokens")
         if raw_tt is not None:
             try:
@@ -516,11 +533,15 @@ def build_ingest_item(
     artifact: dict[str, Any] | None = None,
     eval_tooling: dict[str, Any] | None = None,
     events_timeline: list[str] | None = None,
+    approximate_last_turn_from_total: bool = False,
 ) -> dict[str, Any]:
     raw_summary = summary if isinstance(summary, dict) else None
     s: dict[str, Any] = raw_summary if raw_summary is not None else {}
     usage = s.get("usage")
-    tokens = extract_ingest_tokens(s)
+    tokens = extract_ingest_tokens(
+        s,
+        approximate_last_turn_from_total=approximate_last_turn_from_total,
+    )
 
     extra: dict[str, Any] = {
         "task_id": task_id,
