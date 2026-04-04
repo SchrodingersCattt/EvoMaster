@@ -37,7 +37,7 @@
 #     ANTHROPIC_BEDROCK_SMALL_FAST_MODEL（默认 us.anthropic.claude-haiku-4-5-20251001-v1:0）
 #     脚本会 export 为 ANTHROPIC_MODEL / ANTHROPIC_SMALL_FAST_MODEL 供 Claude Code 读取
 #     ANTHROPIC_PLATFORM=bedrock、AWS_PROFILE=default、CLAUDE_CODE_USE_BEDROCK=1、CLAUDE_CODE_EFFORT_LEVEL（默认 max）
-#     Bedrock 模式下会在 aws configure 后执行 list-foundation-models 探测（与 HTTP_PROXY/SOCKS 一致，便于看是否打通）
+#     Bedrock 模式下会在 aws configure 后执行 list-foundation-models 探测（失败则 exit 1，无法评测）
 #     BASELINE_MAX_TURNS             — 每题最大对话轮数，默认 50
 #     BASELINE_TIMEOUT               — 每题超时秒数，默认 900
 #     BASELINE_CLAUDE_JOBS           — 同时跑几道 claude -p（run_claude_cli_baseline_tasks.py --jobs），默认 4
@@ -60,6 +60,8 @@
 #     BASELINE_STHP_PORT             — sthp 本地 HTTP 监听端口，默认 18080
 #     BASELINE_STHP_SOCKS_USER       — SOCKS5 用户名（可选）
 #     BASELINE_STHP_SOCKS_PASSWORD   — SOCKS5 密码（可选）
+#     BASELINE_SOCKS_PROBE_URL       — SOCKS 直连接探针 URL，默认 http://ifconfig.me（须 curl；失败则 exit 1）
+#     BASELINE_SOCKS_PROBE_TIMEOUT_S — 探针超时秒数，默认 30
 #     BASELINE_NO_PROXY              — 逗号分隔 NO_PROXY（可选，同时设置 NO_PROXY/no_proxy）
 #   AWS CLI（可选，镜像已装 aws v2；须 GitLab Masked 变量）:
 #     AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY — 非空时执行 aws configure set（等价交互式 configure）
@@ -87,6 +89,40 @@ _baseline_stop_sthp() {
     fi
 }
 trap _baseline_stop_sthp EXIT
+
+# 在设置 HTTP_PROXY / 启动 sthp 之前：直连 SOCKS 测出口（与 sthp -s 同源变量）
+_baseline_probe_socks_curl() {
+    local socks="${BASELINE_STHP_SOCKS:-}"
+    [[ -z "${socks}" ]] && return 0
+    if ! command -v curl &>/dev/null; then
+        echo "[ERROR] BASELINE_STHP_SOCKS 已设置但未找到 curl，无法做 SOCKS 探针" >&2
+        exit 1
+    fi
+    local url="${BASELINE_SOCKS_PROBE_URL:-http://ifconfig.me}"
+    local tmo="${BASELINE_SOCKS_PROBE_TIMEOUT_S:-30}"
+    local socks_arg="${socks}"
+    if [[ -n "${BASELINE_STHP_SOCKS_USER:-}" ]]; then
+        socks_arg="${BASELINE_STHP_SOCKS_USER}:${BASELINE_STHP_SOCKS_PASSWORD:-}@${socks}"
+    fi
+    if [[ -n "${BASELINE_STHP_SOCKS_USER:-}" ]]; then
+        echo "[CI] SOCKS 探针: curl --socks5 user:***@${socks} ${url} (timeout ${tmo}s)" >&2
+    else
+        echo "[CI] SOCKS 探针: curl --socks5 ${socks} ${url} (timeout ${tmo}s)" >&2
+    fi
+    set +e
+    local out rc
+    out=$(curl -fsS --max-time "${tmo}" --socks5 "${socks_arg}" "${url}" 2>&1)
+    rc=$?
+    set -e
+    if [[ "${rc}" -eq 0 ]]; then
+        echo "[CI] SOCKS 探针成功: ${out}" >&2
+    else
+        echo "[ERROR] SOCKS 探针失败（exit ${rc}），代理不可用，中止评测: ${out}" >&2
+        exit 1
+    fi
+}
+
+_baseline_probe_socks_curl
 
 _baseline_maybe_start_sthp() {
     local socks="${BASELINE_STHP_SOCKS:-}"
@@ -171,7 +207,8 @@ _baseline_probe_bedrock_list_models() {
         return 0
     fi
     if ! command -v aws &>/dev/null; then
-        return 0
+        echo "[ERROR] Bedrock 模式已启用但未找到 aws CLI，无法 list-foundation-models" >&2
+        exit 1
     fi
     local br_region="${AWS_DEFAULT_REGION:-us-east-1}"
     local _tmp
@@ -188,7 +225,9 @@ _baseline_probe_bedrock_list_models() {
     else
         head -c 4000 "${_tmp}" >&2
         echo "" >&2
-        echo "[WARN] list-foundation-models 失败（exit ${rc}）：SOCKS/代理、网络或 IAM（bedrock:ListFoundationModels）；评测仍继续。" >&2
+        echo "[ERROR] list-foundation-models 失败（exit ${rc}），Bedrock 不可用，中止评测（SOCKS/代理、网络或 IAM: bedrock:ListFoundationModels）。" >&2
+        rm -f "${_tmp}"
+        exit 1
     fi
     rm -f "${_tmp}"
 }

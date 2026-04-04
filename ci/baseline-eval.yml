@@ -45,6 +45,7 @@
 #     BASELINE_STHP_SOCKS          — 必填（启用时）：SOCKS5 地址 host:port，勿加 socks:// 前缀
 #     BASELINE_STHP_PORT           — 本地 HTTP 代理端口，默认 18080
 #     BASELINE_STHP_SOCKS_USER / BASELINE_STHP_SOCKS_PASSWORD — SOCKS 认证（可选）
+#     BASELINE_SOCKS_PROBE_URL / BASELINE_SOCKS_PROBE_TIMEOUT_S — 启动 sthp 前 curl --socks5 直连接探针（默认 ifconfig.me / 30s；失败则 job 失败）
 #     BASELINE_NO_PROXY            — 内网不走代理，逗号分隔（可选）
 #   AWS CLI（可选，评测镜像已装 aws；密钥务必 Masked）— 子 job docker create 已 -e 透传，run_baseline_eval.sh 内 aws configure set:
 #     AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY — 均非空时写入默认 profile（~/.aws）
@@ -53,6 +54,7 @@
 #   Claude Code + Bedrock（claude_cli；须 AWS 凭证写入 default profile，见上）:
 #     触发（任一）: CLAUDE_CODE_USE_BEDROCK=1 / ANTHROPIC_PLATFORM=bedrock / BASELINE_CLAUDE_BEDROCK=1
 #     Bedrock 模型 ID 用 ANTHROPIC_BEDROCK_MODEL / ANTHROPIC_BEDROCK_SMALL_FAST_MODEL（勿用 ANTHROPIC_MODEL=Vendor2/…，那是 gpugeek 路由）
+#     run_baseline_eval.sh 会执行 aws bedrock list-foundation-models；失败则 job 失败（不继续评测）
 #     未设时脚本默认 opus=us.anthropic.claude-opus-4-6-v1[1m]、haiku=us.anthropic.claude-haiku-4-5-20251001-v1:0
 #   finalize 上传评测产物 zip 到 OSS（见 src/dao/oss_io.py）— 须传入内层 docker 容器，已在子流水线 docker create 中 -e 透传:
 #     OSS_ENDPOINT, OSS_BUCKET_NAME, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET

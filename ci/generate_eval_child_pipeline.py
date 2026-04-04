@@ -183,6 +183,8 @@ EVAL_TEMPLATE = """\
         -e BASELINE_STHP_PORT \\
         -e BASELINE_STHP_SOCKS_USER \\
         -e BASELINE_STHP_SOCKS_PASSWORD \\
+        -e BASELINE_SOCKS_PROBE_URL \\
+        -e BASELINE_SOCKS_PROBE_TIMEOUT_S \\
         -e BASELINE_NO_PROXY \\
         -e AWS_ACCESS_KEY_ID \\
         -e AWS_SECRET_ACCESS_KEY \\
@@ -284,6 +286,8 @@ eval-question-list:
         -e BASELINE_STHP_PORT \\
         -e BASELINE_STHP_SOCKS_USER \\
         -e BASELINE_STHP_SOCKS_PASSWORD \\
+        -e BASELINE_SOCKS_PROBE_URL \\
+        -e BASELINE_SOCKS_PROBE_TIMEOUT_S \\
         -e BASELINE_NO_PROXY \\
         -e AWS_ACCESS_KEY_ID \\
         -e AWS_SECRET_ACCESS_KEY \\
