@@ -188,7 +188,7 @@ class FullToolRunner:
                     continue
 
             # 1b. Cancel check (stop_mode-aware)
-            if ctx.stop_event is not None and ctx.stop_event.is_set():
+            if ctx.cancel_token is not None and ctx.cancel_token.is_cancelled:
                 stop_mode = instance.tool_binding.stop_mode
                 if stop_mode == "cancellable":
                     tr = ToolResult(status="cancelled", content="Run cancelled.")
@@ -276,7 +276,7 @@ class FullToolRunner:
         # ── Phase 2: Concurrent execution ──────────────────
         if approved:
             exec_ctx = _ExecCtx(
-                stop_event=ctx.stop_event,
+                cancel_token=ctx.cancel_token,
                 runner_state=self._state,
             )
             await asyncio.gather(
