@@ -17,6 +17,9 @@ developer_instructions = '''
 
 [tools]
 builtin = [
+    "Bash", "Read", "Write", "Edit",
+    "Glob", "Grep", "TodoWrite",
+    "Agent", "WebSearch", "WebFetch",
 ]
 mcp = "*"
 
