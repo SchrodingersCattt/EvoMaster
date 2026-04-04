@@ -1,0 +1,108 @@
+"""matmaster/tools/builtin/bash_tool.py
+
+BashTool — execute bash commands via session.
+
+CC Reference: tools/BashTool/ (toolName.ts, prompt.ts, BashTool.tsx)
+CC name: Bash
+"""
+
+from __future__ import annotations
+
+from typing import Any, ClassVar
+
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
+
+from .base import BuiltinTool
+
+
+class BashTool(BuiltinTool):
+    """Execute bash commands in the session shell.
+
+    CC name: Bash (BashTool)
+    """
+
+    name: ClassVar[str] = "Bash"
+    description: ClassVar[str] = (
+        "Executes a given bash command and returns its output."
+    )
+    json_schema: ClassVar[dict[str, Any]] = {
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": "The command to execute",
+            },
+            "timeout": {
+                "type": "integer",
+                "description": (
+                    "Optional timeout in milliseconds (max 600000). "
+                    "Default: 120000ms (2 minutes)."
+                ),
+            },
+            "description": {
+                "type": "string",
+                "description": (
+                    "Clear, concise description of what this command does."
+                ),
+            },
+        },
+        "required": ["command"],
+    }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="session", mode="exclusive"),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset({"shell.execute"})
+    effect_level: ClassVar[str] = "local_mutation"
+    max_result_chars: ClassVar[int] = 30_000
+    plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
+
+    def prompt(self, ctx=None) -> str:
+        return (
+            "Executes a given bash command and returns its output.\n\n"
+            "The working directory persists between commands, but shell state "
+            "does not.\n\n"
+            "IMPORTANT: Avoid using this tool to run `find`, `grep`, `cat`, "
+            "`head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly "
+            "instructed. Instead, use the appropriate dedicated tool:\n"
+            " - File search: Use Glob (NOT find or ls)\n"
+            " - Content search: Use Grep (NOT grep or rg)\n"
+            " - Read files: Use Read (NOT cat/head/tail)\n"
+            " - Edit files: Use Edit (NOT sed/awk)\n"
+            " - Write files: Use Write (NOT echo >/cat <<EOF)\n\n"
+            "# Instructions\n"
+            " - Always quote file paths that contain spaces with double quotes\n"
+            " - You may specify an optional timeout in milliseconds (max 600000ms / "
+            "10 minutes). By default, your command will timeout after 120000ms.\n"
+            " - When issuing multiple commands that are independent, make multiple "
+            "Bash tool calls in a single message.\n"
+            " - For git commands: prefer creating a new commit rather than amending."
+        )
+
+    def _execute(self, arguments: dict[str, Any]) -> str:
+        session = self._require_session()
+
+        command: str = (arguments.get("command") or "").strip()
+        if not command:
+            return "Error: command is required and must not be empty."
+
+        timeout_ms = arguments.get("timeout", 120_000)
+        timeout_ms = min(int(timeout_ms), 600_000)  # cap at 10min
+        timeout_s = timeout_ms / 1000  # float division preserves sub-second
+
+        result = session.exec_bash(
+            command=command,
+            timeout=timeout_s,
+            cancel_token=self._cancel_token_for_exec(),
+        )
+
+        output = result.get("output", "") or result.get("stdout", "")
+        exit_code = result.get("exit_code", 0)
+        working_dir = result.get("working_dir", "")
+
+        obs = output
+        if working_dir:
+            obs += f"\n[Current working directory: {working_dir}]"
+        obs += f"\n[Command finished with exit code {exit_code}]"
+
+        return obs
