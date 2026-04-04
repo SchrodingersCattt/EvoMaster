@@ -2,7 +2,7 @@ version: v5
 capability: data_diagnosis
 domain: general
 questions:
-- id: DD_general_001
+- id: DD_general_001_20260404
   capability: data_diagnosis
   domain: general
   intent: Diagnose SCF non-convergence caused by missing spin polarization on a magnetic oxide.
@@ -31,12 +31,15 @@ questions:
     - evidence
     - fix_ISPIN
     - fix_MAGMOM
+  - key: turn_budget
+    value: &id000
+      max: 8
   - key: duration_budget
     value: &id001
       max: 7200000
   - key: token_budget_total
     value: &id002
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: root_cause
     criterion: Correctly identifies missing spin polarization (ISPIN=1 on magnetic Fe2O3) as root cause.
@@ -55,6 +58,10 @@ questions:
     criterion: Agent reads the provided bundle and diagnoses directly without excessive exploratory tool calls.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
       per deployment).
@@ -64,7 +71,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: DD_general_002
+- id: DD_general_002_20260404
   capability: data_diagnosis
   domain: general
   intent: Diagnose SCF non-convergence caused by wrong SMEARING settings for a semiconductor.
@@ -92,6 +99,8 @@ questions:
     - evidence
     - fix_ISMEAR
     - fix_SIGMA
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -113,6 +122,10 @@ questions:
     criterion: Agent diagnoses directly from the bundle without unnecessary tool exploration.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
       per deployment).
@@ -122,7 +135,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: DD_general_003
+- id: DD_general_003_20260404
   capability: data_diagnosis
   domain: general
   intent: Diagnose relaxation non-convergence caused by EDIFF being too loose relative to EDIFFG.
@@ -151,6 +164,8 @@ questions:
     - evidence
     - fix_EDIFF
     - ediff_ediffg_rule
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -173,6 +188,10 @@ questions:
     criterion: Agent reaches diagnosis without redundant tool calls beyond reading the provided bundle.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
       per deployment).
@@ -182,7 +201,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: DD_general_004
+- id: DD_general_004_20260404
   capability: data_diagnosis
   domain: general
   intent: Diagnose relaxation divergence caused by POTIM too large combined with wrong initial phase.
@@ -212,6 +231,8 @@ questions:
     - evidence
     - fix_POTIM
     - fix_initial_structure
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -235,6 +256,10 @@ questions:
     criterion: Dual root cause is identified efficiently without repeated re-reading of the same file.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
       per deployment).
@@ -244,7 +269,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: DD_general_005
+- id: DD_general_005_20260404
   capability: data_diagnosis
   domain: general
   intent: Given descriptions of mixed failed-job scenarios, classify failure modes and provide parameterized retry strategy.
@@ -270,6 +295,8 @@ questions:
     - retry_parameters
     - fallback_rule
     - stop_condition
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -293,6 +320,10 @@ questions:
       failure descriptions.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
       per deployment).

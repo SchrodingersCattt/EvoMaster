@@ -71,24 +71,24 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.20.0
+    rev: v3.21.2
     hooks:
       - id: pyupgrade
 
   - repo: https://github.com/psf/black
-    rev: 25.9.0
+    rev: 26.3.1
     hooks:
       - id: black
         args: [ --skip-string-normalization, --line-length=88 ]
 
   - repo: https://github.com/pycqa/isort
-    rev: 6.0.1
+    rev: 8.0.1
     hooks:
       - id: isort
         args: [ "--profile", "black" ]
 
   - repo: https://github.com/pycqa/autoflake
-    rev: v2.3.1
+    rev: v2.3.3
     hooks:
       - id: autoflake
         args:
