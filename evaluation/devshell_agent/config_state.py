@@ -31,3 +31,4 @@ class AgentLoopSharedState:
     session_dir: Path
     outcomes: list[dict[str, Any]]
     defaults: DevshellAgentCliDefaults
+    last_eval_output_dir: Path | None = None

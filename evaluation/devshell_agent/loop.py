@@ -19,6 +19,7 @@ from evaluation.devshell_agent.git_iteration import (
     git_rev_parse_head,
     head_at_iteration_start,
 )
+from evaluation.devshell_agent.subprocess_runner import run_score_devshell_tasks_submit
 
 
 @dataclass
@@ -32,6 +33,8 @@ class AgentLoopConfig:
     max_sdk_turns: int
     extra_instruction: str = ""
     git_reset_on_regression: bool = True
+    eval_ingest_submit_each_iteration: bool = True
+    eval_ingest_submit_timeout: float = 120.0
 
 
 class DevshellAgentLoop:
@@ -53,7 +56,7 @@ class DevshellAgentLoop:
 - 优先使用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py` 自动评分；它会基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl` 调用同一套 `BinaryEvaluator`。
 - 宏平均以 `score_devshell_tasks.py` 输出为准；不要手工估算一个与脚本不一致的分数。
 - 如需解释低分原因，可再阅读题库 YAML、workspace 交付物和事件日志；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
-- 若使用 `--eval-ingest-pending-only`：优先通过 `score_devshell_tasks.py --submit` 写回并提交 `pending_ingest/*.json`。
+- 若使用 `--eval-ingest-pending-only`（本编排默认）：判分时请只用 `score_devshell_tasks.py --dry-run`；**ingest POST** 由外层在每轮 `report_iteration_outcome` 之后对本轮最近一次 `run_devshell_eval` 输出目录自动执行 `score_devshell_tasks.py --submit`，你无需再手动 `--submit`（避免重复上报）。
 
 ## 修改范围
 - 优先修改与 Agent 行为直接相关的路径，例如 `configs/mat_master/`、`matmaster/exps/`、`playground/mat_master/` 下的提示、技能、工具描述；避免无关大重构。
@@ -85,7 +88,7 @@ class DevshellAgentLoop:
 
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
-2. 对本次 run 先执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <本轮目录> --dry-run`，以脚本输出的每题分数与宏平均作为本轮判分结果；必要时再阅读 `eval_runs/.../workspaces/<task_id>/`、`logs/<task_id>/events_*.jsonl` 与题库 YAML 解释低分原因。
+2. 对本次 run 执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <本轮目录> --dry-run` 获取判分（**不要**在本轮内自行加 `--submit`）；ingest 由编排器在本轮结束后自动提交。
 3. 若未达标：修改仓库内相关提示词/工具/配置。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**（`git revert` 或安全的 `reset`）。若已达标：可不改。
 4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（如有）；若本轮曾回滚无效改动，分数应以回滚后的最终状态为准。
 {extra_block}
@@ -108,6 +111,8 @@ class DevshellAgentLoop:
             },
             "extra_instruction": cfg.extra_instruction,
             "git_reset_on_regression": cfg.git_reset_on_regression,
+            "eval_ingest_submit_each_iteration": cfg.eval_ingest_submit_each_iteration,
+            "eval_ingest_submit_timeout": cfg.eval_ingest_submit_timeout,
         }
         session_dir.mkdir(parents=True, exist_ok=True)
         (session_dir / "session_manifest.json").write_text(
@@ -168,6 +173,7 @@ class DevshellAgentLoop:
         exit_code = 0
         async with ClaudeSDKClient(options=options) as client:
             for it in range(1, cfg.max_iterations + 1):
+                state.last_eval_output_dir = None
                 head0 = git_rev_parse_head(repo_root=cfg.repo_root)
                 if head0:
                     append_iteration_head(
@@ -189,6 +195,10 @@ class DevshellAgentLoop:
                         file=sys.stderr,
                     )
                     exit_code = 1
+                    if not self._maybe_submit_iteration_ingest(
+                        state=state, iteration=it
+                    ):
+                        exit_code = 1
                     continue
 
                 last = matching[-1]
@@ -225,6 +235,9 @@ class DevshellAgentLoop:
                                     file=sys.stderr,
                                 )
 
+                if not self._maybe_submit_iteration_ingest(state=state, iteration=it):
+                    exit_code = 1
+
                 if met or score >= cfg.target_mean_score:
                     print(
                         f"Stopping after iteration {it}: target_met={met} "
@@ -234,6 +247,76 @@ class DevshellAgentLoop:
                     break
 
         return exit_code
+
+    def _defaults_disable_eval_ingest(self) -> bool:
+        return "--no-eval-ingest" in self._cfg.defaults.extra_args
+
+    def _maybe_submit_iteration_ingest(
+        self,
+        *,
+        state: AgentLoopSharedState,
+        iteration: int,
+    ) -> bool:
+        """Return False if ``--submit`` was run and exited non-zero."""
+        cfg = self._cfg
+        if not cfg.eval_ingest_submit_each_iteration:
+            return True
+        if not cfg.defaults.eval_ingest_pending_only:
+            return True
+        if self._defaults_disable_eval_ingest():
+            return True
+        run_dir = state.last_eval_output_dir
+        if run_dir is None:
+            print(
+                f"warning: iter {iteration}: skip ingest submit (no run_devshell_eval "
+                f"output dir recorded)",
+                file=sys.stderr,
+            )
+            return True
+        run_dir = run_dir.resolve()
+        if not (run_dir / "raw_runs.jsonl").is_file():
+            print(
+                f"warning: iter {iteration}: skip ingest submit (no raw_runs.jsonl in "
+                f"{run_dir})",
+                file=sys.stderr,
+            )
+            return True
+        pending_dir = run_dir / "pending_ingest"
+        if not pending_dir.is_dir() or not any(pending_dir.glob("*.json")):
+            print(
+                f"warning: iter {iteration}: skip ingest submit (no pending_ingest/*.json "
+                f"under {run_dir})",
+                file=sys.stderr,
+            )
+            return True
+        rc, out, err = run_score_devshell_tasks_submit(
+            repo_root=cfg.repo_root,
+            run_dir=run_dir,
+            eval_config=cfg.defaults.eval_config,
+            eval_ingest_timeout=float(cfg.eval_ingest_submit_timeout),
+        )
+        log_path = cfg.session_dir / "ingest_submit.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_row = {
+            "iteration": iteration,
+            "run_dir": str(run_dir),
+            "exit_code": rc,
+            "stdout_tail": (out or "")[-8000:],
+            "stderr_tail": (err or "")[-8000:],
+        }
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(log_row, ensure_ascii=False) + "\n")
+        if out.strip():
+            print(out, file=sys.stderr, end="" if out.endswith("\n") else "\n")
+        if err.strip():
+            print(err, file=sys.stderr, end="" if err.endswith("\n") else "\n")
+        if rc != 0:
+            print(
+                f"warning: iter {iteration}: score_devshell_tasks --submit exit {rc}",
+                file=sys.stderr,
+            )
+            return False
+        return True
 
     def run_sync(self) -> int:
         return asyncio.run(self.run())

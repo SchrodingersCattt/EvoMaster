@@ -90,6 +90,21 @@ class DevshellAgentLoopCli:
                 "and git head was recorded at iteration start, run git reset --hard."
             ),
         )
+        p.add_argument(
+            "--eval-ingest-submit-each-iteration",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help=(
+                "When eval-ingest-pending-only is on, after each iteration run "
+                "score_devshell_tasks.py --submit on the last run_devshell_eval output dir."
+            ),
+        )
+        p.add_argument(
+            "--eval-ingest-submit-timeout",
+            type=float,
+            default=120.0,
+            help="HTTP timeout (seconds) per ingest POST during automatic --submit.",
+        )
 
         p.add_argument(
             "--modes",
@@ -218,6 +233,10 @@ class DevshellAgentLoopCli:
             max_sdk_turns=max(1, int(args.max_sdk_turns)),
             extra_instruction=str(args.extra_instruction or ""),
             git_reset_on_regression=bool(args.git_reset_on_regression),
+            eval_ingest_submit_each_iteration=bool(
+                args.eval_ingest_submit_each_iteration
+            ),
+            eval_ingest_submit_timeout=max(1.0, float(args.eval_ingest_submit_timeout)),
         )
 
         print(f"Session directory: {session_dir}", file=sys.stderr)

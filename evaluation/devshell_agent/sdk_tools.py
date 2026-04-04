@@ -220,6 +220,7 @@ class MatmasterEvalMcpToolkit:
         )
         argv = self._subprocess.build_argv(script, params)
         rc, stdout, stderr = self._subprocess.run_capture(argv)
+        self._state.last_eval_output_dir = params.output_dir
         log_file = params.output_dir / "orchestrator_subprocess.log"
         log_file.write_text(
             f"command: {' '.join(argv)!r}\nexit_code: {rc}\n\n--- STDOUT ---\n{stdout}\n"
