@@ -232,7 +232,9 @@ class TestCliRunMode:
             "usage": {"total_tokens": 3},
         }
 
-    def test_bootstrap_runner_silences_run_mode_stream_output(self, tmp_path: Path) -> None:
+    def test_bootstrap_runner_silences_run_mode_stream_output(
+        self, tmp_path: Path
+    ) -> None:
         from matmaster.devshell.cli import _bootstrap_runner, parse_args
 
         args = parse_args(
@@ -277,7 +279,7 @@ class TestCliRunMode:
             _bootstrap_runner(args)
 
         stream_hook = captured["stream_hook"]
-        assert getattr(stream_hook, "_out") is not sys.stdout
+        assert stream_hook._out is not sys.stdout
 
 
 class TestShowTools:
