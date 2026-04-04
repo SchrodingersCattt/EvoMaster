@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import subprocess
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -99,7 +100,7 @@ class LocalSession:
         self,
         command: str,
         timeout: int,
-        stop_event: threading.Event,
+        stop_event: Any,
     ) -> dict[str, Any]:
         """Execute with stop_event polling -- kill subprocess when stop is requested."""
         proc = subprocess.Popen(
@@ -122,7 +123,11 @@ class LocalSession:
                     "working_dir": str(self._workspace_path),
                     "output": "Cancelled by stop request",
                 }
-            stop_event.wait(poll_interval)
+            wait = getattr(stop_event, "wait", None)
+            if callable(wait):
+                wait(poll_interval)
+            else:
+                time.sleep(poll_interval)
             elapsed += poll_interval
             if elapsed >= timeout:
                 proc.kill()
