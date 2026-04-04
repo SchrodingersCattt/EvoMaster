@@ -21,8 +21,10 @@ child_pipeline: questions
 # claude_cli | devshell — 与 run_baseline_eval.sh / EVAL_RUNNER 一致
 eval_runner: claude_cli
 
-questions_mode: score_summary_missing_cc
+# preset — 只跑下方 question_ids（或 CI 变量 BASELINE_QUESTIONS 覆盖）
+# score_summary_missing_cc — 从 tools-server score-summary 取缺 CC 基线分题目（可与 question_ids / BASELINE_QUESTIONS 求交）
+questions_mode: preset
 
 # Used when child_pipeline is ``questions`` (v5 question ``id`` from bank YAML).
-# Empty is valid if questions_mode is score_summary_missing_cc (IDs from API at run).
-question_ids: []
+question_ids:
+  - SC_elec_001_20260404b
