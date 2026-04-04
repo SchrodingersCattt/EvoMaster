@@ -64,8 +64,8 @@ class TestSessionConfig:
         """Test 2: SessionConfig has timeout/workspace_path/working_dir fields."""
         cfg = SessionConfig()
         assert cfg.timeout == 300
-        assert cfg.workspace_path == "/workspace"
-        assert cfg.working_dir == "/workspace"
+        assert cfg.workspace_path == "/share"
+        assert cfg.working_dir == "/share"
 
     def test_session_config_frozen(self) -> None:
         """Test 2 (continued): SessionConfig is frozen."""
