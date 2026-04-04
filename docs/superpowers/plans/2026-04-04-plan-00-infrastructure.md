@@ -49,11 +49,21 @@ class TestResolveSafePath:
 
     def test_normpath_removes_dotdot(self):
         assert resolve_safe_path("src/../src/foo", "/workspace") == "/workspace/src/foo"
+
+    def test_workdir_trailing_slash(self):
+        assert resolve_safe_path("src", "/workspace/") == "/workspace/src"
+
+    def test_workdir_trailing_slash_absolute(self):
+        assert resolve_safe_path("/workspace/src", "/workspace/") == "/workspace/src"
+
+    def test_prefix_collision_not_subdir(self):
+        # /workspacex is NOT a subdirectory of /workspace
+        assert resolve_safe_path("/workspacex/foo", "/workspace") == "/workspace"
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo/.worktrees/claude-code-tool && python -m pytest tests/matmaster/tools/builtin/test_path_safety.py -v`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo/.worktrees/claude-code-tool && uv run pytest tests/matmaster/tools/builtin/test_path_safety.py -v`
 Expected: FAIL (module not found)
 
 - [ ] **Step 3: Write failing tests for `shell_escape`**
@@ -65,8 +75,9 @@ from matmaster.tools.builtin._path_safety import shell_escape
 
 
 class TestShellEscape:
-    def test_simple_string(self):
-        assert shell_escape("hello") == "'hello'"
+    def test_simple_string_unchanged(self):
+        # shlex.quote returns safe strings unchanged (no wrapping quotes)
+        assert shell_escape("hello") == "hello"
 
     def test_string_with_spaces(self):
         assert shell_escape("hello world") == "'hello world'"
@@ -115,6 +126,9 @@ def resolve_safe_path(user_path: str, workdir: str) -> str:
     The outside-workdir fallback is defense-in-depth; StructuralValidation
     (Layer A) catches boundary violations before _execute() runs.
     """
+    # Normalize workdir first to handle trailing slashes and dot segments
+    workdir = posixpath.normpath(workdir)
+
     if not user_path or user_path == ".":
         return workdir
 
@@ -142,7 +156,7 @@ def shell_escape(value: str) -> str:
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo/.worktrees/claude-code-tool && python -m pytest tests/matmaster/tools/builtin/test_path_safety.py -v`
+Run: `cd /Users/kealdoom/Developer/dp/matmaster/matmaster-evo/.worktrees/claude-code-tool && uv run pytest tests/matmaster/tools/builtin/test_path_safety.py -v`
 Expected: all PASS
 
 - [ ] **Step 6: Commit**
@@ -260,6 +274,22 @@ class TestRequireSession:
         assert tool._require_session() == "fake"
 
 
+class TestToolResultReturn:
+    def test_execute_propagates_tool_result(self):
+        class ToolResultTool(BuiltinTool):
+            name = "ToolResultTool"
+            description = "Returns ToolResult"
+            json_schema = {"type": "object", "properties": {}}
+
+            def _execute(self, arguments):
+                return ToolResult(content="structured output")
+
+        tool = ToolResultTool()
+        result = asyncio.run(tool.execute({}))
+        assert isinstance(result, ToolResult)
+        assert result.content == "structured output"
+
+
 class TestValidateInput:
     def test_default_returns_none(self):
         tool = ConcreteTool()
@@ -269,7 +299,7 @@ class TestValidateInput:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `python -m pytest tests/matmaster/tools/builtin/test_base.py -v`
+Run: `uv run pytest tests/matmaster/tools/builtin/test_base.py -v`
 Expected: FAIL (module not found)
 
 - [ ] **Step 3: Implement `base.py`**
@@ -296,6 +326,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_runner_state import ToolRunnerState
@@ -328,10 +359,10 @@ class BuiltinTool(ABC):
         self,
         *,
         session: Any | None = None,
-        workdir: Path | None = None,
+        workdir: str | Path | None = None,
     ) -> None:
         self._session = session
-        self._workdir = workdir
+        self._workdir = Path(workdir) if workdir is not None else None
         self.logger = logging.getLogger(self.__class__.__name__)
 
     async def execute(self, arguments: dict[str, Any]) -> str | ToolResult:
@@ -347,7 +378,7 @@ class BuiltinTool(ABC):
         arguments: dict[str, Any],
         exec_ctx: ToolExecutionContext | None,
     ) -> str | ToolResult:
-        """Context-aware execution. Subclasses override for stop_event/runner_state."""
+        """Context-aware execution. Subclasses override for cancel_token/runner_state."""
         try:
             return await asyncio.to_thread(self._execute, arguments)
         except Exception as e:
@@ -383,19 +414,19 @@ class BuiltinTool(ABC):
             )
         return self._session
 
-    def _stop_event_for_exec(self) -> Any:
-        """Cancel signal for session.exec_bash."""
-        ev = getattr(self, "_stop_event", None)
-        if ev is not None:
-            return ev
+    def _cancel_token_for_exec(self) -> CancellationToken | None:
+        """Cancel signal for session.exec_bash (injected by ToolCatalog.inject_cancel_token)."""
+        ct = getattr(self, "_cancel_token", None)
+        if ct is not None:
+            return ct
         if self._session is not None:
-            return getattr(self._session, "_stop_event", None)
+            return getattr(self._session, "_cancel_token", None)
         return None
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `python -m pytest tests/matmaster/tools/builtin/test_base.py -v`
+Run: `uv run pytest tests/matmaster/tools/builtin/test_base.py -v`
 Expected: all PASS
 
 - [ ] **Step 5: Commit**
@@ -412,6 +443,8 @@ git commit -m "feat(tools): add BuiltinTool ABC base class"
 **Files:**
 - Create: `matmaster/tools/builtin/__init__.py`
 - Create: `tests/matmaster/tools/builtin/__init__.py`
+
+**Note:** This skeleton is for the worktree fresh-start scenario. The current codebase `__init__.py` already exports all existing tools (BashTool, ReadTool, etc.). When executing in the worktree, start with this minimal skeleton; each subsequent plan (01-04) appends its tool class to `__all__` and adds the corresponding import.
 
 - [ ] **Step 1: Create skeleton `__init__.py`**
 
@@ -439,7 +472,7 @@ __all__ = [
 
 - [ ] **Step 3: Verify import works**
 
-Run: `python -c "from matmaster.tools.builtin import BuiltinTool; print(BuiltinTool.__name__)"`
+Run: `uv run python -c "from matmaster.tools.builtin import BuiltinTool; print(BuiltinTool.__name__)"`
 Expected: `BuiltinTool`
 
 - [ ] **Step 4: Commit**
@@ -454,3 +487,7 @@ git commit -m "feat(tools): add builtin package skeleton"
 ## Dependency Note
 
 Plans 01-04 all depend on this plan completing first. They will each append their tool class to `__init__.py` as they are implemented.
+
+**Plan-01 integration requirements** (must be addressed when implementing core file/shell tools):
+- **Replace inline `_resolve_safe_path`**: GlobTool and GrepTool each have an identical inline `_resolve_safe_path` method. Plan-01 must replace these with `from matmaster.tools.builtin._path_safety import resolve_safe_path`.
+- **Use `shell_escape` for command construction**: Current GlobTool/GrepTool interpolate user-supplied `pattern`, `glob`, and `path` directly into f-strings (e.g., `f'find "{safe_path}" -type f -name "{pattern}"'`). This is a shell injection vector. Plan-01 must use `shell_escape()` from `_path_safety` for all user parameters before shell interpolation.
