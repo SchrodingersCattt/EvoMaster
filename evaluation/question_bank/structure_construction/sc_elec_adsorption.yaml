@@ -4,7 +4,7 @@ domain: "elec"
 
 questions:
   # ============================================================
-  # SC_elec_004_20260401 — Ag(001)表面CO吸附结构构建
+  # SC_elec_004_20260404 — Ag(001)表面CO吸附结构构建
   # ============================================================
   - id: "SC_elec_004_20260404"
     capability: "structure_construction"
@@ -13,7 +13,7 @@ questions:
     human_prompt_seed: |
       构建CO在Ag(001)表面的吸附结构：
       1. 获取Ag FCC体相结构（空间群Fm-3m，a=4.086 Å）；
-      2. 切出(001)表面slab（4层，15 Å真空，3×3扩胞）；
+      2. 切出(001)表面slab：4个原子层（即沿z方向4个不等价原子平面，3×3扩胞共36个Ag原子），真空层15 Å；
       3. 在slab顶层ontop位点放置CO分子（C端朝下，初始距离~2.0 Å）；
       4. 输出三个结构文件：bare_slab.vasp, CO_molecule.vasp, adsorbed_system.vasp。
     tags: ["co2rr", "adsorption", "slab", "molecule_placement", "silver"]
@@ -39,7 +39,7 @@ questions:
         value: {max: 8000}
     scoring_checklist:
       - id: "slab_layers"
-        criterion: "Slab has 4 layers as specified."
+        criterion: "Slab has exactly 4 atomic layers (4 z-distinct atomic planes, 36 Ag atoms in 3×3 supercell)."
         axis: "correctness"
         verify: "numerical_range"
       - id: "required_fields"
@@ -47,7 +47,7 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "structure_validity"
-        criterion: "Slab has 4 layers, vacuum ≥ 15 Å, CO is placed at ontop site with C-down orientation."
+        criterion: "Slab has 4 atomic layers (4 z-distinct planes, 36 Ag atoms), vacuum ≥ 15 Å, CO is placed at ontop site with C-down orientation."
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "grounding_source"
