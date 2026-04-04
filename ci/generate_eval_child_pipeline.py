@@ -171,6 +171,11 @@ EVAL_TEMPLATE = """\
         -e BASELINE_SCORE_SUBMIT="${BASELINE_SCORE_SUBMIT}" \\
         -e BASELINE_SCORE_EVAL_CONFIG="${BASELINE_SCORE_EVAL_CONFIG}" \\
         -e BASELINE_SCORE_EVAL_INGEST_TIMEOUT="${BASELINE_SCORE_EVAL_INGEST_TIMEOUT}" \\
+        -e BASELINE_STHP_SOCKS \\
+        -e BASELINE_STHP_PORT \\
+        -e BASELINE_STHP_SOCKS_USER \\
+        -e BASELINE_STHP_SOCKS_PASSWORD \\
+        -e BASELINE_NO_PROXY \\
         "${DYNAMIC_IMAGE}" \\
         bash /app/ci/run_baseline_eval.sh
       EVAL_EXIT=0
@@ -255,6 +260,11 @@ eval-question-list:
         -e BASELINE_SCORE_SUBMIT="${BASELINE_SCORE_SUBMIT}" \\
         -e BASELINE_SCORE_EVAL_CONFIG="${BASELINE_SCORE_EVAL_CONFIG}" \\
         -e BASELINE_SCORE_EVAL_INGEST_TIMEOUT="${BASELINE_SCORE_EVAL_INGEST_TIMEOUT}" \\
+        -e BASELINE_STHP_SOCKS \\
+        -e BASELINE_STHP_PORT \\
+        -e BASELINE_STHP_SOCKS_USER \\
+        -e BASELINE_STHP_SOCKS_PASSWORD \\
+        -e BASELINE_NO_PROXY \\
         "${DYNAMIC_IMAGE}" \\
         bash /app/ci/run_baseline_eval.sh
       EVAL_EXIT=0

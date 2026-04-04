@@ -48,6 +48,12 @@
 #       （与 preset 中 question_ids / BASELINE_QUESTIONS 交集）；交集为空则 exit 0。须 MATMASTER_TOOLS_*。
 #       缺分列表不按 BASELINE_LIMIT 截断（BASELINE_LIMIT 仅用于 capabilities 布局）。
 #     BASELINE_SCORE_SUMMARY_TIMEOUT — 可选，score-summary GET 超时秒数，默认 120
+#   SOCKS5 出网（可选，镜像内已带 sthp；不设 BASELINE_STHP_SOCKS 则不启用）:
+#     BASELINE_STHP_SOCKS            — SOCKS5 地址 host:port（勿加 socks://；DNS 在 SOCKS 侧解析）
+#     BASELINE_STHP_PORT             — sthp 本地 HTTP 监听端口，默认 18080
+#     BASELINE_STHP_SOCKS_USER       — SOCKS5 用户名（可选）
+#     BASELINE_STHP_SOCKS_PASSWORD   — SOCKS5 密码（可选）
+#     BASELINE_NO_PROXY              — 逗号分隔 NO_PROXY（可选，同时设置 NO_PROXY/no_proxy）
 
 set -euo pipefail
 
@@ -62,6 +68,48 @@ if [[ -x "${APP_DIR}/.venv/bin/python" ]]; then
 else
     PY="python3"
 fi
+
+STHP_PID=""
+_baseline_stop_sthp() {
+    if [[ -n "${STHP_PID}" ]] && kill -0 "${STHP_PID}" 2>/dev/null; then
+        kill "${STHP_PID}" 2>/dev/null || true
+    fi
+}
+trap _baseline_stop_sthp EXIT
+
+_baseline_maybe_start_sthp() {
+    local socks="${BASELINE_STHP_SOCKS:-}"
+    [[ -z "${socks}" ]] && return 0
+    local bin=""
+    if command -v sthp >/dev/null 2>&1; then
+        bin="$(command -v sthp)"
+    elif [[ -x /usr/local/bin/sthp ]]; then
+        bin="/usr/local/bin/sthp"
+    else
+        echo "[ERROR] BASELINE_STHP_SOCKS 已设置但未找到 sthp（需 Dockerfile.eval 构建进镜像）" >&2
+        exit 1
+    fi
+    local port="${BASELINE_STHP_PORT:-18080}"
+    local -a args=(-p "${port}" -s "${socks}")
+    [[ -n "${BASELINE_STHP_SOCKS_USER:-}" ]] && args+=(-u "${BASELINE_STHP_SOCKS_USER}")
+    [[ -n "${BASELINE_STHP_SOCKS_PASSWORD:-}" ]] && args+=(-P "${BASELINE_STHP_SOCKS_PASSWORD}")
+    echo "[CI] 启动 sthp：HTTP 127.0.0.1:${port} -> SOCKS5 ${socks}" >&2
+    "${bin}" "${args[@]}" &
+    STHP_PID=$!
+    sleep 0.5
+    if ! kill -0 "${STHP_PID}" 2>/dev/null; then
+        echo "[ERROR] sthp 进程已退出" >&2
+        exit 1
+    fi
+    export HTTP_PROXY="http://127.0.0.1:${port}"
+    export HTTPS_PROXY="http://127.0.0.1:${port}"
+    if [[ -n "${BASELINE_NO_PROXY:-}" ]]; then
+        export NO_PROXY="${BASELINE_NO_PROXY}"
+        export no_proxy="${BASELINE_NO_PROXY}"
+    fi
+}
+
+_baseline_maybe_start_sthp
 
 _baseline_write_skip_artifacts() {
     local reason="$1"
