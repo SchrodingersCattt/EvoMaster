@@ -9,6 +9,7 @@ Tools are added incrementally by plan-01 through plan-04.
 from matmaster.tools.builtin.agent_tool import AgentTool
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.builtin.bash_tool import BashTool
+from matmaster.tools.builtin.bohrium import BohriumTool
 from matmaster.tools.builtin.edit_tool import EditTool
 from matmaster.tools.builtin.glob_tool import GlobTool
 from matmaster.tools.builtin.grep_tool import GrepTool
@@ -21,6 +22,7 @@ from matmaster.tools.builtin.write_tool import WriteTool
 
 __all__ = [
     "AgentTool",
+    "BohriumTool",
     "BuiltinTool",
     "BashTool",
     "EditTool",

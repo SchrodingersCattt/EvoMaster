@@ -465,6 +465,7 @@ class Exp:
 
         from matmaster.tools.builtin import (
             BashTool,
+            BohriumTool,
             EditTool,
             GlobTool,
             GrepTool,
@@ -503,6 +504,7 @@ class Exp:
             TodoWriteTool(workdir=ctx.workdir),
             WebSearchTool(),
             WebFetchTool(workdir=ctx.workdir),
+            BohriumTool(workdir=ctx.workdir),
         ]
 
         registered: list[Any] = []
