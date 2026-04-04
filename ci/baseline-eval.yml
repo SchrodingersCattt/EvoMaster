@@ -6,7 +6,7 @@
 #      （capabilities | questions），除非在 Run pipeline / 项目 CI Variables 中设置了
 #      BASELINE_CHILD_PIPELINE（该变量会覆盖预设文件）。
 #      - capabilities：每个 capability 一个 manual job。
-#      - questions：仅 eval-question-list 一个 manual job；题目来自预设 question_ids 或
+#      - questions：eval-question-list 在子流水线 init 后自动运行；题目来自预设 question_ids 或
 #        BASELINE_QUESTIONS（逗号分隔）。此模式忽略 BASELINE_LIMIT。
 #
 # 评测引擎（EVAL_RUNNER）：默认由 ci/baseline_eval_preset.yaml 的 eval_runner 决定；
