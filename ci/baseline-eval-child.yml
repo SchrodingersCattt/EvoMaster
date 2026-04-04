@@ -61,6 +61,10 @@ child-pipeline-ready:
         -e ANTHROPIC_DEFAULT_SONNET_MODEL \
         -e MATMASTER_TOOLS_SERVER \
         -e MATMASTER_TOOLS_EVALUATION_BEARER \
+        -e OSS_ENDPOINT \
+        -e OSS_BUCKET_NAME \
+        -e OSS_ACCESS_KEY_ID \
+        -e OSS_ACCESS_KEY_SECRET \
         -e LITELLM_PROXY_API_KEY \
         -e LITELLM_PROXY_API_BASE \
         -e BASELINE_CAPABILITIES="${EVAL_CAP}" \
@@ -71,6 +75,9 @@ child-pipeline-ready:
         -e BASELINE_MODEL="${BASELINE_MODEL}" \
         -e BASELINE_RUN_LABEL="${BASELINE_RUN_LABEL}_${EVAL_CAP}" \
         -e BASELINE_PENDING_ONLY="${BASELINE_PENDING_ONLY}" \
+        -e BASELINE_SCORE_SUBMIT="${BASELINE_SCORE_SUBMIT}" \
+        -e BASELINE_SCORE_EVAL_CONFIG="${BASELINE_SCORE_EVAL_CONFIG}" \
+        -e BASELINE_SCORE_EVAL_INGEST_TIMEOUT="${BASELINE_SCORE_EVAL_INGEST_TIMEOUT}" \
         "${DYNAMIC_IMAGE}" \
         bash /app/ci/run_baseline_eval.sh
       EVAL_EXIT=0

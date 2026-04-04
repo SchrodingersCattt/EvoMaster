@@ -1,13 +1,18 @@
 # 自动评测流水线（父子流水线架构）
 #
 # 架构说明：
-#   1. 父流水线：构建镜像 + 动态生成子流水线 YAML → 触发子流水线
-#   2. 子流水线（动态生成）：自动扫描 evaluation/question_bank/ 下的 capability，
-#      每个 capability 一个独立 manual job，按需点击运行。
+#   1. 父流水线：build 阶段构建镜像；baseline-eval 阶段 baseline-eval-trigger 触发动态子流水线
+#   2. 子流水线（动态生成）：布局由 ci/baseline_eval_preset.yaml 的 child_pipeline 决定
+#      （capabilities | questions），除非在 Run pipeline / 项目 CI Variables 中设置了
+#      BASELINE_CHILD_PIPELINE（该变量会覆盖预设文件）。
+#      - capabilities：每个 capability 一个 manual job。
+#      - questions：eval-question-list 在子流水线 init 后自动运行；题目来自预设 question_ids 或
+#        BASELINE_QUESTIONS（逗号分隔）。缺分选题（score_summary_missing_cc）跑齐 API 返回的缺分题，不按 BASELINE_LIMIT 截断。
 #
-# 评测模式（EVAL_RUNNER）：
-#   claude_cli（默认） — 外部 baseline：prepare workspace → claude -p 跑题 → finalize
-#   devshell           — 内部评测：MatMaster Agent（run_devshell_eval.py）一步跑题
+# 评测引擎（EVAL_RUNNER）：默认由 ci/baseline_eval_preset.yaml 的 eval_runner 决定；
+#   Run pipeline / 项目 CI Variables 中 EVAL_RUNNER 非空时覆盖。
+#   claude_cli — 外部 baseline：prepare → claude -p 跑题 → finalize →（默认）score_baseline_tasks --submit
+#   devshell   — MatMaster Agent（run_devshell_eval.py）一步跑题 →（pending 时同上阶段二）
 #
 # 触发方式（任选，在 .gitlab-ci.yml 的 include 后生效）：
 #   1. 推送到分支 baseline-eval          → 立即触发
@@ -35,6 +40,8 @@
 #     LITELLM_PROXY_API_BASE                   — LiteLLM base_url
 #   可选:
 #     REGISTRY_USERNAME / REGISTRY_PASSWORD    — 拉取/推送私有镜像
+#   finalize 上传评测产物 zip 到 OSS（见 src/dao/oss_io.py）— 须传入内层 docker 容器，已在子流水线 docker create 中 -e 透传:
+#     OSS_ENDPOINT, OSS_BUCKET_NAME, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET
 #
 # Claude CLI 代理配置说明（仅 claude_cli 模式）：
 #   方案 A（gpugeek）:  ANTHROPIC_API_KEY=xxx + ANTHROPIC_BASE_URL=https://api.gpugeek.com
@@ -43,16 +50,21 @@
 #   方案 D（官方）:     ANTHROPIC_API_KEY=sk-ant-xxx（不设 BASE_URL）
 #
 # 可覆盖变量（手动触发时在 UI 传入，或在 schedule 的 Variables 中填写）：
-#   EVAL_RUNNER            — claude_cli 或 devshell，默认 claude_cli
+#   EVAL_RUNNER            — 非空时覆盖预设 eval_runner（claude_cli | devshell）
 #   BASELINE_MODES         — direct 或 planner，默认 direct
-#   BASELINE_LIMIT         — 限制每个 capability 的题数（0=不限），默认 2
+#   BASELINE_LIMIT         — 仅 child_pipeline=capabilities 时限制每 capability 题数（0=不限）；questions 布局不使用
 #   BASELINE_MAX_TURNS     — 每题最大轮数，默认 50（仅 claude_cli）
 #   BASELINE_TIMEOUT       — 每题超时秒数，默认 1200（仅 claude_cli）
 #   BASELINE_MODEL         — 模型标识（claude_cli: 模型名如 opus；devshell: llm_config route key 如 claude-sonnet-4-6）
-#   BASELINE_PENDING_ONLY  — 1=pending等人工阅卷，0=proxy自动入库，默认 1
+#   BASELINE_PENDING_ONLY  — 1=pending + BinaryEvaluator 评分并 POST ingest（默认）；0=proxy 即时入库，不跑阶段二
+#   BASELINE_SCORE_SUBMIT  — 1（默认）在 pending 模式下跑 score_baseline_tasks.py --submit；0 跳过阶段二
+#   BASELINE_SCORE_EVAL_CONFIG — 可选，覆盖评测 YAML 路径（llm_binary_judge 需 evaluator_llm + LITELLM_*）
+#   BASELINE_SCORE_EVAL_INGEST_TIMEOUT — 可选，每题 ingest HTTP 超时秒数，默认 120
+#   BASELINE_CHILD_PIPELINE — 非空时覆盖 ci/baseline_eval_preset.yaml 的 child_pipeline
+#   BASELINE_QUESTIONS     — 非空时覆盖预设 question_ids（逗号分隔 id）
+#   BASELINE_SCORE_SUMMARY_TIMEOUT — score-summary GET 超时秒数（可选，默认 120）
 
 variables:
-  EVAL_RUNNER: "devshell"  # claude_cli 或 devshell
   # ⚠️ 临时测试用，验证通过后务必删除以下几行，改用 GitLab CI Variables 注入
   # [minimax] 当前使用（仅 claude_cli 模式需要）
   # ANTHROPIC_API_KEY: "sk-cp-TGM8jt_jQj6k_K8nCqJGLqoeaBrc61y2E2V-Kfs1KWkfMzmyKLeySXWFXfKCSFqqI9pWftgYzygvxDKM-G2D33ybu-BT77ty0cVnyHCewd6j5W_AscyYRns"
@@ -121,9 +133,11 @@ baseline-eval-build:
         . --push
       echo "DYNAMIC_IMAGE=${EVAL_IMAGE}" >> ${CI_PROJECT_DIR}/build.env
     - |
+      apt-get update -qq && apt-get install -y -qq python3 python3-yaml >/dev/null 2>&1
       echo "--- 写入评测变量到 dotenv ---"
       ENV_FILE="${CI_PROJECT_DIR}/build.env"
-      echo "EVAL_RUNNER=${EVAL_RUNNER}" >> "${ENV_FILE}"
+      echo "EVAL_RUNNER=$(python3 ci/baseline_eval_preset.py eval-runner)" >> "${ENV_FILE}"
+      echo "effective EVAL_RUNNER（EVAL_RUNNER 非空则优先，否则预设 eval_runner）: $(python3 ci/baseline_eval_preset.py eval-runner)"
       echo "BASELINE_MODES=${BASELINE_MODES}" >> "${ENV_FILE}"
       echo "BASELINE_LIMIT=${BASELINE_LIMIT}" >> "${ENV_FILE}"
       echo "BASELINE_MAX_TURNS=${BASELINE_MAX_TURNS}" >> "${ENV_FILE}"
@@ -131,10 +145,17 @@ baseline-eval-build:
       echo "BASELINE_MODEL=${BASELINE_MODEL}" >> "${ENV_FILE}"
       echo "BASELINE_RUN_LABEL=${BASELINE_RUN_LABEL}" >> "${ENV_FILE}"
       echo "BASELINE_PENDING_ONLY=${BASELINE_PENDING_ONLY}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_SUBMIT=${BASELINE_SCORE_SUBMIT:-1}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_EVAL_CONFIG=${BASELINE_SCORE_EVAL_CONFIG:-}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_EVAL_INGEST_TIMEOUT=${BASELINE_SCORE_EVAL_INGEST_TIMEOUT:-}" >> "${ENV_FILE}"
+      echo "BASELINE_CHILD_PIPELINE=${BASELINE_CHILD_PIPELINE}" >> "${ENV_FILE}"
+      echo "BASELINE_QUESTIONS=${BASELINE_QUESTIONS}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_SUMMARY_TIMEOUT=${BASELINE_SCORE_SUMMARY_TIMEOUT:-}" >> "${ENV_FILE}"
       cat "${ENV_FILE}"
     - |
       echo "--- 动态生成子流水线 YAML ---"
       apt-get update -qq && apt-get install -y -qq python3 python3-yaml >/dev/null 2>&1
+      echo "effective child_pipeline (BASELINE_CHILD_PIPELINE 非空则优先生效，否则读预设文件): $(python3 ci/baseline_eval_preset.py child-pipeline)"
       python3 ci/generate_eval_child_pipeline.py
       cat ci/generated-eval-child.yml
   retry: 1
@@ -153,7 +174,7 @@ baseline-eval-build:
 
 # ── Job 2: 触发动态子流水线 ──────────────────────────────────────────────────
 baseline-eval-trigger:
-  stage: sync-question-catalog
+  stage: baseline-eval
   needs:
     - job: baseline-eval-build
       artifacts: true
@@ -167,6 +188,12 @@ baseline-eval-trigger:
     BASELINE_MODEL: $BASELINE_MODEL
     BASELINE_RUN_LABEL: $BASELINE_RUN_LABEL
     BASELINE_PENDING_ONLY: $BASELINE_PENDING_ONLY
+    BASELINE_SCORE_SUBMIT: $BASELINE_SCORE_SUBMIT
+    BASELINE_SCORE_EVAL_CONFIG: $BASELINE_SCORE_EVAL_CONFIG
+    BASELINE_SCORE_EVAL_INGEST_TIMEOUT: $BASELINE_SCORE_EVAL_INGEST_TIMEOUT
+    BASELINE_CHILD_PIPELINE: $BASELINE_CHILD_PIPELINE
+    BASELINE_QUESTIONS: $BASELINE_QUESTIONS
+    BASELINE_SCORE_SUMMARY_TIMEOUT: $BASELINE_SCORE_SUMMARY_TIMEOUT
   trigger:
     include:
       - artifact: ci/generated-eval-child.yml

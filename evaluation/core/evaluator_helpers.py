@@ -169,8 +169,14 @@ def build_llm_context(
     question: QuestionItem,
     answer: str,
     evidence: EvidenceBundle | None,
+    include_tool_calls: bool = True,
 ) -> str:
-    """Build the LLM-judge context string."""
+    """Build the LLM-judge context string.
+
+    When ``include_tool_calls`` is False (e.g. grounding-axis judges), tool-call lines are
+    omitted so the judge does not treat missing MCP/web_search as evidence of failure.
+    Workspace output filenames are still listed when artifacts are present.
+    """
     lines = [
         f'Question intent: {question.intent}',
         f"Final answer: {answer[:500]}{'...' if len(answer) > 500 else ''}",
@@ -186,7 +192,17 @@ def build_llm_context(
         if evidence.workspace_dir:
             lines.append(f'Workspace: {evidence.workspace_dir}')
 
-        if evidence.tool_calls:
+        if evidence.artifacts and not include_tool_calls:
+            names = [a.path for a in evidence.artifacts[:40]]
+            lines.append(
+                f'Workspace output files (names only, up to 40): {", ".join(names)}'
+            )
+            if len(evidence.artifacts) > 40:
+                lines.append(
+                    f'  … and {len(evidence.artifacts) - 40} more files not listed.'
+                )
+
+        if include_tool_calls and evidence.tool_calls:
             lines.append(f'Tool calls ({len(evidence.tool_calls)} total):')
             for i, tc in enumerate(evidence.tool_calls[:10]):
                 tool_desc = tc.tool_description or '(no description)'

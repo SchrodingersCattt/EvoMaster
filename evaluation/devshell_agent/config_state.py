@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -31,3 +31,6 @@ class AgentLoopSharedState:
     session_dir: Path
     outcomes: list[dict[str, Any]]
     defaults: DevshellAgentCliDefaults
+    last_eval_output_dir: Path | None = None
+    checklist_escalations_pending: list[dict[str, Any]] = field(default_factory=list)
+    checklist_revision_reports: list[dict[str, Any]] = field(default_factory=list)

@@ -76,8 +76,10 @@ questions:
     axis: grounding
     verify: tool_called
   - id: grounding_source
-    criterion: Al structure originates from registered database; energy values come from MCP calculation tool, not from LLM
-      estimation.
+    criterion: The answer ties Al structure and energy values to stated retrieval or calculation
+      outputs (or given mock data), not invented numbers. Judge solely from the final answer;
+      do not require or penalize absence of MCP, web_search, or any specific tool in the tool-call
+      log.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -157,7 +159,8 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: Detonation parameters are computed by explicitly applying Kamlet-Jacobs equations with the given density and
-      heat of formation; formula inputs are stated.
+      heat of formation; formula inputs are stated. Judge solely from the final answer; do not fail because the tool-call
+      log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge
@@ -253,7 +256,8 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: All numeric E_f values are derived from the prompt mock energies only (no invented totals).
+    criterion: All numeric E_f values are derived from the prompt mock energies only (no invented totals). Judge solely from
+      the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget

@@ -58,7 +58,7 @@ class MatmasterEvalMcpToolkit:
             "model": {
                 "type": "string",
                 "description": (
-                    "LLM route for inner mm-devshell --model (default: cds/GPT-5.4)."
+                    "LLM route for inner mm-devshell --model (default: claude-opus-4-6)."
                 ),
             },
             "exp": {
@@ -99,7 +99,7 @@ class MatmasterEvalMcpToolkit:
             },
             "macro_mean_0_100": {
                 "type": "integer",
-                "description": "Macro-averaged 0–100 score after manual checklist judging.",
+                "description": "Macro-averaged 0–100 score from score_devshell_tasks.py.",
             },
             "target_met": {
                 "type": "boolean",
@@ -108,7 +108,7 @@ class MatmasterEvalMcpToolkit:
             "rationale": {
                 "type": "string",
                 "description": (
-                    "Short Markdown: checklist summary, evidence paths, stop/continue."
+                    "Short Markdown: auto-score summary, low-score evidence paths, stop/continue."
                 ),
             },
             "files_touched": {
@@ -125,19 +125,87 @@ class MatmasterEvalMcpToolkit:
         ],
     }
 
+    ESCALATE_CHECKLIST_SCHEMA: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "iteration_index": {
+                "type": "integer",
+                "description": "Same 1-based iteration as the current user message.",
+            },
+            "question_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Question id(s) whose scoring_checklist / rubric seem unfair.",
+            },
+            "rationale": {
+                "type": "string",
+                "description": (
+                    "Why the checklist or reference_answers need human-aligned fixes; "
+                    "cite evidence paths (logs, workspace, YAML)."
+                ),
+            },
+            "evidence_paths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional repo-relative or session paths supporting the case.",
+            },
+        },
+        "required": ["iteration_index", "rationale"],
+    }
+
+    REPORT_CHECKLIST_REVISION_SCHEMA: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "iteration_index": {
+                "type": "integer",
+                "description": "Must match the checklist follow-up round.",
+            },
+            "no_changes": {
+                "type": "boolean",
+                "description": "True if after review no YAML edit was needed.",
+            },
+            "rationale": {
+                "type": "string",
+                "description": "What was reviewed and what was changed or skipped.",
+            },
+            "files_touched": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Repo-relative paths under evaluation/question_bank/ (if any).",
+            },
+        },
+        "required": ["iteration_index", "no_changes", "rationale"],
+    }
+
     def __init__(self, state: AgentLoopSharedState) -> None:
         self._state = state
         self._subprocess = DevshellEvalSubprocess(state.repo_root)
 
     @classmethod
-    def allowed_tool_names(cls) -> list[str]:
+    def main_agent_mcp_tool_names(cls) -> list[str]:
         return [
             f"mcp__{cls.MCP_SERVER_NAME}__run_devshell_eval",
             f"mcp__{cls.MCP_SERVER_NAME}__report_iteration_outcome",
+            f"mcp__{cls.MCP_SERVER_NAME}__escalate_checklist_revision",
         ]
+
+    @classmethod
+    def checklist_agent_mcp_tool_names(cls) -> list[str]:
+        return [f"mcp__{cls.MCP_SERVER_NAME}__report_checklist_revision"]
+
+    @classmethod
+    def allowed_tool_names(cls) -> list[str]:
+        """MCP tools for the main (playground/product) iteration agent."""
+        return cls.main_agent_mcp_tool_names()
 
     def _append_outcome_jsonl(self, row: dict[str, Any]) -> None:
         path = self._state.session_dir / "outcomes.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    def _append_checklist_revision_jsonl(self, row: dict[str, Any]) -> None:
+        path = self._state.session_dir / "checklist_revisions.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -220,6 +288,7 @@ class MatmasterEvalMcpToolkit:
         )
         argv = self._subprocess.build_argv(script, params)
         rc, stdout, stderr = self._subprocess.run_capture(argv)
+        self._state.last_eval_output_dir = params.output_dir
         log_file = params.output_dir / "orchestrator_subprocess.log"
         log_file.write_text(
             f"command: {' '.join(argv)!r}\nexit_code: {rc}\n\n--- STDOUT ---\n{stdout}\n"
@@ -243,6 +312,53 @@ class MatmasterEvalMcpToolkit:
         row = dict(args)
         self._state.outcomes.append(row)
         self._append_outcome_jsonl(row)
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": DevshellEvalSubprocess.format_tool_result_text(
+                        {
+                            "recorded": True,
+                            "iteration_index": row.get("iteration_index"),
+                        }
+                    ),
+                }
+            ]
+        }
+
+    async def _escalate_checklist_revision(
+        self, args: dict[str, Any]
+    ) -> dict[str, Any]:
+        row = {
+            "iteration_index": int(args["iteration_index"]),
+            "question_ids": list(args.get("question_ids") or []),
+            "rationale": str(args.get("rationale") or ""),
+            "evidence_paths": list(args.get("evidence_paths") or []),
+        }
+        self._state.checklist_escalations_pending.append(row)
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": DevshellEvalSubprocess.format_tool_result_text(
+                        {
+                            "queued": True,
+                            "iteration_index": row["iteration_index"],
+                            "note": (
+                                "Orchestrator runs a separate checklist-only agent after "
+                                "this iteration's main agent turn. Do not edit "
+                                "evaluation/question_bank/ yourself."
+                            ),
+                        }
+                    ),
+                }
+            ]
+        }
+
+    async def _report_checklist_revision(self, args: dict[str, Any]) -> dict[str, Any]:
+        row = dict(args)
+        self._state.checklist_revision_reports.append(row)
+        self._append_checklist_revision_jsonl(row)
         return {
             "content": [
                 {
@@ -286,10 +402,43 @@ class MatmasterEvalMcpToolkit:
         async def report_iteration_outcome_tool(args: dict[str, Any]) -> dict[str, Any]:
             return await toolkit._report_iteration_outcome(args)
 
+        @tool(
+            "escalate_checklist_revision",
+            (
+                "Queue a follow-up **checklist-only** agent for this iteration. "
+                "Use when scoring_checklist / reference_answers in question_bank "
+                "seem unfair or broken — you must NOT edit evaluation/question_bank/ "
+                "yourself. Call before or when summarizing in report_iteration_outcome."
+            ),
+            self.ESCALATE_CHECKLIST_SCHEMA,
+        )
+        async def escalate_checklist_revision_tool(
+            args: dict[str, Any],
+        ) -> dict[str, Any]:
+            return await toolkit._escalate_checklist_revision(args)
+
+        @tool(
+            "report_checklist_revision",
+            (
+                "Call exactly once at the end of the checklist follow-up turn. "
+                "Record whether you edited any question_bank YAML and why."
+            ),
+            self.REPORT_CHECKLIST_REVISION_SCHEMA,
+        )
+        async def report_checklist_revision_tool(
+            args: dict[str, Any],
+        ) -> dict[str, Any]:
+            return await toolkit._report_checklist_revision(args)
+
         return create_sdk_mcp_server(
             name=self.MCP_SERVER_NAME,
-            version="1.0.0",
-            tools=[run_devshell_eval_tool, report_iteration_outcome_tool],
+            version="1.1.0",
+            tools=[
+                run_devshell_eval_tool,
+                report_iteration_outcome_tool,
+                escalate_checklist_revision_tool,
+                report_checklist_revision_tool,
+            ],
         )
 
 

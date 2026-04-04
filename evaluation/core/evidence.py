@@ -213,6 +213,53 @@ class TokenUsage(BaseModel):
         return self.total_tokens
 
 
+def approximate_last_turn_usage_from_run_summary(
+    usage: dict[str, Any] | None, num_turns: Any
+) -> TokenUsage | None:
+    """Approximate a last-turn snapshot from whole-run usage and turn count.
+
+    This is intended for external baseline summaries that only provide an
+    accumulated ``usage`` object plus ``num_turns``, while devshell records can
+    provide exact per-turn vendor usage.
+    """
+    if not isinstance(usage, dict) or not usage:
+        return None
+    try:
+        turns = int(num_turns)
+    except (TypeError, ValueError):
+        return None
+    if turns <= 0:
+        return None
+
+    whole_run = TokenUsage.from_usage_dict(usage)
+    if (
+        whole_run.prompt_tokens <= 0
+        and whole_run.completion_tokens <= 0
+        and whole_run.total_tokens <= 0
+        and whole_run.cache_read_tokens <= 0
+    ):
+        return None
+
+    def _avg(value: int) -> int:
+        if value <= 0:
+            return 0
+        return max(1, round(value / turns))
+
+    prompt_tokens = _avg(whole_run.prompt_tokens)
+    completion_tokens = _avg(whole_run.completion_tokens)
+    total_tokens = _avg(whole_run.total_tokens)
+    cache_read_tokens = _avg(whole_run.cache_read_tokens)
+    if total_tokens <= 0 and (prompt_tokens > 0 or completion_tokens > 0):
+        total_tokens = prompt_tokens + completion_tokens
+
+    return TokenUsage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        cache_read_tokens=cache_read_tokens,
+    )
+
+
 class EvidenceBundle(BaseModel):
     """Standardised evidence format consumed by the evaluator.
 

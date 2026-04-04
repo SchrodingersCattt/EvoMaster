@@ -8,13 +8,17 @@ from unittest.mock import MagicMock, patch
 from evaluation.eval_ingest_client import (
     EVAL_INGEST_API_PATH,
     EVAL_INGEST_URL,
+    EVAL_SCORE_SUMMARY_API_PATH,
+    EVAL_SCORE_SUMMARY_URL,
     build_ingest_item,
     clip_ingest_text_field,
     eval_run_zip_should_skip_arcname,
     extract_ingest_tokens,
+    fetch_missing_baseline_question_ids,
     load_devshell_events_timeline,
     normalize_baseline_channel,
     normalize_pending_item_for_submission,
+    parse_score_summary_missing_question_ids,
     post_eval_ingest,
     post_question_catalog_sync,
     prompt_sha256,
@@ -102,6 +106,18 @@ def test_extract_ingest_tokens_empty_vendor_list_uses_usage() -> None:
     )
 
 
+def test_extract_ingest_tokens_can_approximate_last_turn_from_total_and_num_turns() -> (
+    None
+):
+    assert (
+        extract_ingest_tokens(
+            {"usage": {"total_tokens": 120}, "num_turns": 3},
+            approximate_last_turn_from_total=True,
+        )
+        == 40
+    )
+
+
 def test_score_for_eval_ingest_explicit() -> None:
     assert score_for_eval_ingest({"score": 0.73}, 1) == 0.73
     assert score_for_eval_ingest({"eval_score": 88}, 0) == 88.0
@@ -129,6 +145,73 @@ def test_eval_ingest_url_matches_tools_server() -> None:
 
     expected = f"{MATMASTER_TOOLS_SERVER.rstrip('/')}{EVAL_INGEST_API_PATH}"
     assert EVAL_INGEST_URL == expected
+
+
+def test_eval_score_summary_url_matches_tools_server() -> None:
+    from utils.env import MATMASTER_TOOLS_SERVER
+
+    expected = f"{MATMASTER_TOOLS_SERVER.rstrip('/')}{EVAL_SCORE_SUMMARY_API_PATH}"
+    assert EVAL_SCORE_SUMMARY_URL == expected
+
+
+def test_parse_score_summary_missing_question_ids_claude_code() -> None:
+    envelope = {
+        "code": 0,
+        "data": {
+            "questions": [
+                {
+                    "question_id": "q_has",
+                    "claude_code_score": 0.5,
+                    "cursor_score": None,
+                },
+                {
+                    "question_id": "q_miss",
+                    "claude_code_score": None,
+                    "cursor_score": 0.9,
+                },
+            ]
+        },
+        "msg": "success",
+    }
+    assert parse_score_summary_missing_question_ids(envelope) == ["q_miss"]
+    assert parse_score_summary_missing_question_ids(envelope, channel="cursor") == [
+        "q_has"
+    ]
+
+
+def test_parse_score_summary_missing_question_ids_absent_field() -> None:
+    envelope = {
+        "code": 0,
+        "data": {"questions": [{"question_id": "q1"}]},
+        "msg": "success",
+    }
+    assert parse_score_summary_missing_question_ids(envelope) == ["q1"]
+
+
+@patch("evaluation.eval_ingest_client._get_matmaster_tools_json")
+@patch(
+    "evaluation.eval_ingest_client.utils.env.MATMASTER_TOOLS_EVALUATION_BEARER",
+    "test-bearer",
+)
+def test_fetch_missing_baseline_question_ids_uses_get(mock_get: MagicMock) -> None:
+    mock_get.return_value = (
+        True,
+        "success",
+        {
+            "code": 0,
+            "data": {
+                "questions": [
+                    {"question_id": "has_cc", "claude_code_score": 1.0},
+                    {"question_id": "no_cc", "claude_code_score": None},
+                ]
+            },
+        },
+    )
+    ok, msg, ids = fetch_missing_baseline_question_ids(timeout=30.0)
+    assert ok
+    assert msg == "success"
+    assert ids == ["no_cc"]
+    assert mock_get.called
 
 
 def test_build_ingest_item_minimal() -> None:
@@ -228,6 +311,21 @@ def test_build_ingest_item_model_top_level() -> None:
     assert item["score"] == 100.0
     assert "model" not in item["extra"]
     assert "num_turns" not in item["extra"]
+
+
+def test_build_ingest_item_can_approximate_last_turn_tokens() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={"usage": {"total_tokens": 120}, "num_turns": 3},
+        duration_ms=None,
+        approximate_last_turn_from_total=True,
+    )
+    assert item["tokens"] == 40
+    assert item["extra"]["tokens_last_turn"] == 40
 
 
 def test_build_ingest_item_explicit_score_overrides_exit() -> None:

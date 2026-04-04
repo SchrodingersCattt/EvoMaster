@@ -81,6 +81,52 @@ class DevshellAgentLoopCli:
             default="",
             help="Appended to each iteration user message (focus areas, constraints).",
         )
+        p.add_argument(
+            "--git-reset-on-regression",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help=(
+                "After each iteration, if macro mean is below the previous iteration's "
+                "and git head was recorded at iteration start, run git reset --hard."
+            ),
+        )
+        p.add_argument(
+            "--eval-ingest-submit-each-iteration",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help=(
+                "When eval-ingest-pending-only is on, after each iteration run "
+                "score_devshell_tasks.py --submit on the last run_devshell_eval output dir."
+            ),
+        )
+        p.add_argument(
+            "--eval-ingest-submit-timeout",
+            type=float,
+            default=120.0,
+            help="HTTP timeout (seconds) per ingest POST during automatic --submit.",
+        )
+        p.add_argument(
+            "--enable-checklist-agent",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help=(
+                "After each main iteration, run a second SDK session that may only "
+                "edit evaluation/question_bank/ when the main agent called "
+                "escalate_checklist_revision."
+            ),
+        )
+        p.add_argument(
+            "--max-checklist-sdk-turns",
+            type=int,
+            default=60,
+            help="Max SDK turns for the checklist-only follow-up session.",
+        )
+        p.add_argument(
+            "--checklist-permission-mode",
+            type=str,
+            default="",
+            help="ClaudeAgentOptions.permission_mode for checklist agent (default: same as --permission-mode).",
+        )
 
         p.add_argument(
             "--modes",
@@ -115,7 +161,7 @@ class DevshellAgentLoopCli:
         p.add_argument(
             "--model",
             type=str,
-            default="cds/GPT-5.4",
+            default="claude-opus-4-6",
             help="Forwarded to run_devshell_eval --model (inner mm-devshell route).",
         )
         p.add_argument(
@@ -208,6 +254,14 @@ class DevshellAgentLoopCli:
             permission_mode=str(args.permission_mode),
             max_sdk_turns=max(1, int(args.max_sdk_turns)),
             extra_instruction=str(args.extra_instruction or ""),
+            git_reset_on_regression=bool(args.git_reset_on_regression),
+            eval_ingest_submit_each_iteration=bool(
+                args.eval_ingest_submit_each_iteration
+            ),
+            eval_ingest_submit_timeout=max(1.0, float(args.eval_ingest_submit_timeout)),
+            enable_checklist_agent=bool(args.enable_checklist_agent),
+            max_checklist_sdk_turns=max(1, int(args.max_checklist_sdk_turns)),
+            checklist_permission_mode=str(args.checklist_permission_mode or ""),
         )
 
         print(f"Session directory: {session_dir}", file=sys.stderr)

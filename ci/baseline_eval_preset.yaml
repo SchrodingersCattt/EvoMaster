@@ -1,0 +1,28 @@
+# Baseline eval CI preset — edit and push so child pipeline + run use the same commit.
+#
+# child_pipeline:
+#   capabilities — dynamic child jobs: one manual job per capability (default).
+#   questions    — single manual job ``eval-question-list``; runs only question_ids
+#                  (or score-summary 缺分全集；不按 BASELINE_LIMIT 截断).
+#
+# Override: Run pipeline / 项目 CI Variables 中非空则优先于本文件：
+#   BASELINE_CHILD_PIPELINE、BASELINE_QUESTIONS、EVAL_RUNNER
+# 勿在 ci/baseline-eval.yml 的 variables 里写死 BASELINE_CHILD_PIPELINE / EVAL_RUNNER，
+# 否则对应预设字段不会生效。
+#
+# questions_mode（仅 child_pipeline: questions 时由 run_baseline_eval.sh 使用）:
+#   preset — 使用下方 question_ids / 或 CI 变量 BASELINE_QUESTIONS（默认）
+#   score_summary_missing_cc — 从 matmaster-tools-server GET .../questions/score-summary
+#     选取 claude_code_score 为 null 的题；若 question_ids / BASELINE_QUESTIONS 非空则与其求交集
+# 由本字段 questions_mode 决定（无效值回退 preset）
+
+child_pipeline: questions
+
+# claude_cli | devshell — 与 run_baseline_eval.sh / EVAL_RUNNER 一致
+eval_runner: claude_cli
+
+questions_mode: score_summary_missing_cc
+
+# Used when child_pipeline is ``questions`` (v5 question ``id`` from bank YAML).
+# Empty is valid if questions_mode is score_summary_missing_cc (IDs from API at run).
+question_ids: []

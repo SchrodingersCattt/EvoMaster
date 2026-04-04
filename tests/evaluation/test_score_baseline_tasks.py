@@ -219,16 +219,48 @@ class TestBuildEvidence:
         assert evidence.workspace_dir == str(tmp_workspace.resolve())
 
     def test_token_usage_from_summary(self, tmp_workspace: Path) -> None:
-        _write_summary(tmp_workspace)
-        summary = _load_summary(tmp_workspace)
+        summary = {
+            "num_turns": 3,
+            "usage": {
+                "prompt_tokens": 1000,
+                "completion_tokens": 200,
+                "total_tokens": 1200,
+            },
+            "usage_vendor_by_turn": [
+                {"prompt_tokens": 500, "completion_tokens": 100, "total_tokens": 600},
+                {"prompt_tokens": 800, "completion_tokens": 150, "total_tokens": 950},
+                {"prompt_tokens": 1000, "completion_tokens": 200, "total_tokens": 1200},
+            ],
+        }
         evidence = _build_evidence(
             task_id="test_task",
             workspace=tmp_workspace,
             summary=summary,
             answer="done",
         )
-        # prompt_tokens = input_tokens + cache_creation + cache_read = 50+100+850 = 1000
+        # When vendor turn snapshots exist, last-turn usage should stay exact.
         assert evidence.token_usage_last_turn.prompt_tokens == 1000
+
+    def test_token_usage_last_turn_approximated_from_total_when_no_vendor_turns(
+        self, tmp_workspace: Path
+    ) -> None:
+        summary = {
+            "num_turns": 3,
+            "usage": {
+                "prompt_tokens": 900,
+                "completion_tokens": 300,
+                "total_tokens": 1200,
+            },
+        }
+        evidence = _build_evidence(
+            task_id="test_task",
+            workspace=tmp_workspace,
+            summary=summary,
+            answer="done",
+        )
+        assert evidence.token_usage_last_turn.prompt_tokens == 300
+        assert evidence.token_usage_last_turn.completion_tokens == 100
+        assert evidence.token_usage_last_turn.total_tokens == 400
 
     def test_artifacts_listed_from_workspace(self, tmp_workspace: Path) -> None:
         (tmp_workspace / "output.cif").write_text("data_", encoding="utf-8")
@@ -328,6 +360,23 @@ class TestFormatScoreReason:
         assert "✓ pass" in reason
         assert "✗ fail" in reason
 
+    def test_format_markdown_sections_and_list_items(self) -> None:
+        record = self._make_mock_record(
+            {
+                "z_last": ("correctness", True, "z ok"),
+                "a_first": ("correctness", True, "a ok"),
+                "g_item": ("grounding", True, "g ok"),
+            }
+        )
+        reason = _format_score_reason(record)
+        assert "### Correctness" in reason
+        assert "### Grounding" in reason
+        assert "- **`a_first`**" in reason
+        assert "- **`z_last`**" in reason
+        # correctness block should list a_first before z_last
+        assert reason.index("a_first") < reason.index("z_last")
+        assert "**Overall weighted score:**" in reason
+
     def test_score_to_int_rounds_correctly(self) -> None:
         record = MagicMock()
         record.overall_weighted_score = 0.734
@@ -359,7 +408,7 @@ class TestUpdatePendingWithScore:
             "task_id": "SC_struct_001_direct_r0",
             "item": {
                 "question_id": "SC_struct_001_20260401",
-                "model": "claude-opus-4-6 | cc_baseline",
+                "model": "claude-opus-4-6",
             },
         }
         pending.write_text(json.dumps(envelope), encoding="utf-8")

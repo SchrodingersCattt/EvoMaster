@@ -51,8 +51,9 @@ questions:
     axis: grounding
     verify: event_type_called
   - id: grounding_source
-    criterion: Gamma frequency is extracted from actual MCP phonon calculation output, not recalled from LLM knowledge of
-      graphene.
+    criterion: The reported gamma frequency is tied to phonon or calculation results stated in the final answer, not bare
+      textbook recall for graphene. Judge from the answer; do not fail because the tool-call log omits MCP, web_search, or
+      any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries

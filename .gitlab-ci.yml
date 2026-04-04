@@ -9,6 +9,7 @@ variables:
 
 stages:
   - build
+  - baseline-eval
   - lint
   - sync-question-catalog
   - build-remote-image

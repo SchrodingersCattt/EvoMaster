@@ -141,10 +141,34 @@ class DevshellEvalSubprocess:
 
     @staticmethod
     def format_tool_result_text(payload: dict[str, Any]) -> str:
-        return textwrap.dedent(
-            f"""
+        return textwrap.dedent(f"""
             ```json
             {json.dumps(payload, ensure_ascii=False, indent=2)}
             ```
-            """
-        ).strip()
+            """).strip()
+
+
+def run_score_devshell_tasks_submit(
+    *,
+    repo_root: Path,
+    run_dir: Path,
+    eval_config: Path | None,
+    eval_ingest_timeout: float,
+) -> tuple[int, str, str]:
+    """Run ``score_devshell_tasks.py --run-dir … --submit`` (writes scores + POST ingest)."""
+    runner = DevshellEvalSubprocess(repo_root)
+    script = (
+        repo_root / "evaluation" / "scripts" / "devshell" / "score_devshell_tasks.py"
+    )
+    cmd: list[str] = [
+        *DevshellEvalSubprocess.python_prefix(),
+        str(script),
+        "--run-dir",
+        str(run_dir),
+        "--submit",
+        "--eval-ingest-timeout",
+        str(eval_ingest_timeout),
+    ]
+    if eval_config is not None:
+        cmd.extend(["--eval-config", str(eval_config)])
+    return runner.run_capture(cmd)
