@@ -21,7 +21,7 @@
 #
 # 镜像说明：
 #   eval-build job 使用 Dockerfile.eval：在主服务镜像基础上叠加 Node.js + Claude CLI + sthp
-#   （https://github.com/KaranGauswami/socks-to-http-proxy，构建阶段使用 USTC rustup/crates 镜像）。
+#   （https://github.com/KaranGauswami/socks-to-http-proxy，Release 预编译 sthp-linux，避免 cargo/crates 拉取超时）。
 #   与生产用 Dockerfile 解耦，不污染 API/Worker 镜像。
 #   DevShell 模式仅需 Python 环境（主镜像已包含），但复用同一 eval 镜像以简化流水线。
 #

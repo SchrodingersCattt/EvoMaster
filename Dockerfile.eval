@@ -6,9 +6,8 @@
 # 多阶段（P0 构建加速）：
 #   eval-toolchain — 仅基于固定 python:3.13-slim，与 matmaster-evo 某次 commit 无关；
 #     apt + NodeSource + 全局 claude-code 可长期被 BuildKit/registry 缓存。
-#   sthp-builder — 在同底镜像上 rustup（USTC）+ cargo 编译 socks-to-http-proxy（sthp），
-#     仅产出 /usr/local/bin/sthp 拷入最终镜像；评测容器内需 BASELINE_STHP_SOCKS 时由
-#     ci/run_baseline_eval.sh 启动本地 HTTP 代理。
+#   sthp-binary — 从 GitHub Release 拉取预编译 sthp-linux（避免 CI 内 cargo 经国内 crates 镜像超时）；
+#     拷入 /usr/local/bin/sthp；需 BASELINE_STHP_SOCKS 时由 ci/run_baseline_eval.sh 启动本地 HTTP 代理。
 #   最终阶段 — FROM matmaster-evo:ci* 后只做从 toolchain 拷贝二进制与 venv 内 pip，
 #     避免每次在「已变 digest 的应用层」上重复跑整段 apt/npm。
 #
@@ -27,7 +26,7 @@
 
 ARG TOOLCHAIN_BASE=registry.dp.tech/public/python:3.13-slim
 ARG BASE_IMAGE=registry.dp.tech/flow/matmaster-evo:latest
-# socks-to-http-proxy 发布 tag（可 build-arg 覆盖）
+# socks-to-http-proxy Release tag，对应 assets 名 sthp-linux（amd64；可 build-arg 覆盖）
 ARG STHP_VERSION=v0.5.0
 
 # ── 阶段 1：Node + 全局 CLI（缓存与 BASE_IMAGE 解耦）────────────────────────
@@ -50,43 +49,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && npm install -g @anthropic-ai/claude-code \
     && claude --version || true
 
-# ── 阶段 1b：sthp（SOCKS5 → HTTP 代理），仅构建阶段需要 Rust ─────────────────
-FROM ${TOOLCHAIN_BASE} AS sthp-builder
+# ── 阶段 1b：sthp 预编译二进制（GitHub Release），不经 cargo/crates.io ─────────
+FROM ${TOOLCHAIN_BASE} AS sthp-binary
 ARG STHP_VERSION
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static \
-    RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true && \
     sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
         ca-certificates \
         curl \
-        git \
-        libssl-dev \
-        pkg-config \
     && rm -rf /var/lib/apt/lists/* \
-    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-        | sh -s -- -y --profile minimal --default-toolchain stable \
-    && mkdir -p /root/.cargo \
-    && printf '%s\n' \
-        '[source.crates-io]' \
-        'replace-with = "ustc"' \
-        '' \
-        '[source.ustc]' \
-        'registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"' \
-        > /root/.cargo/config.toml
-
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-WORKDIR /build
-RUN git clone --depth 1 --branch "${STHP_VERSION}" \
-        https://github.com/KaranGauswami/socks-to-http-proxy.git repo \
-    && cd repo \
-    && cargo build --release
+    && curl -fsSL -o /sthp \
+        "https://github.com/KaranGauswami/socks-to-http-proxy/releases/download/${STHP_VERSION}/sthp-linux" \
+    && chmod +x /sthp \
+    && /sthp --version
 
 # ── 阶段 2：应用镜像 + 拷贝工具链 + 评测依赖 ─────────────────────────────────
 FROM ${BASE_IMAGE}
@@ -105,7 +84,7 @@ RUN --mount=type=bind,from=eval-toolchain,source=/usr,target=/_tc/usr,readonly \
     mkdir -p /usr/local/bin; \
     if [ -f "/_tc/usr/local/bin/claude" ]; then cp -a "/_tc/usr/local/bin/claude" /usr/local/bin/claude; fi
 
-COPY --from=sthp-builder /build/repo/target/release/sthp /usr/local/bin/sthp
+COPY --from=sthp-binary /sthp /usr/local/bin/sthp
 RUN chmod 755 /usr/local/bin/sthp
 
 # 评测 validators：numpy + pymatgen（struct_file_*，见 score_baseline_tasks / BinaryEvaluator）
