@@ -91,20 +91,6 @@ def _duration_ms_from_cc_baseline_clock(
     return delta, "cc_baseline_clock"
 
 
-def _model_tag_cc_baseline(model_from_item: str | None) -> str:
-    """Make tools-server rows filterable as CC baseline (field max 256 in build_ingest_item)."""
-    suffix = " | cc_baseline"
-    if isinstance(model_from_item, str) and model_from_item.strip():
-        base = model_from_item.strip()
-        if "cc_baseline" in base.lower():
-            out = base
-        else:
-            out = base + suffix
-    else:
-        out = "claude_code" + suffix
-    return out[:256] if len(out) > 256 else out
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -320,7 +306,6 @@ def main() -> int:
                 artifact=artifact,
                 eval_tooling=eval_tooling,
             )
-            ingest_item["model"] = _model_tag_cc_baseline(ingest_item.get("model"))
             extra = ingest_item.get("extra")
             if isinstance(extra, dict):
                 extra["eval_runner"] = "claude_code_baseline"

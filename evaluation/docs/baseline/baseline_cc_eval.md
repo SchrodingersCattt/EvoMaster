@@ -321,7 +321,7 @@ uv run python evaluation/scripts/baseline/score_baseline_tasks.py \
 
 ## 库里如何认出外部 Baseline
 
-`finalize_external_baseline_ingest.py` 会在入库项上设置 `item.model` 后缀 `| cc_baseline`，以及 `item.extra.matter_eval_source` / `eval_runner` 为 `claude_code_baseline` 等字段；请求体带 `baseline_channel`（`claude_code` / `cursor` / `codex`）。细节见脚本源码。
+`finalize_external_baseline_ingest.py` 将 `item.model` 设为 `_devshell_summary.json` 中的模型名（与 `build_ingest_item` 一致，不追加后缀）；`item.extra.matter_eval_source` / `eval_runner` 为 `claude_code_baseline` 等字段用于区分 baseline；请求体带 `baseline_channel`（`claude_code` / `cursor` / `codex`）。细节见脚本源码。
 
 ---
 

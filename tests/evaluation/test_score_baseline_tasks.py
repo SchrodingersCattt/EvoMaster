@@ -359,7 +359,7 @@ class TestUpdatePendingWithScore:
             "task_id": "SC_struct_001_direct_r0",
             "item": {
                 "question_id": "SC_struct_001_20260401",
-                "model": "claude-opus-4-6 | cc_baseline",
+                "model": "claude-opus-4-6",
             },
         }
         pending.write_text(json.dumps(envelope), encoding="utf-8")
