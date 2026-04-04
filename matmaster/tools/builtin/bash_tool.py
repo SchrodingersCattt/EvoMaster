@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
@@ -77,7 +78,7 @@ class BashTool(BuiltinTool):
             " - For git commands: prefer creating a new commit rather than amending."
         )
 
-    def _execute(self, arguments: dict[str, Any]) -> str:
+    def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
         session = self._require_session()
 
         command: str = (arguments.get("command") or "").strip()
@@ -103,4 +104,6 @@ class BashTool(BuiltinTool):
             obs += f"\n[Current working directory: {working_dir}]"
         obs += f"\n[Command finished with exit code {exit_code}]"
 
+        if exit_code != 0:
+            return ToolResult(status="error", content=obs)
         return obs
