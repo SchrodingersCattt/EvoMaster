@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
+import threading
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -633,6 +636,7 @@ class TestLazyMCPConnector:
         )
         assert connector._manager is None
         assert connector._loop is None
+        assert connector._connect_timeout == 5.0
         assert connector.workspace_path == ""
 
     def test_init_with_workspace_path(self):
@@ -677,6 +681,83 @@ class TestLazyMCPConnector:
             manager = connector._ensure_manager()
             MockMgr.assert_called_once()
             assert manager is mock_instance
+
+    @pytest.mark.asyncio
+    async def test_ensure_connection_times_out_quickly(self):
+        """Lazy connector should enforce its own short connect timeout."""
+        connector = LazyMCPConnector(
+            mcp_server_config={"s": {"transport": "http", "url": "http://x"}},
+            mcp_config={},
+            connect_timeout=0.1,
+        )
+        fake_manager = MagicMock()
+        fake_manager.connections = {}
+        fake_manager.path_adaptor_factory = None
+        fake_manager.path_adaptor_servers = set()
+        fake_manager.loop = object()
+        connector._manager = fake_manager
+
+        delayed_future: concurrent.futures.Future[None] = concurrent.futures.Future()
+
+        def _finish_later() -> None:
+            time.sleep(0.5)
+            if delayed_future.cancelled():
+                return
+            fake_manager.connections["s"] = MagicMock()
+            delayed_future.set_result(None)
+
+        thread = threading.Thread(target=_finish_later, daemon=True)
+        thread.start()
+
+        with patch(
+            "matmaster.tools.lazy_mcp.asyncio.run_coroutine_threadsafe",
+            return_value=delayed_future,
+        ):
+            started = time.monotonic()
+            with pytest.raises(asyncio.TimeoutError):
+                await connector.ensure_connection("s")
+            elapsed = time.monotonic() - started
+
+        thread.join(timeout=1.0)
+        assert elapsed < 0.3
+
+    @pytest.mark.asyncio
+    async def test_ensure_connection_does_not_block_async_timeout(self):
+        """ensure_connection should yield control so outer async timeouts can fire."""
+        connector = LazyMCPConnector(
+            mcp_server_config={"s": {"transport": "http", "url": "http://x"}},
+            mcp_config={},
+        )
+        fake_manager = MagicMock()
+        fake_manager.connections = {}
+        fake_manager.path_adaptor_factory = None
+        fake_manager.path_adaptor_servers = set()
+        fake_manager.loop = object()
+        connector._manager = fake_manager
+
+        delayed_future: concurrent.futures.Future[None] = concurrent.futures.Future()
+
+        def _finish_later() -> None:
+            time.sleep(0.5)
+            if delayed_future.cancelled():
+                return
+            fake_manager.connections["s"] = MagicMock()
+            delayed_future.set_result(None)
+
+        thread = threading.Thread(target=_finish_later, daemon=True)
+        thread.start()
+
+        with patch(
+            "matmaster.tools.lazy_mcp.asyncio.run_coroutine_threadsafe",
+            return_value=delayed_future,
+        ):
+            started = time.monotonic()
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(connector.ensure_connection("s"), timeout=0.1)
+            elapsed = time.monotonic() - started
+
+        thread.join(timeout=1.0)
+        assert elapsed < 0.3
 
 
 class TestNoEvoMasterImports:

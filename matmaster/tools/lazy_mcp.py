@@ -21,6 +21,7 @@ from matmaster.types.topology import ToolPlane
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MCP_TOOL_TIMEOUT = 120.0
+_DEFAULT_LAZY_MCP_CONNECT_TIMEOUT = 10.0
 
 
 def _parse_claims(raw_claims: Any) -> tuple[ResourceClaim, ...]:
@@ -324,6 +325,7 @@ class LazyMCPConnector:
         mcp_config: dict,
         session: Any = None,
         workspace_path: str = "",
+        connect_timeout: float | None = None,
     ) -> None:
         self._server_config = mcp_server_config
         self._mcp_config = mcp_config
@@ -332,6 +334,17 @@ class LazyMCPConnector:
         self._loop_thread: threading.Thread | None = None
         self.session = session
         self.workspace_path = workspace_path
+        configured_connect_timeout = (
+            mcp_config.get("lazy_connect_timeout")
+            if isinstance(mcp_config, dict)
+            else None
+        )
+        if connect_timeout is not None:
+            self._connect_timeout = float(connect_timeout)
+        elif configured_connect_timeout is not None:
+            self._connect_timeout = float(configured_connect_timeout)
+        else:
+            self._connect_timeout = _DEFAULT_LAZY_MCP_CONNECT_TIMEOUT
 
     def _ensure_loop(self) -> asyncio.AbstractEventLoop:
         if self._loop is not None and not self._loop.is_closed():
@@ -377,7 +390,12 @@ class LazyMCPConnector:
                 manager.add_server(name=server_name, **server_cfg),
                 manager.loop,
             )
-            fut.result(timeout=60)
+            wrapped = asyncio.wrap_future(fut)
+            try:
+                await asyncio.wait_for(wrapped, timeout=self._connect_timeout)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                fut.cancel()
+                raise
 
         conn = manager.connections[server_name]
 
@@ -403,7 +421,7 @@ class LazyMCPConnector:
                 manager.add_server(name=server_name, **server_cfg),
                 manager.loop,
             )
-            fut.result(timeout=60)
+            fut.result(timeout=self._connect_timeout)
 
         return manager.tools_by_server[server_name][f"{server_name}_{remote_tool_name}"]
 
