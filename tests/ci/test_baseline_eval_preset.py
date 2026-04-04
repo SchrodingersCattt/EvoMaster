@@ -25,7 +25,13 @@ def preset_module(monkeypatch: pytest.MonkeyPatch):
     return _load_preset_module()
 
 
-def test_resolve_questions_mode_reads_yaml_default_preset(preset_module) -> None:
+def test_resolve_questions_mode_omitted_defaults_preset(
+    preset_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_load() -> dict:
+        return {}
+
+    monkeypatch.setattr(preset_module, "load_preset_file", fake_load)
     assert preset_module.resolve_questions_mode() == "preset"
 
 

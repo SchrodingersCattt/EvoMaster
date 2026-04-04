@@ -24,4 +24,5 @@ eval_runner: claude_cli
 questions_mode: score_summary_missing_cc
 
 # Used when child_pipeline is ``questions`` (v5 question ``id`` from bank YAML).
+# Empty is valid if questions_mode is score_summary_missing_cc (IDs from API at run).
 question_ids: []

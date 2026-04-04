@@ -6,7 +6,8 @@ Modes (see ``ci/baseline_eval_preset.yaml`` and env ``BASELINE_CHILD_PIPELINE``)
 * ``capabilities`` (default): one manual job per capability discovered in the bank.
 * ``questions``: a single job ``eval-question-list`` (runs automatically after
   ``child-pipeline-ready``); IDs from the preset or ``BASELINE_QUESTIONS``
-  (comma-separated). No per-capability jobs.
+  (comma-separated), or at job runtime when ``questions_mode`` is
+  ``score_summary_missing_cc`` (empty ``question_ids`` allowed). No per-capability jobs.
 
 Output: ``ci/generated-eval-child.yml`` (overwritten each run).
 
@@ -306,16 +307,24 @@ def main() -> int:
     print(f"Child pipeline layout: {mode}", file=sys.stderr)
 
     if mode == "questions":
+        qm = baseline_eval_preset.resolve_questions_mode()
         qids = baseline_eval_preset.resolve_question_ids()
-        if not qids:
+        if not qids and qm != "score_summary_missing_cc":
             print(
                 "Error: child_pipeline=questions requires non-empty question_ids in "
                 "ci/baseline_eval_preset.yaml or BASELINE_QUESTIONS (comma-separated) "
-                "in CI variables.",
+                "in CI variables (unless questions_mode is score_summary_missing_cc).",
                 file=sys.stderr,
             )
             return 1
-        print(f"Question list ({len(qids)}): {', '.join(qids)}", file=sys.stderr)
+        if qids:
+            print(f"Question list ({len(qids)}): {', '.join(qids)}", file=sys.stderr)
+        else:
+            print(
+                "questions_mode=score_summary_missing_cc: ids resolved at job runtime "
+                "from score-summary (optional intersect with preset when non-empty).",
+                file=sys.stderr,
+            )
         content = generate_questions()
     else:
         if not QUESTION_BANK_DIR.is_dir():
