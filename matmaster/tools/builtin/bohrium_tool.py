@@ -1,4 +1,4 @@
-"""matmaster/tools/builtin/bohrium/tool.py — Bohrium HPC platform tool.
+"""matmaster/tools/builtin/bohrium_tool.py — Bohrium HPC platform tool.
 
 Single tool with action-based dispatch for Bohrium HPC operations.
 This tool handles pure communication: submit, poll (single-query), list_images,

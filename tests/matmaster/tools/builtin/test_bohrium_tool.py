@@ -7,8 +7,8 @@ import json
 import sys
 import types
 
-import matmaster.tools.builtin.bohrium.tool as bohrium_module
-from matmaster.tools.builtin.bohrium.tool import BohriumTool, _use_sandbox
+import matmaster.tools.builtin.bohrium_tool as bohrium_module
+from matmaster.tools.builtin.bohrium_tool import BohriumTool, _use_sandbox
 from matmaster.tools.tool_result import ToolResult
 
 
