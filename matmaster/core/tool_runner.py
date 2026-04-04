@@ -7,13 +7,12 @@ Catalog -> StructuralValidation -> CapabilityPolicy -> fast path ->
 Scheduler -> executor -> release.
 
 ToolExecutionContext carries per-batch execution metadata (turn, max_turns,
-stop_event).
+cancel_token).
 """
 
 from __future__ import annotations
 
 import asyncio
-import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -30,6 +29,7 @@ from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.messages import ToolCallData
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import ToolExecutionContext as _ExecCtx, ToolInstance
 from matmaster.types.topology import RuntimeTopology
@@ -42,12 +42,12 @@ if TYPE_CHECKING:
 class BatchExecutionContext:
     """Per-batch execution context used internally by FullToolRunner.
 
-    Carries the current turn number and an optional stop event for cancellation.
+    Carries the current turn number and an optional cancel token for cancellation.
     """
 
     turn: int
     max_turns: int
-    stop_event: threading.Event | None = None
+    cancel_token: CancellationToken | None = None
     progress_sink: Callable[[str, str, str], Awaitable[None]] | None = None
 
 
@@ -188,7 +188,7 @@ class FullToolRunner:
                     continue
 
             # 1b. Cancel check (stop_mode-aware)
-            if ctx.stop_event is not None and ctx.stop_event.is_set():
+            if ctx.cancel_token is not None and ctx.cancel_token.is_cancelled:
                 stop_mode = instance.tool_binding.stop_mode
                 if stop_mode == "cancellable":
                     tr = ToolResult(status="cancelled", content="Run cancelled.")
@@ -276,7 +276,7 @@ class FullToolRunner:
         # ── Phase 2: Concurrent execution ──────────────────
         if approved:
             exec_ctx = _ExecCtx(
-                stop_event=ctx.stop_event,
+                cancel_token=ctx.cancel_token,
                 runner_state=self._state,
             )
             await asyncio.gather(

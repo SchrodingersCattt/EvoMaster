@@ -7,12 +7,13 @@ exec_bash, read_file, write_file, path_exists, is_file.
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
-import threading
-import time
 from pathlib import Path
 from typing import Any
 
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.topology import SessionCapabilities
 
 
@@ -59,18 +60,18 @@ class LocalSession:
         self,
         command: str,
         timeout: int | None = None,
-        stop_event: threading.Event | Any | None = None,
+        cancel_token: CancellationToken | None = None,
     ) -> dict[str, Any]:
         """Execute a bash command via subprocess.
 
         Returns dict with: stdout, stderr, exit_code, working_dir, output.
-        When ``stop_event`` is set during execution, the subprocess is killed
+        When ``cancel_token`` is cancelled during execution, the subprocess is killed
         and exit_code 130 is returned (matching evomaster BaseSession contract).
         """
         effective_timeout = timeout or self._timeout
 
-        if stop_event is not None:
-            return self._exec_bash_with_stop(command, effective_timeout, stop_event)
+        if cancel_token is not None:
+            return self._exec_bash_with_token(command, effective_timeout, cancel_token)
 
         try:
             proc = subprocess.run(
@@ -96,52 +97,68 @@ class LocalSession:
                 "output": f"Command timeout after {effective_timeout}s",
             }
 
-    def _exec_bash_with_stop(
+    def _exec_bash_with_token(
         self,
         command: str,
         timeout: int,
-        stop_event: Any,
+        cancel_token: CancellationToken,
     ) -> dict[str, Any]:
-        """Execute with stop_event polling -- kill subprocess when stop is requested."""
+        """Execute with cancel token callbacks -- kill subprocess when cancelled."""
+        if cancel_token.is_cancelled:
+            return {
+                "stdout": "",
+                "stderr": "Cancelled before command start.",
+                "exit_code": 130,
+                "working_dir": str(self._workspace_path),
+                "output": "Cancelled before command start.",
+            }
+
         proc = subprocess.Popen(
             ["bash", "-c", command],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=str(self._workspace_path),
             text=True,
+            start_new_session=True,
         )
-        poll_interval = 0.1
-        elapsed = 0.0
-        while proc.poll() is None:
-            if stop_event.is_set():
-                proc.kill()
-                proc.wait()
-                return {
-                    "stdout": "",
-                    "stderr": "Cancelled by stop request",
-                    "exit_code": 130,
-                    "working_dir": str(self._workspace_path),
-                    "output": "Cancelled by stop request",
-                }
-            wait = getattr(stop_event, "wait", None)
-            if callable(wait):
-                wait(poll_interval)
-            else:
-                time.sleep(poll_interval)
-            elapsed += poll_interval
-            if elapsed >= timeout:
-                proc.kill()
-                proc.wait()
-                return {
-                    "stdout": "",
-                    "stderr": f"Command timeout after {timeout}s",
-                    "exit_code": 124,
-                    "working_dir": str(self._workspace_path),
-                    "output": f"Command timeout after {timeout}s",
-                }
 
-        stdout = proc.stdout.read() if proc.stdout else ""
-        stderr = proc.stderr.read() if proc.stderr else ""
+        def _kill_group() -> None:
+            if proc.poll() is not None:
+                return
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, OSError):
+                pass
+
+        cancel_token.on_cancel(_kill_group)
+
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_group()
+            proc.communicate()
+            return {
+                "stdout": "",
+                "stderr": f"Command timeout after {timeout}s",
+                "exit_code": 124,
+                "working_dir": str(self._workspace_path),
+                "output": f"Command timeout after {timeout}s",
+            }
+
+        if cancel_token.is_cancelled:
+            output = stdout
+            if output:
+                output = output.rstrip("\n") + "\nCommand cancelled."
+            else:
+                output = "Command cancelled."
+            return {
+                "stdout": stdout,
+                "stderr": "Command cancelled.",
+                "exit_code": 130,
+                "working_dir": str(self._workspace_path),
+                "output": output,
+            }
+
         return {
             "stdout": stdout,
             "stderr": stderr,

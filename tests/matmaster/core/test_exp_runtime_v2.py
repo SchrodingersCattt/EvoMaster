@@ -5,7 +5,6 @@ Phase 34 Plan 1 Task 2: ESIN-01, ESIN-04, ESIN-05.
 
 from __future__ import annotations
 
-import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import (
     LLMResponse,
     StreamChunk,
@@ -26,7 +26,7 @@ from matmaster.types.runtime import AgentRuntimeSpec
 class _MockSession:
     """Minimal Session mock satisfying the Session Protocol."""
 
-    _stop_event = None
+    _cancel_token = None
 
     @property
     def is_open(self) -> bool:
@@ -38,7 +38,7 @@ class _MockSession:
     def close(self) -> None:
         pass
 
-    def exec_bash(self, command, timeout=None, stop_event=None):
+    def exec_bash(self, command, timeout=None, cancel_token=None):
         return {"stdout": "", "stderr": "", "exit_code": 0}
 
     def read_file(self, path, encoding="utf-8"):
@@ -314,6 +314,51 @@ class TestRunStream:
             await gen.aclose()  # Explicitly close, triggering finally
 
         assert cleanup_called, "Cleanup should run on explicit aclose"
+
+    @pytest.mark.asyncio
+    async def test_run_stream_injects_cancel_token_into_session_and_catalog(self) -> None:
+        from matmaster.core.exp import Exp
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context()
+        controller = CancellationController()
+        catalog = MagicMock()
+
+        observed: dict[str, Any] = {}
+
+        async def fake_kernel_run_stream(
+            spec: Any,
+            task: str,
+            history: list[Any] | None = None,
+            cancel_token: Any = None,
+        ) -> AsyncIterator[Any]:
+            observed["spec"] = spec
+            observed["task"] = task
+            observed["history"] = history
+            observed["cancel_token"] = cancel_token
+            yield MagicMock(type="test.event")
+
+        runtime = MagicMock()
+        runtime.spec = MagicMock(tool_catalog=catalog)
+        runtime.kernel = MagicMock()
+        runtime.kernel.run_stream = fake_kernel_run_stream
+
+        exp.build_runtime = AsyncMock(return_value=runtime)
+
+        events = []
+        async for event in exp.run_stream(
+            ctx,
+            "test task",
+            cancel_token=controller.token,
+        ):
+            events.append(event)
+
+        assert len(events) == 1
+        assert ctx.session._cancel_token is controller.token
+        catalog.inject_cancel_token.assert_called_once_with(controller.token)
+        assert observed["task"] == "test task"
+        assert observed["cancel_token"] is controller.token
 
 
 # ── ESIN-05: on_skill_hit uses catalog.register_overlay() ─

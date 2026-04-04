@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import threading
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -12,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import matmaster.config.loader as matmaster_loader
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.context import PlaygroundContext
 from tests.matmaster.core.conftest import MockLLMProvider
 
@@ -409,7 +409,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
                 session_id='sess-spec-order',
                 user_prompt='prompt',
                 send_cb=AsyncMock(),
-                stop_event=threading.Event(),
+                cancel_token=CancellationController().token,
                 mode='direct',
                 task_id='task-spec-order',
             )
@@ -511,7 +511,7 @@ def test_execution_binding_before_build_runtime(
                 session_id='sess-exec-bind',
                 user_prompt='prompt',
                 send_cb=AsyncMock(),
-                stop_event=threading.Event(),
+                cancel_token=CancellationController().token,
                 mode='direct',
                 task_id='task-exec-bind',
             )

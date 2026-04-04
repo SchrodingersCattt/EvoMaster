@@ -11,7 +11,9 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from typing import Any
 
+from matmaster.types.cancellation import CancellationController
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
@@ -42,6 +44,7 @@ _WORKER_HEARTBEAT_INTERVAL = 10.0
 _current_session_id: str | None = None
 # 优雅退出：SIGTERM 时设为 True，主循环在「当前 run 结束后」或「空闲时」退出，不再接新任务
 _drain_requested = False
+_active_controller: CancellationController | None = None
 
 
 def _session_url(session_id: str) -> str:
@@ -54,16 +57,41 @@ def _session_url(session_id: str) -> str:
     return f'https://matmaster{suffix}.bohrium.com/matmaster/chat-evo/{sid}'
 
 
-class RedisBackedStopEvent:
-    """供 Worker 使用：is_set() 从 Redis 读取用户是否请求停止。"""
+class RedisCancellationBridge:
+    """Daemon thread that polls Redis stop flag and cancels a controller."""
 
-    def __init__(self, session_id: str, task_id: str):
+    def __init__(
+        self,
+        controller: CancellationController,
+        session_id: str,
+        task_id: str,
+        interval: float = 0.5,
+        *,
+        _dao_override: Any = None,
+    ) -> None:
+        self._controller = controller
         self._session_id = session_id
         self._task_id = task_id
-        self._dao = get_redis_dao()
+        self._interval = interval
+        self._dao = _dao_override or get_redis_dao()
+        self._shutdown = threading.Event()
+        self._thread: threading.Thread | None = None
 
-    def is_set(self) -> bool:
-        return self._dao.is_stop_requested(self._session_id, self._task_id)
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._shutdown.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+
+    def _poll(self) -> None:
+        while not self._shutdown.is_set() and not self._controller.token.is_cancelled:
+            if self._dao.is_stop_requested(self._session_id, self._task_id):
+                self._controller.cancel()
+                break
+            self._shutdown.wait(self._interval)
 
 
 def _publish_run_interrupted_deploy(session_id: str) -> None:
@@ -136,7 +164,7 @@ def _worker_heartbeat_loop(stop_ev: threading.Event) -> None:
 
 
 def _run_worker_loop() -> None:
-    global _current_session_id
+    global _current_session_id, _active_controller
     redis_dao = get_redis_dao()
     if not redis_dao.create_client():
         logger.error(
@@ -193,7 +221,10 @@ def _run_worker_loop() -> None:
             # 不在此处写 DB：run_agent 内 event_callback 已写，此处再写会导致同一条事件落库两次
             redis_dao.publish_stream_event(_sid, p)
 
-        stop_ev = RedisBackedStopEvent(session_id, task_id)
+        controller = CancellationController()
+        _active_controller = controller
+        bridge = RedisCancellationBridge(controller, session_id, task_id)
+        bridge.start()
         acquired = False
 
         try:
@@ -253,7 +284,7 @@ def _run_worker_loop() -> None:
                         session_id=session_id,
                         user_prompt=user_prompt,
                         send_cb=send_cb,
-                        stop_event=stop_ev,
+                        cancel_token=controller.token,
                         mode=mode,
                         task_id=task_id,
                         invocation_id=invocation_id,
@@ -316,6 +347,8 @@ def _run_worker_loop() -> None:
                 except Exception:
                     pass
         finally:
+            bridge.stop()
+            _active_controller = None
             if acquired:
                 _current_session_id = None
                 LogContext.clear()

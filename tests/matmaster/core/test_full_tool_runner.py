@@ -15,7 +15,6 @@ Verifies:
 
 from __future__ import annotations
 
-import threading
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -35,6 +34,7 @@ from matmaster.tools.builtin.bash_tool import BashTool
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import ToolCallData
 from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_runner_state import ToolRunnerState
@@ -504,14 +504,14 @@ class TestExecutorException:
 
 class TestCancelSemantics:
     @pytest.mark.asyncio
-    async def test_stop_event_skips_remaining(self) -> None:
-        """stop_event.is_set() -> skip remaining tool_calls with cancelled."""
-        stop = threading.Event()
-        stop.set()
+    async def test_cancel_token_skips_remaining(self) -> None:
+        """cancel_token.is_cancelled -> skip remaining tool_calls with cancelled."""
+        ctrl = CancellationController()
+        ctrl.cancel()
 
         catalog = _make_catalog("t1", "t2", "t3")
         runner = _make_runner(catalog)
-        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+        ctx = ToolExecutionContext(turn=1, max_turns=10, cancel_token=ctrl.token)
 
         results = await runner.execute_batch(
             [_make_tc("t1"), _make_tc("t2"), _make_tc("t3")], ctx
@@ -524,12 +524,12 @@ class TestCancelSemantics:
     @pytest.mark.asyncio
     async def test_cancel_on_result_callback(self) -> None:
         """Cancelled results do NOT fire on_result callback."""
-        stop = threading.Event()
-        stop.set()
+        ctrl = CancellationController()
+        ctrl.cancel()
 
         catalog = _make_catalog("t1")
         runner = _make_runner(catalog)
-        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+        ctx = ToolExecutionContext(turn=1, max_turns=10, cancel_token=ctrl.token)
 
         callback_count = 0
 
@@ -844,8 +844,8 @@ class TestNormalizeAndTruncation:
         assert len(results) == 2
 
     @pytest.mark.asyncio
-    async def test_executor_receives_stop_event_from_execution_context(self) -> None:
-        """Executor receives ToolExecutionContext with stop_event from batch context."""
+    async def test_executor_receives_cancel_token_from_execution_context(self) -> None:
+        """Executor receives ToolExecutionContext with cancel_token from batch context."""
         from matmaster.types.tool_spec import ToolExecutionContext as ExecCtx
 
         captured: dict[str, Any] = {}
@@ -873,7 +873,7 @@ class TestNormalizeAndTruncation:
             async def execute_with_context(
                 self, arguments: dict[str, Any], exec_ctx: ExecCtx
             ) -> ToolResult:
-                captured["stop_event"] = exec_ctx.stop_event
+                captured["cancel_token"] = exec_ctx.cancel_token
                 return ToolResult(content="ok")
 
         registry = ToolRegistry()
@@ -881,11 +881,11 @@ class TestNormalizeAndTruncation:
         catalog = ToolCatalog(registry)
         runner = _make_runner(catalog)
 
-        stop = threading.Event()
-        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+        ctrl = CancellationController()
+        ctx = ToolExecutionContext(turn=1, max_turns=10, cancel_token=ctrl.token)
 
         await runner.execute_batch([_make_tc("ctx_tool")], ctx)
-        assert captured["stop_event"] is stop
+        assert captured["cancel_token"] is ctrl.token
 
     @pytest.mark.asyncio
     async def test_no_truncation_when_max_result_chars_zero(self) -> None:
@@ -1123,11 +1123,11 @@ class TestStopModeCancel:
     """FullToolRunner uses stop_mode to decide cancel behavior."""
 
     @pytest.mark.asyncio
-    async def test_cancellable_tool_cancelled_when_stop_set(self) -> None:
+    async def test_cancellable_tool_cancelled_when_token_cancelled(self) -> None:
         runner = _make_runner_with_stop_mode("test_tool", stop_mode="cancellable")
-        stop = threading.Event()
-        stop.set()
-        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+        ctrl = CancellationController()
+        ctrl.cancel()
+        ctx = ToolExecutionContext(turn=1, max_turns=10, cancel_token=ctrl.token)
 
         results = await runner.execute_batch([_make_tc("test_tool")], ctx)
 
@@ -1138,9 +1138,9 @@ class TestStopModeCancel:
     @pytest.mark.asyncio
     async def test_best_effort_tool_cancelled_with_message(self) -> None:
         runner = _make_runner_with_stop_mode("web_tool", stop_mode="best_effort")
-        stop = threading.Event()
-        stop.set()
-        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+        ctrl = CancellationController()
+        ctrl.cancel()
+        ctx = ToolExecutionContext(turn=1, max_turns=10, cancel_token=ctrl.token)
 
         results = await runner.execute_batch([_make_tc("web_tool")], ctx)
 
@@ -1152,15 +1152,15 @@ class TestStopModeCancel:
         )
 
     @pytest.mark.asyncio
-    async def test_non_cancellable_tool_executes_when_stop_set(self) -> None:
+    async def test_non_cancellable_tool_executes_when_token_cancelled(self) -> None:
         runner = _make_runner_with_stop_mode(
             "spawn_tool",
             stop_mode="non_cancellable",
             result_content="spawn_done",
         )
-        stop = threading.Event()
-        stop.set()
-        ctx = ToolExecutionContext(turn=1, max_turns=10, stop_event=stop)
+        ctrl = CancellationController()
+        ctrl.cancel()
+        ctx = ToolExecutionContext(turn=1, max_turns=10, cancel_token=ctrl.token)
 
         results = await runner.execute_batch([_make_tc("spawn_tool")], ctx)
 
@@ -1169,7 +1169,7 @@ class TestStopModeCancel:
         assert results[0][1].content == "spawn_done"
 
     @pytest.mark.asyncio
-    async def test_no_stop_event_all_modes_execute(self) -> None:
+    async def test_no_cancel_token_all_modes_execute(self) -> None:
         for mode in ("cancellable", "best_effort", "non_cancellable"):
             runner = _make_runner_with_stop_mode(
                 f"tool_{mode}",

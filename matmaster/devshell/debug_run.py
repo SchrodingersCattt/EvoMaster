@@ -9,7 +9,6 @@ Usage:
 from __future__ import annotations
 
 import sys
-import threading
 from pathlib import Path
 
 # -- Config --
@@ -27,6 +26,7 @@ def main(prompt: str | None = None) -> None:
     import os
 
     from dotenv import find_dotenv, load_dotenv
+    from matmaster.types.cancellation import CancellationController
 
     load_dotenv()
     current_env = os.getenv("SERVICE_ENV", "test")
@@ -82,10 +82,12 @@ def main(prompt: str | None = None) -> None:
 
     task = prompt or PROMPT
     observer = DevEventObserver()
-    stop_event = threading.Event()
+    controller = CancellationController()
 
     # -- Breakpoint-friendly: step into runner.run() --
-    result = runner.run(task, stop_event=stop_event, event_observer=observer)
+    result = runner.run(
+        task, cancel_token=controller.token, event_observer=observer
+    )
 
     # Print summary
     print(f"\n{'='*60}")

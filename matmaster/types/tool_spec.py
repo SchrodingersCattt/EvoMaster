@@ -18,13 +18,13 @@ All Pydantic models are frozen=True. ToolInstance is a frozen dataclass.
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.topology import ToolPlane
 
@@ -89,7 +89,7 @@ class ToolExecutionContext:
     used by FullToolRunner.
     """
 
-    stop_event: threading.Event | None = None
+    cancel_token: CancellationToken | None = None
     on_progress: Callable[[str], Awaitable[None]] | None = None
     runner_state: ToolRunnerState | None = None
 

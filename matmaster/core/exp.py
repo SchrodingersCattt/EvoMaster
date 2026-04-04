@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import inspect
 import logging
-import threading
 import uuid
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
@@ -28,6 +27,7 @@ from matmaster.config.exp import ExpConfig
 from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
 from matmaster.tools.tool_registry import ToolRegistry
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
 
@@ -107,7 +107,7 @@ class Exp:
         async def spawn_fn(
             exp_name: str,
             task: str,
-            stop_event: threading.Event | None = None,
+            cancel_token: CancellationToken | None = None,
         ) -> str:
             from matmaster.config.loader import load_exp_config
             from matmaster.core.stream_drain import drain_run_stream
@@ -132,7 +132,7 @@ class Exp:
                     child_exp.run_stream(
                         ctx,
                         task,
-                        stop_event=stop_event,
+                        cancel_token=cancel_token,
                         source_override=child_source,
                         spawn_id=child_spawn_id,
                     )
@@ -393,7 +393,7 @@ class Exp:
         task: str,
         *,
         history: list[Message] | None = None,
-        stop_event: threading.Event | None = None,
+        cancel_token: CancellationToken | None = None,
         skills: dict[str, Any] | None = None,
         source_override: str | None = None,
         spawn_id: str | None = None,
@@ -412,15 +412,15 @@ class Exp:
                 spawn_id=spawn_id,
             )
             if ctx.session is not None:
-                ctx.session._stop_event = stop_event
+                ctx.session._cancel_token = cancel_token
 
-            # Inject stop_event into tools for cancel propagation
+            # Inject cancel_token into tools for cancel propagation.
             catalog = getattr(runtime.spec, "tool_catalog", None)
-            if stop_event is not None and catalog is not None:
-                catalog.inject_stop_event(stop_event)
+            if cancel_token is not None and catalog is not None:
+                catalog.inject_cancel_token(cancel_token)
 
             async for event in runtime.kernel.run_stream(
-                runtime.spec, task, history=history, stop_event=stop_event
+                runtime.spec, task, history=history, cancel_token=cancel_token
             ):
                 yield event
         finally:

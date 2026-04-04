@@ -545,13 +545,13 @@ class ChatStreamService:
                     # run 在别的 pod：有 Redis 时订阅 stream channel 收实时事件，否则轮询 + ping 保活
                     if REDIS_URL:
                         redis_queue = asyncio.Queue()
-                        stop_event = threading.Event()
+                        shutdown_event = threading.Event()
                         loop = asyncio.get_event_loop()
                         channel = STREAM_CHANNEL_PREFIX + sid
 
                         def _redis_subscribe_loop(
                             _channel: str = channel,
-                            _stop_ev: threading.Event = stop_event,
+                            _shutdown_ev: threading.Event = shutdown_event,
                             _ev_loop: asyncio.AbstractEventLoop = loop,
                             _queue: asyncio.Queue = redis_queue,
                         ) -> None:
@@ -561,7 +561,7 @@ class ChatStreamService:
                             pubsub = client.pubsub()
                             try:
                                 pubsub.subscribe(_channel)
-                                while not _stop_ev.is_set():
+                                while not _shutdown_ev.is_set():
                                     msg = pubsub.get_message(timeout=1.0)
                                     if msg and msg.get('type') == 'message':
                                         try:
@@ -614,7 +614,7 @@ class ChatStreamService:
                                 )
                                 yield self.sse_format(payload)
                         finally:
-                            stop_event.set()
+                            shutdown_event.set()
                             sub_thread.join(timeout=2.0)
                     else:
                         await asyncio.sleep(5.0)
@@ -844,7 +844,7 @@ class ChatStreamService:
 
         ReplyQueueNotifyOnGet(ctx.reply_queue, _on_reply)
         redis_queue = asyncio.Queue()
-        stop_event = threading.Event()
+        shutdown_event = threading.Event()
         subscribe_ready = threading.Event()
         channel = STREAM_CHANNEL_PREFIX + sid
 
@@ -856,7 +856,7 @@ class ChatStreamService:
             pubsub = client.pubsub()
             try:
                 pubsub.subscribe(channel)
-                while not stop_event.is_set():
+                while not shutdown_event.is_set():
                     msg = pubsub.get_message(timeout=1.0)
                     if msg and msg.get('type') == 'subscribe':
                         subscribe_ready.set()
@@ -980,7 +980,7 @@ class ChatStreamService:
                     if payload.get('type') in {'stream_closed', 'end'}:
                         break
             finally:
-                stop_event.set()
+                shutdown_event.set()
                 sub_thread.join(timeout=2.0)
         finally:
             # 不断开即不 put_cancel：仅用户显式点「停止」(POST /stop) 才取消，刷新/关 Tab 后可在新页继续回复

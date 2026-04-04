@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import threading
 from typing import Any
 
 from matmaster.tools.tool_compiler import ToolCompiler
 from matmaster.tools.tool_registry import Tool, ToolRegistry
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ToolInstance
 from matmaster.types.topology import RuntimeTopology
@@ -120,9 +120,9 @@ class ToolCatalog:
 
         return "\n\n".join(parts)
 
-    def inject_stop_event(self, stop_event: threading.Event) -> None:
+    def inject_cancel_token(self, cancel_token: CancellationToken) -> None:
         for tool in self._registry.all_tools:
-            tool._stop_event = stop_event  # type: ignore[attr-defined]
+            tool._cancel_token = cancel_token  # type: ignore[attr-defined]
 
     def __len__(self) -> int:
         return len(self._registry)

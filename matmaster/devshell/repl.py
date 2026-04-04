@@ -15,6 +15,7 @@ from matmaster.devshell.config import DevConfig
 from matmaster.devshell.event_logger import EventLogger
 from matmaster.devshell.event_observer import DevEventObserver
 from matmaster.devshell.runner import DevRunner
+from matmaster.types.cancellation import CancellationController
 
 BUILTIN_COMMANDS = {"help", "config", "tools", "clear", "history", "verbose"}
 
@@ -129,7 +130,7 @@ def run_repl(
         event_logger.set_run_id(run_id)
 
         observer = DevEventObserver()
-        stop_event = threading.Event()
+        controller = CancellationController()
 
         original_handler = signal.getsignal(signal.SIGINT)
 
@@ -137,9 +138,9 @@ def run_repl(
             signum: int,
             frame: Any,
             *,
-            ev: threading.Event = stop_event,
+            ctrl: CancellationController = controller,
         ) -> None:
-            ev.set()
+            ctrl.cancel()
             print("\n\nCancelling...")
 
         signal.signal(signal.SIGINT, _sigint_handler)
@@ -150,13 +151,13 @@ def run_repl(
 
             def _worker(
                 task: str = user_input,
-                ev: threading.Event = stop_event,
+                ct=controller.token,
                 obs: DevEventObserver = observer,
                 rh: list[Any] = result_holder,
                 eh: list[Exception] = error_holder,
             ) -> None:
                 try:
-                    result = runner.run(task, stop_event=ev, event_observer=obs)
+                    result = runner.run(task, cancel_token=ct, event_observer=obs)
                     rh.append(result)
                 except Exception as e:
                     eh.append(e)

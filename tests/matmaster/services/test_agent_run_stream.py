@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import (
     CancelledEvent,
     ErrorEvent,
@@ -45,7 +46,7 @@ def _make_mock_pg_ctx() -> MagicMock:
     ctx.workdir = '/tmp/workspace'
     ctx.execution_workdir = '/tmp/workspace'
     ctx.session = MagicMock()
-    ctx.session._stop_event = None
+    ctx.session._cancel_token = None
     ctx.session.capabilities = MagicMock()
     ctx.archival = None
     ctx.run_meta = {}
@@ -55,11 +56,9 @@ def _make_mock_pg_ctx() -> MagicMock:
     return ctx
 
 
-def _make_stop_event() -> MagicMock:
-    """Build a mock StopEventLike."""
-    se = MagicMock()
-    se.is_set.return_value = False
-    return se
+def _make_cancel_token():
+    """Build a real CancellationToken for integration-style tests."""
+    return CancellationController().token
 
 
 class _FakeExp:
@@ -70,8 +69,10 @@ class _FakeExp:
         self._config = MagicMock()
         self._config.name = 'direct'
         self._cleanup_callbacks: list = []
+        self.last_run_kwargs: dict[str, Any] | None = None
 
     async def run_stream(self, *args: Any, **kwargs: Any):
+        self.last_run_kwargs = kwargs
         for event in self._events:
             yield event
 
@@ -192,6 +193,8 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
             svc._sessions_service = MagicMock()
             svc._sessions_service.get_session_user_id.return_value = 'user-1'
             svc._pg_manager = pg_mgr
+            svc._test_fake_exp = fake_exp
+            svc._test_pg_ctx = pg_ctx
 
             yield svc, sse_received, persist_received
 
@@ -226,6 +229,26 @@ async def test_run_agent_signature_does_not_accept_reply_queue():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_injects_cancel_token_into_session_and_exp():
+    run_result = RunResultEvent(source='agent', status='completed', reason='natural')
+    cancel_token = _make_cancel_token()
+
+    async with _patched_service([run_result]) as (svc, _, __):
+        await svc.run_agent(
+            session_id='s1',
+            user_prompt='hi',
+            send_cb=AsyncMock(),
+            cancel_token=cancel_token,
+            mode='direct',
+            task_id='t1',
+        )
+
+    assert svc._test_pg_ctx.session._cancel_token is cancel_token
+    assert svc._test_fake_exp.last_run_kwargs is not None
+    assert svc._test_fake_exp.last_run_kwargs['cancel_token'] is cancel_token
+
+
+@pytest.mark.asyncio
 async def test_stream_events_reach_handlers_via_fanout():
     """Events from exp.run_stream() are dispatched through RunEventFanout to handlers."""
     thought = ThoughtEvent(source='agent', content='thinking...')
@@ -237,7 +260,7 @@ async def test_stream_events_reach_handlers_via_fanout():
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
-            stop_event=_make_stop_event(),
+            cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
         )
@@ -261,7 +284,7 @@ async def test_source_normalization_on_events():
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
-            stop_event=_make_stop_event(),
+            cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
         )
@@ -283,7 +306,7 @@ async def test_stream_closed_after_run_result():
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
-            stop_event=_make_stop_event(),
+            cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
         )
@@ -305,7 +328,7 @@ async def test_cancelled_run_emits_cancelled_and_closed():
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
-            stop_event=_make_stop_event(),
+            cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
         )
@@ -401,7 +424,7 @@ async def test_exception_emits_error_and_closed():
                 session_id='s1',
                 user_prompt='hi',
                 send_cb=AsyncMock(),
-                stop_event=_make_stop_event(),
+                cancel_token=_make_cancel_token(),
                 mode='direct',
                 task_id='t1',
             )
@@ -422,7 +445,7 @@ async def test_successful_run_returns_true():
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
-            stop_event=_make_stop_event(),
+            cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
         )
@@ -442,7 +465,7 @@ async def test_failed_run_returns_false_with_reason():
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
-            stop_event=_make_stop_event(),
+            cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
         )
@@ -466,7 +489,7 @@ async def test_worker_mode_send_cb_receives_live_events():
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
-            stop_event=_make_stop_event(),
+            cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
         )
@@ -491,7 +514,7 @@ async def test_persistence_receives_events():
             session_id='s1',
             user_prompt='hi',
             send_cb=AsyncMock(),
-            stop_event=_make_stop_event(),
+            cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
         )

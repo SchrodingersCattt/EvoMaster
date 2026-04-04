@@ -58,7 +58,7 @@ class DevStreamHook:
         self._out.flush()
 
     def _handle_tool_result_event(self, event: Any) -> None:
-        is_error = event.status == "error"
+        is_error = event.status in ("error", "timeout")
         prefix = "\u274c tool_error:" if is_error else "\u2705 tool_result:"
         display = str(event.result) if event.result else ""
         if len(display) > _MAX_RESULT_LEN:

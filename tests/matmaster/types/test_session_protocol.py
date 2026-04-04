@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+from typing import get_type_hints
 
 import pytest
 
 from matmaster.sessions.local import LocalSession
+from matmaster.types.cancellation import CancellationToken
 from matmaster.sessions.tmux import PS1_BEGIN, PS1_END, PS1_PATTERN, BashMetadata
 from matmaster.types.session import (
     LocalSessionConfig,
@@ -39,13 +41,20 @@ class TestSessionProtocol:
 
             def open(self) -> None: ...
             def close(self) -> None: ...
-            def exec_bash(self, command, timeout=None, stop_event=None): ...
+            def exec_bash(self, command, timeout=None, cancel_token=None): ...
             def read_file(self, path, encoding="utf-8"): ...
             def write_file(self, path, content, encoding="utf-8"): ...
             def path_exists(self, path): ...
             def is_file(self, path): ...
 
         assert isinstance(FakeSession(), Session)
+
+    def test_exec_bash_uses_cancel_token_hint(self) -> None:
+        hints = get_type_hints(Session.exec_bash)
+
+        assert "cancel_token" in hints
+        assert hints["cancel_token"] == CancellationToken | None
+        assert all(not name.endswith("_event") for name in hints)
 
 
 class TestSessionConfig:

@@ -10,11 +10,11 @@ models carrying construction-time parameters for each session variant.
 
 from __future__ import annotations
 
-import threading
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.topology import SessionCapabilities
 
 
@@ -95,7 +95,7 @@ class Session(Protocol):
         self,
         command: str,
         timeout: int | None = None,
-        stop_event: threading.Event | Any | None = None,
+        cancel_token: CancellationToken | None = None,
     ) -> dict[str, Any]:
         """Execute a bash command and return result dict."""
         ...
