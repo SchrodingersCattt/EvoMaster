@@ -241,7 +241,7 @@ scoring_checklist:
 ## DevShell 与 Claude Agent SDK 外层编排
 
 - DevShell / IDE 流程：`evaluation/docs/devshell/devshell_claude_code_eval.md`（`run_devshell_eval.py` + `score_devshell_tasks.py` 自动评分）。
-- **程序化**多轮「跑题 → 判分 → 改提示词/工具」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。
+- **程序化**多轮「跑题 → 判分 → 改提示词/工具」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。自迭代时模型侧约定「每处修改单独 commit、无效则 revert」；编排层可用 `--no-git-reset-on-regression` 关闭「较上一轮退步则 reset 到本轮起点」的保险。
 
 ---
 

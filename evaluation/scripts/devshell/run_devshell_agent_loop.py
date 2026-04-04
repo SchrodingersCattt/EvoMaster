@@ -81,6 +81,15 @@ class DevshellAgentLoopCli:
             default="",
             help="Appended to each iteration user message (focus areas, constraints).",
         )
+        p.add_argument(
+            "--git-reset-on-regression",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help=(
+                "After each iteration, if macro mean is below the previous iteration's "
+                "and git head was recorded at iteration start, run git reset --hard."
+            ),
+        )
 
         p.add_argument(
             "--modes",
@@ -208,6 +217,7 @@ class DevshellAgentLoopCli:
             permission_mode=str(args.permission_mode),
             max_sdk_turns=max(1, int(args.max_sdk_turns)),
             extra_instruction=str(args.extra_instruction or ""),
+            git_reset_on_regression=bool(args.git_reset_on_regression),
         )
 
         print(f"Session directory: {session_dir}", file=sys.stderr)

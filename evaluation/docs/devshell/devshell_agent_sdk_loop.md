@@ -29,6 +29,11 @@ uv run python evaluation/scripts/devshell/run_devshell_agent_loop.py \
 - **判分与改仓库**：由 SDK 会话先调用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py --dry-run` 获取真实分数，再视需要检查低分任务的 workspace / events；原则与 [devshell_claude_code_eval.md](devshell_claude_code_eval.md) 一致。
 - **每轮结束**：模型应调用 `report_iteration_outcome`；外层在 `macro_mean_0_100 >= --target-mean-score` 或 `target_met` 时提前停止。
 
+### Git：每改一次提交，无效则回滚
+
+- **系统提示**要求：每次 `Edit`/`Write` 后单独 `git commit`（消息建议带 `devshell_agent iter=…`），便于按条回滚；若某次改动经复评宏平均相对改动前**没有变好**，应对**该 commit** `git revert`（或本地未 push 时用 `git reset --hard HEAD~1`）。
+- **编排层保险**（默认开启）：每轮开始前记录 `HEAD` 写入会话目录 `git_iteration_heads.jsonl`；若本轮 `report_iteration_outcome` 的宏平均**严格低于**上一轮，则对该仓库执行 `git reset --hard` 到**本轮开始**时的 `HEAD`（撤销本轮全部未达标退化）。关闭：`--no-git-reset-on-regression`。
+
 ## 与「仅 Claude Code 文档驱动」的关系
 
 - [devshell_claude_code_eval.md](devshell_claude_code_eval.md)：适用于在 IDE 里跑 `run_devshell_eval.py` 后，再用 `score_devshell_tasks.py` 自动评分、上报的流程。

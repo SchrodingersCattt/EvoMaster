@@ -13,6 +13,12 @@ from evaluation.devshell_agent.config_state import (
     AgentLoopSharedState,
     DevshellAgentCliDefaults,
 )
+from evaluation.devshell_agent.git_iteration import (
+    append_iteration_head,
+    git_reset_hard,
+    git_rev_parse_head,
+    head_at_iteration_start,
+)
 
 
 @dataclass
@@ -25,6 +31,7 @@ class AgentLoopConfig:
     permission_mode: str
     max_sdk_turns: int
     extra_instruction: str = ""
+    git_reset_on_regression: bool = True
 
 
 class DevshellAgentLoop:
@@ -35,7 +42,12 @@ class DevshellAgentLoop:
 ## 工具分工
 - **run_devshell_eval**：在仓库根目录下执行 `evaluation/scripts/devshell/run_devshell_eval.py`（子进程，优先 `uv run python`）。输出目录为会话下的 `eval_runs/<iteration_tag>/`。
 - **report_iteration_outcome**：每一轮结束时**必须**调用一次，记录宏平均分数与是否达标。
-- **Read / Glob / Grep / Edit / Write / Bash**：用于阅读题库与产物、修改配置与提示词。Bash 仅用于必要命令（如 `git diff`），避免破坏性操作。
+- **Read / Glob / Grep / Edit / Write / Bash**：用于阅读题库与产物、修改配置与提示词。Bash 用于 `git` 与必要命令；避免与本流程无关的破坏性操作。
+
+## Git 工作流（自迭代必守）
+- **每次实质性修改**（每次 `Edit`/`Write` 落盘后）：对相应文件 `git add` 并 **`git commit` 一条独立记录**，消息建议 `devshell_agent iter=<轮次> <简述>`，使改动与 commit 一一对应、便于回滚。
+- **判断单次改动是否改善**：在该次改动前记下当时的宏平均（来自 `score_devshell_tasks.py`）；改动并 commit 后，若需用分数验证，应再次对**能反映新代码**的产物跑分（通常需新的 `run_devshell_eval` + `iteration_tag`，或按题库说明复评）。若新宏平均 **不高于** 改动前基准（改善无效），应回滚**该条** commit：优先 `git revert HEAD --no-edit`；若该 commit 尚未 push 且历史仅本地迭代，可用 `git reset --hard HEAD~1`。
+- 不要用 `git push --force` 等破坏协作历史的操作。
 
 ## 判分原则（与 `evaluation/docs/devshell/devshell_claude_code_eval.md` 一致）
 - 优先使用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py` 自动评分；它会基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl` 调用同一套 `BinaryEvaluator`。
@@ -74,8 +86,8 @@ class DevshellAgentLoop:
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
 2. 对本次 run 先执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <本轮目录> --dry-run`，以脚本输出的每题分数与宏平均作为本轮判分结果；必要时再阅读 `eval_runs/.../workspaces/<task_id>/`、`logs/<task_id>/events_*.jsonl` 与题库 YAML 解释低分原因。
-3. 若未达标：修改仓库内相关提示词/工具/配置后准备结束本轮；若已达标：可不改。
-4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写真实分数与 `files_touched`（如有）。
+3. 若未达标：修改仓库内相关提示词/工具/配置。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**（`git revert` 或安全的 `reset`）。若已达标：可不改。
+4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（如有）；若本轮曾回滚无效改动，分数应以回滚后的最终状态为准。
 {extra_block}
 """
 
@@ -95,6 +107,7 @@ class DevshellAgentLoop:
                 for k, v in asdict(cfg.defaults).items()
             },
             "extra_instruction": cfg.extra_instruction,
+            "git_reset_on_regression": cfg.git_reset_on_regression,
         }
         session_dir.mkdir(parents=True, exist_ok=True)
         (session_dir / "session_manifest.json").write_text(
@@ -155,6 +168,11 @@ class DevshellAgentLoop:
         exit_code = 0
         async with ClaudeSDKClient(options=options) as client:
             for it in range(1, cfg.max_iterations + 1):
+                head0 = git_rev_parse_head(repo_root=cfg.repo_root)
+                if head0:
+                    append_iteration_head(
+                        session_dir=cfg.session_dir, iteration=it, head=head0
+                    )
                 await client.query(self._iteration_user_message(it=it))
                 async for message in client.receive_response():
                     if isinstance(message, AssistantMessage):
@@ -176,6 +194,37 @@ class DevshellAgentLoop:
                 last = matching[-1]
                 score = int(last.get("macro_mean_0_100", 0))
                 met = bool(last.get("target_met"))
+
+                if cfg.git_reset_on_regression and it > 1:
+                    prev_rows = [
+                        o
+                        for o in state.outcomes
+                        if int(o.get("iteration_index", -1)) == it - 1
+                    ]
+                    if prev_rows:
+                        prev_score = int(prev_rows[-1].get("macro_mean_0_100", 0))
+                        if score < prev_score:
+                            saved = head_at_iteration_start(cfg.session_dir, it)
+                            if saved:
+                                ok, msg = git_reset_hard(
+                                    repo_root=cfg.repo_root, rev=saved
+                                )
+                                print(
+                                    f"git regression guard: iter {it} mean {score} "
+                                    f"< iter {it - 1} mean {prev_score}; "
+                                    f"reset --hard {saved[:7]}… -> "
+                                    f"{'ok' if ok else 'failed'} {msg}",
+                                    file=sys.stderr,
+                                )
+                                if not ok:
+                                    exit_code = 1
+                            else:
+                                print(
+                                    f"warning: regression at iter {it} but no "
+                                    f"head_at_start recorded; skip auto reset",
+                                    file=sys.stderr,
+                                )
+
                 if met or score >= cfg.target_mean_score:
                     print(
                         f"Stopping after iteration {it}: target_met={met} "
