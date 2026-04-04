@@ -2,8 +2,8 @@
 #
 # child_pipeline:
 #   capabilities — dynamic child jobs: one manual job per capability (default).
-#   questions    — single manual job ``eval-question-list``; runs only question_ids.
-#                  BASELINE_LIMIT is ignored in this layout.
+#   questions    — single manual job ``eval-question-list``; runs only question_ids
+#                  (or score-summary 缺分全集；不按 BASELINE_LIMIT 截断).
 #
 # Override: Run pipeline / 项目 CI Variables 中非空则优先于本文件：
 #   BASELINE_CHILD_PIPELINE、BASELINE_QUESTIONS、EVAL_RUNNER

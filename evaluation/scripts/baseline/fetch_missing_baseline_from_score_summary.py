@@ -59,7 +59,10 @@ def main() -> int:
         "--limit",
         type=int,
         default=0,
-        help="If > 0, emit at most this many ids (stable order from server).",
+        help=(
+            "If > 0, emit at most this many ids (stable order from server). "
+            "For manual use only; CI baseline score_summary_missing_cc does not pass this."
+        ),
     )
     p.add_argument(
         "--timeout",

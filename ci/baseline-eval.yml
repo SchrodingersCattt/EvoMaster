@@ -7,7 +7,7 @@
 #      BASELINE_CHILD_PIPELINE（该变量会覆盖预设文件）。
 #      - capabilities：每个 capability 一个 manual job。
 #      - questions：eval-question-list 在子流水线 init 后自动运行；题目来自预设 question_ids 或
-#        BASELINE_QUESTIONS（逗号分隔）。此模式忽略 BASELINE_LIMIT。
+#        BASELINE_QUESTIONS（逗号分隔）。缺分选题（score_summary_missing_cc）跑齐 API 返回的缺分题，不按 BASELINE_LIMIT 截断。
 #
 # 评测引擎（EVAL_RUNNER）：默认由 ci/baseline_eval_preset.yaml 的 eval_runner 决定；
 #   Run pipeline / 项目 CI Variables 中 EVAL_RUNNER 非空时覆盖。
@@ -52,7 +52,7 @@
 # 可覆盖变量（手动触发时在 UI 传入，或在 schedule 的 Variables 中填写）：
 #   EVAL_RUNNER            — 非空时覆盖预设 eval_runner（claude_cli | devshell）
 #   BASELINE_MODES         — direct 或 planner，默认 direct
-#   BASELINE_LIMIT         — 限制每个 capability 的题数（0=不限），默认 2
+#   BASELINE_LIMIT         — 仅 child_pipeline=capabilities 时限制每 capability 题数（0=不限）；questions 布局不使用
 #   BASELINE_MAX_TURNS     — 每题最大轮数，默认 50（仅 claude_cli）
 #   BASELINE_TIMEOUT       — 每题超时秒数，默认 1200（仅 claude_cli）
 #   BASELINE_MODEL         — 模型标识（claude_cli: 模型名如 opus；devshell: llm_config route key 如 claude-sonnet-4-6）

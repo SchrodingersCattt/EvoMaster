@@ -15,7 +15,7 @@
 #                                    — 可选；finalize 上传 task 产物 zip 到 OSS（须由 GitLab 子 job 的 docker create -e 透传进容器）
 #     BASELINE_CAPABILITIES          — 逗号分隔 capability，默认 structure_construction
 #     BASELINE_MODES                 — direct/planner/direct planner，默认 direct
-#     BASELINE_LIMIT                 — 每次最多跑几道题（0=不限），默认 0
+#     BASELINE_LIMIT                 — 仅 capabilities 布局：每类最多几题（0=不限），默认 0
 #     BASELINE_MODEL                 — 模型标识（空=使用默认）
 #     BASELINE_RUN_LABEL             — run 目录前缀，默认 baseline_cc
 #     BASELINE_PENDING_ONLY          — 1=pending模式（人工阅卷），0=proxy自动入库，默认 1
@@ -25,8 +25,8 @@
 #   题库与布局预设（仓库内文件，见 ci/baseline_eval_preset.yaml）:
 #     child_pipeline                 — capabilities | questions（可被 CI 变量 BASELINE_CHILD_PIPELINE 覆盖）
 #     questions_mode                 — preset | score_summary_missing_cc（仅 yaml，见 ci/baseline_eval_preset.yaml）
-#     question_ids                   — questions 布局下的题目列表（BASELINE_LIMIT 默认忽略；
-#                                      questions_mode=score_summary_missing_cc 时 LIMIT>0 用于封顶缺分列表）
+#     question_ids                   — questions 布局下的题目列表（BASELINE_LIMIT 不用于封顶缺分列表；
+#                                      capabilities 布局下仍用 BASELINE_LIMIT 限制每类题数）
 #   Claude CLI 模式专用:
 #     ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN — Claude CLI 鉴权（二选一）
 #     ANTHROPIC_BASE_URL             — Claude CLI 端点（如 MiniMax/gpugeek 兼容端点）
@@ -44,8 +44,9 @@
 #     BASELINE_SCORE_EVAL_INGEST_TIMEOUT — 可选，每题 ingest HTTP 超时秒数，默认 120
 #   questions 布局 + 自动选题（缺 Claude Code 基线分，来自 tools-server 大表）:
 #     启用方式: ci/baseline_eval_preset.yaml 中 questions_mode: score_summary_missing_cc
-#     行为: GET .../evaluation/questions/score-summary，只跑 claude_code_score 为 null 的题目
+#     行为: GET .../evaluation/questions/score-summary，跑齐 claude_code_score 为 null 的题目
 #       （与 preset 中 question_ids / BASELINE_QUESTIONS 交集）；交集为空则 exit 0。须 MATMASTER_TOOLS_*。
+#       缺分列表不按 BASELINE_LIMIT 截断（BASELINE_LIMIT 仅用于 capabilities 布局）。
 #     BASELINE_SCORE_SUMMARY_TIMEOUT — 可选，score-summary GET 超时秒数，默认 120
 
 set -euo pipefail
@@ -98,9 +99,6 @@ if [[ "${LAYOUT}" == "questions" ]]; then
         )
         if [[ -s "${PRE_IDS_FILE}" ]]; then
             FETCH_CMD+=(--intersect-file "${PRE_IDS_FILE}")
-        fi
-        if [[ "${LIMIT}" -gt 0 ]]; then
-            FETCH_CMD+=(--limit "${LIMIT}")
         fi
         Q_IDS_FILE="$(mktemp)"
         if ! "${FETCH_CMD[@]}" >"${Q_IDS_FILE}"; then

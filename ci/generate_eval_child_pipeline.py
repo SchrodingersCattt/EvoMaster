@@ -109,7 +109,7 @@ child-pipeline-ready:
     - echo "镜像    ：${{DYNAMIC_IMAGE:-<未传入>}}"
     - echo "模型    ：${{BASELINE_MODEL:-<默认>}}"
     - echo "模式    ：${{BASELINE_MODES:-direct}}"
-    - echo "题目    ：preset / BASELINE_QUESTIONS；yaml questions_mode=score_summary_missing_cc 时用 score-summary 筛缺 CC 基线分（可与预设交集，BASELINE_LIMIT>0 时封顶）"
+    - echo "题目    ：preset / BASELINE_QUESTIONS；yaml questions_mode=score_summary_missing_cc 时用 score-summary 筛缺 CC 基线分（可与预设交集；缺分列表不按 BASELINE_LIMIT 截断）"
     - echo ""
     - echo "init 完成后将自动运行 eval-question-list（eval stage）。"
   tags:
