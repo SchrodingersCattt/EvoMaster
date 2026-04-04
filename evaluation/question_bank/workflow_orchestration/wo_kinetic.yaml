@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: kinetic
 questions:
-- id: WO_kinetic_001_20260331
+- id: WO_kinetic_001_20260404
   capability: workflow_orchestration
   domain: kinetic
   intent: 'Compute graphene phonon dispersion: build structure, calculate force constants, extract Gamma optical maximum.'

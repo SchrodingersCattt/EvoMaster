@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: struct
 questions:
-- id: BP_struct_001_20260331
+- id: BP_struct_001_20260404
   capability: batch_processing
   domain: struct
   intent: Batch-construct Si(100) surface slabs with varying vacuum thickness while
@@ -113,7 +113,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_002
+- id: BP_struct_002_20260404
   capability: batch_processing
   domain: struct
   intent: Generate VASP INCAR files for DOS calculation across 4 different structures.
@@ -209,7 +209,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_003_20260403
+- id: BP_struct_003_20260404
   capability: batch_processing
   domain: struct
   intent: Generate 5 VASP INCAR input files for Al ENCUT convergence test (280, 300,
@@ -318,7 +318,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_004
+- id: BP_struct_004_20260404
   capability: batch_processing
   domain: struct
   intent: Perform batch post-processing of band structures for 3 materials (Si, Ge,
@@ -434,7 +434,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_005_20260331
+- id: BP_struct_005_20260404
   capability: batch_processing
   domain: struct
   intent: Generate corrected VASP input files for 5 structures whose initial geometry

@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: mech
 questions:
-- id: WO_mech_001_20260331
+- id: WO_mech_001_20260404
   capability: workflow_orchestration
   domain: mech
   intent: Independently locate Al FCC structure, execute 5-point volume scan, fit EOS, report a0 and B0.
@@ -105,7 +105,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_002
+- id: WO_mech_002_20260404
   capability: workflow_orchestration
   domain: mech
   intent: 'Estimate detonation parameters for RDX: independently construct molecule, compute properties, apply Kamlet-Jacobs

@@ -6,7 +6,7 @@ questions:
   # ============================================================
   # SC_elec_004_20260401 — Ag(001)表面CO吸附结构构建
   # ============================================================
-  - id: "SC_elec_004_20260401"
+  - id: "SC_elec_004_20260404"
     capability: "structure_construction"
     domain: "elec"
     intent: "Build Ag(001) surface slab and place CO molecule at ontop site for adsorption calculation."
