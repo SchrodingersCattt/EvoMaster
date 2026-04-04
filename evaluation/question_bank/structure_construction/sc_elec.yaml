@@ -6,7 +6,7 @@ questions:
   # ============================================================
   # SC_elec_001_20260401 — ZnO 载体单原子催化剂建模
   # ============================================================
-  - id: "SC_elec_001_20260404"
+  - id: "SC_elec_001_20260404b"
     capability: "structure_construction"
     domain: "elec"
     intent: "Build ZnO(001) surface slab with a single Au atom adsorbed at a bridge site for single-atom catalyst modeling."
@@ -33,11 +33,11 @@ questions:
           - "slab_layers"
           - "vacuum_thickness"
       - key: "turn_budget"
-        value: {max: 12}
+        value: {max: 16}
       - key: "duration_budget"
         value: {max: 7200000}
       - key: "token_budget_total"
-        value: {max: 8000}
+        value: {max: 28000}
     scoring_checklist:
       - id: "required_fields"
         criterion: "Output includes a structure file, total atom count, Au fractional coordinate, nearest Au-O distance, slab layer count, and vacuum thickness."
@@ -75,7 +75,7 @@ questions:
   # ============================================================
   # SC_elec_002_20260401 — 合金 slab 建模
   # ============================================================
-  - id: "SC_elec_002_20260404"
+  - id: "SC_elec_002_20260404b"
     capability: "structure_construction"
     domain: "elec"
     intent: "Build an alloy surface slab from a given binary alloy structure for electrocatalysis modeling."
@@ -102,11 +102,11 @@ questions:
           - "layer_composition"
           - "lattice_parameters"
       - key: "turn_budget"
-        value: {max: 12}
+        value: {max: 18}
       - key: "duration_budget"
         value: {max: 7200000}
       - key: "token_budget_total"
-        value: {max: 8000}
+        value: {max: 25000}
     scoring_checklist:
       - id: "required_fields"
         criterion: "Output includes structure file, total atom count, Zn:Pd ratio, surface-exposed atom species, per-layer composition, and lattice parameters."

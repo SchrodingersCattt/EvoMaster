@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -50,6 +51,16 @@ class DevshellAgentLoopCli:
             type=Path,
             default=None,
             help="Loop session directory (default: results/devshell_agent_loop_<UTC>).",
+        )
+        p.add_argument(
+            "--clean-results",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help=(
+                "Before starting, remove the repository <repo-root>/results directory "
+                "if it exists (then recreated when writing the new session). "
+                "Use --no-clean-results to keep prior runs."
+            ),
         )
         p.add_argument(
             "--max-iterations",
@@ -217,6 +228,11 @@ class DevshellAgentLoopCli:
 
         from evaluation.devshell_agent.config_state import DevshellAgentCliDefaults
         from evaluation.devshell_agent.loop import AgentLoopConfig, DevshellAgentLoop
+
+        results_root = repo_root / "results"
+        if args.clean_results and results_root.exists():
+            shutil.rmtree(results_root)
+            print(f"Cleared results directory: {results_root}", file=sys.stderr)
 
         session_dir = args.session_dir
         if session_dir is None:
