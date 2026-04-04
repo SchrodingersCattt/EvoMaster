@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import logging
 import sys
@@ -219,11 +220,8 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     from matmaster.devshell.stream_hook import DevStreamHook
 
     # Suppress stream output in headless+json mode
-    if (
-        getattr(args, "prompt", None) is not None
-        or getattr(args, "prompt_file", None) is not None
-    ):
-        stream_hook = DevStreamHook(verbose=args.verbose)
+    if args.command == "run":
+        stream_hook = DevStreamHook(output=io.StringIO(), verbose=args.verbose)
     else:
         stream_hook = DevStreamHook(verbose=args.verbose)
 
@@ -319,16 +317,15 @@ def _run_single(
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    kr = result.result
     summary: dict[str, Any] = {
         "model": getattr(resolved, "model", None),
         "profile_key": getattr(resolved, "profile_key", None),
         "route_key": getattr(resolved, "route_key", None),
-        "status": kr.status,
-        "reason": kr.reason,
-        "final_content": kr.final_content,
-        "num_turns": kr.num_turns,
-        "usage": dict(kr.usage) if kr.usage else {},
+        "status": result.status,
+        "reason": result.reason,
+        "final_content": result.final_content,
+        "num_turns": result.num_turns,
+        "usage": dict(result.usage) if result.usage else {},
     }
     line = json.dumps(summary, ensure_ascii=False)
     print(line)
@@ -336,7 +333,7 @@ def _run_single(
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(line + "\n", encoding="utf-8")
 
-    return 0 if kr.reason == "natural" else 1
+    return 0 if result.reason == "natural" else 1
 
 
 def main(argv: list[str] | None = None) -> None:

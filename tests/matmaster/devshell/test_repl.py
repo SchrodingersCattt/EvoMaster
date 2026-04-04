@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 class TestBuiltinCommands:
@@ -181,6 +185,99 @@ class TestCliParsing:
         assert args.command == "run"
         assert args.prompt_file == Path("/tmp/p.txt")
         assert args.json_out == Path("/tmp/out.json")
+
+
+class TestCliRunMode:
+    def test_run_single_uses_drain_result_fields(self, capsys, tmp_path: Path) -> None:
+        from matmaster.core.stream_drain import DrainResult
+        from matmaster.devshell.cli import _run_single, parse_args
+
+        args = parse_args(
+            [
+                "run",
+                "--workdir",
+                str(tmp_path / "ws"),
+                "--log-dir",
+                str(tmp_path / "logs"),
+                "-p",
+                "hello",
+            ]
+        )
+        drain_result = DrainResult(
+            status="completed",
+            reason="natural",
+            final_content="OK",
+            num_turns=1,
+            usage={"total_tokens": 3},
+            messages=[],
+        )
+        resolved = SimpleNamespace(model="m", profile_key="p", route_key="r")
+
+        with patch(
+            "matmaster.devshell.cli._run_with_event_log",
+            return_value=(drain_result, tmp_path / "logs" / "events.jsonl"),
+        ):
+            rc = _run_single(args, runner=object(), resolved=resolved)
+
+        captured = capsys.readouterr()
+        assert rc == 0
+        assert json.loads(captured.out) == {
+            "model": "m",
+            "profile_key": "p",
+            "route_key": "r",
+            "status": "completed",
+            "reason": "natural",
+            "final_content": "OK",
+            "num_turns": 1,
+            "usage": {"total_tokens": 3},
+        }
+
+    def test_bootstrap_runner_silences_run_mode_stream_output(self, tmp_path: Path) -> None:
+        from matmaster.devshell.cli import _bootstrap_runner, parse_args
+
+        args = parse_args(
+            [
+                "run",
+                "--workdir",
+                str(tmp_path / "ws"),
+                "--log-dir",
+                str(tmp_path / "logs"),
+                "-p",
+                "hello",
+            ]
+        )
+        fake_llm_config = SimpleNamespace(
+            resolve_route=lambda **_: SimpleNamespace(
+                model="m",
+                profile_key="p",
+                route_key="r",
+            )
+        )
+        captured: dict[str, object] = {}
+
+        class FakeRunner:
+            def __init__(self, **kwargs) -> None:
+                captured.update(kwargs)
+
+        with (
+            patch(
+                "matmaster.devshell.cli._load_agents_general_llm",
+                return_value="opus",
+            ),
+            patch(
+                "matmaster.config.loader.load_llm_config",
+                return_value=fake_llm_config,
+            ),
+            patch(
+                "matmaster.providers.llm_factory.build_provider",
+                return_value=object(),
+            ),
+            patch("matmaster.devshell.runner.DevRunner", FakeRunner),
+        ):
+            _bootstrap_runner(args)
+
+        stream_hook = captured["stream_hook"]
+        assert getattr(stream_hook, "_out") is not sys.stdout
 
 
 class TestShowTools:
