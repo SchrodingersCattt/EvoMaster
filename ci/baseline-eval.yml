@@ -62,6 +62,7 @@
 #   BASELINE_SCORE_EVAL_INGEST_TIMEOUT — 可选，每题 ingest HTTP 超时秒数，默认 120
 #   BASELINE_CHILD_PIPELINE — 非空时覆盖 ci/baseline_eval_preset.yaml 的 child_pipeline
 #   BASELINE_QUESTIONS     — 非空时覆盖预设 question_ids（逗号分隔 id）
+#   BASELINE_SCORE_SUMMARY_TIMEOUT — score-summary GET 超时秒数（可选，默认 120）
 
 variables:
   # ⚠️ 临时测试用，验证通过后务必删除以下几行，改用 GitLab CI Variables 注入
@@ -149,6 +150,7 @@ baseline-eval-build:
       echo "BASELINE_SCORE_EVAL_INGEST_TIMEOUT=${BASELINE_SCORE_EVAL_INGEST_TIMEOUT:-}" >> "${ENV_FILE}"
       echo "BASELINE_CHILD_PIPELINE=${BASELINE_CHILD_PIPELINE}" >> "${ENV_FILE}"
       echo "BASELINE_QUESTIONS=${BASELINE_QUESTIONS}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_SUMMARY_TIMEOUT=${BASELINE_SCORE_SUMMARY_TIMEOUT:-}" >> "${ENV_FILE}"
       cat "${ENV_FILE}"
     - |
       echo "--- 动态生成子流水线 YAML ---"
@@ -191,6 +193,7 @@ baseline-eval-trigger:
     BASELINE_SCORE_EVAL_INGEST_TIMEOUT: $BASELINE_SCORE_EVAL_INGEST_TIMEOUT
     BASELINE_CHILD_PIPELINE: $BASELINE_CHILD_PIPELINE
     BASELINE_QUESTIONS: $BASELINE_QUESTIONS
+    BASELINE_SCORE_SUMMARY_TIMEOUT: $BASELINE_SCORE_SUMMARY_TIMEOUT
   trigger:
     include:
       - artifact: ci/generated-eval-child.yml

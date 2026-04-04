@@ -76,12 +76,25 @@ _EVAL_BASELINE_CHANNELS: frozenset[str] = frozenset({"claude_code", "cursor", "c
 # Direct tools-server path (not the gateway ``/bohrapi/v1/matmaster-tools-server/...`` prefix).
 EVAL_INGEST_API_PATH = "/api/v1/evaluation/ingest"
 QUESTION_CATALOG_SYNC_API_PATH = "/api/v1/evaluation/question-catalog/sync"
+# 首页大表：每题各基线渠道最近一次得分（无则为 null）。见 matmaster-tools-server
+# ``evaluation_api.evaluation_questions_score_summary``；单题时间线用
+# ``/questions/{id}/overview``，批量筛「缺某渠道基线分」应使用本路径而非 per-question overview。
+EVAL_SCORE_SUMMARY_API_PATH = "/api/v1/evaluation/questions/score-summary"
 
 _base = (utils.env.MATMASTER_TOOLS_SERVER or "").strip().rstrip("/")
 EVAL_INGEST_URL: str | None = f"{_base}{EVAL_INGEST_API_PATH}" if _base else None
 QUESTION_CATALOG_SYNC_URL: str | None = (
     f"{_base}{QUESTION_CATALOG_SYNC_API_PATH}" if _base else None
 )
+EVAL_SCORE_SUMMARY_URL: str | None = (
+    f"{_base}{EVAL_SCORE_SUMMARY_API_PATH}" if _base else None
+)
+
+_SCORE_SUMMARY_FIELD_BY_CHANNEL: dict[str, str] = {
+    "claude_code": "claude_code_score",
+    "cursor": "cursor_score",
+    "codex": "codex_score",
+}
 
 
 def normalize_baseline_channel(
@@ -582,6 +595,91 @@ def matmaster_evaluation_request_headers() -> dict[str, str]:
     if bearer:
         headers["Authorization"] = f"Bearer {bearer}"
     return headers
+
+
+def _get_matmaster_tools_json(
+    url: str,
+    *,
+    timeout: float,
+) -> tuple[bool, str, dict[str, Any] | None]:
+    """GET tools-server JSON; parse ``{code, msg, data?}`` envelope (same as POST)."""
+    headers = matmaster_evaluation_request_headers()
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        return False, str(exc), None
+
+    if resp.status_code != 200:
+        return False, f"HTTP {resp.status_code}: {resp.text[:500]}", None
+
+    try:
+        data = resp.json()
+    except Exception:
+        return False, f"non-JSON response: {resp.text[:200]}", None
+
+    if not isinstance(data, dict):
+        return False, f"unexpected JSON type: {type(data).__name__}", None
+
+    if data.get("code") != 0:
+        return False, str(data.get("msg", data)), data
+
+    return True, str(data.get("msg", "success")), data
+
+
+def parse_score_summary_missing_question_ids(
+    envelope: dict[str, Any],
+    *,
+    channel: EvalBaselineChannel = "claude_code",
+) -> list[str]:
+    """From score-summary response body, list ``question_id`` where baseline score is missing.
+
+    *envelope* is the full decoded JSON (with ``code`` / ``data``). Missing score means
+    the channel field (e.g. ``claude_code_score``) is ``null`` or absent.
+    """
+    ch = normalize_baseline_channel(channel)
+    field = _SCORE_SUMMARY_FIELD_BY_CHANNEL.get(ch, "claude_code_score")
+    data = envelope.get("data") or {}
+    if not isinstance(data, dict):
+        return []
+    questions = data.get("questions")
+    if not isinstance(questions, list):
+        return []
+    out: list[str] = []
+    for row in questions:
+        if not isinstance(row, dict):
+            continue
+        qid = str(row.get("question_id", "")).strip()
+        if not qid:
+            continue
+        if row.get(field) is None:
+            out.append(qid)
+    return out
+
+
+def fetch_missing_baseline_question_ids(
+    *,
+    channel: EvalBaselineChannel = "claude_code",
+    timeout: float = 120.0,
+) -> tuple[bool, str, list[str]]:
+    """GET ``EVAL_SCORE_SUMMARY_URL``; return question ids with no score for *channel*.
+
+    Requires ``MATMASTER_TOOLS_SERVER`` and ``MATMASTER_TOOLS_EVALUATION_BEARER``.
+    """
+    url = EVAL_SCORE_SUMMARY_URL
+    if not url:
+        return False, "MATMASTER_TOOLS_SERVER is not set", []
+    if not utils.env.MATMASTER_TOOLS_EVALUATION_BEARER:
+        return (
+            False,
+            "MATMASTER_TOOLS_EVALUATION_BEARER is not set (evaluation GET requires auth)",
+            [],
+        )
+    ok, msg, data = _get_matmaster_tools_json(url, timeout=timeout)
+    if not ok or not data:
+        return False, msg, []
+    ids = parse_score_summary_missing_question_ids(data, channel=channel)
+    return True, msg, ids
 
 
 def _post_matmaster_tools_json(

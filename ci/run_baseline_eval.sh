@@ -24,7 +24,9 @@
 #     BASELINE_QUESTIONS             — 逗号分隔 question id；覆盖 ci/baseline_eval_preset.yaml 的 question_ids
 #   题库与布局预设（仓库内文件，见 ci/baseline_eval_preset.yaml）:
 #     child_pipeline                 — capabilities | questions（可被 CI 变量 BASELINE_CHILD_PIPELINE 覆盖）
-#     question_ids                   — questions 布局下的题目列表（BASELINE_LIMIT 在此布局下忽略）
+#     questions_mode                 — preset | score_summary_missing_cc（仅 yaml，见 ci/baseline_eval_preset.yaml）
+#     question_ids                   — questions 布局下的题目列表（BASELINE_LIMIT 默认忽略；
+#                                      questions_mode=score_summary_missing_cc 时 LIMIT>0 用于封顶缺分列表）
 #   Claude CLI 模式专用:
 #     ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN — Claude CLI 鉴权（二选一）
 #     ANTHROPIC_BASE_URL             — Claude CLI 端点（如 MiniMax/gpugeek 兼容端点）
@@ -40,6 +42,11 @@
 #     BASELINE_SCORE_SUBMIT          — 1（默认）执行 score_baseline_tasks.py --submit；0 跳过
 #     BASELINE_SCORE_EVAL_CONFIG     — 可选，覆盖 evaluation/config.yaml 路径（容器内绝对路径或相对 /app）
 #     BASELINE_SCORE_EVAL_INGEST_TIMEOUT — 可选，每题 ingest HTTP 超时秒数，默认 120
+#   questions 布局 + 自动选题（缺 Claude Code 基线分，来自 tools-server 大表）:
+#     启用方式: ci/baseline_eval_preset.yaml 中 questions_mode: score_summary_missing_cc
+#     行为: GET .../evaluation/questions/score-summary，只跑 claude_code_score 为 null 的题目
+#       （与 preset 中 question_ids / BASELINE_QUESTIONS 交集）；交集为空则 exit 0。须 MATMASTER_TOOLS_*。
+#     BASELINE_SCORE_SUMMARY_TIMEOUT — 可选，score-summary GET 超时秒数，默认 120
 
 set -euo pipefail
 
@@ -63,11 +70,35 @@ PENDING_ONLY="${BASELINE_PENDING_ONLY:-1}"
 LAYOUT="${BASELINE_EVAL_LAYOUT:-capabilities}"
 
 Q_IDS=()
+QUESTIONS_MODE="preset"
 if [[ "${LAYOUT}" == "questions" ]]; then
-    mapfile -t Q_IDS < <("${PY}" "${APP_DIR}/ci/baseline_eval_preset.py" list-ids)
-    if [[ ${#Q_IDS[@]} -eq 0 ]]; then
-        echo "[ERROR] BASELINE_EVAL_LAYOUT=questions 但未解析到任何 question id（检查 BASELINE_QUESTIONS 或 ci/baseline_eval_preset.yaml）"
-        exit 1
+    QUESTIONS_MODE="$("${PY}" "${APP_DIR}/ci/baseline_eval_preset.py" questions-mode)"
+    if [[ "${QUESTIONS_MODE}" == "score_summary_missing_cc" ]]; then
+        echo "[CI] questions_mode=${QUESTIONS_MODE}：从 matmaster-tools-server GET /api/v1/evaluation/questions/score-summary 选取缺 Claude Code 基线分的题目"
+        PRE_IDS_FILE="$(mktemp)"
+        "${PY}" "${APP_DIR}/ci/baseline_eval_preset.py" list-ids > "${PRE_IDS_FILE}" || true
+        FETCH_CMD=(
+            "${PY}" "${APP_DIR}/evaluation/scripts/baseline/fetch_missing_baseline_from_score_summary.py"
+            "--timeout" "${BASELINE_SCORE_SUMMARY_TIMEOUT:-120}"
+        )
+        if [[ -s "${PRE_IDS_FILE}" ]]; then
+            FETCH_CMD+=(--intersect-file "${PRE_IDS_FILE}")
+        fi
+        if [[ "${LIMIT}" -gt 0 ]]; then
+            FETCH_CMD+=(--limit "${LIMIT}")
+        fi
+        mapfile -t Q_IDS < <("${FETCH_CMD[@]}")
+        rm -f "${PRE_IDS_FILE}"
+        if [[ ${#Q_IDS[@]} -eq 0 ]]; then
+            echo "[INFO] score-summary 与预设交集后无待跑题目（Claude Code 基线均已覆盖），退出 0。"
+            exit 0
+        fi
+    else
+        mapfile -t Q_IDS < <("${PY}" "${APP_DIR}/ci/baseline_eval_preset.py" list-ids)
+        if [[ ${#Q_IDS[@]} -eq 0 ]]; then
+            echo "[ERROR] BASELINE_EVAL_LAYOUT=questions 但未解析到任何 question id（检查 BASELINE_QUESTIONS 或 ci/baseline_eval_preset.yaml）"
+            exit 1
+        fi
     fi
 fi
 
@@ -75,6 +106,7 @@ echo "=== CI Baseline Eval ==="
 echo "  runner       : ${EVAL_RUNNER}"
 echo "  layout       : ${LAYOUT}"
 if [[ "${LAYOUT}" == "questions" ]]; then
+    echo "  questions_mode: ${QUESTIONS_MODE}"
     echo "  question_ids : ${Q_IDS[*]}"
 else
     echo "  capabilities : ${CAPABILITIES}"

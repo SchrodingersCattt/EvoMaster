@@ -108,7 +108,7 @@ child-pipeline-ready:
     - echo "镜像    ：${{DYNAMIC_IMAGE:-<未传入>}}"
     - echo "模型    ：${{BASELINE_MODEL:-<默认>}}"
     - echo "模式    ：${{BASELINE_MODES:-direct}}"
-    - echo "题目    ：preset 文件或 BASELINE_QUESTIONS（本模式忽略 BASELINE_LIMIT）"
+    - echo "题目    ：preset / BASELINE_QUESTIONS；yaml questions_mode=score_summary_missing_cc 时用 score-summary 筛缺 CC 基线分（可与预设交集，BASELINE_LIMIT>0 时封顶）"
     - echo ""
     - echo "init 完成后将自动运行 eval-question-list（eval stage）。"
   tags:
@@ -243,6 +243,8 @@ eval-question-list:
         -e LITELLM_PROXY_API_BASE \\
         -e BASELINE_EVAL_LAYOUT=questions \\
         -e BASELINE_QUESTIONS="${BASELINE_QUESTIONS}" \\
+        -e BASELINE_LIMIT="${BASELINE_LIMIT}" \\
+        -e BASELINE_SCORE_SUMMARY_TIMEOUT="${BASELINE_SCORE_SUMMARY_TIMEOUT}" \\
         -e BASELINE_MODES="${BASELINE_MODES}" \\
         -e BASELINE_MAX_TURNS="${BASELINE_MAX_TURNS}" \\
         -e BASELINE_TIMEOUT="${BASELINE_TIMEOUT}" \\
