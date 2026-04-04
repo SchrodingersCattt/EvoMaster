@@ -126,6 +126,7 @@ evaluation/question_bank/
 | `batch_tool_args_constant` | `{"tool_name": str, "param_names": str, "expected_constant": any}` | 批量参数恒定 |
 | `batch_consistent_calls` | `dict` | 批量调用一致性 |
 | `duration_budget` | `{"max": int}`（毫秒） | 运行时间预算 |
+| `turn_budget` | `{"max": int}`（轮次数） | Agent 轮次（step）预算；`total_steps <= max` 则 pass |
 | `molcrys_slab_molecular_integrity` | `{"unit_cell_atoms": int, "slab_atoms": int, "layers": int}` | 分子晶体 slab 完整性 |
 | `sc005_disorder_formulas` | `dict` | 无序结构化学式 |
 | `struct_file_atom_count` | `{"filename": str, "expected": int, "tolerance": float}` | 用 pymatgen 读结构文件验证总原子数 |
@@ -197,10 +198,12 @@ evaluation/question_bank/
 
 ```yaml
 reference_answers:
+  - key: turn_budget
+    value: {max: 12}         # 按题目复杂度调整；粗拍后根据执行情况收紧
   - key: duration_budget
     value: {max: 7200000}    # 2 小时，按需调整
   - key: token_budget_total
-    value: {max: 50000}      # 按需调整
+    value: {max: 8000}       # 最后一轮输入 token；复杂任务约 8k，批处理可放宽至 10k~12k
 
 scoring_checklist:
   - id: no_retries
@@ -211,6 +214,10 @@ scoring_checklist:
     criterion: "Task completes without unnecessary exploratory calls."
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: "Agent completes the task within the turn (step) budget."
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: "Wall-clock run duration does not exceed benchmark ceiling."
     axis: efficiency

@@ -6,7 +6,7 @@ questions:
   # ============================================================
   # SC_elec_003_20260401 — NFPP Al掺杂超胞构建
   # ============================================================
-  - id: "SC_elec_003_20260403"
+  - id: "SC_elec_003_20260404"
     capability: "structure_construction"
     domain: "elec"
     intent: "Build NFPP Al-doped supercell by substituting P with Al."
@@ -30,10 +30,12 @@ questions:
           - "doped_formula"
           - "substituted_site_index"
           - "Al_O_distance"
+      - key: "turn_budget"
+        value: {max: 10}
       - key: "duration_budget"
         value: {max: 3600000}
       - key: "token_budget_total"
-        value: {max: 30000}
+        value: {max: 8000}
     scoring_checklist:
       - id: "doped_formula"
         criterion: "Reported doped supercell formula is Na16Al1Fe12P15O60."
@@ -51,6 +53,10 @@ questions:
         criterion: "No repeated identical structure retrieval or substitution attempts."
         axis: "efficiency"
         verify: "no_retries"
+      - id: "turn_budget"
+        criterion: "Agent completes the task within the turn (step) budget."
+        axis: "efficiency"
+        verify: "turn_budget"
       - id: "efficiency_judge"
         criterion: "Doped supercell construction completes in a direct workflow."
         axis: "efficiency"
