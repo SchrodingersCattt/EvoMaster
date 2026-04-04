@@ -11,8 +11,8 @@
 #
 # 评测引擎（EVAL_RUNNER）：默认由 ci/baseline_eval_preset.yaml 的 eval_runner 决定；
 #   Run pipeline / 项目 CI Variables 中 EVAL_RUNNER 非空时覆盖。
-#   claude_cli — 外部 baseline：prepare → claude -p 跑题 → finalize
-#   devshell   — MatMaster Agent（run_devshell_eval.py）一步跑题
+#   claude_cli — 外部 baseline：prepare → claude -p 跑题 → finalize →（默认）score_baseline_tasks --submit
+#   devshell   — MatMaster Agent（run_devshell_eval.py）一步跑题 →（pending 时同上阶段二）
 #
 # 触发方式（任选，在 .gitlab-ci.yml 的 include 后生效）：
 #   1. 推送到分支 baseline-eval          → 立即触发
@@ -54,7 +54,10 @@
 #   BASELINE_MAX_TURNS     — 每题最大轮数，默认 50（仅 claude_cli）
 #   BASELINE_TIMEOUT       — 每题超时秒数，默认 1200（仅 claude_cli）
 #   BASELINE_MODEL         — 模型标识（claude_cli: 模型名如 opus；devshell: llm_config route key 如 claude-sonnet-4-6）
-#   BASELINE_PENDING_ONLY  — 1=pending等人工阅卷，0=proxy自动入库，默认 1
+#   BASELINE_PENDING_ONLY  — 1=pending + BinaryEvaluator 评分并 POST ingest（默认）；0=proxy 即时入库，不跑阶段二
+#   BASELINE_SCORE_SUBMIT  — 1（默认）在 pending 模式下跑 score_baseline_tasks.py --submit；0 跳过阶段二
+#   BASELINE_SCORE_EVAL_CONFIG — 可选，覆盖评测 YAML 路径（llm_binary_judge 需 evaluator_llm + LITELLM_*）
+#   BASELINE_SCORE_EVAL_INGEST_TIMEOUT — 可选，每题 ingest HTTP 超时秒数，默认 120
 #   BASELINE_CHILD_PIPELINE — 非空时覆盖 ci/baseline_eval_preset.yaml 的 child_pipeline
 #   BASELINE_QUESTIONS     — 非空时覆盖预设 question_ids（逗号分隔 id）
 
@@ -139,6 +142,9 @@ baseline-eval-build:
       echo "BASELINE_MODEL=${BASELINE_MODEL}" >> "${ENV_FILE}"
       echo "BASELINE_RUN_LABEL=${BASELINE_RUN_LABEL}" >> "${ENV_FILE}"
       echo "BASELINE_PENDING_ONLY=${BASELINE_PENDING_ONLY}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_SUBMIT=${BASELINE_SCORE_SUBMIT:-1}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_EVAL_CONFIG=${BASELINE_SCORE_EVAL_CONFIG:-}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_EVAL_INGEST_TIMEOUT=${BASELINE_SCORE_EVAL_INGEST_TIMEOUT:-}" >> "${ENV_FILE}"
       echo "BASELINE_CHILD_PIPELINE=${BASELINE_CHILD_PIPELINE}" >> "${ENV_FILE}"
       echo "BASELINE_QUESTIONS=${BASELINE_QUESTIONS}" >> "${ENV_FILE}"
       cat "${ENV_FILE}"
@@ -178,6 +184,9 @@ baseline-eval-trigger:
     BASELINE_MODEL: $BASELINE_MODEL
     BASELINE_RUN_LABEL: $BASELINE_RUN_LABEL
     BASELINE_PENDING_ONLY: $BASELINE_PENDING_ONLY
+    BASELINE_SCORE_SUBMIT: $BASELINE_SCORE_SUBMIT
+    BASELINE_SCORE_EVAL_CONFIG: $BASELINE_SCORE_EVAL_CONFIG
+    BASELINE_SCORE_EVAL_INGEST_TIMEOUT: $BASELINE_SCORE_EVAL_INGEST_TIMEOUT
     BASELINE_CHILD_PIPELINE: $BASELINE_CHILD_PIPELINE
     BASELINE_QUESTIONS: $BASELINE_QUESTIONS
   trigger:

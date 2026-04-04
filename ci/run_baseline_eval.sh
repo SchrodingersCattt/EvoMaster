@@ -3,8 +3,8 @@
 # 在项目 Docker 容器内运行，由动态生成的 ci/generated-eval-child.yml 中的 job 调用。
 #
 # 模式选择（EVAL_RUNNER）：
-#   claude_cli（默认） — prepare workspace → claude -p 跑题 → finalize
-#   devshell           — run_devshell_eval.py 一步完成（MatMaster Agent 内部跑题）
+#   claude_cli（默认） — prepare → claude -p 跑题 → finalize →（默认）阶段二评分并 POST ingest
+#   devshell           — run_devshell_eval.py 一步完成（MatMaster Agent 内部跑题）→（默认）阶段二同上
 #
 # 环境变量（须在 GitLab CI Variables 中配置）：
 #   通用:
@@ -32,6 +32,10 @@
 #   DevShell 模式专用:
 #     LITELLM_PROXY_API_KEY          — LiteLLM 鉴权（llm_config.yaml 中 ${LITELLM_PROXY_API_KEY}）
 #     LITELLM_PROXY_API_BASE         — LiteLLM base_url
+#   阶段二（BinaryEvaluator 评分 + ingest POST，仅 BASELINE_PENDING_ONLY=1 且存在 pending_ingest/*.json）:
+#     BASELINE_SCORE_SUBMIT          — 1（默认）执行 score_baseline_tasks.py --submit；0 跳过
+#     BASELINE_SCORE_EVAL_CONFIG     — 可选，覆盖 evaluation/config.yaml 路径（容器内绝对路径或相对 /app）
+#     BASELINE_SCORE_EVAL_INGEST_TIMEOUT — 可选，每题 ingest HTTP 超时秒数，默认 120
 
 set -euo pipefail
 
@@ -76,6 +80,7 @@ echo "  modes        : ${MODES}"
 echo "  model        : ${MODEL:-<默认>}"
 echo "  run_label    : ${RUN_LABEL}"
 echo "  pending_only : ${PENDING_ONLY}"
+echo "  score_submit : ${BASELINE_SCORE_SUBMIT:-1} (pending_only=1 且 pending_ingest/*.json 存在时跑阶段二)"
 
 # capability / mode 参数：逗号分隔 → 空格分隔
 CAPS_ARGS=$(echo "${CAPABILITIES}" | tr ',' ' ')
@@ -234,16 +239,44 @@ else
     exit 1
 fi
 
+# ── 统一解析 RUN_DIR（devshell 路径此前可能未设置）────────────────────────────
+if [[ -z "${RUN_DIR:-}" ]]; then
+    RUN_DIR=$(find "${APP_DIR}/results" -maxdepth 1 -type d -name "${RUN_LABEL}_*" | sort | tail -1)
+fi
+
+# ── 阶段二：BinaryEvaluator 评分 + ingest POST（见 baseline_cc_eval.md）──────
+BASELINE_SCORE_SUBMIT="${BASELINE_SCORE_SUBMIT:-1}"
+SCORE_TIMEOUT="${BASELINE_SCORE_EVAL_INGEST_TIMEOUT:-120}"
+if [[ "${BASELINE_SCORE_SUBMIT}" == "1" && "${PENDING_ONLY}" == "1" && -n "${RUN_DIR:-}" ]]; then
+    PENDING_DIR="${RUN_DIR}/pending_ingest"
+    if [[ -d "${PENDING_DIR}" ]]; then
+        shopt -s nullglob
+        PENDING_JSONS=("${PENDING_DIR}"/*.json)
+        shopt -u nullglob
+        if ((${#PENDING_JSONS[@]} > 0)); then
+            echo ""
+            echo "[STEP 3] BinaryEvaluator 评分 + ingest 提交（score_baseline_tasks.py --submit）..."
+            SCORE_CMD=(
+                python evaluation/scripts/baseline/score_baseline_tasks.py
+                --run-dir "${RUN_DIR}"
+                --submit
+                --eval-ingest-timeout "${SCORE_TIMEOUT}"
+            )
+            if [[ -n "${BASELINE_SCORE_EVAL_CONFIG:-}" ]]; then
+                SCORE_CMD+=(--eval-config "${BASELINE_SCORE_EVAL_CONFIG}")
+            fi
+            "${SCORE_CMD[@]}"
+        else
+            echo "[WARN] pending_only=1 但 pending_ingest 下无 .json，跳过阶段二"
+        fi
+    fi
+fi
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  通用汇总统计
 # ══════════════════════════════════════════════════════════════════════════════
 echo ""
 echo "[汇总] 查找产物..."
-
-# devshell 模式下 RUN_DIR 尚未设置，需查找
-if [[ -z "${RUN_DIR:-}" ]]; then
-    RUN_DIR=$(find "${APP_DIR}/results" -maxdepth 1 -type d -name "${RUN_LABEL}_*" | sort | tail -1)
-fi
 
 if [[ -n "${RUN_DIR:-}" ]]; then
     echo "  RUN_DIR: ${RUN_DIR}"
