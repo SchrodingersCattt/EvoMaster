@@ -12,6 +12,7 @@ from matmaster.tools.builtin.edit_tool import EditTool
 from matmaster.tools.builtin.glob_tool import GlobTool
 from matmaster.tools.builtin.grep_tool import GrepTool
 from matmaster.tools.builtin.read_tool import ReadTool
+from matmaster.tools.builtin.write_tool import WriteTool
 
 __all__ = [
     "BuiltinTool",
@@ -20,4 +21,5 @@ __all__ = [
     "GlobTool",
     "GrepTool",
     "ReadTool",
+    "WriteTool",
 ]
