@@ -136,3 +136,75 @@ class TestExpInitSkillTools:
 
         lazy = registry._tools["mat_sg_build_bulk"]
         assert isinstance(lazy, LazyMCPTool)
+
+    async def test_sync_tools_get_shorter_timeout(self, tmp_path):
+        """Sync tools listed in calculation_executors get 30s timeout."""
+        import yaml
+
+        skills_root = _make_skill_dir(tmp_path)
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir(exist_ok=True)
+        # Cache includes both a sync tool and a non-sync tool
+        schemas = [
+            {"name": "build_bulk", "description": "Build bulk", "input_schema": {}},
+            {"name": "run_md", "description": "Run MD simulation", "input_schema": {}},
+        ]
+        (cache_dir / "mat_sg.json").write_text(json.dumps(schemas))
+
+        # MCP runtime config with calculation_executors declaring sync_tools
+        (tmp_path / "mcp.yaml").write_text(
+            yaml.dump(
+                {
+                    "path_adaptor": "calculation",
+                    "calculation_servers": ["mat_sg"],
+                    "calculation_executors": {
+                        "mat_sg": {
+                            "executor": None,
+                            "sync_tools": ["build_bulk"],
+                        },
+                    },
+                }
+            )
+        )
+        (tmp_path / "mcp_config.json").write_text('{"mcpServers": {}}')
+
+        cfg = ExpConfig.model_validate(
+            {
+                "name": "test",
+                "skills": {
+                    "enabled": True,
+                    "skills_root": str(skills_root),
+                    "cache_dir": str(cache_dir),
+                    "config_dir": str(tmp_path),
+                    "mcp_config_file": "mcp_config.json",
+                    "mcp_runtime_file": "mcp.yaml",
+                },
+            }
+        )
+        exp = Exp(cfg)
+        registry = ToolRegistry()
+        ctx = MagicMock(spec=PlaygroundContext)
+        ctx.session = MagicMock()
+
+        exp._init_skill_tools(ctx, registry)
+
+        # Trigger skill hit to inject MCP tools
+        skill_tool = registry._tools["Skill"]
+
+        from matmaster.tools.tool_result import normalize_tool_result
+
+        raw_result = await skill_tool.execute({"skill": "test-skill"})
+        result = normalize_tool_result(raw_result)
+        assert result.status == "success"
+
+        from matmaster.tools.lazy_mcp import LazyMCPTool
+
+        # build_bulk is a sync tool -> should get 30s timeout
+        sync_tool = registry._tools["mat_sg_build_bulk"]
+        assert isinstance(sync_tool, LazyMCPTool)
+        assert sync_tool._timeout == 30.0
+
+        # run_md is NOT a sync tool -> should get default 120s timeout
+        async_tool = registry._tools["mat_sg_run_md"]
+        assert isinstance(async_tool, LazyMCPTool)
+        assert async_tool._timeout == 120.0

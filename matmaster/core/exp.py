@@ -603,6 +603,17 @@ class Exp:
         )
         self._register_cleanup(connector.cleanup)
 
+        # Extract sync_tools mapping from calculation_executors config.
+        # Sync tools are synchronous operations that should complete quickly,
+        # so they get a shorter timeout than the default MCP tool timeout.
+        _SYNC_TOOL_TIMEOUT = 30.0
+        executors = mcp_config.get('calculation_executors') or {}
+        sync_tools_by_server: dict[str, set[str]] = {
+            name: set(cfg.get('sync_tools') or [])
+            for name, cfg in executors.items()
+            if isinstance(cfg, dict) and cfg.get('sync_tools')
+        }
+
         def on_skill_hit(mcp_server: str) -> None:
             schemas = schema_cache.load(mcp_server)
             if not schemas:
@@ -617,11 +628,14 @@ class Exp:
                 if isinstance(tool_timeouts, dict)
                 else None
             )
+            sync_tools = sync_tools_by_server.get(mcp_server, set())
             for tool_schema in schemas:
                 original_name = tool_schema['name']
                 prefixed_name = f'{mcp_server}_{original_name}'
                 if prefixed_name in registry:
                     continue
+                is_sync = original_name in sync_tools
+                tool_timeout = _SYNC_TOOL_TIMEOUT if is_sync else server_timeout
                 lazy_tool = LazyMCPTool(
                     server_name=mcp_server,
                     tool_name=prefixed_name,
@@ -629,7 +643,7 @@ class Exp:
                     description=tool_schema.get('description', ''),
                     input_schema=tool_schema.get('input_schema', {}),
                     connector=connector,
-                    timeout=server_timeout,
+                    timeout=tool_timeout,
                 )
                 # ESIN-05: Use catalog.register_overlay() for version-bumped injection
                 if catalog is not None:
