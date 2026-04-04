@@ -67,7 +67,10 @@ class TestBashExecution:
 
 class TestBashErrorStatus:
     def test_nonzero_exit_returns_error_status(self):
-        session = make_session(output="Traceback...\nModuleNotFoundError: No module named 'pymatgen'", exit_code=1)
+        session = make_session(
+            output="Traceback...\nModuleNotFoundError: No module named 'pymatgen'",
+            exit_code=1,
+        )
         tool = BashTool(session=session, workdir="/workspace")
         result = asyncio.run(tool.execute({"command": "python -c 'import pymatgen'"}))
         assert isinstance(result, ToolResult)

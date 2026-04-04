@@ -13,9 +13,7 @@ class TestErrorContentWrapping:
     def _apply_error_wrap(self, tr: ToolResult) -> ToolResult:
         """Replicate the error_wrap step from _execute_one."""
         if tr.status == "error" and not tr.content.lstrip().startswith("<error>\n"):
-            tr = tr.model_copy(update={
-                "content": f"<error>\n{tr.content}\n</error>"
-            })
+            tr = tr.model_copy(update={"content": f"<error>\n{tr.content}\n</error>"})
         return tr
 
     def test_error_result_gets_wrapped(self):
@@ -41,7 +39,9 @@ class TestErrorContentWrapping:
 
     def test_normalize_then_wrap_pipeline(self):
         """Simulate the full normalize -> error_wrap pipeline for a bash error."""
-        raw = ToolResult(status="error", content="Traceback...\n[Command finished with exit code 1]")
+        raw = ToolResult(
+            status="error", content="Traceback...\n[Command finished with exit code 1]"
+        )
         normalized = normalize_tool_result(raw)
         wrapped = self._apply_error_wrap(normalized)
         assert wrapped.status == "error"
