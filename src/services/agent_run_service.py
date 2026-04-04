@@ -15,7 +15,7 @@ from collections.abc import Callable
 from contextlib import aclosing
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 from matmaster.core.playground import PlaygroundManager
 from matmaster.integration.fanout import RunEventFanout
@@ -23,6 +23,7 @@ from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
+from matmaster.types.cancellation import CancellationToken
 from src.services.agent_run_bohrium import (
     BohriumSetupService,
     derive_skill_sync_spec,
@@ -95,17 +96,6 @@ def _build_workspace_upload_fn(
 
     return _do_upload
 
-
-@runtime_checkable
-class StopEventLike(Protocol):
-    """Stop signal abstraction: only requires is_set() -> bool.
-
-    Satisfied by threading.Event, RedisBackedStopEvent, etc.
-    """
-
-    def is_set(self) -> bool: ...
-
-
 async def _emit_error_and_close_fanout(
     fanout: RunEventFanout, message: str, source: str = 'System'
 ) -> None:
@@ -137,7 +127,7 @@ class AgentRunService:
         session_id: str,
         user_prompt: str,
         send_cb: Callable[[dict], Any],
-        stop_event: StopEventLike,
+        stop_event: CancellationToken,
         mode: str,
         task_id: str,
         invocation_id: str | None = None,

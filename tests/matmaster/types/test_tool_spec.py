@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import (
     ResourceClaim,
@@ -157,6 +158,13 @@ class TestToolExecutionContext:
         ctx = ToolExecutionContext(runner_state=state)
 
         assert ctx.runner_state is state
+
+    def test_tool_execution_context_accepts_cancel_token(self) -> None:
+        ctrl = CancellationController()
+
+        ctx = ToolExecutionContext(cancel_token=ctrl.token)
+
+        assert ctx.cancel_token is ctrl.token
 
 
 class TestToolSpecNewFields:

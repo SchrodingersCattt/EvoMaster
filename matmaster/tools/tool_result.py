@@ -8,7 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ToolResult(BaseModel):
-    """Structured tool execution result consumed by the kernel and SSE layer."""
+    """Structured tool execution result consumed by the kernel and SSE layer.
+
+    Common statuses include "success", "error", "cancelled", and "timeout".
+    """
 
     model_config = ConfigDict(extra="forbid")
 
