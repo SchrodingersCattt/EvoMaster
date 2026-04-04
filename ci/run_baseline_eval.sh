@@ -11,6 +11,8 @@
 #     EVAL_RUNNER                    — claude_cli 或 devshell，默认 claude_cli
 #     MATMASTER_TOOLS_SERVER         — ingest 入库地址（必须）
 #     MATMASTER_TOOLS_EVALUATION_BEARER — ingest Bearer token（必须）
+#     OSS_ENDPOINT / OSS_BUCKET_NAME / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET
+#                                    — 可选；finalize 上传 task 产物 zip 到 OSS（须由 GitLab 子 job 的 docker create -e 透传进容器）
 #     BASELINE_CAPABILITIES          — 逗号分隔 capability，默认 structure_construction
 #     BASELINE_MODES                 — direct/planner/direct planner，默认 direct
 #     BASELINE_LIMIT                 — 每次最多跑几道题（0=不限），默认 0

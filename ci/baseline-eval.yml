@@ -40,6 +40,8 @@
 #     LITELLM_PROXY_API_BASE                   — LiteLLM base_url
 #   可选:
 #     REGISTRY_USERNAME / REGISTRY_PASSWORD    — 拉取/推送私有镜像
+#   finalize 上传评测产物 zip 到 OSS（见 src/dao/oss_io.py）— 须传入内层 docker 容器，已在子流水线 docker create 中 -e 透传:
+#     OSS_ENDPOINT, OSS_BUCKET_NAME, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET
 #
 # Claude CLI 代理配置说明（仅 claude_cli 模式）：
 #   方案 A（gpugeek）:  ANTHROPIC_API_KEY=xxx + ANTHROPIC_BASE_URL=https://api.gpugeek.com

@@ -151,6 +151,10 @@ EVAL_TEMPLATE = """\
         -e ANTHROPIC_DEFAULT_SONNET_MODEL \\
         -e MATMASTER_TOOLS_SERVER \\
         -e MATMASTER_TOOLS_EVALUATION_BEARER \\
+        -e OSS_ENDPOINT \\
+        -e OSS_BUCKET_NAME \\
+        -e OSS_ACCESS_KEY_ID \\
+        -e OSS_ACCESS_KEY_SECRET \\
         -e LITELLM_PROXY_API_KEY \\
         -e LITELLM_PROXY_API_BASE \\
         -e BASELINE_EVAL_LAYOUT=capabilities \\
@@ -231,6 +235,10 @@ eval-question-list:
         -e ANTHROPIC_DEFAULT_SONNET_MODEL \\
         -e MATMASTER_TOOLS_SERVER \\
         -e MATMASTER_TOOLS_EVALUATION_BEARER \\
+        -e OSS_ENDPOINT \\
+        -e OSS_BUCKET_NAME \\
+        -e OSS_ACCESS_KEY_ID \\
+        -e OSS_ACCESS_KEY_SECRET \\
         -e LITELLM_PROXY_API_KEY \\
         -e LITELLM_PROXY_API_BASE \\
         -e BASELINE_EVAL_LAYOUT=questions \\
