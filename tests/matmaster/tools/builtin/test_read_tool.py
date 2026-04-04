@@ -1,6 +1,5 @@
 """tests/matmaster/tools/builtin/test_read_tool.py"""
 import asyncio
-import pytest
 from unittest.mock import MagicMock
 from matmaster.tools.builtin.read_tool import ReadTool
 from matmaster.tools.tool_result import ToolResult
@@ -85,7 +84,7 @@ class TestReadToolRunnerState:
         tool = ReadTool(session=make_session(content=content))
         state = ToolRunnerState()
         ctx = ToolExecutionContext(runner_state=state)
-        result = asyncio.run(tool.execute_with_context(
+        asyncio.run(tool.execute_with_context(
             {"file_path": "/workspace/f.py"}, ctx
         ))
         assert "/workspace/f.py" in state.get("read_files", set())
