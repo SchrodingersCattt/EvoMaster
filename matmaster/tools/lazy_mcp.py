@@ -21,7 +21,8 @@ from matmaster.types.topology import ToolPlane
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MCP_TOOL_TIMEOUT = 120.0
-_DEFAULT_LAZY_MCP_CONNECT_TIMEOUT = 10.0
+_DEFAULT_LAZY_MCP_CONNECT_TIMEOUT = 5.0
+_DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT = 10.0
 
 
 def _parse_claims(raw_claims: Any) -> tuple[ResourceClaim, ...]:
@@ -309,6 +310,32 @@ def configure_mcp_manager(
             k: list(v) if isinstance(v, (list, tuple)) else []
             for k, v in include_only.items()
         }
+
+
+def resolve_lazy_mcp_tool_timeout(
+    mcp_config: dict[str, Any],
+    *,
+    server_name: str,
+    remote_tool_name: str,
+) -> float | None:
+    """Resolve LazyMCP call timeout from runtime config."""
+    tool_timeouts = mcp_config.get('tool_timeouts', {})
+    if isinstance(tool_timeouts, dict):
+        server_timeout = tool_timeouts.get(server_name)
+        if server_timeout is not None:
+            return float(server_timeout)
+
+    executors = mcp_config.get('calculation_executors') or {}
+    server_cfg = executors.get(server_name)
+    if not isinstance(server_cfg, dict):
+        return None
+    if not server_cfg.get('executor'):
+        return None
+
+    sync_tools = set(server_cfg.get('sync_tools') or [])
+    if remote_tool_name in sync_tools:
+        return _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT
+    return None
 
 
 class LazyMCPConnector:

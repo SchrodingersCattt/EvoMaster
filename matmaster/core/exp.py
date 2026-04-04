@@ -541,7 +541,11 @@ class Exp:
         from pathlib import Path
 
         from matmaster.skills.registry import SkillRegistry
-        from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
+        from matmaster.tools.lazy_mcp import (
+            LazyMCPConnector,
+            LazyMCPTool,
+            resolve_lazy_mcp_tool_timeout,
+        )
         from matmaster.tools.schema_cache import ToolSchemaCache
         from matmaster.tools.skill_tool import SkillTool
 
@@ -611,12 +615,6 @@ class Exp:
                     mcp_server,
                 )
                 return
-            tool_timeouts = mcp_config.get('tool_timeouts', {})
-            server_timeout = (
-                tool_timeouts.get(mcp_server)
-                if isinstance(tool_timeouts, dict)
-                else None
-            )
             for tool_schema in schemas:
                 original_name = tool_schema['name']
                 prefixed_name = f'{mcp_server}_{original_name}'
@@ -629,7 +627,11 @@ class Exp:
                     description=tool_schema.get('description', ''),
                     input_schema=tool_schema.get('input_schema', {}),
                     connector=connector,
-                    timeout=server_timeout,
+                    timeout=resolve_lazy_mcp_tool_timeout(
+                        mcp_config,
+                        server_name=mcp_server,
+                        remote_tool_name=original_name,
+                    ),
                 )
                 # ESIN-05: Use catalog.register_overlay() for version-bumped injection
                 if catalog is not None:

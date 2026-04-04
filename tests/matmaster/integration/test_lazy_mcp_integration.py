@@ -381,3 +381,4 @@ class TestLazyMCPTimeoutThreading:
         lazy = registry._tools['mat_sg_build_bulk']
         assert isinstance(lazy, LazyMCPTool)
         assert lazy._timeout == _DEFAULT_MCP_TOOL_TIMEOUT
+

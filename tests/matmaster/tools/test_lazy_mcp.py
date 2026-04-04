@@ -12,7 +12,9 @@ import pytest
 from matmaster.tools.lazy_mcp import (
     LazyMCPConnector,
     LazyMCPTool,
+    _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT,
     configure_mcp_manager,
+    resolve_lazy_mcp_tool_timeout,
 )
 from matmaster.tools.tool_registry import Tool
 from matmaster.tools.tool_result import ToolResult
@@ -624,6 +626,69 @@ class TestConfigureMCPManager:
         # Calling the factory should invoke get_calculation_path_adaptor
         manager.path_adaptor_factory()
         mock_factory.assert_called_once_with(config)
+
+
+class TestResolveLazyMCPToolTimeout:
+    def test_prefers_explicit_server_timeout(self):
+        timeout = resolve_lazy_mcp_tool_timeout(
+            {
+                "tool_timeouts": {"mat_sg": 7},
+                "calculation_executors": {
+                    "mat_sg": {
+                        "executor": {"type": "dispatcher"},
+                        "sync_tools": ["build_bulk"],
+                    }
+                },
+            },
+            server_name="mat_sg",
+            remote_tool_name="build_bulk",
+        )
+        assert timeout == 7.0
+
+    def test_executor_backed_sync_tool_uses_fast_default(self):
+        timeout = resolve_lazy_mcp_tool_timeout(
+            {
+                "calculation_executors": {
+                    "mat_sg": {
+                        "executor": {"type": "dispatcher"},
+                        "sync_tools": ["build_bulk"],
+                    }
+                }
+            },
+            server_name="mat_sg",
+            remote_tool_name="build_bulk",
+        )
+        assert timeout == _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT
+
+    def test_null_executor_sync_tool_keeps_global_default(self):
+        timeout = resolve_lazy_mcp_tool_timeout(
+            {
+                "calculation_executors": {
+                    "mat_doc": {
+                        "executor": None,
+                        "sync_tools": ["extract_data"],
+                    }
+                }
+            },
+            server_name="mat_doc",
+            remote_tool_name="extract_data",
+        )
+        assert timeout is None
+
+    def test_non_sync_tool_keeps_global_default(self):
+        timeout = resolve_lazy_mcp_tool_timeout(
+            {
+                "calculation_executors": {
+                    "mat_sg": {
+                        "executor": {"type": "dispatcher"},
+                        "sync_tools": ["build_bulk"],
+                    }
+                }
+            },
+            server_name="mat_sg",
+            remote_tool_name="submit_build_bulk",
+        )
+        assert timeout is None
 
 
 class TestLazyMCPConnector:
