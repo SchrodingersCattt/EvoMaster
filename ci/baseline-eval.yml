@@ -1,7 +1,7 @@
 # 自动评测流水线（父子流水线架构）
 #
 # 架构说明：
-#   1. 父流水线：构建镜像 + 动态生成子流水线 YAML → 触发子流水线
+#   1. 父流水线：build 阶段构建镜像；baseline-eval 阶段 baseline-eval-trigger 触发动态子流水线
 #   2. 子流水线（动态生成）：布局由 ci/baseline_eval_preset.yaml 的 child_pipeline 决定
 #      （capabilities | questions），除非在 Run pipeline / 项目 CI Variables 中设置了
 #      BASELINE_CHILD_PIPELINE（该变量会覆盖预设文件）。
@@ -162,7 +162,7 @@ baseline-eval-build:
 
 # ── Job 2: 触发动态子流水线 ──────────────────────────────────────────────────
 baseline-eval-trigger:
-  stage: sync-question-catalog
+  stage: baseline-eval
   needs:
     - job: baseline-eval-build
       artifacts: true
