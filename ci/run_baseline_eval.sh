@@ -256,7 +256,8 @@ EOF
 
     echo ""
     echo "[STEP 2] 跑题（claude -p）+ finalize..."
-    "${RUN_CMD[@]}"
+    CLAUDE_RUN_EXIT=0
+    "${RUN_CMD[@]}" || CLAUDE_RUN_EXIT=$?
 
 else
     echo "[ERROR] 未知的 EVAL_RUNNER: ${EVAL_RUNNER}（可选值: claude_cli, devshell）"
@@ -336,8 +337,12 @@ echo ""
 echo "=== 评测完成（${EVAL_RUNNER}）==="
 echo "  查看详细产物请下载 CI artifact: results/"
 
-# 传递 devshell 退出码（部分题目失败时仍需收集 artifact 后再退出）
+# 传递跑题阶段退出码（部分失败/超时仍先写入 baseline_run.env 与汇总，便于 docker cp artifact）
 if [[ "${EVAL_RUNNER}" == "devshell" && "${DEVSHELL_EXIT:-0}" -ne 0 ]]; then
     echo "[CI] devshell 有题目失败，退出码: ${DEVSHELL_EXIT}"
     exit "${DEVSHELL_EXIT}"
+fi
+if [[ "${EVAL_RUNNER}" == "claude_cli" && "${CLAUDE_RUN_EXIT:-0}" -ne 0 ]]; then
+    echo "[CI] Claude CLI baseline 有失败/超时，退出码: ${CLAUDE_RUN_EXIT}"
+    exit "${CLAUDE_RUN_EXIT}"
 fi
