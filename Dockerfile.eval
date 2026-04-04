@@ -1,28 +1,38 @@
+# syntax=docker/dockerfile:1
 # Baseline 评测专用镜像
-# 在主服务镜像基础上叠加 Node.js 20 + Claude Code CLI。
+# 在主服务镜像基础上叠加 Node.js 20 + Claude Code CLI + numpy/pymatgen（validators）。
 # 仅用于 CI baseline eval job，不部署到生产。
+#
+# 多阶段（P0 构建加速）：
+#   eval-toolchain — 仅基于固定 python:3.13-slim，与 matmaster-evo 某次 commit 无关；
+#     apt + NodeSource + 全局 claude-code 可长期被 BuildKit/registry 缓存。
+#   最终阶段 — FROM matmaster-evo:ci* 后只做从 toolchain 拷贝二进制与 venv 内 pip，
+#     避免每次在「已变 digest 的应用层」上重复跑整段 apt/npm。
 #
 # 构建（CI 内部使用 --build-arg）：
 #   docker build -f Dockerfile.eval \
 #     --build-arg BASE_IMAGE=registry.dp.tech/flow/matmaster-evo:ci12345 \
 #     -t registry.dp.tech/flow/matmaster-eval:eval-12345 .
 #
+# 可选：与主镜像基础不一致时覆盖工具链底（须与 matmaster-evo 所用 Debian/glibc 兼容）：
+#   --build-arg TOOLCHAIN_BASE=registry.dp.tech/public/python:3.13-slim
+#
 # 本地快速验证：
 #   docker build -f Dockerfile.eval \
 #     --build-arg BASE_IMAGE=registry.dp.tech/flow/matmaster-evo:latest \
 #     -t matmaster-eval:local .
 
+ARG TOOLCHAIN_BASE=registry.dp.tech/public/python:3.13-slim
 ARG BASE_IMAGE=registry.dp.tech/flow/matmaster-evo:latest
-FROM ${BASE_IMAGE}
 
-USER root
+# ── 阶段 1：Node + 全局 CLI（缓存与 BASE_IMAGE 解耦）────────────────────────
+FROM ${TOOLCHAIN_BASE} AS eval-toolchain
 
-# 与主 Dockerfile 一致：若基础镜像仍是官方 Debian 源，换清华镜像加速 apt（国内/CI）
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true && \
     sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
 
-# 安装 Node.js 20 LTS + Claude Code CLI
-# nodesource 脚本负责添加 apt 源并安装 nodejs（含 npm）
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
@@ -35,8 +45,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && npm install -g @anthropic-ai/claude-code \
     && claude --version || true
 
+# ── 阶段 2：应用镜像 + 拷贝工具链 + 评测依赖 ─────────────────────────────────
+FROM ${BASE_IMAGE}
+
+USER root
+
+# 从 toolchain 挂载 /usr，仅复制 Node 与全局模块（不重跑 apt/npm）
+RUN --mount=type=bind,from=eval-toolchain,source=/usr,target=/_tc/usr,readonly \
+    set -eux; \
+    cp "/_tc/usr/bin/node" /usr/bin/node; \
+    cp "/_tc/usr/bin/npm" /usr/bin/npm; \
+    if [ -f "/_tc/usr/bin/npx" ]; then cp "/_tc/usr/bin/npx" /usr/bin/npx; fi; \
+    if [ -f "/_tc/usr/bin/claude" ]; then cp -a "/_tc/usr/bin/claude" /usr/bin/claude; fi; \
+    mkdir -p /usr/lib/node_modules; \
+    cp -a "/_tc/usr/lib/node_modules/." /usr/lib/node_modules/; \
+    mkdir -p /usr/local/bin; \
+    if [ -f "/_tc/usr/local/bin/claude" ]; then cp -a "/_tc/usr/local/bin/claude" /usr/local/bin/claude; fi
+
 # 评测 validators：numpy + pymatgen（struct_file_*，见 score_baseline_tasks / BinaryEvaluator）
-RUN . /app/.venv/bin/activate && uv pip install numpy "pymatgen>=2024.1"
+RUN --mount=type=cache,target=/root/.cache/uv \
+    . /app/.venv/bin/activate && uv pip install numpy "pymatgen>=2024.1"
 
 # claude --dangerously-skip-permissions 拒绝在 root 下运行，创建非 root 用户。
 # 不对 /app 整树 chown：.venv 与源码小文件极多，递归改属主在 overlay 上极慢（CI 可数十秒）。
