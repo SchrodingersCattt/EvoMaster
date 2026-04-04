@@ -18,7 +18,7 @@ PySCF (Python-based Simulations of Chemistry Framework) is a Python library for 
 
 > Replace `{script_name}` with the actual Python script name (e.g. `run_pyscf.py`).
 > The image includes PySCF + geomeTRIC optimizer.
-> For alternative images: `bohrium(action="list_images", keyword="pyscf")`.
+> For alternative images: `Bohrium(action="list_images", keyword="pyscf")`.
 
 ## Input Preparation
 
@@ -126,8 +126,8 @@ mf.mulliken_pop()
 1. Write Python script (e.g. `run_pyscf.py`)
 2. Prepare structure file (XYZ preferred) if not embedding coordinates
 3. Place script + structure in one directory
-4. Submit: `bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260305", cmd="python run_pyscf.py > log 2>&1")`
-5. Poll: `bohrium(action="poll", job_id=<id>)`
+4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260305", cmd="python run_pyscf.py > log 2>&1")`
+5. Poll: `Bohrium(action="poll", job_id=<id>)`
 
 ## Reference
 

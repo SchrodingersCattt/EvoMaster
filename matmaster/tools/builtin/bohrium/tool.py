@@ -108,7 +108,7 @@ _FAILURE_CODES = {-2, -1}
 class BohriumTool(BuiltinTool):
     """Bohrium HPC platform operations via action-based dispatch."""
 
-    name: ClassVar[str] = 'bohrium'
+    name: ClassVar[str] = 'Bohrium'
     description: ClassVar[str] = (
         'Bohrium HPC platform operations. '
         'action="submit": package input directory and submit a job, returns job_id. '
@@ -197,7 +197,7 @@ class BohriumTool(BuiltinTool):
 
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return (
-            '## bohrium tool usage\n'
+            '## Bohrium tool usage\n'
             '- Load the corresponding software skill first (cp2k, qe, abacus, orca, '
             'lammps, gromacs, pyscf, abinit, pyatb) to obtain image, machine, and cmd.\n'
             '- submit: cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
@@ -419,7 +419,7 @@ class BohriumTool(BuiltinTool):
                         'success': True,
                         'job_id': job_id,
                         'status': status_name,
-                        'message': f'Job is {status_name}. Call bohrium(action="poll", job_id={job_id}) again later to check.',
+                        'message': f'Job is {status_name}. Call Bohrium(action="poll", job_id={job_id}) again later to check.',
                     }, ensure_ascii=False),
                 )
 

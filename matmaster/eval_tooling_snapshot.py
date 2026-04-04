@@ -30,6 +30,7 @@ _BUILTIN_WHEN_STAR: list[str] = [
     "TodoWrite",
     "WebSearch",
     "WebFetch",
+    "Bohrium",
 ]
 
 

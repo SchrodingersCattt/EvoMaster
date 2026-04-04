@@ -334,12 +334,12 @@ class TestExpBuiltinTools:
         return exp, registry
 
     def test_native_tools_count(self, tmp_path: Path) -> None:
-        """9 native tools registered with source='builtin' (CC names)."""
+        """10 native tools registered with source='builtin' (CC names)."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 9
+        assert len(registry) == 10
 
     def test_native_tool_names(self, tmp_path: Path) -> None:
-        """All 9 expected CC-name tools are present in registry."""
+        """All 10 expected CC-name tools are present in registry."""
         _, registry = self._build_registry(tmp_path)
         expected_native = {
             'Bash',
@@ -351,6 +351,7 @@ class TestExpBuiltinTools:
             'TodoWrite',
             'WebSearch',
             'WebFetch',
+            'Bohrium',
         }
         for name in expected_native:
             assert name in registry, f"Expected tool '{name}' not found in registry"
@@ -368,9 +369,9 @@ class TestExpBuiltinTools:
         assert 'str_replace_editor' not in registry
 
     def test_total_count(self, tmp_path: Path) -> None:
-        """Total tools = 9 native builtin (CC names, no legacy tools)."""
+        """Total tools = 10 native builtin (CC names, no legacy tools)."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 9
+        assert len(registry) == 10
 
     def test_web_search_is_native_builtin(self, tmp_path: Path) -> None:
         """WebSearchTool is registered as native builtin with CC name."""
@@ -378,7 +379,7 @@ class TestExpBuiltinTools:
         assert 'WebSearch' in registry
 
     def test_init_builtin_tools_no_session(self, tmp_path: Path) -> None:
-        """session=None registers only sessionless tools (TodoWrite, WebSearch, WebFetch)."""
+        """session=None registers only sessionless tools."""
         from matmaster.tools.tool_registry import ToolRegistry
 
         exp = Exp(ExpConfig(name='test'))
@@ -391,10 +392,11 @@ class TestExpBuiltinTools:
         )
         registry = ToolRegistry()
         exp._init_builtin_tools(ctx, registry, ['*'])
-        assert len(registry) == 3
+        assert len(registry) == 4
         assert "TodoWrite" in registry
         assert "WebSearch" in registry
         assert "WebFetch" in registry
+        assert "Bohrium" in registry
 
     async def test_explicit_builtin_config_filters_tools(self, tmp_path: Path) -> None:
         """Non-empty explicit tool list registers only the requested tools."""
@@ -545,6 +547,30 @@ async def test_build_runtime_registers_todowrite_without_session(tmp_path: Path)
         runtime = await exp.build_runtime(ctx)
 
     assert runtime.spec.tool_catalog.get_tool("TodoWrite") is not None
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_registers_bohrium_without_session(tmp_path: Path) -> None:
+    """Bohrium (sessionless tool) registers even when ctx.session is None."""
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["Bohrium"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=None,
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    assert runtime.spec.tool_catalog.get_tool("Bohrium") is not None
 
 
 # ── TestAgentRegistration ──────────────────────────────

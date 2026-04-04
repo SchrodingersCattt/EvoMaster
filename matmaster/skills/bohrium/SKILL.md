@@ -1,18 +1,18 @@
 ---
 name: bohrium
-description: "Bohrium HPC platform knowledge: submission workflow patterns, monitoring strategies, and troubleshooting. Actual API operations are handled by the built-in bohrium tool — load this skill for platform context before using the tool."
+description: "Bohrium HPC platform knowledge: submission workflow patterns, monitoring strategies, and troubleshooting. Actual API operations are handled by the built-in Bohrium tool — load this skill for platform context before using the tool."
 skill_type: operator
 ---
 
 # Bohrium Platform Guide
 
-This skill provides **platform knowledge only**. All actual operations (submit, poll, list_images, list_machines) are handled by the built-in `bohrium` tool.
+This skill provides **platform knowledge only**. All actual operations (submit, poll, list_images, list_machines) are handled by the built-in `Bohrium` tool.
 
 ## Workflow Pattern
 
 1. Load a **software skill** (cp2k, qe, abacus, orca, lammps, gromacs, pyscf, abinit, pyatb) to get `image`, `machine`, and `cmd` parameters
-2. `bohrium(action="submit", input_dir=..., image=..., cmd=..., machine=...)`
-3. `bohrium(action="poll", job_id=<id>)` — repeat until Finished or Failed
+2. `Bohrium(action="submit", input_dir=..., image=..., cmd=..., machine=...)`
+3. `Bohrium(action="poll", job_id=<id>)` — repeat until Finished or Failed
 4. Analyze results in `result_dir`
 
 ## Monitoring Strategy
@@ -43,9 +43,9 @@ The `poll` action returns the **current status in one call** (non-blocking):
 
 When a software skill's default image is outdated or the user needs a specific version:
 
-- `bohrium(action="list_images", keyword="<software>")` — find available Docker images
-- `bohrium(action="list_machines", machine_type="cpu")` — find CPU machine options
-- `bohrium(action="list_machines", machine_type="gpu", keyword="4090")` — find GPU options
+- `Bohrium(action="list_images", keyword="<software>")` — find available Docker images
+- `Bohrium(action="list_machines", machine_type="cpu")` — find CPU machine options
+- `Bohrium(action="list_machines", machine_type="gpu", keyword="4090")` — find GPU options
 
 Use `url` from image results as the `image` parameter, and `skuEnName` from machine results as the `machine` parameter.
 
@@ -65,4 +65,4 @@ The API path set is determined by `BOHRIUM_USE_SANDBOX`:
 - **Sandbox** (`1`, default when unset): uses `/openapi/v1/sandbox/job/...` paths. Suitable for testing and development.
 - **Standard HPC** (`0`): uses `/openapi/v1/job/create`, `/openapi/v2/job/add`, `GET /openapi/v1/job/{id}`. For production workloads.
 
-The `bohrium` tool handles path selection automatically based on this environment variable.
+The `Bohrium` tool handles path selection automatically based on this environment variable.

@@ -17,4 +17,5 @@ def test_snapshot_default_devshell_skills_disabled() -> None:
     assert snap["mcp_server_names"] == []
     assert "Skill" not in snap["tool_names_surface"]
     assert "Bash" in snap["builtin_tool_names"]
+    assert "Bohrium" in snap["builtin_tool_names"]
     assert "Agent" in snap["builtin_tool_names"]
