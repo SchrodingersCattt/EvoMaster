@@ -554,7 +554,7 @@ questions:
       a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-- id: SC_struct_006_20260404
+- id: SC_struct_006_20260404b
   capability: structure_construction
   domain: struct
   intent: Add missing hydrogens to the monomethylammonium perchlorate crystal MEAPER
@@ -609,7 +609,7 @@ questions:
   - key: duration_budget
     value: *id001
   - key: token_budget_total
-    value: *id002
+    value: {max: 28000}
   scoring_checklist:
   - id: file_exists
     criterion: The output file `meaper_hydrogenated.cif` exists.
@@ -662,7 +662,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_007_20260404
+- id: SC_struct_007_20260404b
   capability: structure_construction
   domain: struct
   intent: Build the nitroprusside anion and validate its coordination, bond lengths,
@@ -767,7 +767,7 @@ questions:
   - key: duration_budget
     value: *id001
   - key: token_budget_total
-    value: *id002
+    value: {max: 18000}
   scoring_checklist:
   - id: file_exists
     criterion: The output file `nitroprusside.xyz` exists.
