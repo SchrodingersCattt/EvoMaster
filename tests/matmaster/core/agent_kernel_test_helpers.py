@@ -189,7 +189,7 @@ class _SimpleTestToolRunner:
         results: list[tuple[ToolCallData, ToolResult]] = []
         for tc in tool_calls:
             # Cancel check
-            if ctx.stop_event is not None and ctx.stop_event.is_set():
+            if ctx.cancel_token is not None and ctx.cancel_token.is_cancelled:
                 tr = ToolResult(status="cancelled", content="Run cancelled.")
                 results.append((tc, tr))
                 if on_result:

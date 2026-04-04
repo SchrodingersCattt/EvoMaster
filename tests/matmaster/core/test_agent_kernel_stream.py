@@ -11,9 +11,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import (
     AssistantStateEvent,
     ResponseEvent,
+    RunResultEvent,
     SkillHitEvent,
     ThoughtEvent,
 )
@@ -532,3 +534,40 @@ class TestGap3CatalogVersionInvalidation:
             f"build_definitions should be called once (caching), got {build_calls}"
         args, _ = mock_catalog.build_definitions.call_args
         assert isinstance(args[0], ToolDescriptionContext)
+
+
+class TestCancellationTokenSupport:
+    @pytest.mark.asyncio
+    async def test_run_stream_returns_cancelled_when_token_already_cancelled(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = ContentOnlyProvider()
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+        ctrl = CancellationController()
+        ctrl.cancel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task", cancel_token=ctrl.token):
+            events.append(event)
+
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "cancelled"
+        assert events[-1].reason == "cancelled"
+
+    @pytest.mark.asyncio
+    async def test_sleep_backoff_wakes_early_on_cancel_token(self) -> None:
+        import asyncio
+
+        from matmaster.core.agent import AgentKernel, _KernelStopRequested
+
+        ctrl = CancellationController()
+        task = asyncio.create_task(
+            AgentKernel._sleep_backoff_with_cancel(5.0, ctrl.token)
+        )
+
+        await asyncio.sleep(0.05)
+        ctrl.cancel()
+
+        with pytest.raises(_KernelStopRequested):
+            await task

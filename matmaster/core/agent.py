@@ -7,7 +7,7 @@ run_stream() yields BusEvent objects through the _run_items() generator.
 Termination conditions:
 - natural: LLM returns no tool_calls
 - max_turns: turn counter reaches spec.max_turns
-- cancelled: stop_event is set (checked each turn, during stream chunks, retry
+- cancelled: cancel_token is set (checked each turn, during stream chunks, retry
   backoff, and between serial tool_calls)
 """
 
@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import threading
 import time
 from collections import deque
 from collections.abc import AsyncIterator
@@ -23,6 +22,7 @@ from dataclasses import dataclass, field as dc_field
 from typing import TYPE_CHECKING, Any
 
 from matmaster.types.errors import LLMError
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.events import (
     AssistantStateEvent,
     ResponseEvent,
@@ -54,7 +54,7 @@ from matmaster.types.messages import (
 
 logger = logging.getLogger(__name__)
 
-# 流式输出中每隔 N 个 chunk 检查一次 stop_event（避免每 chunk 打 Redis EXISTS）
+# 流式输出中每隔 N 个 chunk 检查一次 cancel_token（避免每 chunk 打 Redis EXISTS）
 _STOP_CHECK_EVERY_N_STREAM_CHUNKS = 8
 # 重试退避时切片 sleep 的步长（秒），便于尽快响应停止
 _STOP_RETRY_SLEEP_SLICE_SEC = 0.25
@@ -96,7 +96,7 @@ class _KernelState:
 
 
 class _KernelStopRequested(Exception):
-    """Internal: stop_event became set during LLM stream or retry backoff."""
+    """Internal: cancel_token became set during LLM stream or retry backoff."""
 
 
 class AgentKernel:
@@ -107,7 +107,7 @@ class AgentKernel:
         spec: AgentRuntimeSpec,
         task: str,
         history: list[Message] | None = None,
-        stop_event: threading.Event | None = None,
+        cancel_token: CancellationToken | None = None,
     ) -> AsyncIterator[Any]:
         """Generator-first entry point: yields BusEvent objects.
 
@@ -128,7 +128,7 @@ class AgentKernel:
 
             async def _consume_and_yield():
                 nonlocal last_reason
-                async for item in self._run_items(spec, task, history, stop_event):
+                async for item in self._run_items(spec, task, history, cancel_token):
                     if item.terminal is not None:
                         reason = item.terminal.reason
                         last_reason = reason
@@ -207,7 +207,7 @@ class AgentKernel:
         spec: AgentRuntimeSpec,
         task: str,
         history: list[Message] | None,
-        stop_event: threading.Event | None,
+        cancel_token: CancellationToken | None,
     ) -> AsyncIterator[_KernelItem]:
         """Core generator loop: yields _KernelItem for each event.
 
@@ -252,7 +252,7 @@ class AgentKernel:
         turn_usage: dict[str, int] = {}
 
         while state.turn < spec.max_turns:
-            if stop_event and stop_event.is_set():
+            if cancel_token and cancel_token.is_cancelled:
                 yield self._terminal(state, 'cancelled')
                 return
 
@@ -318,7 +318,7 @@ class AgentKernel:
             llm_response: LLMResponse | None = None
             try:
                 async for item in self._call_llm_streaming(
-                    spec, api_messages, tool_defs, stop_event=stop_event
+                    spec, api_messages, tool_defs, cancel_token=cancel_token
                 ):
                     if item.llm_response is not None:
                         llm_response = item.llm_response
@@ -384,7 +384,7 @@ class AgentKernel:
             exec_ctx = ToolExecutionContext(
                 turn=state.turn,
                 max_turns=spec.max_turns,
-                stop_event=stop_event,
+                cancel_token=cancel_token,
             )
             runner_results = await spec.tool_runner.execute_batch(
                 response.tool_calls, exec_ctx
@@ -424,7 +424,7 @@ class AgentKernel:
         api_messages: list[dict[str, Any]],
         tool_defs: list[dict[str, Any]] | None,
         *,
-        stop_event: threading.Event | None = None,
+        cancel_token: CancellationToken | None = None,
     ) -> AsyncIterator[_KernelItem]:
         """Retry wrapper around _stream_llm_items with timeout-doubling retry on transient errors."""
         provider = spec.llm_provider
@@ -436,7 +436,7 @@ class AgentKernel:
 
         last_error: LLMError | None = None
         for attempt in range(max_retries):
-            if stop_event and stop_event.is_set():
+            if cancel_token and cancel_token.is_cancelled:
                 raise _KernelStopRequested()
             t0 = time.monotonic()
             try:
@@ -444,7 +444,7 @@ class AgentKernel:
                 items: list[_KernelItem] = []
                 async for item in self._stream_llm_items(
                     spec, api_messages, tool_defs,
-                    timeout=current_timeout, stop_event=stop_event,
+                    timeout=current_timeout, cancel_token=cancel_token,
                 ):
                     items.append(item)
                     # Yield event items immediately (streaming)
@@ -463,7 +463,7 @@ class AgentKernel:
                             attempt + 1, max_retries, elapsed,
                         )
                         backoff = retry_delay * (2 ** attempt)
-                        await self._sleep_backoff_with_stop_async(backoff, stop_event)
+                        await self._sleep_backoff_with_cancel(backoff, cancel_token)
                         continue
 
                     if self._is_incomplete_response(resp):
@@ -489,7 +489,7 @@ class AgentKernel:
                     attempt + 1, max_retries, e, backoff,
                 )
                 if attempt < max_retries - 1:
-                    await self._sleep_backoff_with_stop_async(backoff, stop_event)
+                    await self._sleep_backoff_with_cancel(backoff, cancel_token)
 
         # Retries exhausted
         if last_error is not None:
@@ -505,24 +505,18 @@ class AgentKernel:
         )
 
     @staticmethod
-    async def _sleep_backoff_with_stop_async(
+    async def _sleep_backoff_with_cancel(
         seconds: float,
-        stop_event: threading.Event | None,
+        cancel_token: CancellationToken | None,
     ) -> None:
-        """Async sleep for *seconds*, but wake early if stop_event is set."""
+        """Async sleep for *seconds*, but wake early if cancel_token is set."""
         if seconds <= 0:
             return
-        if not stop_event:
+        if not cancel_token:
             await asyncio.sleep(seconds)
             return
-        deadline = time.monotonic() + seconds
-        while time.monotonic() < deadline:
-            if stop_event.is_set():
-                raise _KernelStopRequested()
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            await asyncio.sleep(min(_STOP_RETRY_SLEEP_SLICE_SEC, remaining))
+        if await cancel_token.wait_async(seconds):
+            raise _KernelStopRequested()
 
     async def _stream_llm_items(
         self,
@@ -531,7 +525,7 @@ class AgentKernel:
         tool_defs: list[dict[str, Any]] | None,
         *,
         timeout: float | None = None,
-        stop_event: threading.Event | None = None,
+        cancel_token: CancellationToken | None = None,
     ) -> AsyncIterator[_KernelItem]:
         """Sub-generator: streams LLM chunks as _KernelItem events.
 
@@ -567,9 +561,9 @@ class AgentKernel:
                 api_messages, tool_defs, timeout=timeout
             ):
                 if (
-                    stop_event
+                    cancel_token
                     and chunk_idx % _STOP_CHECK_EVERY_N_STREAM_CHUNKS == 0
-                    and stop_event.is_set()
+                    and cancel_token.is_cancelled
                 ):
                     stream_cancelled = True
                     break
