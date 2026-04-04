@@ -73,6 +73,13 @@ class DevshellAgentLoop:
 - **不可写**：`evaluation/question_bank/**`（见上节）；避免无关大重构。
 - 保持改动可审：尽量小步、可解释。
 
+## MatMaster 实验提示词（优化策略 + 体量硬上限）
+- **优先删减与合并**：在增补新规则前，先删除或合并与 `_base.toml` / 同文件内已有条目**重复、矛盾或过时**的表述；禁止仅靠堆叠新段落规避问题。
+- **系统 prompt token 预算**：对 `ContextBuilder.build()` 产出的**完整初始系统 prompt**（含 `system_prompt` + `developer_instructions` + tool descriptions + skill meta info）使用 tiktoken **gpt-4o 编码**计数；**推荐控制在 12000 以内**，**硬上限为 15000（含 15000）**。
+- **自检命令**：每次修改 `matmaster/exps/` 下相关 TOML 后、在 `git commit` 前于仓库根执行
+  `uv run python -m evaluation.devshell_agent.exp_prompt_budget <exp>`
+  其中 `<exp>` 与本轮 `run_devshell_eval` 所用 `--exp` 一致；若未传 `--exp`，默认按 `direct` 自检（若你改的是其它 exp 名则改用该名）。**命令 exit 非 0 时不得提交**，应先压缩文案直至达标。
+
 ## 轮次结束
 - 调用 **report_iteration_outcome**，`iteration_index` 必须与当前轮次编号一致，`macro_mean_0_100` 为整数 0–100，`target_met` 表示是否达到用户给定目标分，`rationale` 用 Markdown 简述判分与下一步。
 """
@@ -104,11 +111,16 @@ class DevshellAgentLoop:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         return repo_root / "results" / f"{label}_{ts}"
 
+    def _budget_exp_name(self) -> str:
+        exp = (self._cfg.defaults.exp or "").strip()
+        return exp if exp else "direct"
+
     def _iteration_user_message(self, *, it: int) -> str:
         cfg = self._cfg
         extra = cfg.extra_instruction.strip()
         extra_block = f"\n\n## 用户附加说明\n{extra}\n" if extra else ""
         session_dir = cfg.session_dir.resolve()
+        budget_exp = self._budget_exp_name()
         return f"""## 第 {it} / {cfg.max_iterations} 轮迭代
 
 - **目标宏平均分数**：{cfg.target_mean_score}/100（若 `macro_mean_0_100 >= {cfg.target_mean_score}` 或你认为已充分达标，将 `target_met` 设为 true）。
@@ -117,7 +129,9 @@ class DevshellAgentLoop:
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
 2. 对**需要判分的**每个 `run_devshell_eval` 目录分别执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录> --dry-run` 获取判分（**不要**加 `--submit`）；ingest 由编排器在本轮主会话结束且 checklist 开始前对各目录自动提交。
-3. 若未达标：在**允许的路径**内修改提示词/工具/配置（**不要**改 `evaluation/question_bank/`）。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**。若你认为问题在 **checklist / 参考答案** 而非产品侧，调用 **escalate_checklist_revision** 并仍在第 4 步前完成主流程。
+3. 若未达标：在**允许的路径**内修改提示词/工具/配置（**不要**改 `evaluation/question_bank/`）。优化提示时**先删并合并重复/矛盾表述，再考虑增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出）应**优先压到 ≤ 12000**，且**不得超过 15000**（gpt-4o tiktoken）。每次改完相关 TOML 后、`git commit` 前执行：
+   `uv run python -m evaluation.devshell_agent.exp_prompt_budget {budget_exp}`
+   **exit 非 0 不得提交**。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**。若你认为问题在 **checklist / 参考答案** 而非产品侧，调用 **escalate_checklist_revision** 并仍在第 4 步前完成主流程。
 4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（如有）；若本轮曾回滚无效改动，分数应以回滚后的最终状态为准。
 {extra_block}
 """
