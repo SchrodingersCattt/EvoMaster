@@ -141,11 +141,16 @@ _baseline_maybe_configure_aws() {
 
 _baseline_maybe_configure_aws
 
+# 与 settings.json 分支共用：任一成立即视为走 Bedrock（须避免再写 ANTHROPIC_BASE_URL / 第三方 API_KEY）
+_baseline_claude_bedrock_enabled() {
+    [[ "${CLAUDE_CODE_USE_BEDROCK:-}" == "1" ]] \
+        || [[ "${ANTHROPIC_PLATFORM:-}" == "bedrock" ]] \
+        || [[ "${BASELINE_CLAUDE_BEDROCK:-}" == "1" ]]
+}
+
 # Claude Code 走 Bedrock 时由 CI 注入 CLAUDE_CODE_USE_BEDROCK=1 等；此处补齐默认模型与 effort
 _baseline_maybe_export_claude_bedrock_env() {
-    if [[ "${CLAUDE_CODE_USE_BEDROCK:-}" != "1" ]] \
-        && [[ "${ANTHROPIC_PLATFORM:-}" != "bedrock" ]] \
-        && [[ "${BASELINE_CLAUDE_BEDROCK:-}" != "1" ]]; then
+    if ! _baseline_claude_bedrock_enabled; then
         return 0
     fi
     export ANTHROPIC_PLATFORM="${ANTHROPIC_PLATFORM:-bedrock}"
@@ -308,7 +313,25 @@ elif [[ "${EVAL_RUNNER}" == "claude_cli" ]]; then
     CLAUDE_HOME="${HOME}/.claude"
     mkdir -p "${CLAUDE_HOME}"
 
-    if [[ -n "${ANTHROPIC_BASE_URL:-}" && -n "${ANTHROPIC_AUTH_TOKEN:-}" ]]; then
+    # Bedrock 须优先于「API_KEY + BASE_URL」：否则 CI 里残留的 gpugeek 等会写入 settings，Claude 仍走第三方 HTTP
+    if _baseline_claude_bedrock_enabled; then
+        cat > "${CLAUDE_HOME}/settings.json" <<EOF
+{
+  "env": {
+    "ANTHROPIC_PLATFORM": "${ANTHROPIC_PLATFORM:-bedrock}",
+    "AWS_PROFILE": "${AWS_PROFILE:-default}",
+    "CLAUDE_CODE_USE_BEDROCK": "1",
+    "ANTHROPIC_MODEL": "${ANTHROPIC_MODEL:-us.anthropic.claude-opus-4-6-v1[1m]}",
+    "ANTHROPIC_SMALL_FAST_MODEL": "${ANTHROPIC_SMALL_FAST_MODEL:-us.anthropic.claude-haiku-4-5-20251001-v1:0}",
+    "CLAUDE_CODE_EFFORT_LEVEL": "${CLAUDE_CODE_EFFORT_LEVEL:-max}",
+    "API_TIMEOUT_MS": "3000000",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}
+EOF
+        echo "[CI] settings.json 已写入（AWS Bedrock；已忽略 ANTHROPIC_BASE_URL / 第三方 API_KEY）"
+        unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL || true
+    elif [[ -n "${ANTHROPIC_BASE_URL:-}" && -n "${ANTHROPIC_AUTH_TOKEN:-}" ]]; then
         cat > "${CLAUDE_HOME}/settings.json" <<EOF
 {
   "env": {
@@ -343,7 +366,7 @@ EOF
     elif [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
         echo "[CI] 使用 ANTHROPIC_API_KEY（官方 Anthropic API，无自定义 BASE_URL）"
     else
-        echo "[ERROR] 未检测到有效鉴权：需要 ANTHROPIC_AUTH_TOKEN+BASE_URL 或 ANTHROPIC_API_KEY"
+        echo "[ERROR] 未检测到有效鉴权：需要 Bedrock（CLAUDE_CODE_USE_BEDROCK=1 等）+ AWS 凭证，或 ANTHROPIC_AUTH_TOKEN+BASE_URL，或 ANTHROPIC_API_KEY"
         exit 1
     fi
 
