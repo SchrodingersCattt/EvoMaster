@@ -1,6 +1,6 @@
 # DevShell 外层编排：Claude Agent SDK
 
-在「批量跑 `mm-devshell` → 对照题库判分 → 改 MatMaster 提示词/工具 → 再跑」的闭环上，本仓库提供基于 **Claude Agent SDK**（内置 Claude Code 工具集）的编排入口，替代纯 `claude -p` 对话驱动。
+在「批量跑 `mm-devshell` → 用 `score_devshell_tasks.py` 自动评分 → 改 MatMaster 提示词/工具 → 再跑」的闭环上，本仓库提供基于 **Claude Agent SDK**（内置 Claude Code 工具集）的编排入口，替代纯 `claude -p` 对话驱动。
 
 ## 依赖
 
@@ -26,12 +26,12 @@ uv run python evaluation/scripts/devshell/run_devshell_agent_loop.py \
 
 - **会话目录**（默认 `results/devshell_agent_loop_<UTC>/`）：写入 `session_manifest.json`、`outcomes.jsonl`，评测子目录在 `eval_runs/<iteration_tag>/`。
 - **内层评测**：由工具 `run_devshell_eval` 子进程调用 `evaluation/scripts/devshell/run_devshell_eval.py`（默认 `--no-clean-results` 且显式 `--output-dir`，避免清空整个 `results/`）。
-- **判分与改仓库**：由 SDK 会话使用 Read/Glob/Grep/Edit/Write/Bash；原则与 [devshell_claude_code_eval.md](devshell_claude_code_eval.md) 一致。
+- **判分与改仓库**：由 SDK 会话先调用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py --dry-run` 获取真实分数，再视需要检查低分任务的 workspace / events；原则与 [devshell_claude_code_eval.md](devshell_claude_code_eval.md) 一致。
 - **每轮结束**：模型应调用 `report_iteration_outcome`；外层在 `macro_mean_0_100 >= --target-mean-score` 或 `target_met` 时提前停止。
 
 ## 与「仅 Claude Code 文档驱动」的关系
 
-- [devshell_claude_code_eval.md](devshell_claude_code_eval.md)：仍适用于人工在 IDE 里跑 `run_devshell_eval.py` 并判分、上报的流程。
+- [devshell_claude_code_eval.md](devshell_claude_code_eval.md)：适用于在 IDE 里跑 `run_devshell_eval.py` 后，再用 `score_devshell_tasks.py` 自动评分、上报的流程。
 - 本文档：**程序化**外层循环与工具白名单（`allowed_tools`），便于重复实验与稍后的 CI 集成。
 
 ## 常用参数

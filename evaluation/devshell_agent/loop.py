@@ -38,9 +38,10 @@ class DevshellAgentLoop:
 - **Read / Glob / Grep / Edit / Write / Bash**：用于阅读题库与产物、修改配置与提示词。Bash 仅用于必要命令（如 `git diff`），避免破坏性操作。
 
 ## 判分原则（与 `evaluation/docs/devshell/devshell_claude_code_eval.md` 一致）
-- 主证据来自题目 YAML 的 `scoring_checklist` 与对应 `workspaces/<task_id>/` 交付物；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
-- 宏平均：各题按 checklist `weight` 计算百分制后取算术平均（见该文档第 3 节）。
-- 若使用 `--eval-ingest-pending-only`：判分后可按需对 `pending_ingest/*.json` 调用仓库脚本 `evaluation/scripts/eval_ingest_submit_pending.py`（可用 Bash），非强制。
+- 优先使用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py` 自动评分；它会基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl` 调用同一套 `BinaryEvaluator`。
+- 宏平均以 `score_devshell_tasks.py` 输出为准；不要手工估算一个与脚本不一致的分数。
+- 如需解释低分原因，可再阅读题库 YAML、workspace 交付物和事件日志；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
+- 若使用 `--eval-ingest-pending-only`：优先通过 `score_devshell_tasks.py --submit` 写回并提交 `pending_ingest/*.json`。
 
 ## 修改范围
 - 优先修改与 Agent 行为直接相关的路径，例如 `configs/mat_master/`、`matmaster/exps/`、`playground/mat_master/` 下的提示、技能、工具描述；避免无关大重构。
@@ -72,7 +73,7 @@ class DevshellAgentLoop:
 
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
-2. 打开本次 run 的 `manifest.json`、`raw_runs.jsonl`，对各 `task_id` 阅读 `eval_runs/.../workspaces/<task_id>/` 与题库 YAML，完成 checklist 判分并估算 **宏平均**。
+2. 对本次 run 先执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <本轮目录> --dry-run`，以脚本输出的每题分数与宏平均作为本轮判分结果；必要时再阅读 `eval_runs/.../workspaces/<task_id>/`、`logs/<task_id>/events_*.jsonl` 与题库 YAML 解释低分原因。
 3. 若未达标：修改仓库内相关提示词/工具/配置后准备结束本轮；若已达标：可不改。
 4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写真实分数与 `files_touched`（如有）。
 {extra_block}

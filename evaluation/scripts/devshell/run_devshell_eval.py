@@ -29,9 +29,9 @@ Upload is always attempted when ingest is enabled (no skip flag).
 (including ``eval_ingest_artifact`` after a successful OSS upload).
 
 With ``--eval-ingest-pending-only``, no POST is sent; each task writes ``pending_ingest/<task_id>.json``
-(ingest payload without ``score``). After judging, pass
-``--score`` / ``--score-reason`` / ``--suggestion`` to
-``evaluation/scripts/eval_ingest_submit_pending.py --pending <path>``.
+(ingest payload without ``score``). Prefer scoring later with
+``evaluation/scripts/devshell/score_devshell_tasks.py`` (same BinaryEvaluator as MATTER);
+use ``eval_ingest_submit_pending.py`` only when you need to add / override ``suggestion`` manually.
 
 Override host with ``MATMASTER_TOOLS_SERVER`` / ``SERVICE_ENV`` as needed. Use ``--no-eval-ingest`` to skip POSTs.
 
@@ -368,8 +368,8 @@ def main() -> int:
         action="store_true",
         help=(
             "Do not POST ingest; write pending_ingest/<task_id>.json with full item except "
-            "score. After judging, Claude submits with "
-            "--score/--score-reason/--suggestion via eval_ingest_submit_pending.py."
+            "score. Score later with evaluation/scripts/devshell/score_devshell_tasks.py "
+            "(preferred) or manually via eval_ingest_submit_pending.py."
         ),
     )
     parser.add_argument(
@@ -728,9 +728,12 @@ def main() -> int:
                     "run_kind": "iteration",
                     "task_id": task_id,
                     "instructions_zh": (
-                        "判分后在仓库根执行: uv run python "
+                        "推荐在仓库根执行自动评分脚本: uv run python "
+                        "evaluation/scripts/devshell/score_devshell_tasks.py "
+                        f"--run-dir {run_dir} --tasks {task_id} --submit 。"
+                        "若仅需手动补 suggestion，才再用: uv run python "
                         f"evaluation/scripts/eval_ingest_submit_pending.py --pending {pend_path} "
-                        '--score <0-100> [--score-reason "..."] [--suggestion "..."]'
+                        '--score <已有分数> [--suggestion "..."]'
                     ),
                     "item": item_body,
                 }

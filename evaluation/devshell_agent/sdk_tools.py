@@ -99,7 +99,7 @@ class MatmasterEvalMcpToolkit:
             },
             "macro_mean_0_100": {
                 "type": "integer",
-                "description": "Macro-averaged 0–100 score after manual checklist judging.",
+                "description": "Macro-averaged 0–100 score from score_devshell_tasks.py.",
             },
             "target_met": {
                 "type": "boolean",
@@ -108,7 +108,7 @@ class MatmasterEvalMcpToolkit:
             "rationale": {
                 "type": "string",
                 "description": (
-                    "Short Markdown: checklist summary, evidence paths, stop/continue."
+                    "Short Markdown: auto-score summary, low-score evidence paths, stop/continue."
                 ),
             },
             "files_touched": {
