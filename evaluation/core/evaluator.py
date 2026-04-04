@@ -42,6 +42,9 @@ from .evaluator_helpers import (
     check_turn_budget,
 )
 from .evaluator_prompts import BINARY_JUDGE_SYSTEM_PROMPT as _BINARY_JUDGE_SYSTEM_PROMPT
+from .evaluator_prompts import (
+    GROUNDING_JUDGE_SYSTEM_PROMPT as _GROUNDING_JUDGE_SYSTEM_PROMPT,
+)
 from .evaluator_prompts import SAFETY_EVAL_SYSTEM_PROMPT as _SAFETY_EVAL_SYSTEM_PROMPT
 from .evidence import EvidenceBundle
 from .schemas import (
@@ -455,6 +458,17 @@ class BinaryEvaluator:
             return _STRUCT_FILE_DISPATCH[item.verify](evidence=evidence, ref=ref)
 
         if item.verify == 'llm_binary_judge':
+            if item.axis == 'grounding':
+                return self.judge_binary(
+                    criterion=item.criterion,
+                    context=build_llm_context(
+                        question=question,
+                        answer=answer,
+                        evidence=evidence,
+                        include_tool_calls=False,
+                    ),
+                    system_prompt=_GROUNDING_JUDGE_SYSTEM_PROMPT,
+                )
             return self.judge_binary(
                 criterion=item.criterion,
                 context=build_llm_context(
@@ -487,18 +501,28 @@ class BinaryEvaluator:
     # v5 LLM binary judge
     # ------------------------------------------------------------------
 
-    def judge_binary(self, *, criterion: str, context: str) -> tuple[bool, str]:
+    def judge_binary(
+        self,
+        *,
+        criterion: str,
+        context: str,
+        system_prompt: str | None = None,
+    ) -> tuple[bool, str]:
         """Ask the LLM: does this criterion pass?
 
         Returns ``(passed: bool, reason: str)``.
         Falls back to ``(False, 'no evaluator LLM configured')`` when no LLM
         is set, so deterministic-only runs still produce valid records.
+
+        ``system_prompt`` defaults to the generic binary judge; grounding-axis items pass
+        :data:`GROUNDING_JUDGE_SYSTEM_PROMPT` for trajectory-decoupled evaluation.
         """
         if self._llm is None:
             return False, 'no evaluator LLM configured'
+        sys_content = system_prompt or _BINARY_JUDGE_SYSTEM_PROMPT
         dialog = Dialog(
             messages=[
-                SystemMessage(content=_BINARY_JUDGE_SYSTEM_PROMPT),
+                SystemMessage(content=sys_content),
                 UserMessage(
                     content=(
                         f'Criterion:\n{criterion}\n\n'

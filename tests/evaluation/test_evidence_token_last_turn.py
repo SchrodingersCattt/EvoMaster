@@ -6,7 +6,14 @@ import json
 from pathlib import Path
 
 from evaluation.core.evaluator_helpers import build_llm_context, check_token_budget
-from evaluation.core.evidence import EvidenceBundle, EvidenceExtractor, TokenUsage
+from evaluation.core.evidence import (
+    ArtifactRecord,
+    CallStatus,
+    EvidenceBundle,
+    EvidenceExtractor,
+    TokenUsage,
+    ToolCallRecord,
+)
 from evaluation.core.schemas import QuestionItem
 
 
@@ -206,3 +213,47 @@ def test_build_llm_context_shows_last_turn_prompt_tokens() -> None:
     ctx = build_llm_context(question=q, answer='a', evidence=ev)
     assert 'Last turn prompt tokens: 123' in ctx
     assert 'completion_tokens=7' in ctx
+
+
+def test_build_llm_context_grounding_mode_lists_files_not_tool_calls() -> None:
+    q = QuestionItem(
+        id='Q',
+        capability='structure_construction',
+        domain='struct',
+        intent='intent',
+        human_prompt_seed='x',
+        scoring_checklist=[
+            {
+                'id': 'g',
+                'criterion': 'c',
+                'axis': 'grounding',
+                'verify': 'llm_binary_judge',
+            }
+        ],
+        reference_answers=[{'key': 'x', 'value': True}],
+    )
+    ev = EvidenceBundle(
+        task_id='t',
+        token_usage_last_turn=TokenUsage(prompt_tokens=1, completion_tokens=1),
+        total_steps=2,
+        artifacts=[ArtifactRecord(path='out.cif')],
+        tool_calls=[
+            ToolCallRecord(
+                step=1,
+                tool_name='some_tool',
+                args={},
+                status=CallStatus.SUCCESS,
+            )
+        ],
+    )
+    full = build_llm_context(question=q, answer='final', evidence=ev)
+    assert 'Tool calls' in full
+    assert 'some_tool' in full
+
+    grounding = build_llm_context(
+        question=q, answer='final', evidence=ev, include_tool_calls=False
+    )
+    assert 'Tool calls' not in grounding
+    assert 'some_tool' not in grounding
+    assert 'Workspace output files' in grounding
+    assert 'out.cif' in grounding
