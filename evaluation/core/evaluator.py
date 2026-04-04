@@ -538,7 +538,16 @@ class BinaryEvaluator:
             data = self._parse_json(reply.content or '')
         except ValueError:
             return False, 'LLM response contained no JSON object'
-        passed = bool(data.get('pass', False))
+        # Accept string verdict ("PASS"/"FAIL"), 'criterion_met', or legacy 'pass'.
+        raw_verdict = data.get(
+            'verdict',
+            data.get('criterion_met', data.get('pass', False)),
+        )
+        # Robustly convert: handle str ("PASS"/"FAIL"/"true"/"false"), bool, int.
+        if isinstance(raw_verdict, str):
+            passed = raw_verdict.strip().lower() in ('pass', 'true', '1', 'yes')
+        else:
+            passed = bool(raw_verdict)
         reason = str(data.get('reason', '')).strip() or 'llm_binary_judge'
         return passed, reason
 

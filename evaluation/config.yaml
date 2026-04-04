@@ -35,7 +35,7 @@ axis_weights:
 
 evaluator_llm:
   provider: "openai"
-  model: "cds/GPT-5.4"
+  model: "claude-opus-4-6"
   api_key: "${LITELLM_PROXY_API_KEY}"
   base_url: "${LITELLM_PROXY_API_BASE}"
   temperature: 0.0
