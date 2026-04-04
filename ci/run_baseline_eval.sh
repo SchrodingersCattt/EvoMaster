@@ -37,6 +37,7 @@
 #     ANTHROPIC_BEDROCK_SMALL_FAST_MODEL（默认 us.anthropic.claude-haiku-4-5-20251001-v1:0）
 #     脚本会 export 为 ANTHROPIC_MODEL / ANTHROPIC_SMALL_FAST_MODEL 供 Claude Code 读取
 #     ANTHROPIC_PLATFORM=bedrock、AWS_PROFILE=default、CLAUDE_CODE_USE_BEDROCK=1、CLAUDE_CODE_EFFORT_LEVEL（默认 max）
+#     Bedrock 模式下会在 aws configure 后执行 list-foundation-models 探测（与 HTTP_PROXY/SOCKS 一致，便于看是否打通）
 #     BASELINE_MAX_TURNS             — 每题最大对话轮数，默认 50
 #     BASELINE_TIMEOUT               — 每题超时秒数，默认 900
 #     BASELINE_CLAUDE_JOBS           — 同时跑几道 claude -p（run_claude_cli_baseline_tasks.py --jobs），默认 4
@@ -163,6 +164,36 @@ _baseline_maybe_export_claude_bedrock_env() {
 }
 
 _baseline_maybe_export_claude_bedrock_env
+
+# Bedrock 连通性：与 Claude 相同走 HTTP(S)_PROXY（sthp→SOCKS）；需 IAM bedrock:ListFoundationModels
+_baseline_probe_bedrock_list_models() {
+    if ! _baseline_claude_bedrock_enabled; then
+        return 0
+    fi
+    if ! command -v aws &>/dev/null; then
+        return 0
+    fi
+    local br_region="${AWS_DEFAULT_REGION:-us-east-1}"
+    local _tmp
+    _tmp="$(mktemp)"
+    echo "[CI] Bedrock 连通性探测: aws bedrock list-foundation-models --region ${br_region}" >&2
+    set +e
+    aws bedrock list-foundation-models --region "${br_region}" --output json --no-cli-pager >"${_tmp}" 2>&1
+    local rc=$?
+    set -e
+    if [[ "${rc}" -eq 0 ]]; then
+        head -c 8000 "${_tmp}"
+        echo ""
+        echo "[CI] list-foundation-models 成功（exit 0；上文为响应前 8KB）" >&2
+    else
+        head -c 4000 "${_tmp}" >&2
+        echo "" >&2
+        echo "[WARN] list-foundation-models 失败（exit ${rc}）：SOCKS/代理、网络或 IAM（bedrock:ListFoundationModels）；评测仍继续。" >&2
+    fi
+    rm -f "${_tmp}"
+}
+
+_baseline_probe_bedrock_list_models
 
 _baseline_write_skip_artifacts() {
     local reason="$1"
