@@ -8,8 +8,11 @@ from playground.mat_master.core.step_verifier import (
     verify_step_deterministic,
 )
 
+
 def test_verify_step_deterministic_missing_artifacts():
-    contract = StepContract(expected_artifacts=["results/table.csv", "scripts/build_dataset.py"])
+    contract = StepContract(
+        expected_artifacts=["results/table.csv", "scripts/build_dataset.py"]
+    )
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "other.txt").write_text("x")
         ver = verify_step_deterministic(contract, tmp, produced_files=[])
