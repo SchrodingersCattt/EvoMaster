@@ -176,6 +176,10 @@ EVAL_TEMPLATE = """\
         -e BASELINE_STHP_SOCKS_USER \\
         -e BASELINE_STHP_SOCKS_PASSWORD \\
         -e BASELINE_NO_PROXY \\
+        -e AWS_ACCESS_KEY_ID \\
+        -e AWS_SECRET_ACCESS_KEY \\
+        -e AWS_DEFAULT_REGION \\
+        -e AWS_DEFAULT_OUTPUT \\
         "${DYNAMIC_IMAGE}" \\
         bash /app/ci/run_baseline_eval.sh
       EVAL_EXIT=0
@@ -265,6 +269,10 @@ eval-question-list:
         -e BASELINE_STHP_SOCKS_USER \\
         -e BASELINE_STHP_SOCKS_PASSWORD \\
         -e BASELINE_NO_PROXY \\
+        -e AWS_ACCESS_KEY_ID \\
+        -e AWS_SECRET_ACCESS_KEY \\
+        -e AWS_DEFAULT_REGION \\
+        -e AWS_DEFAULT_OUTPUT \\
         "${DYNAMIC_IMAGE}" \\
         bash /app/ci/run_baseline_eval.sh
       EVAL_EXIT=0

@@ -20,8 +20,8 @@
 #   3. 手动在 GitLab UI 点 Run pipeline  → 可传入变量控制范围
 #
 # 镜像说明：
-#   eval-build job 使用 Dockerfile.eval：在主服务镜像基础上叠加 Node.js + Claude CLI + sthp
-#   （https://github.com/KaranGauswami/socks-to-http-proxy，Release 预编译 sthp-linux，避免 cargo/crates 拉取超时）。
+#   eval-build job 使用 Dockerfile.eval：在主服务镜像基础上叠加 Node.js + Claude CLI + sthp + AWS CLI v2
+#   （sthp 见 https://github.com/KaranGauswami/socks-to-http-proxy Release 预编译；AWS 安装包自 awscli.amazonaws.com）。
 #   与生产用 Dockerfile 解耦，不污染 API/Worker 镜像。
 #   DevShell 模式仅需 Python 环境（主镜像已包含），但复用同一 eval 镜像以简化流水线。
 #
@@ -46,6 +46,10 @@
 #     BASELINE_STHP_PORT           — 本地 HTTP 代理端口，默认 18080
 #     BASELINE_STHP_SOCKS_USER / BASELINE_STHP_SOCKS_PASSWORD — SOCKS 认证（可选）
 #     BASELINE_NO_PROXY            — 内网不走代理，逗号分隔（可选）
+#   AWS CLI（可选，评测镜像已装 aws；密钥务必 Masked）— 子 job docker create 已 -e 透传，run_baseline_eval.sh 内 aws configure set:
+#     AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY — 均非空时写入默认 profile（~/.aws）
+#     AWS_DEFAULT_REGION           — 默认 us-east-1（可改）
+#     AWS_DEFAULT_OUTPUT           — 默认 json（可改）
 #   finalize 上传评测产物 zip 到 OSS（见 src/dao/oss_io.py）— 须传入内层 docker 容器，已在子流水线 docker create 中 -e 透传:
 #     OSS_ENDPOINT, OSS_BUCKET_NAME, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET
 #

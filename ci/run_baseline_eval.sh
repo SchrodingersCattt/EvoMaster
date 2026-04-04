@@ -54,6 +54,10 @@
 #     BASELINE_STHP_SOCKS_USER       — SOCKS5 用户名（可选）
 #     BASELINE_STHP_SOCKS_PASSWORD   — SOCKS5 密码（可选）
 #     BASELINE_NO_PROXY              — 逗号分隔 NO_PROXY（可选，同时设置 NO_PROXY/no_proxy）
+#   AWS CLI（可选，镜像已装 aws v2；须 GitLab Masked 变量）:
+#     AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY — 非空时执行 aws configure set（等价交互式 configure）
+#     AWS_DEFAULT_REGION               — 默认 us-east-1
+#     AWS_DEFAULT_OUTPUT               — 默认 json
 
 set -euo pipefail
 
@@ -110,6 +114,26 @@ _baseline_maybe_start_sthp() {
 }
 
 _baseline_maybe_start_sthp
+
+_baseline_maybe_configure_aws() {
+    if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]] || [[ -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+        return 0
+    fi
+    if ! command -v aws >/dev/null 2>&1; then
+        echo "[WARN] 已设置 AWS_ACCESS_KEY_ID/SECRET 但未找到 aws 命令" >&2
+        return 0
+    fi
+    export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+    export AWS_DEFAULT_OUTPUT="${AWS_DEFAULT_OUTPUT:-json}"
+    mkdir -p "${HOME}/.aws"
+    aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
+    aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
+    aws configure set default.region "${AWS_DEFAULT_REGION}"
+    aws configure set default.output "${AWS_DEFAULT_OUTPUT}"
+    echo "[CI] 已写入 ~/.aws（region=${AWS_DEFAULT_REGION} output=${AWS_DEFAULT_OUTPUT}）" >&2
+}
+
+_baseline_maybe_configure_aws
 
 _baseline_write_skip_artifacts() {
     local reason="$1"

@@ -8,6 +8,7 @@
 #     apt + NodeSource + 全局 claude-code 可长期被 BuildKit/registry 缓存。
 #   sthp-binary — 从 GitHub Release 拉取预编译 sthp-linux（避免 CI 内 cargo 经国内 crates 镜像超时）；
 #     拷入 /usr/local/bin/sthp；需 BASELINE_STHP_SOCKS 时由 ci/run_baseline_eval.sh 启动本地 HTTP 代理。
+#   最终阶段安装 AWS CLI v2（官方 bundle）；密钥与区由 CI 环境变量注入，run_baseline_eval.sh 内 aws configure set。
 #   最终阶段 — FROM matmaster-evo:ci* 后只做从 toolchain 拷贝二进制与 venv 内 pip，
 #     避免每次在「已变 digest 的应用层」上重复跑整段 apt/npm。
 #
@@ -86,6 +87,18 @@ RUN --mount=type=bind,from=eval-toolchain,source=/usr,target=/_tc/usr,readonly \
 
 COPY --from=sthp-binary /sthp /usr/local/bin/sthp
 RUN chmod 755 /usr/local/bin/sthp
+
+# AWS CLI v2（评测脚本在 AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY 存在时执行 aws configure set）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        unzip \
+    && curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+    && unzip -q /tmp/awscliv2.zip -d /tmp \
+    && /tmp/aws/install --update \
+    && rm -rf /tmp/aws /tmp/awscliv2.zip \
+    && rm -rf /var/lib/apt/lists/* \
+    && aws --version
 
 # 评测 validators：numpy + pymatgen（struct_file_*，见 score_baseline_tasks / BinaryEvaluator）
 RUN --mount=type=cache,target=/root/.cache/uv \
