@@ -29,6 +29,7 @@ from matmaster.types.runtime import AgentRuntimeSpec
 from .agent_kernel_test_helpers import (
     _make_spec,
     _make_tool_registry,
+    StreamingProvider,
 )
 
 
@@ -266,6 +267,202 @@ class TestStreamLlmItems:
             if i.event and isinstance(i.event, ResponseEvent) and i.event.stream_state == "end"
         ]
         assert len(end_events) == 1, "Should yield an end marker event"
+
+    @pytest.mark.asyncio
+    async def test_same_index_collision_splits_distinct_tool_names(self) -> None:
+        """Distinct tool names on one index must not overwrite each other."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        provider = StreamingProvider([
+            StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "tc-bash",
+                        "name": "Bash",
+                        "arguments": '{"command": "pwd"}',
+                    }
+                ]
+            ),
+            StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "tc-skill",
+                        "name": "Skill",
+                        "arguments": '{"skill": "chemistry"}',
+                    }
+                ]
+            ),
+            StreamChunk(finish_reason="stop"),
+        ])
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        items: list[_KernelItem] = []
+        async for item in kernel._stream_llm_items(
+            spec, [{"role": "user", "content": "test"}], None
+        ):
+            items.append(item)
+
+        final_items = [i for i in items if i.llm_response is not None]
+        assert len(final_items) == 1
+        tool_calls = final_items[0].llm_response.tool_calls
+        assert tool_calls is not None
+        assert [(tc.id, tc.name, tc.arguments) for tc in tool_calls] == [
+            ("tc-bash", "Bash", {"command": "pwd"}),
+            ("tc-skill", "Skill", {"skill": "chemistry"}),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_same_index_collision_splits_same_tool_name_by_id(self) -> None:
+        """Repeated tool name on one index must split when the tool call id changes."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        provider = StreamingProvider([
+            StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "tc-1",
+                        "name": "Bash",
+                        "arguments": '{"command": "pwd"}',
+                    }
+                ]
+            ),
+            StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "tc-2",
+                        "name": "Bash",
+                        "arguments": '{"command": "which python3"}',
+                    }
+                ]
+            ),
+            StreamChunk(finish_reason="stop"),
+        ])
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        items: list[_KernelItem] = []
+        async for item in kernel._stream_llm_items(
+            spec, [{"role": "user", "content": "test"}], None
+        ):
+            items.append(item)
+
+        final_items = [i for i in items if i.llm_response is not None]
+        assert len(final_items) == 1
+        tool_calls = final_items[0].llm_response.tool_calls
+        assert tool_calls is not None
+        assert [(tc.id, tc.name, tc.arguments) for tc in tool_calls] == [
+            ("tc-1", "Bash", {"command": "pwd"}),
+            ("tc-2", "Bash", {"command": "which python3"}),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_same_call_argument_chunks_stay_single_tool_call(self) -> None:
+        """Normal argument streaming for one tool call must not be split."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        provider = StreamingProvider([
+            StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "tc-1",
+                        "name": "Bash",
+                        "arguments": '{"command": "which ',
+                    }
+                ]
+            ),
+            StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "arguments": 'python3 && python3 --version"}',
+                    }
+                ]
+            ),
+            StreamChunk(finish_reason="stop"),
+        ])
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        items: list[_KernelItem] = []
+        async for item in kernel._stream_llm_items(
+            spec, [{"role": "user", "content": "test"}], None
+        ):
+            items.append(item)
+
+        final_items = [i for i in items if i.llm_response is not None]
+        assert len(final_items) == 1
+        tool_calls = final_items[0].llm_response.tool_calls
+        assert tool_calls is not None
+        assert [(tc.id, tc.name, tc.arguments) for tc in tool_calls] == [
+            (
+                "tc-1",
+                "Bash",
+                {"command": "which python3 && python3 --version"},
+            )
+        ]
+
+    @pytest.mark.asyncio
+    async def test_collision_split_preserves_stream_arrival_order(self) -> None:
+        """Split calls should keep stream order even when index 0 is reused later."""
+        from matmaster.core.agent import AgentKernel, _KernelItem
+
+        provider = StreamingProvider([
+            StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "tc-1",
+                        "name": "Bash",
+                        "arguments": '{"command": "pwd"}',
+                    }
+                ]
+            ),
+            StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 1,
+                        "id": "tc-2",
+                        "name": "Skill",
+                        "arguments": '{"skill": "chemistry"}',
+                    }
+                ]
+            ),
+            StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "tc-3",
+                        "name": "Bash",
+                        "arguments": '{"command": "which python3"}',
+                    }
+                ]
+            ),
+            StreamChunk(finish_reason="stop"),
+        ])
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        items: list[_KernelItem] = []
+        async for item in kernel._stream_llm_items(
+            spec, [{"role": "user", "content": "test"}], None
+        ):
+            items.append(item)
+
+        final_items = [i for i in items if i.llm_response is not None]
+        assert len(final_items) == 1
+        tool_calls = final_items[0].llm_response.tool_calls
+        assert tool_calls is not None
+        assert [(tc.id, tc.name) for tc in tool_calls] == [
+            ("tc-1", "Bash"),
+            ("tc-2", "Skill"),
+            ("tc-3", "Bash"),
+        ]
 
 
 # ── _run_items() event yields ─────────────────────────────

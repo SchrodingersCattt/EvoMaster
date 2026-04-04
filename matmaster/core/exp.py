@@ -542,11 +542,7 @@ class Exp:
 
         from matmaster.skills.registry import SkillRegistry
         from matmaster.tools.builtin.skill_tool import SkillTool
-        from matmaster.tools.lazy_mcp import (
-            LazyMCPConnector,
-            LazyMCPTool,
-            resolve_lazy_mcp_tool_timeout,
-        )
+        from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
         from matmaster.tools.schema_cache import ToolSchemaCache
 
         # Build root list from str | list[str]
@@ -626,11 +622,21 @@ class Exp:
                     mcp_server,
                 )
                 return
+            tool_timeouts = mcp_config.get('tool_timeouts', {})
+            server_timeout = (
+                float(tool_timeouts.get(mcp_server))
+                if isinstance(tool_timeouts, dict)
+                and tool_timeouts.get(mcp_server) is not None
+                else None
+            )
+            sync_tools = sync_tools_by_server.get(mcp_server, set())
             for tool_schema in schemas:
                 original_name = tool_schema['name']
                 prefixed_name = f'{mcp_server}_{original_name}'
                 if prefixed_name in registry:
                     continue
+                is_sync = original_name in sync_tools
+                tool_timeout = _SYNC_TOOL_TIMEOUT if is_sync else server_timeout
                 lazy_tool = LazyMCPTool(
                     server_name=mcp_server,
                     tool_name=prefixed_name,
@@ -638,11 +644,7 @@ class Exp:
                     description=tool_schema.get('description', ''),
                     input_schema=tool_schema.get('input_schema', {}),
                     connector=connector,
-                    timeout=resolve_lazy_mcp_tool_timeout(
-                        mcp_config,
-                        server_name=mcp_server,
-                        remote_tool_name=original_name,
-                    ),
+                    timeout=tool_timeout,
                 )
                 # ESIN-05: Use catalog.register_overlay() for version-bumped injection
                 if catalog is not None:

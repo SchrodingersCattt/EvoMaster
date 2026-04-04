@@ -20,6 +20,8 @@ from urllib.parse import quote
 
 import requests
 
+from matmaster.integration.bohrium_env import BOHRIUM_OPENAPI_HOST
+
 try:
     from dotenv import load_dotenv as _load_dotenv
 
@@ -29,14 +31,7 @@ except ImportError:
 
 ACCESS_KEY = os.environ.get('BOHRIUM_ACCESS_KEY', '').strip()
 PROJECT_ID = int(os.environ.get('BOHRIUM_PROJECT_ID', '-1') or '-1')
-try:
-    from src.utils.constant import BOHRIUM_OPENAPI_HOST
-
-    OPENAPI_BASE = BOHRIUM_OPENAPI_HOST
-except ImportError:
-    OPENAPI_BASE = os.environ.get(
-        'BOHRIUM_BASE_URL', 'https://open.bohrium.com'
-    ).rstrip('/')
+OPENAPI_BASE = BOHRIUM_OPENAPI_HOST
 
 _AUTH_HEADER = {'accessKey': ACCESS_KEY, 'Content-Type': 'application/json'}
 

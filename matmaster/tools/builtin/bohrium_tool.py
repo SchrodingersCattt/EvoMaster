@@ -24,6 +24,7 @@ from urllib.parse import quote
 
 import requests
 
+from matmaster.integration.bohrium_env import BOHRIUM_OPENAPI_HOST
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
@@ -41,13 +42,7 @@ def _resolve_env() -> tuple[str, int, str]:
 
     Returns (access_key, project_id, base_url).
     """
-    try:
-        from src.utils.constant import BOHRIUM_OPENAPI_HOST
-        base_url = BOHRIUM_OPENAPI_HOST
-    except ImportError:
-        base_url = os.environ.get(
-            'BOHRIUM_BASE_URL', 'https://open.bohrium.com'
-        ).rstrip('/')
+    base_url = BOHRIUM_OPENAPI_HOST
 
     access_key = os.environ.get('BOHRIUM_ACCESS_KEY', '').strip()
     raw_pid = os.environ.get('BOHRIUM_PROJECT_ID', '-1') or '-1'
