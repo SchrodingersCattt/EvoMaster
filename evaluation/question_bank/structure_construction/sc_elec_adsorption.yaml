@@ -51,7 +51,7 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "grounding_source"
-        criterion: "Ag bulk structure uses correct FCC lattice constant; slab is built with proper crystallographic orientation and parameters; CO placement uses physically motivated coordinates—not merely naming tools."
+        criterion: "Ag bulk structure uses correct FCC lattice constant; slab is built with proper crystallographic orientation and parameters; CO placement uses physically motivated coordinates, tied to named deliverables. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool."
         axis: "grounding"
         verify: "llm_binary_judge"
       - id: "no_retries"

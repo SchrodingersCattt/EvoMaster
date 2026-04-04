@@ -81,7 +81,9 @@ questions:
   - id: grounding_source
     criterion: The answer states the physical picture (lattice matching, AB stacking,
       interlayer spacing, vacuum, how mismatch is defined) and ties it to the delivered
-      POSCAR/CIF—not merely naming tools or MCP calls.
+      POSCAR/CIF, not generic claims disconnected from those files. Judge solely from the
+      final answer and named deliverables; do not fail because the tool-call log omits MCP,
+      web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -198,7 +200,9 @@ questions:
   - id: grounding_source
     criterion: The answer states what physical picture is used (molecular connectivity,
       periodic boundaries, (110) plane vs bulk, and how that supports or contradicts
-      cutting molecules), citing the structures—not merely naming tools or MCP calls.
+      cutting molecules), citing the structures, not generic recall disconnected from those
+      files. Judge solely from the final answer and named deliverables; do not fail because
+      the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -311,8 +315,9 @@ questions:
   - id: grounding_source
     criterion: The answer cites the structural physics (Si(100) facets, dangling bonds
       on both surfaces, target coordination, Si-H bond length) and ties passivation
-      checks to the delivered POSCAR—not only generic semiconductor chemistry recall
-      or tool names.
+      checks to the delivered POSCAR, not only generic semiconductor chemistry recall
+      disconnected from that file. Judge solely from the final answer and named deliverables; do not fail
+      because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -401,7 +406,9 @@ questions:
   - id: grounding_source
     criterion: The answer explains how monolayer stoichiometry, in-plane extent, layer
       thickness, and vacuum are verified from the delivered POSCAR/structure (geometric
-      definitions), not asserted without structural basis or tool names alone.
+      definitions), not asserted without structural basis. Judge solely from the final answer and named
+      deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific
+      tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -515,8 +522,10 @@ questions:
   - id: grounding_source
     criterion: The answer explains the physical/chemical basis for each structure
       (disorder/occupancy, connectivity, valence or charge balance, and what changes
-      when building an ordered replica), tied to the named CIFs and delivered outputs—not
-      only naming tools or restating task text.
+      when building an ordered replica), tied to the named CIFs and delivered outputs,
+      not only restating task text without structural basis. Judge solely from the final answer and named
+      deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific
+      tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries_disorder
@@ -624,8 +633,10 @@ questions:
   - id: grounding_source
     criterion: The answer states the chemical/geometry rationale (which atoms should
       receive H, tetrahedral CH3/NH3 targets, perchlorate O must stay non-protic)
-      and ties checks to `meaper_hydrogenated.cif` and the input CIF—not only procedural
-      or tool-centric wording.
+      and ties checks to `meaper_hydrogenated.cif` and the input CIF, not only procedural
+      wording disconnected from those files. Judge solely from the final answer and named
+      deliverables; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -802,8 +813,10 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The answer names the coordination/bonding motifs (Fe–CN vs Fe–NO, linear
-      nitrosyl, cyano linkages) and ties counts, bond lengths, and angles to `nitroprusside.xyz`—not
-      generic coordination-chemistry recall or MCP/tool names alone.
+      nitrosyl, cyano linkages) and ties counts, bond lengths, and angles to `nitroprusside.xyz`,
+      not generic coordination-chemistry recall disconnected from that file. Judge solely from the final
+      answer and named deliverables; do not fail because the tool-call log omits MCP,
+      web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -933,7 +946,9 @@ questions:
   - id: grounding_source
     criterion: The answer links Al:O stoichiometry, cell angles, tetrahedral vs octahedral
       Al sites, minimum contact distances, and post-relax forces to `gamma_alumina.cif`
-      and the stated relaxation—not handbook gamma-alumina recall or tool names alone.
+      and the stated relaxation, not handbook recall disconnected from that file. Judge solely from the final
+      answer and named deliverables; do not fail because the tool-call log omits MCP,
+      web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -1051,8 +1066,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The answer explains slab polarity/symmetry, layer stacking for CeO2(111),
-      O termination, and Ce:O stoichiometry using `ceo2_111_trilayer.cif`—not textbook-only
-      claims or naming MCP tools alone.
+      O termination, and Ce:O stoichiometry using `ceo2_111_trilayer.cif`, not textbook-only
+      claims disconnected from that file. Judge solely from the final answer and named deliverables; do not fail
+      because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries

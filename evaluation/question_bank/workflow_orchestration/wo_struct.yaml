@@ -54,7 +54,8 @@ questions:
   - id: grounding_source
     criterion: Surface energy is computed from stated bulk and slab total energies
       and area; formula inputs are traceable in the report rather than asserted without
-      energy provenance.
+      energy provenance. Judge solely from the final answer; do not fail because the
+      tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -128,7 +129,8 @@ questions:
   - id: grounding_source
     criterion: Formation energy is computed from stated perfect and defective total
       energies with an explicit chemical potential; numbers are tied to the reported
-      structures rather than invented.
+      structures rather than invented. Judge solely from the final answer; do not fail
+      because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries

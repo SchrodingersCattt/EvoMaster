@@ -46,7 +46,7 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "grounding_source"
-        criterion: "NFPP structure uses correct wurtzite Pna2₁ lattice parameters; doping is performed by explicit P→Al substitution at PO₄ site with physically justified coordinates."
+        criterion: "NFPP structure uses correct wurtzite Pna2₁ lattice parameters; doping is performed by explicit P→Al substitution at PO₄ site with physically justified coordinates. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool."
         axis: "grounding"
         verify: "llm_binary_judge"
       - id: "no_retries"

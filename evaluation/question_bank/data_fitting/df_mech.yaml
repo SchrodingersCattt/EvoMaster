@@ -55,7 +55,8 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: EOS fitting uses the data from ev_curve.json; fit parameters are derived from the provided E-V points, not
-      hallucinated.
+      hallucinated. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge
@@ -131,7 +132,8 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: C-J parameters are derived from the provided msst_hugoniot.json data, with filtered reaction-complete points
-      shown.
+      shown. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific
+      tool.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge

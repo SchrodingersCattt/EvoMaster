@@ -61,7 +61,7 @@ questions:
     axis: correctness
     verify: contains_all
   - id: grounding_source
-    criterion: The modified STRU preserves the original slab lattice vectors and real Fe fractional coordinates from base_slab.stru; changes are limited to adding Fe_empty species/layers and INPUT parameters.
+    criterion: The modified STRU preserves the original slab lattice vectors and real Fe fractional coordinates from base_slab.stru; changes are limited to adding Fe_empty species/layers and INPUT parameters. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -138,7 +138,7 @@ questions:
     axis: correctness
     verify: contains_all
   - id: grounding_source
-    criterion: Modified STRU keeps the original 53 real Fe fractional coordinates and lattice from base_vacancy.stru; only Fe_empty is added at the vacancy.
+    criterion: Modified STRU keeps the original 53 real Fe fractional coordinates and lattice from base_vacancy.stru; only Fe_empty is added at the vacancy. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget

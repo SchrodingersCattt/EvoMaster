@@ -312,7 +312,8 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: Each failure class is grounded in the specific job descriptions provided in the prompt (Job IDs, error types);
-      no generic advice without tracing to the prompt.
+      no generic advice without tracing to the prompt. Judge solely from the final answer; do not fail because the tool-call
+      log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge

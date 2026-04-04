@@ -51,7 +51,7 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "grounding_source"
-        criterion: "Adsorption energy computed with specified mock energies; structures built with physically correct parameters (lattice constant, bond length, slab geometry)."
+        criterion: "Adsorption energy computed with specified mock energies; structures built with physically correct parameters (lattice constant, bond length, slab geometry). Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool."
         axis: "grounding"
         verify: "llm_binary_judge"
       - id: "turn_budget"

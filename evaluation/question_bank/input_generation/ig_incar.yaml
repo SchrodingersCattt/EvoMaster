@@ -149,7 +149,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -335,7 +337,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -566,7 +570,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -782,7 +788,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -989,7 +997,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1167,7 +1177,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1407,7 +1419,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1578,7 +1592,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1716,7 +1732,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1979,7 +1997,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2145,7 +2165,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2378,7 +2400,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2544,7 +2568,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2763,7 +2789,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2948,7 +2976,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -3110,7 +3140,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -3310,7 +3342,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -3481,7 +3515,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -3652,7 +3688,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -3817,7 +3855,9 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated INCAR is grounded in the provided task_spec.json data (material system,
-      calculation type, element order) rather than hallucinated.
+      calculation type, element order) rather than hallucinated. Judge solely from the final answer
+      and stated file content; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget

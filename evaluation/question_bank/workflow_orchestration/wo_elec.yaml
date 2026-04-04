@@ -63,8 +63,9 @@ questions:
     axis: grounding
     verify: tool_called
   - id: grounding_source
-    criterion: Band gap values are extracted from MCP band calculation results, not
-      recalled from LLM training knowledge.
+    criterion: Stated band gap values are tied to band-structure or calculation outcomes described in the final answer, not
+      only generic training recall. Judge from the answer and named outputs; do not fail because the tool-call log omits MCP,
+      web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -150,8 +151,8 @@ questions:
     axis: grounding
     verify: tool_called
   - id: grounding_source
-    criterion: Gap value is extracted from MCP calculation results; acceleration strategy
-      is grounded in actual tool capabilities.
+    criterion: The gap value and any acceleration discussion are tied to calculation results or constraints stated in the
+      final answer. Judge from the answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -231,7 +232,8 @@ questions:
     axis: grounding
     verify: tool_called
   - id: grounding_source
-    criterion: Numeric sigma is computed from the given mock E_bulk, E_slab, and A; no invented energies.
+    criterion: Numeric sigma is computed from the given mock E_bulk, E_slab, and A; no invented energies. Judge solely from
+      the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries

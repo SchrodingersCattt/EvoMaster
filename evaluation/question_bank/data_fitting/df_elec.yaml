@@ -54,7 +54,9 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: Gap type and value are derived from band_edges.json data, not from LLM knowledge of Si band gap.
+    criterion: Gap type and value are tied to band_edges.json as described in the final answer, not bare LLM recall of Si.
+      Judge from the answer and stated file use; do not fail because the tool-call log omits MCP, web_search, or any specific
+      tool.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge
