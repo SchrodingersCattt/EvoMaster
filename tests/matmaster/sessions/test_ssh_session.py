@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.session import Session, SSHSessionConfig
 
 
@@ -274,10 +275,8 @@ class TestSSHSessionExecBash:
             or "timed out" in result["stdout"].lower()
         )
 
-    def test_stop_event_cancels(self, ssh_config, mock_paramiko):
-        """exec_bash returns exit_code=130 when stop_event is set."""
-        import threading
-
+    def test_cancel_token_cancels(self, ssh_config, mock_paramiko):
+        """exec_bash returns exit_code=130 when cancel_token is set."""
         from matmaster.sessions.ssh import SSHSession
 
         session = SSHSession(ssh_config)
@@ -289,9 +288,9 @@ class TestSSHSessionExecBash:
         channel.recv_stderr_ready.return_value = False
         mock_paramiko["transport"].open_session.return_value = channel
 
-        stop = threading.Event()
-        stop.set()
-        result = session.exec_bash("sleep 999", stop_event=stop)
+        ctrl = CancellationController()
+        ctrl.cancel()
+        result = session.exec_bash("sleep 999", cancel_token=ctrl.token)
         assert result["exit_code"] == 130
 
     def test_concurrent_exec_bash(self, ssh_config, mock_paramiko):

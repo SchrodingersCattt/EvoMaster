@@ -22,6 +22,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from matmaster.sessions.sftp_pool import SFTPPool
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.session import SSHSessionConfig
 from matmaster.types.topology import SessionCapabilities
 
@@ -135,7 +136,7 @@ class SSHSession:
         self,
         command: str,
         timeout: int | None = None,
-        stop_event: threading.Event | Any | None = None,
+        cancel_token: CancellationToken | None = None,
     ) -> dict[str, Any]:
         """Execute a bash command via exec_command per-channel with streaming reads.
 
@@ -153,6 +154,8 @@ class SSHSession:
             f"bash -l -c {shlex.quote(f'cd {shlex.quote(self._workdir)} && {command}')}"
         )
         channel.exec_command(wrapped)
+        if cancel_token:
+            cancel_token.on_cancel(channel.close)
 
         stdout_chunks: list[bytes] = []
         stderr_chunks: list[bytes] = []
@@ -173,8 +176,7 @@ class SSHSession:
                     "working_dir": self._workdir,
                     "output": out + f"\nCommand timed out after {timeout}s",
                 }
-            is_set = getattr(stop_event, "is_set", None)
-            if callable(is_set) and is_set():
+            if cancel_token and cancel_token.wait(0.05):
                 channel.close()
                 out = b"".join(stdout_chunks).decode("utf-8", errors="replace")
                 return {
@@ -184,7 +186,8 @@ class SSHSession:
                     "working_dir": self._workdir,
                     "output": out + "\nCommand cancelled.",
                 }
-            time.sleep(0.05)
+            elif not cancel_token:
+                time.sleep(0.05)
 
         # drain remaining
         while channel.recv_ready():
