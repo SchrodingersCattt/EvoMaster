@@ -53,11 +53,26 @@ set -euo pipefail
 APP_DIR="/app"
 cd "${APP_DIR}"
 
+# 以脚本路径执行 evaluation/ci 下 .py 时，须能从仓库根解析 evaluation、evomaster 等包。
+export PYTHONPATH="${APP_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+
 if [[ -x "${APP_DIR}/.venv/bin/python" ]]; then
     PY="${APP_DIR}/.venv/bin/python"
 else
     PY="python3"
 fi
+
+_baseline_write_skip_artifacts() {
+    local reason="$1"
+    mkdir -p "${APP_DIR}/results"
+    # 空目录可能无法作为 GitLab artifact 上传；占位文件便于 docker cp 与子 job 收集。
+    touch "${APP_DIR}/results/.baseline_skipped"
+    {
+        echo "BASELINE_SKIPPED=1"
+        echo "BASELINE_SKIP_REASON=${reason}"
+        echo "BASELINE_SKIP_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    } >"${APP_DIR}/baseline_run.env"
+}
 
 # ── 通用参数解析 ─────────────────────────────────────────────────────────────
 EVAL_RUNNER="${EVAL_RUNNER:-claude_cli}"
@@ -87,14 +102,28 @@ if [[ "${LAYOUT}" == "questions" ]]; then
         if [[ "${LIMIT}" -gt 0 ]]; then
             FETCH_CMD+=(--limit "${LIMIT}")
         fi
-        mapfile -t Q_IDS < <("${FETCH_CMD[@]}")
-        rm -f "${PRE_IDS_FILE}"
+        Q_IDS_FILE="$(mktemp)"
+        if ! "${FETCH_CMD[@]}" >"${Q_IDS_FILE}"; then
+            rm -f "${Q_IDS_FILE}" "${PRE_IDS_FILE}"
+            echo "[ERROR] fetch_missing_baseline_from_score_summary 失败（见上方 Python 输出）。" >&2
+            exit 1
+        fi
+        mapfile -t Q_IDS <"${Q_IDS_FILE}"
+        rm -f "${Q_IDS_FILE}" "${PRE_IDS_FILE}"
         if [[ ${#Q_IDS[@]} -eq 0 ]]; then
             echo "[INFO] score-summary 与预设交集后无待跑题目（Claude Code 基线均已覆盖），退出 0。"
+            _baseline_write_skip_artifacts "no_questions_after_score_summary"
             exit 0
         fi
     else
-        mapfile -t Q_IDS < <("${PY}" "${APP_DIR}/ci/baseline_eval_preset.py" list-ids)
+        Q_LIST_FILE="$(mktemp)"
+        if ! "${PY}" "${APP_DIR}/ci/baseline_eval_preset.py" list-ids >"${Q_LIST_FILE}"; then
+            rm -f "${Q_LIST_FILE}"
+            echo "[ERROR] baseline_eval_preset.py list-ids 失败。" >&2
+            exit 1
+        fi
+        mapfile -t Q_IDS <"${Q_LIST_FILE}"
+        rm -f "${Q_LIST_FILE}"
         if [[ ${#Q_IDS[@]} -eq 0 ]]; then
             echo "[ERROR] BASELINE_EVAL_LAYOUT=questions 但未解析到任何 question id（检查 BASELINE_QUESTIONS 或 ci/baseline_eval_preset.yaml）"
             exit 1
