@@ -620,6 +620,7 @@ class Exp:
             mcp_server_config=server_config,
             mcp_config=mcp_config,
             session=ctx.session,
+            workspace_path=ctx.execution_workdir,
         )
         self._register_cleanup(connector.cleanup)
 

@@ -89,6 +89,7 @@ class TestLazyMCPIntegration:
 
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         # Initialize skill tools
         exp._init_skill_tools(ctx, registry)
@@ -143,6 +144,7 @@ class TestLazyMCPIntegration:
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         exp._init_skill_tools(ctx, registry)
 
@@ -192,6 +194,7 @@ class TestLazyMCPIntegration:
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         exp._init_skill_tools(ctx, registry)
 
@@ -246,6 +249,7 @@ class TestExpMCPSelfLoad:
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         # Run _init_skill_tools -- should self-load mcp.yaml
         exp._init_skill_tools(ctx, registry)

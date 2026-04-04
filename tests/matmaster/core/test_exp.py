@@ -383,6 +383,18 @@ class TestExpBuiltinTools:
         _, registry = self._build_registry(tmp_path)
         assert 'WebSearch' in registry
 
+    def test_read_tracker_cleanup_registered(self, tmp_path: Path) -> None:
+        """ReadTracker.clear is registered as a cleanup callback after _init_builtin_tools."""
+        exp, _ = self._build_registry(tmp_path)
+        # At least one cleanup callback should be registered (ReadTracker.clear)
+        assert len(exp._cleanup_callbacks) >= 1
+        # The callback should be the bound clear method of a ReadTracker instance
+        cb = exp._cleanup_callbacks[-1]
+        assert hasattr(cb, '__self__')
+        from matmaster.tools.builtin import ReadTracker
+
+        assert isinstance(cb.__self__, ReadTracker)
+
     def test_init_builtin_tools_no_session(self, tmp_path: Path) -> None:
         """session=None registers only sessionless tools."""
         from matmaster.tools.tool_registry import ToolRegistry
