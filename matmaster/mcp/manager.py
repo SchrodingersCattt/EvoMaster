@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 # 最大重试次数
 _MAX_RETRIES = 3
 
+# Per-connection shutdown budget (seconds).
+# One hung connection must not prevent later connections from being cleaned up.
+_PER_CONN_SHUTDOWN_TIMEOUT = 1.0
+
 # 重试间隔（秒）
 _RETRY_DELAY = 2
 
@@ -295,14 +299,24 @@ class MCPToolManager:
         """关闭所有 MCP 连接。
 
         遍历所有连接的 context manager 并调用 __aexit__。
-        单个连接关闭失败只记录 warning，不阻断其他连接的清理。
+        每个连接有独立的 shutdown budget，单个连接超时或失败只记录
+        warning，不阻断其他连接的清理。
         """
         logger.info("Cleaning up MCP connections")
 
         for name, conn_ctx in list(self._conn_ctxs.items()):
             try:
-                await conn_ctx.__aexit__(None, None, None)
+                await asyncio.wait_for(
+                    conn_ctx.__aexit__(None, None, None),
+                    timeout=_PER_CONN_SHUTDOWN_TIMEOUT,
+                )
                 logger.debug("Closed MCP connection: %s", name)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "MCP connection '%s' shutdown timed out after %.1fs, skipping",
+                    name,
+                    _PER_CONN_SHUTDOWN_TIMEOUT,
+                )
             except Exception as e:
                 logger.warning("Error closing MCP connection '%s': %s", name, e)
 

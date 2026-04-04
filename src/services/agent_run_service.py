@@ -380,7 +380,7 @@ class AgentRunService:
                 elapsed,
             )
             # Cleanup order matters:
-            # 1. Bohrium FIRST -- cleanup can still emit events via event bridge
+            # 1. Bohrium cleanup -- can still emit events via event bridge
             if bohrium_svc:
                 try:
                     await bohrium_svc.run_cleanup(
@@ -390,12 +390,10 @@ class AgentRunService:
                     )
                 except Exception:
                     logger.warning('Bohrium cleanup error', exc_info=True)
-            # 2. Exp cleanup (with timeout to prevent worker hangs)
-            if exp is not None:
-                try:
-                    await asyncio.wait_for(exp._run_cleanup_callbacks(), timeout=30)
-                except Exception:
-                    logger.warning('Exp cleanup failed', exc_info=True)
+            # 2. Exp cleanup is owned by Exp.run_stream() via its finally block.
+            #    aclosing() guarantees the generator's finally runs before we
+            #    reach this point, so the callback list is already cleared.
+            #    Do NOT re-invoke exp._run_cleanup_callbacks() here.
             # 3. Fanout LAST -- drains pending persistence and calls handler close()
             if fanout is not None:
                 try:

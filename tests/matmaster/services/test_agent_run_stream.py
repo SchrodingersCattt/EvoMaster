@@ -69,8 +69,11 @@ class _FakeExp:
 
     async def run_stream(self, *args: Any, **kwargs: Any):
         self.last_run_kwargs = kwargs
-        for event in self._events:
-            yield event
+        try:
+            for event in self._events:
+                yield event
+        finally:
+            await self._run_cleanup_callbacks()
 
     async def build_runtime(self, *args: Any, **kwargs: Any) -> Any:
         runtime = MagicMock()

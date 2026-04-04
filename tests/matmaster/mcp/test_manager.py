@@ -245,6 +245,36 @@ class TestMCPToolManagerCleanup:
         # Should not raise
         await m.cleanup()
 
+    async def test_cleanup_per_connection_timeout_isolation(self):
+        """One hung connection must not prevent later connections from being attempted."""
+        import asyncio
+
+        from matmaster.mcp.manager import MCPToolManager
+
+        m = MCPToolManager()
+
+        # First connection hangs forever
+        hung_ctx = AsyncMock()
+        hung_future = asyncio.Future()  # never resolved
+
+        async def _hang(*args):
+            await hung_future
+
+        hung_ctx.__aexit__ = _hang
+
+        # Second connection closes normally
+        fast_ctx = AsyncMock()
+        fast_ctx.__aexit__ = AsyncMock(return_value=None)
+
+        m._conn_ctxs["hung_srv"] = hung_ctx
+        m._conn_ctxs["fast_srv"] = fast_ctx
+
+        await m.cleanup()
+
+        # fast_srv must have been attempted despite hung_srv timing out
+        fast_ctx.__aexit__.assert_called_once_with(None, None, None)
+        assert len(m._conn_ctxs) == 0
+
 
 class TestNoEvoMasterImportsInManager:
     def test_no_top_level_evomaster_imports(self):

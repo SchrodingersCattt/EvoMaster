@@ -177,7 +177,11 @@ class MCPConnectionHTTP(MCPConnection):
         self.headers = headers or {}
 
     def _create_context(self):
-        return streamablehttp_client(url=self.url, headers=self.headers)
+        return streamablehttp_client(
+            url=self.url,
+            headers=self.headers,
+            terminate_on_close=False,
+        )
 
 
 def create_connection(

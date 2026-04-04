@@ -712,13 +712,80 @@ class TestLazyMCPConnector:
         )
         assert connector.workspace_path == "/test/workspace"
 
-    def test_cleanup_noop_when_not_connected(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_noop_when_not_connected(self):
         """Cleanup on a fresh connector should not raise."""
         connector = LazyMCPConnector(
             mcp_server_config={},
             mcp_config={},
         )
-        connector.cleanup()  # Should not raise
+        await connector.cleanup()  # Should not raise
+
+    @pytest.mark.asyncio
+    async def test_cleanup_bounded_by_shutdown_timeout(self):
+        """Slow manager cleanup must not exceed connector shutdown budget."""
+        connector = LazyMCPConnector(
+            mcp_server_config={},
+            mcp_config={},
+        )
+        loop = asyncio.new_event_loop()
+        thread = threading.Thread(target=loop.run_forever, daemon=True)
+        thread.start()
+        connector._loop = loop
+        connector._loop_thread = thread
+
+        # Manager whose cleanup hangs forever
+        slow_manager = MagicMock()
+
+        async def _hang():
+            await asyncio.sleep(999)
+
+        slow_manager.cleanup = _hang
+        connector._manager = slow_manager
+
+        start = time.monotonic()
+        await connector.cleanup()
+        elapsed = time.monotonic() - start
+
+        # Must finish well within the 5s connector budget + join overhead
+        assert elapsed < 8.0
+        # State must be nullified after cleanup
+        assert connector._manager is None
+        assert connector._loop is None
+        assert connector._loop_thread is None
+
+    @pytest.mark.asyncio
+    async def test_cleanup_survives_cancellation(self):
+        """CancelledError during cleanup must still stop the loop and join."""
+        connector = LazyMCPConnector(
+            mcp_server_config={},
+            mcp_config={},
+        )
+        loop = asyncio.new_event_loop()
+        thread = threading.Thread(target=loop.run_forever, daemon=True)
+        thread.start()
+        connector._loop = loop
+        connector._loop_thread = thread
+
+        slow_manager = MagicMock()
+
+        async def _hang():
+            await asyncio.sleep(999)
+
+        slow_manager.cleanup = _hang
+        connector._manager = slow_manager
+
+        # Cancel the cleanup task shortly after it starts
+        task = asyncio.create_task(connector.cleanup())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # Even after cancellation, state must be torn down
+        assert connector._manager is None
+        assert connector._loop is None
+        assert connector._loop_thread is None
 
     def test_missing_server_raises(self):
         connector = LazyMCPConnector(

@@ -24,6 +24,10 @@ _DEFAULT_MCP_TOOL_TIMEOUT = 120.0
 _DEFAULT_LAZY_MCP_CONNECT_TIMEOUT = 5.0
 _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT = 10.0
 
+# Shutdown budgets -- semantically separate from connect/execution timeouts.
+_MCP_CONNECTOR_SHUTDOWN_TIMEOUT = 5.0  # overall connector cleanup budget (seconds)
+_MCP_LOOP_JOIN_TIMEOUT = 1.0  # thread join after loop.stop() (seconds)
+
 
 def _parse_claims(raw_claims: Any) -> tuple[ResourceClaim, ...]:
     claims: list[ResourceClaim] = []
@@ -453,16 +457,25 @@ class LazyMCPConnector:
 
         return manager.tools_by_server[server_name][f"{server_name}_{remote_tool_name}"]
 
-    def cleanup(self) -> None:
-        if self._manager and self._loop and not self._loop.is_closed():
-            try:
-                fut = asyncio.run_coroutine_threadsafe(
-                    self._manager.cleanup(), self._loop
-                )
-                fut.result(timeout=30)
-            except Exception as e:
-                logger.warning("LazyMCPConnector cleanup error: %s", e)
-        if self._loop and not self._loop.is_closed():
-            self._loop.call_soon_threadsafe(self._loop.stop)
-        if self._loop_thread:
-            self._loop_thread.join(timeout=5)
+    async def cleanup(self) -> None:
+        try:
+            if self._manager and self._loop and not self._loop.is_closed():
+                try:
+                    fut = asyncio.run_coroutine_threadsafe(
+                        self._manager.cleanup(), self._loop
+                    )
+                    await asyncio.wait_for(
+                        asyncio.wrap_future(fut),
+                        timeout=_MCP_CONNECTOR_SHUTDOWN_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.warning("LazyMCPConnector cleanup error: %s", e)
+        finally:
+            # Guarantee loop stop + thread join even on CancelledError.
+            if self._loop and not self._loop.is_closed():
+                self._loop.call_soon_threadsafe(self._loop.stop)
+            if self._loop_thread:
+                self._loop_thread.join(timeout=_MCP_LOOP_JOIN_TIMEOUT)
+            self._manager = None
+            self._loop = None
+            self._loop_thread = None
