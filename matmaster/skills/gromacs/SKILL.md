@@ -22,8 +22,8 @@ GROMACS is a high-performance molecular dynamics package primarily designed for 
 | cmd | `gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run -gpu_id 0 > log 2>&1` |
 
 > Adjust `grompp` arguments to match actual filenames.
-> For GPU options: `bohrium(action="list_machines", machine_type="gpu", keyword="4090")`.
-> For different GROMACS versions: `bohrium(action="list_images", keyword="gromacs")`.
+> For GPU options: `Bohrium(action="list_machines", machine_type="gpu", keyword="4090")`.
+> For different GROMACS versions: `Bohrium(action="list_images", keyword="gromacs")`.
 
 ## Input Preparation
 
@@ -84,8 +84,8 @@ If the user provides `.gro` + `.top` + `.mdp` (or a pre-built `.tpr`), skip prep
 2. Generate/verify MDP: `render_input.py --software gromacs --task md --output md.mdp`
 3. Ensure `.gro`, `.top`, `.mdp` are in one directory
 4. Submit (the cmd runs both grompp and mdrun):
-   `bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/gromacs:2022.2", cmd="gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run > log 2>&1")`
-5. Poll: `bohrium(action="poll", job_id=<id>)`
+   `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/gromacs:2022.2", cmd="gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run > log 2>&1")`
+5. Poll: `Bohrium(action="poll", job_id=<id>)`
 
 ## Post-Processing
 

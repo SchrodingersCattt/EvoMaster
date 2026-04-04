@@ -1,20 +1,13 @@
-"""BashTool -- execute bash commands via session.
+"""matmaster/tools/builtin/bash_tool.py
 
-Pure execution layer: receives commands, executes them, returns results.
-Bash safety checks (dangerous command patterns, env credential scanning)
-are handled by DefaultCapabilityPolicy in the constraint model (Phase 35-01).
+BashTool — execute bash commands via session.
 
-Dual-path execute:
-- matmaster LocalSession -> native asyncio.create_subprocess_exec
-- other sessions -> sync session.exec_bash (via base class)
+CC Reference: tools/BashTool/ (toolName.ts, prompt.ts, BashTool.tsx)
+CC name: Bash
 """
 
 from __future__ import annotations
 
-import asyncio
-import os
-import signal
-import sys
 from typing import Any, ClassVar
 
 from matmaster.types.tool_spec import ResourceClaim
@@ -22,186 +15,94 @@ from matmaster.types.topology import ToolPlane
 
 from .base import BuiltinTool
 
-# Proxy clear prefix -- injected before each new command to prevent
-# platform-injected proxies from blocking curl/wget/git on remote nodes.
-_PROXY_CLEAR_PREFIX = (
-    'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= '
-    'NO_PROXY= no_proxy= ftp_proxy= FTP_PROXY=; '
-    'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY '
-    'NO_PROXY no_proxy ftp_proxy FTP_PROXY WGETRC 2>/dev/null; '
-)
-
 
 class BashTool(BuiltinTool):
-    """Execute bash commands in the session shell."""
+    """Execute bash commands in the session shell.
 
-    name: ClassVar[str] = 'execute_bash'
-    description: ClassVar[str] = 'Execute a bash command in the session shell.'
+    CC name: Bash (BashTool)
+    """
+
+    name: ClassVar[str] = "Bash"
+    description: ClassVar[str] = (
+        "Executes a given bash command and returns its output."
+    )
     json_schema: ClassVar[dict[str, Any]] = {
-        'type': 'object',
-        'properties': {
-            'command': {
-                'type': 'string',
-                'description': (
-                    'The bash command to execute. Prefer dedicated tools for file operations. '
-                    'Local: cwd is the workspace (relative paths OK). '
-                    'Bohrium SSH only: shared storage is often /share (not /workspace).'
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": "The command to execute",
+            },
+            "timeout": {
+                "type": "integer",
+                "description": (
+                    "Optional timeout in milliseconds (max 600000). "
+                    "Default: 120000ms (2 minutes)."
                 ),
             },
-            'timeout': {
-                'type': 'number',
-                'description': 'Hard timeout in seconds. Use -1 for no limit.',
-                'default': -1,
+            "description": {
+                "type": "string",
+                "description": (
+                    "Clear, concise description of what this command does."
+                ),
             },
         },
-        'required': ['command'],
+        "required": ["command"],
     }
     resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
         ResourceClaim(resource="session", mode="exclusive"),
     )
     capabilities: ClassVar[frozenset[str]] = frozenset({"shell.execute"})
     effect_level: ClassVar[str] = "local_mutation"
-    max_result_chars: ClassVar[int] = 12000
+    max_result_chars: ClassVar[int] = 30_000
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
 
-    def prompt(self, ctx: Any | None = None) -> str | None:
+    def prompt(self, ctx=None) -> str:
         return (
-            'Do not use bash for: cat/head/tail/sed/awk/find/ls/grep/rg/echo. '
-            'Use read_file, edit_file, write_file, glob, grep instead.\n\n'
-            'Paths: local/devshell cwd is the task workspace; do not assume /share exists. '
-            'Bohrium SSH: shared storage is usually /share, not /workspace.'
+            "Executes a given bash command and returns its output.\n\n"
+            "The working directory persists between commands, but shell state "
+            "does not.\n\n"
+            "IMPORTANT: Avoid using this tool to run `find`, `grep`, `cat`, "
+            "`head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly "
+            "instructed. Instead, use the appropriate dedicated tool:\n"
+            " - File search: Use Glob (NOT find or ls)\n"
+            " - Content search: Use Grep (NOT grep or rg)\n"
+            " - Read files: Use Read (NOT cat/head/tail)\n"
+            " - Edit files: Use Edit (NOT sed/awk)\n"
+            " - Write files: Use Write (NOT echo >/cat <<EOF)\n\n"
+            "# Instructions\n"
+            " - Always quote file paths that contain spaces with double quotes\n"
+            " - You may specify an optional timeout in milliseconds (max 600000ms / "
+            "10 minutes). By default, your command will timeout after 120000ms.\n"
+            " - When issuing multiple commands that are independent, make multiple "
+            "Bash tool calls in a single message.\n"
+            " - For git commands: prefer creating a new commit rather than amending."
         )
-
-    async def execute(self, arguments: dict[str, Any]) -> str:
-        """Dual-path execute: native async for matmaster LocalSession, sync fallback otherwise."""
-        from matmaster.sessions.local import LocalSession as _MatLocal
-
-        if isinstance(self._session, _MatLocal):
-            try:
-                return await self._execute_async(arguments)
-            except Exception as e:
-                self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
-                return f"Error: {e}"
-
-        return await super().execute(arguments)
-
-    async def execute_with_context(
-        self,
-        arguments: dict[str, Any],
-        exec_ctx: Any,
-    ) -> str:
-        """Context-aware execution entry point.
-
-        Captures the cancel_token from ToolExecutionContext for cancellation
-        support, then delegates to the standard execute() path.
-        """
-        if exec_ctx is not None and hasattr(exec_ctx, "cancel_token"):
-            self._cancel_token = exec_ctx.cancel_token
-        return await self.execute(arguments)
-
-    async def _execute_async(self, arguments: dict[str, Any]) -> str:
-        """Native async subprocess execution for matmaster LocalSession.
-
-        Uses asyncio.create_subprocess_exec instead of subprocess.run,
-        eliminating thread-pool overhead for local command execution.
-        """
-        command: str = arguments.get('command', '').strip()
-        timeout_val = arguments.get('timeout', -1)
-        timeout = int(timeout_val) if timeout_val and float(timeout_val) > 0 else None
-
-        # Inject proxy clear prefix on non-Windows
-        if command and sys.platform != 'win32':
-            command = _PROXY_CLEAR_PREFIX + command
-
-        wd = str(self._workdir) if self._workdir else None
-
-        proc = await asyncio.create_subprocess_exec(
-            "bash",
-            "-c",
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=wd,
-            start_new_session=True,
-        )
-        cancel_token = getattr(self, "_cancel_token", None)
-
-        def _kill_group() -> None:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except (ProcessLookupError, OSError):
-                pass
-
-        if cancel_token and cancel_token.is_cancelled:
-            _kill_group()
-            await proc.wait()
-            obs = "Command cancelled."
-            if wd:
-                obs += f"\n[Current working directory: {wd}]"
-            obs += "\n[Command finished with exit code 130]"
-            return obs
-
-        if cancel_token:
-            cancel_token.on_cancel(_kill_group)
-
-        try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
-        except TimeoutError:
-            proc.kill()
-            await proc.wait()
-            obs = f"Command timeout after {timeout}s"
-            if wd:
-                obs += f"\n[Current working directory: {wd}]"
-            obs += "\n[Command finished with exit code 124]"
-            return obs
-
-        stdout = stdout_bytes.decode(errors="replace") if stdout_bytes else ""
-        stderr = stderr_bytes.decode(errors="replace") if stderr_bytes else ""
-        if cancel_token and cancel_token.is_cancelled:
-            obs = "Command cancelled."
-            if wd:
-                obs += f"\n[Current working directory: {wd}]"
-            obs += "\n[Command finished with exit code 130]"
-            return obs
-        output = stdout
-        if stderr:
-            output = output + stderr if output else stderr
-
-        obs = output
-        if wd:
-            obs += f"\n[Current working directory: {wd}]"
-        if proc.returncode is not None:
-            obs += f"\n[Command finished with exit code {proc.returncode}]"
-
-        return obs
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         session = self._require_session()
 
-        command: str = arguments.get('command', '').strip()
-        timeout_val = arguments.get('timeout', -1)
-        timeout = int(timeout_val) if timeout_val and float(timeout_val) > 0 else None
+        command: str = (arguments.get("command") or "").strip()
+        if not command:
+            return "Error: command is required and must not be empty."
 
-        # Inject proxy clear prefix on non-Windows
-        if command and sys.platform != 'win32':
-            command = _PROXY_CLEAR_PREFIX + command
+        timeout_ms = arguments.get("timeout", 120_000)
+        timeout_ms = min(int(timeout_ms), 600_000)  # cap at 10min
+        timeout_s = timeout_ms / 1000  # float division preserves sub-second
 
         result = session.exec_bash(
             command=command,
-            timeout=timeout,
+            timeout=timeout_s,
             cancel_token=self._cancel_token_for_exec(),
         )
 
-        output = result.get('output', '') or result.get('stdout', '')
-        exit_code = result.get('exit_code', -1)
-        working_dir = result.get('working_dir', '')
+        output = result.get("output", "") or result.get("stdout", "")
+        exit_code = result.get("exit_code", 0)
+        working_dir = result.get("working_dir", "")
 
         obs = output
         if working_dir:
-            obs += f'\n[Current working directory: {working_dir}]'
-        if exit_code != -1:
-            obs += f'\n[Command finished with exit code {exit_code}]'
+            obs += f"\n[Current working directory: {working_dir}]"
+        obs += f"\n[Command finished with exit code {exit_code}]"
 
         return obs

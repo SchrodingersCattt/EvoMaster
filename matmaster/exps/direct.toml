@@ -17,21 +17,9 @@ developer_instructions = '''
 
 [tools]
 builtin = [
-    "execute_bash",
-    "list_dir",
-    "read_file",
-    "write_file",
-    "edit_file",
-    "glob",
-    "grep",
-    "task_create",
-    "task_get",
-    "task_list",
-    "task_update",
-    "task_complete",
-    "spawn",
-    "mm_web_search",
-    "web_fetch",
+    "Bash", "Read", "Write", "Edit",
+    "Glob", "Grep", "TodoWrite",
+    "Agent", "WebSearch", "WebFetch", "Bohrium",
 ]
 mcp = "*"
 

@@ -12,11 +12,11 @@ PyATB (Python Ab initio Tight-Binding) is a post-processing tool that reads Hami
 
 | Item | Default Value |
 |------|---------------|
-| image | *(query first: `bohrium(action="list_images", keyword="pyatb")`)* |
+| image | *(query first: `Bohrium(action="list_images", keyword="pyatb")`)* |
 | machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
 | cmd | `python run_pyatb.py > log 2>&1` |
 
-> **Always query the image before submitting**: `bohrium(action="list_images", keyword="pyatb")`. Do not assume a default image address; PyATB images may change frequently.
+> **Always query the image before submitting**: `Bohrium(action="list_images", keyword="pyatb")`. Do not assume a default image address; PyATB images may change frequently.
 
 ## Input Preparation
 
@@ -86,15 +86,15 @@ This is a two-step workflow (ABACUS → PyATB):
 **Step 1 — ABACUS LCAO calculation** (use `abacus` skill):
 1. Set `basis_type lcao` in INPUT
 2. Set `out_mat_hs2 1` to output HR.dat and SR.dat
-3. Submit via `bohrium(action="submit", ...)` and wait for completion
-4. Download results via `bohrium(action="poll", job_id=<id>)`
+3. Submit via `Bohrium(action="submit", ...)` and wait for completion
+4. Download results via `Bohrium(action="poll", job_id=<id>)`
 
 **Step 2 — PyATB post-processing**:
 1. Write PyATB script (`run_pyatb.py`)
 2. Place script + HR.dat + SR.dat (+ rR.dat if needed) in one directory
-3. Query image: `bohrium(action="list_images", keyword="pyatb")`
-4. Submit: `bohrium(action="submit", input_dir="<dir>", image="<pyatb_image>", cmd="python run_pyatb.py > log 2>&1")`
-5. Poll: `bohrium(action="poll", job_id=<id>)`
+3. Query image: `Bohrium(action="list_images", keyword="pyatb")`
+4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="<pyatb_image>", cmd="python run_pyatb.py > log 2>&1")`
+5. Poll: `Bohrium(action="poll", job_id=<id>)`
 
 ## Physical Checks
 

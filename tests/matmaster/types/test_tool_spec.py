@@ -41,7 +41,7 @@ class TestToolSpec:
     def test_tool_spec_custom_values(self) -> None:
         """ToolSpec accepts custom values."""
         spec = ToolSpec(
-            tool_name="read_file",
+            tool_name="Read",
             description="Read a file",
             args_schema={"path": {"type": "string"}},
             source="builtin",
@@ -50,7 +50,7 @@ class TestToolSpec:
             exposed_to_model=True,
             fast_path_eligible=True,
         )
-        assert spec.tool_name == "read_file"
+        assert spec.tool_name == "Read"
         assert "file_read" in spec.capabilities
 
 

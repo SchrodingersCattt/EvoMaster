@@ -18,7 +18,7 @@ ABACUS (Atomic-orbital Based Ab-initio Computation at UStc) is an open-source DF
 
 > **Important**: `-np` = **half the CPU core count** of the chosen machine (32 cores → 16 processes). This is ABACUS-specific; do not use the full core count.
 > For GPU-accelerated runs: `machine="c8_m60_1 * NVIDIA 4090"` with `basis_type pw`.
-> For different versions: `bohrium(action="list_images", keyword="abacus")`.
+> For different versions: `Bohrium(action="list_images", keyword="abacus")`.
 
 ## Input Preparation
 
@@ -126,8 +126,8 @@ If the user provides complete INPUT + STRU + KPT files with pseudopotentials and
 4. Prepare KPT (Monkhorst-Pack or k-path for band structure)
 5. Diagnose: `diagnose_input.py --software abacus --input INPUT`
 6. Place all files in one directory (INPUT, STRU, KPT, .upf files, .orb files)
-7. Submit: `bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/abacus:LTSv3.10.1", cmd="OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1")`
-8. Poll: `bohrium(action="poll", job_id=<id>)`
+7. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/abacus:LTSv3.10.1", cmd="OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1")`
+8. Poll: `Bohrium(action="poll", job_id=<id>)`
 
 ## Reference
 

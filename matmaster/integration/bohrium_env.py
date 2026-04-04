@@ -182,7 +182,7 @@ def inject_bohrium_executor(
 def build_bohrium_skill_remote_env(session: Any) -> dict[str, str]:
     """Extract ``BOHRIUM_*`` env vars from ``session._bohrium_credentials``.
 
-    Used by MCP calculation and monitor_job to forward credentials to
+    Used by MCP calculation and MonitorJob tool to forward credentials to
     remote skill scripts on Bohrium nodes.
 
     ``BOHRIUM_BASE_URL`` is set from this module's ``BOHRIUM_OPENAPI_HOST``.

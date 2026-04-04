@@ -1,7 +1,7 @@
 """Bohrium OpenAPI job service: status query, result retrieval, file download.
 
 Provides **synchronous** ``query_job_status`` / ``get_job_results`` for the
-monitor_job built-in tool (``matmaster/tools/builtin/monitor_job/``).  API surface mirrors
+MonitorJob built-in tool (``matmaster/tools/builtin/monitor_job/``).  API surface mirrors
 ``_tmp/MatMaster/agents/matmaster_agent/services/job.py`` (async -> sync,
 aiohttp -> urllib).
 

@@ -53,7 +53,7 @@ Builds one canonical evidence table from structured literature outputs and expor
   - Enrich is agent-side: agent writes `enrich_rows.json` + updates `state["enrich_rows_file"]`, then calls `--stage dedup --resume`. Pass `--enrich_rows <path>` to override the state path explicitly.
   - Supports staged execution (`ingest|normalize|dedup|conflict|export|all`) with checkpoint/resume.
 
-## Tool Usage (via use_skill)
+## Tool Usage (via Skill)
 
 - `run_script` with `script_name=build_lit_table.py`
 - Required arguments:

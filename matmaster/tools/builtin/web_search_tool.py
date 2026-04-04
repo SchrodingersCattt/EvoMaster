@@ -1,7 +1,9 @@
-"""WebSearchTool -- SearchApi.io backed web search.
+"""matmaster/tools/builtin/web_search_tool.py
 
-Control-plane HTTP call via sync httpx.Client. No session dependency.
-Returns ToolResult directly for correct error status propagation.
+WebSearchTool — SearchApi.io backed web search.
+
+CC Reference: tools/WebSearchTool/ (prompt.ts, WebSearchTool.ts)
+CC name: WebSearch
 """
 
 from __future__ import annotations
@@ -21,7 +23,6 @@ SEARCH_API_ENDPOINT = "https://www.searchapi.io/api/v1/search"
 
 
 def _resolve_api_key() -> str:
-    """Resolve SearchApi key from environment variables."""
     for var in ("SEARCHAPI_API_KEY", "SEARCHAPI_KEY"):
         val = os.environ.get(var, "").strip()
         if val:
@@ -29,61 +30,32 @@ def _resolve_api_key() -> str:
     return ""
 
 
-def _normalize_results(payload: dict[str, Any], top_k: int) -> list[dict[str, str]]:
-    """Extract organic results into [{title, link, snippet}]."""
-    organic = payload.get("organic_results", [])
-    if not isinstance(organic, list):
-        return []
-
-    results: list[dict[str, str]] = []
-    for item in organic:
-        if not isinstance(item, dict):
-            continue
-        link = str(item.get("link") or "").strip()
-        if not link:
-            continue
-        results.append(
-            {
-                "title": str(item.get("title") or "").strip(),
-                "link": link,
-                "snippet": str(item.get("snippet") or "").strip(),
-            }
-        )
-        if len(results) >= top_k:
-            break
-    return results
-
-
 class WebSearchTool(BuiltinTool):
-    """Search the web via SearchApi.io (Google engine)."""
+    """Search the web via SearchApi.io.
 
-    name: ClassVar[str] = "mm_web_search"
+    CC name: WebSearch (WebSearchTool)
+    """
+
+    name: ClassVar[str] = "WebSearch"
     description: ClassVar[str] = (
-        "Search the web using a search query and return results.\n\n"
-        "Returns up to top_k results, each with title, link, and snippet.\n"
-        "Requires SEARCHAPI_API_KEY or SEARCHAPI_KEY environment variable."
+        "Search the web using a search query and return results."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Search query.",
+                "description": "The search query to use",
             },
-            "top_k": {
-                "type": "integer",
-                "description": "Maximum number of results to return.",
-                "default": 10,
+            "allowed_domains": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Only include search results from these domains",
             },
-            "gl": {
-                "type": "string",
-                "description": "Country code (e.g. us, cn).",
-                "default": "us",
-            },
-            "hl": {
-                "type": "string",
-                "description": "Language code (e.g. en, zh-cn).",
-                "default": "en",
+            "blocked_domains": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Never include search results from these domains",
             },
         },
         "required": ["query"],
@@ -98,29 +70,34 @@ class WebSearchTool(BuiltinTool):
 
     def _execute(self, arguments: dict[str, Any]) -> ToolResult:
         query = (arguments.get("query") or "").strip()
-        if not query:
-            return ToolResult(status="error", content="Error: query is required.")
+        if len(query) < 2:
+            return ToolResult(status="error", content="Error: query must be at least 2 characters.")
 
         api_key = _resolve_api_key()
         if not api_key:
             return ToolResult(
                 status="error",
-                content=(
-                    "Error: Missing SearchApi key. "
-                    "Set SEARCHAPI_API_KEY or SEARCHAPI_KEY in environment."
-                ),
+                content="Error: Missing SearchApi key. Set SEARCHAPI_API_KEY.",
             )
 
-        top_k = max(1, int(arguments.get("top_k", 10)))
-        gl = (arguments.get("gl") or "us").strip()
-        hl = (arguments.get("hl") or "en").strip()
+        # Domain filtering via query modifiers (CC pattern)
+        allowed = arguments.get("allowed_domains") or []
+        blocked = arguments.get("blocked_domains") or []
+        # CC rejects simultaneous allowed + blocked (WebSearchTool.ts validateInput)
+        if allowed and blocked:
+            return ToolResult(
+                status="error",
+                content="Error: Cannot specify both allowed_domains and blocked_domains.",
+            )
+        if allowed:
+            query += " " + " OR ".join(f"site:{d}" for d in allowed)
+        for d in blocked:
+            query += f" -site:{d}"
 
         params: dict[str, Any] = {
             "engine": "google",
             "q": query,
             "api_key": api_key,
-            "gl": gl,
-            "hl": hl,
         }
 
         try:
@@ -133,16 +110,23 @@ class WebSearchTool(BuiltinTool):
                 response.raise_for_status()
                 payload = response.json()
         except Exception as exc:
-            return ToolResult(
-                status="error",
-                content=f"Error: {type(exc).__name__}: {exc}",
-            )
+            return ToolResult(status="error", content=f"Error: {type(exc).__name__}: {exc}")
 
-        results = _normalize_results(payload, top_k=top_k)
+        organic = payload.get("organic_results", [])
+        results = []
+        for item in organic[:10]:
+            if not isinstance(item, dict):
+                continue
+            link = str(item.get("link") or "").strip()
+            if not link:
+                continue
+            results.append({
+                "title": str(item.get("title") or "").strip(),
+                "link": link,
+                "snippet": str(item.get("snippet") or "").strip(),
+            })
+
         return ToolResult(
             status="success",
-            content=json.dumps(
-                {"status": "success", "results": results},
-                ensure_ascii=False,
-            ),
+            content=json.dumps({"results": results}, ensure_ascii=False),
         )

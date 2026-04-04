@@ -107,8 +107,8 @@ class ToolCallStreamProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class UseSkillStreamProvider:
-    """Provider that calls use_skill tool then finishes."""
+class SkillStreamProvider:
+    """Provider that calls Skill tool then finishes."""
 
     def __init__(self) -> None:
         self.call_count = 0
@@ -130,8 +130,8 @@ class UseSkillStreamProvider:
                     {
                         "index": 0,
                         "id": "tc-skill",
-                        "name": "use_skill",
-                        "arguments": '{"skill_name": "chemistry"}',
+                        "name": "Skill",
+                        "arguments": '{"skill": "chemistry"}',
                     }
                 ]
             )
@@ -299,15 +299,15 @@ class TestRunItemsAssistantState:
 
 
 class TestRunItemsSkillHit:
-    """_run_items() yields SkillHitEvent when use_skill is called."""
+    """_run_items() yields SkillHitEvent when Skill tool is called."""
 
     @pytest.mark.asyncio
     async def test_yields_skill_hit_event(self) -> None:
-        """SkillHitEvent emitted when tool_name == 'use_skill'."""
+        """SkillHitEvent emitted when tool_name == 'Skill'."""
         from matmaster.core.agent import AgentKernel
 
-        provider = UseSkillStreamProvider()
-        registry, _ = _make_tool_registry(tool_names=["use_skill", "test_tool"])
+        provider = SkillStreamProvider()
+        registry, _ = _make_tool_registry(tool_names=["Skill", "test_tool"])
         spec = _make_spec(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
 

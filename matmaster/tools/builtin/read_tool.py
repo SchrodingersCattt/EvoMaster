@@ -1,10 +1,8 @@
-"""ReadTool -- read remote file content via session.
+"""matmaster/tools/builtin/read_tool.py
 
-Returns line-numbered output (cat -n format). Supports offset/limit
-for partial reads. Conditional mark_read via ToolRunnerState:
-- Full-read within limit: mark_read
-- Full-read overlimit (error + preview): no mark_read
-- Ranged read (offset/limit): mark_read only if not char-truncated
+ReadTool — read file content via session with line numbers (cat -n).
+
+CC Reference: tools/FileReadTool/FileReadTool.ts + prompt.ts
 """
 
 from __future__ import annotations
@@ -25,35 +23,34 @@ PREVIEW_LINES = 50
 
 
 class ReadTool(BuiltinTool):
-    """Read file content with line numbers (cat -n semantics)."""
+    """Read file content with line numbers (cat -n semantics).
 
-    name: ClassVar[str] = "read_file"
-    description: ClassVar[str] = (
-        "Read file contents with line numbers (cat -n format).\n\n"
-        "Usage:\n"
-        "- ALWAYS use read_file to read files. NEVER use cat/head/tail via execute_bash.\n"
-        "- Files up to 2000 lines are returned in full. Larger files return an error with preview.\n"
-        "- Use offset and limit to read specific portions of large files.\n"
-        "- Always read a file before attempting to edit or overwrite it."
-    )
+    CC name: Read (FileReadTool)
+    """
+
+    name: ClassVar[str] = "Read"
+    description: ClassVar[str] = "Read a file from the local filesystem."
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
             "file_path": {
                 "type": "string",
-                "description": "Absolute path to the file to read.",
+                "description": (
+                    "The absolute path to the file to read"
+                ),
             },
             "offset": {
                 "type": "integer",
                 "description": (
-                    "Line number to start reading from (1-indexed). Defaults to 1."
+                    "The line number to start reading from (0-indexed). "
+                    "Only provide if the file is too large to read at once."
                 ),
             },
             "limit": {
                 "type": "integer",
                 "description": (
-                    "Number of lines to read. "
-                    "Defaults to reading to end of file (up to 2000 lines)."
+                    "The number of lines to read. Only provide if the "
+                    "file is too large to read at once."
                 ),
             },
         },
@@ -65,30 +62,43 @@ class ReadTool(BuiltinTool):
     capabilities: ClassVar[frozenset[str]] = frozenset({"workspace.read"})
     effect_level: ClassVar[str] = "none"
     fast_path_eligible: ClassVar[bool] = True
-    max_result_chars: ClassVar[int] = 12000
+    max_result_chars: ClassVar[int] = 12_000
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_FS
 
-    def __init__(
-        self,
-        *,
-        session: Any | None = None,
-        workdir: Any | None = None,
-    ) -> None:
-        super().__init__(session=session, workdir=workdir)
+    def prompt(self, ctx=None) -> str:
+        return (
+            "Reads a file from the local filesystem. You can access any "
+            "file directly by using this tool.\n"
+            "Assume this tool is able to read all files on the machine. "
+            "If the User provides a path to a file assume that path is valid.\n\n"
+            "Usage:\n"
+            "- The file_path parameter must be an absolute path, not a relative path\n"
+            f"- By default, it reads up to {MAX_READ_LINES} lines starting from "
+            "the beginning of the file\n"
+            "- When you already know which part of the file you need, only read "
+            "that part. This can be important for larger files.\n"
+            "- Results are returned using cat -n format, with line numbers starting at 1\n"
+            "- This tool can only read files, not directories. To read a directory, "
+            "use an ls command via the Bash tool.\n"
+            "- If you read a file that exists but has empty contents you will "
+            "receive a system reminder warning in place of file contents."
+        )
 
-    # ------------------------------------------------------------------
-    # Core execution
-    # ------------------------------------------------------------------
+    # -- Core execution --
 
-    def _execute(self, arguments: dict[str, Any]) -> str:
-        return self._execute_internal(arguments).content
+    def _execute(self, arguments: dict[str, Any]) -> ToolResult:
+        return self._execute_internal(arguments)
 
     async def execute_with_context(
         self,
         arguments: dict[str, Any],
         exec_ctx: ToolExecutionContext | None,
     ) -> ToolResult:
-        result = await asyncio.to_thread(self._execute_internal, arguments)
+        try:
+            result = await asyncio.to_thread(self._execute_internal, arguments)
+        except Exception as e:
+            self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
+            return ToolResult(status="error", content=f"Error: {e}")
 
         if exec_ctx is not None and exec_ctx.runner_state is not None:
             if result.meta.get("mark_read"):
@@ -106,20 +116,12 @@ class ReadTool(BuiltinTool):
         offset: int | None = arguments.get("offset")
         limit: int | None = arguments.get("limit")
 
-        # --- parameter validation ---
-        if offset is not None and offset < 1:
-            return ToolResult(status="error", content="Error: offset must be >= 1.")
-        if limit is not None and limit < 1:
-            return ToolResult(status="error", content="Error: limit must be >= 1.")
-
-        # --- file check ---
         if not session.is_file(file_path):
             return ToolResult(
                 status="error",
-                content=f"Error: {file_path} is not a file",
+                content=f"Error: {file_path} is not a file or does not exist",
             )
 
-        # --- read content ---
         content: str = session.read_file(file_path)
         lines = content.splitlines()
         total = len(lines)
@@ -131,34 +133,36 @@ class ReadTool(BuiltinTool):
         else:
             return self._full_read(file_path, lines, total)
 
-    # ------------------------------------------------------------------
-    # Full-read mode
-    # ------------------------------------------------------------------
+    # -- Full-read mode --
 
     def _full_read(self, file_path: str, lines: list[str], total: int) -> ToolResult:
+        if total == 0:
+            return ToolResult(
+                content=(
+                    f"<system-reminder>Warning: the file {file_path} exists "
+                    "but the contents are empty.</system-reminder>"
+                ),
+                meta={"mark_read": True},
+            )
+
         if total <= MAX_READ_LINES:
             output = self._format_lines(lines, file_path, init_line=1)
-            truncated, result = self._apply_char_limit(output)
-            if not truncated:
-                return ToolResult(content=result, meta={"mark_read": True})
-            return ToolResult(content=result)
+            _truncated, result = self._apply_char_limit(output)
+            return ToolResult(content=result, meta={"mark_read": True})
 
-        # Overlimit: error + preview (no mark_read regardless)
         preview = lines[:PREVIEW_LINES]
         preview_text = self._format_lines(preview, file_path, init_line=1)
-        _, result = self._apply_char_limit(
+        _truncated, result = self._apply_char_limit(
             f"Error: file has {total} lines, exceeds read limit "
             f"({MAX_READ_LINES} lines).\n"
             f"Use offset and limit to read portions, e.g. "
-            f"offset=1, limit={MAX_READ_LINES} for the first {MAX_READ_LINES} lines.\n\n"
+            f"offset=0, limit={MAX_READ_LINES} for the first {MAX_READ_LINES} lines.\n\n"
             f"Preview (first {PREVIEW_LINES} lines):\n"
             f"{preview_text}"
         )
         return ToolResult(status="error", content=result)
 
-    # ------------------------------------------------------------------
-    # Ranged-read mode
-    # ------------------------------------------------------------------
+    # -- Ranged-read mode --
 
     def _ranged_read(
         self,
@@ -168,52 +172,42 @@ class ReadTool(BuiltinTool):
         offset: int | None,
         limit: int | None,
     ) -> ToolResult:
-        start = offset if offset is not None else 1
+        start = offset if offset is not None else 0
 
-        if start < 1 or start > total:
+        if start < 0 or start >= total:
             return ToolResult(
                 status="error",
-                content=f"Error: offset {start} is out of range [1, {total}].",
+                content=f"Error: offset {start} is out of range [0, {total - 1}].",
             )
 
-        remaining = total - start + 1
+        remaining = total - start
         requested = limit if limit is not None else remaining
         count = min(requested, remaining, MAX_READ_LINES)
-        end = start + count - 1
+        end = start + count
 
-        selected = lines[start - 1 : end]
-        output = self._format_lines(selected, file_path, init_line=start)
+        selected = lines[start:end]
+        output = self._format_lines(selected, file_path, init_line=start + 1)
 
-        # Truncation notice
         if count < requested:
             output += (
                 f"\n[Note: showing {count} of {remaining} remaining lines, "
-                f"capped at {MAX_READ_LINES}. Use offset={end + 1} to continue reading.]"
+                f"capped at {MAX_READ_LINES}. Use offset={end} to continue reading.]"
             )
 
-        truncated, result = self._apply_char_limit(output)
-        if not truncated:
-            return ToolResult(content=result, meta={"mark_read": True})
-        return ToolResult(content=result)
+        _truncated, result = self._apply_char_limit(output)
+        return ToolResult(content=result, meta={"mark_read": True})
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+    # -- Helpers --
 
     @staticmethod
     def _format_lines(lines: list[str], descriptor: str, init_line: int = 1) -> str:
-        """Format lines with line numbers in cat -n style."""
         numbered = "\n".join(
             f"{i + init_line:6}\t{line}" for i, line in enumerate(lines)
         )
-        return f"Here's the result of running `cat -n` on {descriptor}:\n" f"{numbered}"
+        return f"Here's the result of running `cat -n` on {descriptor}:\n{numbered}"
 
     @staticmethod
     def _apply_char_limit(output: str) -> tuple[bool, str]:
-        """Truncate output if it exceeds MAX_READ_CHARS.
-
-        Returns (truncated, output) so callers can decide whether to mark_read.
-        """
         if len(output) <= MAX_READ_CHARS:
             return False, output
         return True, (

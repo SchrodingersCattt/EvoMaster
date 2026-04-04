@@ -74,7 +74,7 @@ For the depth choice when calling deep-survey: use `--depth brief` when only see
 ## Tool usage notes
 
 - This skill is guidance-only (orchestrator type); it has no runnable scripts. Do NOT call `action=run_script` for this skill.
-- To load the workflow, call `use_skill` with `action=get_info`.
+- To load the workflow, invoke `Skill` with `action=get_info`.
 - DART GA tool names are server-prefixed at runtime; prefer:
   - `mat_compdart_submit_run_dart_ga` if registered
   - otherwise, detect available tool ending with `_run_dart_ga`

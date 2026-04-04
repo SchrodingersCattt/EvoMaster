@@ -1,11 +1,13 @@
-"""BuiltinTool ABC -- base class for all matmaster native tools.
+"""matmaster/tools/builtin/base.py
+
+BuiltinTool ABC — base class for all matmaster builtin tools.
 
 Satisfies the Tool Protocol (name/description/json_schema/execute).
 Construction injection: session/workdir passed at Exp assemble time.
 Kernel sees only Tool Protocol interface.
 
-execute() is async def, delegates to sync _execute() via asyncio.to_thread.
-Subclasses implement sync _execute() only -- no async needed in subclass code.
+execute() is async, delegates to sync _execute() via asyncio.to_thread.
+Subclasses implement sync _execute() only.
 """
 
 from __future__ import annotations
@@ -26,17 +28,11 @@ from matmaster.types.topology import ToolPlane
 
 
 class BuiltinTool(ABC):
-    """BuiltinTool base -- satisfies matmaster Tool Protocol.
-
-    Construction injection: session/workdir passed at Exp assemble time.
-    Kernel sees only Tool Protocol (name/description/json_schema/execute).
-
-    execute() is async def and delegates to sync _execute() via asyncio.to_thread,
-    ensuring blocking tool operations do not stall the event loop.
+    """BuiltinTool base — satisfies matmaster Tool Protocol.
 
     Subclasses:
-    - Define name, description, json_schema as class-level attributes
-    - Implement _execute(arguments) -> str | ToolResult (sync def)
+    - Define name, description, json_schema as ClassVar
+    - Implement _execute(arguments) -> str | ToolResult (sync)
     """
 
     name: ClassVar[str]
@@ -56,10 +52,10 @@ class BuiltinTool(ABC):
         self,
         *,
         session: Any | None = None,
-        workdir: Path | None = None,
+        workdir: str | Path | None = None,
     ) -> None:
         self._session = session
-        self._workdir = workdir
+        self._workdir = Path(workdir) if workdir is not None else None
         self.logger = logging.getLogger(self.__class__.__name__)
 
     async def execute(self, arguments: dict[str, Any]) -> str | ToolResult:
@@ -67,54 +63,55 @@ class BuiltinTool(ABC):
         try:
             return await asyncio.to_thread(self._execute, arguments)
         except Exception as e:
-            self.logger.error('Tool %s failed: %s', self.name, e, exc_info=True)
-            return f'Error: {e}'
-
-    def describe(self, ctx: ToolDescriptionContext | None = None) -> str:
-        return self.description
-
-    def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
-        return None
+            self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
+            return f"Error: {e}"
 
     async def execute_with_context(
         self,
         arguments: dict[str, Any],
         exec_ctx: ToolExecutionContext | None,
     ) -> str | ToolResult:
+        """Context-aware execution. Subclasses override for cancel_token/runner_state."""
         try:
             return await asyncio.to_thread(self._execute, arguments)
         except Exception as e:
-            self.logger.error('Tool %s failed: %s', self.name, e, exc_info=True)
-            return f'Error: {e}'
+            self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
+            return f"Error: {e}"
+
+    def describe(self, ctx: ToolDescriptionContext | None = None) -> str:
+        """Dynamic description. Default returns self.description."""
+        return self.description
+
+    def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
+        """LLM prompt injection. Default returns None."""
+        return None
 
     async def validate_input(
         self,
         arguments: dict[str, Any],
         runner_state: ToolRunnerState | None = None,
     ) -> ToolDecision | None:
-        """Tool-specific semantic input validation.
-
-        Override to reject invalid arguments before execution.
-        Return None to allow, ToolDecision(decision='deny', ...) to reject.
-        """
+        """Semantic input validation. Return None to allow, ToolDecision(deny) to reject."""
         return None
 
     @abstractmethod
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
-        """Subclass implementation. Raise on error, return string or ToolResult on success."""
+        """Subclass implementation. Sync. Raise on error, return str or ToolResult."""
         ...
 
     def _require_session(self) -> Any:
-        """Guard: raise if session not injected (session-dependent tools)."""
+        """Guard: raise if session not injected."""
         if self._session is None:
-            raise RuntimeError(f'{self.name} requires a session but none was injected')
+            raise RuntimeError(
+                f"{self.name} requires a session but none was injected"
+            )
         return self._session
 
     def _cancel_token_for_exec(self) -> CancellationToken | None:
-        """Cancel signal for session.exec_bash (injected on tool by Exp / AgentRunService)."""
-        ct = getattr(self, '_cancel_token', None)
+        """Cancel signal for session.exec_bash (injected by ToolCatalog.inject_cancel_token)."""
+        ct = getattr(self, "_cancel_token", None)
         if ct is not None:
             return ct
         if self._session is not None:
-            return getattr(self._session, '_cancel_token', None)
+            return getattr(self._session, "_cancel_token", None)
         return None

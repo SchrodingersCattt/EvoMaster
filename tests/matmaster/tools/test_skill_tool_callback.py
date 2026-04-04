@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from matmaster.skills.registry import SkillRegistry
-from matmaster.tools.skill_tool import SkillTool
+from matmaster.tools.builtin.skill_tool import SkillTool
 
 
 class TestSkillToolCallback:
@@ -20,24 +20,24 @@ class TestSkillToolCallback:
         self._make_skill_dir(tmp_path, "test-skill", mcp_server="mat_sg")
         registry = SkillRegistry(tmp_path)
         hit_servers = []
-        tool = SkillTool(registry, on_skill_hit=lambda s: hit_servers.append(s))
+        tool = SkillTool(skill_registry=registry, on_skill_hit=lambda s: hit_servers.append(s))
 
-        asyncio.run(tool.execute({"skill_name": "test-skill"}))
+        asyncio.run(tool.execute({"skill": "test-skill"}))
         assert hit_servers == ["mat_sg"]
 
     def test_callback_not_invoked_without_mcp_server(self, tmp_path):
         self._make_skill_dir(tmp_path, "plain-skill")
         registry = SkillRegistry(tmp_path)
         hit_servers = []
-        tool = SkillTool(registry, on_skill_hit=lambda s: hit_servers.append(s))
+        tool = SkillTool(skill_registry=registry, on_skill_hit=lambda s: hit_servers.append(s))
 
-        asyncio.run(tool.execute({"skill_name": "plain-skill"}))
+        asyncio.run(tool.execute({"skill": "plain-skill"}))
         assert hit_servers == []
 
     def test_no_callback_is_fine(self, tmp_path):
         self._make_skill_dir(tmp_path, "test-skill", mcp_server="mat_sg")
         registry = SkillRegistry(tmp_path)
-        tool = SkillTool(registry)  # No callback
+        tool = SkillTool(skill_registry=registry)  # No callback
 
-        result = asyncio.run(tool.execute({"skill_name": "test-skill"}))
+        result = asyncio.run(tool.execute({"skill": "test-skill"}))
         assert "Skill body" in result  # Still returns expanded skill body

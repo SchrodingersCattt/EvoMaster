@@ -181,7 +181,7 @@ class TestToolCompiler:
 
 
 class TestTopologyDependentBinding:
-    @pytest.mark.parametrize("tool_name", ["list_dir", "glob", "grep"])
+    @pytest.mark.parametrize("tool_name", ["Glob", "Grep"])
     def test_local_stateless_relaxes_shell_readers(self, tool_name: str) -> None:
         compiler = ToolCompiler()
         tool = _SelfDescribingTool(tool_name)
@@ -194,7 +194,7 @@ class TestTopologyDependentBinding:
             ResourceClaim(resource="session", mode="shared_read"),
         )
 
-    @pytest.mark.parametrize("tool_name", ["list_dir", "glob", "grep"])
+    @pytest.mark.parametrize("tool_name", ["Glob", "Grep"])
     def test_non_local_sessions_do_not_relax(self, tool_name: str) -> None:
         compiler = ToolCompiler()
         tool = _SelfDescribingTool(tool_name)

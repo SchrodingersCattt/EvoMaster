@@ -13,7 +13,7 @@ Produce a full-length, multi-section review report. This is the most rigorous ti
 ## Workflow
 
 ### Step 1 — Plan facets
-- Analyze the topic and break it into **3-5 facets** (e.g. definition/background, mechanisms, methods/approaches, state of the art, gaps/challenges; for typed facet examples fetch `use_skill action=get_reference skill_name="deep-survey" reference_name="search_facets_and_rounds.md"`).
+- Analyze the topic and break it into **3-5 facets** (e.g. definition/background, mechanisms, methods/approaches, state of the art, gaps/challenges; for typed facet examples fetch `Skill action=get_reference skill="deep-survey" reference_name="search_facets_and_rounds.md"`).
 - For each facet, plan **2-4 query variants** (keywords, synonyms, alternate language, "X review", "X mechanism").
 - Target total: **10-15+ retrieval tool calls**.
 
@@ -38,7 +38,7 @@ Adjust the remaining plan before proceeding to the next facet.
 After completing ALL retrieval, run `collect_evidence.py` to automatically extract evidence cards from the raw tool outputs and write them to `collected_<topic>.json`. This happens **before** writing the narrative report sections.
 
 ```
-use_skill action=run_script skill_name="deep-survey" script_name="collect_evidence.py"
+Skill action=run_script skill="deep-survey" script_name="collect_evidence.py"
   script_args="--collected_json _tmp/surveys/collected_<topic>.json"
 ```
 
@@ -105,7 +105,7 @@ Write all five sections fully. Write each section's full body to a file first (e
 
 ## De-AIGC rules (compressed — apply to all written sections)
 
-Full guide: `use_skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
+Full guide: `Skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
 
 **Core principles:**
 1. Lead with the real problem, not broad context.

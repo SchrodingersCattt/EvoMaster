@@ -512,3 +512,65 @@ class TestAgentKernelHookWiring:
                 strategy="summary",
             ),
         ]
+
+
+# ── Spawn guard: child Exp gets allow_spawn=False ──────
+
+
+class TestSpawnGuardWiring:
+    """_make_spawn_fn creates child Exp with allow_spawn=False."""
+
+    @pytest.mark.asyncio
+    async def test_make_spawn_fn_constructs_child_exp_with_allow_spawn_false(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import matmaster.core.exp as exp_module
+
+        created_allow_spawn: list[bool] = []
+        original_exp = exp_module.Exp
+
+        class RecordingExp(original_exp):
+            def __init__(self, config, *, allow_spawn: bool = True) -> None:
+                created_allow_spawn.append(allow_spawn)
+                super().__init__(config, allow_spawn=allow_spawn)
+
+            async def run_stream(self, *args, **kwargs):
+                if False:
+                    yield None
+
+        async def fake_drain_run_stream(_stream):
+            return SimpleNamespace(
+                status="completed",
+                final_content="child done",
+                reason="natural",
+            )
+
+        monkeypatch.setattr(exp_module, "Exp", RecordingExp)
+
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            run_meta={"session_id": "session-1"},
+            llm_provider=MockLLMProvider(),
+        )
+
+        with patch(
+            "matmaster.config.loader.load_exp_config",
+            return_value=ExpConfig(name="direct"),
+        ), patch(
+            "matmaster.core.stream_drain.drain_run_stream",
+            side_effect=fake_drain_run_stream,
+        ):
+            spawn_fn = original_exp._make_spawn_fn(
+                ctx,
+                source_prefix="MatMaster",
+                hook_executor=HookExecutor(),
+            )
+            result = await spawn_fn("direct", "summarize this task")
+
+        assert result == "child done"
+        assert created_allow_spawn[-1] is False

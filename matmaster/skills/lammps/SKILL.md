@@ -16,7 +16,7 @@ LAMMPS (Large-scale Atomic/Molecular Massively Parallel Simulator) is a classica
 | machine | `c16_m64_1 * NVIDIA 4090` (GPU node) |
 | cmd | `lmp -in {input_file} > log 2>&1` |
 
-> LAMMPS default image is GPU-enabled (DeePMD support). For CPU-only runs, query `bohrium(action="list_images", keyword="lammps")` for alternative images.
+> LAMMPS default image is GPU-enabled (DeePMD support). For CPU-only runs, query `Bohrium(action="list_images", keyword="lammps")` for alternative images.
 > Replace `{input_file}` with the actual `.in` or `.lammps` filename.
 > GPU node is default because many LAMMPS workflows use DeePMD or GPU-accelerated pair styles.
 
@@ -75,8 +75,8 @@ If the user provides a complete LAMMPS script, skip preparation and submit direc
 2. Generate/write input script
 3. Diagnose: `diagnose_input.py --software lammps --input lammps.in`
 4. Collect all files (input script + data file + potential files)
-5. Submit: `bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/lammps-agent:03810da8", cmd="lmp -in lammps.in > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
-6. Poll: `bohrium(action="poll", job_id=<id>)`
+5. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/lammps-agent:03810da8", cmd="lmp -in lammps.in > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
+6. Poll: `Bohrium(action="poll", job_id=<id>)`
 
 > For CPU-only runs (non-GPU pair styles), use `machine="c32_m128_cpu"` and adjust image accordingly.
 

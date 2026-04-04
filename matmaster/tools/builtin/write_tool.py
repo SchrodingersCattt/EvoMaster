@@ -1,17 +1,15 @@
-"""WriteTool -- create/overwrite files via session.
+"""matmaster/tools/builtin/write_tool.py
 
-Read-Before-Modify for existing files is enforced via validate_input()
-(input_validator path in ToolInstance). This preserves the path_exists
-session capability check that Guard layer should not depend on.
-New files (path_exists=False) are written without restriction.
+WriteTool — create/overwrite files via session.
 
-When runner_state is None, read-before-modify enforcement is disabled
-for backward compatibility during the migration.
+CC Reference: tools/FileWriteTool/ (prompt.ts, FileWriteTool.ts)
+CC name: Write
 """
 
 from __future__ import annotations
 
 import posixpath
+from pathlib import PurePosixPath
 from typing import Any, ClassVar
 
 from matmaster.types.tool_decision import ToolDecision
@@ -23,26 +21,26 @@ from .base import BuiltinTool
 
 
 class WriteTool(BuiltinTool):
-    """Write content to a file. Read-Before-Modify via validate_input for existing files."""
+    """Write content to a file via session.
 
-    name: ClassVar[str] = "write_file"
-    description: ClassVar[str] = (
-        "Write content to a file, creating parent directories as needed.\n\n"
-        "Usage:\n"
-        "- ALWAYS use write_file to create files. NEVER use echo/heredoc via execute_bash.\n"
-        "- If the file exists, you MUST read it first using read_file.\n"
-        "- Always provide the complete intended file content."
-    )
+    CC name: Write (FileWriteTool)
+    """
+
+    name: ClassVar[str] = "Write"
+    description: ClassVar[str] = "Write a file to the local filesystem."
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
             "file_path": {
                 "type": "string",
-                "description": "Absolute path to the file to write.",
+                "description": (
+                    "The absolute path to the file to write "
+                    "(must be absolute, not relative)"
+                ),
             },
             "content": {
                 "type": "string",
-                "description": "The complete content to write to the file.",
+                "description": "The content to write to the file",
             },
         },
         "required": ["file_path", "content"],
@@ -54,27 +52,30 @@ class WriteTool(BuiltinTool):
     effect_level: ClassVar[str] = "local_mutation"
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_FS
 
-    def __init__(
-        self,
-        *,
-        session: Any | None = None,
-        workdir: Any | None = None,
-    ) -> None:
-        super().__init__(session=session, workdir=workdir)
+    def prompt(self, ctx=None) -> str:
+        return (
+            "Writes a file to the local filesystem.\n\n"
+            "Usage:\n"
+            "- This tool will overwrite the existing file if there is one at "
+            "the provided path.\n"
+            "- If this is an existing file, you MUST use the Read tool first "
+            "to read the file's contents. This tool will fail if you did not "
+            "read the file first.\n"
+            "- Prefer the Edit tool for modifying existing files — it only sends "
+            "the diff. Only use this tool to create new files or for complete rewrites."
+        )
 
     async def validate_input(
         self,
         arguments: dict[str, Any],
         runner_state: ToolRunnerState | None = None,
     ) -> ToolDecision | None:
-        from pathlib import PurePosixPath
-
         file_path = arguments.get("file_path", "")
         if not file_path:
             return ToolDecision(decision="deny", reason="file_path is required")
         if self._workdir is None:
-            return ToolDecision(decision="deny", reason="workdir not set, cannot validate path")
-        # Parent-child containment via PurePosixPath.is_relative_to (not string prefix)
+            return ToolDecision(decision="deny", reason="workdir not set")
+
         try:
             resolved = PurePosixPath(posixpath.normpath(file_path))
             if not resolved.is_relative_to(self._workdir):
@@ -85,7 +86,6 @@ class WriteTool(BuiltinTool):
         except (TypeError, ValueError):
             return ToolDecision(decision="deny", reason=f"invalid file_path: '{file_path}'")
 
-        # Read-before-modify check for existing files
         if runner_state is not None and self._session is not None:
             normalized = posixpath.normpath(file_path)
             if self._session.path_exists(file_path):
@@ -94,15 +94,13 @@ class WriteTool(BuiltinTool):
                     return ToolDecision(
                         decision="deny",
                         reason=f"File '{file_path}' must be read before overwrite",
-                        guidance="Read the file first using read_file.",
+                        guidance="Read the file first using Read.",
                     )
         return None
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         session = self._require_session()
-
         file_path: str = arguments.get("file_path", "")
         content: str = arguments.get("content", "")
-
         session.write_file(file_path, content)
         return f"File written successfully to: {file_path}"

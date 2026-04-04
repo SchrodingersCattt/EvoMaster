@@ -33,7 +33,7 @@ class ToolCompiler:
             topology.session_kind == "local"
             and topology.session_capabilities is not None
             and topology.session_capabilities.shell_persistence == "stateless"
-            and tool.name in ("list_dir", "glob", "grep")
+            and tool.name in ("Glob", "Grep")
         ):
             claims = (ResourceClaim(resource="session", mode="shared_read"),)
 

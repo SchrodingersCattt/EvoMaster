@@ -1,13 +1,9 @@
-"""EditTool -- str_replace editing via session.
+"""matmaster/tools/builtin/edit_tool.py
 
-Performs exact string replacement with unique-match enforcement.
-Read-Before-Modify is enforced in validate_input() via runner_state.
-_execute() remains a pure execution layer once validation has passed.
-No insert/undo_edit commands (D-01: str_replace only).
-Editor helpers inlined (originally from evomaster).
+EditTool — str_replace editing via session.
 
-Strip retry: if old_str not found verbatim but old_str.strip() matches
-uniquely, the stripped version is used automatically.
+CC Reference: tools/FileEditTool/ (constants.ts, types.ts, prompt.ts)
+CC name: Edit
 """
 
 from __future__ import annotations
@@ -23,59 +19,45 @@ from matmaster.types.topology import ToolPlane
 
 from .base import BuiltinTool
 
-# ---- Editor helpers (inlined from evomaster.agent.tools.builtin.editor) ----
 SNIPPET_LINES = 4
-MAX_OUTPUT_SIZE = 16000
-_TEXT_FILE_TRUNCATED_NOTICE = (
-    '<response clipped><NOTE>Due to the max output limit, only part of this file has been shown to you. '
-    'You should retry this tool after you have searched inside the file with `grep -n` in order to find '
-    'the line numbers of what you are looking for.</NOTE>'
-)
-
-
-def maybe_truncate(
-    content: str,
-    max_size: int = MAX_OUTPUT_SIZE,
-    notice: str = _TEXT_FILE_TRUNCATED_NOTICE,
-) -> str:
-    """Truncate content in the middle if it exceeds max_size."""
-    if len(content) <= max_size:
-        return content
-    half = max_size // 2
-    return content[:half] + '\n' + notice + '\n' + content[-half:]
-
-
-# ---- End Editor helpers ----
+MAX_OUTPUT_SIZE = 16_000
 
 
 class EditTool(BuiltinTool):
-    """Edit a file using str_replace with unique-match enforcement."""
+    """Edit a file using str_replace with unique-match enforcement.
 
-    name: ClassVar[str] = "edit_file"
-    description: ClassVar[str] = (
-        "Edit a file by replacing an exact string match (str_replace).\n\n"
-        "Usage:\n"
-        "- ALWAYS use edit_file for edits. NEVER use sed/awk via execute_bash.\n"
-        "- old_str must match exactly one location. Include 3-5 lines of context.\n"
-        "- You must read the file first using read_file."
-    )
+    CC name: Edit (FileEditTool)
+    """
+
+    name: ClassVar[str] = "Edit"
+    description: ClassVar[str] = "Performs exact string replacements in files."
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
             "file_path": {
                 "type": "string",
-                "description": "Absolute path to the file to edit.",
+                "description": "The absolute path to the file to modify",
             },
-            "old_str": {
+            "old_string": {
                 "type": "string",
-                "description": "The exact string to find and replace. Must be unique in the file.",
+                "description": "The text to replace",
             },
-            "new_str": {
+            "new_string": {
                 "type": "string",
-                "description": "The replacement string.",
+                "description": (
+                    "The text to replace it with "
+                    "(must be different from old_string)"
+                ),
+            },
+            "replace_all": {
+                "type": "boolean",
+                "description": (
+                    "Replace all occurrences of old_string (default false)"
+                ),
+                "default": False,
             },
         },
-        "required": ["file_path", "old_str", "new_str"],
+        "required": ["file_path", "old_string", "new_string"],
     }
     resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
         ResourceClaim(resource="workspace", mode="exclusive"),
@@ -84,27 +66,34 @@ class EditTool(BuiltinTool):
     effect_level: ClassVar[str] = "local_mutation"
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_FS
 
-    def __init__(
-        self,
-        *,
-        session: Any | None = None,
-        workdir: Any | None = None,
-    ) -> None:
-        super().__init__(session=session, workdir=workdir)
+    def prompt(self, ctx=None) -> str:
+        return (
+            "Performs exact string replacements in files.\n\n"
+            "Usage:\n"
+            "- You must use your `Read` tool at least once in the conversation "
+            "before editing. This tool will error if you attempt an edit without "
+            "reading the file.\n"
+            "- ALWAYS prefer editing existing files in the codebase. NEVER write "
+            "new files unless explicitly required.\n"
+            "- The edit will FAIL if `old_string` is not unique in the file. "
+            "Either provide a larger string with more surrounding context to make "
+            "it unique or use `replace_all` to change every instance of `old_string`.\n"
+            "- Use `replace_all` for replacing and renaming strings across the file."
+        )
 
     async def validate_input(
         self,
         arguments: dict[str, Any],
         runner_state: ToolRunnerState | None = None,
     ) -> ToolDecision | None:
-        old_str = arguments.get("old_str", "")
-        new_str = arguments.get("new_str", "")
+        old_str = arguments.get("old_string", "")
+        new_str = arguments.get("new_string", "")
         if not old_str:
-            return ToolDecision(decision="deny", reason="old_str must not be empty")
+            return ToolDecision(decision="deny", reason="old_string must not be empty")
         if old_str == new_str:
             return ToolDecision(
                 decision="deny",
-                reason="old_str and new_str are identical, no edit needed",
+                reason="old_string and new_string are identical, no edit needed",
             )
         if runner_state is not None:
             read_files = runner_state.get("read_files", set())
@@ -113,7 +102,7 @@ class EditTool(BuiltinTool):
                 return ToolDecision(
                     decision="deny",
                     reason=f"File '{path}' must be read before editing",
-                    guidance="Read the file first using read_file.",
+                    guidance="Read the file first using Read.",
                 )
         return None
 
@@ -121,69 +110,52 @@ class EditTool(BuiltinTool):
         session = self._require_session()
 
         file_path: str = arguments.get("file_path", "")
-        old_str: str = arguments.get("old_str", "")
-        new_str: str = arguments.get("new_str", "")
+        old_str: str = arguments.get("old_string", "")
+        new_str: str = arguments.get("new_string", "")
+        replace_all: bool = arguments.get("replace_all", False)
 
-        # No-op check
         if old_str == new_str:
-            return (
-                "Error: No replacement was performed. "
-                "`old_str` and `new_str` must be different."
-            )
+            return "Error: No replacement was performed. `old_string` and `new_string` must be different."
 
         content: str = session.read_file(file_path)
-
-        # Find matches
         pattern = re.escape(old_str)
         matches = list(re.finditer(pattern, content))
 
-        # Strip fallback if no exact match
         if not matches:
-            old_str_stripped = old_str.strip()
-            new_str_stripped = new_str.strip()
-            pattern = re.escape(old_str_stripped)
-            matches = list(re.finditer(pattern, content))
+            return (
+                f"No replacement was performed, old_string "
+                f"did not appear verbatim in {file_path}."
+            )
 
-            if matches:
-                if old_str_stripped == new_str_stripped:
-                    return (
-                        "Error: No replacement was performed. "
-                        "`old_str` and `new_str` must be different "
-                        "(after stripping whitespace)."
-                    )
-                old_str = old_str_stripped
-                new_str = new_str_stripped
-            else:
-                return (
-                    f"No replacement was performed, old_str "
-                    f"did not appear verbatim in {file_path}."
-                )
+        if replace_all:
+            new_content = content.replace(old_str, new_str)
+            count = len(matches)
+            session.write_file(file_path, new_content)
+            return f"Replaced {count} occurrence(s) in {file_path}."
 
-        # Multiple matches
         if len(matches) > 1:
             line_numbers = sorted(
                 {content.count("\n", 0, m.start()) + 1 for m in matches}
             )
             return (
                 f"No replacement was performed. Multiple occurrences "
-                f"of old_str in lines {line_numbers}. "
-                f"Please ensure it is unique."
+                f"of old_string in lines {line_numbers}. "
+                f"Please ensure it is unique or use replace_all=true."
             )
 
-        # Single match -- perform replacement
         match = matches[0]
         replacement_line = content.count("\n", 0, match.start()) + 1
         new_content = content[: match.start()] + new_str + content[match.end() :]
 
         session.write_file(file_path, new_content)
 
-        # Build context snippet
         start_line = max(0, replacement_line - SNIPPET_LINES)
         end_line = replacement_line + SNIPPET_LINES + new_str.count("\n") + 1
         snippet = "\n".join(new_content.split("\n")[start_line : end_line + 1])
-        snippet = maybe_truncate(snippet, max_size=MAX_OUTPUT_SIZE)
+        if len(snippet) > MAX_OUTPUT_SIZE:
+            half = MAX_OUTPUT_SIZE // 2
+            snippet = snippet[:half] + "\n...\n" + snippet[-half:]
 
-        # Format with line numbers
         numbered = "\n".join(
             f"{i + start_line + 1:6}\t{line}"
             for i, line in enumerate(snippet.split("\n"))

@@ -1,42 +1,37 @@
-"""Builtin tools -- matmaster native tool implementations.
+"""matmaster/tools/builtin/__init__.py
 
-All builtin tools inherit from BuiltinTool ABC and satisfy the Tool Protocol.
+Builtin tools — matmaster native tool implementations.
+All tools inherit from BuiltinTool ABC and satisfy the Tool Protocol.
+
+Tools are added incrementally by plan-01 through plan-04.
 """
 
+from matmaster.tools.builtin.agent_tool import AgentTool
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.builtin.bash_tool import BashTool
+from matmaster.tools.builtin.bohrium import BohriumTool
 from matmaster.tools.builtin.edit_tool import EditTool
 from matmaster.tools.builtin.glob_tool import GlobTool
 from matmaster.tools.builtin.grep_tool import GrepTool
-from matmaster.tools.builtin.listdir_tool import ListDirTool
 from matmaster.tools.builtin.read_tool import ReadTool
-from matmaster.tools.builtin.spawn_tool import SpawnTool
-from matmaster.tools.builtin.task import (
-    TaskCompleteTool,
-    TaskCreateTool,
-    TaskGetTool,
-    TaskListTool,
-    TaskUpdateTool,
-)
+from matmaster.tools.builtin.skill_tool import SkillTool
+from matmaster.tools.builtin.todo_write_tool import TodoWriteTool
 from matmaster.tools.builtin.web_fetch_tool import WebFetchTool
 from matmaster.tools.builtin.web_search_tool import WebSearchTool
 from matmaster.tools.builtin.write_tool import WriteTool
 
 __all__ = [
+    "AgentTool",
+    "BohriumTool",
     "BuiltinTool",
     "BashTool",
     "EditTool",
     "GlobTool",
     "GrepTool",
-    "ListDirTool",
     "ReadTool",
-    "SpawnTool",
-    "WriteTool",
-    "TaskCompleteTool",
-    "TaskCreateTool",
-    "TaskGetTool",
-    "TaskListTool",
-    "TaskUpdateTool",
+    "SkillTool",
+    "TodoWriteTool",
     "WebFetchTool",
     "WebSearchTool",
+    "WriteTool",
 ]

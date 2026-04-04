@@ -67,7 +67,7 @@ Minimum **800 words**. Must include:
 
 ## De-AIGC rules (mandatory — full apply)
 
-Full guide: `use_skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
+Full guide: `Skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
 
 **Thesis-specific priorities:**
 1. Literature Review: every claim about the field must be cited; no "it is widely accepted that" without citations.

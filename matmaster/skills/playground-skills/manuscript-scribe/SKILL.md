@@ -194,7 +194,7 @@ Full format details are in `citation_and_output_format.md`, which is already inj
 * **Usage**: `python init_manuscript.py --title "My Paper" --template "research_paper"`
   Or with section files: `python init_manuscript.py --title "My Paper" --template "research_paper" --sections_dir sections/`
   List profiles: `python init_manuscript.py --list_formats`
-* **use_skill example**: script_name=init_manuscript.py, script_args="--title \"My Paper\" --template computational_report"
+* **Skill example**: script_name=init_manuscript.py, script_args="--title \"My Paper\" --template computational_report"
 * **Effect**: Creates a draft outline based on the selected format profile. With `--sections_dir`, creates empty section files under `sections/` and writes `_profile.json` with profile metadata so downstream scripts can auto-detect the profile.
 * **Templates**: research_paper, grant, computational_report, patent, review, technical_report, thesis_section.
 
@@ -209,7 +209,7 @@ Full format details are in `citation_and_output_format.md`, which is already inj
   * Writes the given content into the section (no expansion; script writes exactly what you pass). Use **`--append`** to add more paragraphs to an existing section so you can build it in chunks (multiple calls) instead of one long generation.
   * **--profile**: When set, prints word count after writing and warns if below profile minimum.
   * **--min_words**: Explicit floor (overrides profile).
-  * **Prefer --content_file for long content**: Inline --content is prone to truncation when passed via use_skill; for References, Summary, or any section with lists/long text, write to a temp file and use --content_file.
+  * **Prefer --content_file for long content**: Inline --content is prone to truncation when passed via Skill; for References, Summary, or any section with lists/long text, write to a temp file and use --content_file.
   * Citation-backed prose: every claim that needs a source must have `[n](URL)` or `[n](#ref-n)` and a corresponding entry in References.
   * Output: update `--draft` or write to `--output sections/SectionName.md`.
 
@@ -277,7 +277,7 @@ Full format details are in `citation_and_output_format.md`, which is already inj
   - **Reference formatting**: Auto-detects journal names (italic), years (bold), page ranges (en-dash).
   - En-dash and minus sign: preserved as correct Unicode.
   - Times New Roman 11pt, standard margins, page numbers.
-* **use_skill example**: script_name=export_docx.py, script_args="--input final.md --output manuscript.docx"
+* **Skill example**: script_name=export_docx.py, script_args="--input final.md --output manuscript.docx"
 
 ### `export_latex.py` (LaTeX export)
 
@@ -291,7 +291,7 @@ Full format details are in `citation_and_output_format.md`, which is already inj
   - Superscripts `^{text}` → `$^{text}$`.
   - Markdown tables → LaTeX `tabular`.
   - Optional BibTeX file generation from References section.
-* **use_skill example**: script_name=export_latex.py, script_args="--input final.md --output manuscript.tex --bibfile refs.bib"
+* **Skill example**: script_name=export_latex.py, script_args="--input final.md --output manuscript.tex --bibfile refs.bib"
 
 ## When to use
 
@@ -313,13 +313,13 @@ Full format details are in `citation_and_output_format.md`, which is already inj
 * In chat: report progress and **file paths** only; never stream the full manuscript.
 * **Always specify --profile** when calling init_manuscript, write_section, validate_content, and assemble_manuscript so that format-specific section ordering and word-count thresholds apply.
 
-## Tool (via use_skill)
+## Tool (via Skill)
 
 - **run_script** with **script_name**: `init_manuscript.py`, `write_section.py`, `append_chunk.py`, `validate_content.py`, `assemble_manuscript.py`, `run_pipeline.py`, `polish_text.py`, `export_docx.py`, or `export_latex.py`; **script_args** as in Usage above.
 
 ## De-AIGC Writing Rules (mandatory for all profiles except the patent Claims section)
 
-Full reference: `use_skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
+Full reference: `Skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
 
 **Core rules (apply at every writing step):**
 1. Lead with the real problem, not broad context.
@@ -339,7 +339,7 @@ Full reference: `use_skill action=get_reference reference_name="de_aigc_style_gu
 
 * **Retrieval first**: Before any init_manuscript or write_section call, run literature search (mat_sn_* paper and web search) for the topic; do not write from memory only. Exception: `computational_report` with user-provided parameters.
 * **Required args**: init_manuscript.py always needs --title; pass it in script_args (e.g. script_args="--title \"My Paper\" --template research_paper"). assemble_manuscript.py always needs **--output** and one of **--draft** or **--sections_dir** (e.g. script_args="--draft draft_manuscript.md --output final.md").
-* **Long section content (critical)**: Section content passed via **--content** in script_args can be truncated by the tool layer (e.g. ~500–1000 chars). For any section longer than a short paragraph (lists, multiple refs, 2+ paragraphs), **write the content to a file first** (e.g. with str_replace_editor or execute_bash), then call `write_section.py --section "SectionName" --content_file path/to/section.md --draft draft_manuscript.md`. Do not rely on long --content strings for Summary, State-of-the-Art, or References.
+* **Long section content (critical)**: Section content passed via **--content** in script_args can be truncated by the tool layer (e.g. ~500–1000 chars). For any section longer than a short paragraph (lists, multiple refs, 2+ paragraphs), **write the content to a file first** (e.g. with `Write` or `Bash`), then call `write_section.py --section "SectionName" --content_file path/to/section.md --draft draft_manuscript.md`. Do not rely on long --content strings for Summary, State-of-the-Art, or References.
 * **Chunked writing**: Use multiple `write_section.py` calls per section (first call creates, further calls use `--append`) or build the full section in a file then pass with `--content_file`; the script does not expand short text.
 * **Long-task state (recommended)**: Use `--state _tmp/manuscript/state.json --resume` on write/validate/assemble stages for deterministic resume.
 * **Profile**: Always pass `--profile <name>` to init_manuscript, write_section, validate_content, and assemble_manuscript. Use `computational_report` for DFT/MD write-ups, `patent` for patent apps, `thesis_section` for thesis chapters, etc.

@@ -74,7 +74,7 @@ class ToolCallingProvider:
                     {
                         'index': 0,
                         'id': 'tc-1',
-                        'name': 'execute_bash',
+                        'name': 'Bash',
                         'arguments': '{"command": "echo hello"}',
                     }
                 ],

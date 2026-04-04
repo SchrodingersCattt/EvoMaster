@@ -171,7 +171,7 @@ class TestBuildRuntimeFullToolRunner:
         from matmaster.core.exp import Exp
         from matmaster.types.topology import ToolPlane
 
-        config = _make_exp_config(tools={"builtin": ["read_file"]})
+        config = _make_exp_config(tools={"builtin": ["Read"]})
         exp = Exp(config)
         ctx = _make_playground_context()
 
@@ -187,8 +187,8 @@ class TestBuildRuntimeFullToolRunner:
         )
 
     @pytest.mark.asyncio
-    async def test_build_runtime_runner_can_execute_read_file(self) -> None:
-        """Default build_runtime path can execute read_file without plane errors."""
+    async def test_build_runtime_runner_can_execute_read(self) -> None:
+        """Default build_runtime path can execute Read without plane errors."""
         from matmaster.core.exp import Exp
         from matmaster.core.tool_runner import ToolExecutionContext
         from matmaster.types.messages import ToolCallData
@@ -203,13 +203,13 @@ class TestBuildRuntimeFullToolRunner:
             def read_file(self, path, encoding="utf-8"):
                 return "hello from test"
 
-        config = _make_exp_config(tools={"builtin": ["read_file"]})
+        config = _make_exp_config(tools={"builtin": ["Read"]})
         exp = Exp(config)
         ctx = _make_playground_context(session=_ReadableSession())
 
         runtime = await exp.build_runtime(ctx)
         results = await runtime.spec.tool_runner.execute_batch(
-            [ToolCallData(id="c1", name="read_file", arguments={"file_path": "/tmp/test-exec/test.txt"})],
+            [ToolCallData(id="c1", name="Read", arguments={"file_path": "/tmp/test-exec/test.txt"})],
             ToolExecutionContext(turn=1, max_turns=10),
         )
         assert results[0][1].status == "success"
@@ -472,3 +472,36 @@ class TestBuildRuntimeCompactorEventSink:
         assert hasattr(runtime.spec.compactor, "_event_sink")
         # event_sink should be None (set later by _run_items)
         assert runtime.spec.compactor._event_sink is None
+
+
+# ── Active planes with new CC tool names ─────────────────
+
+
+class TestActivePlanesNewNames:
+    """_derive_active_planes recognises new CC-style tool names."""
+
+    @pytest.mark.asyncio
+    async def test_build_runtime_adds_external_service_plane_for_websearch(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """WebSearch in builtin_cfg activates EXTERNAL_SERVICE plane."""
+        from matmaster.config.exp import ExpConfig
+        from matmaster.core.exp import Exp
+        from matmaster.types.context import PlaygroundContext
+        from matmaster.types.topology import ToolPlane
+
+        config = ExpConfig(name="test", tools={"builtin": ["WebSearch"]})
+        exp = Exp(config)
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=None,
+            llm_provider=_MockProvider(),
+        )
+
+        runtime = await exp.build_runtime(ctx)
+
+        assert ToolPlane.EXTERNAL_SERVICE in runtime.spec.runtime_topology.active_planes

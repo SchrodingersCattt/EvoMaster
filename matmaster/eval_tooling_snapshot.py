@@ -19,22 +19,18 @@ from matmaster.config.exp import ExpSkillsConfig
 
 logger = logging.getLogger(__name__)
 
-# Order matches ``matmaster.core.exp.Exp._init_builtin_tools`` + spawn branch.
+# Order matches ``matmaster.core.exp.Exp._init_builtin_tools`` CC-name registration.
 _BUILTIN_WHEN_STAR: list[str] = [
-    "execute_bash",
-    "list_dir",
-    "read_file",
-    "write_file",
-    "edit_file",
-    "glob",
-    "grep",
-    "task_create",
-    "task_get",
-    "task_list",
-    "task_update",
-    "task_complete",
-    "monitor_job",
-    "mm_web_search",
+    "Bash",
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+    "TodoWrite",
+    "WebSearch",
+    "WebFetch",
+    "Bohrium",
 ]
 
 
@@ -43,7 +39,7 @@ def _resolve_builtin_tool_names(builtin_cfg: list[str]) -> list[str]:
     if not builtin_cfg:
         return []
     if builtin_cfg == ["*"]:
-        return list(_BUILTIN_WHEN_STAR) + ["spawn"]
+        return list(_BUILTIN_WHEN_STAR) + ["Agent"]
     out: list[str] = []
     for name in builtin_cfg:
         if name == "*":
@@ -133,7 +129,7 @@ def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
     surface_tools = list(builtin_names)
 
     if exp_cfg.skills.enabled:
-        surface_tools.append("use_skill")
+        surface_tools.append("Skill")
         root_paths = _skills_roots_as_paths(exp_cfg.skills, repo_root)
         skills_roots_str = [str(p) for p in root_paths]
         try:
