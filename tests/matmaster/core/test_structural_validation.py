@@ -1,7 +1,7 @@
 """Tests for StructuralValidation -- Layer A stateless validation.
 
 Tests args_schema validation, plane activation check, and
-session capabilities matching.
+path normalization / stateless shell semantics.
 """
 
 from __future__ import annotations
@@ -176,17 +176,17 @@ class TestPlaneCheck:
 
 
 # ---------------------------------------------------------------------------
-# TestCapabilities
+# TestSessionShellExecution
 # ---------------------------------------------------------------------------
 
 class TestCapabilities:
-    """Session capabilities matching."""
+    """Session capability inputs do not block one-shot shell execution."""
 
     def setup_method(self) -> None:
         self.validator = StructuralValidation()
 
-    def test_deny_shell_execute_without_shell_input(self) -> None:
-        """shell.execute capability but shell_input=False -> deny."""
+    def test_allow_shell_execute_without_shell_input(self) -> None:
+        """Stateless shell execution does not require interactive shell_input."""
         instance = _make_instance(
             plane=ToolPlane.SESSION_SHELL,
             capabilities=frozenset({"shell.execute"}),
@@ -198,11 +198,10 @@ class TestCapabilities:
         )
         result = self.validator.validate(topo, instance, {})
 
-        assert result.decision == "deny"
-        assert "shell.execute" in result.reason.lower()
+        assert result.decision == "allow"
 
     def test_allow_when_no_session_capabilities(self) -> None:
-        """session_capabilities=None skips capability check -> allow."""
+        """session_capabilities=None still allows one-shot shell execution."""
         instance = _make_instance(
             plane=ToolPlane.SESSION_SHELL,
             capabilities=frozenset({"shell.execute"}),
@@ -216,7 +215,7 @@ class TestCapabilities:
         assert result.decision == "allow"
 
     def test_allow_when_capabilities_match(self) -> None:
-        """shell.execute with shell_input=True -> allow."""
+        """Interactive-capable sessions also allow one-shot shell execution."""
         instance = _make_instance(
             plane=ToolPlane.SESSION_SHELL,
             capabilities=frozenset({"shell.execute"}),
@@ -231,7 +230,7 @@ class TestCapabilities:
         assert result.decision == "allow"
 
     def test_allow_control_plane_no_capability_check(self) -> None:
-        """CONTROL_PLANE tools skip capability checks even with caps present."""
+        """CONTROL_PLANE tools are unaffected by session shell capabilities."""
         instance = _make_instance(plane=ToolPlane.CONTROL_PLANE)
         caps = SessionCapabilities(shell_input=False)
         topo = _make_topology(

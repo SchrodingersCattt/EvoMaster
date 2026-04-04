@@ -9,9 +9,9 @@ can be dispatched:
 2. **plane activation** -- verifies the tool's ToolPlane is in the
    RuntimeTopology.active_planes set.
 
-3. **session capabilities** -- if RuntimeTopology.session_capabilities is
-   present, checks that the session supports required capabilities
-   (e.g., shell_input for shell.execute tools).
+3. **workspace path normalization** -- for workspace-bound tools, resolves
+   file path arguments against RuntimeTopology.workspace_root and rejects
+   paths outside the workspace boundary.
 
 Each check returns a deny ToolDecision on failure. If all pass,
 returns allow.
@@ -75,27 +75,9 @@ class StructuralValidation:
                 ),
             )
 
-        # 3. session capabilities matching
-        caps = runtime_topology.session_capabilities
-        if caps is not None:
-            spec = tool_instance.tool_spec
-            binding_plane = tool_instance.tool_binding.plane
-
-            # shell.execute requires shell_input support
-            if (
-                binding_plane == ToolPlane.SESSION_SHELL
-                and "shell.execute" in spec.capabilities
-                and not caps.shell_input
-            ):
-                return ToolDecision(
-                    decision="deny",
-                    reason=(
-                        "Session does not support required capability: "
-                        "shell.execute"
-                    ),
-                )
-
-        # 4. Path normalization for workspace-bound tools only
+        # 3. Path normalization for workspace-bound tools only.
+        # shell_input is reserved for future interactive shell features;
+        # stateless one-shot shell execution remains valid with shell_input=False.
         _WORKSPACE_PLANES = {ToolPlane.SESSION_FS, ToolPlane.SESSION_SHELL}
         modified_args: dict[str, Any] | None = None
         if plane in _WORKSPACE_PLANES:

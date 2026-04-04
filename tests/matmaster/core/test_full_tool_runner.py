@@ -16,6 +16,7 @@ Verifies:
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -29,6 +30,8 @@ from matmaster.core.tool_runner import (
     ToolRunner,
 )
 from matmaster.core.tool_scheduler import SchedulerTicket, ToolScheduler
+from matmaster.sessions.local import LocalSession
+from matmaster.tools.builtin.bash_tool import BashTool
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
@@ -239,6 +242,35 @@ class TestStructuralDeny:
         tc, tr = results[0]
         assert tr.status == "error"
         assert tr.meta["layer"] == "structural"
+
+    @pytest.mark.asyncio
+    async def test_execute_bash_allowed_for_stateless_local_session(
+        self, tmp_path
+    ) -> None:
+        """Real LocalSession capabilities should not structurally block execute_bash."""
+        session = LocalSession(workspace_path=tmp_path)
+        assert session.capabilities.shell_persistence == "stateless"
+        assert session.capabilities.shell_input is False
+        topology = _make_topology(session_caps=session.capabilities)
+        registry = ToolRegistry()
+        registry.register(
+            BashTool(session=session, workdir=Path(tmp_path)),
+            source="builtin",
+        )
+        catalog = ToolCatalog(registry, topology=topology)
+        runner = _make_runner(catalog, topology=topology)
+        ctx = _make_ctx()
+
+        results = await runner.execute_batch(
+            [_make_tc("execute_bash", command="echo runner_ok")],
+            ctx,
+        )
+
+        assert len(results) == 1
+        tc, tr = results[0]
+        assert tc.name == "execute_bash"
+        assert tr.status == "success"
+        assert "runner_ok" in tr.content
 
 
 # ── Repeated Calls ───────────────────────────────────────

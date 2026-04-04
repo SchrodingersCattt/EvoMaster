@@ -161,9 +161,9 @@ class SessionCapabilities(BaseModel):
 
 说明：
 
-- 当前 SSHSession 的 exec_bash 每次新开 channel 执行 `bash -l -c 'cd ... && cmd'`，应报告 `shell_persistence = "stateless"`、`shell_input = False`
-- 当前 LocalSession 应报告 `shell_persistence = "stateless"`、`shell_input = False`、`exec_cancel = False`（LocalSession.exec_bash 使用 subprocess.run，stop_event 无效果；BashTool 的本地异步路径也不检查 stop_event）
-- 若未来引入 tmux 持久 shell，对应 Session 报告 `shell_persistence = "persistent"`、`shell_input = True`，无需改动 RuntimeTopology 或上层逻辑
+- 当前 SSHSession 的 `exec_bash` 每次新开 channel 执行 `bash -l -c 'cd ... && cmd'`，应报告 `shell_persistence = "stateless"`、`shell_input = False`。这表示支持一次性 `shell.execute`，但不支持交互式 shell 输入。
+- 当前 LocalSession 应报告 `shell_persistence = "stateless"`、`shell_input = False`、`exec_cancel = True`。同样，`shell_input = False` 仅表示没有交互式 shell 输入语义，不应阻止一次性 `execute_bash` 执行。
+- 若未来引入 tmux 持久 shell，对应 Session 报告 `shell_persistence = "persistent"`、`shell_input = True`；此时 `shell_input` 表示交互式 / 持久 shell 能力，无需改动 RuntimeTopology 或上层逻辑。
 
 实现路径：在 Session Protocol 上增加 `capabilities` 属性（提供默认实现）。Playground 构建 PlaygroundContext 时调用 `session.capabilities` 填入。
 
@@ -388,7 +388,11 @@ class StructuralValidation:
 - `args_schema` 类型和必填字段校验
 - 参数路径规范化到允许的根目录
 - 当前 topology 是否启用了所需 plane
-- 当前 binding 在当前 session_capabilities 下是否可执行
+
+说明：
+
+- `RuntimeTopology.session_capabilities` 仍作为 topology 的一部分向后传递，供 ToolCompiler 和未来更细粒度的 capability 约束消费
+- 当前 Layer A 不基于 `shell_input` 阻止一次性 `shell.execute`；`shell_input` 仅表达交互式 shell 能力
 
 #### Layer B: RunStateGuard
 
@@ -632,7 +636,7 @@ LLM 返回 tool_call
   │    ToolCatalog.get_tool(tool_name) → ToolInstance（miss → error ToolResult）
   │
   ├─ Step 2: Layer A — StructuralValidation
-  │    args_schema 校验 / 路径规范化 / plane 启用检查 / session_capabilities 匹配
+  │    args_schema 校验 / 路径规范化 / plane 启用检查
   │    → ToolDecision（deny → error；allow + modified_args → 替换后续参数）
   │
   ├─ Step 3: 工具级语义校验
