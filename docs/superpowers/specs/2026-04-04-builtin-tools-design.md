@@ -83,6 +83,19 @@ Used by Glob and Grep. Write's boundary check lives in `validate_input` (needs `
 
 Interaction with StructuralValidation (Layer A): Layer A checks workspace boundary on `file_path`/`path` params before `_execute` is called, denying out-of-bounds paths. `resolve_safe_path` handles the remaining cases that pass Layer A: empty strings, `.`, and relative paths that need defaulting to workdir. The silent-fallback branch for absolute-path traversal is effectively dead code (Layer A catches it first) but retained as defense-in-depth.
 
+Additionally, `_path_safety.py` provides a shell-argument sanitizer:
+
+```python
+def shell_escape(value: str) -> str:
+```
+
+Uses `shlex.quote()` to wrap user-supplied values before interpolation into shell commands. **All tools that build shell command strings from user parameters (Glob, Grep) MUST pass `pattern`, `glob`, and `path` through `shell_escape()` before string interpolation.** This prevents shell injection (`$(...)`, backticks, quote escaping) that would bypass CapabilityPolicy, which only inspects the `Bash` tool's `command` parameter.
+
+Example safe command construction:
+```python
+cmd = f'find {shell_escape(safe_path)} -type f -name {shell_escape(pattern)} ...'
+```
+
 ### 1.3 __init__.py
 
 Exports: `BuiltinTool`, `BashTool`, `ReadTool`, `EditTool`, `WriteTool`, `GlobTool`, `GrepTool`, `WebSearchTool`, `WebFetchTool`, `AgentTool`, `TodoWriteTool`, `SkillTool`.
@@ -113,12 +126,17 @@ Behavior:
 2. `session.read_file(path)` to get full content, splitlines
 3. Full-read mode (no offset/limit):
    - 2000 lines or fewer: cat -n format, `meta.mark_read = True`
-   - Over 2000: error + 50-line preview + guidance to use offset/limit
+   - Over 2000: error + 50-line preview + guidance to use offset/limit (no mark_read)
 4. Range mode (offset/limit specified):
    - Slice lines, cat -n format
+   - `meta.mark_read = True` always (the user explicitly requested a range, they know what they are editing)
    - Continuation hint if truncated
 5. All output capped at 200K chars
-6. `execute_with_context()`: successful full read adds path to `runner_state["read_files"]`
+6. `execute_with_context()`: if `meta.mark_read` is True, add path to `runner_state["read_files"]`
+
+**mark_read contract**: Any successful read (full or ranged) marks the file as read, **except** the >2000-line error case. This means large files can be Edit/Write'd after a ranged read -- the agent takes responsibility for knowing the relevant portion. The >2000-line error is the only case that blocks Edit/Write, forcing the agent to narrow its read first.
+
+Note: `max_result_chars = 12_000` triggers FullToolRunner truncation on the content sent to the LLM, but this does NOT affect `mark_read` -- the meta flag is set before truncation happens in the pipeline. The agent may see truncated output but the file is still marked as read.
 
 ### 2.2 Edit
 
@@ -146,7 +164,7 @@ validate_input:
 _execute:
 1. `session.read_file(path)` for current content
 2. `re.finditer(re.escape(old_string), content)` to find matches
-3. Zero matches: try `old_string.strip()` fallback. If stripped version matches uniquely, use it as the replacement target (both old and new strings are stripped). Still zero -> error
+3. Zero matches: report error with guidance. No strip fallback -- silent whitespace mutation risks losing indentation and trailing spaces, which is worse than asking the model to retry with correct content
 4. `replace_all=False`: multiple matches -> error with line numbers; single match -> replace
 5. `replace_all=True`: `content.replace(old_string, new_string)`, return replacement count
 6. `session.write_file(path, new_content)`
@@ -380,7 +398,11 @@ def __init__(self, *, session=None, workdir=None,
 
 - `spawn_fn` injected by Exp; async callback to launch sub-agent
 - `available_exps` drives dynamic `exp_name` enum constraint and description text
-- Recursion guard: child agents constructed with `spawn_fn=None`, tool not registered
+- **Recursion guard** (two layers):
+  1. **Schema-layer**: When `spawn_fn=None`, `AgentTool` is simply not registered in the child registry (the `if "Agent" in builtin_cfg` check in `_init_builtin_tools` passes `spawn_fn=None` → tool constructor detects this and sets `exposed_to_model=False`, or the tool is not instantiated at all). The LLM never sees the tool.
+  2. **Runtime-layer**: Even if somehow called, `execute()` returns an error when `spawn_fn is None`.
+  
+  **Integration requirement for `Exp.spawn_fn`**: The existing `Exp._make_spawn_fn()` builds a child Exp and calls `run_stream()`. When building the child runtime, it must pass `spawn_fn=None` to the child's `_init_builtin_tools` call. This is achieved by the child Exp not calling the Agent registration branch (either by omitting `"Agent"` from the child's builtin_cfg, or by passing `spawn_fn=None` explicitly). The implementation must verify this path in `Exp._make_spawn_fn()` and add the gating if absent.
 
 Dynamic schema:
 - If `available_exps` provided at construction, override instance-level `description` and `json_schema`
@@ -474,26 +496,37 @@ execute() override (native async):
 
 ### 6.1 Exp._init_builtin_tools() rewrite
 
-New registration list:
+**Session-dependent tools** (only registered when `ctx.session is not None`):
 ```python
 from matmaster.tools.builtin import (
     BashTool, ReadTool, WriteTool, EditTool,
-    GlobTool, GrepTool, WebSearchTool, WebFetchTool,
-    TodoWriteTool,
+    GlobTool, GrepTool,
 )
 
-native_tools = [
+session_tools = [
     BashTool(session=ctx.session, workdir=exec_wd),
     ReadTool(session=ctx.session, workdir=exec_wd),
     WriteTool(session=ctx.session, workdir=exec_wd),
     EditTool(session=ctx.session, workdir=exec_wd),
     GlobTool(session=ctx.session, workdir=exec_wd),
     GrepTool(session=ctx.session, workdir=exec_wd),
+]
+```
+
+**Session-independent tools** (always registered, no session gate):
+```python
+from matmaster.tools.builtin import (
+    WebSearchTool, WebFetchTool, TodoWriteTool,
+)
+
+sessionless_tools = [
     TodoWriteTool(workdir=ctx.workdir),
     WebSearchTool(),
     WebFetchTool(workdir=ctx.workdir),
 ]
 ```
+
+The current `_init_builtin_tools` is entirely gated by `if builtin_cfg and ctx.session is not None`. This must be split: session-dependent tools stay behind the session gate, sessionless tools (Web, TodoWrite) are registered unconditionally (only gated by `builtin_cfg`).
 
 Agent registered separately (needs spawn_fn):
 ```python
@@ -507,6 +540,8 @@ if ("Agent" in builtin_cfg or "*" in builtin_cfg) and ctx.session is not None:
 Skill registered in `_init_skill_tools()` using new `builtin.SkillTool` class. Although `SkillTool` lives in the `builtin/` directory, it is NOT controlled by the `tools.builtin` TOML config list. Its registration depends on `skills.enabled` and happens in `_init_skill_tools()`, because it requires a `SkillRegistry` instance that is only available after skill initialization.
 
 MonitorJobTool: comment out import and registration with `# TODO: rebuild MonitorJobTool`.
+
+**`_derive_active_planes()` update**: The current code checks `("mm_web_search", "web_fetch", "monitor_job")` to activate `EXTERNAL_SERVICE` plane. Update to `("WebSearch", "WebFetch")`. Remove `"monitor_job"` (out of scope).
 
 Task tool migration: The old 5 task tools (`task_create/get/list/update/complete`) stored data in `{workdir}/.tasks.json`. The new `TodoWrite` uses `{workdir}/.todos.json`. No migration of existing `.tasks.json` files is needed -- they can be ignored (old format is incompatible with the new full-replacement model).
 
@@ -548,6 +583,8 @@ builtin = [
 ]
 ```
 Developer instructions text updates: `read_file` -> `Read`, `list_dir` -> `Glob` (or remove), `execute_bash` -> `Bash`, `mm_web_search` -> `WebSearch`, `web_fetch` -> `WebFetch`.
+
+**Test file references**: Existing test files (`tests/matmaster/core/test_exp.py`, `tests/matmaster/core/test_agent_kernel_stream.py`, `tests/matmaster/core/test_exp_skills.py`, `tests/matmaster/core/test_structural_validation.py`, `tests/matmaster/core/test_capability_policy.py`, `tests/matmaster/tools/test_tool_compiler.py`, `tests/matmaster/devshell/test_integration.py`, `tests/matmaster/test_eval_tooling_snapshot.py`, `tests/test_adapt_tool_calls_format.py`) contain hardcoded old tool names (`execute_bash`, `use_skill`, `list_dir`, `read_file`, etc.). These will be updated in Phase 5 alongside new per-tool test files.
 
 ## 7. Implementation Order
 
