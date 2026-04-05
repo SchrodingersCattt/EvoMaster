@@ -617,6 +617,65 @@ class TestCalculationPathAdaptorPreflight:
         assert result["storage"] == {"provider": "bohrium"}
 
 
+class TestBridgeBackedCredentialResolution:
+    """Task 5: duplicate credential helpers removed in favor of bridge."""
+
+    def test_session_bohrium_credentials_removed(self):
+        """_session_bohrium_credentials should be removed in favor of bridge."""
+        import matmaster.adaptors.calculation.path_adaptor as mod
+
+        assert not hasattr(mod, "_session_bohrium_credentials"), (
+            "_session_bohrium_credentials should be removed in favor of bridge"
+        )
+
+    def test_is_missing_credential_removed(self):
+        """_is_missing_credential should be removed in favor of bridge."""
+        import matmaster.adaptors.calculation.path_adaptor as mod
+
+        assert not hasattr(mod, "_is_missing_credential"), (
+            "_is_missing_credential should be removed in favor of bridge"
+        )
+
+    def test_resolve_args_uses_bridge_for_credentials(self, monkeypatch):
+        """resolve_args should use bridge-backed credential resolution."""
+        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
+        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
+        monkeypatch.delenv("BOHRIUM_USER_ID", raising=False)
+
+        from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
+        class FakeSession:
+            _bohrium_credentials = {
+                "access_key": "bridge-ak",
+                "project_id": 999,
+                "user_id": 888,
+                "user_no": "B001",
+            }
+
+        adaptor = CalculationPathAdaptor(
+            calculation_executors={
+                "mat_sg": {
+                    "sync_tools": ["build_molecule_structures_from_smiles"],
+                }
+            }
+        )
+        result = adaptor.resolve_args(
+            workspace_path="",
+            args={"smiles": "CCO"},
+            tool_name="mat_sg_build_molecule_structures_from_smiles",
+            server_name="mat_sg",
+            session=FakeSession(),
+        )
+
+        # Verify bridge-resolved credentials made it into executor env
+        assert result["executor"]["env"]["BOHRIUM_ACCESS_KEY"] == "bridge-ak"
+        assert result["executor"]["env"]["BOHRIUM_PROJECT_ID"] == "999"
+        assert result["executor"]["env"]["BOHRIUM_USER_ID"] == "888"
+        assert result["executor"]["env"]["BOHRIUM_USER_NO"] == "B001"
+        assert result["storage"]["plugin"]["access_key"] == "bridge-ak"
+        assert result["storage"]["plugin"]["project_id"] == 999
+
+
 class TestCalculationPathOverrideConfig:
     def test_enabled_tools_have_required_path_param_overrides(self):
         config = yaml.safe_load(Path("config/mcp.yaml").read_text(encoding="utf-8"))

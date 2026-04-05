@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -55,21 +54,27 @@ def _tiefblue_nas_host() -> str:
 # ===================================================================
 
 
-def _get_access_key(access_key: str | None = None) -> str:
-    """Return a valid access key or raise."""
-    if access_key:
-        return access_key.strip()
-    try:
-        from matmaster.integration.bohrium_env import get_bohrium_credentials
+def _get_access_key(
+    access_key: str | None = None, session: Any = None
+) -> str:
+    """Return a valid access key or raise.
 
-        cred = get_bohrium_credentials()
-        ak = cred.get('access_key', '')
-    except Exception:
-        ak = os.getenv('BOHRIUM_ACCESS_KEY', '').strip()
+    Uses the runtime bridge for credential resolution with full
+    precedence chain: explicit > session > env.
+    """
+    from matmaster.integration.runtime_bridge.adapters.bohrium import (
+        resolve_bohrium_credentials,
+    )
+
+    cred = resolve_bohrium_credentials(
+        session=session,
+        explicit={"access_key": access_key} if access_key else None,
+    )
+    ak = str(cred.values.get("access_key") or "").strip()
     if not ak:
         raise ValueError(
-            'Bohrium access_key required.  '
-            'Set BOHRIUM_ACCESS_KEY in .env or pass access_key explicitly.'
+            "Bohrium credentials unavailable for current run. "
+            "Provide via session or BOHRIUM_ACCESS_KEY env var."
         )
     return ak
 

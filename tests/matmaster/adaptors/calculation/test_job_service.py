@@ -6,6 +6,7 @@ Behavioral contract:
 - All function signatures match the original contract (accept bohr_job_id as first arg).
 - No top-level (col_offset == 0) evomaster imports; evomaster.env.bohrium appears only in function bodies.
 - Module uses relative import for env_config ('from .env_config import').
+- _get_access_key uses bridge-backed resolution (Task 5).
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from __future__ import annotations
 import ast
 import inspect
 from pathlib import Path
+from types import SimpleNamespace
 
 
 class TestJobServiceImport:
@@ -193,3 +195,50 @@ class TestJobServiceImportStructure:
 
         # If we got here without ImportError, the module loads without needing evomaster at top level
         assert True
+
+
+class TestGetAccessKeyBridgeBacked:
+    """Task 5: _get_access_key uses bridge-backed credential resolution."""
+
+    def test_get_access_key_prefers_explicit(self):
+        """Explicit access_key is returned without bridge lookup."""
+        from matmaster.adaptors.calculation.job_service import _get_access_key
+
+        ak = _get_access_key(access_key="explicit-ak")
+        assert ak == "explicit-ak"
+
+    def test_get_access_key_accepts_session_kwarg(self):
+        """_get_access_key signature must accept session parameter."""
+        from matmaster.adaptors.calculation.job_service import _get_access_key
+
+        sig = inspect.signature(_get_access_key)
+        assert "session" in sig.parameters, (
+            "_get_access_key must accept session parameter for bridge-backed resolution"
+        )
+
+    def test_get_access_key_prefers_session_backed_bridge(self, monkeypatch):
+        """_get_access_key should use bridge when session is provided."""
+        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
+        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
+        monkeypatch.delenv("BOHRIUM_USER_ID", raising=False)
+
+        from matmaster.adaptors.calculation.job_service import _get_access_key
+
+        session = SimpleNamespace(
+            _bohrium_credentials={"access_key": "session-ak", "project_id": 42}
+        )
+        ak = _get_access_key(session=session)
+        assert ak == "session-ak"
+
+    def test_get_access_key_raises_when_no_credentials(self, monkeypatch):
+        """_get_access_key should raise ValueError when no credentials available."""
+        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
+        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
+        monkeypatch.delenv("BOHRIUM_USER_ID", raising=False)
+
+        from matmaster.adaptors.calculation.job_service import _get_access_key
+
+        import pytest
+
+        with pytest.raises(ValueError, match="[Bb]ohrium"):
+            _get_access_key()

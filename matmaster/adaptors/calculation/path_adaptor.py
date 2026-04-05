@@ -103,30 +103,6 @@ def _effective_sync_tools(server_cfg: Any) -> set[str]:
     return set(server_cfg.get("sync_tools") or []) | set(_JOB_CONTROL_TOOLS)
 
 
-def _is_missing_credential(value: Any) -> bool:
-    """Return True when a Bohrium credential value should fall back."""
-    return value is None or str(value).strip() in {"", "-1"}
-
-
-def _session_bohrium_credentials(
-    session: Any,
-) -> tuple[str | None, Any | None, Any | None, str | None]:
-    """Read Bohrium credentials attached to the active session, if any."""
-    creds = getattr(session, "_bohrium_credentials", None)
-    if not isinstance(creds, dict):
-        return None, None, None, None
-
-    access_key = str(creds.get("access_key") or "").strip() or None
-    project_id = creds.get("project_id")
-    if _is_missing_credential(project_id):
-        project_id = None
-    user_id = creds.get("user_id")
-    if _is_missing_credential(user_id):
-        user_id = None
-    user_no = str(creds.get("user_no") or "").strip() or None
-    return access_key, project_id, user_id, user_no
-
-
 # ---------------------------------------------------------------------------
 # Layer 1: schema-driven detection
 # ---------------------------------------------------------------------------
@@ -755,25 +731,29 @@ class CalculationPathAdaptor:
         except Exception as exc:
             raise _wrap_preflight(exc) from exc
 
-        if session is not None:
-            (
-                session_access_key,
-                session_project_id,
-                session_user_id,
-                session_user_no,
-            ) = _session_bohrium_credentials(session)
-            if not access_key and session_access_key:
-                access_key = session_access_key
-            if _is_missing_credential(project_id) and not _is_missing_credential(
-                session_project_id
-            ):
-                project_id = session_project_id
-            if _is_missing_credential(user_id) and not _is_missing_credential(
-                session_user_id
-            ):
-                user_id = session_user_id
-            if not user_no and session_user_no:
-                user_no = session_user_no
+        # --- Bridge-backed credential resolution ---
+        from matmaster.integration.runtime_bridge.adapters.bohrium import (
+            resolve_bohrium_credentials,
+        )
+
+        explicit_creds: dict[str, Any] = {}
+        if access_key:
+            explicit_creds["access_key"] = access_key
+        if project_id is not None and str(project_id).strip() not in {"", "-1"}:
+            explicit_creds["project_id"] = project_id
+        if user_id is not None and str(user_id).strip() not in {"", "-1"}:
+            explicit_creds["user_id"] = user_id
+        if user_no:
+            explicit_creds["user_no"] = user_no
+
+        cred = resolve_bohrium_credentials(
+            session=session,
+            explicit=explicit_creds if explicit_creds else None,
+        )
+        access_key = str(cred.values.get("access_key") or "").strip() or None
+        project_id = cred.values.get("project_id")
+        user_id = cred.values.get("user_id")
+        user_no = str(cred.values.get("user_no") or "").strip() or None
 
         try:
             # --- executor & storage injection ---
