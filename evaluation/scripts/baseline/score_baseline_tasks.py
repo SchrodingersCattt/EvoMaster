@@ -56,6 +56,7 @@ import argparse
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -559,6 +560,26 @@ def main() -> int:
         default=120.0,
         help="HTTP timeout seconds for each ingest POST (default: 120).",
     )
+    parser.add_argument(
+        "--score-jobs",
+        type=int,
+        default=4,
+        metavar="N",
+        help=(
+            "Parallel threads for scoring distinct tasks (default: 4). "
+            "Each task uses its own BinaryEvaluator when N>1."
+        ),
+    )
+    parser.add_argument(
+        "--parallel-checklist-workers",
+        type=int,
+        default=8,
+        metavar="N",
+        help=(
+            "Max parallel threads for scoring_checklist items per task (default: 8). "
+            "LLM judge calls on one client are serialized with a lock."
+        ),
+    )
     args = parser.parse_args()
 
     # --- Resolve RUN_DIR ---
@@ -611,7 +632,15 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    evaluator = BinaryEvaluator(llm_cfg=llm_cfg, axis_weights=axis_weights)
+    score_jobs = max(1, int(args.score_jobs))
+    parallel_checklist = max(1, int(args.parallel_checklist_workers))
+
+    def _build_evaluator() -> BinaryEvaluator:
+        return BinaryEvaluator(
+            llm_cfg=llm_cfg,
+            axis_weights=axis_weights,
+            parallel_checklist_workers=parallel_checklist,
+        )
 
     # --- Load question bank ---
     bank_dir = args.question_bank_dir or _QUESTION_BANK_DIR
@@ -653,42 +682,94 @@ def main() -> int:
             )
             return 1
 
-    print(f"Scoring {len(tasks)} task(s) in {run_dir}", file=sys.stderr)
+    print(
+        f"Scoring {len(tasks)} task(s) in {run_dir} "
+        f"(score-jobs={score_jobs}, parallel-checklist-workers={parallel_checklist})",
+        file=sys.stderr,
+    )
 
     # --- Score each task ---
     results: list[dict[str, Any]] = []
     n_ok = 0
     n_err = 0
 
-    for task_id, workspace in tasks:
-        meta_path = workspace / "_eval_task_meta.json"
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+    skip_tasks: dict[str, str] = {}
+    scored_by_task: dict[str, dict[str, Any]] = {}
+    meta_by_task: dict[str, dict[str, Any]] = {}
+
+    if score_jobs <= 1:
+        evaluator = _build_evaluator()
+        for task_id, workspace in tasks:
+            meta_path = workspace / "_eval_task_meta.json"
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                skip_tasks[task_id] = f"bad _eval_task_meta.json: {exc}"
+                continue
+
+            qid = meta.get("question_id", "")
+            question = question_map.get(qid)
+            if question is None:
+                skip_tasks[task_id] = f"question_id {qid!r} not found in bank"
+                continue
+
+            meta_by_task[task_id] = meta
+            scored_by_task[task_id] = score_task(
+                task_id=task_id,
+                workspace=workspace,
+                question=question,
+                evaluator=evaluator,
+                meta=meta,
+            )
+    else:
+
+        def _score_one(
+            task_id: str,
+            workspace: Path,
+        ) -> tuple[str, dict[str, Any] | None, str, dict[str, Any] | None]:
+            meta_path = workspace / "_eval_task_meta.json"
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                return task_id, None, f"bad _eval_task_meta.json: {exc}", None
+
+            qid = meta.get("question_id", "")
+            question = question_map.get(qid)
+            if question is None:
+                return task_id, None, f"question_id {qid!r} not found in bank", None
+
+            ev = _build_evaluator()
+            res = score_task(
+                task_id=task_id,
+                workspace=workspace,
+                question=question,
+                evaluator=ev,
+                meta=meta,
+            )
+            return task_id, res, "", meta
+
+        with ThreadPoolExecutor(max_workers=score_jobs) as pool:
+            future_map = {pool.submit(_score_one, tid, ws): tid for tid, ws in tasks}
+            for fut in as_completed(future_map):
+                tid, res, reason, meta = fut.result()
+                if res is None:
+                    skip_tasks[tid] = reason
+                else:
+                    scored_by_task[tid] = res
+                    meta_by_task[tid] = meta  # meta set whenever res is not None
+
+    for task_id, _workspace in tasks:
+        if task_id in skip_tasks:
             print(
-                f"  [skip] {task_id}: bad _eval_task_meta.json: {exc}",
+                f"  [skip] {task_id}: {skip_tasks[task_id]}",
                 file=sys.stderr,
             )
             n_err += 1
             continue
 
+        result = scored_by_task[task_id]
+        meta = meta_by_task[task_id]
         qid = meta.get("question_id", "")
-        question = question_map.get(qid)
-        if question is None:
-            print(
-                f"  [skip] {task_id}: question_id {qid!r} not found in bank",
-                file=sys.stderr,
-            )
-            n_err += 1
-            continue
-
-        result = score_task(
-            task_id=task_id,
-            workspace=workspace,
-            question=question,
-            evaluator=evaluator,
-            meta=meta,
-        )
         results.append(result)
 
         score = result["score"]

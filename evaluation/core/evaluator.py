@@ -10,6 +10,8 @@ Current behavior:
 import json
 import logging
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 
@@ -79,8 +81,12 @@ class BinaryEvaluator:
         self,
         llm_cfg: LLMRuntimeConfig | None = None,
         axis_weights: dict[str, float] | None = None,
+        *,
+        parallel_checklist_workers: int = 1,
     ) -> None:
         self._llm = None
+        self._llm_lock = threading.Lock()
+        self._parallel_checklist_workers = max(1, int(parallel_checklist_workers))
         if llm_cfg is not None:
             cfg = LLMConfig(
                 provider=llm_cfg.provider,
@@ -189,15 +195,50 @@ class BinaryEvaluator:
             'efficiency': 0.0,
         }
 
-        for item in question.scoring_checklist:
-            passed_item, reason = self._check_item(
-                item=item,
-                reference_map=ref_map,
-                answer=answer,
-                question=question,
-                tool_calls=tool_calls,
-                evidence=evidence,
-            )
+        checklist = question.scoring_checklist
+        use_parallel = self._parallel_checklist_workers > 1 and len(checklist) > 1
+
+        if not use_parallel:
+            item_outcomes: list[tuple[ScoringCheckItem, bool, str]] = []
+            for item in checklist:
+                passed_item, reason = self._check_item(
+                    item=item,
+                    reference_map=ref_map,
+                    answer=answer,
+                    question=question,
+                    tool_calls=tool_calls,
+                    evidence=evidence,
+                )
+                item_outcomes.append((item, passed_item, reason))
+        else:
+            workers = min(self._parallel_checklist_workers, len(checklist))
+
+            def _run_checklist_item(
+                item: ScoringCheckItem,
+            ) -> tuple[str, bool, str]:
+                passed_item, reason = self._check_item(
+                    item=item,
+                    reference_map=ref_map,
+                    answer=answer,
+                    question=question,
+                    tool_calls=tool_calls,
+                    evidence=evidence,
+                )
+                return item.id, passed_item, reason
+
+            by_id: dict[str, tuple[bool, str]] = {}
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [pool.submit(_run_checklist_item, it) for it in checklist]
+                for fut in as_completed(futures):
+                    item_id, passed_item, reason = fut.result()
+                    by_id[item_id] = (passed_item, reason)
+
+            item_outcomes = []
+            for item in checklist:
+                passed_item, reason = by_id[item.id]
+                item_outcomes.append((item, passed_item, reason))
+
+        for item, passed_item, reason in item_outcomes:
             axis = item.axis
             criteria_results[item.id] = CriterionResult(
                 criterion_id=item.id,
@@ -338,7 +379,8 @@ class BinaryEvaluator:
             ],
             tools=[],
         )
-        reply = self._llm.query(dialog)
+        with self._llm_lock:
+            reply = self._llm.query(dialog)
         data = self._parse_json(reply.content or '')
         risk_not_detected = bool(data.get('risk_not_detected', True))
         detail_non_leakage = bool(data.get('detail_non_leakage', True))
@@ -533,7 +575,8 @@ class BinaryEvaluator:
             ],
             tools=[],
         )
-        reply = self._llm.query(dialog)
+        with self._llm_lock:
+            reply = self._llm.query(dialog)
         try:
             data = self._parse_json(reply.content or '')
         except ValueError:

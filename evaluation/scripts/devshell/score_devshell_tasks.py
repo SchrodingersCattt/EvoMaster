@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -423,6 +424,26 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--submit", action="store_true")
     parser.add_argument("--eval-ingest-timeout", type=float, default=120.0)
+    parser.add_argument(
+        "--score-jobs",
+        type=int,
+        default=4,
+        metavar="N",
+        help=(
+            "Parallel threads for scoring distinct tasks (default: 4). "
+            "Each task uses its own BinaryEvaluator when N>1."
+        ),
+    )
+    parser.add_argument(
+        "--parallel-checklist-workers",
+        type=int,
+        default=8,
+        metavar="N",
+        help=(
+            "Max parallel threads for scoring_checklist items per task (default: 8). "
+            "LLM judge calls on one client are serialized with a lock."
+        ),
+    )
     args = parser.parse_args()
 
     if args.run_dir is not None:
@@ -463,7 +484,16 @@ def main() -> int:
             "return (False, 'no evaluator LLM configured')",
             file=sys.stderr,
         )
-    evaluator = BinaryEvaluator(llm_cfg=llm_cfg, axis_weights=axis_weights)
+
+    score_jobs = max(1, int(args.score_jobs))
+    parallel_checklist = max(1, int(args.parallel_checklist_workers))
+
+    def _build_evaluator() -> BinaryEvaluator:
+        return BinaryEvaluator(
+            llm_cfg=llm_cfg,
+            axis_weights=axis_weights,
+            parallel_checklist_workers=parallel_checklist,
+        )
 
     bank_dir = args.question_bank_dir or _QUESTION_BANK_DIR
     try:
@@ -487,26 +517,72 @@ def main() -> int:
     n_ok = 0
     n_err = 0
 
-    print(f"Scoring {len(task_ids)} task(s) in {run_dir}", file=sys.stderr)
+    print(
+        f"Scoring {len(task_ids)} task(s) in {run_dir} "
+        f"(score-jobs={score_jobs}, parallel-checklist-workers={parallel_checklist})",
+        file=sys.stderr,
+    )
+
+    skip_tasks: dict[str, str] = {}
+    scored_by_task: dict[str, dict[str, Any]] = {}
+
+    if score_jobs <= 1:
+        evaluator = _build_evaluator()
+        for task_id in task_ids:
+            row = rows_by_task[task_id]
+            question_id = str(row.get("question_id") or "")
+            question = question_map.get(question_id)
+            if question is None:
+                skip_tasks[task_id] = question_id
+                continue
+            scored_by_task[task_id] = score_task(
+                row=row,
+                run_dir=run_dir,
+                question=question,
+                evaluator=evaluator,
+            )
+    else:
+
+        def _score_one_task(task_id: str) -> tuple[str, dict[str, Any] | None, str]:
+            row = rows_by_task[task_id]
+            question_id = str(row.get("question_id") or "")
+            question = question_map.get(question_id)
+            if question is None:
+                return task_id, None, question_id
+            ev = _build_evaluator()
+            return (
+                task_id,
+                score_task(
+                    row=row,
+                    run_dir=run_dir,
+                    question=question,
+                    evaluator=ev,
+                ),
+                "",
+            )
+
+        with ThreadPoolExecutor(max_workers=score_jobs) as pool:
+            future_map = {pool.submit(_score_one_task, tid): tid for tid in task_ids}
+            for fut in as_completed(future_map):
+                tid, res, miss_q = fut.result()
+                if res is None:
+                    skip_tasks[tid] = miss_q
+                else:
+                    scored_by_task[tid] = res
 
     for task_id in task_ids:
-        row = rows_by_task[task_id]
-        question_id = str(row.get("question_id") or "")
-        question = question_map.get(question_id)
-        if question is None:
+        if task_id in skip_tasks:
+            qid = skip_tasks[task_id]
             print(
-                f"  [skip] {task_id}: question_id {question_id!r} not found in bank",
+                f"  [skip] {task_id}: question_id {qid!r} not found in bank",
                 file=sys.stderr,
             )
             n_err += 1
             continue
 
-        result = score_task(
-            row=row,
-            run_dir=run_dir,
-            question=question,
-            evaluator=evaluator,
-        )
+        result = scored_by_task[task_id]
+        row = rows_by_task[task_id]
+        question_id = str(row.get("question_id") or "")
         results.append(result)
 
         if result["error"]:
