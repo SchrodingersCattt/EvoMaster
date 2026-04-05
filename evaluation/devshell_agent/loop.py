@@ -43,6 +43,12 @@ class AgentLoopConfig:
 class DevshellAgentLoop:
     """Runs the Claude SDK client for multiple outer iterations."""
 
+    # Upper bounds for sdk_loop_console.log lines (avoid huge single lines / OOM).
+    _SDK_LOG_TOOL_RESULT_MAX_CHARS = 24_000
+    _SDK_LOG_STREAM_EVENT_MAX_CHARS = 4_000
+    _SDK_LOG_TEXT_BLOCK_MAX_CHARS = 100_000
+    _SDK_LOG_SYSTEM_DATA_MAX_CHARS = 24_000
+
     SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编排助手（产品 / Agent 行为侧）**。
 
 ## 工具分工
@@ -58,14 +64,15 @@ class DevshellAgentLoop:
 
 ## Git 工作流（自迭代必守）
 - **每次实质性修改**（每次 `Edit`/`Write` 落盘后）：对相应文件 `git add` 并 **`git commit` 一条独立记录**，消息建议 `devshell_agent iter=<轮次> <简述>`，使改动与 commit 一一对应、便于回滚。
-- **判断单次改动是否改善**：在该次改动前记下当时的宏平均（来自 `score_devshell_tasks.py`）；改动并 commit 后，若需用分数验证，应再次对**能反映新代码**的产物跑分（通常需新的 `run_devshell_eval` + `iteration_tag`，或按题库说明复评）。若新宏平均 **不高于** 改动前基准（改善无效），应回滚**该条** commit：优先 `git revert HEAD --no-edit`；若该 commit 尚未 push 且历史仅本地迭代，可用 `git reset --hard HEAD~1`。
+- **判断单次改动是否改善**：在该次改动前记下当时的宏平均（来自该轮 `pending_ingest/*.json` 的 `item.score` 算术平均，或与 `score_devshell_tasks.py` 输出一致）；改动并 commit 后，若需用分数验证，应再次对**能反映新代码**的产物跑分（通常需新的 `run_devshell_eval` + `iteration_tag`，或按题库说明复评）。若新宏平均 **不高于** 改动前基准（改善无效），应回滚**该条** commit：优先 `git revert HEAD --no-edit`；若该 commit 尚未 push 且历史仅本地迭代，可用 `git reset --hard HEAD~1`。
 - 不要用 `git push --force` 等破坏协作历史的操作。
 
 ## 判分原则（与 `evaluation/docs/devshell/devshell_claude_code_eval.md` 一致）
-- 优先使用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py` 自动评分；它会基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl` 调用同一套 `BinaryEvaluator`。
-- 宏平均以 `score_devshell_tasks.py` 输出为准；不要手工估算一个与脚本不一致的分数。
+- 单次任务的**权威判分**来自 `evaluation/scripts/devshell/score_devshell_tasks.py`（`BinaryEvaluator`，基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl`）。
+- **宏平均**：须与上述脚本口径一致。本编排默认 `--eval-ingest-pending-only`：每轮 **run_devshell_eval** 结束后，编排器会对该目录执行 `score_devshell_tasks.py --submit`，将 `item.score` / `item.score_reason` 写入 `pending_ingest/<task_id>.json` 并上报 ingest。**优先**从这些 JSON 汇总宏平均（与已上报一致），**不要**手工臆造分数。
+- **低分明细**：**优先**读同一目录下 `pending_ingest/*.json` 的 `item.score_reason`；若有评测服务权限，也可 `GET` matmaster-tools-server `/api/v1/evaluation/questions/{question_id}/overview`，从 `iterations[].score_reason`（及基线各渠道字段）查看。避免仅为「看明细」再跑 `score_devshell_tasks.py --dry-run`（会重复跑判分，更慢且含 LLM 的项可能与已上报略有偏差）。
+- 仅在 pending 尚未写入分数、或你**修改了 workspace/证据需重新判分**时，再本地执行 `score_devshell_tasks.py --run-dir …`；若只需打印、不写盘，可用 `--dry-run`。**不要**自行再加 `--submit`（避免重复 ingest）。
 - 如需解释低分原因，可再阅读题库 YAML、workspace 交付物和事件日志；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
-- 若使用 `--eval-ingest-pending-only`（本编排默认）：判分时请只用 `score_devshell_tasks.py --dry-run`；每次 **run_devshell_eval** 完成后，编排器会立即对该输出目录执行 `score_devshell_tasks.py --submit` 并上报 ingest，你无需再手动 `--submit`（避免重复上报）。
 
 ## 修改范围
 - **可写**：`configs/mat_master/`、`matmaster/exps/`、`playground/mat_master/` 等与运行中 Agent 相关的提示、技能、工具描述。
@@ -110,6 +117,272 @@ class DevshellAgentLoop:
         loop_log.flush()
 
     @classmethod
+    def _truncate_log_text(cls, text: str, max_chars: int) -> str:
+        if len(text) <= max_chars:
+            return text
+        return text[:max_chars] + f"\n… [log truncated, total_len={len(text)} chars]"
+
+    def _log_content_block_sdk(
+        self,
+        block: Any,
+        prefix: str,
+        loop_log: TextIO,
+    ) -> None:
+        from claude_agent_sdk import (  # type: ignore[import-untyped]
+            TextBlock,
+            ThinkingBlock,
+            ToolResultBlock,
+            ToolUseBlock,
+        )
+
+        tmax = self._SDK_LOG_TOOL_RESULT_MAX_CHARS
+        xmax = self._SDK_LOG_TEXT_BLOCK_MAX_CHARS
+
+        if isinstance(block, TextBlock):
+            raw = block.text
+            if not raw.strip():
+                self._log_line(f"{prefix}:text (empty)", loop_log)
+            else:
+                self._log_line(
+                    f"{prefix}:text\n{self._truncate_log_text(raw, xmax)}",
+                    loop_log,
+                )
+        elif isinstance(block, ThinkingBlock):
+            sig = block.signature
+            sig_short = f"{sig[:24]}…" if len(sig) > 24 else sig
+            self._log_line(
+                f"{prefix}:thinking chars={len(block.thinking)} "
+                f"signature_prefix={sig_short!r}",
+                loop_log,
+            )
+            if block.thinking.strip():
+                self._log_line(
+                    f"{prefix}:thinking_body\n"
+                    f"{self._truncate_log_text(block.thinking, tmax)}",
+                    loop_log,
+                )
+        elif isinstance(block, ToolUseBlock):
+            try:
+                inp = json.dumps(block.input, ensure_ascii=False, default=str)
+            except TypeError:
+                inp = repr(block.input)
+            inp = self._truncate_log_text(inp, tmax)
+            self._log_line(
+                f"{prefix}:tool_use id={block.id!r} name={block.name!r} input={inp}",
+                loop_log,
+            )
+        elif isinstance(block, ToolResultBlock):
+            c = block.content
+            if c is None:
+                body = "(none)"
+            elif isinstance(c, list):
+                try:
+                    body = json.dumps(c, ensure_ascii=False, default=str)
+                except TypeError:
+                    body = repr(c)
+            else:
+                body = str(c)
+            self._log_line(
+                f"{prefix}:tool_result tool_use_id={block.tool_use_id!r} "
+                f"is_error={block.is_error!r}",
+                loop_log,
+            )
+            self._log_line(
+                f"{prefix}:tool_result_body\n{self._truncate_log_text(body, tmax)}",
+                loop_log,
+            )
+        else:
+            self._log_line(
+                f"{prefix}:unknown_block {type(block).__name__} {block!r}", loop_log
+            )
+
+    def _log_sdk_message(self, message: Any, loop_log: TextIO) -> None:
+        """Log one Claude Agent SDK stream message (all known types)."""
+        from claude_agent_sdk import (  # type: ignore[import-untyped]
+            AssistantMessage,
+            RateLimitEvent,
+            ResultMessage,
+            StreamEvent,
+            SystemMessage,
+            TaskNotificationMessage,
+            TaskProgressMessage,
+            TaskStartedMessage,
+            UserMessage,
+        )
+
+        tmax = self._SDK_LOG_TOOL_RESULT_MAX_CHARS
+        smax = self._SDK_LOG_SYSTEM_DATA_MAX_CHARS
+        xev = self._SDK_LOG_STREAM_EVENT_MAX_CHARS
+
+        def j(x: Any) -> str:
+            try:
+                return json.dumps(x, ensure_ascii=False, default=str)
+            except TypeError:
+                return repr(x)
+
+        if isinstance(message, UserMessage):
+            self._log_line(
+                f"[sdk:user] uuid={message.uuid!r} "
+                f"parent_tool_use_id={message.parent_tool_use_id!r}",
+                loop_log,
+            )
+            if message.tool_use_result is not None:
+                self._log_line(
+                    f"[sdk:user] tool_use_result="
+                    f"{self._truncate_log_text(j(message.tool_use_result), tmax)}",
+                    loop_log,
+                )
+            c = message.content
+            if isinstance(c, str):
+                if c.strip():
+                    self._log_line(
+                        "[sdk:user:text]\n"
+                        f"{self._truncate_log_text(c, self._SDK_LOG_TEXT_BLOCK_MAX_CHARS)}",
+                        loop_log,
+                    )
+                else:
+                    self._log_line("[sdk:user:text] (empty)", loop_log)
+            else:
+                for i, block in enumerate(c):
+                    self._log_content_block_sdk(
+                        block, f"[sdk:user:block:{i}]", loop_log
+                    )
+            return
+
+        if isinstance(message, AssistantMessage):
+            parts = [
+                f"model={message.model!r}",
+                f"message_id={message.message_id!r}",
+                f"uuid={message.uuid!r}",
+                f"parent_tool_use_id={message.parent_tool_use_id!r}",
+            ]
+            if message.error:
+                parts.append(f"error={message.error!r}")
+            if message.stop_reason:
+                parts.append(f"stop_reason={message.stop_reason!r}")
+            if message.usage is not None:
+                parts.append(f"usage={j(message.usage)}")
+            self._log_line("[sdk:assistant] " + " ".join(parts), loop_log)
+            for i, block in enumerate(message.content):
+                self._log_content_block_sdk(
+                    block, f"[sdk:assistant:block:{i}]", loop_log
+                )
+            return
+
+        if isinstance(message, TaskStartedMessage):
+            self._log_line(
+                f"[sdk:system:task_started] subtype={message.subtype!r} "
+                f"task_id={message.task_id!r} description={message.description!r} "
+                f"uuid={message.uuid!r} session_id={message.session_id!r} "
+                f"tool_use_id={message.tool_use_id!r} task_type={message.task_type!r}",
+                loop_log,
+            )
+            return
+
+        if isinstance(message, TaskProgressMessage):
+            self._log_line(
+                f"[sdk:system:task_progress] subtype={message.subtype!r} "
+                f"task_id={message.task_id!r} description={message.description!r} "
+                f"uuid={message.uuid!r} session_id={message.session_id!r} "
+                f"tool_use_id={message.tool_use_id!r} "
+                f"last_tool_name={message.last_tool_name!r} "
+                f"usage={j(message.usage)}",
+                loop_log,
+            )
+            return
+
+        if isinstance(message, TaskNotificationMessage):
+            self._log_line(
+                f"[sdk:system:task_notification] subtype={message.subtype!r} "
+                f"task_id={message.task_id!r} status={message.status!r} "
+                f"output_file={message.output_file!r} summary={message.summary!r} "
+                f"uuid={message.uuid!r} session_id={message.session_id!r} "
+                f"tool_use_id={message.tool_use_id!r}",
+                loop_log,
+            )
+            if message.usage is not None:
+                self._log_line(
+                    f"[sdk:system:task_notification:usage] {j(message.usage)}",
+                    loop_log,
+                )
+            return
+
+        if isinstance(message, SystemMessage):
+            self._log_line(
+                f"[sdk:system] subtype={message.subtype!r} "
+                f"data={self._truncate_log_text(j(message.data), smax)}",
+                loop_log,
+            )
+            return
+
+        if isinstance(message, ResultMessage):
+            self._log_line(
+                f"[sdk:result] subtype={message.subtype!r} num_turns={message.num_turns} "
+                f"duration_ms={message.duration_ms} duration_api_ms={message.duration_api_ms} "
+                f"is_error={message.is_error} stop_reason={message.stop_reason!r} "
+                f"total_cost_usd={message.total_cost_usd!r} session_id={message.session_id!r} "
+                f"uuid={message.uuid!r}",
+                loop_log,
+            )
+            if message.usage:
+                self._log_line(f"[sdk:result:usage] {j(message.usage)}", loop_log)
+            if message.model_usage:
+                self._log_line(
+                    f"[sdk:result:model_usage] {j(message.model_usage)}", loop_log
+                )
+            if message.errors:
+                self._log_line(f"[sdk:result:errors] {j(message.errors)}", loop_log)
+            if message.permission_denials:
+                self._log_line(
+                    f"[sdk:result:permission_denials] "
+                    f"{self._truncate_log_text(j(message.permission_denials), tmax)}",
+                    loop_log,
+                )
+            if message.result:
+                self._log_line(
+                    f"[sdk:result:result]\n"
+                    f"{self._truncate_log_text(message.result, tmax)}",
+                    loop_log,
+                )
+            if message.structured_output is not None:
+                self._log_line(
+                    f"[sdk:result:structured_output] "
+                    f"{self._truncate_log_text(j(message.structured_output), tmax)}",
+                    loop_log,
+                )
+            return
+
+        if isinstance(message, StreamEvent):
+            ev = j(message.event)
+            self._log_line(
+                f"[sdk:stream_event] uuid={message.uuid!r} "
+                f"session_id={message.session_id!r} "
+                f"parent_tool_use_id={message.parent_tool_use_id!r} "
+                f"event={self._truncate_log_text(ev, xev)}",
+                loop_log,
+            )
+            return
+
+        if isinstance(message, RateLimitEvent):
+            ri = message.rate_limit_info
+            self._log_line(
+                f"[sdk:rate_limit] uuid={message.uuid!r} session_id={message.session_id!r} "
+                f"status={ri.status!r} rate_limit_type={ri.rate_limit_type!r} "
+                f"resets_at={ri.resets_at!r} utilization={ri.utilization!r}",
+                loop_log,
+            )
+            if ri.raw:
+                self._log_line(
+                    f"[sdk:rate_limit:raw] {self._truncate_log_text(j(ri.raw), smax)}",
+                    loop_log,
+                )
+            return
+
+        self._log_line(
+            f"[sdk:unhandled] {type(message).__name__}: {message!r}", loop_log
+        )
+
+    @classmethod
     def default_session_dir(
         cls, *, repo_root: Path, label: str = "devshell_agent_loop"
     ) -> Path:
@@ -133,7 +406,7 @@ class DevshellAgentLoop:
 
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
-2. 对**需要判分的**每个 `run_devshell_eval` 目录分别执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录> --dry-run` 获取判分（**不要**加 `--submit`）；每次 `run_devshell_eval` 跑完后，编排器会立刻对该目录自动提交 ingest。
+2. 获取本轮判分与宏平均：**优先**在 `eval_runs/<iteration_tag>/pending_ingest/*.json` 读取已写入的 `item.score`（及低分题的 `item.score_reason`）；编排器在每次 `run_devshell_eval` 结束后会对该目录执行 `score_devshell_tasks.py --submit` 并上报，通常无需再跑脚本。仅在 pending 尚无分数或需对**改动后的**产物重新判分时，再执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录>`（可加 `--dry-run` 仅打印；**不要** `--submit`）。
 3. 若未达标：在**允许的路径**内修改提示词/工具/配置（**不要**改 `evaluation/question_bank/`）。优化提示时**先删并合并重复/矛盾表述，再考虑增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出）应**优先压到 ≤ 12000**，且**不得超过 15000**（gpt-4o tiktoken）。每次改完相关 TOML 后、`git commit` 前执行：
    `uv run python -m evaluation.devshell_agent.exp_prompt_budget {budget_exp}`
    **exit 非 0 不得提交**。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**。若你认为问题在 **checklist / 参考答案** 而非产品侧，调用 **escalate_checklist_revision** 并仍在第 4 步前完成主流程。
@@ -174,10 +447,8 @@ class DevshellAgentLoop:
         """Run up to ``max_iterations`` SDK rounds; return 0 on clean stop, 1 on warnings."""
         try:
             from claude_agent_sdk import (  # type: ignore[import-untyped]
-                AssistantMessage,
                 ClaudeAgentOptions,
                 ClaudeSDKClient,
-                TextBlock,
             )
         except ImportError as e:
             print(
@@ -237,10 +508,7 @@ class DevshellAgentLoop:
                         )
                     await client.query(self._iteration_user_message(it=it))
                     async for message in client.receive_response():
-                        if isinstance(message, AssistantMessage):
-                            for block in message.content:
-                                if isinstance(block, TextBlock) and block.text.strip():
-                                    self._log_line(block.text, loop_log)
+                        self._log_sdk_message(message, loop_log)
 
                     follow_rc = await self._run_checklist_followup_if_needed(
                         it=it,
@@ -401,12 +669,7 @@ class DevshellAgentLoop:
             )
             ids_before = None
 
-        from claude_agent_sdk import (
-            AssistantMessage,
-            ClaudeAgentOptions,
-            ClaudeSDKClient,
-            TextBlock,
-        )
+        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
         from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
@@ -435,10 +698,7 @@ class DevshellAgentLoop:
         async with ClaudeSDKClient(options=co) as cc:
             await cc.query(self._checklist_user_message(it=it, escalations=escalations))
             async for message in cc.receive_response():
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock) and block.text.strip():
-                            self._log_line(block.text, loop_log)
+                self._log_sdk_message(message, loop_log)
 
         state.checklist_escalations_pending = [
             e
