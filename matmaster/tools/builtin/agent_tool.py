@@ -8,7 +8,7 @@ from typing import Any, ClassVar
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 
 SpawnFn = Callable[[str, str, CancellationToken | None], Awaitable[str]]
 
@@ -141,6 +141,14 @@ class AgentTool(BuiltinTool):
             prompt,
             self._cancel_token_for_exec(),
         )
+
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: ToolExecutionContext | None,
+    ) -> str | ToolResult:
+        """Context-aware execution — delegates to async execute()."""
+        return await self.execute(arguments)
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         raise NotImplementedError("AgentTool uses async execute() directly")
