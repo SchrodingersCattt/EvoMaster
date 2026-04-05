@@ -48,8 +48,10 @@ class TestBashToolMetadata:
         assert tool.prompt() is not None
         assert "Read" in tool.prompt()
 
-    def test_prompt_exposure_uses_tool_description_mode(self):
-        assert BashTool.prompt_exposure == "tool_description"
+    def test_describe_uses_long_prompt_text(self):
+        tool = BashTool()
+        ctx = make_desc_ctx(session_kind="local", workspace_root="/tmp/workspace")
+        assert tool.describe(ctx) == tool.prompt(ctx)
 
     def test_definition_description_uses_prompt_text(self):
         registry = ToolRegistry()

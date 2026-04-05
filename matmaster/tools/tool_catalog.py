@@ -79,22 +79,12 @@ class ToolCatalog:
                 continue
 
             raw_tool = self._registry.get_raw(name)
-            prompt_exposure = getattr(raw_tool, "prompt_exposure", "system_prompt")
-
             if ctx is not None:
-                prompt = getattr(raw_tool, "prompt", None) if raw_tool else None
-                if (
-                    prompt_exposure == "tool_description"
-                    and callable(prompt)
-                    and (prompt_value := prompt(ctx))
-                ):
-                    description = prompt_value
+                describe = getattr(raw_tool, "describe", None) if raw_tool else None
+                if callable(describe):
+                    description = describe(ctx)
                 else:
-                    describe = getattr(raw_tool, "describe", None) if raw_tool else None
-                    if callable(describe):
-                        description = describe(ctx)
-                    else:
-                        description = inst.tool_spec.description
+                    description = inst.tool_spec.description
             else:
                 description = inst.tool_spec.description
 
@@ -119,10 +109,10 @@ class ToolCatalog:
             if inst is None or not inst.tool_spec.exposed_to_model:
                 continue
 
-            raw_tool = self._registry.get_raw(name)
-            prompt_exposure = getattr(raw_tool, "prompt_exposure", "system_prompt")
-            if prompt_exposure != "system_prompt":
+            if name == "Bash":
                 continue
+
+            raw_tool = self._registry.get_raw(name)
             prompt = getattr(raw_tool, "prompt", None) if raw_tool else None
             if not callable(prompt):
                 continue

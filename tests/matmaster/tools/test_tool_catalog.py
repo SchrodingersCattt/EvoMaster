@@ -56,20 +56,6 @@ class _DynamicTool(_MinimalTool):
             return "dynamic prompt"
         return f"prompt:{self.name}:{ctx.workspace_root}"
 
-
-class _PromptAsDescriptionTool(_DynamicTool):
-    prompt_exposure = "tool_description"
-
-
-class _SystemPromptOnlyTool(_DynamicTool):
-    prompt_exposure = "system_prompt"
-
-
-class _PromptAsDescriptionButEmptyTool(_PromptAsDescriptionTool):
-    def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
-        return None
-
-
 class _PromptlessTool(_MinimalTool):
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return None
@@ -161,33 +147,6 @@ class TestCatalogBuildDefinitions:
 
         assert names == {"visible"}
 
-    def test_build_definitions_prefers_prompt_for_tool_description_exposure(
-        self,
-    ) -> None:
-        catalog = _make_catalog(_PromptAsDescriptionTool("alpha"))
-
-        defs = catalog.build_definitions(_make_ctx())
-
-        assert defs[0]["function"]["description"] == "prompt:alpha:/tmp/workspace"
-
-    def test_build_definitions_tool_description_mode_replaces_static_description(
-        self,
-    ) -> None:
-        catalog = _make_catalog(_PromptAsDescriptionTool("alpha"))
-
-        defs = catalog.build_definitions(_make_ctx())
-
-        assert defs[0]["function"]["description"] != "minimal alpha"
-
-    def test_build_definitions_tool_description_mode_falls_back_when_prompt_is_none(
-        self,
-    ) -> None:
-        catalog = _make_catalog(_PromptAsDescriptionButEmptyTool("alpha"))
-
-        defs = catalog.build_definitions(_make_ctx())
-
-        assert defs[0]["function"]["description"] == "alpha on local"
-
 
 class TestCatalogPrompts:
     def test_collect_prompts_gathers_non_none_and_skips_missing_prompt(self) -> None:
@@ -196,20 +155,6 @@ class TestCatalogPrompts:
             _PromptlessTool("beta"),
             _MinimalTool("gamma"),
         )
-
-        prompts = catalog.collect_prompts(_make_ctx())
-
-        assert prompts == "prompt:alpha:/tmp/workspace"
-
-    def test_collect_prompts_skips_tool_description_exposure(self) -> None:
-        catalog = _make_catalog(_PromptAsDescriptionTool("alpha"))
-
-        prompts = catalog.collect_prompts(_make_ctx())
-
-        assert prompts == ""
-
-    def test_collect_prompts_keeps_system_prompt_exposure(self) -> None:
-        catalog = _make_catalog(_SystemPromptOnlyTool("alpha"))
 
         prompts = catalog.collect_prompts(_make_ctx())
 

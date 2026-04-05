@@ -28,7 +28,6 @@ class BashTool(BuiltinTool):
     description: ClassVar[str] = (
         "Run a shell command in the session workspace and return its output."
     )
-    prompt_exposure: ClassVar[str] = "tool_description"
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "additionalProperties": False,
@@ -64,6 +63,9 @@ class BashTool(BuiltinTool):
     effect_level: ClassVar[str] = "local_mutation"
     max_result_chars: ClassVar[int] = 30_000
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
+
+    def describe(self, ctx: ToolDescriptionContext | None = None) -> str:
+        return self.prompt(ctx)
 
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str:
         workspace_root = ctx.workspace_root if ctx is not None else None
