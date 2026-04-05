@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
@@ -56,11 +57,22 @@ class BashTool(BuiltinTool):
     max_result_chars: ClassVar[int] = 30_000
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
 
-    def prompt(self, ctx=None) -> str:
+    def prompt(self, ctx: ToolDescriptionContext | None = None) -> str:
+        workspace_root = ctx.workspace_root if ctx is not None else None
+        if workspace_root is None and self._workdir is not None:
+            workspace_root = str(self._workdir)
+
+        workspace_note = "Each Bash call starts in the session workspace directory.\n"
+        if workspace_root:
+            workspace_note = (
+                f"The session workspace directory for this run is `{workspace_root}`.\n"
+                "Each Bash call starts in this directory.\n"
+            )
+
         return (
             "Executes a given bash command and returns its output.\n\n"
-            "The working directory persists between commands, but shell state "
-            "does not.\n\n"
+            f"{workspace_note}\n"
+            "Shell state does not persist between commands.\n\n"
             "IMPORTANT: Avoid using this tool to run `find`, `grep`, `cat`, "
             "`head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly "
             "instructed. Instead, use the appropriate dedicated tool:\n"
@@ -101,7 +113,7 @@ class BashTool(BuiltinTool):
 
         obs = output
         if working_dir:
-            obs += f"\n[Current working directory: {working_dir}]"
+            obs += f"\n[Session working directory: {working_dir}]"
         obs += f"\n[Command finished with exit code {exit_code}]"
 
         if exit_code != 0:

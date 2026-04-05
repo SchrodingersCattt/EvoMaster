@@ -5,6 +5,8 @@ from unittest.mock import MagicMock
 
 from matmaster.tools.builtin.bash_tool import BashTool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+from matmaster.types.topology import RuntimeTopology
 
 
 def make_session(output="hello", exit_code=0, working_dir="/workspace"):
@@ -15,6 +17,19 @@ def make_session(output="hello", exit_code=0, working_dir="/workspace"):
         "working_dir": working_dir,
     }
     return s
+
+
+def make_desc_ctx(session_kind="ssh", workspace_root="/share"):
+    topo = RuntimeTopology(
+        session_kind=session_kind,
+        control_root="/control",
+        workspace_root=workspace_root,
+    )
+    return ToolDescriptionContext(
+        session_kind=session_kind,
+        workspace_root=workspace_root,
+        topology=topo,
+    )
 
 
 class TestBashToolMetadata:
@@ -38,6 +53,14 @@ class TestBashExecution:
         tool = BashTool(session=session, workdir="/workspace")
         result = asyncio.run(tool.execute({"command": "echo hello"}))
         assert "hello" in result
+
+    def test_success_output_labels_session_working_directory(self):
+        session = make_session(output="hello", working_dir="/workspace")
+        tool = BashTool(session=session, workdir="/workspace")
+        result = asyncio.run(tool.execute({"command": "pwd"}))
+
+        assert "[Session working directory: /workspace]" in result
+        assert "[Current working directory:" not in result
 
     def test_empty_command_error(self):
         tool = BashTool(session=make_session())
