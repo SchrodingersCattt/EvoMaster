@@ -1,0 +1,1 @@
+"""Service-specific credential adapters."""
