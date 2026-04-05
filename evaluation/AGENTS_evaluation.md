@@ -71,7 +71,7 @@ evaluation/question_bank/
 
 #### capability 枚举
 
-`knowledge_recall` / `structure_construction` / `property_prediction` / `workflow_orchestration` / `data_diagnosis` / `batch_processing` / `safety_refusal`
+`knowledge_recall` / `structure_construction` / `property_prediction` / `workflow_orchestration` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation_vasp` / `input_generation_abacus`
 
 #### domain 枚举
 
@@ -126,6 +126,7 @@ evaluation/question_bank/
 | `batch_tool_args_constant` | `{"tool_name": str, "param_names": str, "expected_constant": any}` | 批量参数恒定 |
 | `batch_consistent_calls` | `dict` | 批量调用一致性 |
 | `duration_budget` | `{"max": int}`（毫秒） | 运行时间预算 |
+| `turn_budget` | `{"max": int}`（轮次数） | Agent 轮次（step）预算；`total_steps <= max` 则 pass |
 | `molcrys_slab_molecular_integrity` | `{"unit_cell_atoms": int, "slab_atoms": int, "layers": int}` | 分子晶体 slab 完整性 |
 | `sc005_disorder_formulas` | `dict` | 无序结构化学式 |
 | `struct_file_atom_count` | `{"filename": str, "expected": int, "tolerance": float}` | 用 pymatgen 读结构文件验证总原子数 |
@@ -136,7 +137,7 @@ evaluation/question_bank/
 | `struct_file_cell_param` | `{"filename": str, "param": "a"\|"b"\|"c"\|"alpha"\|"beta"\|"gamma", "expected": float, "tolerance": float}` | 读晶格参数并校验 |
 | `struct_file_stoichiometry_ratio` | `{"filename": str, "element_a": str, "element_b": str, "expected_ratio": float, "tolerance": float}` | 验证 count(A)/count(B) 比值 |
 | `struct_file_coordination` | `{"filename": str, "center_element": str, "expected": int, "tolerance": float, "cutoff_A": float}` | 统计中心元素的配位数均值并校验 |
-| `struct_file_layer_count` | `{"filename": str, "expected": int, "tolerance": float, "axis": str, "gap_threshold_A": float}` | 沿指定轴用间距聚类统计原子层数 |
+| `struct_file_layer_count` | `{"filename": str, "expected": int, "tolerance": float, "axis": str, "layer_tol_A": float}` | 沿指定轴在笛卡尔坐标下统计**不同原子平面**数：排序后，与当前平面锚点距离超过 `layer_tol_A`（Å）则开始新平面；默认 `layer_tol_A` 为 `0.25`。旧字段 `gap_threshold_A` 仍可读，但语义为平面合并容差（与现实现一致），新题请写 `layer_tol_A` |
 | `struct_file_count` | `{"pattern": str, "expected": int, "tolerance": int}` | 统计 workspace 中匹配 glob 的文件数（无需 pymatgen） |
 | `struct_file_surface_termination` | `{"filename": str, "element": str, "axis": "x"\|"y"\|"z", "side": "top"\|"bottom"\|"both", "layer_tol_A": float}` | 检查 slab 最外层（top/bottom/both）是否由指定元素构成；用于验证 O-terminated 或其他特定终止面（如 CeO2(111) 的 O 终止）|
 
@@ -150,7 +151,7 @@ evaluation/question_bank/
 | `event_type_called` | 检查事件类型是否被触发 |
 | `source_type_used` | 检查数据源类型 |
 | `call_count_range` | 分析工具调用次数（建议也配上 ref） |
-| `token_budget` | 检查 token 用量（建议配上 ref，格式同 `duration_budget`） |
+| `token_budget` | 用 **最后一轮 LLM** 的原始 ``total_tokens``（**不**扣 cache）：``EvidenceBundle.token_usage_last_turn.total_tokens``（轨迹取 max ``step_id`` 的 ``meta.usage``；无 ``total_tokens`` 时用 prompt+completion 推导）。对 **external baseline** 这类只有整轮汇总、没有 ``usage_vendor_by_turn`` 的摘要，允许用 ``summary.usage.total_tokens / num_turns`` 近似最后一轮。ingest 顶层 ``item["tokens"]`` / ``extra["tokens_last_turn"]`` 与 :func:`evaluation.eval_ingest_client.extract_ingest_tokens` 对齐：有 ``usage_vendor_by_turn`` 时取最后一项的 ``total_tokens``；baseline 若启用近似口径则按 ``summary.usage.total_tokens / num_turns``；其余情况回退到 ``summary.usage.total_tokens``（整表累加标量）。建议配上 ref，格式同 `duration_budget`） |
 
 ---
 
@@ -177,6 +178,8 @@ evaluation/question_bank/
 
 修改 `evaluation/question_bank/**/*.yaml` 中任一题目的题干、期望答案、`reference_answers`、`scoring_checklist` 或其他会影响评测语义的内容时，**必须同时更新该题的顶层 `id`**。新 `id` 可用时间戳或其他唯一后缀；若只是纯格式化、注释、空白或不影响语义的整理，可不改 `id`。
 
+**程序化判分口径变更**：若修改 `evaluation/` 下某 `verify` 对应的 validator 实现，导致**同一 `reference_answers` 配置下的 pass/fail 含义发生变化**（例如层数由“粗间隙分块”改为“原子平面计数”），应视为评测语义变更：在题库中显式更新该题的 `human_prompt_seed` / `scoring_checklist` / `reference_answers` 等对判分的描述或参数，并**按上条规则更新该题顶层 `id`**（除非能证明全仓库无任何题目依赖旧语义且无需对齐题干——一般应对齐题库）。
+
 ### 2. 保持 YAML 原结构
 
 编辑题库 YAML 时，尽量不要无关地改动 `key/value` 组织、字段层级、字段命名、字段顺序、锚点引用关系或列表结构；除非该结构调整本身就是本次修改所必需。纯空白、缩进、换行、引号风格等表面格式也应尽量少动，但优先级低于保持语义结构稳定。
@@ -195,10 +198,12 @@ evaluation/question_bank/
 
 ```yaml
 reference_answers:
+  - key: turn_budget
+    value: {max: 12}         # 按题目复杂度调整；粗拍后根据执行情况收紧
   - key: duration_budget
     value: {max: 7200000}    # 2 小时，按需调整
   - key: token_budget_total
-    value: {max: 50000}      # 按需调整
+    value: {max: 8000}       # 最后一轮输入 token；复杂任务约 8k，批处理可放宽至 10k~12k
 
 scoring_checklist:
   - id: no_retries
@@ -209,6 +214,10 @@ scoring_checklist:
     criterion: "Task completes without unnecessary exploratory calls."
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: "Agent completes the task within the turn (step) budget."
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: "Wall-clock run duration does not exceed benchmark ceiling."
     axis: efficiency
@@ -226,6 +235,13 @@ scoring_checklist:
 - `reference_answers` 中的 `tool_name` / `tool_arg` 字段、`scoring_checklist.criterion` 中引用工具名均为**内部评分逻辑**，不发给 Agent，允许使用工具名。
 - `intent` 中可以使用通用术语（如"表面构建工具"、"结构优化器"），但同样不应包含具体 MCP tool identifier。
 - 新增或修改题目时，需检查 `human_prompt_seed` 中是否意外泄漏了工具名；审查方式：在所有 YAML 的 `human_prompt_seed` 文本中搜索 `mat_sg_`、`mat_dpa_`、`mat_struct_db_` 等前缀。
+
+---
+
+## DevShell 与 Claude Agent SDK 外层编排
+
+- DevShell / IDE 流程：`evaluation/docs/devshell/devshell_claude_code_eval.md`（`run_devshell_eval.py` + `score_devshell_tasks.py` 自动评分）。
+- **程序化**多轮「跑题 → 判分 → 改提示词/工具」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。自迭代时模型侧约定「每处修改单独 commit、无效则 revert」；编排层可用 `--no-git-reset-on-regression` 关闭「较上一轮退步则 reset 到本轮起点」的保险。默认在 **`--eval-ingest-pending-only`** 下每轮结束后自动 `score_devshell_tasks.py --submit` 上报 ingest（见该文档）；`--no-eval-ingest-submit-each-iteration` 可关。**双 Agent**：主 Agent 不得改 `evaluation/question_bank/`；题库/checklist 调整经 `escalate_checklist_revision` 由专责会话处理（见该文档）。
 
 ---
 

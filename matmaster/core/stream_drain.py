@@ -17,6 +17,7 @@ class DrainResult:
     num_turns: int
     usage: dict[str, int]
     messages: list[Any]
+    usage_vendor_by_turn: tuple[dict[str, Any], ...] = ()
     events: list[Any] = field(default_factory=list)
 
 
@@ -46,6 +47,9 @@ async def drain_run_stream(
                 final_content=event.final_content,
                 num_turns=event.num_turns,
                 usage=event.usage,
+                usage_vendor_by_turn=tuple(
+                    dict(item) for item in (event.usage_vendor_by_turn or [])
+                ),
                 messages=event.messages,
                 events=events,
             )

@@ -29,6 +29,10 @@ Examples::
     uv run python evaluation/scripts/baseline/run_claude_cli_baseline_tasks.py \\
       --run-dir "$RUN_DIR" --model opus
 
+    # Serial (default is --jobs 4)
+    uv run python evaluation/scripts/baseline/run_claude_cli_baseline_tasks.py \\
+      --run-dir "$RUN_DIR" -j 1
+
     # Auto-detect RUN_DIR from results/ and also finalize
     uv run python evaluation/scripts/baseline/run_claude_cli_baseline_tasks.py \\
       --run-label baseline_cc_struct --finalize --eval-ingest-pending-only
@@ -41,7 +45,10 @@ import json
 import shutil
 import subprocess
 import sys
+import threading
 import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -306,6 +313,182 @@ def _run_single_task(
     return not is_error, summary
 
 
+def _stderr_line(msg: str, lock: threading.Lock | None) -> None:
+    if lock is not None:
+        with lock:
+            print(msg, file=sys.stderr)
+    else:
+        print(msg, file=sys.stderr)
+
+
+def _run_finalize_only_task(
+    run_dir: Path,
+    task_id: str,
+    *,
+    pending_only: bool,
+    baseline_channel: str | None,
+) -> int:
+    cmd = [
+        sys.executable,
+        str(
+            REPO_ROOT
+            / "evaluation"
+            / "scripts"
+            / "baseline"
+            / "finalize_external_baseline_ingest.py"
+        ),
+        "--run-dir",
+        str(run_dir),
+        "--only-tasks",
+        task_id,
+    ]
+    if pending_only:
+        cmd.append("--eval-ingest-pending-only")
+    if baseline_channel:
+        cmd.extend(["--baseline-channel", baseline_channel])
+    return subprocess.run(cmd, cwd=str(REPO_ROOT)).returncode
+
+
+def _run_score_submit_only_task(
+    run_dir: Path,
+    task_id: str,
+    *,
+    eval_config: Path | None,
+    ingest_timeout: int,
+) -> int:
+    cmd = [
+        sys.executable,
+        str(
+            REPO_ROOT
+            / "evaluation"
+            / "scripts"
+            / "baseline"
+            / "score_baseline_tasks.py"
+        ),
+        "--run-dir",
+        str(run_dir),
+        "--tasks",
+        task_id,
+        "--submit",
+        "--eval-ingest-timeout",
+        str(ingest_timeout),
+    ]
+    if eval_config is not None:
+        cmd.extend(["--eval-config", str(eval_config)])
+    return subprocess.run(cmd, cwd=str(REPO_ROOT)).returncode
+
+
+def _per_task_finalize_and_maybe_score(
+    task_id: str,
+    *,
+    run_dir: Path,
+    pending_only: bool,
+    baseline_channel: str | None,
+    score_submit: bool,
+    eval_config: Path | None,
+    score_ingest_timeout: int,
+    print_lock: threading.Lock | None,
+) -> bool:
+    """Run finalize for one task; optionally score + ingest POST. Returns success."""
+    _stderr_line(f"  [finalize] {task_id} (--only-tasks)...", print_lock)
+    rc = _run_finalize_only_task(
+        run_dir,
+        task_id,
+        pending_only=pending_only,
+        baseline_channel=baseline_channel,
+    )
+    if rc != 0:
+        _stderr_line(f"  [finalize] {task_id} failed (exit {rc})", print_lock)
+        return False
+    if score_submit:
+        _stderr_line(f"  [score+ingest] {task_id}...", print_lock)
+        rc2 = _run_score_submit_only_task(
+            run_dir,
+            task_id,
+            eval_config=eval_config,
+            ingest_timeout=score_ingest_timeout,
+        )
+        if rc2 != 0:
+            _stderr_line(
+                f"  [score+ingest] {task_id} failed (exit {rc2})",
+                print_lock,
+            )
+            return False
+    return True
+
+
+def _execute_task_slot(
+    slot: int,
+    n_total: int,
+    task_id: str,
+    workspace: Path,
+    *,
+    model: str | None,
+    max_turns: int,
+    timeout_seconds: int,
+    extra_args: list[str] | None,
+    print_lock: threading.Lock | None,
+    after: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    """Run one non-skipped task; return the same shape as entries in ``results``."""
+    progress = f"[{slot}/{n_total}]"
+    _stderr_line(f"{progress} {task_id}: running...", print_lock)
+    t0 = time.monotonic()
+    try:
+        ok, summary = _run_single_task(
+            task_id,
+            workspace,
+            model=model,
+            max_turns=max_turns,
+            timeout_seconds=timeout_seconds,
+            extra_args=extra_args,
+        )
+    except subprocess.TimeoutExpired:
+        _stderr_line(
+            f"{progress} {task_id}: TIMEOUT ({timeout_seconds}s)",
+            print_lock,
+        )
+        out: dict[str, Any] = {"task_id": task_id, "status": "timeout"}
+        if after:
+            after(task_id)
+        return out
+    except Exception as exc:
+        _stderr_line(f"{progress} {task_id}: ERROR: {exc}", print_lock)
+        out = {"task_id": task_id, "status": "error", "error": str(exc)}
+        if after:
+            after(task_id)
+        return out
+
+    elapsed = time.monotonic() - t0
+    usage = summary.get("usage", {})
+    cost = usage.get("total_cost_usd", "?")
+    tag = "OK" if ok else "FAIL"
+    _stderr_line(
+        f"{progress} {task_id}: {tag} "
+        f"({elapsed:.0f}s, turns={summary.get('num_turns', '?')}, cost=${cost})",
+        print_lock,
+    )
+    if ok:
+        out = {
+            "task_id": task_id,
+            "status": "ok",
+            "elapsed_s": round(elapsed, 1),
+            "num_turns": summary.get("num_turns"),
+            "cost_usd": usage.get("total_cost_usd"),
+        }
+    else:
+        out = {
+            "task_id": task_id,
+            "status": "fail",
+            "elapsed_s": round(elapsed, 1),
+            "num_turns": summary.get("num_turns"),
+            "cost_usd": usage.get("total_cost_usd"),
+        }
+    if after:
+        after(task_id)
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -354,12 +537,47 @@ def main() -> int:
     parser.add_argument(
         "--finalize",
         action="store_true",
-        help="Run finalize_external_baseline_ingest.py after all tasks complete.",
+        help=(
+            "Run finalize_external_baseline_ingest.py once after all tasks complete. "
+            "Ignored if --finalize-per-task is set."
+        ),
+    )
+    parser.add_argument(
+        "--finalize-per-task",
+        action="store_true",
+        help=(
+            "After each task, run finalize with --only-tasks <task_id> "
+            "(merges raw_runs.jsonl). Replaces the single end-of-run --finalize."
+        ),
+    )
+    parser.add_argument(
+        "--score-submit-per-task",
+        action="store_true",
+        help=(
+            "After each task's finalize, run score_baseline_tasks.py --submit for that task. "
+            "Requires --finalize-per-task and --eval-ingest-pending-only."
+        ),
+    )
+    parser.add_argument(
+        "--eval-config",
+        type=Path,
+        default=None,
+        help="Passed to score_baseline_tasks.py when using --score-submit-per-task.",
+    )
+    parser.add_argument(
+        "--score-ingest-timeout",
+        type=int,
+        default=120,
+        metavar="SEC",
+        help=(
+            "HTTP timeout (seconds) for each per-task ingest POST via "
+            "score_baseline_tasks.py (default: 120)."
+        ),
     )
     parser.add_argument(
         "--eval-ingest-pending-only",
         action="store_true",
-        help="Pass --eval-ingest-pending-only to finalize (requires --finalize).",
+        help="Pass --eval-ingest-pending-only to finalize (batch or per-task).",
     )
     parser.add_argument(
         "--baseline-channel",
@@ -376,7 +594,35 @@ def main() -> int:
         default=None,
         help="Extra arguments to pass to claude -p.",
     )
+    parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=4,
+        metavar="N",
+        help=(
+            "Concurrent claude -p processes (default: 4). "
+            "Each task uses its own workspace cwd; set to 1 to force serial. "
+            "Watch API rate limits when increasing."
+        ),
+    )
     args = parser.parse_args()
+    if args.jobs < 1:
+        print("error: --jobs must be >= 1", file=sys.stderr)
+        return 1
+    if args.score_submit_per_task:
+        if not args.finalize_per_task:
+            print(
+                "error: --score-submit-per-task requires --finalize-per-task",
+                file=sys.stderr,
+            )
+            return 1
+        if not args.eval_ingest_pending_only:
+            print(
+                "error: --score-submit-per-task requires --eval-ingest-pending-only",
+                file=sys.stderr,
+            )
+            return 1
 
     # Resolve RUN_DIR
     if args.run_dir:
@@ -427,81 +673,123 @@ def main() -> int:
         print("error: no tasks to run", file=sys.stderr)
         return 1
 
-    print(f"Tasks to run: {len(selected)}/{len(all_tasks)}", file=sys.stderr)
+    n_sel = len(selected)
+    print(f"Tasks to run: {n_sel}/{len(all_tasks)}", file=sys.stderr)
+    if args.jobs > 1:
+        print(f"Parallel jobs: {args.jobs}", file=sys.stderr)
 
-    # Run tasks sequentially
-    results: list[dict[str, Any]] = []
-    n_ok = 0
-    n_fail = 0
-    for i, (task_id, workspace) in enumerate(selected, 1):
+    results: list[dict[str, Any] | None] = [None] * n_sel
+    to_run: list[tuple[int, str, Path]] = []
+
+    for i, (task_id, workspace) in enumerate(selected):
         summary_exists = (workspace / "_devshell_summary.json").is_file()
         if args.skip_completed and summary_exists:
+            slot = i + 1
             print(
-                f"[{i}/{len(selected)}] {task_id}: skipped (summary exists)",
+                f"[{slot}/{n_sel}] {task_id}: skipped (summary exists)",
                 file=sys.stderr,
             )
-            results.append({"task_id": task_id, "status": "skipped"})
-            continue
+            results[i] = {"task_id": task_id, "status": "skipped"}
+        else:
+            to_run.append((i, task_id, workspace))
 
-        print(f"[{i}/{len(selected)}] {task_id}: running...", file=sys.stderr)
-        t0 = time.monotonic()
-        try:
-            ok, summary = _run_single_task(
+    print_lock: threading.Lock | None = threading.Lock() if args.jobs > 1 else None
+
+    pipeline_failures: list[str] = []
+    after_cb: Callable[[str], None] | None = None
+    pipeline_serial_lock: threading.Lock | None = None
+    if args.finalize_per_task:
+        if args.finalize:
+            print(
+                "note: --finalize-per-task replaces end-of-run --finalize; "
+                "ignoring --finalize",
+                file=sys.stderr,
+            )
+        pipeline_serial_lock = threading.Lock() if args.jobs > 1 else None
+
+        def _after_task(task_id: str) -> None:
+            def _run() -> None:
+                ok = _per_task_finalize_and_maybe_score(
+                    task_id,
+                    run_dir=run_dir,
+                    pending_only=args.eval_ingest_pending_only,
+                    baseline_channel=args.baseline_channel,
+                    score_submit=args.score_submit_per_task,
+                    eval_config=args.eval_config,
+                    score_ingest_timeout=args.score_ingest_timeout,
+                    print_lock=print_lock,
+                )
+                if not ok:
+                    pipeline_failures.append(task_id)
+
+            if pipeline_serial_lock is not None:
+                with pipeline_serial_lock:
+                    _run()
+            else:
+                _run()
+
+        after_cb = _after_task
+
+    if to_run and (args.jobs <= 1 or len(to_run) == 1):
+        for i, task_id, workspace in to_run:
+            results[i] = _execute_task_slot(
+                i + 1,
+                n_sel,
                 task_id,
                 workspace,
                 model=args.model,
                 max_turns=args.max_turns,
                 timeout_seconds=args.timeout,
                 extra_args=args.claude_extra_args,
+                print_lock=print_lock,
+                after=after_cb,
             )
-        except subprocess.TimeoutExpired:
-            print(
-                f"[{i}/{len(selected)}] {task_id}: TIMEOUT ({args.timeout}s)",
-                file=sys.stderr,
-            )
-            n_fail += 1
-            results.append({"task_id": task_id, "status": "timeout"})
-            continue
-        except Exception as exc:
-            print(
-                f"[{i}/{len(selected)}] {task_id}: ERROR: {exc}",
-                file=sys.stderr,
-            )
-            n_fail += 1
-            results.append({"task_id": task_id, "status": "error", "error": str(exc)})
-            continue
-
-        elapsed = time.monotonic() - t0
-        usage = summary.get("usage", {})
-        cost = usage.get("total_cost_usd", "?")
-        tag = "OK" if ok else "FAIL"
-        print(
-            f"[{i}/{len(selected)}] {task_id}: {tag} "
-            f"({elapsed:.0f}s, turns={summary.get('num_turns', '?')}, cost=${cost})",
-            file=sys.stderr,
-        )
-        if ok:
-            n_ok += 1
-        else:
-            n_fail += 1
-        results.append(
-            {
-                "task_id": task_id,
-                "status": "ok" if ok else "fail",
-                "elapsed_s": round(elapsed, 1),
-                "num_turns": summary.get("num_turns"),
-                "cost_usd": usage.get("total_cost_usd"),
+    elif to_run:
+        workers = min(args.jobs, len(to_run))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            future_map = {
+                pool.submit(
+                    _execute_task_slot,
+                    i + 1,
+                    n_sel,
+                    task_id,
+                    workspace,
+                    model=args.model,
+                    max_turns=args.max_turns,
+                    timeout_seconds=args.timeout,
+                    extra_args=args.claude_extra_args,
+                    print_lock=print_lock,
+                    after=after_cb,
+                ): i
+                for i, task_id, workspace in to_run
             }
-        )
+            for fut in as_completed(future_map):
+                idx = future_map[fut]
+                results[idx] = fut.result()
+
+    n_ok = n_fail = 0
+    for r in results:
+        if r is None:
+            continue
+        st = r.get("status")
+        if st == "ok":
+            n_ok += 1
+        elif st in ("fail", "timeout", "error"):
+            n_fail += 1
 
     print(
         f"\nDone: {n_ok} ok, {n_fail} failed, "
-        f"{len(selected) - n_ok - n_fail} skipped out of {len(selected)}",
+        f"{n_sel - n_ok - n_fail} skipped out of {n_sel}",
         file=sys.stderr,
     )
+    if pipeline_failures:
+        print(
+            f"Per-task finalize/score failed for: {pipeline_failures}",
+            file=sys.stderr,
+        )
 
-    # Finalize
-    if args.finalize:
+    # Finalize (batch) — not used together with --finalize-per-task
+    if args.finalize and not args.finalize_per_task:
         print("\nRunning finalize...", file=sys.stderr)
         finalize_cmd = [
             sys.executable,
@@ -524,7 +812,7 @@ def main() -> int:
             print(f"finalize exited with code {rc}", file=sys.stderr)
             return rc
 
-    return 1 if n_fail > 0 else 0
+    return 1 if n_fail > 0 or bool(pipeline_failures) else 0
 
 
 if __name__ == "__main__":

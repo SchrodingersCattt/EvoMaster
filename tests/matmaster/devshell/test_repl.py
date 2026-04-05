@@ -113,14 +113,14 @@ class TestCliParsing:
                 "/tmp/ws",
                 "--log-dir",
                 "/tmp/logs",
-                "--config",
-                "custom.yaml",
+                "--exp",
+                "explore",
                 "--session",
                 "docker",
                 "--verbose",
             )
         )
-        assert args.config == Path("custom.yaml")
+        assert args.exp == "explore"
         assert args.session == "docker"
         assert args.verbose is True
 
@@ -128,7 +128,7 @@ class TestCliParsing:
         from matmaster.devshell.cli import parse_args
 
         args = parse_args(_repl_argv("--workdir", "/tmp/ws", "--log-dir", "/tmp/logs"))
-        assert args.config is None
+        assert args.exp is None
         assert args.session is None
         assert args.verbose is False
         assert args.model is None

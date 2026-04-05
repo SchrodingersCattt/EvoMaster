@@ -279,6 +279,7 @@ class TestKernelResult:
         assert kr.num_turns == 0
         assert kr.stop_reason is None
         assert kr.usage == {}
+        assert kr.usage_vendor_by_turn == ()
 
     def test_construction_with_all_fields(self) -> None:
         kr = KernelResult(

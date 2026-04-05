@@ -69,6 +69,7 @@ class _TerminalItem:
     final_content: str | None = None
     num_turns: int = 0
     usage: dict[str, int] = dc_field(default_factory=dict)
+    usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
     messages: list[Any] = dc_field(default_factory=list)
 
 
@@ -92,6 +93,7 @@ class _KernelState:
     messages: list[Any]
     turn: int = 0
     total_usage: dict[str, int] = dc_field(default_factory=dict)
+    usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
     cached_tool_definitions: list[dict[str, Any]] | None = None
     last_catalog_version: int = -1
 
@@ -147,6 +149,9 @@ class AgentKernel:
                             final_content=item.terminal.final_content,
                             num_turns=item.terminal.num_turns,
                             usage=item.terminal.usage,
+                            usage_vendor_by_turn=[
+                                dict(item) for item in item.terminal.usage_vendor_by_turn
+                            ],
                             messages=item.terminal.messages,
                         )
                         return
@@ -203,6 +208,9 @@ class AgentKernel:
                 final_content=final_content,
                 num_turns=state.turn + turn_offset,
                 usage=dict(state.total_usage),
+                usage_vendor_by_turn=[
+                    dict(item) for item in state.usage_vendor_by_turn
+                ],
                 messages=list(state.messages),
             )
         )
@@ -339,6 +347,9 @@ class AgentKernel:
             response = llm_response
             turn_usage = response.usage
             self._accumulate_usage(state.total_usage, response.usage)
+            state.usage_vendor_by_turn.append(
+                dict(response.usage_vendor) if response.usage_vendor else {}
+            )
             if spec.compactor:
                 spec.compactor.update_message_count(len(state.messages))
 
@@ -553,6 +564,7 @@ class AgentKernel:
         finish_reason: str | None = None
         stream_id = f'turn-{len(api_messages)}'
         usage: dict[str, int] = {}
+        usage_vendor: dict[str, Any] | None = None
         producing_reasoning = False
         producing_content = False
 
@@ -634,6 +646,8 @@ class AgentKernel:
                     finish_reason = chunk.finish_reason
                 if chunk.usage:
                     usage = chunk.usage
+                if chunk.usage_vendor is not None:
+                    usage_vendor = chunk.usage_vendor
                 if chunk.tool_call_deltas:
                     # Segment transition: reasoning -> tool_calls
                     if producing_reasoning:
@@ -739,6 +753,7 @@ class AgentKernel:
                 tool_calls=tool_calls,
                 finish_reason=finish_reason,
                 usage=usage,
+                usage_vendor=usage_vendor,
             )
         )
 

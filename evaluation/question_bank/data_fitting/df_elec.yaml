@@ -2,7 +2,7 @@ version: v5
 capability: property_prediction
 domain: elec
 questions:
-- id: DF_elec_001
+- id: DF_elec_001_20260404
   capability: property_prediction
   domain: elec
   intent: Determine band-gap type and value from given band-edge dataset.
@@ -31,12 +31,15 @@ questions:
     - gap_value
     - vbm_kpoint
     - cbm_kpoint
+  - key: turn_budget
+    value:
+      max: 6
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: gap_type
     criterion: Band-gap type is correctly identified as indirect (not direct).
@@ -51,13 +54,19 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: Gap type and value are derived from band_edges.json data, not from LLM knowledge of Si band gap.
+    criterion: Gap type and value are tied to band_edges.json as described in the final answer, not bare LLM recall of Si.
+      Judge from the answer and stated file use; do not fail because the tool-call log omits MCP, web_search, or any specific
+      tool.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge
     criterion: Band gap classification is achieved by directly reading the provided data file without extra computation.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
       per deployment).

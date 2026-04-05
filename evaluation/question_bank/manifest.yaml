@@ -73,7 +73,7 @@ banks:
 
   - path: "workflow_orchestration/wo_mech.yaml"
     capability: "workflow_orchestration"
-    questions: 2
+    questions: 3
 
   - path: "workflow_orchestration/wo_struct.yaml"
     capability: "workflow_orchestration"
@@ -81,7 +81,7 @@ banks:
 
   - path: "workflow_orchestration/wo_elec.yaml"
     capability: "workflow_orchestration"
-    questions: 2
+    questions: 3
 
   - path: "workflow_orchestration/wo_kinetic.yaml"
     capability: "workflow_orchestration"
@@ -120,7 +120,11 @@ banks:
   # --- VASP INCAR generation (20 questions) ---
 
   - path: "input_generation/ig_incar.yaml"
-    capability: "input_generation"
+    capability: "input_generation_vasp"
     questions: 20
 
-# Total: 61 questions across 17 bank files
+  - path: "input_generation/ig_abacus.yaml"
+    capability: "input_generation_abacus"
+    questions: 2
+
+# Total: 65 questions across 18 bank files

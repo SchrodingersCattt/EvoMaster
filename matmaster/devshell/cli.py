@@ -66,6 +66,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Event log directory",
     )
     common.add_argument(
+        "--exp",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help=(
+            "matmaster/exps/{NAME}.toml. Omit or `devshell`: use the patched direct exp "
+            "for interactive devshell defaults. `direct`: use the unpatched production exp."
+        ),
+    )
+    common.add_argument(
         "--config",
         type=Path,
         default=None,
@@ -194,7 +204,22 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     current_env = os.getenv("SERVICE_ENV", "test")
     load_dotenv(find_dotenv(f".env.{current_env}"))
 
+    from matmaster.config.loader import load_exp_config
     from matmaster.devshell.config import DevConfig, load_dev_config
+    from matmaster.devshell.exp_patch import devshell_default_exp_config
+
+    exp_opt = (getattr(args, "exp", None) or "").strip() or None
+    exp_override = None
+    if exp_opt is not None or not args.config:
+        try:
+            if not exp_opt or exp_opt == "devshell":
+                exp_override = devshell_default_exp_config()
+            else:
+                exp_override = load_exp_config(exp_opt)
+        except (FileNotFoundError, ValueError) as e:
+            label = exp_opt or "devshell"
+            print(f"Error loading exp '{label}': {e}", file=sys.stderr)
+            sys.exit(1)
 
     if args.config:
         try:
@@ -232,6 +257,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
         llm_config=llm_config,
         resolved_route=resolved,
         stream_hook=stream_hook,
+        exp_config=exp_override,
     )
     return runner, config, llm_config, resolved
 
@@ -327,6 +353,9 @@ def _run_single(
         "num_turns": result.num_turns,
         "usage": dict(result.usage) if result.usage else {},
     }
+    vendor_turns = getattr(result, "usage_vendor_by_turn", ())
+    if vendor_turns:
+        summary["usage_vendor_by_turn"] = [dict(item) for item in vendor_turns]
     line = json.dumps(summary, ensure_ascii=False)
     print(line)
     if args.json_out is not None:

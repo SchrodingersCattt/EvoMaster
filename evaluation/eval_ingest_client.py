@@ -23,8 +23,17 @@ before POST. Artifact upload only includes the current task under that run:
 ``workspaces/<task_id>`` and ``logs/<task_id>`` (see
 :func:`upload_eval_task_artifacts_to_oss`). The parent ``devshell_eval_*`` folder is
 shared by all tasks in the batch; it is not uploaded whole. ``extra`` is stored as
-opaque JSON. Optional ``eval_tooling`` (from
-:func:`matmaster.eval_tooling_snapshot.snapshot_devshell_eval_tooling`) records builtin /
+opaque JSON. When devshell ``summary.usage`` is present, ``extra`` includes a JSON-safe copy as
+``usage`` (run-level **accumulated scalars**). ``summary.usage_vendor_by_turn`` lists
+one vendor-native usage dict per LLM round (possibly ``{}``); when present it is
+copied into ``extra["usage_vendor_by_turn"]``. Top-level ``item["tokens"]`` and
+``extra["tokens_last_turn"]`` use the **last LLM round** raw ``total_tokens`` when
+``usage_vendor_by_turn`` is present; for external baseline flows that opt in to
+approximation they use ``summary.usage.total_tokens / num_turns``; otherwise they
+fall back to ``summary.usage.total_tokens`` (whole-run accumulated scalar,
+**not** cache-adjusted). Neither path subtracts cache reads.
+Optional ``eval_tooling`` (from
+:func:`evaluation.eval_tooling_snapshot.snapshot_eval_tooling`) records builtin /
 skill / MCP server config for batch analysis. Optional ``events_timeline`` (from
 :func:`load_devshell_events_timeline`) is a short list of step labels in order, e.g.
 ``["response", "read_file", "execute_bash", "run_result"]``, derived from
@@ -55,6 +64,10 @@ from typing import Any, Literal
 import httpx
 
 import utils.env
+from evaluation.core.evidence import (
+    TokenUsage,
+    approximate_last_turn_usage_from_run_summary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,12 +81,25 @@ _EVAL_BASELINE_CHANNELS: frozenset[str] = frozenset({"claude_code", "cursor", "c
 # Direct tools-server path (not the gateway ``/bohrapi/v1/matmaster-tools-server/...`` prefix).
 EVAL_INGEST_API_PATH = "/api/v1/evaluation/ingest"
 QUESTION_CATALOG_SYNC_API_PATH = "/api/v1/evaluation/question-catalog/sync"
+# 首页大表：每题各基线渠道最近一次得分（无则为 null）。见 matmaster-tools-server
+# ``evaluation_api.evaluation_questions_score_summary``；单题时间线用
+# ``/questions/{id}/overview``，批量筛「缺某渠道基线分」应使用本路径而非 per-question overview。
+EVAL_SCORE_SUMMARY_API_PATH = "/api/v1/evaluation/questions/score-summary"
 
 _base = (utils.env.MATMASTER_TOOLS_SERVER or "").strip().rstrip("/")
 EVAL_INGEST_URL: str | None = f"{_base}{EVAL_INGEST_API_PATH}" if _base else None
 QUESTION_CATALOG_SYNC_URL: str | None = (
     f"{_base}{QUESTION_CATALOG_SYNC_API_PATH}" if _base else None
 )
+EVAL_SCORE_SUMMARY_URL: str | None = (
+    f"{_base}{EVAL_SCORE_SUMMARY_API_PATH}" if _base else None
+)
+
+_SCORE_SUMMARY_FIELD_BY_CHANNEL: dict[str, str] = {
+    "claude_code": "claude_code_score",
+    "cursor": "cursor_score",
+    "codex": "codex_score",
+}
 
 
 def normalize_baseline_channel(
@@ -156,37 +182,75 @@ def load_devshell_events_timeline(log_dir: Path) -> list[str] | None:
     return out if out else None
 
 
-def extract_total_tokens(usage: Any) -> int | None:
-    if not usage or not isinstance(usage, dict):
+def _json_safe_usage_tree(obj: Any) -> Any:
+    """Recursively coerce usage payloads to JSON-serializable structures for ingest ``extra``."""
+    if obj is None or isinstance(obj, (bool, int, float, str)):
+        return obj
+    if isinstance(obj, dict):
+        return {str(k): _json_safe_usage_tree(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe_usage_tree(x) for x in obj]
+    try:
+        return int(obj)
+    except (TypeError, ValueError):
+        pass
+    try:
+        return float(obj)
+    except (TypeError, ValueError):
+        pass
+    return str(obj)
+
+
+def extract_ingest_tokens(
+    summary: Any, *, approximate_last_turn_from_total: bool = False
+) -> int | None:
+    """Token count for ingest ``item["tokens"]``: **last round** raw ``total_tokens``, no cache deduction.
+
+    1. If ``summary["usage_vendor_by_turn"]`` is a non-empty list, use
+       ``int(last_entry["total_tokens"])`` when set.
+    2. Else, if ``approximate_last_turn_from_total`` is true and ``num_turns > 0``,
+       approximate last-turn usage as ``summary["usage"] / num_turns`` and use that
+       raw ``total_tokens``.
+    3. Else use ``summary["usage"]["total_tokens"]`` (whole-run accumulated from kernel).
+    4. Else derive from ``usage`` via :class:`evaluation.core.evidence.TokenUsage` (still
+       **no** cache subtraction — uses reported ``total_tokens`` or ``prompt+completion``).
+    """
+    if not summary or not isinstance(summary, dict):
         return None
-    # Prefer cache-adjusted total (aligned with Claude Code accounting)
-    uncached = usage.get("total_tokens_uncached")
-    if uncached is not None:
-        try:
-            return int(uncached)
-        except (TypeError, ValueError):
-            pass
-    raw = usage.get("total_tokens")
-    if raw is not None:
-        try:
-            val = int(raw)
-            # Subtract cache_read_tokens if available
-            cache_read = usage.get("cache_read_tokens")
-            if cache_read is not None:
+    turns = summary.get("usage_vendor_by_turn")
+    if isinstance(turns, list) and turns:
+        last = turns[-1]
+        if isinstance(last, dict):
+            tt = last.get("total_tokens")
+            if tt is not None:
                 try:
-                    val -= int(cache_read)
+                    v = int(tt)
+                    if v >= 0:
+                        return v
                 except (TypeError, ValueError):
                     pass
-            return val
-        except (TypeError, ValueError):
-            pass
-    pt = usage.get("prompt_tokens")
-    ct = usage.get("completion_tokens")
-    if pt is not None and ct is not None:
-        try:
-            return int(pt) + int(ct)
-        except (TypeError, ValueError):
-            pass
+    usage = summary.get("usage")
+    if isinstance(usage, dict) and usage:
+        if approximate_last_turn_from_total:
+            approx_last_turn = approximate_last_turn_usage_from_run_summary(
+                usage,
+                summary.get("num_turns"),
+            )
+            if approx_last_turn is not None and approx_last_turn.total_tokens >= 0:
+                return approx_last_turn.total_tokens
+        raw_tt = usage.get("total_tokens")
+        if raw_tt is not None:
+            try:
+                v = int(raw_tt)
+                if v >= 0:
+                    return v
+            except (TypeError, ValueError):
+                pass
+        tu = TokenUsage.from_usage_dict(usage)
+        if tu.total_tokens > 0:
+            return tu.total_tokens
+        if tu.prompt_tokens or tu.completion_tokens:
+            return max(0, tu.prompt_tokens + tu.completion_tokens)
     return None
 
 
@@ -469,14 +533,15 @@ def build_ingest_item(
     artifact: dict[str, Any] | None = None,
     eval_tooling: dict[str, Any] | None = None,
     events_timeline: list[str] | None = None,
+    approximate_last_turn_from_total: bool = False,
 ) -> dict[str, Any]:
-    usage = summary.get("usage") if isinstance(summary, dict) else None
-    tokens = extract_total_tokens(usage)
-    preview: str | None = None
-    if isinstance(summary, dict):
-        fc = summary.get("final_content")
-        if isinstance(fc, str) and fc:
-            preview = fc[:2000]
+    raw_summary = summary if isinstance(summary, dict) else None
+    s: dict[str, Any] = raw_summary if raw_summary is not None else {}
+    usage = s.get("usage")
+    tokens = extract_ingest_tokens(
+        s,
+        approximate_last_turn_from_total=approximate_last_turn_from_total,
+    )
 
     extra: dict[str, Any] = {
         "task_id": task_id,
@@ -484,53 +549,61 @@ def build_ingest_item(
         "mode": mode,
         "repeat_idx": repeat_idx,
     }
-    if isinstance(summary, dict):
-        extra.update(
-            {
-                "status": summary.get("status"),
-                "reason": summary.get("reason"),
-                "profile_key": summary.get("profile_key"),
-            }
-        )
-        if summary.get("parse_error"):
-            extra["parse_error"] = True
-            for k in ("error", "missing_file", "empty_file"):
-                if k in summary:
-                    extra[k] = summary[k]
-    if preview is not None:
-        extra["final_content_preview"] = preview
+    extra.update(
+        {
+            "status": s.get("status"),
+            "reason": s.get("reason"),
+            "profile_key": s.get("profile_key"),
+        }
+    )
+    if s.get("parse_error"):
+        extra["parse_error"] = True
+        for k in ("error", "missing_file", "empty_file"):
+            if k in s:
+                extra[k] = s[k]
 
     if eval_tooling is not None:
         extra["eval_tooling"] = eval_tooling
     if events_timeline:
         extra["events_timeline"] = list(events_timeline)
 
+    if isinstance(usage, dict) and usage:
+        extra["usage"] = _json_safe_usage_tree(dict(usage))
+    uv_turns = s.get("usage_vendor_by_turn")
+    if isinstance(uv_turns, list) and uv_turns:
+        extra["usage_vendor_by_turn"] = [
+            (
+                _json_safe_usage_tree(dict(x))
+                if isinstance(x, dict)
+                else _json_safe_usage_tree(x)
+            )
+            for x in uv_turns
+        ]
+    if tokens is not None:
+        extra["tokens_last_turn"] = int(tokens)
+
     item: dict[str, Any] = {
         "question_id": question_id,
         "extra": extra,
     }
-    if isinstance(summary, dict):
-        nt = summary.get("num_turns")
-        if nt is not None:
-            try:
-                nti = int(nt)
-                if nti >= 0:
-                    item["num_turns"] = nti
-            except (TypeError, ValueError):
-                pass
-        mod = summary.get("model")
-        if isinstance(mod, str) and mod.strip():
-            item["model"] = mod.strip()[:256]
+    nt = s.get("num_turns")
+    if nt is not None:
+        try:
+            nti = int(nt)
+            if nti >= 0:
+                item["num_turns"] = nti
+        except (TypeError, ValueError):
+            pass
+    mod = s.get("model")
+    if isinstance(mod, str) and mod.strip():
+        item["model"] = mod.strip()[:256]
 
     if duration_ms is not None and duration_ms >= 0:
         item["duration_ms"] = int(duration_ms)
     if tokens is not None:
         item["tokens"] = tokens
 
-    item["score"] = score_for_eval_ingest(
-        summary if isinstance(summary, dict) else None,
-        devshell_exit_code,
-    )
+    item["score"] = score_for_eval_ingest(raw_summary, devshell_exit_code)
     if isinstance(artifact, dict) and artifact:
         item["artifact"] = dict(artifact)
     return item
@@ -545,31 +618,135 @@ def matmaster_evaluation_request_headers() -> dict[str, str]:
     return headers
 
 
+def _get_matmaster_tools_json(
+    url: str,
+    *,
+    timeout: float,
+) -> tuple[bool, str, dict[str, Any] | None]:
+    """GET tools-server JSON; parse ``{code, msg, data?}`` envelope (same as POST)."""
+    headers = matmaster_evaluation_request_headers()
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        return False, str(exc), None
+
+    if resp.status_code != 200:
+        return False, f"HTTP {resp.status_code}: {resp.text[:500]}", None
+
+    try:
+        data = resp.json()
+    except Exception:
+        return False, f"non-JSON response: {resp.text[:200]}", None
+
+    if not isinstance(data, dict):
+        return False, f"unexpected JSON type: {type(data).__name__}", None
+
+    if data.get("code") != 0:
+        return False, str(data.get("msg", data)), data
+
+    return True, str(data.get("msg", "success")), data
+
+
+def parse_score_summary_missing_question_ids(
+    envelope: dict[str, Any],
+    *,
+    channel: EvalBaselineChannel = "claude_code",
+) -> list[str]:
+    """From score-summary response body, list ``question_id`` where baseline score is missing.
+
+    *envelope* is the full decoded JSON (with ``code`` / ``data``). Missing score means
+    the channel field (e.g. ``claude_code_score``) is ``null`` or absent.
+    """
+    ch = normalize_baseline_channel(channel)
+    field = _SCORE_SUMMARY_FIELD_BY_CHANNEL.get(ch, "claude_code_score")
+    data = envelope.get("data") or {}
+    if not isinstance(data, dict):
+        return []
+    questions = data.get("questions")
+    if not isinstance(questions, list):
+        return []
+    out: list[str] = []
+    for row in questions:
+        if not isinstance(row, dict):
+            continue
+        qid = str(row.get("question_id", "")).strip()
+        if not qid:
+            continue
+        if row.get(field) is None:
+            out.append(qid)
+    return out
+
+
+def fetch_missing_baseline_question_ids(
+    *,
+    channel: EvalBaselineChannel = "claude_code",
+    timeout: float = 120.0,
+) -> tuple[bool, str, list[str]]:
+    """GET ``EVAL_SCORE_SUMMARY_URL``; return question ids with no score for *channel*.
+
+    Requires ``MATMASTER_TOOLS_SERVER`` and ``MATMASTER_TOOLS_EVALUATION_BEARER``.
+    """
+    url = EVAL_SCORE_SUMMARY_URL
+    if not url:
+        return False, "MATMASTER_TOOLS_SERVER is not set", []
+    if not utils.env.MATMASTER_TOOLS_EVALUATION_BEARER:
+        return (
+            False,
+            "MATMASTER_TOOLS_EVALUATION_BEARER is not set (evaluation GET requires auth)",
+            [],
+        )
+    ok, msg, data = _get_matmaster_tools_json(url, timeout=timeout)
+    if not ok or not data:
+        return False, msg, []
+    ids = parse_score_summary_missing_question_ids(data, channel=channel)
+    return True, msg, ids
+
+
+def _post_matmaster_tools_json(
+    url: str,
+    body: dict[str, Any],
+    *,
+    timeout: float,
+) -> tuple[bool, str, dict[str, Any] | None]:
+    """POST JSON to tools-server; parse ``{code, msg, data?}`` envelope.
+
+    Returns ``(ok, message, full_json)`` where *full_json* is the decoded body on
+    success or on JSON parse failure path is still returned when decode succeeded
+    but ``code != 0``; ``None`` on transport / non-JSON / empty decode errors.
+    """
+    headers = matmaster_evaluation_request_headers()
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(url, json=body, headers=headers)
+    except httpx.HTTPError as exc:
+        return False, str(exc), None
+
+    if resp.status_code != 200:
+        return False, f"HTTP {resp.status_code}: {resp.text[:500]}", None
+
+    try:
+        data = resp.json()
+    except Exception:
+        return False, f"non-JSON response: {resp.text[:200]}", None
+
+    if not isinstance(data, dict):
+        return False, f"unexpected JSON type: {type(data).__name__}", None
+
+    if data.get("code") != 0:
+        return False, str(data.get("msg", data)), data
+
+    return True, str(data.get("msg", "success")), data
+
+
 def post_eval_ingest(
     url: str,
     body: dict[str, Any],
     *,
     timeout: float = 30.0,
 ) -> tuple[bool, str]:
-    headers = matmaster_evaluation_request_headers()
-
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(url, json=body, headers=headers)
-    except httpx.HTTPError as exc:
-        return False, str(exc)
-
-    if resp.status_code != 200:
-        return False, f"HTTP {resp.status_code}: {resp.text[:500]}"
-
-    try:
-        data = resp.json()
-    except Exception:
-        return False, f"non-JSON response: {resp.text[:200]}"
-
-    if data.get("code") != 0:
-        return False, str(data.get("msg", data))
-    return True, str(data.get("msg", "success"))
+    ok, msg, _ = _post_matmaster_tools_json(url, body, timeout=timeout)
+    return ok, msg
 
 
 def post_question_catalog_sync(
@@ -606,26 +783,11 @@ def post_question_catalog_sync(
         body_items.append({"question_id": qid, "question_text": qtext})
 
     body = {"items": body_items}
-    headers = matmaster_evaluation_request_headers()
+    ok, err_msg, data = _post_matmaster_tools_json(url, body, timeout=timeout)
+    if not ok:
+        return False, err_msg
 
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(url, json=body, headers=headers)
-    except httpx.HTTPError as exc:
-        return False, str(exc)
-
-    if resp.status_code != 200:
-        return False, f"HTTP {resp.status_code}: {resp.text[:500]}"
-
-    try:
-        data = resp.json()
-    except Exception:
-        return False, f"non-JSON response: {resp.text[:200]}"
-
-    if data.get("code") != 0:
-        return False, str(data.get("msg", data))
-
-    inner = data.get("data") or {}
+    inner = (data or {}).get("data") or {}
     ac = inner.get("active_count")
     ic = inner.get("inactive_count")
     if ac is not None and ic is not None:

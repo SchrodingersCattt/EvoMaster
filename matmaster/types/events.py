@@ -85,6 +85,7 @@ class RunResultEvent(EventBase):
     final_content: str | None = None
     num_turns: int = 0
     usage: dict[str, int] = Field(default_factory=dict)
+    usage_vendor_by_turn: list[dict[str, Any]] = Field(default_factory=list)
     # exclude=True: messages carries the full conversation transcript
     # (including system prompt) for internal drain consumers only.
     # model_dump() excludes it, so SSE/frontend never sees it.
