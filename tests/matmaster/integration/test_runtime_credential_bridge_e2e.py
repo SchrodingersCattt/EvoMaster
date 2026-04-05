@@ -31,6 +31,43 @@ def _session_with_bohrium(
     )
 
 
+class _RemoteShareSession(SimpleNamespace):
+    """Session double exposing remote directory operations for Bohrium submit."""
+
+    def __init__(self):
+        super().__init__(
+            _bohrium_credentials={
+                "access_key": "e2e-ak",
+                "project_id": 99,
+                "user_id": 7,
+                "user_no": "U001",
+            },
+            is_open=True,
+        )
+        self.exec_calls: list[str] = []
+        self.download_calls: list[str] = []
+
+    def path_exists(self, path: str) -> bool:
+        return path == "/share/inputs"
+
+    def is_file(self, path: str) -> bool:
+        return False
+
+    def exec_bash(self, command: str, timeout=None, cancel_token=None) -> dict:
+        self.exec_calls.append(command)
+        return {
+            "stdout": "",
+            "stderr": "",
+            "exit_code": 0,
+            "working_dir": "/share",
+            "output": "",
+        }
+
+    def download(self, path: str, timeout=None) -> bytes:
+        self.download_calls.append(path)
+        return b"zip-bytes"
+
+
 class TestBohriumToolAndRemoteShare:
     """BohriumTool should use session credentials for all actions."""
 
@@ -108,6 +145,81 @@ class TestBohriumToolAndRemoteShare:
         assert result.status == "success"
         # Verify session credential was used
         assert any(c["access_key"] == "e2e-ak" for c in post_calls)
+
+    def test_bohrium_tool_submit_remote_share_uses_session_for_input_dir(
+        self, tmp_path, monkeypatch
+    ):
+        """submit should use remote-session file access for /share input_dir."""
+        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
+        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
+
+        session = _RemoteShareSession()
+        tool = BohriumTool(session=session, workdir=tmp_path)
+
+        import matmaster.tools.builtin.bohrium_tool as bmod
+
+        post_calls = []
+        upload_calls = []
+
+        def fake_post(base_url, path, access_key, payload, timeout=30):
+            post_calls.append({"path": path, "access_key": access_key, "payload": payload})
+            if "create" in path:
+                return {
+                    "code": 0,
+                    "data": {
+                        "storePath": "p/",
+                        "storeHost": "https://s.com",
+                        "token": "t",
+                        "jobId": "j1",
+                    },
+                }
+            return {"code": 0, "data": {"jobId": "j2", "bohrJobId": "b2"}}
+
+        monkeypatch.setattr(bmod, "_post", fake_post)
+
+        sdk_module = types.ModuleType("bohrium_open_sdk")
+        opensdk_module = types.ModuleType("bohrium_open_sdk.opensdk")
+        tiefblue_module = types.ModuleType("bohrium_open_sdk.opensdk._tiefblue_client")
+
+        class FakeTiefblue:
+            def __init__(self, **kw):
+                pass
+
+            def upload_from_file_multi_part(self, **kw):
+                upload_calls.append(kw)
+                return {}
+
+        tiefblue_module.Tiefblue = FakeTiefblue
+        sdk_module.opensdk = opensdk_module
+        opensdk_module._tiefblue_client = tiefblue_module
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+
+        with monkeypatch.context() as m:
+            m.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
+            m.setitem(sys.modules, "bohrium_open_sdk.opensdk", opensdk_module)
+            m.setitem(
+                sys.modules,
+                "bohrium_open_sdk.opensdk._tiefblue_client",
+                tiefblue_module,
+            )
+            result = asyncio.run(
+                tool.execute(
+                    {
+                        "action": "submit",
+                        "input_dir": "/share/inputs",
+                        "image": "test:latest",
+                        "cmd": "echo hi",
+                    }
+                )
+            )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert session.exec_calls
+        assert session.download_calls
+        assert upload_calls
+        assert post_calls[1]["payload"]["cmd"].endswith("> log 2>&1")
 
     def test_bohrium_tool_poll_with_remote_share_and_no_session_errors(
         self, tmp_path, monkeypatch

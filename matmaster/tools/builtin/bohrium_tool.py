@@ -18,12 +18,15 @@ import logging
 import os
 import tempfile
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Iterator
 from urllib.parse import quote
+from uuid import uuid4
 
 import requests
 
+from matmaster.integration.runtime_bridge import resolve_output_path
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
@@ -88,6 +91,148 @@ _STATUS_MAP = {
 _SUCCESS_CODE = 2
 _RUNNING_CODES = {-10, 0, 1, 3}
 _FAILURE_CODES = {-2, -1}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# input_dir preparation helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _resolve_bohrium_input_dir(
+    *,
+    input_dir: str,
+    workdir: Path | None,
+    session: Any | None,
+) -> tuple[str, Path | str]:
+    """Resolve submit input_dir into a validated local or remote directory."""
+    decision = resolve_output_path(
+        raw_path=input_dir,
+        execution_workdir=str(workdir or '.'),
+        session=session,
+    )
+
+    if decision.kind == 'remote_share':
+        if session is None:
+            raise ValueError(
+                f"input_dir '{input_dir}' requires an active remote session, "
+                'but none is available'
+            )
+        if not getattr(session, 'is_open', False):
+            raise ValueError(
+                f"input_dir '{input_dir}' requires an open remote session, "
+                'but the current session is not open'
+            )
+
+        remote_dir = decision.normalized_path
+        if not session.path_exists(remote_dir):
+            raise ValueError(f'Remote input_dir not found: {remote_dir}')
+        if session.is_file(remote_dir):
+            raise ValueError(f'Remote input_dir is not a directory: {remote_dir}')
+        return decision.kind, remote_dir
+
+    local_dir = Path(decision.normalized_path)
+    if not local_dir.exists():
+        raise ValueError(f'input_dir not found: {input_dir}')
+    if not local_dir.is_dir():
+        raise ValueError(f'input_dir is not a directory: {input_dir}')
+    return decision.kind, local_dir
+
+
+def _zip_local_input_dir(input_dir: Path, zip_path: Path) -> None:
+    """Create input.zip from a local input directory."""
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for file_path in input_dir.rglob('*'):
+            if file_path.is_file():
+                zf.write(file_path, file_path.relative_to(input_dir))
+
+
+def _remote_zip_command(input_dir: str, remote_zip_path: str) -> str:
+    """Build a remote python3 command that packages input_dir into a zip file."""
+    return (
+        "python3 - <<'PY'\n"
+        "import pathlib\n"
+        "import zipfile\n\n"
+        f"source = pathlib.Path({json.dumps(input_dir)})\n"
+        f"archive = pathlib.Path({json.dumps(remote_zip_path)})\n"
+        "archive.parent.mkdir(parents=True, exist_ok=True)\n"
+        "with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as zf:\n"
+        "    for path in source.rglob('*'):\n"
+        "        if path.is_file():\n"
+        "            zf.write(path, path.relative_to(source))\n"
+        "print(archive)\n"
+        "PY"
+    )
+
+
+def _prepare_remote_input_zip(
+    *,
+    input_dir: str,
+    session: Any,
+    zip_path: Path,
+) -> None:
+    """Package a remote input directory and download the resulting zip locally."""
+    remote_zip_path = f'/tmp/bohrium_input_{uuid4().hex}.zip'
+    cleanup_cmd = f'rm -f {remote_zip_path}'
+
+    try:
+        result = session.exec_bash(_remote_zip_command(input_dir, remote_zip_path))
+        if result.get('exit_code') != 0:
+            detail = (
+                str(
+                    result.get('stderr')
+                    or result.get('output')
+                    or result.get('stdout')
+                    or 'unknown error'
+                )
+                .strip()
+            )
+            raise RuntimeError(
+                f"Failed to package remote input_dir '{input_dir}': {detail}"
+            )
+
+        try:
+            zip_bytes = session.download(remote_zip_path)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to download remote input_dir '{input_dir}': {exc}"
+            ) from exc
+        zip_path.write_bytes(zip_bytes)
+    finally:
+        try:
+            session.exec_bash(cleanup_cmd)
+        except Exception:
+            logger.warning(
+                'Failed to clean up temporary remote input zip %s',
+                remote_zip_path,
+                exc_info=True,
+            )
+
+
+@contextmanager
+def prepare_bohrium_input_zip(
+    *,
+    input_dir: str,
+    workdir: Path | None,
+    session: Any | None,
+) -> Iterator[Path]:
+    """Yield a local input.zip for Bohrium submit from local or remote input_dir."""
+    input_kind, resolved_input = _resolve_bohrium_input_dir(
+        input_dir=input_dir,
+        workdir=workdir,
+        session=session,
+    )
+
+    with tempfile.TemporaryDirectory(prefix='bohrium_submit_') as tmp_dir:
+        zip_path = Path(tmp_dir) / 'input.zip'
+        if input_kind == 'remote_share':
+            _prepare_remote_input_zip(
+                input_dir=str(resolved_input),
+                session=session,
+                zip_path=zip_path,
+            )
+        else:
+            _zip_local_input_dir(Path(resolved_input), zip_path)
+        yield zip_path
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -283,12 +428,6 @@ class BohriumTool(BuiltinTool):
         if not cmd:
             return ToolResult(status='error', content='Missing required parameter: cmd')
 
-        input_path = Path(input_dir)
-        if not input_path.is_dir():
-            return ToolResult(
-                status='error', content=f'input_dir not found: {input_dir}'
-            )
-
         machine = args.get('machine', 'c32_m128_cpu')
         job_name = args.get('job_name', 'matmaster-job')
         disk_size = args.get('disk_size', 50)
@@ -301,29 +440,27 @@ class BohriumTool(BuiltinTool):
         sandbox = _use_sandbox()
 
         try:
-            # Step 1: create job
-            if sandbox:
-                create_path = '/openapi/v1/sandbox/job/create'
-                create_payload = {'projectId': project_id, 'name': job_name}
-            else:
-                create_path = '/openapi/v1/job/create'
-                create_payload = {'projectId': project_id, 'jobName': job_name}
+            with prepare_bohrium_input_zip(
+                input_dir=input_dir,
+                workdir=self._workdir,
+                session=self._session,
+            ) as zip_path:
+                # Step 1: create job
+                if sandbox:
+                    create_path = '/openapi/v1/sandbox/job/create'
+                    create_payload = {'projectId': project_id, 'name': job_name}
+                else:
+                    create_path = '/openapi/v1/job/create'
+                    create_payload = {'projectId': project_id, 'jobName': job_name}
 
-            create_resp = _post(base_url, create_path, access_key, create_payload)
-            if create_resp.get('code') != 0:
-                return ToolResult(
-                    status='error', content=f'job/create failed: {create_resp}'
-                )
-            create_data = create_resp['data']
+                create_resp = _post(base_url, create_path, access_key, create_payload)
+                if create_resp.get('code') != 0:
+                    return ToolResult(
+                        status='error', content=f'job/create failed: {create_resp}'
+                    )
+                create_data = create_resp['data']
 
-            # Step 2: zip and upload
-            with tempfile.TemporaryDirectory(prefix='bohrium_submit_') as tmp_dir:
-                zip_path = Path(tmp_dir) / 'input.zip'
-                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    for file_path in input_path.rglob('*'):
-                        if file_path.is_file():
-                            zf.write(file_path, file_path.relative_to(input_path))
-
+                # Step 2: upload prepared input.zip
                 store_path = create_data['storePath']
                 store_host = create_data['storeHost'].rstrip('/')
                 token = create_data['token']
@@ -428,6 +565,8 @@ class BohriumTool(BuiltinTool):
                 ),
             )
 
+        except (ValueError, RuntimeError) as exc:
+            return ToolResult(status='error', content=str(exc))
         except Exception as exc:
             logger.error('bohrium submit failed: %s', exc, exc_info=True)
             return ToolResult(status='error', content=f'Submit failed: {exc}')
@@ -454,9 +593,6 @@ class BohriumTool(BuiltinTool):
         sandbox = _use_sandbox()
         job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
         result_dir_str = args.get('result_dir') or f'results/run_{job_id}'
-
-        # Path policy: check if result_dir requires a remote session
-        from matmaster.integration.runtime_bridge import resolve_output_path
 
         decision = resolve_output_path(
             raw_path=result_dir_str,

@@ -7,6 +7,7 @@ import json
 import sys
 import types
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import matmaster.tools.builtin.bohrium_tool as bohrium_module
 from matmaster.integration.runtime_bridge.models import ResolvedCredential
@@ -48,6 +49,117 @@ def _patch_bridge(monkeypatch, cred: ResolvedCredential | None = None):
     )
 
 
+def _install_fake_tiefblue(monkeypatch, upload_calls: list[tuple[str, str, dict]]):
+    """Install a fake Tiefblue SDK module into sys.modules."""
+
+    class FakeTiefblueClient:
+        def __init__(self, *, base_url):
+            self.base_url = base_url
+
+        def upload_from_file_multi_part(
+            self,
+            *,
+            object_key,
+            file_path,
+            custom_headers,
+            progress_bar,
+        ):
+            upload_calls.append((object_key, file_path, custom_headers))
+            assert progress_bar is False
+            return {}
+
+    sdk_module = types.ModuleType("bohrium_open_sdk")
+    opensdk_module = types.ModuleType("bohrium_open_sdk.opensdk")
+    tiefblue_module = types.ModuleType("bohrium_open_sdk.opensdk._tiefblue_client")
+    tiefblue_module.Tiefblue = FakeTiefblueClient
+    sdk_module.opensdk = opensdk_module
+    opensdk_module._tiefblue_client = tiefblue_module
+
+    monkeypatch.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
+    monkeypatch.setitem(sys.modules, "bohrium_open_sdk.opensdk", opensdk_module)
+    monkeypatch.setitem(
+        sys.modules,
+        "bohrium_open_sdk.opensdk._tiefblue_client",
+        tiefblue_module,
+    )
+
+
+def _fake_submit_post_factory(
+    post_calls: list[tuple[str, dict, str]]
+):
+    """Build a fake submit API handler recording payloads and credentials."""
+
+    def fake_post(base_url, path, access_key, payload, timeout=30):
+        post_calls.append((path, payload, access_key))
+        if path == "/openapi/v1/sandbox/job/create":
+            return {
+                "code": 0,
+                "data": {
+                    "storePath": "sandbox/jobs/run-1/",
+                    "storeHost": "https://store.example.com",
+                    "token": "token-123",
+                    "jobId": "create-job-id",
+                },
+            }
+        if path == "/openapi/v1/sandbox/job/add":
+            return {
+                "code": 0,
+                "data": {
+                    "jobId": "job-123",
+                    "bohrJobId": "bohr-456",
+                },
+            }
+        raise AssertionError(f"unexpected path: {path}")
+
+    return fake_post
+
+
+class FakeRemoteSession:
+    """Minimal fake remote session for Bohrium submit tests."""
+
+    def __init__(
+        self,
+        *,
+        existing_paths: set[str] | None = None,
+        file_paths: set[str] | None = None,
+        downloads: dict[str, bytes] | None = None,
+        is_open: bool = True,
+        exec_result: dict | None = None,
+        default_download: bytes = b'zip-bytes',
+    ):
+        self._existing_paths = existing_paths or set()
+        self._file_paths = file_paths or set()
+        self._downloads = downloads or {}
+        self._default_download = default_download
+        self.is_open = is_open
+        self.exec_calls: list[str] = []
+        self.download_calls: list[str] = []
+
+        self._exec_result = exec_result or {
+            "stdout": "",
+            "stderr": "",
+            "exit_code": 0,
+            "working_dir": "/share",
+            "output": "",
+        }
+
+    def path_exists(self, path: str) -> bool:
+        return path in self._existing_paths
+
+    def is_file(self, path: str) -> bool:
+        return path in self._file_paths
+
+    def exec_bash(self, command: str, timeout=None, cancel_token=None) -> dict:
+        self.exec_calls.append(command)
+        return dict(self._exec_result)
+
+    def download(self, path: str, timeout=None) -> bytes:
+        self.download_calls.append(path)
+        if path in self._downloads:
+            return self._downloads[path]
+        return self._default_download
+
+
 # ---------------------------------------------------------------------------
 # TestBohriumMetadata
 # ---------------------------------------------------------------------------
@@ -87,6 +199,344 @@ class TestBohriumSandboxMode:
 
 
 class TestBohriumExecution:
+    def test_submit_remote_share_without_session_errors(self, tmp_path, monkeypatch):
+        _patch_bridge(monkeypatch)
+        tool = BohriumTool(workdir=tmp_path)
+
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "action": "submit",
+                    "input_dir": "/share/Pd111_submit",
+                    "image": "registry.dp.tech/dptech/abacus:LTSv3.10.1",
+                    "cmd": "mpirun -np 16 abacus",
+                }
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert "remote session" in result.content.lower()
+
+    def test_submit_relative_input_dir_resolves_under_workdir(
+        self, tmp_path, monkeypatch
+    ):
+        input_dir = tmp_path / "inputs"
+        input_dir.mkdir()
+        (input_dir / "INPUT").write_text("data", encoding="utf-8")
+
+        tool = BohriumTool(workdir=tmp_path)
+        post_calls: list[tuple[str, dict, str]] = []
+        upload_calls: list[tuple[str, str, dict]] = []
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(
+            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+        )
+
+        with monkeypatch.context() as m:
+            _install_fake_tiefblue(m, upload_calls)
+            result = asyncio.run(
+                tool.execute(
+                    {
+                        "action": "submit",
+                        "input_dir": "inputs",
+                        "image": "test:latest",
+                        "cmd": "echo hi",
+                    }
+                )
+            )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert upload_calls
+        assert upload_calls[0][0].endswith("input.zip")
+        assert post_calls[1][1]["cmd"].endswith("> log 2>&1")
+
+    def test_submit_remote_share_with_session_downloads_bundle(
+        self, tmp_path, monkeypatch
+    ):
+        session = FakeRemoteSession(
+            existing_paths={"/share/Pd111_submit"},
+        )
+        tool = BohriumTool(session=session, workdir=tmp_path)
+        post_calls: list[tuple[str, dict, str]] = []
+        upload_calls: list[tuple[str, str, dict]] = []
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(
+            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+        )
+
+        with monkeypatch.context() as m:
+            _install_fake_tiefblue(m, upload_calls)
+            result = asyncio.run(
+                tool.execute(
+                    {
+                        "action": "submit",
+                        "input_dir": "/share/Pd111_submit",
+                        "image": "test:latest",
+                        "cmd": "echo hi",
+                    }
+                )
+            )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert session.exec_calls
+        assert session.download_calls
+        assert upload_calls
+        assert post_calls[1][1]["cmd"].endswith("> log 2>&1")
+
+    def test_submit_delegates_path_classification_to_resolve_output_path(
+        self, tmp_path, monkeypatch
+    ):
+        input_dir = tmp_path / "inputs"
+        input_dir.mkdir()
+        (input_dir / "INPUT").write_text("data", encoding="utf-8")
+
+        tool = BohriumTool(workdir=tmp_path)
+        post_calls: list[tuple[str, dict, str]] = []
+        upload_calls: list[tuple[str, str, dict]] = []
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(
+            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+        )
+
+        with (
+            monkeypatch.context() as m,
+            patch(
+                "matmaster.tools.builtin.bohrium_tool.resolve_output_path",
+                create=True,
+            ) as mock_resolve,
+        ):
+            mock_resolve.return_value = SimpleNamespace(
+                kind="local_abs",
+                normalized_path=str(input_dir),
+                requires_remote_session=False,
+            )
+            _install_fake_tiefblue(m, upload_calls)
+            result = asyncio.run(
+                tool.execute(
+                    {
+                        "action": "submit",
+                        "input_dir": str(input_dir),
+                        "image": "test:latest",
+                        "cmd": "echo hi",
+                    }
+                )
+            )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        mock_resolve.assert_called_once()
+
+    def test_remote_input_dir_missing_directory_surfaces_remote_error(
+        self, tmp_path, monkeypatch
+    ):
+        session = FakeRemoteSession()
+        tool = BohriumTool(session=session, workdir=tmp_path)
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "action": "submit",
+                    "input_dir": "/share/missing",
+                    "image": "test:latest",
+                    "cmd": "echo hi",
+                }
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert "remote input_dir not found" in result.content.lower()
+
+    def test_remote_input_dir_packaging_failure_surfaces_stderr(
+        self, tmp_path, monkeypatch
+    ):
+        session = FakeRemoteSession(
+            existing_paths={"/share/Pd111_submit"},
+            exec_result={
+                "stdout": "",
+                "stderr": "python3: command not found",
+                "exit_code": 127,
+                "working_dir": "/share",
+                "output": "python3: command not found",
+            },
+        )
+        tool = BohriumTool(session=session, workdir=tmp_path)
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "action": "submit",
+                    "input_dir": "/share/Pd111_submit",
+                    "image": "test:latest",
+                    "cmd": "echo hi",
+                }
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert "failed to package remote input_dir".lower() in result.content.lower()
+        assert "python3: command not found" in result.content
+
+    def test_submit_file_path_instead_of_directory_errors(self, tmp_path, monkeypatch):
+        file_path = tmp_path / "INPUT"
+        file_path.write_text("data", encoding="utf-8")
+        tool = BohriumTool(workdir=tmp_path)
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "action": "submit",
+                    "input_dir": str(file_path),
+                    "image": "test:latest",
+                    "cmd": "echo hi",
+                }
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert "not a directory" in result.content.lower()
+
+    def test_remote_temp_archive_cleanup_is_attempted(self, tmp_path, monkeypatch):
+        session = FakeRemoteSession(
+            existing_paths={"/share/Pd111_submit"},
+            exec_result={
+                "stdout": "",
+                "stderr": "zip failure",
+                "exit_code": 1,
+                "working_dir": "/share",
+                "output": "zip failure",
+            },
+        )
+        tool = BohriumTool(session=session, workdir=tmp_path)
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "action": "submit",
+                    "input_dir": "/share/Pd111_submit",
+                    "image": "test:latest",
+                    "cmd": "echo hi",
+                }
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert any(cmd.startswith("rm -f /tmp/bohrium_input_") for cmd in session.exec_calls)
+
+    def test_submit_remote_share_with_closed_session_errors(
+        self, tmp_path, monkeypatch
+    ):
+        session = FakeRemoteSession(is_open=False)
+        tool = BohriumTool(session=session, workdir=tmp_path)
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "action": "submit",
+                    "input_dir": "/share/Pd111_submit",
+                    "image": "test:latest",
+                    "cmd": "echo hi",
+                }
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert "open remote session" in result.content.lower()
+
+    def test_submit_personal_path_treated_as_remote_share(
+        self, tmp_path, monkeypatch
+    ):
+        session = FakeRemoteSession(existing_paths={"/personal/inputs"})
+        tool = BohriumTool(session=session, workdir=tmp_path)
+        post_calls: list[tuple[str, dict, str]] = []
+        upload_calls: list[tuple[str, str, dict]] = []
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(
+            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+        )
+
+        with monkeypatch.context() as m:
+            _install_fake_tiefblue(m, upload_calls)
+            result = asyncio.run(
+                tool.execute(
+                    {
+                        "action": "submit",
+                        "input_dir": "/personal/inputs",
+                        "image": "test:latest",
+                        "cmd": "echo hi",
+                    }
+                )
+            )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert session.download_calls
+        assert upload_calls
+
+    def test_submit_empty_directory_still_uploads_input_zip(
+        self, tmp_path, monkeypatch
+    ):
+        input_dir = tmp_path / "empty-inputs"
+        input_dir.mkdir()
+
+        tool = BohriumTool(workdir=tmp_path)
+        post_calls: list[tuple[str, dict, str]] = []
+        upload_calls: list[tuple[str, str, dict]] = []
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(
+            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+        )
+
+        with monkeypatch.context() as m:
+            _install_fake_tiefblue(m, upload_calls)
+            result = asyncio.run(
+                tool.execute(
+                    {
+                        "action": "submit",
+                        "input_dir": str(input_dir),
+                        "image": "test:latest",
+                        "cmd": "echo hi",
+                    }
+                )
+            )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert upload_calls
+        assert upload_calls[0][0].endswith("input.zip")
+
     def test_unknown_action_error(self, tmp_path):
         tool = BohriumTool(workdir=tmp_path)
         result = asyncio.run(tool.execute({"action": "unknown"}))
