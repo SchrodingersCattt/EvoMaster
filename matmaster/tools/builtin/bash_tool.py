@@ -25,9 +25,13 @@ class BashTool(BuiltinTool):
     """
 
     name: ClassVar[str] = "Bash"
-    description: ClassVar[str] = "Executes a given bash command and returns its output."
+    description: ClassVar[str] = (
+        "Run a shell command in the session workspace and return its output."
+    )
+    prompt_exposure: ClassVar[str] = "tool_description"
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
+        "additionalProperties": False,
         "properties": {
             "command": {
                 "type": "string",
@@ -35,6 +39,8 @@ class BashTool(BuiltinTool):
             },
             "timeout": {
                 "type": "integer",
+                "minimum": 1,
+                "maximum": 600000,
                 "description": (
                     "Optional timeout in milliseconds (max 600000). "
                     "Default: 120000ms (2 minutes)."
@@ -43,7 +49,9 @@ class BashTool(BuiltinTool):
             "description": {
                 "type": "string",
                 "description": (
-                    "Clear, concise description of what this command does."
+                    "Clear, concise active-voice summary of what this command "
+                    "does. Keep simple commands short, and add enough context "
+                    "for pipelines or obscure flags."
                 ),
             },
         },

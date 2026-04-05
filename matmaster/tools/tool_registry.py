@@ -73,6 +73,9 @@ class Tool(Protocol):
     @property
     def exposed_to_model(self) -> bool: ...
 
+    @property
+    def prompt_exposure(self) -> str: ...
+
     async def execute(self, arguments: dict[str, Any]) -> str | ToolResult | None: ...
 
 

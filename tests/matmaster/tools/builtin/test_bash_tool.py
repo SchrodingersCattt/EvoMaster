@@ -4,6 +4,8 @@ import asyncio
 from unittest.mock import MagicMock
 
 from matmaster.tools.builtin.bash_tool import BashTool
+from matmaster.tools.tool_catalog import ToolCatalog
+from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.topology import RuntimeTopology
@@ -45,6 +47,32 @@ class TestBashToolMetadata:
         tool = BashTool()
         assert tool.prompt() is not None
         assert "Read" in tool.prompt()
+
+    def test_prompt_exposure_uses_tool_description_mode(self):
+        assert BashTool.prompt_exposure == "tool_description"
+
+    def test_definition_description_uses_prompt_text(self):
+        registry = ToolRegistry()
+        registry.register(BashTool(), source="builtin")
+        topology = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp/control",
+            workspace_root="/tmp/workspace",
+        )
+        catalog = ToolCatalog(registry, topology=topology)
+
+        defs = catalog.build_definitions(
+            ToolDescriptionContext(
+                session_kind="local",
+                workspace_root="/tmp/workspace",
+                topology=topology,
+            )
+        )
+
+        assert "Avoid using this tool to run" in defs[0]["function"]["description"]
+
+    def test_schema_disallows_additional_properties(self):
+        assert BashTool.json_schema["additionalProperties"] is False
 
 
 class TestBashExecution:

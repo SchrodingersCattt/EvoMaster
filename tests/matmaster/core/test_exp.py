@@ -195,7 +195,7 @@ class TestExpBuildRuntime:
         ]
         assert matching_callbacks
 
-    async def test_collects_tool_prompts_into_system_prompt(
+    async def test_bash_prompt_is_not_collected_into_system_prompt(
         self, tmp_path: Path
     ) -> None:
         exp = Exp(
@@ -218,7 +218,7 @@ class TestExpBuildRuntime:
             runtime = await exp.build_runtime(ctx)
 
         assert "Base persona text." in runtime.spec.system_prompt
-        assert "Avoid using this tool to run" in runtime.spec.system_prompt
+        assert "Avoid using this tool to run" not in runtime.spec.system_prompt
 
 
 # ── TestExpCleanup ───────────────────────────────────────

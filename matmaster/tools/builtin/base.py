@@ -47,6 +47,7 @@ class BuiltinTool(ABC):
     state_mode: ClassVar[str] = "stateless"
     stop_mode: ClassVar[str] = "cancellable"
     exposed_to_model: ClassVar[bool] = True
+    prompt_exposure: ClassVar[str] = "system_prompt"
 
     def __init__(
         self,

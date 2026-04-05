@@ -129,6 +129,33 @@ class TestArgsSchema:
         assert result.decision == "deny"
         assert "invalid arguments" in result.reason.lower()
 
+    def test_deny_when_additional_field_is_unknown(self) -> None:
+        """additionalProperties=False rejects unknown fields."""
+        instance = _make_instance(
+            tool_name="Bash",
+            args_schema={
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+                "required": ["command"],
+                "additionalProperties": False,
+            },
+            plane=ToolPlane.SESSION_SHELL,
+            capabilities=frozenset({"shell.execute"}),
+        )
+        topo = _make_topology(
+            active_planes=frozenset(
+                {ToolPlane.SESSION_SHELL, ToolPlane.CONTROL_PLANE}
+            ),
+        )
+        result = self.validator.validate(
+            topo,
+            instance,
+            {"command": "pwd", "unexpected": True},
+        )
+
+        assert result.decision == "deny"
+        assert "invalid arguments" in result.reason.lower()
+
 
 # ---------------------------------------------------------------------------
 # TestPlaneCheck
