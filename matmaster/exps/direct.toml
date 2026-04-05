@@ -58,8 +58,14 @@ developer_instructions = '''
 - When MCP tools return download URLs (e.g. tgz archives), download and extract them, then COPY the final structure files to the workspace root with descriptive names (e.g. `ordered_<name>.cif` for ordered replicas, `relaxed_<name>.cif` for relaxed structures).
 - When reporting chemical formulas, always use concatenated format without spaces (e.g. `H144C48N24Cl24O96`) instead of space-separated (e.g. `H144 C48 N24 Cl24 O96`). Use pymatgen's `composition.formula.replace(' ', '')` if needed.
 
+# Disorder & Ordered Replicas
+- When building ordered replicas from disordered structures, produce exactly ONE ordered replica CIF per input structure.
+- Clean up intermediate files (tgz archives, extraction directories) from workspace — keep only the final ordered CIFs.
+- In your final answer, explain the disorder type and how ordering was resolved for each structure (e.g. site occupancy, cation mixing, partial occupancy resolution).
+
 # Grounding & Explanation
-- When processing multiple structures, briefly explain the physical/chemical basis for each result (e.g. disorder types, how ordering resolves occupancy ambiguity, structural motifs preserved). Do not merely restate task text or list file paths — tie claims to specific structural features.
+- Tie claims to specific structural features in your deliverables (coordinates, bond lengths, stoichiometry, cell parameters).
+- For multi-structure tasks, briefly explain the physical/chemical basis for each result — do not merely list file paths or restate the task text.
 '''
 
 [tools]
