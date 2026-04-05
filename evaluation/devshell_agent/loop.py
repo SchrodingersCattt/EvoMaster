@@ -233,10 +233,19 @@ class DevshellAgentLoop:
                             if isinstance(block, TextBlock) and block.text.strip():
                                 print(block.text, file=sys.stderr, flush=True)
 
-                if await self._run_checklist_followup_if_needed(
+                follow_rc = await self._run_checklist_followup_if_needed(
                     it=it, state=state, mcp_server=mcp_server
-                ):
+                )
+                if follow_rc >= 1:
                     exit_code = 1
+                if follow_rc == 2:
+                    print(
+                        "Stopping outer iterations: question_bank question id set "
+                        "changed during checklist follow-up (see "
+                        "question_bank_id_drift.json in session dir).",
+                        file=sys.stderr,
+                    )
+                    break
 
                 matching = [
                     o for o in state.outcomes if int(o.get("iteration_index", -1)) == it
@@ -297,6 +306,28 @@ class DevshellAgentLoop:
         raw = (self._cfg.checklist_permission_mode or "").strip()
         return raw if raw else self._cfg.permission_mode
 
+    def _write_question_bank_id_drift(
+        self,
+        *,
+        it: int,
+        ids_removed: list[str],
+        ids_added: list[str],
+        load_error: str | None = None,
+    ) -> None:
+        path = self._cfg.session_dir / "question_bank_id_drift.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload: dict[str, Any] = {
+            "iteration_index": it,
+            "ids_removed": ids_removed,
+            "ids_added": ids_added,
+        }
+        if load_error is not None:
+            payload["load_error"] = load_error
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
     def _checklist_user_message(
         self, *, it: int, escalations: list[dict[str, Any]]
     ) -> str:
@@ -322,7 +353,13 @@ class DevshellAgentLoop:
         state: AgentLoopSharedState,
         mcp_server: Any,
     ) -> int:
-        """Run isolated checklist agent if escalations exist; return 1 if warning."""
+        """Run checklist agent if needed.
+
+        Returns:
+            0: ok
+            1: warning (e.g. missing report_checklist_revision)
+            2: stop outer loop — question_bank id set changed or unloadable after follow-up
+        """
         cfg = self._cfg
         if not cfg.enable_checklist_agent:
             return 0
@@ -333,6 +370,22 @@ class DevshellAgentLoop:
         ]
         if not escalations:
             return 0
+
+        from evaluation.devshell_agent.question_bank_ids import (
+            collect_question_bank_question_ids,
+        )
+
+        ids_before: frozenset[str] | None
+        try:
+            ids_before = collect_question_bank_question_ids(cfg.repo_root)
+        except Exception as e:
+            print(
+                f"warning: cannot snapshot question_bank ids before checklist "
+                f"(id-drift guard skipped): {e}",
+                file=sys.stderr,
+            )
+            ids_before = None
+
         from claude_agent_sdk import (
             AssistantMessage,
             ClaudeAgentOptions,
@@ -386,6 +439,33 @@ class DevshellAgentLoop:
                 file=sys.stderr,
             )
             return 1
+
+        if ids_before is not None:
+            try:
+                ids_after = collect_question_bank_question_ids(cfg.repo_root)
+            except Exception as e:
+                print(
+                    f"error: question_bank unreadable after checklist agent: {e}",
+                    file=sys.stderr,
+                )
+                self._write_question_bank_id_drift(
+                    it=it, ids_removed=[], ids_added=[], load_error=str(e)
+                )
+                return 2
+
+            if ids_before != ids_after:
+                removed = sorted(ids_before - ids_after)
+                added = sorted(ids_after - ids_before)
+                print(
+                    f"checklist follow-up changed question_bank id set; stopping "
+                    f"outer loop (removed={removed!r} added={added!r})",
+                    file=sys.stderr,
+                )
+                self._write_question_bank_id_drift(
+                    it=it, ids_removed=removed, ids_added=added
+                )
+                return 2
+
         return 0
 
     def run_sync(self) -> int:
