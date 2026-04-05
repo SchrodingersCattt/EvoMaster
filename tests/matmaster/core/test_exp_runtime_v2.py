@@ -54,6 +54,9 @@ class _MockSession:
     def download(self, path, timeout=None):
         return b""
 
+    def upload_directory(self, local_dir, remote_dir, exclude=None):
+        pass
+
     @property
     def capabilities(self):
         from matmaster.types.topology import SessionCapabilities
