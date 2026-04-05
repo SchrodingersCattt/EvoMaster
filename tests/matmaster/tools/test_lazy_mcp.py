@@ -118,6 +118,40 @@ class TestLazyMCPToolProtocol:
         assert tool.describe(None) == "d"
         assert tool.prompt() is None
 
+    def test_submit_tool_description_adds_job_lifecycle_guidance(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="mat_dpa",
+            tool_name="mat_dpa_submit_optimize_structure",
+            remote_tool_name="submit_optimize_structure",
+            description="Optimize a structure",
+            input_schema={},
+            connector=connector,
+        )
+
+        description = tool.describe(None)
+
+        assert "returns a job_id immediately" in description
+        assert "mat_dpa_query_job_status" in description
+        assert "mat_dpa_get_job_results" in description
+
+    def test_query_tool_description_adds_single_shot_guidance(self):
+        connector = FakeConnector()
+        tool = LazyMCPTool(
+            server_name="mat_dpa",
+            tool_name="mat_dpa_query_job_status",
+            remote_tool_name="query_job_status",
+            description="Query job status",
+            input_schema={},
+            connector=connector,
+        )
+
+        description = tool.describe(None)
+
+        assert "single-shot" in description
+        assert "still running" in description
+        assert "check again later" in description
+
 
 class TestLazyMCPToolExecution:
     async def test_do_call_returns_tool_result(self):

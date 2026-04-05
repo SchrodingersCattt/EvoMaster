@@ -86,7 +86,12 @@ class LazyMCPTool:
         return self._static_description
 
     def describe(self, ctx: ToolDescriptionContext | None = None) -> str:
-        return self._static_description
+        guidance = self._job_lifecycle_guidance()
+        if not guidance:
+            return self._static_description
+        if not self._static_description:
+            return guidance
+        return f"{self._static_description}\n\n{guidance}"
 
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return None
@@ -251,6 +256,33 @@ class LazyMCPTool:
                     return text
             return text
         return '\n'.join(parts)
+
+    def _job_lifecycle_guidance(self) -> str | None:
+        server_prefix = self._server_name
+        if self._remote_tool_name.startswith("submit_"):
+            return (
+                "Async submission tool: returns a job_id immediately after submission. "
+                f"Then use `{server_prefix}_query_job_status` for single-shot polling, "
+                f"and call `{server_prefix}_get_job_results` only after the job finishes."
+            )
+        if self._remote_tool_name == "query_job_status":
+            return (
+                "single-shot status query for a previously submitted job. "
+                "If the job is still running, report the current status and "
+                "check again later. Only call "
+                f"`{server_prefix}_get_job_results` after the job finishes."
+            )
+        if self._remote_tool_name == "get_job_results":
+            return (
+                "Fetch results for a previously submitted job. Call this only "
+                f"after `{server_prefix}_query_job_status` reports the job has finished."
+            )
+        if self._remote_tool_name == "terminate_job":
+            return (
+                "Cancel a previously submitted job. Use this only when the user "
+                "explicitly wants to stop the running job."
+            )
+        return None
 
 
 def configure_mcp_manager(

@@ -578,6 +578,44 @@ class TestCalculationPathAdaptorPreflight:
                 tool_description=tool["description"],
             )
 
+    @pytest.mark.parametrize(
+        "remote_tool_name",
+        ["query_job_status", "get_job_results", "terminate_job"],
+    )
+    def test_job_control_tools_use_local_executor_and_are_not_blocked(
+        self, monkeypatch, remote_tool_name: str
+    ):
+        from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
+        monkeypatch.setattr(
+            "matmaster.integration.bohrium_env.inject_bohrium_executor",
+            lambda executor_template, **_: executor_template,
+        )
+        monkeypatch.setattr(
+            "matmaster.integration.bohrium_env.get_bohrium_storage_config",
+            lambda **_: {"provider": "bohrium"},
+        )
+
+        adaptor = CalculationPathAdaptor(
+            calculation_executors={
+                "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
+            }
+        )
+        tool = _load_cached_tool("mat_dpa", remote_tool_name)
+
+        result = adaptor.resolve_args(
+            workspace_path="/tmp/ws",
+            args={"job_id": "job-123"},
+            tool_name=f"mat_dpa_{remote_tool_name}",
+            server_name="mat_dpa",
+            input_schema=tool["input_schema"],
+            tool_description=tool["description"],
+        )
+
+        assert result["job_id"] == "job-123"
+        assert result["executor"]["type"] == "local"
+        assert result["storage"] == {"provider": "bohrium"}
+
 
 class TestCalculationPathOverrideConfig:
     def test_enabled_tools_have_required_path_param_overrides(self):

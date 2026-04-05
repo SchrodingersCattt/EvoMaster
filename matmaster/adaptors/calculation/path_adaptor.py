@@ -73,6 +73,14 @@ _PATH_FORMATS: frozenset[str] = frozenset(
     }
 )
 
+_JOB_CONTROL_TOOLS: frozenset[str] = frozenset(
+    {
+        "query_job_status",
+        "get_job_results",
+        "terminate_job",
+    }
+)
+
 
 # ---------------------------------------------------------------------------
 # Executor helpers
@@ -86,6 +94,13 @@ def _has_remote_profile(executor_cfg: Any) -> bool:
         return False
     remote_profile = machine.get("remote_profile")
     return isinstance(remote_profile, dict) and bool(remote_profile)
+
+
+def _effective_sync_tools(server_cfg: Any) -> set[str]:
+    """Return configured sync tools plus standard async job-control tools."""
+    if not isinstance(server_cfg, dict):
+        return set()
+    return set(server_cfg.get("sync_tools") or []) | set(_JOB_CONTROL_TOOLS)
 
 
 def _is_missing_credential(value: Any) -> bool:
@@ -598,7 +613,7 @@ class CalculationPathAdaptor:
         server_cfg = self.calculation_executors.get(server_name)
         if not server_cfg:
             return None
-        sync_tools = server_cfg.get("sync_tools") or []
+        sync_tools = _effective_sync_tools(server_cfg)
         if remote_tool_name in sync_tools:
             return inject_bohrium_executor(
                 {"type": "local", "env": {}},
@@ -636,7 +651,7 @@ class CalculationPathAdaptor:
         server_cfg = self.calculation_executors.get(server_name)
         if not isinstance(server_cfg, dict):
             return False
-        sync_tools = set(server_cfg.get("sync_tools") or [])
+        sync_tools = _effective_sync_tools(server_cfg)
         if remote_tool_name in sync_tools:
             return False
 
@@ -721,7 +736,7 @@ class CalculationPathAdaptor:
             # Block submit_* when the base tool is in sync_tools (sync version only).
             server_cfg = self.calculation_executors.get(server_name)
             if isinstance(server_cfg, dict):
-                sync_tools = set(server_cfg.get("sync_tools") or [])
+                sync_tools = _effective_sync_tools(server_cfg)
                 if remote_name.startswith("submit_"):
                     base_name = remote_name[len("submit_") :]
                     if base_name in sync_tools:
