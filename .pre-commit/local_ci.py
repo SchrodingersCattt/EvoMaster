@@ -5,11 +5,14 @@ import argparse
 import shlex
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
 ZERO_SHA = "0" * 40
 DEFAULT_BASE_REF = "origin/main"
+AUTOFIX_COMMIT_MESSAGE = "style: apply pre-commit autofixes"
+MAX_AUTOFIX_COMMITS = 3
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 GitRunner = Callable[[list[str]], str]
@@ -17,6 +20,24 @@ GitRunner = Callable[[list[str]], str]
 
 class LocalCIError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class FileSnapshot:
+    worktree_dirty: frozenset[str]
+    index_dirty: frozenset[str]
+
+    @property
+    def dirty_files(self) -> frozenset[str]:
+        return self.worktree_dirty | self.index_dirty
+
+    @classmethod
+    def empty(cls) -> FileSnapshot:
+        return cls(worktree_dirty=frozenset(), index_dirty=frozenset())
+
+
+def parse_name_only_output(output: str) -> list[str]:
+    return sorted({line.strip() for line in output.splitlines() if line.strip()})
 
 
 def short_branch_name(remote_ref: str) -> str | None:
@@ -57,6 +78,10 @@ def run_git(args: list[str]) -> str:
     if result.returncode != 0:
         raise LocalCIError(result.stderr.strip() or f"git {' '.join(args)} failed")
     return result.stdout.strip()
+
+
+def collect_tracked_files(*, git_runner: GitRunner = run_git) -> list[str]:
+    return parse_name_only_output(git_runner(["ls-files"]))
 
 
 def resolve_diff_range(
@@ -103,6 +128,27 @@ def collect_changed_files(
     return files, (base, head)
 
 
+def capture_file_snapshot(
+    files: Sequence[str], *, git_runner: GitRunner = run_git
+) -> FileSnapshot:
+    if not files:
+        return FileSnapshot.empty()
+
+    worktree_dirty = frozenset(
+        parse_name_only_output(git_runner(["diff", "--name-only", "--", *files]))
+    )
+    index_dirty = frozenset(
+        parse_name_only_output(
+            git_runner(["diff", "--cached", "--name-only", "--", *files])
+        )
+    )
+    return FileSnapshot(worktree_dirty=worktree_dirty, index_dirty=index_dirty)
+
+
+def detect_autofixed_files(before: FileSnapshot, after: FileSnapshot) -> list[str]:
+    return sorted(after.dirty_files - before.dirty_files)
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="在推送 test 分支前执行本地 lint 和 test 审查。"
@@ -130,23 +176,78 @@ def run_command(command: Sequence[str]) -> int:
     return result.returncode
 
 
+def auto_commit_files(
+    files: Sequence[str],
+    *,
+    command_runner: Callable[[Sequence[str]], int] = run_command,
+) -> int:
+    if not files:
+        return 0
+
+    ordered_files = sorted(files)
+    add_command = ["git", "add", "--", *ordered_files]
+    exit_code = command_runner(add_command)
+    if exit_code != 0:
+        return exit_code
+
+    commit_command = [
+        "git",
+        "commit",
+        "-m",
+        AUTOFIX_COMMIT_MESSAGE,
+        "--only",
+        "--",
+        *ordered_files,
+    ]
+    return command_runner(commit_command)
+
+
 def run_lint(args: argparse.Namespace) -> int:
     print("\n[local-ci] 阶段: lint")
     if args.all_files:
-        command = build_lint_command([], all_files=True)
-        return run_command(command)
+        files = collect_tracked_files()
+        print(f"lint 目标: 全仓跟踪文件 {len(files)} 个")
+    else:
+        files, diff_range = collect_changed_files(
+            base_ref=args.base_ref,
+            remote_sha=args.remote_sha,
+            local_sha=args.local_sha,
+        )
+        print(f"lint diff 范围: {diff_range[0]}..{diff_range[1]}")
 
-    files, diff_range = collect_changed_files(
-        base_ref=args.base_ref,
-        remote_sha=args.remote_sha,
-        local_sha=args.local_sha,
-    )
-    print(f"lint diff 范围: {diff_range[0]}..{diff_range[1]}")
     if not files:
         print("lint: 当前 diff 范围内没有变更文件，跳过。")
         return 0
+
     print(f"lint: 检查 {len(files)} 个变更文件")
-    return run_command(build_lint_command(files, all_files=False))
+    command = build_lint_command(files, all_files=args.all_files)
+
+    for _ in range(MAX_AUTOFIX_COMMITS):
+        before = capture_file_snapshot(files)
+        exit_code = run_command(command)
+        if exit_code == 0:
+            return 0
+
+        after = capture_file_snapshot(files)
+        autofixed_files = detect_autofixed_files(before, after)
+        if not autofixed_files:
+            return exit_code
+
+        if before.dirty_files:
+            print("lint: 目标文件在 pre-commit 运行前已有未提交改动，拒绝自动提交：")
+            for path in sorted(before.dirty_files):
+                print(f"  {path}")
+            return exit_code
+
+        print(
+            f"lint: 检测到 pre-commit 自动改写 {len(autofixed_files)} 个文件，创建独立提交。"
+        )
+        commit_exit = auto_commit_files(autofixed_files)
+        if commit_exit != 0:
+            return commit_exit
+        print("lint: 已创建 autofix 提交，重新运行 lint 校验。")
+
+    raise LocalCIError("lint 自动修复超过最大重试次数，请手动检查。")
 
 
 def run_tests() -> int:
