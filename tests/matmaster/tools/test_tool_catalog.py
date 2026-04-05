@@ -56,6 +56,7 @@ class _DynamicTool(_MinimalTool):
             return "dynamic prompt"
         return f"prompt:{self.name}:{ctx.workspace_root}"
 
+
 class _PromptlessTool(_MinimalTool):
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return None

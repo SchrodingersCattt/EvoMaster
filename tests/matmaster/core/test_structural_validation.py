@@ -143,9 +143,7 @@ class TestArgsSchema:
             capabilities=frozenset({"shell.execute"}),
         )
         topo = _make_topology(
-            active_planes=frozenset(
-                {ToolPlane.SESSION_SHELL, ToolPlane.CONTROL_PLANE}
-            ),
+            active_planes=frozenset({ToolPlane.SESSION_SHELL, ToolPlane.CONTROL_PLANE}),
         )
         result = self.validator.validate(
             topo,

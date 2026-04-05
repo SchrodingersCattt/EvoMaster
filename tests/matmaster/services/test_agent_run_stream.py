@@ -359,8 +359,7 @@ async def test_child_event_sink_reaches_sse_and_persistence():
         )
 
     assert any(
-        getattr(event, 'spawn_id', None) == 'childdeadbeef123'
-        for event in sse_events
+        getattr(event, 'spawn_id', None) == 'childdeadbeef123' for event in sse_events
     )
     assert any(
         getattr(event, 'spawn_id', None) == 'childdeadbeef123'
