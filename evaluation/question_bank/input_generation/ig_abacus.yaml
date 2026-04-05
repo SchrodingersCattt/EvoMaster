@@ -1,9 +1,9 @@
 version: v5
-capability: input_generation
+capability: input_generation_abacus
 domain: elec
 questions:
 - id: IG_abacus_001_20260404
-  capability: input_generation
+  capability: input_generation_abacus
   domain: elec
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place empty-atom layers in vacuum, and write SCF INPUT with sparse k along vacuum.'
   human_prompt_seed: |
@@ -82,7 +82,7 @@ questions:
     verify: token_budget
 
 - id: IG_abacus_002_20260404
-  capability: input_generation
+  capability: input_generation_abacus
   domain: mech
   intent: 'Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty ghost atom and SCF INPUT.'
   human_prompt_seed: |

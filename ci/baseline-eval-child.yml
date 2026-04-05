@@ -1,7 +1,7 @@
 # 评测子流水线 — 每个 capability 一个手动触发的评测 job
 #
 # 由 baseline-eval.yml 的 baseline-eval-trigger 触发。
-# 镜像构建完成后，此处 7 个 capability job 均为 manual，按需点击运行。
+# 镜像构建完成后，此处 8 个 capability job 均为 manual，按需点击运行。
 # 变量（EVAL_RUNNER、ANTHROPIC_*、LITELLM_*、BASELINE_*、DYNAMIC_IMAGE 等）从父流水线继承。
 # EVAL_RUNNER=claude_cli 时走 Claude Code CLI 跑题；EVAL_RUNNER=devshell 时走 MatMaster Agent 跑题。
 
@@ -59,6 +59,14 @@ child-pipeline-ready:
         -e ANTHROPIC_DEFAULT_HAIKU_MODEL \
         -e ANTHROPIC_DEFAULT_OPUS_MODEL \
         -e ANTHROPIC_DEFAULT_SONNET_MODEL \
+        -e ANTHROPIC_PLATFORM \
+        -e AWS_PROFILE \
+        -e CLAUDE_CODE_USE_BEDROCK \
+        -e ANTHROPIC_BEDROCK_MODEL \
+        -e ANTHROPIC_BEDROCK_SMALL_FAST_MODEL \
+        -e ANTHROPIC_SMALL_FAST_MODEL \
+        -e CLAUDE_CODE_EFFORT_LEVEL \
+        -e BASELINE_CLAUDE_BEDROCK \
         -e MATMASTER_TOOLS_SERVER \
         -e MATMASTER_TOOLS_EVALUATION_BEARER \
         -e OSS_ENDPOINT \
@@ -78,6 +86,17 @@ child-pipeline-ready:
         -e BASELINE_SCORE_SUBMIT="${BASELINE_SCORE_SUBMIT}" \
         -e BASELINE_SCORE_EVAL_CONFIG="${BASELINE_SCORE_EVAL_CONFIG}" \
         -e BASELINE_SCORE_EVAL_INGEST_TIMEOUT="${BASELINE_SCORE_EVAL_INGEST_TIMEOUT}" \
+        -e BASELINE_STHP_SOCKS \
+        -e BASELINE_STHP_PORT \
+        -e BASELINE_STHP_SOCKS_USER \
+        -e BASELINE_STHP_SOCKS_PASSWORD \
+        -e BASELINE_SOCKS_PROBE_URL \
+        -e BASELINE_SOCKS_PROBE_TIMEOUT_S \
+        -e BASELINE_NO_PROXY \
+        -e AWS_ACCESS_KEY_ID \
+        -e AWS_SECRET_ACCESS_KEY \
+        -e AWS_DEFAULT_REGION \
+        -e AWS_DEFAULT_OUTPUT \
         "${DYNAMIC_IMAGE}" \
         bash /app/ci/run_baseline_eval.sh
       EVAL_EXIT=0
@@ -98,16 +117,21 @@ child-pipeline-ready:
   tags:
     - k8s-runner-ack
 
-# ── 7 个 capability 各一个 job ─────────────────────────────────────────────────
+# ── 8 个 capability 各一个 job ─────────────────────────────────────────────────
 eval-structure-construction:
   extends: .eval-template
   variables:
     EVAL_CAP: structure_construction
 
-eval-input-generation:
+eval-input-generation-vasp:
   extends: .eval-template
   variables:
-    EVAL_CAP: input_generation
+    EVAL_CAP: input_generation_vasp
+
+eval-input-generation-abacus:
+  extends: .eval-template
+  variables:
+    EVAL_CAP: input_generation_abacus
 
 eval-batch-processing:
   extends: .eval-template

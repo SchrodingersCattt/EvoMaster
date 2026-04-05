@@ -71,7 +71,7 @@ evaluation/question_bank/
 
 #### capability 枚举
 
-`knowledge_recall` / `structure_construction` / `property_prediction` / `workflow_orchestration` / `data_diagnosis` / `batch_processing` / `safety_refusal`
+`knowledge_recall` / `structure_construction` / `property_prediction` / `workflow_orchestration` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation_vasp` / `input_generation_abacus`
 
 #### domain 枚举
 

@@ -6,6 +6,8 @@
 # 多阶段（P0 构建加速）：
 #   eval-toolchain — 仅基于固定 python:3.13-slim，与 matmaster-evo 某次 commit 无关；
 #     apt + NodeSource + 全局 claude-code 可长期被 BuildKit/registry 缓存。
+#   （当前注释掉）sthp-binary — GitHub Release 预编译 sthp-linux；BASELINE_STHP_SOCKS 时需配合 run_baseline_eval.sh。
+#   （当前注释掉）AWS CLI v2 — Bedrock 时 run_baseline_eval.sh 会 aws configure / list-foundation-models。
 #   最终阶段 — FROM matmaster-evo:ci* 后只做从 toolchain 拷贝二进制与 venv 内 pip，
 #     避免每次在「已变 digest 的应用层」上重复跑整段 apt/npm。
 #
@@ -24,6 +26,8 @@
 
 ARG TOOLCHAIN_BASE=registry.dp.tech/public/python:3.13-slim
 ARG BASE_IMAGE=registry.dp.tech/flow/matmaster-evo:latest
+# （sthp 阶段注释掉时未使用）socks-to-http-proxy Release tag
+# ARG STHP_VERSION=v0.5.0
 
 # ── 阶段 1：Node + 全局 CLI（缓存与 BASE_IMAGE 解耦）────────────────────────
 FROM ${TOOLCHAIN_BASE} AS eval-toolchain
@@ -45,6 +49,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && npm install -g @anthropic-ai/claude-code \
     && claude --version || true
 
+# ── 阶段 1b：sthp（按需取消注释；需同步取消最终阶段 COPY sthp）──────────────────
+# FROM ${TOOLCHAIN_BASE} AS sthp-binary
+# ARG STHP_VERSION
+#
+# ENV DEBIAN_FRONTEND=noninteractive
+#
+# RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true && \
+#     sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
+#
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#         ca-certificates \
+#         curl \
+#     && rm -rf /var/lib/apt/lists/* \
+#     && curl -fsSL -o /sthp \
+#         "https://github.com/KaranGauswami/socks-to-http-proxy/releases/download/${STHP_VERSION}/sthp-linux" \
+#     && chmod +x /sthp \
+#     && /sthp --version
+
 # ── 阶段 2：应用镜像 + 拷贝工具链 + 评测依赖 ─────────────────────────────────
 FROM ${BASE_IMAGE}
 
@@ -61,6 +83,21 @@ RUN --mount=type=bind,from=eval-toolchain,source=/usr,target=/_tc/usr,readonly \
     cp -a "/_tc/usr/lib/node_modules/." /usr/lib/node_modules/; \
     mkdir -p /usr/local/bin; \
     if [ -f "/_tc/usr/local/bin/claude" ]; then cp -a "/_tc/usr/local/bin/claude" /usr/local/bin/claude; fi
+
+# COPY --from=sthp-binary /sthp /usr/local/bin/sthp
+# RUN chmod 755 /usr/local/bin/sthp
+
+# AWS CLI v2（按需取消注释；Bedrock / aws configure 时需要）
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#         ca-certificates \
+#         curl \
+#         unzip \
+#     && curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+#     && unzip -q /tmp/awscliv2.zip -d /tmp \
+#     && /tmp/aws/install --update \
+#     && rm -rf /tmp/aws /tmp/awscliv2.zip \
+#     && rm -rf /var/lib/apt/lists/* \
+#     && aws --version
 
 # 评测 validators：numpy + pymatgen（struct_file_*，见 score_baseline_tasks / BinaryEvaluator）
 RUN --mount=type=cache,target=/root/.cache/uv \

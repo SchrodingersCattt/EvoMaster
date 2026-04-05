@@ -90,7 +90,14 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
     captured: list[list[str | Path]] = []
 
     def fake_run_devshell_task(
-        *, cmd, cwd, env, summary_file, console_log_file, timeout_sec=None
+        *,
+        cmd,
+        cwd,
+        env,
+        summary_file,
+        console_log_file,
+        timeout_sec=None,
+        tee_stderr=False,
     ):
         captured.append(list(cmd))
         summary_file.write_text(
@@ -145,7 +152,14 @@ def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> 
     captured: list[list[str | Path]] = []
 
     def fake_run_devshell_task(
-        *, cmd, cwd, env, summary_file, console_log_file, timeout_sec=None
+        *,
+        cmd,
+        cwd,
+        env,
+        summary_file,
+        console_log_file,
+        timeout_sec=None,
+        tee_stderr=False,
     ):
         captured.append(list(cmd))
         summary_file.write_text(
@@ -201,7 +215,14 @@ def test_devshell_eval_exp_direct_forwards_flag(tmp_path, monkeypatch) -> None:
     captured: list[list[str | Path]] = []
 
     def fake_run_devshell_task(
-        *, cmd, cwd, env, summary_file, console_log_file, timeout_sec=None
+        *,
+        cmd,
+        cwd,
+        env,
+        summary_file,
+        console_log_file,
+        timeout_sec=None,
+        tee_stderr=False,
     ):
         captured.append(list(cmd))
         summary_file.write_text(

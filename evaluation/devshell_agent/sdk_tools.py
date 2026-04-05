@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import create_sdk_mcp_server, tool  # type: ignore[import-untyped]
@@ -14,6 +16,7 @@ from evaluation.devshell_agent.config_state import (
 from evaluation.devshell_agent.subprocess_runner import (
     DevshellEvalSubprocess,
     RunDevshellEvalParams,
+    run_score_devshell_tasks_submit,
 )
 
 
@@ -261,6 +264,53 @@ class MatmasterEvalMcpToolkit:
             extra_args=extra,
         )
 
+    def _maybe_submit_run_dir_ingest(
+        self,
+        *,
+        run_dir: Path,
+        params: RunDevshellEvalParams,
+    ) -> dict[str, Any]:
+        state = self._state
+        if not state.eval_ingest_submit_each_iteration:
+            return {"attempted": False, "reason": "auto_submit_disabled"}
+        if not params.eval_ingest_pending_only:
+            return {"attempted": False, "reason": "pending_only_disabled"}
+        if "--no-eval-ingest" in params.extra_args:
+            return {"attempted": False, "reason": "eval_ingest_disabled"}
+        if not (run_dir / "raw_runs.jsonl").is_file():
+            return {"attempted": False, "reason": "missing_raw_runs_jsonl"}
+        pending_dir = run_dir / "pending_ingest"
+        if not pending_dir.is_dir() or not any(pending_dir.glob("*.json")):
+            return {"attempted": False, "reason": "missing_pending_ingest"}
+
+        rc, out, err = run_score_devshell_tasks_submit(
+            repo_root=state.repo_root,
+            run_dir=run_dir,
+            eval_config=params.eval_config,
+            eval_ingest_timeout=float(state.eval_ingest_submit_timeout),
+        )
+        log_path = state.session_dir / "ingest_submit.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_row = {
+            "run_dir": str(run_dir),
+            "exit_code": rc,
+            "stdout_tail": (out or "")[-8000:],
+            "stderr_tail": (err or "")[-8000:],
+        }
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(log_row, ensure_ascii=False) + "\n")
+        if out.strip():
+            print(out, file=sys.stderr, end="" if out.endswith("\n") else "\n")
+        if err.strip():
+            print(err, file=sys.stderr, end="" if err.endswith("\n") else "\n")
+        return {
+            "attempted": True,
+            "ok": rc == 0,
+            "exit_code": rc,
+            "stdout_tail": (out or "")[-4000:],
+            "stderr_tail": (err or "")[-4000:],
+        }
+
     async def _run_devshell_eval(self, args: dict[str, Any]) -> dict[str, Any]:
         tag = str(args["iteration_tag"]).strip()
         if not tag or ".." in tag or "/" in tag or "\\" in tag:
@@ -297,6 +347,10 @@ class MatmasterEvalMcpToolkit:
             encoding="utf-8",
         )
         payload = DevshellEvalSubprocess.summarize_run_dir(params.output_dir)
+        payload["ingest_submit"] = self._maybe_submit_run_dir_ingest(
+            run_dir=params.output_dir,
+            params=params,
+        )
         payload["exit_code"] = rc
         payload["argv"] = argv
         return {

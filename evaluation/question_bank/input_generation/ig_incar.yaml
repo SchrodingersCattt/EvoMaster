@@ -1,9 +1,9 @@
 version: v5
-capability: input_generation
+capability: input_generation_vasp
 domain: incar
 questions:
 - id: IG_incar_001_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for a band structure calculation of Lu4N4. Non-self-consistent run reading existing charge
     density (ICHARG=11), with projected band output (LORBIT=11).
@@ -175,7 +175,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_002_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for a static SCF calculation of organic-inorganic hybrid perovskite C26H28Cl4N4Pb2. Semiconductor,
     high-precision convergence.
@@ -363,7 +363,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_003_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for structure relaxation of perovskite ErNaO3. Full cell+ion optimization (ISIF=3), spin-polarized
     (Er3+ f electrons).
@@ -596,7 +596,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_004_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for HSE06 hybrid functional calculation of MOF C30H22N4O10Zn2. Accurate electronic structure
     and band gap.
@@ -814,7 +814,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_005_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for DFT+U calculation of RbPmMo2O8 with Hubbard U on Mo d-orbitals. Spin-polarized.
 
@@ -1023,7 +1023,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_006_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for SCAN metaGGA calculation of intermetallic Tm2ZnGa2. Tm has f electrons; spin-polarized.
 
@@ -1203,7 +1203,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_007_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for Born-Oppenheimer molecular dynamics of Heusler alloy MnNaPm2. Mn is magnetic; timestep
     0.5 fs.
@@ -1445,7 +1445,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_008_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for elastic constants calculation of perovskite BaZrO3. Finite-difference method (IBRION=6),
     displacement 0.015 A.
@@ -1618,7 +1618,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_009_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for DFPT dielectric constant calculation of C8H12HfO4. Compute dielectric tensor and Born effective
     charges.
@@ -1758,7 +1758,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_010_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for spin-orbit coupling calculation of heavy-element halide Br6H6Pb2S2. Pb SOC is significant.
 
@@ -2023,7 +2023,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_011_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for density of states calculation of ternary intermetallic CdOs3Pt. Magnetic metal; needs PDOS.
 
@@ -2191,7 +2191,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_012_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Fe magnetic,
     NUPDOWN=20.
@@ -2426,7 +2426,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_013_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for surface relaxation of ternary carbide (Ta,V)2C surface (C33O2Ta16V16). Fixed cell (ISIF=2),
     metallic.
@@ -2594,7 +2594,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_014_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for static calculation of hydrogen-passivated SiO2 slab H16O24Si12. Insulator, fixed cell (ISIF=2).
 
@@ -2815,7 +2815,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_015_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for defect calculation of I-on-S substitution in BiSI with HSE06+SOC. Heavy element Bi requires
     SOC.
@@ -3002,7 +3002,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_016_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for GW precursor SCF of rare-earth selenide DySe. Dy has f electrons (MAGMOM~7); save wavefunctions
     for subsequent GW.
@@ -3166,7 +3166,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_017_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for high-precision structure optimization of Al as BSE precursor. PREC=Accurate, ISIF=3.
 
@@ -3368,7 +3368,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_018_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for magnetic SCF calculation of double perovskite Ca4TaOs. 5d transition metals (Ta, Os); spin-polarized
     with MAGMOM.
@@ -3541,7 +3541,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_019_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for non-magnetic insulator static SCF calculation of cesium borate B12Cs4O20. Non-magnetic
     (ISPIN=1), wide-gap insulator.
@@ -3714,7 +3714,7 @@ questions:
     verify: token_budget
 
 - id: IG_incar_020_20260404
-  capability: input_generation
+  capability: input_generation_vasp
   domain: incar
   intent: 'Generate VASP INCAR for magnetic metal SCF calculation of ternary selenide Na3AlSe. Spin-polarized (ISPIN=2) with
     PDOS (LORBIT=11).

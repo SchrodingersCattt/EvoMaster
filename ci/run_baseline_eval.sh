@@ -31,6 +31,13 @@
 #     ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN — Claude CLI 鉴权（二选一）
 #     ANTHROPIC_BASE_URL             — Claude CLI 端点（如 MiniMax/gpugeek 兼容端点）
 #     ANTHROPIC_MODEL                — Claude CLI 指定模型名
+#   Claude Code + AWS Bedrock（任选其一触发：CLAUDE_CODE_USE_BEDROCK=1 / ANTHROPIC_PLATFORM=bedrock / BASELINE_CLAUDE_BEDROCK=1）:
+#     须先有 AWS 凭证（见上方 AWS CLI）；Bedrock **不使用** ANTHROPIC_MODEL（那是 gpugeek/兼容 API 路由名），而用:
+#     ANTHROPIC_BEDROCK_MODEL（默认 us.anthropic.claude-opus-4-6-v1[1m]）
+#     ANTHROPIC_BEDROCK_SMALL_FAST_MODEL（默认 us.anthropic.claude-haiku-4-5-20251001-v1:0）
+#     脚本会 export 为 ANTHROPIC_MODEL / ANTHROPIC_SMALL_FAST_MODEL 供 Claude Code 读取
+#     ANTHROPIC_PLATFORM=bedrock、AWS_PROFILE=default、CLAUDE_CODE_USE_BEDROCK=1、CLAUDE_CODE_EFFORT_LEVEL（默认 max）
+#     Bedrock 模式下会在 aws configure 后执行 list-foundation-models 探测（失败则 exit 1，无法评测）
 #     BASELINE_MAX_TURNS             — 每题最大对话轮数，默认 50
 #     BASELINE_TIMEOUT               — 每题超时秒数，默认 900
 #     BASELINE_CLAUDE_JOBS           — 同时跑几道 claude -p（run_claude_cli_baseline_tasks.py --jobs），默认 4
@@ -48,6 +55,18 @@
 #       （与 preset 中 question_ids / BASELINE_QUESTIONS 交集）；交集为空则 exit 0。须 MATMASTER_TOOLS_*。
 #       缺分列表不按 BASELINE_LIMIT 截断（BASELINE_LIMIT 仅用于 capabilities 布局）。
 #     BASELINE_SCORE_SUMMARY_TIMEOUT — 可选，score-summary GET 超时秒数，默认 120
+#   SOCKS5 出网（可选，镜像内已带 sthp；不设 BASELINE_STHP_SOCKS 则不启用）:
+#     BASELINE_STHP_SOCKS            — SOCKS5 地址 host:port（勿加 socks://；DNS 在 SOCKS 侧解析）
+#     BASELINE_STHP_PORT             — sthp 本地 HTTP 监听端口，默认 18080
+#     BASELINE_STHP_SOCKS_USER       — SOCKS5 用户名（可选）
+#     BASELINE_STHP_SOCKS_PASSWORD   — SOCKS5 密码（可选）
+#     BASELINE_SOCKS_PROBE_URL       — SOCKS 直连接探针 URL，默认 http://ifconfig.me（须 curl；失败则 exit 1）
+#     BASELINE_SOCKS_PROBE_TIMEOUT_S — 探针超时秒数，默认 30
+#     BASELINE_NO_PROXY              — 逗号分隔 NO_PROXY（可选，同时设置 NO_PROXY/no_proxy）
+#   AWS CLI（可选，镜像已装 aws v2；须 GitLab Masked 变量）:
+#     AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY — 非空时执行 aws configure set（等价交互式 configure）
+#     AWS_DEFAULT_REGION               — 默认 us-east-1
+#     AWS_DEFAULT_OUTPUT               — 默认 json
 
 set -euo pipefail
 
@@ -62,6 +81,158 @@ if [[ -x "${APP_DIR}/.venv/bin/python" ]]; then
 else
     PY="python3"
 fi
+
+STHP_PID=""
+_baseline_stop_sthp() {
+    if [[ -n "${STHP_PID}" ]] && kill -0 "${STHP_PID}" 2>/dev/null; then
+        kill "${STHP_PID}" 2>/dev/null || true
+    fi
+}
+trap _baseline_stop_sthp EXIT
+
+# 在设置 HTTP_PROXY / 启动 sthp 之前：直连 SOCKS 测出口（与 sthp -s 同源变量）
+_baseline_probe_socks_curl() {
+    local socks="${BASELINE_STHP_SOCKS:-}"
+    [[ -z "${socks}" ]] && return 0
+    if ! command -v curl &>/dev/null; then
+        echo "[ERROR] BASELINE_STHP_SOCKS 已设置但未找到 curl，无法做 SOCKS 探针" >&2
+        exit 1
+    fi
+    local url="${BASELINE_SOCKS_PROBE_URL:-http://ifconfig.me}"
+    local tmo="${BASELINE_SOCKS_PROBE_TIMEOUT_S:-30}"
+    local socks_arg="${socks}"
+    if [[ -n "${BASELINE_STHP_SOCKS_USER:-}" ]]; then
+        socks_arg="${BASELINE_STHP_SOCKS_USER}:${BASELINE_STHP_SOCKS_PASSWORD:-}@${socks}"
+    fi
+    if [[ -n "${BASELINE_STHP_SOCKS_USER:-}" ]]; then
+        echo "[CI] SOCKS 探针: curl --socks5 user:***@${socks} ${url} (timeout ${tmo}s)" >&2
+    else
+        echo "[CI] SOCKS 探针: curl --socks5 ${socks} ${url} (timeout ${tmo}s)" >&2
+    fi
+    set +e
+    local out rc
+    out=$(curl -fsS --max-time "${tmo}" --socks5 "${socks_arg}" "${url}" 2>&1)
+    rc=$?
+    set -e
+    if [[ "${rc}" -eq 0 ]]; then
+        echo "[CI] SOCKS 探针成功: ${out}" >&2
+    else
+        echo "[ERROR] SOCKS 探针失败（exit ${rc}），代理不可用，中止评测: ${out}" >&2
+        exit 1
+    fi
+}
+
+_baseline_probe_socks_curl
+
+_baseline_maybe_start_sthp() {
+    local socks="${BASELINE_STHP_SOCKS:-}"
+    [[ -z "${socks}" ]] && return 0
+    local bin=""
+    if command -v sthp >/dev/null 2>&1; then
+        bin="$(command -v sthp)"
+    elif [[ -x /usr/local/bin/sthp ]]; then
+        bin="/usr/local/bin/sthp"
+    else
+        echo "[ERROR] BASELINE_STHP_SOCKS 已设置但未找到 sthp（需 Dockerfile.eval 构建进镜像）" >&2
+        exit 1
+    fi
+    local port="${BASELINE_STHP_PORT:-18080}"
+    local -a args=(-p "${port}" -s "${socks}")
+    [[ -n "${BASELINE_STHP_SOCKS_USER:-}" ]] && args+=(-u "${BASELINE_STHP_SOCKS_USER}")
+    [[ -n "${BASELINE_STHP_SOCKS_PASSWORD:-}" ]] && args+=(-P "${BASELINE_STHP_SOCKS_PASSWORD}")
+    echo "[CI] 启动 sthp：HTTP 127.0.0.1:${port} -> SOCKS5 ${socks}" >&2
+    "${bin}" "${args[@]}" &
+    STHP_PID=$!
+    sleep 0.5
+    if ! kill -0 "${STHP_PID}" 2>/dev/null; then
+        echo "[ERROR] sthp 进程已退出" >&2
+        exit 1
+    fi
+    export HTTP_PROXY="http://127.0.0.1:${port}"
+    export HTTPS_PROXY="http://127.0.0.1:${port}"
+    if [[ -n "${BASELINE_NO_PROXY:-}" ]]; then
+        export NO_PROXY="${BASELINE_NO_PROXY}"
+        export no_proxy="${BASELINE_NO_PROXY}"
+    fi
+}
+
+_baseline_maybe_start_sthp
+
+_baseline_maybe_configure_aws() {
+    if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]] || [[ -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+        return 0
+    fi
+    if ! command -v aws >/dev/null 2>&1; then
+        echo "[WARN] 已设置 AWS_ACCESS_KEY_ID/SECRET 但未找到 aws 命令" >&2
+        return 0
+    fi
+    export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+    export AWS_DEFAULT_OUTPUT="${AWS_DEFAULT_OUTPUT:-json}"
+    mkdir -p "${HOME}/.aws"
+    aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
+    aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
+    aws configure set default.region "${AWS_DEFAULT_REGION}"
+    aws configure set default.output "${AWS_DEFAULT_OUTPUT}"
+    echo "[CI] 已写入 ~/.aws（region=${AWS_DEFAULT_REGION} output=${AWS_DEFAULT_OUTPUT}）" >&2
+}
+
+_baseline_maybe_configure_aws
+
+# 与 settings.json 分支共用：任一成立即视为走 Bedrock（须避免再写 ANTHROPIC_BASE_URL / 第三方 API_KEY）
+_baseline_claude_bedrock_enabled() {
+    [[ "${CLAUDE_CODE_USE_BEDROCK:-}" == "1" ]] \
+        || [[ "${ANTHROPIC_PLATFORM:-}" == "bedrock" ]] \
+        || [[ "${BASELINE_CLAUDE_BEDROCK:-}" == "1" ]]
+}
+
+# Claude Code 走 Bedrock 时由 CI 注入 CLAUDE_CODE_USE_BEDROCK=1 等；此处补齐默认模型与 effort
+_baseline_maybe_export_claude_bedrock_env() {
+    if ! _baseline_claude_bedrock_enabled; then
+        return 0
+    fi
+    export ANTHROPIC_PLATFORM="${ANTHROPIC_PLATFORM:-bedrock}"
+    export AWS_PROFILE="${AWS_PROFILE:-default}"
+    export CLAUDE_CODE_USE_BEDROCK=1
+    export ANTHROPIC_MODEL="${ANTHROPIC_BEDROCK_MODEL:-us.anthropic.claude-opus-4-6-v1[1m]}"
+    export ANTHROPIC_SMALL_FAST_MODEL="${ANTHROPIC_BEDROCK_SMALL_FAST_MODEL:-us.anthropic.claude-haiku-4-5-20251001-v1:0}"
+    export CLAUDE_CODE_EFFORT_LEVEL="${CLAUDE_CODE_EFFORT_LEVEL:-max}"
+    echo "[CI] Claude Code：Bedrock（AWS_PROFILE=${AWS_PROFILE} ANTHROPIC_MODEL=${ANTHROPIC_MODEL}）" >&2
+}
+
+_baseline_maybe_export_claude_bedrock_env
+
+# Bedrock 连通性：与 Claude 相同走 HTTP(S)_PROXY（sthp→SOCKS）；需 IAM bedrock:ListFoundationModels
+_baseline_probe_bedrock_list_models() {
+    if ! _baseline_claude_bedrock_enabled; then
+        return 0
+    fi
+    if ! command -v aws &>/dev/null; then
+        echo "[ERROR] Bedrock 模式已启用但未找到 aws CLI，无法 list-foundation-models" >&2
+        exit 1
+    fi
+    local br_region="${AWS_DEFAULT_REGION:-us-east-1}"
+    local _tmp
+    _tmp="$(mktemp)"
+    echo "[CI] Bedrock 连通性探测: aws bedrock list-foundation-models --region ${br_region}" >&2
+    set +e
+    aws bedrock list-foundation-models --region "${br_region}" --output json --no-cli-pager >"${_tmp}" 2>&1
+    local rc=$?
+    set -e
+    if [[ "${rc}" -eq 0 ]]; then
+        head -c 8000 "${_tmp}"
+        echo ""
+        echo "[CI] list-foundation-models 成功（exit 0；上文为响应前 8KB）" >&2
+    else
+        head -c 4000 "${_tmp}" >&2
+        echo "" >&2
+        echo "[ERROR] list-foundation-models 失败（exit ${rc}），Bedrock 不可用，中止评测（SOCKS/代理、网络或 IAM: bedrock:ListFoundationModels）。" >&2
+        rm -f "${_tmp}"
+        exit 1
+    fi
+    rm -f "${_tmp}"
+}
+
+_baseline_probe_bedrock_list_models
 
 _baseline_write_skip_artifacts() {
     local reason="$1"
@@ -212,7 +383,25 @@ elif [[ "${EVAL_RUNNER}" == "claude_cli" ]]; then
     CLAUDE_HOME="${HOME}/.claude"
     mkdir -p "${CLAUDE_HOME}"
 
-    if [[ -n "${ANTHROPIC_BASE_URL:-}" && -n "${ANTHROPIC_AUTH_TOKEN:-}" ]]; then
+    # Bedrock 须优先于「API_KEY + BASE_URL」：否则 CI 里残留的 gpugeek 等会写入 settings，Claude 仍走第三方 HTTP
+    if _baseline_claude_bedrock_enabled; then
+        cat > "${CLAUDE_HOME}/settings.json" <<EOF
+{
+  "env": {
+    "ANTHROPIC_PLATFORM": "${ANTHROPIC_PLATFORM:-bedrock}",
+    "AWS_PROFILE": "${AWS_PROFILE:-default}",
+    "CLAUDE_CODE_USE_BEDROCK": "1",
+    "ANTHROPIC_MODEL": "${ANTHROPIC_MODEL}",
+    "ANTHROPIC_SMALL_FAST_MODEL": "${ANTHROPIC_SMALL_FAST_MODEL}",
+    "CLAUDE_CODE_EFFORT_LEVEL": "${CLAUDE_CODE_EFFORT_LEVEL:-max}",
+    "API_TIMEOUT_MS": "3000000",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}
+EOF
+        echo "[CI] settings.json 已写入（AWS Bedrock；已忽略 ANTHROPIC_BASE_URL / 第三方 API_KEY）"
+        unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL || true
+    elif [[ -n "${ANTHROPIC_BASE_URL:-}" && -n "${ANTHROPIC_AUTH_TOKEN:-}" ]]; then
         cat > "${CLAUDE_HOME}/settings.json" <<EOF
 {
   "env": {
@@ -247,7 +436,7 @@ EOF
     elif [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
         echo "[CI] 使用 ANTHROPIC_API_KEY（官方 Anthropic API，无自定义 BASE_URL）"
     else
-        echo "[ERROR] 未检测到有效鉴权：需要 ANTHROPIC_AUTH_TOKEN+BASE_URL 或 ANTHROPIC_API_KEY"
+        echo "[ERROR] 未检测到有效鉴权：需要 Bedrock（CLAUDE_CODE_USE_BEDROCK=1 等）+ AWS 凭证，或 ANTHROPIC_AUTH_TOKEN+BASE_URL，或 ANTHROPIC_API_KEY"
         exit 1
     fi
 

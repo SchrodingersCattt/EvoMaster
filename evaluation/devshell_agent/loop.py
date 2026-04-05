@@ -8,7 +8,7 @@ import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from evaluation.devshell_agent.config_state import (
     AgentLoopSharedState,
@@ -20,7 +20,6 @@ from evaluation.devshell_agent.git_iteration import (
     git_rev_parse_head,
     head_at_iteration_start,
 )
-from evaluation.devshell_agent.subprocess_runner import run_score_devshell_tasks_submit
 
 
 @dataclass
@@ -66,7 +65,7 @@ class DevshellAgentLoop:
 - 优先使用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py` 自动评分；它会基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl` 调用同一套 `BinaryEvaluator`。
 - 宏平均以 `score_devshell_tasks.py` 输出为准；不要手工估算一个与脚本不一致的分数。
 - 如需解释低分原因，可再阅读题库 YAML、workspace 交付物和事件日志；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
-- 若使用 `--eval-ingest-pending-only`（本编排默认）：判分时请只用 `score_devshell_tasks.py --dry-run`；**ingest POST** 由外层在每轮主 Agent 会话结束后、**checklist 专责回合开始前**，对本轮**各次** `run_devshell_eval` 输出目录依次执行 `score_devshell_tasks.py --submit`，你无需再手动 `--submit`（避免重复上报）。
+- 若使用 `--eval-ingest-pending-only`（本编排默认）：判分时请只用 `score_devshell_tasks.py --dry-run`；每次 **run_devshell_eval** 完成后，编排器会立即对该输出目录执行 `score_devshell_tasks.py --submit` 并上报 ingest，你无需再手动 `--submit`（避免重复上报）。
 
 ## 修改范围
 - **可写**：`configs/mat_master/`、`matmaster/exps/`、`playground/mat_master/` 等与运行中 Agent 相关的提示、技能、工具描述。
@@ -104,6 +103,12 @@ class DevshellAgentLoop:
     def __init__(self, config: AgentLoopConfig) -> None:
         self._cfg = config
 
+    @staticmethod
+    def _log_line(msg: str, loop_log: TextIO) -> None:
+        print(msg, file=sys.stderr, flush=True)
+        loop_log.write(msg + "\n")
+        loop_log.flush()
+
     @classmethod
     def default_session_dir(
         cls, *, repo_root: Path, label: str = "devshell_agent_loop"
@@ -128,7 +133,7 @@ class DevshellAgentLoop:
 
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
-2. 对**需要判分的**每个 `run_devshell_eval` 目录分别执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录> --dry-run` 获取判分（**不要**加 `--submit`）；ingest 由编排器在本轮主会话结束且 checklist 开始前对各目录自动提交。
+2. 对**需要判分的**每个 `run_devshell_eval` 目录分别执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录> --dry-run` 获取判分（**不要**加 `--submit`）；每次 `run_devshell_eval` 跑完后，编排器会立刻对该目录自动提交 ingest。
 3. 若未达标：在**允许的路径**内修改提示词/工具/配置（**不要**改 `evaluation/question_bank/`）。优化提示时**先删并合并重复/矛盾表述，再考虑增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出）应**优先压到 ≤ 12000**，且**不得超过 15000**（gpt-4o tiktoken）。每次改完相关 TOML 后、`git commit` 前执行：
    `uv run python -m evaluation.devshell_agent.exp_prompt_budget {budget_exp}`
    **exit 非 0 不得提交**。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**。若你认为问题在 **checklist / 参考答案** 而非产品侧，调用 **escalate_checklist_revision** 并仍在第 4 步前完成主流程。
@@ -190,6 +195,8 @@ class DevshellAgentLoop:
             session_dir=cfg.session_dir,
             outcomes=[],
             defaults=cfg.defaults,
+            eval_ingest_submit_each_iteration=cfg.eval_ingest_submit_each_iteration,
+            eval_ingest_submit_timeout=cfg.eval_ingest_submit_timeout,
         )
         toolkit = MatmasterEvalMcpToolkit(state)
         mcp_server = toolkit.build_mcp_server()
@@ -215,106 +222,125 @@ class DevshellAgentLoop:
 
         self._write_session_manifest()
 
+        log_path = cfg.session_dir / "sdk_loop_console.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         exit_code = 0
-        async with ClaudeSDKClient(options=options) as client:
-            for it in range(1, cfg.max_iterations + 1):
-                state.last_eval_output_dir = None
-                state.eval_output_dirs.clear()
-                head0 = git_rev_parse_head(repo_root=cfg.repo_root)
-                if head0:
-                    append_iteration_head(
-                        session_dir=cfg.session_dir, iteration=it, head=head0
-                    )
-                await client.query(self._iteration_user_message(it=it))
-                async for message in client.receive_response():
-                    if isinstance(message, AssistantMessage):
-                        for block in message.content:
-                            if isinstance(block, TextBlock) and block.text.strip():
-                                print(block.text, file=sys.stderr, flush=True)
+        with log_path.open("a", encoding="utf-8") as loop_log:
+            async with ClaudeSDKClient(options=options) as client:
+                for it in range(1, cfg.max_iterations + 1):
+                    state.last_eval_output_dir = None
+                    state.eval_output_dirs.clear()
+                    head0 = git_rev_parse_head(repo_root=cfg.repo_root)
+                    if head0:
+                        append_iteration_head(
+                            session_dir=cfg.session_dir, iteration=it, head=head0
+                        )
+                    await client.query(self._iteration_user_message(it=it))
+                    async for message in client.receive_response():
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock) and block.text.strip():
+                                    self._log_line(block.text, loop_log)
 
-                # Ingest submit must run against the question bank as it was when the
-                # run was produced, and every run_devshell_eval directory this iteration
-                # must be submitted (not only the last tag). Checklist follow-up may
-                # rename question ids; submitting after it breaks scoring for stale ids.
-                dirs_to_submit: list[Path] = []
-                if state.eval_output_dirs:
-                    seen: set[Path] = set()
-                    for p in state.eval_output_dirs:
-                        r = p.resolve()
-                        if r not in seen:
-                            seen.add(r)
-                            dirs_to_submit.append(r)
-                elif state.last_eval_output_dir is not None:
-                    dirs_to_submit.append(state.last_eval_output_dir.resolve())
-                for run_dir in dirs_to_submit:
-                    if not self._maybe_submit_iteration_ingest(
-                        state=state, iteration=it, run_dir=run_dir
-                    ):
+                    follow_rc = await self._run_checklist_followup_if_needed(
+                        it=it,
+                        state=state,
+                        mcp_server=mcp_server,
+                        loop_log=loop_log,
+                    )
+                    if follow_rc >= 1:
                         exit_code = 1
+                    if follow_rc == 2:
+                        self._log_line(
+                            "Stopping outer iterations: question_bank question id set "
+                            "changed during checklist follow-up (see "
+                            "question_bank_id_drift.json in session dir).",
+                            loop_log,
+                        )
+                        break
 
-                if await self._run_checklist_followup_if_needed(
-                    it=it, state=state, mcp_server=mcp_server
-                ):
-                    exit_code = 1
-
-                matching = [
-                    o for o in state.outcomes if int(o.get("iteration_index", -1)) == it
-                ]
-                if not matching:
-                    print(
-                        f"warning: no report_iteration_outcome for iteration {it}",
-                        file=sys.stderr,
-                    )
-                    exit_code = 1
-                    continue
-
-                last = matching[-1]
-                score = int(last.get("macro_mean_0_100", 0))
-                met = bool(last.get("target_met"))
-
-                if cfg.git_reset_on_regression and it > 1:
-                    prev_rows = [
+                    matching = [
                         o
                         for o in state.outcomes
-                        if int(o.get("iteration_index", -1)) == it - 1
+                        if int(o.get("iteration_index", -1)) == it
                     ]
-                    if prev_rows:
-                        prev_score = int(prev_rows[-1].get("macro_mean_0_100", 0))
-                        if score < prev_score:
-                            saved = head_at_iteration_start(cfg.session_dir, it)
-                            if saved:
-                                ok, msg = git_reset_hard(
-                                    repo_root=cfg.repo_root, rev=saved
-                                )
-                                print(
-                                    f"git regression guard: iter {it} mean {score} "
-                                    f"< iter {it - 1} mean {prev_score}; "
-                                    f"reset --hard {saved[:7]}… -> "
-                                    f"{'ok' if ok else 'failed'} {msg}",
-                                    file=sys.stderr,
-                                )
-                                if not ok:
-                                    exit_code = 1
-                            else:
-                                print(
-                                    f"warning: regression at iter {it} but no "
-                                    f"head_at_start recorded; skip auto reset",
-                                    file=sys.stderr,
-                                )
+                    if not matching:
+                        self._log_line(
+                            f"warning: no report_iteration_outcome for iteration {it}",
+                            loop_log,
+                        )
+                        exit_code = 1
+                        continue
 
-                if met or score >= cfg.target_mean_score:
-                    print(
-                        f"Stopping after iteration {it}: target_met={met} "
-                        f"macro_mean={score} (target {cfg.target_mean_score})",
-                        file=sys.stderr,
-                    )
-                    break
+                    last = matching[-1]
+                    score = int(last.get("macro_mean_0_100", 0))
+                    met = bool(last.get("target_met"))
+
+                    if cfg.git_reset_on_regression and it > 1:
+                        prev_rows = [
+                            o
+                            for o in state.outcomes
+                            if int(o.get("iteration_index", -1)) == it - 1
+                        ]
+                        if prev_rows:
+                            prev_score = int(prev_rows[-1].get("macro_mean_0_100", 0))
+                            if score < prev_score:
+                                saved = head_at_iteration_start(cfg.session_dir, it)
+                                if saved:
+                                    ok, msg = git_reset_hard(
+                                        repo_root=cfg.repo_root, rev=saved
+                                    )
+                                    self._log_line(
+                                        f"git regression guard: iter {it} mean {score} "
+                                        f"< iter {it - 1} mean {prev_score}; "
+                                        f"reset --hard {saved[:7]}… -> "
+                                        f"{'ok' if ok else 'failed'} {msg}",
+                                        loop_log,
+                                    )
+                                    if not ok:
+                                        exit_code = 1
+                                else:
+                                    self._log_line(
+                                        f"warning: regression at iter {it} but no "
+                                        f"head_at_start recorded; skip auto reset",
+                                        loop_log,
+                                    )
+
+                    if met or score >= cfg.target_mean_score:
+                        self._log_line(
+                            f"Stopping after iteration {it}: target_met={met} "
+                            f"macro_mean={score} (target {cfg.target_mean_score})",
+                            loop_log,
+                        )
+                        break
 
         return exit_code
 
     def _checklist_permission_mode_resolved(self) -> str:
         raw = (self._cfg.checklist_permission_mode or "").strip()
         return raw if raw else self._cfg.permission_mode
+
+    def _write_question_bank_id_drift(
+        self,
+        *,
+        it: int,
+        ids_removed: list[str],
+        ids_added: list[str],
+        load_error: str | None = None,
+    ) -> None:
+        path = self._cfg.session_dir / "question_bank_id_drift.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload: dict[str, Any] = {
+            "iteration_index": it,
+            "ids_removed": ids_removed,
+            "ids_added": ids_added,
+        }
+        if load_error is not None:
+            payload["load_error"] = load_error
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
     def _checklist_user_message(
         self, *, it: int, escalations: list[dict[str, Any]]
@@ -340,8 +366,15 @@ class DevshellAgentLoop:
         it: int,
         state: AgentLoopSharedState,
         mcp_server: Any,
+        loop_log: TextIO,
     ) -> int:
-        """Run isolated checklist agent if escalations exist; return 1 if warning."""
+        """Run checklist agent if needed.
+
+        Returns:
+            0: ok
+            1: warning (e.g. missing report_checklist_revision)
+            2: stop outer loop — question_bank id set changed or unloadable after follow-up
+        """
         cfg = self._cfg
         if not cfg.enable_checklist_agent:
             return 0
@@ -352,6 +385,22 @@ class DevshellAgentLoop:
         ]
         if not escalations:
             return 0
+
+        from evaluation.devshell_agent.question_bank_ids import (
+            collect_question_bank_question_ids,
+        )
+
+        ids_before: frozenset[str] | None
+        try:
+            ids_before = collect_question_bank_question_ids(cfg.repo_root)
+        except Exception as e:
+            self._log_line(
+                f"warning: cannot snapshot question_bank ids before checklist "
+                f"(id-drift guard skipped): {e}",
+                loop_log,
+            )
+            ids_before = None
+
         from claude_agent_sdk import (
             AssistantMessage,
             ClaudeAgentOptions,
@@ -379,9 +428,9 @@ class DevshellAgentLoop:
             allowed_tools=checklist_allowed,
             permission_mode=self._checklist_permission_mode_resolved(),
         )
-        print(
+        self._log_line(
             f"checklist agent: iteration {it}, {len(escalations)} escalation(s)",
-            file=sys.stderr,
+            loop_log,
         )
         async with ClaudeSDKClient(options=co) as cc:
             await cc.query(self._checklist_user_message(it=it, escalations=escalations))
@@ -389,7 +438,7 @@ class DevshellAgentLoop:
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, TextBlock) and block.text.strip():
-                            print(block.text, file=sys.stderr, flush=True)
+                            self._log_line(block.text, loop_log)
 
         state.checklist_escalations_pending = [
             e
@@ -399,85 +448,40 @@ class DevshellAgentLoop:
         new_reports = state.checklist_revision_reports[n_reports_before:]
         ok_reports = [r for r in new_reports if int(r.get("iteration_index", -1)) == it]
         if not ok_reports:
-            print(
+            self._log_line(
                 f"warning: checklist agent did not call report_checklist_revision "
                 f"for iteration {it}",
-                file=sys.stderr,
+                loop_log,
             )
             return 1
+
+        if ids_before is not None:
+            try:
+                ids_after = collect_question_bank_question_ids(cfg.repo_root)
+            except Exception as e:
+                self._log_line(
+                    f"error: question_bank unreadable after checklist agent: {e}",
+                    loop_log,
+                )
+                self._write_question_bank_id_drift(
+                    it=it, ids_removed=[], ids_added=[], load_error=str(e)
+                )
+                return 2
+
+            if ids_before != ids_after:
+                removed = sorted(ids_before - ids_after)
+                added = sorted(ids_after - ids_before)
+                self._log_line(
+                    f"checklist follow-up changed question_bank id set; stopping "
+                    f"outer loop (removed={removed!r} added={added!r})",
+                    loop_log,
+                )
+                self._write_question_bank_id_drift(
+                    it=it, ids_removed=removed, ids_added=added
+                )
+                return 2
+
         return 0
-
-    def _defaults_disable_eval_ingest(self) -> bool:
-        return "--no-eval-ingest" in self._cfg.defaults.extra_args
-
-    def _maybe_submit_iteration_ingest(
-        self,
-        *,
-        state: AgentLoopSharedState,
-        iteration: int,
-        run_dir: Path | None = None,
-    ) -> bool:
-        """Return False if ``--submit`` was run and exited non-zero."""
-        cfg = self._cfg
-        if not cfg.eval_ingest_submit_each_iteration:
-            return True
-        if not cfg.defaults.eval_ingest_pending_only:
-            return True
-        if self._defaults_disable_eval_ingest():
-            return True
-        if run_dir is None:
-            run_dir = state.last_eval_output_dir
-        if run_dir is None:
-            print(
-                f"warning: iter {iteration}: skip ingest submit (no run_devshell_eval "
-                f"output dir recorded)",
-                file=sys.stderr,
-            )
-            return True
-        run_dir = run_dir.resolve()
-        if not (run_dir / "raw_runs.jsonl").is_file():
-            print(
-                f"warning: iter {iteration}: skip ingest submit (no raw_runs.jsonl in "
-                f"{run_dir})",
-                file=sys.stderr,
-            )
-            return True
-        pending_dir = run_dir / "pending_ingest"
-        if not pending_dir.is_dir() or not any(pending_dir.glob("*.json")):
-            print(
-                f"warning: iter {iteration}: skip ingest submit (no pending_ingest/*.json "
-                f"under {run_dir})",
-                file=sys.stderr,
-            )
-            return True
-        rc, out, err = run_score_devshell_tasks_submit(
-            repo_root=cfg.repo_root,
-            run_dir=run_dir,
-            eval_config=cfg.defaults.eval_config,
-            eval_ingest_timeout=float(cfg.eval_ingest_submit_timeout),
-        )
-        log_path = cfg.session_dir / "ingest_submit.jsonl"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        log_row = {
-            "iteration": iteration,
-            "run_dir": str(run_dir),
-            "exit_code": rc,
-            "stdout_tail": (out or "")[-8000:],
-            "stderr_tail": (err or "")[-8000:],
-        }
-        with log_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(log_row, ensure_ascii=False) + "\n")
-        if out.strip():
-            print(out, file=sys.stderr, end="" if out.endswith("\n") else "\n")
-        if err.strip():
-            print(err, file=sys.stderr, end="" if err.endswith("\n") else "\n")
-        if rc != 0:
-            print(
-                f"warning: iter {iteration}: score_devshell_tasks --submit exit {rc}",
-                file=sys.stderr,
-            )
-            return False
-        return True
 
     def run_sync(self) -> int:
         return asyncio.run(self.run())
