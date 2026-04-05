@@ -102,7 +102,11 @@ class MatmasterEvalMcpToolkit:
             },
             "macro_mean_0_100": {
                 "type": "integer",
-                "description": "Macro-averaged 0–100 score from score_devshell_tasks.py.",
+                "description": (
+                    "Macro-averaged 0–100 score: mean of item.score in pending_ingest/*.json "
+                    "for that run_dir (same as score_devshell_tasks.py after orchestrator submit), "
+                    "or from a fresh score_devshell_tasks run if re-scoring."
+                ),
             },
             "target_met": {
                 "type": "boolean",

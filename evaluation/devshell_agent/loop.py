@@ -64,14 +64,15 @@ class DevshellAgentLoop:
 
 ## Git 工作流（自迭代必守）
 - **每次实质性修改**（每次 `Edit`/`Write` 落盘后）：对相应文件 `git add` 并 **`git commit` 一条独立记录**，消息建议 `devshell_agent iter=<轮次> <简述>`，使改动与 commit 一一对应、便于回滚。
-- **判断单次改动是否改善**：在该次改动前记下当时的宏平均（来自 `score_devshell_tasks.py`）；改动并 commit 后，若需用分数验证，应再次对**能反映新代码**的产物跑分（通常需新的 `run_devshell_eval` + `iteration_tag`，或按题库说明复评）。若新宏平均 **不高于** 改动前基准（改善无效），应回滚**该条** commit：优先 `git revert HEAD --no-edit`；若该 commit 尚未 push 且历史仅本地迭代，可用 `git reset --hard HEAD~1`。
+- **判断单次改动是否改善**：在该次改动前记下当时的宏平均（来自该轮 `pending_ingest/*.json` 的 `item.score` 算术平均，或与 `score_devshell_tasks.py` 输出一致）；改动并 commit 后，若需用分数验证，应再次对**能反映新代码**的产物跑分（通常需新的 `run_devshell_eval` + `iteration_tag`，或按题库说明复评）。若新宏平均 **不高于** 改动前基准（改善无效），应回滚**该条** commit：优先 `git revert HEAD --no-edit`；若该 commit 尚未 push 且历史仅本地迭代，可用 `git reset --hard HEAD~1`。
 - 不要用 `git push --force` 等破坏协作历史的操作。
 
 ## 判分原则（与 `evaluation/docs/devshell/devshell_claude_code_eval.md` 一致）
-- 优先使用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py` 自动评分；它会基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl` 调用同一套 `BinaryEvaluator`。
-- 宏平均以 `score_devshell_tasks.py` 输出为准；不要手工估算一个与脚本不一致的分数。
+- 单次任务的**权威判分**来自 `evaluation/scripts/devshell/score_devshell_tasks.py`（`BinaryEvaluator`，基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl`）。
+- **宏平均**：须与上述脚本口径一致。本编排默认 `--eval-ingest-pending-only`：每轮 **run_devshell_eval** 结束后，编排器会对该目录执行 `score_devshell_tasks.py --submit`，将 `item.score` / `item.score_reason` 写入 `pending_ingest/<task_id>.json` 并上报 ingest。**优先**从这些 JSON 汇总宏平均（与已上报一致），**不要**手工臆造分数。
+- **低分明细**：**优先**读同一目录下 `pending_ingest/*.json` 的 `item.score_reason`；若有评测服务权限，也可 `GET` matmaster-tools-server `/api/v1/evaluation/questions/{question_id}/overview`，从 `iterations[].score_reason`（及基线各渠道字段）查看。避免仅为「看明细」再跑 `score_devshell_tasks.py --dry-run`（会重复跑判分，更慢且含 LLM 的项可能与已上报略有偏差）。
+- 仅在 pending 尚未写入分数、或你**修改了 workspace/证据需重新判分**时，再本地执行 `score_devshell_tasks.py --run-dir …`；若只需打印、不写盘，可用 `--dry-run`。**不要**自行再加 `--submit`（避免重复 ingest）。
 - 如需解释低分原因，可再阅读题库 YAML、workspace 交付物和事件日志；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
-- 若使用 `--eval-ingest-pending-only`（本编排默认）：判分时请只用 `score_devshell_tasks.py --dry-run`；每次 **run_devshell_eval** 完成后，编排器会立即对该输出目录执行 `score_devshell_tasks.py --submit` 并上报 ingest，你无需再手动 `--submit`（避免重复上报）。
 
 ## 修改范围
 - **可写**：`configs/mat_master/`、`matmaster/exps/`、`playground/mat_master/` 等与运行中 Agent 相关的提示、技能、工具描述。
@@ -405,7 +406,7 @@ class DevshellAgentLoop:
 
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
-2. 对**需要判分的**每个 `run_devshell_eval` 目录分别执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录> --dry-run` 获取判分（**不要**加 `--submit`）；每次 `run_devshell_eval` 跑完后，编排器会立刻对该目录自动提交 ingest。
+2. 获取本轮判分与宏平均：**优先**在 `eval_runs/<iteration_tag>/pending_ingest/*.json` 读取已写入的 `item.score`（及低分题的 `item.score_reason`）；编排器在每次 `run_devshell_eval` 结束后会对该目录执行 `score_devshell_tasks.py --submit` 并上报，通常无需再跑脚本。仅在 pending 尚无分数或需对**改动后的**产物重新判分时，再执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录>`（可加 `--dry-run` 仅打印；**不要** `--submit`）。
 3. 若未达标：在**允许的路径**内修改提示词/工具/配置（**不要**改 `evaluation/question_bank/`）。优化提示时**先删并合并重复/矛盾表述，再考虑增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出）应**优先压到 ≤ 12000**，且**不得超过 15000**（gpt-4o tiktoken）。每次改完相关 TOML 后、`git commit` 前执行：
    `uv run python -m evaluation.devshell_agent.exp_prompt_budget {budget_exp}`
    **exit 非 0 不得提交**。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**。若你认为问题在 **checklist / 参考答案** 而非产品侧，调用 **escalate_checklist_revision** 并仍在第 4 步前完成主流程。
