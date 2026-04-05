@@ -1,8 +1,13 @@
-"""Tests for matmaster.tools.script_env — credential-to-env bridge."""
+"""Tests for matmaster.tools.script_env — env injection bridge.
+
+Credential resolution is tested in tests/matmaster/integration/test_runtime_bridge.py.
+These tests focus on the injection mechanics: file-based wrapping, inline fallback,
+and the inject_env / inject public API.
+"""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -21,76 +26,44 @@ def _bare_session() -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
-# _collect tests
+# inject delegates to bridge tests
 # ---------------------------------------------------------------------------
 
 
-class TestCollect:
-    """Tests for _collect: session credentials -> env dict."""
+class TestInjectDelegatesToBridge:
+    """Verify inject() calls build_service_env and delegates to inject_env."""
 
-    def test_full_credentials(self) -> None:
-        from matmaster.tools.script_env import _collect
+    def test_inject_calls_bridge_and_wraps(self) -> None:
+        from matmaster.tools.script_env import inject
 
-        session = _session_with_creds(
-            access_key="ak123", project_id=456, user_id=789, user_no="U001"
+        session = _session_with_creds(access_key="ak123", project_id=456)
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            return_value={"stdout": "", "stderr": "", "exit_code": 0}
         )
-        env = _collect(session)
-        assert env["BOHRIUM_ACCESS_KEY"] == "ak123"
-        assert env["BOHRIUM_PROJECT_ID"] == "456"
-        assert env["BOHRIUM_USER_ID"] == "789"
-        assert env["BOHRIUM_USER_NO"] == "U001"
-        assert "BOHRIUM_BASE_URL" in env
 
-    def test_ak_only_without_project_id(self) -> None:
-        from matmaster.tools.script_env import _collect
+        with patch(
+            "matmaster.integration.runtime_bridge.build_service_env",
+            return_value={"BOHRIUM_ACCESS_KEY": "ak123", "BOHRIUM_PROJECT_ID": "456"},
+        ) as mock_build:
+            result = inject("python run.py", session)
+            mock_build.assert_called_once_with("bohrium", session=session)
 
-        session = _session_with_creds(access_key="ak123")
-        env = _collect(session)
-        assert env["BOHRIUM_ACCESS_KEY"] == "ak123"
-        assert "BOHRIUM_PROJECT_ID" not in env
+        assert result.startswith("( . ")
+        assert "python run.py" in result
 
-    def test_rejects_non_int_project_id(self) -> None:
-        from matmaster.tools.script_env import _collect
-
-        session = _session_with_creds(access_key="ak123", project_id="abc")
-        env = _collect(session)
-        assert env["BOHRIUM_ACCESS_KEY"] == "ak123"
-        assert "BOHRIUM_PROJECT_ID" not in env
-
-    def test_empty_creds_returns_empty(self) -> None:
-        from matmaster.tools.script_env import _collect
-
-        session = _session_with_creds()
-        env = _collect(session)
-        assert env == {}
-
-    def test_no_creds_attr_returns_empty(self) -> None:
-        from matmaster.tools.script_env import _collect
+    def test_inject_noop_when_bridge_returns_empty(self) -> None:
+        from matmaster.tools.script_env import inject
 
         session = _bare_session()
-        env = _collect(session)
-        assert env == {}
 
-    def test_skips_sentinel_user_id(self) -> None:
-        from matmaster.tools.script_env import _collect
+        with patch(
+            "matmaster.integration.runtime_bridge.build_service_env",
+            return_value={},
+        ):
+            result = inject("python run.py", session)
 
-        session = _session_with_creds(access_key="ak", user_id="-1")
-        env = _collect(session)
-        assert "BOHRIUM_USER_ID" not in env
-
-    def test_skips_empty_user_no(self) -> None:
-        from matmaster.tools.script_env import _collect
-
-        session = _session_with_creds(access_key="ak", user_no="  ")
-        env = _collect(session)
-        assert "BOHRIUM_USER_NO" not in env
-
-    def test_project_id_string_int_accepted(self) -> None:
-        from matmaster.tools.script_env import _collect
-
-        session = _session_with_creds(access_key="ak", project_id="123")
-        env = _collect(session)
-        assert env["BOHRIUM_PROJECT_ID"] == "123"
+        assert result == "python run.py"
 
 
 # ---------------------------------------------------------------------------
@@ -209,3 +182,33 @@ class TestInjectPassthrough:
 
         session = _bare_session()
         assert inject("python run.py", session) == "python run.py"
+
+
+# ---------------------------------------------------------------------------
+# inject_env tests — explicit env dict API
+# ---------------------------------------------------------------------------
+
+
+class TestInjectEnv:
+    """Tests for inject_env: explicit env dict injection."""
+
+    def test_inject_uses_explicit_env_dict(self) -> None:
+        from matmaster.tools.script_env import inject_env
+
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            return_value={"stdout": "", "stderr": "", "exit_code": 0}
+        )
+
+        result = inject_env("python run.py", {"BOHRIUM_ACCESS_KEY": "ak123"}, session)
+
+        assert result.startswith("( . ")
+        content_arg = session.write_file.call_args[0][1]
+        assert "export BOHRIUM_ACCESS_KEY=" in content_arg
+
+    def test_inject_env_noop_for_empty_env(self) -> None:
+        from matmaster.tools.script_env import inject_env
+
+        session = MagicMock()
+        assert inject_env("python run.py", {}, session) == "python run.py"

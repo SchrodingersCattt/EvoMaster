@@ -1,7 +1,7 @@
 """Session credential -> script environment bridge.
 
-Declarative mapping from session credential attributes to POSIX env vars.
-Injection strategy adapts to session transport capabilities.
+Env injection for shell commands. The runtime bridge resolves credentials;
+this module handles wrapping commands with export statements.
 """
 
 from __future__ import annotations
@@ -13,68 +13,15 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# -- declarative credential mapping ----------------------------------------
-
-_CREDENTIAL_SOURCES: list[tuple[str, dict[str, str]]] = [
-    (
-        "_bohrium_credentials",
-        {
-            "access_key": "BOHRIUM_ACCESS_KEY",
-            "project_id": "BOHRIUM_PROJECT_ID",
-            "user_id": "BOHRIUM_USER_ID",
-            "user_no": "BOHRIUM_USER_NO",
-        },
-    ),
-]
-
-_INT_VALIDATED: set[str] = {"project_id"}
-_SKIP_VALUES: set[str] = {"-1"}
-
-
-def _collect(session: Any) -> dict[str, str]:
-    """Build env dict from session credentials."""
-    env: dict[str, str] = {}
-    for attr_name, mapping in _CREDENTIAL_SOURCES:
-        creds = getattr(session, attr_name, None)
-        if not isinstance(creds, dict):
-            continue
-        ak = (creds.get("access_key") or "").strip()
-        if not ak:
-            continue
-        for cred_key, env_name in mapping.items():
-            val = creds.get(cred_key)
-            if val is None:
-                continue
-            s = str(val).strip()
-            if not s or s in _SKIP_VALUES:
-                continue
-            if cred_key in _INT_VALIDATED:
-                try:
-                    int(s)
-                except (TypeError, ValueError):
-                    continue
-            env[env_name] = s
-    if env.get("BOHRIUM_ACCESS_KEY") and "BOHRIUM_BASE_URL" not in env:
-        try:
-            from src.utils.constant import BOHRIUM_OPENAPI_HOST
-
-            env["BOHRIUM_BASE_URL"] = BOHRIUM_OPENAPI_HOST
-        except ImportError:
-            env["BOHRIUM_BASE_URL"] = "https://open.bohrium.com"
-    return env
-
 
 # -- public API ------------------------------------------------------------
 
 
-def inject(cmd: str, session: Any) -> str:
-    """Wrap shell command with session credentials as env vars.
+def inject_env(cmd: str, env: dict[str, str], session: Any) -> str:
+    """Wrap shell command with explicit env vars.
 
-    Always attempts file-based injection first (credentials off command line).
-    Falls back to inline prefix if write_file or chmod raises.
-    Returns cmd unchanged if no credentials found.
+    Returns *cmd* unchanged if *env* is empty.
     """
-    env = _collect(session)
     if not env:
         return cmd
     try:
@@ -82,6 +29,18 @@ def inject(cmd: str, session: Any) -> str:
     except Exception as exc:
         logger.warning("Env file injection failed: %s; falling back to inline", exc)
         return _inline(cmd, env)
+
+
+def inject(cmd: str, session: Any) -> str:
+    """Wrap shell command with session credentials as env vars.
+
+    Uses the runtime bridge to resolve Bohrium credentials.
+    Returns cmd unchanged if no credentials found.
+    """
+    from matmaster.integration.runtime_bridge import build_service_env
+
+    env = build_service_env("bohrium", session=session)
+    return inject_env(cmd, env, session)
 
 
 # -- injection strategies --------------------------------------------------

@@ -1,7 +1,6 @@
 name = "direct"
 description = "Full-capability execution agent with all tools, MCP access, and skills for completing tasks"
 max_turns = 700
-guards = []
 
 developer_instructions = '''
 
@@ -67,22 +66,15 @@ developer_instructions = '''
 
 [tools]
 builtin = [
-    "execute_bash",
-    "list_dir",
-    "read_file",
-    "write_file",
-    "edit_file",
-    "glob",
-    "grep",
-    "spawn",
-    "mm_web_search",
-    "web_fetch",
+    "Bash", "Read", "Write", "Edit",
+    "Glob", "Grep", "TodoWrite",
+    "Agent", "WebSearch", "WebFetch", "Bohrium",
 ]
 mcp = "*"
 
 [skills]
 enabled = true
-skills_root = ["playground/mat_master/skills", "matmaster/skills/lazymcp"]
+skills_root = ["matmaster/skills"]
 cache_dir = "matmaster/cache"
-config_dir = "matmaster_config"
+config_dir = "config"
 mcp_config_file = "mcp_config.json"

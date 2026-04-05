@@ -94,7 +94,7 @@ EvoMaster/
 ├── evomaster/           # 核心库（agent、session、tools、skills、LLM）
 ├── playground/
 │   └── mat_master/      # MatMaster应用（前端 + 服务 + start_dev.sh）
-├── configs/mat_master/  # MatMaster 配置与 mcp_config*.json
+├── config/              # MatMaster 配置与 mcp_config*.json
 └── docs/                # 文档
 ```
 
@@ -104,20 +104,20 @@ EvoMaster/
 
 不启动Web时，可通过命令行运行智能体。
 
-**准备：** 安装依赖 `uv sync`（或 `pip install -e .`），并在 `.env` 或 `configs/mat_master/config.yaml`（及所需 MCP JSON）中配置 LLM 与 Bohrium。
+**准备：** 安装依赖 `uv sync`（或 `pip install -e .`），并在 `.env` 或 `config/config.yaml`（及所需 MCP JSON）中配置 LLM 与 Bohrium。
 
 ```bash
-# MatMaster（配置见 configs/mat_master/）
-python run.py --agent mat_master --config configs/mat_master/config.yaml --task "你的任务"
+# MatMaster（配置见 config/）
+python run.py --agent mat_master --config config/config.yaml --task "你的任务"
 
 # 从文件读取任务
-python run.py --agent mat_master --config configs/mat_master/config.yaml --task task.txt
+python run.py --agent mat_master --config config/config.yaml --task task.txt
 
 # 交互模式
-python run.py --agent mat_master --config configs/mat_master/config.yaml --interactive
+python run.py --agent mat_master --config config/config.yaml --interactive
 
 # direct / planner 模式
-python run.py --agent mat_master --config configs/mat_master/config.yaml --mode planner --task "你的任务"
+python run.py --agent mat_master --config config/config.yaml --mode planner --task "你的任务"
 ```
 
 ---

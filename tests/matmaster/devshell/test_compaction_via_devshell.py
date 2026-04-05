@@ -7,7 +7,7 @@
 4. 冷却机制: 连续 turn 不触发
 5. 摘要策略: summary provider 正常 → [Compacted Context] 摘要
 6. 滑动窗口回退: summary provider 失败 → sliding_window 截断
-7. 事件发射: MessageBus 收到 ContextCompactionEvent
+7. 事件发射: event_sink 收到 ContextCompactionEvent
 8. 多轮压缩: 首次压缩后继续积累，再次触发
 9. retained turns 选择: 3 轮最低保留 + token budget 约束
 10. Kernel 集成: 完整 kernel loop 中压缩触发且结果正确
@@ -17,9 +17,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
-from matmaster.core.bus import MessageBus
 from matmaster.core.context_compactor import (
     ContextCompactor,
     estimate_tokens,
@@ -36,6 +33,24 @@ from matmaster.types.messages import (
     UserMessage,
 )
 from matmaster.types.runtime import CompactionConfig
+
+
+class _EventCollector:
+    """Simple event collector for compaction tests."""
+
+    def __init__(self):
+        self.events: list = []
+
+    async def sink(self, event):
+        self.events.append(event)
+
+    def get_nowait(self):
+        if not self.events:
+            import asyncio
+
+            raise asyncio.QueueEmpty
+        return self.events.pop(0)
+
 
 # ── Fixtures ──────────────────────────────────────────────
 
@@ -347,21 +362,23 @@ class TestSlidingWindowFallback:
 
 
 class TestEventEmission:
-    """验证 MessageBus 收到 ContextCompactionEvent。"""
+    """验证 event_sink 收到 ContextCompactionEvent。"""
 
     async def test_emits_compaction_event(self) -> None:
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
         provider = MockSummaryProvider()
-        bus = MessageBus()
+        collector = _EventCollector()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=collector.sink
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
-        event = bus.get_nowait()
+        event = collector.get_nowait()
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["compaction_count"] == 1
         assert event.payload["strategy"] == "summary"
@@ -374,14 +391,16 @@ class TestEventEmission:
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
         provider = FailingSummaryProvider()
-        bus = MessageBus()
+        collector = _EventCollector()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=collector.sink
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
-        event = bus.get_nowait()
+        event = collector.get_nowait()
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["strategy"] == "sliding_window"
 
@@ -392,7 +411,9 @@ class TestEventEmission:
         )
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=None)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=None
+        )
         compactor.update_message_count(len(msgs))
 
         # 应正常执行不抛异常
@@ -410,10 +431,12 @@ class TestMultipleCompactions:
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
-        bus = MessageBus()
+        collector = _EventCollector()
         provider = MockSummaryProvider()
         msgs = _build_conversation(8)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=collector.sink
+        )
         compactor.update_message_count(len(msgs))
 
         # 第一次压缩 at turn=3
@@ -449,7 +472,7 @@ class TestMultipleCompactions:
         events = []
         while True:
             try:
-                events.append(bus.get_nowait())
+                events.append(collector.get_nowait())
             except asyncio.QueueEmpty:
                 break
         assert len(events) == 2
@@ -515,14 +538,13 @@ class TestToolTruncationFallback:
 
     async def test_truncation_when_single_turn_exceeds_threshold(self) -> None:
         """1 个 turn 就超限 -> 无可压缩旧 turn -> 截断大 tool result。"""
-        from matmaster.core.bus import MessageBus
         from matmaster.types.events import ContextCompactionEvent
 
         config = CompactionConfig(
             enabled=True, context_window_tokens=500, trigger_ratio=0.9
         )
         provider = MockSummaryProvider()
-        bus = MessageBus()
+        collector = _EventCollector()
 
         # 构造：1 turn with 3 大 tool results (每个 2000+ chars)
         msgs = [
@@ -552,7 +574,9 @@ class TestToolTruncationFallback:
             ),
         ]
 
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=collector.sink
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
@@ -576,7 +600,7 @@ class TestToolTruncationFallback:
             assert len(m.content) < 2000
 
         # 事件 strategy=tool_truncation
-        event = bus.get_nowait()
+        event = collector.get_nowait()
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["strategy"] == "tool_truncation"
 
@@ -604,175 +628,6 @@ class TestToolTruncationFallback:
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 1000}, turn=3)
         assert compactor._compaction_count == 0
         assert "truncated" not in (msgs[3].content or "")
-
-
-# ── Test 11: Kernel 集成端到端 ───────────────────────────
-
-
-@pytest.mark.skip(
-    reason="Kernel integration deferred to Phase 17-18 per D-08: requires Kernel async化"
-)
-class TestKernelIntegration:
-    """完整 kernel loop 中压缩触发且结果正确。"""
-
-    async def test_kernel_triggers_compaction(self) -> None:
-        from matmaster.core.agent import AgentKernel
-        from matmaster.tools.tool_registry import ToolRegistry
-
-        compaction_cfg = CompactionConfig(
-            enabled=True,
-            context_window_tokens=500,
-            trigger_ratio=0.9,
-        )
-
-        call_count = 0
-        summary_calls = 0
-
-        class KernelTestProvider:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *exc):
-                pass
-
-            async def chat(self, messages, tools=None):
-                nonlocal summary_calls
-                summary_calls += 1
-                return LLMResponse(
-                    content="Summary of conversation so far.",
-                    finish_reason="stop",
-                )
-
-            async def chat_stream(self, messages, tools=None, *, timeout=None):
-                nonlocal call_count
-                call_count += 1
-                if call_count <= 5:
-                    yield StreamChunk(
-                        tool_call_deltas=[
-                            {
-                                "index": 0,
-                                "id": f"tc-{call_count}",
-                                "name": "tool",
-                                "arguments": "{}",
-                            }
-                        ],
-                    )
-                    yield StreamChunk(
-                        finish_reason="stop",
-                        usage={
-                            "prompt_tokens": 480,
-                            "completion_tokens": 50,
-                            "total_tokens": 530,
-                        },
-                    )
-                else:
-                    yield StreamChunk(
-                        content="final answer",
-                        finish_reason="stop",
-                        usage={
-                            "prompt_tokens": 200,
-                            "completion_tokens": 20,
-                            "total_tokens": 220,
-                        },
-                    )
-
-        provider = KernelTestProvider()
-        registry = ToolRegistry()
-
-        class DummyTool:
-            @property
-            def name(self):
-                return "tool"
-
-            @property
-            def description(self):
-                return "test tool"
-
-            @property
-            def json_schema(self):
-                return {"type": "object", "properties": {}}
-
-            async def execute(self, arguments):
-                return "result " + "x" * 200
-
-        registry.register(DummyTool(), source="test")
-
-        bus = MessageBus()
-        compactor = ContextCompactor(
-            config=compaction_cfg,
-            summary_provider=provider,
-            bus=bus,
-        )
-
-        from matmaster.types.runtime import AgentRuntimeSpec
-
-        spec = AgentRuntimeSpec(
-            llm_provider=provider,
-            tool_registry=registry,
-            max_turns=10,
-            system_prompt="You are helpful.",
-            compaction=compaction_cfg,
-            compactor=compactor,
-        )
-
-        kernel = AgentKernel()
-        result = await kernel.run(spec, "do something complex")
-
-        assert result.result.status == "completed"
-        assert result.result.reason == "natural"
-        assert result.result.final_content == "final answer"
-        assert summary_calls > 0, "kernel loop 应触发摘要压缩"
-        assert compactor._compaction_count > 0
-
-        # 验证 bus 事件
-        events = []
-        while True:
-            try:
-                events.append(bus.get_nowait())
-            except asyncio.QueueEmpty:
-                break
-        compaction_events = [e for e in events if isinstance(e, ContextCompactionEvent)]
-        assert len(compaction_events) > 0, "bus 应收到压缩事件"
-
-    async def test_kernel_without_compaction(self) -> None:
-        """compactor=None 时 kernel 正常运行。"""
-        from matmaster.core.agent import AgentKernel
-        from matmaster.tools.tool_registry import ToolRegistry
-        from matmaster.types.runtime import AgentRuntimeSpec
-
-        call_count = 0
-
-        class SimpleProvider:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *exc):
-                pass
-
-            async def chat(self, messages, tools=None):
-                return LLMResponse(content="done", finish_reason="stop")
-
-            async def chat_stream(self, messages, tools=None, *, timeout=None):
-                nonlocal call_count
-                call_count += 1
-                yield StreamChunk(
-                    content="done",
-                    finish_reason="stop",
-                    usage={"prompt_tokens": 100, "completion_tokens": 10},
-                )
-
-        spec = AgentRuntimeSpec(
-            llm_provider=SimpleProvider(),
-            tool_registry=ToolRegistry(),
-            max_turns=5,
-            system_prompt="test",
-        )
-        kernel = AgentKernel()
-        result = await kernel.run(spec, "hello")
-
-        assert result.result.status == "completed"
-        assert result.result.reason == "natural"
-        assert call_count == 1
 
 
 # ── Test: token 估算准确性 ───────────────────────────────

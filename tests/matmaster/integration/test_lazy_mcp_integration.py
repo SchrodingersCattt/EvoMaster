@@ -15,7 +15,20 @@ import yaml as _yaml
 from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 from matmaster.core.exp import Exp
 from matmaster.tools.tool_registry import ToolRegistry
+from matmaster.tools.tool_result import normalize_tool_result
 from matmaster.types.context import PlaygroundContext
+
+
+async def _execute_use_skill(
+    registry: ToolRegistry,
+    *,
+    skill_name: str,
+):
+    """Execute Skill tool through the registered tool instance."""
+    skill_tool = registry.get_raw("Skill")
+    assert skill_tool is not None
+    raw_result = await skill_tool.execute({"skill": skill_name})
+    return normalize_tool_result(raw_result)
 
 
 class TestLazyMCPIntegration:
@@ -76,20 +89,19 @@ class TestLazyMCPIntegration:
 
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         # Initialize skill tools
         exp._init_skill_tools(ctx, registry)
 
-        # use_skill should be registered
-        assert 'use_skill' in registry
+        # Skill tool should be registered
+        assert 'Skill' in registry
 
         # Before skill trigger: no MCP tools
         assert 'mat_sg_build_bulk' not in registry
 
         # Simulate skill trigger via use_skill tool
-        result = await registry.execute(
-            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
-        )
+        result = await _execute_use_skill(registry, skill_name="test-skill")
 
         # Verify use_skill returned successfully
         assert result.status == 'success', f"use_skill failed: {result.content}"
@@ -132,19 +144,16 @@ class TestLazyMCPIntegration:
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         exp._init_skill_tools(ctx, registry)
 
         # Trigger first skill
-        await registry.execute(
-            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
-        )
+        await _execute_use_skill(registry, skill_name="test-skill")
         assert "mat_sg_build_bulk" in registry
 
         # Trigger second skill — should NOT duplicate
-        await registry.execute(
-            "use_skill", {"skill_name": "second-skill", "action": "get_info"}
-        )
+        await _execute_use_skill(registry, skill_name="second-skill")
         # Still only one mat_sg_build_bulk
         assert 'mat_sg_build_bulk' in registry
 
@@ -185,13 +194,12 @@ class TestLazyMCPIntegration:
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         exp._init_skill_tools(ctx, registry)
 
         # Trigger skill with uncached server
-        result = await registry.execute(
-            "use_skill", {"skill_name": "uncached-skill", "action": "get_info"}
-        )
+        result = await _execute_use_skill(registry, skill_name="uncached-skill")
         assert result.status == "success"
 
         # No tools injected (cache miss)
@@ -241,17 +249,16 @@ class TestExpMCPSelfLoad:
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
         ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
 
         # Run _init_skill_tools -- should self-load mcp.yaml
         exp._init_skill_tools(ctx, registry)
 
-        # use_skill registered means the full path worked
-        assert 'use_skill' in registry
+        # Skill tool registered means the full path worked
+        assert 'Skill' in registry
 
         # Trigger skill to verify lazy tools get injected
-        result = await registry.execute(
-            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
-        )
+        result = await _execute_use_skill(registry, skill_name="test-skill")
         assert result.status == "success", f"use_skill failed: {result.content}"
         assert "mat_sg_build_bulk" in registry
 
@@ -274,3 +281,109 @@ class TestExpMCPSelfLoad:
 
         with _pytest.raises(FileNotFoundError, match='MCP runtime config not found'):
             exp._init_skill_tools(MagicMock(), MagicMock())
+
+
+class TestLazyMCPTimeoutThreading:
+    async def test_tool_timeouts_from_mcp_yaml(self, tmp_path):
+        skill_dir = tmp_path / 'skills' / 'test-skill'
+        skill_dir.mkdir(parents=True)
+        (skill_dir / 'SKILL.md').write_text(
+            '---\nname: test-skill\ndescription: Test\nmcp_server: mat_sg\n---\nBody\n'
+        )
+
+        cache_dir = tmp_path / 'cache'
+        cache_dir.mkdir()
+        schemas = [{'name': 'build_bulk', 'description': 'Build', 'input_schema': {}}]
+        (cache_dir / 'mat_sg.json').write_text(json.dumps(schemas))
+
+        (tmp_path / 'mcp_config.json').write_text(json.dumps({'mcpServers': {}}))
+        (tmp_path / 'mcp.yaml').write_text(
+            _yaml.dump(
+                {
+                    'path_adaptor': 'calculation',
+                    'calculation_servers': ['mat_sg'],
+                    'tool_timeouts': {'mat_sg': 300},
+                }
+            )
+        )
+
+        cfg = ExpConfig.model_validate(
+            {
+                'name': 'test',
+                'skills': {
+                    'enabled': True,
+                    'skills_root': str(tmp_path / 'skills'),
+                    'cache_dir': str(cache_dir),
+                    'config_dir': str(tmp_path),
+                    'mcp_config_file': 'mcp_config.json',
+                    'mcp_runtime_file': 'mcp.yaml',
+                },
+            }
+        )
+        exp = Exp(cfg)
+        registry = ToolRegistry()
+        ctx = MagicMock(spec=PlaygroundContext)
+        ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
+
+        exp._init_skill_tools(ctx, registry)
+        await _execute_use_skill(registry, skill_name="test-skill")
+
+        from matmaster.tools.lazy_mcp import LazyMCPTool
+
+        lazy = registry._tools['mat_sg_build_bulk']
+        assert isinstance(lazy, LazyMCPTool)
+        assert lazy._timeout == 300.0
+
+    async def test_default_timeout_when_not_in_config(self, tmp_path):
+        skill_dir = tmp_path / 'skills' / 'test-skill'
+        skill_dir.mkdir(parents=True)
+        (skill_dir / 'SKILL.md').write_text(
+            '---\nname: test-skill\ndescription: Test\nmcp_server: mat_sg\n---\nBody\n'
+        )
+
+        cache_dir = tmp_path / 'cache'
+        cache_dir.mkdir()
+        schemas = [{'name': 'build_bulk', 'description': 'Build', 'input_schema': {}}]
+        (cache_dir / 'mat_sg.json').write_text(json.dumps(schemas))
+
+        (tmp_path / 'mcp_config.json').write_text(json.dumps({'mcpServers': {}}))
+        (tmp_path / 'mcp.yaml').write_text(
+            _yaml.dump(
+                {
+                    'path_adaptor': 'calculation',
+                    'calculation_servers': ['mat_sg'],
+                }
+            )
+        )
+
+        cfg = ExpConfig.model_validate(
+            {
+                'name': 'test',
+                'skills': {
+                    'enabled': True,
+                    'skills_root': str(tmp_path / 'skills'),
+                    'cache_dir': str(cache_dir),
+                    'config_dir': str(tmp_path),
+                    'mcp_config_file': 'mcp_config.json',
+                    'mcp_runtime_file': 'mcp.yaml',
+                },
+            }
+        )
+        exp = Exp(cfg)
+        registry = ToolRegistry()
+        ctx = MagicMock(spec=PlaygroundContext)
+        ctx.session = MagicMock()
+        ctx.execution_workdir = str(tmp_path)
+
+        exp._init_skill_tools(ctx, registry)
+        await _execute_use_skill(registry, skill_name="test-skill")
+
+        from matmaster.tools.lazy_mcp import (
+            _DEFAULT_MCP_TOOL_TIMEOUT,
+            LazyMCPTool,
+        )
+
+        lazy = registry._tools['mat_sg_build_bulk']
+        assert isinstance(lazy, LazyMCPTool)
+        assert lazy._timeout == _DEFAULT_MCP_TOOL_TIMEOUT

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-from matmaster.core.bus import MessageBus
 from matmaster.types.events import ContextCompactionEvent
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import (
@@ -135,11 +136,11 @@ class ContextCompactor:
         self,
         config: CompactionConfig,
         summary_provider: LLMProvider,
-        bus: MessageBus | None = None,
+        event_sink: Callable[[Any], Awaitable[None]] | None = None,
     ) -> None:
         self._config = config
         self._summary_provider = summary_provider
-        self._bus = bus
+        self._event_sink = event_sink
         self._last_llm_message_count: int = 0
         self._last_compaction_turn: int = 0
         self._compaction_count: int = 0
@@ -203,8 +204,8 @@ class ContextCompactor:
                     int(threshold),
                     truncated,
                 )
-                if self._bus is not None:
-                    await self._bus.emit(
+                if self._event_sink is not None:
+                    await self._event_sink(
                         ContextCompactionEvent(
                             source="context_compactor",
                             payload={
@@ -249,8 +250,8 @@ class ContextCompactor:
             kept_count,
         )
 
-        if self._bus is not None:
-            await self._bus.emit(
+        if self._event_sink is not None:
+            await self._event_sink(
                 ContextCompactionEvent(
                     source="context_compactor",
                     payload={

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import threading
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -12,11 +11,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import matmaster.config.loader as matmaster_loader
-from matmaster.integration.bohrium_setup import SkillSyncSpec
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.context import PlaygroundContext
-from src.services import agent_run_bohrium as arb
-from src.services.agent_run_bohrium import BohriumSetupResult
-from src.services.sessions_service import SESSIONS
+from tests.matmaster.core.conftest import MockLLMProvider
+
+_src_services = pytest.importorskip(
+    "src.services.agent_run_bohrium",
+    reason="src not available (isolation test)",
+)
+arb = _src_services
+BohriumSetupResult = _src_services.BohriumSetupResult
+SkillSyncSpec = _src_services.SkillSyncSpec
+BohriumSetupService = _src_services.BohriumSetupService
+SESSIONS = pytest.importorskip(
+    "src.services.sessions_service",
+    reason="src not available (isolation test)",
+).SESSIONS
 
 
 @pytest.fixture(autouse=True)
@@ -32,9 +42,16 @@ def _make_pg(original_session: MagicMock) -> MagicMock:
     pg._owns_session = True
     pg.config = MagicMock()
     pg.config.model_dump.return_value = {
-        'skills': {'skills_root': 'evomaster/skills'},
+        'skills': {'skills_root': 'matmaster/skills/lazymcp'},
     }
     return pg
+
+
+def _make_bohrium_service(sessions_service: Any | None = None) -> BohriumSetupService:
+    return BohriumSetupService(
+        sessions_service=sessions_service or MagicMock(),
+        event_sink=lambda event: None,
+    )
 
 
 @patch.object(arb, '_sync_skills_to_ssh_session', MagicMock())
@@ -71,7 +88,8 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
     mock_ssh._env.upload_directory_tarball = MagicMock(return_value=1)
 
     with patch.object(arb, 'SSHSession', return_value=mock_ssh) as mock_ssh_cls:
-        result = arb.setup_bohrium_for_run(
+        svc = _make_bohrium_service()
+        result = svc._setup_bohrium_for_run(
             session_id='sess-ok',
             pg=pg,
             skill_sync_spec=SkillSyncSpec(
@@ -152,7 +170,8 @@ def test_setup_skips_skills_synced_event_when_skill_sync_returns_false(
             self.is_open = False
 
     with patch.object(arb, 'SSHSession', new=FakeSSHSession):
-        result = arb.setup_bohrium_for_run(
+        svc = _make_bohrium_service()
+        result = svc._setup_bohrium_for_run(
             session_id='sess-no-skill-sync',
             pg=pg,
             skill_sync_spec=None,
@@ -216,7 +235,8 @@ def test_setup_failure_after_open_restores_original_and_clears_runtime(
     ):
         mock_run_clear_remote_proxy.side_effect = _raise_after_store
         event_callback = MagicMock()
-        result = arb.setup_bohrium_for_run(
+        svc = _make_bohrium_service()
+        result = svc._setup_bohrium_for_run(
             session_id='sess-fail',
             pg=pg,
             skill_sync_spec=None,
@@ -276,9 +296,9 @@ def test_cleanup_restores_when_ssh_attached_false(
     sessions_service.get_session.return_value = None
     sessions_service.get_session_user_id.return_value = None
 
-    arb.cleanup_bohrium_after_run(
+    svc = _make_bohrium_service(sessions_service)
+    svc._cleanup_bohrium_after_run(
         session_id='sess-x',
-        sessions_service=sessions_service,
         event_callback=MagicMock(),
         pg_for_run=pg,
         ssh_attached=False,
@@ -316,7 +336,10 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
     tmp_path: Path,
 ) -> None:
     """load_exp_config runs before Bohrium setup; derived SkillSyncSpec is passed to setup."""
-    from src.services.agent_run_service import AgentRunService
+    AgentRunService = pytest.importorskip(
+        "src.services.agent_run_service",
+        reason="src not available (isolation test)",
+    ).AgentRunService
 
     order: list[str] = []
     _real_load_exp = matmaster_loader.load_exp_config
@@ -337,7 +360,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
         run_meta={'run_dir': str(tmp_path), 'task_id': 'test-task'},
     )
     mock_pg.prepare.return_value = mock_pg_ctx
-    mock_pg.config_path = Path('matmaster_config/config.yaml')
+    mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
     captured_spec: dict[str, Any] = {}
     mock_bohrium_result = _make_no_attach_bohrium_result()
@@ -347,7 +370,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
         captured_spec['skill_sync_spec'] = kwargs.get('skill_sync_spec')
         return mock_bohrium_result
 
-    mock_llm = MagicMock()
+    mock_llm = MockLLMProvider()
     mock_build_provider.return_value = mock_llm
     mock_load_llm.return_value = MagicMock()
 
@@ -386,9 +409,8 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
                 session_id='sess-spec-order',
                 user_prompt='prompt',
                 send_cb=AsyncMock(),
-                stop_event=threading.Event(),
+                cancel_token=CancellationController().token,
                 mode='direct',
-                reply_queue=None,
                 task_id='task-spec-order',
             )
         )
@@ -399,9 +421,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
     assert isinstance(spec, SkillSyncSpec)
     assert spec.remote_project_root == '/share/.matmaster'
     assert spec.project_skill_roots
-    assert spec.project_skill_roots[0].endswith(
-        str(Path('playground/mat_master/skills'))
-    )
+    assert spec.project_skill_roots[0].endswith(str(Path('matmaster/skills')))
 
 
 @patch('matmaster.providers.llm_factory.build_provider')
@@ -412,7 +432,10 @@ def test_execution_binding_before_build_runtime(
     tmp_path: Path,
 ) -> None:
     """When Bohrium returns an execution binding, pg_ctx passed to Exp.build_runtime is updated."""
-    from src.services.agent_run_service import AgentRunService
+    AgentRunService = pytest.importorskip(
+        "src.services.agent_run_service",
+        reason="src not available (isolation test)",
+    ).AgentRunService
 
     mock_sessions_svc = MagicMock()
     mock_sessions_svc.get_session_user_id.return_value = 'user-123'
@@ -426,7 +449,7 @@ def test_execution_binding_before_build_runtime(
         run_meta={'run_dir': str(tmp_path), 'task_id': 'test-task'},
     )
     mock_pg.prepare.return_value = mock_pg_ctx
-    mock_pg.config_path = Path('matmaster_config/config.yaml')
+    mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
 
     mock_exec = MagicMock()
@@ -442,22 +465,23 @@ def test_execution_binding_before_build_runtime(
     mock_build_provider.return_value = mock_llm
     mock_load_llm.return_value = MagicMock()
 
-    mock_runtime = MagicMock()
-    mock_runtime.spec = MagicMock()
-    mock_runtime.spec.hooks = []
-    mock_runtime.spec.tool_registry = None
-    mock_runtime.spec.model_copy.return_value = mock_runtime.spec
-    mock_kernel_result = MagicMock()
-    mock_run_evt = MagicMock()
-    mock_run_evt.reason = 'natural'
-    mock_run_evt.status = 'completed'
-    mock_run_evt.final_content = None
-    mock_run_evt.source = 'MatMaster'
-    mock_kernel_result.result.to_run_result_event.return_value = mock_run_evt
-    mock_runtime.kernel.run = AsyncMock(return_value=mock_kernel_result)
+    from matmaster.types.events import RunResultEvent
+
+    mock_run_result_event = RunResultEvent(
+        source='MatMaster',
+        status='completed',
+        reason='natural',
+    )
+
+    captured_run_stream_args: dict[str, Any] = {}
+
+    async def _mock_run_stream(*args, **kwargs):
+        captured_run_stream_args['ctx'] = args[0] if args else None
+        captured_run_stream_args['kwargs'] = kwargs
+        yield mock_run_result_event
 
     mock_exp_inst = MagicMock()
-    mock_exp_inst.build_runtime = AsyncMock(return_value=mock_runtime)
+    mock_exp_inst.run_stream = _mock_run_stream
     mock_exp_inst._run_cleanup_callbacks = AsyncMock()
 
     with (
@@ -487,14 +511,13 @@ def test_execution_binding_before_build_runtime(
                 session_id='sess-exec-bind',
                 user_prompt='prompt',
                 send_cb=AsyncMock(),
-                stop_event=threading.Event(),
+                cancel_token=CancellationController().token,
                 mode='direct',
-                reply_queue=None,
                 task_id='task-exec-bind',
             )
         )
 
-    pg_passed = mock_exp_inst.build_runtime.call_args[0][0]
+    pg_passed = captured_run_stream_args['ctx']
     assert pg_passed.session is mock_exec
     assert pg_passed.session_type == 'ssh'
     assert pg_passed.execution_workdir == '/remote/ws'
@@ -509,7 +532,10 @@ def test_skill_sync_upload_exclude_set_does_not_exclude_skill_md(
     tmp_path: Path,
 ) -> None:
     """Skill tree upload must not exclude SKILL.md (contract files sync to the node)."""
-    from evomaster.agent.session.ssh import SSHSession
+    SSHSession = pytest.importorskip(
+        "evomaster.agent.session.ssh",
+        reason="evomaster not available (isolation test)",
+    ).SSHSession
 
     root = tmp_path / 'proj_skills'
     root.mkdir()

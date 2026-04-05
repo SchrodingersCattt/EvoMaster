@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
 
 from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
+from matmaster.types.session import Session
 
 
 class TestWorkspaceArchivalConfig:
@@ -309,16 +311,16 @@ class TestWorkspaceArchivalConfigDefaults:
 class TestPlaygroundContextSessionAndConfigDir:
     """PlaygroundContext session and config_dir fields (D-09, D-10)."""
 
-    def test_session_field_accepts_arbitrary_object(self) -> None:
-        """session=object() constructs without error (arbitrary_types_allowed)."""
-        sentinel = object()
+    def test_session_field_accepts_session_protocol(self) -> None:
+        """session= accepting Session Protocol instance."""
+        mock_session = MagicMock(spec=Session)
         ctx = PlaygroundContext(
             workdir=Path("/tmp/work"),
             session_type="docker",
             cache_area=Path("/tmp/cache"),
-            session=sentinel,
+            session=mock_session,
         )
-        assert ctx.session is sentinel
+        assert ctx.session is mock_session
 
     def test_config_dir_field(self) -> None:
         """config_dir=Path stores correctly as Path."""
@@ -326,9 +328,9 @@ class TestPlaygroundContextSessionAndConfigDir:
             workdir=Path("/tmp/work"),
             session_type="docker",
             cache_area=Path("/tmp/cache"),
-            config_dir=Path("/configs/mat_master"),
+            config_dir=Path("/config"),
         )
-        assert ctx.config_dir == Path("/configs/mat_master")
+        assert ctx.config_dir == Path("/config")
 
     def test_session_and_config_dir_default_none(self) -> None:
         """Both fields default to None when not provided."""
@@ -355,20 +357,18 @@ class TestPlaygroundContextSessionAndConfigDir:
         assert ctx.session is None
         assert ctx.config_dir is None
 
-    def test_model_dump_excludes_session_by_default(self) -> None:
-        """model_dump works even with arbitrary session object."""
-        sentinel = object()
+    def test_model_dump_includes_session_and_config_dir(self) -> None:
+        """model_dump works with Session Protocol object."""
+        mock_session = MagicMock(spec=Session)
         ctx = PlaygroundContext(
             workdir=Path("/tmp/work"),
             session_type="docker",
             cache_area=Path("/tmp/cache"),
-            session=sentinel,
-            config_dir=Path("/configs"),
+            session=mock_session,
+            config_dir=Path("/config"),
         )
         data = ctx.model_dump()
         assert "config_dir" in data
-        # session should be in dump (Any type) but may not be serializable
-        # for JSON -- that's expected and fine for in-process use
         assert "session" in data
 
 

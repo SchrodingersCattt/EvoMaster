@@ -6,19 +6,16 @@ All external dependencies mocked per D-10.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
-from matmaster.core.bus import MessageBus
 from matmaster.core.exp import Exp
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.events import ResponseEvent
+from matmaster.types.events import ResponseEvent, RunResultEvent
 from matmaster.types.messages import LLMResponse, StreamChunk
-from matmaster.types.runtime import KernelResult
 
 
 class MinimalMockLLMProvider:
@@ -55,30 +52,27 @@ class TestMinimalE2EPipeline:
     async def test_minimal_e2e_pipeline(self, tmp_path: Path) -> None:
         """E2E: Minimal playground with simplest possible config.
         No builtin_tools, no mcp_config, no skill_config.
-        Verify pipeline completes with natural finish.
+        Verify pipeline completes with natural finish via run_stream().
         """
         mock_llm = MinimalMockLLMProvider()
         pg_ctx = _make_minimal_ctx(tmp_path, llm_provider=mock_llm)
-        bus = MessageBus()
 
         config = ExpConfig(name="direct")
         exp = Exp(config)
-        runtime = await exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx)
 
+        # Collect events from kernel.run_stream() generator
         kernel = AgentKernel()
-        finish = await kernel.run(runtime.spec, "minimal test task")
-
-        assert isinstance(finish.result, KernelResult)
-        assert finish.result.reason == "natural"
-        assert finish.result.status == "completed"
-        assert finish.result.final_content == "minimal response"
-
-        # Bus should have received response events from streaming content
         events = []
-        try:
-            while True:
-                events.append(bus.get_nowait())
-        except asyncio.QueueEmpty:
-            pass
+        async for event in kernel.run_stream(runtime.spec, "minimal test task"):
+            events.append(event)
+
+        # Generator should have emitted ResponseEvent(s)
         response_events = [e for e in events if isinstance(e, ResponseEvent)]
         assert len(response_events) >= 1
+
+        # Terminal event should be RunResultEvent with natural finish
+        run_results = [e for e in events if isinstance(e, RunResultEvent)]
+        assert len(run_results) == 1
+        assert run_results[0].status == "completed"
+        assert run_results[0].reason == "natural"

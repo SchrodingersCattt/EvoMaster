@@ -11,11 +11,12 @@ def _assistant_with_tool_calls(tool_calls: list[dict]) -> dict:
     }
 
 
-def _tool_call(call_id: str, name: str, args: str = '{}') -> dict:
+def _tool_call(call_id: str, name: str, args: dict | None = None) -> dict:
+    # matmaster flat ToolCallData format: {id, name, arguments: dict}
     return {
         'id': call_id,
-        'type': 'function',
-        'function': {'name': name, 'arguments': args},
+        'name': name,
+        'arguments': args if args is not None else {},
     }
 
 

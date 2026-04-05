@@ -65,7 +65,6 @@ class MockLLMProvider:
 def build_mock_spec(
     *,
     llm_provider: Any | None = None,
-    guards: list[Any] | None = None,
     hooks: list[Any] | None = None,
     max_turns: int = 10,
     system_prompt: str = "You are a test agent",
@@ -77,7 +76,6 @@ def build_mock_spec(
     """
     return {
         "llm_provider": llm_provider or MockLLMProvider(),
-        "guards": guards or [],
         "hooks": hooks or [],
         "max_turns": max_turns,
         "system_prompt": system_prompt,

@@ -9,10 +9,8 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from matmaster.core.hooks import BaseHook, Hook
+from matmaster.core.hooks import HookExecutor
 from matmaster.tools.tool_registry import ToolRegistry
-from matmaster.types.events import RunResultEvent
-from matmaster.types.guards import Guard, GuardContext, GuardResult
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.runtime import (
@@ -20,7 +18,6 @@ from matmaster.types.runtime import (
     AgentRuntimeSpec,
     CompactionConfig,
     KernelResult,
-    KernelRunResult,
 )
 
 # ── Test helpers ───────────────────────────────────────
@@ -50,13 +47,6 @@ class _MockLLMProvider:
         timeout: float | None = None,
     ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(content="mock", finish_reason="stop")
-
-
-class _MockGuard:
-    """A Guard implementation for testing."""
-
-    def evaluate(self, ctx: GuardContext) -> GuardResult:
-        return GuardResult(allowed=True)
 
 
 # ── CompactionConfig ────────────────────────────────────
@@ -114,26 +104,22 @@ class TestAgentRuntimeSpec:
         provider = _MockLLMProvider()
         spec = AgentRuntimeSpec(
             llm_provider=provider,
-            tool_registry=ToolRegistry(),
         )
         assert spec.llm_provider is not None
-        assert spec.tool_registry is not None
 
     def test_defaults(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
         )
-        assert spec.guards == []
         assert spec.max_turns == 100
-        assert spec.hooks == []
+        assert spec.hook_executor is None
         assert spec.system_prompt == ""
         assert isinstance(spec.compaction, CompactionConfig)
+        assert "guards" not in AgentRuntimeSpec.model_fields
 
     def test_frozen(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
         )
         with pytest.raises(ValidationError):
             spec.max_turns = 50
@@ -142,27 +128,13 @@ class TestAgentRuntimeSpec:
         """CONT-05: TerminationPolicy simplified to AgentRuntimeSpec.max_turns."""
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
         )
         assert isinstance(spec.max_turns, int)
         assert spec.max_turns == 100
 
-    def test_with_guard(self) -> None:
-        guard = _MockGuard()
-        assert isinstance(guard, Guard)  # sanity: verify it satisfies Protocol
-
-        spec = AgentRuntimeSpec(
-            llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
-            guards=[guard],
-        )
-        assert len(spec.guards) == 1
-        assert spec.guards[0] is guard
-
     def test_serialization(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
             max_turns=50,
             system_prompt="You are a scientist.",
         )
@@ -170,9 +142,8 @@ class TestAgentRuntimeSpec:
         assert data["max_turns"] == 50
         assert data["system_prompt"] == "You are a scientist."
         assert "llm_provider" in data
-        assert "tool_registry" in data
-        assert "guards" in data
-        assert "hooks" in data
+        assert "guards" not in data
+        assert "hook_executor" in data
         assert "compaction" in data
 
     # ── New typed field tests ──────────────────────────
@@ -184,34 +155,18 @@ class TestAgentRuntimeSpec:
 
         spec = AgentRuntimeSpec(
             llm_provider=provider,
-            tool_registry=ToolRegistry(),
         )
         assert isinstance(spec.llm_provider, LLMProvider)
 
-    def test_hooks_typed_as_hook_protocol(self) -> None:
-        """hooks field accepts list of Hook Protocol-conforming objects."""
-        hook = BaseHook()
-        assert isinstance(hook, Hook)
-
+    def test_hook_executor_accepts_executor_instance(self) -> None:
+        """hook_executor field accepts HookExecutor instances."""
+        executor = HookExecutor()
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
-            hooks=[hook],
-        )
-        assert len(spec.hooks) == 1
-        assert all(isinstance(h, Hook) for h in spec.hooks)
-
-    def test_with_mock_provider_and_hooks(self) -> None:
-        """AgentRuntimeSpec with MockLLMProvider and BaseHook constructs successfully."""
-        spec = AgentRuntimeSpec(
-            llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
-            hooks=[BaseHook(), BaseHook()],
-            guards=[_MockGuard()],
+            hook_executor=executor,
         )
         assert isinstance(spec.llm_provider, LLMProvider)
-        assert len(spec.hooks) == 2
-        assert len(spec.guards) == 1
+        assert spec.hook_executor is executor
 
 
 class TestAgentRuntimeSpecCompactor:
@@ -241,8 +196,6 @@ class TestAgentRuntimeSpecFrozenRejectMutation:
     def test_agent_runtime_spec_frozen_reject_mutation(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=ToolRegistry(),
-            guards=[_MockGuard()],
         )
         with pytest.raises(ValidationError):
             spec.max_turns = 50
@@ -259,23 +212,19 @@ class TestAgentRuntimeSpecDefaults:
         )
         assert spec.max_turns == 100
         assert spec.system_prompt == ""
-        assert spec.guards == []
-        assert spec.hooks == []
-        assert spec.tool_registry is None
+        assert spec.hook_executor is None
+        assert "guards" not in AgentRuntimeSpec.model_fields
 
 
 class TestAgentRuntimeSpecArbitraryTypes:
-    """QUAL-01: LLMProvider and ToolRegistry accepted as arbitrary types."""
+    """QUAL-01: LLMProvider accepted as arbitrary type."""
 
     def test_agent_runtime_spec_arbitrary_types(self) -> None:
         provider = _MockLLMProvider()
-        registry = ToolRegistry()
         spec = AgentRuntimeSpec(
             llm_provider=provider,
-            tool_registry=registry,
         )
         assert spec.llm_provider is provider
-        assert spec.tool_registry is registry
         assert isinstance(spec.llm_provider, LLMProvider)
 
 
@@ -316,39 +265,11 @@ class TestAgentRuntime:
             runtime.kernel = object()  # type: ignore[misc]
 
 
-# ── KernelRunResult ────────────────────────────────────
-
-
-class TestKernelRunResult:
-    """KernelRunResult frozen dataclass — return value of AgentKernel.run()."""
-
-    def test_frozen_construction(self) -> None:
-        kr = KernelResult(status="completed", reason="natural")
-        result = KernelRunResult(result=kr, messages=[])
-        assert result.result is kr
-        assert result.messages == []
-
-    def test_messages_preserved(self) -> None:
-        from matmaster.types.messages import AssistantMessage, UserMessage
-
-        kr = KernelResult(status="completed", reason="natural")
-        msgs = [UserMessage(content="hi"), AssistantMessage(content="hello")]
-        result = KernelRunResult(result=kr, messages=msgs)
-        assert len(result.messages) == 2
-        assert result.messages[0].content == "hi"
-
-    def test_frozen_rejects_mutation(self) -> None:
-        kr = KernelResult(status="completed", reason="natural")
-        result = KernelRunResult(result=kr, messages=[])
-        with pytest.raises(FrozenInstanceError):
-            result.result = kr  # type: ignore[misc]
-
-
 # ── KernelResult ───────────────────────────────────────
 
 
 class TestKernelResult:
-    """KernelResult dataclass construction and to_run_result_event()."""
+    """KernelResult dataclass construction."""
 
     def test_construction_with_defaults(self) -> None:
         kr = KernelResult(status="completed", reason="natural")
@@ -379,25 +300,126 @@ class TestKernelResult:
         with pytest.raises(AttributeError):
             kr.status = "failed"  # type: ignore[misc]
 
-    def test_to_run_result_event(self) -> None:
-        kr = KernelResult(
-            status="completed",
-            reason="natural",
-            final_content="done",
-            num_turns=5,
-            stop_reason="stop",
-            usage={"prompt_tokens": 200},
-        )
-        event = kr.to_run_result_event()
-        assert event.source == "agent"
-        assert event.status == "completed"
-        assert event.reason == "natural"
-        assert event.final_content == "done"
-        # usage/num_turns/stop_reason should NOT be in RunResultEvent's schema
-        assert "num_turns" not in RunResultEvent.model_fields
-        assert "usage" not in RunResultEvent.model_fields
 
-    def test_to_run_result_event_custom_source(self) -> None:
-        kr = KernelResult(status="cancelled", reason="cancelled")
-        event = kr.to_run_result_event(source="worker")
-        assert event.source == "worker"
+# ── Tool Runtime v2 fields (Phase 32-02) ─────────────────
+
+
+class TestAgentRuntimeSpecToolRuntimeV2Fields:
+    """Phase 32-02: 5 new optional fields default to None for backward compat."""
+
+    def test_new_fields_default_none(self) -> None:
+        """All 5 new fields default to None when not provided."""
+        spec = AgentRuntimeSpec()
+        assert spec.tool_runner is None
+        assert spec.tool_catalog is None
+        assert spec.runtime_topology is None
+        assert spec.capability_policy is None
+        assert spec.structural_validation is None
+
+    def test_backward_compat_with_existing_constructor(self) -> None:
+        """Existing _make_spec() pattern (no new fields) still works."""
+        spec = AgentRuntimeSpec(
+            llm_provider=_MockLLMProvider(),
+            hook_executor=None,
+            max_turns=10,
+            system_prompt="You are a test agent",
+        )
+        assert spec.llm_provider is not None
+        assert spec.tool_runner is None
+        assert spec.tool_catalog is None
+
+    def test_tool_runner_field_accepts_protocol_implementation(self) -> None:
+        """tool_runner field accepts a ToolRunner-compatible implementation."""
+
+        class _StubToolRunner:
+            async def execute_batch(
+                self, tool_calls, ctx, *, on_result=None
+            ) -> list[tuple[Any, Any]]:
+                return []
+
+        runner = _StubToolRunner()
+
+        spec = AgentRuntimeSpec(tool_runner=runner)
+
+        assert spec.tool_runner is runner
+
+    def test_tool_catalog_field_accepts_catalog(self) -> None:
+        """tool_catalog field accepts ToolCatalog instance."""
+        from matmaster.tools.tool_catalog import ToolCatalog
+
+        registry = ToolRegistry()
+        catalog = ToolCatalog(registry)
+
+        spec = AgentRuntimeSpec(
+            tool_catalog=catalog,
+        )
+        assert spec.tool_catalog is catalog
+
+    def test_runtime_topology_field_accepts_topology(self) -> None:
+        """runtime_topology field accepts RuntimeTopology instance."""
+        from matmaster.types.topology import RuntimeTopology
+
+        topo = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp",
+            workspace_root="/tmp/workspace",
+        )
+        spec = AgentRuntimeSpec(runtime_topology=topo)
+        assert spec.runtime_topology is topo
+        assert spec.runtime_topology.session_kind == "local"
+
+    def test_model_dump_includes_new_fields(self) -> None:
+        """model_dump() output includes the 5 new fields."""
+        spec = AgentRuntimeSpec()
+        data = spec.model_dump()
+        assert "tool_runner" in data
+        assert "tool_catalog" in data
+        assert "runtime_topology" in data
+        assert "capability_policy" in data
+        assert "structural_validation" in data
+        # All should be None
+        assert data["tool_runner"] is None
+        assert data["tool_catalog"] is None
+
+    def test_tool_runner_rejects_invalid_type(self) -> None:
+        """tool_runner field rejects non-ToolRunner objects at construction."""
+        with pytest.raises(ValidationError, match="tool_runner must be ToolRunner"):
+            AgentRuntimeSpec(tool_runner=object())
+
+    def test_tool_catalog_rejects_invalid_type(self) -> None:
+        """tool_catalog field rejects non-ToolCatalog objects at construction."""
+        with pytest.raises(ValidationError, match="tool_catalog must be ToolCatalog"):
+            AgentRuntimeSpec(tool_catalog="not a catalog")
+
+    def test_runtime_topology_rejects_invalid_type(self) -> None:
+        """runtime_topology field rejects non-RuntimeTopology objects."""
+        with pytest.raises(
+            ValidationError, match="runtime_topology must be RuntimeTopology"
+        ):
+            AgentRuntimeSpec(runtime_topology=42)
+
+
+# ── Types re-export from matmaster.types (Phase 32) ───
+
+
+class TestTypesReExport:
+    """Phase 32 types importable from matmaster.types package."""
+
+    def test_topology_types(self) -> None:
+        from matmaster.types import RuntimeTopology, SessionCapabilities, ToolPlane
+
+        assert hasattr(ToolPlane, "SESSION_SHELL")
+        assert hasattr(SessionCapabilities, "model_fields")
+        assert hasattr(RuntimeTopology, "model_fields")
+
+    def test_tool_spec_types(self) -> None:
+        from matmaster.types import ResourceClaim, ToolBinding, ToolSpec
+
+        assert hasattr(ToolSpec, "model_fields")
+        assert hasattr(ResourceClaim, "model_fields")
+        assert hasattr(ToolBinding, "model_fields")
+
+    def test_tool_decision_type(self) -> None:
+        from matmaster.types import ToolDecision
+
+        assert hasattr(ToolDecision, "model_fields")

@@ -14,6 +14,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from matmaster.types.session import Session
+
 
 class WorkspaceArchivalConfig(BaseModel):
     """Workspace archival configuration.
@@ -54,7 +56,7 @@ class PlaygroundContext(BaseModel):
     env_vars: dict[str, str] = Field(default_factory=dict)
     archival: WorkspaceArchivalConfig | None = None
     run_meta: dict[str, Any] = Field(default_factory=dict)
-    session: Any = None  # EvoMaster BaseSession instance (per D-09)
+    session: Session | None = None
     config_dir: Path | None = None  # Playground config directory (per D-10)
     llm_provider: Any = None  # LLMProvider instance (externally determined)
     llm_config: Any = None  # LLMConfig instance (externally loaded)
@@ -71,7 +73,7 @@ class PlaygroundContext(BaseModel):
 
     def with_execution(
         self,
-        session: Any,
+        session: Session | None,
         session_type: str,
         execution_workdir: str,
     ) -> "PlaygroundContext":

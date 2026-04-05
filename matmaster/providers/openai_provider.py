@@ -4,13 +4,15 @@ Provides OpenAIProvider that satisfies the LLMProvider Protocol, wrapping
 the openai.AsyncOpenAI client for async chat and streaming calls.
 Client lifecycle is managed via async context manager: __aenter__ creates
 the AsyncOpenAI + httpx.AsyncClient, __aexit__ closes connections.
-Retry strategy is handled by Kernel._call_llm(), not by the provider.
+Retry strategy is handled by Kernel._call_llm_streaming(), not by the provider.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any
 
 import openai
@@ -26,12 +28,55 @@ from matmaster.types.messages import (
 logger = logging.getLogger(__name__)
 
 
-def _openai_usage_to_vendor_dict(usage: Any) -> dict[str, Any]:
-    """Serialize OpenAI ``CompletionUsage`` (or compatible) for UI / eval ingest.
+@dataclass
+class _StreamToolCallState:
+    """Provider-local state for one logical streaming tool call."""
 
-    Preserves nested objects such as ``prompt_tokens_details`` using
-    ``model_dump`` when available.
-    """
+    output_index: int
+    id: str = ""
+    name: str = ""
+    arguments: str = ""
+
+    def has_payload(self) -> bool:
+        return bool(self.arguments)
+
+
+def _is_complete_json_document(raw: str) -> bool:
+    """Return True when *raw* is exactly one complete JSON document."""
+    text = raw.strip()
+    if not text:
+        return False
+    try:
+        _, end = json.JSONDecoder().raw_decode(text)
+    except ValueError:
+        return False
+    return text[end:].strip() == ""
+
+
+def _should_split_stream_tool_call(
+    current: _StreamToolCallState, delta: dict[str, Any]
+) -> bool:
+    """Detect proxy/provider index collisions without breaking valid chunking."""
+    if not current.has_payload():
+        return False
+
+    new_id = delta.get("id")
+    if new_id and current.id and new_id != current.id:
+        return True
+
+    new_name = delta.get("name")
+    if new_name and current.name and new_name != current.name:
+        return True
+
+    new_arguments = delta.get("arguments")
+    if isinstance(new_arguments, str) and new_arguments.lstrip().startswith(("{", "[")):
+        return _is_complete_json_document(current.arguments)
+
+    return False
+
+
+def _openai_usage_to_vendor_dict(usage: Any) -> dict[str, Any]:
+    """Serialize provider-native usage while preserving nested detail fields."""
     if usage is None:
         return {}
     model_dump = getattr(usage, "model_dump", None)
@@ -42,6 +87,7 @@ def _openai_usage_to_vendor_dict(usage: Any) -> dict[str, Any]:
             dumped = model_dump(exclude_none=True)
         if isinstance(dumped, dict):
             return dumped
+
     out: dict[str, Any] = {}
     for key in (
         "prompt_tokens",
@@ -50,28 +96,30 @@ def _openai_usage_to_vendor_dict(usage: Any) -> dict[str, Any]:
         "input_tokens",
         "output_tokens",
     ):
-        val = getattr(usage, key, None)
-        if val is not None:
-            out[key] = val
+        value = getattr(usage, key, None)
+        if value is not None:
+            out[key] = value
+
     for detail_key in ("prompt_tokens_details", "completion_tokens_details"):
         detail = getattr(usage, detail_key, None)
         if detail is None:
             continue
-        d_dump = getattr(detail, "model_dump", None)
-        if callable(d_dump):
+        detail_dump = getattr(detail, "model_dump", None)
+        if callable(detail_dump):
             try:
-                out[detail_key] = d_dump(mode="json", exclude_none=True)
+                out[detail_key] = detail_dump(mode="json", exclude_none=True)
             except TypeError:
-                out[detail_key] = d_dump(exclude_none=True)
+                out[detail_key] = detail_dump(exclude_none=True)
         elif isinstance(detail, dict):
             out[detail_key] = dict(detail)
         else:
             cached = getattr(detail, "cached_tokens", None)
             if cached is not None:
                 out[detail_key] = {"cached_tokens": cached}
-    cr = getattr(usage, "cache_read_input_tokens", None)
-    if isinstance(cr, int) and cr > 0:
-        out["cache_read_input_tokens"] = cr
+
+    cache_read = getattr(usage, "cache_read_input_tokens", None)
+    if isinstance(cache_read, int) and cache_read > 0:
+        out["cache_read_input_tokens"] = cache_read
     return out
 
 
@@ -199,6 +247,55 @@ class OpenAIProvider:
     def retry_delay(self) -> float:
         return self._retry_delay
 
+    @staticmethod
+    def _normalize_stream_tool_call_deltas(
+        raw_deltas: list[dict[str, Any]],
+        active_calls: dict[int, _StreamToolCallState],
+        next_output_index: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Rewrite colliding provider indices into stable logical indices."""
+        normalized: list[dict[str, Any]] = []
+
+        for delta in raw_deltas:
+            source_index = delta.get("index", 0)
+            current = active_calls.get(source_index)
+            if current is None:
+                current = _StreamToolCallState(output_index=next_output_index)
+                active_calls[source_index] = current
+                next_output_index += 1
+            elif _should_split_stream_tool_call(current, delta):
+                logger.warning(
+                    "Detected OpenAI-compatible tool_call index collision; "
+                    "rewriting index (source_index=%s, prev_id=%s, new_id=%s, "
+                    "prev_name=%s, new_name=%s)",
+                    source_index,
+                    current.id or "-",
+                    delta.get("id") or "-",
+                    current.name or "-",
+                    delta.get("name") or "-",
+                )
+                current = _StreamToolCallState(output_index=next_output_index)
+                active_calls[source_index] = current
+                next_output_index += 1
+
+            if delta.get("id"):
+                current.id = delta["id"]
+            if delta.get("name"):
+                current.name = delta["name"]
+            if delta.get("arguments"):
+                current.arguments += delta["arguments"]
+
+            item = {"index": current.output_index}
+            if delta.get("id"):
+                item["id"] = delta["id"]
+            if delta.get("name"):
+                item["name"] = delta["name"]
+            if delta.get("arguments"):
+                item["arguments"] = delta["arguments"]
+            normalized.append(item)
+
+        return normalized, next_output_index
+
     async def chat(
         self,
         messages: list[dict[str, Any]],
@@ -300,6 +397,8 @@ class OpenAIProvider:
             stream = await client.chat.completions.create(**kwargs)
             last_chunk_usage: dict[str, int] | None = None
             last_chunk_usage_vendor: dict[str, Any] | None = None
+            active_tool_calls: dict[int, _StreamToolCallState] = {}
+            next_tool_call_index = 0
 
             async for chunk in stream:
                 usage = getattr(chunk, "usage", None)
@@ -326,7 +425,7 @@ class OpenAIProvider:
                 # Map tool_call deltas
                 tool_call_deltas: list[dict[str, Any]] | None = None
                 if delta.tool_calls:
-                    tool_call_deltas = []
+                    raw_tool_call_deltas: list[dict[str, Any]] = []
                     for tc_delta in delta.tool_calls:
                         d: dict[str, Any] = {"index": tc_delta.index}
                         if tc_delta.id:
@@ -336,7 +435,14 @@ class OpenAIProvider:
                                 d["name"] = tc_delta.function.name
                             if tc_delta.function.arguments:
                                 d["arguments"] = tc_delta.function.arguments
-                        tool_call_deltas.append(d)
+                        raw_tool_call_deltas.append(d)
+                    tool_call_deltas, next_tool_call_index = (
+                        self._normalize_stream_tool_call_deltas(
+                            raw_tool_call_deltas,
+                            active_tool_calls,
+                            next_tool_call_index,
+                        )
+                    )
 
                 yield StreamChunk(
                     content=delta.content,

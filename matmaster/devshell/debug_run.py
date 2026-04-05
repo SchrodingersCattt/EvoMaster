@@ -9,25 +9,26 @@ Usage:
 from __future__ import annotations
 
 import sys
-import threading
 from pathlib import Path
 
-# ── Config ───────────────────────────────────────────────────────────────
+# -- Config --
 PROMPT = "Build the nitroprusside anion. Export as `nitroprusside.xyz`. In the final answer, explicitly report: (1) whether `nitroprusside.xyz` exists; (2) the formula, written as `FeC5N6O`; (3) Fe coordination number; (4) the counts of Fe-C bonds shorter than 2.0 A and Fe-N bonds shorter than 2.0 A; (5) one representative N-O bond length and Fe-N-O angle; (6) one representative C-N bond length and Fe-C-N angle."  # <-- change this freely
 WORKDIR = Path(__file__).resolve().parent.parent.parent / "debug_workspace"
 LOG_DIR = WORKDIR / "logs"
-LLM_CONFIG: Path | None = None  # None = auto-detect matmaster_config/llm_config.yaml
+LLM_CONFIG: Path | None = None  # None = auto-detect config/llm_config.yaml
 MODEL_OVERRIDE: str | None = "claude-opus-4-6"  # e.g. "claude-sonnet-4-6"
 # Same as mm-devshell default: direct.toml + narrowed skills_root (see exp_patch).
 USE_DEVSHELL_DEFAULT_PATCH: bool = True
 VERBOSE = True
-# ─────────────────────────────────────────────────────────────────────────
+# --
 
 
 def main(prompt: str | None = None) -> None:
     import os
 
     from dotenv import find_dotenv, load_dotenv
+
+    from matmaster.types.cancellation import CancellationController
 
     load_dotenv()
     current_env = os.getenv("SERVICE_ENV", "test")
@@ -54,8 +55,8 @@ def main(prompt: str | None = None) -> None:
     from matmaster.providers.llm_factory import build_provider
 
     root = _project_root()
-    llm_yaml = LLM_CONFIG or (root / "matmaster_config" / "llm_config.yaml")
-    main_yaml = root / "matmaster_config" / "config.yaml"
+    llm_yaml = LLM_CONFIG or (root / "config" / "llm_config.yaml")
+    main_yaml = root / "config" / "config.yaml"
 
     llm_config = load_llm_config(llm_yaml)
     agent_default_llm = _load_agents_general_llm(main_yaml)
@@ -70,7 +71,7 @@ def main(prompt: str | None = None) -> None:
     )
 
     # Runner
-    from matmaster.core.bus import MessageBus
+    from matmaster.devshell.event_observer import DevEventObserver
     from matmaster.devshell.runner import DevRunner
     from matmaster.devshell.stream_hook import DevStreamHook
 
@@ -86,19 +87,20 @@ def main(prompt: str | None = None) -> None:
     )
 
     task = prompt or PROMPT
-    bus = MessageBus()
-    stop_event = threading.Event()
+    observer = DevEventObserver()
+    controller = CancellationController()
 
-    # ── Breakpoint-friendly: step into runner.run() ──
-    result = runner.run(task, stop_event=stop_event, bus=bus)
+    # -- Breakpoint-friendly: step into runner.run() --
+    result = runner.run(task, cancel_token=controller.token, event_observer=observer)
 
     # Print summary
-    kr = result.result
     print(f"\n{'='*60}")
-    print(f"Status: {kr.status} | Reason: {kr.reason} | Turns: {kr.num_turns}")
-    print(f"Usage: {kr.usage}")
-    if kr.final_content:
-        print(f"\n--- Final Content ---\n{kr.final_content}")
+    print(
+        f"Status: {result.status} | Reason: {result.reason} | Turns: {result.num_turns}"
+    )
+    print(f"Usage: {result.usage}")
+    if result.final_content:
+        print(f"\n--- Final Content ---\n{result.final_content}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,30 @@
+# MatMaster DevShell — 可选覆盖（agent / session / tools）
+# LLM 一律由仓库根目录 matmaster_config/llm_config.yaml + matmaster_config/config.yaml
+# 解析；启动时用 --model 指定 routes 中的 key（见 llm_config.yaml）。
+#
+# mm-devshell --workdir ... --log-dir ... --model claude-sonnet-4-6
+
+# Agent behavior
+agent:
+  name: "general"
+  mode: "direct"
+  max_turns: 20
+  # identity: "You are a materials science AI assistant."
+
+# Session type
+session:
+  type: "local"  # local / docker / ssh
+
+# Tool registration ("*" = all builtin tools)
+tools:
+  builtin:
+    - "*"
+
+# Skill / lazy MCP support (default: disabled)
+# skills:
+#   enabled: true
+#   skills_root:
+#     - "matmaster/skills/lazymcp"
+#   cache_dir: "matmaster/cache"
+#   config_dir: "matmaster_config"
+#   mcp_config_file: "mcp_config.json"

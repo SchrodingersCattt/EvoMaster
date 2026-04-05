@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Pre-commit hook: 单文件行数不超过 1000 行（与 AGENTS.md 约定一致）。"""
 
-
 import sys
 
 MAX_LINES = 1000

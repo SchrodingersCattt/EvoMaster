@@ -2,8 +2,8 @@
 
 Layer 2 boundary contracts:
 - AgentRuntimeSpec: Exp layer output built by Exp.assemble(ctx), consumed by
-  AgentKernel.run(spec, task). frozen=True guarantees immutability during
-  kernel execution.
+  AgentKernel.run_stream(spec, task). frozen=True guarantees immutability
+  during kernel execution.
 - AgentRuntime: runtime bundle returned by Exp.build_runtime(). Holds the
   kernel, assembled spec, and cleanup callable.
 """
@@ -12,17 +12,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matmaster.core.hooks import Hook
-from matmaster.tools.tool_registry import ToolRegistry
-from matmaster.types.events import RunResultEvent
-from matmaster.types.messages import Message
+from matmaster.core.hooks import HookExecutor
 
-from .guards import Guard
 from .llm_provider import LLMProvider
+
+if TYPE_CHECKING:
+    pass
 
 
 class CompactionConfig(BaseModel):
@@ -41,7 +40,7 @@ class AgentRuntimeSpec(BaseModel):
     """Exp 层输出的 agent 运行时规格契约。
 
     由 Exp.assemble(ctx: PlaygroundContext) 构建，
-    传递给 AgentKernel.run(spec, task)。
+    传递给 AgentKernel.run_stream(spec, task)。
     frozen=True 保证 kernel 运行期间规格不变。
     """
 
@@ -52,17 +51,11 @@ class AgentRuntimeSpec(BaseModel):
     # build_runtime guarantees a real provider before kernel execution.
     llm_provider: LLMProvider | None = None
 
-    # Tools (Phase 3: typed as ToolRegistry)
-    tool_registry: ToolRegistry | None = None
-
-    # Guards
-    guards: list[Guard] = Field(default_factory=list)
-
     # Termination (CONT-05: simplified to max_turns field)
     max_turns: int = 100
 
-    # Hooks (Phase 2: typed as Hook Protocol)
-    hooks: list[Hook] = Field(default_factory=list)
+    # Hook executor
+    hook_executor: HookExecutor | None = None
 
     # Context
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
@@ -72,13 +65,48 @@ class AgentRuntimeSpec(BaseModel):
     # Extensible metadata bag (prompt templates, MCP/skill config, etc.)
     meta: dict[str, Any] = Field(default_factory=dict)
 
+    # ── Tool Runtime v2 fields (Phase 32, all optional for backward compat) ──
+    # Annotations are Any to avoid circular imports across the runtime stack.
+    # TYPE_CHECKING block provides static typing; model_validator below
+    # enforces runtime contracts.
+    tool_runner: Any | None = None
+    tool_catalog: Any | None = None
+    runtime_topology: Any | None = None
+    capability_policy: Any | None = None  # Phase 33 defines CapabilityPolicy Protocol
+    structural_validation: Any | None = None  # Phase 33 defines StructuralValidation
+
+    @property
+    def tool_registry(self) -> Any | None:
+        """Backward-compatible alias for tests and callers still expecting v1 specs."""
+        if self.tool_catalog is None:
+            return None
+        return getattr(self.tool_catalog, "registry", None)
+
+    @model_validator(mode="after")
+    def _check_v2_field_types(self) -> AgentRuntimeSpec:
+        """Lazy-import runtime checks for v2 fields (avoids circular import)."""
+        from matmaster.core.tool_runner import ToolRunner
+        from matmaster.tools.tool_catalog import ToolCatalog
+        from matmaster.types.topology import RuntimeTopology
+
+        checks: list[tuple[str, Any, type]] = [
+            ("tool_runner", self.tool_runner, ToolRunner),
+            ("tool_catalog", self.tool_catalog, ToolCatalog),
+            ("runtime_topology", self.runtime_topology, RuntimeTopology),
+        ]
+        for name, value, expected in checks:
+            if value is not None and not isinstance(value, expected):
+                msg = f"{name} must be {expected.__name__}, got {type(value).__name__}"
+                raise ValueError(msg)
+        return self
+
 
 @dataclass(frozen=True)
 class KernelResult:
-    """AgentKernel.run() 的终止结果摘要。
+    """AgentKernel 的终止结果摘要，由 run_stream 内部产生。
 
     内核层专属，不参与总线传输。总线事件 RunResultEvent
-    由上层（service / runner）从 KernelResult 按需构造。
+    在 run_stream() 中从 _TerminalItem 直接构造。
 
     num_turns 语义：已完成 LLM 调用的轮数。cancelled 路径在 turn 递增前退出，
     所以 num_turns 反映的是已完成的轮数，不含被中断的当前轮。
@@ -96,15 +124,6 @@ class KernelResult:
     usage: dict[str, int] = field(default_factory=dict)
     usage_vendor_by_turn: tuple[dict[str, Any], ...] = ()
 
-    def to_run_result_event(self, source: str = "agent") -> RunResultEvent:
-        """构造总线事件。上层发总线时统一走这个方法。"""
-        return RunResultEvent(
-            source=source,
-            status=self.status,
-            reason=self.reason,
-            final_content=self.final_content,
-        )
-
 
 @dataclass(frozen=True)
 class AgentRuntime:
@@ -117,15 +136,3 @@ class AgentRuntime:
     kernel: Any  # AgentKernel (avoid circular import)
     spec: AgentRuntimeSpec
     cleanup: Callable[[], Any]
-
-
-@dataclass(frozen=True)
-class KernelRunResult:
-    """Return value of AgentKernel.run().
-
-    Bundles the terminal result with the full message transcript,
-    enabling callers to extract conversation history for multi-turn.
-    """
-
-    result: KernelResult
-    messages: list[Message]
