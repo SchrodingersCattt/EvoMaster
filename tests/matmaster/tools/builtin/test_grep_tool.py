@@ -71,6 +71,27 @@ class TestGrepExecution:
         assert "$(" not in cmd.split("'")[0]  # pattern should be escaped
 
 
+class TestGrepEnvInjection:
+    def test_grep_injects_bohrium_env_from_bridge(self):
+        session = MagicMock()
+        session._bohrium_credentials = {"access_key": "ak", "project_id": 42}
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"output": "", "exit_code": 1},  # which rg -> not found
+                {"stdout": "", "stderr": "", "exit_code": 0},  # chmod for env file
+                {"output": "match", "exit_code": 0},  # actual grep
+            ]
+        )
+        tool = GrepTool(session=session, workdir="/workspace")
+        asyncio.run(tool.execute({"pattern": "test"}))
+        # The final exec_bash call (the actual grep) should have env-wrapped command
+        final_call = session.exec_bash.call_args_list[-1]
+        cmd = final_call.kwargs.get("command", final_call[1].get("command", ""))
+        assert "grep" in cmd
+        assert session.write_file.called
+
+
 class TestGrepRgDetection:
     def test_rg_detection_cached(self):
         session = make_session(output="")

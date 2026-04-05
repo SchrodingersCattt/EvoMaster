@@ -199,6 +199,12 @@ class GrepTool(BuiltinTool):
             cmd += f" | head -{head_limit}"
         # head_limit == 0: no head pipe (unlimited)
 
+        from matmaster.integration.runtime_bridge import build_service_env
+        from matmaster.tools.script_env import inject_env
+
+        env = build_service_env("bohrium", session=session)
+        cmd = inject_env(cmd, env, session)
+
         result = session.exec_bash(
             command=cmd,
             timeout=30,

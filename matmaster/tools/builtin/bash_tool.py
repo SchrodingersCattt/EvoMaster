@@ -101,6 +101,12 @@ class BashTool(BuiltinTool):
         timeout_ms = min(int(timeout_ms), 600_000)  # cap at 10min
         timeout_s = timeout_ms / 1000  # float division preserves sub-second
 
+        from matmaster.integration.runtime_bridge import build_service_env
+        from matmaster.tools.script_env import inject_env
+
+        env = build_service_env("bohrium", session=session)
+        command = inject_env(command, env, session)
+
         result = session.exec_bash(
             command=command,
             timeout=timeout_s,

@@ -205,3 +205,22 @@ class TestGlobExecution:
         asyncio.run(tool.execute({"pattern": "*.py", "path": "sub"}))
         cmd = session.exec_bash.call_args[1].get("command", "")
         assert "/workspace/sub" in cmd
+
+
+class TestGlobEnvInjection:
+    def test_glob_injects_bohrium_env_from_bridge(self):
+        session = MagicMock()
+        session._bohrium_credentials = {"access_key": "ak", "project_id": 42}
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {"stdout": "/workspace/a.py", "stderr": "", "exit_code": 0, "output": "/workspace/a.py"},
+            ]
+        )
+        tool = GlobTool(session=session, workdir="/workspace")
+        asyncio.run(tool.execute({"pattern": "**/*.py"}))
+        final_call = session.exec_bash.call_args_list[-1]
+        assert final_call.kwargs["command"] != GlobTool._build_find_command("**/*.py", "/workspace")
+        assert "find" in final_call.kwargs["command"]
+        assert session.write_file.called

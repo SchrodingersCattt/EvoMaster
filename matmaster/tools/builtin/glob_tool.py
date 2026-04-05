@@ -84,6 +84,13 @@ class GlobTool(BuiltinTool):
         safe_path = resolve_safe_path(path, workdir)
 
         command = self._build_find_command(pattern, safe_path)
+
+        from matmaster.integration.runtime_bridge import build_service_env
+        from matmaster.tools.script_env import inject_env
+
+        env = build_service_env("bohrium", session=session)
+        command = inject_env(command, env, session)
+
         result = session.exec_bash(
             command=command,
             timeout=30,

@@ -115,3 +115,28 @@ class TestBashErrorStatus:
         result = asyncio.run(tool.execute({"command": "echo hello"}))
         assert isinstance(result, str)
         assert "hello" in result
+
+
+class TestBashEnvInjection:
+    def test_bash_injects_bohrium_env_from_bridge(self):
+        session = MagicMock()
+        session._bohrium_credentials = {"access_key": "ak", "project_id": 42}
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "stdout": "hi",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "working_dir": "/workspace",
+                    "output": "hi",
+                },
+            ]
+        )
+        tool = BashTool(session=session, workdir="/workspace")
+        asyncio.run(tool.execute({"command": "echo hi"}))
+        final_call = session.exec_bash.call_args_list[-1]
+        assert final_call.kwargs["command"] != "echo hi"
+        assert "echo hi" in final_call.kwargs["command"]
+        assert session.write_file.called
