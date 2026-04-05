@@ -27,6 +27,7 @@ from matmaster.types.events import (
     SystemEvent,
     ThoughtEvent,
     ToolCallEvent,
+    ToolProgressEvent,
     ToolResultEvent,
     WorkspaceUploadErrorEvent,
 )
@@ -107,7 +108,7 @@ class TestToolResultEvent:
         assert evt.type == "tool_result"
         assert evt.result == "output"
         assert evt.status == "success"
-        assert evt.info == {}
+        assert evt.payload == {}
 
 
 class TestRunResultEvent:
@@ -139,6 +140,20 @@ class TestSkillHitEvent:
         evt = SkillHitEvent(source="agent", skill_name="research")
         assert evt.type == "skill_hit"
         assert evt.skill_name == "research"
+
+
+class TestToolProgressEvent:
+    def test_instantiation(self) -> None:
+        evt = ToolProgressEvent(
+            source="agent",
+            call_id="c1",
+            tool_name="Bash",
+            content="line 1",
+        )
+        assert evt.type == "tool_progress"
+        assert evt.call_id == "c1"
+        assert evt.tool_name == "Bash"
+        assert evt.content == "line 1"
 
 
 # ── Individual SystemEvent types ────────────────────────
@@ -246,6 +261,12 @@ class TestAgentEventDiscriminator:
             {"type": "error", "source": "a", "message": "m"},
             {"type": "assistant_state", "source": "a", "state": {}},
             {"type": "skill_hit", "source": "a", "skill_name": "s"},
+            {
+                "type": "tool_progress",
+                "source": "a",
+                "call_id": "c",
+                "tool_name": "t",
+            },
         ]
         expected_types = [
             ThoughtEvent,
@@ -256,6 +277,7 @@ class TestAgentEventDiscriminator:
             ErrorEvent,
             AssistantStateEvent,
             SkillHitEvent,
+            ToolProgressEvent,
         ]
         for payload, expected in zip(payloads, expected_types):
             result = _agent_event_adapter.validate_python(payload)
@@ -331,10 +353,10 @@ class TestSystemEventDiscriminator:
 
 
 class TestBusEventUnion:
-    def test_validates_all_18_types(self) -> None:
-        """BusEvent union can validate all 18 event types."""
+    def test_validates_all_19_types(self) -> None:
+        """BusEvent union can validate all 19 event types."""
         payloads = [
-            # 8 AgentEvent types
+            # 9 AgentEvent types
             {"type": "thought", "source": "a"},
             {"type": "response", "source": "a", "content": "hello"},
             {
@@ -355,7 +377,13 @@ class TestBusEventUnion:
             {"type": "error", "source": "a", "message": "m"},
             {"type": "assistant_state", "source": "a", "state": {}},
             {"type": "skill_hit", "source": "a", "skill_name": "s"},
-            # 9 SystemEvent types
+            {
+                "type": "tool_progress",
+                "source": "a",
+                "call_id": "c",
+                "tool_name": "t",
+            },
+            # 10 SystemEvent types
             {
                 "type": "confirmation_request",
                 "source": "s",
@@ -398,6 +426,7 @@ class TestEventSerializationRoundtrip:
             ErrorEvent(source="a", message="m"),
             AssistantStateEvent(source="a", state={"k": "v"}),
             SkillHitEvent(source="a", skill_name="s"),
+            ToolProgressEvent(source="a", call_id="c1", tool_name="t1"),
             ConfirmationRequestEvent(source="s", question="q", mode="m"),
             ConfirmationTimeoutEvent(source="s", question="q"),
             ContextCompactionEvent(source="s", payload={}),
@@ -418,8 +447,8 @@ class TestEventSerializationRoundtrip:
 
 
 class TestNoTypeCollision:
-    def test_all_18_type_literals_are_unique(self) -> None:
-        """All 18 type literals must be globally unique strings."""
+    def test_all_19_type_literals_are_unique(self) -> None:
+        """All 19 type literals must be globally unique strings."""
         type_values = [
             "thought",
             "response",
@@ -429,6 +458,7 @@ class TestNoTypeCollision:
             "error",
             "assistant_state",
             "skill_hit",
+            "tool_progress",
             "confirmation_request",
             "confirmation_timeout",
             "context_compaction",
@@ -440,8 +470,8 @@ class TestNoTypeCollision:
             "mcp_server_status",
             "mcp_connect",
         ]
-        assert len(type_values) == 18
-        assert len(set(type_values)) == 18
+        assert len(type_values) == 19
+        assert len(set(type_values)) == 19
 
 
 # ── Edge case tests (QUAL-01) ─────────────────────────
@@ -456,6 +486,7 @@ _ALL_EVENT_CLASSES = [
     ErrorEvent,
     AssistantStateEvent,
     SkillHitEvent,
+    ToolProgressEvent,
     ConfirmationRequestEvent,
     ConfirmationTimeoutEvent,
     ContextCompactionEvent,
@@ -474,6 +505,7 @@ def _make_event_instance(cls):
     required_extra = {
         ToolCallEvent: {"call_id": "c1", "tool_name": "t1", "arguments": {"k": "v"}},
         ToolResultEvent: {"call_id": "c1", "tool_name": "t1", "result": "ok"},
+        ToolProgressEvent: {"call_id": "c1", "tool_name": "t1"},
         ErrorEvent: {"message": "err"},
         AssistantStateEvent: {"state": {"content": "hi"}},
         SkillHitEvent: {"skill_name": "research"},

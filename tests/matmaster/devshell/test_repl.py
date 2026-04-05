@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 class TestBuiltinCommands:
@@ -183,6 +187,101 @@ class TestCliParsing:
         assert args.json_out == Path("/tmp/out.json")
 
 
+class TestCliRunMode:
+    def test_run_single_uses_drain_result_fields(self, capsys, tmp_path: Path) -> None:
+        from matmaster.core.stream_drain import DrainResult
+        from matmaster.devshell.cli import _run_single, parse_args
+
+        args = parse_args(
+            [
+                "run",
+                "--workdir",
+                str(tmp_path / "ws"),
+                "--log-dir",
+                str(tmp_path / "logs"),
+                "-p",
+                "hello",
+            ]
+        )
+        drain_result = DrainResult(
+            status="completed",
+            reason="natural",
+            final_content="OK",
+            num_turns=1,
+            usage={"total_tokens": 3},
+            messages=[],
+        )
+        resolved = SimpleNamespace(model="m", profile_key="p", route_key="r")
+
+        with patch(
+            "matmaster.devshell.cli._run_with_event_log",
+            return_value=(drain_result, tmp_path / "logs" / "events.jsonl"),
+        ):
+            rc = _run_single(args, runner=object(), resolved=resolved)
+
+        captured = capsys.readouterr()
+        assert rc == 0
+        assert json.loads(captured.out) == {
+            "model": "m",
+            "profile_key": "p",
+            "route_key": "r",
+            "status": "completed",
+            "reason": "natural",
+            "final_content": "OK",
+            "num_turns": 1,
+            "usage": {"total_tokens": 3},
+        }
+
+    def test_bootstrap_runner_silences_run_mode_stream_output(
+        self, tmp_path: Path
+    ) -> None:
+        from matmaster.devshell.cli import _bootstrap_runner, parse_args
+
+        args = parse_args(
+            [
+                "run",
+                "--workdir",
+                str(tmp_path / "ws"),
+                "--log-dir",
+                str(tmp_path / "logs"),
+                "-p",
+                "hello",
+            ]
+        )
+        fake_llm_config = SimpleNamespace(
+            resolve_route=lambda **_: SimpleNamespace(
+                model="m",
+                profile_key="p",
+                route_key="r",
+            )
+        )
+        captured: dict[str, object] = {}
+
+        class FakeRunner:
+            def __init__(self, **kwargs) -> None:
+                captured.update(kwargs)
+
+        with (
+            patch(
+                "matmaster.devshell.cli._load_agents_general_llm",
+                return_value="opus",
+            ),
+            patch(
+                "matmaster.config.loader.load_llm_config",
+                return_value=fake_llm_config,
+            ),
+            patch(
+                "matmaster.providers.llm_factory.build_provider",
+                return_value=object(),
+            ),
+            patch("matmaster.devshell.runner.DevRunner", FakeRunner),
+        ):
+            _bootstrap_runner(args)
+
+        stream_hook = captured["stream_hook"]
+        assert stream_hook._out is not sys.stdout
+
+
 class TestShowTools:
     def test_show_tools_uses_all_tools(self) -> None:
         """Verify _show_tools accesses registry.all_tools, not registry.tools."""
@@ -201,7 +300,9 @@ class TestShowTools:
         del mock_registry.tools
 
         mock_runtime = MagicMock()
-        mock_runtime.spec.tool_registry = mock_registry
+        mock_catalog = MagicMock()
+        mock_catalog.registry = mock_registry
+        mock_runtime.spec.tool_catalog = mock_catalog
 
         with patch("matmaster.core.exp.Exp") as MockExp:
             MockExp.return_value.build_runtime = AsyncMock(return_value=mock_runtime)
@@ -212,32 +313,56 @@ class TestShowTools:
 
 
 class TestDevStreamHookSegment:
-    async def test_on_segment_complete_thought_verbose(self) -> None:
+    def test_on_event_thought_streaming_writes_content(self) -> None:
         import io
 
         from matmaster.devshell.stream_hook import DevStreamHook
+        from matmaster.types.events import ThoughtEvent
 
         out = io.StringIO()
         hook = DevStreamHook(output=out, verbose=True)
-        await hook.on_segment_complete("thought", "some thought", "s1")
-        assert "thought complete" in out.getvalue()
+        hook.on_event(
+            ThoughtEvent(
+                source="agent",
+                content="some thought",
+                stream_state="streaming",
+                stream_id="s1",
+            )
+        )
+        assert out.getvalue() == "some thought"
 
-    async def test_on_segment_complete_thought_non_verbose(self) -> None:
+    def test_on_event_thought_end_writes_newline(self) -> None:
         import io
 
         from matmaster.devshell.stream_hook import DevStreamHook
+        from matmaster.types.events import ThoughtEvent
 
         out = io.StringIO()
         hook = DevStreamHook(output=out, verbose=False)
-        await hook.on_segment_complete("thought", "some thought", "s1")
-        assert out.getvalue() == ""
+        hook.on_event(
+            ThoughtEvent(
+                source="agent",
+                content="",
+                stream_state="end",
+                stream_id="s1",
+            )
+        )
+        assert out.getvalue() == "\n"
 
-    async def test_on_segment_complete_response_silent(self) -> None:
+    def test_on_event_response_complete_writes_content(self) -> None:
         import io
 
         from matmaster.devshell.stream_hook import DevStreamHook
+        from matmaster.types.events import ResponseEvent
 
         out = io.StringIO()
         hook = DevStreamHook(output=out, verbose=True)
-        await hook.on_segment_complete("response", "content", "s1")
-        assert out.getvalue() == ""
+        hook.on_event(
+            ResponseEvent(
+                source="agent",
+                content="content",
+                stream_state="complete",
+                stream_id="s1",
+            )
+        )
+        assert out.getvalue() == "content"

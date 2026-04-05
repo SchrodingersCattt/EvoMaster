@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
+from matmaster.core.hooks import HookExecutor
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.messages import ToolCallData
 from matmaster.types.runtime import (
     AgentRuntime,
     AgentRuntimeSpec,
-    KernelResult,
-    KernelRunResult,
 )
+from matmaster.types.session import Session
+from matmaster.types.tool_runner_state import ToolRunnerState
 from tests.matmaster.core.conftest import MockLLMProvider
 
 
@@ -87,12 +87,12 @@ class TestExpAssemble:
         spec = await exp.assemble(ctx)
         assert spec.max_turns == 100
 
-    async def test_guards_deferred(self) -> None:
-        """guards are deferred to build_runtime; assemble returns empty list."""
-        exp = Exp(ExpConfig(name='test', guards=['mock_guard']))
+    async def test_assemble_does_not_expose_guards_field(self) -> None:
+        """Guard 配置已移除，assemble 产出的 spec 不再暴露 guards 字段。"""
+        exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx()
         spec = await exp.assemble(ctx)
-        assert spec.guards == []
+        assert "guards" not in type(spec).model_fields
 
     async def test_meta_is_empty(self) -> None:
         """Meta bag is empty with new ExpConfig design."""
@@ -135,83 +135,25 @@ class TestExpBuildRuntime:
 
         assert runtime.spec.llm_provider is ctx.llm_provider
 
-    async def test_bus_adds_event_emitter_hook(self) -> None:
-        """When bus is provided, EventEmitterHook is added to spec.hooks."""
-        from matmaster.core.bus import MessageBus
-        from matmaster.core.hooks import EventEmitterHook
-
+    async def test_build_runtime_has_no_bus_parameter(self) -> None:
+        """build_runtime() no longer accepts bus parameter (Phase 36 de-bus)."""
         exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        bus = MessageBus()
+        _make_ctx(with_llm=True)
 
-        with patch("matmaster.core.agent.AgentKernel"):
-            runtime = await exp.build_runtime(ctx, bus=bus)
+        import inspect
 
-        emitter_hooks = [
-            h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
-        ]
-        assert len(emitter_hooks) == 1
+        sig = inspect.signature(exp.build_runtime)
+        assert 'bus' not in sig.parameters
 
-    async def test_build_runtime_threads_spawn_id_into_emitter_hook(self) -> None:
-        """Child runtimes pass spawn_id through EventEmitterHook into emitted events."""
-        from matmaster.core.bus import MessageBus
-        from matmaster.core.hooks import EventEmitterHook
-        from matmaster.types.events import ToolCallEvent
-
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        bus = MessageBus()
-        tool_call = ToolCallData(id='tc-1', name='spawn', arguments={'task': 'demo'})
-
-        with patch("matmaster.core.agent.AgentKernel"):
-            runtime = await exp.build_runtime(ctx, bus=bus, spawn_id="childdeadbeef123")
-
-        emitter_hook = next(
-            h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
-        )
-        await emitter_hook.pre_tool_call(tool_call)
-
-        event = bus.get_nowait()
-        assert isinstance(event, ToolCallEvent)
-        assert event.spawn_id == 'childdeadbeef123'
-
-    async def test_parent_runtime_emits_none_spawn_id_by_default(self) -> None:
-        """Parent runtimes keep spawn_id=None unless one is explicitly provided."""
-        from matmaster.core.bus import MessageBus
-        from matmaster.core.hooks import EventEmitterHook
-        from matmaster.types.events import ToolCallEvent
-
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        bus = MessageBus()
-        tool_call = ToolCallData(id='tc-1', name='spawn', arguments={'task': 'demo'})
-
-        with patch("matmaster.core.agent.AgentKernel"):
-            runtime = await exp.build_runtime(ctx, bus=bus)
-
-        emitter_hook = next(
-            h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
-        )
-        await emitter_hook.pre_tool_call(tool_call)
-
-        event = bus.get_nowait()
-        assert isinstance(event, ToolCallEvent)
-        assert event.spawn_id is None
-
-    async def test_no_bus_no_emitter(self) -> None:
-        """Without bus, no EventEmitterHook in spec.hooks."""
-        from matmaster.core.hooks import EventEmitterHook
-
+    async def test_build_runtime_creates_hook_executor(self) -> None:
+        """build_runtime() always injects a HookExecutor."""
         exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        emitter_hooks = [
-            h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
-        ]
-        assert len(emitter_hooks) == 0
+        assert isinstance(runtime.spec.hook_executor, HookExecutor)
 
     async def test_runtime_has_cleanup_callable(self) -> None:
         """AgentRuntime.cleanup is a callable."""
@@ -223,105 +165,60 @@ class TestExpBuildRuntime:
 
         assert callable(runtime.cleanup)
 
-
-# ── TestExpRun ──────────────────────────────────────────
-
-
-class TestExpRun:
-    """run() calls build_runtime then kernel.run with proper args."""
-
-    async def test_run_calls_build_runtime_then_kernel(self) -> None:
-        """run() delegates to build_runtime then kernel.run."""
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        mock_kr = KernelResult(status='completed', reason='natural')
-        mock_kernel_result = KernelRunResult(result=mock_kr, messages=[])
-
-        mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(return_value=mock_kernel_result)
-        mock_spec = MagicMock(spec=AgentRuntimeSpec)
-        mock_cleanup = MagicMock()
-        mock_runtime = AgentRuntime(
-            kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
+    async def test_tool_runner_state_cleanup_registered(self, tmp_path: Path) -> None:
+        exp = Exp(
+            ExpConfig(
+                name="test",
+                tools=ExpToolsConfig(builtin=["Read"]),
+            )
+        )
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=MagicMock(spec=Session),
+            llm_provider=MockLLMProvider(),
         )
 
-        with patch.object(
-            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
-        ) as mock_br:
-            result = await exp.run(ctx, "do something")
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
 
-        mock_br.assert_called_once_with(
-            ctx,
-            bus=None,
-            skills=None,
-            source_override=None,
-            spawn_id=None,
+        assert exp._cleanup_callbacks
+        state = runtime.spec.tool_runner.state
+        assert isinstance(state, ToolRunnerState)
+
+        matching_callbacks = [
+            cb
+            for cb in exp._cleanup_callbacks
+            if getattr(cb, "__self__", None) is state
+        ]
+        assert matching_callbacks
+
+    async def test_collects_tool_prompts_into_system_prompt(
+        self, tmp_path: Path
+    ) -> None:
+        exp = Exp(
+            ExpConfig(
+                name="test",
+                system_prompt="Base persona text.",
+                tools=ExpToolsConfig(builtin=["Bash"]),
+            )
         )
-        mock_kernel.run.assert_called_once_with(
-            mock_spec, 'do something', history=None, stop_event=None
-        )
-        assert result is mock_kr
-
-    async def test_run_forwards_bus(self) -> None:
-        """run() passes bus to build_runtime."""
-        from matmaster.core.bus import MessageBus
-
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        bus = MessageBus()
-        mock_kr = KernelResult(status='completed', reason='natural')
-
-        mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(
-            return_value=KernelRunResult(result=mock_kr, messages=[])
-        )
-        mock_spec = MagicMock(spec=AgentRuntimeSpec)
-        mock_cleanup = MagicMock()
-        mock_runtime = AgentRuntime(
-            kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=MagicMock(spec=Session),
+            llm_provider=MockLLMProvider(),
         )
 
-        with patch.object(
-            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
-        ) as mock_br:
-            await exp.run(ctx, "task", bus=bus)
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
 
-        mock_br.assert_called_once_with(
-            ctx,
-            bus=bus,
-            skills=None,
-            source_override=None,
-            spawn_id=None,
-        )
-
-    async def test_run_forwards_history_and_stop_event(self) -> None:
-        """run() passes history and stop_event to kernel.run."""
-        import threading
-
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        mock_kr = KernelResult(status='completed', reason='natural')
-        stop = threading.Event()
-        history = [MagicMock()]
-
-        mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(
-            return_value=KernelRunResult(result=mock_kr, messages=[])
-        )
-        mock_spec = MagicMock(spec=AgentRuntimeSpec)
-        mock_cleanup = MagicMock()
-        mock_runtime = AgentRuntime(
-            kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
-        )
-
-        with patch.object(
-            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
-        ):
-            await exp.run(ctx, "task", history=history, stop_event=stop)
-
-        mock_kernel.run.assert_called_once_with(
-            mock_spec, 'task', history=history, stop_event=stop
-        )
+        assert "Base persona text." in runtime.spec.system_prompt
+        assert "Avoid using this tool to run" in runtime.spec.system_prompt
 
 
 # ── TestExpCleanup ───────────────────────────────────────
@@ -329,59 +226,6 @@ class TestExpRun:
 
 class TestExpCleanup:
     """Cleanup callbacks are guaranteed to execute via _run_cleanup_callbacks()."""
-
-    async def test_cleanup_runs_on_success(self) -> None:
-        """Cleanup is called after successful kernel.run via run()."""
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-        mock_kr = KernelResult(status='completed', reason='natural')
-
-        mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(
-            return_value=KernelRunResult(result=mock_kr, messages=[])
-        )
-        mock_spec = MagicMock(spec=AgentRuntimeSpec)
-        mock_cleanup = MagicMock()
-        mock_runtime = AgentRuntime(
-            kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
-        )
-
-        # Register a cleanup callback before run() so we can verify it gets called
-        cleanup_cb = MagicMock()
-        exp._register_cleanup(cleanup_cb)
-
-        with patch.object(
-            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
-        ):
-            await exp.run(ctx, "task")
-
-        cleanup_cb.assert_called_once()
-        assert exp._cleanup_callbacks == []  # cleared after execution
-
-    async def test_cleanup_runs_on_error(self) -> None:
-        """Cleanup is called even when kernel.run() raises."""
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx(with_llm=True)
-
-        mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(side_effect=RuntimeError("kernel exploded"))
-        mock_spec = MagicMock(spec=AgentRuntimeSpec)
-        mock_cleanup = MagicMock()
-        mock_runtime = AgentRuntime(
-            kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
-        )
-
-        cleanup_cb = MagicMock()
-        exp._register_cleanup(cleanup_cb)
-
-        with patch.object(
-            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
-        ):
-            with pytest.raises(RuntimeError, match="kernel exploded"):
-                await exp.run(ctx, "task")
-
-        cleanup_cb.assert_called_once()
-        assert exp._cleanup_callbacks == []
 
     async def test_multiple_cleanups_all_execute(self) -> None:
         """All registered cleanup callbacks run even if one raises."""
@@ -474,7 +318,7 @@ class TestSystemPromptOverride:
 
 
 class TestExpBuiltinTools:
-    """_init_builtin_tools dual-source registration: 12 native + 1 evo adapter."""
+    """_init_builtin_tools CC-name registration: 9 builtin tools."""
 
     def _make_ctx_with_session(self, tmp_path: Path) -> PlaygroundContext:
         """Create PlaygroundContext with a mock session for builtin tool tests."""
@@ -482,7 +326,7 @@ class TestExpBuiltinTools:
             workdir=tmp_path,
             session_type='local',
             cache_area=tmp_path / 'cache',
-            session=MagicMock(),
+            session=MagicMock(spec=Session),
             llm_provider=MockLLMProvider(),
         )
 
@@ -495,76 +339,52 @@ class TestExpBuiltinTools:
         return exp, registry
 
     def test_native_tools_count(self, tmp_path: Path) -> None:
-        """14 native tools registered with source='builtin'."""
+        """10 native tools registered with source='builtin' (CC names)."""
         _, registry = self._build_registry(tmp_path)
-        native = registry.get_tools_by_source("builtin")
-        assert len(native) == 14
+        assert len(registry) == 10
 
     def test_native_tool_names(self, tmp_path: Path) -> None:
-        """All 12 expected native tool names are present in registry."""
+        """All 10 expected CC-name tools are present in registry."""
         _, registry = self._build_registry(tmp_path)
         expected_native = {
-            'execute_bash',
-            'list_dir',
-            'read_file',
-            'write_file',
-            'edit_file',
-            'glob',
-            'grep',
-            'task_create',
-            'task_get',
-            'task_list',
-            'task_update',
-            'task_complete',
+            'Bash',
+            'Read',
+            'Write',
+            'Edit',
+            'Glob',
+            'Grep',
+            'TodoWrite',
+            'WebSearch',
+            'WebFetch',
+            'Bohrium',
         }
         for name in expected_native:
             assert name in registry, f"Expected tool '{name}' not found in registry"
 
-    def test_evo_adapted_tools_count(self, tmp_path: Path) -> None:
-        """2 evo adapter tools are registered with source='builtin_evo'."""
+    def test_no_evo_adapted_tools(self, tmp_path: Path) -> None:
+        """No evo adapter tools remain (EvoToolAdapter eliminated).
+        All tools are native builtins; no 'builtin_evo' source exists."""
         _, registry = self._build_registry(tmp_path)
-        evo = registry.get_tools_by_source('builtin_evo')
-        assert len(evo) == 2
+        for tool in registry.all_tools:
+            assert 'evo' not in tool.name.lower(), f"Unexpected evo tool: {tool.name}"
 
     def test_editor_tool_removed(self, tmp_path: Path) -> None:
         """str_replace_editor (EditorTool) is NOT in the registry."""
         _, registry = self._build_registry(tmp_path)
         assert 'str_replace_editor' not in registry
 
-    def test_monitor_job_retained(self, tmp_path: Path) -> None:
-        """MonitorJobTool is still registered with source='builtin_evo'."""
-        _, registry = self._build_registry(tmp_path)
-        evo = registry.get_tools_by_source('builtin_evo')
-        evo_names = {t.name for t in evo}
-        assert 'monitor_job' in evo_names
-        assert 'web-search' in evo_names
-
     def test_total_count(self, tmp_path: Path) -> None:
-        """Total tools = 14 native + 2 evo adapters = 16."""
+        """Total tools = 10 native builtin (CC names, no legacy tools)."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 16
+        assert len(registry) == 10
 
-    def test_web_search_retained(self, tmp_path: Path) -> None:
-        """Legacy web-search is registered in the new Exp runtime."""
+    def test_web_search_is_native_builtin(self, tmp_path: Path) -> None:
+        """WebSearchTool is registered as native builtin with CC name."""
         _, registry = self._build_registry(tmp_path)
-        evo = registry.get_tools_by_source('builtin_evo')
-        evo_names = {t.name for t in evo}
-        assert 'web-search' in evo_names
-
-    def test_read_tracker_cleanup_registered(self, tmp_path: Path) -> None:
-        """ReadTracker.clear is registered as a cleanup callback after _init_builtin_tools."""
-        exp, _ = self._build_registry(tmp_path)
-        # At least one cleanup callback should be registered (ReadTracker.clear)
-        assert len(exp._cleanup_callbacks) >= 1
-        # The callback should be the bound clear method of a ReadTracker instance
-        cb = exp._cleanup_callbacks[-1]
-        assert hasattr(cb, '__self__')
-        from matmaster.tools.builtin import ReadTracker
-
-        assert isinstance(cb.__self__, ReadTracker)
+        assert 'WebSearch' in registry
 
     def test_init_builtin_tools_no_session(self, tmp_path: Path) -> None:
-        """session=None skips all tool registration."""
+        """session=None registers only sessionless tools."""
         from matmaster.tools.tool_registry import ToolRegistry
 
         exp = Exp(ExpConfig(name='test'))
@@ -577,14 +397,18 @@ class TestExpBuiltinTools:
         )
         registry = ToolRegistry()
         exp._init_builtin_tools(ctx, registry, ['*'])
-        assert len(registry) == 0
+        assert len(registry) == 4
+        assert "TodoWrite" in registry
+        assert "WebSearch" in registry
+        assert "WebFetch" in registry
+        assert "Bohrium" in registry
 
     async def test_explicit_builtin_config_filters_tools(self, tmp_path: Path) -> None:
         """Non-empty explicit tool list registers only the requested tools."""
         exp = Exp(
             ExpConfig(
                 name='test',
-                tools=ExpToolsConfig(builtin=['execute_bash', 'read_file']),
+                tools=ExpToolsConfig(builtin=['Bash', 'Read']),
             )
         )
         ctx = self._make_ctx_with_session(tmp_path)
@@ -592,9 +416,10 @@ class TestExpBuiltinTools:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        native = runtime.spec.tool_registry.get_tools_by_source('builtin')
-        registered_names = {t.name for t in native}
-        assert registered_names == {'execute_bash', 'read_file'}
+        registered_names = {
+            t.name for t in runtime.spec.tool_catalog.registry.all_tools
+        }
+        assert registered_names == {'Bash', 'Read'}
 
     async def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
         """Empty builtin list skips _init_builtin_tools entirely."""
@@ -609,8 +434,7 @@ class TestExpBuiltinTools:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        native = runtime.spec.tool_registry.get_tools_by_source('builtin')
-        assert len(native) == 0
+        assert len(runtime.spec.tool_catalog.registry) == 0
 
 
 # ── TestExecutionWorkdirBinding ─────────────────────────
@@ -631,7 +455,7 @@ class TestExecutionWorkdirBinding:
             execution_workdir=str(execution),
             session_type='local',
             cache_area=tmp_path / 'cache',
-            session=MagicMock(),
+            session=MagicMock(spec=Session),
             llm_provider=MockLLMProvider(),
         )
 
@@ -648,53 +472,33 @@ class TestExecutionWorkdirBinding:
         exp._init_builtin_tools(ctx, registry, ['*'])
         by_name = {t.name: t for t in registry.all_tools}
         for name in (
-            'execute_bash',
-            'list_dir',
-            'read_file',
-            'write_file',
-            'edit_file',
-            'glob',
-            'grep',
+            'Bash',
+            'Read',
+            'Write',
+            'Edit',
+            'Glob',
+            'Grep',
         ):
             assert by_name[name]._workdir == execution, name
 
-    def test_task_tools_use_local_workdir(self, tmp_path: Path) -> None:
-        from matmaster.tools.tool_registry import ToolRegistry
+    async def test_agent_tool_uses_execution_workdir(self, tmp_path: Path) -> None:
+        from matmaster.tools.builtin.agent_tool import AgentTool
 
         control = tmp_path / 'control'
         execution = tmp_path / 'execution'
         control.mkdir()
         execution.mkdir()
         ctx = self._ctx(tmp_path, control=control, execution=execution)
-        exp = Exp(ExpConfig(name='test'))
-        registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry, ['*'])
-        by_name = {t.name: t for t in registry.all_tools}
-        for name in (
-            'task_create',
-            'task_get',
-            'task_list',
-            'task_update',
-            'task_complete',
-        ):
-            assert by_name[name]._workdir == control, name
-
-    async def test_spawn_tool_uses_execution_workdir(self, tmp_path: Path) -> None:
-        from matmaster.tools.builtin.spawn_tool import SpawnTool
-
-        control = tmp_path / 'control'
-        execution = tmp_path / 'execution'
-        control.mkdir()
-        execution.mkdir()
-        ctx = self._ctx(tmp_path, control=control, execution=execution)
-        exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=["*"])))
+        exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=["Agent"])))
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
-        subs = [
-            t for t in runtime.spec.tool_registry.all_tools if isinstance(t, SpawnTool)
+        agents = [
+            t
+            for t in runtime.spec.tool_catalog.registry.all_tools
+            if isinstance(t, AgentTool)
         ]
-        assert len(subs) == 1
-        assert subs[0]._workdir == execution
+        assert len(agents) == 1
+        assert agents[0]._workdir == execution
 
 
 class TestExpCompaction:
@@ -725,3 +529,178 @@ class TestExpCompaction:
             runtime = await exp.build_runtime(ctx)
 
         assert runtime.spec.compactor is None
+
+
+# ── TestSessionlessBuiltins ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_registers_todowrite_without_session(
+    tmp_path: Path,
+) -> None:
+    """TodoWrite (sessionless tool) registers even when ctx.session is None."""
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["TodoWrite"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=None,
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    assert runtime.spec.tool_catalog.get_tool("TodoWrite") is not None
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_registers_bohrium_without_session(tmp_path: Path) -> None:
+    """Bohrium (sessionless tool) registers even when ctx.session is None."""
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["Bohrium"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=None,
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    assert runtime.spec.tool_catalog.get_tool("Bohrium") is not None
+
+
+@pytest.mark.asyncio
+async def test_bohrium_tool_receives_session(tmp_path: Path) -> None:
+    """BohriumTool should be constructed with session=ctx.session."""
+    from matmaster.tools.builtin.bohrium_tool import BohriumTool
+
+    mock_session = MagicMock(spec=Session)
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["Bohrium"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=mock_session,
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    bohrium_tools = [
+        t
+        for t in runtime.spec.tool_catalog.registry.all_tools
+        if isinstance(t, BohriumTool)
+    ]
+    assert len(bohrium_tools) == 1
+    assert bohrium_tools[0]._session is mock_session
+
+
+@pytest.mark.asyncio
+async def test_bohrium_tool_session_none_when_no_session(tmp_path: Path) -> None:
+    """BohriumTool should have _session=None when ctx.session is None."""
+    from matmaster.tools.builtin.bohrium_tool import BohriumTool
+
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["Bohrium"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=None,
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    bohrium_tools = [
+        t
+        for t in runtime.spec.tool_catalog.registry.all_tools
+        if isinstance(t, BohriumTool)
+    ]
+    assert len(bohrium_tools) == 1
+    assert bohrium_tools[0]._session is None
+
+
+# ── TestAgentRegistration ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_registers_agent_by_cc_name(tmp_path: Path) -> None:
+    """Agent registers with CC name when enabled in builtin config."""
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["Agent"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=MagicMock(spec=Session),
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    assert runtime.spec.tool_catalog.get_tool("Agent") is not None
+
+
+# ── TestSpawnGuard ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_hides_agent_when_allow_spawn_false(tmp_path: Path) -> None:
+    """Agent tool is hidden (exposed_to_model=False) when allow_spawn=False."""
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["Agent"]),
+        ),
+        allow_spawn=False,
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=MagicMock(spec=Session),
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    tool = runtime.spec.tool_catalog.get_tool("Agent")
+    assert tool is not None
+    assert tool.tool_spec.exposed_to_model is False

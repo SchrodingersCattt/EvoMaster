@@ -56,7 +56,6 @@ class ExpConfig(BaseModel):
     name: str = "direct"
     description: str = ""
     max_turns: int = 100
-    guards: list[str] = Field(default_factory=list)
     tools: ExpToolsConfig = Field(default_factory=ExpToolsConfig)
     skills: ExpSkillsConfig = Field(default_factory=ExpSkillsConfig)
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)

@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from typing import Any
 
 from matmaster.integration.event_payloads import _public_content_for_event
+from matmaster.response_text import is_trivial_response_text
 from matmaster.types.events import BusEvent, ResponseEvent, ThoughtEvent
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,6 @@ class PersistenceHandler:
 
     _SKIP_TYPES = frozenset({'log_line', 'llm_token'})
     _STREAMING_STATES = frozenset({'start', 'streaming', 'end'})
-    _TRIVIAL_RESPONSE_RE = re.compile(r'^[\s.。…·\-—_*]+$')
 
     def __init__(
         self,
@@ -62,7 +61,7 @@ class PersistenceHandler:
         if (
             isinstance(event, ResponseEvent)
             and event.stream_state == 'complete'
-            and self._TRIVIAL_RESPONSE_RE.match(event.content)
+            and is_trivial_response_text(event.content)
         ):
             return
 

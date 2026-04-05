@@ -4,27 +4,29 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import threading
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from matmaster.config.exp import ExpConfig, ExpSkillsConfig, ExpToolsConfig
-from matmaster.core.bus import MessageBus
+from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.stream_hook import DevStreamHook
+from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import Message, UserMessage
-from matmaster.types.runtime import KernelRunResult
+
+if TYPE_CHECKING:
+    from matmaster.core.stream_drain import DrainResult
+    from matmaster.devshell.event_observer import DevEventObserver
 
 logger = logging.getLogger(__name__)
 
 
 class DevRunner:
-    """Per-run assembly: build_runtime -> inject hooks -> kernel.run -> history.
+    """Per-run assembly: build_runtime -> kernel.run_stream -> drain -> history.
 
     Mirrors the split-call pattern of AgentRunService. REPL-agnostic:
-    accepts task string, returns KernelRunResult.
+    accepts task string, returns DrainResult.
     """
 
     def __init__(
@@ -61,7 +63,7 @@ class DevRunner:
             run_meta={"source": "devshell"},
         )
 
-        # Exp config: always from matmaster/exps/*.toml (``--exp`` or default ``direct``).
+        # Exp config: use explicit exp override when provided, else derive from DevConfig.
         self._exp_config = (
             exp_config if exp_config is not None else self._build_exp_config(config)
         )
@@ -71,7 +73,7 @@ class DevRunner:
             hint = (
                 "\n\n## Local session\n"
                 f"- Workspace directory: `{wd}`\n"
-                "- `execute_bash` uses this directory as cwd; file tools resolve relative paths under it.\n"
+                "- `Bash` uses this directory as cwd; file tools resolve relative paths under it.\n"
                 "- **Do not** assume `/share/...` exists here; that path is for **Bohrium remote SSH** "
                 "project storage, not for typical local runs.\n"
             )
@@ -104,7 +106,7 @@ class DevRunner:
             name=config.agent.name,
             max_turns=config.agent.max_turns,
             tools=ExpToolsConfig(builtin=config.tools.builtin),
-            skills=ExpSkillsConfig(),
+            skills=config.skills,
             compaction=config.compaction,
             developer_instructions=config.agent.identity or "",
             system_prompt=system_prompt,
@@ -114,36 +116,80 @@ class DevRunner:
         self,
         task: str,
         *,
-        stop_event: threading.Event | None = None,
-        bus: MessageBus | None = None,
-    ) -> KernelRunResult:
+        cancel_token: CancellationToken | None = None,
+        event_observer: DevEventObserver | None = None,
+    ) -> DrainResult:
         """Execute a single agent run.
 
-        Returns KernelRunResult with event and message transcript.
+        Returns DrainResult with terminal data and message transcript.
         Appends run messages to history for multi-turn accumulation.
+
+        Real-time event forwarding: intermediate events are forwarded
+        to DevStreamHook and DevEventObserver via the on_event callback
+        during drain, replacing the old hook-based streaming path.
         """
+        from matmaster.core.stream_drain import DrainResult, drain_run_stream
+
         exp = Exp(self._exp_config)
 
-        async def _run_once() -> KernelRunResult:
+        async def _run_once() -> DrainResult:
             try:
-                runtime = await exp.build_runtime(self._pg_ctx, bus=bus)
-                # Inject DevStreamHook (same pattern as AgentRunService)
-                spec = runtime.spec.model_copy(
-                    update={"hooks": [*runtime.spec.hooks, self._stream_hook]}
-                )
-                return await runtime.kernel.run(
-                    spec, task, history=self.history, stop_event=stop_event
+                runtime = await exp.build_runtime(self._pg_ctx)
+                spec = runtime.spec
+
+                # Devshell bypasses Exp.run_stream(), so it must inject
+                # cancellation into the session and tool catalog itself.
+                if cancel_token is not None:
+                    catalog = getattr(spec, "tool_catalog", None)
+                    if catalog is not None:
+                        catalog.inject_cancel_token(cancel_token)
+                    session = self._pg_ctx.session
+                    if session is not None:
+                        session._cancel_token = cancel_token
+
+                # Build on_event callback for real-time forwarding
+                def _on_event(event: Any) -> None:
+                    self._stream_hook.on_event(event)
+                    if event_observer is not None:
+                        event_observer.emit(event)
+
+                return await drain_run_stream(
+                    runtime.kernel.run_stream(
+                        spec, task, history=self.history, cancel_token=cancel_token
+                    ),
+                    on_event=_on_event,
                 )
             finally:
                 await exp._run_cleanup_callbacks()
 
         result = asyncio.run(_run_once())
+
         # Accumulate history for non-cancelled runs.
         # Message layout: [System, *history, User(task), ...new_messages]
         # We skip System + existing history + User to extract only new messages.
-        if result.result.status != "cancelled":
+        if result.status != "cancelled":
             skip_count = 1 + len(self.history) + 1  # System + history + User
             new_messages = result.messages[skip_count:]
             self.history.append(UserMessage(content=task))
             self.history.extend(new_messages)
+
+        # Emit RunResultEvent for observer
+        if event_observer is not None:
+            from matmaster.types.events import RunResultEvent
+
+            event_observer.emit(
+                RunResultEvent(
+                    source="agent",
+                    status=result.status,
+                    reason=result.reason,
+                    final_content=result.final_content,
+                    num_turns=result.num_turns,
+                    usage=result.usage,
+                    usage_vendor_by_turn=[
+                        dict(item)
+                        for item in getattr(result, "usage_vendor_by_turn", ())
+                    ],
+                )
+            )
+
         return result

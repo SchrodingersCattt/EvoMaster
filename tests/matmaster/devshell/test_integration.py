@@ -2,26 +2,27 @@
 
 Smoke tests the full pipeline end-to-end: DevRunner assembles Exp,
 Exp builds runtime with AgentKernel, kernel runs with mock providers,
-DevStreamHook captures terminal output, EventLogger captures bus events.
+DevStreamHook captures terminal output, DevEventObserver captures events.
 """
 
 from __future__ import annotations
 
-import asyncio
 import io
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import create_autospec, patch
 
-from matmaster.core.bus import MessageBus
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.event_logger import EventLogger
+from matmaster.devshell.event_observer import DevEventObserver
 from matmaster.devshell.runner import DevRunner
 from matmaster.devshell.stream_hook import DevStreamHook
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import StreamChunk
+from matmaster.types.session import Session
 
-# ── Mock Providers ──────────────────────────────────────
+# -- Mock Providers --
 
 
 class SimpleProvider:
@@ -68,13 +69,12 @@ class ToolCallingProvider:
     ) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
-            # Emit tool call delta (same format as agent_kernel tests)
             yield StreamChunk(
                 tool_call_deltas=[
                     {
                         'index': 0,
                         'id': 'tc-1',
-                        'name': 'bash',
+                        'name': 'Bash',
                         'arguments': '{"command": "echo hello"}',
                     }
                 ],
@@ -86,7 +86,7 @@ class ToolCallingProvider:
             )
 
 
-# ── Helpers ─────────────────────────────────────────────
+# -- Helpers --
 
 
 def _make_runner(
@@ -100,7 +100,7 @@ def _make_runner(
     config = DevConfig()
 
     with patch('matmaster.devshell.runner.DevRunner._create_session') as mock_session:
-        mock_session.return_value = MagicMock()
+        mock_session.return_value = create_autospec(Session, instance=True)
         return DevRunner(
             config=config,
             workdir=workdir,
@@ -109,14 +109,20 @@ def _make_runner(
         )
 
 
-# ── Tests ───────────────────────────────────────────────
+# -- Tests --
 
 
 class TestDevShellIntegration:
     """End-to-end integration: DevRunner -> Exp -> AgentKernel."""
 
     def test_full_run_with_tool_call(self, tmp_path: Path) -> None:
-        """Tool-calling provider triggers bash tool, DevStreamHook captures output."""
+        """Tool-calling provider triggers tool, result propagates correctly.
+
+        Note: DevShell uses kernel.run() (not run_stream()), and FullToolRunner
+        does not dispatch hook callbacks for pre_tool_call/post_tool_call (D-01).
+        Tool call events are only available via the generator path. DevStreamHook
+        captures stream content and segment completions, but not tool call text.
+        """
         output = io.StringIO()
         stream_hook = DevStreamHook(output=output)
         runner = _make_runner(
@@ -125,37 +131,32 @@ class TestDevShellIntegration:
             stream_hook=stream_hook,
         )
 
-        bus = MessageBus()
+        observer = DevEventObserver()
         log_file = tmp_path / 'events.jsonl'
         event_logger = EventLogger(log_file, run_id='run-001')
 
-        result = runner.run('echo hello', bus=bus)
+        result = runner.run('echo hello', event_observer=observer)
 
-        # Drain bus into event logger
-        while True:
-            try:
-                event = bus.get_nowait()
-                event_logger.log_event(event)
-            except asyncio.QueueEmpty:
-                break
+        # Drain observer into event logger
+        for event in observer.drain():
+            event_logger.log_event(event)
         event_logger.close()
 
-        # Verify result
-        assert result.result.reason == 'natural'
-        assert result.result.final_content == 'Done! I executed the command.'
+        # Verify result (tool call happened because provider returns text on 2nd call)
+        assert result.reason == 'natural'
+        assert result.final_content == 'Done! I executed the command.'
 
-        # Verify terminal output contains tool call
+        # Verify terminal output contains the final response
         terminal_output = output.getvalue()
-        assert 'tool_call: bash' in terminal_output
+        assert 'Done! I executed the command.' in terminal_output
 
-        # Verify history accumulated (UserMessage + AssistantMessage(tool_calls) + ToolMessage + AssistantMessage)
+        # Verify history accumulated
         assert len(runner.history) > 0
 
-        # Verify event log file was written
+        # Verify event log file was written with run_result
         assert log_file.exists()
         log_content = log_file.read_text()
-        assert 'tool_call' in log_content
-        assert 'tool_result' in log_content
+        assert 'run_result' in log_content
 
     def test_multi_turn_history(self, tmp_path: Path) -> None:
         """Multi-turn conversation accumulates history correctly."""
@@ -181,37 +182,34 @@ class TestDevShellIntegration:
         runner.run('hello')
 
         terminal_output = output.getvalue()
-        # SimpleProvider returns "Reply to msg #N" -- content should appear
         assert 'Reply to msg' in terminal_output
 
-    def test_bus_events_emitted(self, tmp_path: Path) -> None:
-        """MessageBus receives events when bus is provided."""
+    def test_observer_collects_events(self, tmp_path: Path) -> None:
+        """DevEventObserver collects events via hook callbacks."""
         runner = _make_runner(tmp_path, provider=SimpleProvider())
 
-        bus = MessageBus()
-        runner.run('test', bus=bus)
+        observer = DevEventObserver()
+        runner.run('test', event_observer=observer)
 
-        # Should have at least a RunResultEvent
-        events = []
-        while True:
-            try:
-                events.append(bus.get_nowait())
-            except asyncio.QueueEmpty:
-                break
-
+        events = observer.drain()
         event_types = [getattr(e, 'type', None) for e in events]
-        # EventEmitterHook emits response events for visible content chunks
+        # Observer hook emits response events for visible content segments
         assert 'response' in event_types
 
     def test_cancelled_run_does_not_accumulate_history(self, tmp_path: Path) -> None:
         """Cancelled runs should not add messages to history."""
-        import threading
-
         runner = _make_runner(tmp_path, provider=SimpleProvider())
 
-        stop = threading.Event()
-        stop.set()
-        result = runner.run('should cancel', stop_event=stop)
+        controller = CancellationController()
+        controller.cancel()
+        result = runner.run('should cancel', cancel_token=controller.token)
 
-        assert result.result.reason == 'cancelled'
+        assert result.reason == 'cancelled'
         assert len(runner.history) == 0
+
+    def test_run_without_observer_works(self, tmp_path: Path) -> None:
+        """Run without observer still works (observer is optional)."""
+        runner = _make_runner(tmp_path, provider=SimpleProvider())
+
+        result = runner.run('hello')
+        assert result.reason == 'natural'

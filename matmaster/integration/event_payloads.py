@@ -112,7 +112,7 @@ def _public_content_for_event(
             'name': payload.get('tool_name'),
             'result': payload.get('result'),
             'status': payload.get('status', 'success'),
-            'info': payload.get('info') or {},
+            'info': payload.get('info') or payload.get('payload') or {},
         }
 
     if event_type == 'confirmation_request':

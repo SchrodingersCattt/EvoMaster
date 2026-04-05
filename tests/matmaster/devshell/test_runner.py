@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import StreamChunk
+from matmaster.types.session import Session
 
 
 class MockProvider:
@@ -75,7 +76,7 @@ class TestDevRunner:
         with patch(
             "matmaster.devshell.runner.DevRunner._create_session"
         ) as mock_session:
-            mock_session.return_value = MagicMock()
+            mock_session.return_value = create_autospec(Session, instance=True)
             return DevRunner(
                 config=config,
                 workdir=workdir,
@@ -86,8 +87,8 @@ class TestDevRunner:
         runner = self._make_runner(tmp_path)
         result = runner.run("hello")
 
-        assert result.result.reason == "natural"
-        assert result.result.final_content == "hello"
+        assert result.reason == "natural"
+        assert result.final_content == "hello"
 
     def test_history_accumulates(self, tmp_path: Path) -> None:
         runner = self._make_runner(tmp_path)
@@ -105,31 +106,56 @@ class TestDevRunner:
         runner.run("test")
         # If we get here without error, cleanup worked
 
-    def test_stop_event(self, tmp_path: Path) -> None:
+    def test_cancel_token(self, tmp_path: Path) -> None:
         runner = self._make_runner(tmp_path)
-        stop = threading.Event()
-        stop.set()
-        result = runner.run("test", stop_event=stop)
-        assert result.result.reason == "cancelled"
+        controller = CancellationController()
+        controller.cancel()
+        result = runner.run("test", cancel_token=controller.token)
+        assert result.reason == "cancelled"
 
-    def test_exp_config_override_uses_toml(self, tmp_path: Path) -> None:
-        from matmaster.config.loader import load_exp_config
-        from matmaster.devshell.config import DevConfig
-        from matmaster.devshell.runner import DevRunner
+    def test_run_injects_cancel_token_into_catalog_and_session(
+        self, tmp_path: Path
+    ) -> None:
+        runner = self._make_runner(tmp_path)
+        controller = CancellationController()
+        catalog = MagicMock()
+        observed: dict[str, Any] = {}
 
-        workdir = tmp_path / "workspace"
-        workdir.mkdir()
-        exp = load_exp_config("direct")
-        with patch(
-            "matmaster.devshell.runner.DevRunner._create_session"
-        ) as mock_session:
-            mock_session.return_value = MagicMock()
-            runner = DevRunner(
-                config=DevConfig(),
-                workdir=workdir,
-                llm_provider=MockProvider(),
-                exp_config=exp,
-            )
-        assert runner._exp_config.name == "direct"
-        assert runner._exp_config.skills.enabled is True
-        assert runner._exp_config.max_turns == exp.max_turns
+        def fake_run_stream(spec, task, history=None, cancel_token=None):
+            observed["spec"] = spec
+            observed["task"] = task
+            observed["history"] = history
+            observed["cancel_token"] = cancel_token
+            return object()
+
+        runtime = MagicMock()
+        runtime.spec = MagicMock(tool_catalog=catalog)
+        runtime.kernel = MagicMock()
+        runtime.kernel.run_stream = fake_run_stream
+
+        fake_result = MagicMock()
+        fake_result.status = "cancelled"
+        fake_result.reason = "cancelled"
+        fake_result.messages = []
+        fake_result.final_content = ""
+        fake_result.num_turns = 0
+        fake_result.usage = {}
+
+        fake_exp = MagicMock()
+        fake_exp.build_runtime = AsyncMock(return_value=runtime)
+        fake_exp._run_cleanup_callbacks = AsyncMock()
+
+        with (
+            patch("matmaster.devshell.runner.Exp", return_value=fake_exp),
+            patch(
+                "matmaster.core.stream_drain.drain_run_stream",
+                new=AsyncMock(return_value=fake_result),
+            ),
+        ):
+            result = runner.run("test", cancel_token=controller.token)
+
+        assert result.reason == "cancelled"
+        assert runner._pg_ctx.session._cancel_token is controller.token
+        catalog.inject_cancel_token.assert_called_once_with(controller.token)
+        assert observed["task"] == "test"
+        assert observed["cancel_token"] is controller.token

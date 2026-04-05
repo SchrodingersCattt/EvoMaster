@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from fastapi import APIRouter, Body, Depends, Path, Request
 from fastapi.responses import StreamingResponse
@@ -248,7 +249,13 @@ async def chat_stream(
     # 给 agent 的 prompt：正文 + 附件 URL + 工作区路径；多轮历史由 run_agent 通过 task.meta['dialog_history'] 注入
     base_prompt = (req.content or '').strip()
     if req.files:
-        base_prompt += '\n\n[Attached files]\n' + '\n'.join(req.files)
+        normalized = [
+            urlunparse(
+                urlparse(u)._replace(path=quote(unquote(urlparse(u).path), safe='/'))
+            )
+            for u in req.files
+        ]
+        base_prompt += '\n\n[Attached files]\n' + '\n'.join(normalized)
     if req.workspace_paths:
         base_prompt += '\n\n[Workspace paths]\n' + '\n'.join(req.workspace_paths)
     return StreamingResponse(

@@ -31,3 +31,9 @@ def test_system_prompt_from_base():
     """system_prompt is loaded from _base.toml."""
     cfg = load_exp_config("direct")
     assert len(cfg.system_prompt.strip()) > 0
+
+
+def test_bohrium_tool_enabled_in_direct_toml():
+    """direct agent exposes the builtin Bohrium tool."""
+    cfg = load_exp_config("direct")
+    assert "Bohrium" in cfg.tools.builtin

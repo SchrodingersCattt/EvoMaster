@@ -1,10 +1,10 @@
-"""Event type hierarchy for the matmaster bus system.
+"""Event type hierarchy for the matmaster event system.
 
 Defines all 18 event types in two categories:
 - AgentEvent (8 types): emitted by the kernel during agent execution
 - SystemEvent (10 types): emitted by service-layer components
 
-BusEvent = AgentEvent | SystemEvent -- the unified type for MessageBus transport.
+BusEvent = AgentEvent | SystemEvent -- the unified event union type.
 
 All events use Pydantic discriminated union with the ``type`` field (Literal)
 as the discriminator, enabling type-safe deserialization from dicts/JSON.
@@ -69,7 +69,9 @@ class ToolResultEvent(EventBase):
     tool_name: str
     result: Any  # str | dict
     status: str = "success"
-    info: dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    turn_usage: dict[str, int] = Field(default_factory=dict)
+    total_usage: dict[str, int] = Field(default_factory=dict)
 
 
 class RunResultEvent(EventBase):
@@ -83,6 +85,13 @@ class RunResultEvent(EventBase):
     status: str = "completed"  # 'completed' | 'failed' | 'cancelled'
     reason: str = ""
     final_content: str | None = None
+    num_turns: int = 0
+    usage: dict[str, int] = Field(default_factory=dict)
+    usage_vendor_by_turn: list[dict[str, Any]] = Field(default_factory=list)
+    # exclude=True: messages carries the full conversation transcript
+    # (including system prompt) for internal drain consumers only.
+    # model_dump() excludes it, so SSE/frontend never sees it.
+    messages: list[Any] = Field(default_factory=list, exclude=True)
 
 
 class ErrorEvent(EventBase):
@@ -98,6 +107,8 @@ class AssistantStateEvent(EventBase):
 
     type: Literal["assistant_state"] = "assistant_state"
     state: dict[str, Any]  # AssistantMessage.model_dump() content
+    turn_usage: dict[str, int] = Field(default_factory=dict)
+    total_usage: dict[str, int] = Field(default_factory=dict)
 
 
 class SkillHitEvent(EventBase):
@@ -105,6 +116,15 @@ class SkillHitEvent(EventBase):
 
     type: Literal["skill_hit"] = "skill_hit"
     skill_name: str
+
+
+class ToolProgressEvent(EventBase):
+    """Streamed progress from a running tool (e.g., bash stdout lines)."""
+
+    type: Literal["tool_progress"] = "tool_progress"
+    call_id: str
+    tool_name: str
+    content: str = ""
 
 
 # ── SystemEvent: service-layer events ───────────────────
@@ -211,6 +231,7 @@ AgentEvent = Annotated[
         ErrorEvent,
         AssistantStateEvent,
         SkillHitEvent,
+        ToolProgressEvent,
     ],
     Field(discriminator="type"),
 ]
@@ -242,6 +263,7 @@ BusEvent = Annotated[
         ErrorEvent,
         AssistantStateEvent,
         SkillHitEvent,
+        ToolProgressEvent,
         # SystemEvent types
         ConfirmationRequestEvent,
         ConfirmationTimeoutEvent,

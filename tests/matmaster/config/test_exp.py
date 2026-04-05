@@ -17,7 +17,6 @@ class TestExpConfig:
         cfg = ExpConfig()
         assert cfg.name == "direct"
         assert cfg.max_turns == 100
-        assert cfg.guards == []
         assert cfg.developer_instructions == ""
         assert cfg.tools.builtin == ["*"]
 
@@ -26,7 +25,6 @@ class TestExpConfig:
         data = {
             "name": "direct",
             "max_turns": 200,
-            "guards": [],
             "developer_instructions": "You are Mat Master.",
             "tools": {"builtin": ["*"], "mcp": "*"},
         }
@@ -102,7 +100,7 @@ class TestExpSkillsConfig:
             enabled=True,
             skills_root="playground/mat_master/skills",
             cache_dir="matmaster/cache",
-            config_dir="configs/mat_master",
+            config_dir="config",
             mcp_config_file="mcp_config.json",
         )
         assert cfg.enabled is True
@@ -117,7 +115,7 @@ class TestExpConfigWithSkills:
                 "enabled": True,
                 "skills_root": "playground/mat_master/skills",
                 "cache_dir": "matmaster/cache",
-                "config_dir": "configs/mat_master",
+                "config_dir": "config",
                 "mcp_config_file": "mcp_config.json",
             },
         }

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from matmaster.sessions.local import LocalSession
+from matmaster.types.session import Session
 
 
 class TestLocalSessionExecBash:
@@ -38,12 +39,6 @@ class TestLocalSessionExecBash:
             "timeout" in result["stderr"].lower()
             or "timeout" in result["output"].lower()
         )
-
-    def test_is_input_returns_error(self, tmp_path: Path) -> None:
-        session = LocalSession(workspace_path=tmp_path)
-        result = session.exec_bash("echo hi", is_input=True)
-        assert result["exit_code"] == 1
-        assert "not supported" in result["stderr"].lower()
 
     def test_cwd_is_workspace(self, tmp_path: Path) -> None:
         session = LocalSession(workspace_path=tmp_path)
@@ -85,6 +80,20 @@ class TestLocalSessionFileOps:
         assert session.is_file(str(tmp_path / "dir")) is False
         assert session.is_file(str(tmp_path / "missing")) is False
 
+    def test_download_returns_bytes(self, tmp_path: Path) -> None:
+        target = tmp_path / "sample.bin"
+        target.write_bytes(b"abc123")
+
+        session = LocalSession(workspace_path=tmp_path)
+
+        assert session.download(str(target)) == b"abc123"
+
+    def test_download_missing_raises_file_not_found(self, tmp_path: Path) -> None:
+        session = LocalSession(workspace_path=tmp_path)
+
+        with pytest.raises(FileNotFoundError):
+            session.download(str(tmp_path / "missing.bin"))
+
 
 class TestLocalSessionLifecycle:
     """open/close are no-ops."""
@@ -98,3 +107,55 @@ class TestLocalSessionLifecycle:
         session = LocalSession(workspace_path=tmp_path)
         result = session.exec_bash("echo works")
         assert result["exit_code"] == 0
+
+
+class TestLocalSessionUploadDirectory:
+    """upload_directory via shutil.copytree."""
+
+    def test_upload_directory_copies_tree(self, tmp_path: Path) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        (src / "nested").mkdir(parents=True)
+        (src / "nested" / "out.txt").write_text("ok", encoding="utf-8")
+
+        session = LocalSession(workspace_path=tmp_path)
+        session.upload_directory(str(src), str(dst))
+
+        assert (dst / "nested" / "out.txt").read_text(encoding="utf-8") == "ok"
+
+
+class TestLocalSessionProtocol:
+    """LocalSession satisfies Session Protocol."""
+
+    def test_satisfies_session_protocol(self, tmp_path: Path) -> None:
+        session = LocalSession(workspace_path=tmp_path)
+        assert isinstance(session, Session)
+
+    def test_is_open_initial_false(self, tmp_path: Path) -> None:
+        session = LocalSession(workspace_path=tmp_path)
+        assert session.is_open is False
+
+    def test_is_open_after_open(self, tmp_path: Path) -> None:
+        session = LocalSession(workspace_path=tmp_path)
+        session.open()
+        assert session.is_open is True
+
+    def test_is_open_after_close(self, tmp_path: Path) -> None:
+        session = LocalSession(workspace_path=tmp_path)
+        session.open()
+        session.close()
+        assert session.is_open is False
+
+    def test_encoding_parameter(self, tmp_path: Path) -> None:
+        session = LocalSession(workspace_path=tmp_path, encoding="latin-1")
+        assert session._encoding == "latin-1"
+
+    def test_encoding_default_utf8(self, tmp_path: Path) -> None:
+        session = LocalSession(workspace_path=tmp_path)
+        assert session._encoding == "utf-8"
+
+    def test_works_before_open(self, tmp_path: Path) -> None:
+        session = LocalSession(workspace_path=tmp_path)
+        result = session.exec_bash("echo no-open")
+        assert result["exit_code"] == 0
+        assert "no-open" in result["stdout"]

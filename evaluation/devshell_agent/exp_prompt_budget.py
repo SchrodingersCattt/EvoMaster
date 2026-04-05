@@ -1,8 +1,8 @@
 """MatMaster ``matmaster/exps/{name}.toml`` prompt token budget (devshell loop).
 
-Counts the **full assembled prompt** that ``ContextBuilder.build()`` produces at
-agent start: ``system_prompt`` + ``developer_instructions`` + tool descriptions +
-skill meta info (section headers and separators included).
+Counts the **full assembled prompt** that current runtime wiring produces at
+agent start: ``ContextBuilder.build()`` output plus builtin/skill prompt
+injections collected from the registered tool catalog.
 
 Uses the same tiktoken model encoding as ``matmaster.core.context_compactor``.
 """
@@ -21,15 +21,7 @@ if TYPE_CHECKING:
 TARGET_MATMASTER_EXP_STATIC_PROMPT_TOKENS = 12_000
 # Hard cap for DevShell 迭代：被测 Agent 的完整初始系统 prompt（含 tools/skills 展开）
 MAX_MATMASTER_EXP_STATIC_PROMPT_TOKENS = 15_000
-
-# SkillTool has @property; values are fixed strings, kept here to avoid instantiation.
-_SKILL_TOOL_ENTRY = (
-    "use_skill",
-    "Use a skill by name. Three actions: "
-    "'get_info' retrieves full skill documentation, "
-    "'get_reference' fetches a specific reference file, "
-    "'run_script' executes a script from the skill.",
-)
+_STATIC_WORKSPACE_ROOT = Path("/workspace")
 
 
 def token_count_gpt4o(text: str) -> int:
@@ -47,29 +39,32 @@ def token_count_gpt4o(text: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _collect_tool_entries(cfg: ExpConfig) -> list[tuple[str, str]]:
-    """Collect ``(name, description)`` for tools that would be registered.
-
-    Mirrors ``Exp._init_builtin_tools`` / ``Exp._init_skill_tools`` but only
-    reads class-level metadata — no session or workdir needed.
-    """
+def _collect_tool_prompts(cfg: ExpConfig) -> str:
+    """Collect tool prompt injections using the current runtime tool surface."""
     from matmaster.tools.builtin import (
+        AgentTool,
         BashTool,
+        BohriumTool,
         EditTool,
         GlobTool,
         GrepTool,
-        ListDirTool,
         ReadTool,
-        SpawnTool,
-        TaskCompleteTool,
-        TaskCreateTool,
-        TaskGetTool,
-        TaskListTool,
-        TaskUpdateTool,
+        TodoWriteTool,
         WebFetchTool,
         WebSearchTool,
         WriteTool,
     )
+    from matmaster.tools.builtin.skill_tool import SkillTool
+    from matmaster.tools.tool_catalog import ToolCatalog
+    from matmaster.tools.tool_registry import ToolRegistry
+    from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+    from matmaster.types.topology import RuntimeTopology
+
+    async def _noop_spawn(
+        exp_name: str, task: str, cancel_token=None
+    ) -> str:  # pragma: no cover - never executed
+        del exp_name, task, cancel_token
+        return ""
 
     builtin_cfg = cfg.tools.builtin
     allow_all = "*" in builtin_cfg
@@ -78,56 +73,46 @@ def _collect_tool_entries(cfg: ExpConfig) -> list[tuple[str, str]]:
     def _want(name: str) -> bool:
         return allowed is None or name in allowed
 
-    entries: list[tuple[str, str]] = []
-
-    # 1. Native builtin tools (same order as Exp._init_builtin_tools)
-    native_classes: list[type] = [
-        BashTool,
-        ListDirTool,
-        ReadTool,
-        WriteTool,
-        EditTool,
-        GlobTool,
-        GrepTool,
-        TaskCreateTool,
-        TaskGetTool,
-        TaskListTool,
-        TaskUpdateTool,
-        TaskCompleteTool,
-        WebSearchTool,
-        WebFetchTool,
+    workdir = _STATIC_WORKSPACE_ROOT
+    tools = [
+        BashTool(workdir=workdir),
+        ReadTool(workdir=workdir),
+        WriteTool(workdir=workdir),
+        EditTool(workdir=workdir),
+        GlobTool(workdir=workdir),
+        GrepTool(workdir=workdir),
+        TodoWriteTool(workdir=workdir),
+        WebSearchTool(),
+        WebFetchTool(workdir=workdir),
+        BohriumTool(workdir=workdir),
     ]
-    for cls in native_classes:
-        if _want(cls.name):
-            entries.append((cls.name, cls.description))
 
-    # 2. Evo adapter tools (may not be importable in all environments)
-    try:
-        from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
+    registry = ToolRegistry()
+    for tool in tools:
+        if _want(tool.name):
+            registry.register(tool, source="builtin")
 
-        t = MonitorJobTool()
-        if _want(t.name):
-            entries.append((t.name, (t.params_class.__doc__ or "").strip()))
-    except Exception:
-        pass
-    try:
-        from playground.mat_master.tools.web_search import get_web_search_tool
+    if _want("Agent"):
+        registry.register(
+            AgentTool(workdir=workdir, spawn_fn=_noop_spawn, available_exps=[]),
+            source="builtin",
+        )
 
-        t = get_web_search_tool()
-        if _want(t.name):
-            entries.append((t.name, (t.params_class.__doc__ or "").strip()))
-    except Exception:
-        pass
-
-    # 3. SpawnTool (registered separately in Exp.build_runtime)
-    if _want(SpawnTool.name):
-        entries.append((SpawnTool.name, SpawnTool.description))
-
-    # 4. SkillTool (registered when skills.enabled)
     if cfg.skills.enabled:
-        entries.append(_SKILL_TOOL_ENTRY)
+        registry.register(SkillTool(), source="skill")
 
-    return entries
+    topology = RuntimeTopology(
+        session_kind="local",
+        control_root=str(workdir),
+        workspace_root=str(workdir),
+    )
+    catalog = ToolCatalog(registry, topology=topology)
+    desc_ctx = ToolDescriptionContext(
+        session_kind=topology.session_kind,
+        workspace_root=topology.workspace_root,
+        topology=topology,
+    )
+    return catalog.collect_prompts(desc_ctx)
 
 
 def _build_skills_meta(cfg: ExpConfig) -> str:
@@ -154,35 +139,39 @@ def _build_skills_meta(cfg: ExpConfig) -> str:
 def _build_full_prompt_text(cfg: ExpConfig) -> str:
     """Reconstruct the text ``ContextBuilder.build()`` would produce.
 
-    Includes: system_prompt, developer_instructions, skills meta, tool
-    descriptions.  Excludes dynamic runtime content (memory, task context,
-    lazy MCP tools injected after initial registration).
+    Includes: ``ContextBuilder`` sections plus prompt injections collected
+    from the current builtin / skill tool surface. Excludes dynamic runtime
+    content (memory, task context, lazy MCP tools injected after initial
+    registration).
     """
-    SEPARATOR = "\n\n---\n\n"
+    from matmaster.core.context_builder import ContextBuilder
+
     sections: list[str] = []
+    builder = ContextBuilder()
 
     # 1. System prompt
-    sp = (cfg.system_prompt or "").strip()
-    if sp:
-        sections.append(f"# System\n\n{sp}")
+    system_section = builder._build_system_prompt(cfg.system_prompt)
+    if system_section:
+        sections.append(system_section)
 
     # 2. Identity (developer_instructions)
-    di = (cfg.developer_instructions or "").strip()
-    if di:
-        sections.append(f"# Identity\n\n{di}")
+    identity_section = builder._build_identity(cfg.developer_instructions)
+    if identity_section:
+        sections.append(identity_section)
 
     # 3. Skills meta context
     skills_text = _build_skills_meta(cfg)
     if skills_text:
         sections.append(f"# Skills\n\n{skills_text}")
 
-    # 4. Tool descriptions
-    tool_entries = _collect_tool_entries(cfg)
-    if tool_entries:
-        lines = [f"- {name}: {desc}" for name, desc in tool_entries]
-        sections.append("# Available Tools\n\n" + "\n".join(lines))
+    # 4. Generic tools section from ContextBuilder (always present)
+    sections.append(builder._build_tools())
 
-    return SEPARATOR.join(sections)
+    prompt = builder.SEPARATOR.join(section for section in sections if section)
+    tool_prompts = _collect_tool_prompts(cfg)
+    if tool_prompts:
+        prompt = f"{prompt}\n\n{tool_prompts}" if prompt else tool_prompts
+    return prompt
 
 
 def static_prompt_token_total_for_exp(
@@ -193,8 +182,8 @@ def static_prompt_token_total_for_exp(
     """Return ``(system_prompt_tokens, developer_instructions_tokens, total)``.
 
     ``total`` is the token count for the full assembled prompt including
-    system_prompt, developer_instructions, tool descriptions, and skill meta
-    — matching what ``ContextBuilder.build()`` produces at agent start.
+    system_prompt, developer_instructions, the generic tools section,
+    tool prompt injections, and skill meta.
     """
     from matmaster.config.loader import load_exp_config
 

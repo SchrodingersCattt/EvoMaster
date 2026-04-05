@@ -1,20 +1,21 @@
-"""Root conftest -- async mock factories for Protocol testing.
-
-Provides MockAsyncLLMProvider, MockAsyncTool, MockAsyncHook that satisfy
-the async Protocol definitions. Used across all test suites for Phase 12+.
-"""
+"""Root conftest -- async mock factories for protocol testing."""
 
 from __future__ import annotations
 
+import os
+import tempfile
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from matmaster.core.hooks import HookAction
-from matmaster.tools.tool_result import ToolResult
-from matmaster.types.guards import GuardResult
-from matmaster.types.messages import LLMResponse, Message, StreamChunk, ToolCallData
+from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.topology import ToolPlane
+
+_TEST_LOG_DIR = Path(tempfile.gettempdir()) / "matmaster-evo-test-logs"
+_TEST_LOG_DIR.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("LOG_DIR", str(_TEST_LOG_DIR))
 
 
 class MockAsyncLLMProvider:
@@ -69,6 +70,15 @@ class MockAsyncTool:
         self._name = name
         self._result = result
         self._description = description
+        self.resource_claims = ()
+        self.capabilities = frozenset()
+        self.effect_level = "local_mutation"
+        self.fast_path_eligible = False
+        self.max_result_chars = 0
+        self.plane = ToolPlane.CONTROL_PLANE
+        self.state_mode = "stateless"
+        self.stop_mode = "cancellable"
+        self.exposed_to_model = True
 
     @property
     def name(self) -> str:
@@ -82,37 +92,14 @@ class MockAsyncTool:
     def json_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {}}
 
+    def describe(self, ctx: Any) -> str:
+        return self.description
+
+    def prompt(self, ctx: Any | None = None) -> str | None:
+        return None
+
     async def execute(self, arguments: dict[str, Any]) -> str:
         return self._result
-
-
-class MockAsyncHook:
-    """Async mock satisfying Hook Protocol for testing."""
-
-    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
-        return HookAction.CONTINUE
-
-    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
-        pass
-
-    async def pre_llm_call(self, messages: list[Message], turn: int) -> None:
-        pass
-
-    async def should_continue(self, messages: list[Message], turn: int) -> bool:
-        return True
-
-    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
-        pass
-
-    async def on_segment_complete(
-        self, segment_type: str, content: str, stream_id: str | None
-    ) -> None:
-        pass
-
-    async def on_guard_blocked(
-        self, tool_call: ToolCallData, result: GuardResult
-    ) -> None:
-        pass
 
 
 # -- Fixtures --
@@ -126,8 +113,3 @@ def async_llm_provider() -> MockAsyncLLMProvider:
 @pytest.fixture
 def async_tool() -> MockAsyncTool:
     return MockAsyncTool()
-
-
-@pytest.fixture
-def async_hook() -> MockAsyncHook:
-    return MockAsyncHook()

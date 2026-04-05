@@ -35,7 +35,7 @@
 
 - **executor 类型**：本仓库对 `executor.type == "dispatcher"` 注入 machine.remote_profile 与 resources.envs；对 `executor.type == "local"` 仅注入 `executor.env` 的 BOHRIUM_ACCESS_KEY 与 BOHRIUM_PROJECT_ID，供 bohr-agent-sdk 的 LocalExecutor 在本地运行时使用（`evomaster/env/bohrium.py`）。
 - **配置结构**：executor 模板来自 `mcp_config.calculation_executors[server_name].executor` 或 `executor_map[tool_name]`；未出现在 `calculation_executors` 中的 server（如纯 DB 检索）不会注入 executor，仅会注入 storage（若在 `calculation_servers` 中）。
-- **path_params_by_tool**：可选。`calculation_executors[server_name].path_params_by_tool` 将 **远程工具名**（如 `submit_run_gromacs`）映射到需在本地解析并上传 OSS 的参数名列表（须出现在 MCP `inputSchema.properties`）。用于 MCP 将 `List[Path]` 暴露为无 `format: path` 的 string 数组、或 submit 工具 description 过短导致无法从 docstring 推断 Path 的场景；未配置时仍依赖 schema / docstring / `*_path` 三层检测。
+- **path_params_by_tool**：可选。`calculation_executors[server_name].path_params_by_tool` 将 **远程工具名**（如 `submit_run_gromacs`）映射到需按输入工件处理的路径 selector 列表，既支持顶层参数名，也支持 `targets[].model_path` 这类嵌套 selector。selector 会对照解引用后的 schema 做校验，配置拼写错误需尽早失败。该配置适用于 MCP 将 `List[Path]` 暴露为无 `format: path` 的 string 数组、或 submit 工具 description 过短导致无法从 docstring 推断 Path 的场景；未配置时仍依赖 schema / docstring / `*_path` 三层检测。
 - **calculation OSS 对象键**：`evomaster/adaptors/calculation/oss_io.upload_file_to_oss` 使用 `{prefix}/{uuid}/{原始文件名}`，使 HTTPS URL 最后一截与本地 basename 一致，便于 bohr-agent-sdk 下载后与 `gmx` 等按 basename 引用一致。
 - **文档与兼容**：修改 Path Adaptor、executor/storage 结构或鉴权注入逻辑时，需考虑与 bohr-agent-sdk 的 CalculationMCPServer、DispatcherExecutor/LocalExecutor 及 storage 约定的兼容性；可参考 [bohr-agent-sdk 仓库](https://github.com/dptech-corp/bohr-agent-sdk) 的 `src/dp/agent/server/calculation_mcp_server.py` 与 `executor/`、`storage/` 实现。
 
@@ -107,13 +107,14 @@
 
 ## 其他约定
 
-- **配置目录**：产品主配置与 MCP JSON 位于 `configs/mat_master/`（仓库根目录不再保留泛用 `configs/config.yaml`）。`ConfigManager` / `get_config_manager()` 未指定 `config_dir` 时默认加载该目录下的 `config.yaml`。
+- **配置目录**：产品主配置与 MCP JSON 位于 `config/`。`ConfigManager` / `get_config_manager()` 未指定 `config_dir` 时默认加载该目录下的 `config.yaml`。
 - **维护本文件**：在对话或开发过程中，若产生新的、值得固化的约定或逻辑（如架构决策、命名/用法约定、废弃说明等），应适时补充到 AGENTS.md，便于后续遵守。
 - **多实例与 Redis**：API 与 Worker 均可多实例部署。跨实例的协调一律使用 Redis（或其它共享存储）；事件顺序、用户回复、run 归属与存活判断等均依赖 Redis，不依赖进程内状态或「请求与执行同进程」的假设。
 - **服务重启**：新增或修改功能时需考虑服务重启场景。进程内内存（如 `SESSIONS`）在重启后会清空；若逻辑依赖跨请求的状态（如会话级鉴权、当前 run 所用资源），应区分「需持久化」与「仅当次 run 有效」：前者落库或共享存储，后者可保留在内存，并确保重启后新请求能从 DB/共享存储恢复必要信息继续工作。
 - **run_interrupted 与长任务**：API 通过 Redis 的 `session_run_owner` 与 `worker_alive` 判断 run 是否在别的 pod 上。`session_run_owner` 有 TTL（默认 7200s）；若 Worker 在 run 期间不刷新该 key，长任务超过 TTL 后 key 过期，用户刷新页面时 API 会看到 `run_owner=None`、DB 仍为 active，从而误判为 stale 并推送 run_interrupted。因此 Worker 心跳中除刷新 `worker_alive` 外，还需周期刷新当前 session 的 `session_run_owner` TTL（见 `agent_worker._worker_heartbeat_loop` 与 `WorkerRegistryService.refresh_session_run_owner`）。
 - **仅 Worker 队列模式**：run 只在 Worker 上执行，不再支持「在 API 进程内执行 run」。请求中的 `mode: 'direct' | 'planner'` 仅表示任务类型，与执行位置无关。发送消息（POST /stream）必须配置 `REDIS_URL`，否则返回 503。
 - **Bohrium 远端共享目录**：Bohrium SSH / skill / bash 的远端工作目录默认直接使用项目级共享目录 `/share`；同一 Bohrium `project_id` 下的不同 session 共用该目录，不再默认创建 `/share/workspace/{session_id}`。修改远端 cwd、prompt 提示、文件浏览或下载落盘逻辑时，应遵守这一 project-scoped 语义。
+- **Runtime Credential Bridge**：Bohrium 鉴权已统一走 `matmaster/integration/runtime_bridge/` 的凭证桥。所有消费 Bohrium 凭证的模块（`BohriumTool`、`CalculationPathAdaptor`、`job_service`、`bohrium_env`）通过桥解析凭证，优先级为：显式参数 > session/runtime > 环境变量回退。生产环境中凭证由 session 自动注入，`.env` 中设置 `BOHRIUM_ACCESS_KEY` 仅用于本地开发回退。`/share/...` 等远端路径输出需要活跃的远程 session 以执行 upload_directory 同步逻辑；无 session 时 poll 会拒绝远端路径。
 - **单文件行数**：若某源文件行数超过 1000 行，应进行重构（拆分为多个模块/子模块、抽取类或函数等），以利于维护与协作。
 - **评测模块约定**：`evaluation/` 目录的详细约定（题库格式、字段规则、verify 类型、数据流、编写指南等）统一维护在 [`evaluation/AGENTS_evaluation.md`](evaluation/AGENTS_evaluation.md)。修改评测相关规则时，**必须同步更新该文件**；若通用约定有变更，**必须同步更新本文件**。
 - （可在此补充项目的其他通用约定，如测试、提交信息、目录结构等。）

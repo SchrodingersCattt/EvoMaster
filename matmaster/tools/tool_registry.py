@@ -1,21 +1,28 @@
-"""Tool Protocol and ToolRegistry -- unified tool management for the assembly layer.
+"""Tool Protocol and ToolRegistry -- pure storage layer for the assembly layer.
 
 Tool is the @runtime_checkable Protocol each tool must satisfy (name, description,
 json_schema, execute). ToolRegistry provides flat-namespace registration with source
-tags (builtin/mcp/skill), same-name override with warning, execute dispatch, and
-OpenAI function calling format definitions.
+tags (builtin/mcp/skill) and same-name override with warning.
 
-Consumed by AgentKernel via AgentRuntimeSpec.tool_registry.
+Upper-layer operations (execute dispatch, OpenAI definitions, cancellation injection)
+are handled by ToolCatalog and FullToolRunner. Registry is consumed only as a storage
+backend via ToolCatalog.registry.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
-from matmaster.tools.tool_result import ToolResult, normalize_tool_result
+if TYPE_CHECKING:
+    from matmaster.tools.tool_result import ToolResult
+    from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+    from matmaster.types.tool_spec import ResourceClaim
+    from matmaster.types.topology import ToolPlane
 
 logger = logging.getLogger(__name__)
+
+EffectLevel = Literal["none", "local_mutation", "external_effect"]
 
 
 @runtime_checkable
@@ -32,18 +39,52 @@ class Tool(Protocol):
     @property
     def description(self) -> str: ...
 
+    def describe(self, ctx: ToolDescriptionContext | None = None) -> str: ...
+
+    def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None: ...
+
     @property
     def json_schema(self) -> dict[str, Any]: ...
+
+    @property
+    def resource_claims(self) -> tuple[ResourceClaim, ...]: ...
+
+    @property
+    def capabilities(self) -> frozenset[str]: ...
+
+    @property
+    def effect_level(self) -> EffectLevel: ...
+
+    @property
+    def fast_path_eligible(self) -> bool: ...
+
+    @property
+    def max_result_chars(self) -> int: ...
+
+    @property
+    def plane(self) -> ToolPlane: ...
+
+    @property
+    def state_mode(self) -> Literal["stateless", "persistent"]: ...
+
+    @property
+    def stop_mode(self) -> Literal["cancellable", "best_effort", "non_cancellable"]: ...
+
+    @property
+    def exposed_to_model(self) -> bool: ...
 
     async def execute(self, arguments: dict[str, Any]) -> str | ToolResult | None: ...
 
 
 class ToolRegistry:
-    """Flat-namespace tool registry with source tracking.
+    """Pure storage: flat-namespace tool registry with source tracking.
 
     Registration order determines override: assemble() registers
     builtin -> MCP -> skill, so skill tools take final precedence.
     Same-name registration overwrites the previous entry with a warning log.
+
+    Upper-layer operations (execute, definitions, cancellation propagation) live in
+    ToolCatalog and FullToolRunner -- not here.
     """
 
     def __init__(self) -> None:
@@ -63,43 +104,18 @@ class ToolRegistry:
         self._tools[tool.name] = tool
         self._sources[tool.name] = source
 
-    async def execute(self, name: str, arguments: dict[str, Any]) -> ToolResult:
-        """Dispatch execution to the named tool.
-
-        Returns error ToolResult if tool name not found, listing available tools.
-        """
-        tool = self._tools.get(name)
-        if tool is None:
-            available = ", ".join(sorted(self._tools))
-            return ToolResult(
-                status="error",
-                content=f"Error: Tool '{name}' not found. Available: {available}",
-            )
-        result = await tool.execute(arguments)
-        return normalize_tool_result(result)
-
-    def get_tool_definitions(self) -> list[dict[str, Any]]:
-        """Return tool definitions in OpenAI function calling format."""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.json_schema,
-                },
-            }
-            for t in self._tools.values()
-        ]
-
-    def get_tools_by_source(self, source: str) -> list[Tool]:
-        """Return tools registered under the given source label."""
-        return [self._tools[name] for name, s in self._sources.items() if s == source]
-
     @property
     def all_tools(self) -> list[Tool]:
         """Return all registered Tool instances."""
         return list(self._tools.values())
+
+    def get_raw(self, name: str) -> Tool | None:
+        """Return the registered tool instance by name, or None."""
+        return self._tools.get(name)
+
+    def get_source(self, name: str) -> str:
+        """Return the registration source for a tool, or 'unknown'."""
+        return self._sources.get(name, "unknown")
 
     def __len__(self) -> int:
         return len(self._tools)

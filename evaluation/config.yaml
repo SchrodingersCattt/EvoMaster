@@ -1,6 +1,6 @@
 # MATTER evaluation module standalone config
 
-modes: ["direct", "planner"]
+modes: ["direct"]
 k: 1
 question_bank_dir: "evaluation/question_bank"
 output_dir: "runs/mat_master_eval"
@@ -9,8 +9,8 @@ use_seed_prompt: true
 max_workers: 1
 random_seed: 7
 
-# Mat Master runtime config used by evaluator runner
-mat_config_path: "configs/mat_master/config.yaml"
+# Mat Master LLM config (matmaster standalone, no evomaster dependency)
+mat_config_path: "config/llm_config.yaml"
 
 # Axis weights for weighted evaluation (v5+)
 # These control the relative importance of correctness, grounding, and efficiency.

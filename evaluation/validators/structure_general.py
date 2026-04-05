@@ -10,11 +10,17 @@ from __future__ import annotations
 import fnmatch
 from pathlib import Path
 
-import numpy as np
+# ---------------------------------------------------------------------------
+# Lazy optional-dep imports (numpy, pymatgen)
+# ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Lazy pymatgen import (optional dep)
-# ---------------------------------------------------------------------------
+_NP_AVAILABLE = False
+try:
+    import numpy as np
+
+    _NP_AVAILABLE = True
+except ImportError:
+    np = None  # type: ignore[assignment]
 
 _PMG_AVAILABLE = False
 try:

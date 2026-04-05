@@ -26,7 +26,6 @@ from .events import (
     ToolResultEvent,
     WorkspaceUploadErrorEvent,
 )
-from .guards import Guard, GuardContext, GuardResult, RecentCall
 from .llm_provider import LLMProvider
 from .messages import (
     AssistantMessage,
@@ -40,6 +39,10 @@ from .messages import (
     UserMessage,
 )
 from .runtime import AgentRuntimeSpec, CompactionConfig
+from .session import LocalSessionConfig, Session, SessionConfig, SSHSessionConfig
+from .tool_decision import ToolDecision
+from .tool_spec import ResourceClaim, ToolBinding, ToolInstance, ToolSpec
+from .topology import RuntimeTopology, SessionCapabilities, ToolPlane
 from .worker_registry import WorkerRegistry
 
 __all__ = [
@@ -69,11 +72,6 @@ __all__ = [
     "ToolCallEvent",
     "ToolResultEvent",
     "WorkspaceUploadErrorEvent",
-    # guards
-    "Guard",
-    "GuardContext",
-    "GuardResult",
-    "RecentCall",
     # llm
     "LLMProvider",
     # messages
@@ -89,6 +87,20 @@ __all__ = [
     # runtime
     "AgentRuntimeSpec",
     "CompactionConfig",
+    # tool runtime v2
+    "ToolPlane",
+    "SessionCapabilities",
+    "RuntimeTopology",
+    "ToolSpec",
+    "ResourceClaim",
+    "ToolBinding",
+    "ToolInstance",
+    "ToolDecision",
+    # session
+    "Session",
+    "SessionConfig",
+    "LocalSessionConfig",
+    "SSHSessionConfig",
     # worker registry
     "WorkerRegistry",
 ]

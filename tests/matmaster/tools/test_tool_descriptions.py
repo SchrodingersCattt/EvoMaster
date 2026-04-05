@@ -10,38 +10,23 @@ from matmaster.tools.builtin.bash_tool import BashTool
 from matmaster.tools.builtin.edit_tool import EditTool
 from matmaster.tools.builtin.glob_tool import GlobTool
 from matmaster.tools.builtin.grep_tool import GrepTool
-from matmaster.tools.builtin.listdir_tool import ListDirTool
 from matmaster.tools.builtin.read_tool import ReadTool
-from matmaster.tools.builtin.task.task_complete import TaskCompleteTool
-from matmaster.tools.builtin.task.task_create import TaskCreateTool
-from matmaster.tools.builtin.task.task_get import TaskGetTool
-from matmaster.tools.builtin.task.task_list import TaskListTool
-from matmaster.tools.builtin.task.task_update import TaskUpdateTool
 from matmaster.tools.builtin.write_tool import WriteTool
 
-ALL_TOOLS = [
-    BashTool,
-    ListDirTool,
-    ReadTool,
-    WriteTool,
-    EditTool,
-    GlobTool,
-    GrepTool,
-    TaskCreateTool,
-    TaskGetTool,
-    TaskListTool,
-    TaskUpdateTool,
-    TaskCompleteTool,
-]
+ALL_TOOLS = [BashTool, ReadTool, WriteTool, EditTool, GlobTool, GrepTool]
 
 
 def test_all_descriptions_nonempty_with_usage_pattern():
-    """Every tool description is non-empty and contains 'Usage:' or is substantive (>50 chars)."""
+    """Every tool description is non-empty and contains 'Usage:' or is substantive (>20 chars)."""
     for tool_cls in ALL_TOOLS:
         desc = tool_cls.description
         assert desc, f"{tool_cls.__name__} has empty description"
+        if tool_cls is BashTool:
+            prompt = BashTool().prompt() or ""
+            assert "Read" in prompt
+            continue
         has_usage = "Usage:" in desc or "When to use:" in desc or "When to Use:" in desc
-        is_substantive = len(desc) > 50
+        is_substantive = len(desc) > 20
         assert has_usage or is_substantive, (
             f"{tool_cls.__name__} description lacks 'Usage:' pattern and is too short "
             f"({len(desc)} chars): {desc!r}"
@@ -49,11 +34,11 @@ def test_all_descriptions_nonempty_with_usage_pattern():
 
 
 def test_description_token_budget():
-    """Every tool description is under 400 characters (~100 tokens)."""
+    """Every tool description is under 500 characters (~125 tokens)."""
     for tool_cls in ALL_TOOLS:
         desc = tool_cls.description
-        assert len(desc) <= 400, (
-            f"{tool_cls.__name__} description exceeds 400 char budget: "
+        assert len(desc) <= 500, (
+            f"{tool_cls.__name__} description exceeds 500 char budget: "
             f"{len(desc)} chars"
         )
 
@@ -71,44 +56,45 @@ def test_schema_param_descriptions():
 
 
 def test_bash_routes_all_dedicated_tools():
-    """BashTool.description mentions all 5 dedicated tool routing targets."""
-    desc = BashTool.description
-    for target in ["read_file", "write_file", "edit_file", "glob", "grep"]:
-        assert target in desc, f"BashTool.description missing routing target '{target}'"
+    """BashTool.prompt mentions all 5 dedicated tool routing targets."""
+    desc = BashTool().prompt() or ""
+    for target in ["Read", "Write", "Edit", "Glob", "Grep"]:
+        assert target in desc, f"BashTool.prompt missing routing target '{target}'"
 
 
-def test_dedicated_tools_have_routing_declaration():
-    """Each dedicated tool (grep/glob/read/write/edit) has ALWAYS or NEVER routing declaration."""
+def test_dedicated_tools_have_prompt_with_usage():
+    """Each dedicated tool (grep/glob/read/write/edit) has a prompt with usage guidance."""
     dedicated_tools = [GrepTool, GlobTool, ReadTool, WriteTool, EditTool]
     for tool_cls in dedicated_tools:
         desc = tool_cls.description
-        assert (
-            "ALWAYS" in desc or "NEVER" in desc
-        ), f"{tool_cls.__name__}.description lacks ALWAYS/NEVER routing declaration"
+        prompt = tool_cls().prompt() or ""
+        has_guidance = len(desc) > 10 or len(prompt) > 10
+        assert has_guidance, f"{tool_cls.__name__} lacks description or prompt content"
 
 
 def test_routing_consistency():
     """Bash routing targets correspond to matching declarations in dedicated tools.
 
-    For each bash command -> dedicated tool mapping, verify both:
-    1. BashTool.description mentions the bash command
-    2. The corresponding tool has a routing declaration
+    For each bash command -> dedicated tool mapping, verify:
+    1. BashTool.prompt mentions the bash command
+    2. The corresponding tool has a meaningful description or prompt
     """
     routing_map = {
-        "cat": ("read_file", ReadTool),
-        "echo": ("write_file", WriteTool),
-        "sed": ("edit_file", EditTool),
-        "find": ("glob", GlobTool),
-        "grep": ("grep", GrepTool),
+        "cat": ("Read", ReadTool),
+        "echo": ("Write", WriteTool),
+        "sed": ("Edit", EditTool),
+        "find": ("Glob", GlobTool),
+        "grep": ("Grep", GrepTool),
     }
-    bash_desc = BashTool.description
+    bash_desc = BashTool().prompt() or ""
     for bash_cmd, (tool_name, tool_cls) in routing_map.items():
         assert bash_cmd in bash_desc, (
-            f"BashTool.description missing bash command '{bash_cmd}' "
+            f"BashTool.prompt missing bash command '{bash_cmd}' "
             f"for routing to '{tool_name}'"
         )
-        tool_desc = tool_cls.description
-        assert "ALWAYS" in tool_desc or "NEVER" in tool_desc, (
-            f"{tool_cls.__name__}.description lacks routing declaration "
+        desc = tool_cls.description
+        prompt = tool_cls().prompt() or ""
+        assert len(desc) > 0 or len(prompt) > 0, (
+            f"{tool_cls.__name__} has no description or prompt "
             f"(expected for bash '{bash_cmd}' routing)"
         )

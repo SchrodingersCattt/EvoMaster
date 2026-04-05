@@ -6,6 +6,8 @@ mock implementation correctness (set/refresh/delete/get).
 
 from __future__ import annotations
 
+import pytest
+
 from matmaster.types.worker_registry import WorkerRegistry
 
 # ---------------------------------------------------------------------------
@@ -133,14 +135,20 @@ class TestWorkerRegistryServiceAdapter:
 
     def test_adapter_isinstance_check(self) -> None:
         """Adapter passes WorkerRegistry isinstance check."""
-        from src.services.worker_registry_adapter import WorkerRegistryServiceAdapter
+        WorkerRegistryServiceAdapter = pytest.importorskip(
+            "src.services.worker_registry_adapter",
+            reason="src not available (isolation test)",
+        ).WorkerRegistryServiceAdapter
 
         adapter = WorkerRegistryServiceAdapter(_StubService())
         assert isinstance(adapter, WorkerRegistry)
 
     def test_adapter_delete_returns_bool(self) -> None:
         """Adapter bridges None -> True for delete."""
-        from src.services.worker_registry_adapter import WorkerRegistryServiceAdapter
+        WorkerRegistryServiceAdapter = pytest.importorskip(
+            "src.services.worker_registry_adapter",
+            reason="src not available (isolation test)",
+        ).WorkerRegistryServiceAdapter
 
         adapter = WorkerRegistryServiceAdapter(_StubService())
         result = adapter.delete_session_run_owner("s1")
@@ -148,7 +156,10 @@ class TestWorkerRegistryServiceAdapter:
 
     def test_adapter_delegates_set(self) -> None:
         """Adapter delegates set_session_run_owner to service."""
-        from src.services.worker_registry_adapter import WorkerRegistryServiceAdapter
+        WorkerRegistryServiceAdapter = pytest.importorskip(
+            "src.services.worker_registry_adapter",
+            reason="src not available (isolation test)",
+        ).WorkerRegistryServiceAdapter
 
         svc = _StubService()
         adapter = WorkerRegistryServiceAdapter(svc)
@@ -158,7 +169,10 @@ class TestWorkerRegistryServiceAdapter:
 
     def test_adapter_delegates_refresh(self) -> None:
         """Adapter delegates refresh_session_run_owner to service."""
-        from src.services.worker_registry_adapter import WorkerRegistryServiceAdapter
+        WorkerRegistryServiceAdapter = pytest.importorskip(
+            "src.services.worker_registry_adapter",
+            reason="src not available (isolation test)",
+        ).WorkerRegistryServiceAdapter
 
         svc = _StubService()
         adapter = WorkerRegistryServiceAdapter(svc)
@@ -168,7 +182,10 @@ class TestWorkerRegistryServiceAdapter:
 
     def test_adapter_delegates_get(self) -> None:
         """Adapter delegates get_session_run_owner to service."""
-        from src.services.worker_registry_adapter import WorkerRegistryServiceAdapter
+        WorkerRegistryServiceAdapter = pytest.importorskip(
+            "src.services.worker_registry_adapter",
+            reason="src not available (isolation test)",
+        ).WorkerRegistryServiceAdapter
 
         svc = _StubService()
         adapter = WorkerRegistryServiceAdapter(svc)

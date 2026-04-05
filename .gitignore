@@ -21,7 +21,6 @@ downloads/
 eggs/
 .eggs/
 lib/
-!playground/mat_master/frontend/src/lib/
 lib64/
 parts/
 sdist/
@@ -182,12 +181,15 @@ logs/
 .agent/
 .agents/
 
-# Agent plugin docs
-docs/superpowers/
-docs/plans/
+# Planning & docs (local only)
+.planning/
+docs/
 
 # Skill tool schema cache
 !matmaster/cache/
+
+# Archived playground skills (Phase 29) - git history preserves full content
+.archive/
 
 # Worktrees
 .worktrees/

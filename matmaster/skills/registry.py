@@ -14,11 +14,40 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+
+def _optional_strip(value: str | None) -> str | None:
+    if value is None:
+        return None
+    s = value.strip()
+    return s if s else None
+
+
+def _parse_depends_on_list(raw: str | None) -> list[str]:
+    if raw is None or not raw.strip():
+        return []
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+SkillTypeLiteral = Literal["operator", "mcp-loader", "orchestrator"]
+
+
+def _parse_skill_type(raw: str | None) -> SkillTypeLiteral | None:
+    s = _optional_strip(raw)
+    if s is None:
+        return None
+    if s == "operator":
+        return "operator"
+    if s == "mcp-loader":
+        return "mcp-loader"
+    if s == "orchestrator":
+        return "orchestrator"
+    raise ValueError(f"Invalid skill_type: {s!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -31,6 +60,9 @@ class SkillMetaInfo(BaseModel):
 
     name: str = Field(description="技能名称")
     description: str = Field(description="技能描述")
+    skill_type: SkillTypeLiteral | None = None
+    mcp_server: str | None = None
+    depends_on: list[str] = Field(default_factory=list)
     extras: dict[str, Any] = Field(default_factory=dict, description="扩展字段")
 
 
@@ -67,7 +99,7 @@ class Skill:
         if not fm_match:
             raise ValueError(f"Invalid SKILL.md: no frontmatter in {skill_md}")
 
-        known_keys = {"name", "description"}
+        known_keys = {"name", "description", "skill_type", "mcp_server", "depends_on"}
         data: dict[str, str] = {}
         for line in fm_match.group(1).split("\n"):
             line = line.strip()
@@ -82,6 +114,9 @@ class Skill:
         return SkillMetaInfo(
             name=data.get("name", self.skill_path.name),
             description=data.get("description", ""),
+            skill_type=_parse_skill_type(data.get("skill_type")),
+            mcp_server=_optional_strip(data.get("mcp_server")),
+            depends_on=_parse_depends_on_list(data.get("depends_on")),
             extras=extras,
         )
 

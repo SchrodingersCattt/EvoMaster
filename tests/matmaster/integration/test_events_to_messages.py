@@ -6,13 +6,19 @@ types Message types (UserMessage, AssistantMessage, ToolMessage).
 
 from __future__ import annotations
 
+import pytest
+
 from matmaster.types.messages import (
     AssistantMessage,
     ToolCallData,
     ToolMessage,
     UserMessage,
 )
-from src.services.chat_history import ChatHistoryConverter
+
+ChatHistoryConverter = pytest.importorskip(
+    "src.services.chat_history",
+    reason="src not available (isolation test)",
+).ChatHistoryConverter
 
 
 def _user_event(content: str = "hello") -> dict:
@@ -245,6 +251,31 @@ class TestEventsToMessagesPreservesOrder:
         assert isinstance(result[-1], AssistantMessage)
         assert result[-1].content == "answer"
         assert result[-1].reasoning_content == "hidden reasoning"
+
+    def test_assistant_state_drops_trivial_tool_call_preamble_content(self):
+        events = [
+            _user_event("q"),
+            _assistant_state_event(
+                content="...",
+                tool_calls=[
+                    {
+                        "id": "call-1",
+                        "name": "bash",
+                        "arguments": {"cmd": "pwd"},
+                    }
+                ],
+            ),
+            _tool_result_event("call-1", "bash", "/tmp"),
+            _response_event("done"),
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assistant_with_tools = [
+            m for m in result if isinstance(m, AssistantMessage) and m.tool_calls
+        ]
+        assert len(assistant_with_tools) == 1
+        assert assistant_with_tools[0].content is None
 
 
 class TestEventsToMessagesPersistenceRoundTrip:

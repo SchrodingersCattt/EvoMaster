@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
+import io
 import json
 import logging
 import sys
@@ -25,7 +25,7 @@ def _project_root() -> Path:
 
 
 def _load_agents_general_llm(main_config: Path) -> str | None:
-    """``agents.general.llm`` from ``matmaster_config/config.yaml`` (profile key)."""
+    """``agents.general.llm`` from ``config/config.yaml`` (profile key)."""
     if not main_config.is_file():
         return None
     with open(main_config, encoding="utf-8") as f:
@@ -71,18 +71,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="NAME",
         help=(
-            "matmaster/exps/{NAME}.toml. Omit or ``devshell``: load ``direct`` but narrow "
-            "skills_root to struct-DB + mcp-mat-sg lazymcp stubs; mat_sg tools narrowed to "
-            "generate_ordered_replicas only. ``direct``: unpatched production toml. "
-            "MCP paths use [skills].config_dir (typically matmaster_config/)."
+            "matmaster/exps/{NAME}.toml. Omit or `devshell`: use the patched direct exp "
+            "for interactive devshell defaults. `direct`: use the unpatched production exp."
         ),
+    )
+    common.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="Optional devshell YAML (agent/session/tools only; LLM comes from config/llm_config.yaml)",
     )
     common.add_argument(
         "--model",
         type=str,
         default=None,
         help=(
-            "LLM route key, matching routes in matmaster_config/llm_config.yaml "
+            "LLM route key, matching routes in config/llm_config.yaml "
             "(e.g. claude-sonnet-4-6); omit to use config.yaml agents.general.llm or llm_config default"
         ),
     )
@@ -159,8 +163,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     """Load LLM config, build provider, return DevRunner and related objects."""
     root = _project_root()
-    llm_yaml = root / "matmaster_config" / "llm_config.yaml"
-    main_yaml = root / "matmaster_config" / "config.yaml"
+    llm_yaml = root / "config" / "llm_config.yaml"
+    main_yaml = root / "config" / "config.yaml"
 
     if not llm_yaml.is_file():
         print(
@@ -201,20 +205,33 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     load_dotenv(find_dotenv(f".env.{current_env}"))
 
     from matmaster.config.loader import load_exp_config
-    from matmaster.devshell.config import DevConfig
+    from matmaster.devshell.config import DevConfig, load_dev_config
     from matmaster.devshell.exp_patch import devshell_default_exp_config
 
     exp_opt = (getattr(args, "exp", None) or "").strip() or None
-    try:
-        if not exp_opt or exp_opt == "devshell":
-            exp_override = devshell_default_exp_config()
-        else:
-            exp_override = load_exp_config(exp_opt)
-    except (FileNotFoundError, ValueError) as e:
-        label = exp_opt or "devshell"
-        print(f"Error loading exp '{label}': {e}", file=sys.stderr)
-        sys.exit(1)
-    config = DevConfig()
+    exp_override = None
+    if exp_opt is not None or not args.config:
+        try:
+            if not exp_opt or exp_opt == "devshell":
+                exp_override = devshell_default_exp_config()
+            else:
+                exp_override = load_exp_config(exp_opt)
+        except (FileNotFoundError, ValueError) as e:
+            label = exp_opt or "devshell"
+            print(f"Error loading exp '{label}': {e}", file=sys.stderr)
+            sys.exit(1)
+
+    if args.config:
+        try:
+            config = load_dev_config(args.config)
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error loading config: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        config = DevConfig()
 
     if args.session:
         config = config.model_copy(
@@ -228,11 +245,8 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     from matmaster.devshell.stream_hook import DevStreamHook
 
     # Suppress stream output in headless+json mode
-    if (
-        getattr(args, "prompt", None) is not None
-        or getattr(args, "prompt_file", None) is not None
-    ):
-        stream_hook = DevStreamHook(verbose=args.verbose)
+    if args.command == "run":
+        stream_hook = DevStreamHook(output=io.StringIO(), verbose=args.verbose)
     else:
         stream_hook = DevStreamHook(verbose=args.verbose)
 
@@ -249,24 +263,26 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
 
 
 def _run_with_event_log(runner: Any, prompt: str, log_dir: Path) -> tuple[Any, Path]:
-    """Run one task with MessageBus + EventLogger (same JSONL shape as REPL).
+    """Run one task with DevEventObserver + EventLogger (same JSONL shape as REPL).
 
     Writes ``log_dir/events_YYYYMMDD_HHMMSS.jsonl``.
     """
-    from matmaster.core.bus import MessageBus
+    from queue import Empty
+
     from matmaster.devshell.event_logger import EventLogger
+    from matmaster.devshell.event_observer import DevEventObserver
 
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
     event_logger = EventLogger(log_file, run_id="run-001")
-    bus = MessageBus()
+    observer = DevEventObserver()
 
     result_holder: list[Any] = []
     error_holder: list[BaseException] = []
 
     def _worker() -> None:
         try:
-            r = runner.run(prompt, bus=bus)
+            r = runner.run(prompt, event_observer=observer)
             result_holder.append(r)
         except BaseException as e:
             error_holder.append(e)
@@ -276,18 +292,15 @@ def _run_with_event_log(runner: Any, prompt: str, log_dir: Path) -> tuple[Any, P
 
     while worker.is_alive():
         try:
-            event = bus.get_nowait()
+            event = observer.get_nowait()
             event_logger.log_event(event)
-        except asyncio.QueueEmpty:
+        except Empty:
             time.sleep(0.1)
             continue
 
-    while True:
-        try:
-            event = bus.get_nowait()
-            event_logger.log_event(event)
-        except asyncio.QueueEmpty:
-            break
+    # Drain remaining events
+    for event in observer.drain():
+        event_logger.log_event(event)
 
     worker.join()
 
@@ -297,7 +310,6 @@ def _run_with_event_log(runner: Any, prompt: str, log_dir: Path) -> tuple[Any, P
         if not result_holder:
             raise RuntimeError("run produced no result")
         result = result_holder[0]
-        event_logger.log_event(result.result.to_run_result_event())
         return result, log_file
     finally:
         event_logger.close()
@@ -331,25 +343,26 @@ def _run_single(
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    kr = result.result
     summary: dict[str, Any] = {
         "model": getattr(resolved, "model", None),
         "profile_key": getattr(resolved, "profile_key", None),
         "route_key": getattr(resolved, "route_key", None),
-        "status": kr.status,
-        "reason": kr.reason,
-        "final_content": kr.final_content,
-        "num_turns": kr.num_turns,
-        "usage": dict(kr.usage) if kr.usage else {},
-        "usage_vendor_by_turn": [dict(x) for x in kr.usage_vendor_by_turn],
+        "status": result.status,
+        "reason": result.reason,
+        "final_content": result.final_content,
+        "num_turns": result.num_turns,
+        "usage": dict(result.usage) if result.usage else {},
     }
+    vendor_turns = getattr(result, "usage_vendor_by_turn", ())
+    if vendor_turns:
+        summary["usage_vendor_by_turn"] = [dict(item) for item in vendor_turns]
     line = json.dumps(summary, ensure_ascii=False)
     print(line)
     if args.json_out is not None:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(line + "\n", encoding="utf-8")
 
-    return 0 if kr.reason == "natural" else 1
+    return 0 if result.reason == "natural" else 1
 
 
 def main(argv: list[str] | None = None) -> None:

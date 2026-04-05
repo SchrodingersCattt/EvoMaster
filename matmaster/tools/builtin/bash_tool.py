@@ -1,186 +1,127 @@
-"""BashTool -- execute bash commands via session.
+"""matmaster/tools/builtin/bash_tool.py
 
-Reuses evomaster bash_safety for dangerous command detection.
-Mirrors the evomaster BashTool behavior (proxy clear, is_input mode)
-but satisfies the matmaster Tool Protocol directly.
+BashTool — execute bash commands via session.
 
-Dual-path execute:
-- matmaster LocalSession -> native asyncio.create_subprocess_exec
-- evomaster / other sessions -> sync session.exec_bash (via base class)
+CC Reference: tools/BashTool/ (toolName.ts, prompt.ts, BashTool.tsx)
+CC name: Bash
 """
 
 from __future__ import annotations
 
-import asyncio
-import sys
 from typing import Any, ClassVar
 
-from evomaster.agent.tools.builtin.bash_safety import is_dangerous_bash_command
+from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
 
 from .base import BuiltinTool
 
-# Proxy clear prefix -- injected before each new command to prevent
-# platform-injected proxies from blocking curl/wget/git on remote nodes.
-_PROXY_CLEAR_PREFIX = (
-    'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= '
-    'NO_PROXY= no_proxy= ftp_proxy= FTP_PROXY=; '
-    'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY '
-    'NO_PROXY no_proxy ftp_proxy FTP_PROXY WGETRC 2>/dev/null; '
-)
-
 
 class BashTool(BuiltinTool):
-    """Execute bash commands in the session shell."""
+    """Execute bash commands in the session shell.
 
-    name: ClassVar[str] = 'execute_bash'
-    description: ClassVar[str] = (
-        'Execute a bash command in the session shell.\n\n'
-        'Do not use bash for: cat/head/tail/sed/awk/find/ls/grep/rg/echo. '
-        'Use read_file, edit_file, write_file, glob, grep instead.\n\n'
-        'Paths: local/devshell cwd is the task workspace; do not assume /share exists. '
-        'Bohrium SSH: shared storage is usually /share, not /workspace.'
-    )
+    CC name: Bash (BashTool)
+    """
+
+    name: ClassVar[str] = "Bash"
+    description: ClassVar[str] = "Executes a given bash command and returns its output."
     json_schema: ClassVar[dict[str, Any]] = {
-        'type': 'object',
-        'properties': {
-            'command': {
-                'type': 'string',
-                'description': (
-                    'The bash command to execute. Prefer dedicated tools for file operations. '
-                    'Local: cwd is the workspace (relative paths OK). '
-                    'Bohrium SSH only: shared storage is often /share (not /workspace).'
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": "The command to execute",
+            },
+            "timeout": {
+                "type": "integer",
+                "description": (
+                    "Optional timeout in milliseconds (max 600000). "
+                    "Default: 120000ms (2 minutes)."
                 ),
             },
-            'is_input': {
-                'type': 'string',
-                'enum': ['true', 'false'],
-                'description': 'If true, the command is input to a running process.',
-                'default': 'false',
-            },
-            'timeout': {
-                'type': 'number',
-                'description': 'Hard timeout in seconds. Use -1 for no limit.',
-                'default': -1,
+            "description": {
+                "type": "string",
+                "description": (
+                    "Clear, concise description of what this command does."
+                ),
             },
         },
-        'required': ['command'],
+        "required": ["command"],
     }
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="session", mode="exclusive"),
+    )
+    capabilities: ClassVar[frozenset[str]] = frozenset({"shell.execute"})
+    effect_level: ClassVar[str] = "local_mutation"
+    max_result_chars: ClassVar[int] = 30_000
+    plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
 
-    async def execute(self, arguments: dict[str, Any]) -> str:
-        """Dual-path execute: native async for LocalSession, sync fallback otherwise.
+    def prompt(self, ctx: ToolDescriptionContext | None = None) -> str:
+        workspace_root = ctx.workspace_root if ctx is not None else None
+        if workspace_root is None and self._workdir is not None:
+            workspace_root = str(self._workdir)
 
-        Overrides BuiltinTool.execute() to use asyncio.create_subprocess_exec
-        when session is evomaster LocalSession, avoiding thread-pool overhead.
-        For all other sessions, delegates to the base class async path (to_thread).
-        """
-        from evomaster.agent.session.local import LocalSession as _EvoLocal
-        from matmaster.sessions.local import LocalSession as _MatLocal
+        workspace_note = "Each Bash call starts in the session workspace directory.\n"
+        if workspace_root:
+            workspace_note = (
+                f"The session workspace directory for this run is `{workspace_root}`.\n"
+                "Each Bash call starts in this directory.\n"
+            )
 
-        if isinstance(self._session, (_EvoLocal, _MatLocal)):
-            try:
-                return await self._execute_async(arguments)
-            except Exception as e:
-                self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
-                return f"Error: {e}"
-
-        return await super().execute(arguments)
-
-    async def _execute_async(self, arguments: dict[str, Any]) -> str:
-        """Native async subprocess execution for matmaster LocalSession.
-
-        Uses asyncio.create_subprocess_exec instead of subprocess.run,
-        eliminating thread-pool overhead for local command execution.
-        """
-        command: str = arguments.get('command', '').strip()
-        is_input_str: str = arguments.get('is_input', 'false')
-        is_input = is_input_str == 'true'
-        timeout_val = arguments.get('timeout', -1)
-        timeout = int(timeout_val) if timeout_val and float(timeout_val) > 0 else None
-
-        # Interactive input not supported in local session
-        if is_input:
-            return "Interactive input is not supported in local session."
-
-        # Block dangerous commands
-        is_dangerous, reason = is_dangerous_bash_command(command)
-        if is_dangerous:
-            return f"Blocked: {reason}"
-
-        # Inject proxy clear prefix for non-input commands on non-Windows
-        if not is_input and command and sys.platform != 'win32':
-            command = _PROXY_CLEAR_PREFIX + command
-
-        wd = str(self._workdir) if self._workdir else None
-
-        proc = await asyncio.create_subprocess_exec(
-            "bash",
-            "-c",
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=wd,
+        return (
+            "Executes a given bash command and returns its output.\n\n"
+            f"{workspace_note}\n"
+            "Shell state does not persist between commands.\n\n"
+            "IMPORTANT: Avoid using this tool to run `find`, `grep`, `cat`, "
+            "`head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly "
+            "instructed. Instead, use the appropriate dedicated tool:\n"
+            " - File search: Use Glob (NOT find or ls)\n"
+            " - Content search: Use Grep (NOT grep or rg)\n"
+            " - Read files: Use Read (NOT cat/head/tail)\n"
+            " - Edit files: Use Edit (NOT sed/awk)\n"
+            " - Write files: Use Write (NOT echo >/cat <<EOF)\n\n"
+            "# Instructions\n"
+            " - Always quote file paths that contain spaces with double quotes\n"
+            " - You may specify an optional timeout in milliseconds (max 600000ms / "
+            "10 minutes). By default, your command will timeout after 120000ms.\n"
+            " - When issuing multiple commands that are independent, make multiple "
+            "Bash tool calls in a single message.\n"
+            " - For git commands: prefer creating a new commit rather than amending."
         )
 
-        try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
-        except TimeoutError:
-            proc.kill()
-            await proc.wait()
-            obs = f"Command timeout after {timeout}s"
-            if wd:
-                obs += f"\n[Current working directory: {wd}]"
-            obs += "\n[Command finished with exit code 124]"
-            return obs
-
-        stdout = stdout_bytes.decode(errors="replace") if stdout_bytes else ""
-        stderr = stderr_bytes.decode(errors="replace") if stderr_bytes else ""
-        output = stdout
-        if stderr:
-            output = output + stderr if output else stderr
-
-        obs = output
-        if wd:
-            obs += f"\n[Current working directory: {wd}]"
-        if proc.returncode is not None:
-            obs += f"\n[Command finished with exit code {proc.returncode}]"
-
-        return obs
-
-    def _execute(self, arguments: dict[str, Any]) -> str:
+    def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
         session = self._require_session()
 
-        command: str = arguments.get('command', '').strip()
-        is_input_str: str = arguments.get('is_input', 'false')
-        is_input = is_input_str == 'true'
-        timeout_val = arguments.get('timeout', -1)
-        timeout = int(timeout_val) if timeout_val and float(timeout_val) > 0 else None
+        command: str = (arguments.get("command") or "").strip()
+        if not command:
+            return "Error: command is required and must not be empty."
 
-        # Block dangerous commands
-        is_dangerous, reason = is_dangerous_bash_command(command)
-        if is_dangerous:
-            return f'Blocked: {reason}'
+        timeout_ms = arguments.get("timeout", 120_000)
+        timeout_ms = min(int(timeout_ms), 600_000)  # cap at 10min
+        timeout_s = timeout_ms / 1000  # float division preserves sub-second
 
-        # Inject proxy clear prefix for non-input commands on non-Windows
-        if not is_input and command and sys.platform != 'win32':
-            command = _PROXY_CLEAR_PREFIX + command
+        from matmaster.integration.runtime_bridge import build_service_env
+        from matmaster.tools.script_env import inject_env
+
+        env = build_service_env("bohrium", session=session)
+        command = inject_env(command, env, session)
 
         result = session.exec_bash(
             command=command,
-            timeout=timeout,
-            is_input=is_input,
-            stop_event=self._stop_event_for_exec(),
+            timeout=timeout_s,
+            cancel_token=self._cancel_token_for_exec(),
         )
 
-        output = result.get('output', '') or result.get('stdout', '')
-        exit_code = result.get('exit_code', -1)
-        working_dir = result.get('working_dir', '')
+        output = result.get("output", "") or result.get("stdout", "")
+        exit_code = result.get("exit_code", 0)
+        working_dir = result.get("working_dir", "")
 
         obs = output
         if working_dir:
-            obs += f'\n[Current working directory: {working_dir}]'
-        if exit_code != -1:
-            obs += f'\n[Command finished with exit code {exit_code}]'
+            obs += f"\n[Session working directory: {working_dir}]"
+        obs += f"\n[Command finished with exit code {exit_code}]"
 
+        if exit_code != 0:
+            return ToolResult(status="error", content=obs)
         return obs

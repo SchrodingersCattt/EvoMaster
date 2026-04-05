@@ -9,12 +9,14 @@ All external dependencies mocked per D-10.
 from __future__ import annotations
 
 import asyncio
-import threading
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import LLMResponse, StreamChunk
 
@@ -95,9 +97,19 @@ def _make_ctx(tmp_path: Path) -> PlaygroundContext:
     )
 
 
+def _make_cancel_token(*, cancelled: bool = False):
+    controller = CancellationController()
+    if cancelled:
+        controller.cancel()
+    return controller.token
+
+
 def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
     """Build an AgentRunService with standard mocks applied."""
-    from src.services.agent_run_service import AgentRunService
+    AgentRunService = pytest.importorskip(
+        "src.services.agent_run_service",
+        reason="src not available (isolation test)",
+    ).AgentRunService
 
     if mock_sessions_svc is None:
         mock_sessions_svc = MagicMock()
@@ -110,7 +122,7 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
     mock_pg = MagicMock()
     if mock_pg_ctx is not None:
         mock_pg.prepare.return_value = mock_pg_ctx
-    mock_pg.config_path = Path('configs/mat_master/config.yaml')
+    mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
 
     return svc, mock_pg
@@ -120,7 +132,7 @@ def _run_with_quota_mock(
     svc,
     mock_pg,
     use_quota_mock,
-    stop_event=None,
+    cancel_token=None,
     send_cb=None,
     *,
     return_result: bool = False,
@@ -169,9 +181,8 @@ def _run_with_quota_mock(
                 session_id='sess-q',
                 user_prompt='quota test',
                 send_cb=send_cb or AsyncMock(),
-                stop_event=stop_event or threading.Event(),
+                cancel_token=cancel_token or _make_cancel_token(),
                 mode='direct',
-                reply_queue=None,
                 task_id='task-q',
             )
         )
@@ -276,19 +287,18 @@ class TestQuotaNotDeductedOnCancel:
     def test_quota_not_deducted_on_cancel(self, tmp_path: Path) -> None:
         """Verify use_quota NOT called when task is cancelled."""
         pg_ctx = _make_ctx(tmp_path)
-        mock_llm = _SuccessLLM()  # LLM would succeed, but stop_event is set
+        mock_llm = _SuccessLLM()  # LLM would succeed, but the token is pre-cancelled
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
 
-        # Set stop_event before run -> kernel returns cancelled immediately
-        stop_event = threading.Event()
-        stop_event.set()
+        # Pre-cancel before run -> kernel returns cancelled immediately
+        cancel_token = _make_cancel_token(cancelled=True)
 
         async def mock_use_quota(uid):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
         called = _run_with_quota_mock(
-            svc, mock_pg, use_quota_mock, stop_event=stop_event
+            svc, mock_pg, use_quota_mock, cancel_token=cancel_token
         )
         assert not called, 'use_quota should NOT be called on cancel'
 
@@ -299,8 +309,7 @@ class TestQuotaNotDeductedOnCancel:
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
         payloads: list[dict[str, Any]] = []
 
-        stop_event = threading.Event()
-        stop_event.set()
+        cancel_token = _make_cancel_token(cancelled=True)
 
         async def mock_use_quota(uid):
             pass
@@ -310,7 +319,7 @@ class TestQuotaNotDeductedOnCancel:
             svc,
             mock_pg,
             use_quota_mock,
-            stop_event=stop_event,
+            cancel_token=cancel_token,
             send_cb=_async_collect(payloads),
         )
 
@@ -331,8 +340,7 @@ class TestQuotaNotDeductedOnCancel:
         mock_llm = _SuccessLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
 
-        stop_event = threading.Event()
-        stop_event.set()
+        cancel_token = _make_cancel_token(cancelled=True)
 
         async def mock_use_quota(uid):
             pass
@@ -342,7 +350,7 @@ class TestQuotaNotDeductedOnCancel:
             svc,
             mock_pg,
             use_quota_mock,
-            stop_event=stop_event,
+            cancel_token=cancel_token,
             return_result=True,
         )
 

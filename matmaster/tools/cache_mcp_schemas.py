@@ -6,7 +6,7 @@ and dumps the resulting tool schemas to matmaster/cache/<server>.json.
 
 Usage:
     uv run python -m matmaster.tools.cache_mcp_schemas
-    uv run python -m matmaster.tools.cache_mcp_schemas --config-dir matmaster_config
+    uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate MCP tool schema cache")
     parser.add_argument(
         "--config-dir",
-        default="matmaster_config",
+        default="config",
         help="Directory containing mcp.yaml and mcp_config*.json",
     )
     parser.add_argument(
@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
 async def generate_cache(config_dir: Path, output_dir: Path) -> None:
     import yaml
 
-    from evomaster.agent.tools.mcp.mcp_manager import MCPToolManager
+    from matmaster.mcp.manager import MCPToolManager
     from matmaster.tools.lazy_mcp import configure_mcp_manager
 
     mcp_yaml = config_dir / "mcp.yaml"
@@ -60,7 +60,7 @@ async def generate_cache(config_dir: Path, output_dir: Path) -> None:
 
     if mcp_config.get("path_adaptor") == "calculation":
         try:
-            from evomaster.adaptors.calculation import resolve_mcp_config_path
+            from matmaster.adaptors.calculation import resolve_mcp_config_path
 
             mcp_config_path = resolve_mcp_config_path(mcp_config_path)
         except ImportError:
@@ -89,13 +89,12 @@ async def generate_cache(config_dir: Path, output_dir: Path) -> None:
 
     for server_name, tools in manager.tools_by_server.items():
         schemas = []
-        for tool in tools.values():
-            spec = tool.get_tool_spec()
+        for tool_info in tools.values():
             schemas.append(
                 {
-                    "name": tool._remote_tool_name or spec.function.name,
-                    "description": spec.function.description,
-                    "input_schema": spec.function.parameters,
+                    "name": tool_info.get("remote_tool_name") or tool_info["name"],
+                    "description": tool_info.get("description", ""),
+                    "input_schema": tool_info.get("input_schema", {}),
                 }
             )
         out_path = output_dir / f"{server_name}.json"

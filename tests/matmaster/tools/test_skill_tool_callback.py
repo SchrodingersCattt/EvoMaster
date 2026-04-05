@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import asyncio
 
-from evomaster.agent.tools.skill import SkillTool
-from evomaster.skills.base import SkillRegistry
+from matmaster.skills.registry import SkillRegistry
+from matmaster.tools.builtin.skill_tool import SkillTool
 
 
 class TestSkillToolCallback:
@@ -21,36 +21,28 @@ class TestSkillToolCallback:
         self._make_skill_dir(tmp_path, "test-skill", mcp_server="mat_sg")
         registry = SkillRegistry(tmp_path)
         hit_servers = []
-        tool = SkillTool(registry, on_skill_hit=lambda s: hit_servers.append(s))
+        tool = SkillTool(
+            skill_registry=registry, on_skill_hit=lambda s: hit_servers.append(s)
+        )
 
-        session = MagicMock()
-        import json
-
-        args = json.dumps({"skill_name": "test-skill", "action": "get_info"})
-        tool.execute(session, args)
+        asyncio.run(tool.execute({"skill": "test-skill"}))
         assert hit_servers == ["mat_sg"]
 
     def test_callback_not_invoked_without_mcp_server(self, tmp_path):
         self._make_skill_dir(tmp_path, "plain-skill")
         registry = SkillRegistry(tmp_path)
         hit_servers = []
-        tool = SkillTool(registry, on_skill_hit=lambda s: hit_servers.append(s))
+        tool = SkillTool(
+            skill_registry=registry, on_skill_hit=lambda s: hit_servers.append(s)
+        )
 
-        session = MagicMock()
-        import json
-
-        args = json.dumps({"skill_name": "plain-skill", "action": "get_info"})
-        tool.execute(session, args)
+        asyncio.run(tool.execute({"skill": "plain-skill"}))
         assert hit_servers == []
 
     def test_no_callback_is_fine(self, tmp_path):
         self._make_skill_dir(tmp_path, "test-skill", mcp_server="mat_sg")
         registry = SkillRegistry(tmp_path)
-        tool = SkillTool(registry)  # No callback
+        tool = SkillTool(skill_registry=registry)  # No callback
 
-        session = MagicMock()
-        import json
-
-        args = json.dumps({"skill_name": "test-skill", "action": "get_info"})
-        obs, info = tool.execute(session, args)
-        assert "Skill body" in obs  # Still returns full_info
+        result = asyncio.run(tool.execute({"skill": "test-skill"}))
+        assert "Skill body" in result  # Still returns expanded skill body

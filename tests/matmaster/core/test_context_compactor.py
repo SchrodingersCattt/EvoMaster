@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -295,8 +293,7 @@ class TestCompactorMessageCount:
 
 
 class TestCompactorEventEmission:
-    async def test_emits_context_compaction_event(self) -> None:
-        from matmaster.core.bus import MessageBus
+    async def test_emits_context_compaction_event_via_sink(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.events import ContextCompactionEvent
 
@@ -304,20 +301,27 @@ class TestCompactorEventEmission:
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
         provider = MockSummaryProvider()
-        bus = MessageBus()
+        received: list = []
+
+        async def sink(event):
+            received.append(event)
+
         msgs = _build_long_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=sink
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
 
-        event = bus.get_nowait()
+        assert len(received) == 1
+        event = received[0]
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["compaction_count"] == 1
         assert event.payload["strategy"] == "summary"
         assert event.payload["trigger_tokens"] > 0
 
-    async def test_no_event_when_no_bus(self) -> None:
+    async def test_no_event_when_no_sink(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(
@@ -325,7 +329,9 @@ class TestCompactorEventEmission:
         )
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=None)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=None
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
@@ -336,7 +342,6 @@ class TestToolTruncationFallback:
 
     async def test_truncates_when_no_compressible_turns(self) -> None:
         """1 turn with huge tool results -> falls back to tool_truncation."""
-        from matmaster.core.bus import MessageBus
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.events import ContextCompactionEvent
 
@@ -344,7 +349,10 @@ class TestToolTruncationFallback:
             enabled=True, context_window_tokens=500, trigger_ratio=0.9
         )
         provider = MockSummaryProvider()
-        bus = MessageBus()
+        received: list = []
+
+        async def sink(event):
+            received.append(event)
 
         # 1 turn: Assistant with 3 tool calls + 3 large ToolMessages
         msgs = [
@@ -374,7 +382,9 @@ class TestToolTruncationFallback:
             ),
         ]
 
-        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=sink
+        )
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
@@ -394,7 +404,8 @@ class TestToolTruncationFallback:
         assert len(truncated_msgs) > 0
 
         # Event should have strategy=tool_truncation
-        event = bus.get_nowait()
+        assert len(received) == 1
+        event = received[0]
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["strategy"] == "tool_truncation"
 
@@ -457,114 +468,69 @@ class TestToolTruncationFallback:
         assert len(result_content) < len(original_content)
 
 
-@pytest.mark.skip(
-    reason="E2E test deferred to Phase 17-18 per D-08: requires Kernel async化"
-)
-class TestEndToEndCompaction:
-    """Full kernel loop with compaction enabled."""
+class TestCompactorEventSink:
+    """Phase 34: event_sink callback replaces bus dependency."""
 
-    async def test_compaction_triggers_on_large_context(self) -> None:
-        from matmaster.core.agent import AgentKernel
+    async def test_event_sink_receives_compaction_event(self) -> None:
+        """Compactor with event_sink calls sink with ContextCompactionEvent."""
         from matmaster.core.context_compactor import ContextCompactor
-        from matmaster.tools.tool_registry import ToolRegistry
-        from matmaster.types.runtime import AgentRuntimeSpec, CompactionConfig
+        from matmaster.types.events import ContextCompactionEvent
 
-        compaction_cfg = CompactionConfig(
-            enabled=True,
-            context_window_tokens=500,
-            trigger_ratio=0.9,
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
+        provider = MockSummaryProvider()
+        received_events: list = []
 
-        call_count = 0
-        summary_calls = 0
+        async def sink(event):
+            received_events.append(event)
 
-        class CompactionTestProvider:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *exc):
-                pass
-
-            async def chat(self, messages, tools=None):
-                nonlocal summary_calls
-                summary_calls += 1
-                return LLMResponse(
-                    content="Summary of conversation.",
-                    finish_reason="stop",
-                )
-
-            async def chat_stream(self, messages, tools=None, *, timeout=None):
-                nonlocal call_count
-                call_count += 1
-                if call_count <= 5:
-                    yield StreamChunk(
-                        tool_call_deltas=[
-                            {
-                                "index": 0,
-                                "id": f"tc-{call_count}",
-                                "name": "tool",
-                                "arguments": "{}",
-                            }
-                        ],
-                    )
-                    yield StreamChunk(
-                        finish_reason="stop",
-                        usage={
-                            "prompt_tokens": 480,
-                            "completion_tokens": 50,
-                            "total_tokens": 530,
-                        },
-                    )
-                else:
-                    yield StreamChunk(
-                        content="all done",
-                        finish_reason="stop",
-                        usage={
-                            "prompt_tokens": 200,
-                            "completion_tokens": 20,
-                            "total_tokens": 220,
-                        },
-                    )
-
-        provider = CompactionTestProvider()
-        registry = ToolRegistry()
-
-        class SimpleTool:
-            @property
-            def name(self):
-                return "tool"
-
-            @property
-            def description(self):
-                return "test"
-
-            @property
-            def json_schema(self):
-                return {"type": "object", "properties": {}}
-
-            async def execute(self, arguments):
-                return "result " + "x" * 100
-
-        registry.register(SimpleTool(), source="test")
-
+        msgs = _build_long_conversation(5)
         compactor = ContextCompactor(
-            config=compaction_cfg,
-            summary_provider=provider,
+            config=config, summary_provider=provider, event_sink=sink
         )
+        compactor.update_message_count(len(msgs))
 
-        spec = AgentRuntimeSpec(
-            llm_provider=provider,
-            tool_registry=registry,
-            max_turns=10,
-            system_prompt="test",
-            compaction=compaction_cfg,
-            compactor=compactor,
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+
+        assert len(received_events) == 1
+        event = received_events[0]
+        assert isinstance(event, ContextCompactionEvent)
+        assert event.payload["compaction_count"] == 1
+        assert event.payload["strategy"] == "summary"
+
+    async def test_no_event_when_no_sink(self) -> None:
+        """Compactor with event_sink=None does not error."""
+        from matmaster.core.context_compactor import ContextCompactor
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
+        provider = MockSummaryProvider()
+        msgs = _build_long_conversation(5)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=None
+        )
+        compactor.update_message_count(len(msgs))
 
-        kernel = AgentKernel()
-        result = await kernel.run(spec, "do things")
+        # Should not raise
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
 
-        assert result.result.reason == "natural"
-        assert result.result.final_content == "all done"
-        assert summary_calls > 0
-        assert compactor._compaction_count > 0
+    async def test_no_bus_import_in_compactor(self) -> None:
+        """ContextCompactor module should not import MessageBus."""
+        import ast
+        import inspect
+
+        from matmaster.core import context_compactor
+
+        source = inspect.getsource(context_compactor)
+        tree = ast.parse(source)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                if node.module and "bus" in node.module:
+                    # Check it's specifically importing MessageBus
+                    for alias in node.names:
+                        assert (
+                            alias.name != "MessageBus"
+                        ), "ContextCompactor should not import MessageBus"

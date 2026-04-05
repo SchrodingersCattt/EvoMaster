@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import io
 
-from matmaster.tools.tool_result import ToolResult
-from matmaster.types.guards import GuardResult
-from matmaster.types.messages import StreamChunk, ToolCallData
+from matmaster.types.events import (
+    ResponseEvent,
+    ThoughtEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
 
 
 class TestDevStreamHook:
@@ -17,67 +20,90 @@ class TestDevStreamHook:
         hook = DevStreamHook(output=buf, verbose=verbose)
         return hook, buf
 
-    async def test_stream_chunk_content(self) -> None:
+    def test_on_event_writes_stream_content(self) -> None:
         hook, buf = self._make_hook()
-        chunk = StreamChunk(content="Hello", stream_state="streaming", stream_id="s1")
-        await hook.on_stream_chunk(chunk)
-        assert buf.getvalue() == "Hello"
 
-    async def test_stream_chunk_start_end_no_content(self) -> None:
+        hook.on_event(
+            ThoughtEvent(
+                source="agent",
+                content="Hello",
+                stream_state="streaming",
+                stream_id="s1",
+            )
+        )
+        hook.on_event(
+            ResponseEvent(
+                source="agent",
+                content=" world",
+                stream_state="streaming",
+                stream_id="s1",
+            )
+        )
+
+        assert buf.getvalue() == "Hello world"
+
+    def test_on_event_handles_start_and_end_markers(self) -> None:
         hook, buf = self._make_hook()
-        await hook.on_stream_chunk(StreamChunk(stream_state="start", stream_id="s1"))
-        await hook.on_stream_chunk(StreamChunk(stream_state="end", stream_id="s1"))
-        # end should add newline
+
+        hook.on_event(
+            ThoughtEvent(
+                source="agent", content="", stream_state="start", stream_id="s1"
+            )
+        )
+        hook.on_event(
+            ResponseEvent(
+                source="agent", content="", stream_state="end", stream_id="s1"
+            )
+        )
+
         assert buf.getvalue() == "\n"
 
-    async def test_pre_tool_call_display(self) -> None:
-        from matmaster.core.hooks import HookAction
-
+    def test_on_event_formats_tool_call(self) -> None:
         hook, buf = self._make_hook()
-        tc = ToolCallData(id="tc-1", name="bash", arguments={"command": "ls"})
-        action = await hook.pre_tool_call(tc)
 
-        assert action == HookAction.CONTINUE
+        hook.on_event(
+            ToolCallEvent(
+                source="agent",
+                call_id="tc-1",
+                tool_name="bash",
+                arguments={"command": "ls"},
+            )
+        )
+
         output = buf.getvalue()
         assert "tool_call: bash" in output
         assert "command" in output
 
-    async def test_post_tool_call_success(self) -> None:
+    def test_on_event_formats_successful_tool_result(self) -> None:
         hook, buf = self._make_hook()
-        tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        await hook.post_tool_call(tc, ToolResult(content="file1.py\nfile2.py"))
+
+        hook.on_event(
+            ToolResultEvent(
+                source="agent",
+                call_id="tc-1",
+                tool_name="bash",
+                result="file1.py\nfile2.py",
+                status="success",
+            )
+        )
 
         output = buf.getvalue()
         assert "tool_result:" in output
         assert "file1.py" in output
 
-    async def test_post_tool_call_truncation(self) -> None:
+    def test_on_event_formats_error_tool_result(self) -> None:
         hook, buf = self._make_hook()
-        tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        long_result = "x" * 2000
-        await hook.post_tool_call(tc, ToolResult(content=long_result))
 
-        output = buf.getvalue()
-        assert "..." in output or len(output) < 2000
-
-    async def test_post_tool_call_error_status(self) -> None:
-        hook, buf = self._make_hook()
-        tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        await hook.post_tool_call(
-            tc,
-            ToolResult(status="error", content="Error: boom"),
+        hook.on_event(
+            ToolResultEvent(
+                source="agent",
+                call_id="tc-1",
+                tool_name="bash",
+                result="Error: boom",
+                status="error",
+            )
         )
 
         output = buf.getvalue()
         assert "tool_error:" in output
         assert "Error: boom" in output
-
-    async def test_guard_blocked(self) -> None:
-        hook, buf = self._make_hook()
-        tc = ToolCallData(id="tc-1", name="rm_rf", arguments={})
-        gr = GuardResult(allowed=False, reason="dangerous operation")
-        await hook.on_guard_blocked(tc, gr)
-
-        output = buf.getvalue()
-        assert "guard_blocked:" in output
-        assert "dangerous operation" in output

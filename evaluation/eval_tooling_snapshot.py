@@ -23,23 +23,29 @@ from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 
 logger = logging.getLogger(__name__)
 
-# Order matches ``matmaster.core.exp.Exp._init_builtin_tools`` + spawn branch.
+# Order matches ``matmaster.core.exp.Exp._init_builtin_tools`` CC-name registration.
 _BUILTIN_WHEN_STAR: list[str] = [
-    "execute_bash",
-    "list_dir",
-    "read_file",
-    "write_file",
-    "edit_file",
-    "glob",
-    "grep",
-    "task_create",
-    "task_get",
-    "task_list",
-    "task_update",
-    "task_complete",
-    "monitor_job",
-    "web-search",
+    "Bash",
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+    "TodoWrite",
+    "WebSearch",
+    "WebFetch",
+    "Bohrium",
 ]
+
+_LEGACY_EVAL_TOOL_NAME_MAP: dict[str, str] = {
+    "WebSearch": "mm_web_search",
+    "WebFetch": "web_fetch",
+}
+
+
+def _append_unique_path(paths: list[Path], candidate: Path) -> None:
+    if candidate not in paths:
+        paths.append(candidate)
 
 
 def _matmaster_config_session_type(repo_root: Path) -> str | None:
@@ -61,32 +67,49 @@ def _matmaster_config_session_type(repo_root: Path) -> str | None:
 
 
 def _resolve_builtin_tool_names(builtin_cfg: list[str]) -> list[str]:
-    """Resolve configured builtin list to concrete tool names (best-effort)."""
+    """Resolve configured builtin list to evaluation-facing tool names."""
     if not builtin_cfg:
         return []
-    if builtin_cfg == ["*"]:
-        return list(_BUILTIN_WHEN_STAR) + ["spawn"]
+    raw_names = (
+        list(_BUILTIN_WHEN_STAR) + ["Agent"] if builtin_cfg == ["*"] else builtin_cfg
+    )
     out: list[str] = []
-    for name in builtin_cfg:
+    for name in raw_names:
         if name == "*":
             continue
-        if name not in out:
-            out.append(name)
+        public_name = _LEGACY_EVAL_TOOL_NAME_MAP.get(name, name)
+        if public_name not in out:
+            out.append(public_name)
     return out
 
 
 def _skills_roots_as_paths(skills_cfg: ExpSkillsConfig, repo_root: Path) -> list[Path]:
     raw = skills_cfg.skills_root
     paths: list[Path] = []
+
+    def _append_root(raw_root: str) -> None:
+        p = Path(str(raw_root))
+        resolved = p if p.is_absolute() else (repo_root / p).resolve()
+        legacy_umbrella = (repo_root / "matmaster/skills").resolve()
+        if resolved == legacy_umbrella:
+            compat_roots = [
+                (repo_root / "playground/mat_master/skills").resolve(),
+                (repo_root / "matmaster/skills/lazymcp").resolve(),
+            ]
+            for compat in compat_roots:
+                if compat.exists():
+                    _append_unique_path(paths, compat)
+            if paths:
+                return
+        _append_unique_path(paths, resolved)
+
     if isinstance(raw, list):
         for r in raw:
             if not r:
                 continue
-            p = Path(str(r))
-            paths.append(p if p.is_absolute() else (repo_root / p).resolve())
+            _append_root(str(r))
     elif raw:
-        p = Path(str(raw))
-        paths.append(p if p.is_absolute() else (repo_root / p).resolve())
+        _append_root(str(raw))
     return paths
 
 
@@ -118,7 +141,7 @@ def _mcp_server_names(
 
     if mcp_config.get("path_adaptor") == "calculation":
         try:
-            from evomaster.adaptors.calculation import resolve_mcp_config_path
+            from matmaster.adaptors.calculation import resolve_mcp_config_path
 
             config_path = resolve_mcp_config_path(config_path)
         except ImportError:
@@ -156,7 +179,8 @@ def _build_eval_tooling_dict(
     surface_tools = list(builtin_names)
 
     if exp_cfg.skills.enabled:
-        surface_tools.append("use_skill")
+        if "use_skill" not in surface_tools:
+            surface_tools.append("use_skill")
         root_paths = _skills_roots_as_paths(exp_cfg.skills, repo_root)
         skills_roots_str = [str(p) for p in root_paths]
         try:
