@@ -74,7 +74,6 @@ When working with existing input files or configurations, preserve the originals
   - To search for files use glob instead of find or ls
   - To search the content of files, use grep instead of grep or rg
   - Reserve using execute_bash exclusively for shell commands, running calculations, compilation, package management, and system operations that have no dedicated tool equivalent
- - Break down and manage your work with task tools (task_create, task_list, task_update, task_complete). These tools are helpful for planning your work and helping the user track your progress. Mark each task as completed as soon as you are done with the task. Do not batch up multiple tasks before marking them as completed.
  - You can call multiple tools in a single response. If you intend to call multiple tools and there are no dependencies between them, make all independent tool calls in parallel. Maximize use of parallel tool calls where possible to increase efficiency. However, if some tool calls depend on previous calls to inform dependent values, do NOT call these tools in parallel and instead call them sequentially.
 
 # Tone and style
