@@ -28,12 +28,22 @@ The `poll` action returns the **current status in one call** (non-blocking):
 
 **Poll interval guidance**: HPC jobs typically run minutes to hours. A reasonable pattern is to poll every 30-60 seconds for short jobs, or inform the user and re-check on request for long jobs. There is no need to poll continuously — each poll is a single lightweight API call.
 
+## Credential Resolution
+
+Bohrium credentials are resolved through a unified runtime bridge with the following precedence:
+
+1. **Explicit params** -- caller-provided values (e.g. passed directly to API functions)
+2. **Session / runtime** -- `session._bohrium_credentials` injected by the platform during a run (production path)
+3. **Environment fallback** -- `BOHRIUM_ACCESS_KEY` / `BOHRIUM_PROJECT_ID` from `.env` or os.environ (local development)
+
+In production, credentials come from the runtime session automatically. Setting `BOHRIUM_ACCESS_KEY` in `.env` is the local development fallback for running without a platform session.
+
 ## Troubleshooting
 
 | Symptom | Likely Cause | Resolution |
 |---------|-------------|------------|
-| submit returns `BOHRIUM_ACCESS_KEY not set` | Missing env variable | Verify environment configuration |
-| submit returns `BOHRIUM_PROJECT_ID not set` | Missing or invalid project ID | Set valid project ID in environment |
+| submit returns `credentials unavailable` | No session and no env variable | In production: verify session has Bohrium credentials. In local dev: set `BOHRIUM_ACCESS_KEY` in `.env` |
+| submit returns `project ID unavailable` | Missing or invalid project ID | In production: verify session credentials include project_id. In local dev: set `BOHRIUM_PROJECT_ID` in `.env` |
 | Failed + empty log_tail | Command errored before writing to log | Check image/cmd compatibility; wrong binary path or missing dependencies |
 | Failed + OOM in log | Insufficient machine memory | Switch to a larger machine (e.g. `c32_m128_cpu` → `c64_m256_cpu`) |
 | Failed + "not enough slots" | MPI process count > available cores | Reduce `-np` to match machine core count |
@@ -53,8 +63,8 @@ Use `url` from image results as the `image` parameter, and `skuEnName` from mach
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `BOHRIUM_ACCESS_KEY` | yes | Bohrium API access key |
-| `BOHRIUM_PROJECT_ID` | yes | Bohrium project ID (positive integer) |
+| `BOHRIUM_ACCESS_KEY` | local dev only | Bohrium API access key (production uses session credentials) |
+| `BOHRIUM_PROJECT_ID` | local dev only | Bohrium project ID, positive integer (production uses session credentials) |
 | `BOHRIUM_BASE_URL` | no | API base URL (default: `https://open.bohrium.com`) |
 | `BOHRIUM_USE_SANDBOX` | no | `1` = sandbox API paths (default when unset); `0` = standard HPC paths |
 
