@@ -71,7 +71,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 # Repo root = evaluation/scripts/devshell/../../..
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -163,6 +163,25 @@ def _manifest_matmaster_exp_label(exp_cli: str | None) -> str:
     return exp_cli
 
 
+class _TeeTextIO:
+    """Write the same decoded text to multiple text streams (e.g. log file + stderr)."""
+
+    __slots__ = ("_streams",)
+
+    def __init__(self, *streams: TextIO) -> None:
+        self._streams = streams
+
+    def write(self, data: str) -> int:
+        for s in self._streams:
+            s.write(data)
+            s.flush()
+        return len(data)
+
+    def flush(self) -> None:
+        for s in self._streams:
+            s.flush()
+
+
 def _load_summary_file(summary_file: Path) -> dict[str, Any]:
     if summary_file.is_file():
         try:
@@ -184,6 +203,7 @@ def _run_devshell_task(
     summary_file: Path,
     console_log_file: Path | None,
     timeout_sec: float | None,
+    tee_stderr: bool = False,
 ) -> tuple[int, int, dict[str, Any]]:
     t0 = time.monotonic()
     timeout = None if timeout_sec is None or timeout_sec <= 0 else float(timeout_sec)
@@ -192,11 +212,12 @@ def _run_devshell_task(
             proc = subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout)
         else:
             with console_log_file.open("w", encoding="utf-8") as f:
+                out = _TeeTextIO(f, sys.stderr) if tee_stderr else f
                 proc = subprocess.run(
                     cmd,
                     cwd=cwd,
                     env=env,
-                    stdout=f,
+                    stdout=out,
                     stderr=subprocess.STDOUT,
                     text=True,
                     timeout=timeout,
@@ -601,7 +622,7 @@ def main() -> int:
         prompt_file = workspace_path / "_devshell_prompt.txt"
         prompt_file.write_text(prompt, encoding="utf-8")
         summary_file = workspace_path / "_devshell_summary.json"
-        console_log_file = log_dir / "devshell_console.log" if args.jobs > 1 else None
+        console_log_file = log_dir / "devshell_console.log"
 
         cmd: list[str | Path] = [
             py,
@@ -682,6 +703,7 @@ def main() -> int:
             summary_file=summary_file,
             console_log_file=console_log_file,
             timeout_sec=args.task_timeout,
+            tee_stderr=args.jobs <= 1,
         )
 
         row: dict[str, Any] = {
@@ -695,9 +717,8 @@ def main() -> int:
             "devshell_summary_path": str(summary_file),
             "devshell_summary": summary,
             "duration_ms": duration_ms,
+            "devshell_console_log_path": str(console_log_file),
         }
-        if console_log_file is not None:
-            row["devshell_console_log_path"] = str(console_log_file)
 
         ingest_status: dict[str, Any] | None = None
         ingest_failed_local = False
@@ -813,7 +834,9 @@ def main() -> int:
     if args.jobs == 1:
         for prepared in prepared_tasks:
             print(
-                f"  [running] {prepared['task_id']} (devshell prints to this terminal; summary -> {Path(prepared['summary_file']).name})...",
+                f"  [running] {prepared['task_id']} (terminal + "
+                f"{Path(prepared['console_log_file']).name}; summary -> "
+                f"{Path(prepared['summary_file']).name})...",
                 file=sys.stderr,
                 flush=True,
             )
@@ -851,10 +874,10 @@ def main() -> int:
                 except StopIteration:
                     return False
                 console_log = prepared["console_log_file"]
-                if console_log is None:
-                    detail = f"summary -> {Path(prepared['summary_file']).name}"
-                else:
-                    detail = f"console -> {Path(console_log).name}, summary -> {Path(prepared['summary_file']).name}"
+                detail = (
+                    f"console -> {Path(console_log).name}, "
+                    f"summary -> {Path(prepared['summary_file']).name}"
+                )
                 print(
                     f"  [queued] {prepared['task_id']} ({detail})...",
                     file=sys.stderr,

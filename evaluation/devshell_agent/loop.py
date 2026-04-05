@@ -8,7 +8,7 @@ import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from evaluation.devshell_agent.config_state import (
     AgentLoopSharedState,
@@ -102,6 +102,12 @@ class DevshellAgentLoop:
 
     def __init__(self, config: AgentLoopConfig) -> None:
         self._cfg = config
+
+    @staticmethod
+    def _log_line(msg: str, loop_log: TextIO) -> None:
+        print(msg, file=sys.stderr, flush=True)
+        loop_log.write(msg + "\n")
+        loop_log.flush()
 
     @classmethod
     def default_session_dir(
@@ -216,89 +222,97 @@ class DevshellAgentLoop:
 
         self._write_session_manifest()
 
+        log_path = cfg.session_dir / "sdk_loop_console.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         exit_code = 0
-        async with ClaudeSDKClient(options=options) as client:
-            for it in range(1, cfg.max_iterations + 1):
-                state.last_eval_output_dir = None
-                state.eval_output_dirs.clear()
-                head0 = git_rev_parse_head(repo_root=cfg.repo_root)
-                if head0:
-                    append_iteration_head(
-                        session_dir=cfg.session_dir, iteration=it, head=head0
+        with log_path.open("a", encoding="utf-8") as loop_log:
+            async with ClaudeSDKClient(options=options) as client:
+                for it in range(1, cfg.max_iterations + 1):
+                    state.last_eval_output_dir = None
+                    state.eval_output_dirs.clear()
+                    head0 = git_rev_parse_head(repo_root=cfg.repo_root)
+                    if head0:
+                        append_iteration_head(
+                            session_dir=cfg.session_dir, iteration=it, head=head0
+                        )
+                    await client.query(self._iteration_user_message(it=it))
+                    async for message in client.receive_response():
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock) and block.text.strip():
+                                    self._log_line(block.text, loop_log)
+
+                    follow_rc = await self._run_checklist_followup_if_needed(
+                        it=it,
+                        state=state,
+                        mcp_server=mcp_server,
+                        loop_log=loop_log,
                     )
-                await client.query(self._iteration_user_message(it=it))
-                async for message in client.receive_response():
-                    if isinstance(message, AssistantMessage):
-                        for block in message.content:
-                            if isinstance(block, TextBlock) and block.text.strip():
-                                print(block.text, file=sys.stderr, flush=True)
+                    if follow_rc >= 1:
+                        exit_code = 1
+                    if follow_rc == 2:
+                        self._log_line(
+                            "Stopping outer iterations: question_bank question id set "
+                            "changed during checklist follow-up (see "
+                            "question_bank_id_drift.json in session dir).",
+                            loop_log,
+                        )
+                        break
 
-                follow_rc = await self._run_checklist_followup_if_needed(
-                    it=it, state=state, mcp_server=mcp_server
-                )
-                if follow_rc >= 1:
-                    exit_code = 1
-                if follow_rc == 2:
-                    print(
-                        "Stopping outer iterations: question_bank question id set "
-                        "changed during checklist follow-up (see "
-                        "question_bank_id_drift.json in session dir).",
-                        file=sys.stderr,
-                    )
-                    break
-
-                matching = [
-                    o for o in state.outcomes if int(o.get("iteration_index", -1)) == it
-                ]
-                if not matching:
-                    print(
-                        f"warning: no report_iteration_outcome for iteration {it}",
-                        file=sys.stderr,
-                    )
-                    exit_code = 1
-                    continue
-
-                last = matching[-1]
-                score = int(last.get("macro_mean_0_100", 0))
-                met = bool(last.get("target_met"))
-
-                if cfg.git_reset_on_regression and it > 1:
-                    prev_rows = [
+                    matching = [
                         o
                         for o in state.outcomes
-                        if int(o.get("iteration_index", -1)) == it - 1
+                        if int(o.get("iteration_index", -1)) == it
                     ]
-                    if prev_rows:
-                        prev_score = int(prev_rows[-1].get("macro_mean_0_100", 0))
-                        if score < prev_score:
-                            saved = head_at_iteration_start(cfg.session_dir, it)
-                            if saved:
-                                ok, msg = git_reset_hard(
-                                    repo_root=cfg.repo_root, rev=saved
-                                )
-                                print(
-                                    f"git regression guard: iter {it} mean {score} "
-                                    f"< iter {it - 1} mean {prev_score}; "
-                                    f"reset --hard {saved[:7]}… -> "
-                                    f"{'ok' if ok else 'failed'} {msg}",
-                                    file=sys.stderr,
-                                )
-                                if not ok:
-                                    exit_code = 1
-                            else:
-                                print(
-                                    f"warning: regression at iter {it} but no "
-                                    f"head_at_start recorded; skip auto reset",
-                                    file=sys.stderr,
-                                )
+                    if not matching:
+                        self._log_line(
+                            f"warning: no report_iteration_outcome for iteration {it}",
+                            loop_log,
+                        )
+                        exit_code = 1
+                        continue
 
-                if met or score >= cfg.target_mean_score:
-                    print(
-                        f"Stopping after iteration {it}: target_met={met} "
-                        f"macro_mean={score} (target {cfg.target_mean_score})",
-                        file=sys.stderr,
-                    )
-                    break
+                    last = matching[-1]
+                    score = int(last.get("macro_mean_0_100", 0))
+                    met = bool(last.get("target_met"))
+
+                    if cfg.git_reset_on_regression and it > 1:
+                        prev_rows = [
+                            o
+                            for o in state.outcomes
+                            if int(o.get("iteration_index", -1)) == it - 1
+                        ]
+                        if prev_rows:
+                            prev_score = int(prev_rows[-1].get("macro_mean_0_100", 0))
+                            if score < prev_score:
+                                saved = head_at_iteration_start(cfg.session_dir, it)
+                                if saved:
+                                    ok, msg = git_reset_hard(
+                                        repo_root=cfg.repo_root, rev=saved
+                                    )
+                                    self._log_line(
+                                        f"git regression guard: iter {it} mean {score} "
+                                        f"< iter {it - 1} mean {prev_score}; "
+                                        f"reset --hard {saved[:7]}… -> "
+                                        f"{'ok' if ok else 'failed'} {msg}",
+                                        loop_log,
+                                    )
+                                    if not ok:
+                                        exit_code = 1
+                                else:
+                                    self._log_line(
+                                        f"warning: regression at iter {it} but no "
+                                        f"head_at_start recorded; skip auto reset",
+                                        loop_log,
+                                    )
+
+                    if met or score >= cfg.target_mean_score:
+                        self._log_line(
+                            f"Stopping after iteration {it}: target_met={met} "
+                            f"macro_mean={score} (target {cfg.target_mean_score})",
+                            loop_log,
+                        )
+                        break
 
         return exit_code
 
@@ -352,6 +366,7 @@ class DevshellAgentLoop:
         it: int,
         state: AgentLoopSharedState,
         mcp_server: Any,
+        loop_log: TextIO,
     ) -> int:
         """Run checklist agent if needed.
 
@@ -379,10 +394,10 @@ class DevshellAgentLoop:
         try:
             ids_before = collect_question_bank_question_ids(cfg.repo_root)
         except Exception as e:
-            print(
+            self._log_line(
                 f"warning: cannot snapshot question_bank ids before checklist "
                 f"(id-drift guard skipped): {e}",
-                file=sys.stderr,
+                loop_log,
             )
             ids_before = None
 
@@ -413,9 +428,9 @@ class DevshellAgentLoop:
             allowed_tools=checklist_allowed,
             permission_mode=self._checklist_permission_mode_resolved(),
         )
-        print(
+        self._log_line(
             f"checklist agent: iteration {it}, {len(escalations)} escalation(s)",
-            file=sys.stderr,
+            loop_log,
         )
         async with ClaudeSDKClient(options=co) as cc:
             await cc.query(self._checklist_user_message(it=it, escalations=escalations))
@@ -423,7 +438,7 @@ class DevshellAgentLoop:
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, TextBlock) and block.text.strip():
-                            print(block.text, file=sys.stderr, flush=True)
+                            self._log_line(block.text, loop_log)
 
         state.checklist_escalations_pending = [
             e
@@ -433,10 +448,10 @@ class DevshellAgentLoop:
         new_reports = state.checklist_revision_reports[n_reports_before:]
         ok_reports = [r for r in new_reports if int(r.get("iteration_index", -1)) == it]
         if not ok_reports:
-            print(
+            self._log_line(
                 f"warning: checklist agent did not call report_checklist_revision "
                 f"for iteration {it}",
-                file=sys.stderr,
+                loop_log,
             )
             return 1
 
@@ -444,9 +459,9 @@ class DevshellAgentLoop:
             try:
                 ids_after = collect_question_bank_question_ids(cfg.repo_root)
             except Exception as e:
-                print(
+                self._log_line(
                     f"error: question_bank unreadable after checklist agent: {e}",
-                    file=sys.stderr,
+                    loop_log,
                 )
                 self._write_question_bank_id_drift(
                     it=it, ids_removed=[], ids_added=[], load_error=str(e)
@@ -456,10 +471,10 @@ class DevshellAgentLoop:
             if ids_before != ids_after:
                 removed = sorted(ids_before - ids_after)
                 added = sorted(ids_after - ids_before)
-                print(
+                self._log_line(
                     f"checklist follow-up changed question_bank id set; stopping "
                     f"outer loop (removed={removed!r} added={added!r})",
-                    file=sys.stderr,
+                    loop_log,
                 )
                 self._write_question_bank_id_drift(
                     it=it, ids_removed=removed, ids_added=added
