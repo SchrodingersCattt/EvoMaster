@@ -6,7 +6,6 @@ import importlib.util
 import json
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from evaluation.core.evaluator import BinaryEvaluator
@@ -235,8 +234,10 @@ def test_check_layer_count_three_coarse_blocks_old_gap_method_would_be_three(
     assert ok9 is True, msg9
 
     coords = sorted(float(s.coords[2]) for s in struct.sites)
-    diffs = np.diff(coords)
-    n_gap_layers = 1 + int(np.sum(diffs > 0.8))
+    import numpy as _np
+
+    diffs = _np.diff(coords)
+    n_gap_layers = 1 + int(_np.sum(diffs > 0.8))
     assert n_gap_layers == 3
 
 
