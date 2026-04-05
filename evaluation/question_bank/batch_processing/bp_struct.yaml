@@ -214,7 +214,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_003_20260404
+- id: BP_struct_003_20260405
   capability: batch_processing
   domain: struct
   intent: Generate 5 VASP INCAR input files for Al ENCUT convergence test (280, 300,
@@ -224,7 +224,7 @@ questions:
   human_prompt_seed: '从 `convergence_encut.json` 读取收敛测试配置。为铝（Al）的 ENCUT 收敛测试生成
     5 个 VASP INCAR 输入文件，ENCUT 分别为：280, 300, 320, 340, 360 eV。
 
-    严格要求： 1. k-point 网格在所有 5 个 INCAR 中固定为 8x8x8 2. ISMEAR=1, SIGMA=0.1 在所有
+    严格要求： 1. k-point 网格在所有 5 个计算中固定为 8x8x8（通过 KPOINTS 文件或 INCAR 均可） 2. ISMEAR=1, SIGMA=0.1 在所有
     INCAR 中完全相同 3. NSW=0（单点计算设定） 4. 除 ENCUT 外，其他所有 VASP 参数在 5 个文件中保持一致
 
     输出 5 个 INCAR 文件，文件名包含 ENCUT 值（如 INCAR_ENCUT280）。不需要提交计算，只需生成正确的输入文件。
@@ -285,7 +285,9 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: kpoint_mesh_constant
-    criterion: K-point mesh specification (8x8x8) is identical in all 5 INCAR files.
+    criterion: K-point mesh (8×8×8 Gamma-centered) is consistently applied to all
+      5 calculations—either via a companion KPOINTS file or via KSPACING/KGAMMA
+      tags in INCAR.
     axis: correctness
     verify: llm_binary_judge
   - id: electronic_params_frozen
@@ -439,7 +441,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_005_20260404
+- id: BP_struct_005_20260405
   capability: batch_processing
   domain: struct
   intent: Generate corrected VASP input files for 5 structures whose initial geometry
@@ -454,8 +456,8 @@ questions:
 
     1. 仅修复结构文件（POSCAR）中的几何问题（原子位置、晶胞参数、对称性）
 
-    2. 严格冻结所有 INCAR 中的计算参数：
-       - KPOINTS: 6x6x6（不变）
+    2. 严格冻结所有计算参数（INCAR + KPOINTS）：
+       - k-point 网格: 6x6x6（不变，通过 KPOINTS 文件或 INCAR 均可）
        - ISMEAR=1, SIGMA=0.1（不变）
        - ENCUT=520 eV（不变）
        - 其他求解器参数（ALGO, NSW 等）不变
@@ -520,8 +522,9 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: kpoint_mesh_frozen
-    criterion: All 5 INCAR files specify identical k-point mesh (6x6x6), unchanged
-      from the original configuration.
+    criterion: All 5 calculations use identical k-point mesh (6×6×6), unchanged
+      from the original configuration—whether specified via a KPOINTS file or
+      via KSPACING in INCAR.
     axis: correctness
     verify: llm_binary_judge
   - id: electronic_params_frozen
