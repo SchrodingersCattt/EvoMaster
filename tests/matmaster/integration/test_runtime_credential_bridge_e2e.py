@@ -162,7 +162,9 @@ class TestBohriumToolAndRemoteShare:
         upload_calls = []
 
         def fake_post(base_url, path, access_key, payload, timeout=30):
-            post_calls.append({"path": path, "access_key": access_key, "payload": payload})
+            post_calls.append(
+                {"path": path, "access_key": access_key, "payload": payload}
+            )
             if "create" in path:
                 return {
                     "code": 0,

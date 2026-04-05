@@ -177,15 +177,12 @@ def _prepare_remote_input_zip(
     try:
         result = session.exec_bash(_remote_zip_command(input_dir, remote_zip_path))
         if result.get('exit_code') != 0:
-            detail = (
-                str(
-                    result.get('stderr')
-                    or result.get('output')
-                    or result.get('stdout')
-                    or 'unknown error'
-                )
-                .strip()
-            )
+            detail = str(
+                result.get('stderr')
+                or result.get('output')
+                or result.get('stdout')
+                or 'unknown error'
+            ).strip()
             raise RuntimeError(
                 f"Failed to package remote input_dir '{input_dir}': {detail}"
             )
@@ -329,10 +326,6 @@ class BohriumTool(BuiltinTool):
     exposed_to_model: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 0
 
-    # ------------------------------------------------------------------
-    # prompt(): platform guidance injected into system prompt
-    # ------------------------------------------------------------------
-
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return (
             '## Bohrium tool usage\n'
@@ -343,10 +336,6 @@ class BohriumTool(BuiltinTool):
             'Call again to re-check a Running job.\n'
             '- When image or machine is unknown, call list_images / list_machines first.\n'
         )
-
-    # ------------------------------------------------------------------
-    # Credential resolution (via runtime bridge)
-    # ------------------------------------------------------------------
 
     def _resolve_credentials(self) -> tuple[str, int, str]:
         """Resolve Bohrium credentials via runtime bridge.
@@ -372,10 +361,6 @@ class BohriumTool(BuiltinTool):
             base_url = BOHRIUM_OPENAPI_HOST
         return access_key, project_id, base_url
 
-    # ------------------------------------------------------------------
-    # Dispatch
-    # ------------------------------------------------------------------
-
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
         action = arguments.get('action', '')
         match action:
@@ -393,10 +378,6 @@ class BohriumTool(BuiltinTool):
                     content=f'Unknown action: {action!r}. '
                     f'Must be one of: submit, poll, list_images, list_machines.',
                 )
-
-    # ------------------------------------------------------------------
-    # action: submit
-    # ------------------------------------------------------------------
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
         access_key, project_id, base_url = self._resolve_credentials()
@@ -570,10 +551,6 @@ class BohriumTool(BuiltinTool):
         except Exception as exc:
             logger.error('bohrium submit failed: %s', exc, exc_info=True)
             return ToolResult(status='error', content=f'Submit failed: {exc}')
-
-    # ------------------------------------------------------------------
-    # action: poll (single-shot, non-blocking)
-    # ------------------------------------------------------------------
 
     def _poll(self, args: dict[str, Any]) -> ToolResult:
         access_key, _, base_url = self._resolve_credentials()
@@ -845,10 +822,6 @@ class BohriumTool(BuiltinTool):
                     continue
         return '(no log file found in result directory)'
 
-    # ------------------------------------------------------------------
-    # action: list_images
-    # ------------------------------------------------------------------
-
     def _list_images(self, args: dict[str, Any]) -> ToolResult:
         access_key, _, base_url = self._resolve_credentials()
         if not access_key:
@@ -939,10 +912,6 @@ class BohriumTool(BuiltinTool):
         except Exception as exc:
             logger.error('bohrium list_images failed: %s', exc, exc_info=True)
             return ToolResult(status='error', content=f'list_images failed: {exc}')
-
-    # ------------------------------------------------------------------
-    # action: list_machines
-    # ------------------------------------------------------------------
 
     def _list_machines(self, args: dict[str, Any]) -> ToolResult:
         access_key, _, base_url = self._resolve_credentials()

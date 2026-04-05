@@ -84,9 +84,7 @@ def _install_fake_tiefblue(monkeypatch, upload_calls: list[tuple[str, str, dict]
     )
 
 
-def _fake_submit_post_factory(
-    post_calls: list[tuple[str, dict, str]]
-):
+def _fake_submit_post_factory(post_calls: list[tuple[str, dict, str]]):
     """Build a fake submit API handler recording payloads and credentials."""
 
     def fake_post(base_url, path, access_key, payload, timeout=30):
@@ -445,7 +443,9 @@ class TestBohriumExecution:
 
         assert isinstance(result, ToolResult)
         assert result.status == "error"
-        assert any(cmd.startswith("rm -f /tmp/bohrium_input_") for cmd in session.exec_calls)
+        assert any(
+            cmd.startswith("rm -f /tmp/bohrium_input_") for cmd in session.exec_calls
+        )
 
     def test_submit_remote_share_with_closed_session_errors(
         self, tmp_path, monkeypatch
@@ -471,9 +471,7 @@ class TestBohriumExecution:
         assert result.status == "error"
         assert "open remote session" in result.content.lower()
 
-    def test_submit_personal_path_treated_as_remote_share(
-        self, tmp_path, monkeypatch
-    ):
+    def test_submit_personal_path_treated_as_remote_share(self, tmp_path, monkeypatch):
         session = FakeRemoteSession(existing_paths={"/personal/inputs"})
         tool = BohriumTool(session=session, workdir=tmp_path)
         post_calls: list[tuple[str, dict, str]] = []
