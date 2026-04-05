@@ -308,7 +308,7 @@ input_dir not found: /share/Pd111_submit
 
 ### Helper-delegation test
 
-补一个小型委托测试，验证 `_submit()` 通过 `resolve_output_path()` 进入路径分类逻辑。  
+补一个小型委托测试，验证 `_submit()` 通过 `resolve_output_path()` 进入路径分类逻辑。
 这里不替代行为测试，只用于防止后续又把分类逻辑拷回 `bohrium_tool.py`。
 
 ### Cleanup tests
