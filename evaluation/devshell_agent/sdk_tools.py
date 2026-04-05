@@ -42,7 +42,10 @@ class MatmasterEvalMcpToolkit:
             },
             "jobs": {
                 "type": "integer",
-                "description": "Parallel mm-devshell tasks (default: CLI defaults).",
+                "description": (
+                    "Parallel mm-devshell tasks; also sets automatic score --score-jobs "
+                    "and checklist max_turns = jobs×2 when using loop defaults (default: CLI)."
+                ),
             },
             "limit": {
                 "type": "integer",
@@ -292,6 +295,7 @@ class MatmasterEvalMcpToolkit:
             run_dir=run_dir,
             eval_config=params.eval_config,
             eval_ingest_timeout=float(state.eval_ingest_submit_timeout),
+            score_jobs=params.jobs,
         )
         log_path = state.session_dir / "ingest_submit.jsonl"
         log_path.parent.mkdir(parents=True, exist_ok=True)

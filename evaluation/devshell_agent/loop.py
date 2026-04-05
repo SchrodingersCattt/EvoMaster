@@ -22,6 +22,15 @@ from evaluation.devshell_agent.git_iteration import (
 )
 
 
+def checklist_max_turns_from_jobs(jobs: int) -> int:
+    """Checklist-only SDK max turns = ``jobs`` × 2 (same knob as run + score parallelism)."""
+    return max(1, int(jobs) * 2)
+
+
+def checklist_max_turns_for_shared_state(state: AgentLoopSharedState) -> int:
+    return checklist_max_turns_from_jobs(int(state.defaults.jobs))
+
+
 @dataclass
 class AgentLoopConfig:
     repo_root: Path
@@ -36,7 +45,6 @@ class AgentLoopConfig:
     eval_ingest_submit_each_iteration: bool = True
     eval_ingest_submit_timeout: float = 120.0
     enable_checklist_agent: bool = True
-    max_checklist_sdk_turns: int = 60
     checklist_permission_mode: str = ""
 
 
@@ -434,7 +442,7 @@ class DevshellAgentLoop:
             "eval_ingest_submit_each_iteration": cfg.eval_ingest_submit_each_iteration,
             "eval_ingest_submit_timeout": cfg.eval_ingest_submit_timeout,
             "enable_checklist_agent": cfg.enable_checklist_agent,
-            "max_checklist_sdk_turns": cfg.max_checklist_sdk_turns,
+            "max_checklist_sdk_turns": checklist_max_turns_from_jobs(cfg.defaults.jobs),
             "checklist_permission_mode": cfg.checklist_permission_mode or None,
         }
         session_dir.mkdir(parents=True, exist_ok=True)
@@ -686,7 +694,7 @@ class DevshellAgentLoop:
         co = ClaudeAgentOptions(
             system_prompt=self.SYSTEM_PROMPT_CHECKLIST,
             cwd=str(cfg.repo_root.resolve()),
-            max_turns=max(1, cfg.max_checklist_sdk_turns),
+            max_turns=checklist_max_turns_for_shared_state(state),
             mcp_servers={MatmasterEvalMcpToolkit.MCP_SERVER_NAME: mcp_server},
             allowed_tools=checklist_allowed,
             permission_mode=self._checklist_permission_mode_resolved(),
