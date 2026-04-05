@@ -4,9 +4,9 @@
 
 **Goal:** Add remote shared-directory support to the built-in `Bohrium` tool so `submit` can accept local paths, relative paths, and `/share/...` or `/personal/...` directories without changing the existing Bohrium OpenAPI submission contract.
 
-**Architecture:** Keep `job/create -> Tiefblue upload -> job/add` unchanged, and insert a file-level input-preparation layer inside `matmaster/tools/builtin/bohrium_tool.py`. That layer classifies `input_dir`, validates local or remote access, materializes a local temporary `input.zip`, and returns cleanup metadata to `_submit()`.
+**Architecture:** Keep `job/create -> Tiefblue upload -> job/add` unchanged, and insert a file-level input-preparation layer inside `matmaster/tools/builtin/bohrium_tool.py`. That layer must call `resolve_output_path()` for path classification, validate local or remote access, materialize a local temporary `input.zip`, and expose it through a context manager used by `_submit()`.
 
-**Tech Stack:** Python 3.10+, pytest, requests, stdlib `tempfile` / `zipfile` / `tarfile`, existing session protocol methods `exec_bash()` and `download()`
+**Tech Stack:** Python 3.10+, pytest, requests, stdlib `contextlib` / `tempfile` / `zipfile`, existing session protocol methods `path_exists()` / `is_file()` / `exec_bash()` / `download()`
 
 **Execution Skills:** `@superpowers/executing-plans` in a fresh execution session; `@superpowers/subagent-driven-development` only if executing inside the current session.
 
@@ -23,7 +23,11 @@
 - Do not touch `playground-skills/bohrium-job` or any script under that directory.
 - Keep the change scoped to the built-in `Bohrium` tool and its tests.
 - Keep file-preparation helpers as file-level shared functions inside `matmaster/tools/builtin/bohrium_tool.py`, not as `BohriumTool` instance methods except for final call wiring.
+- Directly call `resolve_output_path()` for submit-path classification; do not duplicate the `/share` classification rules.
+- Use a context manager that yields a local zip path; do not introduce a bundle dataclass unless implementation proves it necessary.
+- Use `path_exists()` + `is_file()` for remote directory preflight; reserve `exec_bash()` for remote zip creation and cleanup.
 - Preserve current local directory behavior, including automatic `> log 2>&1` suffixing.
+- Accept that `session.download()` returns `bytes`; this plan covers normal-sized input bundles only.
 - Use `uv run` for all verification commands.
 
 ---
@@ -109,6 +113,14 @@ def test_submit_remote_share_with_session_downloads_bundle(self, tmp_path, monke
     assert session.download_calls
 ```
 
+```python
+def test_submit_delegates_path_classification_to_resolve_output_path(...):
+    with patch("matmaster.tools.builtin.bohrium_tool.resolve_output_path") as mock_resolve:
+        ...
+        asyncio.run(tool.execute({...}))
+    mock_resolve.assert_called_once()
+```
+
 For the integration file, add one regression that asserts the built-in tool uses the session-backed remote path instead of reporting local `input_dir not found`.
 
 **Step 2: Run the target tests to confirm they fail**
@@ -119,7 +131,7 @@ Run:
 uv run pytest tests/matmaster/tools/builtin/test_bohrium_tool.py tests/matmaster/integration/test_runtime_credential_bridge_e2e.py -k "submit and (remote_share or relative_input_dir)" -v
 ```
 
-Expected: FAIL because `BohriumTool._submit()` still calls `Path(input_dir).is_dir()` directly and has no remote directory path handling.
+Expected: FAIL because `BohriumTool._submit()` still calls `Path(input_dir).is_dir()` directly, does not delegate submit-path classification to `resolve_output_path()`, and has no remote directory path handling.
 
 **Step 3: Commit the failing-test checkpoint**
 
@@ -130,7 +142,7 @@ git commit -m "test: cover Bohrium remote input directories"
 
 ---
 
-## Task 2: Add file-level bundle preparation helpers in `bohrium_tool.py`
+## Task 2: Add file-level input zip context manager in `bohrium_tool.py`
 
 **Files:**
 
@@ -167,24 +179,19 @@ Expected: FAIL because the helper layer does not exist yet.
 In `matmaster/tools/builtin/bohrium_tool.py`, add file-level helpers before `class BohriumTool`:
 
 ```python
-@dataclass
-class PreparedBohriumBundle:
-    zip_path: Path
-    source_kind: str
-    normalized_input_dir: str
-    temp_root: Path
-
-
-def prepare_bohrium_input_bundle(*, input_dir: str, workdir: Path | None, session: Any | None) -> PreparedBohriumBundle:
+@contextmanager
+def prepare_bohrium_input_zip(*, input_dir: str, workdir: Path | None, session: Any | None) -> Iterator[Path]:
     ...
 ```
 
 Add narrow helpers for:
 
-- classifying `input_dir`
+- calling `resolve_output_path()` for `input_dir`
 - resolving relative paths under `workdir`
+- validating remote directories via `path_exists()` and `is_file()`
 - creating local `input.zip`
-- creating and downloading a remote temporary archive
+- creating a remote temporary `input.zip` via `python3` + `zipfile`
+- downloading the remote zip directly for upload
 - cleaning temporary files
 
 Keep the helpers independent from `ToolResult`.
@@ -194,7 +201,7 @@ Keep the helpers independent from `ToolResult`.
 Run:
 
 ```bash
-uv run pytest tests/matmaster/tools/builtin/test_bohrium_tool.py -k "remote_share or relative_input_dir or packaging_failure" -v
+uv run pytest tests/matmaster/tools/builtin/test_bohrium_tool.py -k "remote_share or relative_input_dir or packaging_failure or delegates_path_classification" -v
 ```
 
 Expected: PASS for the new helper-oriented tests.
@@ -223,6 +230,7 @@ Add or refine a test that asserts:
 - `_submit()` no longer checks `Path("/share/...").is_dir()`
 - upload still sends `input.zip`
 - sandbox and standard-HPC payload shapes stay unchanged
+- session-not-open errors are distinct from missing-session errors
 
 ```python
 assert upload_calls[0][0].endswith("input.zip")
@@ -238,16 +246,16 @@ Run:
 uv run pytest tests/matmaster/tools/builtin/test_bohrium_tool.py tests/matmaster/integration/test_runtime_credential_bridge_e2e.py -k "submit and (remote_share or defaults_to_sandbox)" -v
 ```
 
-Expected: FAIL until `_submit()` is switched to use `prepare_bohrium_input_bundle(...)`.
+Expected: FAIL until `_submit()` is switched to use `prepare_bohrium_input_zip(...)`.
 
 **Step 3: Implement the `_submit()` integration**
 
 Modify `_submit()` so it:
 
 1. validates required fields
-2. calls `prepare_bohrium_input_bundle(...)`
-3. uses `bundle.zip_path` instead of direct `input_path.rglob('*')`
-4. wraps bundle cleanup in `try/finally`
+2. enters `with prepare_bohrium_input_zip(...) as zip_path:`
+3. uses `zip_path` instead of direct `input_path.rglob('*')`
+4. preserves context-manager cleanup semantics
 5. preserves all existing create/upload/add payload semantics
 
 Keep this part explicitly unchanged:
@@ -294,6 +302,8 @@ Cover:
 - file passed instead of directory
 - remote cleanup attempted after download or packaging failure
 - `/share` and `/personal` are remote-share paths, but `/tmp/...` is not
+- session exists but `is_open` is false
+- remote `python3` missing or remote zip generation failure surfaces stderr clearly
 
 Example:
 
@@ -395,14 +405,17 @@ git commit -m "fix: support remote shared input directories in Bohrium tool"
 
 ## Implementation Notes
 
-- Prefer `session.exec_bash()` for remote directory checks and archive creation because the session protocol has `download()` and `exec_bash()` but no `is_dir()`.
-- Prefer remote `tar.gz` as the transport format, then normalize to local `input.zip` before Bohrium upload.
+- Directly call `resolve_output_path()` for submit-path classification so submit and poll share the same `/share` semantics.
+- Prefer `path_exists()` + `is_file()` for remote directory checks; use `exec_bash()` only for remote zip creation and cleanup.
+- Prefer remote `python3` + stdlib `zipfile` to generate the temporary `input.zip` directly, avoiding local unzip/rezip churn and avoiding a dependency on the `zip` binary.
 - Keep error messages distinct for:
   - missing remote session
+  - session present but not open
   - remote directory missing
-  - remote packaging failure
+  - remote zip packaging failure
   - remote download failure
 - Keep the helper layer independent from `ToolResult` so testing stays simple.
+- `session.download()` returns `bytes`; this implementation is intentionally optimized for normal Bohrium input directories, not arbitrarily large remote bundles.
 
 ## Verification Checklist
 

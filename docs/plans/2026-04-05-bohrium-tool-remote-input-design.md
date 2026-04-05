@@ -16,11 +16,12 @@
 - 不将 Bohrium tool 改为项目自有 OSS URL 传递模式
 - 在 `matmaster/tools/builtin/bohrium_tool.py` 中新增文件级共享预处理层
 - `BohriumTool._submit()` 在上传前调用该预处理层，把 `input_dir` 统一转换为本地临时 `input.zip`
+- 路径分类直接复用 `matmaster.integration.runtime_bridge.path_policy.resolve_output_path()`
 - `input_dir` 支持三类输入：
   - 相对目录
   - 本地绝对目录
   - 远端共享目录 `/share/...` 与 `/personal/...`
-- 对远端共享目录采用 远端先打包、再下载、再本地统一生成 `input.zip` 的策略
+- 对远端共享目录采用 远端直接生成 `input.zip`、下载后直接上传 的策略
 - 无活动 session 时，对远端共享目录快速失败并返回明确错误
 
 ## Findings
@@ -80,7 +81,7 @@ input_dir not found: /share/Pd111_submit
 - 单一职责：预处理层只负责把 `input_dir` 转换成可上传的本地归档
 - 协议不动：不改 `job/create`、`Tiefblue` 上传、`job/add`
 - 显式失败：远端路径缺少 session 时快速报错，不做 silent fallback
-- 行为收敛：路径分类规则与 `poll(result_dir)` 保持一致
+- 行为收敛：直接复用与 `poll(result_dir)` 相同的路径分类逻辑
 - 兼容优先：本地目录成功路径与现有实现保持一致
 
 ## Target Architecture
@@ -98,8 +99,7 @@ input_dir not found: /share/Pd111_submit
 ```text
 matmaster/tools/builtin/bohrium_tool.py
   - imports
-  - shared helper dataclasses / context managers
-  - shared helper functions for input_dir preflight + bundling
+  - shared helper context managers / functions for input_dir preflight + bundling
   - BohriumTool class
 ```
 
@@ -108,33 +108,23 @@ matmaster/tools/builtin/bohrium_tool.py
 建议新增一个文件级入口，命名可类似：
 
 ```python
-def prepare_bohrium_input_bundle(
+@contextmanager
+def prepare_bohrium_input_zip(
     *,
     input_dir: str,
     workdir: Path | None,
     session: Any | None,
-) -> PreparedBohriumBundle:
+) -> Iterator[Path]:
     ...
-```
-
-建议返回轻量对象，命名可类似：
-
-```python
-@dataclass
-class PreparedBohriumBundle:
-    zip_path: Path
-    source_kind: Literal["relative", "local_abs", "remote_share"]
-    normalized_input_dir: str
-    cleanup: Callable[[], None] | None
 ```
 
 该辅助层只负责：
 
-- 路径分类
+- 调用 `resolve_output_path()` 做路径分类
 - 目录可访问性校验
 - 本地或远端目录打包
-- 返回本地 `input.zip`
-- 清理临时文件
+- 通过 `with` 语义返回本地 `input.zip`
+- 自动清理临时文件
 
 该辅助层不负责：
 
@@ -149,13 +139,15 @@ class PreparedBohriumBundle:
 
 输入为原始 `input_dir` 字符串。
 
-分类规则：
+这里直接调用 `resolve_output_path()`，不在 `bohrium_tool.py` 里重写路径分类规则。
 
-- 相对路径：按 `workdir` 解析
-- 本地绝对路径：按本地目录处理
-- `/share/...`、`/personal/...`：识别为远端共享目录
+得到的分类结果仍然是现有 `OutputPathDecision`：
 
-推荐复用或镜像 `resolve_output_path()` 的路径语义，而不是另写一套完全独立规则。
+- `relative`
+- `local_abs`
+- `remote_share`
+
+并直接使用其 `requires_remote_session` 结果判断是否允许继续。
 
 ### Step 2: Validate accessibility
 
@@ -166,9 +158,16 @@ class PreparedBohriumBundle:
 
 #### 远端共享目录
 
-- 要求存在活动 session
-- 用 `session.exec_bash()` 做目录级校验，例如 `test -d`
-- 不使用 `session.is_file()` 代替目录校验
+- 要求存在活动且已打开的 session
+- 优先使用现有 session 协议：
+  - `path_exists(path)`
+  - `is_file(path)`
+- 判定规则：
+  - `path_exists(path) is False` -> 远端目录不存在
+  - `is_file(path) is True` -> 该路径是文件，不是目录
+  - 其余情况按目录继续处理
+
+`session.exec_bash()` 保留给远端打包与清理，不用于预校验。
 
 ### Step 3: Produce a local bundle
 
@@ -179,13 +178,13 @@ class PreparedBohriumBundle:
 
 #### 远端共享目录
 
-- 在远端会话中创建临时归档，推荐 `tar.gz`
-- 使用 `session.download()` 将该归档下载到本地临时目录
-- 本地解包后重新统一打包为 `input.zip`
+- 在远端会话中直接创建临时 `input.zip`
+- 使用 `session.download()` 将该 zip 下载到本地临时目录
+- 下载后的 zip 直接进入上传阶段，不再解包和重打包
 
 ### Step 4: Continue existing submit flow
 
-`BohriumTool._submit()` 获取 `PreparedBohriumBundle.zip_path` 后，继续执行现有逻辑：
+`BohriumTool._submit()` 在 `with prepare_bohrium_input_zip(...) as zip_path:` 中获得本地 zip 后，继续执行现有逻辑：
 
 1. `job/create`
 2. 上传 `input.zip` 到 Bohrium `storePath`
@@ -195,7 +194,7 @@ class PreparedBohriumBundle:
 
 ### Recommended approach
 
-采用 远端先打包、再下载单个归档 的方式，而不是逐文件拉取。
+采用 远端直接生成 zip、再下载单个归档 的方式，而不是逐文件拉取。
 
 原因：
 
@@ -203,20 +202,24 @@ class PreparedBohriumBundle:
 - 自动保留目录层级
 - 中间状态更少，失败恢复更清晰
 - 对包含子目录的科学计算输入目录更稳妥
+- 避免 本地解包再重打包 这一步额外 I/O
 
 ### Remote packaging details
 
 推荐流程：
 
-1. 通过 `session.exec_bash()` 在远端创建临时归档
-2. 归档文件名放在 `/tmp/` 下，带随机后缀
-3. 下载该归档到本地临时目录
-4. 本地解包并重新生成标准 `input.zip`
-5. 使用 `finally` 尝试删除远端临时归档
+1. 使用 `resolve_output_path()` 得到标准化远端目录路径
+2. 通过 `session.exec_bash()` 在远端 `/tmp/` 下生成带随机后缀的 `input.zip`
+3. 远端 zip 生成使用 `python3` + 标准库 `zipfile`
+4. 使用 `session.download()` 把该 zip 拉回本地临时目录
+5. 下载后的 zip 直接上传给 Bohrium
+6. 使用 `finally` 尝试删除远端临时 zip
+
+这里明确选择依赖远端 `python3`，而不是依赖 `zip` 命令。若远端缺少 `python3`，应报显式错误，而不是隐式回退到另一条未定义的打包路径。
 
 ### Why normalize back to `input.zip`
 
-虽然远端中间格式可用 `tar.gz`，但 Bohrium tool 当前后续逻辑与测试都围绕 `input.zip` 展开。统一回 `input.zip` 可以最大程度降低改动面并保持上传阶段一致性。
+当前 Bohrium tool 后续逻辑与测试都围绕 `input.zip` 展开。远端直接生成 `input.zip` 可以保持上传阶段一致性，同时减少不必要的格式转换。
 
 ## Error Handling
 
@@ -227,9 +230,10 @@ class PreparedBohriumBundle:
 1. 本地目录不存在
 2. 本地路径不是目录
 3. 远端共享目录缺少活动 session
-4. 远端目录不存在
-5. 远端打包失败
-6. 远端归档下载失败
+4. session 对象存在但未打开
+5. 远端目录不存在
+6. 远端打包失败
+7. 远端 zip 下载失败
 
 ### Error message guidance
 
@@ -239,6 +243,10 @@ class PreparedBohriumBundle:
 
 ```text
 input_dir '/share/Pd111_submit' requires an active remote session, but none is available
+```
+
+```text
+input_dir '/share/Pd111_submit' requires an open remote session, but the current session is not open
 ```
 
 ```text
@@ -294,8 +302,14 @@ input_dir not found: /share/Pd111_submit
 - 有活动 session 时，`/share/...` 目录提交成功
 - 有活动 session 时，`/personal/...` 目录提交成功
 - 无 session 时，远端共享目录报 remote session required
+- session 存在但未打开时，报 open remote session required
 - 远端目录不存在时报明确错误
 - 远端打包失败时报明确错误
+
+### Helper-delegation test
+
+补一个小型委托测试，验证 `_submit()` 通过 `resolve_output_path()` 进入路径分类逻辑。  
+这里不替代行为测试，只用于防止后续又把分类逻辑拷回 `bohrium_tool.py`。
 
 ### Cleanup tests
 
@@ -319,8 +333,9 @@ input_dir not found: /share/Pd111_submit
 
 ## Risks
 
-- 远端打包命令依赖目标运行环境具备 `tar`
-- 远端目录很大时，本地临时归档与解包会带来额外磁盘占用
+- 远端打包命令依赖目标运行环境具备 `python3`
+- `session.download()` 当前返回 `bytes`，远端 zip 会整块进入内存；本轮实现适用于常规输入目录，不面向超大目录优化
+- 远端目录很大时，本地临时 zip 仍会带来磁盘占用
 - 如果错误处理不严谨，容易残留远端 `/tmp` 临时文件
 
 这些风险都属于可控范围，且明显低于逐文件远端拉取的复杂度与脆弱性。
