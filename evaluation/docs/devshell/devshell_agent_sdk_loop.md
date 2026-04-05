@@ -30,7 +30,7 @@ uv run python evaluation/scripts/devshell/run_devshell_agent_loop.py \
 - **提示词优化策略与体量**：主 Agent 系统提示要求**先删减/合并重复或矛盾表述再增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出，gpt-4o tiktoken）**推荐 ≤ 12000**，且**硬上限 ≤ 15000**。自检：`uv run python -m evaluation.devshell_agent.exp_prompt_budget <exp>`。
 - **判分与改仓库**：由 SDK 会话先调用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py --dry-run` 获取真实分数，再视需要检查低分任务的 workspace / events；原则与 [devshell_claude_code_eval.md](devshell_claude_code_eval.md) 一致。
 - **每轮结束**：模型应调用 `report_iteration_outcome`；外层在 `macro_mean_0_100 >= --target-mean-score` 或 `target_met` 时提前停止。
-- **每轮 ingest 上报**：在 **`--eval-ingest-pending-only`**（默认）下，外层在主 Agent 回合结束后、**checklist 专责回合开始前**，对本轮**每一次** `run_devshell_eval` 的输出目录（按顺序、去重）分别执行 `score_devshell_tasks.py --submit`（写回 `pending_ingest` 分数并 POST），保证题库尚未被 checklist 改写时与 `raw_runs` 中的 `question_id` 一致，且中间 tag（如先 `iter_01` 再 `iter_01b`）不会只上报最后一次。日志追加到会话目录 `ingest_submit.jsonl`。若内层已改为即时 POST（`--no-eval-ingest-pending-only`），则不再自动 `--submit`，以免重复。关闭自动上报：`--no-eval-ingest-submit-each-iteration`；超时：`--eval-ingest-submit-timeout`。
+- **每次 run 完成即 ingest 上报**：在 **`--eval-ingest-pending-only`**（默认）下，外层会在**每一次** `run_devshell_eval` 完成后，立刻对该输出目录执行 `score_devshell_tasks.py --submit`（写回 `pending_ingest` 分数并 POST），保证 `iter_01`、`iter_01b` 这类中间 tag 一打完分就上报，不再等整轮主 Agent 会话结束。日志追加到会话目录 `ingest_submit.jsonl`。若内层已改为即时 POST（`--no-eval-ingest-pending-only`），则不再自动 `--submit`，以免重复。关闭自动上报：`--no-eval-ingest-submit-each-iteration`；超时：`--eval-ingest-submit-timeout`。
 
 ### Git：每改一次提交，无效则回滚
 

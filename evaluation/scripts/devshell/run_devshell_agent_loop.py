@@ -106,9 +106,9 @@ class DevshellAgentLoopCli:
             action=argparse.BooleanOptionalAction,
             default=True,
             help=(
-                "When eval-ingest-pending-only is on, after each main-agent iteration "
-                "(before the checklist follow-up) run score_devshell_tasks.py --submit "
-                "on each run_devshell_eval output dir recorded that iteration."
+                "When eval-ingest-pending-only is on, immediately after each "
+                "run_devshell_eval completes, run score_devshell_tasks.py --submit "
+                "for that output directory."
             ),
         )
         p.add_argument(

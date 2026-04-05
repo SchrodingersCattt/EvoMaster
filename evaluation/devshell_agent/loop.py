@@ -20,7 +20,6 @@ from evaluation.devshell_agent.git_iteration import (
     git_rev_parse_head,
     head_at_iteration_start,
 )
-from evaluation.devshell_agent.subprocess_runner import run_score_devshell_tasks_submit
 
 
 @dataclass
@@ -66,7 +65,7 @@ class DevshellAgentLoop:
 - 优先使用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py` 自动评分；它会基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl` 调用同一套 `BinaryEvaluator`。
 - 宏平均以 `score_devshell_tasks.py` 输出为准；不要手工估算一个与脚本不一致的分数。
 - 如需解释低分原因，可再阅读题库 YAML、workspace 交付物和事件日志；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
-- 若使用 `--eval-ingest-pending-only`（本编排默认）：判分时请只用 `score_devshell_tasks.py --dry-run`；**ingest POST** 由外层在每轮主 Agent 会话结束后、**checklist 专责回合开始前**，对本轮**各次** `run_devshell_eval` 输出目录依次执行 `score_devshell_tasks.py --submit`，你无需再手动 `--submit`（避免重复上报）。
+- 若使用 `--eval-ingest-pending-only`（本编排默认）：判分时请只用 `score_devshell_tasks.py --dry-run`；每次 **run_devshell_eval** 完成后，编排器会立即对该输出目录执行 `score_devshell_tasks.py --submit` 并上报 ingest，你无需再手动 `--submit`（避免重复上报）。
 
 ## 修改范围
 - **可写**：`configs/mat_master/`、`matmaster/exps/`、`playground/mat_master/` 等与运行中 Agent 相关的提示、技能、工具描述。
@@ -128,7 +127,7 @@ class DevshellAgentLoop:
 
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
-2. 对**需要判分的**每个 `run_devshell_eval` 目录分别执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录> --dry-run` 获取判分（**不要**加 `--submit`）；ingest 由编排器在本轮主会话结束且 checklist 开始前对各目录自动提交。
+2. 对**需要判分的**每个 `run_devshell_eval` 目录分别执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录> --dry-run` 获取判分（**不要**加 `--submit`）；每次 `run_devshell_eval` 跑完后，编排器会立刻对该目录自动提交 ingest。
 3. 若未达标：在**允许的路径**内修改提示词/工具/配置（**不要**改 `evaluation/question_bank/`）。优化提示时**先删并合并重复/矛盾表述，再考虑增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出）应**优先压到 ≤ 12000**，且**不得超过 15000**（gpt-4o tiktoken）。每次改完相关 TOML 后、`git commit` 前执行：
    `uv run python -m evaluation.devshell_agent.exp_prompt_budget {budget_exp}`
    **exit 非 0 不得提交**。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**。若你认为问题在 **checklist / 参考答案** 而非产品侧，调用 **escalate_checklist_revision** 并仍在第 4 步前完成主流程。
@@ -190,6 +189,8 @@ class DevshellAgentLoop:
             session_dir=cfg.session_dir,
             outcomes=[],
             defaults=cfg.defaults,
+            eval_ingest_submit_each_iteration=cfg.eval_ingest_submit_each_iteration,
+            eval_ingest_submit_timeout=cfg.eval_ingest_submit_timeout,
         )
         toolkit = MatmasterEvalMcpToolkit(state)
         mcp_server = toolkit.build_mcp_server()
@@ -231,26 +232,6 @@ class DevshellAgentLoop:
                         for block in message.content:
                             if isinstance(block, TextBlock) and block.text.strip():
                                 print(block.text, file=sys.stderr, flush=True)
-
-                # Ingest submit must run against the question bank as it was when the
-                # run was produced, and every run_devshell_eval directory this iteration
-                # must be submitted (not only the last tag). Checklist follow-up may
-                # rename question ids; submitting after it breaks scoring for stale ids.
-                dirs_to_submit: list[Path] = []
-                if state.eval_output_dirs:
-                    seen: set[Path] = set()
-                    for p in state.eval_output_dirs:
-                        r = p.resolve()
-                        if r not in seen:
-                            seen.add(r)
-                            dirs_to_submit.append(r)
-                elif state.last_eval_output_dir is not None:
-                    dirs_to_submit.append(state.last_eval_output_dir.resolve())
-                for run_dir in dirs_to_submit:
-                    if not self._maybe_submit_iteration_ingest(
-                        state=state, iteration=it, run_dir=run_dir
-                    ):
-                        exit_code = 1
 
                 if await self._run_checklist_followup_if_needed(
                     it=it, state=state, mcp_server=mcp_server
@@ -406,78 +387,6 @@ class DevshellAgentLoop:
             )
             return 1
         return 0
-
-    def _defaults_disable_eval_ingest(self) -> bool:
-        return "--no-eval-ingest" in self._cfg.defaults.extra_args
-
-    def _maybe_submit_iteration_ingest(
-        self,
-        *,
-        state: AgentLoopSharedState,
-        iteration: int,
-        run_dir: Path | None = None,
-    ) -> bool:
-        """Return False if ``--submit`` was run and exited non-zero."""
-        cfg = self._cfg
-        if not cfg.eval_ingest_submit_each_iteration:
-            return True
-        if not cfg.defaults.eval_ingest_pending_only:
-            return True
-        if self._defaults_disable_eval_ingest():
-            return True
-        if run_dir is None:
-            run_dir = state.last_eval_output_dir
-        if run_dir is None:
-            print(
-                f"warning: iter {iteration}: skip ingest submit (no run_devshell_eval "
-                f"output dir recorded)",
-                file=sys.stderr,
-            )
-            return True
-        run_dir = run_dir.resolve()
-        if not (run_dir / "raw_runs.jsonl").is_file():
-            print(
-                f"warning: iter {iteration}: skip ingest submit (no raw_runs.jsonl in "
-                f"{run_dir})",
-                file=sys.stderr,
-            )
-            return True
-        pending_dir = run_dir / "pending_ingest"
-        if not pending_dir.is_dir() or not any(pending_dir.glob("*.json")):
-            print(
-                f"warning: iter {iteration}: skip ingest submit (no pending_ingest/*.json "
-                f"under {run_dir})",
-                file=sys.stderr,
-            )
-            return True
-        rc, out, err = run_score_devshell_tasks_submit(
-            repo_root=cfg.repo_root,
-            run_dir=run_dir,
-            eval_config=cfg.defaults.eval_config,
-            eval_ingest_timeout=float(cfg.eval_ingest_submit_timeout),
-        )
-        log_path = cfg.session_dir / "ingest_submit.jsonl"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        log_row = {
-            "iteration": iteration,
-            "run_dir": str(run_dir),
-            "exit_code": rc,
-            "stdout_tail": (out or "")[-8000:],
-            "stderr_tail": (err or "")[-8000:],
-        }
-        with log_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(log_row, ensure_ascii=False) + "\n")
-        if out.strip():
-            print(out, file=sys.stderr, end="" if out.endswith("\n") else "\n")
-        if err.strip():
-            print(err, file=sys.stderr, end="" if err.endswith("\n") else "\n")
-        if rc != 0:
-            print(
-                f"warning: iter {iteration}: score_devshell_tasks --submit exit {rc}",
-                file=sys.stderr,
-            )
-            return False
-        return True
 
     def run_sync(self) -> int:
         return asyncio.run(self.run())
