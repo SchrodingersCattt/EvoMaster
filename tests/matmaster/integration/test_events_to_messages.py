@@ -252,6 +252,31 @@ class TestEventsToMessagesPreservesOrder:
         assert result[-1].content == "answer"
         assert result[-1].reasoning_content == "hidden reasoning"
 
+    def test_assistant_state_drops_trivial_tool_call_preamble_content(self):
+        events = [
+            _user_event("q"),
+            _assistant_state_event(
+                content="...",
+                tool_calls=[
+                    {
+                        "id": "call-1",
+                        "name": "bash",
+                        "arguments": {"cmd": "pwd"},
+                    }
+                ],
+            ),
+            _tool_result_event("call-1", "bash", "/tmp"),
+            _response_event("done"),
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assistant_with_tools = [
+            m for m in result if isinstance(m, AssistantMessage) and m.tool_calls
+        ]
+        assert len(assistant_with_tools) == 1
+        assert assistant_with_tools[0].content is None
+
 
 class TestEventsToMessagesPersistenceRoundTrip:
     """Persisted public content shape remains readable by ChatHistoryConverter."""

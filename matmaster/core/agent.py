@@ -31,6 +31,7 @@ from matmaster.types.events import (
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
+    UsageEvent,
 )
 
 if TYPE_CHECKING:
@@ -42,6 +43,7 @@ from matmaster.core.hooks import (
     RunContext,
     UserPromptContext,
 )
+from matmaster.response_text import is_trivial_response_text
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -342,6 +344,16 @@ class AgentKernel:
             if spec.compactor:
                 spec.compactor.update_message_count(len(state.messages))
 
+            yield _KernelItem(
+                event=UsageEvent(
+                    source="agent",
+                    turn=state.turn,
+                    phase="llm_response",
+                    turn_usage=dict(turn_usage),
+                    total_usage=dict(state.total_usage),
+                )
+            )
+
             if not response.tool_calls:
                 if not self._is_valid_natural_finish(response):
                     yield self._terminal(state, 'invalid_finish')
@@ -419,6 +431,16 @@ class AgentKernel:
                                 skill_name=skill_name,
                             )
                         )
+
+            yield _KernelItem(
+                event=UsageEvent(
+                    source="agent",
+                    turn=state.turn,
+                    phase="tool_result",
+                    turn_usage=dict(turn_usage),
+                    total_usage=dict(state.total_usage),
+                )
+            )
 
         yield self._terminal(state, 'max_turns')
 
@@ -649,14 +671,16 @@ class AgentKernel:
                         producing_reasoning = False
                     # Segment transition: content -> tool_calls
                     if producing_content:
-                        yield _KernelItem(
-                            event=ResponseEvent(
-                                source="agent",
-                                content=''.join(content_parts),
-                                stream_state="complete",
-                                stream_id=stream_id,
+                        content_snapshot = ''.join(content_parts)
+                        if not is_trivial_response_text(content_snapshot):
+                            yield _KernelItem(
+                                event=ResponseEvent(
+                                    source="agent",
+                                    content=content_snapshot,
+                                    stream_state="complete",
+                                    stream_id=stream_id,
+                                )
                             )
-                        )
                         producing_content = False
                     for delta in chunk.tool_call_deltas:
                         idx = delta.get('index', 0)
@@ -731,6 +755,8 @@ class AgentKernel:
                 tool_calls.append(
                     ToolCallData(id=v['id'], name=v['name'], arguments=args)
                 )
+            if is_trivial_response_text(joined_content):
+                joined_content = ''
 
         yield _KernelItem(
             llm_response=LLMResponse(

@@ -10,6 +10,7 @@ from matmaster.types.messages import (
     ToolMessage,
     UserMessage,
 )
+from matmaster.response_text import is_trivial_response_text
 from src.utils.chat_event_source import normalize_event_source
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,16 @@ def _adapt_tool_calls_format(raw: dict) -> dict:
         else:
             adapted.append(tc)
     return {**raw, 'tool_calls': adapted}
+
+
+def _sanitize_trivial_tool_call_preamble(raw: dict) -> dict:
+    """Drop punctuation-only assistant content when the turn is really tool-use."""
+    tool_calls = raw.get('tool_calls')
+    if not isinstance(tool_calls, list) or not tool_calls:
+        return raw
+    if not is_trivial_response_text(raw.get('content')):
+        return raw
+    return {**raw, 'content': None}
 
 
 def _serialized_message_role(m: dict) -> str:
@@ -443,7 +454,11 @@ class ChatHistoryConverter:
                 raw_content = ev.get('content')
                 try:
                     msg = AssistantMessage.model_validate(
-                        _adapt_tool_calls_format(raw_content) if raw_content else {}
+                        _sanitize_trivial_tool_call_preamble(
+                            _adapt_tool_calls_format(raw_content)
+                        )
+                        if raw_content
+                        else {}
                     )
                 except Exception as e:
                     logger.warning(

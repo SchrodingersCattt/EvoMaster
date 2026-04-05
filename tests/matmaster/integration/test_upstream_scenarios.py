@@ -21,6 +21,7 @@ from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.events import (
     AssistantStateEvent,
     FinishEvent,
+    ResponseEvent,
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
@@ -241,6 +242,76 @@ class TestEventHandlerPersistence:
         # Non-streaming thought in direct mode is filtered
         thought_payloads = [p for p in payloads if p.get("type") == "thought"]
         assert len(thought_payloads) == 1  # only streaming one
+
+    async def test_sse_drops_trivial_response_preamble_before_tool_call(self) -> None:
+        """Punctuation-only response chunk before tool_calls should not reach frontend."""
+        payloads = []
+
+        async def mock_send_cb(payload):
+            payloads.append(payload)
+
+        handler = SSEHandler(
+            send_cb=mock_send_cb,
+            session_id="sess-1",
+            task_id="task-1",
+            invocation_id=None,
+            mode="direct",
+        )
+
+        await handler.handle(
+            ResponseEvent(
+                source="agent",
+                content="...",
+                stream_state="streaming",
+                stream_id="stream-1",
+            )
+        )
+        await handler.handle(
+            ToolCallEvent(
+                source="agent",
+                call_id="c1",
+                tool_name="bash",
+                arguments={"cmd": "pwd"},
+            )
+        )
+
+        assert [p.get("type") for p in payloads] == ["tool_call"]
+
+    async def test_sse_keeps_trivial_prefix_when_real_response_follows(self) -> None:
+        """Ellipsis should be preserved only when it is followed by visible content."""
+        payloads = []
+
+        async def mock_send_cb(payload):
+            payloads.append(payload)
+
+        handler = SSEHandler(
+            send_cb=mock_send_cb,
+            session_id="sess-1",
+            task_id="task-1",
+            invocation_id=None,
+            mode="direct",
+        )
+
+        await handler.handle(
+            ResponseEvent(
+                source="agent",
+                content="...",
+                stream_state="streaming",
+                stream_id="stream-1",
+            )
+        )
+        await handler.handle(
+            ResponseEvent(
+                source="agent",
+                content="真实内容",
+                stream_state="streaming",
+                stream_id="stream-1",
+            )
+        )
+
+        assert [p.get("type") for p in payloads] == ["response", "response"]
+        assert payloads[0]["content"] == "..."
+        assert payloads[1]["content"] == "真实内容"
 
 
 # -- Reply queue dormant plumbing (retained for v2.3) ----------------

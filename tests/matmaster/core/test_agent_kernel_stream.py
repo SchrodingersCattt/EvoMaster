@@ -147,6 +147,41 @@ class SkillStreamProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
+class TrivialToolPreambleProvider:
+    """Provider that emits punctuation-only content before switching to tools."""
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.call_count += 1
+        if self.call_count == 1:
+            yield StreamChunk(content="...")
+            yield StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "tc-ellipsis",
+                        "name": "test_tool",
+                        "arguments": '{"cmd": "pwd"}',
+                    }
+                ],
+                finish_reason="tool_calls",
+            )
+        else:
+            yield StreamChunk(content="done")
+            yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+
+
 # ── _stream_llm_items() tests ─────────────────────────────
 
 
@@ -372,6 +407,28 @@ class TestRunItemsAssistantState:
         # State should contain tool_calls
         state = assistant_state_events[0].state
         assert state.get("tool_calls") is not None
+
+    @pytest.mark.asyncio
+    async def test_assistant_state_drops_trivial_tool_call_preamble_content(self) -> None:
+        """Punctuation-only content before tool_calls should not leak into assistant_state."""
+        from matmaster.core.agent import AgentKernel
+
+        provider = TrivialToolPreambleProvider()
+        registry, _ = _make_tool_registry(tool_names=["test_tool"])
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assistant_state_events = [
+            e for e in events if isinstance(e, AssistantStateEvent)
+        ]
+        assert len(assistant_state_events) >= 1, "Should yield AssistantStateEvent"
+        state = assistant_state_events[0].state
+        assert state.get("tool_calls") is not None
+        assert state.get("content") is None
 
 
 class TestRunItemsSkillHit:

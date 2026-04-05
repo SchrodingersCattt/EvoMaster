@@ -122,6 +122,16 @@ class ToolProgressEvent(EventBase):
     content: str = ""
 
 
+class UsageEvent(EventBase):
+    """Per-turn token usage snapshot emitted after LLM response and tool execution."""
+
+    type: Literal["usage"] = "usage"
+    turn: int
+    phase: str  # 'llm_response' | 'tool_result'
+    turn_usage: dict[str, int] = Field(default_factory=dict)
+    total_usage: dict[str, int] = Field(default_factory=dict)
+
+
 # ── SystemEvent: service-layer events ───────────────────
 
 
@@ -227,6 +237,7 @@ AgentEvent = Annotated[
         AssistantStateEvent,
         SkillHitEvent,
         ToolProgressEvent,
+        UsageEvent,
     ],
     Field(discriminator="type"),
 ]
@@ -259,6 +270,7 @@ BusEvent = Annotated[
         AssistantStateEvent,
         SkillHitEvent,
         ToolProgressEvent,
+        UsageEvent,
         # SystemEvent types
         ConfirmationRequestEvent,
         ConfirmationTimeoutEvent,
