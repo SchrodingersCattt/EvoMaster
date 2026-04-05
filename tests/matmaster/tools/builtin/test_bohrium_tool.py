@@ -405,9 +405,7 @@ class TestBohriumSessionCredentials:
 
         sdk_module = types.ModuleType("bohrium_open_sdk")
         opensdk_module = types.ModuleType("bohrium_open_sdk.opensdk")
-        tiefblue_module = types.ModuleType(
-            "bohrium_open_sdk.opensdk._tiefblue_client"
-        )
+        tiefblue_module = types.ModuleType("bohrium_open_sdk.opensdk._tiefblue_client")
         tiefblue_module.Tiefblue = FakeTiefblueClient
         sdk_module.opensdk = opensdk_module
         opensdk_module._tiefblue_client = tiefblue_module
@@ -448,7 +446,10 @@ class TestBohriumSessionCredentials:
         tool = BohriumTool(workdir=tmp_path)
         result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
         assert result.status == "error"
-        assert "credential" in result.content.lower() or "unavailable" in result.content.lower()
+        assert (
+            "credential" in result.content.lower()
+            or "unavailable" in result.content.lower()
+        )
 
     def test_session_none_falls_back_to_env(self, tmp_path, monkeypatch):
         """session=None should fall back to env credentials via bridge."""

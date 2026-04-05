@@ -215,12 +215,19 @@ class TestGlobEnvInjection:
         session.exec_bash = MagicMock(
             side_effect=[
                 {"stdout": "", "stderr": "", "exit_code": 0},
-                {"stdout": "/workspace/a.py", "stderr": "", "exit_code": 0, "output": "/workspace/a.py"},
+                {
+                    "stdout": "/workspace/a.py",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "output": "/workspace/a.py",
+                },
             ]
         )
         tool = GlobTool(session=session, workdir="/workspace")
         asyncio.run(tool.execute({"pattern": "**/*.py"}))
         final_call = session.exec_bash.call_args_list[-1]
-        assert final_call.kwargs["command"] != GlobTool._build_find_command("**/*.py", "/workspace")
+        assert final_call.kwargs["command"] != GlobTool._build_find_command(
+            "**/*.py", "/workspace"
+        )
         assert "find" in final_call.kwargs["command"]
         assert session.write_file.called

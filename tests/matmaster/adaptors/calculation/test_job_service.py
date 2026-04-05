@@ -212,9 +212,9 @@ class TestGetAccessKeyBridgeBacked:
         from matmaster.adaptors.calculation.job_service import _get_access_key
 
         sig = inspect.signature(_get_access_key)
-        assert "session" in sig.parameters, (
-            "_get_access_key must accept session parameter for bridge-backed resolution"
-        )
+        assert (
+            "session" in sig.parameters
+        ), "_get_access_key must accept session parameter for bridge-backed resolution"
 
     def test_get_access_key_prefers_session_backed_bridge(self, monkeypatch):
         """_get_access_key should use bridge when session is provided."""
@@ -236,9 +236,9 @@ class TestGetAccessKeyBridgeBacked:
         monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
         monkeypatch.delenv("BOHRIUM_USER_ID", raising=False)
 
-        from matmaster.adaptors.calculation.job_service import _get_access_key
-
         import pytest
+
+        from matmaster.adaptors.calculation.job_service import _get_access_key
 
         with pytest.raises(ValueError, match="[Bb]ohrium"):
             _get_access_key()

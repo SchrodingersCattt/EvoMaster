@@ -41,9 +41,7 @@ def resolve_credentials(
     if explicit:
         merged = _merge_explicit(explicit, env_keys)
         if _has_required(merged, required_keys):
-            return ResolvedCredential(
-                service=service, source="explicit", values=merged
-            )
+            return ResolvedCredential(service=service, source="explicit", values=merged)
 
     # 2. Session credentials
     if session_extractor is not None:

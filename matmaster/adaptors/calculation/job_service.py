@@ -54,9 +54,7 @@ def _tiefblue_nas_host() -> str:
 # ===================================================================
 
 
-def _get_access_key(
-    access_key: str | None = None, session: Any = None
-) -> str:
+def _get_access_key(access_key: str | None = None, session: Any = None) -> str:
     """Return a valid access key or raise.
 
     Uses the runtime bridge for credential resolution with full

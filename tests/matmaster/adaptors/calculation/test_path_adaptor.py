@@ -624,17 +624,17 @@ class TestBridgeBackedCredentialResolution:
         """_session_bohrium_credentials should be removed in favor of bridge."""
         import matmaster.adaptors.calculation.path_adaptor as mod
 
-        assert not hasattr(mod, "_session_bohrium_credentials"), (
-            "_session_bohrium_credentials should be removed in favor of bridge"
-        )
+        assert not hasattr(
+            mod, "_session_bohrium_credentials"
+        ), "_session_bohrium_credentials should be removed in favor of bridge"
 
     def test_is_missing_credential_removed(self):
         """_is_missing_credential should be removed in favor of bridge."""
         import matmaster.adaptors.calculation.path_adaptor as mod
 
-        assert not hasattr(mod, "_is_missing_credential"), (
-            "_is_missing_credential should be removed in favor of bridge"
-        )
+        assert not hasattr(
+            mod, "_is_missing_credential"
+        ), "_is_missing_credential should be removed in favor of bridge"
 
     def test_resolve_args_uses_bridge_for_credentials(self, monkeypatch):
         """resolve_args should use bridge-backed credential resolution."""

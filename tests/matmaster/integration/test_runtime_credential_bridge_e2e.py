@@ -8,7 +8,6 @@ fallback chains.
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
 import types
 from types import SimpleNamespace
@@ -35,9 +34,7 @@ def _session_with_bohrium(
 class TestBohriumToolAndRemoteShare:
     """BohriumTool should use session credentials for all actions."""
 
-    def test_bohrium_tool_submit_uses_session_credentials(
-        self, tmp_path, monkeypatch
-    ):
+    def test_bohrium_tool_submit_uses_session_credentials(self, tmp_path, monkeypatch):
         """Submit action uses session-backed credentials, not env vars."""
         monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
         monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
@@ -73,9 +70,7 @@ class TestBohriumToolAndRemoteShare:
         # Mock tiefblue SDK
         sdk_module = types.ModuleType("bohrium_open_sdk")
         opensdk_module = types.ModuleType("bohrium_open_sdk.opensdk")
-        tiefblue_module = types.ModuleType(
-            "bohrium_open_sdk.opensdk._tiefblue_client"
-        )
+        tiefblue_module = types.ModuleType("bohrium_open_sdk.opensdk._tiefblue_client")
 
         class FakeTiefblue:
             def __init__(self, **kw):

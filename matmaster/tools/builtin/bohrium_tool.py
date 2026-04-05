@@ -517,9 +517,7 @@ class BohriumTool(BuiltinTool):
                     and hasattr(self._session, 'upload_directory')
                 ):
                     try:
-                        self._session.upload_directory(
-                            str(result_dir), result_dir_str
-                        )
+                        self._session.upload_directory(str(result_dir), result_dir_str)
                         report_dir = result_dir_str
                     except Exception as upload_exc:
                         logger.warning(
