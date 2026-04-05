@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -23,7 +24,7 @@ class DrainResult:
 
 async def drain_run_stream(
     stream: AsyncIterator[Any],
-    on_event: Callable[[Any], None] | None = None,
+    on_event: Callable[[Any], Any] | None = None,
 ) -> DrainResult:
     """Consume run_stream() to completion, return structured result.
 
@@ -55,5 +56,7 @@ async def drain_run_stream(
             )
         events.append(event)
         if on_event is not None:
-            on_event(event)
+            result = on_event(event)
+            if inspect.isawaitable(result):
+                await result
     raise RuntimeError("run_stream ended without RunResultEvent")

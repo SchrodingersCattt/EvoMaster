@@ -26,7 +26,12 @@ from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.events import ContextCompactionEvent, RunResultEvent
+from matmaster.types.events import (
+    ContextCompactionEvent,
+    ResponseEvent,
+    RunResultEvent,
+    ToolCallEvent,
+)
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -201,7 +206,7 @@ class TestExpWiring:
             llm_provider=MockLLMProvider(),
         )
 
-        async def fake_drain_run_stream(_stream):
+        async def fake_drain_run_stream(_stream, on_event=None):
             return SimpleNamespace(
                 status="completed",
                 final_content="child done",
@@ -232,6 +237,99 @@ class TestExpWiring:
         assert started[0].parent_session_id == "session-1"
         assert started[0].task_preview == "summarize this task"
         assert stopped[0].agent_id == started[0].agent_id
+
+    @pytest.mark.asyncio
+    async def test_make_spawn_fn_forwards_child_events_with_source_and_spawn_id(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        forwarded = []
+
+        async def sink(event) -> None:
+            forwarded.append(event)
+
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            run_meta={"session_id": "session-1", "event_sink": sink},
+            llm_provider=MockLLMProvider(),
+        )
+
+        async def fake_drain_run_stream(_stream, on_event=None):
+            if on_event is not None:
+                await on_event(ResponseEvent(source="agent", content="child answer"))
+                await on_event(
+                    ToolCallEvent(
+                        source="agent",
+                        call_id="c1",
+                        tool_name="Read",
+                        arguments={},
+                    )
+                )
+            return SimpleNamespace(
+                status="completed",
+                final_content="child done",
+                reason="natural",
+            )
+
+        with (
+            patch(
+                "matmaster.config.loader.load_exp_config",
+                return_value=ExpConfig(name="direct"),
+            ),
+            patch(
+                "matmaster.core.stream_drain.drain_run_stream",
+                side_effect=fake_drain_run_stream,
+            ),
+        ):
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
+            result = await spawn_fn("direct", "summarize this task")
+
+        assert result == "child done"
+        assert len(forwarded) == 2
+        assert {event.source for event in forwarded} == {"MatMaster:direct"}
+        assert all(event.spawn_id for event in forwarded)
+        assert len({event.spawn_id for event in forwarded}) == 1
+
+    @pytest.mark.asyncio
+    async def test_make_spawn_fn_without_event_sink_still_returns_child_summary(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            run_meta={"session_id": "session-1"},
+            llm_provider=MockLLMProvider(),
+        )
+
+        async def fake_drain_run_stream(_stream, on_event=None):
+            if on_event is not None:
+                await on_event(ResponseEvent(source="agent", content="child answer"))
+            return SimpleNamespace(
+                status="completed",
+                final_content="child done",
+                reason="natural",
+            )
+
+        with (
+            patch(
+                "matmaster.config.loader.load_exp_config",
+                return_value=ExpConfig(name="direct"),
+            ),
+            patch(
+                "matmaster.core.stream_drain.drain_run_stream",
+                side_effect=fake_drain_run_stream,
+            ),
+        ):
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
+            result = await spawn_fn("direct", "summarize this task")
+
+        assert result == "child done"
 
 
 class TestFullToolRunnerHookWiring:
@@ -543,7 +641,7 @@ class TestSpawnGuardWiring:
                 if False:
                     yield None
 
-        async def fake_drain_run_stream(_stream):
+        async def fake_drain_run_stream(_stream, on_event=None):
             return SimpleNamespace(
                 status="completed",
                 final_content="child done",

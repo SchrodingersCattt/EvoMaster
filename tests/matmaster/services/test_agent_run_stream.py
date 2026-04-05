@@ -32,7 +32,12 @@ from matmaster.types.events import (
 def _make_mock_playground(pg_ctx: Any) -> Any:
     """Build a mock Playground that returns the given PlaygroundContext."""
     pg = MagicMock()
-    pg.prepare.return_value = pg_ctx
+
+    def _prepare(run_meta: dict[str, Any]) -> Any:
+        pg_ctx.run_meta = dict(run_meta)
+        return pg_ctx
+
+    pg.prepare.side_effect = _prepare
     return pg
 
 
@@ -48,7 +53,14 @@ def _make_mock_pg_ctx() -> MagicMock:
     ctx.run_meta = {}
     ctx.with_bohrium.return_value = ctx
     ctx.with_execution.return_value = ctx
-    ctx.model_copy.return_value = ctx
+
+    def _model_copy(*, update: dict[str, Any] | None = None, **_: Any) -> MagicMock:
+        if update:
+            for key, value in update.items():
+                setattr(ctx, key, value)
+        return ctx
+
+    ctx.model_copy.side_effect = _model_copy
     return ctx
 
 
@@ -65,13 +77,20 @@ class _FakeExp:
         self._config = MagicMock()
         self._config.name = 'direct'
         self._cleanup_callbacks: list = []
+        self.last_ctx: Any = None
         self.last_run_kwargs: dict[str, Any] | None = None
 
     async def run_stream(self, *args: Any, **kwargs: Any):
+        self.last_ctx = args[0] if args else None
         self.last_run_kwargs = kwargs
         try:
-            for event in self._events:
-                yield event
+            if callable(self._events):
+                stream = self._events(self.last_ctx)
+                async for event in stream:
+                    yield event
+            else:
+                for event in self._events:
+                    yield event
         finally:
             await self._run_cleanup_callbacks()
 
@@ -265,6 +284,26 @@ async def test_run_agent_injects_cancel_token_into_session_and_exp():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_injects_event_sink_into_pg_ctx_run_meta():
+    run_result = RunResultEvent(source='agent', status='completed', reason='natural')
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        ok, _elapsed = await svc.run_agent(
+            session_id='sess-1',
+            user_prompt='hello',
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode='direct',
+            task_id='task-1',
+        )
+
+    assert ok is True
+    injected = svc._test_fake_exp.last_ctx.run_meta['event_sink']
+    assert callable(injected)
+    assert svc._test_fake_exp.last_ctx.run_meta['task_id'] == 'task-1'
+
+
+@pytest.mark.asyncio
 async def test_stream_events_reach_handlers_via_fanout():
     """Events from exp.run_stream() are dispatched through RunEventFanout to handlers."""
     thought = ThoughtEvent(source='agent', content='thinking...')
@@ -291,6 +330,42 @@ async def test_stream_events_reach_handlers_via_fanout():
     assert 'response' in sse_types
     assert 'run_result' in sse_types
     assert 'stream_closed' in sse_types
+
+
+@pytest.mark.asyncio
+async def test_child_event_sink_reaches_sse_and_persistence():
+    async def child_then_parent(ctx):
+        await ctx.run_meta['event_sink'](
+            ResponseEvent(
+                source='MatMaster:direct',
+                spawn_id='childdeadbeef123',
+                content='child answer',
+            )
+        )
+        yield RunResultEvent(source='agent', status='completed', reason='natural')
+
+    async with _patched_service(child_then_parent) as (
+        svc,
+        sse_events,
+        persist_events,
+    ):
+        await svc.run_agent(
+            session_id='s1',
+            user_prompt='hi',
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode='direct',
+            task_id='t1',
+        )
+
+    assert any(
+        getattr(event, 'spawn_id', None) == 'childdeadbeef123'
+        for event in sse_events
+    )
+    assert any(
+        getattr(event, 'spawn_id', None) == 'childdeadbeef123'
+        for event in persist_events
+    )
 
 
 @pytest.mark.asyncio
