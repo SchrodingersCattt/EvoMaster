@@ -7,7 +7,8 @@ list_machines. All software-specific knowledge lives in software skills.
 Design decisions:
 - poll is single-shot (non-blocking): returns current status, Agent controls retry
 - submit auto-appends "> log 2>&1" if missing
-- All API credentials read from environment variables at call time (not init)
+- Credentials resolved via runtime bridge (session > env fallback)
+- Remote /share paths require active session with upload_directory
 """
 
 from __future__ import annotations
@@ -23,7 +24,6 @@ from urllib.parse import quote
 
 import requests
 
-from matmaster.integration.bohrium_env import BOHRIUM_OPENAPI_HOST
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
@@ -35,23 +35,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Bohrium API helpers (shared across actions)
 # ---------------------------------------------------------------------------
-
-
-def _resolve_env() -> tuple[str, int, str]:
-    """Read Bohrium credentials from environment.
-
-    Returns (access_key, project_id, base_url).
-    """
-    base_url = BOHRIUM_OPENAPI_HOST
-
-    access_key = os.environ.get('BOHRIUM_ACCESS_KEY', '').strip()
-    raw_pid = os.environ.get('BOHRIUM_PROJECT_ID', '-1') or '-1'
-    try:
-        project_id = int(raw_pid)
-    except ValueError:
-        project_id = -1
-
-    return access_key, project_id, base_url
 
 
 def _use_sandbox() -> bool:
@@ -217,6 +200,34 @@ class BohriumTool(BuiltinTool):
         )
 
     # ------------------------------------------------------------------
+    # Credential resolution (via runtime bridge)
+    # ------------------------------------------------------------------
+
+    def _resolve_credentials(self) -> tuple[str, int, str]:
+        """Resolve Bohrium credentials via runtime bridge.
+
+        Precedence: explicit > session > env > none.
+        Returns (access_key, project_id, base_url).
+        """
+        from matmaster.integration.runtime_bridge.adapters.bohrium import (
+            resolve_bohrium_credentials,
+        )
+
+        cred = resolve_bohrium_credentials(session=self._session)
+        access_key = str(cred.values.get("access_key") or "").strip()
+        project_id_raw = cred.values.get("project_id")
+        try:
+            project_id = int(project_id_raw) if project_id_raw is not None else -1
+        except (TypeError, ValueError):
+            project_id = -1
+        base_url = str(cred.values.get("base_url") or "").strip()
+        if not base_url:
+            from matmaster.integration.bohrium_env import BOHRIUM_OPENAPI_HOST
+
+            base_url = BOHRIUM_OPENAPI_HOST
+        return access_key, project_id, base_url
+
+    # ------------------------------------------------------------------
     # Dispatch
     # ------------------------------------------------------------------
 
@@ -243,12 +254,18 @@ class BohriumTool(BuiltinTool):
     # ------------------------------------------------------------------
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
-        access_key, project_id, base_url = _resolve_env()
+        access_key, project_id, base_url = self._resolve_credentials()
         if not access_key:
-            return ToolResult(status='error', content='BOHRIUM_ACCESS_KEY not set.')
+            return ToolResult(
+                status='error',
+                content='Bohrium credentials unavailable. '
+                'Provide via session or BOHRIUM_ACCESS_KEY env var.',
+            )
         if project_id <= 0:
             return ToolResult(
-                status='error', content='BOHRIUM_PROJECT_ID not set or invalid.'
+                status='error',
+                content='Bohrium project ID unavailable. '
+                'Provide via session or BOHRIUM_PROJECT_ID env var.',
             )
 
         input_dir = args.get('input_dir', '')
@@ -420,9 +437,13 @@ class BohriumTool(BuiltinTool):
     # ------------------------------------------------------------------
 
     def _poll(self, args: dict[str, Any]) -> ToolResult:
-        access_key, _, base_url = _resolve_env()
+        access_key, _, base_url = self._resolve_credentials()
         if not access_key:
-            return ToolResult(status='error', content='BOHRIUM_ACCESS_KEY not set.')
+            return ToolResult(
+                status='error',
+                content='Bohrium credentials unavailable. '
+                'Provide via session or BOHRIUM_ACCESS_KEY env var.',
+            )
 
         raw_job_id = args.get('job_id')
         if raw_job_id is None:
@@ -433,6 +454,22 @@ class BohriumTool(BuiltinTool):
         sandbox = _use_sandbox()
         job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
         result_dir_str = args.get('result_dir') or f'results/run_{job_id}'
+
+        # Path policy: check if result_dir requires a remote session
+        from matmaster.integration.runtime_bridge import resolve_output_path
+
+        decision = resolve_output_path(
+            raw_path=result_dir_str,
+            execution_workdir=str(self._workdir or '.'),
+            session=self._session,
+        )
+        if decision.requires_remote_session:
+            return ToolResult(
+                status='error',
+                content=f"result_dir '{result_dir_str}' requires an active remote session "
+                'but none is available. Use a local path instead.',
+            )
+
         result_dir = Path(result_dir_str)
 
         try:
@@ -471,6 +508,26 @@ class BohriumTool(BuiltinTool):
                     access_key,
                     base_url,
                 )
+
+                # Remote share: upload local results to remote session
+                report_dir = str(result_dir)
+                if (
+                    decision.kind == 'remote_share'
+                    and self._session is not None
+                    and hasattr(self._session, 'upload_directory')
+                ):
+                    try:
+                        self._session.upload_directory(
+                            str(result_dir), result_dir_str
+                        )
+                        report_dir = result_dir_str
+                    except Exception as upload_exc:
+                        logger.warning(
+                            'Failed to upload results to remote share %s: %s',
+                            result_dir_str,
+                            upload_exc,
+                        )
+
                 return ToolResult(
                     status='success',
                     content=json.dumps(
@@ -478,7 +535,7 @@ class BohriumTool(BuiltinTool):
                             'success': True,
                             'job_id': job_id,
                             'status': 'Finished',
-                            'result_dir': str(result_dir),
+                            'result_dir': report_dir,
                             'files': files,
                             'log_tail': log_tail,
                         },
@@ -659,9 +716,13 @@ class BohriumTool(BuiltinTool):
     # ------------------------------------------------------------------
 
     def _list_images(self, args: dict[str, Any]) -> ToolResult:
-        access_key, _, base_url = _resolve_env()
+        access_key, _, base_url = self._resolve_credentials()
         if not access_key:
-            return ToolResult(status='error', content='BOHRIUM_ACCESS_KEY not set.')
+            return ToolResult(
+                status='error',
+                content='Bohrium credentials unavailable. '
+                'Provide via session or BOHRIUM_ACCESS_KEY env var.',
+            )
 
         keyword = (args.get('keyword') or '').strip().lower()
         max_results = args.get('max_results', 20)
@@ -750,9 +811,13 @@ class BohriumTool(BuiltinTool):
     # ------------------------------------------------------------------
 
     def _list_machines(self, args: dict[str, Any]) -> ToolResult:
-        access_key, _, base_url = _resolve_env()
+        access_key, _, base_url = self._resolve_credentials()
         if not access_key:
-            return ToolResult(status='error', content='BOHRIUM_ACCESS_KEY not set.')
+            return ToolResult(
+                status='error',
+                content='Bohrium credentials unavailable. '
+                'Provide via session or BOHRIUM_ACCESS_KEY env var.',
+            )
 
         choose_type = args.get('machine_type', 'cpu')
         keyword = (args.get('keyword') or '').strip().lower()

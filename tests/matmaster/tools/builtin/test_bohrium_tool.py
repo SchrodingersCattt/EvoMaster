@@ -6,10 +6,51 @@ import asyncio
 import json
 import sys
 import types
+from types import SimpleNamespace
 
 import matmaster.tools.builtin.bohrium_tool as bohrium_module
+from matmaster.integration.runtime_bridge.models import ResolvedCredential
 from matmaster.tools.builtin.bohrium_tool import BohriumTool, _use_sandbox
 from matmaster.tools.tool_result import ToolResult
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_BOHRIUM_ADAPTER = "matmaster.integration.runtime_bridge.adapters.bohrium"
+
+
+def _fake_cred(
+    access_key: str = "access-key",
+    project_id: int = 42,
+    source: str = "env",
+) -> ResolvedCredential:
+    """Build a ResolvedCredential for monkeypatching."""
+    return ResolvedCredential(
+        service="bohrium",
+        source=source,
+        values={
+            "access_key": access_key,
+            "project_id": project_id,
+            "base_url": "https://open.bohrium.com",
+        },
+    )
+
+
+def _patch_bridge(monkeypatch, cred: ResolvedCredential | None = None):
+    """Monkeypatch resolve_bohrium_credentials at the adapter module."""
+    import matmaster.integration.runtime_bridge.adapters.bohrium as adapter_mod
+
+    monkeypatch.setattr(
+        adapter_mod,
+        "resolve_bohrium_credentials",
+        lambda session=None, explicit=None: cred or _fake_cred(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# TestBohriumMetadata
+# ---------------------------------------------------------------------------
 
 
 class TestBohriumMetadata:
@@ -25,6 +66,11 @@ class TestBohriumMetadata:
         assert "list_machines" in prompt
 
 
+# ---------------------------------------------------------------------------
+# TestBohriumSandboxMode
+# ---------------------------------------------------------------------------
+
+
 class TestBohriumSandboxMode:
     def test_use_sandbox_defaults_true(self, monkeypatch):
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
@@ -33,6 +79,11 @@ class TestBohriumSandboxMode:
     def test_use_sandbox_disabled_with_zero(self, monkeypatch):
         monkeypatch.setenv("BOHRIUM_USE_SANDBOX", "0")
         assert _use_sandbox() is False
+
+
+# ---------------------------------------------------------------------------
+# TestBohriumExecution
+# ---------------------------------------------------------------------------
 
 
 class TestBohriumExecution:
@@ -98,11 +149,7 @@ class TestBohriumExecution:
         opensdk_module._tiefblue_client = tiefblue_module
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-        monkeypatch.setattr(
-            bohrium_module,
-            "_resolve_env",
-            lambda: ("access-key", 42, "https://open.bohrium.com"),
-        )
+        _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_module, "_post", fake_post)
 
         with monkeypatch.context() as m:
@@ -152,11 +199,7 @@ class TestBohriumExecution:
             return {"data": {"status": 1}}
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-        monkeypatch.setattr(
-            bohrium_module,
-            "_resolve_env",
-            lambda: ("access-key", 42, "https://open.bohrium.com"),
-        )
+        _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_module, "_get", fake_get)
 
         result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-123"}))
@@ -201,11 +244,7 @@ class TestBohriumExecution:
                 }
             raise AssertionError(f"unexpected path: {path}")
 
-        monkeypatch.setattr(
-            bohrium_module,
-            "_resolve_env",
-            lambda: ("access-key", 42, "https://open.bohrium.com"),
-        )
+        _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_module, "_get", fake_get)
 
         result = asyncio.run(
@@ -248,11 +287,7 @@ class TestBohriumExecution:
                 }
             }
 
-        monkeypatch.setattr(
-            bohrium_module,
-            "_resolve_env",
-            lambda: ("access-key", 42, "https://open.bohrium.com"),
-        )
+        _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_module, "_get", fake_get)
 
         result = asyncio.run(
@@ -274,3 +309,163 @@ class TestBohriumExecution:
         assert payload["returned"] == 1
         assert payload["machines"][0]["skuEnName"] == "c6_m60_1 * NVIDIA 4090"
         assert get_calls[0][1]["chooseType"] == "gpu"
+
+
+# ---------------------------------------------------------------------------
+# TestBohriumSessionCredentials
+# ---------------------------------------------------------------------------
+
+
+class TestBohriumSessionCredentials:
+    """Tests for session-backed credential resolution."""
+
+    def test_poll_uses_session_credentials_when_env_missing(
+        self, tmp_path, monkeypatch
+    ):
+        """BohriumTool should work with session credentials even without env vars."""
+        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
+        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
+
+        session = SimpleNamespace(
+            _bohrium_credentials={"access_key": "session-ak", "project_id": 42},
+            is_open=True,
+        )
+        tool = BohriumTool(session=session, workdir=tmp_path)
+
+        get_calls = []
+
+        def fake_get(base_url, path, access_key, params=None, timeout=30):
+            get_calls.append((path, access_key))
+            return {"data": {"status": 1}}  # Running
+
+        monkeypatch.setattr(bohrium_module, "_get", fake_get)
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+
+        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
+        assert result.status == "success"
+        assert get_calls[0][1] == "session-ak"  # Used session credential, not env
+
+    def test_poll_remote_share_without_session_errors(self, tmp_path, monkeypatch):
+        """poll with /share/ result_dir and no session should error."""
+        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
+        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
+
+        # Provide env credentials so we pass the credential check,
+        # but no session -- so path policy rejects the remote path
+        _patch_bridge(monkeypatch)
+        tool = BohriumTool(workdir=tmp_path)
+
+        result = asyncio.run(
+            tool.execute(
+                {"action": "poll", "job_id": "job-1", "result_dir": "/share/out"}
+            )
+        )
+        assert result.status == "error"
+        assert "remote session" in result.content.lower()
+
+    def test_submit_uses_session_credentials_when_env_missing(
+        self, tmp_path, monkeypatch
+    ):
+        """submit should work with session credentials."""
+        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
+        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
+
+        input_dir = tmp_path / "inputs"
+        input_dir.mkdir()
+        (input_dir / "input.inp").write_text("data", encoding="utf-8")
+
+        session = SimpleNamespace(
+            _bohrium_credentials={"access_key": "session-ak", "project_id": 42},
+            is_open=True,
+        )
+        tool = BohriumTool(session=session, workdir=tmp_path)
+
+        post_calls = []
+
+        def fake_post(base_url, path, access_key, payload, timeout=30):
+            post_calls.append((path, access_key))
+            if "create" in path:
+                return {
+                    "code": 0,
+                    "data": {
+                        "storePath": "p/",
+                        "storeHost": "https://s.com",
+                        "token": "t",
+                        "jobId": "j1",
+                    },
+                }
+            return {"code": 0, "data": {"jobId": "j2", "bohrJobId": "b2"}}
+
+        class FakeTiefblueClient:
+            def __init__(self, *, base_url):
+                pass
+
+            def upload_from_file_multi_part(self, **kwargs):
+                return {}
+
+        sdk_module = types.ModuleType("bohrium_open_sdk")
+        opensdk_module = types.ModuleType("bohrium_open_sdk.opensdk")
+        tiefblue_module = types.ModuleType(
+            "bohrium_open_sdk.opensdk._tiefblue_client"
+        )
+        tiefblue_module.Tiefblue = FakeTiefblueClient
+        sdk_module.opensdk = opensdk_module
+        opensdk_module._tiefblue_client = tiefblue_module
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        monkeypatch.setattr(bohrium_module, "_post", fake_post)
+
+        with monkeypatch.context() as m:
+            m.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
+            m.setitem(sys.modules, "bohrium_open_sdk.opensdk", opensdk_module)
+            m.setitem(
+                sys.modules,
+                "bohrium_open_sdk.opensdk._tiefblue_client",
+                tiefblue_module,
+            )
+            result = asyncio.run(
+                tool.execute(
+                    {
+                        "action": "submit",
+                        "input_dir": str(input_dir),
+                        "image": "registry.dp.tech/dptech/cp2k:2024.1",
+                        "cmd": "cp2k.popt -i input.inp",
+                    }
+                )
+            )
+
+        assert result.status == "success"
+        # Verify session credential was used in API calls
+        assert post_calls[0][1] == "session-ak"
+        assert post_calls[1][1] == "session-ak"
+
+    def test_no_credentials_returns_error(self, tmp_path, monkeypatch):
+        """No session and no env vars should return a credential error."""
+        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
+        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
+        monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
+
+        tool = BohriumTool(workdir=tmp_path)
+        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
+        assert result.status == "error"
+        assert "credential" in result.content.lower() or "unavailable" in result.content.lower()
+
+    def test_session_none_falls_back_to_env(self, tmp_path, monkeypatch):
+        """session=None should fall back to env credentials via bridge."""
+        monkeypatch.setenv("BOHRIUM_ACCESS_KEY", "env-ak")
+        monkeypatch.setenv("BOHRIUM_PROJECT_ID", "99")
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+
+        tool = BohriumTool(session=None, workdir=tmp_path)
+
+        get_calls = []
+
+        def fake_get(base_url, path, access_key, params=None, timeout=30):
+            get_calls.append((path, access_key))
+            return {"data": {"status": 1}}
+
+        monkeypatch.setattr(bohrium_module, "_get", fake_get)
+
+        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
+        assert result.status == "success"
+        assert get_calls[0][1] == "env-ak"

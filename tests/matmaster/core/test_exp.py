@@ -584,6 +584,71 @@ async def test_build_runtime_registers_bohrium_without_session(tmp_path: Path) -
     assert runtime.spec.tool_catalog.get_tool("Bohrium") is not None
 
 
+@pytest.mark.asyncio
+async def test_bohrium_tool_receives_session(tmp_path: Path) -> None:
+    """BohriumTool should be constructed with session=ctx.session."""
+    from matmaster.tools.builtin.bohrium_tool import BohriumTool
+
+    mock_session = MagicMock(spec=Session)
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["Bohrium"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=mock_session,
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    bohrium_tools = [
+        t
+        for t in runtime.spec.tool_catalog.registry.all_tools
+        if isinstance(t, BohriumTool)
+    ]
+    assert len(bohrium_tools) == 1
+    assert bohrium_tools[0]._session is mock_session
+
+
+@pytest.mark.asyncio
+async def test_bohrium_tool_session_none_when_no_session(tmp_path: Path) -> None:
+    """BohriumTool should have _session=None when ctx.session is None."""
+    from matmaster.tools.builtin.bohrium_tool import BohriumTool
+
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["Bohrium"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        session=None,
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    bohrium_tools = [
+        t
+        for t in runtime.spec.tool_catalog.registry.all_tools
+        if isinstance(t, BohriumTool)
+    ]
+    assert len(bohrium_tools) == 1
+    assert bohrium_tools[0]._session is None
+
+
 # ── TestAgentRegistration ──────────────────────────────
 
 
