@@ -13,6 +13,7 @@ from evaluation.devshell_agent.config_state import (
     AgentLoopSharedState,
     DevshellAgentCliDefaults,
 )
+from evaluation.devshell_agent.loop import checklist_max_turns_for_shared_state
 
 
 def _tool(*_args: object, **_kwargs: object):
@@ -95,6 +96,7 @@ def test_run_devshell_eval_submits_immediately_after_run(tmp_path: Path) -> None
         run_dir=run_dir,
         eval_config=None,
         eval_ingest_timeout=42.0,
+        score_jobs=2,
     )
 
 
@@ -129,3 +131,9 @@ def test_run_devshell_eval_skips_immediate_submit_when_pending_only_disabled(
 
     assert result["is_error"] is False
     mock_submit.assert_not_called()
+
+
+def test_checklist_max_turns_uses_default_jobs_only(tmp_path: Path) -> None:
+    state = _build_state(tmp_path)
+
+    assert checklist_max_turns_for_shared_state(state) == 4

@@ -128,12 +128,6 @@ class DevshellAgentLoopCli:
             ),
         )
         p.add_argument(
-            "--max-checklist-sdk-turns",
-            type=int,
-            default=60,
-            help="Max SDK turns for the checklist-only follow-up session.",
-        )
-        p.add_argument(
             "--checklist-permission-mode",
             type=str,
             default="",
@@ -149,14 +143,17 @@ class DevshellAgentLoopCli:
         p.add_argument(
             "--jobs",
             type=int,
-            default=4,
-            help="Forwarded to run_devshell_eval --jobs",
+            default=8,
+            help=(
+                "Single knob for: run_devshell_eval --jobs, score_devshell_tasks "
+                "--score-jobs, and checklist agent max_turns (= jobs×2)."
+            ),
         )
         p.add_argument(
             "--limit",
             type=int,
             default=None,
-            help="Forwarded to run_devshell_eval --limit",
+            help="Forwarded to run_devshell_eval --limit (default: no cap).",
         )
         p.add_argument(
             "--questions",
@@ -277,7 +274,6 @@ class DevshellAgentLoopCli:
             ),
             eval_ingest_submit_timeout=max(1.0, float(args.eval_ingest_submit_timeout)),
             enable_checklist_agent=bool(args.enable_checklist_agent),
-            max_checklist_sdk_turns=max(1, int(args.max_checklist_sdk_turns)),
             checklist_permission_mode=str(args.checklist_permission_mode or ""),
         )
 

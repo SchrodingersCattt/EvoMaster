@@ -52,7 +52,7 @@ uv run python evaluation/scripts/devshell/run_devshell_agent_loop.py \
 | `--permission-mode` | 默认 `acceptEdits`；见官方 Agent SDK 文档 |
 | `--max-sdk-turns` | 每轮允许的最大 SDK turn |
 | `--enable-checklist-agent` / `--no-enable-checklist-agent` | 是否在本轮主 Agent 之后按需运行题库专责 Agent（默认开） |
-| `--max-checklist-sdk-turns` | 题库专责会话的最大 turn |
+| `--jobs` | 同时控制 `run_devshell_eval --jobs`、自动 submit 的 `--score-jobs`、以及 checklist 会话 `max_turns = jobs×2` |
 | `--checklist-permission-mode` | 专责会话的 `permission_mode`（默认与 `--permission-mode` 相同） |
 | `--extra-instruction` | 附加到每轮 user 消息的约束/重点 |
 | `--eval-ingest-pending-only` / `--no-eval-ingest-pending-only` | 与 `run_devshell_eval.py` 一致 |
