@@ -63,9 +63,9 @@ developer_instructions = '''
 - Clean up intermediate files (tgz archives, extraction directories) from workspace — keep only the final ordered CIFs.
 - In your final answer, explain the disorder type and how ordering was resolved for each structure (e.g. site occupancy, cation mixing, partial occupancy resolution).
 
-# Grounding & Explanation
+# Grounding & Explanation (CRITICAL)
+- A summary table alone is NEVER sufficient. For each structure or result, include 1-2 sentences explaining the physical/chemical basis: disorder types, occupancy details, symmetry, bonding motifs, or why specific choices were made.
 - Tie claims to specific structural features in your deliverables (coordinates, bond lengths, stoichiometry, cell parameters).
-- For multi-structure tasks, briefly explain the physical/chemical basis for each result — do not merely list file paths or restate the task text.
 '''
 
 [tools]
