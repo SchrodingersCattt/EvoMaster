@@ -181,9 +181,9 @@ logs/
 .agent/
 .agents/
 
-# Agent plugin docs
-docs/superpowers/
-docs/plans/
+# Planning & docs (local only)
+.planning/
+docs/
 
 # Skill tool schema cache
 !matmaster/cache/
