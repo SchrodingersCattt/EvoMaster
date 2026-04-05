@@ -154,17 +154,21 @@ def run_score_devshell_tasks_submit(
     run_dir: Path,
     eval_config: Path | None,
     eval_ingest_timeout: float,
+    score_jobs: int,
 ) -> tuple[int, str, str]:
     """Run ``score_devshell_tasks.py --run-dir … --submit`` (writes scores + POST ingest)."""
     runner = DevshellEvalSubprocess(repo_root)
     script = (
         repo_root / "evaluation" / "scripts" / "devshell" / "score_devshell_tasks.py"
     )
+    sj = max(1, int(score_jobs))
     cmd: list[str] = [
         *DevshellEvalSubprocess.python_prefix(),
         str(script),
         "--run-dir",
         str(run_dir),
+        "--score-jobs",
+        str(sj),
         "--submit",
         "--eval-ingest-timeout",
         str(eval_ingest_timeout),

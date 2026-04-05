@@ -76,9 +76,11 @@ def check_batch_single_variable_sweep(
 
     all_param_names = set(all_args[0].keys())
 
+    exclude = set(sweep_cfg.get('exclude_params', []))
+
     # Check that only sweep_var changes across calls
     for param in all_param_names:
-        if param == sweep_var:
+        if param == sweep_var or param in exclude:
             continue
         values = [str(args.get(param, '<missing>')) for args in all_args]
         if len(set(values)) > 1:

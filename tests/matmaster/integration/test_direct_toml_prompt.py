@@ -24,7 +24,8 @@ def test_execution_mode_in_developer_instructions():
     """Former mode_contract content now lives in developer_instructions."""
     cfg = load_exp_config("direct")
     di = cfg.developer_instructions.lower()
-    assert "direct execution mode" in di
+    assert "direct execution" in di
+    assert "remote compute" in di
 
 
 def test_system_prompt_from_base():
