@@ -8,6 +8,7 @@ import logging
 import threading
 from typing import Any
 
+from matmaster.adaptors.calculation.path_adaptor import CalculationPreflightError
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
@@ -145,6 +146,8 @@ class LazyMCPTool:
                     input_schema=self._input_schema,
                     session=getattr(self._connector, "session", None),
                 )
+            except CalculationPreflightError as e:
+                return ToolResult(status="error", content=str(e))
             except Exception as e:
                 logger.warning("path_adaptor resolve_args failed: %s", e)
 

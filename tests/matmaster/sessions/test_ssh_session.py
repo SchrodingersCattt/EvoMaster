@@ -182,6 +182,20 @@ class TestSSHSessionFileOps:
         mock_paramiko["sftp"].stat.side_effect = FileNotFoundError
         assert session.is_file("/remote/nope") is False
 
+    def test_download_reads_remote_bytes(self, ssh_config, mock_paramiko):
+        session = self._make_open_session(ssh_config, mock_paramiko)
+
+        mock_file = MagicMock()
+        mock_file.__enter__ = MagicMock(return_value=mock_file)
+        mock_file.__exit__ = MagicMock(return_value=False)
+        mock_file.read.return_value = b"remote-bytes"
+        mock_paramiko["sftp"].open.return_value = mock_file
+
+        data = session.download("/remote/file.dat")
+
+        assert data == b"remote-bytes"
+        mock_paramiko["sftp"].open.assert_called_with("/remote/file.dat", "rb")
+
 
 class TestSSHSessionProtocol:
     """SSHSession satisfies Session Protocol."""
@@ -230,6 +244,13 @@ class TestSSHSessionNotOpen:
         session = SSHSession(ssh_config)
         with pytest.raises(RuntimeError, match="not open"):
             session.is_file("/remote/file")
+
+    def test_download_not_open_raises(self, ssh_config, mock_paramiko):
+        from matmaster.sessions.ssh import SSHSession
+
+        session = SSHSession(ssh_config)
+        with pytest.raises(RuntimeError, match="not open"):
+            session.download("/remote/file.dat")
 
 
 class TestSSHSessionExecBash:

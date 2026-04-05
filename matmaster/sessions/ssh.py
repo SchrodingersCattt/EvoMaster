@@ -39,8 +39,9 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\r")
 class SSHSession:
     """SSH session -- direct paramiko client, exec_command per-channel.
 
-    Implements the 8-method Session Protocol via duck typing:
-    is_open, open, close, exec_bash, read_file, write_file, path_exists, is_file.
+    Implements the Session Protocol via duck typing:
+    is_open, open, close, exec_bash, read_file, write_file, path_exists,
+    is_file, download.
 
     Also exposes helper methods needed by external callers:
     ssh_exec, upload_file, upload_directory_tarball.
@@ -271,6 +272,20 @@ class SSHSession:
             return st.st_mode is not None and stat.S_ISREG(st.st_mode)
         except FileNotFoundError:
             return False
+        finally:
+            pool.release(sftp)
+
+    def download(self, path: str, timeout: int | None = None) -> bytes:
+        """Read raw bytes from a remote file via SFTP pool."""
+        if not self._is_open:
+            raise RuntimeError("Session not open")
+        self._ensure_connected()
+        pool = self._sftp_pool
+        sftp = pool.acquire()
+        try:
+            with sftp.open(path, "rb") as f:
+                data = f.read()
+            return data if isinstance(data, bytes) else bytes(data)
         finally:
             pool.release(sftp)
 

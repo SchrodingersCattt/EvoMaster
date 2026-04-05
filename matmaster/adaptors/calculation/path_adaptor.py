@@ -39,8 +39,23 @@ if TYPE_CHECKING:
     pass
 
 from .oss_io import upload_file_to_oss
+from .path_selectors import (
+    collect_path_selectors,
+    rewrite_selected_paths,
+    validate_selector_paths,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class CalculationPreflightError(RuntimeError):
+    """Raised when calculation tool arguments cannot be prepared safely."""
+
+
+def _wrap_preflight(exc: Exception) -> CalculationPreflightError:
+    if isinstance(exc, CalculationPreflightError):
+        return exc
+    return CalculationPreflightError(str(exc))
 
 # ---------------------------------------------------------------------------
 # JSON Schema ``format`` values that indicate a filesystem path.
@@ -360,6 +375,32 @@ def _resolve_model_aliases(
     return out
 
 
+def _top_level_path_keys(selectors: set[str]) -> set[str]:
+    return {selector for selector in selectors if "." not in selector and "[]" not in selector}
+
+
+def _needs_filesystem_upload(
+    payload: dict[str, Any],
+    selectors: set[str],
+    input_schema: dict[str, Any] | None,
+) -> bool:
+    needs_upload = False
+
+    def _detect(selector: str, value: Any, schema_leaf: dict[str, Any] | None) -> Any:
+        nonlocal needs_upload
+        if isinstance(value, str) and _is_local_path(value):
+            needs_upload = True
+        return value
+
+    rewrite_selected_paths(
+        payload,
+        selectors=selectors,
+        schema=input_schema,
+        rewrite_leaf=_detect,
+    )
+    return needs_upload
+
+
 # ---------------------------------------------------------------------------
 # Path resolution helpers
 # ---------------------------------------------------------------------------
@@ -501,13 +542,13 @@ class CalculationPathAdaptor:
     def __init__(self, calculation_executors: dict[str, Any] | None = None):
         self.calculation_executors = calculation_executors or {}
 
-    def _path_keys_from_tool_config(
+    def _path_selectors_from_tool_config(
         self,
         server_name: str,
         remote_tool_name: str,
         input_schema: dict[str, Any] | None,
     ) -> set[str]:
-        """Extra path param names from ``path_params_by_tool`` (must exist in schema)."""
+        """Extra path selectors from ``path_params_by_tool`` validated against schema."""
         server_cfg = self.calculation_executors.get(server_name)
         if not isinstance(server_cfg, dict):
             return set()
@@ -520,13 +561,18 @@ class CalculationPathAdaptor:
         if raw is None:
             return set()
         if isinstance(raw, str):
-            names = [raw]
-        elif isinstance(raw, (list, tuple)):
-            names = [x for x in raw if isinstance(x, str)]
+            selectors = {raw}
+        elif isinstance(raw, (list, tuple)) and all(
+            isinstance(item, str) for item in raw
+        ):
+            selectors = set(raw)
         else:
-            return set()
-        props = set((input_schema or {}).get('properties') or {})
-        return {n for n in names if n in props}
+            raise ValueError(
+                f"Invalid path_params_by_tool entry for {server_name}.{remote_tool_name}"
+            )
+
+        validate_selector_paths(input_schema or {}, selectors)
+        return selectors
 
     def _resolve_executor(
         self,
@@ -666,25 +712,28 @@ class CalculationPathAdaptor:
         if server_name and tool_name.startswith(server_name + '_'):
             remote_name = tool_name[len(server_name) + 1 :]
 
-        # Block submit_* when the base tool is in sync_tools (sync version only).
-        server_cfg = self.calculation_executors.get(server_name)
-        if isinstance(server_cfg, dict):
-            sync_tools = set(server_cfg.get('sync_tools') or [])
-            if remote_name.startswith('submit_'):
-                base_name = remote_name[len('submit_') :]
-                if base_name in sync_tools:
-                    raise ValueError(
-                        f"Tool '{tool_name}' is blocked: '{base_name}' is a sync "
-                        f"tool. Use sync interface: '{server_name}_{base_name}' "
-                        f"instead of submit_*."
-                    )
+        try:
+            # Block submit_* when the base tool is in sync_tools (sync version only).
+            server_cfg = self.calculation_executors.get(server_name)
+            if isinstance(server_cfg, dict):
+                sync_tools = set(server_cfg.get('sync_tools') or [])
+                if remote_name.startswith('submit_'):
+                    base_name = remote_name[len('submit_') :]
+                    if base_name in sync_tools:
+                        raise ValueError(
+                            f"Tool '{tool_name}' is blocked: '{base_name}' is a sync "
+                            f"tool. Use sync interface: '{server_name}_{base_name}' "
+                            f"instead of submit_*."
+                        )
 
-        is_async_tool = self._is_async_remote_tool(server_name, remote_name)
-        if is_async_tool and not remote_name.startswith('submit_'):
-            raise ValueError(
-                f"Async tool '{tool_name}' is blocked for LLM runtime. "
-                f"Use submit interface: '{server_name}_submit_*'."
-            )
+            is_async_tool = self._is_async_remote_tool(server_name, remote_name)
+            if is_async_tool and not remote_name.startswith('submit_'):
+                raise ValueError(
+                    f"Async tool '{tool_name}' is blocked for LLM runtime. "
+                    f"Use submit interface: '{server_name}_submit_*'."
+                )
+        except Exception as exc:
+            raise _wrap_preflight(exc) from exc
 
         if session is not None:
             (
@@ -706,177 +755,106 @@ class CalculationPathAdaptor:
             if not user_no and session_user_no:
                 user_no = session_user_no
 
-        # --- executor & storage injection ---
-        if 'executor' in out:
-            logger.info(
-                'Ignoring user-provided executor for %s; using config executor.',
-                tool_name,
-            )
-        out['executor'] = self._resolve_executor(
-            server_name,
-            remote_name,
-            access_key=access_key,
-            project_id=project_id,
-            user_id=user_id,
-            user_no=user_no,
-        )
-        if is_async_tool:
-            self._validate_executor_profile(
-                out['executor'],
-                server_name=server_name,
-                remote_tool_name=remote_name,
-            )
-        out['storage'] = get_bohrium_storage_config(
-            access_key=access_key,
-            project_id=project_id,
-            user_id=user_id,
-        )
-
-        # --- Detect path-typed params ---
-        _schema_keys = _path_keys_from_schema(input_schema)
-        _desc_keys = _path_keys_from_description(tool_description)
-        _param_keys = _path_keys_from_param_names(input_schema)
-
-        if _schema_keys:
-            path_arg_names = _schema_keys
-            source = 'schema'
-        elif _desc_keys:
-            path_arg_names = _desc_keys
-            source = 'description'
-        elif _param_keys:
-            path_arg_names = _param_keys
-            source = 'param_name'
-        else:
-            path_arg_names = set()
-            source = 'schema'
-
-        _before_config_keys = set(path_arg_names)
-        _config_keys = self._path_keys_from_tool_config(
-            server_name, remote_name, input_schema
-        )
-        if _config_keys:
-            path_arg_names = path_arg_names | _config_keys
-            if not _before_config_keys:
-                source = 'config'
-
-        _td = tool_description if isinstance(tool_description, str) else ''
-        _desc_len = len(_td)
-        _desc_has_args_header = bool(re.search(r'Args:\s*\n', _td))
-
-        _schema_props = (
-            sorted((input_schema or {}).get('properties') or {})
-            if isinstance(input_schema, dict)
-            else []
-        )
-        _has_input_files_prop = 'input_files' in (
-            (input_schema or {}).get('properties') or {}
-        )
-        _params_brief = _input_schema_params_brief(
-            input_schema if isinstance(input_schema, dict) else None
-        )
-        logger.info(
-            'Path adaptor [%s] path_keys=%s source=%s L1_schema=%s L2_description=%s '
-            'L3_param_name=%s L4_config=%s tool_description_len=%s '
-            'tool_description_has_args_header=%s workspace_path_set=%s schema_props=%s '
-            'input_files_in_schema=%s input_files_classified=%s '
-            'schema_params_brief=%s',
-            tool_name,
-            sorted(path_arg_names),
-            source,
-            sorted(_schema_keys),
-            sorted(_desc_keys),
-            sorted(_param_keys),
-            sorted(_config_keys),
-            _desc_len,
-            _desc_has_args_header,
-            bool(workspace_path and str(workspace_path).strip()),
-            _schema_props,
-            bool(_has_input_files_prop),
-            'input_files' in path_arg_names,
-            json.dumps(_params_brief, ensure_ascii=False, default=str),
-        )
-        if _has_input_files_prop:
-            _raw_if = ((input_schema or {}).get('properties') or {}).get('input_files')
-            logger.info(
-                'Path adaptor [%s] input_files raw schema (JSON): %s',
-                tool_name,
-                json.dumps(_raw_if, ensure_ascii=False, default=str),
-            )
-        if _has_input_files_prop and 'input_files' not in path_arg_names:
-            logger.info(
-                'Path adaptor [%s] tool_description_head (first 400 chars, repr): %s',
-                tool_name,
-                repr(_td[:400]) if _td else repr(_td),
-            )
-            logger.warning(
-                'Path adaptor [%s]: schema has input_files but it was not classified '
-                'as path params (no format/path in schema, docstring Path, *_path '
-                'name, or path_params_by_tool); local paths may be sent to MCP '
-                'unchanged.',
-                tool_name,
-            )
-
-        if path_arg_names:
-            logger.debug(
-                'Tool %s: Path params detail via %s: %s',
+        try:
+            # --- executor & storage injection ---
+            if 'executor' in out:
+                logger.info(
+                    'Ignoring user-provided executor for %s; using config executor.',
+                    tool_name,
+                )
+            out['executor'] = self._resolve_executor(
+                server_name,
                 remote_name,
-                source,
-                sorted(path_arg_names),
+                access_key=access_key,
+                project_id=project_id,
+                user_id=user_id,
+                user_no=user_no,
             )
+            if is_async_tool:
+                self._validate_executor_profile(
+                    out['executor'],
+                    server_name=server_name,
+                    remote_tool_name=remote_name,
+                )
+            out['storage'] = get_bohrium_storage_config(
+                access_key=access_key,
+                project_id=project_id,
+                user_id=user_id,
+            )
+
+            # --- Detect path selectors ---
+            schema_selectors = collect_path_selectors(input_schema or {})
+            desc_selectors = _path_keys_from_description(tool_description)
+            config_selectors = self._path_selectors_from_tool_config(
+                server_name, remote_name, input_schema
+            )
+            path_selectors = schema_selectors | desc_selectors | config_selectors
+        except Exception as exc:
+            raise _wrap_preflight(exc) from exc
+
+        logger.info(
+            'Path adaptor [%s] selectors=%s schema=%s description=%s config=%s '
+            'workspace_path_set=%s schema_params_brief=%s',
+            tool_name,
+            sorted(path_selectors),
+            sorted(schema_selectors),
+            sorted(desc_selectors),
+            sorted(config_selectors),
+            bool(workspace_path and str(workspace_path).strip()),
+            json.dumps(
+                _input_schema_params_brief(
+                    input_schema if isinstance(input_schema, dict) else None
+                ),
+                ensure_ascii=False,
+                default=str,
+            ),
+        )
 
         # --- Model alias resolution (DPA2.4-7M -> OSS URL) ---
-        if path_arg_names and tool_description:
-            out = _resolve_model_aliases(out, tool_description, path_arg_names)
+        top_level_path_keys = _top_level_path_keys(path_selectors)
+        if top_level_path_keys and tool_description:
+            out = _resolve_model_aliases(out, tool_description, top_level_path_keys)
 
         # --- Upload local files -> OSS ---
-        if not path_arg_names or not workspace_path:
-            if not path_arg_names:
-                logger.info(
-                    'Path adaptor [%s]: skip OSS upload (no path-typed params '
-                    'detected).',
-                    tool_name,
-                )
-            elif not workspace_path:
-                logger.info(
-                    'Path adaptor [%s]: skip OSS upload (workspace_path empty).',
-                    tool_name,
-                )
+        if not path_selectors:
+            logger.info(
+                'Path adaptor [%s]: skip OSS upload (no path selectors detected).',
+                tool_name,
+            )
             return out
 
-        def _is_null_or_empty_path(v: Any) -> bool:
-            if v is None:
-                return True
-            if isinstance(v, str) and v.strip().lower() in ('none', 'null', ''):
-                return True
-            return False
+        if not workspace_path:
+            if _needs_filesystem_upload(out, path_selectors, input_schema):
+                raise CalculationPreflightError(
+                    'Calculation tool preflight failed: workspace_path is required '
+                    'to upload local or remote input files'
+                )
+            logger.info(
+                'Path adaptor [%s]: skip OSS upload (workspace_path empty, but all '
+                'selected values are URL-like or null).',
+                tool_name,
+            )
+            return out
 
         workspace_root = Path(workspace_path).resolve()
         logger.info(
             'Path adaptor [%s]: resolving local paths -> OSS '
-            '(keys=%s workspace_root=%s)',
+            '(selectors=%s workspace_root=%s)',
             tool_name,
-            sorted(path_arg_names),
+            sorted(path_selectors),
             workspace_root,
         )
-        for key in sorted(path_arg_names):
-            if key not in out:
-                continue
-            val = out[key]
-            if _is_null_or_empty_path(val):
-                out[key] = None
-                continue
-            if isinstance(val, list):
-                out[key] = [
-                    (
-                        None
-                        if _is_null_or_empty_path(v)
-                        else _resolve_one(str(v), workspace_root, session)
-                    )
-                    for v in val
-                ]
-            else:
-                out[key] = _resolve_one(str(val), workspace_root, session)
-        return out
+        try:
+            return rewrite_selected_paths(
+                out,
+                selectors=path_selectors,
+                schema=input_schema,
+                rewrite_leaf=lambda selector, value, schema_leaf: _resolve_one(
+                    str(value), workspace_root, session
+                ),
+            )
+        except Exception as exc:
+            raise _wrap_preflight(exc) from exc
 
 
 def get_calculation_path_adaptor(

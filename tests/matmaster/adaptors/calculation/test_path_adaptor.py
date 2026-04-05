@@ -14,8 +14,33 @@ from __future__ import annotations
 
 import ast
 import inspect
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
+import yaml
+
+
+def _load_cached_tool(server_name: str, tool_name: str) -> dict:
+    cache_path = Path("matmaster/cache") / f"{server_name}.json"
+    tools = json.loads(cache_path.read_text(encoding="utf-8"))
+    for tool in tools:
+        if tool["name"] == tool_name:
+            return tool
+    raise KeyError(f"Tool not found in cache: {server_name}.{tool_name}")
+
+
+def _make_dispatcher_executor() -> dict:
+    return {
+        "type": "dispatcher",
+        "machine": {"remote_profile": {"machine_type": "x", "image_address": "y"}},
+        "resources": {"envs": {}},
+    }
+
+
+def _fake_upload_url(path: str | Path, object_basename: str | None = None) -> str:
+    return f"https://oss.test/{object_basename or Path(path).name}"
 
 
 class TestCalculationPathAdaptorExists:
@@ -291,3 +316,270 @@ class TestNoTopLevelEvoMasterInPathAdaptor:
         assert (
             "from .oss_io import" in source or "from matmaster" in source
         ), "path_adaptor.py must use relative import for oss_io"
+
+
+class TestCalculationPathAdaptorPreflight:
+    def test_remote_session_without_download_raises_preflight_error(self):
+        from matmaster.adaptors.calculation.path_adaptor import (
+            CalculationPathAdaptor,
+            CalculationPreflightError,
+        )
+
+        class FakeSSHSession:
+            def is_file(self, path: str) -> bool:
+                return True
+
+        adaptor = CalculationPathAdaptor(
+            calculation_executors={
+                "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
+            }
+        )
+        tool = _load_cached_tool("mat_dpa", "submit_calculate_elastic_constants")
+
+        with pytest.raises(CalculationPreflightError, match="download"):
+            adaptor.resolve_args(
+                workspace_path="/share",
+                args={"input_structure": "/share/in.cif", "model_path": "DPA2.4-7M"},
+                tool_name="mat_dpa_submit_calculate_elastic_constants",
+                server_name="mat_dpa",
+                input_schema=tool["input_schema"],
+                tool_description=tool["description"],
+                session=FakeSSHSession(),
+            )
+
+    def test_empty_workspace_path_with_local_input_raises_preflight_error(
+        self, tmp_path: Path
+    ):
+        from matmaster.adaptors.calculation.path_adaptor import (
+            CalculationPathAdaptor,
+            CalculationPreflightError,
+        )
+
+        input_file = tmp_path / "in.cif"
+        input_file.write_text("data", encoding="utf-8")
+
+        adaptor = CalculationPathAdaptor(
+            calculation_executors={
+                "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
+            }
+        )
+        tool = _load_cached_tool("mat_dpa", "submit_calculate_elastic_constants")
+
+        with pytest.raises(CalculationPreflightError, match="workspace_path"):
+            adaptor.resolve_args(
+                workspace_path="",
+                args={
+                    "input_structure": str(input_file),
+                    "model_path": "DPA2.4-7M",
+                },
+                tool_name="mat_dpa_submit_calculate_elastic_constants",
+                server_name="mat_dpa",
+                input_schema=tool["input_schema"],
+                tool_description=tool["description"],
+            )
+
+    def test_plot_path_is_not_treated_as_upload_input(
+        self, monkeypatch, tmp_path: Path
+    ):
+        from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
+        monkeypatch.setattr(
+            "matmaster.adaptors.calculation.path_adaptor.upload_file_to_oss",
+            lambda path, workspace_root, object_basename=None: _fake_upload_url(
+                path, object_basename
+            ),
+        )
+
+        (tmp_path / "in.cif").write_text("data", encoding="utf-8")
+
+        adaptor = CalculationPathAdaptor(
+            calculation_executors={
+                "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
+            }
+        )
+        tool = _load_cached_tool("mat_dpa", "submit_calculate_phonon")
+
+        result = adaptor.resolve_args(
+            workspace_path=str(tmp_path),
+            args={
+                "input_structure": "in.cif",
+                "model_path": "DPA2.4-7M",
+                "temperatures": [300],
+                "plot_path": "phonon_band.png",
+            },
+            tool_name="mat_dpa_submit_calculate_phonon",
+            server_name="mat_dpa",
+            input_schema=tool["input_schema"],
+            tool_description=tool["description"],
+        )
+
+        assert result["input_structure"] == "https://oss.test/in.cif"
+        assert result["plot_path"] == "phonon_band.png"
+
+    def test_compdart_nested_structure_template_path_uploads(
+        self, monkeypatch, tmp_path: Path
+    ):
+        from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
+        monkeypatch.setattr(
+            "matmaster.adaptors.calculation.path_adaptor.upload_file_to_oss",
+            lambda path, workspace_root, object_basename=None: _fake_upload_url(
+                path, object_basename
+            ),
+        )
+
+        (tmp_path / "template.cif").write_text("template", encoding="utf-8")
+        (tmp_path / "bulk.pt").write_text("model", encoding="utf-8")
+
+        adaptor = CalculationPathAdaptor(
+            calculation_executors={
+                "mat_compdart": {
+                    "executor": _make_dispatcher_executor(),
+                    "sync_tools": [],
+                    "path_params_by_tool": {"submit_run_dart_ga": ["targets[].model_path"]},
+                }
+            }
+        )
+        tool = _load_cached_tool("mat_compdart", "submit_run_dart_ga")
+
+        result = adaptor.resolve_args(
+            workspace_path=str(tmp_path),
+            args={
+                "elements": ["Fe", "Ni"],
+                "targets": [
+                    {
+                        "name": "bulk_modulus",
+                        "type": "surrogate",
+                        "model_path": "bulk.pt",
+                    }
+                ],
+                "structure_config": {"mode": "template", "template_path": "template.cif"},
+            },
+            tool_name="mat_compdart_submit_run_dart_ga",
+            server_name="mat_compdart",
+            input_schema=tool["input_schema"],
+            tool_description=tool["description"],
+        )
+
+        assert result["structure_config"]["template_path"].startswith("https://")
+        assert result["targets"][0]["model_path"].startswith("https://")
+
+    def test_compdart_template_enum_literal_passes_through(
+        self, monkeypatch, tmp_path: Path
+    ):
+        from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
+        monkeypatch.setattr(
+            "matmaster.adaptors.calculation.path_adaptor.upload_file_to_oss",
+            lambda path, workspace_root, object_basename=None: _fake_upload_url(
+                path, object_basename
+            ),
+        )
+
+        (tmp_path / "bulk.pt").write_text("model", encoding="utf-8")
+
+        adaptor = CalculationPathAdaptor(
+            calculation_executors={
+                "mat_compdart": {
+                    "executor": _make_dispatcher_executor(),
+                    "sync_tools": [],
+                    "path_params_by_tool": {"submit_run_dart_ga": ["targets[].model_path"]},
+                }
+            }
+        )
+        tool = _load_cached_tool("mat_compdart", "submit_run_dart_ga")
+
+        result = adaptor.resolve_args(
+            workspace_path=str(tmp_path),
+            args={
+                "elements": ["Fe", "Ni"],
+                "targets": [
+                    {
+                        "name": "bulk_modulus",
+                        "type": "surrogate",
+                        "model_path": "bulk.pt",
+                    }
+                ],
+                "structure_config": {"mode": "template", "template_path": "fcc"},
+            },
+            tool_name="mat_compdart_submit_run_dart_ga",
+            server_name="mat_compdart",
+            input_schema=tool["input_schema"],
+            tool_description=tool["description"],
+        )
+
+        assert result["structure_config"]["template_path"] == "fcc"
+        assert result["targets"][0]["model_path"] == "https://oss.test/bulk.pt"
+
+    def test_model_alias_resolution_still_works_for_top_level_model_path(
+        self, monkeypatch, tmp_path: Path
+    ):
+        from matmaster.adaptors.calculation.path_adaptor import CalculationPathAdaptor
+
+        monkeypatch.setattr(
+            "matmaster.adaptors.calculation.path_adaptor.upload_file_to_oss",
+            lambda path, workspace_root, object_basename=None: _fake_upload_url(
+                path, object_basename
+            ),
+        )
+
+        (tmp_path / "in.cif").write_text("data", encoding="utf-8")
+
+        adaptor = CalculationPathAdaptor(
+            calculation_executors={
+                "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
+            }
+        )
+        tool = _load_cached_tool("mat_dpa", "submit_calculate_elastic_constants")
+
+        result = adaptor.resolve_args(
+            workspace_path=str(tmp_path),
+            args={"input_structure": "in.cif", "model_path": "DPA2.4-7M"},
+            tool_name="mat_dpa_submit_calculate_elastic_constants",
+            server_name="mat_dpa",
+            input_schema=tool["input_schema"],
+            tool_description=tool["description"],
+        )
+
+        assert result["input_structure"] == "https://oss.test/in.cif"
+        assert result["model_path"].startswith("https://")
+        assert result["model_path"] != "https://oss.test/DPA2.4-7M"
+
+    def test_async_tool_blocking_raises_preflight_error(self):
+        from matmaster.adaptors.calculation.path_adaptor import (
+            CalculationPathAdaptor,
+            CalculationPreflightError,
+        )
+
+        adaptor = CalculationPathAdaptor(
+            calculation_executors={
+                "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
+            }
+        )
+        tool = _load_cached_tool("mat_dpa", "submit_calculate_elastic_constants")
+
+        with pytest.raises(CalculationPreflightError, match="blocked"):
+            adaptor.resolve_args(
+                workspace_path="/tmp/ws",
+                args={
+                    "input_structure": "/tmp/ws/in.cif",
+                    "model_path": "DPA2.4-7M",
+                },
+                tool_name="mat_dpa_calculate_elastic_constants",
+                server_name="mat_dpa",
+                input_schema=tool["input_schema"],
+                tool_description=tool["description"],
+            )
+
+
+class TestCalculationPathOverrideConfig:
+    def test_enabled_tools_have_required_path_param_overrides(self):
+        config = yaml.safe_load(Path("config/mcp.yaml").read_text(encoding="utf-8"))
+        executors = config["calculation_executors"]
+
+        assert executors["mat_nmr"]["path_params_by_tool"]["NMR_predict_tool"] == [
+            "molecule_file"
+        ]
+        assert executors["mat_compdart"]["path_params_by_tool"][
+            "submit_run_dart_ga"
+        ] == ["targets[].model_path"]

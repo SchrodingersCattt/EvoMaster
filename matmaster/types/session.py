@@ -71,11 +71,12 @@ class SSHSessionConfig(SessionConfig):
 class Session(Protocol):
     """Session interface -- the structural typing contract for all session types.
 
-    Any object implementing these 8 methods/properties satisfies the
+    Any object implementing these protocol members satisfies the
     Session Protocol via duck typing. No explicit subclassing required.
 
-    Methods mirror evomaster BaseSession's core interface, minus upload/download
-    (those are environment-level concerns, not session-level).
+    Methods mirror the core runtime session interface. Raw file download is part
+    of the session contract so higher layers can read bytes from local or remote
+    filesystems without knowing the transport details.
     """
 
     @property
@@ -114,6 +115,10 @@ class Session(Protocol):
 
     def is_file(self, path: str) -> bool:
         """Check if path is a regular file."""
+        ...
+
+    def download(self, path: str, timeout: int | None = None) -> bytes:
+        """Read raw file bytes from the session filesystem."""
         ...
 
     @property

@@ -80,6 +80,20 @@ class TestLocalSessionFileOps:
         assert session.is_file(str(tmp_path / "dir")) is False
         assert session.is_file(str(tmp_path / "missing")) is False
 
+    def test_download_returns_bytes(self, tmp_path: Path) -> None:
+        target = tmp_path / "sample.bin"
+        target.write_bytes(b"abc123")
+
+        session = LocalSession(workspace_path=tmp_path)
+
+        assert session.download(str(target)) == b"abc123"
+
+    def test_download_missing_raises_file_not_found(self, tmp_path: Path) -> None:
+        session = LocalSession(workspace_path=tmp_path)
+
+        with pytest.raises(FileNotFoundError):
+            session.download(str(tmp_path / "missing.bin"))
+
 
 class TestLocalSessionLifecycle:
     """open/close are no-ops."""

@@ -1,9 +1,4 @@
-"""LocalSession -- lightweight local session for builtin tool execution.
-
-Replaces evomaster.agent.session.local.LocalSession with a minimal
-implementation satisfying the 5-method interface used by builtin tools:
-exec_bash, read_file, write_file, path_exists, is_file.
-"""
+"""LocalSession -- lightweight local session for builtin tool execution."""
 
 from __future__ import annotations
 
@@ -184,3 +179,7 @@ class LocalSession:
     def is_file(self, path: str) -> bool:
         """Check if path is a regular file."""
         return Path(path).is_file()
+
+    def download(self, path: str, timeout: int | None = None) -> bytes:
+        """Read raw file bytes from the local filesystem."""
+        return Path(path).read_bytes()

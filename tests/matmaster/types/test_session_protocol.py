@@ -28,7 +28,7 @@ class TestSessionProtocol:
         assert isinstance(session, Session)
 
     def test_mock_with_all_methods_satisfies_protocol(self) -> None:
-        """Test 8: Any object implementing 8 methods satisfies Session."""
+        """Test 8: Any object implementing protocol methods satisfies Session."""
 
         class FakeSession:
             @property
@@ -46,6 +46,7 @@ class TestSessionProtocol:
             def write_file(self, path, content, encoding="utf-8"): ...
             def path_exists(self, path): ...
             def is_file(self, path): ...
+            def download(self, path, timeout=None): ...
 
         assert isinstance(FakeSession(), Session)
 

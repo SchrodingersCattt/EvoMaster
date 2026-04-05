@@ -88,6 +88,9 @@ calculation_executors:
           app_key: "agent"
       resources:
         envs: {}
+    path_params_by_tool:
+      submit_run_dart_ga:
+        - targets[].model_path
     sync_tools: []
   mat_doc:
     executor: null
@@ -95,6 +98,9 @@ calculation_executors:
       - extract_material_data_from_pdf
   mat_nmr:
     executor: null
+    path_params_by_tool:
+      NMR_predict_tool:
+        - molecule_file
     sync_tools:
       - NMR_search_tool
       - NMR_predict_tool

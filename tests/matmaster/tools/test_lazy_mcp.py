@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from matmaster.adaptors.calculation.path_adaptor import CalculationPreflightError
 from matmaster.tools.lazy_mcp import (
     _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT,
     LazyMCPConnector,
@@ -503,7 +504,28 @@ class TestLazyMCPToolPathAdaptor:
 
         assert mock_adaptor.resolve_args.call_args.kwargs["session"] is fake_session
 
-    async def test_path_adaptor_failure_falls_back(self):
+    async def test_calculation_preflight_failure_returns_tool_error(self):
+        mock_adaptor = MagicMock()
+        mock_adaptor.resolve_args.side_effect = CalculationPreflightError(
+            "preflight failed"
+        )
+        connector = FakeConnector(path_adaptor=mock_adaptor)
+        tool = LazyMCPTool(
+            server_name="mat_dpa",
+            tool_name="mat_dpa_submit_calculate_elastic_constants",
+            remote_tool_name="submit_calculate_elastic_constants",
+            description="desc",
+            input_schema={},
+            connector=connector,
+        )
+
+        result = await tool.execute({"input_structure": "/share/in.cif"})
+
+        assert result.status == "error"
+        assert "preflight failed" in result.content
+        connector._call_tool.assert_not_awaited()
+
+    async def test_generic_path_adaptor_failure_still_falls_back(self):
         mock_adaptor = MagicMock()
         mock_adaptor.resolve_args.side_effect = Exception("resolve failed")
         connector = FakeConnector(path_adaptor=mock_adaptor)
