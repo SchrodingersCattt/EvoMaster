@@ -40,7 +40,9 @@ def test_validate_selector_paths_accepts_nested_array_selector():
 
 def test_rewrite_selected_paths_updates_nested_targets_model_path():
     payload = {
-        "targets": [{"name": "bulk_modulus", "type": "surrogate", "model_path": "model.pt"}]
+        "targets": [
+            {"name": "bulk_modulus", "type": "surrogate", "model_path": "model.pt"}
+        ]
     }
 
     rewritten = rewrite_selected_paths(

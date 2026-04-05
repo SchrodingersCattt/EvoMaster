@@ -78,12 +78,9 @@ def _schema_has_path_format(
     )
 
 
-def _schema_allows_string(
-    schema: dict[str, Any], root_schema: dict[str, Any]
-) -> bool:
+def _schema_allows_string(schema: dict[str, Any], root_schema: dict[str, Any]) -> bool:
     return any(
-        variant.get("type") == "string"
-        or variant.get("format") in _PATH_FORMATS
+        variant.get("type") == "string" or variant.get("format") in _PATH_FORMATS
         for variant in _iter_navigation_variants(schema, root_schema)
     )
 
@@ -307,9 +304,12 @@ def _rewrite_exact_value(
     if isinstance(value, list):
         item_schema = _array_items_schema(schema_leaf, root_schema) or schema_leaf
         return [
-            item
-            if _is_null_like(item) or _enum_contains_value(item_schema, item, root_schema)
-            else rewrite_leaf(selector, item, item_schema)
+            (
+                item
+                if _is_null_like(item)
+                or _enum_contains_value(item_schema, item, root_schema)
+                else rewrite_leaf(selector, item, item_schema)
+            )
             for item in value
         ]
 
@@ -330,7 +330,9 @@ def rewrite_selected_paths(
     rewrite_leaf: Callable[[str, Any, dict[str, Any] | None], Any],
 ) -> Any:
     """Rewrite only selected leaves in a nested payload."""
-    selector_map = {tuple(_selector_tokens(selector)): selector for selector in selectors}
+    selector_map = {
+        tuple(_selector_tokens(selector)): selector for selector in selectors
+    }
 
     def _rewrite(value: Any, prefix: tuple[str, ...]) -> Any:
         selector = selector_map.get(prefix)

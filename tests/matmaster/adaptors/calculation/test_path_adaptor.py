@@ -436,7 +436,9 @@ class TestCalculationPathAdaptorPreflight:
                 "mat_compdart": {
                     "executor": _make_dispatcher_executor(),
                     "sync_tools": [],
-                    "path_params_by_tool": {"submit_run_dart_ga": ["targets[].model_path"]},
+                    "path_params_by_tool": {
+                        "submit_run_dart_ga": ["targets[].model_path"]
+                    },
                 }
             }
         )
@@ -453,7 +455,10 @@ class TestCalculationPathAdaptorPreflight:
                         "model_path": "bulk.pt",
                     }
                 ],
-                "structure_config": {"mode": "template", "template_path": "template.cif"},
+                "structure_config": {
+                    "mode": "template",
+                    "template_path": "template.cif",
+                },
             },
             tool_name="mat_compdart_submit_run_dart_ga",
             server_name="mat_compdart",
@@ -483,7 +488,9 @@ class TestCalculationPathAdaptorPreflight:
                 "mat_compdart": {
                     "executor": _make_dispatcher_executor(),
                     "sync_tools": [],
-                    "path_params_by_tool": {"submit_run_dart_ga": ["targets[].model_path"]},
+                    "path_params_by_tool": {
+                        "submit_run_dart_ga": ["targets[].model_path"]
+                    },
                 }
             }
         )
