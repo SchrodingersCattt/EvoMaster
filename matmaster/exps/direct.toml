@@ -33,7 +33,6 @@ developer_instructions = '''
 
 # Tool Usage
 - Prefer MCP tools (mat_sg_build_surface_slab, mat_sg_build_bulk_structure_by_wyckoff, mat_sg_generate_ordered_replicas) for their intended purpose. Fall back to Python only when MCP fails.
-- For slab construction (including batch vacuum/layer sweeps): ALWAYS call mat_sg_build_surface_slab once per parameter value. Do NOT substitute Python/ASE for slab building when this tool is available.
 - For batch/sweep tasks: call the appropriate MCP tool once per parameter value.
 - Do NOT retry a failed MCP tool more than once; immediately fall back to Python (ASE/pymatgen).
 
