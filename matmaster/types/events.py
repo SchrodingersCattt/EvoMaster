@@ -70,6 +70,8 @@ class ToolResultEvent(EventBase):
     result: Any  # str | dict
     status: str = "success"
     payload: dict[str, Any] = Field(default_factory=dict)
+    turn_usage: dict[str, int] = Field(default_factory=dict)
+    total_usage: dict[str, int] = Field(default_factory=dict)
 
 
 class RunResultEvent(EventBase):
@@ -104,6 +106,8 @@ class AssistantStateEvent(EventBase):
 
     type: Literal["assistant_state"] = "assistant_state"
     state: dict[str, Any]  # AssistantMessage.model_dump() content
+    turn_usage: dict[str, int] = Field(default_factory=dict)
+    total_usage: dict[str, int] = Field(default_factory=dict)
 
 
 class SkillHitEvent(EventBase):
@@ -120,16 +124,6 @@ class ToolProgressEvent(EventBase):
     call_id: str
     tool_name: str
     content: str = ""
-
-
-class UsageEvent(EventBase):
-    """Per-turn token usage snapshot emitted after LLM response and tool execution."""
-
-    type: Literal["usage"] = "usage"
-    turn: int
-    phase: str  # 'llm_response' | 'tool_result'
-    turn_usage: dict[str, int] = Field(default_factory=dict)
-    total_usage: dict[str, int] = Field(default_factory=dict)
 
 
 # ── SystemEvent: service-layer events ───────────────────
@@ -237,7 +231,6 @@ AgentEvent = Annotated[
         AssistantStateEvent,
         SkillHitEvent,
         ToolProgressEvent,
-        UsageEvent,
     ],
     Field(discriminator="type"),
 ]
@@ -270,7 +263,6 @@ BusEvent = Annotated[
         AssistantStateEvent,
         SkillHitEvent,
         ToolProgressEvent,
-        UsageEvent,
         # SystemEvent types
         ConfirmationRequestEvent,
         ConfirmationTimeoutEvent,

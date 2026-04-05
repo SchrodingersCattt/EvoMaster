@@ -31,7 +31,6 @@ from matmaster.types.events import (
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
-    UsageEvent,
 )
 
 if TYPE_CHECKING:
@@ -344,16 +343,6 @@ class AgentKernel:
             if spec.compactor:
                 spec.compactor.update_message_count(len(state.messages))
 
-            yield _KernelItem(
-                event=UsageEvent(
-                    source="agent",
-                    turn=state.turn,
-                    phase="llm_response",
-                    turn_usage=dict(turn_usage),
-                    total_usage=dict(state.total_usage),
-                )
-            )
-
             if not response.tool_calls:
                 if not self._is_valid_natural_finish(response):
                     yield self._terminal(state, 'invalid_finish')
@@ -379,6 +368,8 @@ class AgentKernel:
                     event=AssistantStateEvent(
                         source="agent",
                         state=assistant_msg.model_dump(mode="json"),
+                        turn_usage=dict(turn_usage),
+                        total_usage=dict(state.total_usage),
                     )
                 )
 
@@ -420,6 +411,8 @@ class AgentKernel:
                         result=tool_result.content,
                         status=tool_result.status,
                         payload=tool_result.payload,
+                        turn_usage=dict(turn_usage),
+                        total_usage=dict(state.total_usage),
                     )
                 )
                 if tc.name == "Skill":
@@ -431,16 +424,6 @@ class AgentKernel:
                                 skill_name=skill_name,
                             )
                         )
-
-            yield _KernelItem(
-                event=UsageEvent(
-                    source="agent",
-                    turn=state.turn,
-                    phase="tool_result",
-                    turn_usage=dict(turn_usage),
-                    total_usage=dict(state.total_usage),
-                )
-            )
 
         yield self._terminal(state, 'max_turns')
 
