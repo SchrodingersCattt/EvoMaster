@@ -6,7 +6,7 @@ questions:
   # ============================================================
   # BP_elec_001_20260404 — 多金属表面批量吸附能计算（Mock版）
   # ============================================================
-  - id: "BP_elec_001_20260404"
+  - id: "BP_elec_001_20260405"
     capability: "batch_processing"
     domain: "elec"
     intent: "Batch-compute H adsorption energy on 3 different metal (001) surfaces using mock energies to test batch workflow efficiency."
@@ -68,17 +68,17 @@ questions:
         value: {max: 12000}
     scoring_checklist:
       - id: "E_ads_Cu"
-        criterion: "Cu adsorption energy is computed correctly from mock energies (~-0.62 eV)."
+        criterion: "Cu(001) adsorption energy E_ads = E(slab+H) − E(slab) − 0.5×E(H₂) = −61.08 − (−57.12) − 0.5×(−6.68) is reported as approximately −0.62 eV (accept values within ±0.2 eV of −0.62)."
         axis: "correctness"
-        verify: "numerical_range"
+        verify: "llm_binary_judge"
       - id: "E_ads_Ag"
-        criterion: "Ag adsorption energy is computed correctly from mock energies (~-0.73 eV)."
+        criterion: "Ag(001) adsorption energy E_ads = E(slab+H) − E(slab) − 0.5×E(H₂) = −47.63 − (−43.56) − 0.5×(−6.68) is reported as approximately −0.73 eV (accept values within ±0.2 eV of −0.73)."
         axis: "correctness"
-        verify: "numerical_range"
+        verify: "llm_binary_judge"
       - id: "E_ads_Au"
-        criterion: "Au adsorption energy is computed correctly from mock energies (~-0.65 eV)."
+        criterion: "Au(001) adsorption energy E_ads = E(slab+H) − E(slab) − 0.5×E(H₂) = −54.83 − (−50.84) − 0.5×(−6.68) is reported as approximately −0.65 eV (accept values within ±0.2 eV of −0.65)."
         axis: "correctness"
-        verify: "numerical_range"
+        verify: "llm_binary_judge"
       - id: "required_fields"
         criterion: "Report includes adsorption energy for all three metals, H₂ reference energy, and HER activity ranking."
         axis: "correctness"

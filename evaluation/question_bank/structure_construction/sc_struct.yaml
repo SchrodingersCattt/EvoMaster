@@ -109,7 +109,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_002_20260404
+- id: SC_struct_002_20260405
   capability: structure_construction
   domain: struct
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular
@@ -151,12 +151,12 @@ questions:
   reference_answers:
   - key: unit_cell_atoms
     value:
-      filename: '*PUBMUU03*'
+      filename: 'surface_PUBMUU03*'
       expected: 144
       tolerance: 0
   - key: total_atoms
     value:
-      filename: '*.cif'
+      filename: 'slab_*PUBMUU03*'
       expected: 576
       tolerance: 0
   - key: required_fields
@@ -343,7 +343,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_004_20260404
+- id: SC_struct_004_20260405
   capability: structure_construction
   domain: struct
   intent: Exfoliate a MoS2 monolayer from bulk 2H-MoS2 and verify the 2D structure.
@@ -372,10 +372,10 @@ questions:
   - key: layer_thickness_A
     value:
       filename: '*POSCAR*'
-      element_a: Mo
+      element_a: S
       element_b: S
-      cutoff_A: 3.0
-      expected: 3.1
+      cutoff_A: 4.0
+      expected: 3.13
       tolerance: 0.6
   - key: required_fields
     value:
@@ -395,7 +395,7 @@ questions:
     axis: correctness
     verify: struct_file_formula
   - id: layer_thickness_A
-    criterion: The Mo-S bond length read from the output POSCAR is representative of the ~3.1 A monolayer thickness.
+    criterion: The mean S-S nearest-neighbor distance read from the output POSCAR is approximately 3.13 A, representative of the MoS2 monolayer S-Mo-S sandwich thickness.
     axis: correctness
     verify: struct_file_bond_length
   - id: required_fields
