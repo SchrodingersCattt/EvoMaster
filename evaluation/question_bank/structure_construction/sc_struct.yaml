@@ -434,7 +434,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260404
+- id: SC_struct_005_20260405
   capability: structure_construction
   domain: struct
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and
@@ -480,7 +480,7 @@ questions:
   reference_answers:
   - key: structures_processed
     value:
-      pattern: 'ordered_*'
+      pattern: 'ordered_*.cif'
       expected: 5
       tolerance: 0
   - key: sc005_disorder_formulas
