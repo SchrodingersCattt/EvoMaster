@@ -289,6 +289,12 @@ class SSHSession:
         finally:
             pool.release(sftp)
 
+    def upload_directory(
+        self, local_dir: str, remote_dir: str, exclude: set[str] | None = None
+    ) -> None:
+        """Upload a local directory to the remote host."""
+        self.upload_directory_tarball(local_dir, remote_dir, exclude=exclude)
+
     # ------------------------------------------------------------------
     # Public helpers (non-Protocol, used by external callers)
     # ------------------------------------------------------------------

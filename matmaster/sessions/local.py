@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import signal
 import subprocess
 from pathlib import Path
@@ -179,6 +180,12 @@ class LocalSession:
     def is_file(self, path: str) -> bool:
         """Check if path is a regular file."""
         return Path(path).is_file()
+
+    def upload_directory(
+        self, local_dir: str, remote_dir: str, exclude: set[str] | None = None
+    ) -> None:
+        """Copy local directory tree to destination."""
+        shutil.copytree(local_dir, remote_dir, dirs_exist_ok=True)
 
     def download(self, path: str, timeout: int | None = None) -> bytes:
         """Read raw file bytes from the local filesystem."""

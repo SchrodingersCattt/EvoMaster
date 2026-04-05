@@ -121,6 +121,15 @@ class Session(Protocol):
         """Read raw file bytes from the session filesystem."""
         ...
 
+    def upload_directory(
+        self,
+        local_dir: str,
+        remote_dir: str,
+        exclude: set[str] | None = None,
+    ) -> None:
+        """Copy a local directory tree into the session filesystem."""
+        ...
+
     @property
     def capabilities(self) -> SessionCapabilities:
         """Report runtime capabilities exposed by this session implementation."""

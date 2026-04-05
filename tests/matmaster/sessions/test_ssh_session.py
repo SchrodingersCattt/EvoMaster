@@ -197,6 +197,27 @@ class TestSSHSessionFileOps:
         mock_paramiko["sftp"].open.assert_called_with("/remote/file.dat", "rb")
 
 
+class TestSSHSessionUploadDirectory:
+    """upload_directory delegates to upload_directory_tarball."""
+
+    def _make_open_session(self, ssh_config, mock_paramiko):
+        from matmaster.sessions.ssh import SSHSession
+
+        session = SSHSession(ssh_config)
+        session.open()
+        return session
+
+    def test_upload_directory_delegates_to_tarball(self, ssh_config, mock_paramiko):
+        session = self._make_open_session(ssh_config, mock_paramiko)
+        session.upload_directory_tarball = MagicMock()
+        session.upload_directory("/tmp/local", "/share/remote")
+        session.upload_directory_tarball.assert_called_once_with(
+            "/tmp/local",
+            "/share/remote",
+            exclude=None,
+        )
+
+
 class TestSSHSessionProtocol:
     """SSHSession satisfies Session Protocol."""
 

@@ -109,6 +109,21 @@ class TestLocalSessionLifecycle:
         assert result["exit_code"] == 0
 
 
+class TestLocalSessionUploadDirectory:
+    """upload_directory via shutil.copytree."""
+
+    def test_upload_directory_copies_tree(self, tmp_path: Path) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        (src / "nested").mkdir(parents=True)
+        (src / "nested" / "out.txt").write_text("ok", encoding="utf-8")
+
+        session = LocalSession(workspace_path=tmp_path)
+        session.upload_directory(str(src), str(dst))
+
+        assert (dst / "nested" / "out.txt").read_text(encoding="utf-8") == "ok"
+
+
 class TestLocalSessionProtocol:
     """LocalSession satisfies Session Protocol."""
 
