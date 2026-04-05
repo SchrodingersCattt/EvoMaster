@@ -29,9 +29,9 @@ class TestSkillToolMetadata:
         tool = SkillTool(skill_registry=make_registry())
         assert "skill" in tool.json_schema["properties"]
 
-    def test_schema_has_args_param(self):
+    def test_schema_does_not_have_args_param(self):
         tool = SkillTool(skill_registry=make_registry())
-        assert "args" in tool.json_schema["properties"]
+        assert "args" not in tool.json_schema["properties"]
 
 
 class TestSkillExecution:
@@ -57,11 +57,11 @@ class TestSkillExecution:
         asyncio.run(tool.execute({"skill": "test-skill"}))
         callback.assert_called_with("my-server")
 
-    def test_args_appended(self):
+    def test_extra_args_ignored(self):
         skill = make_skill()
         tool = SkillTool(skill_registry=make_registry(skill=skill))
         result = asyncio.run(tool.execute({"skill": "test-skill", "args": "some args"}))
-        assert "some args" in result
+        assert "some args" not in result
 
     def test_slash_prefix_stripped(self):
         skill = make_skill()

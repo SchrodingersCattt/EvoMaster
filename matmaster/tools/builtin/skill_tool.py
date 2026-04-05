@@ -30,10 +30,6 @@ class SkillTool(BuiltinTool):
                 "type": "string",
                 "description": 'The skill name. E.g. "commit" or "review-pr"',
             },
-            "args": {
-                "type": "string",
-                "description": "Optional arguments for the skill",
-            },
         },
         "required": ["skill"],
     }
@@ -64,10 +60,10 @@ class SkillTool(BuiltinTool):
             '(e.g. "/commit", "/review-pr"), they are referring to a skill. '
             "Use this tool to invoke it.\n\n"
             "How to invoke:\n"
-            '- Use this tool with the skill name and optional arguments\n'
+            '- Use this tool with the skill name\n'
             '- Examples:\n'
             '  - `skill: "pdf"` - invoke the pdf skill\n'
-            '  - `skill: "commit", args: "-m \'Fix bug\'"` - invoke with arguments\n\n'
+            '  - `skill: "review-pr"` - invoke the review-pr skill\n\n'
             "Important:\n"
             "- Available skills are listed in system-reminder messages in the conversation\n"
             "- When a skill matches the user's request, invoke it before generating "
@@ -81,7 +77,6 @@ class SkillTool(BuiltinTool):
             skill_name = (
                 arguments.get("skill") or arguments.get("skill_name") or ""
             ).lstrip("/")
-            args = arguments.get("args", "")
 
             if self._registry is None:
                 return "Error: skill registry not available"
@@ -100,10 +95,7 @@ class SkillTool(BuiltinTool):
                 if dep_skill is not None:
                     self._maybe_hit_mcp(dep_skill)
 
-            result = f"Base directory for this skill: {skill_dir}\n\n{body}"
-            if args:
-                result += f"\n\nARGUMENTS: {args}"
-            return result
+            return f"Base directory for this skill: {skill_dir}\n\n{body}"
         except Exception as e:
             self.logger.error("Skill tool failed: %s", e, exc_info=True)
             return f"Error: {e}"
@@ -143,10 +135,6 @@ class LegacyUseSkillTool(SkillTool):
             "skill": {
                 "type": "string",
                 "description": "Accepted for compatibility with the new Skill tool.",
-            },
-            "args": {
-                "type": "string",
-                "description": "Optional skill arguments.",
             },
         },
         "required": ["skill_name"],
