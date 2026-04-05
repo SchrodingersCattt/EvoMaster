@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: struct
 questions:
-- id: BP_struct_001_20260405
+- id: BP_struct_001_20260405b
   capability: batch_processing
   domain: struct
   intent: Batch-construct Si(100) surface slabs with varying vacuum thickness while
@@ -40,6 +40,8 @@ questions:
       - 20.0
       - 25.0
       - 30.0
+      exclude_params:
+      - output_file
   - key: locked_miller_index
     tool_name: mat_sg_build_surface_slab
     value:
