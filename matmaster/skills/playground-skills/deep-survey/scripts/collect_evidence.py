@@ -18,7 +18,6 @@ Usage:
   python collect_evidence.py --topic "MyTopic" --tool_outputs_dir _tmp/tool_outputs
 """
 
-
 import argparse
 import json
 import re

@@ -96,9 +96,7 @@ Si                  // element type
 4.073  1.358  4.073  m 1 1 1
 0.000  2.716  2.716  m 1 1 1
 1.358  4.073  4.073  m 1 1 1
-""".format(
-    a=_SI_ALAT_ANG
-)
+""".format(a=_SI_ALAT_ANG)
 
 # KPT 模板（Monkhorst-Pack）
 _SCF_KPT = """\

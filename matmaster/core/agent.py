@@ -151,7 +151,8 @@ class AgentKernel:
                             num_turns=item.terminal.num_turns,
                             usage=item.terminal.usage,
                             usage_vendor_by_turn=[
-                                dict(item) for item in item.terminal.usage_vendor_by_turn
+                                dict(item)
+                                for item in item.terminal.usage_vendor_by_turn
                             ],
                             messages=item.terminal.messages,
                         )

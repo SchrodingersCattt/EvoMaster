@@ -409,7 +409,9 @@ class TestRunItemsAssistantState:
         assert state.get("tool_calls") is not None
 
     @pytest.mark.asyncio
-    async def test_assistant_state_drops_trivial_tool_call_preamble_content(self) -> None:
+    async def test_assistant_state_drops_trivial_tool_call_preamble_content(
+        self,
+    ) -> None:
         """Punctuation-only content before tool_calls should not leak into assistant_state."""
         from matmaster.core.agent import AgentKernel
 

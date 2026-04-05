@@ -4,13 +4,13 @@ import json
 import logging
 from typing import Any
 
+from matmaster.response_text import is_trivial_response_text
 from matmaster.types.messages import (
     AssistantMessage,
     ToolCallData,
     ToolMessage,
     UserMessage,
 )
-from matmaster.response_text import is_trivial_response_text
 from src.utils.chat_event_source import normalize_event_source
 
 logger = logging.getLogger(__name__)

@@ -7,7 +7,6 @@ Used by ToolGuard.can_finish_survey() and by check_concept_coverage.py CLI wrapp
 No subprocess: pure Python, so finish gate does not depend on script paths.
 """
 
-
 import json
 from pathlib import Path
 

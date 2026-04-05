@@ -7,7 +7,6 @@ and provides Bohrium-aware resolution, env projection, and MCP arg injection.
 from __future__ import annotations
 
 import copy
-import os
 from typing import Any
 
 from matmaster.integration.bohrium_api import get_bohrium_base_url

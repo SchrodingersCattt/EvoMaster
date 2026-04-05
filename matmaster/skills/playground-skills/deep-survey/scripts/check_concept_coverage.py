@@ -8,7 +8,6 @@ Reads key_concepts from collected_*.json (schema_version 2); files without
 key_concepts are skipped (pass).
 """
 
-
 import json
 import sys
 from pathlib import Path

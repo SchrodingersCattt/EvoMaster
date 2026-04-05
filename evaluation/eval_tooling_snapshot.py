@@ -70,7 +70,9 @@ def _resolve_builtin_tool_names(builtin_cfg: list[str]) -> list[str]:
     """Resolve configured builtin list to evaluation-facing tool names."""
     if not builtin_cfg:
         return []
-    raw_names = list(_BUILTIN_WHEN_STAR) + ["Agent"] if builtin_cfg == ["*"] else builtin_cfg
+    raw_names = (
+        list(_BUILTIN_WHEN_STAR) + ["Agent"] if builtin_cfg == ["*"] else builtin_cfg
+    )
     out: list[str] = []
     for name in raw_names:
         if name == "*":

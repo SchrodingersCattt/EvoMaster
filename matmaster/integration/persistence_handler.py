@@ -30,6 +30,7 @@ class PersistenceHandler:
 
     _SKIP_TYPES = frozenset({'log_line', 'llm_token'})
     _STREAMING_STATES = frozenset({'start', 'streaming', 'end'})
+
     def __init__(
         self,
         events_table: Any,

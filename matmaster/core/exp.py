@@ -579,7 +579,9 @@ class Exp:
                     return compat
             return candidate
 
-        def _deep_merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+        def _deep_merge_dict(
+            base: dict[str, Any], patch: dict[str, Any]
+        ) -> dict[str, Any]:
             merged = dict(base)
             for key, value in patch.items():
                 if isinstance(value, dict) and isinstance(merged.get(key), dict):

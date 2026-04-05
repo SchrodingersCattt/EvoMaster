@@ -336,8 +336,7 @@ def convert(
 # CLI
 # ---------------------------------------------------------------------------
 
-SUPPORTED_FORMATS_HELP = textwrap.dedent(
-    """\
+SUPPORTED_FORMATS_HELP = textwrap.dedent("""\
     Commonly used format strings:
       vasp/poscar   - VASP POSCAR / CONTCAR
       lammps/lmp    - LAMMPS data file  (requires --type-map; see --atom-style)
@@ -359,8 +358,7 @@ SUPPORTED_FORMATS_HELP = textwrap.dedent(
         Use "full" for molecular systems (ID mol-ID type charge x y z).
         If the source .lmp was written with atom_style full but you omit
         --atom-style full, the columns will be MISPARSED silently.
-"""
-)
+""")
 
 
 def main() -> None:

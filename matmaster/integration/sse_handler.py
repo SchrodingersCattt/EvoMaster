@@ -89,9 +89,7 @@ class SSEHandler:
 
         return False
 
-    def _response_buffer_key(
-        self, event: ResponseEvent
-    ) -> tuple[str | None, str]:
+    def _response_buffer_key(self, event: ResponseEvent) -> tuple[str | None, str]:
         """Group buffered trivial chunks by spawn + response stream."""
         return (getattr(event, 'spawn_id', None), event.stream_id or '__default__')
 

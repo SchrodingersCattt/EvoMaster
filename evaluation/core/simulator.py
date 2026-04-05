@@ -11,9 +11,16 @@ from pathlib import Path
 from typing import Any
 
 from .llm_utils import SyncLLM
-from .schemas import (DataFileRef, ExpectedResult, LLMRuntimeConfig,
-                      QuestionItem, ReferenceAnswer, ScoringCheckItem,
-                      SimulatedTask, TaskSpec)
+from .schemas import (
+    DataFileRef,
+    ExpectedResult,
+    LLMRuntimeConfig,
+    QuestionItem,
+    ReferenceAnswer,
+    ScoringCheckItem,
+    SimulatedTask,
+    TaskSpec,
+)
 
 # ---------------------------------------------------------------------------
 # Prompt templates -- calc_type -> difficulty level -> template string

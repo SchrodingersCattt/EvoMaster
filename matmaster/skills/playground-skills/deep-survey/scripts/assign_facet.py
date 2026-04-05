@@ -7,7 +7,6 @@ cards get the correct facet at ingest time. This script remains for old
 workspaces or one-off repair only. Not part of the recommended production flow.
 """
 
-
 import argparse
 import json
 from pathlib import Path

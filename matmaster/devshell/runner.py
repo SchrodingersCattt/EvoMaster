@@ -186,7 +186,8 @@ class DevRunner:
                     num_turns=result.num_turns,
                     usage=result.usage,
                     usage_vendor_by_turn=[
-                        dict(item) for item in getattr(result, "usage_vendor_by_turn", ())
+                        dict(item)
+                        for item in getattr(result, "usage_vendor_by_turn", ())
                     ],
                 )
             )
