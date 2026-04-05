@@ -142,7 +142,14 @@ class LLMResponse(BaseModel):
     reasoning_content: str | None = None
     tool_calls: list[ToolCallData] | None = None
     finish_reason: str | None = None
-    usage: dict[str, int] = Field(default_factory=dict)
+    usage: dict[str, int] = Field(
+        default_factory=dict,
+        description="Per-call totals for kernel accumulation (scalar ints).",
+    )
+    usage_vendor: dict[str, Any] | None = Field(
+        default=None,
+        description="Provider-native usage snapshot (may include nested structs).",
+    )
     degraded: bool = False
 
 
@@ -160,3 +167,4 @@ class StreamChunk(BaseModel):
     stream_state: str | None = None
     stream_id: str | None = None
     usage: dict[str, int] | None = None
+    usage_vendor: dict[str, Any] | None = None

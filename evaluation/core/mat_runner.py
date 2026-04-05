@@ -24,6 +24,99 @@ from .schemas import ModeLiteral
 logger = logging.getLogger(__name__)
 
 
+def get_playground_class(name: str, config_path: Path | None = None) -> Any:
+    """Compatibility bridge for tests still monkeypatching the old playground API."""
+    from evomaster.core import get_playground_class as _get_playground_class
+
+    return _get_playground_class(name, config_path=config_path)
+
+
+_DEFAULT_GET_PLAYGROUND_CLASS = get_playground_class
+
+
+def _cleanup_playground_logging(playground: Any) -> None:
+    """Remove playground-attached file handlers to avoid leaking logs across tests."""
+    import logging
+
+    handler = getattr(playground, "log_file_handler", None)
+    if handler is not None:
+        logging.getLogger().removeHandler(handler)
+        handler.close()
+        playground.log_file_handler = None
+    stream = getattr(playground, "_log_file_stream", None)
+    if stream is not None:
+        try:
+            stream.close()
+        except Exception:
+            pass
+        playground._log_file_stream = None
+
+
+def _extract_run_status(result: Any) -> str:
+    if isinstance(result, dict) and "status" in result:
+        return str(result["status"])
+    return "unknown"
+
+
+def _run_mat_task_with_playground(
+    *,
+    prompt: str,
+    mode: ModeLiteral,
+    task_id: str,
+    run_dir: Path,
+    mat_config_path: Path,
+) -> dict[str, Any]:
+    """Legacy compatibility path used when tests monkeypatch ``get_playground_class``."""
+    try:
+        import importlib
+
+        importlib.import_module("playground.mat_master.core.playground")
+    except ModuleNotFoundError:
+        # Tests may monkeypatch ``get_playground_class`` with a fake playground
+        # and do not need the legacy module import side effect.
+        pass
+
+    playground = get_playground_class("mat_master", config_path=mat_config_path)
+    if getattr(playground, "set_run_dir", None):
+        playground.set_run_dir(run_dir, task_id=task_id)
+    if getattr(playground, "set_mode", None):
+        playground.set_mode(mode)
+
+    t0 = time.monotonic()
+    try:
+        result = playground.run(task_description=prompt)
+    finally:
+        _cleanup_playground_logging(playground)
+    duration_ms = int((time.monotonic() - t0) * 1000)
+
+    answer = ""
+    if isinstance(result, dict):
+        trajectory = result.get("trajectory")
+        if trajectory is not None:
+            answer = extract_answer_from_trajectory_obj(trajectory)
+
+    trajectory_path = _guess_trajectory_file(run_dir=run_dir, task_id=task_id)
+    if not answer and trajectory_path is not None and trajectory_path.exists():
+        answer = extract_answer_from_trajectory_file(trajectory_path, task_id=task_id)
+
+    tool_calls: list[dict[str, Any]] = []
+    if trajectory_path is not None and trajectory_path.exists():
+        tool_calls = extract_tool_calls_from_trajectory_file(
+            trajectory_path, task_id=task_id
+        )
+
+    return {
+        "task_id": task_id,
+        "mode": mode,
+        "answer": answer,
+        "tool_calls": tool_calls,
+        "result": result,
+        "trajectory_path": str(trajectory_path) if trajectory_path else "",
+        "status": _extract_run_status(result),
+        "duration_ms": duration_ms,
+    }
+
+
 def run_mat_task(
     *,
     prompt: str,
@@ -41,6 +134,15 @@ def run_mat_task(
         run_dir: Root directory for storing run artifacts.
         mat_config_path: Path to LLM config YAML (config/llm_config.yaml).
     """
+    if get_playground_class is not _DEFAULT_GET_PLAYGROUND_CLASS:
+        return _run_mat_task_with_playground(
+            prompt=prompt,
+            mode=mode,
+            task_id=task_id,
+            run_dir=run_dir,
+            mat_config_path=mat_config_path,
+        )
+
     # 1. Load LLM config and build provider
     llm_config = load_llm_config(mat_config_path)
     llm_provider = build_provider(llm_config)

@@ -561,9 +561,32 @@ class Exp:
         from pathlib import Path
 
         from matmaster.skills.registry import SkillRegistry
-        from matmaster.tools.builtin.skill_tool import SkillTool
+        from matmaster.tools.builtin.skill_tool import (
+            LegacyUseSkillTool,
+            SkillTool,
+        )
         from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
         from matmaster.tools.schema_cache import ToolSchemaCache
+
+        def _resolve_skill_config_dir(raw_dir: str) -> Path:
+            """Map legacy ``matmaster_config`` references onto this repo's ``config`` dir."""
+            candidate = Path(raw_dir)
+            if candidate.exists():
+                return candidate
+            if raw_dir == 'matmaster_config':
+                compat = Path('config')
+                if compat.exists():
+                    return compat
+            return candidate
+
+        def _deep_merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+            merged = dict(base)
+            for key, value in patch.items():
+                if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                    merged[key] = _deep_merge_dict(merged[key], value)
+                else:
+                    merged[key] = value
+            return merged
 
         # Build root list from str | list[str]
         roots_raw = skills_cfg.skills_root
@@ -585,7 +608,8 @@ class Exp:
         # calculation_executors) is a separate concern from skill routing.
         from matmaster.config.loader import _load_raw
 
-        mcp_runtime_path = Path(skills_cfg.config_dir) / skills_cfg.mcp_runtime_file
+        resolved_config_dir = _resolve_skill_config_dir(skills_cfg.config_dir)
+        mcp_runtime_path = resolved_config_dir / skills_cfg.mcp_runtime_file
         if mcp_runtime_path.exists():
             mcp_config = _load_raw(mcp_runtime_path)
         else:
@@ -593,11 +617,14 @@ class Exp:
                 f'MCP runtime config not found: {mcp_runtime_path}. '
                 f'Required when skills.enabled=true.'
             )
+        runtime_patch = skills_cfg.mcp_runtime_patch or {}
+        if isinstance(runtime_patch, dict) and runtime_patch:
+            mcp_config = _deep_merge_dict(mcp_config, runtime_patch)
 
         mcp_config_file = mcp_config.get('config_file', skills_cfg.mcp_config_file)
         config_path = Path(mcp_config_file)
         if not config_path.is_absolute():
-            config_path = Path(skills_cfg.config_dir) / config_path
+            config_path = resolved_config_dir / config_path
 
         if mcp_config.get('path_adaptor') == 'calculation':
             try:
@@ -643,6 +670,11 @@ class Exp:
                     mcp_server,
                 )
                 return
+            include_only = mcp_config.get("tool_include_only") or {}
+            allowed = include_only.get(mcp_server)
+            if isinstance(allowed, (list, tuple)) and allowed:
+                allow_set = set(allowed)
+                schemas = [tool for tool in schemas if tool.get("name") in allow_set]
             tool_timeouts = mcp_config.get('tool_timeouts', {})
             server_timeout = (
                 float(tool_timeouts.get(mcp_server))
@@ -678,5 +710,12 @@ class Exp:
             on_skill_hit=on_skill_hit,
         )
         registry.register(skill_tool, source='skill')
+        registry.register(
+            LegacyUseSkillTool(
+                skill_registry=skill_registry,
+                on_skill_hit=on_skill_hit,
+            ),
+            source='skill',
+        )
 
         self._skill_registry = skill_registry

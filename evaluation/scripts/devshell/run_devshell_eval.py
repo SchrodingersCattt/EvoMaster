@@ -7,10 +7,16 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
     python -u -m matmaster.devshell run ... --prompt-file ... --json-out .../_devshell_summary.json
 
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
-``manifest.json`` carries ``eval_tooling`` (registered builtins, skill names, MCP server keys from config);
+``manifest.json`` carries ``eval_tooling`` (default: same as interactive ``mm-devshell`` without ``--exp`` —
+patched ``direct`` / ``matmaster_exp`` ``devshell`` + narrowed ``skills_root``; use ``--exp direct`` for
+full skill trees from ``matmaster/exps/{name}.toml`` + ``matmaster_config/`` MCP);
 the same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
 When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
 labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
+
+**Per-task wall clock**: each ``mm-devshell`` subprocess is limited by ``--task-timeout``
+(default **1200** seconds = 20 minutes). This is the reliable cap when a turn/tool blocks
+without tripping the LLM per-request timeout; use ``0`` to disable.
 
 Optional **per-task ingest** to matmaster-tools-server (after each devshell run).
 POST URL is fixed: ``MATMASTER_TOOLS_SERVER`` + ``/api/v1/evaluation/ingest`` (see ``evaluation.eval_ingest_client``).
@@ -23,9 +29,9 @@ Upload is always attempted when ingest is enabled (no skip flag).
 (including ``eval_ingest_artifact`` after a successful OSS upload).
 
 With ``--eval-ingest-pending-only``, no POST is sent; each task writes ``pending_ingest/<task_id>.json``
-(ingest payload without ``score``). After judging, pass
-``--score`` / ``--score-reason`` / ``--suggestion`` to
-``evaluation/scripts/eval_ingest_submit_pending.py --pending <path>``.
+(ingest payload without ``score``). Prefer scoring later with
+``evaluation/scripts/devshell/score_devshell_tasks.py`` (same BinaryEvaluator as MATTER);
+use ``eval_ingest_submit_pending.py`` only when you need to add / override ``suggestion`` manually.
 
 Override host with ``MATMASTER_TOOLS_SERVER`` / ``SERVICE_ENV`` as needed. Use ``--no-eval-ingest`` to skip POSTs.
 
@@ -35,7 +41,7 @@ See matmaster-tools-server ``docs/apifox-evaluation-openapi.json`` for the schem
 
 Usage (from repository root)::
 
-    uv run python evaluation/scripts/devshell/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --model claude-opus-4-6 --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --capabilities structure_construction --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
@@ -65,7 +71,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 # Repo root = evaluation/scripts/devshell/../../..
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -123,6 +129,59 @@ def _merge_eval_config(path: Path | None, overrides: dict[str, Any]) -> dict[str
     return base
 
 
+def _normalize_mm_devshell_exp_cli(raw: str | None) -> str | None:
+    """Normalize ``--exp``: None/blank → omit mm-devshell flag (patched direct default)."""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    return s or None
+
+
+def _mm_devshell_exp_cmd_suffix(exp_cli: str | None) -> list[str]:
+    """Extra argv for ``matmaster.devshell run``; omit ``--exp`` when using default patch."""
+    if exp_cli is None or exp_cli == "devshell":
+        return []
+    return ["--exp", exp_cli]
+
+
+def _eval_tooling_snapshot_for_exp_cli(
+    *, repo_root: Path, exp_cli: str | None
+) -> dict[str, Any]:
+    from evaluation.eval_tooling_snapshot import (
+        snapshot_devshell_eval_tooling,
+        snapshot_eval_tooling,
+    )
+
+    if exp_cli is None or exp_cli == "devshell":
+        return snapshot_devshell_eval_tooling(repo_root=repo_root)
+    return snapshot_eval_tooling(repo_root=repo_root, exp_name=exp_cli)
+
+
+def _manifest_matmaster_exp_label(exp_cli: str | None) -> str:
+    if exp_cli is None or exp_cli == "devshell":
+        return "devshell"
+    return exp_cli
+
+
+class _TeeTextIO:
+    """Write the same decoded text to multiple text streams (e.g. log file + stderr)."""
+
+    __slots__ = ("_streams",)
+
+    def __init__(self, *streams: TextIO) -> None:
+        self._streams = streams
+
+    def write(self, data: str) -> int:
+        for s in self._streams:
+            s.write(data)
+            s.flush()
+        return len(data)
+
+    def flush(self) -> None:
+        for s in self._streams:
+            s.flush()
+
+
 def _load_summary_file(summary_file: Path) -> dict[str, Any]:
     if summary_file.is_file():
         try:
@@ -143,26 +202,58 @@ def _run_devshell_task(
     env: dict[str, str],
     summary_file: Path,
     console_log_file: Path | None,
+    timeout_sec: float | None,
+    tee_stderr: bool = False,
 ) -> tuple[int, int, dict[str, Any]]:
     t0 = time.monotonic()
-    if console_log_file is None:
-        proc = subprocess.run(cmd, cwd=cwd, env=env)
-    else:
-        with console_log_file.open("w", encoding="utf-8") as f:
-            proc = subprocess.run(
-                cmd,
-                cwd=cwd,
-                env=env,
-                stdout=f,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
+    timeout = None if timeout_sec is None or timeout_sec <= 0 else float(timeout_sec)
+    try:
+        if console_log_file is None:
+            proc = subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout)
+        else:
+            with console_log_file.open("w", encoding="utf-8") as f:
+                out = _TeeTextIO(f, sys.stderr) if tee_stderr else f
+                proc = subprocess.run(
+                    cmd,
+                    cwd=cwd,
+                    env=env,
+                    stdout=out,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=timeout,
+                )
+    except subprocess.TimeoutExpired as e:
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        summary = _load_summary_file(summary_file)
+        if not isinstance(summary, dict):
+            summary = {}
+        lim = (
+            float(e.timeout) if getattr(e, "timeout", None) else float(timeout_sec or 0)
+        )
+        summary = {
+            **summary,
+            "task_wall_timeout": True,
+            "timeout_seconds": lim,
+        }
+        # Same convention as coreutils `timeout` / common CI (timed out)
+        return 124, duration_ms, summary
+
     duration_ms = int((time.monotonic() - t0) * 1000)
     summary = _load_summary_file(summary_file)
     return proc.returncode, duration_ms, summary
 
 
 def main() -> int:
+    # Load .env files so OSS / SERVICE_ENV / etc. are available to post-processing
+    # (same logic as matmaster.devshell.cli)
+    from dotenv import find_dotenv, load_dotenv
+
+    load_dotenv(REPO_ROOT / ".env")
+    current_env = os.environ.get("SERVICE_ENV", "test")
+    env_file = find_dotenv(f".env.{current_env}")
+    if env_file:
+        load_dotenv(env_file, override=True)
+
     parser = argparse.ArgumentParser(
         description="Run MATTER question bank through mm-devshell (matmaster devshell run).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -194,8 +285,21 @@ def main() -> int:
     parser.add_argument(
         "--model",
         type=str,
+        default="claude-opus-4-6",
+        help=(
+            "LLM route key passed to ``mm-devshell run --model`` (see llm_config.yaml routes; "
+            "default: claude-opus-4-6)"
+        ),
+    )
+    parser.add_argument(
+        "--exp",
+        type=str,
         default=None,
-        help="LLM route key passed to ``mm-devshell run --model`` (see llm_config.yaml routes)",
+        help=(
+            "Forwarded to ``mm-devshell run --exp`` when set. Omit this flag (default) for the same "
+            "patched ``direct`` as interactive devshell (narrowed skills_root; manifest "
+            "``matmaster_exp``: devshell). Use ``direct`` for full playground skill trees."
+        ),
     )
     parser.add_argument(
         "--capabilities",
@@ -285,8 +389,8 @@ def main() -> int:
         action="store_true",
         help=(
             "Do not POST ingest; write pending_ingest/<task_id>.json with full item except "
-            "score. After judging, Claude submits with "
-            "--score/--score-reason/--suggestion via eval_ingest_submit_pending.py."
+            "score. Score later with evaluation/scripts/devshell/score_devshell_tasks.py "
+            "(preferred) or manually via eval_ingest_submit_pending.py."
         ),
     )
     parser.add_argument(
@@ -294,6 +398,15 @@ def main() -> int:
         type=float,
         default=30.0,
         help="HTTP timeout seconds for each ingest POST (default: 30).",
+    )
+    parser.add_argument(
+        "--task-timeout",
+        type=float,
+        default=1200.0,
+        help=(
+            "Per-task wall-clock limit in seconds for each mm-devshell subprocess "
+            "(default: 1200 = 20 min). Use 0 to disable."
+        ),
     )
     parser.add_argument(
         "--eval-ingest-strict",
@@ -414,7 +527,6 @@ def main() -> int:
         post_eval_ingest,
         upload_eval_task_artifacts_to_oss,
     )
-    from matmaster.eval_tooling_snapshot import snapshot_devshell_eval_tooling
 
     pending_only = args.eval_ingest_pending_only
     ingest_url = None if args.no_eval_ingest else EVAL_INGEST_URL
@@ -432,7 +544,10 @@ def main() -> int:
 
     git_commit = git_head_commit(REPO_ROOT)
 
-    eval_tooling_snapshot = snapshot_devshell_eval_tooling(repo_root=REPO_ROOT)
+    exp_cli = _normalize_mm_devshell_exp_cli(args.exp)
+    eval_tooling_snapshot = _eval_tooling_snapshot_for_exp_cli(
+        repo_root=REPO_ROOT, exp_cli=exp_cli
+    )
 
     manifest: dict[str, Any] = {
         "run_label": args.run_label,
@@ -442,8 +557,10 @@ def main() -> int:
         "model": args.model,
         "plan_count": len(run_plan),
         "jobs": args.jobs,
+        "task_timeout_sec": args.task_timeout,
         "dry_run": False,
         "eval_tooling": eval_tooling_snapshot,
+        "matmaster_exp": _manifest_matmaster_exp_label(exp_cli),
     }
     if ingest_url:
         manifest["eval_ingest_url"] = ingest_url
@@ -470,6 +587,13 @@ def main() -> int:
     print(f"Run directory: {run_dir}", file=sys.stderr)
     print(f"Planned tasks: {len(run_plan)}", file=sys.stderr)
     print(f"Parallel jobs: {args.jobs}", file=sys.stderr)
+    if args.task_timeout and args.task_timeout > 0:
+        print(
+            f"Per-task timeout: {args.task_timeout:g}s ({args.task_timeout / 60:g} min)",
+            file=sys.stderr,
+        )
+    else:
+        print("Per-task timeout: disabled", file=sys.stderr)
 
     any_failed = False
     ingest_failed = False
@@ -498,7 +622,7 @@ def main() -> int:
         prompt_file = workspace_path / "_devshell_prompt.txt"
         prompt_file.write_text(prompt, encoding="utf-8")
         summary_file = workspace_path / "_devshell_summary.json"
-        console_log_file = log_dir / "devshell_console.log" if args.jobs > 1 else None
+        console_log_file = log_dir / "devshell_console.log"
 
         cmd: list[str | Path] = [
             py,
@@ -517,6 +641,7 @@ def main() -> int:
         ]
         if args.model:
             cmd.extend(["--model", args.model])
+        cmd.extend(_mm_devshell_exp_cmd_suffix(exp_cli))
         if args.verbose:
             cmd.append("--verbose")
 
@@ -577,6 +702,8 @@ def main() -> int:
             env=env,
             summary_file=summary_file,
             console_log_file=console_log_file,
+            timeout_sec=args.task_timeout,
+            tee_stderr=args.jobs <= 1,
         )
 
         row: dict[str, Any] = {
@@ -590,9 +717,8 @@ def main() -> int:
             "devshell_summary_path": str(summary_file),
             "devshell_summary": summary,
             "duration_ms": duration_ms,
+            "devshell_console_log_path": str(console_log_file),
         }
-        if console_log_file is not None:
-            row["devshell_console_log_path"] = str(console_log_file)
 
         ingest_status: dict[str, Any] | None = None
         ingest_failed_local = False
@@ -623,9 +749,12 @@ def main() -> int:
                     "run_kind": "iteration",
                     "task_id": task_id,
                     "instructions_zh": (
-                        "判分后在仓库根执行: uv run python "
+                        "推荐在仓库根执行自动评分脚本: uv run python "
+                        "evaluation/scripts/devshell/score_devshell_tasks.py "
+                        f"--run-dir {run_dir} --tasks {task_id} --submit 。"
+                        "若仅需手动补 suggestion，才再用: uv run python "
                         f"evaluation/scripts/eval_ingest_submit_pending.py --pending {pend_path} "
-                        "--score <0-100> [--score-reason \"...\"] [--suggestion \"...\"]"
+                        '--score <已有分数> [--suggestion "..."]'
                     ),
                     "item": item_body,
                 }
@@ -705,7 +834,9 @@ def main() -> int:
     if args.jobs == 1:
         for prepared in prepared_tasks:
             print(
-                f"  [running] {prepared['task_id']} (devshell prints to this terminal; summary -> {Path(prepared['summary_file']).name})...",
+                f"  [running] {prepared['task_id']} (terminal + "
+                f"{Path(prepared['console_log_file']).name}; summary -> "
+                f"{Path(prepared['summary_file']).name})...",
                 file=sys.stderr,
                 flush=True,
             )
@@ -743,10 +874,10 @@ def main() -> int:
                 except StopIteration:
                     return False
                 console_log = prepared["console_log_file"]
-                if console_log is None:
-                    detail = f"summary -> {Path(prepared['summary_file']).name}"
-                else:
-                    detail = f"console -> {Path(console_log).name}, summary -> {Path(prepared['summary_file']).name}"
+                detail = (
+                    f"console -> {Path(console_log).name}, "
+                    f"summary -> {Path(prepared['summary_file']).name}"
+                )
                 print(
                     f"  [queued] {prepared['task_id']} ({detail})...",
                     file=sys.stderr,
@@ -807,7 +938,13 @@ def main() -> int:
     print(f"Wrote {raw_path}", file=sys.stderr)
 
     if not args.no_export_review:
-        export_script = REPO_ROOT / "scripts" / "export_devshell_review_bundle.py"
+        export_script = (
+            REPO_ROOT
+            / "evaluation"
+            / "scripts"
+            / "devshell"
+            / "export_devshell_review_bundle.py"
+        )
         review_md = run_dir / "claude_review.md"
         export_cmd: list[str | Path] = [
             py,

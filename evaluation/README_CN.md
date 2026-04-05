@@ -7,12 +7,12 @@ MATTER 是 `evaluation/` 下的独立评测模块，当前仅维护 **v5+** 题�
 | 路径 | 内容 |
 |------|------|
 | `core/` | Python 实现：题库模型、runner、判分、报告等 |
-| `scripts/devshell/` | DevShell / mm-devshell 批量跑题、`export_devshell_review_bundle` |
+| `scripts/devshell/` | DevShell / mm-devshell 批量跑题、`score_devshell_tasks`、`export_devshell_review_bundle` |
 | `scripts/baseline/` | 外部 baseline（CC/Cursor/Codex 等）：`finalize_external_baseline_ingest`、`run_claude_cli_baseline_tasks`（仅 `claude` CLI） |
 | `scripts/matter_cli/` | **Core 评测**（`evaluation.core` + Playground `run_mat_task`）：后台跑 `python -m evaluation`、Windows 启动脚本、run 目录监控 |
 | `scripts/eval_ingest_submit_pending.py` | 共用：pending 入库（baseline / devshell 判分后上报） |
 | `docs/baseline/` | 外部 baseline 流程说明（含 Claude Code / Cursor / Codex 两阶段话术） |
-| `docs/devshell/` | DevShell 批量 + 人工判分话术 |
+| `docs/devshell/` | DevShell 批量 + `score_devshell_tasks.py` 自动评分话术 |
 | `question_bank/` | v5+ 题库与 `data/` 输入文件 |
 | `config.yaml` | 默认评测配置 |
 | `cli.py` / `__main__.py` | 同上：命令行入口，转发到 `core.cli`（与 `matter_cli` 里后台命令是同一套评测） |
@@ -173,6 +173,6 @@ evaluation/scripts/matter_cli/run_mat_master_eval_bg.sh start
 ## 更多文档
 
 - [baseline_cc_eval.md](./docs/baseline/baseline_cc_eval.md) - Claude Code baseline（与 DevShell 产物对齐）
-- [devshell_claude_code_eval.md](./docs/devshell/devshell_claude_code_eval.md) - DevShell 批量跑题 + Claude Code 人工判分（`evaluation/scripts/devshell/run_devshell_eval.py`、产物路径、百分制话术）
+- [devshell_claude_code_eval.md](./docs/devshell/devshell_claude_code_eval.md) - DevShell 批量跑题 + `score_devshell_tasks.py` 自动评分（`evaluation/scripts/devshell/run_devshell_eval.py`、产物路径、百分制话术）
 - [WEIGHTED_PORTABLE_EVAL_MIGRATION.md](../../docs/mat_master/WEIGHTED_PORTABLE_EVAL_MIGRATION.md) - 迁移指南与 FAQ
 - [WEIGHTED_EVAL_IMPLEMENTATION.md](../../docs/mat_master/WEIGHTED_EVAL_IMPLEMENTATION.md) - 实现细节

@@ -43,6 +43,7 @@ VerifyLiteral = Literal[
     'no_retries',
     'artifact_exists',
     'token_budget',
+    'turn_budget',
     'duration_budget',
     'molcrys_slab_molecular_integrity',
     'sc005_disorder_formulas',
@@ -76,7 +77,8 @@ CapabilityLiteral = Literal[
     'data_diagnosis',
     'batch_processing',
     'safety_refusal',
-    'input_generation',
+    'input_generation_vasp',
+    'input_generation_abacus',
 ]
 
 DomainLiteral = Literal[
@@ -229,6 +231,7 @@ class QuestionItem(BaseModel):
             'batch_tool_args_constant',
             'batch_consistent_calls',
             'duration_budget',
+            'turn_budget',
             'molcrys_slab_molecular_integrity',
             'sc005_disorder_formulas',
         }

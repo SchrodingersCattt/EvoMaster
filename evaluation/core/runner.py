@@ -19,6 +19,7 @@ import yaml
 
 from .aggregator import build_summary
 from .evaluator import BinaryEvaluator
+from .evaluator_helpers import token_usage_record_from_evidence
 from .evidence import EvidenceBundle, EvidenceExtractor
 from .mat_runner import run_mat_task
 from .reporter import append_raw_run, write_reports
@@ -27,7 +28,6 @@ from .schemas import (
     EvalRunRecord,
     QuestionBank,
     QuestionItem,
-    TokenUsageRecord,
 )
 from .simulator import HumanSimulator
 
@@ -123,14 +123,7 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
                 workspace_dir=workspace_abs,
             )
 
-        # Populate token usage from evidence if available
-        token_usage = TokenUsageRecord(
-            prompt_tokens=evidence.token_usage.prompt_tokens,
-            completion_tokens=evidence.token_usage.completion_tokens,
-            total_tokens=evidence.token_usage.total_tokens,
-            cache_read_tokens=evidence.token_usage.cache_read_tokens,
-            total_tokens_effective=evidence.token_usage.total_tokens_effective,
-        )
+        token_usage = token_usage_record_from_evidence(evidence)
 
         # BinaryEvaluator.evaluate() returns EvalRunRecord directly
         record = evaluator.evaluate(

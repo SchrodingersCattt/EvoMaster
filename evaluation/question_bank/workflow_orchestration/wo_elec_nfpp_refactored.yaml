@@ -6,14 +6,14 @@ questions:
   # ============================================================
   # WO_elec_003_20260401 — NFPP掺杂形成能计算（Mock版）
   # ============================================================
-  - id: "WO_elec_003_20260401"
+  - id: "WO_elec_003_20260404"
     capability: "workflow_orchestration"
     domain: "elec"
     intent: "Compute doping formation energy of NFPP: retrieve structure, build doped supercell, use mock energies, calculate formation energy."
     human_prompt_seed: |
       计算NFPP的Al掺杂形成能：
-      1. 获取NFPP结构（空间群Pna2₁），构建2×1×1超胞作为pristine结构；
-      2. 在P位（PO₄孤立磷酸根位点）用Al替换一个P原子，构建掺杂超胞；
+      1. 获取NFPP（Na₄Fe₃(PO₄)₂P₂O₇）结构（空间群Pna2₁），构建2×1×1超胞作为pristine结构；
+      2. 在P位（PO₄磷酸根位点）用Al替换一个P原子，构建掺杂超胞；
       3. 使用以下mock能量值（模拟DPA弛豫结果）：
          - E_pristine = -689.605 eV
          - E_doped = -687.057 eV
@@ -39,10 +39,15 @@ questions:
           - "chemical_potentials"
           - "formation_energy"
           - "volume_change"
+      - key: "turn_budget"
+        value: &id000
+          max: 18
       - key: "duration_budget"
-        value: {max: 7200000}
+        value: &id001
+          max: 7200000
       - key: "token_budget_total"
-        value: {max: 50000}
+        value: &id002
+          max: 8000
     scoring_checklist:
       - id: "formation_energy_eV"
         criterion: "Doping formation energy is computed correctly from mock energies (~0.88 eV)."
@@ -57,9 +62,13 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "grounding_source"
-        criterion: "NFPP structure uses correct Pna2₁ lattice parameters; mock energies used as specified; chemical potentials explicitly defined."
+        criterion: "NFPP structure uses correct Pna2₁ lattice parameters; mock energies used as specified; chemical potentials explicitly defined. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool."
         axis: "grounding"
         verify: "llm_binary_judge"
+      - id: "turn_budget"
+        criterion: "Agent completes the task within the turn (step) budget."
+        axis: "efficiency"
+        verify: "turn_budget"
       - id: "efficiency_judge"
         criterion: "Workflow (fetch → build supercell → dope → compute E_f with mock values) completes without redundant steps."
         axis: "efficiency"
@@ -74,21 +83,22 @@ questions:
         verify: "token_budget"
 
   # ============================================================
-  # WO_elec_004_20260401 — NFPP平均嵌钠电压计算（Mock版）
+  # WO_elec_004_20260404 — NFPP平均嵌钠电压计算（Mock版）
   # ============================================================
-  - id: "WO_elec_004_20260401"
+  - id: "WO_elec_004_20260404"
     capability: "workflow_orchestration"
     domain: "elec"
     intent: "Compute average Na intercalation voltage of NFPP using mock energies."
     human_prompt_seed: |
       计算NFPP的平均嵌钠电压：
-      1. 获取NFPP结构，构建2×2×1超胞；
-      2. 构建含钠态（完整Na填充，Na16Fe8P8O32F8）和完全脱钠态（移除所有Na，Fe8P8O32F8）；
+      1. 获取NFPP（Na₄Fe₃(PO₄)₂P₂O₇）结构（空间群Pna2₁，Z=4），使用单胞（104原子）；
+      2. 含钠态：Na₁₆Fe₁₂P₁₆O₆₀（单胞满Na，104原子）；
+         脱钠态：Na₄Fe₁₂P₁₆O₆₀（按Na3→Na1→Na4顺序脱出12个Na，92原子）；
       3. 使用以下mock能量值（模拟DPA弛豫结果）：
-         - E_sodiated = -2758.42 eV
-         - E_desodiated = -2704.18 eV
+         - E_sodiated = -689.60 eV
+         - E_desodiated = -633.08 eV
          - μ_Na（BCC Na金属）= -1.31 eV/atom
-         - n = 16（转移的Na离子数）
+         - n = 12（脱出的Na离子数：每个formula unit脱3个 × Z=4）
       4. 按公式 V = -[E(sodiated) - E(desodiated) - n·μ_Na] / n 计算平均电压；
       5. 输出平均电压(V vs Na/Na⁺)、n值、各能量值。
     tags: ["nfpp", "voltage", "intercalation", "battery", "workflow"]
@@ -105,23 +115,37 @@ questions:
           - "mu_Na"
           - "voltage"
           - "voltage_formula"
+      - key: "turn_budget"
+        value: *id000
       - key: "duration_budget"
-        value: {max: 7200000}
+        value: *id001
       - key: "token_budget_total"
-        value: {max: 50000}
+        value: *id002
     scoring_checklist:
       - id: "avg_voltage_V"
         criterion: "Average voltage is computed correctly from mock energies (~3.4 V)."
         axis: "correctness"
         verify: "numerical_range"
+      - id: "sodiated_state"
+        criterion: "Sodiated state is the full unit cell Na₁₆Fe₁₂P₁₆O₆₀ with 104 atoms and all 16 Na sites occupied."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "desodiated_state"
+        criterion: "Desodiated state Na₄Fe₁₂P₁₆O₆₀ has 92 atoms with exactly 12 Na removed following Na3→Na1→Na4 site order."
+        axis: "correctness"
+        verify: "llm_binary_judge"
       - id: "required_fields"
         criterion: "Report includes sodiated/desodiated energies, Na chemical potential, voltage formula, and computed voltage."
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "grounding_source"
-        criterion: "Voltage is computed with explicitly defined mock energies and chemical potential."
+        criterion: "NFPP structure uses correct Pna2₁ lattice parameters; mock energies and μ_Na used exactly as specified; voltage formula applied correctly. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool."
         axis: "grounding"
         verify: "llm_binary_judge"
+      - id: "turn_budget"
+        criterion: "Agent completes the task within the turn (step) budget."
+        axis: "efficiency"
+        verify: "turn_budget"
       - id: "efficiency_judge"
         criterion: "Voltage workflow (fetch → build 2 states → compute with mock values) completes linearly."
         axis: "efficiency"

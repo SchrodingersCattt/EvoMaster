@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: struct
 questions:
-- id: BP_struct_001_20260331
+- id: BP_struct_001_20260404
   capability: batch_processing
   domain: struct
   intent: Batch-construct Si(100) surface slabs with varying vacuum thickness while
@@ -31,7 +31,6 @@ questions:
   reference_answers:
   - key: vacuum_sweep_variable
     value:
-      tool_name: mat_sg_build_surface_slab
       sweep_param: vacuum_thickness_A
       expected_values:
       - 10.0
@@ -41,12 +40,10 @@ questions:
       - 30.0
   - key: locked_miller_index
     value:
-      tool_name: mat_sg_build_surface_slab
       param_names: miller_index
       expected_constant: '[1, 0, 0]'
   - key: locked_layer_count
     value:
-      tool_name: mat_sg_build_surface_slab
       param_names: number_of_layers
       expected_constant: 4
   - key: output_files_generated
@@ -57,12 +54,15 @@ questions:
     tolerance: 0.0
   - key: batch_efficiency
     value: 5 slabs without re-querying
+  - key: turn_budget
+    value: &id000
+      max: 20
   - key: duration_budget
     value: &id001
       max: 7200000
   - key: token_budget_total
     value: &id002
-      max: 50000
+      max: 10000
   scoring_checklist:
   - id: vacuum_sweep_variable
     criterion: 'Vacuum thickness parameter varies across exactly 5 calls: 10, 15,
@@ -70,7 +70,7 @@ questions:
     axis: correctness
     verify: batch_single_variable_sweep
   - id: locked_miller_index
-    criterion: Miller index [1,0,0] remains constant across all 5 mat_sg_build_surface_slab
+    criterion: Miller index [1,0,0] remains constant across all 5 slab-construction
       calls.
     axis: correctness
     verify: batch_tool_args_constant
@@ -99,6 +99,10 @@ questions:
       unchanged geometries.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
       a generous benchmark ceiling (tunable per deployment).
@@ -109,7 +113,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_002
+- id: BP_struct_002_20260404
   capability: batch_processing
   domain: struct
   intent: Generate VASP INCAR files for DOS calculation across 4 different structures.
@@ -157,6 +161,8 @@ questions:
     value: Configuration from dos_input_prep.json
   - key: no_manual_kpoint_tuning
     value: Systematic k-point density calculation
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -189,6 +195,10 @@ questions:
       not by trial-and-error.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
       a generous benchmark ceiling (tunable per deployment).
@@ -199,7 +209,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_003_20260331
+- id: BP_struct_003_20260404
   capability: batch_processing
   domain: struct
   intent: Generate 5 VASP INCAR input files for Al ENCUT convergence test (280, 300,
@@ -247,9 +257,12 @@ questions:
   - key: incar_format_valid
     value: VASP INCAR key=value format
   - key: single_variable_control
-    value: Only ENCUT differs across the 5 files
+    value: Only ENCUT differs across the 5 files (SYSTEM tag and comment lines may
+      also vary as they are cosmetic, not computational)
   - key: grounding_config_used
     value: Parameters from convergence_encut.json
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -261,7 +274,9 @@ questions:
     verify: numerical_range
   - id: encut_sweep_values
     criterion: 'The 5 INCAR files contain ENCUT values 280, 300, 320, 340, 360 eV
-      respectively, and ENCUT is the only parameter that differs across files.'
+      respectively, and ENCUT is the only computational parameter that differs across
+      files. Cosmetic fields such as SYSTEM tags, comment lines, or filename references
+      may also vary and should not be counted as violations.'
     axis: correctness
     verify: llm_binary_judge
   - id: kpoint_mesh_constant
@@ -278,8 +293,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: single_variable_control
-    criterion: Comparing any two of the 5 INCAR files, the only line that differs
-      is the ENCUT value. All other lines are byte-identical.
+    criterion: Comparing any two of the 5 INCAR files, ENCUT is the only computational
+      parameter that differs. All other computational parameters (ISMEAR, SIGMA, NSW,
+      EDIFF, PREC, etc.) are identical. Cosmetic differences in SYSTEM tags, comment
+      lines, or first-line labels are acceptable.
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_config_used
@@ -287,6 +304,10 @@ questions:
       provided convergence_encut.json configuration exactly.
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
       a generous benchmark ceiling (tunable per deployment).
@@ -297,7 +318,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_004
+- id: BP_struct_004_20260404
   capability: batch_processing
   domain: struct
   intent: Perform batch post-processing of band structures for 3 materials (Si, Ge,
@@ -355,6 +376,8 @@ questions:
     value: Configuration from postprocessing_bandstr.json
   - key: analysis_workflow_streamlined
     value: Unified workflow for all 3 materials
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -397,6 +420,10 @@ questions:
       template (no per-material ad-hoc tweaks).
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
       a generous benchmark ceiling (tunable per deployment).
@@ -407,7 +434,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_005_20260331
+- id: BP_struct_005_20260404
   capability: batch_processing
   domain: struct
   intent: Generate corrected VASP input files for 5 structures whose initial geometry
@@ -475,6 +502,8 @@ questions:
     value: Frozen parameters from failure_recovery.json
   - key: grounding_repair_causes
     value: Each geometry fix addresses the specific failure cause
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -516,6 +545,10 @@ questions:
       cell distortion, resolving symmetry errors).
     axis: grounding
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
       a generous benchmark ceiling (tunable per deployment).

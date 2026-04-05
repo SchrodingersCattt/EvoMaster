@@ -13,6 +13,15 @@ from matmaster.types.cancellation import CancellationToken
 from matmaster.types.topology import SessionCapabilities
 
 
+class _SessionConfig:
+    """Minimal config object exposing workspace_path for path adaptors."""
+
+    __slots__ = ("workspace_path",)
+
+    def __init__(self, workspace_path: str) -> None:
+        self.workspace_path = workspace_path
+
+
 class LocalSession:
     """Local session executing commands via subprocess.
 
@@ -25,6 +34,7 @@ class LocalSession:
     ) -> None:
         self._workspace_path = Path(workspace_path)
         self._timeout = timeout
+        self.config = _SessionConfig(str(self._workspace_path))
         self._encoding = encoding
         self._is_open: bool = False
 

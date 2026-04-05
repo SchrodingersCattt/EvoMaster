@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: struct
 questions:
-- id: WO_struct_001
+- id: WO_struct_001_20260404
   capability: workflow_orchestration
   domain: struct
   intent: Calculate surface energy of MgO(100) by constructing slab models and comparing
@@ -32,12 +32,15 @@ questions:
     - surface_area
     - surface_energy
     - convergence_check
+  - key: turn_budget
+    value: &id000
+      max: 18
   - key: duration_budget
     value: &id001
       max: 7200000
   - key: token_budget_total
     value: &id002
-      max: 50000
+      max: 8000
   scoring_checklist:
   - id: surface_energy_J_m2
     criterion: Surface energy is in expected range.
@@ -51,7 +54,8 @@ questions:
   - id: grounding_source
     criterion: Surface energy is computed from stated bulk and slab total energies
       and area; formula inputs are traceable in the report rather than asserted without
-      energy provenance.
+      energy provenance. Judge solely from the final answer; do not fail because the
+      tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -63,6 +67,10 @@ questions:
       is executed in a linear pipeline.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
       a generous benchmark ceiling (tunable per deployment).
@@ -73,7 +81,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_struct_002
+- id: WO_struct_002_20260404
   capability: workflow_orchestration
   domain: struct
   intent: 'Calculate vacancy formation energy: build perfect and defective supercells,
@@ -102,6 +110,8 @@ questions:
     - E_perfect
     - chemical_potential
     - formation_energy
+  - key: turn_budget
+    value: *id000
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -119,7 +129,8 @@ questions:
   - id: grounding_source
     criterion: Formation energy is computed from stated perfect and defective total
       energies with an explicit chemical potential; numbers are tied to the reported
-      structures rather than invented.
+      structures rather than invented. Judge solely from the final answer; do not fail
+      because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -132,6 +143,10 @@ questions:
       is executed without redundant steps.
     axis: efficiency
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
       a generous benchmark ceiling (tunable per deployment).

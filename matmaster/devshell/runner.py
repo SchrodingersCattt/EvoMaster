@@ -38,6 +38,7 @@ class DevRunner:
         llm_config: Any = None,
         resolved_route: Any = None,
         stream_hook: DevStreamHook | None = None,
+        exp_config: ExpConfig | None = None,
     ) -> None:
         self._config = config
         self._workdir = workdir
@@ -62,8 +63,10 @@ class DevRunner:
             run_meta={"source": "devshell"},
         )
 
-        # Exp config dict
-        self._exp_config = self._build_exp_config(config)
+        # Exp config: use explicit exp override when provided, else derive from DevConfig.
+        self._exp_config = (
+            exp_config if exp_config is not None else self._build_exp_config(config)
+        )
         # Local devshell is not Bohrium SSH; avoid model defaulting to /share from tool hints.
         if config.session.type == "local":
             wd = str(workdir.resolve())
@@ -180,6 +183,11 @@ class DevRunner:
                     status=result.status,
                     reason=result.reason,
                     final_content=result.final_content,
+                    num_turns=result.num_turns,
+                    usage=result.usage,
+                    usage_vendor_by_turn=[
+                        dict(item) for item in getattr(result, "usage_vendor_by_turn", ())
+                    ],
                 )
             )
 

@@ -503,14 +503,17 @@ def check_layer_count(
     expected: int,
     tolerance: float = 0,
     axis: str = 'z',
-    gap_threshold_A: float = 1.0,
+    layer_tol_A: float = 0.25,
 ) -> tuple[bool, str]:
-    """Count atomic layers by clustering fractional coords along *axis*.
+    """Count distinct atomic planes along *axis* using Cartesian coordinates.
 
-    Layers are separated by gaps larger than *gap_threshold_A* in Cartesian space.
+    Sites are sorted along the axis. A new plane starts when a coordinate is farther
+    than *layer_tol_A* from the **first** coordinate of the current plane (same-layer
+    atoms may sit at slightly different positions along the axis).
     """
     if not _PMG_AVAILABLE:
         return False, _IMPORT_MSG
+    tol = float(layer_tol_A)
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
@@ -532,14 +535,19 @@ def check_layer_count(
     if len(coords_sorted) < 2:
         return False, f'{fpath.name}: fewer than 2 atoms'
 
-    # Count layers by finding gaps larger than threshold
-    diffs = np.diff(coords_sorted)
-    n_layers = 1 + int(np.sum(diffs > gap_threshold_A))
+    # Count distinct planes: merge atoms within layer_tol_A of the current plane anchor.
+    anchor = float(coords_sorted[0])
+    n_layers = 1
+    for c in coords_sorted[1:]:
+        z = float(c)
+        if z - anchor > tol:
+            n_layers += 1
+            anchor = z
 
     hit = abs(n_layers - expected) <= tolerance
     return (
         hit,
-        f'{fpath.name}: {n_layers} layers along {axis} (gap_threshold={gap_threshold_A} Å), '
+        f'{fpath.name}: {n_layers} layers along {axis} (layer_tol={tol} Å), '
         f'expected={expected}±{tolerance}',
     )
 

@@ -1,0 +1,221 @@
+# 自动评测流水线（父子流水线架构）
+#
+# 架构说明：
+#   1. 父流水线：build 阶段构建镜像；baseline-eval 阶段 baseline-eval-trigger 触发动态子流水线
+#   2. 子流水线（动态生成）：布局由 ci/baseline_eval_preset.yaml 的 child_pipeline 决定
+#      （capabilities | questions），除非在 Run pipeline / 项目 CI Variables 中设置了
+#      BASELINE_CHILD_PIPELINE（该变量会覆盖预设文件）。
+#      - capabilities：每个 capability 一个 manual job。
+#      - questions：eval-question-list 在子流水线 init 后自动运行；题目来自预设 question_ids 或
+#        BASELINE_QUESTIONS（逗号分隔）。缺分选题（score_summary_missing_cc）跑齐 API 返回的缺分题，不按 BASELINE_LIMIT 截断。
+#
+# 评测引擎（EVAL_RUNNER）：默认由 ci/baseline_eval_preset.yaml 的 eval_runner 决定；
+#   Run pipeline / 项目 CI Variables 中 EVAL_RUNNER 非空时覆盖。
+#   claude_cli — 外部 baseline：prepare → claude -p 跑题 → finalize →（默认）score_baseline_tasks --submit
+#   devshell   — MatMaster Agent（run_devshell_eval.py）一步跑题 →（pending 时同上阶段二）
+#
+# 触发方式（任选，在 .gitlab-ci.yml 的 include 后生效）：
+#   1. 推送到分支 baseline-eval          → 立即触发
+#   2. 主流水线 schedule（GitLab 定时）  → 每日/每周自动触发（选分支 main）
+#   3. 手动在 GitLab UI 点 Run pipeline  → 可传入变量控制范围
+#
+# 镜像说明：
+#   eval-build job 使用 Dockerfile.eval：在主服务镜像基础上叠加 Node.js + Claude CLI + sthp + AWS CLI v2
+#   （sthp 见 https://github.com/KaranGauswami/socks-to-http-proxy Release 预编译；AWS 安装包自 awscli.amazonaws.com）。
+#   与生产用 Dockerfile 解耦，不污染 API/Worker 镜像。
+#   DevShell 模式仅需 Python 环境（主镜像已包含），但复用同一 eval 镜像以简化流水线。
+#
+# 所需 GitLab CI Variables（Settings → CI/CD → Variables，Protected + Masked）：
+#   通用（两种模式均需）:
+#     MATMASTER_TOOLS_SERVER                   — ingest URL 前缀
+#     MATMASTER_TOOLS_EVALUATION_BEARER        — tools-server Bearer token
+#   Claude CLI 模式:
+#     ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN — Claude CLI 鉴权（二选一）
+#     ANTHROPIC_BASE_URL                       — Claude CLI 端点（如 gpugeek/MiniMax/DeepSeek 兼容端点）
+#     ANTHROPIC_MODEL                          — 指定模型名（可选）
+#     ANTHROPIC_DEFAULT_HAIKU_MODEL            — Haiku 模型覆盖（可选）
+#     ANTHROPIC_DEFAULT_SONNET_MODEL           — Sonnet 模型覆盖（可选）
+#     ANTHROPIC_DEFAULT_OPUS_MODEL             — Opus 模型覆盖（可选）
+#   DevShell 模式:
+#     LITELLM_PROXY_API_KEY                    — LiteLLM 鉴权（llm_config.yaml 中引用）
+#     LITELLM_PROXY_API_BASE                   — LiteLLM base_url
+#   可选:
+#     REGISTRY_USERNAME / REGISTRY_PASSWORD    — 拉取/推送私有镜像
+#   评测容器经 SOCKS5 出网（可选）：在 CI Variables 中设置后由 run_baseline_eval.sh 启动 sthp 并导出 HTTP(S)_PROXY
+#     BASELINE_STHP_SOCKS          — 必填（启用时）：SOCKS5 地址 host:port，勿加 socks:// 前缀
+#     BASELINE_STHP_PORT           — 本地 HTTP 代理端口，默认 18080
+#     BASELINE_STHP_SOCKS_USER / BASELINE_STHP_SOCKS_PASSWORD — SOCKS 认证（可选）
+#     BASELINE_SOCKS_PROBE_URL / BASELINE_SOCKS_PROBE_TIMEOUT_S — 启动 sthp 前 curl --socks5 直连接探针（默认 ifconfig.me / 30s；失败则 job 失败）
+#     BASELINE_NO_PROXY            — 内网不走代理，逗号分隔（可选）
+#   AWS CLI（可选，评测镜像已装 aws；密钥务必 Masked）— 子 job docker create 已 -e 透传，run_baseline_eval.sh 内 aws configure set:
+#     AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY — 均非空时写入默认 profile（~/.aws）
+#     AWS_DEFAULT_REGION           — 默认 us-east-1（可改）
+#     AWS_DEFAULT_OUTPUT           — 默认 json（可改）
+#   Claude Code + Bedrock（claude_cli；须 AWS 凭证写入 default profile，见上）:
+#     触发（任一）: CLAUDE_CODE_USE_BEDROCK=1 / ANTHROPIC_PLATFORM=bedrock / BASELINE_CLAUDE_BEDROCK=1
+#     Bedrock 模型 ID 用 ANTHROPIC_BEDROCK_MODEL / ANTHROPIC_BEDROCK_SMALL_FAST_MODEL（勿用 ANTHROPIC_MODEL=Vendor2/…，那是 gpugeek 路由）
+#     run_baseline_eval.sh 会执行 aws bedrock list-foundation-models；失败则 job 失败（不继续评测）
+#     未设时脚本默认 opus=us.anthropic.claude-opus-4-6-v1[1m]、haiku=us.anthropic.claude-haiku-4-5-20251001-v1:0
+#   finalize 上传评测产物 zip 到 OSS（见 src/dao/oss_io.py）— 须传入内层 docker 容器，已在子流水线 docker create 中 -e 透传:
+#     OSS_ENDPOINT, OSS_BUCKET_NAME, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET
+#
+# Claude CLI 代理配置说明（仅 claude_cli 模式）：
+#   方案 A（gpugeek）:  ANTHROPIC_API_KEY=xxx + ANTHROPIC_BASE_URL=https://api.gpugeek.com
+#   方案 B（MiniMax）:  ANTHROPIC_API_KEY=sk-xxx + ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
+#   方案 C（DeepSeek）: ANTHROPIC_AUTH_TOKEN=sk-xxx + ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+#   方案 D（官方）:     ANTHROPIC_API_KEY=sk-ant-xxx（不设 BASE_URL）
+#
+# 可覆盖变量（手动触发时在 UI 传入，或在 schedule 的 Variables 中填写）：
+#   EVAL_RUNNER            — 非空时覆盖预设 eval_runner（claude_cli | devshell）
+#   BASELINE_MODES         — direct 或 planner，默认 direct
+#   BASELINE_LIMIT         — 仅 child_pipeline=capabilities 时限制每 capability 题数（0=不限）；questions 布局不使用
+#   BASELINE_MAX_TURNS     — 每题最大轮数，默认 50（仅 claude_cli）
+#   BASELINE_TIMEOUT       — 每题超时秒数，默认 1200（仅 claude_cli）
+#   BASELINE_MODEL         — 模型标识（claude_cli: 模型名如 opus；devshell: llm_config route key 如 claude-sonnet-4-6）
+#   BASELINE_PENDING_ONLY  — 1=pending + BinaryEvaluator 评分并 POST ingest（默认）；0=proxy 即时入库，不跑阶段二
+#   BASELINE_SCORE_SUBMIT  — 1（默认）在 pending 模式下跑 score_baseline_tasks.py --submit；0 跳过阶段二
+#   BASELINE_SCORE_EVAL_CONFIG — 可选，覆盖评测 YAML 路径（llm_binary_judge 需 evaluator_llm + LITELLM_*）
+#   BASELINE_SCORE_EVAL_INGEST_TIMEOUT — 可选，每题 ingest HTTP 超时秒数，默认 120
+#   BASELINE_CHILD_PIPELINE — 非空时覆盖 ci/baseline_eval_preset.yaml 的 child_pipeline
+#   BASELINE_QUESTIONS     — 非空时覆盖预设 question_ids（逗号分隔 id）
+#   BASELINE_SCORE_SUMMARY_TIMEOUT — score-summary GET 超时秒数（可选，默认 120）
+
+variables:
+  # ⚠️ 临时测试用，验证通过后务必删除以下几行，改用 GitLab CI Variables 注入
+  # [minimax] 当前使用（仅 claude_cli 模式需要）
+  # ANTHROPIC_API_KEY: "sk-cp-TGM8jt_jQj6k_K8nCqJGLqoeaBrc61y2E2V-Kfs1KWkfMzmyKLeySXWFXfKCSFqqI9pWftgYzygvxDKM-G2D33ybu-BT77ty0cVnyHCewd6j5W_AscyYRns"
+  # ANTHROPIC_BASE_URL: "https://api.minimaxi.com/anthropic"
+  # ANTHROPIC_MODEL: "MiniMax-M2.7"
+  # [gpugeek] 已注释，暂时停用
+  ANTHROPIC_API_KEY: "l0gkdqe9ht0d3u01000dhifz5fpd9xa1m0mtvwao"
+  ANTHROPIC_BASE_URL: "https://api.gpugeek.com"
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: "Vendor2/Claude-4.6-Opus"
+  ANTHROPIC_DEFAULT_OPUS_MODEL: "Vendor2/Claude-4.6-Opus"
+  ANTHROPIC_DEFAULT_SONNET_MODEL: "Vendor2/Claude-4.6-Opus"
+  ANTHROPIC_MODEL: "Vendor2/Claude-4.6-Opus"
+  BASELINE_MODES: "direct"
+  BASELINE_LIMIT: "2"
+  BASELINE_MAX_TURNS: "50"
+  BASELINE_TIMEOUT: "1200"
+  BASELINE_MODEL: ""
+  BASELINE_RUN_LABEL: "baseline_cc_ci"
+  BASELINE_PENDING_ONLY: "1"
+
+# ── Job 1: 构建镜像 + 动态生成子流水线 YAML ──────────────────────────────────
+# 使用 Dockerfile.eval 构建评测镜像，然后扫描题库生成子流水线 YAML
+baseline-eval-build:
+  stage: build
+  image: $REGISTRY/public/ubuntu:gitlab-docker
+  variables:
+    DOCKER_HOST: tcp://docker-build-service:32375
+  before_script:
+    - |
+      cat > /root/.docker/config.json <<EOF
+      {
+        "auths": {
+          "registry.dp.tech": {
+            "auth": "$(echo -n ${REGISTRY_USERNAME}:${REGISTRY_PASSWORD} | base64)"
+          }
+        }
+      }
+      EOF
+  script:
+    - |
+      MAIN_TAG="ci${CI_PIPELINE_ID}"
+      MAIN_IMAGE="${REGISTRY}/flow/matmaster-evo:${MAIN_TAG}"
+      MAIN_CACHE="${REGISTRY}/flow/matmaster-evo:latest"
+      git rev-parse HEAD > ${CI_PROJECT_DIR}/.build-version
+      docker pull "${MAIN_CACHE}" || true
+      docker buildx build --progress=plain \
+        -f ${CI_PROJECT_DIR}/Dockerfile \
+        --cache-from "${MAIN_CACHE}" \
+        -t ${MAIN_IMAGE} \
+        -t ${MAIN_CACHE} \
+        --cache-to type=inline,mode=max \
+        . --push
+      echo "MAIN_IMAGE=${MAIN_IMAGE}" >> build.env
+    - |
+      EVAL_TAG="eval-${CI_PIPELINE_ID}"
+      EVAL_IMAGE="${REGISTRY}/flow/matmaster-eval:${EVAL_TAG}"
+      EVAL_CACHE="${REGISTRY}/flow/matmaster-eval:latest"
+      docker pull "${EVAL_CACHE}" || true
+      docker buildx build --progress=plain \
+        -f ${CI_PROJECT_DIR}/Dockerfile.eval \
+        --build-arg BASE_IMAGE="${MAIN_IMAGE}" \
+        --cache-from "${EVAL_CACHE}" \
+        -t ${EVAL_IMAGE} \
+        -t ${EVAL_CACHE} \
+        --cache-to type=inline,mode=max \
+        . --push
+      echo "DYNAMIC_IMAGE=${EVAL_IMAGE}" >> ${CI_PROJECT_DIR}/build.env
+    - |
+      apt-get update -qq && apt-get install -y -qq python3 python3-yaml >/dev/null 2>&1
+      echo "--- 写入评测变量到 dotenv ---"
+      ENV_FILE="${CI_PROJECT_DIR}/build.env"
+      echo "EVAL_RUNNER=$(python3 ci/baseline_eval_preset.py eval-runner)" >> "${ENV_FILE}"
+      echo "effective EVAL_RUNNER（EVAL_RUNNER 非空则优先，否则预设 eval_runner）: $(python3 ci/baseline_eval_preset.py eval-runner)"
+      echo "BASELINE_MODES=${BASELINE_MODES}" >> "${ENV_FILE}"
+      echo "BASELINE_LIMIT=${BASELINE_LIMIT}" >> "${ENV_FILE}"
+      echo "BASELINE_MAX_TURNS=${BASELINE_MAX_TURNS}" >> "${ENV_FILE}"
+      echo "BASELINE_TIMEOUT=${BASELINE_TIMEOUT}" >> "${ENV_FILE}"
+      echo "BASELINE_MODEL=${BASELINE_MODEL}" >> "${ENV_FILE}"
+      echo "BASELINE_RUN_LABEL=${BASELINE_RUN_LABEL}" >> "${ENV_FILE}"
+      echo "BASELINE_PENDING_ONLY=${BASELINE_PENDING_ONLY}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_SUBMIT=${BASELINE_SCORE_SUBMIT:-1}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_EVAL_CONFIG=${BASELINE_SCORE_EVAL_CONFIG:-}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_EVAL_INGEST_TIMEOUT=${BASELINE_SCORE_EVAL_INGEST_TIMEOUT:-}" >> "${ENV_FILE}"
+      echo "BASELINE_CHILD_PIPELINE=${BASELINE_CHILD_PIPELINE}" >> "${ENV_FILE}"
+      echo "BASELINE_QUESTIONS=${BASELINE_QUESTIONS}" >> "${ENV_FILE}"
+      echo "BASELINE_SCORE_SUMMARY_TIMEOUT=${BASELINE_SCORE_SUMMARY_TIMEOUT:-}" >> "${ENV_FILE}"
+      cat "${ENV_FILE}"
+    - |
+      echo "--- 动态生成子流水线 YAML ---"
+      apt-get update -qq && apt-get install -y -qq python3 python3-yaml >/dev/null 2>&1
+      echo "effective child_pipeline (BASELINE_CHILD_PIPELINE 非空则优先生效，否则读预设文件): $(python3 ci/baseline_eval_preset.py child-pipeline)"
+      python3 ci/generate_eval_child_pipeline.py
+      cat ci/generated-eval-child.yml
+  retry: 1
+  tags:
+    - k8s-runner-ack
+  artifacts:
+    reports:
+      dotenv: ${CI_PROJECT_DIR}/build.env
+    paths:
+      - ci/generated-eval-child.yml
+    expire_in: 1 day
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "baseline-eval"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "baseline-eval"'
+
+# ── Job 2: 触发动态子流水线 ──────────────────────────────────────────────────
+baseline-eval-trigger:
+  stage: baseline-eval
+  needs:
+    - job: baseline-eval-build
+      artifacts: true
+  variables:
+    DYNAMIC_IMAGE: $DYNAMIC_IMAGE
+    EVAL_RUNNER: $EVAL_RUNNER
+    BASELINE_MODES: $BASELINE_MODES
+    BASELINE_LIMIT: $BASELINE_LIMIT
+    BASELINE_MAX_TURNS: $BASELINE_MAX_TURNS
+    BASELINE_TIMEOUT: $BASELINE_TIMEOUT
+    BASELINE_MODEL: $BASELINE_MODEL
+    BASELINE_RUN_LABEL: $BASELINE_RUN_LABEL
+    BASELINE_PENDING_ONLY: $BASELINE_PENDING_ONLY
+    BASELINE_SCORE_SUBMIT: $BASELINE_SCORE_SUBMIT
+    BASELINE_SCORE_EVAL_CONFIG: $BASELINE_SCORE_EVAL_CONFIG
+    BASELINE_SCORE_EVAL_INGEST_TIMEOUT: $BASELINE_SCORE_EVAL_INGEST_TIMEOUT
+    BASELINE_CHILD_PIPELINE: $BASELINE_CHILD_PIPELINE
+    BASELINE_QUESTIONS: $BASELINE_QUESTIONS
+    BASELINE_SCORE_SUMMARY_TIMEOUT: $BASELINE_SCORE_SUMMARY_TIMEOUT
+  trigger:
+    include:
+      - artifact: ci/generated-eval-child.yml
+        job: baseline-eval-build
+    strategy: depend
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "baseline-eval"'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "baseline-eval"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "baseline-eval"'

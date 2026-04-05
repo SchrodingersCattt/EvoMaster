@@ -20,6 +20,7 @@ Examples::
 
     uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py --run-dir results/baseline_cc_20260328_120000
     uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py --run-dir results/... --eval-ingest-pending-only
+    uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py --run-dir results/... --only-tasks SC_struct_007_direct_r0
 """
 
 from __future__ import annotations
@@ -58,6 +59,35 @@ def _exit_code_from_summary(summary: dict[str, Any]) -> int:
 CC_BASELINE_TASK_START_NAME = "_cc_baseline_task_start.json"
 
 
+def _load_raw_runs_by_task(path: Path) -> dict[str, dict[str, Any]]:
+    """Parse ``raw_runs.jsonl`` into ``task_id -> row dict`` for merge writes."""
+    out: dict[str, dict[str, Any]] = {}
+    if not path.is_file():
+        return out
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return out
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        tid = obj.get("task_id")
+        if isinstance(tid, str) and tid:
+            out[tid] = obj
+    return out
+
+
+def _write_raw_runs_merged(path: Path, rows: dict[str, dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8") as raw_f:
+        for tid in sorted(rows.keys()):
+            raw_f.write(json.dumps(rows[tid], ensure_ascii=False) + "\n")
+
+
 def _duration_ms_from_cc_baseline_clock(
     workspace: Path, summary_path: Path
 ) -> tuple[int | None, str | None]:
@@ -89,20 +119,6 @@ def _duration_ms_from_cc_baseline_clock(
     if delta < 0:
         return None, None
     return delta, "cc_baseline_clock"
-
-
-def _model_tag_cc_baseline(model_from_item: str | None) -> str:
-    """Make tools-server rows filterable as CC baseline (field max 256 in build_ingest_item)."""
-    suffix = " | cc_baseline"
-    if isinstance(model_from_item, str) and model_from_item.strip():
-        base = model_from_item.strip()
-        if "cc_baseline" in base.lower():
-            out = base
-        else:
-            out = base + suffix
-    else:
-        out = "claude_code" + suffix
-    return out[:256] if len(out) > 256 else out
 
 
 def main() -> int:
@@ -151,6 +167,17 @@ def main() -> int:
             "Default: manifest baseline_channel or claude_code."
         ),
     )
+    parser.add_argument(
+        "--only-tasks",
+        nargs="+",
+        metavar="TASK_ID",
+        default=None,
+        help=(
+            "Process only these workspace task_id(s). "
+            "Merges their rows into existing raw_runs.jsonl (other task rows preserved). "
+            "Use for per-task finalize after incremental baseline runs."
+        ),
+    )
     args = parser.parse_args()
 
     if args.no_eval_ingest and args.eval_ingest_pending_only:
@@ -179,7 +206,7 @@ def main() -> int:
         post_eval_ingest,
         upload_eval_task_artifacts_to_oss,
     )
-    from matmaster.eval_tooling_snapshot import snapshot_devshell_eval_tooling
+    from evaluation.eval_tooling_snapshot import snapshot_devshell_eval_tooling
 
     ingest_url: str | None = None
     if not args.no_eval_ingest:
@@ -260,6 +287,22 @@ def main() -> int:
         )
         return 1
 
+    only_set: set[str] | None = None
+    if args.only_tasks is not None:
+        only_set = set(args.only_tasks)
+        tasks = [(tid, ws) for tid, ws in tasks if tid in only_set]
+        missing = only_set - {t[0] for t in tasks}
+        if missing:
+            print(
+                f"error: --only-tasks not found under workspaces/: {sorted(missing)}",
+                file=sys.stderr,
+            )
+            return 1
+        if not tasks:
+            print("error: --only-tasks matched no workspaces", file=sys.stderr)
+            return 1
+
+    merge_raw = only_set is not None
     raw_path = run_dir / "raw_runs.jsonl"
     pending_dir = run_dir / "pending_ingest"
     if args.eval_ingest_pending_only and ingest_url:
@@ -267,7 +310,14 @@ def main() -> int:
 
     any_ingest_fail = False
     n_written = 0
-    with raw_path.open("w", encoding="utf-8") as raw_f:
+    merged_rows: dict[str, dict[str, Any]] | None = None
+    raw_f = None
+    if merge_raw:
+        merged_rows = _load_raw_runs_by_task(raw_path)
+    else:
+        raw_f = raw_path.open("w", encoding="utf-8")
+
+    try:
         for task_id, ws in tasks:
             meta_path = ws / "_eval_task_meta.json"
             summary_path = ws / "_devshell_summary.json"
@@ -319,8 +369,8 @@ def main() -> int:
                 duration_ms=duration_ms,
                 artifact=artifact,
                 eval_tooling=eval_tooling,
+                approximate_last_turn_from_total=True,
             )
-            ingest_item["model"] = _model_tag_cc_baseline(ingest_item.get("model"))
             extra = ingest_item.get("extra")
             if isinstance(extra, dict):
                 extra["eval_runner"] = "claude_code_baseline"
@@ -397,7 +447,9 @@ def main() -> int:
                         "耗时：仅认客观墙钟 — workspace 须有 _cc_baseline_task_start.json（见 "
                         "mark_external_baseline_task_start.py），duration_ms = 该文件时间戳至 _devshell_summary.json "
                         "mtime；缺则 item 无 duration_ms。"
-                        " tokens 以 summary.usage 为准；若缺失须在 score_reason 中说明。"
+                        " tokens 默认按最后一轮口径；若 baseline 仅有总 usage，则按 "
+                        "summary.usage.total_tokens / num_turns 近似最后一轮。若缺失须在 "
+                        "score_reason 中说明。"
                         "上报命令: uv run python "
                         f"evaluation/scripts/eval_ingest_submit_pending.py --pending {pend_path} "
                         "--score <0-100> --score-reason \"...\" [--suggestion \"...\"]"
@@ -443,10 +495,30 @@ def main() -> int:
                 if artifact:
                     row["eval_ingest_artifact"] = artifact
 
-            raw_f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            line_payload = json.dumps(row, ensure_ascii=False) + "\n"
+            if merge_raw:
+                assert merged_rows is not None
+                merged_rows[task_id] = row
+            else:
+                assert raw_f is not None
+                raw_f.write(line_payload)
             n_written += 1
+    finally:
+        if raw_f is not None:
+            raw_f.close()
 
-    print(f"Wrote {raw_path} ({n_written}/{len(tasks)} task row(s))", file=sys.stderr)
+    if merge_raw:
+        assert merged_rows is not None
+        _write_raw_runs_merged(raw_path, merged_rows)
+        print(
+            f"Wrote {raw_path} (merged {n_written} task(s); "
+            f"{len(merged_rows)} total row(s))",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"Wrote {raw_path} ({n_written}/{len(tasks)} task row(s))", file=sys.stderr
+        )
     if args.eval_ingest_strict and any_ingest_fail:
         return 1
     return 0

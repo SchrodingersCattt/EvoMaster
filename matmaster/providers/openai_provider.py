@@ -75,6 +75,54 @@ def _should_split_stream_tool_call(
     return False
 
 
+def _openai_usage_to_vendor_dict(usage: Any) -> dict[str, Any]:
+    """Serialize provider-native usage while preserving nested detail fields."""
+    if usage is None:
+        return {}
+    model_dump = getattr(usage, "model_dump", None)
+    if callable(model_dump):
+        try:
+            dumped = model_dump(mode="json", exclude_none=True)
+        except TypeError:
+            dumped = model_dump(exclude_none=True)
+        if isinstance(dumped, dict):
+            return dumped
+
+    out: dict[str, Any] = {}
+    for key in (
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "input_tokens",
+        "output_tokens",
+    ):
+        value = getattr(usage, key, None)
+        if value is not None:
+            out[key] = value
+
+    for detail_key in ("prompt_tokens_details", "completion_tokens_details"):
+        detail = getattr(usage, detail_key, None)
+        if detail is None:
+            continue
+        detail_dump = getattr(detail, "model_dump", None)
+        if callable(detail_dump):
+            try:
+                out[detail_key] = detail_dump(mode="json", exclude_none=True)
+            except TypeError:
+                out[detail_key] = detail_dump(exclude_none=True)
+        elif isinstance(detail, dict):
+            out[detail_key] = dict(detail)
+        else:
+            cached = getattr(detail, "cached_tokens", None)
+            if cached is not None:
+                out[detail_key] = {"cached_tokens": cached}
+
+    cache_read = getattr(usage, "cache_read_input_tokens", None)
+    if isinstance(cache_read, int) and cache_read > 0:
+        out["cache_read_input_tokens"] = cache_read
+    return out
+
+
 def _extract_cached_tokens(usage: Any) -> int:
     """Best-effort extraction of prompt cache-read tokens from an API usage object.
 
@@ -287,6 +335,7 @@ class OpenAIProvider:
 
         # Map usage
         usage: dict[str, int] = {}
+        usage_vendor: dict[str, Any] | None = None
         if response.usage:
             usage = {
                 "prompt_tokens": response.usage.prompt_tokens,
@@ -296,12 +345,14 @@ class OpenAIProvider:
             cache_read = _extract_cached_tokens(response.usage)
             if cache_read:
                 usage["cache_read_tokens"] = cache_read
+            usage_vendor = _openai_usage_to_vendor_dict(response.usage)
 
         return LLMResponse(
             content=message.content,
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason,
             usage=usage,
+            usage_vendor=usage_vendor,
         )
 
     async def chat_stream(
@@ -345,6 +396,7 @@ class OpenAIProvider:
         try:
             stream = await client.chat.completions.create(**kwargs)
             last_chunk_usage: dict[str, int] | None = None
+            last_chunk_usage_vendor: dict[str, Any] | None = None
             active_tool_calls: dict[int, _StreamToolCallState] = {}
             next_tool_call_index = 0
 
@@ -363,6 +415,7 @@ class OpenAIProvider:
                     cache_read = _extract_cached_tokens(usage)
                     if cache_read:
                         last_chunk_usage["cache_read_tokens"] = cache_read
+                    last_chunk_usage_vendor = _openai_usage_to_vendor_dict(usage)
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta
@@ -399,7 +452,10 @@ class OpenAIProvider:
                 )
 
             if last_chunk_usage is not None:
-                yield StreamChunk(usage=last_chunk_usage)
+                yield StreamChunk(
+                    usage=last_chunk_usage,
+                    usage_vendor=last_chunk_usage_vendor,
+                )
 
         except openai.APITimeoutError as exc:
             raise LLMError(str(exc), retryable=True, error_category="timeout") from exc

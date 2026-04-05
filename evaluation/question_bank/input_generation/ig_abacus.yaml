@@ -1,0 +1,159 @@
+version: v5
+capability: input_generation_abacus
+domain: elec
+questions:
+- id: IG_abacus_001_20260404
+  capability: input_generation_abacus
+  domain: elec
+  intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place empty-atom layers in vacuum, and write SCF INPUT with sparse k along vacuum.'
+  human_prompt_seed: |
+    读取工作区中的 `base_slab.stru`（Fe 合金表面 slab，仅真实 Fe 原子，尚未做 BSSE 校正）。
+
+    请为 ABACUS LCAO 单点 SCF 准备输入文件，要求对 NAO 基组的 BSSE 做 ghost/empty atom 校正：
+    1) 在 `STRU` 中新增 `Fe_empty` 物种：与 Fe 相同的赝势与数值轨道文件，但价电子电荷为 0，empty 原子不设置磁矩。
+    2) 在 slab 两侧真空区域各布置一层 empty Fe（参考距最外层真实 Fe 约 2.0 Å；empty 原子在面内可均匀铺开）。
+    3) 生成配套 `INPUT`：`calculation scf`，`ecutwfc 100`，`nspin 2`，`basis_type lcao`；沿真空方向使用稀疏 k（例如 `kspacing` 在真空方向取 1.0，另两个方向可用 0.14），`scf_thr 1e-7`，`smearing_method gaussian`，`smearing_sigma 0.01`。
+
+    将完整 `STRU` 写入 `STRU_bsse`，将 `INPUT` 写入 `INPUT_bsse`（当前工作目录）。
+  tags:
+  - abacus
+  - bsse
+  - empty_atom
+  - surface
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: base_slab
+    path: data/IG_abacus_001_20260404/base_slab.stru
+    oss_url: ''
+    description: Fe slab STRU without Fe_empty (starting geometry for BSSE setup).
+  reference_answers:
+  - key: markers_contains
+    value:
+    - Fe_empty
+    - '0.000000'
+    - scf
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: fe_empty_species
+    criterion: STRU defines Fe_empty with the same pseudopotential and numerical orbital as Fe, charge 0.0, and no magnetic moment on empty sites.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: empty_layer_placement
+    criterion: Empty Fe atoms are placed on both slab sides in the vacuum region at roughly ~2.0 Å from the outermost real Fe layers (not buried inside the slab).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: input_scf_kspacing
+    criterion: INPUT requests an SCF LCAO run with nspin 2, ecutwfc 100 Ry, and a sparse k-grid along the vacuum direction (e.g. kspacing third component 1.0) while keeping reasonable in-plane k-spacing.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: markers_contains
+    criterion: Final answer text or written STRU/INPUT snippets include Fe_empty, the 0.000000 charge line for empty species, and scf calculation type.
+    axis: correctness
+    verify: contains_all
+  - id: grounding_source
+    criterion: The modified STRU preserves the original slab lattice vectors and real Fe fractional coordinates from base_slab.stru; changes are limited to adding Fe_empty species/layers and INPUT parameters. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: efficiency_judge
+    criterion: Produces STRU_bsse and INPUT_bsse without unnecessary exploratory steps or redundant file rewrites.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_abacus_002_20260404
+  capability: input_generation_abacus
+  domain: mech
+  intent: 'Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty ghost atom and SCF INPUT.'
+  human_prompt_seed: |
+    读取工作区中的 `base_vacancy.stru`：bcc Fe 3×3×3 传统胞超胞，已去掉一个 Fe 原子形成空位（53 个真实 Fe）。
+
+    请为 ABACUS LCAO 单点 SCF 做 BSSE 校正：在空位位置放置一个 `Fe_empty`（与 Fe 相同赝势与数值轨道、电荷 0、无磁矩），并在答案中简要说明为何空位处需要 ghost 基组（NAO 在空位处基组不完备带来的 BSSE）。
+
+    生成配套 `INPUT`：`calculation scf`，`nspin 2`，`ecutwfc 100`，`basis_type lcao`，均匀 `kspacing`（例如三方向均 0.10），`scf_thr 1e-7`，`smearing_method gaussian`，`smearing_sigma 0.01`。
+
+    将完整 `STRU` 写入 `STRU_vac_bsse`，将 `INPUT` 写入 `INPUT_vac_bsse`。
+  tags:
+  - abacus
+  - bsse
+  - vacancy
+  - empty_atom
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: base_vacancy
+    path: data/IG_abacus_002_20260404/base_vacancy.stru
+    oss_url: ''
+    description: 53-Fe supercell with one vacancy (no Fe_empty yet).
+  reference_answers:
+  - key: markers_contains
+    value:
+    - Fe_empty
+    - '0.000000'
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: fe_empty_at_vacancy
+    criterion: STRU places exactly one Fe_empty at the vacant site (the former missing Fe position) with charge 0 and no magnetic moment.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: bsse_explanation
+    criterion: Answer explains that the vacancy removes basis completeness for NAO and that Fe_empty supplies ghost basis functions to reduce BSSE in LCAO.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: input_bulk_scf
+    criterion: INPUT is a collinear SCF LCAO run with uniform kspacing suitable for bulk (no vacuum-only k sparsity trick), nspin 2, ecutwfc 100 Ry.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: markers_contains
+    criterion: Answer or STRU includes Fe_empty and the 0.000000 charge line for the empty species.
+    axis: correctness
+    verify: contains_all
+  - id: grounding_source
+    criterion: Modified STRU keeps the original 53 real Fe fractional coordinates and lattice from base_vacancy.stru; only Fe_empty is added at the vacancy. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: efficiency_judge
+    criterion: Produces STRU_vac_bsse and INPUT_vac_bsse without unnecessary exploration.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget

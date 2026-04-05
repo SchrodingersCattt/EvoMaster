@@ -1,0 +1,106 @@
+{
+  "description": "Phonon calculation via finite differences or DFPT",
+  "kpoints": {
+    "note": "Supercell method needs fewer k-points (Gamma-only may suffice for large supercells)",
+    "rule": "Dense Gamma-centered mesh. Converge carefully for phonons."
+  },
+  "method_dfpt": {
+    "description": "Density-functional perturbation theory (IBRION=8)",
+    "incar": {
+      "recommended": {
+        "ADDGRID": ".TRUE.",
+        "ISMEAR": 0,
+        "LREAL": ".FALSE.",
+        "SIGMA": 0.01
+      },
+      "required": {
+        "EDIFF": {
+          "value": 1e-07
+        },
+        "ENCUT": {
+          "rule": "well converged"
+        },
+        "IBRION": {
+          "note": "DFPT with symmetry (7 without)",
+          "value": 8
+        },
+        "LEPSILON": ".TRUE.",
+        "NSW": 1,
+        "PREC": "Accurate"
+      }
+    },
+    "note": "DFPT only at Gamma. For dispersion: use supercell method or PHON_DISPERSION."
+  },
+  "method_finite_diff": {
+    "description": "Finite differences with symmetry (IBRION=6)",
+    "incar": {
+      "optional": {
+        "LCALCEPS": {
+          "note": "alternative to LEPSILON using finite field",
+          "value": ".TRUE."
+        },
+        "LEPSILON": {
+          "note": "for Born effective charges and dielectric tensor",
+          "value": ".TRUE."
+        }
+      },
+      "recommended": {
+        "ADDGRID": ".TRUE.",
+        "ALGO": "Fast",
+        "ISMEAR": 0,
+        "LREAL": ".FALSE.",
+        "SIGMA": 0.05
+      },
+      "required": {
+        "EDIFF": {
+          "note": "very tight, critical for phonon accuracy",
+          "value": 1e-07
+        },
+        "ENCUT": {
+          "rule": "well converged, >= 1.3*ENMAX"
+        },
+        "IBRION": {
+          "note": "finite differences with symmetry (5 without symmetry)",
+          "value": 6
+        },
+        "ISIF": {
+          "note": "3 if also want elastic constants",
+          "value": 2
+        },
+        "NFREE": {
+          "note": "central differences (more accurate than forward)",
+          "value": 2
+        },
+        "NSW": 1,
+        "POTIM": {
+          "note": "displacement in Angstrom for finite differences",
+          "value": 0.015
+        },
+        "PREC": "Accurate"
+      }
+    },
+    "note": "Use supercell large enough that interactions decay within it. Typically 2x2x2 or larger."
+  },
+  "phonon_dispersion": {
+    "description": "Full phonon dispersion using finite differences + Fourier interpolation",
+    "vasp_builtin": {
+      "LPHON_DISPERSION": ".TRUE.",
+      "PHON_NWRITE": 3,
+      "note": "VASP 6.4+ can compute dispersion internally"
+    },
+    "workflow": [
+      "1. Relax structure with tight EDIFFG",
+      "2. Create supercell (e.g., 2x2x2 or 3x3x3)",
+      "3. Run IBRION=6 on supercell",
+      "4. Post-process with phonopy or VASP built-in (PHON_DISPERSION)"
+    ]
+  },
+  "task_type": "phonon",
+  "use_cases": [
+    "phonon dispersion",
+    "phonon DOS",
+    "thermodynamic properties",
+    "IR/Raman spectra",
+    "structural stability"
+  ]
+}

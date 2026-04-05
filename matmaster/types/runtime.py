@@ -75,6 +75,13 @@ class AgentRuntimeSpec(BaseModel):
     capability_policy: Any | None = None  # Phase 33 defines CapabilityPolicy Protocol
     structural_validation: Any | None = None  # Phase 33 defines StructuralValidation
 
+    @property
+    def tool_registry(self) -> Any | None:
+        """Backward-compatible alias for tests and callers still expecting v1 specs."""
+        if self.tool_catalog is None:
+            return None
+        return getattr(self.tool_catalog, "registry", None)
+
     @model_validator(mode="after")
     def _check_v2_field_types(self) -> AgentRuntimeSpec:
         """Lazy-import runtime checks for v2 fields (avoids circular import)."""
@@ -103,6 +110,10 @@ class KernelResult:
 
     num_turns 语义：已完成 LLM 调用的轮数。cancelled 路径在 turn 递增前退出，
     所以 num_turns 反映的是已完成的轮数，不含被中断的当前轮。
+
+    usage：各轮 LLM 调用的标量用量累加（prompt / completion / total / cache_read 等）。
+    usage_vendor_by_turn：按 LLM 调用顺序，每轮一条供应商原生 usage（无则为 ``{}``），
+    与 ``num_turns`` 已完成的轮次一一对应。
     """
 
     status: str
@@ -111,6 +122,7 @@ class KernelResult:
     num_turns: int = 0
     stop_reason: str | None = None
     usage: dict[str, int] = field(default_factory=dict)
+    usage_vendor_by_turn: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
