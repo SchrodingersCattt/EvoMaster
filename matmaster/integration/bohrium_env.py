@@ -19,9 +19,9 @@ place.
 from __future__ import annotations
 
 import copy
-import os
 from typing import Any, NamedTuple
 
+from matmaster.integration.bohrium_api import get_bohrium_base_url
 from matmaster.integration.runtime_bridge.adapters.bohrium import (
     build_bohrium_env,
     resolve_bohrium_credentials,
@@ -29,9 +29,7 @@ from matmaster.integration.runtime_bridge.adapters.bohrium import (
 
 # ── Constants ────────────────────────────────────────────────────────
 
-BOHRIUM_OPENAPI_HOST: str = os.getenv(
-    "BOHRIUM_BASE_URL", "https://open.bohrium.com"
-).rstrip("/")
+BOHRIUM_OPENAPI_HOST: str = get_bohrium_base_url()
 
 
 # ── Types ────────────────────────────────────────────────────────────

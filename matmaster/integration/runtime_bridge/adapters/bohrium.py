@@ -10,6 +10,7 @@ import copy
 import os
 from typing import Any
 
+from matmaster.integration.bohrium_api import get_bohrium_base_url
 from matmaster.integration.runtime_bridge.env_projector import project_to_env
 from matmaster.integration.runtime_bridge.models import ResolvedCredential
 from matmaster.integration.runtime_bridge.resolver import resolve_credentials
@@ -23,9 +24,6 @@ _BOHRIUM_ENV_KEYS: dict[str, str] = {
     "user_id": "BOHRIUM_USER_ID",
     "user_no": "BOHRIUM_USER_NO",
 }
-
-# base_url is always read from env (with a default), not from session.
-_BOHRIUM_BASE_URL_DEFAULT = "https://open.bohrium.com"
 
 # The minimum set of fields required for a valid credential.
 _BOHRIUM_REQUIRED_KEYS = ["access_key"]
@@ -45,8 +43,7 @@ _BOHRIUM_FIELD_TO_ENV: dict[str, str] = {
 
 def _read_base_url() -> str:
     """Read BOHRIUM_BASE_URL from env, strip trailing slash, apply default."""
-    raw = os.environ.get("BOHRIUM_BASE_URL", _BOHRIUM_BASE_URL_DEFAULT)
-    return raw.rstrip("/")
+    return get_bohrium_base_url()
 
 
 def _session_extractor(session: Any | None):

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sys
 import types
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import matmaster.tools.builtin.bohrium_tool as bohrium_module
+import pytest
+import requests
 from matmaster.integration.runtime_bridge.models import ResolvedCredential
 from matmaster.tools.builtin.bohrium_tool import BohriumTool, _use_sandbox
 from matmaster.tools.tool_result import ToolResult
@@ -25,6 +28,7 @@ def _fake_cred(
     access_key: str = "access-key",
     project_id: int = 42,
     source: str = "env",
+    base_url: str = "https://openapi.test.dp.tech",
 ) -> ResolvedCredential:
     """Build a ResolvedCredential for monkeypatching."""
     return ResolvedCredential(
@@ -33,7 +37,7 @@ def _fake_cred(
         values={
             "access_key": access_key,
             "project_id": project_id,
-            "base_url": "https://open.bohrium.com",
+            "base_url": base_url,
         },
     )
 
@@ -197,6 +201,112 @@ class TestBohriumSandboxMode:
 
 
 class TestBohriumExecution:
+    def test_get_logs_http_error_context(self, monkeypatch, caplog):
+        class FakeResponse:
+            status_code = 401
+            ok = False
+            text = '{"code":2000,"error":"AccessKey Invalid"}'
+
+            def raise_for_status(self):
+                raise requests.HTTPError(
+                    "401 Client Error: Unauthorized for url: "
+                    "https://openapi.test.dp.tech/openapi/v1/calc/list"
+                )
+
+        monkeypatch.setattr(bohrium_module.requests, "get", lambda *args, **kwargs: FakeResponse())
+
+        with caplog.at_level(logging.WARNING):
+            with pytest.raises(requests.HTTPError):
+                bohrium_module._get(
+                    "https://openapi.test.dp.tech",
+                    "/openapi/v1/calc/list",
+                    "secret-ak",
+                )
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("method=GET" in msg for msg in messages)
+        assert any("status=401" in msg for msg in messages)
+        assert any("response_body=" in msg for msg in messages)
+        assert not any("secret-ak" in msg for msg in messages)
+
+    def test_post_logs_http_error_context(self, monkeypatch, caplog):
+        class FakeResponse:
+            status_code = 404
+            ok = False
+            text = "404 page not found"
+
+            def raise_for_status(self):
+                raise requests.HTTPError(
+                    "404 Client Error: Not Found for url: "
+                    "https://open.bohrium.com/openapi/v1/sandbox/job/create"
+                )
+
+        monkeypatch.setattr(
+            bohrium_module.requests, "post", lambda *args, **kwargs: FakeResponse()
+        )
+
+        with caplog.at_level(logging.WARNING):
+            with pytest.raises(requests.HTTPError):
+                bohrium_module._post(
+                    "https://open.bohrium.com",
+                    "/openapi/v1/sandbox/job/create",
+                    "secret-ak",
+                    {"projectId": 1, "name": "probe"},
+                )
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("method=POST" in msg for msg in messages)
+        assert any("status=404" in msg for msg in messages)
+        assert any("response_body=404 page not found" in msg for msg in messages)
+        assert not any("secret-ak" in msg for msg in messages)
+
+    def test_submit_logs_resolved_context(self, tmp_path, monkeypatch, caplog):
+        input_dir = tmp_path / "inputs"
+        input_dir.mkdir()
+        (input_dir / "INPUT").write_text("data", encoding="utf-8")
+
+        tool = BohriumTool(workdir=tmp_path)
+        post_calls: list[tuple[str, dict, str]] = []
+        upload_calls: list[tuple[str, str, dict]] = []
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(
+            monkeypatch,
+            _fake_cred(
+                access_key="secret-access-key",
+                project_id=42,
+                source="session",
+                base_url="https://openapi.test.dp.tech",
+            ),
+        )
+        monkeypatch.setattr(
+            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+        )
+
+        with monkeypatch.context() as m:
+            _install_fake_tiefblue(m, upload_calls)
+            with caplog.at_level(logging.INFO):
+                result = asyncio.run(
+                    tool.execute(
+                        {
+                            "action": "submit",
+                            "input_dir": "inputs",
+                            "image": "test:latest",
+                            "cmd": "echo hi",
+                        }
+                    )
+                )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("action=submit" in msg for msg in messages)
+        assert any("source=session" in msg for msg in messages)
+        assert any("base_url=https://openapi.test.dp.tech" in msg for msg in messages)
+        assert any("sandbox=True" in msg for msg in messages)
+        assert any("access_key=secr..." in msg for msg in messages)
+        assert not any("secret-access-key" in msg for msg in messages)
+
     def test_submit_remote_share_without_session_errors(self, tmp_path, monkeypatch):
         _patch_bridge(monkeypatch)
         tool = BohriumTool(workdir=tmp_path)

@@ -20,7 +20,7 @@ import tempfile
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, ClassVar, Iterator
+from typing import Any, ClassVar, Iterator, NamedTuple
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -51,12 +51,15 @@ def _get(
     params: dict | None = None,
     timeout: int = 30,
 ) -> dict:
+    url = f'{base_url}{path}'
     resp = requests.get(
-        f'{base_url}{path}',
+        url,
         headers={'accessKey': access_key, 'Accept': 'application/json'},
         params=params or {},
         timeout=timeout,
     )
+    if not getattr(resp, 'ok', True):
+        _log_http_error('GET', url, resp)
     resp.raise_for_status()
     return resp.json()
 
@@ -64,14 +67,45 @@ def _get(
 def _post(
     base_url: str, path: str, access_key: str, payload: dict, timeout: int = 30
 ) -> dict:
+    url = f'{base_url}{path}'
     resp = requests.post(
-        f'{base_url}{path}',
+        url,
         headers={'accessKey': access_key, 'Content-Type': 'application/json'},
         json=payload,
         timeout=timeout,
     )
+    if not getattr(resp, 'ok', True):
+        _log_http_error('POST', url, resp)
     resp.raise_for_status()
     return resp.json()
+
+
+def _mask_secret(secret: str) -> str:
+    raw = (secret or '').strip()
+    if not raw:
+        return '(empty)'
+    if len(raw) <= 4:
+        return raw[0] + '...'
+    return raw[:4] + '...'
+
+
+def _compact_log_text(text: str, *, max_chars: int = 200) -> str:
+    compact = ' '.join((text or '').split())
+    if not compact:
+        return '(empty)'
+    if len(compact) <= max_chars:
+        return compact
+    return compact[: max_chars - 3] + '...'
+
+
+def _log_http_error(method: str, url: str, response: Any) -> None:
+    logger.warning(
+        'Bohrium HTTP error method=%s url=%s status=%s response_body=%s',
+        method,
+        url,
+        getattr(response, 'status_code', 'unknown'),
+        _compact_log_text(getattr(response, 'text', '')),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +125,13 @@ _STATUS_MAP = {
 _SUCCESS_CODE = 2
 _RUNNING_CODES = {-10, 0, 1, 3}
 _FAILURE_CODES = {-2, -1}
+
+
+class _ResolvedBohriumContext(NamedTuple):
+    access_key: str
+    project_id: int
+    base_url: str
+    source: str
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -337,11 +378,11 @@ class BohriumTool(BuiltinTool):
             '- When image or machine is unknown, call list_images / list_machines first.\n'
         )
 
-    def _resolve_credentials(self) -> tuple[str, int, str]:
+    def _resolve_credentials(self) -> _ResolvedBohriumContext:
         """Resolve Bohrium credentials via runtime bridge.
 
         Precedence: explicit > session > env > none.
-        Returns (access_key, project_id, base_url).
+        Returns resolved credential context for diagnostics and requests.
         """
         from matmaster.integration.runtime_bridge.adapters.bohrium import (
             resolve_bohrium_credentials,
@@ -359,7 +400,31 @@ class BohriumTool(BuiltinTool):
             from matmaster.integration.bohrium_env import BOHRIUM_OPENAPI_HOST
 
             base_url = BOHRIUM_OPENAPI_HOST
-        return access_key, project_id, base_url
+        return _ResolvedBohriumContext(
+            access_key=access_key,
+            project_id=project_id,
+            base_url=base_url,
+            source=cred.source,
+        )
+
+    def _log_request_context(
+        self,
+        *,
+        action: str,
+        ctx: _ResolvedBohriumContext,
+        sandbox: bool | None,
+    ) -> None:
+        logger.info(
+            'Bohrium request context action=%s source=%s base_url=%s '
+            'project_id=%s sandbox=%s service_env=%s access_key=%s',
+            action,
+            ctx.source,
+            ctx.base_url,
+            ctx.project_id,
+            sandbox if sandbox is not None else 'n/a',
+            (os.getenv('SERVICE_ENV', 'test') or '').strip() or 'test',
+            _mask_secret(ctx.access_key),
+        )
 
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
         action = arguments.get('action', '')
@@ -380,7 +445,10 @@ class BohriumTool(BuiltinTool):
                 )
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
-        access_key, project_id, base_url = self._resolve_credentials()
+        ctx = self._resolve_credentials()
+        access_key = ctx.access_key
+        project_id = ctx.project_id
+        base_url = ctx.base_url
         if not access_key:
             return ToolResult(
                 status='error',
@@ -419,6 +487,7 @@ class BohriumTool(BuiltinTool):
             cmd = cmd_stripped + ' > log 2>&1'
 
         sandbox = _use_sandbox()
+        self._log_request_context(action='submit', ctx=ctx, sandbox=sandbox)
 
         try:
             with prepare_bohrium_input_zip(
@@ -549,11 +618,19 @@ class BohriumTool(BuiltinTool):
         except (ValueError, RuntimeError) as exc:
             return ToolResult(status='error', content=str(exc))
         except Exception as exc:
-            logger.error('bohrium submit failed: %s', exc, exc_info=True)
+            logger.error(
+                'bohrium submit failed action=submit base_url=%s sandbox=%s error=%s',
+                base_url,
+                sandbox,
+                exc,
+                exc_info=True,
+            )
             return ToolResult(status='error', content=f'Submit failed: {exc}')
 
     def _poll(self, args: dict[str, Any]) -> ToolResult:
-        access_key, _, base_url = self._resolve_credentials()
+        ctx = self._resolve_credentials()
+        access_key = ctx.access_key
+        base_url = ctx.base_url
         if not access_key:
             return ToolResult(
                 status='error',
@@ -568,6 +645,7 @@ class BohriumTool(BuiltinTool):
             )
 
         sandbox = _use_sandbox()
+        self._log_request_context(action='poll', ctx=ctx, sandbox=sandbox)
         job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
         result_dir_str = args.get('result_dir') or f'results/run_{job_id}'
 
@@ -699,7 +777,13 @@ class BohriumTool(BuiltinTool):
             )
 
         except Exception as exc:
-            logger.error('bohrium poll failed: %s', exc, exc_info=True)
+            logger.error(
+                'bohrium poll failed action=poll base_url=%s sandbox=%s error=%s',
+                base_url,
+                sandbox,
+                exc,
+                exc_info=True,
+            )
             return ToolResult(status='error', content=f'Poll failed: {exc}')
 
     def _download_results(
@@ -823,7 +907,9 @@ class BohriumTool(BuiltinTool):
         return '(no log file found in result directory)'
 
     def _list_images(self, args: dict[str, Any]) -> ToolResult:
-        access_key, _, base_url = self._resolve_credentials()
+        ctx = self._resolve_credentials()
+        access_key = ctx.access_key
+        base_url = ctx.base_url
         if not access_key:
             return ToolResult(
                 status='error',
@@ -833,6 +919,7 @@ class BohriumTool(BuiltinTool):
 
         keyword = (args.get('keyword') or '').strip().lower()
         max_results = args.get('max_results', 20)
+        self._log_request_context(action='list_images', ctx=ctx, sandbox=None)
 
         try:
             # Fetch all public image IDs
@@ -910,11 +997,18 @@ class BohriumTool(BuiltinTool):
             )
 
         except Exception as exc:
-            logger.error('bohrium list_images failed: %s', exc, exc_info=True)
+            logger.error(
+                'bohrium list_images failed action=list_images base_url=%s error=%s',
+                base_url,
+                exc,
+                exc_info=True,
+            )
             return ToolResult(status='error', content=f'list_images failed: {exc}')
 
     def _list_machines(self, args: dict[str, Any]) -> ToolResult:
-        access_key, _, base_url = self._resolve_credentials()
+        ctx = self._resolve_credentials()
+        access_key = ctx.access_key
+        base_url = ctx.base_url
         if not access_key:
             return ToolResult(
                 status='error',
@@ -925,6 +1019,7 @@ class BohriumTool(BuiltinTool):
         choose_type = args.get('machine_type', 'cpu')
         keyword = (args.get('keyword') or '').strip().lower()
         max_results = args.get('max_results', 50)
+        self._log_request_context(action='list_machines', ctx=ctx, sandbox=None)
 
         try:
             data = _get(
@@ -985,5 +1080,12 @@ class BohriumTool(BuiltinTool):
             )
 
         except Exception as exc:
-            logger.error('bohrium list_machines failed: %s', exc, exc_info=True)
+            logger.error(
+                'bohrium list_machines failed action=list_machines '
+                'base_url=%s machine_type=%s error=%s',
+                base_url,
+                choose_type,
+                exc,
+                exc_info=True,
+            )
             return ToolResult(status='error', content=f'list_machines failed: {exc}')

@@ -58,6 +58,17 @@ def test_bohrium_env_projection_uses_resolved_values(monkeypatch):
     assert env["BOHRIUM_BASE_URL"] == "https://test.dp.tech"
 
 
+def test_bohrium_resolver_uses_service_env_default_host(monkeypatch):
+    monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
+    monkeypatch.setenv("SERVICE_ENV", "uat")
+    session = _session_with_bohrium()
+
+    cred = resolve_service_credentials("bohrium", session=session, explicit=None)
+
+    assert cred.source == "session"
+    assert cred.values["base_url"] == "https://openapi.uat.dp.tech"
+
+
 def test_bohrium_resolver_returns_source_none_without_credentials(monkeypatch):
     monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
     monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)

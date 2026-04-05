@@ -25,6 +25,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from matmaster.integration.bohrium_api import get_bohrium_base_url
+
 from .env_config import get_current_env
 
 logger = logging.getLogger(__name__)
@@ -37,9 +39,7 @@ logger = logging.getLogger(__name__)
 
 def _openapi_host() -> str:
     """``https://openapi.dp.tech`` (prod) or ``https://openapi.test.dp.tech`` (test)."""
-    env = get_current_env()
-    url_part = f".{env}" if env != 'prod' else ''
-    return f"https://openapi{url_part}.dp.tech"
+    return get_bohrium_base_url()
 
 
 def _tiefblue_nas_host() -> str:

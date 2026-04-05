@@ -21,7 +21,16 @@ class TestBohriumOpenapiHost:
     def test_bohrium_openapi_host_default(self, monkeypatch):
         """Without BOHRIUM_BASE_URL env var, returns default host."""
         monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
+        monkeypatch.delenv("SERVICE_ENV", raising=False)
         # Re-import to pick up env change (module-level constant)
+        import matmaster.integration.bohrium_env as mod
+
+        mod = importlib.reload(mod)
+        assert mod.BOHRIUM_OPENAPI_HOST == "https://openapi.test.dp.tech"
+
+    def test_bohrium_openapi_host_from_service_env(self, monkeypatch):
+        monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
+        monkeypatch.setenv("SERVICE_ENV", "prod")
         import matmaster.integration.bohrium_env as mod
 
         mod = importlib.reload(mod)
@@ -130,6 +139,7 @@ class TestBuildBohriumSkillRemoteEnv:
     def test_returns_env_dict_with_valid_credentials(self, monkeypatch):
         # Ensure module uses the right BOHRIUM_OPENAPI_HOST
         monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
+        monkeypatch.setenv("SERVICE_ENV", "uat")
         import matmaster.integration.bohrium_env as mod
 
         mod = importlib.reload(mod)
@@ -145,7 +155,7 @@ class TestBuildBohriumSkillRemoteEnv:
         result = mod.build_bohrium_skill_remote_env(FakeSession())
         assert result["BOHRIUM_ACCESS_KEY"] == "ak"
         assert result["BOHRIUM_PROJECT_ID"] == "42"
-        assert result["BOHRIUM_BASE_URL"] == "https://open.bohrium.com"
+        assert result["BOHRIUM_BASE_URL"] == "https://openapi.uat.dp.tech"
         assert result["BOHRIUM_USER_ID"] == "5"
         assert result["BOHRIUM_USER_NO"] == "U001"
 
