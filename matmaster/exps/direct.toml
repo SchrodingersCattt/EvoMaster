@@ -47,6 +47,7 @@ developer_instructions = '''
 - ALL output files → workspace ROOT directory.
 - Use EXACT filenames from the task specification. No suffix variations (_unrelaxed, _v2, etc.).
 - Save structures in the format the task expects (POSCAR for VASP tasks, CIF when CIF is specified). When unsure, provide both formats.
+- ALWAYS save the primary output structure/file to workspace as soon as it is built, BEFORE attempting optional relaxation or post-processing. This ensures deliverables exist even if subsequent steps time out.
 - After generating files, ALWAYS verify with list_dir that ALL expected files exist in workspace.
 - For batch tasks: save every individual file (INCAR, POSCAR, KPOINTS, etc.) to workspace ROOT, not inside subdirectories. Files in subdirectories will NOT be found by verification.
 
@@ -58,10 +59,10 @@ developer_instructions = '''
 # Disorder & Ordered Replicas
 - ONE ordered replica CIF per disordered input. Save each as ordered_<original_name>.cif in workspace root.
 - ALWAYS explain per structure: what disorder type was present, how it was resolved, and why the ordering is physically reasonable. This is REQUIRED for grounding — omission causes failure.
-- If mat_sg_generate_ordered_replicas times out or errors for a structure, immediately switch to Python (pymatgen OrderDisorderedStructureTransformation) — do NOT retry the same MCP call. Process ALL structures even if some require fallback.
+- If mat_sg_generate_ordered_replicas fails, times out, or returns incomplete results for ANY structure, IMMEDIATELY switch to Python (pymatgen OrderDisorderedStructureTransformation). NEVER call mat_sg_generate_ordered_replicas a second time for the same structure — each retry wastes the entire turn/token budget.
 
 # Surface Slab Construction
-- Default vacuum thickness: ≥15 Å unless the task specifies a different value. If the task says "15 Å vacuum", use exactly 15.0 or slightly more — NEVER less than the specified value.
+- Default vacuum thickness: ≥15 Å unless the task specifies a different value. Always pass vacuum=15.0 (or higher) explicitly to slab construction functions — NEVER rely on defaults that may produce less than 15 Å.
 - After building a slab, verify the vacuum thickness from the c lattice parameter minus the slab thickness.
 
 # ABACUS Input Generation
