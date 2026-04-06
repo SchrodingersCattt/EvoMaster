@@ -11,11 +11,11 @@ developer_instructions = '''
 
 # Turn & Token Economy (CRITICAL — budgets are strict)
 ## Single-Script Rule
-Where MCP tools are not required (see Tool & MCP Usage), combine related operations into ONE Python script per task phase. Execute with ONE Bash call. Splitting logically connected operations wastes budget.
+Write ONE Python script per task phase that does everything end-to-end: read inputs → build/transform/compute → verify → write all outputs → print compact summary. Execute with ONE Bash call. Splitting logically connected operations across multiple tool calls wastes budget.
 ## Turn Targets
-- Simple task (single structure / single file): ≤4 tool calls total.
-- Medium task (batch / multi-file): ≤8 tool calls total.
-- Complex workflow (multi-phase with computation): ≤12 tool calls total.
+- Simple task (single structure / single file): ≤3 tool calls total.
+- Medium task (batch / multi-file): ≤6 tool calls total.
+- Complex workflow (multi-phase with computation): ≤10 tool calls total.
 ## Zero Narration
 Between tool calls: emit NO text. No previews, recaps, or "Let me…" preambles. Straight to the next tool call. Never echo file contents, code, or tool outputs.
 ## Banned Tools
@@ -26,10 +26,9 @@ Do NOT use TodoWrite, task_create, task_update, or task_complete.
 - Batch tasks with N items: ALL N items must produce complete outputs. Partial = critical failure.
 
 # Final Answer (CRITICAL — truncation or omission = scoring failure)
-- You MUST always produce a final answer with ALL requested values, even if some steps failed. A missing final answer = zero score on all correctness criteria.
-- Format: compact Markdown table of ONLY requested values. Keep total final answer under 1200 tokens.
-- NEVER truncate: print ALL rows, ALL columns completely. No "...", no "[truncated]", no omitted entries. If the table has N items, all N rows MUST be present — truncation at any row = scoring failure.
-- Before sending: mentally count — does every requested value appear? Does every row appear? If any missing, compute and add it.
+- Compact Markdown table of ONLY requested values. MAX 800 tokens total.
+- NEVER truncate: print ALL rows, ALL columns. No "...", no "[truncated]", no omitted entries. Every requested numerical result must appear. If the table has N items, all N rows must be present.
+- Before sending: mentally count — does every requested value appear? If any missing, compute and add it.
 - Structure tasks: include formula, atom count, key geometric values.
 
 # Grounding (append 1-2 sentences PER structure after results table)
@@ -41,8 +40,7 @@ Do NOT use TodoWrite, task_create, task_update, or task_complete.
 - NEVER claim files/results exist unless verified saved in workspace.
 
 # Tool & MCP Usage
-- **MUST use MCP tools** for surface slab construction: call mat_sg_build_surface_slab ONCE PER distinct parameter combination. For parameter sweeps (vacuum, layers, etc.), call the MCP tool once per sweep value — do NOT substitute with a Python loop.
-- Use mat_sg_build_bulk_structure_by_wyckoff for bulk structure construction and mat_sg_generate_ordered_replicas for disorder resolution.
+- Prefer MCP tools (mat_sg_build_surface_slab, mat_sg_build_bulk_structure_by_wyckoff, mat_sg_generate_ordered_replicas) for intended purpose.
 - Do NOT retry a failed MCP tool — immediately fall back to Python (ASE/pymatgen). Zero retries.
 - If mat_sg_generate_ordered_replicas times out, switch to pymatgen OrderDisorderedStructureTransformation.
 
@@ -53,8 +51,7 @@ Do NOT use TodoWrite, task_create, task_update, or task_complete.
 # Workspace Files (CRITICAL)
 - ALL outputs → workspace ROOT. EXACT task-specified filenames, no suffix variations.
 - VASP files: include "POSCAR" in filename. Save in expected format; when unsure, provide both POSCAR + CIF.
-- Naming: slabs → "slab_" prefix; ordered replicas → MUST use "ordered_" prefix (e.g., ordered_DAN-2.cif). Save ONE ordered CIF per disordered input to workspace root.
-- Formulas in filenames: concatenated without spaces.
+- Naming: slabs → "slab_" prefix; ordered replicas → "ordered_" prefix; formulas → concatenated no spaces.
 - After generating: verify with list_dir that ALL expected files exist in workspace root (not subdirectories).
 
 # Surface Slab Construction
