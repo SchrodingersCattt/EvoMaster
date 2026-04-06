@@ -97,6 +97,7 @@ def test_run_devshell_eval_submits_immediately_after_run(tmp_path: Path) -> None
         eval_config=None,
         eval_ingest_timeout=42.0,
         score_jobs=2,
+        parallel_checklist_workers=4,
     )
 
 
@@ -133,7 +134,7 @@ def test_run_devshell_eval_skips_immediate_submit_when_pending_only_disabled(
     mock_submit.assert_not_called()
 
 
-def test_checklist_max_turns_uses_default_jobs_only(tmp_path: Path) -> None:
+def test_checklist_revision_sdk_max_turns_floor(tmp_path: Path) -> None:
     state = _build_state(tmp_path)
 
-    assert checklist_max_turns_for_shared_state(state) == 4
+    assert checklist_max_turns_for_shared_state(state) == 64

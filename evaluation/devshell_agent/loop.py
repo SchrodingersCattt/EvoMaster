@@ -13,6 +13,8 @@ from typing import Any, TextIO
 from evaluation.devshell_agent.config_state import (
     AgentLoopSharedState,
     DevshellAgentCliDefaults,
+    checklist_revision_sdk_max_turns_from_jobs,
+    parallel_scoring_checklist_workers_from_jobs,
 )
 from evaluation.devshell_agent.git_iteration import (
     append_iteration_head,
@@ -22,13 +24,9 @@ from evaluation.devshell_agent.git_iteration import (
 )
 
 
-def checklist_max_turns_from_jobs(jobs: int) -> int:
-    """Checklist-only SDK max turns = ``jobs`` × 2 (same knob as run + score parallelism)."""
-    return max(1, int(jobs) * 2)
-
-
 def checklist_max_turns_for_shared_state(state: AgentLoopSharedState) -> int:
-    return checklist_max_turns_from_jobs(int(state.defaults.jobs))
+    """Claude SDK ``max_turns`` for the question_bank checklist-revision agent."""
+    return checklist_revision_sdk_max_turns_from_jobs(int(state.defaults.jobs))
 
 
 @dataclass
@@ -442,7 +440,12 @@ class DevshellAgentLoop:
             "eval_ingest_submit_each_iteration": cfg.eval_ingest_submit_each_iteration,
             "eval_ingest_submit_timeout": cfg.eval_ingest_submit_timeout,
             "enable_checklist_agent": cfg.enable_checklist_agent,
-            "max_checklist_sdk_turns": checklist_max_turns_from_jobs(cfg.defaults.jobs),
+            "max_checklist_sdk_turns": checklist_revision_sdk_max_turns_from_jobs(
+                cfg.defaults.jobs
+            ),
+            "parallel_scoring_checklist_workers": parallel_scoring_checklist_workers_from_jobs(
+                cfg.defaults.jobs
+            ),
             "checklist_permission_mode": cfg.checklist_permission_mode or None,
         }
         session_dir.mkdir(parents=True, exist_ok=True)

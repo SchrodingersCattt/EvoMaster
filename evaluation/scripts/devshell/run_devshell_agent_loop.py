@@ -145,8 +145,11 @@ class DevshellAgentLoopCli:
             type=int,
             default=8,
             help=(
-                "Single knob for: run_devshell_eval --jobs, score_devshell_tasks "
-                "--score-jobs, and checklist agent max_turns (= jobs×2)."
+                "Single knob for: run_devshell_eval --jobs; score_devshell_tasks "
+                "--score-jobs (parallel tasks); and --parallel-checklist-workers = jobs×2 "
+                "(parallel scoring_checklist items inside each task). Checklist *revision* "
+                "SDK session uses a separate max_turns budget (see loop manifest "
+                "max_checklist_sdk_turns)."
             ),
         )
         p.add_argument(
