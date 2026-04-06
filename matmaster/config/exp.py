@@ -12,11 +12,14 @@ Usage::
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from matmaster.types.runtime import CompactionConfig
+
+ExpContextMode = Literal["fresh", "inherit"]
+ExpResultStyle = Literal["summary", "findings", "completion"]
 
 
 class ExpToolsConfig(BaseModel):
@@ -55,6 +58,11 @@ class ExpConfig(BaseModel):
 
     name: str = "direct"
     description: str = ""
+    when_to_use: str = ""
+    read_only: bool = False
+    visible_as_subagent: bool = True
+    context_mode: ExpContextMode = "fresh"
+    result_style: ExpResultStyle = "summary"
     max_turns: int = 100
     tools: ExpToolsConfig = Field(default_factory=ExpToolsConfig)
     skills: ExpSkillsConfig = Field(default_factory=ExpSkillsConfig)
