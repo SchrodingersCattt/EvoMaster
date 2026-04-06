@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: struct
 questions:
-- id: BP_struct_001_20260406
+- id: BP_struct_001_20260406a
   capability: batch_processing
   domain: struct
   intent: Batch-construct Si(100) surface slabs with varying vacuum thickness while
@@ -30,29 +30,17 @@ questions:
       vacuum.
   reference_answers:
   - key: vacuum_sweep_variable
-    tool_name: mat_sg_build_surface_slab
-    tool_arg: vacuum
     value:
-      sweep_param: vacuum_thickness_A
       expected_values:
       - 10.0
       - 15.0
       - 20.0
       - 25.0
       - 30.0
-      exclude_params:
-      - output_file
   - key: locked_miller_index
-    tool_name: mat_sg_build_surface_slab
-    value:
-      param_names: miller_index
-      expected_constant: '[1, 0, 0]'
+    value: '[1, 0, 0]'
   - key: locked_layer_count
-    tool_name: mat_sg_build_surface_slab
-    tool_arg: slab_size_value
-    value:
-      param_names: number_of_layers
-      expected_constant: 4
+    value: 4
   - key: output_files_generated
     value: 5
     tolerance: 0.0
@@ -72,20 +60,23 @@ questions:
       max: 35000
   scoring_checklist:
   - id: vacuum_sweep_variable
-    criterion: 'Vacuum thickness parameter varies across exactly 5 calls: 10, 15,
-      20, 25, 30 Å.'
+    criterion: 'The 5 generated slab files use vacuum thicknesses of exactly 10, 15,
+      20, 25, and 30 Å, with vacuum being the only structural parameter that varies
+      across files. Judge from the build script, log output, or file metadata.'
     axis: correctness
-    verify: batch_single_variable_sweep
+    verify: llm_binary_judge
   - id: locked_miller_index
-    criterion: Miller index [1,0,0] remains constant across all 5 slab-construction
-      calls.
+    criterion: All 5 generated slabs use Miller index [1,0,0] (Si(100) surface), as
+      confirmed by the build script, log output, or output file metadata. Judge solely
+      from the final answer; do not fail because a specific MCP tool was not used.
     axis: correctness
-    verify: batch_tool_args_constant
+    verify: llm_binary_judge
   - id: locked_layer_count
-    criterion: Number of layers parameter remains constant (value = 4) across all
-      5 calls.
+    criterion: All 5 generated slabs have exactly 4 Si layers, as confirmed by the
+      build script, log output, or output file content. Judge solely from the final
+      answer; do not fail because a specific MCP tool was not used.
     axis: correctness
-    verify: batch_tool_args_constant
+    verify: llm_binary_judge
   - id: output_files_generated
     criterion: All 5 CIF/POSCAR files are generated and have distinct vacuum thickness
       indicators.
