@@ -8,7 +8,7 @@ import queue
 import threading
 import time
 import uuid
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -43,9 +43,6 @@ from src.utils.feishu_notifier import (
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
-
-# 进程内队列用的取消哨兵（get 时转为 None）
-_CANCEL_SENTINEL = object()
 
 
 @runtime_checkable
@@ -138,28 +135,6 @@ def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
     return deduped
 
 
-class InMemoryReplyQueue:
-    """进程内队列封装，实现 ReplyQueueLike。"""
-
-    def __init__(self, q: queue.Queue) -> None:
-        self._q = q
-
-    def put_content(self, content: str) -> None:
-        self._q.put(content)
-
-    def put_cancel(self) -> None:
-        self._q.put(_CANCEL_SENTINEL)
-
-    def get(self, timeout: float | None = None) -> str | None:
-        try:
-            v = self._q.get(timeout=timeout)
-        except queue.Empty:
-            raise
-        if v is _CANCEL_SENTINEL:
-            return None
-        return v
-
-
 class RedisReplyQueue:
     """基于 Redis List 的回复队列，任意 worker 可 put_content/put_cancel，执行 run 的 worker 可 get。"""
 
@@ -184,72 +159,12 @@ class RedisReplyQueue:
         return value
 
 
-class ReplyQueueNotifyOnGet:
-    """包装 ReplyQueueLike：在 get() 返回用户回复时调用 on_reply(content)。
-    用于在「执行 agent 的 worker」上注入 interaction reply，保证多 worker 下顺序正确（POST 可能打到其他 worker）。
-    """
-
-    def __init__(self, inner: ReplyQueueLike, on_reply: Callable[[str], None]) -> None:
-        self._inner = inner
-        self._on_reply = on_reply
-
-    def put_content(self, content: str) -> None:
-        self._inner.put_content(content)
-
-    def put_cancel(self) -> None:
-        self._inner.put_cancel()
-
-    def get(self, timeout: float | None = None) -> str | None:
-        result = self._inner.get(timeout=timeout)
-        if result is not None and self._on_reply:
-            logger.info(
-                'ReplyQueueNotifyOnGet.get: got user reply len=%s, scheduling inject',
-                len(result),
-            )
-            self._on_reply(result)
-        return result
-
-
 class StreamQueueManager:
     """流式接口的队列管理：SSE 订阅队列的注册/注销与广播；当前 run 的交互回复队列（ask_question 共用）。"""
 
     def __init__(self) -> None:
         # session_id -> 该会话下所有 SSE 连接的队列，agent 事件会广播到这些队列
         self._sse_queues: dict[str, list[asyncio.Queue]] = {}
-        # session_id -> 当前 run 的确认回复队列（仅无 Redis 时使用；有 Redis 时由 get_reply_queue 按 run_active 返回 RedisReplyQueue）
-        self._reply_queues: dict[str, ReplyQueueLike] = {}
-        # session_id -> 当前 run 的 request_event_queue（供 broadcast_reply 时注入 interaction reply，保证发送流内事件顺序）
-        self._request_event_queues: dict[str, tuple[asyncio.Queue, str, str]] = {}
-
-    def set_reply_queue(self, session_id: str, q: ReplyQueueLike) -> None:
-        """注册该会话当前 run 的确认回复队列（仅 in-memory 路径调用）。"""
-        self._reply_queues[session_id.strip()] = q
-
-    def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
-        """供 POST /ask_question_reply 写入使用；无活跃 run 时返回 None。"""
-        return self._reply_queues.get(session_id.strip())
-
-    def set_request_event_queue(
-        self,
-        session_id: str,
-        queue: asyncio.Queue,
-        task_id: str,
-        invocation_id: str,
-    ) -> None:
-        """注册当前 run 的 request_event_queue，便于 interaction reply 按序注入发送流。"""
-        self._request_event_queues[session_id.strip()] = (queue, task_id, invocation_id)
-
-    def get_request_event_queue(
-        self, session_id: str
-    ) -> tuple[asyncio.Queue, str, str] | None:
-        """返回 (queue, task_id, invocation_id)，无则 None。"""
-        return self._request_event_queues.get(session_id.strip())
-
-    def clear_reply_queue(self, session_id: str) -> None:
-        """run 结束后从内存表移除；有 Redis 时由 ChatStreamService.clear_reply_queue 负责 Redis 清理。"""
-        sid = session_id.strip()
-        self._reply_queues.pop(sid, None)
-        self._request_event_queues.pop(sid, None)
 
     def register_subscriber(self, session_id: str) -> asyncio.Queue:
         """为会话注册一个 SSE 订阅队列，返回该队列。"""
@@ -342,6 +257,10 @@ class ChatStreamService:
                 ev['elapsed_ms'] = t_ms - start
             out.append(ev)
         return out
+
+    @staticmethod
+    def _ping_payload(session_id: str) -> dict:
+        return {'source': 'System', 'type': 'ping', 'content': '', 'session_id': session_id}
 
     @staticmethod
     def _build_run_interrupted_message(
@@ -442,6 +361,16 @@ class ChatStreamService:
                     reason, previous_version, current_version
                 )
                 last_user_content = (last_query or {}).get('content', '')
+                # 共享的可选元数据字段，SSE payload 和入库内容都需要
+                _meta: dict = {}
+                if current_version:
+                    _meta['current_version'] = current_version
+                if previous_version:
+                    _meta['previous_version'] = previous_version
+                if reason_meta.get('note'):
+                    _meta['reason_note'] = reason_meta['note']
+                if reason in ('restart', 'deploy'):
+                    _meta['treat_as_failure'] = True
                 run_interrupted_payload = {
                     'source': 'System',
                     'type': 'run_interrupted',
@@ -449,16 +378,8 @@ class ChatStreamService:
                     'session_id': sid,
                     'reason': reason,
                     'last_user_content': last_user_content,
+                    **_meta,
                 }
-                if current_version:
-                    run_interrupted_payload['current_version'] = current_version
-                if previous_version:
-                    run_interrupted_payload['previous_version'] = previous_version
-                if reason_meta.get('note'):
-                    run_interrupted_payload['reason_note'] = reason_meta['note']
-                # reason=restart 或 deploy 时按失败处理：便于前端直接结束流并展示为失败
-                if reason in ('restart', 'deploy'):
-                    run_interrupted_payload['treat_as_failure'] = True
                 yield self.sse_format(run_interrupted_payload)
                 # 入库，便于历史/导出（如 CSV）中有重启记录；task_id 指向被中断的那一轮
                 interrupted_task_id = payload.get('last_task_id')
@@ -466,15 +387,8 @@ class ChatStreamService:
                     'message': run_interrupted_content,
                     'reason': reason,
                     'last_user_content': last_user_content,
+                    **_meta,
                 }
-                if current_version:
-                    history_content['current_version'] = current_version
-                if previous_version:
-                    history_content['previous_version'] = previous_version
-                if reason_meta.get('note'):
-                    history_content['reason_note'] = reason_meta['note']
-                if reason in ('restart', 'deploy'):
-                    history_content['treat_as_failure'] = True
                 self._events_service.add_history_event(
                     sid,
                     {
@@ -591,14 +505,7 @@ class ChatStreamService:
                                         redis_queue.get(), timeout=30.0
                                     )
                                 except TimeoutError:
-                                    yield self.sse_format(
-                                        {
-                                            'source': 'System',
-                                            'type': 'ping',
-                                            'content': '',
-                                            'session_id': sid,
-                                        }
-                                    )
+                                    yield self.sse_format(self._ping_payload(sid))
                                     continue
                                 if payload.get('type') in {'stream_closed', 'end'}:
                                     yield self.sse_format(payload)
@@ -624,25 +531,11 @@ class ChatStreamService:
                             )
                             yield self.sse_format(payload)
                             break
-                        yield self.sse_format(
-                            {
-                                'source': 'System',
-                                'type': 'ping',
-                                'content': '',
-                                'session_id': sid,
-                            }
-                        )
+                        yield self.sse_format(self._ping_payload(sid))
                 else:
                     # 仅「已入队未接手」：ping 保活，等待 Worker 接手或 queued 超时
                     await asyncio.sleep(5.0)
-                    yield self.sse_format(
-                        {
-                            'source': 'System',
-                            'type': 'ping',
-                            'content': '',
-                            'session_id': sid,
-                        }
-                    )
+                    yield self.sse_format(self._ping_payload(sid))
         finally:
             self._queues.unregister_subscriber(sid, event_queue)
 
@@ -745,8 +638,7 @@ class ChatStreamService:
         self, session_id: str, content: str, *, event_type: str = "ask_question_reply"
     ) -> None:
         """将用户回复广播到该会话所有 SSE 订阅。
-        发送流内的 interaction reply 由 ReplyQueueNotifyOnGet 在 agent 的 get() 返回时注入，保证顺序且多 worker 下也正确。
-        broadcast 的 payload 带上 task_id/invocation_id（同 worker 从内存取，多 worker 从 Redis 取），便于前端去重或排序。
+        payload 带上 task_id/invocation_id（从 Redis 取），便于前端去重或排序。
         """
         sid = session_id.strip()
         payload = {
@@ -815,34 +707,6 @@ class ChatStreamService:
                 self._send_cb, sid, ctx.request_event_queue, payload
             )
 
-        def _inject_interaction_reply(content: str) -> None:
-            """在 event loop 中执行：将 interaction reply 注入本连接 request_event_queue，保证顺序在 tool_result 前（多 worker 下也成立）。"""
-            payload = {
-                'source': 'User',
-                'type': 'ask_question_reply',
-                'content': content,
-                'session_id': sid,
-                'task_id': ctx.task_id,
-                'invocation_id': ctx.invocation_id,
-            }
-            try:
-                ctx.request_event_queue.put_nowait(payload)
-                logger.info(
-                    'interaction_reply injected into request_event_queue session_id=%s task_id=%s',
-                    sid,
-                    ctx.task_id,
-                )
-            except Exception as e:
-                logger.warning(
-                    'interaction_reply inject failed session_id=%s: %s',
-                    sid,
-                    e,
-                )
-
-        def _on_reply(content: str) -> None:
-            loop.call_soon_threadsafe(_inject_interaction_reply, content)
-
-        ReplyQueueNotifyOnGet(ctx.reply_queue, _on_reply)
         redis_queue = asyncio.Queue()
         shutdown_event = threading.Event()
         subscribe_ready = threading.Event()
@@ -959,14 +823,7 @@ class ChatStreamService:
                             redis_queue.get(), timeout=30.0
                         )
                     except TimeoutError:
-                        yield self.sse_format(
-                            {
-                                'source': 'System',
-                                'type': 'ping',
-                                'content': '',
-                                'session_id': sid,
-                            }
-                        )
+                        yield self.sse_format(self._ping_payload(sid))
                         continue
                     elapsed_ms = int(time.time() * 1000) - start_time_ms
                     out = {

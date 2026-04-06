@@ -75,43 +75,39 @@ def derive_skill_sync_spec(
     )
 
 
-def _clear_remote_proxy_shell() -> str:
-    """Bash snippet for root on Bohrium SSH nodes: wget/curl/git/pip + env.
-
-    GNU wget only accepts ``use_proxy = on|off``; ``use_proxy = no`` is invalid and
-    leaves /etc/wgetrc proxy (e.g. ga.dp.tech:8118) in effect.
-
-    Pip reads ``~/.pip/pip.conf`` / ``/etc/pip.conf`` ``[global] proxy=`` independently
-    of shell env; strip those lines so ``pip install`` does not force ga.dp.tech.
-    """
-    return (
-        'rm -f /root/speedUp.sh /speedUp.sh; '
-        'printf %s\\n '
-        "'# matmaster-evo: disable platform proxy for OSS/outbound' "
-        "'use_proxy = off' "
-        "'proxy =' "
-        "'http_proxy =' "
-        "'https_proxy =' "
-        "'ftp_proxy =' "
-        '> /root/.wgetrc; '
-        'printf %s\\n '
-        "'# matmaster-evo: disable curl default proxy' "
-        "'proxy = \"\"' "
-        "'noproxy = \"*\"' "
-        '> /root/.curlrc; '
-        'git config --global --unset-all http.proxy 2>/dev/null; true; '
-        'git config --global --unset-all https.proxy 2>/dev/null; true; '
-        '[ -f /root/.pip/pip.conf ] && sed -i '
-        "'/^[[:space:]]*proxy[[:space:]]*=/d' "
-        '/root/.pip/pip.conf 2>/dev/null; true; '
-        '[ -f /etc/pip.conf ] && sed -i '
-        "'/^[[:space:]]*proxy[[:space:]]*=/d' "
-        '/etc/pip.conf 2>/dev/null; true; '
-        'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= '
-        'NO_PROXY= no_proxy= ftp_proxy= FTP_PROXY=; '
-        'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY '
-        'NO_PROXY no_proxy ftp_proxy FTP_PROXY WGETRC 2>/dev/null; '
-    )
+# Bash snippet for root on Bohrium SSH nodes: wget/curl/git/pip + env.
+# GNU wget only accepts ``use_proxy = on|off``; ``use_proxy = no`` is invalid and
+# leaves /etc/wgetrc proxy (e.g. ga.dp.tech:8118) in effect.
+# Pip reads ``~/.pip/pip.conf`` / ``/etc/pip.conf`` ``[global] proxy=`` independently
+# of shell env; strip those lines so ``pip install`` does not force ga.dp.tech.
+_CLEAR_REMOTE_PROXY_SCRIPT: str = (
+    'rm -f /root/speedUp.sh /speedUp.sh; '
+    'printf %s\\n '
+    "'# matmaster-evo: disable platform proxy for OSS/outbound' "
+    "'use_proxy = off' "
+    "'proxy =' "
+    "'http_proxy =' "
+    "'https_proxy =' "
+    "'ftp_proxy =' "
+    '> /root/.wgetrc; '
+    'printf %s\\n '
+    "'# matmaster-evo: disable curl default proxy' "
+    "'proxy = \"\"' "
+    "'noproxy = \"*\"' "
+    '> /root/.curlrc; '
+    'git config --global --unset-all http.proxy 2>/dev/null; true; '
+    'git config --global --unset-all https.proxy 2>/dev/null; true; '
+    '[ -f /root/.pip/pip.conf ] && sed -i '
+    "'/^[[:space:]]*proxy[[:space:]]*=/d' "
+    '/root/.pip/pip.conf 2>/dev/null; true; '
+    '[ -f /etc/pip.conf ] && sed -i '
+    "'/^[[:space:]]*proxy[[:space:]]*=/d' "
+    '/etc/pip.conf 2>/dev/null; true; '
+    'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= '
+    'NO_PROXY= no_proxy= ftp_proxy= FTP_PROXY=; '
+    'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY '
+    'NO_PROXY no_proxy ftp_proxy FTP_PROXY WGETRC 2>/dev/null; '
+)
 
 
 _SKILL_SYNC_EXCLUDE = frozenset(
@@ -179,21 +175,9 @@ def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
         _restore_playground_session(pg, orig, orig_owns)
 
 
-def _upload_directory(
-    env: Any, local_dir: str, remote_dir: str, exclude: set[str] | None = None
-) -> None:
-    """Upload a directory tree; prefer tarball when SSHEnv supports it."""
-    ex = exclude or set()
-    if hasattr(env, 'upload_directory_tarball'):
-        env.upload_directory_tarball(local_dir, remote_dir, exclude=ex)
-    else:
-        env.upload_directory(local_dir, remote_dir, exclude=ex)
-
-
 def _sync_skills_to_ssh_session(
     ssh_session: Any,
     skill_sync_spec: SkillSyncSpec | None,
-    pg: Any,
 ) -> bool:
     """Upload project skill trees and set remote_project_root on SSHSession.
 
@@ -220,7 +204,7 @@ def _sync_skills_to_ssh_session(
                 remote_dest = f"{spec.remote_project_root.rstrip('/')}/{rel.as_posix()}"
             except ValueError:
                 remote_dest = f"{spec.remote_project_root.rstrip('/')}/{lp.name}"
-            _upload_directory(ssh_session, str(lp), remote_dest, exclude)
+            ssh_session.upload_directory(str(lp), remote_dest, exclude=exclude)
             synced_any = True
         ssh_session.remote_project_root = spec.remote_project_root
         if synced_any:
@@ -256,7 +240,7 @@ def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
             'run_agent: clear_remote_proxy (%s) running (wgetrc/curlrc/pip.conf + env)',
             phase,
         )
-        script = _clear_remote_proxy_shell()
+        script = _CLEAR_REMOTE_PROXY_SCRIPT
         env = getattr(session, '_env', None)
         if env is not None and hasattr(env, 'ssh_bash_noninteractive'):
             # Avoid tmux send-keys on very long lines (remote tmux: unknown command C-m).
@@ -485,9 +469,7 @@ def _load_run_credentials(
         pid = row.get('project_id')
         if pid is not None:
             run_creds['project_id'] = int(pid)
-    user_id_for_ak = sessions_service.get_session_user_id(session_id)
-    if run_creds.get('user_id') is None and user_id_for_ak is not None:
-        run_creds['user_id'] = user_id_for_ak
+    user_id_for_ak = run_creds.get('user_id')
     org_id = (run_creds.get('org_id') or '').strip()
     if user_id_for_ak and org_id:
         run_creds['access_key'] = (
@@ -820,7 +802,7 @@ def _setup_bohrium_for_run(
                 _run_clear_remote_proxy(pg, 'post_ssh')
                 try:
                     skills_sync_ok = _sync_skills_to_ssh_session(
-                        ssh_session, skill_sync_spec, pg
+                        ssh_session, skill_sync_spec
                     )
                     if skills_sync_ok:
                         _emit_node_status(

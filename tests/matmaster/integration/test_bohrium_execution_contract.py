@@ -547,12 +547,12 @@ def test_skill_sync_upload_exclude_set_does_not_exclude_skill_md(
     excludes: list[set[str]] = []
 
     def _capture_upload(
-        _env: Any, _local_dir: str, _remote_dir: str, exclude: set[str] | None = None
+        _local_dir: str, _remote_dir: str, exclude: set[str] | None = None
     ) -> None:
         excludes.append(set(exclude) if exclude is not None else set())
 
-    with patch.object(arb, '_upload_directory', side_effect=_capture_upload):
-        arb._sync_skills_to_ssh_session(ssh, spec, pg=MagicMock())
+    with patch.object(ssh, 'upload_directory', side_effect=_capture_upload):
+        arb._sync_skills_to_ssh_session(ssh, spec)
 
     assert excludes
     assert all('SKILL.md' not in ex for ex in excludes)
