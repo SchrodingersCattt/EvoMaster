@@ -4,6 +4,7 @@ import asyncio
 from pathlib import PurePosixPath
 from unittest.mock import MagicMock
 
+from matmaster.tools.builtin.read_tool import ReadTool
 from matmaster.tools.builtin.write_tool import WriteTool
 from matmaster.types.session import SessionFileStat
 from matmaster.types.tool_runner_state import ToolRunnerState
@@ -111,3 +112,27 @@ class TestWriteExecution:
 
         session.write_file.assert_called_once_with("/workspace/f.txt", "hello", "utf-16")
         assert result.meta["encoding_source"] == "fresh_probe"
+
+    def test_read_then_write_reuses_snapshot_encoding(self):
+        raw = b"\xff\xfeh\x00i\x00\n\x00"
+        session = MagicMock()
+        session.is_file.return_value = True
+        session.download.return_value = raw
+        session.stat_file.return_value = SessionFileStat(size=len(raw), mtime=1.0)
+        session.path_exists.return_value = True
+        session.write_file = MagicMock()
+
+        read_tool = ReadTool(session=session, workdir="/workspace")
+        write_tool = WriteTool(session=session, workdir=PurePosixPath("/workspace"))
+        state = ToolRunnerState()
+        ctx = ToolExecutionContext(runner_state=state)
+
+        asyncio.run(read_tool.execute_with_context({"file_path": "/workspace/f.txt"}, ctx))
+        asyncio.run(
+            write_tool.execute_with_context(
+                {"file_path": "/workspace/f.txt", "content": "ok"},
+                ctx,
+            )
+        )
+
+        session.write_file.assert_called_with("/workspace/f.txt", "ok", "utf-16")

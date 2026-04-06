@@ -148,6 +148,27 @@ class TestBashExecution:
         final_cmd = session.exec_bash.call_args.kwargs["command"]
         assert final_cmd.startswith("bash ")
 
+    def test_bash_heredoc_does_not_inline_original_command(self):
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "stdout": "ok",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "working_dir": "/workspace",
+                    "output": "ok",
+                },
+            ]
+        )
+        tool = BashTool(session=session, workdir="/workspace")
+        asyncio.run(tool.execute({"command": "python3 << 'PYEOF'\nprint(1)\nPYEOF"}))
+        final_cmd = session.exec_bash.call_args.kwargs["command"]
+        assert "python3 << 'PYEOF'" not in final_cmd
+        assert final_cmd.startswith("bash ")
+
 
 class TestBashErrorStatus:
     def test_nonzero_exit_returns_error_status(self):
