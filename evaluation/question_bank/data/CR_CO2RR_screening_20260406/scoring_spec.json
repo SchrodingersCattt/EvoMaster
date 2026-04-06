@@ -1,0 +1,17 @@
+{
+  "columns": {
+    "E_ads_CO_eV": "CO 吸附能 (eV)，过强不利于产物脱附；以约 -0.6 eV 为参考中心。",
+    "U_L_CO_V": "CO2 电还原至 CO 路径的极限电势 U_L (V)，越大越接近热力学平衡（越有利）。",
+    "U_L_HER_V": "析氢反应极限电势 U_L (V)。",
+    "catalyst_id": "catalyst_id"
+  },
+  "formula": {
+    "ads_penalty_eV": "abs(E_ads_CO_eV + 0.6)",
+    "score_S": "U_L_CO_V + 0.5 * selectivity_V - 0.3 * ads_penalty_eV",
+    "selectivity_V": "U_L_CO_V - U_L_HER_V"
+  },
+  "input_csv": "screening_candidates.csv",
+  "procedure_zh": "读取 screening_candidates.csv，按上式逐行计算 score_S，按 S 降序排序；输出完整排名表，并明确写出推荐的第一名 catalyst_id 及其 S 值（保留至少三位小数）。",
+  "title_zh": "CO(2)RR 催化剂三指标筛选评分",
+  "version": 1
+}
