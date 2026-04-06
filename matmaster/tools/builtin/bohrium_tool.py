@@ -967,7 +967,9 @@ class BohriumTool(BuiltinTool):
         ctx: _ResolvedBohriumContext,
     ) -> tuple[list[str], str]:
         """Download results in sandbox mode (iterate objects, find zip, extract)."""
-        result_url = str(detail_data.get('resultUrl') or detail_data.get('result') or '')
+        result_url = str(
+            detail_data.get('resultUrl') or detail_data.get('result') or ''
+        )
         objects: list[dict[str, Any]] = []
         root_host = ''
         root_token = ''
