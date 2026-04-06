@@ -24,6 +24,7 @@ from evaluation.validators.structure_general import (
 )
 from evaluation.validators.structure_molcrys import (
     check_disorder_dan2_integer_formula,
+    check_molcrys_local_env,
     check_sc005_other_formulas_in_answer,
     verify_molecular_slab_layer_scaling,
 )
@@ -316,6 +317,26 @@ def check_sc005_disorder_formulas(*, answer: str) -> tuple[bool, str]:
     if not ok:
         return ok, reason
     return check_disorder_dan2_integer_formula(answer)
+
+
+def check_molcrys_local_env_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Bridge evaluator dispatch → MolCrysKit local-environment validator."""
+    if evidence is None or not evidence.workspace_dir:
+        return False, 'missing workspace_dir on evidence'
+    cfg: dict[str, Any] = ref.value if isinstance(ref.value, dict) else {}
+    filename = cfg.get('filename', '*.cif')
+    expected_formula = cfg.get('expected_formula', '')
+    z_value = int(cfg.get('z_value', 4))
+    if not expected_formula:
+        return False, 'reference answer missing expected_formula'
+    return check_molcrys_local_env(
+        evidence.workspace_dir,
+        filename=filename,
+        expected_formula=expected_formula,
+        z_value=z_value,
+    )
 
 
 # ---------------------------------------------------------------------------
