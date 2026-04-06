@@ -19,15 +19,13 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
+from _calculator import build_calculator, build_fparam, set_fparam
 from ase import Atoms, io
 from phonopy import Phonopy
 from phonopy.harmonic.dynmat_to_fc import get_commensurate_points
 from phonopy.structure.atoms import PhonopyAtoms
-
-from _calculator import build_calculator, build_fparam, set_fparam
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -40,8 +38,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--structure", required=True, help="Input structure (CIF)")
     p.add_argument("--model", default="DPA3.1-3M", help="Model name/path/URL")
     p.add_argument("--head", default=None, help="Model head (DP family)")
-    p.add_argument("--temperatures", type=float, nargs="+", default=[], help="Temperatures (K)")
-    p.add_argument("--displacement", type=float, default=0.005, help="Displacement distance (Å)")
+    p.add_argument(
+        "--temperatures", type=float, nargs="+", default=[], help="Temperatures (K)"
+    )
+    p.add_argument(
+        "--displacement", type=float, default=0.005, help="Displacement distance (Å)"
+    )
     p.add_argument("--calc-tdos", action="store_true", help="Calculate total DOS")
     p.add_argument("--calc-pdos", action="store_true", help="Calculate projected DOS")
     p.add_argument("--mesh", type=int, default=40, help="Mesh density for DOS")
@@ -51,13 +53,15 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def _compute_forces(phonon: Phonopy, calc, fparam: Optional[np.ndarray]):
+def _compute_forces(phonon: Phonopy, calc, fparam: np.ndarray | None):
     """Compute displaced-supercell forces and set them on the Phonopy object."""
     force_sets = []
     for sc in phonon.supercells_with_displacements:
         sc_atoms = Atoms(
-            cell=sc.cell, symbols=sc.symbols,
-            scaled_positions=sc.scaled_positions, pbc=True,
+            cell=sc.cell,
+            symbols=sc.symbols,
+            scaled_positions=sc.scaled_positions,
+            pbc=True,
         )
         set_fparam(sc_atoms, fparam)
         sc_atoms.calc = calc
@@ -105,7 +109,9 @@ def main() -> None:
     result["max_frequency_K"] = float(np.max(freqs) * THz_TO_K)
 
     # Band structure
-    phonon.auto_band_structure(npoints=101, write_yaml=True, filename="phonon_band.yaml")
+    phonon.auto_band_structure(
+        npoints=101, write_yaml=True, filename="phonon_band.yaml"
+    )
     plot = phonon.plot_band_structure()
     plot.savefig("phonon_band.png", dpi=300)
     result["band_plot"] = "phonon_band.png"

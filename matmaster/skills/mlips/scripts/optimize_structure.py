@@ -19,11 +19,10 @@ import json
 import logging
 from pathlib import Path
 
+from _calculator import build_calculator, build_fparam, set_fparam
 from ase.filters import FrechetCellFilter
 from ase.io import read, write
 from ase.optimize import BFGS
-
-from _calculator import build_calculator, build_fparam, set_fparam
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -31,14 +30,35 @@ log = logging.getLogger(__name__)
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="MLIP structure optimization")
-    p.add_argument("--structure", required=True, help="Input structure file (CIF, POSCAR, XYZ …)")
-    p.add_argument("--model", default="DPA3.1-3M", help="Model name, path, or URL (default: DPA3.1-3M)")
-    p.add_argument("--head", default=None, help="Model head for DP family (e.g. Omat24, OMol25)")
-    p.add_argument("--relax-cell", action="store_true", help="Also relax cell shape/volume")
-    p.add_argument("--fmax", type=float, default=0.01, help="Force convergence (eV/Å, default: 0.01)")
-    p.add_argument("--steps", type=int, default=100, help="Max optimization steps (default: 100)")
-    p.add_argument("--charge", type=int, default=None, help="System charge (DPA3.2-5M only)")
-    p.add_argument("--spin", type=int, default=None, help="Spin multiplicity (DPA3.2-5M only)")
+    p.add_argument(
+        "--structure", required=True, help="Input structure file (CIF, POSCAR, XYZ …)"
+    )
+    p.add_argument(
+        "--model",
+        default="DPA3.1-3M",
+        help="Model name, path, or URL (default: DPA3.1-3M)",
+    )
+    p.add_argument(
+        "--head", default=None, help="Model head for DP family (e.g. Omat24, OMol25)"
+    )
+    p.add_argument(
+        "--relax-cell", action="store_true", help="Also relax cell shape/volume"
+    )
+    p.add_argument(
+        "--fmax",
+        type=float,
+        default=0.01,
+        help="Force convergence (eV/Å, default: 0.01)",
+    )
+    p.add_argument(
+        "--steps", type=int, default=100, help="Max optimization steps (default: 100)"
+    )
+    p.add_argument(
+        "--charge", type=int, default=None, help="System charge (DPA3.2-5M only)"
+    )
+    p.add_argument(
+        "--spin", type=int, default=None, help="Spin multiplicity (DPA3.2-5M only)"
+    )
     return p.parse_args()
 
 
@@ -80,7 +100,10 @@ def main() -> None:
     energy = float(atoms.get_potential_energy())
     log.info(
         "Done: %d steps, energy=%.4f eV, converged=%s → %s",
-        optimizer.nsteps, energy, converged, out_file,
+        optimizer.nsteps,
+        energy,
+        converged,
+        out_file,
     )
 
     # result.json

@@ -20,13 +20,12 @@ import logging
 from pathlib import Path
 
 import numpy as np
+from _calculator import build_calculator, build_fparam, set_fparam
 from ase.io import read
 from ase.optimize import FIRE
 from pymatgen.analysis.elasticity import DeformedStructureSet, ElasticTensor, Strain
 from pymatgen.analysis.elasticity.elastic import get_strain_state_dict
 from pymatgen.io.ase import AseAtomsAdaptor
-
-from _calculator import build_calculator, build_fparam, set_fparam
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -39,11 +38,25 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--structure", required=True, help="Relaxed structure (CIF)")
     p.add_argument("--model", default="DPA3.1-3M")
     p.add_argument("--head", default=None)
-    p.add_argument("--norm-strain", type=float, nargs=3, default=[-0.01, 0.01, 4],
-                   metavar=("MIN", "MAX", "N"), help="Normal strain range (default: -0.01 0.01 4)")
-    p.add_argument("--shear-strain", type=float, nargs=3, default=[-0.06, 0.06, 4],
-                   metavar=("MIN", "MAX", "N"), help="Shear strain range (default: -0.06 0.06 4)")
-    p.add_argument("--fmax", type=float, default=0.01, help="Ionic relaxation fmax (eV/Å)")
+    p.add_argument(
+        "--norm-strain",
+        type=float,
+        nargs=3,
+        default=[-0.01, 0.01, 4],
+        metavar=("MIN", "MAX", "N"),
+        help="Normal strain range (default: -0.01 0.01 4)",
+    )
+    p.add_argument(
+        "--shear-strain",
+        type=float,
+        nargs=3,
+        default=[-0.06, 0.06, 4],
+        metavar=("MIN", "MAX", "N"),
+        help="Shear strain range (default: -0.06 0.06 4)",
+    )
+    p.add_argument(
+        "--fmax", type=float, default=0.01, help="Ionic relaxation fmax (eV/Å)"
+    )
     p.add_argument("--charge", type=int, default=None)
     p.add_argument("--spin", type=int, default=None)
     return p.parse_args()
@@ -53,7 +66,8 @@ def _fit_elastic_tensor(strains, stresses, eq_stress=None) -> ElasticTensor:
     """Least-squares fit of 6×6 elastic tensor from strain-stress data."""
     strain_states = [tuple(ss) for ss in np.eye(6)]
     ss_dict = get_strain_state_dict(
-        strains, stresses,
+        strains,
+        stresses,
         eq_stress=eq_stress,
         add_eq=eq_stress is not None,
     )
@@ -61,7 +75,9 @@ def _fit_elastic_tensor(strains, stresses, eq_stress=None) -> ElasticTensor:
     for i in range(6):
         s_data = ss_dict[strain_states[i]]
         for j in range(6):
-            c_ij[i, j] = np.polyfit(s_data["strains"][:, i], s_data["stresses"][:, j], 1)[0]
+            c_ij[i, j] = np.polyfit(
+                s_data["strains"][:, i], s_data["stresses"][:, j], 1
+            )[0]
     return ElasticTensor.from_voigt(c_ij).zeroed(1e-7)
 
 
@@ -73,8 +89,12 @@ def main() -> None:
     atoms = read(args.structure)
     structure = AseAtomsAdaptor.get_structure(atoms)
 
-    norm_strains = np.linspace(args.norm_strain[0], args.norm_strain[1], int(args.norm_strain[2]))
-    shear_strains = np.linspace(args.shear_strain[0], args.shear_strain[1], int(args.shear_strain[2]))
+    norm_strains = np.linspace(
+        args.norm_strain[0], args.norm_strain[1], int(args.norm_strain[2])
+    )
+    shear_strains = np.linspace(
+        args.shear_strain[0], args.shear_strain[1], int(args.shear_strain[2])
+    )
     deformed = DeformedStructureSet(structure, norm_strains, shear_strains)
 
     stresses = []

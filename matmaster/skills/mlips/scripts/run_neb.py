@@ -20,11 +20,10 @@ import json
 import logging
 from pathlib import Path
 
+from _calculator import build_calculator, build_fparam, set_fparam
 from ase.io import read
 from ase.mep import NEB, NEBTools
 from ase.optimize import BFGS
-
-from _calculator import build_calculator, build_fparam, set_fparam
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -36,7 +35,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--final", required=True, help="Final (relaxed) structure")
     p.add_argument("--model", default="DPA3.1-3M")
     p.add_argument("--head", default=None)
-    p.add_argument("--images", type=int, default=5, help="Intermediate images (default: 5)")
+    p.add_argument(
+        "--images", type=int, default=5, help="Intermediate images (default: 5)"
+    )
     p.add_argument("--fmax", type=float, default=0.05, help="Force tolerance (eV/Å)")
     p.add_argument("--steps", type=int, default=500, help="Max NEB steps")
     p.add_argument("--charge", type=int, default=None)

@@ -18,7 +18,6 @@ import logging
 import os
 import urllib.request
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from ase.calculators.calculator import Calculator
@@ -141,9 +140,7 @@ def _init_mace(model_path: Path | str | None, **_kw) -> Calculator:
     try:
         from mace.calculators import mace_mp
     except ImportError as exc:
-        raise ImportError(
-            "MACE is not installed. Run: pip install mace-torch"
-        ) from exc
+        raise ImportError("MACE is not installed. Run: pip install mace-torch") from exc
     kw: dict = {"device": "cuda", "default_dtype": "float64"}
     if model_path is not None:
         kw["model"] = str(model_path)
@@ -154,9 +151,7 @@ def _init_sevennet(model_id: str | None, **_kw) -> Calculator:
     try:
         from sevenn.sevennet_calculator import SevenNetCalculator
     except ImportError as exc:
-        raise ImportError(
-            "SevenNet is not installed. Run: pip install sevenn"
-        ) from exc
+        raise ImportError("SevenNet is not installed. Run: pip install sevenn") from exc
     name = model_id or "SevenNet-0"
     kw: dict = {"model": name, "device": "cuda"}
     if name == "7net-mf-ompa":
@@ -202,13 +197,17 @@ def build_calculator(
     ase.calculators.calculator.Calculator
     """
     family, resolved = resolve_model(model_name_or_path)
-    logger.info("Building %s calculator: family=%s, resolved=%s", model_name_or_path, family, resolved)
+    logger.info(
+        "Building %s calculator: family=%s, resolved=%s",
+        model_name_or_path,
+        family,
+        resolved,
+    )
 
     init_fn = _FAMILY_INIT.get(family)
     if init_fn is None:
         raise ValueError(
-            f"Unknown model family {family!r}. "
-            f"Supported: {sorted(_FAMILY_INIT)}"
+            f"Unknown model family {family!r}. " f"Supported: {sorted(_FAMILY_INIT)}"
         )
 
     if family == "DP":
@@ -226,9 +225,9 @@ def build_calculator(
 
 
 def build_fparam(
-    charge: Optional[int] = None,
-    spin_multiplicity: Optional[int] = None,
-) -> Optional[np.ndarray]:
+    charge: int | None = None,
+    spin_multiplicity: int | None = None,
+) -> np.ndarray | None:
     """Build ``fparam`` array for DeePMD-kit models that accept frame params.
 
     DPA3.2-5M uses ``numb_fparam=2``, order ``[charge, spin_multiplicity]``.
@@ -250,10 +249,12 @@ def build_fparam(
             charge,
         )
         spin_multiplicity = 1
-    return np.array([float(charge), float(spin_multiplicity)], dtype=np.float64).reshape(1, 2)
+    return np.array(
+        [float(charge), float(spin_multiplicity)], dtype=np.float64
+    ).reshape(1, 2)
 
 
-def set_fparam(atoms, fparam: Optional[np.ndarray]) -> None:
+def set_fparam(atoms, fparam: np.ndarray | None) -> None:
     """Attach *fparam* to ``atoms.info`` so DP calculator reads it."""
     if fparam is not None:
         atoms.info["fparam"] = fparam

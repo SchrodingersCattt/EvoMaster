@@ -38,6 +38,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+from _calculator import build_calculator, build_fparam, set_fparam
 from ase import units
 from ase.io import read, write
 from ase.md.langevin import Langevin
@@ -50,8 +51,6 @@ from ase.md.velocitydistribution import (
     ZeroRotation,
 )
 from ase.md.verlet import VelocityVerlet
-
-from _calculator import build_calculator, build_fparam, set_fparam
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -72,6 +71,7 @@ def parse_args() -> argparse.Namespace:
 
 # ---------------------------------------------------------------------------
 
+
 def _build_dynamics(atoms, stage: dict, seed: int):
     """Return an ASE dynamics object for the given stage config."""
     mode = stage["mode"]
@@ -89,22 +89,30 @@ def _build_dynamics(atoms, stage: dict, seed: int):
     if mode == "NVT-Berendsen":
         return NVTBerendsen(atoms, timestep=dt, temperature_K=T, taut=tau_t)
     if mode in ("NVT-Langevin", "Langevin"):
-        return Langevin(atoms, timestep=dt, temperature_K=T,
-                        friction=1.0 / tau_t, rng=rng)
+        return Langevin(
+            atoms, timestep=dt, temperature_K=T, friction=1.0 / tau_t, rng=rng
+        )
     if mode in ("NPT-aniso", "NPT-tri"):
         if P is None:
             raise ValueError(f"Pressure required for {mode}")
         mask = np.eye(3, dtype=bool) if mode == "NPT-aniso" else None
-        return NPT(atoms, timestep=dt, temperature_K=T,
-                    externalstress=P * units.GPa,
-                    ttime=tau_t, pfactor=tau_p, mask=mask)
+        return NPT(
+            atoms,
+            timestep=dt,
+            temperature_K=T,
+            externalstress=P * units.GPa,
+            ttime=tau_t,
+            pfactor=tau_p,
+            mask=mask,
+        )
     if mode == "NVE":
         return VelocityVerlet(atoms, timestep=dt)
     raise ValueError(f"Unknown MD mode: {mode}")
 
 
-def _run_stage(atoms, stage: dict, stage_idx: int, save_interval: int,
-               seed: int, log_fh):
+def _run_stage(
+    atoms, stage: dict, stage_idx: int, save_interval: int, seed: int, log_fh
+):
     """Run a single MD stage; return atoms after the run."""
     mode = stage["mode"]
     T = stage.get("temperature_K")
@@ -114,8 +122,9 @@ def _run_stage(atoms, stage: dict, stage_idx: int, save_interval: int,
 
     # Initialize velocities for first stage
     if stage_idx == 0 and T is not None:
-        MaxwellBoltzmannDistribution(atoms, temperature_K=T,
-                                     rng=np.random.RandomState(seed))
+        MaxwellBoltzmannDistribution(
+            atoms, temperature_K=T, rng=np.random.RandomState(seed)
+        )
         Stationary(atoms)
         ZeroRotation(atoms)
 
