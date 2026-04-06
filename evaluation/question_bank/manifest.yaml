@@ -124,4 +124,10 @@ banks:
     capability: "input_generation_abacus"
     questions: 2
 
-# Total: 65 questions across 18 bank files
+  # --- DPA / MLIP workflow evaluation ---
+
+  - path: "workflow_orchestration/wo_mlip_dpa.yaml"
+    capability: "workflow_orchestration"
+    questions: 5
+
+# Total: 70 questions across 19 bank files
