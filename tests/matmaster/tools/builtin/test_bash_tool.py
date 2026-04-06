@@ -71,7 +71,10 @@ class TestBashToolMetadata:
             )
         )
 
-        assert "Avoid using this tool to run" in defs[0]["function"]["description"]
+        assert (
+            "Use dedicated tools instead of shell equivalents"
+            in defs[0]["function"]["description"]
+        )
 
     def test_schema_disallows_additional_properties(self):
         assert BashTool.json_schema["additionalProperties"] is False

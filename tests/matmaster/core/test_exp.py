@@ -17,6 +17,7 @@ from matmaster.types.runtime import (
     AgentRuntimeSpec,
 )
 from matmaster.types.session import Session
+from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_runner_state import ToolRunnerState
 from tests.matmaster.core.conftest import MockLLMProvider
 
@@ -219,8 +220,19 @@ class TestExpBuildRuntime:
 
         assert "Base persona text." in runtime.spec.system_prompt
         assert "Avoid using this tool to run" not in runtime.spec.system_prompt
-        assert "Use dedicated tools instead of shell equivalents" in (
+        assert "Use dedicated tools instead of shell equivalents" not in (
             runtime.spec.system_prompt
+        )
+        desc_ctx = ToolDescriptionContext(
+            session_kind=runtime.spec.runtime_topology.session_kind,
+            workspace_root=runtime.spec.runtime_topology.workspace_root,
+            topology=runtime.spec.runtime_topology,
+        )
+        defs = runtime.spec.tool_catalog.build_definitions(desc_ctx)
+        assert any(
+            "Use dedicated tools instead of shell equivalents"
+            in d["function"]["description"]
+            for d in defs
         )
 
     async def test_agent_tool_uses_model_visible_exp_discovery(
