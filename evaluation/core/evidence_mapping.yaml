@@ -52,22 +52,42 @@ mappings:
     detail: "MCP space-group structure builder operation"
 
   # -------------------------------------------------------------------------
-  # DPA potential optimizer / MD (MCP mat_dpa)
+  # MLIPs calculations (operator skill via Bohrium submit_job.py)
   # -------------------------------------------------------------------------
-  - pattern: "mat_dpa_submit_optimize_structure"
+  - pattern: "execute_bash"
+    when_args_contains:
+      command: "optimize_structure.py"
     event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "Submitted structure optimisation via DPA potential"
+    source_type: "bash_script"
+    detail: "Submitted MLIPs structure optimisation via Bohrium job"
 
-  - pattern: "mat_dpa_submit_md"
+  - pattern: "execute_bash"
+    when_args_contains:
+      command: "run_molecular_dynamics.py"
     event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "Submitted molecular dynamics via DPA potential"
+    source_type: "bash_script"
+    detail: "Submitted MLIPs molecular dynamics via Bohrium job"
 
-  - pattern: "mat_dpa_*"
+  - pattern: "execute_bash"
+    when_args_contains:
+      command: "calculate_phonon.py"
     event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "MCP DPA potential calculation"
+    source_type: "bash_script"
+    detail: "Submitted MLIPs phonon calculation via Bohrium job"
+
+  - pattern: "execute_bash"
+    when_args_contains:
+      command: "calculate_elastic.py"
+    event_type: "calculation_execution"
+    source_type: "bash_script"
+    detail: "Submitted MLIPs elastic constants calculation via Bohrium job"
+
+  - pattern: "execute_bash"
+    when_args_contains:
+      command: "run_neb.py"
+    event_type: "calculation_execution"
+    source_type: "bash_script"
+    detail: "Submitted MLIPs NEB transition-state calculation via Bohrium job"
 
   # -------------------------------------------------------------------------
   # ABACUS DFT calculations (via bohrium-job skill + input-manual-helper)
