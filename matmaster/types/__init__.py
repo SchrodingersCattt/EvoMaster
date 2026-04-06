@@ -3,6 +3,9 @@
 from .context import PlaygroundContext
 from .events import (
     AgentEvent,
+    AskQuestionEvent,
+    AskQuestionReplyEvent,
+    AskQuestionTimeoutEvent,
     AssistantStateEvent,
     BohriumNodeEvent,
     BusEvent,
@@ -50,6 +53,9 @@ __all__ = [
     "PlaygroundContext",
     # events
     "AgentEvent",
+    "AskQuestionEvent",
+    "AskQuestionReplyEvent",
+    "AskQuestionTimeoutEvent",
     "AssistantStateEvent",
     "BohriumNodeEvent",
     "BusEvent",

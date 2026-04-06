@@ -189,6 +189,29 @@ def _public_content_for_event(
             'default_reply': payload.get('default_reply'),
         }
 
+    if event_type == 'ask_question':
+        return {
+            'request_id': payload.get('request_id'),
+            'questions': payload.get('questions') or [],
+            'metadata': payload.get('metadata') or {},
+            'origin': payload.get('origin'),
+            'preview_format': payload.get('preview_format', 'markdown'),
+        }
+
+    if event_type == 'ask_question_reply':
+        return {
+            'request_id': payload.get('request_id'),
+            'answers': payload.get('answers') or {},
+            'annotations': payload.get('annotations') or {},
+        }
+
+    if event_type == 'ask_question_timeout':
+        return {
+            'request_id': payload.get('request_id'),
+            'questions': payload.get('questions') or [],
+            'reason': payload.get('reason', 'timeout'),
+        }
+
     if event_type == 'exp_run':
         return {'exp_name': payload.get('exp_name')}
 
