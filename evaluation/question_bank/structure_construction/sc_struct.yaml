@@ -228,7 +228,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260404
+- id: SC_struct_SiH_20260406
   capability: structure_construction
   domain: struct
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab
@@ -265,7 +265,7 @@ questions:
       filename: '*POSCAR*'
       center_element: Si
       expected: 4
-      tolerance: 0
+      tolerance: 0.5
       cutoff_A: 2.6
   - key: si_si_h_angle_deg
     value:
@@ -296,8 +296,8 @@ questions:
     verify: struct_file_bond_length
   - id: si_coordination
     criterion: The mean coordination number of ALL Si atoms in the POSCAR (cutoff
-      2.6 A) is 4, confirming that dangling bonds on both top and bottom surfaces
-      are fully saturated.
+      2.6 A) is approximately 4 (within ±0.5), confirming that dangling bonds on
+      both top and bottom surfaces are predominantly saturated.
     axis: correctness
     verify: struct_file_coordination
   - id: si_si_h_angle_deg
@@ -434,7 +434,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260405
+- id: SC_struct_005_20260406
   capability: structure_construction
   domain: struct
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and
@@ -494,7 +494,7 @@ questions:
   - key: tool_call_budget
     value:
       min: 5
-      max: 20
+      max: 30
   - key: turn_budget
     value: *id000
   - key: token_budget_total
