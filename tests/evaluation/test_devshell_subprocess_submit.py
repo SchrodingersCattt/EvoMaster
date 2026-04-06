@@ -39,6 +39,8 @@ def test_run_score_devshell_tasks_submit_includes_flags(tmp_path: Path) -> None:
         assert "--submit" in argv
         assert "--score-jobs" in argv
         assert argv[argv.index("--score-jobs") + 1] == "4"
+        assert "--parallel-checklist-workers" in argv
+        assert argv[argv.index("--parallel-checklist-workers") + 1] == "8"
         assert str(run_dir) in argv
         assert "99.0" in argv or "99" in argv
         assert str(eval_cfg) in argv

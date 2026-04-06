@@ -7,6 +7,18 @@ from pathlib import Path
 from typing import Any
 
 
+def parallel_scoring_checklist_workers_from_jobs(jobs: int) -> int:
+    """``BinaryEvaluator`` parallelism for ``scoring_checklist`` items (``jobs`` × 2)."""
+
+    return max(1, int(jobs) * 2)
+
+
+def checklist_revision_sdk_max_turns_from_jobs(jobs: int) -> int:
+    """Claude SDK ``max_turns`` for the question_bank checklist-revision agent."""
+
+    return max(64, int(jobs) * 8)
+
+
 @dataclass
 class DevshellAgentCliDefaults:
     """CLI defaults merged into ``run_devshell_eval`` when the model omits fields."""
