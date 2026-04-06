@@ -37,13 +37,10 @@ tools:
     server: "mat_sg"
     category: "structure_construction"
 
-  # --- DPA potential optimizer / MD (MCP mat_dpa) ---
-  mat_dpa_submit_optimize_structure:
-    server: "mat_dpa"
-    category: "calculation_execution"
-  mat_dpa_submit_md:
-    server: "mat_dpa"
-    category: "calculation_execution"
+  # --- MLIPs calculations (operator skill via Bohrium submit_job.py) ---
+  # MLIPs tasks are submitted via execute_bash (submit_job.py + MLIPs scripts).
+  # No dedicated MCP tool entries needed; evidence mapping uses
+  # when_args_contains on execute_bash for script-level classification.
 
   # --- Bash execution (bohrium-job skill, scripts) ---
   execute_bash:

@@ -10,11 +10,6 @@
       "transport": "http",
       "url": "http://pfmx1355864.bohrium.tech:50005/mcp"
     },
-    "mat_dpa": {
-      "headers": {},
-      "transport": "http",
-      "url": "https://dpa-calculator-uat-2-uuid1767842102.appspace.uat.bohrium.com/mcp?token=7b67a2e7778d4eb3b2c255d2f975d585"
-    },
     "mat_electron_microscope": {
       "headers": {},
       "transport": "sse",

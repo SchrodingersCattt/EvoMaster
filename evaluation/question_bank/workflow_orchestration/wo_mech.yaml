@@ -25,9 +25,9 @@ questions:
     - mat_struct_db_fetch_structures_from_db
     - mat_sg_build_bulk_structure_by_template
     - mat_sg_build_bulk_structure_by_wyckoff
-  - key: used_dpa_optimizer
+  - key: used_mlips_optimizer
     value:
-    - mat_dpa_submit_optimize_structure
+    - execute_bash
   - key: a0_A
     value: 4.04
     tolerance: 0.08
@@ -71,8 +71,8 @@ questions:
     criterion: Used structure database or builder tool to obtain Al FCC structure (not LLM-fabricated coordinates).
     axis: grounding
     verify: tool_called
-  - id: used_dpa_optimizer
-    criterion: Used DPA optimizer for volume-scan single-point calculations.
+  - id: used_mlips_optimizer
+    criterion: Used MLIPs optimizer (via Bohrium job) for volume-scan single-point calculations.
     axis: grounding
     verify: tool_called
   - id: grounding_source
