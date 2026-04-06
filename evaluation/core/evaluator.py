@@ -24,6 +24,7 @@ from .evaluator_helpers import (
     build_llm_context,
     build_safety_eval_record,
     check_duration_budget,
+    check_molcrys_local_env_from_evidence,
     check_molcrys_slab_integrity,
     check_sc005_disorder_formulas,
     check_struct_file_atom_count,
@@ -467,6 +468,10 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return check_sc005_disorder_formulas(answer=answer)
+        if item.verify == 'molcrys_local_env':
+            if ref is None:
+                return False, 'missing reference answer'
+            return check_molcrys_local_env_from_evidence(evidence=evidence, ref=ref)
 
         # --- struct_file_* programmatic structure checks ---
         _STRUCT_FILE_DISPATCH = {
