@@ -66,9 +66,7 @@ class EditTool(BuiltinTool):
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_FS
 
     def prompt(self, ctx=None) -> str:
-        return (
-            "Read the file first. old_string must be unique; if not, add context or use replace_all."
-        )
+        return "Read the file first. old_string must be unique; if not, add context or use replace_all."
 
     async def validate_input(
         self,
