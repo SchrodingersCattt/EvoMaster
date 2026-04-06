@@ -8,65 +8,31 @@ EvoMaster is a framework for building scientific agents. It provides MCP tooling
 
 ## MatMaster-Evo
 
-MatMaster is a scientific agent for materials research, with a Next.js frontend and FastAPI backend. Development runs backend and frontend together via a single script.
+MatMaster is a scientific agent for materials research. The **platform API** in this repository is FastAPI (`app.py` + `src/`); chat traffic is designed to run with **Redis + Worker** (see **Service architecture** in `AGENTS.md`).
 
-### Two backends (entrypoints and ports)
+### Platform API (entrypoint)
 
-This repo exposes **two HTTP stacks** for MatMaster-related work. Do not mix up ports or treat the local dev server as the production API:
+| | **Platform API (`src/` + root `app.py`)** |
+|------|-------------------------------------------|
+| **Role** | HTTP API: DB-backed sessions, SSE streaming, enqueue to Worker via Redis. |
+| **Typical entry** | `uv run python app.py` (default **8000**). |
+| **Notes** | Production-style layout is multi-process (API pods + worker pods). |
 
-| | **Platform API (`src/` + root `app.py`)** | **Local MatMaster Web (`playground/mat_master/service/server`)** |
-|------|-------------------------------------------|-------------------------------------------------------------------|
-| **Role** | Production-style integration: DB sessions, SSE, Redis + Worker | Local debugging: Next dashboard under `playground/mat_master`, WebSocket chat, in-memory sessions, fixed workspace |
-| **Typical entry** | `uv run python app.py` (default **8000**) | `python -m playground.mat_master.service.server` or `start_dev.sh` (default **BACKEND_PORT=50001**) |
-| **Protocol** | REST + SSE (e.g. `/api/v1/.../chat/sessions/...`) | WebSocket `/ws/chat`, etc. |
-| **Notes** | Multi-process layout: see **Service architecture** in `AGENTS.md` | See [playground/mat_master/README_WEB.md](playground/mat_master/README_WEB.md) |
+The historical **`playground/mat_master`** tree (separate Next.js + FastAPI local stack) has been **removed from this repo**. Session-scoped agent behavior still uses `matmaster.core.playground` (`matmaster/core/playground.py`) inside the platform API and worker. For historical notes on alternate `run_agent_sync` layouts, see [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md) when that file is present in your checkout.
 
-The platform API and the local Web stack use **different `run_agent_sync` implementations** (persistence, OSS, Bohrium, event push rules, etc.). See [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md).
+### Agent DevShell (CLI)
 
-The **Start development** section below refers to the **local Web** stack (default port 50001).
-
-### Start development (frontend + backend)
-
-From the project root:
+For a lightweight agent REPL or one-shot run against a workspace (no platform HTTP server), use the **`mm-devshell`** console script from `pyproject.toml`:
 
 ```bash
-cd playground/mat_master/
-bash start_dev.sh
+uv sync
+uv run mm-devshell repl --workdir ./workspace --log-dir ./logs
+# or: uv run mm-devshell run --workdir ./workspace --log-dir ./logs -p "Your prompt"
 ```
 
-Then open the dashboard at `http://<host>:<FRONTEND_PORT>` (default `http://127.0.0.1:50004`). Backend API runs on `BACKEND_PORT` (default `50001`; on Windows/Git Bash the script uses `8000` unless you set `BACKEND_PORT`).
+Load `.env` from the **repository root** as usual. See `mm-devshell --help` for options (`--exp`, `--config`, etc.).
 
-### Start with a custom work directory (CLI)
-
-Install the project in editable mode, then run the full stack (backend + frontend) with a **custom work directory** that is used as a **shared workspace**: the frontend file tree and agent outputs use `work_dir` directly (no per-session `workspaces/` subfolders). Logs and run data also go under `work_dir`. This lets you point MatMaster at any local path (e.g. a manuscript or project folder).
-
-```bash
-pip install -e .
-matmaster run ./myproject
-```
-
-You can run `matmaster` from any directory; authentication still comes from the **repository root `.env`** (no need to copy `.env` into the work dir).
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `work_dir` | (required) | Shared workspace directory: file tree, agent outputs, and logs all go here. |
-| `--backend-port` | `8000` (Windows) / `50001` (others) | Backend port. |
-| `--frontend-port` | `50004` | Frontend port. |
-| `--public-host` | Auto-detect | Host for API/WS URLs (e.g. for remote access). |
-
-**With uv:** From the repo, run `uv run matmaster run /path/to/work_dir`. Or activate the project venv (`source .venv/bin/activate` or `.venv\Scripts\activate` on Windows), then run `matmaster run work_dir` from any directory.
-
-### Environment variables used by `start_dev.sh`
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BACKEND_PORT` | `50001` (Windows: `8000`) | FastAPI server port. |
-| `FRONTEND_PORT` | `50004` | Next.js dev server port. |
-| `PUBLIC_HOST` | Host IP or `127.0.0.1` | Host used for API/WS URLs shown to the frontend. Set this when accessing from another machine (e.g. `PUBLIC_HOST=your-host.example.com`). |
-| `NEXT_PUBLIC_API_URL` | `http://<PUBLIC_HOST>:<BACKEND_PORT>` | Override the API base URL the frontend calls. |
-| `NEXT_PUBLIC_WS_URL` | `ws://<PUBLIC_HOST>:<BACKEND_PORT>/ws/chat` | Set automatically from `NEXT_PUBLIC_API_URL` if not provided. |
-
-**Local run without Redis:** Do not set `REDIS_URL` in `.env`. The backend will start in single-process mode: stop and stream work in-process only. This is enough for local dev and tracemalloc baseline/diff on one process.
+**Local API without Redis:** If `REDIS_URL` is unset, chat enqueue paths may be unavailable (503); adjust `.env` per `AGENTS.md` for full stack testing.
 
 ---
 
@@ -94,33 +60,17 @@ Optional for full calculation/storage: `BOHRIUM_PROJECT_ID`, `BOHRIUM_EMAIL`, `B
 ```
 EvoMaster/
 ├── evomaster/           # Core (agent, session, tools, skills, LLM)
-├── playground/
-│   └── mat_master/      # MatMaster app (frontend + service + start_dev.sh)
+├── matmaster/           # MatMaster adapters, exp TOML, packaged skills
+├── src/                 # Platform API, DAOs, services, worker
 ├── config/              # MatMaster YAML + mcp_config*.json
-└── docs/                # Documentation
+└── evaluation/          # Question bank & eval harness (see evaluation/README_CN.md)
 ```
 
 ---
 
 ## CLI (optional)
 
-You can run agents from the command line without the web UI.
-
-**Prerequisites:** `uv sync` (or `pip install -e .`). Configure LLM and Bohrium in `.env` and/or in `config/config.yaml` (and MCP JSON as needed).
-
-```bash
-# MatMaster agent (default config under config/)
-python run.py --agent mat_master --config config/config.yaml --task "Your task"
-
-# Task from file
-python run.py --agent mat_master --config config/config.yaml --task task.txt
-
-# Interactive
-python run.py --agent mat_master --config config/config.yaml --interactive
-
-# Planner vs direct mode (MatMaster)
-python run.py --agent mat_master --config config/config.yaml --mode planner --task "Your task"
-```
+Use **`mm-devshell`** for agent REPL / single-shot runs (see **Agent DevShell** above). Evaluation and batch flows may use scripts under `evaluation/scripts/`; see `evaluation/README_CN.md`.
 
 ---
 

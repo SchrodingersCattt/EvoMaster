@@ -6,7 +6,7 @@ skill_type: operator
 
 # Poly Generator
 
-Use the local wrappers under `playground/mat_master/skills/poly-generator/scripts/`.
+Use the local wrappers under `matmaster/skills/playground-skills/poly-generator/scripts/`.
 
 ## Use cases
 
@@ -26,10 +26,10 @@ Use the local wrappers under `playground/mat_master/skills/poly-generator/script
 
 ## Script paths
 
-- `playground/mat_master/skills/poly-generator/scripts/build_polymer.py`
-- `playground/mat_master/skills/poly-generator/scripts/generate_2d.py`
-- `playground/mat_master/skills/poly-generator/scripts/generate_3d.py`
-- `playground/mat_master/skills/poly-generator/python_path.txt`
+- `matmaster/skills/playground-skills/poly-generator/scripts/build_polymer.py`
+- `matmaster/skills/playground-skills/poly-generator/scripts/generate_2d.py`
+- `matmaster/skills/playground-skills/poly-generator/scripts/generate_3d.py`
+- `matmaster/skills/playground-skills/poly-generator/python_path.txt`
 
 ## Rules
 

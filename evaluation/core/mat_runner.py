@@ -67,15 +67,6 @@ def _run_mat_task_with_playground(
     mat_config_path: Path,
 ) -> dict[str, Any]:
     """Legacy compatibility path used when tests monkeypatch ``get_playground_class``."""
-    try:
-        import importlib
-
-        importlib.import_module("playground.mat_master.core.playground")
-    except ModuleNotFoundError:
-        # Tests may monkeypatch ``get_playground_class`` with a fake playground
-        # and do not need the legacy module import side effect.
-        pass
-
     playground = get_playground_class("mat_master", config_path=mat_config_path)
     if getattr(playground, "set_run_dir", None):
         playground.set_run_dir(run_dir, task_id=task_id)
