@@ -494,6 +494,7 @@ class Exp:
             return allowed is None or name in allowed
 
         from matmaster.tools.builtin import (
+            AskQuestionTool,
             BashTool,
             BohriumTool,
             EditTool,
@@ -549,6 +550,11 @@ class Exp:
             WebSearchTool(),
             WebFetchTool(workdir=ctx.workdir),
             BohriumTool(session=ctx.session, workdir=ctx.workdir),
+            AskQuestionTool(
+                session=ctx.session,
+                workdir=ctx.workdir,
+                bridge=ctx.interaction_bridge,
+            ),
         ]
 
         registered: list[Any] = []

@@ -60,6 +60,7 @@ class PlaygroundContext(BaseModel):
     config_dir: Path | None = None  # Playground config directory (per D-10)
     llm_provider: Any = None  # LLMProvider instance (externally determined)
     llm_config: Any = None  # LLMConfig instance (externally loaded)
+    interaction_bridge: Any = None  # AskQuestionBridge instance (externally injected)
 
     @model_validator(mode="before")
     @classmethod
