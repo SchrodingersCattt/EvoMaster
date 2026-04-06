@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.session import Session, SSHSessionConfig
+from matmaster.types.session import Session, SessionFileStat, SSHSessionConfig
 
 
 @pytest.fixture
@@ -195,6 +195,18 @@ class TestSSHSessionFileOps:
 
         assert data == b"remote-bytes"
         mock_paramiko["sftp"].open.assert_called_with("/remote/file.dat", "rb")
+
+    def test_stat_file_returns_size_and_mtime(self, ssh_config, mock_paramiko):
+        session = self._make_open_session(ssh_config, mock_paramiko)
+
+        mock_stat = MagicMock()
+        mock_stat.st_size = 9
+        mock_stat.st_mtime = 123.0
+        mock_paramiko["sftp"].stat.return_value = mock_stat
+
+        stat = session.stat_file("/remote/file.dat")
+
+        assert stat == SessionFileStat(size=9, mtime=123.0)
 
 
 class TestSSHSessionUploadDirectory:

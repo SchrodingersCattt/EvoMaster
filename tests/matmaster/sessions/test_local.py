@@ -94,6 +94,16 @@ class TestLocalSessionFileOps:
         with pytest.raises(FileNotFoundError):
             session.download(str(tmp_path / "missing.bin"))
 
+    def test_stat_file_returns_size_and_mtime(self, tmp_path: Path) -> None:
+        target = tmp_path / "sample.txt"
+        target.write_text("hello", encoding="utf-8")
+
+        session = LocalSession(workspace_path=tmp_path)
+        stat = session.stat_file(str(target))
+
+        assert stat.size == 5
+        assert stat.mtime > 0
+
 
 class TestLocalSessionLifecycle:
     """open/close are no-ops."""

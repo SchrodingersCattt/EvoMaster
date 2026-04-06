@@ -8,9 +8,13 @@ CC Reference: tools/FileReadTool/FileReadTool.ts + prompt.ts
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import posixpath
+from time import monotonic_ns
 from typing import Any, ClassVar
 
+from matmaster.tools.filesystem_semantics.snapshots import put_snapshot, snapshot_from_seed
+from matmaster.tools.filesystem_semantics.text_resolution import resolve_text_bytes
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 from matmaster.types.topology import ToolPlane
@@ -50,6 +54,10 @@ class ReadTool(BuiltinTool):
                     "The number of lines to read. Only provide if the "
                     "file is too large to read at once."
                 ),
+            },
+            "encoding": {
+                "type": "string",
+                "description": "Optional explicit text encoding to use when reading.",
             },
         },
         "required": ["file_path"],
@@ -105,6 +113,11 @@ class ReadTool(BuiltinTool):
                 read_files.add(path)
                 exec_ctx.runner_state.set("read_files", read_files)
 
+                seed = result.payload.pop("snapshot_seed", None)
+                if seed is not None:
+                    snapshot = snapshot_from_seed(seed, access_ns=monotonic_ns())
+                    put_snapshot(exec_ctx.runner_state, snapshot)
+
         return result
 
     def _execute_internal(self, arguments: dict[str, Any]) -> ToolResult:
@@ -113,6 +126,7 @@ class ReadTool(BuiltinTool):
         file_path: str = arguments.get("file_path", "")
         offset: int | None = arguments.get("offset")
         limit: int | None = arguments.get("limit")
+        explicit_encoding: str | None = arguments.get("encoding")
 
         if not session.is_file(file_path):
             return ToolResult(
@@ -120,16 +134,48 @@ class ReadTool(BuiltinTool):
                 content=f"Error: {file_path} is not a file or does not exist",
             )
 
-        content: str = session.read_file(file_path)
-        lines = content.splitlines()
+        raw = session.download(file_path)
+        file_stat = session.stat_file(file_path)
+        resolution = resolve_text_bytes(raw, explicit_encoding=explicit_encoding)
+
+        if resolution.status != "success":
+            meta: dict[str, Any] = {"encoding_requested": explicit_encoding}
+            if resolution.diagnostic is not None:
+                meta["diagnostic"] = resolution.diagnostic.to_meta()
+            return ToolResult(
+                status="error",
+                content=f"Error: unable to safely decode {file_path}",
+                meta=meta,
+            )
+
+        lines = (resolution.text or "").splitlines()
         total = len(lines)
 
         ranged = offset is not None or limit is not None
 
         if ranged:
-            return self._ranged_read(file_path, lines, total, offset, limit)
+            result = self._ranged_read(file_path, lines, total, offset, limit)
         else:
-            return self._full_read(file_path, lines, total)
+            result = self._full_read(file_path, lines, total)
+
+        result.meta.update(
+            {
+                "mark_read": True,
+                "encoding_used": resolution.encoding,
+                "encoding_source": resolution.encoding_source,
+                "raw_size": len(raw),
+            }
+        )
+        result.payload["snapshot_seed"] = {
+            "path": posixpath.normpath(file_path),
+            "size": file_stat.size,
+            "mtime": file_stat.mtime,
+            "prefix_hash": hashlib.sha256(raw[:4096]).hexdigest(),
+            "kind": resolution.semantic_kind,
+            "encoding": resolution.encoding,
+            "encoding_source": resolution.encoding_source,
+        }
+        return result
 
     # -- Full-read mode --
 

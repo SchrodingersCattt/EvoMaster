@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from dataclasses import dataclass
 from time import monotonic_ns
 
@@ -59,3 +60,24 @@ def put_snapshot(
         stored.pop(oldest_path, None)
 
     runner_state.set("file_semantics", stored)
+
+
+def snapshot_from_seed(
+    seed: dict[str, Any],
+    *,
+    access_ns: int,
+) -> FileSemanticSnapshot:
+    fingerprint = SnapshotFingerprint(
+        size=int(seed["size"]),
+        mtime=float(seed["mtime"]),
+        prefix_hash=str(seed["prefix_hash"]),
+    )
+    encoding = seed["encoding"]
+    return FileSemanticSnapshot(
+        path=str(seed["path"]),
+        kind=str(seed["kind"]),
+        encoding=None if encoding is None else str(encoding),
+        encoding_source=str(seed["encoding_source"]),
+        fingerprint=fingerprint,
+        last_access_ns=access_ns,
+    )
