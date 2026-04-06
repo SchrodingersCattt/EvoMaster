@@ -6,7 +6,7 @@ skill_type: operator
 
 # Grompp Remote Mdrun
 
-Use the local script under `playground/mat_master/skills/grompp-remote-mdrun/scripts/prepare_remote_mdrun.py`.
+Use the local script under `matmaster/skills/playground-skills/grompp-remote-mdrun/scripts/prepare_remote_mdrun.py`.
 
 ## When to use
 
@@ -23,7 +23,7 @@ Use the local script under `playground/mat_master/skills/grompp-remote-mdrun/scr
 
 ## Script
 
-- `playground/mat_master/skills/grompp-remote-mdrun/scripts/prepare_remote_mdrun.py`
+- `matmaster/skills/playground-skills/grompp-remote-mdrun/scripts/prepare_remote_mdrun.py`
 
 ## Rules
 

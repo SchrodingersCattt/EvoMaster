@@ -4,7 +4,6 @@
 path_adaptor: "calculation"
 calculation_servers:
   - "mat_sg"
-  - "mat_dpa"
   - "mat_compdart"
   - "mat_doc"
   - "mat_struct_db"
@@ -61,20 +60,6 @@ calculation_executors:
       - analyze_wyckoff_positions
       - get_structure_info
       - get_molecule_info
-  mat_dpa:
-    executor:
-      type: "dispatcher"
-      machine:
-        batch_type: "OpenAPI"
-        context_type: "OpenAPI"
-        remote_profile:
-          image_address: "registry.dp.tech/dptech/dpa-calculator:cd96ac21"
-          platform: "ali"
-          machine_type: "c16_m64_1 * NVIDIA 4090"
-          app_key: "agent"
-      resources:
-        envs: {}
-    sync_tools: []
   mat_compdart:
     executor:
       type: "dispatcher"

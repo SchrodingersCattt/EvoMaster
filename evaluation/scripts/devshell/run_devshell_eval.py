@@ -298,7 +298,7 @@ def main() -> int:
         help=(
             "Forwarded to ``mm-devshell run --exp`` when set. Omit this flag (default) for the same "
             "patched ``direct`` as interactive devshell (narrowed skills_root; manifest "
-            "``matmaster_exp``: devshell). Use ``direct`` for full playground skill trees."
+            "``matmaster_exp``: devshell). Use ``direct`` for full packaged skill trees (unpatched exp)."
         ),
     )
     parser.add_argument(

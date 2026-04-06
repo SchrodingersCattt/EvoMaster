@@ -6,7 +6,7 @@ skill_type: operator
 
 # MD Analysis
 
-Use the local wrapper under `playground/mat_master/skills/md-analysis/scripts/analyze_gmx.py`.
+Use the local wrapper under `matmaster/skills/playground-skills/md-analysis/scripts/analyze_gmx.py`.
 
 ## When to use
 
@@ -24,7 +24,7 @@ Use the local wrapper under `playground/mat_master/skills/md-analysis/scripts/an
 
 ## Script
 
-- `playground/mat_master/skills/md-analysis/scripts/analyze_gmx.py`
+- `matmaster/skills/playground-skills/md-analysis/scripts/analyze_gmx.py`
 
 ## Rules
 

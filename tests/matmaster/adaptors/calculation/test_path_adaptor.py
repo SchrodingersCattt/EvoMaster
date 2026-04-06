@@ -31,6 +31,101 @@ def _load_cached_tool(server_name: str, tool_name: str) -> dict:
     raise KeyError(f"Tool not found in cache: {server_name}.{tool_name}")
 
 
+# ---------------------------------------------------------------------------
+# Inline DPA-like tool schemas for tests that previously read mat_dpa cache.
+# mat_dpa has been removed (MLIPs operator skill migration); the schemas below
+# provide the minimal structure that CalculationPathAdaptor tests require.
+# ---------------------------------------------------------------------------
+_OPTIONAL_EXECUTOR = {"anyOf": [{"type": "object"}, {"type": "null"}], "default": None}
+_OPTIONAL_STORAGE = {"anyOf": [{"type": "object"}, {"type": "null"}], "default": None}
+
+# Description snippet that embeds model alias URLs so that _resolve_model_aliases
+# can map short names (e.g. "DPA2.4-7M") to the full URL, just like the real
+# mat_dpa MCP server descriptions did.
+_DPA_MODEL_ALIAS_DESC = (
+    "Args:\n"
+    "    model_path (Path): Path or alias for a pre-trained DPA model.\n"
+    "        Available aliases:\n"
+    "        'DPA2.4-7M': \"https://bohrium-api.dp.tech/sdk/openapi/"
+    "repo/get_data?rid=rickyxuehe/dpa-2.4-7M/dpa-2.4-7M.pt\"\n"
+)
+
+_DPA_TOOL_FIXTURES: dict[str, dict] = {
+    "submit_calculate_elastic_constants": {
+        "name": "submit_calculate_elastic_constants",
+        "description": (
+            "Submit elastic constants calculation via DPA potential.\n\n"
+            + _DPA_MODEL_ALIAS_DESC
+        ),
+        "input_schema": {
+            "properties": {
+                "input_structure": {"type": "string", "format": "path"},
+                "model_path": {"type": "string"},
+                "executor": _OPTIONAL_EXECUTOR,
+                "storage": _OPTIONAL_STORAGE,
+            },
+            "required": ["input_structure"],
+        },
+    },
+    "submit_calculate_phonon": {
+        "name": "submit_calculate_phonon",
+        "description": (
+            "Submit phonon calculation via DPA potential.\n\n" + _DPA_MODEL_ALIAS_DESC
+        ),
+        "input_schema": {
+            "properties": {
+                "input_structure": {"type": "string", "format": "path"},
+                "model_path": {"type": "string"},
+                "temperatures": {"type": "array", "items": {"type": "number"}},
+                "plot_path": {"type": "string"},
+                "executor": _OPTIONAL_EXECUTOR,
+                "storage": _OPTIONAL_STORAGE,
+            },
+            "required": ["input_structure"],
+        },
+    },
+    "query_job_status": {
+        "name": "query_job_status",
+        "description": "Query the status of a submitted job.",
+        "input_schema": {
+            "properties": {
+                "job_id": {"type": "string"},
+                "executor": _OPTIONAL_EXECUTOR,
+            },
+            "required": ["job_id"],
+        },
+    },
+    "get_job_results": {
+        "name": "get_job_results",
+        "description": "Get results of a completed job.",
+        "input_schema": {
+            "properties": {
+                "job_id": {"type": "string"},
+                "executor": _OPTIONAL_EXECUTOR,
+                "storage": _OPTIONAL_STORAGE,
+            },
+            "required": ["job_id"],
+        },
+    },
+    "terminate_job": {
+        "name": "terminate_job",
+        "description": "Terminate a running job.",
+        "input_schema": {
+            "properties": {
+                "job_id": {"type": "string"},
+                "executor": _OPTIONAL_EXECUTOR,
+            },
+            "required": ["job_id"],
+        },
+    },
+}
+
+
+def _get_dpa_fixture(tool_name: str) -> dict:
+    """Return an inline DPA tool fixture (replacement for mat_dpa cache)."""
+    return _DPA_TOOL_FIXTURES[tool_name]
+
+
 def _make_dispatcher_executor() -> dict:
     return {
         "type": "dispatcher",
@@ -334,7 +429,7 @@ class TestCalculationPathAdaptorPreflight:
                 "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
             }
         )
-        tool = _load_cached_tool("mat_dpa", "submit_calculate_elastic_constants")
+        tool = _get_dpa_fixture("submit_calculate_elastic_constants")
 
         with pytest.raises(CalculationPreflightError, match="download"):
             adaptor.resolve_args(
@@ -363,7 +458,7 @@ class TestCalculationPathAdaptorPreflight:
                 "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
             }
         )
-        tool = _load_cached_tool("mat_dpa", "submit_calculate_elastic_constants")
+        tool = _get_dpa_fixture("submit_calculate_elastic_constants")
 
         with pytest.raises(CalculationPreflightError, match="workspace_path"):
             adaptor.resolve_args(
@@ -397,7 +492,7 @@ class TestCalculationPathAdaptorPreflight:
                 "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
             }
         )
-        tool = _load_cached_tool("mat_dpa", "submit_calculate_phonon")
+        tool = _get_dpa_fixture("submit_calculate_phonon")
 
         result = adaptor.resolve_args(
             workspace_path=str(tmp_path),
@@ -537,7 +632,7 @@ class TestCalculationPathAdaptorPreflight:
                 "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
             }
         )
-        tool = _load_cached_tool("mat_dpa", "submit_calculate_elastic_constants")
+        tool = _get_dpa_fixture("submit_calculate_elastic_constants")
 
         result = adaptor.resolve_args(
             workspace_path=str(tmp_path),
@@ -563,7 +658,7 @@ class TestCalculationPathAdaptorPreflight:
                 "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
             }
         )
-        tool = _load_cached_tool("mat_dpa", "submit_calculate_elastic_constants")
+        tool = _get_dpa_fixture("submit_calculate_elastic_constants")
 
         with pytest.raises(CalculationPreflightError, match="blocked"):
             adaptor.resolve_args(
@@ -601,7 +696,7 @@ class TestCalculationPathAdaptorPreflight:
                 "mat_dpa": {"executor": _make_dispatcher_executor(), "sync_tools": []}
             }
         )
-        tool = _load_cached_tool("mat_dpa", remote_tool_name)
+        tool = _get_dpa_fixture(remote_tool_name)
 
         result = adaptor.resolve_args(
             workspace_path="/tmp/ws",

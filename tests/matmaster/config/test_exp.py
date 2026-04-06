@@ -98,13 +98,13 @@ class TestExpSkillsConfig:
     def test_from_dict(self):
         cfg = ExpSkillsConfig(
             enabled=True,
-            skills_root="playground/mat_master/skills",
+            skills_root="matmaster/skills",
             cache_dir="matmaster/cache",
             config_dir="config",
             mcp_config_file="mcp_config.json",
         )
         assert cfg.enabled is True
-        assert cfg.skills_root == "playground/mat_master/skills"
+        assert cfg.skills_root == "matmaster/skills"
 
 
 class TestExpConfigWithSkills:
@@ -113,7 +113,7 @@ class TestExpConfigWithSkills:
             "name": "direct",
             "skills": {
                 "enabled": True,
-                "skills_root": "playground/mat_master/skills",
+                "skills_root": "matmaster/skills",
                 "cache_dir": "matmaster/cache",
                 "config_dir": "config",
                 "mcp_config_file": "mcp_config.json",

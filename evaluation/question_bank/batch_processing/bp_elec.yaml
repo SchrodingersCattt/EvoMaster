@@ -6,7 +6,7 @@ questions:
   # ============================================================
   # BP_elec_001_20260404 — 多金属表面批量吸附能计算（Mock版）
   # ============================================================
-  - id: "BP_elec_001_20260405"
+  - id: "BP_elec_001_20260406"
     capability: "batch_processing"
     domain: "elec"
     intent: "Batch-compute H adsorption energy on 3 different metal (001) surfaces using mock energies to test batch workflow efficiency."
@@ -65,7 +65,7 @@ questions:
       - key: "duration_budget"
         value: {max: 7200000}
       - key: "token_budget_total"
-        value: {max: 12000}
+        value: {max: 25000}
     scoring_checklist:
       - id: "E_ads_Cu"
         criterion: "Cu(001) adsorption energy E_ads = E(slab+H) − E(slab) − 0.5×E(H₂) = −61.08 − (−57.12) − 0.5×(−6.68) is reported as approximately −0.62 eV (accept values within ±0.2 eV of −0.62)."

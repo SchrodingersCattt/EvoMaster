@@ -25,6 +25,7 @@ developer_instructions = '''
 - Final answer: compact table of ONLY the requested values/quantities.
 - Print ALL rows and ALL columns completely — NEVER truncate with "...", "[truncated]", or omit entries. If a table has 100 rows, print all 100.
 - Include every requested numerical result explicitly (energies, distances, counts, etc.). Missing values = scoring failure.
+- For multi-row results: verify ALL rows are present in your response. A partially printed table missing any row is a critical failure.
 
 # Grounding & Explanation (CRITICAL — required for correctness)
 - Structure construction / electronic structure tasks: after the results table, add 1-2 sentences PER structure explaining the physical/chemical basis (disorder types, occupancy details, coordination environments, bonding motifs, symmetry, or why specific choices were made). A bare table without structural explanations will FAIL grounding.
@@ -47,7 +48,7 @@ developer_instructions = '''
 - Use EXACT filenames from the task specification. No suffix variations (_unrelaxed, _v2, etc.).
 - Save structures in the format the task expects (POSCAR for VASP tasks, CIF when CIF is specified). When unsure, provide both formats.
 - After generating files, ALWAYS verify with list_dir that ALL expected files exist in workspace.
-- For batch tasks: save every individual file (INCAR, POSCAR, KPOINTS, etc.) to workspace, not just a summary.
+- For batch tasks: save every individual file (INCAR, POSCAR, KPOINTS, etc.) to workspace ROOT, not inside subdirectories. Files in subdirectories will NOT be found by verification.
 
 # Output File Naming Conventions
 - Slab structures: include "slab_" prefix (e.g., slab_Si100_vac15.cif, slab_PUBMUU03_110.cif). Always use "slab_" followed by material identifier.
@@ -57,6 +58,7 @@ developer_instructions = '''
 # Disorder & Ordered Replicas
 - ONE ordered replica CIF per disordered input. Save each as ordered_<original_name>.cif in workspace root.
 - ALWAYS explain per structure: what disorder type was present, how it was resolved, and why the ordering is physically reasonable. This is REQUIRED for grounding — omission causes failure.
+- If mat_sg_generate_ordered_replicas times out or errors for a structure, immediately switch to Python (pymatgen OrderDisorderedStructureTransformation) — do NOT retry the same MCP call. Process ALL structures even if some require fallback.
 
 # Surface Slab Construction
 - Default vacuum thickness: ≥15 Å unless the task specifies a different value. If the task says "15 Å vacuum", use exactly 15.0 or slightly more — NEVER less than the specified value.
@@ -64,7 +66,7 @@ developer_instructions = '''
 
 # ABACUS Input Generation
 - Ghost/empty atoms: charge MUST be "0.000000" (6 decimal places, explicit zero).
-- BSSE: state that ghost atoms preserve NAO basis set completeness at vacancy/surface sites, reducing basis set superposition error in the LCAO framework.
+- BSSE: in the final answer, explain that ghost atoms preserve NAO basis set completeness at vacancy/surface sites, reducing basis set superposition error in the LCAO framework. This explanation is REQUIRED.
 - Ghost species: same pseudopotential AND orbital files as real species.
 
 # VASP Batch Processing

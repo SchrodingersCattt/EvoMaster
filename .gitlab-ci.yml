@@ -11,6 +11,7 @@ stages:
   - build
   - baseline-eval
   - lint
+  - test
   - sync-question-catalog
   - build-remote-image
   - trigger
@@ -101,6 +102,60 @@ pre-commit:
     - docker pull "${DYNAMIC_IMAGE}"
   script:
     - bash "${CI_PROJECT_DIR}/ci/run_pre_commit_in_docker.sh" "${DYNAMIC_IMAGE}"
+  tags:
+    - k8s-runner-ack
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+
+# 合并到 main：lint 通过后跑单测（与 ci/api-deploy.yml 的 test job 同源，复用 docker-build-mr-main 镜像）
+pytest-mr-main:
+  variables:
+    DOCKER_HOST: tcp://docker-build-service:32375
+  stage: test
+  image: $REGISTRY/public/ubuntu:gitlab-docker
+  needs:
+    - job: docker-build-mr-main
+      artifacts: true
+    - job: pre-commit
+  before_script:
+    - |
+      cat > /root/.docker/config.json <<EOF
+      {
+      "auths": {
+        "registry.dp.tech": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        },
+        "dp-harbor-registry.cn-zhangjiakou.cr.aliyuncs.com": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        }
+      }
+      }
+      EOF
+    - |
+      test -n "${DYNAMIC_IMAGE:-}" || (echo "pytest: 缺少 DYNAMIC_IMAGE（需 docker-build-mr-main 产出 build.env）" && exit 1)
+    - docker pull "${DYNAMIC_IMAGE}"
+  script:
+    - docker rm -f "testcov-${CI_PIPELINE_ID}" || true
+    - docker create --name "testcov-${CI_PIPELINE_ID}" ${DYNAMIC_IMAGE} sh -c "
+      cd /app &&
+      python -V &&
+      . .venv/bin/activate &&
+      uv add pytest-cov pytest-xdist pytest-timer pytest-asyncio &&
+      pytest -n 8 --cov=./ --cov-report term-missing --cov-report html:/app/htmlcov -sv
+      "
+    - docker cp ${CI_PROJECT_DIR}/tests/. "testcov-${CI_PIPELINE_ID}":/app/tests/
+    - docker cp ${CI_PROJECT_DIR}/pytest.ini "testcov-${CI_PIPELINE_ID}":/app/pytest.ini
+    - docker start -a "testcov-${CI_PIPELINE_ID}"
+    - docker cp "testcov-${CI_PIPELINE_ID}":/app/htmlcov ${CI_PROJECT_DIR}/htmlcov
+    - docker rm "testcov-${CI_PIPELINE_ID}"
+  coverage: /TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/
+  artifacts:
+    paths:
+      - htmlcov/
+  cache:
+    paths:
+      - .cache/pip
   tags:
     - k8s-runner-ack
   rules:

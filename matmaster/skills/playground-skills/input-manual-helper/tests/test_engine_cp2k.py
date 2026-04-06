@@ -6,7 +6,7 @@ Tests cover:
   - Fix B: _check_physics_compatibility() in CP2KBackend.get_diagnostics()
 
 Run from project root:
-  uv run pytest playground/mat_master/skills/input-manual-helper/tests/test_engine_cp2k.py -v
+  uv run pytest matmaster/skills/playground-skills/input-manual-helper/tests/test_engine_cp2k.py -v
 Or from skill dir:
   uv run pytest tests/test_engine_cp2k.py -v
 """

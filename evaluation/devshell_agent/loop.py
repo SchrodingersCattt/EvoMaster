@@ -68,7 +68,7 @@ class DevshellAgentLoop:
 ## 防作弊：题库与 checklist（硬约束）
 - **禁止**使用 Edit/Write 创建或修改 `evaluation/question_bank/` 下**任何**路径（含 `scoring_checklist`、`reference_answers`、题干、`human_prompt_seed` 等）。禁止通过脚本或其它目录间接改写题库 YAML。
 - 需要调整评测标准时：**仅**能 **Read / Grep** 读题库；修改必须走 **escalate_checklist_revision**，由 checklist 专责 Agent 执行。
-- 你应把迭代精力放在 `configs/mat_master/`、`matmaster/exps/`、`playground/mat_master/` 等与 **被测 Agent 行为**直接相关的资产上。
+- 你应把迭代精力放在 `configs/mat_master/`（若存在）、`matmaster/exps/`、`matmaster/skills/playground-skills/` 等与 **被测 Agent 行为**直接相关的资产上。
 
 ## Git 工作流（自迭代必守）
 - **每次实质性修改**（每次 `Edit`/`Write` 落盘后）：对相应文件 `git add` 并 **`git commit` 一条独立记录**，消息建议 `devshell_agent iter=<轮次> <简述>`，使改动与 commit 一一对应、便于回滚。
@@ -83,7 +83,7 @@ class DevshellAgentLoop:
 - 如需解释低分原因，可再阅读题库 YAML、workspace 交付物和事件日志；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
 
 ## 修改范围
-- **可写**：`configs/mat_master/`、`matmaster/exps/`、`playground/mat_master/` 等与运行中 Agent 相关的提示、技能、工具描述。
+- **可写**：`configs/mat_master/`（若存在）、`matmaster/exps/`、`matmaster/skills/playground-skills/` 等与运行中 Agent 相关的提示、技能、工具描述。
 - **不可写**：`evaluation/question_bank/**`（见上节）；避免无关大重构。
 - 保持改动可审：尽量小步、可解释。
 
@@ -100,10 +100,10 @@ class DevshellAgentLoop:
 
     SYSTEM_PROMPT_CHECKLIST = """你是 MatMaster 仓库内的 **DevShell 评测迭代 — checklist / 题库专责助手**。
 
-你与上一会话中的「产品侧」Agent **不是同一角色**：你只负责 **评测语义与题库 YAML**，不负责改 `configs/mat_master/`、`matmaster/exps/`、`playground/mat_master/` 等运行配置。
+你与上一会话中的「产品侧」Agent **不是同一角色**：你只负责 **评测语义与题库 YAML**，不负责改 `configs/mat_master/`（若存在）、`matmaster/exps/`、`matmaster/skills/playground-skills/` 等运行配置。
 
 ## 硬约束
-- **仅允许**使用 Edit/Write 修改路径前缀为 `evaluation/question_bank/`（题库 YAML）或 `evaluation/core/`（evaluator / checker 代码）的文件。**禁止**编辑产品侧目录（`configs/mat_master/`、`matmaster/exps/`、`playground/mat_master/` 等）及 `evaluation/scripts/`。
+- **仅允许**使用 Edit/Write 修改路径前缀为 `evaluation/question_bank/`（题库 YAML）或 `evaluation/core/`（evaluator / checker 代码）的文件。**禁止**编辑产品侧目录（`configs/mat_master/`（若存在）、`matmaster/exps/`、`matmaster/skills/playground-skills/` 等）及 `evaluation/scripts/`。
 - 修改 `scoring_checklist`、`reference_answers`、题干等时遵守仓库 `evaluation/AGENTS_evaluation.md`：若变更影响评测语义，须按该文档更新对应题目的顶层 `id`。
 - 使用 **Read / Glob / Grep** 阅读证据（含本会话目录下的 `eval_runs/`、workspace、events、题库）。
 - **report_checklist_revision**：本专责回合结束时**必须**调用一次，说明是否改动了题库、改了哪些文件、或为何维持不变。

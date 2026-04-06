@@ -4,11 +4,11 @@ Unit tests for input-manual-helper validators.
 Uses the existing reference templates in references/ as test fixtures.
 
 Run from the skill directory:
-  cd playground/mat_master/skills/input-manual-helper
+  cd matmaster/skills/playground-skills/input-manual-helper
   uv run pytest tests/ -v
 
 Or from project root:
-  uv run pytest playground/mat_master/skills/input-manual-helper/tests/ -v
+  uv run pytest matmaster/skills/playground-skills/input-manual-helper/tests/ -v
 """
 
 from __future__ import annotations

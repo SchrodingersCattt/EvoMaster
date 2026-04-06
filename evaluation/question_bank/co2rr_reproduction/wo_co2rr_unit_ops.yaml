@@ -1,0 +1,526 @@
+# CO2RR 催化剂高通量筛选与 ML 构效关系 — 文档「单元操作」拆解（MATTER v5）
+# 来源：仓库根目录《CO(2)还原CO催化剂的高通量计算筛选和ML构效关系分析项目复现.docx》
+# 说明：以 llm_binary_judge + 预算类 verify 为主；数值/结构强校验需在稳定产出物（固定 POSCAR 名等）后收紧 tolerance。
+version: v5
+capability: co2rr_reproduction
+domain: mech
+questions:
+- id: CR_SC_Fe001_20260406
+  capability: co2rr_reproduction
+  domain: struct
+  intent: Build Fe(001) surface slab with specified thickness and 2x2x1 supercell
+    per reproduction doc section 3.1.1.
+  human_prompt_seed: '纯金属 Fe 的 (001) 切面 slab 建模：至少 3 层原子、2×2×1 扩胞；真空层足够避免镜像相互作用（建议 ≥15 Å），
+    结构在 z 方向居中。输出 POSCAR 或 CIF，并简要说明 Miller 指数、层数、扩胞与真空厚度。
+
+    '
+  tags:
+  - co2rr_repro
+  - surface_slab
+  - fe
+  - '001'
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value: &cr_turn_std
+      max: 22
+  - key: duration_budget
+    value: &cr_dur_std
+      max: 7200000
+  - key: token_budget_total
+    value: &cr_tok_struct
+      max: 12000
+  scoring_checklist:
+  - id: deliverables_check
+    criterion: 输出包含可下载/可引用的 slab 结构文件，并明确给出 (001) Miller 指数、层数不少于 3、2×2×1（或等价）扩胞与真空厚度。
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: 几何设定与交付物一致（非泛泛描述）；若使用构建工具，最终结构应与所述参数一致。仅依据最终答案与命名文件判断。
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling (tunable after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: CR_SC_ZnPd011_20260406
+  capability: co2rr_reproduction
+  domain: struct
+  intent: Cut ZnPd (011) slab from Materials Project bulk (mp-1103252) with 3 layers
+    and 2x2x1 supercell per doc 3.1.1.
+  human_prompt_seed: '使用体相结构 mp-1103252（ZnPd）切出 (011) 表面 slab：3 层厚度、2×2×1 扩胞，真空 ≥15 Å，z 向居中。
+    输出 POSCAR/CIF，并注明与 mp-1103252 的对应关系及切面/扩胞参数。
+
+    '
+  tags:
+  - co2rr_repro
+  - alloy_slab
+  - zn_pd
+  - '011'
+  - mp_id
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value: *cr_turn_std
+  - key: duration_budget
+    value: *cr_dur_std
+  - key: token_budget_total
+    value: *cr_tok_struct
+  scoring_checklist:
+  - id: mp_and_miller
+    criterion: 答案明确使用 mp-1103252 为体相来源，(011) 切面，3 层、2×2×1 扩胞，并提供结构文件。
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: 结构来源与切面参数可核对（体相 ID、切面、层数、扩胞），非脱离文件的口头描述。
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: CR_SC_ZnS001_20260406
+  capability: co2rr_reproduction
+  domain: struct
+  intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per
+    doc 3.1.2.
+  human_prompt_seed: 'ZnS 化合物 (001) 切面 slab：3 层厚度、2×2×1 扩胞，真空 ≥15 Å。若为极性表面，说明是否采用对称 slab 或偶极修正策略。
+    输出结构文件并简述终止面/化学计量处理。
+
+    '
+  tags:
+  - co2rr_repro
+  - compound_slab
+  - zns
+  - polar_surface
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value: *cr_turn_std
+  - key: duration_budget
+    value: *cr_dur_std
+  - key: token_budget_total
+    value: *cr_tok_struct
+  scoring_checklist:
+  - id: geometry_ok
+    criterion: 交付 ZnS(001) slab，3 层、2×2×1、真空与居中要求满足文档 3.1.2。
+    axis: correctness
+    verify: llm_binary_judge
+  - id: polar_handling
+    criterion: 对 (001) 可能极性作出说明（对称 slab、偶极修正或其它合理方案之一），并与结构一致。
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: CR_SC_ZnO_Au_HCOO_20260406
+  capability: co2rr_reproduction
+  domain: struct
+  intent: Build Au13 cluster CIF, ZnO(001) two-layer 2x2x1 slab with Au single atom
+    and HCOO adsorbate on-top per doc 3.1.3.
+  human_prompt_seed: '按文档 3.1.3：（1）用 ASE 或等价方式构建 Au13 团簇并保存为 CIF；（2）ZnO(001) 切面 slab，两层厚、2×2×1 扩胞；
+    （3）在两个表面 O 位点之一上放置单原子 Au；（4）在 Au 上放置 HCOO，采用 on-top 排布，初始吸附高度合理（约 1.5–2.5 Å）且无严重原子重叠。
+    输出团簇与 adslab 的结构文件，并附简短几何说明。
+
+    '
+  tags:
+  - co2rr_repro
+  - cluster
+  - single_atom
+  - adsorbate_initial
+  - zno
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 28
+  - key: duration_budget
+    value: *cr_dur_std
+  - key: token_budget_total
+    value:
+      max: 16000
+  scoring_checklist:
+  - id: multi_part_deliverables
+    criterion: 同时交付 Au13 团簇 CIF、含单 Au 的 ZnO(001) adslab，且 HCOO 为 on-top 初始构型；层数/扩胞与文档一致。
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: 各子结构与相对排布在答案中可追踪（文件名与几何关系一致），非仅文字宣称。
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: CR_WO_Ag_adsorption_20260406
+  capability: co2rr_reproduction
+  domain: mech
+  intent: Compute adsorption energies of six adsorbates on Ag(001) and Ag(011) at
+    on-top sites using DP/calculator with consistent energy reference per doc 3.2.1.
+  human_prompt_seed: '对 Ag 体相切出 (001) 与 (011) 两个表面；分别计算 H、CO、COOH、CO2、HCOO、HCOOH 六种吸附质在 on-top 位点的吸附能。
+    使用 DP（或题目环境要求的等效势/计算器），并统一气相分子与体相/slab 的能量零点（说明 E_ads 定义与参考态）。
+    以表格汇总各体系吸附能（eV），并注明是否包含 ZPE/熵校正（若未做，需明确写「仅电子能」）。
+
+    '
+  tags:
+  - co2rr_repro
+  - adsorption_energy
+  - ag
+  - deep_potential
+  - high_throughput_style
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 35
+  - key: duration_budget
+    value: *cr_dur_std
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: coverage_table
+    criterion: 结果覆盖 Ag(001) 与 Ag(011)，六种吸附质，on-top；给出吸附能数值表并定义能量参考（slab、气相）。
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_workflow
+    criterion: 叙述与表格自洽，能看出从体相/表面到吸附结构的计算链条；未凭空列出与步骤无关的数值。
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: CR_WO_limiting_potential_20260406
+  capability: co2rr_reproduction
+  domain: elec
+  intent: From free-energy steps on CO2RR-to-CO, HER, and CO2-to-HCOOH pathways,
+    compute limiting potentials U_L = -ΔG_max/e per doc 3.2.2.
+  human_prompt_seed: '给定（或由你说明来源的）各中间态与气相参考的吉布斯自由能或等价能量数据，对以下三条路径计算极限电势 U_L = -ΔG_max/e：
+    （1）CO2(g)→CO* 路径含 CO2*、COOH*、CO* 等步骤；（2）HER：H* 形成；（3）CO2→HCOOH 路径含 HCOO*、HCOOH*。
+    使用文档中的 ΔG 表达式形式（含 E(slab)、E(ads)、0.5 E(H2)、eU 项），标出每条路径的决速步与 U_L（V），并汇总对比。
+
+    '
+  tags:
+  - co2rr_repro
+  - limiting_potential
+  - co2rr
+  - her
+  - free_energy
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value: *cr_dur_std
+  - key: token_budget_total
+    value:
+      max: 14000
+  scoring_checklist:
+  - id: three_pathways_ul
+    criterion: 分别给出 CO2→CO、HER、CO2→HCOOH 三条路径的决速步 ΔG_max 与 U_L，公式与文档 3.2.2 一致，单位正确。
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_energies
+    criterion: 使用的能量/自由能数据来源清楚（计算值、表格或明确假设），且代入与决速步判定一致。
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: CR_BP_HT_adsorption_tree_20260406
+  capability: co2rr_reproduction
+  domain: struct
+  intent: Generate HT_adsorption/ directory tree with pure_metals, compounds, clusters
+    sections per doc 4.1 (high-level structure and naming).
+  human_prompt_seed: '构建高通量吸附建模数据集目录 HT_adsorption/，顶层包含 pure_metals、compounds、clusters 三部分，命名与层级遵循文档 4.1：
+    pure_metals 下按元素与 std-{structure} 组织，含 bulk/、slab/001/、slab/011/、adslab/001/、adslab/011/；slab 至少 5 层、真空 ≥15 Å、横向 ≥10 Å；
+    吸附分子 HCOOH、CO2、COOH、HCOO、H、CO；每个 slab 至少 top/bridge/hollow 三种位点，文件命名 {adsorbate}_{site}.xyz。
+    compounds 列表与 clusters（Au13 等）按文档列出。若无法一次生成全部元素，请生成可复现的脚本 + 对 Ag、ZnO、Au13 的完整示例子树，并说明如何扩展到全量。
+
+    '
+  tags:
+  - co2rr_repro
+  - batch_structure
+  - ht_dataset
+  - filesystem
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value: *cr_dur_std
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: tree_and_script
+    criterion: 交付 HT_adsorption/ 层级说明或实际目录；含 bulk/slab/adslab 逻辑与吸附位点命名约定；至少对 Ag、ZnO、Au13 有可检查示例子树或等价产物。
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_batch
+    criterion: 目录/脚本与文档 4.1 的字段（元素列表、化合物列表、团簇列表、文件名规则）一致，无自相矛盾。
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: CR_WO_feature_extract_43d_20260406
+  capability: co2rr_reproduction
+  domain: general
+  intent: Implement 43-dimensional feature extraction (40 continuous + 3 categorical)
+    from adslab POSCAR paths per doc 4.3.1.
+  human_prompt_seed: '编写脚本：输入为含多个子目录的数据集根路径，每个体系子目录内有 POSCAR（或等价结构文件）。用 pymatgen 或 ASE 读取结构，
+    识别吸附物与基底，吸附位点取吸附物几何中心；构造四类近邻环境（第一近邻同层、第二近邻同层、第二近邻下层、6 Å 内全体近邻），
+    对每类用距离倒数加权，汇总元素属性得到 40 维连续特征；另输出 3 个类别特征：吸附物种类、吸附类型（物理/化学吸附标签规则需在注释中说明）、基底类型。
+    输出 CSV 列名与维度说明。若工作区无完整数据集，可对单示例 POSCAR 演示流水线并说明如何批处理。
+
+    '
+  tags:
+  - co2rr_repro
+  - feature_engineering
+  - pymatgen
+  - ase
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 26
+  - key: duration_budget
+    value: *cr_dur_std
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: script_and_schema
+    criterion: 脚本可执行或逻辑完整；明确 40+3 维定义、四类近邻、6 Å cutoff、加权方式与输出列说明。
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_impl
+    criterion: 实现与文档 4.3.1 描述一致（库函数选择、吸附质/基底识别规则、类别标签规则可读）。
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: CR_DF_LGBM_adsorption_20260406
+  capability: co2rr_reproduction
+  domain: mech
+  intent: Train LightGBM on adsorption_features_energies.csv with IQR outlier removal,
+    parity and importance plots, target train/test R² ≥ 0.8 per doc 4.3.2.
+  human_prompt_seed: '读取工作区中的 `adsorption_ml_toy.csv`（feat_0…feat_5 为特征，E_ads 为回归目标）。
+    IQR 剔除异常值后，用 LightGBM 回归预测 E_ads，划分训练/测试集，报告两侧 R² 与 RMSE，保存 parity plot 与特征重要性图（文件路径写进结论）。
+    目标：训练集 R² ≥ 0.8；若清洗后样本过少导致不稳定，在答案中说明原因并仍给出完整流程与图表。
+
+    '
+  tags:
+  - co2rr_repro
+  - lightgbm
+  - ml
+  - adsorption
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: adsorption_ml_toy
+    path: data/CR_DF_LGBM_20260406/adsorption_ml_toy.csv
+    oss_url: ''
+    description: Toy adsorption dataset (6 features + E_ads) for LightGBM benchmark.
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 32
+  - key: duration_budget
+    value: *cr_dur_std
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: train_r2_floor
+    criterion: 报告的训练集 R² 不低于 0.8；若使用合成小样本导致 R² 不稳定，需在答案中说明并完成 IQR、LightGBM、parity、重要性图与模型保存流程。
+    axis: correctness
+    verify: llm_binary_judge
+  - id: ml_deliverables
+    criterion: 产出 IQR 说明、LightGBM 训练、parity plot 与特征重要性图路径或嵌入图，以及模型或推理入口。
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_data
+    criterion: 数据列与标签定义清楚，预处理与划分可复现，非仅口头报告指标。
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: CR_CO2RR_screening_20260406
+  capability: co2rr_reproduction
+  domain: mech
+  intent: Build a three-metric catalyst screening score from U_L(CO2-to-CO), U_L(HER),
+    and CO adsorption energy using the provided CSV and closed-form spec.
+  human_prompt_seed: '阅读 `scoring_spec.json` 与 `screening_candidates.csv`，严格按 spec 中的公式计算每条候选的 score_S，
+    输出完整排名表（含各行的 U_L_CO_V、U_L_HER_V、E_ads_CO_eV、selectivity_V、ads_penalty_eV、score_S），
+    并明确写出排名第一的 catalyst_id 及其 score_S（至少三位小数）。不要改动 CSV 中的数值。
+
+    '
+  tags:
+  - co2rr_repro
+  - screening
+  - limiting_potential
+  - adsorption
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: scoring_spec
+    path: data/CR_CO2RR_screening_20260406/scoring_spec.json
+    oss_url: ''
+    description: Closed-form three-metric screening score definition for CO2RR catalysts.
+  - key: screening_candidates
+    path: data/CR_CO2RR_screening_20260406/screening_candidates.csv
+    oss_url: ''
+    description: Candidate catalysts with U_L and CO adsorption columns.
+  reference_answers:
+  - key: top_catalyst_id
+    value: cat_B
+  - key: top_score_S
+    value: -0.385
+    tolerance: 0.002
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value: *cr_dur_std
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: top_catalyst_id
+    criterion: 最终答案中推荐的排名第一催化剂 id 为 cat_B（可与说明文字同现，但必须一致）。
+    axis: correctness
+    verify: exact_match
+  - id: top_score_S
+    criterion: 报告的第一名 score_S 与按 spec 手算一致，约为 -0.385（允许数值读取误差）。
+    axis: correctness
+    verify: numerical_range
+  - id: full_ranking
+    criterion: 给出全部候选的 score_S 排序表，且每行中间量（selectivity_V、ads_penalty_eV）与公式一致。
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_spec
+    criterion: 计算与 scoring_spec.json 中公式一致，使用的列名与 CSV 一致，未篡改输入数据。
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

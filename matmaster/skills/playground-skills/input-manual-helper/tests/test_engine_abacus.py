@@ -10,7 +10,7 @@ Tests cover:
   - ABACUSValidator: regex-based validation rules
 
 Run from project root:
-  uv run pytest playground/mat_master/skills/input-manual-helper/tests/test_engine_abacus.py -v
+  uv run pytest matmaster/skills/playground-skills/input-manual-helper/tests/test_engine_abacus.py -v
 Or from skill dir:
   uv run pytest tests/test_engine_abacus.py -v
 """

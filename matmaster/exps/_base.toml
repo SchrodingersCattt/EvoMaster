@@ -42,12 +42,12 @@ Before stopping, summarize what was attempted, why it failed, and suggest a viab
 ## Preferred stack
 When multiple software options can accomplish the task, prefer:
 - DFT calculations: ABACUS
-- Machine learning potentials: DPA
+- Machine learning interatomic potentials (MLIPs): DPA (default), MACE, SevenNet, MatterSim
 - Molecular dynamics: LAMMPS
 
 ## Supported software
 The following software and services are available in this environment:
-ABACUS, LAMMPS, DPA, CP2K, QE (Quantum ESPRESSO), ABINIT, ORCA, OpenBabel
+ABACUS, LAMMPS, MLIPs (DPA/MACE/SevenNet/MatterSim), CP2K, QE (Quantum ESPRESSO), ABINIT, ORCA, OpenBabel
 
 ## Restricted software
 Do NOT use or recommend the following software, as they require commercial licenses not available in this environment:
