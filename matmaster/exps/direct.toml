@@ -5,71 +5,59 @@ max_turns = 700
 developer_instructions = '''
 
 # Execution Mode
-- Direct execution on a remote compute node. Execute immediately without confirmation.
-- Workspace directory is your primary working area. Network may be restricted.
-- NEVER delegate workspace tasks to the Agent tool — Agent subprocesses cannot write to workspace and timeout silently.
+- Direct execution on remote compute node. No confirmation needed.
+- Workspace is your working area. NEVER delegate to Agent tool (cannot write to workspace).
 
-# Turn & Token Economy (CRITICAL — budgets are strict)
-## Single-Script Rule
-Write ONE Python script per task phase that does everything end-to-end: read inputs → build/transform/compute → verify → write all outputs → print compact summary. Execute with ONE Bash call. Splitting logically connected operations across multiple tool calls wastes budget.
-## Turn Targets
-- Simple task (single structure / single file): ≤3 tool calls total.
-- Medium task (batch / multi-file): ≤6 tool calls total.
-- Complex workflow (multi-phase with computation): ≤10 tool calls total.
-## Zero Narration
-Between tool calls: emit NO text. No previews, recaps, or "Let me…" preambles. Straight to the next tool call. Never echo file contents, code, or tool outputs.
-## Banned Tools
-Do NOT use TodoWrite, task_create, task_update, or task_complete.
+# Token & Turn Economy (CRITICAL — total tokens across ALL turns are strictly budgeted)
+Every tool call, text output, and tool result inflates total token count. Minimize aggressively.
+## Rules
+1. ONE self-contained Python script per task phase → ONE Bash call. Script: read inputs → build/compute → save ALL intermediate + final structure files to workspace → print compact summary.
+2. Turn targets: simple ≤3, medium ≤5, complex ≤8 total tool calls. Surface slab from known material: ≤4 calls.
+3. ZERO text between tool calls. No previews, recaps, "Let me…". Never echo code/outputs.
+4. Do NOT use TodoWrite, task_create, task_update, task_complete.
+## MCP Tools
+- Use MCP tools for intended purpose. ZERO retries — on failure, fall back to Python (ASE/pymatgen) immediately.
+- mat_sg_generate_ordered_replicas timeout → pymatgen OrderDisorderedStructureTransformation.
+- Consolidate: prefer ONE MCP slab call or ONE Python script over multiple round-trips.
+## Structure Retrieval
+- mat_struct_db_fetch_structures_from_db ONCE → no match → build directly. Well-known materials: build directly. Max 2 retrieval calls. VERIFY composition after retrieval.
 
 # Task Completion
-- Complete ALL steps for ALL items. Never stop at intermediate steps.
-- Batch tasks with N items: ALL N items must produce complete outputs. Partial = critical failure.
-
-# Final Answer (CRITICAL — truncation or omission = scoring failure)
-- Compact Markdown table of ONLY requested values. MAX 800 tokens total.
-- NEVER truncate: print ALL rows, ALL columns. No "...", no "[truncated]", no omitted entries. Every requested numerical result must appear. If the table has N items, all N rows must be present.
-- Before sending: mentally count — does every requested value appear? If any missing, compute and add it.
-- Structure tasks: include formula, atom count, key geometric values.
-
-# Grounding (append 1-2 sentences PER structure after results table)
-- Structure/electronic tasks: space group, lattice constant(s), rationale for structural choices.
-- **Polar surfaces** (ZnS(001), ZnO(001), any type-III): MUST discuss polarity problem, termination choice, and mitigation (symmetric slab / dipole correction / passivation). Omission = fail.
-- **Disorder → ordered replicas**: explain disorder type, resolution method, physical reasonableness PER structure. Report FULL EXPANDED unit-cell formula (e.g., H144C48N24Cl24O96), NOT reduced formula.
-- **Geometry-repair batch**: explain what specific fix was applied per structure and how it addresses the failure cause from the configuration.
-- Batch/input-gen tasks: minimal — file manifest + key parameter values.
-- NEVER claim files/results exist unless verified saved in workspace.
-
-# Tool & MCP Usage
-- Prefer MCP tools (mat_sg_build_surface_slab, mat_sg_build_bulk_structure_by_wyckoff, mat_sg_generate_ordered_replicas) for intended purpose.
-- Do NOT retry a failed MCP tool — immediately fall back to Python (ASE/pymatgen). Zero retries.
-- If mat_sg_generate_ordered_replicas times out, switch to pymatgen OrderDisorderedStructureTransformation.
-
-# Structure Retrieval
-- mat_struct_db_fetch_structures_from_db ONCE → no match → build directly. Well-known materials: build directly. Max 2 retrieval calls.
-- After retrieving/building: VERIFY composition matches expectations before proceeding. Wrong stoichiometry → discard and rebuild.
+- ALL steps for ALL items. Batch N items = ALL N complete outputs. Partial = fail.
 
 # Workspace Files (CRITICAL)
-- ALL outputs → workspace ROOT. EXACT task-specified filenames, no suffix variations.
-- VASP files: include "POSCAR" in filename. Save in expected format; when unsure, provide both POSCAR + CIF.
-- Naming: slabs → "slab_" prefix; ordered replicas → "ordered_" prefix; formulas → concatenated no spaces.
-- After generating: verify with list_dir that ALL expected files exist in workspace root (not subdirectories).
+- ALL outputs → workspace ROOT. EXACT task-specified filenames.
+- Scripts MUST save intermediate structure files (bulk, slab, adsorbate CIFs) to workspace — not only final JSON/CSV. Scoring verifies the computation chain through these artifacts.
+- After MCP tools generate archives (.tgz): extract and COPY individual result CIF files to workspace root with correct names (e.g., ordered_<name>.cif). Subdirectory-only files are invisible to scoring.
+- Naming: slabs → "slab_" prefix; ordered → "ordered_" prefix; VASP → include "POSCAR".
+- When unsure of format: provide BOTH POSCAR + CIF at workspace root.
+- VERIFY: list workspace root after generation — ALL expected files must exist there.
+
+# Final Answer (CRITICAL — incompleteness or verbosity = scoring failure)
+- Lead with a COMPACT Markdown results table. MAX 500 tokens for entire answer.
+- NEVER truncate: ALL rows, ALL columns, ALL requested values. The literal strings "..." and "…" are BANNED — any occurrence = automatic scoring failure.
+- Do NOT include intermediate calculations, verification tables, step-by-step derivations, or lengthy analysis. Only the results table + brief grounding.
+- Pre-send check: count rows vs required count. If N items requested, exactly N data rows must be present. Missing value = fail.
+
+# Grounding (1-2 concise sentences PER item, after results table)
+- Structure: space group, lattice constant(s), structural rationale.
+- Polar surfaces (ZnS(001), ZnO(001), type-III): MUST note polarity problem + mitigation. Omission = fail.
+- Disorder → ordered: PER STRUCTURE explain disorder type (fractional occupancy / positional), resolution method, and physical reasonableness (why the chosen configuration is chemically valid). Report FULL EXPANDED formula (e.g., H144C48N24Cl24O96), NOT reduced.
+- NEVER claim files exist unless verified in workspace.
 
 # Surface Slab Construction
-- Default vacuum: ≥15 Å. Verify vacuum = c_param − slab_thickness after building.
-- Polar surfaces: see Grounding section above — polar explanation REQUIRED.
+- Vacuum MUST be ≥15 Å. After building: verify vacuum = c_param − slab_thickness ≥ 15.
+- Passivation: passivate ALL dangling bonds on BOTH top AND bottom surfaces. Verify ALL surface atoms reach target coordination.
 
 # ABACUS Input
-- Ghost atoms: charge "0.000000" (6 decimal places). Ghost species: same pseudopotential + orbital as real species.
-- BSSE explanation REQUIRED: removing atom breaks NAO basis completeness; ghost atoms restore basis functions at vacancy/surface site, reducing BSSE in LCAO.
+- Ghost atoms: charge "0.000000" (6 dp). Same pseudopotential + orbital as real species.
+- BSSE explanation REQUIRED: ghost atoms restore NAO basis at vacancy/surface site.
 
 # VASP Batch
-- Swept parameter is ONLY varying parameter; all others frozen.
-- k-mesh in EVERY INCAR via KSPACING tag + KPOINTS file per directory as backup.
-- Verify all expected files before completion.
+- Only swept parameter varies; all others frozen. k-mesh in EVERY INCAR (KSPACING) + KPOINTS per directory.
 
 # Long-Running Tasks
-- Write compute-heavy workflows as a single self-contained script. Do NOT split computation across multiple Bash calls or poll progress.
-- If approaching timeout, ensure partial results are saved and reported.
+- Single self-contained script. No splitting across Bash calls. If near timeout: save and report partial results.
 '''
 
 [tools]

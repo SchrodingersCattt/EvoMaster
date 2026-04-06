@@ -109,7 +109,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_002_20260405
+- id: SC_struct_002_20260405v2
   capability: structure_construction
   domain: struct
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular
@@ -176,7 +176,8 @@ questions:
   - key: duration_budget
     value: *id001
   - key: token_budget_total
-    value: *id002
+    value:
+      max: 24000
   scoring_checklist:
   - id: unit_cell_atoms
     criterion: The input unit cell atom count read from the downloaded CIF is 144 atoms.

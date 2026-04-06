@@ -218,7 +218,9 @@ class TestExpBuildRuntime:
             runtime = await exp.build_runtime(ctx)
 
         assert "Base persona text." in runtime.spec.system_prompt
-        assert "Avoid using this tool to run" in runtime.spec.system_prompt
+        assert "Use dedicated tools instead of shell equivalents" in (
+            runtime.spec.system_prompt
+        )
 
 
 # ── TestExpCleanup ───────────────────────────────────────

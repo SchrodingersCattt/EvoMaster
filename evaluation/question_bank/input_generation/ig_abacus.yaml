@@ -2,7 +2,7 @@ version: v5
 capability: input_generation_abacus
 domain: elec
 questions:
-- id: IG_abacus_001_20260404
+- id: IG_abacus_001_20260404v2
   capability: input_generation_abacus
   domain: elec
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place empty-atom layers in vacuum, and write SCF INPUT with sparse k along vacuum.'
@@ -42,7 +42,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 20000
   scoring_checklist:
   - id: fe_empty_species
     criterion: STRU defines Fe_empty with the same pseudopotential and numerical orbital as Fe, charge 0.0, and no magnetic moment on empty sites.
@@ -81,7 +81,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_002_20260404
+- id: IG_abacus_002_20260404v2
   capability: input_generation_abacus
   domain: mech
   intent: 'Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty ghost atom and SCF INPUT.'
@@ -119,7 +119,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 18000
   scoring_checklist:
   - id: fe_empty_at_vacancy
     criterion: STRU places exactly one Fe_empty at the vacant site (the former missing Fe position) with charge 0 and no magnetic moment.

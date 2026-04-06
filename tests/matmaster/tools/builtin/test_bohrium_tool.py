@@ -37,9 +37,11 @@ class TestBohriumMetadata:
         tool = BohriumTool(workdir=tmp_path)
         prompt = tool.prompt()
         assert prompt is not None
-        assert "Bohrium" in prompt
-        assert "list_images" in prompt
-        assert "list_machines" in prompt
+        assert "skill" in prompt
+        assert "image" in prompt
+        assert "machine" in prompt
+        assert "submit" in prompt
+        assert "poll" in prompt
 
 
 # ---------------------------------------------------------------------------
