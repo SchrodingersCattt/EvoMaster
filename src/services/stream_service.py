@@ -186,7 +186,7 @@ class RedisReplyQueue:
 
 class ReplyQueueNotifyOnGet:
     """包装 ReplyQueueLike：在 get() 返回用户回复时调用 on_reply(content)。
-    用于在「执行 agent 的 worker」上注入 confirmation_reply，保证多 worker 下顺序正确（POST 可能打到其他 worker）。
+    用于在「执行 agent 的 worker」上注入 interaction reply，保证多 worker 下顺序正确（POST 可能打到其他 worker）。
     """
 
     def __init__(self, inner: ReplyQueueLike, on_reply: Callable[[str], None]) -> None:
@@ -211,14 +211,14 @@ class ReplyQueueNotifyOnGet:
 
 
 class StreamQueueManager:
-    """流式接口的队列管理：SSE 订阅队列的注册/注销与广播；当前 run 的确认回复队列（confirmation_request 共用）。"""
+    """流式接口的队列管理：SSE 订阅队列的注册/注销与广播；当前 run 的交互回复队列（ask_question 共用）。"""
 
     def __init__(self) -> None:
         # session_id -> 该会话下所有 SSE 连接的队列，agent 事件会广播到这些队列
         self._sse_queues: dict[str, list[asyncio.Queue]] = {}
         # session_id -> 当前 run 的确认回复队列（仅无 Redis 时使用；有 Redis 时由 get_reply_queue 按 run_active 返回 RedisReplyQueue）
         self._reply_queues: dict[str, ReplyQueueLike] = {}
-        # session_id -> 当前 run 的 request_event_queue（供 broadcast_reply 时注入 confirmation_reply，保证发送流内事件顺序）
+        # session_id -> 当前 run 的 request_event_queue（供 broadcast_reply 时注入 interaction reply，保证发送流内事件顺序）
         self._request_event_queues: dict[str, tuple[asyncio.Queue, str, str]] = {}
 
     def set_reply_queue(self, session_id: str, q: ReplyQueueLike) -> None:
@@ -226,7 +226,7 @@ class StreamQueueManager:
         self._reply_queues[session_id.strip()] = q
 
     def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
-        """供 POST /confirmation_reply 写入使用；无活跃 run 时返回 None。"""
+        """供 POST /ask_question_reply 写入使用；无活跃 run 时返回 None。"""
         return self._reply_queues.get(session_id.strip())
 
     def set_request_event_queue(
@@ -236,7 +236,7 @@ class StreamQueueManager:
         task_id: str,
         invocation_id: str,
     ) -> None:
-        """注册当前 run 的 request_event_queue，便于 confirmation_reply 按序注入发送流。"""
+        """注册当前 run 的 request_event_queue，便于 interaction reply 按序注入发送流。"""
         self._request_event_queues[session_id.strip()] = (queue, task_id, invocation_id)
 
     def get_request_event_queue(
@@ -293,7 +293,7 @@ class SendStreamContext:
     user_msg: dict
     request_event_queue: asyncio.Queue
     reply_queue: (
-        ReplyQueueLike  # confirmation_request 共用，POST /confirmation_reply 写入
+        ReplyQueueLike  # ask_question 共用，POST /ask_question_reply 写入
     )
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
@@ -730,7 +730,7 @@ class ChatStreamService:
         )
 
     def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
-        """供 POST /confirmation_reply 写入使用；无活跃 run 时返回 None。仅 Worker 队列模式，由 Redis run_active 判定。"""
+        """供 POST /ask_question_reply 写入使用；无活跃 run 时返回 None。仅 Worker 队列模式，由 Redis run_active 判定。"""
         if not REDIS_URL:
             return None
         if get_redis_dao().is_interaction_run_active(session_id):

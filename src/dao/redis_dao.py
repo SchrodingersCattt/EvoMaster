@@ -107,7 +107,7 @@ class RedisDao:
             logger.warning('Redis client init failed: %s', e)
             return None
 
-    # ---------- confirmation_reply 多 worker（run_active + reply list）----------
+    # ---------- interaction reply 多 worker（run_active + reply list）----------
 
     def set_interaction_run_active(self, session_id: str) -> bool:
         """标记该会话当前有活跃 run。未配置 Redis 或失败返回 False。"""
@@ -212,7 +212,7 @@ class RedisDao:
             client.rpush(_reply_list_key(session_id), value)
         except Exception as e:
             logger.warning(
-                'Redis RPUSH confirmation_reply failed session_id=%s: %s',
+                'Redis RPUSH interaction_reply failed session_id=%s: %s',
                 session_id,
                 e,
             )
@@ -226,7 +226,7 @@ class RedisDao:
             result = client.blpop(_reply_list_key(session_id), timeout=timeout_sec)
         except Exception as e:
             logger.warning(
-                'Redis BLPOP confirmation_reply failed session_id=%s: %s',
+                'Redis BLPOP interaction_reply failed session_id=%s: %s',
                 session_id,
                 e,
             )

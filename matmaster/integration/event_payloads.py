@@ -120,13 +120,22 @@ def _public_content_for_event(
         return out
 
     if event_type == 'confirmation_request':
+        # 向后兼容：旧的 confirmation_request 事件按 ask_question 格式输出
         return {
-            'question': payload.get('question'),
-            'mode': payload.get('mode'),
-            'timeout_seconds': payload.get('timeout_seconds'),
-            'context': payload.get('context'),
-            'actions': payload.get('actions') or [],
+            'request_id': payload.get('origin', ''),
+            'questions': [
+                {
+                    'question': payload.get('question', ''),
+                    'header': 'Confirmation',
+                    'options': [
+                        {'label': a, 'description': ''}
+                        for a in (payload.get('actions') or ['confirm', 'cancel'])
+                    ],
+                }
+            ],
+            'metadata': {},
             'origin': payload.get('origin'),
+            'preview_format': 'markdown',
         }
 
     if event_type == 'error':
