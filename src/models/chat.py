@@ -196,6 +196,14 @@ class ChatPlannerReplyRequest(BaseModel):
     )
 
 
+class ChatAskQuestionReplyRequest(BaseModel):
+    """POST /chat/sessions/{session_id}/ask_question_reply 结构化问答回复"""
+
+    request_id: str
+    answers: dict[str, str]
+    annotations: dict[str, dict[str, str]] | None = None
+
+
 class ErrorApiResponse(BaseResponse[None]):
     """错误响应示例。"""
 

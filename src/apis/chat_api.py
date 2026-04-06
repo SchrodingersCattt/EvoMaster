@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 
 from src.base.base_res import BaseResponse
 from src.models.chat import (
+    ChatAskQuestionReplyRequest,
     ChatPlannerReplyRequest,
     ChatSendRequest,
     ErrorApiResponse,
@@ -332,6 +333,63 @@ async def confirmation_reply(
         'source': 'User',
         'type': 'confirmation_reply',
         'content': content,
+        'session_id': sid,
+    }
+    run_ctx = stream_svc.get_run_context(sid)
+    if run_ctx:
+        payload['task_id'] = run_ctx.get('task_id')
+        payload['invocation_id'] = run_ctx.get('invocation_id')
+    events_svc.add_history_event(sid, payload, user_id=user_id)
+    return BaseResponse(msg='ok')
+
+
+@router.post(
+    '/{session_id}/ask_question_reply',
+    response_model=BaseResponse,
+    summary='提交结构化问答回复',
+    description='当会话流返回 `ask_question` 事件时，调用本接口提交结构化回复。',
+    operation_id='replyChatSessionAskQuestion',
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+        409: COMMON_ERROR_RESPONSES[409],
+    },
+)
+async def ask_question_reply(
+    session_id: str = Path(..., description='会话 ID'),
+    req: ChatAskQuestionReplyRequest = Body(...),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+    stream_svc: ChatStreamService = Depends(get_stream_service),
+    events_svc: ChatEventsService = Depends(get_events_service),
+):
+    sid = session_id.strip()
+    if not chat_svc.can_access_session(sid, user_id):
+        raise ForbiddenErrorResponse(msg='无权限访问该会话')
+    reply_queue = stream_svc.get_reply_queue(sid)
+    if reply_queue is None:
+        raise ConflictErrorResponse(msg='当前无活跃任务，或任务已结束')
+
+    import json as _json
+
+    envelope = _json.dumps({
+        'interaction_type': 'ask_question',
+        'request_id': req.request_id,
+        'payload': {
+            'answers': req.answers,
+            'annotations': req.annotations or {},
+        },
+    }, ensure_ascii=False)
+
+    # 先广播 ask_question_reply，再 put_content 唤醒 agent
+    stream_svc.broadcast_reply(sid, envelope, event_type='ask_question_reply')
+    reply_queue.put_content(envelope)
+
+    payload = {
+        'source': 'User',
+        'type': 'ask_question_reply',
+        'request_id': req.request_id,
+        'answers': req.answers,
+        'annotations': req.annotations or {},
         'session_id': sid,
     }
     run_ctx = stream_svc.get_run_context(sid)

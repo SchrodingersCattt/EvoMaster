@@ -743,15 +743,15 @@ class ChatStreamService:
             return None
         return get_redis_dao().get_interaction_run_context(session_id)
 
-    def broadcast_reply(self, session_id: str, content: str) -> None:
-        """将用户确认回复广播到该会话所有 SSE 订阅（confirmation_request 统一用 confirmation_reply）。
-        发送流内的 confirmation_reply 由 ReplyQueueNotifyOnGet 在 agent 的 get() 返回时注入，保证顺序且多 worker 下也正确。
+    def broadcast_reply(self, session_id: str, content: str, *, event_type: str = "ask_question_reply") -> None:
+        """将用户回复广播到该会话所有 SSE 订阅。
+        发送流内的 interaction reply 由 ReplyQueueNotifyOnGet 在 agent 的 get() 返回时注入，保证顺序且多 worker 下也正确。
         broadcast 的 payload 带上 task_id/invocation_id（同 worker 从内存取，多 worker 从 Redis 取），便于前端去重或排序。
         """
         sid = session_id.strip()
         payload = {
             'source': 'User',
-            'type': 'confirmation_reply',
+            'type': event_type,
             'content': content,
             'session_id': sid,
         }
@@ -815,11 +815,11 @@ class ChatStreamService:
                 self._send_cb, sid, ctx.request_event_queue, payload
             )
 
-        def _inject_confirmation_reply(content: str) -> None:
-            """在 event loop 中执行：将 confirmation_reply 注入本连接 request_event_queue，保证顺序在 tool_result 前（多 worker 下也成立）。"""
+        def _inject_interaction_reply(content: str) -> None:
+            """在 event loop 中执行：将 interaction reply 注入本连接 request_event_queue，保证顺序在 tool_result 前（多 worker 下也成立）。"""
             payload = {
                 'source': 'User',
-                'type': 'confirmation_reply',
+                'type': 'ask_question_reply',
                 'content': content,
                 'session_id': sid,
                 'task_id': ctx.task_id,
@@ -828,19 +828,19 @@ class ChatStreamService:
             try:
                 ctx.request_event_queue.put_nowait(payload)
                 logger.info(
-                    'confirmation_reply injected into request_event_queue session_id=%s task_id=%s',
+                    'interaction_reply injected into request_event_queue session_id=%s task_id=%s',
                     sid,
                     ctx.task_id,
                 )
             except Exception as e:
                 logger.warning(
-                    'confirmation_reply inject failed session_id=%s: %s',
+                    'interaction_reply inject failed session_id=%s: %s',
                     sid,
                     e,
                 )
 
         def _on_reply(content: str) -> None:
-            loop.call_soon_threadsafe(_inject_confirmation_reply, content)
+            loop.call_soon_threadsafe(_inject_interaction_reply, content)
 
         ReplyQueueNotifyOnGet(ctx.reply_queue, _on_reply)
         redis_queue = asyncio.Queue()
