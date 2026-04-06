@@ -79,6 +79,30 @@ def _get_job_detail(
     return detail.get('data', {})
 
 
+def _confirm_terminal_status(
+    *,
+    ctx: _ResolvedBohriumContext,
+    job_id: int | str,
+    sandbox: bool,
+    detail_data: dict[str, Any],
+) -> tuple[int, str, dict[str, Any]]:
+    code = detail_data.get('status', 0)
+    final_detail = detail_data
+    final_code = code
+
+    if code not in _FAILURE_CODES:
+        return final_code, _STATUS_MAP.get(final_code, f'Unknown({final_code})'), final_detail
+
+    for _ in range(1, _FAILURE_CONFIRM_ATTEMPTS):
+        time.sleep(_FAILURE_CONFIRM_SLEEP_SECONDS)
+        final_detail = _get_job_detail(ctx=ctx, job_id=job_id, sandbox=sandbox)
+        final_code = final_detail.get('status', 0)
+        if final_code not in _FAILURE_CODES:
+            break
+
+    return final_code, _STATUS_MAP.get(final_code, f'Unknown({final_code})'), final_detail
+
+
 class _DownloadTargetDir(NamedTuple):
     local_dir: Path
     report_dir: str
@@ -850,6 +874,13 @@ class BohriumTool(BuiltinTool):
         code = detail_data.get('status', 0)
         status_name = _STATUS_MAP.get(code, f'Unknown({code})')
 
+        code, status_name, detail_data = _confirm_terminal_status(
+            ctx=ctx,
+            job_id=job_id,
+            sandbox=sandbox,
+            detail_data=detail_data,
+        )
+
         if code in _RUNNING_CODES:
             return ToolResult(
                 status='error',
@@ -859,9 +890,51 @@ class BohriumTool(BuiltinTool):
                 ),
             )
 
+        files, log_tail = download_bohrium_results(
+            job_id,
+            detail_data,
+            target.local_dir,
+            ctx=ctx,
+            sandbox=sandbox,
+        )
+        report_dir = _finalize_download_target_dir(target=target, session=self._session)
+
+        if code == _SUCCESS_CODE:
+            return ToolResult(
+                status='success',
+                content=json.dumps(
+                    {
+                        'success': True,
+                        'job_id': job_id,
+                        'status': 'Finished',
+                        'result_dir': report_dir,
+                        'files': files,
+                        'log_tail': log_tail,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+        if code in _FAILURE_CODES:
+            return ToolResult(
+                status='error',
+                content=json.dumps(
+                    {
+                        'success': False,
+                        'job_id': job_id,
+                        'status': status_name,
+                        'result_dir': report_dir,
+                        'files': files,
+                        'log_tail': log_tail,
+                        'error': f'Job {status_name}.',
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
         return ToolResult(
             status='error',
-            content='download implementation not finished yet',
+            content=f'Unexpected job status: {status_name} (code={code})',
         )
 
     def _list_images(self, args: dict[str, Any]) -> ToolResult:
