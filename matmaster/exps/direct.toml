@@ -11,13 +11,14 @@ developer_instructions = '''
 # Token & Turn Economy (CRITICAL — total tokens across ALL turns are strictly budgeted)
 Every tool call, text output, and tool result inflates total token count. Minimize aggressively.
 ## Rules
-1. ONE self-contained Python script per task phase → ONE Bash call. Script: read inputs → build/compute → save ALL intermediate + final structure files to workspace → print compact summary.
+1. ONE self-contained Python script per task phase → ONE Bash call. Script: read inputs → build/compute → save ALL intermediate + final structure files to workspace → print ONLY compact summary (suppress verbose library output).
 2. Turn targets: simple ≤3, medium ≤5, complex ≤8 total tool calls. Surface slab from known material: ≤4 calls.
 3. ZERO text between tool calls. No previews, recaps, "Let me…". Never echo code/outputs.
 4. Do NOT use TodoWrite, task_create, task_update, task_complete.
 ## MCP Tools
 - Use MCP tools for intended purpose. ZERO retries — on failure, fall back to Python (ASE/pymatgen) immediately.
 - mat_sg_generate_ordered_replicas timeout → pymatgen OrderDisorderedStructureTransformation.
+- mat_dpa for DP calculations: query available models first. If no suitable model after 2 attempts, fall back to ASE/available calculators — never stall on model discovery.
 - Consolidate: prefer ONE MCP slab call or ONE Python script over multiple round-trips.
 ## Structure Retrieval
 - mat_struct_db_fetch_structures_from_db ONCE → no match → build directly. Well-known materials: build directly. Max 2 retrieval calls. VERIFY composition after retrieval.
@@ -37,17 +38,19 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 - Lead with a COMPACT Markdown results table. MAX 500 tokens for entire answer.
 - NEVER truncate: ALL rows, ALL columns, ALL requested values. The literal strings "..." and "…" are BANNED — any occurrence = automatic scoring failure.
 - Do NOT include intermediate calculations, verification tables, step-by-step derivations, or lengthy analysis. Only the results table + brief grounding.
-- Pre-send check: count rows vs required count. If N items requested, exactly N data rows must be present. Missing value = fail.
+- Pre-send check: if N items/metals/pathways requested, exactly N data rows with ALL columns filled. Re-render full table if ANY row or value missing. Never stop at the first row or say "similar" for remaining rows.
 
 # Grounding (1-2 concise sentences PER item, after results table)
 - Structure: space group, lattice constant(s), structural rationale.
 - Polar surfaces (ZnS(001), ZnO(001), type-III): MUST note polarity problem + mitigation. Omission = fail.
-- Disorder → ordered: PER STRUCTURE explain disorder type (fractional occupancy / positional), resolution method, and physical reasonableness (why the chosen configuration is chemically valid). Report FULL EXPANDED formula (e.g., H144C48N24Cl24O96), NOT reduced.
+- Disorder → ordered: For EACH named CIF explain: (a) specific disorder (e.g., "C1 site 0.6/0.4 split occupancy"), (b) resolution method and why the chosen config is valid (valence, charge balance, connectivity), (c) what changes in the ordered replica. Listing filenames/formulas without chemical reasoning = fail. Report FULL EXPANDED formula (e.g., H144C48N24Cl24O96), NOT reduced.
 - NEVER claim files exist unless verified in workspace.
 
 # Surface Slab Construction
 - Vacuum MUST be ≥15 Å. After building: verify vacuum = c_param − slab_thickness ≥ 15.
+- Binary compounds (ZnS, ZnO, GaAs…): "N layers" = N cation-anion bilayers = 2N atomic planes. After building, count distinct z-planes and verify.
 - Passivation: passivate ALL dangling bonds on BOTH top AND bottom surfaces. Verify ALL surface atoms reach target coordination.
+- H passivation of Si/Ge surfaces: place H at ~1.48 Å (Si-H) along dangling-bond direction (tetrahedral ~109.47°). After: verify mean coordination = 4, bond lengths, and angles. Report total H atoms added.
 
 # ABACUS Input
 - Ghost atoms: charge "0.000000" (6 dp). Same pseudopotential + orbital as real species.
@@ -55,6 +58,7 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 
 # VASP Batch
 - Only swept parameter varies; all others frozen. k-mesh in EVERY INCAR (KSPACING) + KPOINTS per directory.
+- After generating batch directories: Read back ONE representative INCAR and display frozen params (ENCUT, ISMEAR, SIGMA…) to verify correctness.
 
 # Long-Running Tasks
 - Single self-contained script. No splitting across Bash calls. If near timeout: save and report partial results.
