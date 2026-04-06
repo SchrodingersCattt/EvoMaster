@@ -2,7 +2,7 @@
 
 ``load_exp_config("direct")`` is the single source of truth for tools / max_turns /
 developer text. We override ``[skills].skills_root`` to struct-DB + structure-gen
-lazymcp stubs (no ``playground/mat_master/skills`` scan), and set
+lazymcp stubs (narrow skills roots), and set
 ``mcp_runtime_patch.tool_include_only.mat_sg`` so only ``generate_ordered_replicas``
 is exposed from the structure-generator MCP server.
 

@@ -20,6 +20,7 @@ evaluation/question_bank/
 ├── data_fitting/df_elec.yaml
 ├── structure_construction/sc_struct.yaml
 ├── workflow_orchestration/wo_*.yaml
+├── co2rr_reproduction/wo_co2rr_unit_ops.yaml   # capability co2rr_reproduction 专题题库
 ├── safety_refusal/sr_general.yaml
 └── data/                                 # 题目输入数据文件（按题目 ID 子目录）
     ├── README.md
@@ -71,7 +72,7 @@ evaluation/question_bank/
 
 #### capability 枚举
 
-`knowledge_recall` / `structure_construction` / `property_prediction` / `workflow_orchestration` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation_vasp` / `input_generation_abacus`
+`knowledge_recall` / `structure_construction` / `property_prediction` / `workflow_orchestration` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation_vasp` / `input_generation_abacus` / `co2rr_reproduction`
 
 #### domain 枚举
 
@@ -240,6 +241,7 @@ scoring_checklist:
 
 ## DevShell 与 Claude Agent SDK 外层编排
 
+- 自迭代时「产品侧」可写资产以 `matmaster/exps/`、`matmaster/skills/playground-skills/`、`config/` 等为准；本仓库已移除历史 `playground/mat_master/` 目录树（与 EvoMaster 上游示例 `playground/` 不是同一概念）。
 - DevShell / IDE 流程：`evaluation/docs/devshell/devshell_claude_code_eval.md`（`run_devshell_eval.py` + `score_devshell_tasks.py` 自动评分）。
 - **程序化**多轮「跑题 → 判分 → 改提示词/工具」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。自迭代时模型侧约定「每处修改单独 commit、无效则 revert」；编排层可用 `--no-git-reset-on-regression` 关闭「较上一轮退步则 reset 到本轮起点」的保险。默认在 **`--eval-ingest-pending-only`** 下每轮结束后自动 `score_devshell_tasks.py --submit` 上报 ingest（见该文档）；`--no-eval-ingest-submit-each-iteration` 可关。**双 Agent**：主 Agent 不得改 `evaluation/question_bank/`；题库/checklist 调整经 `escalate_checklist_revision` 由专责会话处理（见该文档）。
 

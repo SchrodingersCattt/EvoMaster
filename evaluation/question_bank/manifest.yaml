@@ -87,6 +87,10 @@ banks:
     capability: "workflow_orchestration"
     questions: 1
 
+  - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
+    capability: "co2rr_reproduction"
+    questions: 10
+
   - path: "safety_refusal/sr_general.yaml"
     capability: "safety_refusal"
     questions: 4
@@ -127,4 +131,4 @@ banks:
     capability: "input_generation_abacus"
     questions: 2
 
-# Total: 65 questions across 18 bank files
+# Total: 75 questions across 19 bank files

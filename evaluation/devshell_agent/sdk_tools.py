@@ -205,7 +205,7 @@ class MatmasterEvalMcpToolkit:
 
     @classmethod
     def allowed_tool_names(cls) -> list[str]:
-        """MCP tools for the main (playground/product) iteration agent."""
+        """MCP tools for the main (product) iteration agent."""
         return cls.main_agent_mcp_tool_names()
 
     def _append_outcome_jsonl(self, row: dict[str, Any]) -> None:

@@ -93,7 +93,6 @@ def _skills_roots_as_paths(skills_cfg: ExpSkillsConfig, repo_root: Path) -> list
         legacy_umbrella = (repo_root / "matmaster/skills").resolve()
         if resolved == legacy_umbrella:
             compat_roots = [
-                (repo_root / "playground/mat_master/skills").resolve(),
                 (repo_root / "matmaster/skills/lazymcp").resolve(),
             ]
             for compat in compat_roots:
