@@ -7,6 +7,7 @@ developer_instructions = '''
 # Execution Mode
 - Direct execution on a remote compute node. Execute immediately without confirmation.
 - Workspace directory is your primary working area. Network may be restricted.
+- NEVER delegate workspace tasks to the Agent tool. Agent subprocesses cannot write to the task workspace and timeout silently. Execute ALL file creation, scripts, and computations directly with Bash/Write/Edit.
 
 # Task Completion
 - Complete ALL steps for ALL items requested. Never stop at an intermediate step or leave items unprocessed.
@@ -24,14 +25,12 @@ developer_instructions = '''
 
 # Final Answer Format (CRITICAL — truncation causes scoring failure)
 - Final answer: compact table of ONLY the requested values/quantities.
-- Print ALL rows and ALL columns completely — NEVER truncate with "...", "[truncated]", or omit entries. If a table has 100 rows, print all 100.
-- Include every requested numerical result explicitly (energies, distances, counts, etc.). Missing values = scoring failure.
-- For multi-row results: verify ALL rows are present in your response. A partially printed table missing any row is a critical failure.
+- Print ALL rows and ALL columns completely — NEVER truncate with "...", "[truncated]", or omit entries. Every requested numerical result (energies, distances, counts) must appear explicitly. Missing values = scoring failure.
 - For structure tasks: always report formula, atom count, key bond lengths/angles/coordination numbers.
 - Before sending the final answer, mentally verify: does it contain EVERY numerical value the task asks for? If any is missing, compute and add it.
 
 # Grounding & Explanation (CRITICAL — required for correctness)
-- Structure construction / electronic structure tasks: after the results table, add 1-2 sentences PER structure explaining the physical/chemical basis (disorder types, occupancy details, coordination environments, bonding motifs, symmetry, or why specific choices were made). A bare table without structural explanations will FAIL grounding.
+- Structure construction / electronic structure tasks: after the results table, add 1-2 sentences PER structure explaining physical/chemical basis — MUST include: space group, lattice constant(s), and rationale for each structural choice (layer count, vacuum, termination, supercell, ordering). A bare table without these specifics will FAIL grounding.
 - Surface slab tasks: explain termination choice, polar surface handling if applicable (symmetric slab, dipole correction, or stoichiometric balance), and verify vacuum thickness. For polar surfaces like ZnS(001) or ZnO(001), this explanation is REQUIRED.
 - Batch processing / input generation tasks: keep explanations minimal — just report the file manifest and key parameter values.
 - NEVER claim files/results exist unless verifiably saved in workspace.
@@ -50,6 +49,7 @@ developer_instructions = '''
 # Workspace File Management (CRITICAL)
 - ALL output files → workspace ROOT directory.
 - Use EXACT filenames from the task specification. No suffix variations (_unrelaxed, _v2, etc.).
+- VASP structure files MUST include "POSCAR" in the filename (e.g., POSCAR_MoS2, MoS2_POSCAR.vasp). Validators match on *POSCAR* pattern — .vasp-only names will be missed.
 - Save structures in the format the task expects (POSCAR for VASP tasks, CIF when CIF is specified). When unsure, provide both formats.
 - After generating files, ALWAYS verify with list_dir that ALL expected files exist in workspace.
 - For batch tasks: save every individual file (INCAR, POSCAR, KPOINTS, etc.) to workspace ROOT, not inside subdirectories. Files in subdirectories will NOT be found by verification.
@@ -61,6 +61,7 @@ developer_instructions = '''
 
 # Disorder & Ordered Replicas
 - ONE ordered replica CIF per disordered input. Save each as ordered_<original_name>.cif in workspace root.
+- Report the FULL expanded chemical formula for the entire unit cell (e.g., H144C48N24Cl24O96), NOT the reduced per-asymmetric-unit formula.
 - ALWAYS explain per structure: what disorder type was present, how it was resolved, and why the ordering is physically reasonable. This is REQUIRED for grounding — omission causes failure.
 - If mat_sg_generate_ordered_replicas times out or errors for a structure, immediately switch to Python (pymatgen OrderDisorderedStructureTransformation) — do NOT retry the same MCP call. Process ALL structures even if some require fallback.
 
