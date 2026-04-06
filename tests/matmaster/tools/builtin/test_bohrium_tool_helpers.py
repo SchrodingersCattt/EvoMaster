@@ -124,6 +124,8 @@ class FakeRemoteSession:
         self.is_open = is_open
         self.exec_calls: list[str] = []
         self.download_calls: list[str] = []
+        self.upload_calls: list[tuple[str, str, object]] = []
+        self.upload_error: Exception | None = None
 
         self._exec_result = exec_result or {
             "stdout": "",
@@ -148,6 +150,11 @@ class FakeRemoteSession:
         if path in self._downloads:
             return self._downloads[path]
         return self._default_download
+
+    def upload_directory(self, local_dir: str, remote_dir: str, exclude=None) -> None:
+        self.upload_calls.append((local_dir, remote_dir, exclude))
+        if self.upload_error is not None:
+            raise self.upload_error
 
 
 def _zip_bytes(files: dict[str, str]) -> bytes:

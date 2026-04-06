@@ -21,7 +21,8 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, ClassVar, Iterator
+import shutil
+from typing import Any, ClassVar, Iterator, NamedTuple
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -76,6 +77,70 @@ def _get_job_detail(
     )
     detail = _get(ctx.base_url, detail_path, ctx.access_key)
     return detail.get('data', {})
+
+
+class _DownloadTargetDir(NamedTuple):
+    local_dir: Path
+    report_dir: str
+    remote_dir: str | None
+
+
+def _resolve_download_target_dir(
+    *,
+    raw_result_dir: str,
+    workdir: Path | None,
+    session: Any | None,
+) -> _DownloadTargetDir | ToolResult:
+    decision = resolve_output_path(
+        raw_path=raw_result_dir,
+        execution_workdir=str(workdir or '.'),
+        session=session,
+    )
+    if decision.requires_remote_session:
+        return ToolResult(
+            status='error',
+            content=(
+                f"result_dir '{raw_result_dir}' requires an active remote session "
+                'but none is available. Use a local path instead.'
+            ),
+        )
+
+    if decision.kind == 'remote_share':
+        local_dir = Path(tempfile.mkdtemp(prefix='bohrium-download-'))
+        return _DownloadTargetDir(
+            local_dir=local_dir,
+            report_dir=str(local_dir),
+            remote_dir=raw_result_dir,
+        )
+
+    local_dir = Path(decision.normalized_path)
+    return _DownloadTargetDir(
+        local_dir=local_dir,
+        report_dir=str(local_dir),
+        remote_dir=None,
+    )
+
+
+def _finalize_download_target_dir(
+    *,
+    target: _DownloadTargetDir,
+    session: Any | None,
+) -> str:
+    if target.remote_dir is None:
+        return target.report_dir
+    if session is None or not hasattr(session, 'upload_directory'):
+        return target.report_dir
+    try:
+        session.upload_directory(str(target.local_dir), target.remote_dir)
+        shutil.rmtree(target.local_dir, ignore_errors=True)
+        return target.remote_dir
+    except Exception:
+        logger.warning(
+            'Failed to upload results to remote share %s',
+            target.remote_dir,
+            exc_info=True,
+        )
+        return target.report_dir
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -753,6 +818,47 @@ class BohriumTool(BuiltinTool):
             return ToolResult(status='error', content=f'Poll failed: {exc}')
 
     def _download(self, args: dict[str, Any]) -> ToolResult:
+        result = self._require_credentials()
+        if isinstance(result, ToolResult):
+            return result
+        ctx = result
+
+        raw_job_id = args.get('job_id')
+        if raw_job_id is None:
+            return ToolResult(status='error', content='Missing required parameter: job_id')
+
+        result_dir_str = str(args.get('result_dir') or '').strip()
+        if not result_dir_str:
+            return ToolResult(
+                status='error',
+                content='Missing required parameter: result_dir',
+            )
+
+        sandbox = _use_sandbox()
+        self._log_request_context(action='download', ctx=ctx, sandbox=sandbox)
+        job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
+
+        target = _resolve_download_target_dir(
+            raw_result_dir=result_dir_str,
+            workdir=self._workdir,
+            session=self._session,
+        )
+        if isinstance(target, ToolResult):
+            return target
+
+        detail_data = _get_job_detail(ctx=ctx, job_id=job_id, sandbox=sandbox)
+        code = detail_data.get('status', 0)
+        status_name = _STATUS_MAP.get(code, f'Unknown({code})')
+
+        if code in _RUNNING_CODES:
+            return ToolResult(
+                status='error',
+                content=(
+                    f'Job is {status_name}. '
+                    'download is only available after terminal status.'
+                ),
+            )
+
         return ToolResult(
             status='error',
             content='download implementation not finished yet',
