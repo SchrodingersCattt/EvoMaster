@@ -1,16 +1,16 @@
-####################################################################### 
-# 
-# This file contains crystal structure data downloaded from the 
-# Cambridge Structural Database (CSD) hosted by the Cambridge 
+#######################################################################
+#
+# This file contains crystal structure data downloaded from the
+# Cambridge Structural Database (CSD) hosted by the Cambridge
 # Crystallographic Data Centre (CCDC).
-# 
-# Full information about CCDC data access policies and citation 
-# guidelines are available at http://www.ccdc.cam.ac.uk/access/V1 
-# 
-# Audit and citation data items may have been added by the CCDC. 
-# Please retain this information to preserve the provenance of 
-# this file and to allow appropriate attribution of the data. 
-# 
+#
+# Full information about CCDC data access policies and citation
+# guidelines are available at http://www.ccdc.cam.ac.uk/access/V1
+#
+# Audit and citation data items may have been added by the CCDC.
+# Please retain this information to preserve the provenance of
+# this file and to allow appropriate attribution of the data.
+#
 #######################################################################
 
 data_DACMOR
@@ -23,14 +23,14 @@ _citation_doi
 _citation_year
 1 10.1107/S0567740879010645 1979
 _audit_creation_method           'Created from the CSD'
-_audit_update_record             
+_audit_update_record
 ;
 2026-01-10 downloaded from the CCDC.
 ;
 _database_code_NBS               508521
 _chemical_name_common            'Heroin, diacetylmorphine'
 _chemical_formula_moiety         'C21 H23 N1 O5'
-_chemical_name_systematic        
+_chemical_name_systematic
 '7,8-Didehydro-4,5\a-epoxy-17-methyl-morphinan-3,6\a-diol diacetate'
 _chemical_properties_biological  'analgesic, sedative'
 _chemical_absolute_configuration unk
