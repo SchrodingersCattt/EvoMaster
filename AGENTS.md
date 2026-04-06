@@ -51,7 +51,7 @@
 |------|-------------------------|----------------|
 | 定位 | 下游应用：基于 EvoMaster 的 evomaster 核心 + 自研 playground、服务端、MCP 适配 | 上游框架：Agent/Playground/Exp、Tools、Skills、Session 等通用实现 |
 | 当前基于版本 | v0.0.1 架构与 API | 上游已发布 v0.0.2（配置与多 Agent 等有较大变更） |
-| 代码对应 | 项目内 `evomaster/` 目录对应上游的 `evomaster/`；本仓库另有 `playground/mat_master/`、`src/`、`evomaster/adaptors/` 等自有代码 | 上游 `evomaster/` + 上游仓库内各类 `playground/` 示例 |
+| 代码对应 | 项目内 `evomaster/` 目录对应上游的 `evomaster/`；本仓库另有 `matmaster/`、`src/`、`evomaster/adaptors/` 等自有代码（历史 `playground/mat_master` 本地 Web 树已移除） | 上游 `evomaster/` + 上游仓库内各类 `playground/` 示例 |
 
 ### 与本仓库直接相关的约定
 
@@ -72,11 +72,13 @@
 
 - **协调方式**：API 与 Worker 之间通过 Redis 通信：任务队列、stream 事件发布/订阅、`session_run_owner` / `worker_alive`、stop 请求等。新增或修改功能时，不得依赖「处理当前 HTTP 请求的进程」与「执行该会话 agent 的进程」为同一进程。
 
-### MatMaster：平台 API 与本地 Web 调试后端
+### MatMaster：平台 API 与会话 Playground
 
-除上表 **API / Worker** 外，仓库内还有一套 **仅用于本地调试** 的 FastAPI 应用：`playground/mat_master/service/server/`（`python -m playground.mat_master.service.server`，环境变量 `BACKEND_PORT`，默认 **50001**）。它与根目录 `app.py` **并行存在**，不是生产部署中 API 的替代进程，而是配合 `playground/mat_master/frontend` 的裸机开发（WebSocket、同进程内 run、固定 workspace 等）。修改会话、流式推送、鉴权或 agent 执行路径时，应明确改动落在 `src/` / `app.py` 还是 `playground/.../service/server/`，避免只验证本地 Web 却误以为已覆盖生产路径。更完整的说明见根目录 [README-zh.md](README-zh.md) 中的「两套后端」。
+MatMaster 的对话与任务执行以 **根目录 `app.py` + `src/`（API）** 与 **`src/worker/agent_worker.py`（Worker）** 为主路径；会话级工作区与归档等行为由 **`matmaster.core.playground`**（`matmaster/core/playground.py`）与 `AgentRunService` 协同完成。
 
-**两套 `run_agent_sync`：** 生产为 `AgentRunService.run_agent_sync`（`src/services/agent_run_service.py`），本地 Web 为 `_run_agent_sync`（`playground/mat_master/service/server/run_agent.py`）。行为差异（落库、Bohrium、OSS、推送过滤、配额等）见 [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md)。
+历史上曾存在独立的 **`playground/mat_master`** 本地 Web（Next + 另一 FastAPI 进程）；该目录树已从本仓库移除。修改会话、流式推送、鉴权或 agent 执行路径时，以 `src/` / `app.py` / Worker 为准。说明与入口见根目录 [README-zh.md](README-zh.md)。
+
+**`run_agent_sync`：** 当前以 `AgentRunService.run_agent_sync`（`src/services/agent_run_service.py`）为准。若检出中包含 [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md)，其中可能保留与历史本地 Web 栈的对照说明。
 
 ---
 
@@ -86,7 +88,7 @@
 
 - **运行 / 验证时**：在项目根目录下应使用 **`uv run python`**（或先 `source .venv/bin/activate` 再执行 `python`），不要依赖系统 PATH 下第一个 `python`，以免误用其他环境（如系统 3.9、anaconda）导致行为不一致。
 - **示例**：验证导入、跑脚本、跑测试时统一用 uv 环境：
-  - `uv run python -c "from playground.mat_master.core.callback import MatToolCallbacks; print('OK')"`
+  - `uv run python -c "from matmaster.core.playground import Playground; print('OK')"`
   - `uv run pytest ...`
   - `uv run python app.py` 等。
 - **版本约定**：`pyproject.toml` 中 `requires-python = ">=3.10"`；实际开发/CI 使用 uv 安装的版本（如 3.13）。涉及语法或类型注解（如是否保留 `from __future__ import annotations`）时，以 **uv 环境中的 Python 版本** 为准做验证与决策。

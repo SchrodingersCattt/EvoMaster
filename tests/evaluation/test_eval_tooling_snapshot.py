@@ -23,8 +23,7 @@ def test_snapshot_eval_tooling_direct_matches_production_exp() -> None:
     assert "mm_web_search" in snap["builtin_tool_names"]
     assert "web_fetch" in snap["builtin_tool_names"]
     assert snap["session_type"] == "local"
-    # Umbrella ``matmaster/skills`` expands to lazymcp + playground/mat_master/skills
-    # when both exist; mat_master tree may be absent in minimal checkouts / images.
+    # Umbrella ``matmaster/skills`` expands to lazymcp roots when present.
     assert len(snap["skills_roots"]) >= 1
     joined = "\n".join(snap["skills_roots"])
     assert "mat_master" in joined or "lazymcp" in joined

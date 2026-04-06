@@ -6,7 +6,7 @@ skill_type: operator
 
 # GROMACS System Prep
 
-Use the local wrapper under `playground/mat_master/skills/gromacs-system-prep/scripts/prepare_gmx.py`.
+Use the local wrapper under `matmaster/skills/playground-skills/gromacs-system-prep/scripts/prepare_gmx.py`.
 
 ## When to use
 
@@ -26,7 +26,7 @@ Use the local wrapper under `playground/mat_master/skills/gromacs-system-prep/sc
 
 ## Script
 
-- `playground/mat_master/skills/gromacs-system-prep/scripts/prepare_gmx.py`
+- `matmaster/skills/playground-skills/gromacs-system-prep/scripts/prepare_gmx.py`
 
 ## Rules
 

@@ -8,63 +8,31 @@ EvoMaster是用于构建科学智能体的框架，提供MCP工具、技能与�
 
 ## MatMaster-Evo
 
-MatMaster是面向材料研究的科学智能体，前端为Next.js，后端为FastAPI。开发时通过一键脚本同时启动前后端。
+MatMaster 是面向材料研究的科学智能体。本仓库中的 **平台 API** 为 FastAPI（根目录 `app.py` + `src/`）；对话链路按 **Redis + Worker** 设计（见 `AGENTS.md`「服务架构」）。
 
-### 两套后端（入口与端口）
+### 平台 API（入口）
 
-本仓库里与 MatMaster 相关的 **HTTP 服务有两套**，用途不同，请勿混用端口或把本地调试后端当成生产 API：
+| | **平台 API（`src/` + 根目录 `app.py`）** |
+|------|-------------------------------------------|
+| **用途** | HTTP：会话落库、SSE、经 Redis 将任务交给 Worker。 |
+| **典型入口** | `uv run python app.py`（默认 **8000**）。 |
+| **说明** | 生产向部署一般为 API 与 Worker 多进程/多实例。 |
 
-| | **平台 API（`src/` + 根目录 `app.py`）** | **本地 MatMaster Web（`playground/mat_master/service/server`）** |
-|------|-------------------------------------------|-------------------------------------------------------------------|
-| **用途** | 生产/集成：会话落库、SSE、与 Worker 经 Redis 协作 | 本地调试：与 `playground/mat_master` 下 Next 仪表盘配套，WebSocket 对话、内存会话、固定 workspace |
-| **典型入口** | `uv run python app.py`（默认 **8000**） | `python -m playground.mat_master.service.server` 或 `start_dev.sh`（默认 **BACKEND_PORT=50001**） |
-| **协议** | REST + SSE（如 `/api/v1/.../chat/sessions/...`） | WebSocket `/ws/chat` 等 |
-| **说明** | 部署与多进程约定见 `AGENTS.md`「服务架构」 | 详见 [playground/mat_master/README_WEB.md](playground/mat_master/README_WEB.md) |
+历史上曾存在的 **`playground/mat_master`**（独立 Next + FastAPI 本地栈）已从本仓库 **移除**。会话侧 Agent 行为仍通过 `matmaster.core.playground`（`matmaster/core/playground.py`）由平台 API 与 Worker 使用。若检出中包含该文档，关于另一套 `run_agent_sync` 的对照说明见 [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md)。
 
-平台 API 与本地 Web 各自对应的 **`run_agent_sync` 实现不同**（落库、OSS、Bohrium、事件推送等），维护时勿混为一谈；对照说明见 [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md)。
+### Agent DevShell（命令行）
 
-下文「启动前端调试」中的后端指 **本地 Web** 这一套（默认 50001）。
-
-### 启动前端调试（前后端一体）
-
-在项目根目录下执行：
+不启动平台 HTTP 时，可用 `pyproject.toml` 中的 **`mm-devshell`** 做交互 REPL 或单次运行：
 
 ```bash
-cd playground/mat_master/
-bash start_dev.sh
+uv sync
+uv run mm-devshell repl --workdir ./workspace --log-dir ./logs
+# 或：uv run mm-devshell run --workdir ./workspace --log-dir ./logs -p "你的提示"
 ```
 
-然后在浏览器访问`http://<主机>:<FRONTEND_PORT>`（默认`http://127.0.0.1:50004`）。后端API端口为`BACKEND_PORT`（默认`50001`；在Windows/Git Bash下脚本会改用`8000`，除非已设置`BACKEND_PORT`）。
+鉴权仍使用**仓库根目录**的 `.env`。更多参数见 `mm-devshell --help`（如 `--exp`、`--config`）。
 
-### 指定工作目录启动（CLI）
-
-以可编辑方式安装项目后，可用**自定义工作目录**启动前后端：`work_dir` 作为**共享工作区**，前端文件树与 agent 输出都直接使用该目录（不再按 session 建 `workspaces/` 子目录），日志与运行数据也在此目录下。适合指向任意本地路径（如稿件或项目文件夹）。
-
-```bash
-pip install -e .
-matmaster run ./myproject
-```
-
-可在任意目录执行 `matmaster`；鉴权仍使用**仓库根目录的 `.env`**，无需在工作目录再放 `.env`。
-
-| 选项 | 默认值 | 说明 |
-|------|--------|------|
-| `work_dir` | （必填） | 共享工作区目录：文件树、agent 输出与日志均写入此处。 |
-| `--backend-port` | Windows 下 `8000`，其他 `50001` | 后端端口。 |
-| `--frontend-port` | `50004` | 前端端口。 |
-| `--public-host` | 自动检测 | API/WS 所用主机（如公网访问时设置）。 |
-
-**使用 uv 时：** 在仓库内执行 `uv run matmaster run /path/to/work_dir`；或先激活项目 venv（`source .venv/bin/activate` 或 Windows 下 `.venv\Scripts\activate`），之后在任意目录执行 `matmaster run work_dir`。
-
-### `start_dev.sh`涉及的环境变量
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `BACKEND_PORT` | `50001`（Windows下为`8000`） | 后端FastAPI端口。 |
-| `FRONTEND_PORT` | `50004` | 前端Next.js开发服务端口。 |
-| `PUBLIC_HOST` | 本机IP或`127.0.0.1` | 供前端请求的API/WS所用主机。需从其他机器访问时设置（如`PUBLIC_HOST=your-host.example.com`）。 |
-| `NEXT_PUBLIC_API_URL` | `http://<PUBLIC_HOST>:<BACKEND_PORT>` | 若设置，则前端使用该地址作为API根地址。 |
-| `NEXT_PUBLIC_WS_URL` | `ws://<PUBLIC_HOST>:<BACKEND_PORT>/ws/chat` | 未设置时由脚本根据API地址自动推导。 |
+**未配置 Redis：** 若未设置 `REDIS_URL`，部分聊天入队能力可能不可用（503）；全栈联调请按 `AGENTS.md` 配置。
 
 ---
 
@@ -92,33 +60,17 @@ cp .env.template .env
 ```
 EvoMaster/
 ├── evomaster/           # 核心库（agent、session、tools、skills、LLM）
-├── playground/
-│   └── mat_master/      # MatMaster应用（前端 + 服务 + start_dev.sh）
+├── matmaster/           # MatMaster 适配层、实验 TOML、打包技能
+├── src/                 # 平台 API、DAO、服务、Worker
 ├── config/              # MatMaster 配置与 mcp_config*.json
-└── docs/                # 文档
+└── evaluation/          # 题库与评测流水线（见 evaluation/README_CN.md）
 ```
 
 ---
 
 ## CLI（可选）
 
-不启动Web时，可通过命令行运行智能体。
-
-**准备：** 安装依赖 `uv sync`（或 `pip install -e .`），并在 `.env` 或 `config/config.yaml`（及所需 MCP JSON）中配置 LLM 与 Bohrium。
-
-```bash
-# MatMaster（配置见 config/）
-python run.py --agent mat_master --config config/config.yaml --task "你的任务"
-
-# 从文件读取任务
-python run.py --agent mat_master --config config/config.yaml --task task.txt
-
-# 交互模式
-python run.py --agent mat_master --config config/config.yaml --interactive
-
-# direct / planner 模式
-python run.py --agent mat_master --config config/config.yaml --mode planner --task "你的任务"
-```
+智能体命令行入口见上文 **Agent DevShell**（`mm-devshell`）。批量评测与脚本见 `evaluation/scripts/` 及 `evaluation/README_CN.md`。
 
 ---
 
