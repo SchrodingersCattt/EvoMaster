@@ -112,6 +112,56 @@ def _sandbox_download_object(
     _download_to_file(url, dest_path)
 
 
+_SANDBOX_OBJECT_DOWNLOAD_LIMIT = 128
+
+
+def _sandbox_relative_object_path(object_path: str, root_prefix: str) -> str:
+    path = object_path.strip()
+    if root_prefix and path.startswith(root_prefix):
+        path = path[len(root_prefix) :]
+    return path.lstrip('/')
+
+
+def _sandbox_download_objects(
+    *,
+    objects: list[dict[str, Any]],
+    root_host: str,
+    root_token: str,
+    root_prefix: str,
+    result_dir: Path,
+) -> list[str]:
+    downloaded: list[str] = []
+    count = 0
+
+    for obj in objects:
+        if count >= _SANDBOX_OBJECT_DOWNLOAD_LIMIT:
+            break
+        if not isinstance(obj, dict) or obj.get('isDir'):
+            continue
+        object_path = str(obj.get('path') or obj.get('key') or '').strip()
+        if not object_path:
+            continue
+
+        relative_path = _sandbox_relative_object_path(object_path, root_prefix)
+        if not relative_path or relative_path.endswith('.zip'):
+            continue
+
+        dest_path = result_dir / relative_path
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            _sandbox_download_object(root_host, root_token, object_path, dest_path)
+            downloaded.append(relative_path)
+            count += 1
+        except Exception:
+            logger.debug(
+                'sandbox object download failed object=%s',
+                object_path,
+                exc_info=True,
+            )
+
+    return downloaded
+
+
 def _sandbox_choose_zip_object(
     job_id: int | str, objects: list[dict[str, Any]]
 ) -> str | None:
@@ -264,21 +314,21 @@ def _sandbox_download_results(
                 exc_info=True,
             )
 
+    downloaded_files: list[str] = []
+    if objects and root_host and root_token:
+        downloaded_files = _sandbox_download_objects(
+            objects=objects,
+            root_host=root_host,
+            root_token=root_token,
+            root_prefix=root_prefix,
+            result_dir=result_dir,
+        )
+        downloaded_files = _merge_log_file(downloaded_files, log_downloaded)
+        if downloaded_files:
+            return downloaded_files, _read_log(result_dir)
+
     if log_downloaded:
         return ['log'], _read_log(result_dir)
-
-    if objects:
-        files = [
-            str(obj.get('path') or obj.get('key') or '')
-            for obj in objects
-            if isinstance(obj, dict) and (obj.get('path') or obj.get('key'))
-        ]
-        if root_prefix:
-            files = [
-                path[len(root_prefix) :] if path.startswith(root_prefix) else path
-                for path in files
-            ]
-        return files, _read_log(result_dir)
 
     if result_url:
         return [], '(sandbox resultUrl download failed)'

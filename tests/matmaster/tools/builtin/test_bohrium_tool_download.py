@@ -7,10 +7,12 @@ import json
 from pathlib import Path
 
 import matmaster.tools.builtin.bohrium_tool as bohrium_module
+import matmaster.tools.builtin.bohrium_tool._results as bohrium_results_module
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.tool_result import ToolResult
 from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
     FakeRemoteSession,
+    _FakeDownloadResponse,
     _patch_bridge,
 )
 
@@ -264,3 +266,126 @@ class TestBohriumDownloadExecution:
         assert result.status == 'error'
         assert 'Unexpected job status' in result.content
         assert 'code=99' in result.content
+
+    def test_download_failed_falls_back_to_individual_objects_when_zip_missing(
+        self, tmp_path, monkeypatch
+    ):
+        tool = BohriumTool(workdir=tmp_path)
+        http_get_calls: list[str] = []
+        sleep_calls: list[float] = []
+
+        statuses = [
+            {
+                'status': -1,
+                'resultUrl': 'https://store.example/api/download/'
+                'prefix/job-789.zip?token=root-token',
+            },
+            {
+                'status': -1,
+                'resultUrl': 'https://store.example/api/download/'
+                'prefix/job-789.zip?token=root-token',
+            },
+            {
+                'status': -1,
+                'resultUrl': 'https://store.example/api/download/'
+                'prefix/job-789.zip?token=root-token',
+            },
+        ]
+        idx = 0
+
+        def fake_get(base_url, path, access_key, params=None, timeout=30):
+            del base_url, access_key, params, timeout
+            nonlocal idx
+            detail = statuses[min(idx, len(statuses) - 1)]
+            idx += 1
+            return {'data': detail}
+
+        def fake_post(base_url, path, access_key, payload, timeout=30):
+            del base_url, access_key, timeout
+            if path == '/openapi/v1/sandbox/job/file/token':
+                return {
+                    'code': 0,
+                    'data': {
+                        'host': 'https://store.example',
+                        'path': 'prefix/log',
+                        'token': 'log-token',
+                    },
+                }
+            raise AssertionError(path)
+
+        def fake_requests_post(url, *, headers=None, json=None, timeout=30):
+            del headers, json, timeout
+            assert url == 'https://store.example/api/iterate'
+            return _FakeDownloadResponse(
+                json_data={
+                    'code': 0,
+                    'data': {
+                        'hasNext': False,
+                        'objects': [
+                            {'path': 'prefix/log', 'isDir': False},
+                            {'path': 'prefix/run_bader.sh', 'isDir': False},
+                            {'path': 'prefix/OUT.ABACUS/warning.log', 'isDir': False},
+                            {'path': 'prefix/bader_bin', 'isDir': False},
+                        ],
+                    },
+                }
+            )
+
+        def fake_requests_get(
+            url, *, headers=None, params=None, timeout=30, stream=False
+        ):
+            del headers, params, timeout
+            http_get_calls.append(url)
+            if url.startswith('https://store.example/api/download/prefix/log'):
+                return _FakeDownloadResponse(content=b'job failed\n')
+            if url.startswith('https://store.example/api/download/prefix/job-789.zip'):
+                return _FakeDownloadResponse(status_code=404)
+            if url.startswith('https://store.example/api/download/prefix/run_bader.sh'):
+                return _FakeDownloadResponse(content=b'#!/bin/bash\necho run\n')
+            if url.startswith(
+                'https://store.example/api/download/prefix/OUT.ABACUS/warning.log'
+            ):
+                return _FakeDownloadResponse(content=b'warning details\n')
+            if url.startswith('https://store.example/api/download/prefix/bader_bin'):
+                return _FakeDownloadResponse(content=b'binary')
+            return _FakeDownloadResponse(status_code=404)
+
+        monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(bohrium_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_module, '_post', fake_post)
+        monkeypatch.setattr(bohrium_results_module, '_post', fake_post)
+        monkeypatch.setattr(bohrium_results_module.requests, 'post', fake_requests_post)
+        monkeypatch.setattr(bohrium_results_module.requests, 'get', fake_requests_get)
+        import time as time_module
+
+        monkeypatch.setattr(bohrium_module, 'time', time_module, raising=False)
+        monkeypatch.setattr(bohrium_module.time, 'sleep', sleep_calls.append)
+
+        result = asyncio.run(
+            tool.execute(
+                {
+                    'action': 'download',
+                    'job_id': 'job-789',
+                    'result_dir': str(tmp_path / 'results'),
+                }
+            )
+        )
+
+        assert result.status == 'error'
+        payload = json.loads(result.content)
+        result_dir = Path(payload['result_dir'])
+        assert payload['files'] == [
+            'log',
+            'run_bader.sh',
+            'OUT.ABACUS/warning.log',
+            'bader_bin',
+        ]
+        assert (result_dir / 'run_bader.sh').read_text(encoding='utf-8').startswith(
+            '#!/bin/bash'
+        )
+        assert (
+            result_dir / 'OUT.ABACUS' / 'warning.log'
+        ).read_text(encoding='utf-8') == 'warning details\n'
+        assert (result_dir / 'bader_bin').read_bytes() == b'binary'
+        assert sleep_calls == [3, 3]
