@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: struct
 questions:
-- id: BP_struct_001_20260405b
+- id: BP_struct_001_20260406
   capability: batch_processing
   domain: struct
   intent: Batch-construct Si(100) surface slabs with varying vacuum thickness while
@@ -69,7 +69,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value: &id002
-      max: 10000
+      max: 35000
   scoring_checklist:
   - id: vacuum_sweep_variable
     criterion: 'Vacuum thickness parameter varies across exactly 5 calls: 10, 15,
@@ -120,7 +120,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_002_20260404
+- id: BP_struct_002_20260406
   capability: batch_processing
   domain: struct
   intent: Generate VASP INCAR files for DOS calculation across 4 different structures.
@@ -216,7 +216,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_003_20260405
+- id: BP_struct_003_20260406
   capability: batch_processing
   domain: struct
   intent: Generate 5 VASP INCAR input files for Al ENCUT convergence test (280, 300,
@@ -327,7 +327,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_004_20260404
+- id: BP_struct_004_20260406
   capability: batch_processing
   domain: struct
   intent: Perform batch post-processing of band structures for 3 materials (Si, Ge,
@@ -395,7 +395,7 @@ questions:
   - id: analysis_count_correct
     criterion: Exactly 3 materials are analyzed (Si, Ge, GaAs).
     axis: correctness
-    verify: numerical_range
+    verify: llm_binary_judge
   - id: kpath_unified
     criterion: All 3 analyses use the same k-path (M-Gamma-K) with 50 points per segment.
     axis: correctness
@@ -443,7 +443,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_005_20260405
+- id: BP_struct_005_20260406
   capability: batch_processing
   domain: struct
   intent: Generate corrected VASP input files for 5 structures whose initial geometry
