@@ -61,6 +61,23 @@ _DEFAULT_POLL_WAIT_SECONDS = 30
 _DEFAULT_POLL_INTERVAL_SECONDS = 5
 _FAILURE_CONFIRM_ATTEMPTS = 3
 _FAILURE_CONFIRM_SLEEP_SECONDS = 3
+
+
+def _get_job_detail(
+    *,
+    ctx: _ResolvedBohriumContext,
+    job_id: int | str,
+    sandbox: bool,
+) -> dict[str, Any]:
+    detail_path = (
+        f'/openapi/v1/sandbox/job/{job_id}'
+        if sandbox
+        else f'/openapi/v1/job/{job_id}'
+    )
+    detail = _get(ctx.base_url, detail_path, ctx.access_key)
+    return detail.get('data', {})
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # input_dir preparation helpers
 # ═══════════════════════════════════════════════════════════════════════════
@@ -603,10 +620,19 @@ class BohriumTool(BuiltinTool):
                 status='error', content='Missing required parameter: job_id'
             )
 
+        if args.get('result_dir'):
+            return ToolResult(
+                status='error',
+                content=(
+                    'poll no longer downloads artifacts. '
+                    f'Use Bohrium(action="download", job_id={raw_job_id!r}, '
+                    f'result_dir="results/run_{raw_job_id}") instead.'
+                ),
+            )
+
         sandbox = _use_sandbox()
         self._log_request_context(action='poll', ctx=ctx, sandbox=sandbox)
         job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
-        result_dir_str = args.get('result_dir') or f'results/run_{job_id}'
         wait = _coerce_bool(args.get('wait'), default=False)
         max_wait_seconds = _coerce_positive_int(
             args.get('max_wait_seconds'), _DEFAULT_POLL_WAIT_SECONDS
@@ -615,32 +641,11 @@ class BohriumTool(BuiltinTool):
             args.get('poll_interval_seconds'), _DEFAULT_POLL_INTERVAL_SECONDS
         )
 
-        decision = resolve_output_path(
-            raw_path=result_dir_str,
-            execution_workdir=str(self._workdir or '.'),
-            session=self._session,
-        )
-        if decision.requires_remote_session:
-            return ToolResult(
-                status='error',
-                content=f"result_dir '{result_dir_str}' requires an active remote session "
-                'but none is available. Use a local path instead.',
-            )
-
-        result_dir = Path(result_dir_str)
-
         try:
-            detail_path = (
-                f'/openapi/v1/sandbox/job/{job_id}'
-                if sandbox
-                else f'/openapi/v1/job/{job_id}'
-            )
-
             waited_seconds = 0
 
             while True:
-                detail = _get(ctx.base_url, detail_path, ctx.access_key)
-                detail_data = detail.get('data', {})
+                detail_data = _get_job_detail(ctx=ctx, job_id=job_id, sandbox=sandbox)
                 code = detail_data.get('status', 0)
                 status_name = _STATUS_MAP.get(code, f'Unknown({code})')
 
@@ -687,32 +692,6 @@ class BohriumTool(BuiltinTool):
                     )
 
                 if code == _SUCCESS_CODE:
-                    files, log_tail = download_bohrium_results(
-                        job_id,
-                        detail_data,
-                        result_dir,
-                        ctx=ctx,
-                        sandbox=sandbox,
-                    )
-
-                    report_dir = str(result_dir)
-                    if (
-                        decision.kind == 'remote_share'
-                        and self._session is not None
-                        and hasattr(self._session, 'upload_directory')
-                    ):
-                        try:
-                            self._session.upload_directory(
-                                str(result_dir), result_dir_str
-                            )
-                            report_dir = result_dir_str
-                        except Exception as upload_exc:
-                            logger.warning(
-                                'Failed to upload results to remote share %s: %s',
-                                result_dir_str,
-                                upload_exc,
-                            )
-
                     return ToolResult(
                         status='success',
                         content=json.dumps(
@@ -720,62 +699,35 @@ class BohriumTool(BuiltinTool):
                                 'success': True,
                                 'job_id': job_id,
                                 'status': 'Finished',
-                                'result_dir': report_dir,
-                                'files': files,
-                                'log_tail': log_tail,
+                                'message': (
+                                    'Job is Finished. Call '
+                                    f'Bohrium(action="download", job_id={job_id!r}, '
+                                    f'result_dir="results/run_{job_id}") '
+                                    'to retrieve artifacts.'
+                                ),
                             },
                             ensure_ascii=False,
                         ),
                     )
 
                 if code in _FAILURE_CODES:
-                    confirm_detail = detail_data
-                    confirm_code = code
-                    for _ in range(1, _FAILURE_CONFIRM_ATTEMPTS):
-                        time.sleep(_FAILURE_CONFIRM_SLEEP_SECONDS)
-                        detail = _get(ctx.base_url, detail_path, ctx.access_key)
-                        confirm_detail = detail.get('data', {})
-                        confirm_code = confirm_detail.get('status', 0)
-                        if confirm_code not in _FAILURE_CODES:
-                            break
-
-                    if confirm_code in _FAILURE_CODES:
-                        confirmed_status_name = _STATUS_MAP.get(
-                            confirm_code,
-                            f'Unknown({confirm_code})',
-                        )
-                        files: list[str] = []
-                        log_tail = ''
-                        try:
-                            files, log_tail = download_bohrium_results(
-                                job_id,
-                                confirm_detail,
-                                result_dir,
-                                ctx=ctx,
-                                sandbox=sandbox,
-                            )
-                        except Exception:
-                            pass
-                        return ToolResult(
-                            status='error',
-                            content=json.dumps(
-                                {
-                                    'success': False,
-                                    'job_id': job_id,
-                                    'status': confirmed_status_name,
-                                    'result_dir': str(result_dir) if files else '',
-                                    'files': files,
-                                    'log_tail': log_tail,
-                                    'error': f'Job {confirmed_status_name} on Bohrium.',
-                                },
-                                ensure_ascii=False,
-                            ),
-                        )
-
-                    code = confirm_code
-                    detail_data = confirm_detail
-                    status_name = _STATUS_MAP.get(code, f'Unknown({code})')
-                    continue
+                    return ToolResult(
+                        status='success',
+                        content=json.dumps(
+                            {
+                                'success': True,
+                                'job_id': job_id,
+                                'status': status_name,
+                                'message': (
+                                    'Job is Failed. Call '
+                                    f'Bohrium(action="download", job_id={job_id!r}, '
+                                    f'result_dir="results/run_{job_id}") '
+                                    'to retrieve logs and artifacts.'
+                                ),
+                            },
+                            ensure_ascii=False,
+                        ),
+                    )
 
                 return ToolResult(
                     status='success',

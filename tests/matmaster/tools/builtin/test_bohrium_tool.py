@@ -776,13 +776,11 @@ class TestBohriumSessionCredentials:
         assert result.status == "success"
         assert get_calls[0][1] == "session-ak"  # Used session credential, not env
 
-    def test_poll_remote_share_without_session_errors(self, tmp_path, monkeypatch):
-        """poll with /share/ result_dir and no session should error."""
+    def test_poll_rejects_result_dir_parameter(self, tmp_path, monkeypatch):
+        """poll no longer accepts result_dir — directs to download action."""
         monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
         monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
 
-        # Provide env credentials so we pass the credential check,
-        # but no session -- so path policy rejects the remote path
         _patch_bridge(monkeypatch)
         tool = BohriumTool(workdir=tmp_path)
 
@@ -792,7 +790,8 @@ class TestBohriumSessionCredentials:
             )
         )
         assert result.status == "error"
-        assert "remote session" in result.content.lower()
+        assert "no longer downloads artifacts" in result.content
+        assert 'action="download"' in result.content
 
     def test_submit_uses_session_credentials_when_env_missing(
         self, tmp_path, monkeypatch

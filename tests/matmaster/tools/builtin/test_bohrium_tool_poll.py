@@ -7,13 +7,10 @@ import json
 from pathlib import Path
 
 import matmaster.tools.builtin.bohrium_tool as bohrium_module
-import matmaster.tools.builtin.bohrium_tool._results as bohrium_results_module
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.tool_result import ToolResult
 from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
-    _FakeDownloadResponse,
     _patch_bridge,
-    _zip_bytes,
 )
 
 
@@ -102,297 +99,81 @@ class TestBohriumPollExecution:
         assert payload['status'] == 'Running'
         assert get_calls == ['/openapi/v1/sandbox/job/job-789']
 
-    def test_poll_failed_confirms_before_downloading(self, tmp_path, monkeypatch):
+    def test_poll_finished_returns_guidance_without_downloading(
+        self, tmp_path, monkeypatch
+    ):
         tool = BohriumTool(workdir=tmp_path)
-        get_calls: list[str] = []
-        sleep_calls: list[float] = []
-        statuses = [
-            {
-                'status': -1,
-                'resultUrl': 'https://store.example/api/download/'
-                'prefix/job-999.zip?token=root-token',
-            },
-            {
-                'status': -1,
-                'resultUrl': 'https://store.example/api/download/'
-                'prefix/job-999.zip?token=root-token',
-            },
-            {
-                'status': -1,
-                'resultUrl': 'https://store.example/api/download/'
-                'prefix/job-999.zip?token=root-token',
-            },
-        ]
-        status_index = 0
-        download_calls: list[tuple[int | str, dict, Path, bool]] = []
+        download_calls: list[tuple] = []
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
             del base_url, access_key, params, timeout
-            nonlocal status_index
-            get_calls.append(path)
-            detail_data = statuses[min(status_index, len(statuses) - 1)]
-            status_index += 1
-            return {'data': detail_data}
+            assert path == '/openapi/v1/sandbox/job/job-finished'
+            return {'data': {'status': 2}}
 
-        def fake_download_results(job_id, detail_data, result_dir, *, ctx, sandbox):
-            del ctx
-            download_calls.append((job_id, detail_data, result_dir, sandbox))
-            return ['log'], 'boom'
+        def fake_download_results(*args, **kwargs):
+            download_calls.append((args, kwargs))
+            return ['log'], 'should not happen'
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_module, '_get', fake_get)
-        import time as time_module
-
-        monkeypatch.setattr(bohrium_module, 'time', time_module, raising=False)
-        monkeypatch.setattr(bohrium_module.time, 'sleep', sleep_calls.append)
         monkeypatch.setattr(
             bohrium_module, 'download_bohrium_results', fake_download_results
         )
 
-        result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-999'}))
+        result = asyncio.run(
+            tool.execute({'action': 'poll', 'job_id': 'job-finished'})
+        )
 
-        assert result.status == 'error'
+        assert result.status == 'success'
         payload = json.loads(result.content)
-        assert payload['status'] == 'Failed'
-        assert payload['result_dir']
-        assert payload['files'] == ['log']
-        assert payload['log_tail'] == 'boom'
-        assert get_calls == ['/openapi/v1/sandbox/job/job-999'] * 3
-        assert sleep_calls == [3, 3]
-        assert len(download_calls) == 1
+        assert payload['status'] == 'Finished'
+        assert 'action="download"' in payload['message']
+        assert 'result_dir' not in payload
+        assert 'files' not in payload
+        assert download_calls == []
 
-    def test_poll_failed_downloads_log_from_file_token_and_result_url_zip(
+    def test_poll_failed_returns_guidance_without_downloading(
         self, tmp_path, monkeypatch
     ):
         tool = BohriumTool(workdir=tmp_path)
-        get_calls: list[str] = []
-        file_token_calls: list[tuple[str, dict[str, str]]] = []
-        iterate_calls: list[tuple[str, dict[str, str], dict[str, str]]] = []
-        http_get_calls: list[tuple[str, object, object, int, bool]] = []
-        sleep_calls: list[int | float] = []
+        sleep_calls: list[float] = []
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
             del base_url, access_key, params, timeout
-            get_calls.append(path)
-            return {
-                'data': {
-                    'status': -1,
-                    'resultUrl': 'https://store.example/api/download/'
-                    'prefix/job-123.zip?token=root-token',
-                }
-            }
-
-        def fake_post(base_url, path, access_key, payload, timeout=30):
-            del base_url, access_key, timeout
-            file_token_calls.append((path, payload))
-            return {
-                'code': 0,
-                'data': {
-                    'host': 'https://store.example',
-                    'path': 'prefix/log',
-                    'token': 'log-token',
-                },
-            }
-
-        def fake_requests_post(url, *, headers=None, json=None, timeout=30):
-            del timeout
-            iterate_calls.append((url, headers, json))
-            return _FakeDownloadResponse(
-                json_data={
-                    'code': 0,
-                    'data': {
-                        'hasNext': False,
-                        'objects': [
-                            {
-                                'path': 'prefix/job-123.zip',
-                                'isDir': False,
-                            },
-                            {
-                                'path': 'prefix/log',
-                                'isDir': False,
-                            },
-                        ],
-                    },
-                }
-            )
-
-        def fake_requests_get(
-            url, *, headers=None, params=None, timeout=30, stream=False
-        ):
-            http_get_calls.append((url, headers, params, timeout, stream))
-            if url.startswith('https://store.example/api/download/prefix/log'):
-                return _FakeDownloadResponse(
-                    content=b'traceback: model not found\n',
-                )
-            if url.startswith('https://store.example/api/download/prefix/job-123.zip'):
-                return _FakeDownloadResponse(
-                    content=_zip_bytes(
-                        {
-                            'log': 'traceback: model not found\n',
-                            'stderr.txt': 'x',
-                        }
-                    ),
-                )
-            if not stream:
-                return _FakeDownloadResponse(json_data={'data': {'list': []}})
-            return _FakeDownloadResponse(content=b'')
-
-        def fake_sleep(seconds):
-            sleep_calls.append(seconds)
+            return {'data': {'status': -1}}
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_module, '_get', fake_get)
-        monkeypatch.setattr(bohrium_module, '_post', fake_post)
-        monkeypatch.setattr(bohrium_results_module, '_post', fake_post)
-        monkeypatch.setattr(bohrium_module.requests, 'post', fake_requests_post)
-        monkeypatch.setattr(bohrium_module.requests, 'get', fake_requests_get)
-        import time as time_module
-
-        monkeypatch.setattr(bohrium_module, 'time', time_module, raising=False)
-        monkeypatch.setattr(bohrium_module.time, 'sleep', fake_sleep)
-
-        result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-123'}))
-
-        assert isinstance(result, ToolResult)
-        assert result.status == 'error'
-        payload = json.loads(result.content)
-        assert payload['status'] == 'Failed'
-        assert payload['result_dir']
-        assert 'traceback: model not found' in payload['log_tail']
-        assert 'log' in payload['files']
-        assert any(
-            url.startswith('https://store.example/api/download/prefix/log')
-            for url, _, _, _, _ in http_get_calls
-        )
-        assert any(
-            url.startswith('https://store.example/api/download/prefix/job-123.zip')
-            for url, _, _, _, _ in http_get_calls
-        )
-        assert file_token_calls == [
-            (
-                '/openapi/v1/sandbox/job/file/token',
-                {'filePath': 'log', 'jobId': 'job-123'},
-            )
-        ]
-        assert iterate_calls == [
-            (
-                'https://store.example/api/iterate',
-                {
-                    'Authorization': 'Bearer root-token',
-                    'Content-Type': 'application/json',
-                },
-                {'prefix': 'prefix/'},
-            )
-        ]
-        assert get_calls == ['/openapi/v1/sandbox/job/job-123'] * 3
-        assert sleep_calls == [3, 3]
-
-    def test_poll_failed_returns_log_when_zip_is_not_ready(self, tmp_path, monkeypatch):
-        tool = BohriumTool(workdir=tmp_path)
-        get_calls: list[str] = []
-        file_token_calls: list[tuple[str, dict[str, str]]] = []
-        iterate_calls: list[tuple[str, dict[str, str], dict[str, str]]] = []
-        http_get_calls: list[tuple[str, object, object, int, bool]] = []
-        sleep_calls: list[int | float] = []
-
-        def fake_get(base_url, path, access_key, params=None, timeout=30):
-            del base_url, access_key, params, timeout
-            get_calls.append(path)
-            return {
-                'data': {
-                    'status': -1,
-                    'resultUrl': 'https://store.example/api/download/'
-                    'prefix/job-456.zip?token=root-token',
-                }
-            }
-
-        def fake_post(base_url, path, access_key, payload, timeout=30):
-            del base_url, access_key, timeout
-            file_token_calls.append((path, payload))
-            return {
-                'code': 0,
-                'data': {
-                    'host': 'https://store.example',
-                    'path': 'prefix/log',
-                    'token': 'log-token',
-                },
-            }
-
-        def fake_requests_post(url, *, headers=None, json=None, timeout=30):
-            del timeout
-            iterate_calls.append((url, headers, json))
-            return _FakeDownloadResponse(
-                json_data={
-                    'code': 0,
-                    'data': {
-                        'hasNext': False,
-                        'objects': [
-                            {
-                                'path': 'prefix/log',
-                                'isDir': False,
-                            }
-                        ],
-                    },
-                }
-            )
-
-        def fake_requests_get(
-            url, *, headers=None, params=None, timeout=30, stream=False
-        ):
-            http_get_calls.append((url, headers, params, timeout, stream))
-            if url.startswith('https://store.example/api/download/prefix/log'):
-                return _FakeDownloadResponse(
-                    content=b'runtime error: missing model\n',
-                )
-            if url.startswith('https://store.example/api/download/prefix/job-456.zip'):
-                return _FakeDownloadResponse(status_code=404)
-            return _FakeDownloadResponse(status_code=404)
-
-        monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
-        _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_module, '_get', fake_get)
-        monkeypatch.setattr(bohrium_module, '_post', fake_post)
-        monkeypatch.setattr(bohrium_results_module, '_post', fake_post)
-        monkeypatch.setattr(bohrium_module.requests, 'post', fake_requests_post)
-        monkeypatch.setattr(bohrium_module.requests, 'get', fake_requests_get)
         import time as time_module
 
         monkeypatch.setattr(bohrium_module, 'time', time_module, raising=False)
         monkeypatch.setattr(bohrium_module.time, 'sleep', sleep_calls.append)
 
-        result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-456'}))
+        result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-failed'}))
 
-        assert isinstance(result, ToolResult)
-        assert result.status == 'error'
+        assert result.status == 'success'
         payload = json.loads(result.content)
-        assert payload['result_dir']
-        assert payload['files'] == ['log']
-        assert 'runtime error: missing model' in payload['log_tail']
-        assert any(
-            url.startswith('https://store.example/api/download/prefix/log')
-            for url, _, _, _, _ in http_get_calls
-        )
-        assert any(
-            url.startswith('https://store.example/api/download/prefix/job-456.zip')
-            for url, _, _, _, _ in http_get_calls
-        )
-        assert file_token_calls == [
-            (
-                '/openapi/v1/sandbox/job/file/token',
-                {'filePath': 'log', 'jobId': 'job-456'},
-            )
-        ]
-        assert iterate_calls == [
-            (
-                'https://store.example/api/iterate',
+        assert payload['status'] == 'Failed'
+        assert 'action="download"' in payload['message']
+        assert sleep_calls == []
+
+    def test_poll_rejects_result_dir_parameter(self, tmp_path, monkeypatch):
+        tool = BohriumTool(workdir=tmp_path)
+        monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
+        _patch_bridge(monkeypatch)
+
+        result = asyncio.run(
+            tool.execute(
                 {
-                    'Authorization': 'Bearer root-token',
-                    'Content-Type': 'application/json',
-                },
-                {'prefix': 'prefix/'},
+                    'action': 'poll',
+                    'job_id': 'job-1',
+                    'result_dir': 'results/run_job-1',
+                }
             )
-        ]
-        assert get_calls == ['/openapi/v1/sandbox/job/job-456'] * 3
-        assert sleep_calls == [3, 3]
+        )
+
+        assert result.status == 'error'
+        assert 'no longer downloads artifacts' in result.content
+        assert 'action="download"' in result.content
