@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import MagicMock
 
 from matmaster.tools.builtin.grep_tool import GrepTool
+from matmaster.types.tool_spec import ResourceClaim
 
 
 def make_session(output="", exit_code=0):
@@ -24,6 +25,11 @@ class TestGrepToolMetadata:
         assert "-A" in props
         assert "-B" in props
         assert "-C" in props
+
+    def test_grep_uses_workspace_shared_read(self):
+        assert GrepTool.resource_claims == (
+            ResourceClaim(resource="workspace", mode="shared_read"),
+        )
 
 
 class TestGrepExecution:

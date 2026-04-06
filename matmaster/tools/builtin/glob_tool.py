@@ -64,7 +64,7 @@ class GlobTool(BuiltinTool):
         "required": ["pattern"],
     }
     resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
-        ResourceClaim(resource="session", mode="shared_read"),
+        ResourceClaim(resource="workspace", mode="shared_read"),
     )
     capabilities: ClassVar[frozenset[str]] = frozenset({"workspace.search.path"})
     effect_level: ClassVar[str] = "none"

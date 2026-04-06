@@ -58,6 +58,7 @@ class BashTool(BuiltinTool):
         "required": ["command"],
     }
     resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="workspace", mode="exclusive"),
         ResourceClaim(resource="session", mode="exclusive"),
     )
     capabilities: ClassVar[frozenset[str]] = frozenset({"shell.execute"})

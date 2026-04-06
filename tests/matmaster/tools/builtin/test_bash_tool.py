@@ -76,6 +76,11 @@ class TestBashToolMetadata:
     def test_schema_disallows_additional_properties(self):
         assert BashTool.json_schema["additionalProperties"] is False
 
+    def test_bash_claims_workspace_and_session_exclusive(self):
+        claims = {(claim.resource, claim.mode) for claim in BashTool.resource_claims}
+        assert ("workspace", "exclusive") in claims
+        assert ("session", "exclusive") in claims
+
 
 class TestBashExecution:
     def test_simple_command(self):

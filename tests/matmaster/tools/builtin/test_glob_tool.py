@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import MagicMock
 
 from matmaster.tools.builtin.glob_tool import MAX_GLOB_RESULTS, GlobTool
+from matmaster.types.tool_spec import ResourceClaim
 
 
 def make_session(output="", exit_code=0):
@@ -26,6 +27,11 @@ class TestGlobToolMetadata:
 
     def test_fast_path(self):
         assert GlobTool.fast_path_eligible is True
+
+    def test_glob_uses_workspace_shared_read(self):
+        assert GlobTool.resource_claims == (
+            ResourceClaim(resource="workspace", mode="shared_read"),
+        )
 
 
 # ---------------------------------------------------------------------------
