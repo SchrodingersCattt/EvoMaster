@@ -66,19 +66,7 @@ class EditTool(BuiltinTool):
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_FS
 
     def prompt(self, ctx=None) -> str:
-        return (
-            "Performs exact string replacements in files.\n\n"
-            "Usage:\n"
-            "- You must use your `Read` tool at least once in the conversation "
-            "before editing. This tool will error if you attempt an edit without "
-            "reading the file.\n"
-            "- ALWAYS prefer editing existing files in the codebase. NEVER write "
-            "new files unless explicitly required.\n"
-            "- The edit will FAIL if `old_string` is not unique in the file. "
-            "Either provide a larger string with more surrounding context to make "
-            "it unique or use `replace_all` to change every instance of `old_string`.\n"
-            "- Use `replace_all` for replacing and renaming strings across the file."
-        )
+        return "Read the file first. old_string must be unique; if not, add context or use replace_all."
 
     async def validate_input(
         self,

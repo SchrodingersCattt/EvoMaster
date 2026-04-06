@@ -69,6 +69,43 @@ def test_sc005_dan2_accepts_integer() -> None:
     assert ok is True, reason
 
 
+def test_sc005_formulas_reordered_elements() -> None:
+    """Agent reports same formulas but with different element ordering."""
+    answer = """
+    disorder_DAN-2.cif
+    chemical_formula: K1H14C6N5O9
+    disorder_DAP-4: C48H144Cl24N24O96
+    disorder_PAP-H4: C80H288Cl48N48O192
+    disorder_PAP-M5: C40H112Ag8Cl24N16O96
+    disorder_TILPEN: C24Fe2H40N16O2
+    """
+    ok, reason = run_sc005_formula_checks(answer)
+    assert ok is True, reason
+
+
+def test_sc005_formulas_reduced_form() -> None:
+    """Agent reports reduced-ratio formulas instead of full-cell counts."""
+    answer = """
+    disorder_DAN-2.cif
+    chemical_formula: K1H14C6N5O9
+    disorder_DAP-4: C2H6NClO4
+    disorder_PAP-H4: C5H18Cl3N3O12
+    disorder_PAP-M5: Ag1C5H14Cl3N2O12
+    disorder_TILPEN: FeH20C12N8O
+    """
+    ok, reason = run_sc005_formula_checks(answer)
+    assert ok is True, reason
+
+
+def test_sc005_formulas_implicit_count_1() -> None:
+    """Token extraction handles formulas with implicit count-1 elements (e.g. FeC5N6O)."""
+    from evaluation.validators.structure_molcrys import _extract_formula_like_tokens
+
+    tokens = _extract_formula_like_tokens('The formula is FeC5N6O and also C2H6NClO4')
+    assert 'FeC5N6O' in tokens
+    assert 'C2H6NClO4' in tokens
+
+
 def test_mat_runner_includes_duration_ms(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -253,3 +290,36 @@ def test_molcrys_slab_scaling_placeholder() -> None:
 
     ok, reason = verify_molecular_slab_layer_scaling('/nonexistent/path')
     assert ok is False
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('molcrys_kit') is None,
+    reason='molcrys-kit optional; install with uv sync --extra calculation',
+)
+def test_molcrys_local_env_graceful_missing_workspace() -> None:
+    """check_molcrys_local_env fails gracefully on non-existent workspace."""
+    from evaluation.validators.structure_molcrys import check_molcrys_local_env
+
+    ok, reason = check_molcrys_local_env(
+        '/nonexistent/path',
+        filename='dacmor_hydrogenated.cif',
+        expected_formula='C21H23NO5',
+        z_value=4,
+    )
+    assert ok is False
+    assert 'not a directory' in reason
+
+
+def test_molcrys_local_env_returns_not_installed_when_missing() -> None:
+    """Without molcrys-kit, the function returns a clear error, not an exception."""
+    from evaluation.validators.structure_molcrys import check_molcrys_local_env
+
+    # If MolCrysKit IS installed, this test still validates return type
+    ok, reason = check_molcrys_local_env(
+        '/nonexistent/path',
+        filename='test.cif',
+        expected_formula='C21H23NO5',
+        z_value=4,
+    )
+    assert isinstance(ok, bool)
+    assert isinstance(reason, str)

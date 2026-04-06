@@ -67,15 +67,8 @@ class WriteTool(BuiltinTool):
 
     def prompt(self, ctx=None) -> str:
         return (
-            "Writes a file to the local filesystem.\n\n"
-            "Usage:\n"
-            "- This tool will overwrite the existing file if there is one at "
-            "the provided path.\n"
-            "- If this is an existing file, you MUST use the Read tool first "
-            "to read the file's contents. This tool will fail if you did not "
-            "read the file first.\n"
-            "- Prefer the Edit tool for modifying existing files — it only sends "
-            "the diff. Only use this tool to create new files or for complete rewrites."
+            "Overwrites existing file at path. Read existing files first before writing. "
+            "Prefer Edit for modifications; use Write only for new files or full rewrites."
         )
 
     async def validate_input(

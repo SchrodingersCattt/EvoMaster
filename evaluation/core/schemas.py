@@ -46,6 +46,7 @@ VerifyLiteral = Literal[
     'turn_budget',
     'duration_budget',
     'molcrys_slab_molecular_integrity',
+    'molcrys_local_env',
     'sc005_disorder_formulas',
     'llm_binary_judge',
     'batch_single_variable_sweep',
@@ -234,6 +235,7 @@ class QuestionItem(BaseModel):
             'duration_budget',
             'turn_budget',
             'molcrys_slab_molecular_integrity',
+            'molcrys_local_env',
             'sc005_disorder_formulas',
         }
         for item in self.scoring_checklist:

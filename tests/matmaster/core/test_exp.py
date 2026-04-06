@@ -219,6 +219,9 @@ class TestExpBuildRuntime:
 
         assert "Base persona text." in runtime.spec.system_prompt
         assert "Avoid using this tool to run" not in runtime.spec.system_prompt
+        assert "Use dedicated tools instead of shell equivalents" in (
+            runtime.spec.system_prompt
+        )
 
     async def test_agent_tool_uses_model_visible_exp_discovery(
         self, tmp_path: Path

@@ -15,6 +15,7 @@ from .structure_general import (
 )
 from .structure_molcrys import (
     check_disorder_dan2_integer_formula,
+    check_molcrys_local_env,
     check_sc005_other_formulas_in_answer,
     verify_molecular_slab_layer_scaling,
 )
@@ -34,6 +35,7 @@ __all__ = [
     'check_surface_termination',
     # structure_molcrys (MolCrysKit-backed)
     'check_disorder_dan2_integer_formula',
+    'check_molcrys_local_env',
     'check_sc005_other_formulas_in_answer',
     'verify_molecular_slab_layer_scaling',
 ]

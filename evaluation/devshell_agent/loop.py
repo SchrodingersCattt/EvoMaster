@@ -66,7 +66,7 @@ class DevshellAgentLoop:
 ## 防作弊：题库与 checklist（硬约束）
 - **禁止**使用 Edit/Write 创建或修改 `evaluation/question_bank/` 下**任何**路径（含 `scoring_checklist`、`reference_answers`、题干、`human_prompt_seed` 等）。禁止通过脚本或其它目录间接改写题库 YAML。
 - 需要调整评测标准时：**仅**能 **Read / Grep** 读题库；修改必须走 **escalate_checklist_revision**，由 checklist 专责 Agent 执行。
-- 你应把迭代精力放在 `configs/mat_master/`（若存在）、`matmaster/exps/`、`matmaster/skills/playground-skills/` 等与 **被测 Agent 行为**直接相关的资产上。
+- 结合 `pending_ingest` 的 `item.score_reason`、workspace 与 events 判断改动落点，**无固定先后顺序**：全局提示/约束优先看 `matmaster/exps/`；技能与 Skill 文案优先看 `matmaster/skills/`（以本轮 `--exp` 与 runtime patch 后实际生效的 `skills_root` 为准）；工具描述与内置工具行为优先看 `matmaster/tools/`；MCP / 模型 / 连接配置优先看 `config/`；远端计算路径、executor / storage、OSS 上传等问题再看 `matmaster/adaptors/calculation/`；`mm-devshell` 默认行为与入口补丁再看 `matmaster/devshell/`。避免无关大重构。
 
 ## Git 工作流（自迭代必守）
 - **每次实质性修改**（每次 `Edit`/`Write` 落盘后）：对相应文件 `git add` 并 **`git commit` 一条独立记录**，消息建议 `devshell_agent iter=<轮次> <简述>`，使改动与 commit 一一对应、便于回滚。
@@ -81,7 +81,9 @@ class DevshellAgentLoop:
 - 如需解释低分原因，可再阅读题库 YAML、workspace 交付物和事件日志；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
 
 ## 修改范围
-- **可写**：`configs/mat_master/`（若存在）、`matmaster/exps/`、`matmaster/skills/playground-skills/` 等与运行中 Agent 相关的提示、技能、工具描述。
+- **可写（产品侧，按证据小步修改）**：`config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/`；`matmaster/core/` 仅在框架层缺陷明确时再动。
+- **缓存目录**：`matmaster/cache/` 下 JSON 视为生成物，**不要**作为常规手改目标；若改动影响 MCP schema / lazy tool 可见性，在仓库根执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成。
+- **默认不优先**：`src/`、`app.py` 仅在失败与 HTTP API / Worker 链路明确相关时再考虑。
 - **不可写**：`evaluation/question_bank/**`（见上节）；避免无关大重构。
 - 保持改动可审：尽量小步、可解释。
 
@@ -98,10 +100,10 @@ class DevshellAgentLoop:
 
     SYSTEM_PROMPT_CHECKLIST = """你是 MatMaster 仓库内的 **DevShell 评测迭代 — checklist / 题库专责助手**。
 
-你与上一会话中的「产品侧」Agent **不是同一角色**：你只负责 **评测语义与题库 YAML**，不负责改 `configs/mat_master/`（若存在）、`matmaster/exps/`、`matmaster/skills/playground-skills/` 等运行配置。
+你与上一会话中的「产品侧」Agent **不是同一角色**：你只负责 **评测语义与题库 YAML / evaluator**，不负责改 `config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/`、`matmaster/devshell/`、`matmaster/core/` 等产品侧目录。
 
 ## 硬约束
-- **仅允许**使用 Edit/Write 修改路径前缀为 `evaluation/question_bank/`（题库 YAML）或 `evaluation/core/`（evaluator / checker 代码）的文件。**禁止**编辑产品侧目录（`configs/mat_master/`（若存在）、`matmaster/exps/`、`matmaster/skills/playground-skills/` 等）及 `evaluation/scripts/`。
+- **仅允许**使用 Edit/Write 修改路径前缀为 `evaluation/question_bank/`（题库 YAML）或 `evaluation/core/`（evaluator / checker 代码）的文件。**禁止**编辑产品侧目录（`config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/`、`matmaster/devshell/`、`matmaster/core/` 等）及 `evaluation/scripts/`。
 - 修改 `scoring_checklist`、`reference_answers`、题干等时遵守仓库 `evaluation/AGENTS_evaluation.md`：若变更影响评测语义，须按该文档更新对应题目的顶层 `id`。
 - 使用 **Read / Glob / Grep** 阅读证据（含本会话目录下的 `eval_runs/`、workspace、events、题库）。
 - **report_checklist_revision**：本专责回合结束时**必须**调用一次，说明是否改动了题库、改了哪些文件、或为何维持不变。
@@ -413,7 +415,7 @@ class DevshellAgentLoop:
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
 2. 获取本轮判分与宏平均：**优先**在 `eval_runs/<iteration_tag>/pending_ingest/*.json` 读取已写入的 `item.score`（及低分题的 `item.score_reason`）；编排器在每次 `run_devshell_eval` 结束后会对该目录执行 `score_devshell_tasks.py --submit` 并上报，通常无需再跑脚本。仅在 pending 尚无分数或需对**改动后的**产物重新判分时，再执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录>`（可加 `--dry-run` 仅打印；**不要** `--submit`）。
-3. 若未达标：在**允许的路径**内修改提示词/工具/配置（**不要**改 `evaluation/question_bank/`）。优化提示时**先删并合并重复/矛盾表述，再考虑增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出）应**优先压到 ≤ 12000**，且**不得超过 15000**（gpt-4o tiktoken）。每次改完相关 TOML 后、`git commit` 前执行：
+3. 若未达标：在**允许的路径**内修改提示词/工具/配置（如 `config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/`；`matmaster/core/` 仅在框架缺陷明确时；**不要**改 `evaluation/question_bank/`）。`matmaster/cache/` 不作为常规手改目标；若改动影响 MCP schema / lazy tool 可见性，执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成。优化提示时**先删并合并重复/矛盾表述，再考虑增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出）应**优先压到 ≤ 12000**，且**不得超过 15000**（gpt-4o tiktoken）。每次改完相关 TOML 后、`git commit` 前执行：
    `uv run python -m evaluation.devshell_agent.exp_prompt_budget {budget_exp}`
    **exit 非 0 不得提交**。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**。若你认为问题在 **checklist / 参考答案** 而非产品侧，调用 **escalate_checklist_revision** 并仍在第 4 步前完成主流程。
 4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（如有）；若本轮曾回滚无效改动，分数应以回滚后的最终状态为准。
@@ -635,7 +637,7 @@ class DevshellAgentLoop:
 ```
 
 - **会话目录**（只读产物）：`{session_dir}`
-- 任务：仅在 **evaluation/question_bank/** 内做必要 YAML 修订，或论证无需修改；遵守 `evaluation/AGENTS_evaluation.md` 的题库 `id` 规则。
+- 任务：仅在 **evaluation/question_bank/** 内做必要 YAML 修订；若判分器 / validator 本身存在明确口径缺陷，可在 **evaluation/core/** 内做对应修复。遵守 `evaluation/AGENTS_evaluation.md` 的题库 `id` 规则。
 - 结束前**必须**调用 **report_checklist_revision**（`iteration_index={it}`）。
 """
 

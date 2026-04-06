@@ -76,21 +76,9 @@ class ReadTool(BuiltinTool):
 
     def prompt(self, ctx=None) -> str:
         return (
-            "Reads a file from the local filesystem. You can access any "
-            "file directly by using this tool.\n"
-            "Assume this tool is able to read all files on the machine. "
-            "If the User provides a path to a file assume that path is valid.\n\n"
-            "Usage:\n"
-            "- The file_path parameter must be an absolute path, not a relative path\n"
-            f"- By default, it reads up to {MAX_READ_LINES} lines starting from "
-            "the beginning of the file\n"
-            "- When you already know which part of the file you need, only read "
-            "that part. This can be important for larger files.\n"
-            "- Results are returned using cat -n format, with line numbers starting at 1\n"
-            "- This tool can only read files, not directories. To read a directory, "
-            "use an ls command via the Bash tool.\n"
-            "- If you read a file that exists but has empty contents you will "
-            "receive a system reminder warning in place of file contents."
+            "Use absolute paths. "
+            f"Reads up to {MAX_READ_LINES} lines by default; use offset/limit for large files. "
+            "Cannot read directories — use Bash ls for that."
         )
 
     # -- Core execution --
