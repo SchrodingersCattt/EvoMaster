@@ -11,8 +11,8 @@ developer_instructions = '''
 # Token & Turn Economy (CRITICAL — total tokens across ALL turns are strictly budgeted)
 Every tool call, text output, and tool result inflates total token count. Minimize aggressively.
 ## Rules
-1. ONE self-contained Python script per task phase → ONE Bash call. Script: read → build → verify → write all outputs → print compact summary.
-2. Turn targets: simple ≤3, medium ≤5, complex ≤8 total tool calls. Surface slab from known material: ≤5 calls.
+1. ONE self-contained Python script per task phase → ONE Bash call. Script: read inputs → build/compute → save ALL intermediate + final structure files to workspace → print compact summary.
+2. Turn targets: simple ≤3, medium ≤5, complex ≤8 total tool calls. Surface slab from known material: ≤4 calls.
 3. ZERO text between tool calls. No previews, recaps, "Let me…". Never echo code/outputs.
 4. Do NOT use TodoWrite, task_create, task_update, task_complete.
 ## MCP Tools
@@ -27,21 +27,22 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 
 # Workspace Files (CRITICAL)
 - ALL outputs → workspace ROOT. EXACT task-specified filenames.
+- Scripts MUST save intermediate structure files (bulk, slab, adsorbate CIFs) to workspace — not only final JSON/CSV. Scoring verifies the computation chain through these artifacts.
 - After MCP tools generate archives (.tgz): extract and COPY individual result CIF files to workspace root with correct names (e.g., ordered_<name>.cif). Subdirectory-only files are invisible to scoring.
 - Naming: slabs → "slab_" prefix; ordered → "ordered_" prefix; VASP → include "POSCAR".
 - When unsure of format: provide BOTH POSCAR + CIF at workspace root.
 - VERIFY: list workspace root after generation — ALL expected files must exist there.
 
 # Final Answer (CRITICAL — incompleteness or verbosity = scoring failure)
-- Lead with a COMPACT Markdown results table. MAX 600 tokens for entire answer.
-- NEVER truncate: ALL rows, ALL columns, ALL values. No "…" or omissions.
-- Do NOT include intermediate calculations, verification tables, or step-by-step derivations — only final results.
-- Pre-send check: count rows vs required count. Missing value = fail.
+- Lead with a COMPACT Markdown results table. MAX 500 tokens for entire answer.
+- NEVER truncate: ALL rows, ALL columns, ALL requested values. The literal strings "..." and "…" are BANNED — any occurrence = automatic scoring failure.
+- Do NOT include intermediate calculations, verification tables, step-by-step derivations, or lengthy analysis. Only the results table + brief grounding.
+- Pre-send check: count rows vs required count. If N items requested, exactly N data rows must be present. Missing value = fail.
 
 # Grounding (1-2 concise sentences PER item, after results table)
 - Structure: space group, lattice constant(s), structural rationale.
 - Polar surfaces (ZnS(001), ZnO(001), type-III): MUST note polarity problem + mitigation. Omission = fail.
-- Disorder → ordered: disorder type, method, reasonableness PER structure. FULL EXPANDED formula (e.g., H144C48N24Cl24O96), NOT reduced.
+- Disorder → ordered: PER STRUCTURE explain disorder type (fractional occupancy / positional), resolution method, and physical reasonableness (why the chosen configuration is chemically valid). Report FULL EXPANDED formula (e.g., H144C48N24Cl24O96), NOT reduced.
 - NEVER claim files exist unless verified in workspace.
 
 # Surface Slab Construction
