@@ -1,4 +1,4 @@
-"""matmaster/tools/builtin/bohrium_tool.py — Bohrium HPC platform tool.
+"""matmaster/tools/builtin/bohrium_tool/__init__.py — Bohrium HPC platform tool.
 
 Single tool with action-based dispatch for Bohrium HPC operations.
 This tool handles pure communication: submit, poll (single-query), list_images,
@@ -22,17 +22,17 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, ClassVar, Iterator
-from urllib.parse import parse_qs, quote, unquote, urlparse
+from urllib.parse import quote
 from uuid import uuid4
 
-import requests
+import requests as _requests
 
 from matmaster.integration.bohrium_api import (
     get_bohrium_base_url,
     get_bohrium_service_env,
 )
 from matmaster.integration.runtime_bridge import resolve_output_path
-from matmaster.tools.builtin._bohrium_api import (
+from ._api import (
     _FAILURE_CODES,
     _RUNNING_CODES,
     _STATUS_MAP,
@@ -43,11 +43,16 @@ from matmaster.tools.builtin._bohrium_api import (
     _ResolvedBohriumContext,
     _use_sandbox,
 )
+from ._results import download_bohrium_results
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
+
+# Re-export the shared requests module so tests can monkeypatch HTTP calls
+# through bohrium_tool without reaching into private helper modules.
+requests = _requests
 
 logger = logging.getLogger(__name__)
 
@@ -210,147 +215,6 @@ def _coerce_positive_int(value: Any, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return parsed if parsed > 0 else default
-
-
-def _parse_sandbox_result_url(result_url: str) -> tuple[str, str, str, str]:
-    parsed = urlparse(result_url)
-    host = f'{parsed.scheme}://{parsed.netloc}'.rstrip('/')
-    token = parse_qs(parsed.query).get('token', [''])[0].strip()
-    object_path = unquote(parsed.path.removeprefix('/api/download/')).strip('/')
-    if not host or not token or not object_path:
-        raise ValueError(f'invalid sandbox resultUrl: {result_url}')
-    prefix = object_path.rsplit('/', 1)[0] + '/' if '/' in object_path else ''
-    return host, token, object_path, prefix
-
-
-def _sandbox_iterate_objects(
-    host: str, token: str, prefix: str
-) -> list[dict[str, Any]]:
-    headers = {
-        'Authorization': f'Bearer {token}',
-        'Content-Type': 'application/json',
-    }
-    objects: list[dict[str, Any]] = []
-    next_token = ''
-
-    while True:
-        payload: dict[str, Any] = {'prefix': prefix}
-        if next_token:
-            payload['nextToken'] = next_token
-
-        response = requests.post(
-            f'{host.rstrip("/")}/api/iterate',
-            headers=headers,
-            json=payload,
-            timeout=30,
-        )
-        response.raise_for_status()
-        body = response.json() or {}
-        if body.get('code') not in (None, 0):
-            raise RuntimeError(f'sandbox iterate failed: {body}')
-
-        data = body.get('data') or {}
-        objects.extend(data.get('objects') or [])
-
-        if not data.get('hasNext'):
-            break
-        next_token = str(data.get('nextToken') or '').strip()
-        if not next_token:
-            break
-
-    return objects
-
-
-def _sandbox_download_object(
-    host: str, token: str, object_path: str, dest_path: Path
-) -> None:
-    encoded_path = quote(object_path, safe='/')
-    url = (
-        f'{host.rstrip("/")}/api/download/{encoded_path}?token={token}'
-        '&Response-Content-Type=application/octet-stream'
-    )
-    BohriumTool._download_to_file(url, dest_path)
-
-
-def _sandbox_choose_zip_object(
-    job_id: int | str, objects: list[dict[str, Any]]
-) -> str | None:
-    file_paths = [
-        str(obj.get('path') or obj.get('key') or '').strip()
-        for obj in objects
-        if isinstance(obj, dict)
-        and not obj.get('isDir')
-        and (obj.get('path') or obj.get('key'))
-    ]
-
-    preferred_name = f'{job_id}.zip'
-    for path in file_paths:
-        if Path(path).name == preferred_name:
-            return path
-    for path in file_paths:
-        if path.endswith('.zip') and Path(path).name != 'task.zip':
-            return path
-    for path in file_paths:
-        if path.endswith('.zip'):
-            return path
-    return None
-
-
-def _sandbox_download_log(
-    *,
-    job_id: int | str,
-    result_dir: Path,
-    ctx: _ResolvedBohriumContext,
-    root_host: str,
-    root_token: str,
-    objects: list[dict[str, Any]],
-) -> bool:
-    log_path = result_dir / 'log'
-
-    try:
-        token_resp = _post(
-            ctx.base_url,
-            '/openapi/v1/sandbox/job/file/token',
-            ctx.access_key,
-            {'filePath': 'log', 'jobId': str(job_id)},
-        )
-        if token_resp.get('code') == 0:
-            token_data = token_resp.get('data') or {}
-            log_host = str(token_data.get('host') or token_data.get('storeHost') or '')
-            log_token = str(token_data.get('token') or '').strip()
-            log_object_path = str(
-                token_data.get('path') or token_data.get('storePath') or ''
-            ).strip('/')
-            if log_host and log_token and log_object_path:
-                _sandbox_download_object(log_host, log_token, log_object_path, log_path)
-                return True
-    except Exception:
-        logger.debug('sandbox log token download failed', exc_info=True)
-
-    if root_host and root_token:
-        log_object = next(
-            (
-                str(obj.get('path') or obj.get('key') or '').strip()
-                for obj in objects
-                if isinstance(obj, dict)
-                and not obj.get('isDir')
-                and Path(str(obj.get('path') or obj.get('key') or '')).name == 'log'
-            ),
-            '',
-        )
-        if log_object:
-            _sandbox_download_object(root_host, root_token, log_object, log_path)
-            return True
-
-    return False
-
-
-def _merge_log_file(files: list[str], log_downloaded: bool) -> list[str]:
-    if not log_downloaded:
-        return files
-    if 'log' in files:
-        return files
-    return ['log', *files]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -818,7 +682,7 @@ class BohriumTool(BuiltinTool):
                     )
 
                 if code == _SUCCESS_CODE:
-                    files, log_tail = self._download_results(
+                    files, log_tail = download_bohrium_results(
                         job_id,
                         detail_data,
                         result_dir,
@@ -862,7 +726,7 @@ class BohriumTool(BuiltinTool):
                 if code in _FAILURE_CODES:
                     confirm_detail = detail_data
                     confirm_code = code
-                    for attempt in range(1, _FAILURE_CONFIRM_ATTEMPTS):
+                    for _ in range(1, _FAILURE_CONFIRM_ATTEMPTS):
                         time.sleep(_FAILURE_CONFIRM_SLEEP_SECONDS)
                         detail = _get(ctx.base_url, detail_path, ctx.access_key)
                         confirm_detail = detail.get('data', {})
@@ -878,7 +742,7 @@ class BohriumTool(BuiltinTool):
                         files: list[str] = []
                         log_tail = ''
                         try:
-                            files, log_tail = self._download_results(
+                            files, log_tail = download_bohrium_results(
                                 job_id,
                                 confirm_detail,
                                 result_dir,
@@ -930,165 +794,6 @@ class BohriumTool(BuiltinTool):
                 exc_info=True,
             )
             return ToolResult(status='error', content=f'Poll failed: {exc}')
-
-    def _download_results(
-        self,
-        job_id: int | str,
-        detail_data: dict,
-        result_dir: Path,
-        *,
-        ctx: _ResolvedBohriumContext,
-        sandbox: bool,
-    ) -> tuple[list[str], str]:
-        """Download and extract result artifacts. Returns (file_list, log_tail)."""
-        result_dir.mkdir(parents=True, exist_ok=True)
-
-        if sandbox:
-            return self._sandbox_download(job_id, detail_data, result_dir, ctx=ctx)
-
-        # Standard HPC: download resultUrl zip
-        result_url = detail_data.get('resultUrl', '')
-        if not result_url:
-            return [], '(no resultUrl in job detail)'
-
-        zip_path = result_dir / 'out.zip'
-        self._download_to_file(result_url, zip_path)
-
-        files = self._extract_zip(zip_path, result_dir)
-        log_tail = self._read_log(result_dir)
-        return files, log_tail
-
-    def _sandbox_download(
-        self,
-        job_id: int | str,
-        detail_data: dict,
-        result_dir: Path,
-        *,
-        ctx: _ResolvedBohriumContext,
-    ) -> tuple[list[str], str]:
-        """Download results in sandbox mode (iterate objects, find zip, extract)."""
-        result_url = str(
-            detail_data.get('resultUrl') or detail_data.get('result') or ''
-        )
-        objects: list[dict[str, Any]] = []
-        root_host = ''
-        root_token = ''
-        root_prefix = ''
-
-        if result_url:
-            try:
-                root_host, root_token, _object_path, root_prefix = (
-                    _parse_sandbox_result_url(result_url)
-                )
-                objects = _sandbox_iterate_objects(root_host, root_token, root_prefix)
-            except Exception as exc:
-                logger.debug(
-                    'sandbox resultUrl iteration failed job_id=%s error=%s',
-                    job_id,
-                    exc,
-                    exc_info=True,
-                )
-
-        log_downloaded = _sandbox_download_log(
-            job_id=job_id,
-            result_dir=result_dir,
-            ctx=ctx,
-            root_host=root_host,
-            root_token=root_token,
-            objects=objects,
-        )
-
-        zip_key = _sandbox_choose_zip_object(job_id, objects)
-        if zip_key and root_host and root_token:
-            try:
-                zip_path = result_dir / Path(zip_key).name
-                _sandbox_download_object(root_host, root_token, zip_key, zip_path)
-                files = self._extract_zip(zip_path, result_dir)
-                files = _merge_log_file(files, log_downloaded)
-                log_tail = self._read_log(result_dir)
-                return files, log_tail
-            except Exception as exc:
-                logger.debug(
-                    'sandbox zip-object download failed job_id=%s zip=%s error=%s',
-                    job_id,
-                    zip_key,
-                    exc,
-                    exc_info=True,
-                )
-
-        if result_url:
-            try:
-                zip_path = result_dir / 'out.zip'
-                self._download_to_file(result_url, zip_path)
-                files = self._extract_zip(zip_path, result_dir)
-                files = _merge_log_file(files, log_downloaded)
-                log_tail = self._read_log(result_dir)
-                return files, log_tail
-            except Exception as exc:
-                logger.debug(
-                    'sandbox resultUrl zip download failed job_id=%s error=%s',
-                    job_id,
-                    exc,
-                    exc_info=True,
-                )
-
-        if log_downloaded:
-            return ['log'], self._read_log(result_dir)
-
-        if objects:
-            files = [
-                str(obj.get('path') or obj.get('key') or '')
-                for obj in objects
-                if isinstance(obj, dict) and (obj.get('path') or obj.get('key'))
-            ]
-            if root_prefix:
-                files = [
-                    path[len(root_prefix) :] if path.startswith(root_prefix) else path
-                    for path in files
-                ]
-            return files, self._read_log(result_dir)
-
-        if result_url:
-            return [], '(sandbox resultUrl download failed)'
-        return [], '(no resultUrl in job detail)'
-
-    @staticmethod
-    def _download_to_file(url: str, dest: Path, *, timeout: int = 300) -> None:
-        """Stream-download a URL to a local file."""
-        resp = requests.get(url, timeout=timeout, stream=True)
-        resp.raise_for_status()
-        with open(dest, 'wb') as f:
-            for chunk in resp.iter_content(chunk_size=65536):
-                f.write(chunk)
-
-    @staticmethod
-    def _extract_zip(zip_path: Path, extract_dir: Path) -> list[str]:
-        """Extract a zip and return list of extracted filenames."""
-        try:
-            with zipfile.ZipFile(zip_path, 'r') as zf:
-                zf.extractall(extract_dir)
-                return zf.namelist()
-        except zipfile.BadZipFile:
-            return [f'(bad zip: {zip_path.name})']
-
-    @staticmethod
-    def _read_log(extract_dir: Path, max_chars: int = 4000) -> str:
-        """Read log tail from extracted result directory."""
-        for name in ('log', 'STDOUTERR'):
-            f = extract_dir / name
-            if f.exists():
-                try:
-                    size = f.stat().st_size
-                    with open(f, 'rb') as fh:
-                        # Seek near end: UTF-8 is at most 4 bytes/char
-                        if size > max_chars * 4:
-                            fh.seek(-(max_chars * 4), 2)
-                        raw = fh.read()
-                    text = raw.decode('utf-8', errors='replace')
-                    return text[-max_chars:]
-                except Exception:
-                    continue
-        return '(no log file found in result directory)'
 
     def _list_images(self, args: dict[str, Any]) -> ToolResult:
         result = self._require_credentials()

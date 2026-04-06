@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import io
 import sys
 import types
+import zipfile
 
+import requests
 from matmaster.integration.runtime_bridge.models import ResolvedCredential
 
 
@@ -144,3 +147,41 @@ class FakeRemoteSession:
         if path in self._downloads:
             return self._downloads[path]
         return self._default_download
+
+
+def _zip_bytes(files: dict[str, str]) -> bytes:
+    """Build an in-memory zip for sandbox download tests."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+        for name, content in files.items():
+            zf.writestr(name, content)
+    return buffer.getvalue()
+
+
+class _FakeDownloadResponse:
+    """Minimal requests-like response used by sandbox download tests."""
+
+    def __init__(
+        self,
+        *,
+        status_code: int = 200,
+        json_data: dict[str, object] | None = None,
+        content: bytes | None = None,
+    ) -> None:
+        self.status_code = status_code
+        self._json_data = json_data or {}
+        self._content = content if content is not None else b''
+        self.ok = status_code < 400
+        self.text = ''
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise requests.HTTPError(f'{self.status_code} Client Error')
+
+    def json(self) -> dict[str, object]:
+        return self._json_data
+
+    def iter_content(self, chunk_size: int = 8192):
+        del chunk_size
+        if self._content:
+            yield self._content
