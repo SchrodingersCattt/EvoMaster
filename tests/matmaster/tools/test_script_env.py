@@ -226,7 +226,9 @@ class TestPrepareCommandHelpers:
             return_value={"stdout": "", "stderr": "", "exit_code": 0}
         )
 
-        result = prepare_inline_command("echo hi", {"BOHRIUM_ACCESS_KEY": "ak"}, session)
+        result = prepare_inline_command(
+            "echo hi", {"BOHRIUM_ACCESS_KEY": "ak"}, session
+        )
 
         assert result.startswith("( . ")
         session.write_file.assert_called_once()

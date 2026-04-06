@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
 from dataclasses import dataclass
 from time import monotonic_ns
+from typing import Any
 
 from matmaster.types.tool_runner_state import ToolRunnerState
 
@@ -53,8 +53,7 @@ def put_snapshot(
 
     while max_entries >= 0 and len(stored) > max_entries:
         effective_access = {
-            path: item.last_access_ns or monotonic_ns()
-            for path, item in stored.items()
+            path: item.last_access_ns or monotonic_ns() for path, item in stored.items()
         }
         oldest_path = min(effective_access, key=effective_access.get)
         stored.pop(oldest_path, None)

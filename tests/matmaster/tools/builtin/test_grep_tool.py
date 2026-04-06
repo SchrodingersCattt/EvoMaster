@@ -168,7 +168,9 @@ class TestGrepFallback:
         session.download.return_value = b"unused"
 
         result = asyncio.run(
-            tool.execute_with_context({"pattern": "alpha", "output_mode": "content"}, ctx)
+            tool.execute_with_context(
+                {"pattern": "alpha", "output_mode": "content"}, ctx
+            )
         )
         assert isinstance(result, ToolResult)
         assert "alpha" in result.content

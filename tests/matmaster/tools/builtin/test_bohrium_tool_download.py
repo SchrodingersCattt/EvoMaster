@@ -23,9 +23,7 @@ class TestBohriumDownloadExecution:
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
 
-        result = asyncio.run(
-            tool.execute({'action': 'download', 'job_id': 'job-1'})
-        )
+        result = asyncio.run(tool.execute({'action': 'download', 'job_id': 'job-1'}))
 
         assert isinstance(result, ToolResult)
         assert result.status == 'error'
@@ -56,9 +54,7 @@ class TestBohriumDownloadExecution:
         assert result.status == 'error'
         assert 'only available after terminal status' in result.content
 
-    def test_download_remote_share_without_session_errors(
-        self, tmp_path, monkeypatch
-    ):
+    def test_download_remote_share_without_session_errors(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
@@ -381,11 +377,13 @@ class TestBohriumDownloadExecution:
             'OUT.ABACUS/warning.log',
             'bader_bin',
         ]
-        assert (result_dir / 'run_bader.sh').read_text(encoding='utf-8').startswith(
-            '#!/bin/bash'
-        )
         assert (
-            result_dir / 'OUT.ABACUS' / 'warning.log'
-        ).read_text(encoding='utf-8') == 'warning details\n'
+            (result_dir / 'run_bader.sh')
+            .read_text(encoding='utf-8')
+            .startswith('#!/bin/bash')
+        )
+        assert (result_dir / 'OUT.ABACUS' / 'warning.log').read_text(
+            encoding='utf-8'
+        ) == 'warning details\n'
         assert (result_dir / 'bader_bin').read_bytes() == b'binary'
         assert sleep_calls == [3, 3]

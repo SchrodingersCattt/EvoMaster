@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from matmaster.tools.builtin.ask_question_tool import AskQuestionTool
 from matmaster.integration.interaction_bridge import AskQuestionResponse
-from matmaster.types.tool_spec import ToolExecutionContext
+from matmaster.tools.builtin.ask_question_tool import AskQuestionTool
 from matmaster.types.cancellation import CancellationToken
+from matmaster.types.tool_spec import ToolExecutionContext
 
 
 class _FakeBridge:
@@ -38,7 +38,10 @@ class TestAskQuestionToolValidation:
                             "question": "Which library should we use?",
                             "header": "Library",
                             "options": [
-                                {"label": "Pydantic", "description": "Runtime validation"},
+                                {
+                                    "label": "Pydantic",
+                                    "description": "Runtime validation",
+                                },
                                 {"label": "dataclasses", "description": "Stdlib only"},
                             ],
                         },
@@ -83,9 +86,13 @@ class TestAskQuestionToolExecution:
             bridge=_FakeBridge(
                 {
                     "request_id": "aq_1",
-                    "answers": {"Which library should we use?": "Pydantic (Recommended)"},
+                    "answers": {
+                        "Which library should we use?": "Pydantic (Recommended)"
+                    },
                     "annotations": {
-                        "Which library should we use?": {"notes": "Need runtime validation"}
+                        "Which library should we use?": {
+                            "notes": "Need runtime validation"
+                        }
                     },
                 }
             )
@@ -113,7 +120,9 @@ class TestAskQuestionToolExecution:
                 _exec_ctx(),
             )
         )
-        assert '"Which library should we use?"="Pydantic (Recommended)"' in result.content
+        assert (
+            '"Which library should we use?"="Pydantic (Recommended)"' in result.content
+        )
         assert "user notes: Need runtime validation" in result.content
 
     def test_execute_without_bridge_returns_error(self) -> None:

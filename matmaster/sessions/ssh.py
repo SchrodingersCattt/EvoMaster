@@ -23,7 +23,7 @@ from typing import Any
 
 from matmaster.sessions.sftp_pool import SFTPPool
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.session import SSHSessionConfig, SessionFileStat
+from matmaster.types.session import SessionFileStat, SSHSessionConfig
 from matmaster.types.topology import SessionCapabilities
 
 logger = logging.getLogger(__name__)

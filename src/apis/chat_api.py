@@ -371,14 +371,17 @@ async def ask_question_reply(
 
     import json as _json
 
-    envelope = _json.dumps({
-        'interaction_type': 'ask_question',
-        'request_id': req.request_id,
-        'payload': {
-            'answers': req.answers,
-            'annotations': req.annotations or {},
+    envelope = _json.dumps(
+        {
+            'interaction_type': 'ask_question',
+            'request_id': req.request_id,
+            'payload': {
+                'answers': req.answers,
+                'annotations': req.annotations or {},
+            },
         },
-    }, ensure_ascii=False)
+        ensure_ascii=False,
+    )
 
     # 先广播 ask_question_reply，再 put_content 唤醒 agent
     stream_svc.broadcast_reply(sid, envelope, event_type='ask_question_reply')

@@ -151,13 +151,15 @@ class AskQuestionTool(BuiltinTool):
         """确保每个 question 有完整的字段结构。"""
         result = []
         for q in questions:
-            result.append({
-                "question": q["question"],
-                "header": q.get("header", q["question"]),
-                "options": q.get("options", []),
-                "multi_select": q.get("multi_select", False),
-                "allow_freeform": q.get("allow_freeform", False),
-            })
+            result.append(
+                {
+                    "question": q["question"],
+                    "header": q.get("header", q["question"]),
+                    "options": q.get("options", []),
+                    "multi_select": q.get("multi_select", False),
+                    "allow_freeform": q.get("allow_freeform", False),
+                }
+            )
         return result
 
     @staticmethod

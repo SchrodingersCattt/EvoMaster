@@ -79,7 +79,9 @@ class AskQuestionBridge:
                     reason="timeout",
                 )
             )
-            raise TimeoutError(f"AskQuestion {request_id} timed out after {self._timeout_seconds}s")
+            raise TimeoutError(
+                f"AskQuestion {request_id} timed out after {self._timeout_seconds}s"
+            )
 
         if raw is None:
             # cancel sentinel

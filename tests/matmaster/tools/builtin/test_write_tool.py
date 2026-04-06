@@ -99,7 +99,9 @@ class TestWriteExecution:
         ctx = ToolExecutionContext(runner_state=state)
 
         decision = asyncio.run(
-            tool.validate_input({"file_path": "/workspace/f.txt", "content": "hello"}, state)
+            tool.validate_input(
+                {"file_path": "/workspace/f.txt", "content": "hello"}, state
+            )
         )
         assert decision is None
 
@@ -110,7 +112,9 @@ class TestWriteExecution:
             )
         )
 
-        session.write_file.assert_called_once_with("/workspace/f.txt", "hello", "utf-16")
+        session.write_file.assert_called_once_with(
+            "/workspace/f.txt", "hello", "utf-16"
+        )
         assert result.meta["encoding_source"] == "fresh_probe"
 
     def test_read_then_write_reuses_snapshot_encoding(self):
@@ -127,7 +131,9 @@ class TestWriteExecution:
         state = ToolRunnerState()
         ctx = ToolExecutionContext(runner_state=state)
 
-        asyncio.run(read_tool.execute_with_context({"file_path": "/workspace/f.txt"}, ctx))
+        asyncio.run(
+            read_tool.execute_with_context({"file_path": "/workspace/f.txt"}, ctx)
+        )
         asyncio.run(
             write_tool.execute_with_context(
                 {"file_path": "/workspace/f.txt", "content": "ok"},

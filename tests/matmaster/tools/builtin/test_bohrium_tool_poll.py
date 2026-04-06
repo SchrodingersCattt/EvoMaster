@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 
 import matmaster.tools.builtin.bohrium_tool as bohrium_module
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
@@ -121,9 +120,7 @@ class TestBohriumPollExecution:
             bohrium_module, 'download_bohrium_results', fake_download_results
         )
 
-        result = asyncio.run(
-            tool.execute({'action': 'poll', 'job_id': 'job-finished'})
-        )
+        result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-finished'}))
 
         assert result.status == 'success'
         payload = json.loads(result.content)

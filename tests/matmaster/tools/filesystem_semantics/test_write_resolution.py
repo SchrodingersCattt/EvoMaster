@@ -35,7 +35,9 @@ def test_write_resolution_allows_fresh_definite_probe_without_snapshot() -> None
     assert result.encoding == "utf-16"
 
 
-def test_write_resolution_rejects_recovered_snapshot_without_explicit_encoding() -> None:
+def test_write_resolution_rejects_recovered_snapshot_without_explicit_encoding() -> (
+    None
+):
     snapshot = FileSemanticSnapshot(
         path="/workspace/f.txt",
         fingerprint=SnapshotFingerprint(size=5, mtime=1.0, prefix_hash="aaa"),

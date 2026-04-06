@@ -61,7 +61,9 @@ class TestPublicContentForEvent:
             'reason': 'user stop'
         }
 
-    def test_confirmation_request_backward_compat_maps_to_ask_question_format(self) -> None:
+    def test_confirmation_request_backward_compat_maps_to_ask_question_format(
+        self,
+    ) -> None:
         payload = {
             'type': 'confirmation_request',
             'source': 'System',

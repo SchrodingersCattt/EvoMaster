@@ -16,8 +16,7 @@ from typing import Any, ClassVar
 from matmaster.tools.filesystem_semantics.snapshots import FileSemanticSnapshot
 from matmaster.tools.filesystem_semantics.text_resolution import resolve_text_bytes
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.tool_spec import ToolExecutionContext
-from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 from matmaster.types.topology import ToolPlane
 
 from ._path_safety import resolve_safe_path, shell_escape

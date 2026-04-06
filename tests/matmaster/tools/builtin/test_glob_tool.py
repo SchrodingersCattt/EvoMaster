@@ -221,7 +221,9 @@ class TestGlobExecution:
         assert "/workspace/sub" in cmd
 
     def test_glob_returns_meta_when_paths_are_skipped(self):
-        session = make_session(output="/workspace/a.py", stderr="find: permission denied")
+        session = make_session(
+            output="/workspace/a.py", stderr="find: permission denied"
+        )
         tool = GlobTool(session=session, workdir="/workspace")
         result = asyncio.run(tool.execute({"pattern": "*.py"}))
         assert isinstance(result, ToolResult)

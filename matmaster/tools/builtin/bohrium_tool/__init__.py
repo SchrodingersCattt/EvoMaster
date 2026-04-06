@@ -15,13 +15,13 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import tempfile
 import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
-import shutil
 from typing import Any, ClassVar, Iterator, NamedTuple
 from urllib.parse import quote
 from uuid import uuid4
@@ -71,9 +71,7 @@ def _get_job_detail(
     sandbox: bool,
 ) -> dict[str, Any]:
     detail_path = (
-        f'/openapi/v1/sandbox/job/{job_id}'
-        if sandbox
-        else f'/openapi/v1/job/{job_id}'
+        f'/openapi/v1/sandbox/job/{job_id}' if sandbox else f'/openapi/v1/job/{job_id}'
     )
     detail = _get(ctx.base_url, detail_path, ctx.access_key)
     return detail.get('data', {})
@@ -91,7 +89,11 @@ def _confirm_terminal_status(
     final_code = code
 
     if code not in _FAILURE_CODES:
-        return final_code, _STATUS_MAP.get(final_code, f'Unknown({final_code})'), final_detail
+        return (
+            final_code,
+            _STATUS_MAP.get(final_code, f'Unknown({final_code})'),
+            final_detail,
+        )
 
     for _ in range(1, _FAILURE_CONFIRM_ATTEMPTS):
         time.sleep(_FAILURE_CONFIRM_SLEEP_SECONDS)
@@ -100,7 +102,11 @@ def _confirm_terminal_status(
         if final_code not in _FAILURE_CODES:
             break
 
-    return final_code, _STATUS_MAP.get(final_code, f'Unknown({final_code})'), final_detail
+    return (
+        final_code,
+        _STATUS_MAP.get(final_code, f'Unknown({final_code})'),
+        final_detail,
+    )
 
 
 class _DownloadTargetDir(NamedTuple):
@@ -849,7 +855,9 @@ class BohriumTool(BuiltinTool):
 
         raw_job_id = args.get('job_id')
         if raw_job_id is None:
-            return ToolResult(status='error', content='Missing required parameter: job_id')
+            return ToolResult(
+                status='error', content='Missing required parameter: job_id'
+            )
 
         result_dir_str = str(args.get('result_dir') or '').strip()
         if not result_dir_str:

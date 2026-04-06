@@ -13,7 +13,10 @@ import posixpath
 from time import monotonic_ns
 from typing import Any, ClassVar
 
-from matmaster.tools.filesystem_semantics.snapshots import put_snapshot, snapshot_from_seed
+from matmaster.tools.filesystem_semantics.snapshots import (
+    put_snapshot,
+    snapshot_from_seed,
+)
 from matmaster.tools.filesystem_semantics.text_resolution import resolve_text_bytes
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext

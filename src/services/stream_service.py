@@ -292,9 +292,7 @@ class SendStreamContext:
     mode: str
     user_msg: dict
     request_event_queue: asyncio.Queue
-    reply_queue: (
-        ReplyQueueLike  # ask_question 共用，POST /ask_question_reply 写入
-    )
+    reply_queue: ReplyQueueLike  # ask_question 共用，POST /ask_question_reply 写入
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
 
@@ -743,7 +741,9 @@ class ChatStreamService:
             return None
         return get_redis_dao().get_interaction_run_context(session_id)
 
-    def broadcast_reply(self, session_id: str, content: str, *, event_type: str = "ask_question_reply") -> None:
+    def broadcast_reply(
+        self, session_id: str, content: str, *, event_type: str = "ask_question_reply"
+    ) -> None:
         """将用户回复广播到该会话所有 SSE 订阅。
         发送流内的 interaction reply 由 ReplyQueueNotifyOnGet 在 agent 的 get() 返回时注入，保证顺序且多 worker 下也正确。
         broadcast 的 payload 带上 task_id/invocation_id（同 worker 从内存取，多 worker 从 Redis 取），便于前端去重或排序。
