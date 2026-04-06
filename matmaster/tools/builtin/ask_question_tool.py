@@ -49,6 +49,7 @@ class AskQuestionTool(BuiltinTool):
                             },
                         },
                         "multi_select": {"type": "boolean"},
+                        "allow_freeform": {"type": "boolean"},
                     },
                     "required": ["question", "header", "options"],
                     "additionalProperties": False,
@@ -155,6 +156,7 @@ class AskQuestionTool(BuiltinTool):
                 "header": q.get("header", q["question"]),
                 "options": q.get("options", []),
                 "multi_select": q.get("multi_select", False),
+                "allow_freeform": q.get("allow_freeform", False),
             })
         return result
 
