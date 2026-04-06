@@ -57,23 +57,8 @@ class SkillTool(BuiltinTool):
 
     def prompt(self, ctx=None) -> str:
         return (
-            "Execute a skill within the main conversation\n\n"
-            "When users ask you to perform tasks, check if any of the available "
-            "skills match. Skills provide specialized capabilities and domain knowledge.\n\n"
-            'When users reference a "slash command" or "/<something>" '
-            '(e.g. "/commit", "/review-pr"), they are referring to a skill. '
-            "Use this tool to invoke it.\n\n"
-            "How to invoke:\n"
-            '- Use this tool with the skill name and optional arguments\n'
-            '- Examples:\n'
-            '  - `skill: "pdf"` - invoke the pdf skill\n'
-            '  - `skill: "commit", args: "-m \'Fix bug\'"` - invoke with arguments\n\n'
-            "Important:\n"
-            "- Available skills are listed in system-reminder messages in the conversation\n"
-            "- When a skill matches the user's request, invoke it before generating "
-            "any other response\n"
-            "- Never mention a skill without actually calling this tool\n"
-            "- Do not invoke a skill that is already running"
+            "Invoke a skill by name. Skills are listed in system-reminder messages. "
+            "When a skill matches the user's request, invoke it before other responses."
         )
 
     async def execute(self, arguments: dict[str, Any]) -> str:
