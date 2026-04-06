@@ -260,7 +260,12 @@ class ChatStreamService:
 
     @staticmethod
     def _ping_payload(session_id: str) -> dict:
-        return {'source': 'System', 'type': 'ping', 'content': '', 'session_id': session_id}
+        return {
+            'source': 'System',
+            'type': 'ping',
+            'content': '',
+            'session_id': session_id,
+        }
 
     @staticmethod
     def _build_run_interrupted_message(
