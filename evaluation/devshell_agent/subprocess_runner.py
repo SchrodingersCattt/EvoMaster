@@ -155,6 +155,7 @@ def run_score_devshell_tasks_submit(
     eval_config: Path | None,
     eval_ingest_timeout: float,
     score_jobs: int,
+    parallel_checklist_workers: int | None = None,
 ) -> tuple[int, str, str]:
     """Run ``score_devshell_tasks.py --run-dir … --submit`` (writes scores + POST ingest)."""
     runner = DevshellEvalSubprocess(repo_root)
@@ -162,6 +163,11 @@ def run_score_devshell_tasks_submit(
         repo_root / "evaluation" / "scripts" / "devshell" / "score_devshell_tasks.py"
     )
     sj = max(1, int(score_jobs))
+    pc = (
+        max(1, int(parallel_checklist_workers))
+        if parallel_checklist_workers is not None
+        else max(1, sj * 2)
+    )
     cmd: list[str] = [
         *DevshellEvalSubprocess.python_prefix(),
         str(script),
@@ -169,6 +175,8 @@ def run_score_devshell_tasks_submit(
         str(run_dir),
         "--score-jobs",
         str(sj),
+        "--parallel-checklist-workers",
+        str(pc),
         "--submit",
         "--eval-ingest-timeout",
         str(eval_ingest_timeout),

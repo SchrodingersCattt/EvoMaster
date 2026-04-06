@@ -101,7 +101,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_SC_ZnS001_20260406
+- id: CR_SC_ZnS001_20260406v2
   capability: co2rr_reproduction
   domain: struct
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per
@@ -132,7 +132,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: polar_handling
-    criterion: 对 (001) 可能极性作出说明（对称 slab、偶极修正或其它合理方案之一），并与结构一致。
+    criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称 slab、施加偶极修正等），所述策略与交付的结构文件一致。
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -247,7 +247,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_WO_limiting_potential_20260406
+- id: CR_WO_limiting_potential_20260406v2
   capability: co2rr_reproduction
   domain: elec
   intent: From free-energy steps on CO2RR-to-CO, HER, and CO2-to-HCOOH pathways,
@@ -278,7 +278,7 @@ questions:
       max: 14000
   scoring_checklist:
   - id: three_pathways_ul
-    criterion: 分别给出 CO2→CO、HER、CO2→HCOOH 三条路径的决速步 ΔG_max 与 U_L，公式与文档 3.2.2 一致，单位正确。
+    criterion: 答案分别给出 CO2→CO、HER、CO2→HCOOH 三条路径各自的决速步（potential-determining step）及其 ΔG_max 值，并由 U_L = −ΔG_max/e 得到极限电势 U_L；能量单位为 eV，电势单位为 V。
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_energies
