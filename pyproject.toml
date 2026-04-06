@@ -33,6 +33,7 @@ dependencies = [
     "markdownify>=0.14.1",
     "tiktoken>=0.7.0",
     "pre-commit>=4.5.1",
+    "bohrium-open-sdk>=1.0.0",
 ]
 
 [project.optional-dependencies]

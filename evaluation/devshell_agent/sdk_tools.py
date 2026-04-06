@@ -12,6 +12,7 @@ from claude_agent_sdk import create_sdk_mcp_server, tool  # type: ignore[import-
 from evaluation.devshell_agent.config_state import (
     AgentLoopSharedState,
     DevshellAgentCliDefaults,
+    parallel_scoring_checklist_workers_from_jobs,
 )
 from evaluation.devshell_agent.subprocess_runner import (
     DevshellEvalSubprocess,
@@ -43,8 +44,9 @@ class MatmasterEvalMcpToolkit:
             "jobs": {
                 "type": "integer",
                 "description": (
-                    "Parallel mm-devshell tasks; also sets automatic score --score-jobs "
-                    "and checklist max_turns = jobs×2 when using loop defaults (default: CLI)."
+                    "Parallel mm-devshell eval tasks and automatic score --score-jobs; "
+                    "orchestrator also passes --parallel-checklist-workers = jobs×2 for "
+                    "per-question scoring_checklist (default: CLI)."
                 ),
             },
             "limit": {
@@ -205,7 +207,7 @@ class MatmasterEvalMcpToolkit:
 
     @classmethod
     def allowed_tool_names(cls) -> list[str]:
-        """MCP tools for the main (playground/product) iteration agent."""
+        """MCP tools for the main (product) iteration agent."""
         return cls.main_agent_mcp_tool_names()
 
     def _append_outcome_jsonl(self, row: dict[str, Any]) -> None:
@@ -296,6 +298,9 @@ class MatmasterEvalMcpToolkit:
             eval_config=params.eval_config,
             eval_ingest_timeout=float(state.eval_ingest_submit_timeout),
             score_jobs=params.jobs,
+            parallel_checklist_workers=parallel_scoring_checklist_workers_from_jobs(
+                params.jobs
+            ),
         )
         log_path = state.session_dir / "ingest_submit.jsonl"
         log_path.parent.mkdir(parents=True, exist_ok=True)

@@ -84,6 +84,10 @@ banks:
     capability: "workflow_orchestration"
     questions: 1
 
+  - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
+    capability: "co2rr_reproduction"
+    questions: 10
+
   - path: "safety_refusal/sr_general.yaml"
     capability: "safety_refusal"
     questions: 4

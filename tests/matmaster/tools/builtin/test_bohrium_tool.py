@@ -7,6 +7,7 @@ import json
 import logging
 import sys
 import types
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -33,6 +34,17 @@ class TestBohriumMetadata:
     def test_name(self):
         assert BohriumTool.name == "Bohrium"
 
+    def test_module_is_loaded_from_bohrium_tool_package(self):
+        module_path = Path(bohrium_module.__file__)
+        assert module_path.name == "__init__.py"
+        assert module_path.parent.name == "bohrium_tool"
+
+    def test_poll_schema_exposes_wait_fields(self):
+        properties = BohriumTool.json_schema["properties"]
+        assert properties["wait"]["type"] == "boolean"
+        assert properties["max_wait_seconds"]["type"] == "integer"
+        assert properties["poll_interval_seconds"]["type"] == "integer"
+
     def test_prompt_mentions_list_actions(self, tmp_path):
         tool = BohriumTool(workdir=tmp_path)
         prompt = tool.prompt()
@@ -40,6 +52,14 @@ class TestBohriumMetadata:
         assert "Bohrium" in prompt
         assert "list_images" in prompt
         assert "list_machines" in prompt
+
+    def test_prompt_mentions_poll_wait_mode(self, tmp_path):
+        tool = BohriumTool(workdir=tmp_path)
+        prompt = tool.prompt()
+        assert prompt is not None
+        assert "single query" in prompt
+        assert "wait=true" in prompt
+        assert "failure confirmation" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -611,27 +631,6 @@ class TestBohriumExecution:
         assert upload_calls
         assert upload_calls[0][0].endswith("input.zip")
         assert upload_calls[0][2]["Authorization"] == "Bearer token-123"
-
-    def test_poll_running_uses_sandbox_endpoint(self, tmp_path, monkeypatch):
-        tool = BohriumTool(workdir=tmp_path)
-        get_calls: list[str] = []
-
-        def fake_get(base_url, path, access_key, params=None, timeout=30):
-            get_calls.append(path)
-            return {"data": {"status": 1}}
-
-        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-        _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_module, "_get", fake_get)
-
-        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-123"}))
-
-        assert isinstance(result, ToolResult)
-        assert result.status == "success"
-        payload = json.loads(result.content)
-        assert payload["job_id"] == "job-123"
-        assert payload["status"] == "Running"
-        assert get_calls == ["/openapi/v1/sandbox/job/job-123"]
 
     def test_list_images_filters_and_returns_versions(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)

@@ -6,9 +6,9 @@ skill_type: operator
 
 # Poly Forcefield
 
-Use the current local prototype under `playground/mat_master/skills/polyFF/`.
+Use the current local prototype under `matmaster/skills/playground-skills/polyFF/`.
 The public runnable entry for this skill is exposed at
-`playground/mat_master/skills/poly-forcefield/scripts/generate_gmx_top.py`,
+`matmaster/skills/playground-skills/poly-forcefield/scripts/generate_gmx_top.py`,
 which delegates to the current `polyFF` implementation.
 
 ## Current scope
@@ -25,12 +25,12 @@ which delegates to the current `polyFF` implementation.
 
 ## Script path
 
-- `playground/mat_master/skills/poly-forcefield/scripts/generate_gmx_top.py`
+- `matmaster/skills/playground-skills/poly-forcefield/scripts/generate_gmx_top.py`
 
 ## Example
 
 ```bash
-python playground/mat_master/skills/poly-forcefield/scripts/generate_gmx_top.py \
+python matmaster/skills/playground-skills/poly-forcefield/scripts/generate_gmx_top.py \
   --smiles CCCCCCCCCCC \
   --output workspace/c11.top \
   --molecule-name C11
@@ -41,4 +41,4 @@ python playground/mat_master/skills/poly-forcefield/scripts/generate_gmx_top.py 
 - Do not claim support for arbitrary polymers unless the local prototype actually supports them.
 - If typing or parameter assignment fails, surface the failure and the probable unsupported chemistry.
 - Always keep generated files inside the active workspace when possible.
-- gaff用这个`playground/mat_master/skills/polyFF/assets/gaff_min.dat`
+- gaff用这个`matmaster/skills/playground-skills/polyFF/assets/gaff_min.dat`

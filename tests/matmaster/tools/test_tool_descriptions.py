@@ -62,6 +62,17 @@ def test_bash_routes_all_dedicated_tools():
         assert target in desc, f"BashTool.prompt missing routing target '{target}'"
 
 
+def test_bash_description_is_short_static_summary():
+    assert "Run a shell command" in BashTool.description
+    assert len(BashTool.description) < 120
+
+
+def test_bash_prompt_mentions_workspace_and_shell_state():
+    prompt = BashTool().prompt() or ""
+    assert "session workspace directory" in prompt
+    assert "Shell state does not persist between commands." in prompt
+
+
 def test_dedicated_tools_have_prompt_with_usage():
     """Each dedicated tool (grep/glob/read/write/edit) has a prompt with usage guidance."""
     dedicated_tools = [GrepTool, GlobTool, ReadTool, WriteTool, EditTool]

@@ -9,6 +9,14 @@
 - **10009**：`manual-uat` 步骤的 `DEVOPS_DEPLOY_NAME` 固定为 `"manual-uat"`，不传带 `:api` / `:worker` 的 job 名，避免平台报「没有查询 gitlab stage 步骤」。
 - **分支**：推 **test 结尾分支**时同时 trigger API + Worker 两条子流水线。
 
+## 本地 CI 审查
+
+- **手动运行**：`uv run python .pre-commit/local_ci.py`
+- **自动触发**：安装 `bash .pre-commit/install_pre_push_hook.sh` 后，推送到 **test 结尾分支**时会自动执行本地 `lint` + `test`
+- **autofix 提交**：若 `pre-commit` 在 `lint` 阶段只对原本干净的目标文件做了自动格式修复，脚本会创建独立提交 `style: apply pre-commit autofixes`，然后重新执行一次 `lint`
+- **安全边界**：若目标文件在运行 `pre-commit` 前就已有未提交改动，local CI 不会替你自动提交这些文件
+- **临时跳过**：`SKIP_LOCAL_CI=1 git push ...`
+
 ## 一次构建三环境 Remote 镜像（test / uat / prod）
 
 - **触发方式**：推送到分支 `remote-image` 即自动执行 **build-remote-image:all**。

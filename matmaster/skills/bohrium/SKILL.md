@@ -1,12 +1,16 @@
 ---
 name: bohrium
-description: "Bohrium HPC platform knowledge: submission workflow patterns, monitoring strategies, and troubleshooting. Actual API operations are handled by the built-in Bohrium tool — load this skill for platform context before using the tool."
+description: "Bohrium HPC platform knowledge only. This skill is guidance-only and has no runnable scripts; all submit, poll, list_images, and list_machines operations must use the built-in Bohrium tool."
 skill_type: operator
 ---
 
 # Bohrium Platform Guide
 
-This skill provides **platform knowledge only**. All actual operations (submit, poll, list_images, list_machines) are handled by the built-in `Bohrium` tool.
+This skill provides **platform knowledge only**.
+
+- It is **guidance-only**
+- It has **no runnable scripts**
+- All actual operations (`submit`, `poll`, `list_images`, `list_machines`) must use the built-in `Bohrium` tool
 
 ## Workflow Pattern
 

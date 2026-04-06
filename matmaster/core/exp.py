@@ -118,6 +118,29 @@ class Exp:
             child_source = f'{source_prefix}:{exp_name}'
             child_spawn_id = uuid.uuid4().hex[:16]
             parent_session_id = ctx.run_meta.get("session_id", "")
+            event_sink = ctx.run_meta.get("event_sink")
+
+            async def _forward_child_event(event: Any) -> None:
+                if event_sink is None:
+                    return
+                try:
+                    forwarded = event.model_copy(
+                        update={
+                            "source": child_source,
+                            "spawn_id": child_spawn_id,
+                        }
+                    )
+                    result = event_sink(forwarded)
+                    if inspect.isawaitable(result):
+                        await result
+                except Exception:
+                    logging.getLogger(__name__).warning(
+                        "subagent event forwarding failed type=%s spawn_id=%s",
+                        getattr(event, "type", "?"),
+                        child_spawn_id,
+                        exc_info=True,
+                    )
+
             if hook_executor is not None:
                 await hook_executor.emit(
                     HookEvent.SUBAGENT_START,
@@ -136,7 +159,8 @@ class Exp:
                         cancel_token=cancel_token,
                         source_override=child_source,
                         spawn_id=child_spawn_id,
-                    )
+                    ),
+                    on_event=_forward_child_event,
                 )
             finally:
                 if hook_executor is not None:
@@ -260,7 +284,7 @@ class Exp:
         # (child Exp), spawn_fn is None which causes AgentTool to set
         # exposed_to_model=False (hidden from LLM but still in catalog).
         if "Agent" in builtin_cfg or "*" in builtin_cfg:
-            from matmaster.config.loader import list_available_exps
+            from matmaster.config.loader import list_model_visible_exps
             from matmaster.tools.builtin import AgentTool
 
             spawn_fn = None
@@ -271,7 +295,7 @@ class Exp:
                     source_prefix='MatMaster',
                     hook_executor=hook_executor,
                 )
-                available_exps = list_available_exps()
+                available_exps = list_model_visible_exps()
             agent_tool = AgentTool(
                 session=ctx.session,
                 workdir=(

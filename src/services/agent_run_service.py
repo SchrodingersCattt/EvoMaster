@@ -288,6 +288,25 @@ class AgentRunService:
             if pg_ctx.session is not None:
                 pg_ctx.session._cancel_token = cancel_token
 
+            async def _child_event_sink(event: BusEvent) -> None:
+                try:
+                    await fanout.dispatch(event)
+                except Exception:
+                    logger.warning(
+                        'child event sink failed for event type=%s',
+                        getattr(event, 'type', '?'),
+                        exc_info=True,
+                    )
+
+            pg_ctx = pg_ctx.model_copy(
+                update={
+                    'run_meta': {
+                        **pg_ctx.run_meta,
+                        'event_sink': _child_event_sink,
+                    }
+                }
+            )
+
             # -- Stage 5: History --
             raw_events = (
                 events_table.get_session_events(

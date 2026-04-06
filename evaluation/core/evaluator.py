@@ -550,31 +550,46 @@ class BinaryEvaluator:
         if self._llm is None:
             return False, 'no evaluator LLM configured'
         sys_content = system_prompt or _BINARY_JUDGE_SYSTEM_PROMPT
-        with self._llm_lock:
-            reply_text = self._llm.chat(
-                system=sys_content,
-                user=(
-                    f'Criterion:\n{criterion}\n\n'
-                    f'Context:\n{context}\n\n'
-                    'Return JSON only.'
-                ),
-            )
-        try:
-            data = self._parse_json(reply_text)
-        except ValueError:
-            return False, 'LLM response contained no JSON object'
-        # Accept string verdict ("PASS"/"FAIL"), 'criterion_met', or legacy 'pass'.
-        raw_verdict = data.get(
-            'verdict',
-            data.get('criterion_met', data.get('pass', False)),
+        user_msg = (
+            f'Criterion:\n{criterion}\n\n'
+            f'Context:\n{context}\n\n'
+            'Return JSON only.'
         )
-        # Robustly convert: handle str ("PASS"/"FAIL"/"true"/"false"), bool, int.
-        if isinstance(raw_verdict, str):
-            passed = raw_verdict.strip().lower() in ('pass', 'true', '1', 'yes')
-        else:
-            passed = bool(raw_verdict)
-        reason = str(data.get('reason', '')).strip() or 'llm_binary_judge'
-        return passed, reason
+        max_judge_attempts = 2
+        last_parse_error = ''
+        for _attempt in range(max_judge_attempts):
+            with self._llm_lock:
+                reply_text = self._llm.chat(
+                    system=sys_content,
+                    user=user_msg,
+                )
+            try:
+                data = self._parse_json(reply_text)
+            except ValueError:
+                last_parse_error = (
+                    f'LLM response contained no JSON object'
+                    f' (attempt {_attempt + 1}/{max_judge_attempts})'
+                )
+                _eval_logger.warning(
+                    'judge_binary: JSON parse failed on attempt %d/%d for criterion %.80s',
+                    _attempt + 1,
+                    max_judge_attempts,
+                    criterion,
+                )
+                continue
+            # Accept string verdict ("PASS"/"FAIL"), 'criterion_met', or legacy 'pass'.
+            raw_verdict = data.get(
+                'verdict',
+                data.get('criterion_met', data.get('pass', False)),
+            )
+            # Robustly convert: handle str ("PASS"/"FAIL"/"true"/"false"), bool, int.
+            if isinstance(raw_verdict, str):
+                passed = raw_verdict.strip().lower() in ('pass', 'true', '1', 'yes')
+            else:
+                passed = bool(raw_verdict)
+            reason = str(data.get('reason', '')).strip() or 'llm_binary_judge'
+            return passed, reason
+        return False, last_parse_error
 
     # ------------------------------------------------------------------
     # Context builder for LLM judge

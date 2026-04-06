@@ -78,8 +78,8 @@ class ToolCatalog:
             if inst is None or not inst.tool_spec.exposed_to_model:
                 continue
 
+            raw_tool = self._registry.get_raw(name)
             if ctx is not None:
-                raw_tool = self._registry.get_raw(name)
                 describe = getattr(raw_tool, "describe", None) if raw_tool else None
                 if callable(describe):
                     description = describe(ctx)
@@ -107,6 +107,9 @@ class ToolCatalog:
         for name in sorted(tool.name for tool in self._registry.all_tools):
             inst = self.get_tool(name)
             if inst is None or not inst.tool_spec.exposed_to_model:
+                continue
+
+            if name == "Bash":
                 continue
 
             raw_tool = self._registry.get_raw(name)
