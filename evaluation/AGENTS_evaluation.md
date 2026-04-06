@@ -20,6 +20,7 @@ evaluation/question_bank/
 ├── data_fitting/df_elec.yaml
 ├── structure_construction/sc_struct.yaml
 ├── workflow_orchestration/wo_*.yaml
+├── co2rr_reproduction/wo_co2rr_unit_ops.yaml   # capability co2rr_reproduction 专题题库
 ├── safety_refusal/sr_general.yaml
 └── data/                                 # 题目输入数据文件（按题目 ID 子目录）
     ├── README.md
@@ -71,7 +72,7 @@ evaluation/question_bank/
 
 #### capability 枚举
 
-`knowledge_recall` / `structure_construction` / `property_prediction` / `workflow_orchestration` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation_vasp` / `input_generation_abacus`
+`knowledge_recall` / `structure_construction` / `property_prediction` / `workflow_orchestration` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation_vasp` / `input_generation_abacus` / `co2rr_reproduction`
 
 #### domain 枚举
 

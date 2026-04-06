@@ -79,6 +79,7 @@ CapabilityLiteral = Literal[
     'safety_refusal',
     'input_generation_vasp',
     'input_generation_abacus',
+    'co2rr_reproduction',
 ]
 
 DomainLiteral = Literal[
