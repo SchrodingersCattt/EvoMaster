@@ -51,6 +51,11 @@ class _MockSession:
     def is_file(self, path):
         return False
 
+    def stat_file(self, path):
+        from matmaster.types.session import SessionFileStat
+
+        return SessionFileStat(size=0, mtime=0.0)
+
     def download(self, path, timeout=None):
         return b""
 

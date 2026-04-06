@@ -45,7 +45,7 @@ class TestPublicContentForEvent:
         state = {'role': 'assistant', 'content': 'hi', 'tool_calls': []}
         payload = {'type': 'assistant_state', 'source': 'Agent', 'state': state}
 
-        assert _public_content_for_event('assistant_state', payload) == state
+        assert _public_content_for_event('assistant_state', payload) == {'state': state}
 
     def test_skill_hit_returns_skill_name(self) -> None:
         payload = {'type': 'skill_hit', 'source': 'Agent', 'skill_name': 'search'}
