@@ -362,9 +362,7 @@ def check_molcrys_local_env(
     if expected_counts is None:
         return False, f'could not parse expected formula {expected_formula!r}'
     expected_reduced = _reduce_counts(expected_counts)
-    expected_atoms_per_mol = sum(
-        round(v) for v in expected_counts.values()
-    )
+    expected_atoms_per_mol = sum(round(v) for v in expected_counts.values())
 
     issues: list[str] = []
     for i, mol in enumerate(molecules):
@@ -442,9 +440,7 @@ def _check_chemenv(molecules: list) -> list[str]:
         for node_idx in graph.nodes():
             sym = symbols[node_idx]
             # Only validate heavy atoms that are bonded to at least one H
-            h_neighbors = [
-                nb for nb in graph.neighbors(node_idx) if symbols[nb] == 'H'
-            ]
+            h_neighbors = [nb for nb in graph.neighbors(node_idx) if symbols[nb] == 'H']
             if not h_neighbors or sym == 'H':
                 continue
 

@@ -471,9 +471,7 @@ class BinaryEvaluator:
         if item.verify == 'molcrys_local_env':
             if ref is None:
                 return False, 'missing reference answer'
-            return check_molcrys_local_env_from_evidence(
-                evidence=evidence, ref=ref
-            )
+            return check_molcrys_local_env_from_evidence(evidence=evidence, ref=ref)
 
         # --- struct_file_* programmatic structure checks ---
         _STRUCT_FILE_DISPATCH = {
