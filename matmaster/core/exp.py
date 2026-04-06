@@ -284,7 +284,7 @@ class Exp:
         # (child Exp), spawn_fn is None which causes AgentTool to set
         # exposed_to_model=False (hidden from LLM but still in catalog).
         if "Agent" in builtin_cfg or "*" in builtin_cfg:
-            from matmaster.config.loader import list_available_exps
+            from matmaster.config.loader import list_model_visible_exps
             from matmaster.tools.builtin import AgentTool
 
             spawn_fn = None
@@ -295,7 +295,7 @@ class Exp:
                     source_prefix='MatMaster',
                     hook_executor=hook_executor,
                 )
-                available_exps = list_available_exps()
+                available_exps = list_model_visible_exps()
             agent_tool = AgentTool(
                 session=ctx.session,
                 workdir=(
