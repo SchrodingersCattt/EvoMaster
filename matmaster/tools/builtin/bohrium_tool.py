@@ -280,13 +280,9 @@ class BohriumTool(BuiltinTool):
 
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return (
-            '## Bohrium tool usage\n'
-            '- Load the corresponding software skill first (cp2k, qe, abacus, orca, '
-            'lammps, gromacs, pyscf, abinit, pyatb) to obtain image, machine, and cmd.\n'
-            '- submit: cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
-            '- poll: non-blocking single query. Returns Running/Finished/Failed. '
-            'Call again to re-check a Running job.\n'
-            '- When image or machine is unknown, call list_images / list_machines first.\n'
+            'Load software skill first for image/machine/cmd. '
+            'submit cmd must end with "> log 2>&1". '
+            'poll is non-blocking; re-call for Running jobs.'
         )
 
     def _resolve_credentials(self) -> _ResolvedBohriumContext:
