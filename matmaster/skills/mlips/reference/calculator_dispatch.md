@@ -70,4 +70,4 @@ model_name_or_path
 > Use `Bohrium(action="list_images", keyword="lambench")` to find the latest multi-MLIP image.
 > The DPA-specific image is smaller and faster to pull when only DPA is needed.
 > If a package is missing in the selected image, the submitted `cmd` / `command` may prepend `pip install <pkg> &&` before running the script.
-> If you want the installation to land in the bundled environment, activate `/mcp_server/dpa/.venv` first, e.g. `source /mcp_server/dpa/.venv/bin/activate && pip install <pkg> && python ...`.
+> If you want the installation to land in the bundled environment, activate `/mcp_server/AI4S-agent-tools/.venv` first, e.g. `source /mcp_server/AI4S-agent-tools/.venv/bin/activate && pip install <pkg> && python ...`.
