@@ -5,7 +5,7 @@ This tool handles pure communication: submit, poll (single-query), list_images,
 list_machines. All software-specific knowledge lives in software skills.
 
 Design decisions:
-- poll is single-shot (non-blocking): returns current status, Agent controls retry
+- poll defaults to single-shot (non-blocking), with optional short waits via wait=true
 - submit auto-appends "> log 2>&1" if missing
 - Credentials resolved via runtime bridge (session > env fallback)
 - Remote /share paths require active session with upload_directory
@@ -16,12 +16,13 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
+import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, ClassVar, Iterator
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from uuid import uuid4
 
 import requests
@@ -49,6 +50,11 @@ from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_POLL_WAIT_SECONDS = 30
+_DEFAULT_POLL_INTERVAL_SECONDS = 5
+_FAILURE_CONFIRM_ATTEMPTS = 3
+_FAILURE_CONFIRM_SLEEP_SECONDS = 3
 # ═══════════════════════════════════════════════════════════════════════════
 # input_dir preparation helpers
 # ═══════════════════════════════════════════════════════════════════════════
@@ -188,6 +194,165 @@ def prepare_bohrium_input_zip(
         yield zip_path
 
 
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+    return bool(value)
+
+
+def _coerce_positive_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _parse_sandbox_result_url(result_url: str) -> tuple[str, str, str, str]:
+    parsed = urlparse(result_url)
+    host = f'{parsed.scheme}://{parsed.netloc}'.rstrip('/')
+    token = parse_qs(parsed.query).get('token', [''])[0].strip()
+    object_path = unquote(parsed.path.removeprefix('/api/download/')).strip('/')
+    if not host or not token or not object_path:
+        raise ValueError(f'invalid sandbox resultUrl: {result_url}')
+    prefix = object_path.rsplit('/', 1)[0] + '/' if '/' in object_path else ''
+    return host, token, object_path, prefix
+
+
+def _sandbox_iterate_objects(
+    host: str, token: str, prefix: str
+) -> list[dict[str, Any]]:
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json',
+    }
+    objects: list[dict[str, Any]] = []
+    next_token = ''
+
+    while True:
+        payload: dict[str, Any] = {'prefix': prefix}
+        if next_token:
+            payload['nextToken'] = next_token
+
+        response = requests.post(
+            f'{host.rstrip("/")}/api/iterate',
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+        body = response.json() or {}
+        if body.get('code') not in (None, 0):
+            raise RuntimeError(f'sandbox iterate failed: {body}')
+
+        data = body.get('data') or {}
+        objects.extend(data.get('objects') or [])
+
+        if not data.get('hasNext'):
+            break
+        next_token = str(data.get('nextToken') or '').strip()
+        if not next_token:
+            break
+
+    return objects
+
+
+def _sandbox_download_object(
+    host: str, token: str, object_path: str, dest_path: Path
+) -> None:
+    encoded_path = quote(object_path, safe='/')
+    url = (
+        f'{host.rstrip("/")}/api/download/{encoded_path}?token={token}'
+        '&Response-Content-Type=application/octet-stream'
+    )
+    BohriumTool._download_to_file(url, dest_path)
+
+
+def _sandbox_choose_zip_object(
+    job_id: int | str, objects: list[dict[str, Any]]
+) -> str | None:
+    file_paths = [
+        str(obj.get('path') or obj.get('key') or '').strip()
+        for obj in objects
+        if isinstance(obj, dict)
+        and not obj.get('isDir')
+        and (obj.get('path') or obj.get('key'))
+    ]
+
+    preferred_name = f'{job_id}.zip'
+    for path in file_paths:
+        if Path(path).name == preferred_name:
+            return path
+    for path in file_paths:
+        if path.endswith('.zip') and Path(path).name != 'task.zip':
+            return path
+    for path in file_paths:
+        if path.endswith('.zip'):
+            return path
+    return None
+
+
+def _sandbox_download_log(
+    *,
+    job_id: int | str,
+    result_dir: Path,
+    ctx: _ResolvedBohriumContext,
+    root_host: str,
+    root_token: str,
+    objects: list[dict[str, Any]],
+) -> bool:
+    log_path = result_dir / 'log'
+
+    try:
+        token_resp = _post(
+            ctx.base_url,
+            '/openapi/v1/sandbox/job/file/token',
+            ctx.access_key,
+            {'filePath': 'log', 'jobId': str(job_id)},
+        )
+        if token_resp.get('code') == 0:
+            token_data = token_resp.get('data') or {}
+            log_host = str(token_data.get('host') or token_data.get('storeHost') or '')
+            log_token = str(token_data.get('token') or '').strip()
+            log_object_path = str(
+                token_data.get('path') or token_data.get('storePath') or ''
+            ).strip('/')
+            if log_host and log_token and log_object_path:
+                _sandbox_download_object(log_host, log_token, log_object_path, log_path)
+                return True
+    except Exception:
+        logger.debug('sandbox log token download failed', exc_info=True)
+
+    if root_host and root_token:
+        log_object = next(
+            (
+                str(obj.get('path') or obj.get('key') or '').strip()
+                for obj in objects
+                if isinstance(obj, dict)
+                and not obj.get('isDir')
+                and Path(str(obj.get('path') or obj.get('key') or '')).name == 'log'
+            ),
+            '',
+        )
+        if log_object:
+            _sandbox_download_object(root_host, root_token, log_object, log_path)
+            return True
+
+    return False
+
+
+def _merge_log_file(files: list[str], log_downloaded: bool) -> list[str]:
+    if not log_downloaded:
+        return files
+    if 'log' in files:
+        return files
+    return ['log', *files]
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # BohriumTool
 # ═══════════════════════════════════════════════════════════════════════════
@@ -200,7 +365,7 @@ class BohriumTool(BuiltinTool):
     description: ClassVar[str] = (
         'Bohrium HPC platform operations. '
         'action="submit": package input directory and submit a job, returns job_id. '
-        'action="poll": single query of current job status; downloads results when Finished. '
+        'action="poll": query current job status; defaults to a single query and can wait briefly when wait=true; downloads results when Finished. '
         'action="list_images": query available Docker images by keyword. '
         'action="list_machines": query available machine types (cpu/gpu).'
     )
@@ -247,6 +412,18 @@ class BohriumTool(BuiltinTool):
                 'type': 'string',
                 'description': 'Local directory for downloaded results. (poll)',
             },
+            'wait': {
+                'type': 'boolean',
+                'description': 'Wait within this call when the job is still Running. Default: false. (poll)',
+            },
+            'max_wait_seconds': {
+                'type': 'integer',
+                'description': 'Maximum wait time when wait=true. Default: 30. (poll)',
+            },
+            'poll_interval_seconds': {
+                'type': 'integer',
+                'description': 'Interval between detail checks when wait=true. Default: 5. (poll)',
+            },
             # --- list ---
             'keyword': {
                 'type': 'string',
@@ -288,8 +465,11 @@ class BohriumTool(BuiltinTool):
             '- Load the corresponding software skill first (cp2k, qe, abacus, orca, '
             'lammps, gromacs, pyscf, abinit, pyatb) to obtain image, machine, and cmd.\n'
             '- submit: cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
-            '- poll: non-blocking single query. Returns Running/Finished/Failed. '
-            'Call again to re-check a Running job.\n'
+            '- poll: default single query (wait=false). Set wait=true to wait within '
+            'one call, and use max_wait_seconds / poll_interval_seconds to control '
+            'that loop. Failed jobs include a short failure confirmation before '
+            'downloading artifacts. Returns Running/Finished/Failed. Call again to '
+            're-check a Running job.\n'
             '- When image or machine is unknown, call list_images / list_machines first.\n'
         )
 
@@ -558,6 +738,13 @@ class BohriumTool(BuiltinTool):
         self._log_request_context(action='poll', ctx=ctx, sandbox=sandbox)
         job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
         result_dir_str = args.get('result_dir') or f'results/run_{job_id}'
+        wait = _coerce_bool(args.get('wait'), default=False)
+        max_wait_seconds = _coerce_positive_int(
+            args.get('max_wait_seconds'), _DEFAULT_POLL_WAIT_SECONDS
+        )
+        poll_interval_seconds = _coerce_positive_int(
+            args.get('poll_interval_seconds'), _DEFAULT_POLL_INTERVAL_SECONDS
+        )
 
         decision = resolve_output_path(
             raw_path=result_dir_str,
@@ -574,79 +761,63 @@ class BohriumTool(BuiltinTool):
         result_dir = Path(result_dir_str)
 
         try:
-            # Single query
-            if sandbox:
-                detail_path = f'/openapi/v1/sandbox/job/{job_id}'
-            else:
-                detail_path = f'/openapi/v1/job/{job_id}'
+            detail_path = (
+                f'/openapi/v1/sandbox/job/{job_id}'
+                if sandbox
+                else f'/openapi/v1/job/{job_id}'
+            )
 
-            detail = _get(ctx.base_url, detail_path, ctx.access_key)
-            detail_data = detail.get('data', {})
-            code = detail_data.get('status', 0)
-            status_name = _STATUS_MAP.get(code, f'Unknown({code})')
+            waited_seconds = 0
 
-            # Still running
-            if code in _RUNNING_CODES:
-                return ToolResult(
-                    status='success',
-                    content=json.dumps(
-                        {
-                            'success': True,
-                            'job_id': job_id,
-                            'status': status_name,
-                            'message': f'Job is {status_name}. Call Bohrium(action="poll", job_id={job_id}) again later to check.',
-                        },
-                        ensure_ascii=False,
-                    ),
-                )
+            while True:
+                detail = _get(ctx.base_url, detail_path, ctx.access_key)
+                detail_data = detail.get('data', {})
+                code = detail_data.get('status', 0)
+                status_name = _STATUS_MAP.get(code, f'Unknown({code})')
 
-            # Finished — download results
-            if code == _SUCCESS_CODE:
-                files, log_tail = self._download_results(
-                    job_id,
-                    detail_data,
-                    result_dir,
-                    ctx=ctx,
-                    sandbox=sandbox,
-                )
-
-                # Remote share: upload local results to remote session
-                report_dir = str(result_dir)
-                if (
-                    decision.kind == 'remote_share'
-                    and self._session is not None
-                    and hasattr(self._session, 'upload_directory')
-                ):
-                    try:
-                        self._session.upload_directory(str(result_dir), result_dir_str)
-                        report_dir = result_dir_str
-                    except Exception as upload_exc:
-                        logger.warning(
-                            'Failed to upload results to remote share %s: %s',
-                            result_dir_str,
-                            upload_exc,
+                if code in _RUNNING_CODES:
+                    if wait:
+                        if waited_seconds >= max_wait_seconds:
+                            return ToolResult(
+                                status='success',
+                                content=json.dumps(
+                                    {
+                                        'success': True,
+                                        'job_id': job_id,
+                                        'status': status_name,
+                                        'message': (
+                                            f'Job is {status_name}. wait=true '
+                                            f'exhausted; waited {int(waited_seconds)}s '
+                                            'before returning.'
+                                        ),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                            )
+                        sleep_seconds = min(
+                            poll_interval_seconds,
+                            max_wait_seconds - waited_seconds,
                         )
+                        if sleep_seconds <= 0:
+                            continue
+                        time.sleep(sleep_seconds)
+                        waited_seconds += sleep_seconds
+                        continue
 
-                return ToolResult(
-                    status='success',
-                    content=json.dumps(
-                        {
-                            'success': True,
-                            'job_id': job_id,
-                            'status': 'Finished',
-                            'result_dir': report_dir,
-                            'files': files,
-                            'log_tail': log_tail,
-                        },
-                        ensure_ascii=False,
-                    ),
-                )
+                    return ToolResult(
+                        status='success',
+                        content=json.dumps(
+                            {
+                                'success': True,
+                                'job_id': job_id,
+                                'status': status_name,
+                                'message': f'Job is {status_name}. Call Bohrium(action="poll", job_id={job_id}) again later to check.',
+                            },
+                            ensure_ascii=False,
+                        ),
+                    )
 
-            # Failed — try downloading whatever is available
-            if code in _FAILURE_CODES:
-                files: list[str] = []
-                log_tail = ''
-                try:
+                if code == _SUCCESS_CODE:
                     files, log_tail = self._download_results(
                         job_id,
                         detail_data,
@@ -654,37 +825,101 @@ class BohriumTool(BuiltinTool):
                         ctx=ctx,
                         sandbox=sandbox,
                     )
-                except Exception:
-                    pass
+
+                    report_dir = str(result_dir)
+                    if (
+                        decision.kind == 'remote_share'
+                        and self._session is not None
+                        and hasattr(self._session, 'upload_directory')
+                    ):
+                        try:
+                            self._session.upload_directory(
+                                str(result_dir), result_dir_str
+                            )
+                            report_dir = result_dir_str
+                        except Exception as upload_exc:
+                            logger.warning(
+                                'Failed to upload results to remote share %s: %s',
+                                result_dir_str,
+                                upload_exc,
+                            )
+
+                    return ToolResult(
+                        status='success',
+                        content=json.dumps(
+                            {
+                                'success': True,
+                                'job_id': job_id,
+                                'status': 'Finished',
+                                'result_dir': report_dir,
+                                'files': files,
+                                'log_tail': log_tail,
+                            },
+                            ensure_ascii=False,
+                        ),
+                    )
+
+                if code in _FAILURE_CODES:
+                    confirm_detail = detail_data
+                    confirm_code = code
+                    for attempt in range(1, _FAILURE_CONFIRM_ATTEMPTS):
+                        time.sleep(_FAILURE_CONFIRM_SLEEP_SECONDS)
+                        detail = _get(ctx.base_url, detail_path, ctx.access_key)
+                        confirm_detail = detail.get('data', {})
+                        confirm_code = confirm_detail.get('status', 0)
+                        if confirm_code not in _FAILURE_CODES:
+                            break
+
+                    if confirm_code in _FAILURE_CODES:
+                        confirmed_status_name = _STATUS_MAP.get(
+                            confirm_code,
+                            f'Unknown({confirm_code})',
+                        )
+                        files: list[str] = []
+                        log_tail = ''
+                        try:
+                            files, log_tail = self._download_results(
+                                job_id,
+                                confirm_detail,
+                                result_dir,
+                                ctx=ctx,
+                                sandbox=sandbox,
+                            )
+                        except Exception:
+                            pass
+                        return ToolResult(
+                            status='error',
+                            content=json.dumps(
+                                {
+                                    'success': False,
+                                    'job_id': job_id,
+                                    'status': confirmed_status_name,
+                                    'result_dir': str(result_dir) if files else '',
+                                    'files': files,
+                                    'log_tail': log_tail,
+                                    'error': f'Job {confirmed_status_name} on Bohrium.',
+                                },
+                                ensure_ascii=False,
+                            ),
+                        )
+
+                    code = confirm_code
+                    detail_data = confirm_detail
+                    status_name = _STATUS_MAP.get(code, f'Unknown({code})')
+                    continue
+
                 return ToolResult(
-                    status='error',
+                    status='success',
                     content=json.dumps(
                         {
-                            'success': False,
+                            'success': True,
                             'job_id': job_id,
                             'status': status_name,
-                            'result_dir': str(result_dir) if files else '',
-                            'files': files,
-                            'log_tail': log_tail,
-                            'error': f'Job {status_name} on Bohrium.',
+                            'message': f'Unexpected status code {code}. Retry poll or check Bohrium console.',
                         },
                         ensure_ascii=False,
                     ),
                 )
-
-            # Unknown status
-            return ToolResult(
-                status='success',
-                content=json.dumps(
-                    {
-                        'success': True,
-                        'job_id': job_id,
-                        'status': status_name,
-                        'message': f'Unexpected status code {code}. Retry poll or check Bohrium console.',
-                    },
-                    ensure_ascii=False,
-                ),
-            )
 
         except Exception as exc:
             logger.error(
@@ -709,7 +944,7 @@ class BohriumTool(BuiltinTool):
         result_dir.mkdir(parents=True, exist_ok=True)
 
         if sandbox:
-            return self._sandbox_download(job_id, result_dir, ctx=ctx)
+            return self._sandbox_download(job_id, detail_data, result_dir, ctx=ctx)
 
         # Standard HPC: download resultUrl zip
         result_url = detail_data.get('resultUrl', '')
@@ -726,64 +961,94 @@ class BohriumTool(BuiltinTool):
     def _sandbox_download(
         self,
         job_id: int | str,
+        detail_data: dict,
         result_dir: Path,
         *,
         ctx: _ResolvedBohriumContext,
     ) -> tuple[list[str], str]:
         """Download results in sandbox mode (iterate objects, find zip, extract)."""
-        token_resp = _post(
-            ctx.base_url,
-            '/openapi/v1/sandbox/job/file/token',
-            ctx.access_key,
-            {'jobId': str(job_id)},
+        result_url = str(detail_data.get('resultUrl') or detail_data.get('result') or '')
+        objects: list[dict[str, Any]] = []
+        root_host = ''
+        root_token = ''
+        root_prefix = ''
+
+        if result_url:
+            try:
+                root_host, root_token, _object_path, root_prefix = (
+                    _parse_sandbox_result_url(result_url)
+                )
+                objects = _sandbox_iterate_objects(root_host, root_token, root_prefix)
+            except Exception as exc:
+                logger.debug(
+                    'sandbox resultUrl iteration failed job_id=%s error=%s',
+                    job_id,
+                    exc,
+                    exc_info=True,
+                )
+
+        log_downloaded = _sandbox_download_log(
+            job_id=job_id,
+            result_dir=result_dir,
+            ctx=ctx,
+            root_host=root_host,
+            root_token=root_token,
+            objects=objects,
         )
-        if token_resp.get('code') != 0:
-            return [], f'(file token request failed: {token_resp})'
 
-        token_data = token_resp.get('data', {})
-        store_host = token_data.get('storeHost', '').rstrip('/')
-        token = token_data.get('token', '')
-        prefix = token_data.get('storePath', '')
+        zip_key = _sandbox_choose_zip_object(job_id, objects)
+        if zip_key and root_host and root_token:
+            try:
+                zip_path = result_dir / Path(zip_key).name
+                _sandbox_download_object(root_host, root_token, zip_key, zip_path)
+                files = self._extract_zip(zip_path, result_dir)
+                files = _merge_log_file(files, log_downloaded)
+                log_tail = self._read_log(result_dir)
+                return files, log_tail
+            except Exception as exc:
+                logger.debug(
+                    'sandbox zip-object download failed job_id=%s zip=%s error=%s',
+                    job_id,
+                    zip_key,
+                    exc,
+                    exc_info=True,
+                )
 
-        if not (store_host and token and prefix):
-            return [], '(incomplete file token response)'
+        if result_url:
+            try:
+                zip_path = result_dir / 'out.zip'
+                self._download_to_file(result_url, zip_path)
+                files = self._extract_zip(zip_path, result_dir)
+                files = _merge_log_file(files, log_downloaded)
+                log_tail = self._read_log(result_dir)
+                return files, log_tail
+            except Exception as exc:
+                logger.debug(
+                    'sandbox resultUrl zip download failed job_id=%s error=%s',
+                    job_id,
+                    exc,
+                    exc_info=True,
+                )
 
-        # List objects
-        list_url = f'{store_host}/api/list'
-        list_params = {'prefix': prefix, 'token': token, 'limit': 500}
-        list_resp = requests.get(list_url, params=list_params, timeout=30)
-        list_resp.raise_for_status()
-        objects = list_resp.json().get('data', {}).get('list', [])
+        if log_downloaded:
+            return ['log'], self._read_log(result_dir)
 
-        # Find the output zip
-        zip_key = None
-        for obj in objects:
-            key = obj.get('key', '')
-            if key.endswith('.zip') and 'out' in key.lower():
-                zip_key = key
-                break
-        if not zip_key:
-            # Fallback: any zip
-            for obj in objects:
-                if obj.get('key', '').endswith('.zip'):
-                    zip_key = obj['key']
-                    break
+        if objects:
+            files = [
+                str(obj.get('path') or obj.get('key') or '')
+                for obj in objects
+                if isinstance(obj, dict) and (obj.get('path') or obj.get('key'))
+            ]
+            if root_prefix:
+                files = [
+                    path[len(root_prefix) :] if path.startswith(root_prefix) else path
+                    for path in files
+                ]
+            return files, self._read_log(result_dir)
 
-        if not zip_key:
-            return [], '(no zip file found in sandbox artifacts)'
-
-        # Download zip
-        encoded_key = quote(zip_key, safe='/')
-        dl_url = (
-            f'{store_host}/api/download/{encoded_key}?token={token}'
-            '&Response-Content-Type=application/octet-stream'
-        )
-        zip_path = result_dir / 'out.zip'
-        self._download_to_file(dl_url, zip_path)
-
-        files = self._extract_zip(zip_path, result_dir)
-        log_tail = self._read_log(result_dir)
-        return files, log_tail
+        if result_url:
+            return [], '(sandbox resultUrl download failed)'
+        return [], '(no resultUrl in job detail)'
 
     @staticmethod
     def _download_to_file(url: str, dest: Path, *, timeout: int = 300) -> None:
