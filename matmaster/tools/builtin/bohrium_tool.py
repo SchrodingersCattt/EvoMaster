@@ -26,7 +26,10 @@ from uuid import uuid4
 
 import requests
 
-from matmaster.integration.bohrium_api import get_bohrium_base_url, get_bohrium_service_env
+from matmaster.integration.bohrium_api import (
+    get_bohrium_base_url,
+    get_bohrium_service_env,
+)
 from matmaster.integration.runtime_bridge import resolve_output_path
 from matmaster.tools.builtin._bohrium_api import (
     _FAILURE_CODES,
@@ -413,7 +416,9 @@ class BohriumTool(BuiltinTool):
                     create_path = '/openapi/v1/job/create'
                     create_payload = {'projectId': ctx.project_id, 'jobName': job_name}
 
-                create_resp = _post(ctx.base_url, create_path, ctx.access_key, create_payload)
+                create_resp = _post(
+                    ctx.base_url, create_path, ctx.access_key, create_payload
+                )
                 if create_resp.get('code') != 0:
                     return ToolResult(
                         status='error', content=f'job/create failed: {create_resp}'
