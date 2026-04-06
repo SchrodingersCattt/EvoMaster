@@ -2,7 +2,24 @@
 
 import asyncio
 
+from matmaster.config.exp import ExpSubagentMeta
 from matmaster.tools.builtin.agent_tool import AgentTool
+from matmaster.tools.tool_result import ToolResult
+
+
+def _meta(**overrides):
+    data = {
+        "name": "explore",
+        "description": "Read-only exploration subagent",
+        "when_to_use": "Use for evidence gathering",
+        "read_only": True,
+        "visible_as_subagent": True,
+        "context_mode": "fresh",
+        "result_style": "findings",
+        "tools_summary": "Builtin: Bash, Read, Glob, Grep; MCP: none; Skills: disabled",
+    }
+    data.update(overrides)
+    return ExpSubagentMeta.model_validate(data)
 
 
 class TestAgentToolMetadata:
@@ -12,172 +29,102 @@ class TestAgentToolMetadata:
     def test_stop_mode(self):
         assert AgentTool.stop_mode == "non_cancellable"
 
-
-class TestAgentRecursionGuard:
     def test_no_spawn_fn_hidden_from_model(self):
-        """Schema-layer guard: exposed_to_model=False when spawn_fn=None."""
-        tool = AgentTool(spawn_fn=None)
+        tool = AgentTool(spawn_fn=None, available_exps=[_meta()])
         assert tool.exposed_to_model is False
 
-    def test_no_spawn_fn_runtime_error(self):
-        """Runtime-layer guard: returns error even if somehow called."""
-        tool = AgentTool(spawn_fn=None)
-        result = asyncio.run(
-            tool.execute(
-                {
-                    "description": "test",
-                    "prompt": "do something",
-                }
-            )
+    def test_schema_keeps_prompt_required_and_legacy_description_alias(self):
+        tool = AgentTool(spawn_fn=None, available_exps=[_meta()])
+        assert set(tool.json_schema["required"]) == {"prompt"}
+        assert "exp_name" in tool.json_schema["properties"]
+        assert "task_summary" in tool.json_schema["properties"]
+        assert tool.json_schema["properties"]["description"]["deprecated"] is True
+
+    def test_prompt_lists_subagent_usage(self):
+        tool = AgentTool(spawn_fn=None, available_exps=[_meta()])
+        text = tool.prompt()
+        assert "explore" in text
+        assert "Use for evidence gathering" in text
+        assert "Tools:" in text
+        assert "read-only" in text.lower()
+        assert "spawn_id" in text
+        assert "When NOT to use the Agent tool" in text
+        assert (
+            "Brief the agent like a smart colleague who just walked into the room"
+            in text
         )
-        assert "error" in result.lower() or "not available" in result.lower()
-
-    def test_with_spawn_fn_visible(self):
-        async def fake_spawn(exp_name, task, cancel_token=None):
-            return f"Result for: {task}"
-
-        tool = AgentTool(spawn_fn=fake_spawn)
-        assert tool.exposed_to_model is True
-
-    def test_with_spawn_fn(self):
-        async def fake_spawn(exp_name, task, cancel_token=None):
-            return f"Result for: {task}"
-
-        tool = AgentTool(spawn_fn=fake_spawn)
-        result = asyncio.run(
-            tool.execute(
-                {
-                    "description": "test",
-                    "prompt": "do something",
-                }
-            )
-        )
-        assert "Result for: do something" in result
-
-    def test_exp_name_passed_to_spawn(self):
-        async def fake_spawn(exp_name, task, cancel_token=None):
-            return f"Ran {exp_name}: {task}"
-
-        tool = AgentTool(spawn_fn=fake_spawn)
-        result = asyncio.run(
-            tool.execute(
-                {
-                    "description": "test",
-                    "prompt": "do x",
-                    "exp_name": "explore",
-                }
-            )
-        )
-        assert "explore" in result
-
-
-class TestAgentDynamicSchema:
-    def test_available_exps_modifies_schema(self):
-        exps = [("explore", "Read-only exploration"), ("direct", "Full execution")]
-        tool = AgentTool(spawn_fn=None, available_exps=exps)
-        schema = tool.json_schema
-        exp_prop = schema["properties"]["exp_name"]
-        assert "enum" in exp_prop
-        assert "explore" in exp_prop["enum"]
-        assert "direct" in exp_prop["enum"]
-
-    def test_description_includes_exps(self):
-        exps = [("explore", "Read-only exploration")]
-        tool = AgentTool(spawn_fn=None, available_exps=exps)
-        assert "explore" in tool.description.lower()
+        assert "Never delegate understanding" in text
+        assert "parallel" in text.lower()
 
 
 class TestAgentValidation:
-    def test_empty_prompt_error(self):
-        async def fake_spawn(exp_name, task, stop_event=None):
-            return "ok"
-
-        tool = AgentTool(spawn_fn=fake_spawn)
-        result = asyncio.run(
-            tool.execute(
+    def test_validate_input_maps_legacy_description_alias(self):
+        tool = AgentTool(spawn_fn=None, available_exps=[_meta()])
+        decision = asyncio.run(
+            tool.validate_input(
                 {
-                    "description": "test",
-                    "prompt": "",
-                }
-            )
-        )
-        assert "error" in result.lower()
-
-    def test_empty_exp_name_error_when_available_exps_set(self):
-        """exp_name 为空时，若已设置 available_exps，应返回错误并列出合法值。"""
-
-        async def fake_spawn(exp_name, task, cancel_token=None):
-            return "ok"
-
-        exps = [("explore", "Read-only exploration"), ("direct", "Full execution")]
-        tool = AgentTool(spawn_fn=fake_spawn, available_exps=exps)
-        result = asyncio.run(
-            tool.execute(
-                {
-                    "description": "test",
-                    "prompt": "do something",
-                    "exp_name": "",
-                }
-            )
-        )
-        assert "error" in result.lower()
-        assert "explore" in result
-        assert "direct" in result
-
-    def test_invalid_exp_name_error_when_available_exps_set(self):
-        """exp_name 不在合法集合中时，应返回错误并列出合法值。"""
-
-        async def fake_spawn(exp_name, task, cancel_token=None):
-            return "ok"
-
-        exps = [("explore", "Read-only exploration"), ("direct", "Full execution")]
-        tool = AgentTool(spawn_fn=fake_spawn, available_exps=exps)
-        result = asyncio.run(
-            tool.execute(
-                {
-                    "description": "test",
-                    "prompt": "do something",
-                    "exp_name": "nonexistent",
-                }
-            )
-        )
-        assert "error" in result.lower()
-        assert "explore" in result
-        assert "direct" in result
-
-    def test_valid_exp_name_passes_when_available_exps_set(self):
-        """exp_name 在合法集合中时，应正常调用 spawn_fn。"""
-
-        async def fake_spawn(exp_name, task, cancel_token=None):
-            return f"Ran {exp_name}"
-
-        exps = [("explore", "Read-only exploration"), ("direct", "Full execution")]
-        tool = AgentTool(spawn_fn=fake_spawn, available_exps=exps)
-        result = asyncio.run(
-            tool.execute(
-                {
-                    "description": "test",
-                    "prompt": "do something",
                     "exp_name": "explore",
+                    "description": "trace parser flow",
+                    "prompt": "Inspect the parser stack and summarize the path.",
                 }
             )
         )
-        assert result == "Ran explore"
+        assert decision is not None
+        assert decision.modified_args["task_summary"] == "trace parser flow"
 
-    def test_any_exp_name_allowed_when_no_available_exps(self):
-        """未设置 available_exps 时，任意 exp_name（包括空值）应正常通过。"""
+    def test_validate_input_defaults_missing_exp_name_to_direct(self):
+        tool = AgentTool(
+            spawn_fn=None,
+            available_exps=[
+                _meta(
+                    name="direct",
+                    description="Execution subagent",
+                    when_to_use="Use for execution",
+                    read_only=False,
+                    result_style="completion",
+                ),
+                _meta(),
+            ],
+        )
+        decision = asyncio.run(
+            tool.validate_input(
+                {
+                    "description": "trace parser flow",
+                    "prompt": "Inspect the parser stack and summarize the path.",
+                }
+            )
+        )
+        assert decision is not None
+        assert decision.modified_args["exp_name"] == "direct"
 
+    def test_validate_input_rejects_unknown_fields(self):
+        tool = AgentTool(spawn_fn=None, available_exps=[_meta()])
+        decision = asyncio.run(
+            tool.validate_input(
+                {
+                    "exp_name": "explore",
+                    "prompt": "Inspect the parser stack.",
+                    "unexpected": True,
+                }
+            )
+        )
+        assert decision is not None
+        assert decision.decision == "deny"
+
+    def test_execute_returns_tool_result_payload(self):
         async def fake_spawn(exp_name, task, cancel_token=None):
-            return f"Ran '{exp_name}'"
+            return f"Ran {exp_name}: {task}"
 
-        tool = AgentTool(spawn_fn=fake_spawn)
+        tool = AgentTool(spawn_fn=fake_spawn, available_exps=[_meta()])
         result = asyncio.run(
             tool.execute(
                 {
-                    "description": "test",
-                    "prompt": "do something",
-                    "exp_name": "",
+                    "exp_name": "explore",
+                    "task_summary": "trace parser flow",
+                    "prompt": "Inspect the parser stack and summarize the path.",
                 }
             )
         )
-        assert "error" not in result.lower()
+        assert isinstance(result, ToolResult)
+        assert result.payload["exp_name"] == "explore"
+        assert result.payload["task_summary"] == "trace parser flow"

@@ -20,6 +20,14 @@ class TestExpConfig:
         assert cfg.developer_instructions == ""
         assert cfg.tools.builtin == ["*"]
 
+    def test_subagent_metadata_defaults(self):
+        cfg = ExpConfig()
+        assert cfg.when_to_use == ""
+        assert cfg.read_only is False
+        assert cfg.visible_as_subagent is True
+        assert cfg.context_mode == "fresh"
+        assert cfg.result_style == "summary"
+
     def test_from_toml_dict(self):
         """Simulate what tomllib.load() would produce from direct.toml."""
         data = {
@@ -83,6 +91,24 @@ class TestExpConfig:
         }
         cfg = ExpConfig.model_validate(data)
         assert "Line 2" in cfg.developer_instructions
+
+    def test_subagent_metadata_from_dict(self):
+        cfg = ExpConfig.model_validate(
+            {
+                "name": "explore",
+                "description": "Read-only explorer",
+                "when_to_use": "Use for codebase discovery",
+                "read_only": True,
+                "visible_as_subagent": False,
+                "context_mode": "fresh",
+                "result_style": "findings",
+            }
+        )
+        assert cfg.when_to_use == "Use for codebase discovery"
+        assert cfg.read_only is True
+        assert cfg.visible_as_subagent is False
+        assert cfg.context_mode == "fresh"
+        assert cfg.result_style == "findings"
 
 
 class TestExpSkillsConfig:
