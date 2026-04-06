@@ -1,6 +1,6 @@
 name = "direct"
 description = "Full-capability execution subagent for completing tasks with file edits, tools, MCP, and skills"
-when_to_use = "Use when the parent agent already knows the goal and needs a subagent to perform real execution work such as edits, commands, or MCP calls"
+when_to_use = "Use only when the parent agent needs a subagent to autonomously carry out a complex multi-step task, such as coordinated edits across multiple files, investigate-then-execute work, MCP or external tool orchestration, or a task that would otherwise require a long chain of direct tool calls. Do not use for simple reads, quick searches, single-command work, or small localized edits that can be completed directly with builtin tools."
 read_only = false
 visible_as_subagent = true
 context_mode = "fresh"
