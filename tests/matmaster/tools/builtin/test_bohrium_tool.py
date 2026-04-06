@@ -53,13 +53,23 @@ class TestBohriumMetadata:
         assert "list_images" in prompt
         assert "list_machines" in prompt
 
-    def test_prompt_mentions_poll_wait_mode(self, tmp_path):
+    def test_schema_exposes_download_action(self):
+        properties = BohriumTool.json_schema["properties"]
+        assert "download" in properties["action"]["enum"]
+        assert properties["result_dir"]["description"].endswith("(download)")
+
+    def test_capabilities_include_download(self):
+        assert BohriumTool.capabilities == frozenset(
+            {"bohrium.submit", "bohrium.query", "bohrium.download"}
+        )
+
+    def test_prompt_mentions_poll_and_download_modes(self, tmp_path):
         tool = BohriumTool(workdir=tmp_path)
         prompt = tool.prompt()
         assert prompt is not None
         assert "single query" in prompt
-        assert "wait=true" in prompt
-        assert "failure confirmation" in prompt
+        assert 'action="download"' in prompt
+        assert "does not download artifacts" in prompt
 
 
 # ---------------------------------------------------------------------------

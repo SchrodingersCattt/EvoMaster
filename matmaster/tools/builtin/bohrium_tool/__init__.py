@@ -230,7 +230,8 @@ class BohriumTool(BuiltinTool):
     description: ClassVar[str] = (
         'Bohrium HPC platform operations. '
         'action="submit": package input directory and submit a job, returns job_id. '
-        'action="poll": query current job status; defaults to a single query and can wait briefly when wait=true; downloads results when Finished. '
+        'action="poll": query current job status; defaults to a single query and can wait briefly when wait=true. '
+        'action="download": download artifacts for a finished or failed job into result_dir. '
         'action="list_images": query available Docker images by keyword. '
         'action="list_machines": query available machine types (cpu/gpu).'
     )
@@ -240,7 +241,7 @@ class BohriumTool(BuiltinTool):
         'properties': {
             'action': {
                 'type': 'string',
-                'enum': ['submit', 'poll', 'list_images', 'list_machines'],
+                'enum': ['submit', 'poll', 'download', 'list_images', 'list_machines'],
                 'description': 'Operation to perform.',
             },
             # --- submit ---
@@ -271,11 +272,11 @@ class BohriumTool(BuiltinTool):
             # --- poll ---
             'job_id': {
                 'type': ['integer', 'string'],
-                'description': 'Job ID returned by submit. (poll)',
+                'description': 'Job ID returned by submit. (poll, download)',
             },
             'result_dir': {
                 'type': 'string',
-                'description': 'Local directory for downloaded results. (poll)',
+                'description': 'Directory where downloaded artifacts will be stored. (download)',
             },
             'wait': {
                 'type': 'boolean',
@@ -314,6 +315,7 @@ class BohriumTool(BuiltinTool):
         {
             'bohrium.submit',
             'bohrium.query',
+            'bohrium.download',
         }
     )
     effect_level: ClassVar[str] = 'external_effect'
@@ -332,9 +334,9 @@ class BohriumTool(BuiltinTool):
             '- submit: cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
             '- poll: default single query (wait=false). Set wait=true to wait within '
             'one call, and use max_wait_seconds / poll_interval_seconds to control '
-            'that loop. Failed jobs include a short failure confirmation before '
-            'downloading artifacts. Returns Running/Finished/Failed. Call again to '
-            're-check a Running job.\n'
+            'that loop. poll does not download artifacts.\n'
+            '- download: use action="download" only after poll reports Finished or '
+            'Failed. Requires result_dir; retrieves logs and artifacts for analysis.\n'
             '- When image or machine is unknown, call list_images / list_machines first.\n'
         )
 
@@ -403,6 +405,8 @@ class BohriumTool(BuiltinTool):
                 return self._submit(arguments)
             case 'poll':
                 return self._poll(arguments)
+            case 'download':
+                return self._download(arguments)
             case 'list_images':
                 return self._list_images(arguments)
             case 'list_machines':
@@ -411,7 +415,7 @@ class BohriumTool(BuiltinTool):
                 return ToolResult(
                     status='error',
                     content=f'Unknown action: {action!r}. '
-                    f'Must be one of: submit, poll, list_images, list_machines.',
+                    f'Must be one of: submit, poll, download, list_images, list_machines.',
                 )
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
@@ -795,6 +799,12 @@ class BohriumTool(BuiltinTool):
                 exc_info=True,
             )
             return ToolResult(status='error', content=f'Poll failed: {exc}')
+
+    def _download(self, args: dict[str, Any]) -> ToolResult:
+        return ToolResult(
+            status='error',
+            content='download implementation not finished yet',
+        )
 
     def _list_images(self, args: dict[str, Any]) -> ToolResult:
         result = self._require_credentials()
