@@ -82,9 +82,7 @@ class TestBohriumPollExecution:
         assert get_calls == ['/openapi/v1/sandbox/job/job-running'] * 3
         assert sleep_calls == [5, 5]
 
-    def test_poll_running_without_wait_remains_single_shot(
-        self, tmp_path, monkeypatch
-    ):
+    def test_poll_running_without_wait_remains_single_shot(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
         get_calls: list[str] = []
 
@@ -291,9 +289,7 @@ class TestBohriumPollExecution:
         assert get_calls == ['/openapi/v1/sandbox/job/job-123'] * 3
         assert sleep_calls == [3, 3]
 
-    def test_poll_failed_returns_log_when_zip_is_not_ready(
-        self, tmp_path, monkeypatch
-    ):
+    def test_poll_failed_returns_log_when_zip_is_not_ready(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
         get_calls: list[str] = []
         file_token_calls: list[tuple[str, dict[str, str]]] = []

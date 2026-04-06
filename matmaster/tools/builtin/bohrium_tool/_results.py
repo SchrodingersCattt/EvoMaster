@@ -201,9 +201,7 @@ def _sandbox_download_results(
     ctx: _ResolvedBohriumContext,
 ) -> tuple[list[str], str]:
     """Download results in sandbox mode."""
-    result_url = str(
-        detail_data.get('resultUrl') or detail_data.get('result') or ''
-    )
+    result_url = str(detail_data.get('resultUrl') or detail_data.get('result') or '')
     objects: list[dict[str, Any]] = []
     root_host = ''
     root_token = ''
