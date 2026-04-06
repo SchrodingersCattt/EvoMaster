@@ -10,14 +10,15 @@ This skill provides **platform knowledge only**.
 
 - It is **guidance-only**
 - It has **no runnable scripts**
-- All actual operations (`submit`, `poll`, `list_images`, `list_machines`) must use the built-in `Bohrium` tool
+- All actual operations (`submit`, `poll`, `download`, `list_images`, `list_machines`) must use the built-in `Bohrium` tool
 
 ## Workflow Pattern
 
 1. Load a **software skill** (cp2k, qe, abacus, orca, lammps, gromacs, pyscf, abinit, pyatb) to get `image`, `machine`, and `cmd` parameters
-2. `Bohrium(action="submit", input_dir=..., image=..., cmd=..., machine=...)`
-3. `Bohrium(action="poll", job_id=<id>)` — repeat until Finished or Failed
-4. Analyze results in `result_dir`
+2. `Bohrium(action="submit", input_dir="inputs/run_001", image="registry.dp.tech/dptech/abacus:LTSv3.10.1", cmd="OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1", machine="c32_m128_cpu")`
+3. `Bohrium(action="poll", job_id="job-123")` — repeat until the job reaches `Finished` or `Failed`
+4. `Bohrium(action="download", job_id="job-123", result_dir="results/run_job-123")`
+5. Analyze `result_dir`, `files`, and `log_tail`
 
 ## Monitoring Strategy
 
@@ -27,8 +28,8 @@ The `poll` action returns the **current status in one call** (non-blocking):
 |--------|---------|------------|
 | Pending / Scheduling | Job queued, waiting for resources | Poll again later |
 | Running | Job executing on HPC node | Poll again later |
-| Finished | Completed; results downloaded to result_dir | Analyze output files and log_tail |
-| Failed | Job crashed or errored | Read log_tail for diagnostics |
+| Finished | Completed | Call `download` to fetch artifacts, then analyze output files and `log_tail` |
+| Failed | Job crashed or errored | Call `download` to fetch logs and remaining artifacts for diagnosis |
 
 **Poll interval guidance**: HPC jobs typically run minutes to hours. A reasonable pattern is to poll every 30-60 seconds for short jobs, or inform the user and re-check on request for long jobs. There is no need to poll continuously — each poll is a single lightweight API call.
 
@@ -52,6 +53,7 @@ In production, credentials come from the runtime session automatically. Setting 
 | Failed + OOM in log | Insufficient machine memory | Switch to a larger machine (e.g. `c32_m128_cpu` → `c64_m256_cpu`) |
 | Failed + "not enough slots" | MPI process count > available cores | Reduce `-np` to match machine core count |
 | Finished but results empty | Output files not in expected locations | Check the command writes to the working directory (not a temp path) |
+| `download` returns files but zip is missing | Sandbox result bundle not ready, but individual objects exist | The builtin tool falls back to per-object downloads; inspect `files` and `log_tail` in `result_dir` |
 
 ## Image / Machine Discovery
 
