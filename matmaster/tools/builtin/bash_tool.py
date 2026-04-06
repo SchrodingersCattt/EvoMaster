@@ -70,24 +70,10 @@ class BashTool(BuiltinTool):
             )
 
         return (
-            "Executes a given bash command and returns its output.\n\n"
-            f"{workspace_note}\n"
-            "Shell state does not persist between commands.\n\n"
-            "IMPORTANT: Avoid using this tool to run `find`, `grep`, `cat`, "
-            "`head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly "
-            "instructed. Instead, use the appropriate dedicated tool:\n"
-            " - File search: Use Glob (NOT find or ls)\n"
-            " - Content search: Use Grep (NOT grep or rg)\n"
-            " - Read files: Use Read (NOT cat/head/tail)\n"
-            " - Edit files: Use Edit (NOT sed/awk)\n"
-            " - Write files: Use Write (NOT echo >/cat <<EOF)\n\n"
-            "# Instructions\n"
-            " - Always quote file paths that contain spaces with double quotes\n"
-            " - You may specify an optional timeout in milliseconds (max 600000ms / "
-            "10 minutes). By default, your command will timeout after 120000ms.\n"
-            " - When issuing multiple commands that are independent, make multiple "
-            "Bash tool calls in a single message.\n"
-            " - For git commands: prefer creating a new commit rather than amending."
+            f"{workspace_note}"
+            "Shell state does not persist between commands. "
+            "Use dedicated tools instead of shell equivalents "
+            "(Glob not find, Grep not grep, Read not cat, Edit not sed, Write not echo)."
         )
 
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:

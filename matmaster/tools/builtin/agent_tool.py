@@ -102,22 +102,9 @@ class AgentTool(BuiltinTool):
 
     def prompt(self, ctx=None) -> str:
         return (
-            "Usage notes:\n"
-            "- Always include a short description (3-5 words) summarizing what "
-            "the agent will do\n"
-            "- When the agent is done, it will return a single message back to you. "
-            "The result returned by the agent is not visible to the user. "
-            "To show the user the result, send a concise summary.\n"
-            "- The agent's outputs should generally be trusted\n"
-            "- Clearly tell the agent whether you expect it to write code or "
-            "just to do research\n\n"
-            "## Writing the prompt\n\n"
-            "Brief the agent like a smart colleague who just walked into the room.\n"
-            "- Explain what you're trying to accomplish and why.\n"
-            "- Describe what you've already learned or ruled out.\n"
-            "- Give enough context for judgment calls.\n\n"
-            "**Never delegate understanding.** Include concrete context such as "
-            "file paths or specific changes when relevant."
+            "Include a short description (3-5 words). "
+            "Provide complete context (the sub-agent has no conversation history). "
+            "Agent results are not visible to the user — summarize them yourself."
         )
 
     async def execute(self, arguments: dict[str, Any]) -> str | ToolResult:
