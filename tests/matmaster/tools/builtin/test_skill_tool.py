@@ -1,6 +1,7 @@
 """tests/matmaster/tools/builtin/test_skill_tool.py"""
 
 import asyncio
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from matmaster.tools.builtin.skill_tool import SkillTool
@@ -9,7 +10,7 @@ from matmaster.tools.builtin.skill_tool import SkillTool
 def make_skill(body="# Test Skill\nDo things.", mcp=None, deps=None):
     skill = MagicMock()
     skill.get_full_info.return_value = body
-    skill.skill_path.resolve.return_value = "/skills/test-skill"
+    skill.skill_path = Path("/skills/test-skill")
     skill.meta_info.mcp_server = mcp
     skill.meta_info.depends_on = deps or []
     return skill

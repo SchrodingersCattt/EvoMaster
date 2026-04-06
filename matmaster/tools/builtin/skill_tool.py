@@ -86,7 +86,7 @@ class SkillTool(BuiltinTool):
                 return f"Error: Skill '{skill_name}' not found"
 
             body = skill.get_full_info()
-            skill_dir = str(skill.skill_path.resolve())
+            skill_dir = str(skill.skill_path)
             body = body.replace("${SKILL_DIR}", skill_dir)
 
             self._maybe_hit_mcp(skill)
