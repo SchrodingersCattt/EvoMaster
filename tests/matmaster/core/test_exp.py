@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from matmaster.config.exp import ExpConfig, ExpToolsConfig
+from matmaster.config.exp import ExpConfig, ExpSubagentMeta, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.core.hooks import HookExecutor
 from matmaster.tools.tool_registry import ToolRegistry
@@ -219,6 +219,46 @@ class TestExpBuildRuntime:
 
         assert "Base persona text." in runtime.spec.system_prompt
         assert "Avoid using this tool to run" not in runtime.spec.system_prompt
+
+    async def test_agent_tool_uses_model_visible_exp_discovery(
+        self, tmp_path: Path
+    ) -> None:
+        exp = Exp(
+            ExpConfig(
+                name="test",
+                tools=ExpToolsConfig(builtin=["Agent"]),
+            )
+        )
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=MagicMock(spec=Session),
+            llm_provider=MockLLMProvider(),
+        )
+        meta = ExpSubagentMeta.model_validate(
+            {
+                "name": "explore",
+                "description": "Read-only exploration subagent",
+                "when_to_use": "Use for evidence gathering",
+                "read_only": True,
+                "tools_summary": "Builtin: Read; MCP: none; Skills: disabled",
+            }
+        )
+
+        with (
+            patch("matmaster.core.agent.AgentKernel"),
+            patch(
+                "matmaster.config.loader.list_model_visible_exps",
+                return_value=[meta],
+            ),
+        ):
+            runtime = await exp.build_runtime(ctx)
+
+        raw_tool = runtime.spec.tool_catalog.registry.get_raw("Agent")
+        assert raw_tool is not None
+        assert raw_tool._available_exps == (meta,)
 
 
 # ── TestExpCleanup ───────────────────────────────────────

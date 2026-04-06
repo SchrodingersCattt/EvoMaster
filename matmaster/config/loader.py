@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .exp import ExpConfig
+from .exp import ExpConfig, ExpSubagentMeta
 from .llm import LLMConfig
 
 _ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
@@ -98,6 +98,60 @@ def load_base_system_prompt(*, exps_dir: Path | None = None) -> str:
     if exps_dir is None:
         exps_dir = Path(__file__).resolve().parent.parent / "exps"
     return _load_base_system_prompt(exps_dir)
+
+
+def _format_exp_tools_summary(cfg: ExpConfig) -> str:
+    """Render a concise tool/skill summary for model-visible exp discovery."""
+    builtin = cfg.tools.builtin
+    if builtin == ["*"]:
+        builtin_text = "Builtin: all"
+    elif builtin:
+        builtin_text = f"Builtin: {', '.join(builtin)}"
+    else:
+        builtin_text = "Builtin: none"
+
+    if cfg.tools.mcp == "*":
+        mcp_text = "MCP: all"
+    elif cfg.tools.mcp:
+        mcp_text = f"MCP: {cfg.tools.mcp}"
+    else:
+        mcp_text = "MCP: none"
+
+    skills_text = "Skills: enabled" if cfg.skills.enabled else "Skills: disabled"
+    return f"{builtin_text}; {mcp_text}; {skills_text}"
+
+
+def list_model_visible_exps(
+    *,
+    exps_dir: Path | None = None,
+) -> list[ExpSubagentMeta]:
+    """Return typed exp metadata exposed to the model as subagent choices."""
+    if exps_dir is None:
+        exps_dir = Path(__file__).resolve().parent.parent / "exps"
+
+    result: list[ExpSubagentMeta] = []
+    for p in sorted(exps_dir.glob("*.toml")):
+        if p.stem.startswith("_"):
+            continue
+        try:
+            cfg = load_exp_config(p.stem, exps_dir=exps_dir)
+            meta = ExpSubagentMeta.model_validate(
+                {
+                    "name": cfg.name,
+                    "description": cfg.description,
+                    "when_to_use": cfg.when_to_use,
+                    "read_only": cfg.read_only,
+                    "visible_as_subagent": cfg.visible_as_subagent,
+                    "context_mode": cfg.context_mode,
+                    "result_style": cfg.result_style,
+                    "tools_summary": _format_exp_tools_summary(cfg),
+                }
+            )
+            if meta.visible_as_subagent:
+                result.append(meta)
+        except Exception:
+            _logger.warning("Failed to load model-visible exp: %s", p, exc_info=True)
+    return result
 
 
 def list_available_exps(

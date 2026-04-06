@@ -1,5 +1,10 @@
 name = "direct"
-description = "Full-capability execution agent with all tools, MCP access, and skills for completing tasks"
+description = "Full-capability execution subagent for completing tasks with file edits, tools, MCP, and skills"
+when_to_use = "Use when the parent agent already knows the goal and needs a subagent to perform real execution work such as edits, commands, or MCP calls"
+read_only = false
+visible_as_subagent = true
+context_mode = "fresh"
+result_style = "completion"
 max_turns = 700
 
 developer_instructions = '''

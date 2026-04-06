@@ -1,5 +1,10 @@
 name = "explore"
-description = "Read-only exploration agent for gathering information from files and codebase without making changes"
+description = "Read-only exploration subagent for searching files, reading code, and reporting findings"
+when_to_use = "Use when the parent agent needs evidence, call-chain tracing, or current-state analysis without modifying files"
+read_only = true
+visible_as_subagent = true
+context_mode = "fresh"
+result_style = "findings"
 max_turns = 50
 
 developer_instructions = '''
