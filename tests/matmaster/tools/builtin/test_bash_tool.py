@@ -117,6 +117,32 @@ class TestBashExecution:
         result = asyncio.run(tool.execute({"command": "ls"}))
         assert "error" in result.lower()
 
+    def test_bash_tool_uses_script_mode_for_heredoc(self):
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "stdout": "ok",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "working_dir": "/workspace",
+                    "output": "ok",
+                },
+            ]
+        )
+        tool = BashTool(session=session, workdir="/workspace")
+        asyncio.run(
+            tool.execute(
+                {"command": "python3 << 'PYEOF'\nprint(1)\nPYEOF", "description": "run"}
+            )
+        )
+        written = session.write_file.call_args[0][1]
+        assert "python3 << 'PYEOF'" in written
+        final_cmd = session.exec_bash.call_args.kwargs["command"]
+        assert final_cmd.startswith("bash ")
+
 
 class TestBashErrorStatus:
     def test_nonzero_exit_returns_error_status(self):

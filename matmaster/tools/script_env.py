@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 # -- public API ------------------------------------------------------------
 
 
-def inject_env(cmd: str, env: dict[str, str], session: Any) -> str:
-    """Wrap shell command with explicit env vars.
+def prepare_inline_command(cmd: str, env: dict[str, str], session: Any) -> str:
+    """Wrap an inline shell command with explicit env vars.
 
     Returns *cmd* unchanged if *env* is empty.
     """
@@ -29,6 +29,35 @@ def inject_env(cmd: str, env: dict[str, str], session: Any) -> str:
     except Exception as exc:
         logger.warning("Env file injection failed: %s; falling back to inline", exc)
         return _inline(cmd, env)
+
+
+def prepare_script_command(
+    cmd: str,
+    env: dict[str, str],
+    session: Any,
+    *,
+    shell_path: str,
+) -> str:
+    """Write a script file with env exports and return the cleanup wrapper."""
+    path = f"/tmp/.mm_cmd_{uuid.uuid4().hex[:12]}.sh"
+    env_block = "\n".join(
+        f"export {k}={shlex.quote(v)}" for k, v in sorted(env.items())
+    )
+    script = "#!/usr/bin/env bash\nset -e\n"
+    if env_block:
+        script += env_block + "\n"
+    script += cmd + "\n"
+    session.write_file(path, script)
+    session.exec_bash(f"chmod 700 {shlex.quote(path)}")
+    return (
+        f"{shell_path} {shlex.quote(path)}; "
+        f"_ec=$?; rm -f {shlex.quote(path)}; exit $_ec"
+    )
+
+
+def inject_env(cmd: str, env: dict[str, str], session: Any) -> str:
+    """Backward-compatible wrapper for inline env injection."""
+    return prepare_inline_command(cmd, env, session)
 
 
 def inject(cmd: str, session: Any) -> str:
