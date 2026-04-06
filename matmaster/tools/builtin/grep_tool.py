@@ -9,13 +9,20 @@ CC name: Grep
 
 from __future__ import annotations
 
+import asyncio
+import re
 from typing import Any, ClassVar
 
+from matmaster.tools.filesystem_semantics.snapshots import FileSemanticSnapshot
+from matmaster.tools.filesystem_semantics.text_resolution import resolve_text_bytes
+from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_spec import ToolExecutionContext
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
 from ._path_safety import resolve_safe_path, shell_escape
 from .base import BuiltinTool
+from .glob_tool import GlobTool
 
 DEFAULT_HEAD_LIMIT = 250
 VCS_EXCLUDE_RG = ""  # rg auto-excludes .git
@@ -138,7 +145,29 @@ class GrepTool(BuiltinTool):
             self._use_rg = False
         return self._use_rg
 
-    def _execute(self, arguments: dict[str, Any]) -> str:
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: ToolExecutionContext | None,
+    ) -> ToolResult:
+        snapshots: dict[str, FileSemanticSnapshot] = {}
+        if exec_ctx is not None and exec_ctx.runner_state is not None:
+            snapshots = dict(exec_ctx.runner_state.get("file_semantics", {}))
+
+        try:
+            return await asyncio.to_thread(self._execute_internal, arguments, snapshots)
+        except Exception as exc:
+            self.logger.error("Tool %s failed: %s", self.name, exc, exc_info=True)
+            return ToolResult(status="error", content=f"Error: {exc}")
+
+    def _execute(self, arguments: dict[str, Any]) -> ToolResult:
+        return self._execute_internal(arguments, {})
+
+    def _execute_internal(
+        self,
+        arguments: dict[str, Any],
+        snapshots: dict[str, FileSemanticSnapshot],
+    ) -> ToolResult:
         session = self._require_session()
 
         pattern: str = arguments.get("pattern", "")
@@ -212,9 +241,100 @@ class GrepTool(BuiltinTool):
         )
         output = result.get("output", "") or result.get("stdout", "")
 
+        if self._needs_semantic_fallback(output, safe_path, snapshots):
+            content = self._semantic_search(
+                pattern,
+                safe_path,
+                file_glob,
+                output_mode=output_mode,
+                case_insensitive=case_insensitive,
+            )
+            if not content:
+                content = f"No matches for pattern '{pattern}' in {safe_path}"
+            return ToolResult(
+                status="success",
+                content=content,
+                meta={"fallback_mode": "semantic"},
+            )
+
         if not output.strip():
-            return f"No matches for pattern '{pattern}' in {safe_path}"
-        return output
+            return ToolResult(
+                status="success",
+                content=f"No matches for pattern '{pattern}' in {safe_path}",
+                meta={"fallback_mode": "backend"},
+            )
+        return ToolResult(
+            status="success",
+            content=output,
+            meta={"fallback_mode": "backend"},
+        )
+
+    def _needs_semantic_fallback(
+        self,
+        output: str,
+        safe_path: str,
+        snapshots: dict[str, FileSemanticSnapshot],
+    ) -> bool:
+        lowered = output.lower()
+        if "binary file matches" in lowered:
+            return True
+        return any(
+            snapshot.kind != "definite_text"
+            for path, snapshot in snapshots.items()
+            if path.startswith(safe_path)
+        )
+
+    def _list_candidate_files(self, safe_path: str, file_glob: str) -> list[str]:
+        session = self._require_session()
+        if session.is_file(safe_path):
+            return [safe_path]
+
+        from matmaster.integration.runtime_bridge import build_service_env
+        from matmaster.tools.script_env import inject_env
+
+        find_cmd = GlobTool._build_find_command(file_glob or "**", safe_path)
+        result = session.exec_bash(
+            command=inject_env(
+                find_cmd,
+                build_service_env("bohrium", session=session),
+                session,
+            ),
+            timeout=30,
+            cancel_token=self._cancel_token_for_exec(),
+        )
+        output = result.get("output", "") or result.get("stdout", "")
+        return [line for line in output.splitlines() if line.strip()]
+
+    def _semantic_search(
+        self,
+        pattern: str,
+        safe_path: str,
+        file_glob: str,
+        *,
+        output_mode: str,
+        case_insensitive: bool,
+    ) -> str:
+        flags = re.IGNORECASE if case_insensitive else 0
+        regex = re.compile(pattern, flags)
+        paths = self._list_candidate_files(safe_path, file_glob)
+        matches: list[str] = []
+        for path in paths:
+            raw = self._require_session().download(path)
+            resolution = resolve_text_bytes(raw, explicit_encoding=None)
+            if resolution.status != "success" or resolution.text is None:
+                continue
+
+            match_count = 0
+            for lineno, line in enumerate(resolution.text.splitlines(), start=1):
+                if regex.search(line):
+                    match_count += 1
+                    if output_mode == "content":
+                        matches.append(f"{path}:{lineno}:{line}")
+            if output_mode == "files_with_matches" and match_count > 0:
+                matches.append(path)
+            elif output_mode == "count" and match_count > 0:
+                matches.append(f"{path}:{match_count}")
+        return "\n".join(matches)
 
     def _build_rg_command(
         self,
