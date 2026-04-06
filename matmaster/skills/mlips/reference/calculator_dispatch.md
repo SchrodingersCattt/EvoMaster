@@ -64,8 +64,10 @@ model_name_or_path
 
 | Family | Known working image |
 |--------|-------------------|
-| DP (DPA) | `registry.dp.tech/dptech/dpa-calculator:cd96ac21` |
+| DP (DPA) | `registry.dp.tech/dptech/dpa-calculator:f7835422` |
 | All families | `registry.dp.tech/dptech/dp/native/prod-375/lambench:v2.9` (LAMBench image) |
 
 > Use `Bohrium(action="list_images", keyword="lambench")` to find the latest multi-MLIP image.
 > The DPA-specific image is smaller and faster to pull when only DPA is needed.
+> If a package is missing in the selected image, the submitted `cmd` / `command` may prepend `pip install <pkg> &&` before running the script.
+> If you want the installation to land in the bundled environment, activate `/mcp_server/dpa/.venv` first, e.g. `source /mcp_server/dpa/.venv/bin/activate && pip install <pkg> && python ...`.
