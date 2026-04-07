@@ -22,6 +22,30 @@
 
 本设计目标是在一次性重构中压平这些历史包装层，保留已有 Bohrium 凭证解析能力，同时将路径与工件生命周期彻底收回 Bohrium 领域。
 
+### BohriumTool、Session 与 Open SDK 的现有关联
+
+当前 Bohrium 运行链路不是单一的 HTTP 工具调用，而是三类能力的协同编排：
+
+- `session`
+  - 用于访问 Bohrium 远端共享目录
+  - 提供 `path_exists`、`is_file`、`exec_bash`、`download`、`upload_directory`
+  - 负责远端输入目录打包、远端下载结果回写
+- `bohrium_open_sdk`
+  - 用于将本地 `input.zip` 上传到 Tiefblue 对象存储
+  - 是 submit 三步中的对象存储上传实现
+- Bohrium OpenAPI
+  - 用于 `job/create`、`job/add`、`job/detail`、`poll`
+  - 是作业生命周期和部分结果令牌获取的接口来源
+
+因此，当前 `BohriumTool` 的真实角色是：
+
+- 使用既有 Bohrium 凭证解析链获取鉴权上下文
+- 使用 `session` 连接远端共享目录语义与本地 staging
+- 使用 `bohrium_open_sdk` 将本地工件上传到对象存储
+- 使用 OpenAPI 驱动作业生命周期
+
+本次重构不会改变这种桥梁角色，而是将桥的实现从 大文件 + helper + bridge 中转 改为清晰的 Bohrium 领域模块协作。
+
 ## 目标
 
 1. 让 Bohrium 调用栈清晰可追踪，删除无业务语义的中转层与兼容包装。
@@ -122,6 +146,8 @@
 - 将凭证投影为 `BOHRIUM_*` 环境变量
 - 为 MCP executor 注入 Bohrium 鉴权字段
 
+同时保留以 `ResolvedCredential` 作为凭证解析结果的现有设计。后续 `BohriumContext` 由该对象转换构造，而不是重新定义另一套凭证读取链。
+
 ### 删除或迁出
 
 以下内容应在本次重构中删除或迁出：
@@ -145,6 +171,8 @@
 
 它不再承担路径解析与路径判定职责。
 
+本次重构完成后，`runtime_bridge/__init__.py` 也需要同步收缩导出内容，移除 `resolve_output_path` 与 `OutputPathDecision` 的对外暴露。
+
 ### 2. Bohrium 领域内建立清晰模块边界
 
 本次重构中，Bohrium 领域实现重组为以下模块：
@@ -165,6 +193,7 @@
   - 结果下载
   - staging 生命周期
   - 远端回写与临时目录清理
+  - 显式接收 `session` 参数，不隐藏依赖
 - `matmaster/tools/builtin/bohrium_tool/open_sdk.py`
   - 封装 `bohrium_open_sdk` 导入与 Tiefblue 上传
 - `matmaster/tools/builtin/bohrium_tool/models.py`
@@ -184,9 +213,16 @@
 - `project_id`
 - `base_url`
 - `credential_source`
+- `sandbox`
 - 必要时的 `user_id`、`user_no`
 
-该对象由已有 Bohrium 凭证解析链构造，`BohriumTool` 不自己实现任何凭证 precedence 逻辑。
+该对象通过以下路径构造：
+
+1. 调用既有 `resolve_bohrium_credentials(...)`
+2. 获取 `ResolvedCredential`
+3. 将 `ResolvedCredential.values` 与当前 `BOHRIUM_USE_SANDBOX` 环境配置转换为 `BohriumContext`
+
+`BohriumTool` 不自己实现任何凭证 precedence 逻辑，只负责把既有凭证解析结果转换为 Bohrium 运行上下文。
 
 ### BohriumInputSource
 
@@ -206,6 +242,10 @@
 
 因此不再保留单独的 `requires_remote_session` 等半完成状态字段。
 
+说明：
+
+当前 `relative` 与 `local_abs` 两种路径分类在 Bohrium 领域内都会折叠为 `local_dir`。对 Bohrium 来说，两者只影响归一化过程，不影响后续传输语义。
+
 ### BohriumDownloadTarget
 
 表示 download 的目标目录，至少包含：
@@ -217,8 +257,8 @@
 - `resolved_path`
 - `staging_dir`
 - `publish_mode`
-  - `local_only`
-  - `upload_back`
+  - `direct`
+  - `staged_upload`
 
 设计意图：
 
@@ -278,6 +318,26 @@ download 过程中统一采用以下流程：
 4. 若目标是远端共享目录，则通过 session 回写到远端
 5. 回写成功返回远端目录，失败返回本地 staging 目录
 
+### `_results.py` 逻辑拆分去向
+
+当前 `_results.py` 中的逻辑在重构后按以下方式拆分：
+
+- 保留在 `transfers.py`
+  - 结果 zip 下载
+  - zip 解压
+  - 日志读取与合并
+  - sandbox `resultUrl` 解析
+  - 对象存储 `iterate` 与对象下载
+  - 根据对象列表选择 zip 或逐个文件下载
+- 迁移到 `api.py`
+  - 通过 OpenAPI 获取 sandbox 日志文件令牌
+  - 与 job detail、状态确认相关的上游接口交互
+
+拆分原则是：
+
+- 只要逻辑直接处理工件字节流、对象存储路径或本地文件落盘，就归 `transfers.py`
+- 只要逻辑调用 Bohrium OpenAPI 并返回上游元数据，就归 `api.py`
+
 ## Open SDK 与 Session 的桥接边界
 
 `BohriumTool` 的核心角色是桥接以下三类能力：
@@ -298,6 +358,8 @@ download 过程中统一采用以下流程：
   - 负责编排 submit、poll、download 工作流
 
 这样可以保留桥梁角色，同时避免让 `BohriumTool` 单文件直接了解所有底层细节。
+
+其中 `transfers.py` 对 `session` 的依赖采用显式参数注入方式。模块自身不持有全局 session，也不从其他模块隐式读取 session 状态。
 
 ## 错误处理统一方案
 
@@ -363,8 +425,12 @@ download 过程中统一采用以下流程：
 1. 校验参数
 2. 构建 `BohriumContext`
 3. 调用 `api.py` 查询 detail
-4. 根据 `wait` 与 job 状态做轮询或立即返回
+4. 根据 `wait` 与 job 状态做同步轮询或立即返回
 5. 组装成功结果
+
+说明：
+
+当前 `poll` 的等待实现是同步 `time.sleep`。本次重构不改变这一同步执行模型，也不引入新的异步接口；`max_wait_seconds` 与 `poll_interval_seconds` 的控制语义保持不变。
 
 ## 文件迁移方案
 
@@ -386,6 +452,34 @@ download 过程中统一采用以下流程：
 - 删除 `matmaster/tools/builtin/bohrium_tool/_results.py`
 - 将 `matmaster/tools/builtin/bohrium_tool/__init__.py` 改为稳定导出入口
 
+### 当前逻辑到目标模块映射
+
+| 当前位置 | 当前职责 | 目标去向 |
+|---|---|---|
+| `__init__.py:_require_credentials` | 调用 Bohrium 凭证解析并构造 `_ResolvedBohriumContext` | `tool.py` 中的 context 构造入口，产出 `BohriumContext` |
+| `__init__.py:_log_request_context` | 请求上下文日志 | 保留在 `tool.py` |
+| `__init__.py:_execute` | action 分发 | 保留在 `tool.py` |
+| `__init__.py:_submit` 参数校验与结果组装 | submit 编排 | 保留在 `tool.py` |
+| `__init__.py:_submit` 中的 create/add 路径选择 | submit API 语义 | `api.py` |
+| `__init__.py:_submit` 中的 Tiefblue 导入与上传 | Open SDK 上传 | `open_sdk.py` |
+| `__init__.py:_submit` 中的输入目录打包 | 输入工件准备 | `paths.py` + `transfers.py` |
+| `__init__.py:_poll` | 轮询编排与结果组装 | `tool.py` + `api.py` |
+| `__init__.py:_download` 参数校验与结果组装 | download 编排 | `tool.py` |
+| `__init__.py:_resolve_download_target_dir` | 下载路径包装 | 删除，逻辑迁入 `paths.py` |
+| `__init__.py:_finalize_download_target_dir` | 下载回写包装 | 删除，逻辑迁入 `transfers.py` |
+| `__init__.py:prepare_bohrium_input_zip` | 输入 zip 包装 | 删除，逻辑迁入 `transfers.py` |
+| `__init__.py:_get_job_detail` | detail 查询 | `api.py` |
+| `__init__.py:_confirm_terminal_status` | 终态确认 | `api.py` |
+| `__init__.py:_list_images` | 镜像查询与结果组装 | `api.py` 提供查询，`tool.py` 组装结果 |
+| `__init__.py:_list_machines` | 机器查询与结果组装 | `api.py` 提供查询，`tool.py` 组装结果 |
+| `_helpers.py` 中的输入路径解析 | 输入路径语义 | `paths.py` |
+| `_helpers.py` 中的下载目标解析 | 输出路径语义 | `paths.py` |
+| `_helpers.py` 中的远端 zip 打包与下载 | 输入工件传输 | `transfers.py` |
+| `_helpers.py` 中的远端回写与临时目录清理 | 输出工件发布 | `transfers.py` |
+| `_results.py` 中的 zip 下载、解压、日志读取 | 输出工件传输 | `transfers.py` |
+| `_results.py` 中的 sandbox 日志令牌获取 | OpenAPI 元数据调用 | `api.py` |
+| `_api.py` 中的 HTTP 封装与状态码常量 | Bohrium API 客户端基础能力 | `api.py` |
+
 ### 迁移顺序
 
 本次重构按以下顺序施工：
@@ -396,10 +490,11 @@ download 过程中统一采用以下流程：
 4. 实现 `transfers.py`
 5. 整理 `api.py`
 6. 重写 `tool.py`
-7. 更新 `__init__.py` 导出
-8. 删除旧 helper 与旧 bridge
-9. 收敛技能脚本到共享实现
-10. 收敛测试
+7. 扫描并更新 `resolve_output_path`、`OutputPathDecision`、`runtime_bridge.__init__` 的全部引用点
+8. 更新 `__init__.py` 导出
+9. 删除旧 helper 与旧 bridge
+10. 收敛技能脚本到共享实现
+11. 收敛测试
 
 ## 测试策略
 
@@ -440,6 +535,32 @@ download 过程中统一采用以下流程：
 
 不再 patch 旧顶层兼容包装函数，也不再 patch `runtime_bridge.resolve_output_path`。
 
+### 一次性切换的验证标准
+
+本次重构采用单分支、单次切换方式完成，不引入 feature flag。其安全边界依赖以下验证标准：
+
+- Bohrium tool 相关单元测试全部通过
+- `runtime_bridge` 相关测试同步更新并全部通过
+- 技能脚本路径上的共享 submit 能力可被最少一组测试覆盖
+- `list_images`、`list_machines`、`submit`、`poll`、`download` 五类 action 均有至少一条主路径测试
+
+如在实施后发现结构性问题，回滚单位为本次重构提交整体，通过 `git revert` 回退到重构前状态，而不是保留运行时兼容分支。
+
+### 引用点扫描结果与处理要求
+
+当前 `resolve_output_path` 与 `OutputPathDecision` 的引用点主要位于：
+
+- `matmaster/tools/builtin/bohrium_tool/__init__.py`
+- `tests/matmaster/integration/test_runtime_bridge.py`
+- `tests/matmaster/tools/builtin/test_bohrium_tool.py`
+- `runtime_bridge` 自身模块
+
+本次删除 `bridge.py` 与 `path_policy.py` 时，必须同步：
+
+- 收缩 `runtime_bridge/__init__.py` 对外导出
+- 删除或改写对应测试
+- 将 Bohrium tool 与测试改为依赖新的 `paths.py` 领域入口
+
 ## 技能脚本收敛
 
 `matmaster/skills/playground-skills/bohrium-job/scripts/submit_job.py` 不应继续维护一套独立的 Bohrium 提交流程。
@@ -473,6 +594,14 @@ download 过程中统一采用以下流程：
 
 - 将 input 与 output 都建模为 Bohrium 领域路径对象
 - 将 staging 生命周期放在统一传输模块中
+
+### 风险 4：一次性切换导致行为缺口难以及时定位
+
+控制方式：
+
+- 使用 当前逻辑到目标模块映射 作为实施清单
+- 先完成引用点扫描，再删除旧 bridge 和旧 helper
+- 以单次提交整体回滚为预设方案，而非保留临时兼容层
 
 ## 成功标准
 
