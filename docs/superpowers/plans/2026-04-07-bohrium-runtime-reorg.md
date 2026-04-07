@@ -4,7 +4,7 @@
 
 **Goal:** Rebuild Bohrium integration around a single runtime handle registered during `agent_run_bohrium`, migrate every downstream consumer to that handle, and delete `runtime_bridge`, `bohrium_env`, and `adaptors/calculation`.
 
-**Architecture:** Introduce a focused `matmaster/bohrium/` package as the only production implementation of the calculation runtime, with a thin `matmaster/calculation_runtimes/` contract layer for future non-Bohrium backends. Keep calculation MCP request understanding inside `matmaster/mcp/calculation/`, but make it consume a runtime handle for env, submission building, and path materialization. Migrate in startup-first order: core contracts, runtime registration, shell/script consumers, Bohrium builtin tool, MCP preflight and `lazy_mcp`, then remove legacy modules and add structure guards.
+**Architecture:** Introduce a focused `matmaster/bohrium/` package as the only production implementation of the calculation runtime, with a thin `matmaster/calculation_runtimes/` contract layer for future non-Bohrium backends. Keep calculation MCP request understanding inside `matmaster/mcp/calculation/`, but make it consume a runtime handle for env, submission building, and path materialization. Preserve two compatibility boundaries while refactoring: `src/utils/constant.py` remains the home for service/startup-only Bohrium defaults such as image IDs and core-service URLs, and `bohrium_tool` keeps its existing sandbox-vs-HPC OpenAPI protocol split instead of abstracting it into the runtime contract. Migrate in startup-first order: core contracts, runtime registration, shell/script consumers, Bohrium builtin tool, MCP preflight and `lazy_mcp`, then remove legacy modules and add structure guards.
 
 **Tech Stack:** Python 3.13 via `uv run`, existing `Session` / `PlaygroundContext` abstractions, pytest, unittest.mock, pathlib, dataclasses / Protocols, Bohrium SSH + OpenAPI integration
 
@@ -79,6 +79,8 @@
   Purpose: become the only runtime composition root and temporarily dual-write `_bohrium_runtime` plus `_bohrium_credentials`.
 - `src/services/agent_run_service.py`
   Purpose: stop hand-assembling Bohrium meta dicts and write `BohriumRuntimeSnapshot`-derived data into `PlaygroundContext`.
+- `src/services/bohrium_node_service.py`
+  Purpose: keep node-lifecycle OpenAPI host selection aligned with the runtime-side endpoint helper instead of drifting to a second rule set.
 - `matmaster/types/context.py`
   Purpose: keep `with_bohrium()` aligned with `BohriumRuntimeSnapshot`.
 - `matmaster/mcp/manager.py`
@@ -119,6 +121,14 @@
   Purpose: replace `resolve_bohrium_credentials` patching with runtime handle patching.
 - `tests/matmaster/tools/builtin/test_bohrium_tool.py`
   Purpose: keep end-to-end builtin tool orchestration aligned with runtime handle usage.
+- `tests/matmaster/tools/builtin/test_bohrium_tool_api.py`
+  Purpose: preserve sandbox-vs-HPC endpoint and payload contracts while credential sourcing changes underneath.
+- `tests/matmaster/tools/builtin/test_bohrium_tool_poll.py`
+  Purpose: preserve sandbox-vs-HPC job ID typing and poll endpoint behavior.
+- `tests/matmaster/tools/builtin/test_bohrium_tool_download.py`
+  Purpose: preserve sandbox-vs-HPC download endpoint and artifact resolution behavior.
+- `tests/matmaster/tools/builtin/test_bohrium_tool_transfers.py`
+  Purpose: preserve sandbox resultUrl/token download behavior while runtime integration changes.
 - `tests/matmaster/tools/test_lazy_mcp.py`
   Purpose: verify new calculation preflight factory and call path.
 - `tests/matmaster/tools/test_lazy_mcp_actor_routing.py`
@@ -127,9 +137,14 @@
   Purpose: rename manager-side adaptor state to calculation preflight state and preserve tool metadata filtering behavior.
 - `tests/matmaster/integration/test_runtime_credential_bridge_e2e.py`
   Purpose: rewrite bridge-oriented end-to-end coverage so Bohrium tool, preflight, and jobs all resolve credentials through the runtime handle.
+- `tests/matmaster/integration/test_bohrium_job_skill_submit.py`
+  Purpose: preserve skill-facing submit output, sandbox flag propagation, and machine/HPC payload compatibility.
 
 ### Existing files to reference while implementing
 
+- `src/utils/constant.py`
+- `src/services/bohrium_node_service.py`
+- `src/services/user_service.py`
 - `matmaster/core/playground.py`
 - `matmaster/types/session.py`
 - `matmaster/tools/tool_result.py`
@@ -139,6 +154,14 @@
 - `matmaster/tools/builtin/bohrium_tool/open_sdk.py`
 - `matmaster/tools/builtin/bohrium_tool/paths.py`
 - `matmaster/tools/builtin/bohrium_tool/transfers.py`
+
+---
+
+## Compatibility Guardrails
+
+- `src/utils/constant.py` is not a blind migration target. Keep `BOHRIUM_DEFAULT_IMAGE_ID`, `BOHRIUM_DEFAULT_IMAGE_NAME`, and `BOHRIUM_CORE_BASE_URL` in `src/` because they are consumed by startup/service orchestration. This refactor only needs to ensure that any new `matmaster/bohrium/endpoints.py` host logic stays semantically aligned with the existing OpenAPI host rule used by node services.
+- `BOHRIUM_USE_SANDBOX` remains a Bohrium job-protocol switch, not a runtime-contract concern. The refactor must preserve the current API split between sandbox paths such as `/openapi/v1/sandbox/job/create` and standard HPC paths such as `/openapi/v1/job/create` plus `/openapi/v2/job/add`, along with their different payloads, job ID typing, and download flows.
+- `machine`, `scassType`, `diskSize`, `ossPath`, `download_url`, and sandbox `resultUrl` handling are compatibility-sensitive. Refactoring credential sourcing must not rewrite these protocol-level behaviors unless a dedicated follow-up spec covers it.
 
 ---
 
@@ -153,6 +176,7 @@
 - Create: `matmaster/bohrium/types.py`
 - Create: `matmaster/bohrium/errors.py`
 - Create: `matmaster/bohrium/endpoints.py`
+- Modify: `src/services/bohrium_node_service.py`
 - Test: `tests/matmaster/calculation_runtimes/test_registry.py`
 - Test: `tests/matmaster/bohrium/test_types.py`
 
@@ -199,6 +223,18 @@ def test_runtime_snapshot_is_plain_data() -> None:
 def test_bohrium_base_url_prefers_explicit_env(monkeypatch) -> None:
     monkeypatch.setenv("BOHRIUM_BASE_URL", "https://openapi.custom.dp.tech/")
     assert get_bohrium_base_url() == "https://openapi.custom.dp.tech"
+
+
+def test_bohrium_base_url_matches_existing_service_constant(monkeypatch) -> None:
+    import importlib
+
+    monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
+    monkeypatch.setenv("SERVICE_ENV", "prod")
+
+    import src.utils.constant as constant_module
+
+    reloaded = importlib.reload(constant_module)
+    assert get_bohrium_base_url() == reloaded.BOHRIUM_OPENAPI_HOST
 
 
 def test_bohrium_service_env_defaults_to_test(monkeypatch) -> None:
@@ -258,6 +294,7 @@ Expected:
 """matmaster/bohrium/types.py"""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -386,8 +423,19 @@ def get_bohrium_base_url() -> str:
         return override
     env = get_bohrium_service_env()
     if env == "prod":
-        return "https://openapi.dp.tech"
+        return "https://open.bohrium.com"
     return f"https://openapi.{env}.dp.tech"
+```
+
+```python
+"""src/services/bohrium_node_service.py"""
+from matmaster.bohrium.endpoints import get_bohrium_base_url
+from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID
+
+
+class BohriumNodeService:
+    def __init__(self) -> None:
+        self._host = get_bohrium_base_url().rstrip("/")
 ```
 
 - [ ] **Step 4: Run the new foundational tests**
@@ -404,6 +452,7 @@ Expected:
 
 - all selected tests `PASS`
 - no import from `matmaster.integration.runtime_bridge`
+- `get_bohrium_base_url()` stays aligned with `src.utils.constant.BOHRIUM_OPENAPI_HOST`
 
 - [ ] **Step 5: Commit the foundational contracts**
 
@@ -413,6 +462,7 @@ git add \
   matmaster/bohrium/types.py \
   matmaster/bohrium/errors.py \
   matmaster/bohrium/endpoints.py \
+  src/services/bohrium_node_service.py \
   matmaster/calculation_runtimes/__init__.py \
   matmaster/calculation_runtimes/base.py \
   matmaster/calculation_runtimes/types.py \
@@ -1090,9 +1140,16 @@ git commit -m "refactor: read Bohrium env from runtime handle"
 **Files:**
 - Modify: `matmaster/tools/builtin/bohrium_tool/tool.py`
 - Modify: `matmaster/tools/builtin/bohrium_tool/models.py`
+- Reference: `matmaster/tools/builtin/bohrium_tool/api.py`
+- Reference: `matmaster/tools/builtin/bohrium_tool/transfers.py`
 - Modify: `tests/matmaster/tools/builtin/test_bohrium_tool_models.py`
 - Modify: `tests/matmaster/tools/builtin/test_bohrium_tool_helpers.py`
 - Modify: `tests/matmaster/tools/builtin/test_bohrium_tool.py`
+- Reference: `tests/matmaster/tools/builtin/test_bohrium_tool_api.py`
+- Reference: `tests/matmaster/tools/builtin/test_bohrium_tool_poll.py`
+- Reference: `tests/matmaster/tools/builtin/test_bohrium_tool_download.py`
+- Reference: `tests/matmaster/tools/builtin/test_bohrium_tool_transfers.py`
+- Reference: `tests/matmaster/integration/test_bohrium_job_skill_submit.py`
 
 - [ ] **Step 1: Write the failing Bohrium builtin tool tests against runtime-derived credentials**
 
@@ -1165,15 +1222,28 @@ Run:
 uv run pytest \
   tests/matmaster/tools/builtin/test_bohrium_tool_models.py \
   tests/matmaster/tools/builtin/test_bohrium_tool_helpers.py \
-  tests/matmaster/tools/builtin/test_bohrium_tool.py -v
+  tests/matmaster/tools/builtin/test_bohrium_tool.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_api.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_poll.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_download.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_transfers.py \
+  tests/matmaster/integration/test_bohrium_job_skill_submit.py -v
 ```
 
 Expected:
 
 - model test fails because `BohriumContext.from_credentials()` does not exist
 - helper test fails because `build_bohrium_context()` still imports `resolve_bohrium_credentials`
+- sandbox/HPC protocol tests remain green or fail only because credential resolution still points at the old bridge
 
 - [ ] **Step 3: Replace bridge-facing code with runtime-facing code**
+
+Keep these behaviors unchanged while editing:
+
+- `use_sandbox()` remains the only switch for sandbox-vs-HPC job API selection.
+- `create_job()` / `add_job()` / `get_job_detail()` keep their current endpoint split and payload differences.
+- sandbox uses string job IDs and `download_url`; standard HPC keeps integer job IDs and `oss_key`.
+- download/result transfer code in `transfers.py` is compatibility-sensitive and should only change if the credential-source refactor forces a minimal signature update.
 
 ```python
 """matmaster/tools/builtin/bohrium_tool/models.py"""
@@ -1240,13 +1310,19 @@ Run:
 uv run pytest \
   tests/matmaster/tools/builtin/test_bohrium_tool_models.py \
   tests/matmaster/tools/builtin/test_bohrium_tool_helpers.py \
-  tests/matmaster/tools/builtin/test_bohrium_tool.py -v
+  tests/matmaster/tools/builtin/test_bohrium_tool.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_api.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_poll.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_download.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_transfers.py \
+  tests/matmaster/integration/test_bohrium_job_skill_submit.py -v
 ```
 
 Expected:
 
 - the selected Bohrium builtin tool tests `PASS`
 - no production import remains from `matmaster.integration.runtime_bridge.models`
+- sandbox/HPC endpoint, payload, machine, and artifact-download compatibility all remain unchanged
 
 - [ ] **Step 5: Commit the Bohrium builtin tool migration**
 
@@ -1622,6 +1698,7 @@ Expected:
 """matmaster/bohrium/jobs.py"""
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from matmaster.bohrium.endpoints import get_bohrium_base_url
@@ -1638,6 +1715,9 @@ def _get_access_key(access_key: str | None = None, session: Any = None) -> str:
     runtime = get_runtime(session) if session is not None else None
     if runtime is not None and runtime.credentials().access_key:
         return runtime.credentials().access_key
+    env_ak = (os.getenv("BOHRIUM_ACCESS_KEY") or "").strip()
+    if env_ak:
+        return env_ak
     raise ValueError(
         "Bohrium credentials unavailable for current run. "
         "Provide via session or BOHRIUM_ACCESS_KEY env var."
@@ -1943,11 +2023,16 @@ uv run pytest \
   tests/matmaster/tools/builtin/test_glob_tool.py \
   tests/matmaster/tools/builtin/test_grep_tool.py \
   tests/matmaster/tools/builtin/test_bohrium_tool.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_api.py \
   tests/matmaster/tools/builtin/test_bohrium_tool_models.py \
   tests/matmaster/tools/builtin/test_bohrium_tool_helpers.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_poll.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_download.py \
+  tests/matmaster/tools/builtin/test_bohrium_tool_transfers.py \
   tests/matmaster/tools/test_cache_mcp_schemas.py \
   tests/matmaster/test_bohrium_setup_injection.py \
   tests/matmaster/integration/test_runtime_credential_bridge_e2e.py \
+  tests/matmaster/integration/test_bohrium_job_skill_submit.py \
   tests/matmaster/architecture/test_bohrium_runtime_boundaries.py -v
 ```
 
@@ -1966,10 +2051,11 @@ git commit -m "refactor: remove legacy Bohrium bridge modules"
 ## Coverage Check
 
 - Runtime contracts, value objects, endpoint resolution: Task 1
+- `constant.py` / node-service OpenAPI host alignment without moving startup-only defaults: Task 1
 - Runtime handle, env, submission builder, session attach/get/detach: Task 2
 - Startup-first registration and migration-period dual-write: Task 3
 - Shell/script env consumer migration: Task 4
-- `bohrium_tool` runtime-handle migration: Task 5
+- `bohrium_tool` runtime-handle migration with sandbox-vs-HPC protocol compatibility preserved: Task 5
 - Calculation preflight extraction and `lazy_mcp` migration: Task 6
 - `bohrium_api.py`, `oss_io.py`, `job_service.py`, and config-consumer relocation: Task 7
 - Legacy removal and structure guards: Task 8
