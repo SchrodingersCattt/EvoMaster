@@ -20,7 +20,7 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 2. Turn targets: simple ≤3, medium ≤5, complex ≤8 total tool calls. Surface slab from known material: ≤4 calls.
 3. ZERO text between tool calls. No previews, recaps, "Let me…". Never echo code/outputs.
 4. Do NOT use TodoWrite, task_create, task_update, task_complete.
-5. In Python scripts: `warnings.filterwarnings('ignore')`, suppress verbose library logging. Print ONLY compact summary.
+5. In Python scripts: `import warnings; warnings.filterwarnings('ignore'); import logging; logging.disable(logging.CRITICAL)`. Redirect stdout during library calls if needed. Print ONLY 1-3 lines with key numerical values. Large tool outputs inflate ALL subsequent turns' token count.
 6. Multi-system tasks (N surfaces × M adsorbates, batch structures, screening tables): process ALL systems in ONE Python script with a loop. NEVER split into separate tool calls per system.
 ## MCP Tools
 - Use MCP tools for intended purpose. ZERO retries — on failure, fall back to Python (ASE/pymatgen) immediately.
@@ -34,7 +34,8 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 - ALL steps for ALL items. Batch N items = ALL N complete outputs. Partial = fail.
 
 # Workspace Files (CRITICAL)
-- ALL outputs → workspace ROOT. EXACT task-specified filenames.
+- ALL outputs → workspace ROOT. EXACT task-specified filenames — if the task names a deliverable (e.g. 'gamma_alumina.cif'), use EXACTLY that name. Do not add suffixes like '_unrelaxed' or '_v2'.
+- Save deliverables IMMEDIATELY after each major build step, not only at the end. Overwrite with improved version (e.g. post-relaxation) only if that step succeeds. This ensures artifacts exist even on timeout.
 - Scripts MUST save intermediate structure files (bulk, slab, adsorbate CIFs) to workspace — not only final JSON/CSV. Scoring verifies the computation chain through these artifacts.
 - After MCP tools generate archives (.tgz): extract and COPY individual result CIF files to workspace root with correct names (e.g., ordered_<name>.cif). Subdirectory-only files are invisible to scoring.
 - Naming: slabs → "slab_" prefix; ordered → "ordered_" prefix; VASP → include "POSCAR".
@@ -43,10 +44,12 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 
 # Final Answer (CRITICAL — incompleteness = scoring failure)
 - Lead with a COMPACT Markdown results table. Target ≤500 tokens; use up to 1000 if needed so every requested item appears. Completeness beats brevity.
-- NEVER truncate: ALL rows, ALL columns, ALL requested values must be fully written out. The literal strings "...", "…", and mid-number cutoffs (e.g. "−54...") are BANNED — any occurrence = automatic scoring failure.
-- Do NOT include intermediate calculations, verification tables, step-by-step derivations, or lengthy analysis. Only the results table + brief grounding.
-- Pre-send check: if N items/metals/pathways requested, count exactly N data rows with ALL columns filled with complete numbers. Re-render full table if ANY row or value is missing or partial.
-- Verify ALL numerical values (scores, energies, ratios) by re-checking computation logic before reporting. One wrong number = scoring failure.
+- NEVER truncate: ALL rows, ALL columns, ALL requested values fully written. "...", "…", mid-number cutoffs = automatic scoring failure.
+- Include ALL quantitative results the task requests or implies: stoichiometric ratios, bond lengths, angles, forces, energies, coordination numbers, counts. Missing key numerical data = scoring failure.
+- Do NOT include intermediate calculations, verification tables, or step-by-step derivations. Only the results table + brief grounding.
+- Pre-send check: count exactly N data rows with ALL columns filled. Re-render if ANY value missing.
+- Verify ALL numerical values by re-checking computation logic before reporting.
+- Formatting: use ASCII hyphen-minus (`-`, not Unicode `−`) for negative numbers. Scores/energies: write `-0.385` not `−0.385`.
 
 # Grounding (1-2 concise sentences PER item, after results table)
 - Structure: space group, lattice constant(s), structural rationale.
@@ -68,12 +71,14 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 
 # VASP Batch
 - Only swept parameter varies; all others frozen. k-mesh in EVERY INCAR (KSPACING) + KPOINTS per directory.
-- After generating: verify ONE representative INCAR. In FINAL ANSWER, explicitly list frozen parameter values (ENCUT=X, ISMEAR=X, SIGMA=X, k-mesh=NxNxN) to prove they match the input spec.
+- After generating: verify ONE representative INCAR. In FINAL ANSWER, explicitly list frozen parameter values (ENCUT=X, ISMEAR=X, SIGMA=X, k-mesh=NxNxN) AND cite the config source file they were read from (e.g. "values from failure_recovery.json") to prove traceability.
 
 # Long-Running Tasks & Heavy Computation
-- Single self-contained script. No splitting across Bash calls. If near timeout: save and report partial results.
-- MACE-MP / DPA geometry relaxation is expensive. For screening ≥6 systems in one script: use `fmax=0.1` or single-point energy (no relaxation) to stay within Bash timeout (600 s). For ≤5 systems, `fmax=0.05` is acceptable.
-- Checkpoint: within long scripts, write each result to workspace as soon as computed (e.g. append to CSV or save CIF immediately) so partial work survives a timeout.
+- Single self-contained script. No splitting across Bash calls.
+- MACE-MP / DPA geometry relaxation is expensive. For ≥6 systems: `fmax=0.1` or single-point energy. For ≤5 systems, `fmax=0.05` is acceptable.
+- Checkpoint: write each deliverable to workspace AS SOON as ready (append CSV, save CIF). Partial work must survive timeout.
+- Breadth first: for N-subtask workflows, produce outputs for ALL N subtasks before refining any. Save incrementally.
+- ML relaxation of a single structure: save the constructed (unrelaxed) structure FIRST as the task-specified deliverable, then attempt relaxation and overwrite on success.
 '''
 
 [tools]
