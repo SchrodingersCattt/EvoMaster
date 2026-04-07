@@ -110,4 +110,4 @@ def require_runtime(session: SupportsBohriumRuntimeSlot) -> BohriumRuntimeHandle
 
 def detach_runtime(session: SupportsBohriumRuntimeSlot) -> None:
     if hasattr(session, "_bohrium_runtime"):
-        delattr(session, "_bohrium_runtime")
+        del session._bohrium_runtime

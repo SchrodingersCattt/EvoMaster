@@ -122,13 +122,7 @@ _CLEAR_REMOTE_PROXY_SCRIPT: str = (
 
 
 _SKILL_SYNC_EXCLUDE = frozenset(
-    {
-        '__pycache__',
-        '.git',
-        'node_modules',
-        '.mypy_cache',
-        '.pytest_cache',
-    }
+    {'__pycache__', '.git', 'node_modules', '.mypy_cache', '.pytest_cache'}
 )
 
 
@@ -139,7 +133,7 @@ def _store_bohrium_runtime(
     original_owns_session: bool,
     ssh_session: Any,
 ) -> None:
-    """Persist Bohrium SSH swap state for cleanup (SESSIONS[session_id]['bohrium_runtime'])."""
+    """Persist Bohrium SSH swap state for cleanup."""
     if session_id not in SESSIONS:
         SESSIONS[session_id] = {}
     SESSIONS[session_id]['bohrium_runtime'] = {
@@ -193,11 +187,7 @@ def _sync_skills_to_ssh_session(
     ssh_session: Any,
     skill_sync_spec: SkillSyncSpec | None,
 ) -> bool:
-    """Upload project skill trees and set remote_project_root on SSHSession.
-
-    Returns True if at least one directory was uploaded without error; False if
-    skipped, nothing uploaded, or sync failed.
-    """
+    """Upload project skill trees and set remote_project_root on SSHSession."""
     spec = skill_sync_spec
     if spec is None:
         logger.debug('run_agent: skill sync skipped (no SkillSyncSpec)')
@@ -945,12 +935,7 @@ def _cleanup_bohrium_after_run(
     pg_for_run: Any,
     ssh_attached: bool,
 ) -> None:
-    """Restore session state and cleanup or release Bohrium node.
-
-    Session restore is driven by ``SESSIONS[session_id]['bohrium_runtime']``.
-    ``ssh_attached`` is retained for public API compatibility and logging, but
-    it no longer gates whether the original session is restored.
-    """
+    """Restore session state and cleanup or release Bohrium node."""
     logger.debug(
         'cleanup_bohrium_after_run: session_id=%s ssh_attached=%s',
         session_id,
