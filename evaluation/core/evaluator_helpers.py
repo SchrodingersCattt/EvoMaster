@@ -187,7 +187,7 @@ def build_llm_context(
     """
     lines = [
         f'Question intent: {question.intent}',
-        f"Final answer: {answer[:500]}{'...' if len(answer) > 500 else ''}",
+        f"Final answer: {answer[:4000]}{'...' if len(answer) > 4000 else ''}",
     ]
 
     if evidence is not None:
