@@ -4,7 +4,7 @@
 
 **Goal:** Replace the current Bohrium helper and bridge layering with explicit Bohrium domain modules while keeping the existing credential resolver intact and preserving `from matmaster.tools.builtin.bohrium_tool import BohriumTool`.
 
-**Architecture:** Keep `matmaster.integration.runtime_bridge` focused on credential resolution and env projection only, then move Bohrium path parsing, Open SDK upload, artifact transfer, and action orchestration into Bohrium-scoped modules under `matmaster/tools/builtin/bohrium_tool/`. Land the new modules first, rewire `BohriumTool` to consume them, then remove the legacy bridge and helper files in one cleanup pass.
+**Architecture:** Keep `matmaster.integration.runtime_bridge` focused on credential resolution and env projection only, with the package root still exposing generic service-dispatch helpers such as `resolve_service_credentials`, `build_service_env`, and `inject_mcp_args`. Remove only the Bohrium path-classification bridge from that package, then move Bohrium path parsing, Open SDK upload, artifact transfer, and action orchestration into Bohrium-scoped modules under `matmaster/tools/builtin/bohrium_tool/`. Land the new modules first, rewire `BohriumTool` to consume them, then remove the legacy bridge and helper files in one cleanup pass.
 
 **Tech Stack:** Python 3.13, pytest, requests, Bohrium Open SDK, Session protocol, `uv`
 
@@ -31,12 +31,10 @@
 ### Modify
 
 - `matmaster/tools/builtin/bohrium_tool/__init__.py`
-- `matmaster/tools/builtin/bohrium_tool/_api.py`
-- `matmaster/tools/builtin/bohrium_tool/_helpers.py`
-- `matmaster/tools/builtin/bohrium_tool/_results.py`
 - `matmaster/integration/runtime_bridge/__init__.py`
 - `matmaster/integration/runtime_bridge/models.py`
 - `tests/matmaster/integration/test_runtime_bridge.py`
+- `tests/matmaster/integration/test_runtime_credential_bridge_e2e.py`
 - `tests/matmaster/tools/builtin/test_bohrium_tool.py`
 - `tests/matmaster/tools/builtin/test_bohrium_tool_download.py`
 - `tests/matmaster/tools/builtin/test_bohrium_tool_poll.py`
@@ -539,14 +537,19 @@ import zipfile
 from pathlib import Path
 
 from matmaster.tools.builtin.bohrium_tool.models import (
+    BohriumContext,
     BohriumDownloadTarget,
     BohriumInputSource,
 )
 from matmaster.tools.builtin.bohrium_tool.transfers import (
+    download_job_artifacts,
     prepare_input_archive,
     publish_download_target,
 )
-from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import FakeRemoteSession
+from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
+    FakeRemoteSession,
+    _FakeDownloadResponse,
+)
 
 
 def test_prepare_input_archive_downloads_remote_share_zip(tmp_path, monkeypatch):
@@ -584,6 +587,86 @@ def test_publish_download_target_uploads_remote_share_and_returns_remote_dir(tmp
 
     assert result_dir == "/share/results"
     assert session.upload_calls[0][1] == "/share/results"
+
+
+def test_download_job_artifacts_preserves_sandbox_zip_object_fallback(tmp_path, monkeypatch):
+    target = BohriumDownloadTarget(
+        kind="remote_share_dir",
+        raw_path="/share/results",
+        resolved_path="/share/results",
+        staging_dir=tmp_path / "results",
+        publish_mode="staged_upload",
+    )
+    ctx = BohriumContext(
+        access_key="ak",
+        project_id=42,
+        base_url="https://openapi.test.dp.tech",
+        credential_source="env",
+        sandbox=True,
+    )
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("log", "done\n")
+
+    monkeypatch.setattr(
+        "matmaster.tools.builtin.bohrium_tool.transfers.requests.get",
+        lambda url, timeout=300, stream=True: _FakeDownloadResponse(content=buffer.getvalue()),
+    )
+    monkeypatch.setattr(
+        "matmaster.tools.builtin.bohrium_tool.transfers.requests.post",
+        lambda *args, **kwargs: _FakeDownloadResponse(
+            json_data={
+                "code": 0,
+                "data": {
+                    "objects": [{"path": "prefix/job-1.zip", "isDir": False}],
+                    "hasNext": False,
+                    "nextToken": "",
+                },
+            }
+        ),
+    )
+
+    files, log_tail = download_job_artifacts(
+        job_id="job-1",
+        detail_data={"resultUrl": "https://store.example/api/download/prefix/job-1.zip?token=root-token"},
+        target=target,
+        ctx=ctx,
+    )
+
+    assert "log" in files
+    assert "done" in log_tail
+
+
+def test_download_job_artifacts_returns_bad_zip_marker_without_crashing(tmp_path, monkeypatch):
+    target = BohriumDownloadTarget(
+        kind="local_dir",
+        raw_path=str(tmp_path / "results"),
+        resolved_path=str(tmp_path / "results"),
+        staging_dir=tmp_path / "results",
+        publish_mode="direct",
+    )
+    ctx = BohriumContext(
+        access_key="ak",
+        project_id=42,
+        base_url="https://openapi.test.dp.tech",
+        credential_source="env",
+        sandbox=False,
+    )
+    monkeypatch.setattr(
+        "matmaster.tools.builtin.bohrium_tool.transfers.requests.get",
+        lambda url, timeout=300, stream=True: _FakeDownloadResponse(content=b"not-a-zip"),
+    )
+
+    files, log_tail = download_job_artifacts(
+        job_id=1,
+        detail_data={"resultUrl": "https://store.example/out.zip"},
+        target=target,
+        ctx=ctx,
+    )
+
+    assert files == ["(bad zip: out.zip)"]
+    assert log_tail == "(no log file found in result directory)"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -604,14 +687,15 @@ import tempfile
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
-from uuid import uuid4
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import requests
 
 from .errors import BohriumTransferError
-from .models import BohriumDownloadTarget, BohriumInputSource
+from .models import BohriumContext, BohriumDownloadTarget, BohriumInputSource
 
 logger = logging.getLogger(__name__)
+_SANDBOX_OBJECT_DOWNLOAD_LIMIT = 128
 
 
 def _zip_local_dir(input_dir: Path, zip_path: Path) -> None:
@@ -677,17 +761,222 @@ def _download_to_file(url: str, dest: Path, *, timeout: int = 300) -> None:
 
 
 def _extract_zip(zip_path: Path, extract_dir: Path) -> list[str]:
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        zf.extractall(extract_dir)
-        return zf.namelist()
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(extract_dir)
+            return zf.namelist()
+    except zipfile.BadZipFile:
+        return [f"(bad zip: {zip_path.name})"]
 
 
 def _read_log(result_dir: Path, *, max_chars: int = 4000) -> str:
     for name in ("log", "STDOUTERR"):
         file_path = result_dir / name
         if file_path.exists():
-            return file_path.read_text(encoding="utf-8", errors="replace")[-max_chars:]
+            size = file_path.stat().st_size
+            with open(file_path, "rb") as fh:
+                if size > max_chars * 4:
+                    fh.seek(-(max_chars * 4), 2)
+                raw = fh.read()
+            return raw.decode("utf-8", errors="replace")[-max_chars:]
     return "(no log file found in result directory)"
+
+
+def _parse_sandbox_result_url(result_url: str) -> tuple[str, str, str, str]:
+    parsed = urlparse(result_url)
+    host = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+    token = parse_qs(parsed.query).get("token", [""])[0].strip()
+    object_path = unquote(parsed.path.removeprefix("/api/download/")).strip("/")
+    if not host or not token or not object_path:
+        raise BohriumTransferError(f"invalid sandbox resultUrl: {result_url}")
+    prefix = object_path.rsplit("/", 1)[0] + "/" if "/" in object_path else ""
+    return host, token, object_path, prefix
+
+
+def _sandbox_iterate_objects(host: str, token: str, prefix: str) -> list[dict]:
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    objects: list[dict] = []
+    next_token = ""
+    while True:
+        payload = {"prefix": prefix}
+        if next_token:
+            payload["nextToken"] = next_token
+        response = requests.post(
+            f"{host.rstrip('/')}/api/iterate",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+        body = response.json() or {}
+        if body.get("code") not in (None, 0):
+            raise BohriumTransferError(f"sandbox iterate failed: {body}")
+        data = body.get("data") or {}
+        objects.extend(data.get("objects") or [])
+        if not data.get("hasNext"):
+            break
+        next_token = str(data.get("nextToken") or "").strip()
+        if not next_token:
+            break
+    return objects
+
+
+def _sandbox_download_object(host: str, token: str, object_path: str, dest_path: Path) -> None:
+    encoded_path = quote(object_path, safe="/")
+    _download_to_file(
+        f"{host.rstrip('/')}/api/download/{encoded_path}?token={token}&Response-Content-Type=application/octet-stream",
+        dest_path,
+    )
+
+
+def _sandbox_choose_zip_object(job_id: int | str, objects: list[dict]) -> str | None:
+    preferred_name = f"{job_id}.zip"
+    for obj in objects:
+        object_path = str(obj.get("path") or obj.get("key") or "").strip()
+        if object_path and Path(object_path).name == preferred_name:
+            return object_path
+    for obj in objects:
+        object_path = str(obj.get("path") or obj.get("key") or "").strip()
+        if object_path.endswith(".zip") and Path(object_path).name != "task.zip":
+            return object_path
+    for obj in objects:
+        object_path = str(obj.get("path") or obj.get("key") or "").strip()
+        if object_path.endswith(".zip"):
+            return object_path
+    return None
+
+
+def _sandbox_download_log(
+    *, job_id: int | str, result_dir: Path, ctx: BohriumContext, root_host: str, root_token: str, objects: list[dict]
+) -> bool:
+    log_path = result_dir / "log"
+    try:
+        response = requests.post(
+            f"{ctx.base_url}/openapi/v1/sandbox/job/file/token",
+            headers={"accessKey": ctx.access_key, "Content-Type": "application/json"},
+            json={"filePath": "log", "jobId": str(job_id)},
+            timeout=30,
+        )
+        response.raise_for_status()
+        body = response.json() or {}
+        if body.get("code") == 0:
+            data = body.get("data") or {}
+            log_host = str(data.get("host") or data.get("storeHost") or "")
+            log_token = str(data.get("token") or "").strip()
+            log_object_path = str(data.get("path") or data.get("storePath") or "").strip("/")
+            if log_host and log_token and log_object_path:
+                _sandbox_download_object(log_host, log_token, log_object_path, log_path)
+                return True
+    except Exception:
+        logger.debug("sandbox log token download failed", exc_info=True)
+
+    if root_host and root_token:
+        for obj in objects:
+            object_path = str(obj.get("path") or obj.get("key") or "").strip()
+            if object_path and Path(object_path).name == "log":
+                _sandbox_download_object(root_host, root_token, object_path, log_path)
+                return True
+    return False
+
+
+def _merge_log_file(files: list[str], log_downloaded: bool) -> list[str]:
+    if not log_downloaded or "log" in files:
+        return files
+    return ["log", *files]
+
+
+def _sandbox_relative_object_path(object_path: str, root_prefix: str) -> str:
+    path = object_path.strip()
+    if root_prefix and path.startswith(root_prefix):
+        path = path[len(root_prefix) :]
+    return path.lstrip("/")
+
+
+def _sandbox_download_objects(
+    *, objects: list[dict], root_host: str, root_token: str, root_prefix: str, result_dir: Path
+) -> list[str]:
+    downloaded: list[str] = []
+    count = 0
+    for obj in objects:
+        if count >= _SANDBOX_OBJECT_DOWNLOAD_LIMIT:
+            break
+        if not isinstance(obj, dict) or obj.get("isDir"):
+            continue
+        object_path = str(obj.get("path") or obj.get("key") or "").strip()
+        if not object_path:
+            continue
+        relative_path = _sandbox_relative_object_path(object_path, root_prefix)
+        if not relative_path or relative_path.endswith(".zip"):
+            continue
+        dest_path = result_dir / relative_path
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        _sandbox_download_object(root_host, root_token, object_path, dest_path)
+        downloaded.append(relative_path)
+        count += 1
+    return downloaded
+
+
+def _sandbox_download_results(
+    *, job_id: int | str, detail_data: dict, result_dir: Path, ctx: BohriumContext
+) -> tuple[list[str], str]:
+    result_url = str(detail_data.get("resultUrl") or detail_data.get("result") or "")
+    objects: list[dict] = []
+    root_host = ""
+    root_token = ""
+    root_prefix = ""
+
+    if result_url:
+        try:
+            root_host, root_token, _object_path, root_prefix = _parse_sandbox_result_url(result_url)
+            objects = _sandbox_iterate_objects(root_host, root_token, root_prefix)
+        except Exception:
+            logger.debug("sandbox resultUrl iteration failed", exc_info=True)
+
+    log_downloaded = _sandbox_download_log(
+        job_id=job_id,
+        result_dir=result_dir,
+        ctx=ctx,
+        root_host=root_host,
+        root_token=root_token,
+        objects=objects,
+    )
+
+    zip_key = _sandbox_choose_zip_object(job_id, objects)
+    if zip_key and root_host and root_token:
+        try:
+            zip_path = result_dir / Path(zip_key).name
+            _sandbox_download_object(root_host, root_token, zip_key, zip_path)
+            files = _extract_zip(zip_path, result_dir)
+            return _merge_log_file(files, log_downloaded), _read_log(result_dir)
+        except Exception:
+            logger.debug("sandbox zip-object download failed", exc_info=True)
+
+    if result_url:
+        try:
+            zip_path = result_dir / "out.zip"
+            _download_to_file(result_url, zip_path)
+            files = _extract_zip(zip_path, result_dir)
+            return _merge_log_file(files, log_downloaded), _read_log(result_dir)
+        except Exception:
+            logger.debug("sandbox resultUrl zip download failed", exc_info=True)
+
+    if objects and root_host and root_token:
+        downloaded_files = _sandbox_download_objects(
+            objects=objects,
+            root_host=root_host,
+            root_token=root_token,
+            root_prefix=root_prefix,
+            result_dir=result_dir,
+        )
+        downloaded_files = _merge_log_file(downloaded_files, log_downloaded)
+        if downloaded_files:
+            return downloaded_files, _read_log(result_dir)
+
+    if log_downloaded:
+        return ["log"], _read_log(result_dir)
+    if result_url:
+        return [], "(sandbox resultUrl download failed)"
+    return [], "(no resultUrl in job detail)"
 
 
 def download_job_artifacts(
@@ -695,6 +984,13 @@ def download_job_artifacts(
 ) -> tuple[list[str], str]:
     result_dir = target.staging_dir
     result_dir.mkdir(parents=True, exist_ok=True)
+    if ctx.sandbox:
+        return _sandbox_download_results(
+            job_id=job_id,
+            detail_data=detail_data,
+            result_dir=result_dir,
+            ctx=ctx,
+        )
     result_url = str(detail_data.get("resultUrl") or detail_data.get("result") or "")
     if not result_url:
         return [], "(no resultUrl in job detail)"
@@ -708,7 +1004,7 @@ def download_job_artifacts(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/matmaster/tools/builtin/test_bohrium_tool_transfers.py -v`
-Expected: PASS with 2 passed
+Expected: PASS with 4 passed
 
 - [ ] **Step 5: Commit**
 
@@ -725,7 +1021,6 @@ git commit -m "feat: add Bohrium transfer workflows"
 **Files:**
 - Create: `matmaster/tools/builtin/bohrium_tool/api.py`
 - Create: `tests/matmaster/tools/builtin/test_bohrium_tool_api.py`
-- Modify: `matmaster/tools/builtin/bohrium_tool/models.py`
 
 - [ ] **Step 1: Write the failing API tests**
 
@@ -1029,8 +1324,7 @@ Expected: PASS with 2 passed
 ```bash
 git add \
   matmaster/tools/builtin/bohrium_tool/api.py \
-  tests/matmaster/tools/builtin/test_bohrium_tool_api.py \
-  matmaster/tools/builtin/bohrium_tool/models.py
+  tests/matmaster/tools/builtin/test_bohrium_tool_api.py
 git commit -m "feat: consolidate Bohrium OpenAPI logic"
 ```
 
@@ -1039,6 +1333,7 @@ git commit -m "feat: consolidate Bohrium OpenAPI logic"
 **Files:**
 - Create: `matmaster/tools/builtin/bohrium_tool/tool.py`
 - Modify: `matmaster/tools/builtin/bohrium_tool/__init__.py`
+- Modify: `tests/matmaster/integration/test_runtime_credential_bridge_e2e.py`
 - Modify: `tests/matmaster/tools/builtin/test_bohrium_tool.py`
 - Modify: `tests/matmaster/tools/builtin/test_bohrium_tool_download.py`
 - Modify: `tests/matmaster/tools/builtin/test_bohrium_tool_poll.py`
@@ -1046,6 +1341,10 @@ git commit -m "feat: consolidate Bohrium OpenAPI logic"
 - [ ] **Step 1: Rewrite one representative tool test to patch the new seams**
 
 ```python
+from matmaster.tools.builtin.bohrium_tool.api import use_sandbox
+from matmaster.tools.builtin.bohrium_tool.models import BohriumContext
+
+
 def test_download_finished_job_returns_files(tmp_path, monkeypatch):
     tool = BohriumTool(workdir=tmp_path)
 
@@ -1054,6 +1353,16 @@ def test_download_finished_job_returns_files(tmp_path, monkeypatch):
         staging_dir = tmp_path / "results"
         publish_mode = "direct"
 
+    monkeypatch.setattr(
+        "matmaster.tools.builtin.bohrium_tool.tool.BohriumTool._build_context",
+        lambda self, require_project=False: BohriumContext(
+            access_key="ak",
+            project_id=42,
+            base_url="https://openapi.test.dp.tech",
+            credential_source="env",
+            sandbox=True,
+        ),
+    )
     monkeypatch.setattr("matmaster.tools.builtin.bohrium_tool.tool.resolve_download_target", lambda **_: FakeTarget())
     monkeypatch.setattr(
         "matmaster.tools.builtin.bohrium_tool.tool.get_job_detail",
@@ -1061,7 +1370,7 @@ def test_download_finished_job_returns_files(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         "matmaster.tools.builtin.bohrium_tool.tool.confirm_terminal_status",
-        lambda ctx, job_id, detail_data: (2, "Finished", detail_data),
+        lambda ctx, *, job_id, detail_data: (2, "Finished", detail_data),
     )
     monkeypatch.setattr(
         "matmaster.tools.builtin.bohrium_tool.tool.download_job_artifacts",
@@ -1081,12 +1390,13 @@ def test_download_finished_job_returns_files(tmp_path, monkeypatch):
     payload = json.loads(result.content)
     assert payload["status"] == "Finished"
     assert payload["files"] == ["log"]
+    assert use_sandbox() is True
 ```
 
 - [ ] **Step 2: Run the existing Bohrium tool tests to verify the old patch points now fail**
 
 Run: `uv run pytest tests/matmaster/tools/builtin/test_bohrium_tool.py tests/matmaster/tools/builtin/test_bohrium_tool_poll.py tests/matmaster/tools/builtin/test_bohrium_tool_download.py -v`
-Expected: FAIL in tests that patch `_get`, `_resolve_download_target_dir`, `download_bohrium_results`, or package-level `_use_sandbox`
+Expected: FAIL in tests that patch `_get`, `_resolve_download_target_dir`, `download_bohrium_results`, or still import package-level `_use_sandbox`
 
 - [ ] **Step 3: Implement the new orchestrator and package export**
 
@@ -1103,7 +1413,7 @@ from typing import Any
 from matmaster.integration.runtime_bridge.adapters.bohrium import (
     resolve_bohrium_credentials,
 )
-from matmaster.integration.bohrium_api import get_bohrium_base_url, get_bohrium_service_env
+from matmaster.integration.bohrium_api import get_bohrium_base_url
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
 
@@ -1151,29 +1461,17 @@ class BohriumTool(BuiltinTool):
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
         try:
-            ctx = self._build_context(require_project=True)
-            source = resolve_input_source(
-                raw_path=str(args["input_dir"]),
+            job_id, bohr_job_id = submit_job_via_runtime(
+                input_dir=str(args["input_dir"]),
+                image=str(args["image"]),
+                cmd=str(args["cmd"]),
+                machine=str(args.get("machine", "c32_m128_cpu")),
+                job_name=str(args.get("job_name", "matmaster-job")),
+                disk_size=int(args.get("disk_size", 50)),
                 workdir=self._workdir,
                 session=self._session,
             )
-            cmd = str(args["cmd"]).rstrip()
-            if not cmd.endswith("> log 2>&1"):
-                cmd = cmd + " > log 2>&1"
-            with prepare_input_archive(source, session=self._session) as zip_path:
-                create_data = create_job(ctx, job_name=str(args.get("job_name", "matmaster-job")))
-                upload = upload_input_archive(create_data=create_data, zip_path=zip_path)
-                add_data = add_job(
-                    ctx,
-                    create_data=create_data,
-                    upload=upload,
-                    image=str(args["image"]),
-                    cmd=cmd,
-                    machine=str(args.get("machine", "c32_m128_cpu")),
-                    job_name=str(args.get("job_name", "matmaster-job")),
-                    disk_size=int(args.get("disk_size", 50)),
-                )
-            return ToolResult(status="success", content=json.dumps({"success": True, "job_id": add_data["jobId"], "status": "Submitted"}, ensure_ascii=False))
+            return ToolResult(status="success", content=json.dumps({"success": True, "job_id": job_id, "bohr_job_id": bohr_job_id, "status": "Submitted"}, ensure_ascii=False))
         except BohriumError as exc:
             return ToolResult(status="error", content=str(exc))
 
@@ -1211,9 +1509,51 @@ from .tool import BohriumTool
 __all__ = ["BohriumTool"]
 ```
 
+Also extract a top-level helper in `matmaster/tools/builtin/bohrium_tool/tool.py`:
+
+```python
+def submit_job_via_runtime(
+    *,
+    input_dir: str | Path,
+    image: str,
+    cmd: str,
+    machine: str,
+    job_name: str,
+    disk_size: int,
+    workdir: Path,
+    session,
+) -> tuple[int | str, int | str]:
+    ...
+```
+
+`BohriumTool._submit(...)` should become a thin `ToolResult` wrapper around this shared helper so that the skill script can import exactly the same submit workflow instead of recreating create/upload/add sequencing.
+
+Also update `tests/matmaster/tools/builtin/test_bohrium_tool.py` to replace:
+
+```python
+from matmaster.tools.builtin.bohrium_tool import BohriumTool, _use_sandbox
+```
+
+with:
+
+```python
+from matmaster.tools.builtin.bohrium_tool import BohriumTool
+from matmaster.tools.builtin.bohrium_tool.api import use_sandbox
+```
+
+Also update `tests/matmaster/integration/test_runtime_credential_bridge_e2e.py` to patch the new seams:
+
+```python
+monkeypatch.setattr("matmaster.tools.builtin.bohrium_tool.api._post", fake_post)
+monkeypatch.setattr(
+    "matmaster.tools.builtin.bohrium_tool.open_sdk._load_tiefblue_client",
+    lambda: FakeTiefblue,
+)
+```
+
 - [ ] **Step 4: Run the Bohrium tool tests against the new module seams**
 
-Run: `uv run pytest tests/matmaster/tools/builtin/test_bohrium_tool.py tests/matmaster/tools/builtin/test_bohrium_tool_poll.py tests/matmaster/tools/builtin/test_bohrium_tool_download.py -v`
+Run: `uv run pytest tests/matmaster/tools/builtin/test_bohrium_tool.py tests/matmaster/tools/builtin/test_bohrium_tool_poll.py tests/matmaster/tools/builtin/test_bohrium_tool_download.py tests/matmaster/integration/test_runtime_credential_bridge_e2e.py -v`
 Expected: PASS after replacing old package-level patches with `tool.py`, `api.py`, `paths.py`, and `transfers.py` patch points
 
 - [ ] **Step 5: Commit**
@@ -1222,6 +1562,7 @@ Expected: PASS after replacing old package-level patches with `tool.py`, `api.py
 git add \
   matmaster/tools/builtin/bohrium_tool/tool.py \
   matmaster/tools/builtin/bohrium_tool/__init__.py \
+  tests/matmaster/integration/test_runtime_credential_bridge_e2e.py \
   tests/matmaster/tools/builtin/test_bohrium_tool.py \
   tests/matmaster/tools/builtin/test_bohrium_tool_poll.py \
   tests/matmaster/tools/builtin/test_bohrium_tool_download.py
@@ -1232,6 +1573,7 @@ git commit -m "refactor: rewire Bohrium tool around domain modules"
 
 **Files:**
 - Modify: `matmaster/integration/runtime_bridge/__init__.py`
+- Modify: `matmaster/integration/runtime_bridge/models.py`
 - Modify: `tests/matmaster/integration/test_runtime_bridge.py`
 - Modify: `matmaster/skills/playground-skills/bohrium-job/scripts/submit_job.py`
 - Create: `tests/matmaster/integration/test_bohrium_job_skill_submit.py`
@@ -1249,14 +1591,14 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-import pytest
-
 from matmaster.integration import runtime_bridge
 
 SCRIPT_PATH = Path("matmaster/skills/playground-skills/bohrium-job/scripts/submit_job.py")
 
 
-def test_runtime_bridge_no_longer_exports_path_resolution():
+def test_runtime_bridge_keeps_env_projection_but_drops_path_resolution():
+    assert hasattr(runtime_bridge, "build_service_env")
+    assert hasattr(runtime_bridge, "resolve_service_credentials")
     assert not hasattr(runtime_bridge, "resolve_output_path")
     assert not hasattr(runtime_bridge, "OutputPathDecision")
 
@@ -1298,22 +1640,83 @@ Expected: FAIL because `runtime_bridge` still exports path helpers and `submit_j
 
 ```python
 # matmaster/integration/runtime_bridge/__init__.py
-from matmaster.integration.runtime_bridge.adapters.bohrium import (
-    build_bohrium_env,
-    inject_bohrium_mcp_args,
-    resolve_bohrium_credentials,
-)
+from __future__ import annotations
+
+import importlib
+from typing import Any
+
 from matmaster.integration.runtime_bridge.models import ResolvedCredential
 from matmaster.integration.runtime_bridge.resolver import resolve_credentials
 
+_ADAPTERS: dict[str, str] = {
+    "bohrium": "matmaster.integration.runtime_bridge.adapters.bohrium",
+}
+
+
+def _get_adapter(service: str):  # noqa: ANN202
+    if service not in _ADAPTERS:
+        raise ValueError(f"Unknown service: {service!r}")
+    return importlib.import_module(_ADAPTERS[service])
+
+
+def resolve_service_credentials(
+    service: str,
+    *,
+    session: Any | None = None,
+    explicit: dict[str, Any] | None = None,
+) -> ResolvedCredential:
+    adapter = _get_adapter(service)
+    resolver_fn = getattr(adapter, f"resolve_{service}_credentials")
+    return resolver_fn(session=session, explicit=explicit)
+
+
+def build_service_env(
+    service: str,
+    *,
+    session: Any | None = None,
+    explicit: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    adapter = _get_adapter(service)
+    env_fn = getattr(adapter, f"build_{service}_env")
+    return env_fn(session=session, explicit=explicit)
+
+
+def inject_mcp_args(
+    service: str,
+    *,
+    session: Any | None = None,
+    explicit: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    adapter = _get_adapter(service)
+    inject_fn = getattr(adapter, f"inject_{service}_mcp_args")
+    return inject_fn(session=session, explicit=explicit, **kwargs)
+
 __all__ = [
     "ResolvedCredential",
-    "build_bohrium_env",
-    "inject_bohrium_mcp_args",
-    "resolve_bohrium_credentials",
+    "build_service_env",
+    "inject_mcp_args",
+    "resolve_service_credentials",
     "resolve_credentials",
 ]
 ```
+
+```python
+# matmaster/integration/runtime_bridge/models.py
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Literal
+
+
+@dataclass(frozen=True)
+class ResolvedCredential:
+    service: str
+    source: Literal["explicit", "session", "env", "none"]
+    values: dict[str, Any]
+```
+
+Also update `tests/matmaster/integration/test_runtime_bridge.py` to remove the old `resolve_output_path(...)` assertions entirely; after this cleanup that file covers credential precedence, env projection, and package export surface only.
 
 ```python
 # matmaster/skills/playground-skills/bohrium-job/scripts/submit_job.py
@@ -1321,47 +1724,32 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from matmaster.integration.runtime_bridge.adapters.bohrium import (
-    resolve_bohrium_credentials,
-)
-from matmaster.tools.builtin.bohrium_tool.api import add_job, create_job, use_sandbox
-from matmaster.tools.builtin.bohrium_tool.models import BohriumContext
-from matmaster.tools.builtin.bohrium_tool.open_sdk import upload_input_archive
-from matmaster.tools.builtin.bohrium_tool.paths import resolve_input_source
-from matmaster.tools.builtin.bohrium_tool.transfers import prepare_input_archive
+from matmaster.tools.builtin.bohrium_tool.tool import submit_job_via_runtime
 
 
-def submit_job_via_runtime(
-    *,
+def submit_job(
     input_dir: Path,
     image: str,
     cmd: str,
     machine: str,
     job_name: str,
     disk_size: int,
-):
-    cred = resolve_bohrium_credentials(session=None, explicit=None)
-    ctx = BohriumContext.from_resolved_credential(cred, sandbox=use_sandbox())
-    source = resolve_input_source(raw_path=str(input_dir), workdir=input_dir.parent, session=None)
-    with prepare_input_archive(source, session=None) as zip_path:
-        create_data = create_job(ctx, job_name=job_name)
-        upload = upload_input_archive(create_data=create_data, zip_path=zip_path)
-        add_data = add_job(
-            ctx,
-            create_data=create_data,
-            upload=upload,
-            image=image,
-            cmd=cmd,
-            machine=machine,
-            job_name=job_name,
-            disk_size=disk_size,
-        )
-    return add_data["jobId"], add_data.get("bohrJobId") or add_data["jobId"]
+) -> tuple[int | str, int | str]:
+    return submit_job_via_runtime(
+        input_dir=input_dir,
+        image=image,
+        cmd=cmd,
+        machine=machine,
+        job_name=job_name,
+        disk_size=disk_size,
+        workdir=input_dir.parent,
+        session=None,
+    )
 ```
 
 - [ ] **Step 4: Run the focused cleanup suite and one full Bohrium regression sweep**
 
-Run: `uv run pytest tests/matmaster/integration/test_runtime_bridge.py tests/matmaster/integration/test_bohrium_job_skill_submit.py tests/matmaster/tools/builtin/test_bohrium_tool.py tests/matmaster/tools/builtin/test_bohrium_tool_poll.py tests/matmaster/tools/builtin/test_bohrium_tool_download.py tests/matmaster/tools/builtin/test_bohrium_tool_api.py tests/matmaster/tools/builtin/test_bohrium_tool_transfers.py tests/matmaster/tools/builtin/test_bohrium_tool_paths.py tests/matmaster/tools/builtin/test_bohrium_tool_open_sdk.py tests/matmaster/tools/builtin/test_bohrium_tool_models.py -v`
+Run: `uv run pytest tests/matmaster/integration/test_runtime_bridge.py tests/matmaster/integration/test_runtime_credential_bridge_e2e.py tests/matmaster/integration/test_bohrium_job_skill_submit.py tests/matmaster/tools/test_script_env.py tests/matmaster/tools/builtin/test_bash_tool.py tests/matmaster/tools/builtin/test_glob_tool.py tests/matmaster/tools/builtin/test_grep_tool.py tests/matmaster/tools/builtin/test_bohrium_tool.py tests/matmaster/tools/builtin/test_bohrium_tool_poll.py tests/matmaster/tools/builtin/test_bohrium_tool_download.py tests/matmaster/tools/builtin/test_bohrium_tool_api.py tests/matmaster/tools/builtin/test_bohrium_tool_transfers.py tests/matmaster/tools/builtin/test_bohrium_tool_paths.py tests/matmaster/tools/builtin/test_bohrium_tool_open_sdk.py tests/matmaster/tools/builtin/test_bohrium_tool_models.py -v`
 Expected: PASS with all Bohrium-related tests green and no import of `resolve_output_path`
 
 - [ ] **Step 5: Commit**
@@ -1369,6 +1757,7 @@ Expected: PASS with all Bohrium-related tests green and no import of `resolve_ou
 ```bash
 git add \
   matmaster/integration/runtime_bridge/__init__.py \
+  matmaster/integration/runtime_bridge/models.py \
   matmaster/skills/playground-skills/bohrium-job/scripts/submit_job.py \
   tests/matmaster/integration/test_runtime_bridge.py \
   tests/matmaster/integration/test_bohrium_job_skill_submit.py
