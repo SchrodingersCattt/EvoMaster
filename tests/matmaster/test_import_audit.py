@@ -154,6 +154,6 @@ class TestPhase30FullIsolation:
     def test_known_violations_count(self):
         """Track the total known violations count -- this number should decrease over time."""
         assert len(self.KNOWN_VIOLATIONS) == 5, (
-            f"Expected 6 known violations, got {len(self.KNOWN_VIOLATIONS)}. "
+            f"Expected 5 known violations, got {len(self.KNOWN_VIOLATIONS)}. "
             "Update this count as violations are resolved."
         )

@@ -7,6 +7,7 @@ post-processing.
 
 import asyncio
 import gc
+import inspect
 import logging
 import os
 import time
@@ -18,7 +19,10 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.core.playground import PlaygroundManager
-from matmaster.integration.event_payloads import _normalize_public_source
+from matmaster.integration.event_payloads import (
+    _normalize_public_source,
+    build_public_sse_payload_from_bus_dump,
+)
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
@@ -307,6 +311,29 @@ class AgentRunService:
                 }
             )
 
+            # -- Stage 4b: AskQuestion bridge --
+            from matmaster.integration.interaction_bridge import AskQuestionBridge
+            from src.services.stream_service import RedisReplyQueue
+
+            def _send_interaction_event(raw_event: dict[str, Any]) -> None:
+                payload = build_public_sse_payload_from_bus_dump(
+                    raw_event,
+                    session_id=session_id,
+                    task_id=task_id,
+                    invocation_id=invocation_id,
+                    spawn_id=raw_event.get('spawn_id'),
+                )
+                result = send_cb(payload)
+                if inspect.isawaitable(result):
+                    asyncio.get_running_loop().create_task(result)
+
+            bridge = AskQuestionBridge(
+                session_id=session_id,
+                send_cb=_send_interaction_event,
+                reply_queue=RedisReplyQueue(session_id),
+                timeout_seconds=1800,
+            )
+            pg_ctx = pg_ctx.model_copy(update={'interaction_bridge': bridge})
             # -- Stage 5: History --
             raw_events = (
                 events_table.get_session_events(

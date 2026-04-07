@@ -15,7 +15,7 @@ from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
 from src.dao.redis_dao import (
-    CONFIRMATION_CANCEL_VALUE,
+    INTERACTION_CANCEL_VALUE,
     STREAM_CHANNEL_PREFIX,
     get_redis_dao,
 )
@@ -143,24 +143,24 @@ class RedisReplyQueue:
         self._dao = get_redis_dao()
 
     def put_content(self, content: str) -> None:
-        self._dao.rpush_confirmation_reply(self._session_id, content)
+        self._dao.rpush_interaction_reply(self._session_id, content)
 
     def put_cancel(self) -> None:
-        self._dao.rpush_confirmation_reply(self._session_id, CONFIRMATION_CANCEL_VALUE)
+        self._dao.rpush_interaction_reply(self._session_id, INTERACTION_CANCEL_VALUE)
 
     def get(self, timeout: float | None = None) -> str | None:
         # timeout=None 表示 BLOCK 模式，Redis BLPOP timeout=0 表示一直阻塞
         sec = 0 if timeout is None else int(timeout) if timeout >= 0 else 300
-        value = self._dao.blpop_confirmation_reply(self._session_id, sec)
+        value = self._dao.blpop_interaction_reply(self._session_id, sec)
         if value is None:
             raise queue.Empty
-        if value == CONFIRMATION_CANCEL_VALUE:
+        if value == INTERACTION_CANCEL_VALUE:
             return None
         return value
 
 
 class StreamQueueManager:
-    """流式接口的队列管理：SSE 订阅队列的注册/注销与广播；当前 run 的确认回复队列。"""
+    """流式接口的队列管理：SSE 订阅队列的注册/注销与广播；当前 run 的交互回复队列（ask_question 共用）。"""
 
     def __init__(self) -> None:
         # session_id -> 该会话下所有 SSE 连接的队列，agent 事件会广播到这些队列
@@ -207,9 +207,7 @@ class SendStreamContext:
     mode: str
     user_msg: dict
     request_event_queue: asyncio.Queue
-    reply_queue: (
-        ReplyQueueLike  # confirmation_request 共用，POST /confirmation_reply 写入
-    )
+    reply_queue: ReplyQueueLike  # ask_question 共用，POST /ask_question_reply 写入
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
 
@@ -612,7 +610,7 @@ class ChatStreamService:
         self._events_service.add_history_event(sid, user_msg, user_id=user_id)
 
         dao = get_redis_dao()
-        dao.delete_confirmation_reply_list(sid)
+        dao.delete_interaction_reply_list(sid)
         reply_queue: ReplyQueueLike = RedisReplyQueue(sid)
         request_event_queue: asyncio.Queue = asyncio.Queue()
 
@@ -628,10 +626,10 @@ class ChatStreamService:
         )
 
     def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
-        """供 POST /confirmation_reply 写入使用；无活跃 run 时返回 None。仅 Worker 队列模式，由 Redis run_active 判定。"""
+        """供 POST /ask_question_reply 写入使用；无活跃 run 时返回 None。仅 Worker 队列模式，由 Redis run_active 判定。"""
         if not REDIS_URL:
             return None
-        if get_redis_dao().is_confirmation_run_active(session_id):
+        if get_redis_dao().is_interaction_run_active(session_id):
             return RedisReplyQueue(session_id)
         return None
 
@@ -639,21 +637,23 @@ class ChatStreamService:
         """当前 run 的 task_id / invocation_id。仅 Worker 队列模式，从 Redis 取。供写入历史等用。"""
         if not REDIS_URL:
             return None
-        return get_redis_dao().get_confirmation_run_context(session_id)
+        return get_redis_dao().get_interaction_run_context(session_id)
 
-    def broadcast_reply(self, session_id: str, content: str) -> None:
-        """将用户确认回复广播到该会话所有 SSE 订阅。
+    def broadcast_reply(
+        self, session_id: str, content: str, *, event_type: str = "ask_question_reply"
+    ) -> None:
+        """将用户回复广播到该会话所有 SSE 订阅。
         payload 带上 task_id/invocation_id（从 Redis 取），便于前端去重或排序。
         """
         sid = session_id.strip()
         payload = {
             'source': 'User',
-            'type': 'confirmation_reply',
+            'type': event_type,
             'content': content,
             'session_id': sid,
         }
         if REDIS_URL:
-            ctx = get_redis_dao().get_confirmation_run_context(session_id)
+            ctx = get_redis_dao().get_interaction_run_context(session_id)
             if ctx:
                 payload['task_id'] = ctx.get('task_id')
                 payload['invocation_id'] = ctx.get('invocation_id')
