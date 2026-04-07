@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
-from matmaster.integration.interaction_bridge import AskQuestionResponse
+from matmaster.integration.interaction_bridge import AskQuestionBridge, AskQuestionResponse
 from matmaster.tools.builtin.ask_question_tool import AskQuestionTool
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.tool_spec import ToolExecutionContext
@@ -21,6 +22,22 @@ class _FakeBridge:
         if self._response is None:
             return {"request_id": "fake", "answers": {}, "annotations": {}}
         return self._response
+
+
+class _ImmediateReplyQueue:
+    """测试用 reply queue，立即返回预设 envelope。"""
+
+    def __init__(self, envelope: str) -> None:
+        self._envelope = envelope
+
+    def put_content(self, content: str) -> None:
+        self._envelope = content
+
+    def put_cancel(self) -> None:
+        self._envelope = ""
+
+    def get(self, timeout: float | None = None) -> str | None:
+        return self._envelope
 
 
 def _exec_ctx() -> ToolExecutionContext:
@@ -145,3 +162,48 @@ class TestAskQuestionToolVisibility:
     def test_visible_with_bridge(self) -> None:
         tool = AskQuestionTool(bridge=_FakeBridge())
         assert tool.exposed_to_model is True
+
+
+class TestAskQuestionBridge:
+    def test_emits_json_serializable_ask_question_event(self) -> None:
+        sent_payloads: list[dict[str, Any]] = []
+        bridge = AskQuestionBridge(
+            session_id="session_1",
+            send_cb=sent_payloads.append,
+            reply_queue=_ImmediateReplyQueue(
+                json.dumps(
+                    {
+                        "payload": {
+                            "answers": {"Q1": "A1"},
+                            "annotations": {},
+                        }
+                    }
+                )
+            ),
+        )
+
+        response = asyncio.run(
+            bridge.ask(
+                session_id="session_1",
+                task_id="task_1",
+                invocation_id="inv_1",
+                request_id="aq_1",
+                questions=[
+                    {
+                        "question": "Q1",
+                        "header": "H1",
+                        "options": [
+                            {"label": "A1", "description": "desc"},
+                            {"label": "A2", "description": "desc"},
+                        ],
+                    }
+                ],
+                metadata={},
+                cancel_token=None,
+            )
+        )
+
+        assert response["answers"] == {"Q1": "A1"}
+        assert sent_payloads
+        assert isinstance(sent_payloads[0]["timestamp"], str)
+        json.dumps(sent_payloads[0], ensure_ascii=False)

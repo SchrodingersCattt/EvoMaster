@@ -55,7 +55,7 @@ class AskQuestionBridge:
 
     def _send_event(self, event: AskQuestionEvent | AskQuestionTimeoutEvent) -> None:
         """把事件 model_dump 推入 SSE bus。"""
-        self._send_cb(event.model_dump())
+        self._send_cb(event.model_dump(mode="json"))
 
     def _wait_for_reply(
         self,
