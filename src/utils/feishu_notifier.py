@@ -10,12 +10,9 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from src.utils.constant import SERVICE_ENV
+from utils.feishu_webhook import FEISHU_WEBHOOK_URL
 
 logger = logging.getLogger(__name__)
-
-FEISHU_WEBHOOK_URL = (
-    'https://open.feishu.cn/open-apis/bot/v2/hook/a99f6620-6f73-48a6-85d2-65068e057fd1'
-)
 
 # 卡片 header 颜色：blue/green/orange/red
 CARD_TEMPLATE_BLUE = 'blue'
