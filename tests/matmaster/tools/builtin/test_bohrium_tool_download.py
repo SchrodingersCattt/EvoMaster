@@ -381,7 +381,9 @@ class TestBohriumDownloadExecution:
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
-        monkeypatch.setattr(bohrium_transfers_module.requests, 'post', fake_requests_post)
+        monkeypatch.setattr(
+            bohrium_transfers_module.requests, 'post', fake_requests_post
+        )
         monkeypatch.setattr(bohrium_transfers_module.requests, 'get', fake_requests_get)
         import time as time_module
 

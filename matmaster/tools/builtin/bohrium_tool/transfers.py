@@ -26,7 +26,9 @@ def _zip_local_dir(input_dir: Path, zip_path: Path) -> None:
                 zf.write(file_path, file_path.relative_to(input_dir))
 
 
-def _prepare_remote_input_zip(*, source: BohriumInputSource, session, zip_path: Path) -> None:
+def _prepare_remote_input_zip(
+    *, source: BohriumInputSource, session, zip_path: Path
+) -> None:
     remote_zip_path = f"/tmp/bohrium_input_{uuid4().hex}.zip"
     script = (
         "python3 - <<'PY'\n"
@@ -166,7 +168,9 @@ def _sandbox_iterate_objects(host: str, token: str, prefix: str) -> list[dict]:
     return objects
 
 
-def _sandbox_download_object(host: str, token: str, object_path: str, dest_path: Path) -> None:
+def _sandbox_download_object(
+    host: str, token: str, object_path: str, dest_path: Path
+) -> None:
     encoded_path = quote(object_path, safe="/")
     _download_to_file(
         f"{host.rstrip('/')}/api/download/{encoded_path}?token={token}&Response-Content-Type=application/octet-stream",
@@ -214,9 +218,9 @@ def _sandbox_download_log(
             data = body.get("data") or {}
             log_host = str(data.get("host") or data.get("storeHost") or "")
             log_token = str(data.get("token") or "").strip()
-            log_object_path = str(data.get("path") or data.get("storePath") or "").strip(
-                "/"
-            )
+            log_object_path = str(
+                data.get("path") or data.get("storePath") or ""
+            ).strip("/")
             if log_host and log_token and log_object_path:
                 _sandbox_download_object(log_host, log_token, log_object_path, log_path)
                 return True
@@ -246,7 +250,12 @@ def _sandbox_relative_object_path(object_path: str, root_prefix: str) -> str:
 
 
 def _sandbox_download_objects(
-    *, objects: list[dict], root_host: str, root_token: str, root_prefix: str, result_dir: Path
+    *,
+    objects: list[dict],
+    root_host: str,
+    root_token: str,
+    root_prefix: str,
+    result_dir: Path,
 ) -> list[str]:
     downloaded: list[str] = []
     count = 0
@@ -287,8 +296,8 @@ def _sandbox_download_results(
 
     if result_url:
         try:
-            root_host, root_token, _object_path, root_prefix = _parse_sandbox_result_url(
-                result_url
+            root_host, root_token, _object_path, root_prefix = (
+                _parse_sandbox_result_url(result_url)
             )
             objects = _sandbox_iterate_objects(root_host, root_token, root_prefix)
         except Exception:
@@ -342,7 +351,11 @@ def _sandbox_download_results(
 
 
 def download_job_artifacts(
-    *, job_id: int | str, detail_data: dict, target: BohriumDownloadTarget, ctx: BohriumContext
+    *,
+    job_id: int | str,
+    detail_data: dict,
+    target: BohriumDownloadTarget,
+    ctx: BohriumContext,
 ) -> tuple[list[str], str]:
     result_dir = target.staging_dir
     result_dir.mkdir(parents=True, exist_ok=True)

@@ -8,8 +8,10 @@ from matmaster.core.agent import AgentKernel
 from matmaster.providers.openai_provider import OpenAIProvider
 from matmaster.types.errors import LLMError
 from matmaster.types.messages import AssistantMessage, ToolMessage
-
-from tests.matmaster.core.agent_kernel_test_helpers import _make_spec, _make_tool_registry
+from tests.matmaster.core.agent_kernel_test_helpers import (
+    _make_spec,
+    _make_tool_registry,
+)
 
 
 async def _async_iter(items):

@@ -15,9 +15,7 @@ class UploadedArchive:
 
 def _load_tiefblue_client():
     try:
-        from bohrium_open_sdk.opensdk._tiefblue_client import (
-            Tiefblue as TiefblueClient,
-        )
+        from bohrium_open_sdk.opensdk._tiefblue_client import Tiefblue as TiefblueClient
     except ImportError as exc:
         raise BohriumTransferError(
             "bohrium_open_sdk not installed. Run: pip install bohrium_open_sdk"

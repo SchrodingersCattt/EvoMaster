@@ -142,7 +142,9 @@ def test_download_job_artifacts_returns_bad_zip_marker_without_crashing(
     )
     monkeypatch.setattr(
         "matmaster.tools.builtin.bohrium_tool.transfers.requests.get",
-        lambda url, timeout=300, stream=True: _FakeDownloadResponse(content=b"not-a-zip"),
+        lambda url, timeout=300, stream=True: _FakeDownloadResponse(
+            content=b"not-a-zip"
+        ),
     )
 
     files, log_tail = download_job_artifacts(

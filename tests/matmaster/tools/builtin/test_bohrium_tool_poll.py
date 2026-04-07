@@ -103,6 +103,7 @@ class TestBohriumPollExecution:
         self, tmp_path, monkeypatch
     ):
         tool = BohriumTool(workdir=tmp_path)
+
         def fake_get(base_url, path, access_key, params=None, timeout=30):
             del base_url, access_key, params, timeout
             assert path == '/openapi/v1/sandbox/job/job-finished'

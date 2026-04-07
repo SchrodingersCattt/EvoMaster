@@ -594,7 +594,9 @@ class TestChatStreamContent:
             }
         ]
 
-    async def test_chat_stream_drops_exact_duplicate_id_on_different_index(self) -> None:
+    async def test_chat_stream_drops_exact_duplicate_id_on_different_index(
+        self,
+    ) -> None:
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
@@ -639,7 +641,9 @@ class TestChatStreamContent:
         ]
         assert chunks[1].tool_call_deltas in (None, [])
 
-    async def test_chat_stream_merges_duplicate_id_continuation_on_different_index(self) -> None:
+    async def test_chat_stream_merges_duplicate_id_continuation_on_different_index(
+        self,
+    ) -> None:
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
@@ -721,10 +725,14 @@ class TestChatStreamContent:
         with pytest.raises(LLMError, match="duplicate tool_call id"):
             _ = [
                 chunk
-                async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+                async for chunk in provider.chat_stream(
+                    [{"role": "user", "content": "Hi"}]
+                )
             ]
 
-    async def test_chat_stream_duplicate_id_with_conflicting_arguments_raises(self) -> None:
+    async def test_chat_stream_duplicate_id_with_conflicting_arguments_raises(
+        self,
+    ) -> None:
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
@@ -756,7 +764,9 @@ class TestChatStreamContent:
         with pytest.raises(LLMError, match="duplicate tool_call id"):
             _ = [
                 chunk
-                async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+                async for chunk in provider.chat_stream(
+                    [{"role": "user", "content": "Hi"}]
+                )
             ]
 
     async def test_chat_stream_empty_choices(self) -> None:

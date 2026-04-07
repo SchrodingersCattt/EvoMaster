@@ -31,9 +31,7 @@ def test_upload_input_archive_returns_oss_key_and_download_url(
     )
 
     assert uploaded.oss_key == "sandbox/jobs/run-1/input.zip"
-    assert uploaded.download_url.startswith(
-        "https://store.example.com/api/download/"
-    )
+    assert uploaded.download_url.startswith("https://store.example.com/api/download/")
     assert upload_calls[0][2]["Authorization"] == "Bearer token-123"
 
 

@@ -37,7 +37,9 @@ def main() -> None:
     parser.add_argument(
         "--cmd", required=True, help="Shell command to run inside container"
     )
-    parser.add_argument("--machine", default="c32_m128_cpu", help="Bohrium machine type")
+    parser.add_argument(
+        "--machine", default="c32_m128_cpu", help="Bohrium machine type"
+    )
     parser.add_argument("--job-name", default=None, help="Human-readable job name")
     parser.add_argument(
         "--software", default="unknown", help="Software label for default job name"
@@ -61,7 +63,10 @@ def main() -> None:
     if not input_dir.is_dir():
         print(
             json.dumps(
-                {"success": False, "error": f"input_dir not found or not a directory: {input_dir}"}
+                {
+                    "success": False,
+                    "error": f"input_dir not found or not a directory: {input_dir}",
+                }
             )
         )
         sys.exit(1)

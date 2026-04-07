@@ -21,7 +21,7 @@ class BohriumContext:
     @classmethod
     def from_resolved_credential(
         cls, cred: ResolvedCredential, *, sandbox: bool
-    ) -> "BohriumContext":
+    ) -> BohriumContext:
         values = cred.values
         access_key = str(values.get("access_key") or "").strip()
         if not access_key:

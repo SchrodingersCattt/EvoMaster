@@ -34,7 +34,9 @@ def test_create_job_uses_sandbox_endpoint(
 
     create_job(ctx, job_name="demo")
 
-    assert calls == [("/openapi/v1/sandbox/job/create", {"projectId": 42, "name": "demo"})]
+    assert calls == [
+        ("/openapi/v1/sandbox/job/create", {"projectId": 42, "name": "demo"})
+    ]
 
 
 def test_add_job_uses_uploaded_download_url_for_sandbox(

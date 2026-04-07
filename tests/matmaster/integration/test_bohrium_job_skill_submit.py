@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
-SCRIPT_PATH = Path("matmaster/skills/playground-skills/bohrium-job/scripts/submit_job.py")
+SCRIPT_PATH = Path(
+    "matmaster/skills/playground-skills/bohrium-job/scripts/submit_job.py"
+)
 
 
 def test_submit_job_script_delegates_to_shared_upload_workflow(
     monkeypatch,
 ) -> None:
-    spec = importlib.util.spec_from_file_location("bohrium_submit_job_script", SCRIPT_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "bohrium_submit_job_script", SCRIPT_PATH
+    )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
@@ -41,7 +45,9 @@ def test_submit_job_script_delegates_to_shared_upload_workflow(
 def test_submit_job_script_main_emits_status_and_sandbox(
     monkeypatch, tmp_path, capsys
 ) -> None:
-    spec = importlib.util.spec_from_file_location("bohrium_submit_job_script", SCRIPT_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "bohrium_submit_job_script", SCRIPT_PATH
+    )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)

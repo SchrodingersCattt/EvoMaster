@@ -186,7 +186,7 @@ class LazyMCPTool:
         if cancel_token is None:
             try:
                 return await call_coro
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return self._timeout_result()
 
         call_task = asyncio.create_task(call_coro)
@@ -199,13 +199,13 @@ class LazyMCPTool:
             task.cancel()
             try:
                 await task
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (asyncio.CancelledError, TimeoutError):
                 pass
 
         if call_task in done:
             try:
                 return call_task.result()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return self._timeout_result()
 
         return self._cancelled_result()

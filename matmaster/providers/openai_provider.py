@@ -63,7 +63,9 @@ def _find_existing_tool_call_by_id(
     return None
 
 
-def _reconcile_duplicate_tool_call_arguments(existing: str, incoming: str) -> tuple[str, str | None]:
+def _reconcile_duplicate_tool_call_arguments(
+    existing: str, incoming: str
+) -> tuple[str, str | None]:
     if not incoming:
         return existing, None
     if not existing:

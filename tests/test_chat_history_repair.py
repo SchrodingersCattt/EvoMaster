@@ -196,7 +196,9 @@ def test_events_to_dialog_messages_deduplicates_pending_tool_calls():
 
     msgs = ChatHistoryConverter.events_to_dialog_messages(events)
 
-    assistant_msgs = [m for m in msgs if m["role"] == "assistant" and m.get("tool_calls")]
+    assistant_msgs = [
+        m for m in msgs if m["role"] == "assistant" and m.get("tool_calls")
+    ]
     assert len(assistant_msgs) == 1
     assert len(assistant_msgs[0]["tool_calls"]) == 1
     assert assistant_msgs[0]["tool_calls"][0]["id"] == "c1"

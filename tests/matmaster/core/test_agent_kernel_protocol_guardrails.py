@@ -24,12 +24,22 @@ class _DuplicateIdProvider:
     async def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(
             tool_call_deltas=[
-                {"index": 0, "id": "tc-dup", "name": "test_tool", "arguments": '{"x": 1}'}
+                {
+                    "index": 0,
+                    "id": "tc-dup",
+                    "name": "test_tool",
+                    "arguments": '{"x": 1}',
+                }
             ]
         )
         yield StreamChunk(
             tool_call_deltas=[
-                {"index": 1, "id": "tc-dup", "name": "test_tool", "arguments": '{"x": 1}'}
+                {
+                    "index": 1,
+                    "id": "tc-dup",
+                    "name": "test_tool",
+                    "arguments": '{"x": 1}',
+                }
             ]
         )
         yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 1})

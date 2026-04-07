@@ -505,7 +505,10 @@ class ChatHistoryConverter:
                 tc = cls._tool_call_from_event(ev)
                 if tc:
                     tc_id = str(tc.get('id') or '')
-                    if tc_id in assistant_state_tool_ids or tc_id in pending_tool_call_ids:
+                    if (
+                        tc_id in assistant_state_tool_ids
+                        or tc_id in pending_tool_call_ids
+                    ):
                         continue
                     pending_tool_calls.append(tc)
                     if tc_id:
@@ -517,7 +520,10 @@ class ChatHistoryConverter:
                 if triple:
                     flush_tool_calls()
                     call_id, name, content = triple
-                    if call_id not in active_tool_turn_ids and call_id not in assistant_state_tool_ids:
+                    if (
+                        call_id not in active_tool_turn_ids
+                        and call_id not in assistant_state_tool_ids
+                    ):
                         logger.warning(
                             "chat_history: skipping orphan tool_result call_id=%s context=events_to_dialog_messages",
                             call_id[:64],
