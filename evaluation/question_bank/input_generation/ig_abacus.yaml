@@ -188,8 +188,8 @@ questions:
     - calculation scf
     - basis_type pw
     - out_pot 2
+    - K_POINTS
     - Gamma
-    - 1
   - key: turn_budget
     value:
       max: 8
@@ -260,6 +260,14 @@ questions:
     oss_url: ''
     description: H2O in a vacuum cell for dipole-correction setup.
   reference_answers:
+  - key: markers_contains
+    value:
+    - efield_flag 1
+    - dip_cor_flag 1
+    - efield_dir 2
+    - efield_amp 0.0
+    - K_POINTS
+    - Gamma
   - key: turn_budget
     value:
       max: 8
@@ -271,17 +279,17 @@ questions:
       max: 8000
   scoring_checklist:
   - id: dipole_params
-    criterion: INPUT_dipole enables dipole correction for a slab/vacuum system with efield_flag 1, dip_cor_flag 1, vacuum-normal direction (`efield_dir`), and zero finite-field amplitude (efield_amp=0), while keeping the saw-like correction region in vacuum.
+    criterion: INPUT_dipole contains the required dipole-correction controls for this task (`efield_flag 1`, `dip_cor_flag 1`, `efield_dir 2`, `efield_pos_max`, `efield_pos_dec`, `efield_amp 0.0`) and keeps `out_pot 2` in a PW SCF setup.
     axis: correctness
     verify: llm_binary_judge
-  - id: dipole_pw_output
-    criterion: INPUT_dipole is a PW SCF setup with 100 Ry cutoff, fixed occupations, and out_pot 2 for electrostatic-potential analysis.
+  - id: kpt_dipole_gamma
+    criterion: KPT_dipole is Gamma-centered and uses a 1x1x1 grid for the large-vacuum supercell in this task.
     axis: correctness
     verify: llm_binary_judge
-  - id: dipole_field_params
-    criterion: INPUT_dipole contains the required dipole-correction parameter set for this task (`efield_flag 1`, `dip_cor_flag 1`, `efield_dir 2`, `efield_pos_max 0.0`, `efield_pos_dec 0.1`, `efield_amp 0.0`).
+  - id: markers_contains
+    criterion: "Final answer text or generated files include required dipole-input markers: efield_flag 1, dip_cor_flag 1, efield_dir 2, efield_amp 0.0, and Gamma-centered K_POINTS."
     axis: correctness
-    verify: llm_binary_judge
+    verify: contains_all
   - id: grounding_source
     criterion: The generated setup is grounded in base_h2o.stru and does not modify the provided structure beyond preparing INPUT/KPT.
     axis: grounding
@@ -338,6 +346,15 @@ questions:
     oss_url: ''
     description: Seven-layer Al fcc(100) slab with selective-relaxation flags.
   reference_answers:
+  - key: markers_contains
+    value:
+    - INPUT_bulk_relax
+    - INPUT_slab5
+    - INPUT_slab7
+    - KPT_bulk
+    - KPT_slab
+    - calculation cell-relax
+    - calculation relax
   - key: turn_budget
     value:
       max: 8
@@ -353,9 +370,13 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: slab_kmesh
-    criterion: KPT_slab uses a Gamma-centered anisotropic mesh with dense in-plane sampling and only one k-point along the vacuum direction, while KPT_bulk remains genuinely three-dimensional.
+    criterion: KPT_slab uses a Gamma-centered anisotropic mesh with only one k-point along the vacuum direction, while KPT_bulk remains a three-dimensional bulk mesh.
     axis: correctness
     verify: llm_binary_judge
+  - id: markers_contains
+    criterion: "Final answer text or generated files include required product markers: INPUT_bulk_relax, INPUT_slab5, INPUT_slab7, KPT_bulk, KPT_slab, `calculation cell-relax`, and `calculation relax`."
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: The generated files are grounded in the three provided STRU files; no unrelated structural edits are introduced beyond preparing inputs for bulk and slab calculations.
     axis: grounding
@@ -412,6 +433,15 @@ questions:
     oss_url: ''
     description: Surface-vacancy slab derived from the pristine Mo slab.
   reference_answers:
+  - key: markers_contains
+    value:
+    - INPUT_bulk_mo
+    - INPUT_slab_clean
+    - INPUT_slab_vac
+    - KPT_gamma
+    - calculation cell-relax
+    - calculation scf
+    - Gamma
   - key: turn_budget
     value:
       max: 8
@@ -423,9 +453,13 @@ questions:
       max: 8000
   scoring_checklist:
   - id: vacancy_inputs
-    criterion: The generated files include one PW `cell-relax` bulk input (INPUT_bulk_mo), two PW `scf` slab inputs (INPUT_slab_clean and INPUT_slab_vac), and a Gamma-point KPT file (KPT_gamma) with task-consistent low-cost benchmark settings.
+    criterion: The generated files include one PW `cell-relax` bulk input (INPUT_bulk_mo), two PW `scf` slab inputs (INPUT_slab_clean and INPUT_slab_vac), and a Gamma-point KPT file (KPT_gamma).
     axis: correctness
     verify: llm_binary_judge
+  - id: markers_contains
+    criterion: "Final answer text or generated files include required product markers: INPUT_bulk_mo, INPUT_slab_clean, INPUT_slab_vac, KPT_gamma, `calculation cell-relax`, `calculation scf`, and Gamma-centered K_POINTS."
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: The three generated inputs are grounded in the provided Mo bulk and slab structures, without inventing unrelated structural modifications.
     axis: grounding
@@ -475,6 +509,16 @@ questions:
     oss_url: ''
     description: Nanoribbon structure with vacuum for electric-field and band-structure setup.
   reference_answers:
+  - key: markers_contains
+    value:
+    - INPUT_spin_elec_scf
+    - INPUT_spin_elec_band
+    - KPT_band
+    - nspin 2
+    - efield_flag 1
+    - efield_dir 2
+    - calculation nscf
+    - init_chg file
   - key: turn_budget
     value:
       max: 8
@@ -497,6 +541,10 @@ questions:
     criterion: KPT_band uses line-mode from Gamma (0 0 0) to Y (0 0.5 0) with sufficiently dense interpolation (e.g. around 100 points).
     axis: correctness
     verify: llm_binary_judge
+  - id: markers_contains
+    criterion: "Final answer text or generated files include required product markers: INPUT_spin_elec_scf, INPUT_spin_elec_band, KPT_band, `nspin 2`, `efield_flag 1`, `efield_dir 2`, `calculation nscf`, and `init_chg file`."
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: The generated inputs are grounded in the provided nanoribbon structure and do not invent unrelated structural edits.
     axis: grounding
@@ -547,6 +595,16 @@ questions:
     oss_url: ''
     description: H2O in a vacuum cell for compensating-charge setup.
   reference_answers:
+  - key: markers_contains
+    value:
+    - INPUT_gate
+    - KPT_gate
+    - gate_flag 1
+    - zgate
+    - nelec
+    - block 1
+    - K_POINTS
+    - Gamma
   - key: turn_budget
     value:
       max: 8
@@ -569,6 +627,10 @@ questions:
     criterion: INPUT_gate contains the required compensating-charge and barrier controls (`gate_flag 1`, `zgate` in vacuum, task-consistent `nelec`, `block 1`, and vacuum-window barrier parameters such as `block_down`, `block_up`, `block_height`).
     axis: correctness
     verify: llm_binary_judge
+  - id: markers_contains
+    criterion: "Final answer text or generated files include required product markers: INPUT_gate, KPT_gate, `gate_flag 1`, `zgate`, `nelec`, `block 1`, and Gamma-centered K_POINTS."
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: The generated setup is grounded in base_h2o_gate.stru and does not modify the provided structure beyond preparing INPUT/KPT.
     axis: grounding
