@@ -85,7 +85,7 @@ class TestCacheMcpSchemasGenerateCache:
                     "remote_tool_name": "run",
                     "description": "Run something",
                     "input_schema": {"type": "object", "properties": {}},
-                    "has_path_adaptor": False,
+                    "has_calculation_preflight": False,
                     "connection": MagicMock(),
                 }
             }

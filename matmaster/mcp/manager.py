@@ -156,7 +156,7 @@ class MCPToolManager:
         # tool_info_dict 结构：
         #   {"name": str, "description": str, "input_schema": dict,
         #    "remote_tool_name": str, "connection": MCPConnection,
-        #    "has_path_adaptor": bool}
+        #    "has_calculation_preflight": bool}
         self.tools_by_server: dict[str, dict[str, dict[str, Any]]] = {}
 
         # Long-lived managed connections (enter/exit in same Task)
@@ -165,11 +165,11 @@ class MCPToolManager:
         # In-flight startup tasks keyed by server.
         self._startup_tasks: dict[str, asyncio.Task[None]] = {}
 
-        # 需要 path adaptor 的 server 集合
-        self.path_adaptor_servers: set[str] = set()
+        # 需要 calculation preflight 的 server 集合
+        self.calculation_preflight_servers: set[str] = set()
 
-        # path adaptor 工厂函数
-        self.path_adaptor_factory: Callable[[], Any] | None = None
+        # calculation preflight 工厂函数
+        self.calculation_preflight_factory: Callable[[], Any] | None = None
 
         # 同步工具集合：{server_name: {tool_name, ...}}
         # 对于 calculation 服务，submit_<name> 在 <name> 属于 sync_tools 时被过滤掉
@@ -331,7 +331,7 @@ class MCPToolManager:
         2. sync_tools 过滤（移除 submit_* 对应的同步工具）
         3. async 去重（当 submit_X 存在时移除 base X）
         4. description 继承（submit_* 继承 base 的完整描述）
-        5. path_adaptor 注入标记
+        5. calculation_preflight 注入标记
         6. 全局去重（同名 tool 只保留第一个 server）
 
         结果存储为轻量级 dict 而非 MCPTool 实例。
@@ -404,11 +404,11 @@ class MCPToolManager:
                     name,
                 )
 
-        # 判断是否需要 path_adaptor
-        needs_path_adaptor = (
-            self.path_adaptor_servers
-            and self.path_adaptor_factory
-            and name in self.path_adaptor_servers
+        # 判断是否需要 calculation_preflight
+        needs_calculation_preflight = (
+            self.calculation_preflight_servers
+            and self.calculation_preflight_factory
+            and name in self.calculation_preflight_servers
         )
 
         # 构建工具信息字典
@@ -441,7 +441,7 @@ class MCPToolManager:
                 'input_schema': tool_info.get('input_schema', {}),
                 'remote_tool_name': original_name,
                 'connection': conn,
-                'has_path_adaptor': bool(needs_path_adaptor),
+                'has_calculation_preflight': bool(needs_calculation_preflight),
             }
 
             server_tools[prefixed_name] = tool_dict
