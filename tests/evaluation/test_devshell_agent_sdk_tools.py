@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import io
 import importlib
+import json
 import sys
 import types
 from pathlib import Path
@@ -126,7 +127,15 @@ def test_run_devshell_eval_submits_immediately_after_run(tmp_path: Path) -> None
     pending_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "raw_runs.jsonl").write_text("{}\n", encoding="utf-8")
     (pending_dir / "SC_struct_001_direct_r0.json").write_text(
-        "{}\n",
+        json.dumps(
+            {
+                "item": {
+                    "score": 65,
+                    "score_reason": "Checklist wording says too much about the task.",
+                }
+            }
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -146,6 +155,8 @@ def test_run_devshell_eval_submits_immediately_after_run(tmp_path: Path) -> None
         result = asyncio.run(toolkit._run_devshell_eval({"iteration_tag": "iter_01"}))
 
     assert result["is_error"] is False
+    assert '"macro_mean_0_100": 65' in result["content"][0]["text"]
+    assert "Checklist wording says too much about the task." not in result["content"][0]["text"]
     assert mock_run.call_count == 1
     mock_submit.assert_called_once_with(
         repo_root=tmp_path,
@@ -265,6 +276,9 @@ def test_report_optimization_result_persists_jsonl(tmp_path: Path) -> None:
 def test_main_agent_allowed_tools_exclude_edit_write_and_bash() -> None:
     allowed = DevshellAgentLoop.main_agent_allowed_tools()
 
+    assert "Read" not in allowed
+    assert "Glob" not in allowed
+    assert "Grep" not in allowed
     assert "Edit" not in allowed
     assert "Write" not in allowed
     assert "Bash" not in allowed

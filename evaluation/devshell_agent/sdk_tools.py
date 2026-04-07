@@ -327,6 +327,39 @@ class MatmasterEvalMcpToolkit:
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
+    def _build_sanitized_run_summary(self, run_dir: Path) -> dict[str, Any]:
+        pending_dir = run_dir / "pending_ingest"
+        rows: list[dict[str, Any]] = []
+        if pending_dir.is_dir():
+            for path in sorted(pending_dir.glob("*.json")):
+                try:
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    continue
+                item = payload.get("item") or {}
+                score = item.get("score")
+                if isinstance(score, (int, float)):
+                    rows.append(
+                        {
+                            "task_id": path.stem,
+                            "score": int(score),
+                        }
+                    )
+        macro_mean = 0
+        if rows:
+            macro_mean = round(sum(row["score"] for row in rows) / len(rows))
+        low_score_tasks = [row for row in rows if row["score"] < 100]
+        return {
+            "macro_mean_0_100": macro_mean,
+            "task_scores": rows,
+            "low_score_tasks": low_score_tasks,
+            "sanitized": True,
+            "notes": [
+                "Raw score_reason is intentionally withheld from the main agent.",
+                "Use delegate_optimization or escalate_checklist_revision with sanitized summaries only.",
+            ],
+        }
+
     def _merge_run_args(self, args: dict[str, Any]) -> RunDevshellEvalParams:
         d: DevshellAgentCliDefaults = self._state.defaults
         tag = str(args["iteration_tag"]).strip()
@@ -467,6 +500,9 @@ class MatmasterEvalMcpToolkit:
             encoding="utf-8",
         )
         payload = DevshellEvalSubprocess.summarize_run_dir(params.output_dir)
+        payload["sanitized_summary"] = self._build_sanitized_run_summary(
+            params.output_dir
+        )
         payload["ingest_submit"] = self._maybe_submit_run_dir_ingest(
             run_dir=params.output_dir,
             params=params,

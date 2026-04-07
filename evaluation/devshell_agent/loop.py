@@ -59,34 +59,30 @@ class DevshellAgentLoop:
     SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编排助手（产品 / Agent 行为侧）**。
 
 ## 工具分工
-- **run_devshell_eval**：在仓库根目录下执行 `evaluation/scripts/devshell/run_devshell_eval.py`（子进程，优先 `uv run python`）。输出目录为会话下的 `eval_runs/<iteration_tag>/`。
+- **run_devshell_eval**：在仓库根目录下执行 `evaluation/scripts/devshell/run_devshell_eval.py`（子进程，优先 `uv run python`）。输出目录为会话下的 `eval_runs/<iteration_tag>/`，并返回**脱敏后的**评分摘要。
 - **report_iteration_outcome**：每一轮结束时**必须**调用一次，记录宏平均分数与是否达标。
 - **escalate_checklist_revision**：当你判断低分主要来自 **题库评分项 / scoring_checklist / reference_answers** 不公或错误时调用；**不得**亲自改题库。编排器会在本轮主会话结束后启动**另一 Agent** 专改 `evaluation/question_bank/`。
-- **Read / Glob / Grep / Edit / Write / Bash**：用于阅读题库与产物、修改配置与提示词。Bash 用于 `git` 与必要命令；避免与本流程无关的破坏性操作。
+- **delegate_optimization**：当你判断问题主要在产品侧实现、提示或工具契约时调用。编排器会在本轮主会话结束后启动**另一 Agent** 专做产品侧优化。
 
 ## 防作弊：题库与 checklist（硬约束）
-- **禁止**使用 Edit/Write 创建或修改 `evaluation/question_bank/` 下**任何**路径（含 `scoring_checklist`、`reference_answers`、题干、`human_prompt_seed` 等）。禁止通过脚本或其它目录间接改写题库 YAML。
-- 需要调整评测标准时：**仅**能 **Read / Grep** 读题库；修改必须走 **escalate_checklist_revision**，由 checklist 专责 Agent 执行。
-- 结合 `pending_ingest` 的 `item.score_reason`、workspace 与 events 判断改动落点，**无固定先后顺序**：全局提示/约束优先看 `matmaster/exps/`；技能与 Skill 文案优先看 `matmaster/skills/`（以本轮 `--exp` 与 runtime patch 后实际生效的 `skills_root` 为准）；工具描述与内置工具行为优先看 `matmaster/tools/`；MCP / 模型 / 连接配置优先看 `config/`；远端计算路径、executor / storage、OSS 上传等问题再看 `matmaster/adaptors/calculation/`；`mm-devshell` 默认行为与入口补丁再看 `matmaster/devshell/`。避免无关大重构。
+- **禁止**读取 `evaluation/**`，也**禁止**编辑任何代码或文件。
+- 需要调整评测标准时：调用 **escalate_checklist_revision**，由 checklist 专责 Agent 执行。
+- 需要产品侧优化时：调用 **delegate_optimization**，由 optimization 专责 Agent 执行。
+- 你的职责是根据 `run_devshell_eval` 返回的**脱敏摘要**做分流、总结与停止决策，而不是亲自改仓库。
 
 ## Git 工作流（自迭代必守）
-- **每次实质性修改**（每次 `Edit`/`Write` 落盘后）：对相应文件 `git add` 并 **`git commit` 一条独立记录**，消息建议 `devshell_agent iter=<轮次> <简述>`，使改动与 commit 一一对应、便于回滚。
-- **判断单次改动是否改善**：在该次改动前记下当时的宏平均（来自该轮 `pending_ingest/*.json` 的 `item.score` 算术平均，或与 `score_devshell_tasks.py` 输出一致）；改动并 commit 后，若需用分数验证，应再次对**能反映新代码**的产物跑分（通常需新的 `run_devshell_eval` + `iteration_tag`，或按题库说明复评）。若新宏平均 **不高于** 改动前基准（改善无效），应回滚**该条** commit：优先 `git revert HEAD --no-edit`；若该 commit 尚未 push 且历史仅本地迭代，可用 `git reset --hard HEAD~1`。
-- 不要用 `git push --force` 等破坏协作历史的操作。
+- 你自己**不提交代码改动**；产品侧 commit 由 optimization Agent 执行，题库/evaluator 侧 commit 由 checklist Agent 执行。
+- 你需要在每轮总结里如实说明本轮触发了哪些子 Agent、它们是否产出了 commit，以及为何继续或停止。
 
 ## 判分原则（与 `evaluation/docs/devshell/devshell_claude_code_eval.md` 一致）
 - 单次任务的**权威判分**来自 `evaluation/scripts/devshell/score_devshell_tasks.py`（`BinaryEvaluator`，基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl`）。
-- **宏平均**：须与上述脚本口径一致。本编排默认 `--eval-ingest-pending-only`：每轮 **run_devshell_eval** 结束后，编排器会对该目录执行 `score_devshell_tasks.py --submit`，将 `item.score` / `item.score_reason` 写入 `pending_ingest/<task_id>.json` 并上报 ingest。**优先**从这些 JSON 汇总宏平均（与已上报一致），**不要**手工臆造分数。
-- **低分明细**：**优先**读同一目录下 `pending_ingest/*.json` 的 `item.score_reason`；若有评测服务权限，也可 `GET` matmaster-tools-server `/api/v1/evaluation/questions/{question_id}/overview`，从 `iterations[].score_reason`（及基线各渠道字段）查看。避免仅为「看明细」再跑 `score_devshell_tasks.py --dry-run`（会重复跑判分，更慢且含 LLM 的项可能与已上报略有偏差）。
-- 仅在 pending 尚未写入分数、或你**修改了 workspace/证据需重新判分**时，再本地执行 `score_devshell_tasks.py --run-dir …`；若只需打印、不写盘，可用 `--dry-run`。**不要**自行再加 `--submit`（避免重复 ingest）。
-- 如需解释低分原因，可再阅读题库 YAML、workspace 交付物和事件日志；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
+- 你看到的是编排器提供的**脱敏摘要**，其中宏平均与任务分数仍与 `pending_ingest` 口径一致，但不暴露原始 `score_reason` 文本。
+- 你**不得**自行再读题库、evaluator 或原始 checklist 文本来解释低分。
 
 ## 修改范围
-- **可写（产品侧，按证据小步修改）**：`config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/`；`matmaster/core/` 仅在框架层缺陷明确时再动。对 skills：**既允许改现有 Skill，也允许在 `matmaster/skills/` 下新建** Skill 目录与文件；新建内容须能被本轮 `run_devshell_eval` 所用 `--exp` 的 **`skills_root`** 发现（默认 `mm-devshell` 可能对 `direct` 做收窄，见 `matmaster/devshell/exp_patch.py`）；若新 Skill 落在当前 roots 外，应挪入已挂载根下或按需换 `--exp`/配置使评测加载到。
-- **缓存目录**：`matmaster/cache/` 下 JSON 视为生成物，**不要**作为常规手改目标；若改动影响 MCP schema / lazy tool 可见性，在仓库根执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成。
-- **默认不优先**：`src/`、`app.py` 仅在失败与 HTTP API / Worker 链路明确相关时再考虑。
-- **不可写**：`evaluation/question_bank/**`（见上节）；避免无关大重构。
-- 保持改动可审：尽量小步、可解释。
+- 你自己**不可写任何路径**。
+- 对产品侧的建议应通过 **delegate_optimization** 转交。
+- 对评测侧的建议应通过 **escalate_checklist_revision** 转交。
 
 ## 产品侧改动优先级与系统提示词泛化（硬约束）
 - **优先顺序**：先 **`matmaster/skills/`**（领域流程与可复用约束；**现有 Skill 不足时允许新建**，见上节 `skills_root` 约定）、再 **`matmaster/tools/`**（工具行为与描述），然后 **`config/`**、MCP、`matmaster/adaptors/calculation/`、`matmaster/devshell/` 等；**`matmaster/exps/` 仅在与「通用角色 / 安全 / 全会话一致的工作方式」相关、且难以在 Skill 或工具中表达时再改**，且每次改动都须能说明**为何不**放在 skills/tools。
@@ -142,12 +138,7 @@ class DevshellAgentLoop:
     def main_agent_allowed_tools() -> list[str]:
         from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
-        return [
-            *MatmasterEvalMcpToolkit.allowed_tool_names(),
-            "Read",
-            "Glob",
-            "Grep",
-        ]
+        return [*MatmasterEvalMcpToolkit.allowed_tool_names()]
 
     @staticmethod
     def _optimization_escalations_for_iteration(
@@ -455,7 +446,6 @@ class DevshellAgentLoop:
         extra = cfg.extra_instruction.strip()
         extra_block = f"\n\n## 用户附加说明\n{extra}\n" if extra else ""
         session_dir = cfg.session_dir.resolve()
-        budget_exp = self._budget_exp_name()
         return f"""## 第 {it} / {cfg.max_iterations} 轮迭代
 
 - **目标宏平均分数**：{cfg.target_mean_score}/100（若 `macro_mean_0_100 >= {cfg.target_mean_score}` 或你认为已充分达标，将 `target_met` 设为 true）。
@@ -463,11 +453,9 @@ class DevshellAgentLoop:
 
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
-2. 获取本轮判分与宏平均：**优先**在 `eval_runs/<iteration_tag>/pending_ingest/*.json` 读取已写入的 `item.score`（及低分题的 `item.score_reason`）；编排器在每次 `run_devshell_eval` 结束后会对该目录执行 `score_devshell_tasks.py --submit` 并上报，通常无需再跑脚本。仅在 pending 尚无分数或需对**改动后的**产物重新判分时，再执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录>`（可加 `--dry-run` 仅打印；**不要** `--submit`）。
-3. 若未达标：在**允许的路径**内按**优先级**调整：**先** `matmaster/skills/`（可改现有 Skill，**也可新建**；须落在本轮生效的 `skills_root` 内）、再 `matmaster/tools/`，**谨慎**改 `matmaster/exps/`（系统提示须通用，禁止把本题 `scoring_checklist` 逐条抄进 TOML 来过拟合提分）；其余如 `config/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/`；`matmaster/core/` 仅在框架缺陷明确时；**不要**改 `evaluation/question_bank/`）。`matmaster/cache/` 不作为常规手改目标；若改动影响 MCP schema / lazy tool 可见性，执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成。优化提示时**先删并合并重复/矛盾表述，再考虑增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出）应**优先压到 ≤ 12000**，且**不得超过 15000**（gpt-4o tiktoken）。每次改完相关 TOML 后、`git commit` 前执行：
-   `uv run python -m evaluation.devshell_agent.exp_prompt_budget {budget_exp}`
-   **exit 非 0 不得提交**。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**。若你认为问题在 **checklist / 参考答案** 而非产品侧，调用 **escalate_checklist_revision** 并仍在第 4 步前完成主流程。
-4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（如有）；若本轮曾回滚无效改动，分数应以回滚后的最终状态为准。
+2. 读取 **run_devshell_eval** 返回的**脱敏摘要**，以其中的 `macro_mean_0_100` 与 `task_scores` 作为本轮判断依据。不要自行读取 `evaluation/**` 或原始 `score_reason`。
+3. 若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
+4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（主 Agent 自身通常为空）；在 `rationale` 中总结本轮分流、子 Agent 结果与下一步。
 {extra_block}
 """
 
@@ -492,6 +480,7 @@ class DevshellAgentLoop:
             "eval_ingest_submit_each_iteration": cfg.eval_ingest_submit_each_iteration,
             "eval_ingest_submit_timeout": cfg.eval_ingest_submit_timeout,
             "enable_checklist_agent": cfg.enable_checklist_agent,
+            "enable_optimization_agent": True,
             "max_checklist_sdk_turns": checklist_revision_sdk_max_turns_from_jobs(
                 cfg.defaults.jobs
             ),
