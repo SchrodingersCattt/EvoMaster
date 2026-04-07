@@ -8,6 +8,7 @@ import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
+from uuid import uuid4
 
 import requests
 
@@ -26,7 +27,7 @@ def _zip_local_dir(input_dir: Path, zip_path: Path) -> None:
 
 
 def _prepare_remote_input_zip(*, source: BohriumInputSource, session, zip_path: Path) -> None:
-    remote_zip_path = "/tmp/remote.zip"
+    remote_zip_path = f"/tmp/bohrium_input_{uuid4().hex}.zip"
     script = (
         "python3 - <<'PY'\n"
         "import pathlib, zipfile\n"
@@ -38,10 +39,34 @@ def _prepare_remote_input_zip(*, source: BohriumInputSource, session, zip_path: 
         "            zf.write(path, path.relative_to(source))\n"
         "PY"
     )
-    result = session.exec_bash(script)
-    if result.get("exit_code") != 0:
-        raise BohriumTransferError("Failed to package remote input_dir")
-    zip_path.write_bytes(session.download(remote_zip_path))
+    cleanup_cmd = f"rm -f {remote_zip_path}"
+    try:
+        result = session.exec_bash(script)
+        if result.get("exit_code") != 0:
+            detail = str(
+                result.get("stderr")
+                or result.get("output")
+                or result.get("stdout")
+                or "unknown error"
+            ).strip()
+            raise BohriumTransferError(
+                f"Failed to package remote input_dir '{source.resolved_path}': {detail}"
+            )
+        try:
+            zip_path.write_bytes(session.download(remote_zip_path))
+        except Exception as exc:
+            raise BohriumTransferError(
+                f"Failed to download remote input_dir '{source.resolved_path}': {exc}"
+            ) from exc
+    finally:
+        try:
+            session.exec_bash(cleanup_cmd)
+        except Exception:
+            logger.warning(
+                "Failed to clean up temporary remote input zip %s",
+                remote_zip_path,
+                exc_info=True,
+            )
 
 
 @contextmanager

@@ -41,7 +41,8 @@ def test_prepare_input_archive_downloads_remote_share_zip(
     with prepare_input_archive(source, session=session) as zip_path:
         assert zip_path.name == "input.zip"
         assert session.exec_calls
-        assert session.download_calls == ["/tmp/remote.zip"]
+        assert len(session.download_calls) == 1
+        assert session.download_calls[0].startswith("/tmp/bohrium_input_")
 
 
 def test_publish_download_target_uploads_remote_share_and_returns_remote_dir(

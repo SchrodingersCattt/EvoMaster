@@ -31,14 +31,13 @@ def _fake_cred(
 
 
 def _patch_bridge(monkeypatch, cred: ResolvedCredential | None = None):
-    """Monkeypatch resolve_bohrium_credentials at the adapter module."""
+    """Monkeypatch resolve_bohrium_credentials for adapter and Bohrium tool."""
     import matmaster.integration.runtime_bridge.adapters.bohrium as adapter_mod
+    import matmaster.tools.builtin.bohrium_tool.tool as tool_mod
 
-    monkeypatch.setattr(
-        adapter_mod,
-        "resolve_bohrium_credentials",
-        lambda session=None, explicit=None: cred or _fake_cred(),
-    )
+    resolver = lambda session=None, explicit=None: cred or _fake_cred()
+    monkeypatch.setattr(adapter_mod, "resolve_bohrium_credentials", resolver)
+    monkeypatch.setattr(tool_mod, "resolve_bohrium_credentials", resolver)
 
 
 def _install_fake_tiefblue(monkeypatch, upload_calls: list[tuple[str, str, dict]]):

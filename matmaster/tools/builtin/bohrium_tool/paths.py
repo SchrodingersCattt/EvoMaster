@@ -26,9 +26,13 @@ def _normalize_local_path(raw_path: str, workdir: Path | None) -> str:
 
 
 def _require_open_session(session: Any | None, raw_path: str) -> Any:
-    if session is None or not getattr(session, "is_open", False):
+    if session is None:
         raise BohriumPathError(
             f"path '{raw_path}' requires an active remote session but none is available"
+        )
+    if not getattr(session, "is_open", False):
+        raise BohriumPathError(
+            f"path '{raw_path}' requires an open remote session but the current session is not open"
         )
     return session
 
