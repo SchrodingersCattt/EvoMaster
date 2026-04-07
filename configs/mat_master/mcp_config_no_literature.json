@@ -5,11 +5,6 @@
       "url": "https://structure-generator-uuid1767674194.appspace.bohrium.com/mcp?token=a297dc122dc74368af3d2e725991d559",
       "headers": {}
     },
-    "mat_sn": {
-      "transport": "sse",
-      "url": "http://bohrium-mcp-internal.dp.tech:11003/sse",
-      "headers": {}
-    },
     "mat_doc": {
       "transport": "http",
       "url": "http://pfmx1355864.bohrium.tech:50001/mcp",

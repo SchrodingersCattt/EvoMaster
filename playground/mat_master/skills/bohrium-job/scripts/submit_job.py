@@ -88,6 +88,7 @@ def _step2_upload(create_data: dict, zip_path: Path) -> dict:
 
     # Tiefblue requires Authorization: Bearer <token>, otherwise 401.
     tf_client = _TiefblueClient(base_url=store_host)
+    tf_client.host = store_host  # monkey-patch: SDK bug - init_upload_by_part needs self.host
     resp = tf_client.upload_from_file_multi_part(
         object_key=oss_key,
         file_path=str(zip_path),

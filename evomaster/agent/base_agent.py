@@ -311,8 +311,6 @@ class BaseAgent(TrajectoryPersistenceMixin, ABC):
             if tool_call.function.name == 'finish':
                 # 打印 finish 工具的参数（最终答案）
                 try:
-                    import json
-
                     finish_args = json.loads(tool_call.function.arguments)
                     self.logger.info('=' * 80)
                     self.logger.info('📝 Finish Tool Arguments:')
@@ -418,8 +416,6 @@ class BaseAgent(TrajectoryPersistenceMixin, ABC):
             if tool_args:
                 # 尝试格式化JSON参数
                 try:
-                    import json
-
                     args_dict = json.loads(tool_args)
                     print(
                         f"  Arguments: {json.dumps(args_dict, indent=2, ensure_ascii=False)}"

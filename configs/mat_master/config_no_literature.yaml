@@ -1,0 +1,388 @@
+# config_no_literature.yaml — Experiment B ablation config
+# Identical to configs/mat_master/config.yaml EXCEPT:
+#   1. mcp.config_file → mcp_config_no_literature.json (mat_sn removed)
+#   2. crp.allow_list → "mat_sn" removed
+#   3. tool_include_only.mat_sn → removed entirely
+#   4. tool_output_auto_save_patterns → "mat_sn_" removed
+#   5. tool_obs_summarize_patterns → mat_sn_* entries removed
+#   6. ask_human.enabled → false (batch mode, no human interaction)
+
+# ============================================
+# LLM 配置
+# ============================================
+llm:
+  opus:
+    provider: "openai"
+    model: "claude-opus-4-6"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    thinking_effort: "high"
+    reasoning_protocol: "anthropic_adaptive_thinking"
+    temperature_policy: "force_one_when_reasoning"
+    temperature: 0.7
+    timeout: 300
+    stream_timeout: 90
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
+  sonnet:
+    provider: "openai"
+    model: "claude-sonnet-4-6"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    thinking_effort: "high"
+    reasoning_protocol: "anthropic_adaptive_thinking"
+    temperature_policy: "force_one_when_reasoning"
+    temperature: 0.7
+    timeout: 300
+    stream_timeout: 90
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
+  haiku:
+    provider: "openai"
+    model: "claude-haiku-4-5"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    timeout: 120
+    stream_timeout: 15
+    stream_idle_timeout: 20
+    max_retries: 3
+    retry_delay: 1.0
+
+  gemini:
+    provider: "openai"
+    model: "gemini-3-flash-preview"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "high"
+    timeout: 120
+    stream_timeout: 15
+    stream_idle_timeout: 20
+    max_retries: 3
+    retry_delay: 1.0
+
+  compaction:
+    provider: "openai"
+    model: "gemini-3-flash-preview"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    temperature: 0.3
+    max_tokens: 4096
+    timeout: 120
+    stream_timeout: 15
+    stream_idle_timeout: 20
+    max_retries: 2
+    retry_delay: 1.0
+
+  default: "opus"
+
+# ============================================
+# 多智能体配置
+# ============================================
+agents:
+  general:
+    llm: "opus"
+    max_turns: 200
+    tools:
+      builtin: ["*"]
+      mcp: "*"
+
+    context:
+      max_tokens: 180000
+      truncation_strategy: "summary"
+      preserve_system_messages: true
+      preserve_recent_turns: 5
+
+      compaction:
+        enabled: true
+        trigger_tokens: -1
+        context_window_tokens: 200000
+        trigger_ratio: 0.90
+        preserve_recent_turns: 2
+        compaction_llm: "compaction"
+        fallback_strategy: "sliding_window"
+        max_compact_tokens: 3000
+        min_compressible_ratio: 0.10
+
+    system_prompt_file: "prompts/mat_master_system_prompt.txt"
+    user_prompt_file: "prompts/user_prompt.txt"
+
+# ============================================
+# Mat Master
+# ============================================
+mat_master:
+  crp:
+    allow_list:
+      - "ABACUS"
+      - "LAMMPS"
+      - "DPA"
+      - "COMPDART"
+      - "CP2K"
+      - "QE"
+      - "ABINIT"
+      - "ORCA"
+      - "GROMACS"
+      - "OpenBabel"
+      # MCP server prefixes (planner validation)
+      - "mat_dpa"
+      - "mat_compdart"
+      - "mat_sg"
+      - "mat_doc"
+      # REMOVED: "mat_sn"  ← ABLATION
+      - "mat_nmr"
+      - "mat_xrd"
+      - "mat_electron_microscope"
+    block_list:
+      - "VASP"
+      - "Gaussian"
+      - "CASTEP"
+      - "Wien2k"
+    tool_stack:
+      preferred_dft: "ABACUS"
+      preferred_mlp: "DPA"
+      preferred_md: "LAMMPS"
+
+  execution:
+    direct_max_workers: 4
+    planner_max_workers: 3
+    rate_limit: null
+    # ABLATION: "mat_sn_" removed from auto-save patterns
+    tool_output_auto_save_patterns: ["mat_doc_", "web-search", "extract_info_from_webpage"]
+    # ABLATION: mat_sn_* entries removed from summarize patterns
+    tool_obs_summarize_patterns: ["mat_sg_", "mat_doc_"]
+    tool_obs_summarize_threshold: 10000
+
+  planner:
+    max_turns: 200
+    max_steps: 20
+    state_file: "research_state.json"
+    system_prompt_file: "prompts/planner_system_prompt.txt"
+    quality_gates:
+      survey_min_retrieval_calls: 10
+      survey_min_root_md_bytes: 400
+      survey_max_root_md_files: 48
+    sub_agent:
+      enabled: true
+      step_turn_budget: 30
+
+  capabilities:
+    skill_evolution:
+      enabled: true
+
+  # Batch mode: disable human interaction
+  ask_human:
+    enabled: false
+    mode: "timeout"
+    timeout_seconds: 5
+    block_max_wait_seconds: 60
+
+  monitor_job:
+    max_retries: 3
+    poll_interval_seconds: 60
+
+  skill_evolution:
+    dynamic_skills_root: "playground/mat_master/skills/dynamic"
+    local_user_skills_root: "~/.evomaster-skills"
+    remote_user_skills_root: "/personal/.evomaster-skills"
+    persist_new_skills: "ask"
+    sandbox: "subprocess"
+
+# ============================================
+# MCP 配置 — ABLATION: mat_sn removed
+# ============================================
+mcp:
+  # ABLATION: point to the no-literature MCP config
+  config_file: "mcp_config_no_literature.json"
+  enabled: true
+  path_adaptor: "calculation"
+  calculation_servers:
+    - "mat_sg"
+    - "mat_dpa"
+    - "mat_compdart"
+    - "mat_doc"
+    - "mat_struct_db"
+    - "mat_nmr"
+    - "mat_xrd"
+    - "mat_electron_microscope"
+  # ABLATION: mat_sn entry removed entirely from tool_include_only
+  tool_include_only:
+    mat_doc:
+      - extract_material_data_from_pdf
+    mat_nmr:
+      - "NMR_search_tool"
+      - "NMR_predict_tool"
+      - "NMR_reverse_predict_tool"
+    mat_xrd:
+      - "xrd_phase_identification"
+    mat_electron_microscope:
+      - "get_electron_microscope_recognize"
+  calculation_executors:
+    mat_sg:
+      executor:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/dpa-calculator:5a6b85f0"
+            platform: "ali"
+            machine_type: "c8_m32_1 * NVIDIA 4090"
+            app_key: "agent"
+        resources:
+          envs: {}
+      sync_tools:
+        - add_hydrogens
+        - generate_ordered_replicas
+        - apply_structure_transformation
+        - remove_solvents
+        - build_bulk_structure_by_template
+        - build_bulk_structure_by_wyckoff
+        - extract_molecules_from_crystal
+        - make_supercell_structure
+        - make_defect_structure
+        - make_doped_structure
+        - make_amorphous_structure
+        - make_crosslinked_structure
+        - build_polymer_chain
+        - build_molecule_structures_from_smiles
+        - add_cell_for_molecules
+        - build_surface_slab
+        - build_surface_adsorbate
+        - build_surface_interface
+        - analyze_wyckoff_positions
+        - get_structure_info
+        - get_molecule_info
+    mat_dpa:
+      executor:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/dpa-calculator:cd96ac21"
+            platform: "ali"
+            machine_type: "c16_m64_1 * NVIDIA 4090"
+            app_key: "agent"
+        resources:
+          envs: {}
+      sync_tools: []
+    mat_compdart:
+      executor:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/dpa-calculator:9ef99f94"
+            platform: "ali"
+            machine_type: "c16_m64_1 * NVIDIA 4090"
+            app_key: "agent"
+        resources:
+          envs: {}
+      sync_tools: []
+    mat_doc:
+      executor: null
+      sync_tools:
+        - extract_material_data_from_pdf
+    mat_nmr:
+      executor: null
+      sync_tools:
+        - NMR_search_tool
+        - NMR_predict_tool
+        - NMR_reverse_predict_tool
+    mat_xrd:
+      executor: null
+      sync_tools:
+        - xrd_phase_identification
+    mat_electron_microscope:
+      executor: null
+      sync_tools:
+        - get_electron_microscope_recognize
+    mat_struct_db:
+      executor:
+        type: "local"
+        env: {}
+      sync_tools:
+        - fetch_structures_from_db
+
+# ============================================
+# Skills
+# ============================================
+skills:
+  enabled: true
+  skills_root: evomaster/skills
+
+# ============================================
+# Session 配置
+# ============================================
+session:
+  type: "local"
+  local:
+    working_dir: "./playground/mat_master/workspace"
+    timeout: 60
+    gpu_devices: null
+    cpu_devices: null
+    symlinks: {}
+  docker:
+    image: "evomaster/base:latest"
+    container_name: null
+    use_existing_container: null
+    working_dir: "/workspace"
+    memory_limit: "64g"
+    cpu_limit: 16.0
+    gpu_devices: "0"
+    network_mode: "host"
+    volumes: {"./playground/mat_master/workspace": "/workspace"}
+    env_vars: {}
+    auto_remove: false
+    timeout: 300
+
+# ============================================
+# Env 配置
+# ============================================
+env:
+  cluster:
+    debug_pool:
+      type: "cpu"
+      max_concurrent: 1
+    train_pool:
+      type: "cpu"
+      max_concurrent: 1
+  docker:
+    base_image: "python:3.11-slim"
+    registry: "docker.io"
+    pull_policy: "if_not_present"
+  scheduler:
+    type: "local"
+    queue_timeout: 300
+    retry_failed: false
+    max_retries: 1
+
+# ============================================
+# LLM 输出与日志
+# ============================================
+llm_output:
+  show_in_console: true
+  log_to_file: true
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: null
+  console: true
+  log_path: "./logs/evomaster.log"
+
+# ============================================
+# Playground 配置
+# ============================================
+playground:
+  cache_dir: ".cache/matmaster"
+
+project_root: "."
+workspace: "./workspace"
+results_dir: "./results"
+debug: false
