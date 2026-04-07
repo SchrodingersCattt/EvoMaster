@@ -34,7 +34,7 @@ class TestBohriumOpenapiHost:
         import matmaster.integration.bohrium_env as mod
 
         mod = importlib.reload(mod)
-        assert mod.BOHRIUM_OPENAPI_HOST == "https://open.bohrium.com"
+        assert mod.BOHRIUM_OPENAPI_HOST == "https://openapi.dp.tech"
 
     def test_bohrium_openapi_host_from_env(self, monkeypatch):
         """BOHRIUM_BASE_URL overrides default; trailing slash is stripped."""
