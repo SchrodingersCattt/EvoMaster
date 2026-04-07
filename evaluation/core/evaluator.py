@@ -900,6 +900,8 @@ class BinaryEvaluator:
 
     @staticmethod
     def _extract_numbers(text: str) -> list[float]:
+        # Normalise Unicode minus (U+2212) to ASCII hyphen-minus before extraction
+        text = text.replace('\u2212', '-')
         pattern = r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?'
         numbers: list[float] = []
         for raw in re.findall(pattern, text):
