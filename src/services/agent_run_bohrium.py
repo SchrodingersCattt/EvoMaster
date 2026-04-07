@@ -521,7 +521,6 @@ def _apply_run_credentials_to_session(session: Any, run_creds: dict[str, Any]) -
             execution_session=session,
         ),
     )
-    session._bohrium_credentials = dict(run_creds)
 
 
 def _remote_session_workspace_root() -> str:

@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from matmaster.bohrium.runtime import get_runtime
-from matmaster.integration.bohrium_env import BohriumSetupResult
 from matmaster.types.events import (
     BohriumNodeEvent,
     ErrorEvent,
@@ -41,6 +40,8 @@ class TestBohriumSetupServiceOrchestration:
 
     @pytest.mark.asyncio
     async def test_run_setup_loads_credentials_and_delegates(self):
+        from src.services.agent_run_bohrium import BohriumSetupResult
+
         sink = MagicMock()
         svc = _make_service(event_sink=sink)
         event_cb = MagicMock()
@@ -50,6 +51,7 @@ class TestBohriumSetupServiceOrchestration:
             execution_session=None,
             execution_workdir="/remote",
             session_type="ssh",
+            runtime_snapshot=None,
         )
 
         with (
@@ -225,7 +227,7 @@ class TestBohriumSetupServiceLocation:
         assert "class SkillSyncSpec" in source
 
 
-def test_apply_run_credentials_registers_runtime_and_keeps_dual_write() -> None:
+def test_apply_run_credentials_registers_runtime_without_dual_write() -> None:
     from src.services.agent_run_bohrium import _apply_run_credentials_to_session
 
     session = SimpleNamespace()
@@ -242,7 +244,7 @@ def test_apply_run_credentials_registers_runtime_and_keeps_dual_write() -> None:
     runtime = get_runtime(session)
     assert runtime is not None
     assert runtime.credentials().access_key == "ak"
-    assert session._bohrium_credentials["project_id"] == 42
+    assert not hasattr(session, "_bohrium_credentials")
 
 
 def test_playground_context_with_bohrium_uses_snapshot_dict() -> None:
