@@ -45,7 +45,7 @@ class TestPublicContentForEvent:
         state = {'role': 'assistant', 'content': 'hi', 'tool_calls': []}
         payload = {'type': 'assistant_state', 'source': 'Agent', 'state': state}
 
-        assert _public_content_for_event('assistant_state', payload) == state
+        assert _public_content_for_event('assistant_state', payload) == {'state': state}
 
     def test_skill_hit_returns_skill_name(self) -> None:
         payload = {'type': 'skill_hit', 'source': 'Agent', 'skill_name': 'search'}
@@ -59,6 +59,26 @@ class TestPublicContentForEvent:
 
         assert _public_content_for_event('cancelled', payload) == {
             'reason': 'user stop'
+        }
+
+    def test_confirmation_request_returns_confirmation_shape(self) -> None:
+        payload = {
+            'type': 'confirmation_request',
+            'source': 'System',
+            'question': 'Proceed?',
+            'timeout_seconds': 30,
+            'context': 'tool context',
+            'mode': 'timeout',
+            'actions': ['confirm', 'cancel'],
+            'origin': 'tool:X',
+        }
+        assert _public_content_for_event('confirmation_request', payload) == {
+            'question': 'Proceed?',
+            'mode': 'timeout',
+            'timeout_seconds': 30,
+            'context': 'tool context',
+            'actions': ['confirm', 'cancel'],
+            'origin': 'tool:X',
         }
 
     def test_confirmation_timeout_returns_question_and_default(self) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
@@ -12,6 +13,9 @@ from .base import BuiltinTool
 
 if TYPE_CHECKING:
     from matmaster.skills.registry import Skill, SkillRegistry
+
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 class SkillTool(BuiltinTool):
@@ -29,10 +33,6 @@ class SkillTool(BuiltinTool):
             "skill": {
                 "type": "string",
                 "description": 'The skill name. E.g. "commit" or "review-pr"',
-            },
-            "args": {
-                "type": "string",
-                "description": "Optional arguments for the skill",
             },
         },
         "required": ["skill"],
@@ -57,8 +57,23 @@ class SkillTool(BuiltinTool):
 
     def prompt(self, ctx=None) -> str:
         return (
-            "Invoke a skill by name. Skills are listed in system-reminder messages. "
-            "When a skill matches the user's request, invoke it before other responses."
+            "Execute a skill within the main conversation\n\n"
+            "When users ask you to perform tasks, check if any of the available "
+            "skills match. Skills provide specialized capabilities and domain knowledge.\n\n"
+            'When users reference a "slash command" or "/<something>" '
+            '(e.g. "/commit", "/review-pr"), they are referring to a skill. '
+            "Use this tool to invoke it.\n\n"
+            "How to invoke:\n"
+            '- Use this tool with the skill name\n'
+            '- Examples:\n'
+            '  - `skill: "pdf"` - invoke the pdf skill\n'
+            '  - `skill: "review-pr"` - invoke the review-pr skill\n\n'
+            "Important:\n"
+            "- Available skills are listed in system-reminder messages in the conversation\n"
+            "- When a skill matches the user's request, invoke it before generating "
+            "any other response\n"
+            "- Never mention a skill without actually calling this tool\n"
+            "- Do not invoke a skill that is already running"
         )
 
     async def execute(self, arguments: dict[str, Any]) -> str:
@@ -66,7 +81,6 @@ class SkillTool(BuiltinTool):
             skill_name = (
                 arguments.get("skill") or arguments.get("skill_name") or ""
             ).lstrip("/")
-            args = arguments.get("args", "")
 
             if self._registry is None:
                 return "Error: skill registry not available"
@@ -76,7 +90,7 @@ class SkillTool(BuiltinTool):
                 return f"Error: Skill '{skill_name}' not found"
 
             body = skill.get_full_info()
-            skill_dir = str(skill.skill_path.resolve())
+            skill_dir = self._render_skill_dir(skill)
             body = body.replace("${SKILL_DIR}", skill_dir)
 
             self._maybe_hit_mcp(skill)
@@ -85,10 +99,7 @@ class SkillTool(BuiltinTool):
                 if dep_skill is not None:
                     self._maybe_hit_mcp(dep_skill)
 
-            result = f"Base directory for this skill: {skill_dir}\n\n{body}"
-            if args:
-                result += f"\n\nARGUMENTS: {args}"
-            return result
+            return f"Base directory for this skill: {skill_dir}\n\n{body}"
         except Exception as e:
             self.logger.error("Skill tool failed: %s", e, exc_info=True)
             return f"Error: {e}"
@@ -104,6 +115,21 @@ class SkillTool(BuiltinTool):
         mcp_server = skill.meta_info.mcp_server
         if mcp_server and self._on_skill_hit:
             self._on_skill_hit(mcp_server)
+
+    def _render_skill_dir(self, skill: Skill) -> str:
+        skill_path = skill.skill_path
+        local_abs = skill_path if skill_path.is_absolute() else skill_path.resolve()
+
+        session = self._session
+        remote_project_root = getattr(session, "remote_project_root", None)
+        if remote_project_root:
+            try:
+                rel = local_abs.relative_to(_PROJECT_ROOT)
+                return str(PurePosixPath(remote_project_root) / rel.as_posix())
+            except ValueError:
+                pass
+
+        return str(local_abs)
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         raise NotImplementedError("SkillTool uses async execute() directly")
@@ -128,10 +154,6 @@ class LegacyUseSkillTool(SkillTool):
             "skill": {
                 "type": "string",
                 "description": "Accepted for compatibility with the new Skill tool.",
-            },
-            "args": {
-                "type": "string",
-                "description": "Optional skill arguments.",
             },
         },
         "required": ["skill_name"],

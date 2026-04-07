@@ -106,7 +106,7 @@ def _public_content_for_event(
 
     if event_type == 'tool_result':
         call_id = payload.get('call_id')
-        return {
+        out: dict[str, Any] = {
             'id': call_id,
             'call_id': call_id,
             'name': payload.get('tool_name'),
@@ -114,6 +114,10 @@ def _public_content_for_event(
             'status': payload.get('status', 'success'),
             'info': payload.get('info') or payload.get('payload') or {},
         }
+        if payload.get('turn_usage'):
+            out['turn_usage'] = payload['turn_usage']
+            out['total_usage'] = payload.get('total_usage', {})
+        return out
 
     if event_type == 'confirmation_request':
         return {
@@ -167,7 +171,11 @@ def _public_content_for_event(
         }
 
     if event_type == 'assistant_state':
-        return payload.get('state')
+        content: dict[str, Any] = {'state': payload.get('state')}
+        if payload.get('turn_usage'):
+            content['turn_usage'] = payload['turn_usage']
+            content['total_usage'] = payload.get('total_usage', {})
+        return content
 
     if event_type == 'skill_hit':
         return {'skill_name': payload.get('skill_name')}

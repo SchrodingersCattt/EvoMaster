@@ -212,3 +212,46 @@ class TestInjectEnv:
 
         session = MagicMock()
         assert inject_env("python run.py", {}, session) == "python run.py"
+
+
+class TestPrepareCommandHelpers:
+    """Tests for the split inline/script preparation helpers."""
+
+    def test_prepare_inline_command_uses_file_wrapping(self) -> None:
+        from matmaster.tools.script_env import prepare_inline_command
+
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            return_value={"stdout": "", "stderr": "", "exit_code": 0}
+        )
+
+        result = prepare_inline_command(
+            "echo hi", {"BOHRIUM_ACCESS_KEY": "ak"}, session
+        )
+
+        assert result.startswith("( . ")
+        session.write_file.assert_called_once()
+        session.exec_bash.assert_called_once()
+
+    def test_prepare_script_command_writes_script_with_env(self) -> None:
+        from matmaster.tools.script_env import prepare_script_command
+
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            return_value={"stdout": "", "stderr": "", "exit_code": 0}
+        )
+
+        result = prepare_script_command(
+            "echo hi",
+            {"BOHRIUM_ACCESS_KEY": "ak"},
+            session,
+            shell_path="bash",
+        )
+
+        written = session.write_file.call_args[0][1]
+        assert "#!/usr/bin/env bash" in written
+        assert "export BOHRIUM_ACCESS_KEY=" in written
+        assert "echo hi" in written
+        assert result.startswith("bash ")

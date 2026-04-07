@@ -23,7 +23,7 @@ from typing import Any
 
 from matmaster.sessions.sftp_pool import SFTPPool
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.session import SSHSessionConfig
+from matmaster.types.session import SessionFileStat, SSHSessionConfig
 from matmaster.types.topology import SessionCapabilities
 
 logger = logging.getLogger(__name__)
@@ -272,6 +272,19 @@ class SSHSession:
             return st.st_mode is not None and stat.S_ISREG(st.st_mode)
         except FileNotFoundError:
             return False
+        finally:
+            pool.release(sftp)
+
+    def stat_file(self, path: str) -> SessionFileStat:
+        """Return remote file metadata via SFTP stat."""
+        if not self._is_open:
+            raise RuntimeError("Session not open")
+        self._ensure_connected()
+        pool = self._sftp_pool
+        sftp = pool.acquire()
+        try:
+            st = sftp.stat(path)
+            return SessionFileStat(size=st.st_size, mtime=st.st_mtime)
         finally:
             pool.release(sftp)
 

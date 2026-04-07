@@ -5,15 +5,21 @@ from unittest.mock import MagicMock
 
 from matmaster.tools.builtin.read_tool import ReadTool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.session import SessionFileStat
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import ToolExecutionContext
 
 
 def make_session(content="line1\nline2\nline3", is_file=True):
-    s = MagicMock()
-    s.is_file.return_value = is_file
-    s.read_file.return_value = content
-    return s
+    return make_download_session(content.encode("utf-8"), is_file=is_file)
+
+
+def make_download_session(raw: bytes, is_file: bool = True, mtime: float = 1.0):
+    session = MagicMock()
+    session.is_file.return_value = is_file
+    session.download.return_value = raw
+    session.stat_file.return_value = SessionFileStat(size=len(raw), mtime=mtime)
+    return session
 
 
 class TestReadToolMetadata:
@@ -25,6 +31,9 @@ class TestReadToolMetadata:
 
     def test_fast_path(self):
         assert ReadTool.fast_path_eligible is True
+
+    def test_schema_allows_explicit_encoding(self):
+        assert "encoding" in ReadTool.json_schema["properties"]
 
 
 class TestReadToolExecution:
@@ -87,6 +96,22 @@ class TestReadToolExecution:
         assert isinstance(result, ToolResult)
         assert result.meta.get("mark_read") is True
 
+    def test_read_tool_recovers_utf16_bom(self):
+        tool = ReadTool(session=make_download_session(b"\xff\xfeh\x00i\x00\n\x00"))
+        result = asyncio.run(tool.execute({"file_path": "/workspace/f.txt"}))
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert "hi" in result.content
+        assert result.meta["encoding_used"] == "utf-16"
+
+    def test_read_tool_returns_structured_error_for_candidate_text(self):
+        raw = "第一行\n第二行\n".encode("gb18030")
+        tool = ReadTool(session=make_download_session(raw))
+        result = asyncio.run(tool.execute({"file_path": "/workspace/f.txt"}))
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert result.meta["diagnostic"]["kind"] == "candidate_text"
+
 
 class TestReadToolRunnerState:
     def test_execute_with_context_updates_runner_state(self):
@@ -96,3 +121,13 @@ class TestReadToolRunnerState:
         ctx = ToolExecutionContext(runner_state=state)
         asyncio.run(tool.execute_with_context({"file_path": "/workspace/f.py"}, ctx))
         assert "/workspace/f.py" in state.get("read_files", set())
+
+    def test_execute_with_context_writes_snapshot(self):
+        tool = ReadTool(session=make_download_session(b"hello\n"))
+        state = ToolRunnerState()
+        ctx = ToolExecutionContext(runner_state=state)
+        asyncio.run(tool.execute_with_context({"file_path": "/workspace/f.txt"}, ctx))
+        assert "/workspace/f.txt" in state.get("read_files", set())
+        snapshot = state.get("file_semantics", {})["/workspace/f.txt"]
+        assert snapshot.fingerprint.size == 6
+        assert snapshot.fingerprint.mtime == 1.0

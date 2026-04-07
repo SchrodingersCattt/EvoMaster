@@ -10,12 +10,19 @@ models carrying construction-time parameters for each session variant.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.topology import SessionCapabilities
+
+
+@dataclass(frozen=True)
+class SessionFileStat:
+    size: int
+    mtime: float
 
 
 class SessionConfig(BaseModel):
@@ -115,6 +122,10 @@ class Session(Protocol):
 
     def is_file(self, path: str) -> bool:
         """Check if path is a regular file."""
+        ...
+
+    def stat_file(self, path: str) -> SessionFileStat:
+        """Return file size and mtime for semantic fingerprinting."""
         ...
 
     def download(self, path: str, timeout: int | None = None) -> bytes:

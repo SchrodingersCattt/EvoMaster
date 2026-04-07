@@ -9,6 +9,8 @@ import pytest
 from matmaster.config.exp import ExpConfig
 from matmaster.config.llm import LLMConfig
 from matmaster.config.loader import (
+    list_available_exps,
+    list_model_visible_exps,
     load_base_system_prompt,
     load_exp_config,
     load_llm_config,
@@ -168,6 +170,54 @@ class TestLoadExpConfig:
         """Default exps_dir resolves to matmaster/exps/ and can load direct.toml."""
         cfg = load_exp_config("direct")
         assert cfg.name == "direct"
+
+
+class TestExpDiscovery:
+    def test_list_model_visible_exps_returns_structured_metadata(self, tmp_path):
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "direct.toml").write_text(
+            'name = "direct"\n'
+            'description = "exec agent"\n'
+            'when_to_use = "Use for execution"\n'
+            'read_only = false\n'
+            'visible_as_subagent = true\n'
+            "[tools]\n"
+            'builtin = ["Bash", "Read"]\n'
+            'mcp = "*"\n'
+        )
+
+        visible = list_model_visible_exps(exps_dir=exps_dir)
+
+        assert len(visible) == 1
+        assert visible[0].name == "direct"
+        assert visible[0].description == "exec agent"
+        assert visible[0].when_to_use == "Use for execution"
+        assert visible[0].read_only is False
+        assert "Bash" in visible[0].tools_summary
+        assert "MCP: all" in visible[0].tools_summary
+
+    def test_list_model_visible_exps_skips_hidden_exp(self, tmp_path):
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "hidden.toml").write_text(
+            'name = "hidden"\n'
+            'description = "hidden agent"\n'
+            'visible_as_subagent = false\n'
+        )
+
+        assert list_model_visible_exps(exps_dir=exps_dir) == []
+
+    def test_list_available_exps_keeps_legacy_all_exp_listing(self, tmp_path):
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "hidden.toml").write_text(
+            'name = "hidden"\n'
+            'description = "hidden agent"\n'
+            'visible_as_subagent = false\n'
+        )
+
+        assert list_available_exps(exps_dir=exps_dir) == [("hidden", "hidden agent")]
 
 
 class TestBaseTomlMerge:

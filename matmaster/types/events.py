@@ -1,7 +1,7 @@
 """Event type hierarchy for the matmaster event system.
 
-Defines all 18 event types in two categories:
-- AgentEvent (8 types): emitted by the kernel during agent execution
+Defines all 19 event types in two categories:
+- AgentEvent (9 types): emitted by the kernel during agent execution
 - SystemEvent (10 types): emitted by service-layer components
 
 BusEvent = AgentEvent | SystemEvent -- the unified event union type.

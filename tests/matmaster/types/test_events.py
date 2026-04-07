@@ -383,7 +383,7 @@ class TestBusEventUnion:
                 "call_id": "c",
                 "tool_name": "t",
             },
-            # 10 SystemEvent types
+            # 13 SystemEvent types
             {
                 "type": "confirmation_request",
                 "source": "s",

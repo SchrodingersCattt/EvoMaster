@@ -182,7 +182,7 @@ class TestToolProtocol:
         assert schema["type"] == "object"
         props = schema["properties"]
         assert "skill" in props
-        assert "args" in props
+        assert "args" not in props
         assert schema["required"] == ["skill"]
 
     def test_description_explains_activation(self, tmp_path: Path) -> None:

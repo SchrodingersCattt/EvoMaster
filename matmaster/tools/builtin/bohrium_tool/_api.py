@@ -1,4 +1,4 @@
-"""Shared Bohrium API helpers for the builtin Bohrium tool."""
+"""Shared Bohrium API helpers for the builtin Bohrium tool package."""
 
 from __future__ import annotations
 

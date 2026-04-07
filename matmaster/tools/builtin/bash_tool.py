@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from matmaster.tools.filesystem_semantics.shell_planner import plan_shell_command
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim
@@ -25,9 +26,12 @@ class BashTool(BuiltinTool):
     """
 
     name: ClassVar[str] = "Bash"
-    description: ClassVar[str] = "Executes a given bash command and returns its output."
+    description: ClassVar[str] = (
+        "Run a shell command in the session workspace and return its output."
+    )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
+        "additionalProperties": False,
         "properties": {
             "command": {
                 "type": "string",
@@ -35,6 +39,8 @@ class BashTool(BuiltinTool):
             },
             "timeout": {
                 "type": "integer",
+                "minimum": 1,
+                "maximum": 600000,
                 "description": (
                     "Optional timeout in milliseconds (max 600000). "
                     "Default: 120000ms (2 minutes)."
@@ -43,19 +49,25 @@ class BashTool(BuiltinTool):
             "description": {
                 "type": "string",
                 "description": (
-                    "Clear, concise description of what this command does."
+                    "Clear, concise active-voice summary of what this command "
+                    "does. Keep simple commands short, and add enough context "
+                    "for pipelines or obscure flags."
                 ),
             },
         },
         "required": ["command"],
     }
     resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="workspace", mode="exclusive"),
         ResourceClaim(resource="session", mode="exclusive"),
     )
     capabilities: ClassVar[frozenset[str]] = frozenset({"shell.execute"})
     effect_level: ClassVar[str] = "local_mutation"
     max_result_chars: ClassVar[int] = 30_000
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
+
+    def describe(self, ctx: ToolDescriptionContext | None = None) -> str:
+        return self.prompt(ctx)
 
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str:
         workspace_root = ctx.workspace_root if ctx is not None else None
@@ -88,10 +100,22 @@ class BashTool(BuiltinTool):
         timeout_s = timeout_ms / 1000  # float division preserves sub-second
 
         from matmaster.integration.runtime_bridge import build_service_env
-        from matmaster.tools.script_env import inject_env
+        from matmaster.tools.script_env import (
+            prepare_inline_command,
+            prepare_script_command,
+        )
 
         env = build_service_env("bohrium", session=session)
-        command = inject_env(command, env, session)
+        plan = plan_shell_command(command)
+        if plan.mode == "script":
+            command = prepare_script_command(
+                command,
+                env,
+                session,
+                shell_path="bash",
+            )
+        else:
+            command = prepare_inline_command(command, env, session)
 
         result = session.exec_bash(
             command=command,

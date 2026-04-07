@@ -4,12 +4,18 @@ import asyncio
 from unittest.mock import MagicMock
 
 from matmaster.tools.builtin.glob_tool import MAX_GLOB_RESULTS, GlobTool
+from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_spec import ResourceClaim
 
 
-def make_session(output="", exit_code=0):
-    s = MagicMock()
-    s.exec_bash.return_value = {"output": output, "exit_code": exit_code}
-    return s
+def make_session(output="", exit_code=0, stderr=""):
+    session = MagicMock()
+    session.exec_bash.return_value = {
+        "output": output,
+        "exit_code": exit_code,
+        "stderr": stderr,
+    }
+    return session
 
 
 # ---------------------------------------------------------------------------
@@ -26,6 +32,11 @@ class TestGlobToolMetadata:
 
     def test_fast_path(self):
         assert GlobTool.fast_path_eligible is True
+
+    def test_glob_uses_workspace_shared_read(self):
+        assert GlobTool.resource_claims == (
+            ResourceClaim(resource="workspace", mode="shared_read"),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +174,8 @@ class TestGlobExecution:
     def test_no_results(self):
         tool = GlobTool(session=make_session(output=""), workdir="/workspace")
         result = asyncio.run(tool.execute({"pattern": "*.xyz"}))
-        assert "no files" in result.lower()
+        assert isinstance(result, ToolResult)
+        assert "no files" in result.content.lower()
 
     def test_results_returned(self):
         tool = GlobTool(
@@ -171,15 +183,17 @@ class TestGlobExecution:
             workdir="/workspace",
         )
         result = asyncio.run(tool.execute({"pattern": "*.py"}))
-        assert "a.py" in result
-        assert "b.py" in result
+        assert isinstance(result, ToolResult)
+        assert "a.py" in result.content
+        assert "b.py" in result.content
 
     def test_truncation_message(self):
         """When results hit MAX_GLOB_RESULTS, append truncation notice."""
         lines = "\n".join(f"/workspace/f{i}.py" for i in range(MAX_GLOB_RESULTS))
         tool = GlobTool(session=make_session(output=lines), workdir="/workspace")
         result = asyncio.run(tool.execute({"pattern": "**/*.py"}))
-        assert "truncated" in result.lower()
+        assert isinstance(result, ToolResult)
+        assert "truncated" in result.content.lower()
 
     def test_exec_bash_receives_find_command(self):
         """The command passed to exec_bash must be find-based, not shopt."""
@@ -205,6 +219,16 @@ class TestGlobExecution:
         asyncio.run(tool.execute({"pattern": "*.py", "path": "sub"}))
         cmd = session.exec_bash.call_args[1].get("command", "")
         assert "/workspace/sub" in cmd
+
+    def test_glob_returns_meta_when_paths_are_skipped(self):
+        session = make_session(
+            output="/workspace/a.py", stderr="find: permission denied"
+        )
+        tool = GlobTool(session=session, workdir="/workspace")
+        result = asyncio.run(tool.execute({"pattern": "*.py"}))
+        assert isinstance(result, ToolResult)
+        assert "a.py" in result.content
+        assert result.meta["skipped_paths"] == 1
 
 
 class TestGlobEnvInjection:

@@ -1,11 +1,11 @@
-"""matmaster/tools/builtin/bohrium_tool.py — Bohrium HPC platform tool.
+"""matmaster/tools/builtin/bohrium_tool/__init__.py — Bohrium HPC platform tool.
 
 Single tool with action-based dispatch for Bohrium HPC operations.
 This tool handles pure communication: submit, poll (single-query), list_images,
 list_machines. All software-specific knowledge lives in software skills.
 
 Design decisions:
-- poll is single-shot (non-blocking): returns current status, Agent controls retry
+- poll defaults to single-shot (non-blocking), with optional short waits via wait=true
 - submit auto-appends "> log 2>&1" if missing
 - Credentials resolved via runtime bridge (session > env fallback)
 - Remote /share paths require active session with upload_directory
@@ -15,19 +15,26 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
-import zipfile
-from contextlib import contextmanager
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, ClassVar, Iterator
+from typing import Any, ClassVar
 from urllib.parse import quote
-from uuid import uuid4
 
-import requests
+import requests as _requests
 
+from matmaster.integration.bohrium_api import (
+    get_bohrium_base_url,
+    get_bohrium_service_env,
+)
 from matmaster.integration.runtime_bridge import resolve_output_path
-from matmaster.tools.builtin._bohrium_api import (
+from matmaster.tools.builtin.base import BuiltinTool
+from matmaster.tools.tool_result import ToolResult
+from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+from matmaster.types.tool_spec import ResourceClaim
+from matmaster.types.topology import ToolPlane
+
+from ._api import (
     _FAILURE_CODES,
     _RUNNING_CODES,
     _STATUS_MAP,
@@ -38,150 +45,113 @@ from matmaster.tools.builtin._bohrium_api import (
     _ResolvedBohriumContext,
     _use_sandbox,
 )
-from matmaster.tools.builtin.base import BuiltinTool
-from matmaster.tools.tool_result import ToolResult
-from matmaster.types.tool_desc_ctx import ToolDescriptionContext
-from matmaster.types.tool_spec import ResourceClaim
-from matmaster.types.topology import ToolPlane
+from ._helpers import (
+    _coerce_bool,
+    _coerce_positive_int,
+)
+from ._helpers import (
+    _finalize_download_target_dir as _finalize_download_target_dir_impl,
+)
+from ._helpers import _resolve_download_target_dir as _resolve_download_target_dir_impl
+from ._helpers import prepare_bohrium_input_zip as _prepare_bohrium_input_zip_impl
+from ._results import download_bohrium_results
+
+# Re-export the shared requests module so tests can monkeypatch HTTP calls
+# through bohrium_tool without reaching into private helper modules.
+requests = _requests
 
 logger = logging.getLogger(__name__)
-# ═══════════════════════════════════════════════════════════════════════════
-# input_dir preparation helpers
-# ═══════════════════════════════════════════════════════════════════════════
+
+_DEFAULT_POLL_WAIT_SECONDS = 30
+_DEFAULT_POLL_INTERVAL_SECONDS = 5
+_FAILURE_CONFIRM_ATTEMPTS = 3
+_FAILURE_CONFIRM_SLEEP_SECONDS = 3
 
 
-def _resolve_bohrium_input_dir(
+def _resolve_download_target_dir(
     *,
-    input_dir: str,
+    raw_result_dir: str,
     workdir: Path | None,
     session: Any | None,
-) -> tuple[str, Path | str]:
-    """Resolve submit input_dir into a validated local or remote directory."""
-    decision = resolve_output_path(
-        raw_path=input_dir,
-        execution_workdir=str(workdir or '.'),
+) -> Any:
+    return _resolve_download_target_dir_impl(
+        raw_result_dir=raw_result_dir,
+        workdir=workdir,
         session=session,
-    )
-
-    if decision.kind == 'remote_share':
-        if session is None:
-            raise ValueError(
-                f"input_dir '{input_dir}' requires an active remote session, "
-                'but none is available'
-            )
-        if not getattr(session, 'is_open', False):
-            raise ValueError(
-                f"input_dir '{input_dir}' requires an open remote session, "
-                'but the current session is not open'
-            )
-
-        remote_dir = decision.normalized_path
-        if not session.path_exists(remote_dir):
-            raise ValueError(f'Remote input_dir not found: {remote_dir}')
-        if session.is_file(remote_dir):
-            raise ValueError(f'Remote input_dir is not a directory: {remote_dir}')
-        return decision.kind, remote_dir
-
-    local_dir = Path(decision.normalized_path)
-    if not local_dir.exists():
-        raise ValueError(f'input_dir not found: {input_dir}')
-    if not local_dir.is_dir():
-        raise ValueError(f'input_dir is not a directory: {input_dir}')
-    return decision.kind, local_dir
-
-
-def _zip_local_input_dir(input_dir: Path, zip_path: Path) -> None:
-    """Create input.zip from a local input directory."""
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for file_path in input_dir.rglob('*'):
-            if file_path.is_file():
-                zf.write(file_path, file_path.relative_to(input_dir))
-
-
-def _remote_zip_command(input_dir: str, remote_zip_path: str) -> str:
-    """Build a remote python3 command that packages input_dir into a zip file."""
-    return (
-        "python3 - <<'PY'\n"
-        "import pathlib\n"
-        "import zipfile\n\n"
-        f"source = pathlib.Path({json.dumps(input_dir)})\n"
-        f"archive = pathlib.Path({json.dumps(remote_zip_path)})\n"
-        "archive.parent.mkdir(parents=True, exist_ok=True)\n"
-        "with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as zf:\n"
-        "    for path in source.rglob('*'):\n"
-        "        if path.is_file():\n"
-        "            zf.write(path, path.relative_to(source))\n"
-        "print(archive)\n"
-        "PY"
+        resolve_path=resolve_output_path,
     )
 
 
-def _prepare_remote_input_zip(
+def _finalize_download_target_dir(
     *,
-    input_dir: str,
-    session: Any,
-    zip_path: Path,
-) -> None:
-    """Package a remote input directory and download the resulting zip locally."""
-    remote_zip_path = f'/tmp/bohrium_input_{uuid4().hex}.zip'
-    cleanup_cmd = f'rm -f {remote_zip_path}'
-
-    try:
-        result = session.exec_bash(_remote_zip_command(input_dir, remote_zip_path))
-        if result.get('exit_code') != 0:
-            detail = str(
-                result.get('stderr')
-                or result.get('output')
-                or result.get('stdout')
-                or 'unknown error'
-            ).strip()
-            raise RuntimeError(
-                f"Failed to package remote input_dir '{input_dir}': {detail}"
-            )
-
-        try:
-            zip_bytes = session.download(remote_zip_path)
-        except Exception as exc:
-            raise RuntimeError(
-                f"Failed to download remote input_dir '{input_dir}': {exc}"
-            ) from exc
-        zip_path.write_bytes(zip_bytes)
-    finally:
-        try:
-            session.exec_bash(cleanup_cmd)
-        except Exception:
-            logger.warning(
-                'Failed to clean up temporary remote input zip %s',
-                remote_zip_path,
-                exc_info=True,
-            )
+    target: Any,
+    session: Any | None,
+) -> str:
+    return _finalize_download_target_dir_impl(
+        target=target,
+        session=session,
+        logger=logger,
+    )
 
 
-@contextmanager
 def prepare_bohrium_input_zip(
     *,
     input_dir: str,
     workdir: Path | None,
     session: Any | None,
-) -> Iterator[Path]:
-    """Yield a local input.zip for Bohrium submit from local or remote input_dir."""
-    input_kind, resolved_input = _resolve_bohrium_input_dir(
+):
+    return _prepare_bohrium_input_zip_impl(
         input_dir=input_dir,
         workdir=workdir,
         session=session,
+        resolve_path=resolve_output_path,
+        logger=logger,
     )
 
-    with tempfile.TemporaryDirectory(prefix='bohrium_submit_') as tmp_dir:
-        zip_path = Path(tmp_dir) / 'input.zip'
-        if input_kind == 'remote_share':
-            _prepare_remote_input_zip(
-                input_dir=str(resolved_input),
-                session=session,
-                zip_path=zip_path,
-            )
-        else:
-            _zip_local_input_dir(Path(resolved_input), zip_path)
-        yield zip_path
+
+def _get_job_detail(
+    *,
+    ctx: _ResolvedBohriumContext,
+    job_id: int | str,
+    sandbox: bool,
+) -> dict[str, Any]:
+    detail_path = (
+        f'/openapi/v1/sandbox/job/{job_id}' if sandbox else f'/openapi/v1/job/{job_id}'
+    )
+    detail = _get(ctx.base_url, detail_path, ctx.access_key)
+    return detail.get('data', {})
+
+
+def _confirm_terminal_status(
+    *,
+    ctx: _ResolvedBohriumContext,
+    job_id: int | str,
+    sandbox: bool,
+    detail_data: dict[str, Any],
+) -> tuple[int, str, dict[str, Any]]:
+    code = detail_data.get('status', 0)
+    final_detail = detail_data
+    final_code = code
+
+    if code not in _FAILURE_CODES:
+        return (
+            final_code,
+            _STATUS_MAP.get(final_code, f'Unknown({final_code})'),
+            final_detail,
+        )
+
+    for _ in range(1, _FAILURE_CONFIRM_ATTEMPTS):
+        time.sleep(_FAILURE_CONFIRM_SLEEP_SECONDS)
+        final_detail = _get_job_detail(ctx=ctx, job_id=job_id, sandbox=sandbox)
+        final_code = final_detail.get('status', 0)
+        if final_code not in _FAILURE_CODES:
+            break
+
+    return (
+        final_code,
+        _STATUS_MAP.get(final_code, f'Unknown({final_code})'),
+        final_detail,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -196,7 +166,8 @@ class BohriumTool(BuiltinTool):
     description: ClassVar[str] = (
         'Bohrium HPC platform operations. '
         'action="submit": package input directory and submit a job, returns job_id. '
-        'action="poll": single query of current job status; downloads results when Finished. '
+        'action="poll": query current job status; defaults to a single query and can wait briefly when wait=true. '
+        'action="download": download artifacts for a finished or failed job into result_dir. '
         'action="list_images": query available Docker images by keyword. '
         'action="list_machines": query available machine types (cpu/gpu).'
     )
@@ -206,7 +177,7 @@ class BohriumTool(BuiltinTool):
         'properties': {
             'action': {
                 'type': 'string',
-                'enum': ['submit', 'poll', 'list_images', 'list_machines'],
+                'enum': ['submit', 'poll', 'download', 'list_images', 'list_machines'],
                 'description': 'Operation to perform.',
             },
             # --- submit ---
@@ -237,11 +208,23 @@ class BohriumTool(BuiltinTool):
             # --- poll ---
             'job_id': {
                 'type': ['integer', 'string'],
-                'description': 'Job ID returned by submit. (poll)',
+                'description': 'Job ID returned by submit. (poll, download)',
             },
             'result_dir': {
                 'type': 'string',
-                'description': 'Local directory for downloaded results. (poll)',
+                'description': 'Directory where downloaded artifacts will be stored. (download)',
+            },
+            'wait': {
+                'type': 'boolean',
+                'description': 'Wait within this call when the job is still Running. Default: false. (poll)',
+            },
+            'max_wait_seconds': {
+                'type': 'integer',
+                'description': 'Maximum wait time when wait=true. Default: 30. (poll)',
+            },
+            'poll_interval_seconds': {
+                'type': 'integer',
+                'description': 'Interval between detail checks when wait=true. Default: 5. (poll)',
             },
             # --- list ---
             'keyword': {
@@ -268,6 +251,7 @@ class BohriumTool(BuiltinTool):
         {
             'bohrium.submit',
             'bohrium.query',
+            'bohrium.download',
         }
     )
     effect_level: ClassVar[str] = 'external_effect'
@@ -280,33 +264,50 @@ class BohriumTool(BuiltinTool):
 
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return (
-            'Load software skill first for image/machine/cmd. '
-            'submit cmd must end with "> log 2>&1". '
-            'poll is non-blocking; re-call for Running jobs.'
+            '## Bohrium tool usage\n'
+            '- Load the corresponding software skill first (cp2k, qe, abacus, orca, '
+            'lammps, gromacs, pyscf, abinit, pyatb) to obtain image, machine, and cmd.\n'
+            '- submit: cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
+            '- poll: default single query (wait=false). Set wait=true to wait within '
+            'one call, and use max_wait_seconds / poll_interval_seconds to control '
+            'that loop. poll does not download artifacts.\n'
+            '- download: use action="download" only after poll reports Finished or '
+            'Failed. Requires result_dir; retrieves logs and artifacts for analysis.\n'
+            '- When image or machine is unknown, call list_images / list_machines first.\n'
         )
 
-    def _resolve_credentials(self) -> _ResolvedBohriumContext:
-        """Resolve Bohrium credentials via runtime bridge.
+    def _require_credentials(
+        self, *, require_project: bool = False
+    ) -> _ResolvedBohriumContext | ToolResult:
+        """Resolve and validate Bohrium credentials.
 
-        Precedence: explicit > session > env > none.
-        Returns resolved credential context for diagnostics and requests.
+        Returns ``_ResolvedBohriumContext`` on success, ``ToolResult`` on failure.
+        Adapter already coerces types when ``source != "none"``.
         """
         from matmaster.integration.runtime_bridge.adapters.bohrium import (
             resolve_bohrium_credentials,
         )
 
         cred = resolve_bohrium_credentials(session=self._session)
-        access_key = str(cred.values.get("access_key") or "").strip()
-        project_id_raw = cred.values.get("project_id")
-        try:
-            project_id = int(project_id_raw) if project_id_raw is not None else -1
-        except (TypeError, ValueError):
-            project_id = -1
-        base_url = str(cred.values.get("base_url") or "").strip()
-        if not base_url:
-            from matmaster.integration.bohrium_env import BOHRIUM_OPENAPI_HOST
+        vals = cred.values
+        access_key = str(vals.get("access_key") or "").strip()
+        raw_pid = vals.get("project_id")
+        project_id = raw_pid if isinstance(raw_pid, int) else -1
+        base_url = str(vals.get("base_url") or "").strip() or get_bohrium_base_url()
 
-            base_url = BOHRIUM_OPENAPI_HOST
+        if not access_key:
+            return ToolResult(
+                status='error',
+                content='Bohrium credentials unavailable. '
+                'Provide via session or BOHRIUM_ACCESS_KEY env var.',
+            )
+        if require_project and project_id <= 0:
+            return ToolResult(
+                status='error',
+                content='Bohrium project ID unavailable. '
+                'Provide via session or BOHRIUM_PROJECT_ID env var.',
+            )
+
         return _ResolvedBohriumContext(
             access_key=access_key,
             project_id=project_id,
@@ -329,7 +330,7 @@ class BohriumTool(BuiltinTool):
             ctx.base_url,
             ctx.project_id,
             sandbox if sandbox is not None else 'n/a',
-            (os.getenv('SERVICE_ENV', 'test') or '').strip() or 'test',
+            get_bohrium_service_env(),
             _mask_secret(ctx.access_key),
         )
 
@@ -340,6 +341,8 @@ class BohriumTool(BuiltinTool):
                 return self._submit(arguments)
             case 'poll':
                 return self._poll(arguments)
+            case 'download':
+                return self._download(arguments)
             case 'list_images':
                 return self._list_images(arguments)
             case 'list_machines':
@@ -348,26 +351,14 @@ class BohriumTool(BuiltinTool):
                 return ToolResult(
                     status='error',
                     content=f'Unknown action: {action!r}. '
-                    f'Must be one of: submit, poll, list_images, list_machines.',
+                    f'Must be one of: submit, poll, download, list_images, list_machines.',
                 )
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
-        ctx = self._resolve_credentials()
-        access_key = ctx.access_key
-        project_id = ctx.project_id
-        base_url = ctx.base_url
-        if not access_key:
-            return ToolResult(
-                status='error',
-                content='Bohrium credentials unavailable. '
-                'Provide via session or BOHRIUM_ACCESS_KEY env var.',
-            )
-        if project_id <= 0:
-            return ToolResult(
-                status='error',
-                content='Bohrium project ID unavailable. '
-                'Provide via session or BOHRIUM_PROJECT_ID env var.',
-            )
+        result = self._require_credentials(require_project=True)
+        if isinstance(result, ToolResult):
+            return result
+        ctx = result
 
         input_dir = args.get('input_dir', '')
         image = args.get('image', '')
@@ -405,12 +396,14 @@ class BohriumTool(BuiltinTool):
                 # Step 1: create job
                 if sandbox:
                     create_path = '/openapi/v1/sandbox/job/create'
-                    create_payload = {'projectId': project_id, 'name': job_name}
+                    create_payload = {'projectId': ctx.project_id, 'name': job_name}
                 else:
                     create_path = '/openapi/v1/job/create'
-                    create_payload = {'projectId': project_id, 'jobName': job_name}
+                    create_payload = {'projectId': ctx.project_id, 'jobName': job_name}
 
-                create_resp = _post(base_url, create_path, access_key, create_payload)
+                create_resp = _post(
+                    ctx.base_url, create_path, ctx.access_key, create_payload
+                )
                 if create_resp.get('code') != 0:
                     return ToolResult(
                         status='error', content=f'job/create failed: {create_resp}'
@@ -473,7 +466,7 @@ class BohriumTool(BuiltinTool):
                 add_path = '/openapi/v1/sandbox/job/add'
             else:
                 add_payload = {
-                    'projectId': project_id,
+                    'projectId': ctx.project_id,
                     'jobName': job_name,
                     'jobType': 'indicate',
                     'scassType': machine,
@@ -487,7 +480,7 @@ class BohriumTool(BuiltinTool):
                 }
                 add_path = '/openapi/v2/job/add'
 
-            add_resp = _post(base_url, add_path, access_key, add_payload)
+            add_resp = _post(ctx.base_url, add_path, ctx.access_key, add_payload)
             if add_resp.get('code') != 0:
                 return ToolResult(status='error', content=f'job/add failed: {add_resp}')
             add_data = add_resp['data']
@@ -527,7 +520,7 @@ class BohriumTool(BuiltinTool):
         except Exception as exc:
             logger.error(
                 'bohrium submit failed action=submit base_url=%s sandbox=%s error=%s',
-                base_url,
+                ctx.base_url,
                 sandbox,
                 exc,
                 exc_info=True,
@@ -535,15 +528,10 @@ class BohriumTool(BuiltinTool):
             return ToolResult(status='error', content=f'Submit failed: {exc}')
 
     def _poll(self, args: dict[str, Any]) -> ToolResult:
-        ctx = self._resolve_credentials()
-        access_key = ctx.access_key
-        base_url = ctx.base_url
-        if not access_key:
-            return ToolResult(
-                status='error',
-                content='Bohrium credentials unavailable. '
-                'Provide via session or BOHRIUM_ACCESS_KEY env var.',
-            )
+        result = self._require_credentials()
+        if isinstance(result, ToolResult):
+            return result
+        ctx = result
 
         raw_job_id = args.get('job_id')
         if raw_job_id is None:
@@ -551,78 +539,114 @@ class BohriumTool(BuiltinTool):
                 status='error', content='Missing required parameter: job_id'
             )
 
+        if args.get('result_dir'):
+            return ToolResult(
+                status='error',
+                content=(
+                    'poll no longer downloads artifacts. '
+                    f'Use Bohrium(action="download", job_id={raw_job_id!r}, '
+                    f'result_dir="results/run_{raw_job_id}") instead.'
+                ),
+            )
+
         sandbox = _use_sandbox()
         self._log_request_context(action='poll', ctx=ctx, sandbox=sandbox)
         job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
-        result_dir_str = args.get('result_dir') or f'results/run_{job_id}'
-
-        decision = resolve_output_path(
-            raw_path=result_dir_str,
-            execution_workdir=str(self._workdir or '.'),
-            session=self._session,
+        wait = _coerce_bool(args.get('wait'), default=False)
+        max_wait_seconds = _coerce_positive_int(
+            args.get('max_wait_seconds'), _DEFAULT_POLL_WAIT_SECONDS
         )
-        if decision.requires_remote_session:
-            return ToolResult(
-                status='error',
-                content=f"result_dir '{result_dir_str}' requires an active remote session "
-                'but none is available. Use a local path instead.',
-            )
-
-        result_dir = Path(result_dir_str)
+        poll_interval_seconds = _coerce_positive_int(
+            args.get('poll_interval_seconds'), _DEFAULT_POLL_INTERVAL_SECONDS
+        )
 
         try:
-            # Single query
-            if sandbox:
-                detail_path = f'/openapi/v1/sandbox/job/{job_id}'
-            else:
-                detail_path = f'/openapi/v1/job/{job_id}'
+            waited_seconds = 0
 
-            detail = _get(base_url, detail_path, access_key)
-            detail_data = detail.get('data', {})
-            code = detail_data.get('status', 0)
-            status_name = _STATUS_MAP.get(code, f'Unknown({code})')
+            while True:
+                detail_data = _get_job_detail(ctx=ctx, job_id=job_id, sandbox=sandbox)
+                code = detail_data.get('status', 0)
+                status_name = _STATUS_MAP.get(code, f'Unknown({code})')
 
-            # Still running
-            if code in _RUNNING_CODES:
-                return ToolResult(
-                    status='success',
-                    content=json.dumps(
-                        {
-                            'success': True,
-                            'job_id': job_id,
-                            'status': status_name,
-                            'message': f'Job is {status_name}. Call Bohrium(action="poll", job_id={job_id}) again later to check.',
-                        },
-                        ensure_ascii=False,
-                    ),
-                )
-
-            # Finished — download results
-            if code == _SUCCESS_CODE:
-                files, log_tail = self._download_results(
-                    job_id,
-                    detail_data,
-                    result_dir,
-                    access_key,
-                    base_url,
-                )
-
-                # Remote share: upload local results to remote session
-                report_dir = str(result_dir)
-                if (
-                    decision.kind == 'remote_share'
-                    and self._session is not None
-                    and hasattr(self._session, 'upload_directory')
-                ):
-                    try:
-                        self._session.upload_directory(str(result_dir), result_dir_str)
-                        report_dir = result_dir_str
-                    except Exception as upload_exc:
-                        logger.warning(
-                            'Failed to upload results to remote share %s: %s',
-                            result_dir_str,
-                            upload_exc,
+                if code in _RUNNING_CODES:
+                    if wait:
+                        if waited_seconds >= max_wait_seconds:
+                            return ToolResult(
+                                status='success',
+                                content=json.dumps(
+                                    {
+                                        'success': True,
+                                        'job_id': job_id,
+                                        'status': status_name,
+                                        'message': (
+                                            f'Job is {status_name}. wait=true '
+                                            f'exhausted; waited {int(waited_seconds)}s '
+                                            'before returning.'
+                                        ),
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                            )
+                        sleep_seconds = min(
+                            poll_interval_seconds,
+                            max_wait_seconds - waited_seconds,
                         )
+                        if sleep_seconds <= 0:
+                            continue
+                        time.sleep(sleep_seconds)
+                        waited_seconds += sleep_seconds
+                        continue
+
+                    return ToolResult(
+                        status='success',
+                        content=json.dumps(
+                            {
+                                'success': True,
+                                'job_id': job_id,
+                                'status': status_name,
+                                'message': f'Job is {status_name}. Call Bohrium(action="poll", job_id={job_id}) again later to check.',
+                            },
+                            ensure_ascii=False,
+                        ),
+                    )
+
+                if code == _SUCCESS_CODE:
+                    return ToolResult(
+                        status='success',
+                        content=json.dumps(
+                            {
+                                'success': True,
+                                'job_id': job_id,
+                                'status': 'Finished',
+                                'message': (
+                                    'Job is Finished. Call '
+                                    f'Bohrium(action="download", job_id={job_id!r}, '
+                                    f'result_dir="results/run_{job_id}") '
+                                    'to retrieve artifacts.'
+                                ),
+                            },
+                            ensure_ascii=False,
+                        ),
+                    )
+
+                if code in _FAILURE_CODES:
+                    return ToolResult(
+                        status='success',
+                        content=json.dumps(
+                            {
+                                'success': True,
+                                'job_id': job_id,
+                                'status': status_name,
+                                'message': (
+                                    'Job is Failed. Call '
+                                    f'Bohrium(action="download", job_id={job_id!r}, '
+                                    f'result_dir="results/run_{job_id}") '
+                                    'to retrieve logs and artifacts.'
+                                ),
+                            },
+                            ensure_ascii=False,
+                        ),
+                    )
 
                 return ToolResult(
                     status='success',
@@ -630,214 +654,139 @@ class BohriumTool(BuiltinTool):
                         {
                             'success': True,
                             'job_id': job_id,
-                            'status': 'Finished',
-                            'result_dir': report_dir,
-                            'files': files,
-                            'log_tail': log_tail,
-                        },
-                        ensure_ascii=False,
-                    ),
-                )
-
-            # Failed — try downloading whatever is available
-            if code in _FAILURE_CODES:
-                files: list[str] = []
-                log_tail = ''
-                try:
-                    files, log_tail = self._download_results(
-                        job_id,
-                        detail_data,
-                        result_dir,
-                        access_key,
-                        base_url,
-                    )
-                except Exception:
-                    pass
-                return ToolResult(
-                    status='error',
-                    content=json.dumps(
-                        {
-                            'success': False,
-                            'job_id': job_id,
                             'status': status_name,
-                            'result_dir': str(result_dir) if files else '',
-                            'files': files,
-                            'log_tail': log_tail,
-                            'error': f'Job {status_name} on Bohrium.',
+                            'message': f'Unexpected status code {code}. Retry poll or check Bohrium console.',
                         },
                         ensure_ascii=False,
                     ),
                 )
-
-            # Unknown status
-            return ToolResult(
-                status='success',
-                content=json.dumps(
-                    {
-                        'success': True,
-                        'job_id': job_id,
-                        'status': status_name,
-                        'message': f'Unexpected status code {code}. Retry poll or check Bohrium console.',
-                    },
-                    ensure_ascii=False,
-                ),
-            )
 
         except Exception as exc:
             logger.error(
                 'bohrium poll failed action=poll base_url=%s sandbox=%s error=%s',
-                base_url,
+                ctx.base_url,
                 sandbox,
                 exc,
                 exc_info=True,
             )
             return ToolResult(status='error', content=f'Poll failed: {exc}')
 
-    def _download_results(
-        self,
-        job_id: int | str,
-        detail_data: dict,
-        result_dir: Path,
-        access_key: str,
-        base_url: str,
-    ) -> tuple[list[str], str]:
-        """Download and extract result artifacts. Returns (file_list, log_tail)."""
-        result_dir.mkdir(parents=True, exist_ok=True)
+    def _download(self, args: dict[str, Any]) -> ToolResult:
+        result = self._require_credentials()
+        if isinstance(result, ToolResult):
+            return result
+        ctx = result
 
-        if _use_sandbox():
-            return self._sandbox_download(job_id, result_dir, access_key, base_url)
+        raw_job_id = args.get('job_id')
+        if raw_job_id is None:
+            return ToolResult(
+                status='error', content='Missing required parameter: job_id'
+            )
 
-        # Standard HPC: download resultUrl zip
-        result_url = detail_data.get('resultUrl', '')
-        if not result_url:
-            return [], '(no resultUrl in job detail)'
-
-        zip_path = result_dir / 'out.zip'
-        resp = requests.get(result_url, timeout=300, stream=True)
-        resp.raise_for_status()
-        with open(zip_path, 'wb') as f:
-            for chunk in resp.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        files = self._extract_zip(zip_path, result_dir)
-        log_tail = self._read_log(result_dir)
-        return files, log_tail
-
-    def _sandbox_download(
-        self,
-        job_id: int | str,
-        result_dir: Path,
-        access_key: str,
-        base_url: str,
-    ) -> tuple[list[str], str]:
-        """Download results in sandbox mode (iterate objects, find zip, extract)."""
-        # Get file token
-        token_resp = _post(
-            base_url,
-            '/openapi/v1/sandbox/job/file/token',
-            access_key,
-            {'jobId': str(job_id)},
-        )
-        if token_resp.get('code') != 0:
-            return [], f'(file token request failed: {token_resp})'
-
-        token_data = token_resp.get('data', {})
-        store_host = token_data.get('storeHost', '').rstrip('/')
-        token = token_data.get('token', '')
-        prefix = token_data.get('storePath', '')
-
-        if not (store_host and token and prefix):
-            return [], '(incomplete file token response)'
-
-        # List objects
-        list_url = f'{store_host}/api/list'
-        list_params = {'prefix': prefix, 'token': token, 'limit': 500}
-        list_resp = requests.get(list_url, params=list_params, timeout=30)
-        list_resp.raise_for_status()
-        objects = list_resp.json().get('data', {}).get('list', [])
-
-        # Find the output zip
-        zip_key = None
-        for obj in objects:
-            key = obj.get('key', '')
-            if key.endswith('.zip') and 'out' in key.lower():
-                zip_key = key
-                break
-        if not zip_key:
-            # Fallback: any zip
-            for obj in objects:
-                if obj.get('key', '').endswith('.zip'):
-                    zip_key = obj['key']
-                    break
-
-        if not zip_key:
-            return [], '(no zip file found in sandbox artifacts)'
-
-        # Download zip
-        encoded_key = quote(zip_key, safe='/')
-        dl_url = (
-            f'{store_host}/api/download/{encoded_key}?token={token}'
-            '&Response-Content-Type=application/octet-stream'
-        )
-        zip_path = result_dir / 'out.zip'
-        dl_resp = requests.get(dl_url, timeout=300, stream=True)
-        dl_resp.raise_for_status()
-        with open(zip_path, 'wb') as f:
-            for chunk in dl_resp.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        files = self._extract_zip(zip_path, result_dir)
-        log_tail = self._read_log(result_dir)
-        return files, log_tail
-
-    @staticmethod
-    def _extract_zip(zip_path: Path, extract_dir: Path) -> list[str]:
-        """Extract a zip and return list of extracted filenames."""
-        try:
-            with zipfile.ZipFile(zip_path, 'r') as zf:
-                zf.extractall(extract_dir)
-                return zf.namelist()
-        except zipfile.BadZipFile:
-            return [f'(bad zip: {zip_path.name})']
-
-    @staticmethod
-    def _read_log(extract_dir: Path, max_chars: int = 4000) -> str:
-        """Read log tail from extracted result directory."""
-        for name in ('log', 'STDOUTERR'):
-            f = extract_dir / name
-            if f.exists():
-                try:
-                    text = f.read_text(encoding='utf-8', errors='replace')
-                    return text[-max_chars:] if len(text) > max_chars else text
-                except Exception:
-                    continue
-        return '(no log file found in result directory)'
-
-    def _list_images(self, args: dict[str, Any]) -> ToolResult:
-        ctx = self._resolve_credentials()
-        access_key = ctx.access_key
-        base_url = ctx.base_url
-        if not access_key:
+        result_dir_str = str(args.get('result_dir') or '').strip()
+        if not result_dir_str:
             return ToolResult(
                 status='error',
-                content='Bohrium credentials unavailable. '
-                'Provide via session or BOHRIUM_ACCESS_KEY env var.',
+                content='Missing required parameter: result_dir',
             )
+
+        sandbox = _use_sandbox()
+        self._log_request_context(action='download', ctx=ctx, sandbox=sandbox)
+        job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
+
+        target = _resolve_download_target_dir(
+            raw_result_dir=result_dir_str,
+            workdir=self._workdir,
+            session=self._session,
+        )
+        if isinstance(target, ToolResult):
+            return target
+
+        detail_data = _get_job_detail(ctx=ctx, job_id=job_id, sandbox=sandbox)
+        code = detail_data.get('status', 0)
+        status_name = _STATUS_MAP.get(code, f'Unknown({code})')
+
+        code, status_name, detail_data = _confirm_terminal_status(
+            ctx=ctx,
+            job_id=job_id,
+            sandbox=sandbox,
+            detail_data=detail_data,
+        )
+
+        if code in _RUNNING_CODES:
+            return ToolResult(
+                status='error',
+                content=(
+                    f'Job is {status_name}. '
+                    'download is only available after terminal status.'
+                ),
+            )
+
+        files, log_tail = download_bohrium_results(
+            job_id,
+            detail_data,
+            target.local_dir,
+            ctx=ctx,
+            sandbox=sandbox,
+        )
+        report_dir = _finalize_download_target_dir(target=target, session=self._session)
+
+        if code == _SUCCESS_CODE:
+            return ToolResult(
+                status='success',
+                content=json.dumps(
+                    {
+                        'success': True,
+                        'job_id': job_id,
+                        'status': 'Finished',
+                        'result_dir': report_dir,
+                        'files': files,
+                        'log_tail': log_tail,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+        if code in _FAILURE_CODES:
+            return ToolResult(
+                status='error',
+                content=json.dumps(
+                    {
+                        'success': False,
+                        'job_id': job_id,
+                        'status': status_name,
+                        'result_dir': report_dir,
+                        'files': files,
+                        'log_tail': log_tail,
+                        'error': f'Job {status_name}.',
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+
+        return ToolResult(
+            status='error',
+            content=f'Unexpected job status: {status_name} (code={code})',
+        )
+
+    def _list_images(self, args: dict[str, Any]) -> ToolResult:
+        result = self._require_credentials()
+        if isinstance(result, ToolResult):
+            return result
+        ctx = result
         keyword = (args.get('keyword') or '').strip().lower()
         max_results = args.get('max_results', 20)
         self._log_request_context(action='list_images', ctx=ctx, sandbox=None)
 
         try:
-            # Fetch all public image IDs
             data = _get(
-                base_url,
+                ctx.base_url,
                 '/openapi/v2/image/public',
-                access_key,
+                ctx.access_key,
                 params={'page': 1, 'pageSize': 1000},
             )
             all_images = (data.get('data') or {}).get('items') or []
 
-            # Filter by keyword
             if keyword:
                 filtered = [
                     r
@@ -848,17 +797,21 @@ class BohriumTool(BuiltinTool):
             else:
                 filtered = all_images
 
-            # Fetch version details for each
-            results = []
+            # Prepare fetch targets
+            to_fetch: list[tuple[Any, str]] = []
             for record in filtered[:max_results]:
                 img_id = record.get('id') or record.get('imageId')
-                if img_id is None:
-                    continue
+                if img_id is not None:
+                    name = record.get('name') or record.get('imageName') or ''
+                    to_fetch.append((img_id, name))
+
+            def _fetch_versions(item: tuple[Any, str]) -> dict[str, Any]:
+                img_id, name = item
                 try:
                     ver_data = _get(
-                        base_url,
+                        ctx.base_url,
                         f'/openapi/v2/image/public/{img_id}/version',
-                        access_key,
+                        ctx.access_key,
                         params={
                             'current': 1,
                             'pageSize': 10,
@@ -881,13 +834,11 @@ class BohriumTool(BuiltinTool):
                     if entry:
                         version_list.append(entry)
 
-                results.append(
-                    {
-                        'id': img_id,
-                        'name': record.get('name') or record.get('imageName') or '',
-                        'versions': version_list,
-                    }
-                )
+                return {'id': img_id, 'name': name, 'versions': version_list}
+
+            # Parallel version queries to avoid N+1 latency
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                results = list(pool.map(_fetch_versions, to_fetch))
 
             return ToolResult(
                 status='success',
@@ -905,22 +856,17 @@ class BohriumTool(BuiltinTool):
         except Exception as exc:
             logger.error(
                 'bohrium list_images failed action=list_images base_url=%s error=%s',
-                base_url,
+                ctx.base_url,
                 exc,
                 exc_info=True,
             )
             return ToolResult(status='error', content=f'list_images failed: {exc}')
 
     def _list_machines(self, args: dict[str, Any]) -> ToolResult:
-        ctx = self._resolve_credentials()
-        access_key = ctx.access_key
-        base_url = ctx.base_url
-        if not access_key:
-            return ToolResult(
-                status='error',
-                content='Bohrium credentials unavailable. '
-                'Provide via session or BOHRIUM_ACCESS_KEY env var.',
-            )
+        result = self._require_credentials()
+        if isinstance(result, ToolResult):
+            return result
+        ctx = result
         choose_type = args.get('machine_type', 'cpu')
         keyword = (args.get('keyword') or '').strip().lower()
         max_results = args.get('max_results', 50)
@@ -928,9 +874,9 @@ class BohriumTool(BuiltinTool):
 
         try:
             data = _get(
-                base_url,
+                ctx.base_url,
                 '/openapi/v1/calc/list',
-                access_key,
+                ctx.access_key,
                 params={
                     'page': 1,
                     'pageSize': 512,
@@ -988,7 +934,7 @@ class BohriumTool(BuiltinTool):
             logger.error(
                 'bohrium list_machines failed action=list_machines '
                 'base_url=%s machine_type=%s error=%s',
-                base_url,
+                ctx.base_url,
                 choose_type,
                 exc,
                 exc_info=True,

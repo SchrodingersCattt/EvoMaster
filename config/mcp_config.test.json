@@ -10,11 +10,6 @@
       "transport": "http",
       "url": "http://pfmx1355864.bohrium.tech:50005/mcp"
     },
-    "mat_dpa": {
-      "headers": {},
-      "transport": "http",
-      "url": "http://qpus1389933.bohrium.tech:50001/mcp"
-    },
     "mat_electron_microscope": {
       "headers": {},
       "transport": "sse",

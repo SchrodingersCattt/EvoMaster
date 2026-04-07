@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
@@ -64,7 +65,7 @@ class GlobTool(BuiltinTool):
         "required": ["pattern"],
     }
     resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
-        ResourceClaim(resource="session", mode="shared_read"),
+        ResourceClaim(resource="workspace", mode="shared_read"),
     )
     capabilities: ClassVar[frozenset[str]] = frozenset({"workspace.search.path"})
     effect_level: ClassVar[str] = "none"
@@ -72,7 +73,7 @@ class GlobTool(BuiltinTool):
     max_result_chars: ClassVar[int] = 8_000
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
 
-    def _execute(self, arguments: dict[str, Any]) -> str:
+    def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
         session = self._require_session()
 
         pattern: str = arguments.get("pattern", "")
@@ -98,9 +99,15 @@ class GlobTool(BuiltinTool):
         )
 
         output = result.get("output", "") or result.get("stdout", "")
+        stderr = result.get("stderr", "")
+        meta = {"skipped_paths": stderr.lower().count("permission denied")}
 
         if not output.strip():
-            return f"No files matching pattern '{pattern}' found in {safe_path}"
+            return ToolResult(
+                status="success",
+                content=f"No files matching pattern '{pattern}' found in {safe_path}",
+                meta=meta,
+            )
 
         lines = output.strip().splitlines()
         if len(lines) >= MAX_GLOB_RESULTS:
@@ -109,7 +116,7 @@ class GlobTool(BuiltinTool):
                 "Consider using a more specific path or pattern.)"
             )
 
-        return output
+        return ToolResult(status="success", content=output, meta=meta)
 
     @staticmethod
     def _build_find_command(pattern: str, safe_path: str) -> str:

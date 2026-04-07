@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${SKIP_LOCAL_CI:-0}" = "1" ]; then
+  echo "local-ci: 检测到 SKIP_LOCAL_CI=1，跳过 pre-push 审查。"
+  exit 0
+fi
+
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${HOOK_DIR}/../.." && pwd)"
+cd "${REPO_ROOT}"
+
+is_test_branch_ref() {
+  local remote_ref="$1"
+  local branch_name=""
+  case "${remote_ref}" in
+    refs/heads/*)
+      branch_name="${remote_ref#refs/heads/}"
+      ;;
+    refs/*)
+      return 1
+      ;;
+    *)
+      branch_name="${remote_ref}"
+      ;;
+  esac
+  case "${branch_name}" in
+    *test) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "${remote_ref:-}" ] && continue
+  [ "${local_sha:-}" = "0000000000000000000000000000000000000000" ] && continue
+  if is_test_branch_ref "${remote_ref}"; then
+    echo "local-ci: 检测到推送目标 ${remote_ref}，开始本地审查。"
+    exec uv run python .pre-commit/local_ci.py \
+      --remote-ref "${remote_ref}" \
+      --remote-sha "${remote_sha:-}" \
+      --local-sha "${local_sha:-}"
+  fi
+done
+
+exit 0

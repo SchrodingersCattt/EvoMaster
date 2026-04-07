@@ -4,6 +4,8 @@ import asyncio
 from unittest.mock import MagicMock
 
 from matmaster.tools.builtin.bash_tool import BashTool
+from matmaster.tools.tool_catalog import ToolCatalog
+from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.topology import RuntimeTopology
@@ -46,6 +48,42 @@ class TestBashToolMetadata:
         assert tool.prompt() is not None
         assert "Read" in tool.prompt()
 
+    def test_describe_uses_long_prompt_text(self):
+        tool = BashTool()
+        ctx = make_desc_ctx(session_kind="local", workspace_root="/tmp/workspace")
+        assert tool.describe(ctx) == tool.prompt(ctx)
+
+    def test_definition_description_uses_prompt_text(self):
+        registry = ToolRegistry()
+        registry.register(BashTool(), source="builtin")
+        topology = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp/control",
+            workspace_root="/tmp/workspace",
+        )
+        catalog = ToolCatalog(registry, topology=topology)
+
+        defs = catalog.build_definitions(
+            ToolDescriptionContext(
+                session_kind="local",
+                workspace_root="/tmp/workspace",
+                topology=topology,
+            )
+        )
+
+        assert (
+            "Use dedicated tools instead of shell equivalents"
+            in defs[0]["function"]["description"]
+        )
+
+    def test_schema_disallows_additional_properties(self):
+        assert BashTool.json_schema["additionalProperties"] is False
+
+    def test_bash_claims_workspace_and_session_exclusive(self):
+        claims = {(claim.resource, claim.mode) for claim in BashTool.resource_claims}
+        assert ("workspace", "exclusive") in claims
+        assert ("session", "exclusive") in claims
+
 
 class TestBashExecution:
     def test_simple_command(self):
@@ -86,6 +124,53 @@ class TestBashExecution:
         tool = BashTool()
         result = asyncio.run(tool.execute({"command": "ls"}))
         assert "error" in result.lower()
+
+    def test_bash_tool_uses_script_mode_for_heredoc(self):
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "stdout": "ok",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "working_dir": "/workspace",
+                    "output": "ok",
+                },
+            ]
+        )
+        tool = BashTool(session=session, workdir="/workspace")
+        asyncio.run(
+            tool.execute(
+                {"command": "python3 << 'PYEOF'\nprint(1)\nPYEOF", "description": "run"}
+            )
+        )
+        written = session.write_file.call_args[0][1]
+        assert "python3 << 'PYEOF'" in written
+        final_cmd = session.exec_bash.call_args.kwargs["command"]
+        assert final_cmd.startswith("bash ")
+
+    def test_bash_heredoc_does_not_inline_original_command(self):
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "stdout": "ok",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "working_dir": "/workspace",
+                    "output": "ok",
+                },
+            ]
+        )
+        tool = BashTool(session=session, workdir="/workspace")
+        asyncio.run(tool.execute({"command": "python3 << 'PYEOF'\nprint(1)\nPYEOF"}))
+        final_cmd = session.exec_bash.call_args.kwargs["command"]
+        assert "python3 << 'PYEOF'" not in final_cmd
+        assert final_cmd.startswith("bash ")
 
 
 class TestBashErrorStatus:

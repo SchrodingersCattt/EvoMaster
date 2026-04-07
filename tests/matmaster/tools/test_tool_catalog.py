@@ -161,6 +161,13 @@ class TestCatalogPrompts:
 
         assert prompts == "prompt:alpha:/tmp/workspace"
 
+    def test_collect_prompts_defaults_to_legacy_behavior_without_metadata(self) -> None:
+        catalog = _make_catalog(_DynamicTool("alpha"))
+
+        prompts = catalog.collect_prompts(_make_ctx())
+
+        assert prompts == "prompt:alpha:/tmp/workspace"
+
 
 class TestCatalogCancelInjection:
     def test_inject_cancel_token_sets_tool_attribute(self) -> None:
