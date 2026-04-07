@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from matmaster.adaptors.calculation.oss_io import upload_file_to_oss
+from .oss import upload_file_to_oss
 
 from .errors import BohriumPathMaterializationError
 

@@ -60,7 +60,7 @@ async def generate_cache(config_dir: Path, output_dir: Path) -> None:
 
     if mcp_config.get("path_adaptor") == "calculation":
         try:
-            from matmaster.adaptors.calculation import resolve_mcp_config_path
+            from matmaster.mcp.calculation.config_env import resolve_mcp_config_path
 
             mcp_config_path = resolve_mcp_config_path(mcp_config_path)
         except ImportError:
