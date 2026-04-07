@@ -35,5 +35,6 @@ def get_bohrium_base_url() -> str:
 
     service_env = get_bohrium_service_env()
     if service_env == "prod":
-        return "https://open.bohrium.com"
+        # return "https://open.bohrium.com"
+        return "https://openapi.dp.tech"
     return f"https://openapi.{service_env}.dp.tech"
