@@ -13,7 +13,7 @@ def _iter_python_sources() -> list[Path]:
 def test_production_code_no_longer_imports_runtime_bridge() -> None:
     offenders = []
     for path in _iter_python_sources():
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8", errors="ignore")
         if "matmaster.integration.runtime_bridge" in text:
             offenders.append(path)
     assert offenders == []
@@ -22,7 +22,7 @@ def test_production_code_no_longer_imports_runtime_bridge() -> None:
 def test_production_code_no_longer_imports_bohrium_env() -> None:
     offenders = []
     for path in _iter_python_sources():
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8", errors="ignore")
         if "matmaster.integration.bohrium_env" in text:
             offenders.append(path)
     assert offenders == []
@@ -31,7 +31,7 @@ def test_production_code_no_longer_imports_bohrium_env() -> None:
 def test_production_code_no_longer_imports_calculation_adaptors() -> None:
     offenders = []
     for path in _iter_python_sources():
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8", errors="ignore")
         if "matmaster.adaptors.calculation" in text:
             offenders.append(path)
     assert offenders == []
@@ -40,7 +40,7 @@ def test_production_code_no_longer_imports_calculation_adaptors() -> None:
 def test_production_code_no_longer_reads_session_bohrium_credentials() -> None:
     offenders = []
     for path in _iter_python_sources():
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8", errors="ignore")
         if "._bohrium_credentials" in text:
             offenders.append(path)
     assert offenders == []
