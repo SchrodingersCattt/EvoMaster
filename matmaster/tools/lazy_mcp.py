@@ -17,7 +17,7 @@ from matmaster.types.topology import ToolPlane
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MCP_TOOL_TIMEOUT = 120.0
-_DEFAULT_LAZY_MCP_CONNECT_TIMEOUT = 5.0
+_DEFAULT_LAZY_MCP_CONNECT_TIMEOUT = 10.0
 _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT = 10.0
 
 # Shutdown budgets -- semantically separate from connect/execution timeouts.

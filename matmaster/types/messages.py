@@ -39,6 +39,90 @@ class ToolCallData(BaseModel):
     arguments: dict[str, Any]
 
 
+def _coerce_parsed_tool_arguments(value: Any) -> dict[str, Any] | None:
+    """Normalize parsed tool-call payloads to a dict when possible."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            reparsed = json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            return None
+        return _coerce_parsed_tool_arguments(reparsed)
+    return None
+
+
+def _escape_literal_control_chars_in_strings(raw: str) -> str:
+    """Escape raw control characters that commonly appear in multiline content."""
+    if not raw:
+        return raw
+
+    repaired: list[str] = []
+    in_string = False
+    escape = False
+    changed = False
+
+    for ch in raw:
+        if in_string:
+            if escape:
+                repaired.append(ch)
+                escape = False
+                continue
+            if ch == "\\":
+                repaired.append(ch)
+                escape = True
+                continue
+            if ch == '"':
+                repaired.append(ch)
+                in_string = False
+                continue
+            if ch == "\n":
+                repaired.append("\\n")
+                changed = True
+                continue
+            if ch == "\r":
+                repaired.append("\\r")
+                changed = True
+                continue
+            if ch == "\t":
+                repaired.append("\\t")
+                changed = True
+                continue
+            repaired.append(ch)
+            continue
+
+        repaired.append(ch)
+        if ch == '"':
+            in_string = True
+
+    if not changed:
+        return raw
+    return "".join(repaired)
+
+
+def _parse_tool_arguments_json_prefix(raw: str) -> dict[str, Any] | None:
+    """Parse the first complete JSON document from a payload with trailing noise."""
+    text = raw.strip()
+    if not text:
+        return None
+
+    try:
+        parsed, end = json.JSONDecoder().raw_decode(text)
+    except ValueError:
+        return None
+
+    coerced = _coerce_parsed_tool_arguments(parsed)
+    if coerced is None:
+        return None
+
+    if text[end:].strip():
+        logger.warning(
+            "Tool call arguments contained trailing characters; "
+            "parsed the leading JSON document only."
+        )
+    return coerced
+
+
 def parse_tool_arguments(raw: str) -> dict[str, Any]:
     """Parse JSON arguments string from streaming tool call accumulation.
 
@@ -47,11 +131,27 @@ def parse_tool_arguments(raw: str) -> dict[str, Any]:
     """
     if not raw:
         return {}
-    try:
-        return json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        logger.warning("Failed to parse tool call arguments: %s", raw[:200])
-        return {"_raw": raw}
+
+    candidates = [raw]
+    escaped_controls = _escape_literal_control_chars_in_strings(raw)
+    if escaped_controls != raw:
+        candidates.append(escaped_controls)
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except (json.JSONDecodeError, ValueError):
+            parsed = None
+        coerced = _coerce_parsed_tool_arguments(parsed)
+        if coerced is not None:
+            return coerced
+
+        prefixed = _parse_tool_arguments_json_prefix(candidate)
+        if prefixed is not None:
+            return prefixed
+
+    logger.warning("Failed to parse tool call arguments: %s", raw[:200])
+    return {"_raw": raw}
 
 
 class Message(BaseModel):

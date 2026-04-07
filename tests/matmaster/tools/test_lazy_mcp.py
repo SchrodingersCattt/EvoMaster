@@ -761,7 +761,7 @@ class TestLazyMCPConnector:
         )
         assert connector._manager is None
         assert connector._loop is None
-        assert connector._connect_timeout == 5.0
+        assert connector._connect_timeout == 10.0
         assert connector.workspace_path == ""
 
     def test_init_with_workspace_path(self):

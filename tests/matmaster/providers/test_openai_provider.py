@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from matmaster.providers.openai_provider import OpenAIProvider
+from matmaster.types.errors import LLMError
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
 
@@ -592,6 +593,171 @@ class TestChatStreamContent:
                 "arguments": '{"command": "which python3"}',
             }
         ]
+
+    async def test_chat_stream_drops_exact_duplicate_id_on_different_index(self) -> None:
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                _make_stream_chunk(
+                    tool_calls=[
+                        _make_tool_call_delta(
+                            index=0,
+                            call_id="tc-dup",
+                            name="Bash",
+                            arguments='{"command":"pwd"}',
+                        )
+                    ]
+                ),
+                _make_stream_chunk(
+                    tool_calls=[
+                        _make_tool_call_delta(
+                            index=1,
+                            call_id="tc-dup",
+                            name="Bash",
+                            arguments='{"command":"pwd"}',
+                        )
+                    ]
+                ),
+                _make_stream_chunk(finish_reason="stop"),
+            ]
+        )
+        provider._client = mock_client
+
+        chunks = [
+            chunk
+            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+        ]
+
+        assert chunks[0].tool_call_deltas == [
+            {
+                "index": 0,
+                "id": "tc-dup",
+                "name": "Bash",
+                "arguments": '{"command":"pwd"}',
+            }
+        ]
+        assert chunks[1].tool_call_deltas in (None, [])
+
+    async def test_chat_stream_merges_duplicate_id_continuation_on_different_index(self) -> None:
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                _make_stream_chunk(
+                    tool_calls=[
+                        _make_tool_call_delta(
+                            index=0,
+                            call_id="tc-dup",
+                            name="Bash",
+                            arguments='{"command":"which ',
+                        )
+                    ]
+                ),
+                _make_stream_chunk(
+                    tool_calls=[
+                        _make_tool_call_delta(
+                            index=1,
+                            call_id="tc-dup",
+                            name="Bash",
+                            arguments='python3"}',
+                        )
+                    ]
+                ),
+                _make_stream_chunk(finish_reason="stop"),
+            ]
+        )
+        provider._client = mock_client
+
+        chunks = [
+            chunk
+            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+        ]
+
+        assert chunks[0].tool_call_deltas == [
+            {
+                "index": 0,
+                "id": "tc-dup",
+                "name": "Bash",
+                "arguments": '{"command":"which ',
+            }
+        ]
+        assert chunks[1].tool_call_deltas == [
+            {
+                "index": 0,
+                "arguments": 'python3"}',
+            }
+        ]
+
+    async def test_chat_stream_duplicate_id_with_conflicting_name_raises(self) -> None:
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                _make_stream_chunk(
+                    tool_calls=[
+                        _make_tool_call_delta(
+                            index=0,
+                            call_id="tc-dup",
+                            name="Bash",
+                            arguments='{"command":"pwd"}',
+                        )
+                    ]
+                ),
+                _make_stream_chunk(
+                    tool_calls=[
+                        _make_tool_call_delta(
+                            index=1,
+                            call_id="tc-dup",
+                            name="Skill",
+                            arguments='{"skill":"brainstorming"}',
+                        )
+                    ]
+                ),
+            ]
+        )
+        provider._client = mock_client
+
+        with pytest.raises(LLMError, match="duplicate tool_call id"):
+            _ = [
+                chunk
+                async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            ]
+
+    async def test_chat_stream_duplicate_id_with_conflicting_arguments_raises(self) -> None:
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                _make_stream_chunk(
+                    tool_calls=[
+                        _make_tool_call_delta(
+                            index=0,
+                            call_id="tc-dup",
+                            name="Bash",
+                            arguments='{"command":"pwd"}',
+                        )
+                    ]
+                ),
+                _make_stream_chunk(
+                    tool_calls=[
+                        _make_tool_call_delta(
+                            index=1,
+                            call_id="tc-dup",
+                            name="Bash",
+                            arguments='{"command":"which python3"}',
+                        )
+                    ]
+                ),
+            ]
+        )
+        provider._client = mock_client
+
+        with pytest.raises(LLMError, match="duplicate tool_call id"):
+            _ = [
+                chunk
+                async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            ]
 
     async def test_chat_stream_empty_choices(self) -> None:
         """Chunks with no choices are skipped."""

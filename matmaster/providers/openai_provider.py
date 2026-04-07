@@ -53,6 +53,63 @@ def _is_complete_json_document(raw: str) -> bool:
     return text[end:].strip() == ""
 
 
+def _find_existing_tool_call_by_id(
+    active_calls: dict[int, _StreamToolCallState],
+    tool_call_id: str,
+) -> _StreamToolCallState | None:
+    for state in active_calls.values():
+        if tool_call_id and state.id == tool_call_id:
+            return state
+    return None
+
+
+def _reconcile_duplicate_tool_call_arguments(existing: str, incoming: str) -> tuple[str, str | None]:
+    if not incoming:
+        return existing, None
+    if not existing:
+        return incoming, incoming
+    if incoming == existing:
+        return existing, None
+    if incoming.startswith(existing):
+        suffix = incoming[len(existing) :]
+        return incoming, suffix or None
+    if (
+        existing
+        and not _is_complete_json_document(existing)
+        and not incoming.lstrip().startswith(("{", "["))
+    ):
+        return existing + incoming, incoming
+    raise ValueError("conflicting duplicate tool_call arguments")
+
+
+def _normalize_duplicate_id_delta(
+    current: _StreamToolCallState,
+    delta: dict[str, Any],
+) -> dict[str, Any] | None:
+    new_name = delta.get("name")
+    if new_name and current.name and new_name != current.name:
+        raise ValueError("duplicate tool_call id reused with different name")
+
+    merged_args, emitted_suffix = _reconcile_duplicate_tool_call_arguments(
+        current.arguments,
+        str(delta.get("arguments") or ""),
+    )
+    current.arguments = merged_args
+
+    if new_name and not current.name:
+        current.name = new_name
+
+    out = {"index": current.output_index}
+    if not current.id and delta.get("id"):
+        current.id = str(delta["id"])
+        out["id"] = current.id
+    if new_name and not delta.get("arguments"):
+        out["name"] = new_name
+    if emitted_suffix:
+        out["arguments"] = emitted_suffix
+    return out if len(out) > 1 else None
+
+
 def _should_split_stream_tool_call(
     current: _StreamToolCallState, delta: dict[str, Any]
 ) -> bool:
@@ -142,6 +199,19 @@ def _extract_cached_tokens(usage: Any) -> int:
     if isinstance(val, int) and val > 0:
         return val
     return 0
+
+
+def _is_non_retryable_tool_protocol_bad_request(err_str: str) -> bool:
+    text = err_str.lower()
+    patterns = (
+        "duplicate ids",
+        "unexpected `tool_use_id`",
+        "must have a corresponding `tool_use` block",
+        "expected toolresult blocks",
+        "exceeds the number of tooluse blocks",
+        "wrong number of tooluse blocks",
+    )
+    return any(pattern in text for pattern in patterns)
 
 
 class OpenAIProvider:
@@ -259,6 +329,28 @@ class OpenAIProvider:
         for delta in raw_deltas:
             source_index = delta.get("index", 0)
             current = active_calls.get(source_index)
+
+            duplicate_state = None
+            if current is None and delta.get("id"):
+                duplicate_state = _find_existing_tool_call_by_id(
+                    active_calls,
+                    str(delta["id"]),
+                )
+            if duplicate_state is not None:
+                try:
+                    item = _normalize_duplicate_id_delta(duplicate_state, delta)
+                except ValueError as exc:
+                    from matmaster.types.errors import LLMError
+
+                    raise LLMError(
+                        f"duplicate tool_call id detected in stream: {delta.get('id')}: {exc}",
+                        retryable=False,
+                        error_category="bad_request",
+                    ) from exc
+                if item is not None:
+                    normalized.append(item)
+                continue
+
             if current is None:
                 current = _StreamToolCallState(output_index=next_output_index)
                 active_calls[source_index] = current
@@ -474,10 +566,15 @@ class OpenAIProvider:
         except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
             raise LLMError(str(exc), retryable=False, error_category="auth") from exc
         except openai.BadRequestError as exc:
-            err_str = str(exc).lower()
-            if "context" in err_str and ("length" in err_str or "token" in err_str):
+            err_str = str(exc)
+            err_text = err_str.lower()
+            if "context" in err_text and ("length" in err_text or "token" in err_text):
                 raise LLMError(
                     str(exc), retryable=False, error_category="context_overflow"
+                ) from exc
+            if _is_non_retryable_tool_protocol_bad_request(err_str):
+                raise LLMError(
+                    str(exc), retryable=False, error_category="bad_request"
                 ) from exc
             raise LLMError(
                 str(exc), retryable=True, error_category="bad_request"

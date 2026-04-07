@@ -1,18 +1,12 @@
-"""Tests for matmaster.integration.runtime_bridge -- credential bridge primitives.
-
-Covers:
-- Bohrium credential resolution precedence (explicit > session > env > none)
-- Env projection from resolved credentials
-- Output path classification (relative / local_abs / remote_share)
-"""
+"""Tests for matmaster.integration.runtime_bridge credential bridge primitives."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
+from matmaster.integration import runtime_bridge
 from matmaster.integration.runtime_bridge import (
     build_service_env,
-    resolve_output_path,
     resolve_service_credentials,
 )
 
@@ -81,49 +75,8 @@ def test_bohrium_resolver_returns_source_none_without_credentials(monkeypatch):
     assert cred.values == {}
 
 
-def test_relative_path_resolves_under_execution_workdir():
-    decision = resolve_output_path(
-        raw_path="results/run_1",
-        execution_workdir="/workspace/run",
-        session=None,
-    )
-
-    assert decision.kind == "relative"
-    assert decision.normalized_path == "/workspace/run/results/run_1"
-    assert decision.requires_remote_session is False
-
-
-def test_local_absolute_path_stays_local():
-    decision = resolve_output_path(
-        raw_path="/tmp/results/run_1",
-        execution_workdir="/workspace/run",
-        session=None,
-    )
-
-    assert decision.kind == "local_abs"
-    assert decision.normalized_path == "/tmp/results/run_1"
-    assert decision.requires_remote_session is False
-
-
-def test_remote_share_path_requires_remote_session():
-    decision = resolve_output_path(
-        raw_path="/share/NiCoCr_relax",
-        execution_workdir="/workspace",
-        session=None,
-    )
-
-    assert decision.kind == "remote_share"
-    assert decision.requires_remote_session is True
-
-
-def test_remote_share_path_is_allowed_with_remote_session():
-    session = SimpleNamespace(is_open=True)
-    decision = resolve_output_path(
-        raw_path="/share/NiCoCr_relax",
-        execution_workdir="/share",
-        session=session,
-    )
-
-    assert decision.kind == "remote_share"
-    assert decision.normalized_path == "/share/NiCoCr_relax"
-    assert decision.requires_remote_session is False
+def test_runtime_bridge_keeps_env_projection_but_drops_path_resolution():
+    assert hasattr(runtime_bridge, "build_service_env")
+    assert hasattr(runtime_bridge, "resolve_service_credentials")
+    assert not hasattr(runtime_bridge, "resolve_output_path")
+    assert not hasattr(runtime_bridge, "OutputPathDecision")

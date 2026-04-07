@@ -285,3 +285,37 @@ class TestChatStreamErrorCategory:
             ]
         assert exc_info.value.error_category == "bad_request"
         assert exc_info.value.retryable is True
+
+    @pytest.mark.parametrize(
+        ("message", "category"),
+        [
+            (
+                "BedrockException - {'message':'The toolResult blocks at messages.2.content contain duplicate Ids: tooluse_123'}",
+                "bad_request",
+            ),
+            (
+                "OpenAIException - ..content.0: unexpected `tool_use_id` found in `tool_result` blocks: toolu_123. Each `tool_result` block must have a corresponding `tool_use` block in the previous message.",
+                "bad_request",
+            ),
+            (
+                "BedrockException - {'message':'Expected toolResult blocks at messages.2.content for the following Ids: tooluse_123'}",
+                "bad_request",
+            ),
+        ],
+    )
+    async def test_tool_protocol_bad_request_is_non_retryable(
+        self, message: str, category: str
+    ) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = openai.BadRequestError(
+            response=MagicMock(status_code=400, headers={}),
+            body=None,
+            message=message,
+        )
+        with pytest.raises(LLMError) as exc_info:
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+            ]
+        assert exc_info.value.retryable is False
+        assert exc_info.value.error_category == category
