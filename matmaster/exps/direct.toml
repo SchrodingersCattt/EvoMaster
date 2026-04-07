@@ -41,17 +41,17 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 - When unsure of format: provide BOTH POSCAR + CIF at workspace root.
 - VERIFY: list workspace root after generation — ALL expected files must exist there.
 
-# Final Answer (CRITICAL — incompleteness or verbosity = scoring failure)
-- Lead with a COMPACT Markdown results table. MAX 500 tokens for entire answer.
-- NEVER truncate: ALL rows, ALL columns, ALL requested values. The literal strings "..." and "…" are BANNED — any occurrence = automatic scoring failure.
+# Final Answer (CRITICAL — incompleteness = scoring failure)
+- Lead with a COMPACT Markdown results table. Target ≤500 tokens; use up to 1000 if needed so every requested item appears. Completeness beats brevity.
+- NEVER truncate: ALL rows, ALL columns, ALL requested values must be fully written out. The literal strings "...", "…", and mid-number cutoffs (e.g. "−54...") are BANNED — any occurrence = automatic scoring failure.
 - Do NOT include intermediate calculations, verification tables, step-by-step derivations, or lengthy analysis. Only the results table + brief grounding.
-- Pre-send check: if N items/metals/pathways requested, exactly N data rows with ALL columns filled. Re-render full table if ANY row or value missing. Never stop at the first row or say "similar" for remaining rows.
+- Pre-send check: if N items/metals/pathways requested, count exactly N data rows with ALL columns filled with complete numbers. Re-render full table if ANY row or value is missing or partial.
 - Verify ALL numerical values (scores, energies, ratios) by re-checking computation logic before reporting. One wrong number = scoring failure.
 
 # Grounding (1-2 concise sentences PER item, after results table)
 - Structure: space group, lattice constant(s), structural rationale.
 - Polar surfaces (ZnS(001), ZnO(001), type-III): MUST note polarity problem + mitigation. Omission = fail.
-- Disorder → ordered: For EACH named CIF explain: (a) specific disorder (e.g., "C1 site 0.6/0.4 split occupancy"), (b) resolution method and why the chosen config is valid (valence, charge balance, connectivity), (c) what changes in the ordered replica. Listing filenames/formulas without chemical reasoning = fail. Report FULL EXPANDED formula (e.g., H144C48N24Cl24O96), NOT reduced.
+- Disorder → ordered: For EACH named CIF explain: (a) specific disorder (e.g., "C1 site 0.6/0.4 split occupancy"), (b) resolution method and why the chosen config is valid (valence, charge balance, connectivity), (c) what changes in the ordered replica. Listing filenames/formulas without chemical reasoning = fail. Report BOTH the original disordered formula (as parsed, with fractional occupancy) AND the ordered FULL EXPANDED formula (e.g., H144C48N24Cl24O96), NOT reduced.
 - NEVER claim files exist unless verified in workspace.
 
 # Surface Slab Construction
@@ -68,8 +68,10 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 - Only swept parameter varies; all others frozen. k-mesh in EVERY INCAR (KSPACING) + KPOINTS per directory.
 - After generating: verify ONE representative INCAR. In FINAL ANSWER, explicitly list frozen parameter values (ENCUT=X, ISMEAR=X, SIGMA=X, k-mesh=NxNxN) to prove they match the input spec.
 
-# Long-Running Tasks
+# Long-Running Tasks & Heavy Computation
 - Single self-contained script. No splitting across Bash calls. If near timeout: save and report partial results.
+- MACE-MP / DPA geometry relaxation is expensive. For screening ≥6 systems in one script: use `fmax=0.1` or single-point energy (no relaxation) to stay within Bash timeout (600 s). For ≤5 systems, `fmax=0.05` is acceptable.
+- Checkpoint: within long scripts, write each result to workspace as soon as computed (e.g. append to CSV or save CIF immediately) so partial work survives a timeout.
 '''
 
 [tools]
