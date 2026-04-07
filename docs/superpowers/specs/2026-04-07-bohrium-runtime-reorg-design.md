@@ -72,7 +72,6 @@ matmaster/
     runtime.py
     types.py
     errors.py
-    session.py
 
   calculation_runtimes/
     __init__.py

@@ -25,13 +25,15 @@
 - `matmaster/bohrium/endpoints.py`
   Purpose: own Bohrium host and service-env resolution previously in `integration/bohrium_api.py`.
 - `matmaster/bohrium/credentials.py`
-  Purpose: normalize raw credential mappings into `BohriumCredentials`.
+  Purpose: host credential normalization and environment fallback helpers that build `BohriumCredentials`.
 - `matmaster/bohrium/env.py`
   Purpose: project runtime credentials into `BOHRIUM_*` environment variables.
 - `matmaster/bohrium/executor.py`
   Purpose: inject normalized credentials into dispatcher/local executor templates.
 - `matmaster/bohrium/storage.py`
   Purpose: build HTTPS storage payloads for calculation submissions.
+- `matmaster/bohrium/paths.py`
+  Purpose: own path classification, remote-session download, model-alias rewrite helpers, and OSS-backed input materialization.
 - `matmaster/bohrium/runtime.py`
   Purpose: define `BohriumRuntimeHandle`, session attach/get/detach helpers, snapshot export, and submission construction.
 - `matmaster/bohrium/oss.py`
@@ -43,7 +45,7 @@
 - `matmaster/calculation_runtimes/base.py`
   Purpose: define the minimal `CalculationRuntime` Protocol.
 - `matmaster/calculation_runtimes/types.py`
-  Purpose: define small request/response carrier types shared by preflight and runtime implementations.
+  Purpose: define small request/response carrier types and execution-context Protocols shared by preflight and runtime implementations.
 - `matmaster/calculation_runtimes/registry.py`
   Purpose: register and resolve calculation runtime factories by name.
 - `matmaster/mcp/calculation/__init__.py`
@@ -86,7 +88,7 @@
 - `matmaster/mcp/manager.py`
   Purpose: rename `path_adaptor` plumbing to calculation preflight metadata and factories so LazyMCP no longer exposes legacy adaptor concepts.
 - `matmaster/tools/script_env.py`
-  Purpose: switch shell env injection from `build_service_env()` to `require_runtime(session).build_env()`.
+  Purpose: switch shell env injection from `build_service_env()` to runtime-backed env projection via `get_runtime(session)`.
 - `matmaster/tools/builtin/bash_tool.py`
   Purpose: use runtime env projection instead of the old runtime bridge.
 - `matmaster/tools/builtin/glob_tool.py`
@@ -225,21 +227,58 @@ def test_bohrium_base_url_prefers_explicit_env(monkeypatch) -> None:
     assert get_bohrium_base_url() == "https://openapi.custom.dp.tech"
 
 
-def test_bohrium_base_url_matches_existing_service_constant(monkeypatch) -> None:
-    import importlib
-
+def test_bohrium_base_url_keeps_current_prod_default(monkeypatch) -> None:
     monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
     monkeypatch.setenv("SERVICE_ENV", "prod")
-
-    import src.utils.constant as constant_module
-
-    reloaded = importlib.reload(constant_module)
-    assert get_bohrium_base_url() == reloaded.BOHRIUM_OPENAPI_HOST
+    assert get_bohrium_base_url() == "https://open.bohrium.com"
 
 
 def test_bohrium_service_env_defaults_to_test(monkeypatch) -> None:
     monkeypatch.delenv("SERVICE_ENV", raising=False)
     assert get_bohrium_service_env() == "test"
+```
+
+```python
+"""matmaster/bohrium/errors.py"""
+class BohriumCredentialError(RuntimeError):
+    """Raised when Bohrium credentials cannot be resolved."""
+
+
+class BohriumRuntimeNotInitialized(RuntimeError):
+    """Raised when the current session has no attached Bohrium runtime."""
+
+
+class BohriumSubmissionBuildError(RuntimeError):
+    """Raised when a submission spec cannot be built from runtime state."""
+
+
+class BohriumPathMaterializationError(RuntimeError):
+    """Raised when a calculation input path cannot be converted to a remote URL."""
+```
+
+```python
+"""matmaster/bohrium/__init__.py"""
+from .credentials import credentials_from_env, normalize_bohrium_credentials
+from .runtime import BohriumRuntimeHandle, attach_runtime, detach_runtime, get_runtime
+from .types import (
+    BohriumCredentials,
+    BohriumExecutionContext,
+    BohriumRuntimeSnapshot,
+    BohriumSubmissionSpec,
+)
+
+__all__ = [
+    "BohriumCredentials",
+    "BohriumExecutionContext",
+    "BohriumRuntimeHandle",
+    "BohriumRuntimeSnapshot",
+    "BohriumSubmissionSpec",
+    "attach_runtime",
+    "credentials_from_env",
+    "detach_runtime",
+    "get_runtime",
+    "normalize_bohrium_credentials",
+]
 ```
 
 ```python
@@ -368,15 +407,48 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from .types import ExecutionContextLike, SubmissionRequest, SubmissionSpecLike
+
 
 class CalculationRuntime(Protocol):
     def build_env(self) -> dict[str, str]: ...
 
-    def execution(self) -> Any: ...
+    def execution(self) -> ExecutionContextLike: ...
 
-    def build_submission(self, request: Any) -> Any: ...
+    def build_submission(self, request: SubmissionRequest) -> SubmissionSpecLike: ...
 
     def materialize_input_path(self, *args: Any, **kwargs: Any) -> str: ...
+```
+
+```python
+"""matmaster/calculation_runtimes/types.py"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+
+class ExecutionContextLike(Protocol):
+    session_type: str
+    execution_workdir: str
+    remote_workspace_root: str
+    remote_project_root: str
+    node_id: int | None
+    node_ip: str | None
+    ssh_attached: bool
+
+
+class SubmissionSpecLike(Protocol):
+    executor: dict[str, Any] | None
+    storage: dict[str, Any] | None
+    submission_mode: str
+
+
+@dataclass(frozen=True)
+class SubmissionRequest:
+    executor_template: dict[str, Any] | None
+    needs_storage: bool
+    submission_mode: str
 ```
 
 ```python
@@ -452,7 +524,8 @@ Expected:
 
 - all selected tests `PASS`
 - no import from `matmaster.integration.runtime_bridge`
-- `get_bohrium_base_url()` stays aligned with `src.utils.constant.BOHRIUM_OPENAPI_HOST`
+- `get_bohrium_base_url()` stays aligned with the current prod/test fallback
+  semantics used by `src.utils.constant`
 
 - [ ] **Step 5: Commit the foundational contracts**
 
@@ -479,6 +552,7 @@ git commit -m "feat: add Bohrium runtime contracts"
 - Create: `matmaster/bohrium/env.py`
 - Create: `matmaster/bohrium/executor.py`
 - Create: `matmaster/bohrium/storage.py`
+- Create: `matmaster/bohrium/paths.py`
 - Create: `matmaster/bohrium/runtime.py`
 - Test: `tests/matmaster/bohrium/test_runtime.py`
 
@@ -569,6 +643,53 @@ def test_build_submission_injects_dispatcher_credentials() -> None:
 def test_require_runtime_raises_for_missing_runtime() -> None:
     with pytest.raises(RuntimeError):
         require_runtime(SimpleNamespace())
+
+
+def test_snapshot_maps_execution_fields_explicitly() -> None:
+    snap = _runtime().snapshot()
+
+    assert snap.session_type == "ssh"
+    assert snap.execution_workdir == "/share"
+
+
+def test_materialize_input_path_uploads_local_files(tmp_path, monkeypatch) -> None:
+    input_file = tmp_path / "input.in"
+    input_file.write_text("data", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "matmaster.bohrium.paths.upload_file_to_oss",
+        lambda path, workspace_root, **kwargs: f"https://oss/{path.name}",
+    )
+
+    url = _runtime().materialize_input_path(
+        str(input_file),
+        workspace_root=tmp_path,
+        session=None,
+    )
+
+    assert url == "https://oss/input.in"
+
+
+def test_materialize_input_path_downloads_remote_files_before_upload(
+    tmp_path, monkeypatch
+) -> None:
+    session = SimpleNamespace(
+        is_file=lambda path: True,
+        download=lambda path: b"remote-data",
+    )
+
+    monkeypatch.setattr(
+        "matmaster.bohrium.paths.upload_file_to_oss",
+        lambda path, workspace_root, **kwargs: f"https://oss/{kwargs['object_basename']}",
+    )
+
+    url = _runtime().materialize_input_path(
+        "inputs/job.in",
+        workspace_root=tmp_path,
+        session=session,
+    )
+
+    assert url == "https://oss/job.in"
 ```
 
 - [ ] **Step 2: Run tests to confirm runtime helpers do not exist yet**
@@ -582,23 +703,34 @@ uv run pytest tests/matmaster/bohrium/test_runtime.py -v
 Expected:
 
 - import errors for `matmaster.bohrium.runtime`
-- missing `SubmissionRequest` type
+- missing runtime helpers and builders in `matmaster.bohrium`
 
 - [ ] **Step 3: Implement runtime data flow and submission helpers**
 
 ```python
-"""matmaster/calculation_runtimes/types.py"""
+"""matmaster/bohrium/credentials.py"""
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
 from typing import Any
 
+from .types import BohriumCredentials
 
-@dataclass(frozen=True)
-class SubmissionRequest:
-    executor_template: dict[str, Any] | None
-    needs_storage: bool
-    submission_mode: str
+
+def normalize_bohrium_credentials(values: dict[str, Any]) -> BohriumCredentials:
+    return BohriumCredentials.from_mapping(values)
+
+
+def credentials_from_env() -> BohriumCredentials | None:
+    values = {
+        "access_key": os.getenv("BOHRIUM_ACCESS_KEY"),
+        "project_id": os.getenv("BOHRIUM_PROJECT_ID"),
+        "user_id": os.getenv("BOHRIUM_USER_ID"),
+        "user_no": os.getenv("BOHRIUM_USER_NO"),
+        "base_url": os.getenv("BOHRIUM_BASE_URL"),
+    }
+    cred = normalize_bohrium_credentials(values)
+    return cred if cred.access_key else None
 ```
 
 ```python
@@ -675,16 +807,80 @@ def build_storage(credentials: BohriumCredentials) -> dict[str, object]:
 ```
 
 ```python
+"""matmaster/bohrium/paths.py"""
+from __future__ import annotations
+
+import re
+import tempfile
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
+
+from .errors import BohriumPathMaterializationError
+from .oss import upload_file_to_oss
+
+_URL_RE = re.compile(r'https?://[^\s,\'"<>)}\]]+')
+
+
+def is_local_path(value: Any) -> bool:
+    if not value or not isinstance(value, str):
+        return False
+    parsed = urlparse(value.strip())
+    return parsed.scheme not in ("http", "https")
+
+
+def workspace_path_to_local(value: str, workspace_root: Path) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else (workspace_root / path).resolve()
+
+
+def materialize_input_path(
+    value: str,
+    *,
+    workspace_root: Path,
+    session: Any = None,
+) -> str:
+    if not is_local_path(value):
+        return value
+
+    resolved = workspace_path_to_local(value, workspace_root)
+    if session is not None and hasattr(session, "download") and hasattr(session, "is_file"):
+        remote_path = str(resolved).replace("\\", "/")
+        if not session.is_file(remote_path):
+            raise BohriumPathMaterializationError(
+                f"Remote input file not found: {remote_path}"
+            )
+        data = session.download(remote_path)
+        suffix = Path(remote_path).suffix or ""
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(data)
+            tmp_path = Path(tmp.name)
+        try:
+            return upload_file_to_oss(
+                tmp_path,
+                tmp_path.parent,
+                object_basename=Path(remote_path).name,
+            )
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+    if not resolved.exists() or not resolved.is_file():
+        raise BohriumPathMaterializationError(f"Local input file not found: {resolved}")
+    return upload_file_to_oss(resolved, workspace_root)
+```
+
+```python
 """matmaster/bohrium/runtime.py"""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import Any, Protocol
 
 from matmaster.calculation_runtimes.types import SubmissionRequest
 
 from .env import build_bohrium_env
 from .executor import build_executor
+from .paths import materialize_input_path as materialize_bohrium_input_path
 from .storage import build_storage
 from .types import (
     BohriumCredentials,
@@ -692,6 +888,10 @@ from .types import (
     BohriumRuntimeSnapshot,
     BohriumSubmissionSpec,
 )
+
+
+class SupportsBohriumRuntimeSlot(Protocol):
+    _bohrium_runtime: "BohriumRuntimeHandle | None"
 
 
 class BohriumRuntimeHandle:
@@ -713,7 +913,15 @@ class BohriumRuntimeHandle:
         return self._execution
 
     def snapshot(self) -> BohriumRuntimeSnapshot:
-        return BohriumRuntimeSnapshot(**self._execution.__dict__)
+        return BohriumRuntimeSnapshot(
+            session_type=self._execution.session_type,
+            execution_workdir=self._execution.execution_workdir,
+            remote_workspace_root=self._execution.remote_workspace_root,
+            remote_project_root=self._execution.remote_project_root,
+            node_id=self._execution.node_id,
+            node_ip=self._execution.node_ip,
+            ssh_attached=self._execution.ssh_attached,
+        )
 
     def execution_session(self) -> Any | None:
         return self._execution_session
@@ -728,26 +936,41 @@ class BohriumRuntimeHandle:
             submission_mode=request.submission_mode,
         )
 
-    def materialize_input_path(self, value: str, **_: Any) -> str:
-        return value
+    def materialize_input_path(
+        self,
+        value: str,
+        *,
+        workspace_root: Path,
+        session: Any = None,
+        **_: Any,
+    ) -> str:
+        return materialize_bohrium_input_path(
+            value,
+            workspace_root=workspace_root,
+            session=session,
+        )
 
 
-def attach_runtime(session: Any, runtime: BohriumRuntimeHandle) -> None:
+def attach_runtime(session: SupportsBohriumRuntimeSlot, runtime: BohriumRuntimeHandle) -> None:
     session._bohrium_runtime = runtime
 
 
-def get_runtime(session: Any) -> BohriumRuntimeHandle | None:
+def get_runtime(
+    session: SupportsBohriumRuntimeSlot | None,
+) -> BohriumRuntimeHandle | None:
+    if session is None:
+        return None
     return getattr(session, "_bohrium_runtime", None)
 
 
-def require_runtime(session: Any) -> BohriumRuntimeHandle:
+def require_runtime(session: SupportsBohriumRuntimeSlot) -> BohriumRuntimeHandle:
     runtime = get_runtime(session)
     if runtime is None:
         raise RuntimeError("Bohrium runtime is not initialized for this session.")
     return runtime
 
 
-def detach_runtime(session: Any) -> None:
+def detach_runtime(session: SupportsBohriumRuntimeSlot) -> None:
     if hasattr(session, "_bohrium_runtime"):
         delattr(session, "_bohrium_runtime")
 ```
@@ -772,6 +995,7 @@ git add \
   matmaster/bohrium/credentials.py \
   matmaster/bohrium/env.py \
   matmaster/bohrium/executor.py \
+  matmaster/bohrium/paths.py \
   matmaster/bohrium/storage.py \
   matmaster/bohrium/runtime.py \
   tests/matmaster/bohrium/test_runtime.py
@@ -785,6 +1009,17 @@ git commit -m "feat: add Bohrium runtime handle"
 - Modify: `src/services/agent_run_service.py`
 - Modify: `matmaster/types/context.py`
 - Modify: `tests/matmaster/test_bohrium_setup_injection.py`
+
+Task 3 only changes the runtime registration lifecycle inside
+`src/services/agent_run_bohrium.py`. The existing node provisioning, SSH swap,
+skill sync, and abort flow stay in place. The concrete methods to touch are:
+
+- `_apply_run_credentials_to_session()`
+- `_setup_bohrium_for_run()`
+- `_store_bohrium_runtime()` only as cleanup bookkeeping, not as a second
+  runtime registry
+- `_restore_bohrium_runtime_state()`
+- `_cleanup_bohrium_after_run()`
 
 - [ ] **Step 1: Write the failing startup registration tests**
 
@@ -857,7 +1092,7 @@ Expected:
 ```python
 """replace _apply_run_credentials_to_session in src/services/agent_run_bohrium.py"""
 from matmaster.bohrium.endpoints import get_bohrium_base_url
-from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
+from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime, detach_runtime
 from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 
 
@@ -887,6 +1122,34 @@ def _apply_run_credentials_to_session(session: Any, run_creds: dict[str, Any]) -
     )
     attach_runtime(session, runtime)
     session._bohrium_credentials = dict(run_creds)
+
+
+def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
+    """Close the transient SSH session and clear its runtime slot before restore."""
+    sess = SESSIONS.get(session_id)
+    if not sess:
+        return
+    runtime_state = sess.pop("bohrium_runtime", None)
+    if not runtime_state:
+        return
+    ssh = runtime_state.get("ssh_session")
+    if ssh is not None:
+        detach_runtime(ssh)
+        if getattr(ssh, "is_open", False):
+            ssh.close()
+    if pg is not None:
+        _restore_playground_session(
+            pg,
+            runtime_state.get("original_session"),
+            runtime_state.get("original_owns_session", True),
+        )
+
+
+def _cleanup_bohrium_after_run(...):
+    """Run-final cleanup removes runtime slots from the active session objects."""
+    if session is not None:
+        detach_runtime(session)
+    _restore_bohrium_runtime_state(session_id, pg)
 ```
 
 ```python
@@ -967,7 +1230,7 @@ git add \
 git commit -m "refactor: register Bohrium runtime during startup"
 ```
 
-### Task 4: Migrate shell and script env consumers to `require_runtime(session).build_env()`
+### Task 4: Migrate shell and script env consumers to `get_runtime(session)`-based env projection
 
 **Files:**
 - Modify: `matmaster/tools/script_env.py`
@@ -978,6 +1241,13 @@ git commit -m "refactor: register Bohrium runtime during startup"
 - Modify: `tests/matmaster/tools/builtin/test_bash_tool.py`
 - Modify: `tests/matmaster/tools/builtin/test_glob_tool.py`
 - Modify: `tests/matmaster/tools/builtin/test_grep_tool.py`
+
+The concrete call sites in current code are:
+
+- `script_env.inject()` as the shared shell wrapper
+- `bash_tool.BashTool._execute()` after `plan_shell_command()`
+- `glob_tool.GlobTool._execute()` before `session.exec_bash()`
+- `grep_tool.GrepTool._execute_internal()` before `session.exec_bash()`
 
 - [ ] **Step 1: Write the failing consumer tests around runtime env usage**
 
@@ -1035,7 +1305,7 @@ def test_bash_tool_reads_runtime_env(monkeypatch):
     runtime = MagicMock()
     runtime.build_env.return_value = {"BOHRIUM_ACCESS_KEY": "ak"}
     monkeypatch.setattr(
-        "matmaster.tools.builtin.bash_tool.require_runtime",
+        "matmaster.tools.builtin.bash_tool.get_runtime",
         lambda _session: runtime,
     )
 
@@ -1065,7 +1335,7 @@ Expected:
 
 ```python
 """matmaster/tools/script_env.py"""
-from matmaster.bohrium.runtime import get_runtime, require_runtime
+from matmaster.bohrium.runtime import get_runtime
 
 
 def inject(cmd: str, session: Any) -> str:
@@ -1083,6 +1353,11 @@ from matmaster.bohrium.runtime import get_runtime
 
 runtime = get_runtime(session)
 env = runtime.build_env() if runtime is not None else {}
+plan = plan_shell_command(command)
+if plan.mode == "script":
+    command = prepare_script_command(command, env, session, shell_path="bash")
+else:
+    command = prepare_inline_command(command, env, session)
 ```
 
 ```python
@@ -1090,8 +1365,9 @@ env = runtime.build_env() if runtime is not None else {}
 from matmaster.bohrium.runtime import get_runtime
 
 
-runtime = get_runtime(self.session)
+runtime = get_runtime(session)
 env = runtime.build_env() if runtime is not None else {}
+command = inject_env(command, env, session)
 ```
 
 ```python
@@ -1099,8 +1375,9 @@ env = runtime.build_env() if runtime is not None else {}
 from matmaster.bohrium.runtime import get_runtime
 
 
-runtime = get_runtime(self.session)
+runtime = get_runtime(session)
 env = runtime.build_env() if runtime is not None else {}
+cmd = inject_env(cmd, env, session)
 ```
 
 - [ ] **Step 4: Run the updated shell/script test slice**
@@ -1150,6 +1427,10 @@ git commit -m "refactor: read Bohrium env from runtime handle"
 - Reference: `tests/matmaster/tools/builtin/test_bohrium_tool_download.py`
 - Reference: `tests/matmaster/tools/builtin/test_bohrium_tool_transfers.py`
 - Reference: `tests/matmaster/integration/test_bohrium_job_skill_submit.py`
+
+`BohriumInputSource` and `BohriumDownloadTarget` stay unchanged in this task.
+Task 5 only changes how `BohriumContext` gets its credentials and how
+`build_bohrium_context()` preserves the existing runtime-or-env fallback.
 
 - [ ] **Step 1: Write the failing Bohrium builtin tool tests against runtime-derived credentials**
 
@@ -1212,6 +1493,18 @@ def test_build_bohrium_context_reads_runtime_handle() -> None:
     ctx = build_bohrium_context(session=session, require_project=True)
 
     assert ctx.project_id == 42
+
+
+def test_build_bohrium_context_falls_back_to_env(monkeypatch) -> None:
+    monkeypatch.setenv("BOHRIUM_ACCESS_KEY", "env-ak")
+    monkeypatch.setenv("BOHRIUM_PROJECT_ID", "9")
+    monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
+
+    ctx = build_bohrium_context(session=None, require_project=True)
+
+    assert ctx.access_key == "env-ak"
+    assert ctx.project_id == 9
+    assert ctx.credential_source == "env"
 ```
 
 - [ ] **Step 2: Run the Bohrium builtin tool tests to expose bridge/model coupling**
@@ -1267,7 +1560,7 @@ class BohriumContext:
 
     @classmethod
     def from_credentials(
-        cls, cred: BohriumCredentials, *, sandbox: bool
+        cls, cred: BohriumCredentials, *, sandbox: bool, source: str = "runtime"
     ) -> "BohriumContext":
         if not cred.access_key:
             raise BohriumCredentialError(
@@ -1277,7 +1570,7 @@ class BohriumContext:
             access_key=cred.access_key,
             project_id=cred.project_id,
             base_url=cred.base_url,
-            credential_source="runtime",
+            credential_source=source,
             sandbox=sandbox,
             user_id=cred.user_id,
             user_no=cred.user_no,
@@ -1286,18 +1579,41 @@ class BohriumContext:
 
 ```python
 """matmaster/tools/builtin/bohrium_tool/tool.py"""
-from matmaster.bohrium.runtime import require_runtime
+from matmaster.bohrium.credentials import credentials_from_env
+from matmaster.bohrium.endpoints import get_bohrium_base_url
+from matmaster.bohrium.runtime import get_runtime
 
 
 def build_bohrium_context(*, session, require_project: bool = False) -> BohriumContext:
-    runtime = require_runtime(session)
+    runtime = get_runtime(session) if session is not None else None
+    if runtime is not None:
+        cred = runtime.credentials()
+        source = "runtime"
+    else:
+        cred = credentials_from_env()
+        if cred is None:
+            raise BohriumError(
+                "Bohrium credentials unavailable. Provide via session or BOHRIUM_ACCESS_KEY."
+            )
+        source = "env"
     ctx = BohriumContext.from_credentials(
-        runtime.credentials(),
+        cred,
         sandbox=use_sandbox(),
+        source=source,
     )
     if require_project and ctx.project_id <= 0:
         raise BohriumError(
             "Bohrium project ID unavailable. Provide via session or BOHRIUM_PROJECT_ID."
+        )
+    if not ctx.base_url:
+        ctx = BohriumContext(
+            access_key=ctx.access_key,
+            project_id=ctx.project_id,
+            base_url=get_bohrium_base_url(),
+            credential_source=ctx.credential_source,
+            sandbox=ctx.sandbox,
+            user_id=ctx.user_id,
+            user_no=ctx.user_no,
         )
     return ctx
 ```
@@ -1351,6 +1667,15 @@ git commit -m "refactor: route Bohrium tool through runtime handle"
 - Modify: `tests/matmaster/tools/test_lazy_mcp.py`
 - Modify: `tests/matmaster/tools/test_lazy_mcp_actor_routing.py`
 
+This task replaces the old adaptor plumbing rather than layering a second
+registry on top of it:
+
+- `manager.path_adaptor_servers` -> `manager.calculation_preflight_servers`
+- `manager.path_adaptor_factory` -> `manager.calculation_preflight_factory`
+- `tool_info["has_path_adaptor"]` -> `tool_info["has_calculation_preflight"]`
+- `LazyMCPConnector._path_adaptors` -> `_calculation_preflights`
+- `get_path_adaptor()` -> `get_calculation_preflight()`
+
 - [ ] **Step 1: Write the failing preflight and `lazy_mcp` tests**
 
 ```python
@@ -1379,6 +1704,7 @@ def test_prepare_call_builds_submission_and_materializes_selected_inputs(monkeyp
         workspace_path="/tmp/work",
         args=args,
         tool_name="mat_sg_run",
+        remote_tool_name="run",
         server_name="mat_sg",
         input_schema=schema,
         tool_description="Args:\\n    input_path (Path): input file",
@@ -1389,6 +1715,46 @@ def test_prepare_call_builds_submission_and_materializes_selected_inputs(monkeyp
     assert resolved["executor"] == {"type": "local"}
     assert resolved["storage"] == {"type": "https"}
     assert resolved["input_path"] == "https://oss/a.in"
+
+
+def test_prepare_call_resolves_model_alias_before_path_materialization():
+    runtime = MagicMock(spec=BohriumRuntimeHandle)
+    runtime.build_submission.return_value = MagicMock(
+        executor={"type": "dispatcher"},
+        storage={"type": "https"},
+        submission_mode="async",
+    )
+    runtime.materialize_input_path.side_effect = lambda value, **_: value
+
+    preflight = CalculationPreflight(
+        calculation_executors={
+            "mat_sg": {
+                "executor_map": {
+                    "submit_run": {"type": "dispatcher", "machine": {"remote_profile": {}}}
+                }
+            }
+        }
+    )
+    resolved = preflight.prepare_call(
+        workspace_path="/tmp/work",
+        args={"model_path": "DPA2.4-7M"},
+        tool_name="mat_sg_submit_run",
+        remote_tool_name="submit_run",
+        server_name="mat_sg",
+        input_schema={
+            "type": "object",
+            "properties": {"model_path": {"type": "string", "format": "path"}},
+        },
+        tool_description=(
+            "Args:\\n"
+            "    model_path (Path): model file. Aliases: "
+            "{'DPA2.4-7M': 'https://oss/models/dpa-2.4-7M.pt'}"
+        ),
+        runtime=runtime,
+        session=None,
+    )
+
+    assert resolved["model_path"] == "https://oss/models/dpa-2.4-7M.pt"
 ```
 
 ```python
@@ -1460,6 +1826,15 @@ Expected:
 
 - [ ] **Step 3: Move selector/config logic and introduce `CalculationPreflight`**
 
+Move these helper families into the new client-side preflight layer without
+changing their current behavior:
+
+- sync-vs-async classification via `_effective_sync_tools()`
+- per-tool executor lookup via `executor_map` fallback to server executor
+- `path_params_by_tool` validation against dereferenced schema
+- description-driven model alias resolution via `_resolve_model_aliases()`
+- leaf-level path upload delegated to `runtime.materialize_input_path()`
+
 ```python
 """matmaster/mcp/calculation/errors.py"""
 class CalculationPreflightError(RuntimeError):
@@ -1499,16 +1874,46 @@ class CalculationPreflight:
             raise CalculationPreflightError(
                 f"Calculation runtime unavailable for server {server_name}."
             )
-        path_selectors = collect_path_selectors(input_schema or {})
+        server_cfg = self.calculation_executors.get(server_name) or {}
+        sync_tools = _effective_sync_tools(server_cfg)
+        if remote_tool_name.startswith("submit_"):
+            base_name = remote_tool_name[len("submit_") :]
+            if base_name in sync_tools:
+                raise CalculationPreflightError(
+                    f"Tool '{tool_name}' is blocked: '{base_name}' is a sync tool."
+                )
+        is_async_tool = self._is_async_remote_tool(server_name, remote_tool_name)
+        if is_async_tool and not remote_tool_name.startswith("submit_"):
+            raise CalculationPreflightError(
+                f"Async tool '{tool_name}' is blocked for LLM runtime. "
+                f"Use submit interface: '{server_name}_submit_*'."
+            )
+
+        schema_selectors = collect_path_selectors(input_schema or {})
+        desc_selectors = _path_keys_from_description(tool_description)
+        config_selectors = self._path_selectors_from_tool_config(
+            server_name, remote_tool_name, input_schema
+        )
+        path_selectors = schema_selectors | desc_selectors | config_selectors
         request = SubmissionRequest(
-            executor_template=self.calculation_executors.get(server_name, {}).get("executor"),
+            executor_template=self._resolve_executor_template(
+                server_name,
+                remote_tool_name,
+            ),
             needs_storage=True,
-            submission_mode="sync",
+            submission_mode="async" if is_async_tool else "sync",
         )
         submission = runtime.build_submission(request)
         resolved = dict(args)
         resolved["executor"] = submission.executor
         resolved["storage"] = submission.storage
+        top_level_path_keys = _top_level_path_keys(path_selectors)
+        if top_level_path_keys and tool_description:
+            resolved = _resolve_model_aliases(
+                resolved,
+                tool_description,
+                top_level_path_keys,
+            )
         if not path_selectors:
             return resolved
         workspace_root = Path(workspace_path).resolve()
@@ -1596,6 +2001,12 @@ async def get_calculation_preflight(self, server_name: str) -> Any | None:
             manager.calculation_preflight_factory()
         )
     return self._calculation_preflights[server_name]
+
+
+async def ensure_connection(self, server_name: str) -> dict[str, Any]:
+    await self.ensure_actor(server_name)
+    calculation_preflight = await self.get_calculation_preflight(server_name)
+    return {"calculation_preflight": calculation_preflight}
 ```
 
 - [ ] **Step 4: Run the selector, preflight, and `lazy_mcp` tests**
@@ -1670,11 +2081,31 @@ def test_resolve_mcp_config_path_is_importable_from_new_namespace(tmp_path: Path
 
 ```python
 """tests/matmaster/bohrium/test_jobs.py"""
-from matmaster.bohrium.jobs import _extract_bohr_job_id
+from inspect import signature
+
+from matmaster.bohrium import jobs as jobs_mod
 
 
 def test_extract_bohr_job_id_keeps_numeric_suffix() -> None:
-    assert _extract_bohr_job_id("123456/789") == "789"
+    assert jobs_mod._extract_bohr_job_id("123456/789") == "789"
+
+
+def test_jobs_module_keeps_public_surface() -> None:
+    public_names = [
+        "RUNNING_STATUSES",
+        "get_job_detail_raw",
+        "get_file_token",
+        "iterate_job_files",
+        "download_job_file",
+        "download_job_directory",
+        "query_job_status",
+        "get_job_results",
+        "terminate_job",
+    ]
+    for name in public_names:
+        assert hasattr(jobs_mod, name)
+    assert "Running" in jobs_mod.RUNNING_STATUSES
+    assert "bohr_job_id" in signature(jobs_mod.query_job_status).parameters
 ```
 
 - [ ] **Step 2: Run the config and job tests to show the new modules are absent**
@@ -1693,6 +2124,22 @@ Expected:
 - import errors for `matmaster.mcp.calculation.config_env`
 
 - [ ] **Step 3: Move the old helpers into their new namespaces and update imports**
+
+`matmaster/bohrium/jobs.py` is a full namespace move for the current public job
+service surface, not just `_extract_bohr_job_id()`. The new module keeps:
+
+- `RUNNING_STATUSES`
+- `get_job_detail_raw()`
+- `get_file_token()`
+- `iterate_job_files()`
+- `download_job_file()`
+- `download_job_directory()`
+- `query_job_status()`
+- `get_job_results()`
+- `terminate_job()`
+
+The migration should preserve current signatures, especially the
+`bohr_job_id`-first calling convention used by existing consumers and tests.
 
 ```python
 """matmaster/bohrium/jobs.py"""
@@ -1727,6 +2174,10 @@ def _get_access_key(access_key: str | None = None, session: Any = None) -> str:
 ```python
 """matmaster/core/exp.py / matmaster/tools/cache_mcp_schemas.py / evaluation/eval_tooling_snapshot.py"""
 from matmaster.mcp.calculation.config_env import resolve_mcp_config_path
+
+# The config key remains `path_adaptor: calculation`; only the imported helper
+# moves namespaces. `evaluation/eval_tooling_snapshot.py` does not need any
+# `CalculationPreflight` import.
 ```
 
 ```python
@@ -1892,6 +2343,7 @@ git commit -m "refactor: move Bohrium services into new namespaces"
 ### Task 8: Remove legacy modules and add structure-guard tests
 
 **Files:**
+- Modify: `src/services/agent_run_bohrium.py`
 - Delete: `matmaster/integration/runtime_bridge/__init__.py`
 - Delete: `matmaster/integration/runtime_bridge/resolver.py`
 - Delete: `matmaster/integration/runtime_bridge/env_projector.py`
@@ -1980,6 +2432,15 @@ Expected:
 
 - [ ] **Step 3: Delete the old entrypoints and update the remaining tests**
 
+Before enabling the `_bohrium_credentials` structure guard, remove the
+migration-period dual write from `agent_run_bohrium.py`:
+
+```python
+"""src/services/agent_run_bohrium.py"""
+# delete after Tasks 3-7 land:
+# session._bohrium_credentials = dict(run_creds)
+```
+
 ```bash
 rm -rf matmaster/integration/runtime_bridge
 rm -f matmaster/integration/bohrium_env.py
@@ -2052,6 +2513,9 @@ git commit -m "refactor: remove legacy Bohrium bridge modules"
 
 - Runtime contracts, value objects, endpoint resolution: Task 1
 - `constant.py` / node-service OpenAPI host alignment without moving startup-only defaults: Task 1
+- Current prod default host remains `https://open.bohrium.com`, matching today's
+  `src/utils/constant.py` semantics rather than the older `openapi.dp.tech`
+  assumption: Task 1
 - Runtime handle, env, submission builder, session attach/get/detach: Task 2
 - Startup-first registration and migration-period dual-write: Task 3
 - Shell/script env consumer migration: Task 4
