@@ -20,13 +20,12 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, ClassVar
 
-from matmaster.integration.bohrium_api import (
+from matmaster.bohrium.credentials import credentials_from_env
+from matmaster.bohrium.endpoints import (
     get_bohrium_base_url,
     get_bohrium_service_env,
 )
-from matmaster.integration.runtime_bridge.adapters.bohrium import (
-    resolve_bohrium_credentials,
-)
+from matmaster.bohrium.runtime import get_runtime
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
@@ -81,8 +80,23 @@ def _coerce_positive_int(value: Any, default: int) -> int:
 
 
 def build_bohrium_context(*, session, require_project: bool = False) -> BohriumContext:
-    cred = resolve_bohrium_credentials(session=session)
-    ctx = BohriumContext.from_resolved_credential(cred, sandbox=use_sandbox())
+    runtime = get_runtime(session) if session is not None else None
+    if runtime is not None:
+        cred = runtime.credentials()
+        source = "runtime"
+    else:
+        cred = credentials_from_env()
+        if cred is None:
+            raise BohriumError(
+                "Bohrium credentials unavailable. Provide via session or BOHRIUM_ACCESS_KEY."
+            )
+        source = "env"
+
+    ctx = BohriumContext.from_credentials(
+        cred,
+        sandbox=use_sandbox(),
+        source=source,
+    )
     if require_project and ctx.project_id <= 0:
         raise BohriumError(
             "Bohrium project ID unavailable. Provide via session or BOHRIUM_PROJECT_ID."
