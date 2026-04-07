@@ -223,6 +223,31 @@ class TestBohriumExecution:
         assert result.status == "error"
         assert "remote session" in result.content.lower()
 
+    def test_submit_unexpected_context_error_returns_tool_result(
+        self, tmp_path, monkeypatch
+    ):
+        tool = BohriumTool(workdir=tmp_path)
+
+        with patch.object(
+            BohriumTool,
+            "_build_context",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = asyncio.run(
+                tool.execute(
+                    {
+                        "action": "submit",
+                        "input_dir": "inputs",
+                        "image": "test:latest",
+                        "cmd": "echo hi",
+                    }
+                )
+            )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert result.content == "Submit failed: boom"
+
     def test_submit_relative_input_dir_resolves_under_workdir(
         self, tmp_path, monkeypatch
     ):

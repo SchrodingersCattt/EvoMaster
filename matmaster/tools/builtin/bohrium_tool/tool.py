@@ -337,6 +337,8 @@ class BohriumTool(BuiltinTool):
         job_name = args.get('job_name', 'matmaster-job')
         disk_size = int(args.get('disk_size', 50))
 
+        ctx: BohriumContext | None = None
+        sandbox: bool | str = 'n/a'
         try:
             ctx = self._build_context(require_project=True)
             sandbox = ctx.sandbox
@@ -369,7 +371,7 @@ class BohriumTool(BuiltinTool):
         except Exception as exc:
             logger.error(
                 'bohrium submit failed action=submit base_url=%s sandbox=%s error=%s',
-                ctx.base_url,
+                ctx.base_url if ctx is not None else '',
                 sandbox,
                 exc,
                 exc_info=True,
@@ -531,6 +533,7 @@ class BohriumTool(BuiltinTool):
                 content='Missing required parameter: result_dir',
             )
 
+        ctx: BohriumContext | None = None
         try:
             ctx = self._build_context()
             sandbox = ctx.sandbox
@@ -602,6 +605,14 @@ class BohriumTool(BuiltinTool):
             )
         except BohriumError as exc:
             return ToolResult(status='error', content=str(exc))
+        except Exception as exc:
+            logger.error(
+                'bohrium download failed action=download base_url=%s error=%s',
+                ctx.base_url if ctx is not None else '',
+                exc,
+                exc_info=True,
+            )
+            return ToolResult(status='error', content=f'Download failed: {exc}')
 
     def _list_images(self, args: dict[str, Any]) -> ToolResult:
         keyword = (args.get('keyword') or '').strip().lower()

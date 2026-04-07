@@ -110,6 +110,39 @@ class TestBohriumDownloadExecution:
         assert payload['files'] == ['log']
         assert payload['log_tail'] == 'done\n'
 
+    def test_download_unexpected_transfer_error_returns_tool_result(
+        self, tmp_path, monkeypatch
+    ):
+        tool = BohriumTool(workdir=tmp_path)
+
+        def fake_get(base_url, path, access_key, params=None, timeout=30):
+            del base_url, path, access_key, params, timeout
+            return {'data': {'status': 2}}
+
+        def fake_download_artifacts(*, job_id, detail_data, target, ctx):
+            del job_id, detail_data, target, ctx
+            raise RuntimeError('boom')
+
+        monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
+        monkeypatch.setattr(
+            bohrium_tool_module, 'download_job_artifacts', fake_download_artifacts
+        )
+
+        result = asyncio.run(
+            tool.execute(
+                {
+                    'action': 'download',
+                    'job_id': 'job-finished',
+                    'result_dir': str(tmp_path / 'results'),
+                }
+            )
+        )
+
+        assert result.status == 'error'
+        assert result.content == 'Download failed: boom'
+
     def test_download_failed_job_returns_error_with_artifacts(
         self, tmp_path, monkeypatch
     ):

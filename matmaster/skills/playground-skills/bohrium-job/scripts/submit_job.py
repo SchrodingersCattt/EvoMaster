@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 
+from matmaster.tools.builtin.bohrium_tool.api import use_sandbox
 from matmaster.tools.builtin.bohrium_tool.tool import submit_job_via_runtime
 
 
@@ -82,7 +83,13 @@ def main() -> None:
 
     print(
         json.dumps(
-            {"success": True, "job_id": job_id, "bohr_job_id": bohr_job_id},
+            {
+                "success": True,
+                "job_id": job_id,
+                "bohr_job_id": bohr_job_id,
+                "status": "Submitted",
+                "use_sandbox": use_sandbox(),
+            },
             ensure_ascii=False,
         )
     )
