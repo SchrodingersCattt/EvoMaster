@@ -3,6 +3,8 @@
 import asyncio
 from unittest.mock import MagicMock
 
+from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
+from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.grep_tool import GrepTool
 from matmaster.tools.filesystem_semantics.snapshots import (
     FileSemanticSnapshot,
@@ -18,6 +20,29 @@ def make_session(output="", exit_code=0):
     session = MagicMock()
     session.exec_bash.return_value = {"output": output, "exit_code": exit_code}
     return session
+
+
+def attach_test_runtime(session: MagicMock) -> None:
+    runtime = BohriumRuntimeHandle(
+        credentials=BohriumCredentials(
+            access_key="ak",
+            project_id=42,
+            user_id=7,
+            user_no="U001",
+            base_url="https://openapi.test.dp.tech",
+        ),
+        execution=BohriumExecutionContext(
+            session_type="ssh",
+            execution_workdir="/share",
+            remote_workspace_root="/share",
+            remote_project_root="/share/.matmaster",
+            node_id=1,
+            node_ip="10.0.0.1",
+            ssh_attached=True,
+        ),
+        execution_session=session,
+    )
+    attach_runtime(session, runtime)
 
 
 class TestGrepToolMetadata:
@@ -89,9 +114,9 @@ class TestGrepExecution:
 
 
 class TestGrepEnvInjection:
-    def test_grep_injects_bohrium_env_from_bridge(self):
+    def test_grep_reads_runtime_env(self):
         session = MagicMock()
-        session._bohrium_credentials = {"access_key": "ak", "project_id": 42}
+        attach_test_runtime(session)
         session.write_file = MagicMock()
         session.exec_bash = MagicMock(
             side_effect=[
@@ -126,9 +151,21 @@ class TestGrepRgDetection:
 
 class TestGrepFallback:
     def test_grep_binary_signal_uses_semantic_fallback(self, monkeypatch) -> None:
-        session = make_session(
-            output='binary file matches (found "\\0" byte around offset 1)'
+        session = MagicMock()
+        attach_test_runtime(session)
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "output": 'binary file matches (found "\\0" byte around offset 1)',
+                    "exit_code": 0,
+                },
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {"output": "/workspace/a.txt", "exit_code": 0},
+            ]
         )
+        session.is_file.return_value = False
         tool = GrepTool(session=session, workdir="/workspace")
         state = ToolRunnerState()
         state.set(
@@ -151,11 +188,6 @@ class TestGrepFallback:
 
         monkeypatch.setattr(tool, "_detect_rg", lambda: True)
         monkeypatch.setattr(
-            tool,
-            "_list_candidate_files",
-            lambda safe_path, file_glob: ["/workspace/a.txt"],
-        )
-        monkeypatch.setattr(
             "matmaster.tools.builtin.grep_tool.resolve_text_bytes",
             lambda raw, explicit_encoding=None: TextResolution(
                 status="success",
@@ -175,3 +207,7 @@ class TestGrepFallback:
         assert isinstance(result, ToolResult)
         assert "alpha" in result.content
         assert result.meta["fallback_mode"] == "semantic"
+        assert session.write_file.call_count >= 2
+        final_call = session.exec_bash.call_args_list[-1]
+        cmd = final_call.kwargs.get("command", final_call[1].get("command", ""))
+        assert "find" in cmd

@@ -23,7 +23,6 @@ _OUTPUT_LIKE_TOKENS: tuple[str, ...] = (
 def resolve_local_ref(
     spec: dict[str, Any], root_schema: dict[str, Any]
 ) -> dict[str, Any]:
-    """Resolve a local ``#/$defs/...`` reference to its concrete schema node."""
     current = spec
     seen_refs: set[str] = set()
 
@@ -39,7 +38,7 @@ def resolve_local_ref(
         try:
             for part in ref[2:].split("/"):
                 node = node[part]
-        except Exception as exc:  # pragma: no cover - defensive schema failure
+        except Exception as exc:
             raise ValueError(f"Schema ref could not be resolved: {ref}") from exc
         if not isinstance(node, dict):
             raise ValueError(f"Schema ref did not resolve to object: {ref}")
@@ -129,7 +128,6 @@ def collect_path_selectors(
     *,
     root_schema: dict[str, Any] | None = None,
 ) -> set[str]:
-    """Collect path-bearing selectors from a schema, including nested refs/arrays."""
     if not isinstance(schema, dict):
         return set()
 
@@ -329,7 +327,6 @@ def rewrite_selected_paths(
     schema: dict[str, Any] | None = None,
     rewrite_leaf: Callable[[str, Any, dict[str, Any] | None], Any],
 ) -> Any:
-    """Rewrite only selected leaves in a nested payload."""
     selector_map = {
         tuple(_selector_tokens(selector)): selector for selector in selectors
     }

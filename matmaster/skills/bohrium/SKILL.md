@@ -35,13 +35,13 @@ The `poll` action returns the **current status in one call** (non-blocking):
 
 ## Credential Resolution
 
-Bohrium credentials are resolved through a unified runtime bridge with the following precedence:
+Bohrium credentials are resolved through the runtime handle with the following precedence:
 
 1. **Explicit params** -- caller-provided values (e.g. passed directly to API functions)
-2. **Session / runtime** -- `session._bohrium_credentials` injected by the platform during a run (production path)
+2. **Runtime handle** -- `BohriumRuntimeHandle` attached to the session by the platform during a run (production path)
 3. **Environment fallback** -- `BOHRIUM_ACCESS_KEY` / `BOHRIUM_PROJECT_ID` from `.env` or os.environ (local development)
 
-In production, credentials come from the runtime session automatically. Setting `BOHRIUM_ACCESS_KEY` in `.env` is the local development fallback for running without a platform session.
+In production, credentials come from the runtime handle automatically. Setting `BOHRIUM_ACCESS_KEY` in `.env` is the local development fallback for running without a platform session.
 
 ## Troubleshooting
 
