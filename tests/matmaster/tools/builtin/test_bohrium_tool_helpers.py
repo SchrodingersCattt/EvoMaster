@@ -37,6 +37,7 @@ def _patch_bridge(monkeypatch, cred: ResolvedCredential | None = None):
 
     def resolver(session=None, explicit=None):
         return cred or _fake_cred()
+
     monkeypatch.setattr(adapter_mod, "resolve_bohrium_credentials", resolver)
     monkeypatch.setattr(tool_mod, "resolve_bohrium_credentials", resolver)
 
