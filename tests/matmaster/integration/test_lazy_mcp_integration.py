@@ -60,7 +60,7 @@ class TestLazyMCPIntegration:
         (tmp_path / 'mcp.yaml').write_text(
             _yaml.dump(
                 {
-                    'path_adaptor': 'calculation',
+                    'calculation_preflight': 'calculation',
                     'calculation_servers': ['mat_sg'],
                 }
             )
@@ -171,7 +171,7 @@ class TestLazyMCPIntegration:
         (tmp_path / 'mcp.yaml').write_text(
             _yaml.dump(
                 {
-                    'path_adaptor': 'calculation',
+                    'calculation_preflight': 'calculation',
                     'calculation_servers': [],
                 }
             )
@@ -215,7 +215,7 @@ class TestExpMCPSelfLoad:
         (tmp_path / 'mcp.yaml').write_text(
             _yaml.dump(
                 {
-                    'path_adaptor': 'calculation',
+                    'calculation_preflight': 'calculation',
                     'calculation_servers': ['mat_sg'],
                 }
             )
@@ -300,7 +300,7 @@ class TestLazyMCPTimeoutThreading:
         (tmp_path / 'mcp.yaml').write_text(
             _yaml.dump(
                 {
-                    'path_adaptor': 'calculation',
+                    'calculation_preflight': 'calculation',
                     'calculation_servers': ['mat_sg'],
                     'tool_timeouts': {'mat_sg': 300},
                 }
@@ -351,7 +351,7 @@ class TestLazyMCPTimeoutThreading:
         (tmp_path / 'mcp.yaml').write_text(
             _yaml.dump(
                 {
-                    'path_adaptor': 'calculation',
+                    'calculation_preflight': 'calculation',
                     'calculation_servers': ['mat_sg'],
                 }
             )

@@ -310,7 +310,7 @@ def configure_mcp_manager(
             calculation_servers is absent). Playground passes parsed
             server names; LazyMCPConnector passes server_config keys.
     """
-    if mcp_config.get("path_adaptor") == "calculation":
+    if mcp_config.get("calculation_preflight") == "calculation":
         calc_servers = mcp_config.get("calculation_servers")
         if calc_servers:
             manager.calculation_preflight_servers = set(calc_servers)

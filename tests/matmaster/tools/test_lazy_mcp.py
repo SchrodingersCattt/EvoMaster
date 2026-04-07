@@ -606,7 +606,7 @@ class TestConfigureMCPManager:
     def test_sets_calculation_preflight_servers_from_explicit_list(self):
         manager = FakeMCPManager()
         config = {
-            "path_adaptor": "calculation",
+            "calculation_preflight": "calculation",
             "calculation_servers": ["mat_sg", "mat_dpa"],
         }
         configure_mcp_manager(manager, config)
@@ -615,7 +615,7 @@ class TestConfigureMCPManager:
     def test_calculation_preflight_servers_fallback_to_all_servers(self):
         """When calculation_servers is absent, fallback to all_server_names."""
         manager = FakeMCPManager()
-        config = {"path_adaptor": "calculation"}
+        config = {"calculation_preflight": "calculation"}
         configure_mcp_manager(
             manager, config, all_server_names={"mat_sg", "mat_sn", "mat_doc"}
         )
@@ -626,10 +626,10 @@ class TestConfigureMCPManager:
         }
 
     def test_sync_tools_only_inside_calculation_branch(self):
-        """sync_tools_by_server is only set when path_adaptor == calculation."""
+        """sync_tools_by_server is only set when calculation_preflight == calculation."""
         manager = FakeMCPManager()
         config = {
-            "path_adaptor": "calculation",
+            "calculation_preflight": "calculation",
             "calculation_executors": {
                 "mat_sg": {"sync_tools": ["build_bulk_structure_by_wyckoff"]},
             },
@@ -640,7 +640,7 @@ class TestConfigureMCPManager:
         )
 
     def test_sync_tools_not_set_without_calculation(self):
-        """Without path_adaptor=calculation, sync_tools_by_server stays empty."""
+        """Without calculation_preflight=calculation, sync_tools_by_server stays empty."""
         manager = FakeMCPManager()
         config = {
             "calculation_executors": {
@@ -676,7 +676,7 @@ class TestConfigureMCPManager:
         """Verify factory uses matmaster.mcp.calculation.preflight."""
         manager = FakeMCPManager()
         config = {
-            "path_adaptor": "calculation",
+            "calculation_preflight": "calculation",
             "calculation_servers": ["mat_sg"],
         }
         with patch("matmaster.mcp.calculation.preflight.CalculationPreflight") as cls:

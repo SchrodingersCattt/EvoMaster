@@ -1,4 +1,8 @@
-"""Bohrium job service helpers in the new runtime namespace."""
+"""Bohrium OpenAPI job service: status query, result retrieval, file download.
+
+Provides **synchronous** ``query_job_status`` / ``get_job_results`` for the
+MonitorJob built-in tool (``matmaster/tools/builtin/monitor_job/``).
+"""
 
 from __future__ import annotations
 
@@ -30,6 +34,10 @@ def _tiefblue_nas_host() -> str:
 
 
 def _get_access_key(access_key: str | None = None, session: Any = None) -> str:
+    """Return a valid access key or raise.
+
+    Precedence: explicit > runtime handle > env.
+    """
     if access_key:
         return access_key.strip()
     runtime = get_runtime(session) if session is not None else None
@@ -78,6 +86,27 @@ def _extract_bohr_job_id(
     job_id: str,
     bohr_job_id: str | None = None,
 ) -> str | None:
+    """Best-effort extraction of the Bohrium OpenAPI job ID.
+
+    MCP ``job_id`` format: ``"{timestamp}/{task_id}"``.
+
+    * Numeric ``task_id`` -> *is* the Bohrium job ID directly.
+    * Hex hash ``task_id`` (dpdispatcher convention): the real Bohrium job ID
+      lives in ``extra_info.bohr_job_id`` returned by the submit tool.
+
+    Parameters
+    ----------
+    job_id : str
+        The MCP ``job_id`` string.
+    bohr_job_id : str | None
+        Explicit Bohrium job ID (from ``extra_info.bohr_job_id``).
+        Takes priority when provided.
+
+    Returns
+    -------
+    str | None
+        Bohrium job ID if resolved, else ``None``.
+    """
     if bohr_job_id:
         return bohr_job_id.strip()
 
@@ -183,6 +212,11 @@ def get_job_detail_raw(
     *,
     access_key: str | None = None,
 ) -> dict[str, Any]:
+    """GET ``/openapi/v1/sandbox/job/{bohr_job_id}``.
+
+    Returns the full JSON response from the Bohrium API.
+    Raises on HTTP / auth errors.
+    """
     ak = _get_access_key(access_key)
     api = f"{_openapi_host()}/openapi/v1/sandbox/job/{bohr_job_id}"
     logger.debug("get_job_detail_raw: GET %s", api)
@@ -195,6 +229,10 @@ def get_file_token(
     *,
     access_key: str | None = None,
 ) -> tuple[str, str, str]:
+    """Get NAS download token for a file inside a Bohrium job.
+
+    Returns ``(host, remote_path, token)``.
+    """
     ak = _get_access_key(access_key)
     api = f"{_openapi_host()}/openapi/v1/sandbox/job/file/token?accessKey={ak}"
     body = {"filePath": file_path, "jobId": bohr_job_id}
@@ -209,6 +247,10 @@ def iterate_job_files(
     prefix: str | None = None,
     access_key: str | None = None,
 ) -> list[dict[str, Any]]:
+    """List files in a Bohrium job's working directory.
+
+    Returns a list of ``{"path": ..., "isDir": bool, "size": int, ...}`` dicts.
+    """
     host, path, token = get_file_token("", bohr_job_id, access_key=access_key)
     if not host or not token:
         logger.warning("iterate_job_files: empty token for job %s", bohr_job_id)
@@ -239,6 +281,10 @@ def download_job_file(
     *,
     access_key: str | None = None,
 ) -> Path:
+    """Download a single file from a Bohrium job to *dest*.
+
+    Uses the NAS file-token API.
+    """
     normalized = str(file_path or "").replace("\\", "/").strip()
     if normalized:
         try:
@@ -271,6 +317,31 @@ def download_job_directory(
     access_key: str | None = None,
     max_bytes_per_file: int | None = None,
 ) -> list[Path]:
+    """Download all files under *dir_path* in a Bohrium job to *dest_dir*.
+
+    Parameters
+    ----------
+    dir_path:
+        Remote directory path relative to the job root (e.g. ``"trajs_files"``).
+    bohr_job_id:
+        Bohrium job ID.
+    dest_dir:
+        Local directory to write files into (created if absent).
+    access_key:
+        Bohrium access key; falls back to ``BOHRIUM_ACCESS_KEY`` env var.
+    max_bytes_per_file:
+        If set, skip individual files larger than this many bytes.
+
+    Returns
+    -------
+    list[Path]
+        Paths of successfully downloaded files.
+
+    Raises
+    ------
+    RuntimeError
+        If the directory listing returns no files (empty or non-existent dir).
+    """
     normalized_dir = str(dir_path or "").replace("\\", "/").strip().rstrip("/")
 
     root_prefix = ""
@@ -341,6 +412,27 @@ def query_job_status(
     software: str | None = None,
     access_key: str | None = None,
 ) -> str:
+    """Query the status of a remote calculation job.
+
+    Parameters
+    ----------
+    job_id : str
+        MCP ``job_id`` (e.g. ``"2026-02-11-09:47:40.249175/614883"``).
+    bohr_job_id : str | None
+        Explicit Bohrium job ID (from ``extra_info.bohr_job_id``).
+        Required for dpdispatcher-style jobs whose MCP ``job_id``
+        contains a hex hash rather than a numeric ID.
+    software : str | None
+        Software name (reserved for future per-software handling).
+    access_key : str | None
+        Bohrium access key; falls back to ``BOHRIUM_ACCESS_KEY`` env var.
+
+    Returns
+    -------
+    str
+        One of: ``Finished``, ``Running``, ``Failed``, ``Pending``,
+        ``Scheduling``, ``Unknown``, or ``Error:<msg>``.
+    """
     bid = _extract_bohr_job_id(job_id, bohr_job_id)
     if not bid:
         return "Unknown"
@@ -389,6 +481,11 @@ def get_job_results(
     software: str | None = None,
     access_key: str | None = None,
 ) -> dict[str, Any]:
+    """Retrieve job result metadata.
+
+    Returns a dict with at least ``status`` and ``bohr_job_id``.
+    On success includes ``output_files`` (list of remote paths).
+    """
     bid = _extract_bohr_job_id(job_id, bohr_job_id)
     if not bid:
         return {
@@ -450,6 +547,10 @@ def terminate_job(
     *,
     access_key: str | None = None,
 ) -> tuple[bool, dict[str, Any]]:
+    """Terminate a Bohrium job using the OpenAPI kill endpoint.
+
+    Returns ``(success, result_dict)``.
+    """
     bid = (bohr_job_id or "").strip()
     if not bid:
         return False, {"error": "bohr_job_id is required"}

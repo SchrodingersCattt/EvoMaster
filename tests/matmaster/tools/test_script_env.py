@@ -1,6 +1,6 @@
 """Tests for matmaster.tools.script_env — env injection bridge.
 
-Credential resolution is tested in tests/matmaster/integration/test_runtime_bridge.py.
+Credential resolution is tested in tests/matmaster/integration/test_runtime_credential_bridge_e2e.py.
 These tests focus on the injection mechanics: file-based wrapping, inline fallback,
 and the inject_env / inject public API.
 """
