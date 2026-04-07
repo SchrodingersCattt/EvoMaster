@@ -26,7 +26,7 @@ def get_bohrium_base_url() -> str:
     Priority:
     1. ``BOHRIUM_BASE_URL`` explicit override
     2. ``SERVICE_ENV`` derived default:
-       - ``prod`` -> ``https://open.bohrium.com``
+       - ``prod`` -> ``https://openapi.dp.tech``
        - others -> ``https://openapi.{env}.dp.tech``
     """
     override = (os.getenv("BOHRIUM_BASE_URL", "") or "").strip().rstrip("/")
@@ -35,6 +35,5 @@ def get_bohrium_base_url() -> str:
 
     service_env = get_bohrium_service_env()
     if service_env == "prod":
-        # return "https://open.bohrium.com"
         return "https://openapi.dp.tech"
     return f"https://openapi.{service_env}.dp.tech"
