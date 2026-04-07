@@ -1,5 +1,5 @@
 """Redis 连接与发布（DAO 层：仅负责与 Redis 的 I/O）。
-另提供 interaction reply 多 worker 用：run_active 标记、run_context（task_id/invocation_id）、回复 list 的读写。
+另提供 confirmation_reply 多 worker 用：run_active 标记、run_context（task_id/invocation_id）、回复 list 的读写。
 """
 
 import json
@@ -13,12 +13,12 @@ from src.utils.constant import REDIS_URL
 
 logger = logging.getLogger(__name__)
 
-# interaction reply 多 worker：Redis key 与取消占位值
-INTERACTION_RUN_ACTIVE_KEY = 'chat:run_active:{session_id}'
-INTERACTION_RUN_CONTEXT_KEY = 'chat:run_context:{session_id}'
-INTERACTION_REPLY_LIST_KEY = 'chat:confirmation_reply:{session_id}'
-INTERACTION_CANCEL_VALUE = '__CANCEL__'
-INTERACTION_RUN_ACTIVE_TTL_SEC = 3600
+# confirmation_reply 多 worker：Redis key 与取消占位值
+CONFIRMATION_RUN_ACTIVE_KEY = 'chat:run_active:{session_id}'
+CONFIRMATION_RUN_CONTEXT_KEY = 'chat:run_context:{session_id}'
+CONFIRMATION_REPLY_LIST_KEY = 'chat:confirmation_reply:{session_id}'
+CONFIRMATION_CANCEL_VALUE = '__CANCEL__'
+CONFIRMATION_RUN_ACTIVE_TTL_SEC = 3600
 
 # 多 worker 时 run 所在 pod 向其它 pod 的 subscribe 流推送事件（Pub/Sub）
 STREAM_CHANNEL_PREFIX = 'chat:stream:'
@@ -34,15 +34,15 @@ SESSION_RUN_QUEUED_TTL_SEC = 300
 
 
 def _run_active_key(session_id: str) -> str:
-    return INTERACTION_RUN_ACTIVE_KEY.format(session_id=session_id.strip())
+    return CONFIRMATION_RUN_ACTIVE_KEY.format(session_id=session_id.strip())
 
 
 def _run_context_key(session_id: str) -> str:
-    return INTERACTION_RUN_CONTEXT_KEY.format(session_id=session_id.strip())
+    return CONFIRMATION_RUN_CONTEXT_KEY.format(session_id=session_id.strip())
 
 
 def _reply_list_key(session_id: str) -> str:
-    return INTERACTION_REPLY_LIST_KEY.format(session_id=session_id.strip())
+    return CONFIRMATION_REPLY_LIST_KEY.format(session_id=session_id.strip())
 
 
 def _stop_key(session_id: str, task_id: str) -> str:
@@ -107,9 +107,9 @@ class RedisDao:
             logger.warning('Redis client init failed: %s', e)
             return None
 
-    # ---------- interaction reply 多 worker（run_active + reply list）----------
+    # ---------- confirmation_reply 多 worker（run_active + reply list）----------
 
-    def set_interaction_run_active(self, session_id: str) -> bool:
+    def set_confirmation_run_active(self, session_id: str) -> bool:
         """标记该会话当前有活跃 run。未配置 Redis 或失败返回 False。"""
         client = self.create_client()
         if not client:
@@ -118,7 +118,7 @@ class RedisDao:
             client.set(
                 _run_active_key(session_id),
                 '1',
-                ex=INTERACTION_RUN_ACTIVE_TTL_SEC,
+                ex=CONFIRMATION_RUN_ACTIVE_TTL_SEC,
             )
             return True
         except Exception as e:
@@ -127,7 +127,7 @@ class RedisDao:
             )
             return False
 
-    def delete_interaction_run_active(self, session_id: str) -> None:
+    def delete_confirmation_run_active(self, session_id: str) -> None:
         """清除 run 活跃标记与 run_context。"""
         client = self.create_client()
         if not client:
@@ -142,7 +142,7 @@ class RedisDao:
                 e,
             )
 
-    def set_interaction_run_context(
+    def set_confirmation_run_context(
         self, session_id: str, task_id: str, invocation_id: str
     ) -> bool:
         """写入当前 run 的 task_id / invocation_id，供 broadcast_reply 跨 worker 使用。"""
@@ -156,7 +156,7 @@ class RedisDao:
                     {'task_id': task_id, 'invocation_id': invocation_id},
                     ensure_ascii=False,
                 ),
-                ex=INTERACTION_RUN_ACTIVE_TTL_SEC,
+                ex=CONFIRMATION_RUN_ACTIVE_TTL_SEC,
             )
             return True
         except Exception as e:
@@ -165,7 +165,7 @@ class RedisDao:
             )
             return False
 
-    def get_interaction_run_context(self, session_id: str) -> dict | None:
+    def get_confirmation_run_context(self, session_id: str) -> dict | None:
         """读取当前 run 的 task_id / invocation_id，无或失败返回 None。"""
         client = self.create_client()
         if not client:
@@ -181,7 +181,7 @@ class RedisDao:
             )
             return None
 
-    def is_interaction_run_active(self, session_id: str) -> bool:
+    def is_confirmation_run_active(self, session_id: str) -> bool:
         """是否配置了 Redis 且该会话在 Redis 中有活跃 run。"""
         client = self.create_client()
         if not client:
@@ -191,7 +191,7 @@ class RedisDao:
         except Exception:
             return False
 
-    def delete_interaction_reply_list(self, session_id: str) -> None:
+    def delete_confirmation_reply_list(self, session_id: str) -> None:
         """清空该会话的回复列表（新 run 开始时调用）。"""
         client = self.create_client()
         if not client:
@@ -203,7 +203,7 @@ class RedisDao:
                 'Redis clear reply list failed session_id=%s: %s', session_id, e
             )
 
-    def rpush_interaction_reply(self, session_id: str, value: str) -> None:
+    def rpush_confirmation_reply(self, session_id: str, value: str) -> None:
         """向该会话回复列表尾部推入一条（内容或取消占位）。"""
         client = self.create_client()
         if not client:
@@ -212,12 +212,12 @@ class RedisDao:
             client.rpush(_reply_list_key(session_id), value)
         except Exception as e:
             logger.warning(
-                'Redis RPUSH interaction_reply failed session_id=%s: %s',
+                'Redis RPUSH confirmation_reply failed session_id=%s: %s',
                 session_id,
                 e,
             )
 
-    def blpop_interaction_reply(self, session_id: str, timeout_sec: int) -> str | None:
+    def blpop_confirmation_reply(self, session_id: str, timeout_sec: int) -> str | None:
         """从该会话回复列表左侧阻塞弹出一条。超时返回 None；否则返回字符串（可能为取消占位）。"""
         client = self.create_client()
         if not client:
@@ -226,7 +226,7 @@ class RedisDao:
             result = client.blpop(_reply_list_key(session_id), timeout=timeout_sec)
         except Exception as e:
             logger.warning(
-                'Redis BLPOP interaction_reply failed session_id=%s: %s',
+                'Redis BLPOP confirmation_reply failed session_id=%s: %s',
                 session_id,
                 e,
             )

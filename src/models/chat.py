@@ -3,7 +3,7 @@
 ag-ui 协议（前后端约定）：
 - 服务端 -> 客户端：SSE，event 固定为 "ag-ui"，data 为 JSON 字符串，字段：
   source: "System"|"User"|"MatMaster", type: 事件类型, content: 内容, session_id: 会话 id
-  事件类型示例: session_status, status, query, thought, response, tool_call, tool_result, run_result, error, cancelled, run_interrupted, ask_question, ask_question_reply, ask_question_timeout, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等。
+  事件类型示例: session_status, status, query, thought, response, tool_call, tool_result, run_result, error, cancelled, run_interrupted, confirmation_request, confirmation_reply, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等。
   thought：仅表示 reasoning / thinking 内容；若为流式思考分片，则仍使用 type='thought'，并在 payload 顶层附带 stream_state='start'|'streaming'|'end'，以及可选 stream_id/context/token_count。
   response：assistant 对用户可见的正文内容；流式分片同样在 payload 顶层附带 stream_state / stream_id，非流式 response 用于持久化与历史回放。
   session_status：流开头推送，含 status: 'idle'|'active'|'waiting'|'failed'（waiting=已入队未接手，failed=上一轮因 run_interrupted reason=restart 或 deploy 按失败结束），可选 last_task_id；便于部署/重启后前端根据 idle/failed 结束“未结束的 stream”状态。
@@ -12,8 +12,7 @@ ag-ui 协议（前后端约定）：
 - 客户端 -> 服务端：REST
   POST /chat/sessions/{session_id}/stream  Body 可选：不传或 content 为空→仅历史+ping；有 content→发送并返回本次 SSE 流
   POST /chat/sessions/{session_id}/stop  终止当前运行
-  POST /chat/sessions/{session_id}/ask_question_reply Body: ChatAskQuestionReplyRequest
-  POST /chat/sessions/{session_id}/confirmation_reply Body: ChatPlannerReplyRequest（过渡期保留）
+  POST /chat/sessions/{session_id}/confirmation_reply Body: ChatPlannerReplyRequest（confirmation_request 统一回复）
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
@@ -195,14 +194,6 @@ class ChatPlannerReplyRequest(BaseModel):
             }
         }
     )
-
-
-class ChatAskQuestionReplyRequest(BaseModel):
-    """POST /chat/sessions/{session_id}/ask_question_reply 结构化问答回复"""
-
-    request_id: str
-    answers: dict[str, str]
-    annotations: dict[str, dict[str, str]] | None = None
 
 
 class ErrorApiResponse(BaseResponse[None]):

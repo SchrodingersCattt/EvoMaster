@@ -120,22 +120,13 @@ def _public_content_for_event(
         return out
 
     if event_type == 'confirmation_request':
-        # 向后兼容：旧的 confirmation_request 事件按 ask_question 格式输出
         return {
-            'request_id': payload.get('origin', ''),
-            'questions': [
-                {
-                    'question': payload.get('question', ''),
-                    'header': 'Confirmation',
-                    'options': [
-                        {'label': a, 'description': ''}
-                        for a in (payload.get('actions') or ['confirm', 'cancel'])
-                    ],
-                }
-            ],
-            'metadata': {},
+            'question': payload.get('question'),
+            'mode': payload.get('mode'),
+            'timeout_seconds': payload.get('timeout_seconds'),
+            'context': payload.get('context'),
+            'actions': payload.get('actions') or [],
             'origin': payload.get('origin'),
-            'preview_format': 'markdown',
         }
 
     if event_type == 'error':
@@ -196,29 +187,6 @@ def _public_content_for_event(
         return {
             'question': payload.get('question'),
             'default_reply': payload.get('default_reply'),
-        }
-
-    if event_type == 'ask_question':
-        return {
-            'request_id': payload.get('request_id'),
-            'questions': payload.get('questions') or [],
-            'metadata': payload.get('metadata') or {},
-            'origin': payload.get('origin'),
-            'preview_format': payload.get('preview_format', 'markdown'),
-        }
-
-    if event_type == 'ask_question_reply':
-        return {
-            'request_id': payload.get('request_id'),
-            'answers': payload.get('answers') or {},
-            'annotations': payload.get('annotations') or {},
-        }
-
-    if event_type == 'ask_question_timeout':
-        return {
-            'request_id': payload.get('request_id'),
-            'questions': payload.get('questions') or [],
-            'reason': payload.get('reason', 'timeout'),
         }
 
     if event_type == 'exp_run':

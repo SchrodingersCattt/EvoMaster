@@ -394,9 +394,9 @@ class TestExpBuiltinTools:
         return exp, registry
 
     def test_native_tools_count(self, tmp_path: Path) -> None:
-        """11 native tools registered with source='builtin' (CC names)."""
+        """10 native tools registered with source='builtin' (CC names)."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 11
+        assert len(registry) == 10
 
     def test_native_tool_names(self, tmp_path: Path) -> None:
         """All 10 expected CC-name tools are present in registry."""
@@ -429,9 +429,9 @@ class TestExpBuiltinTools:
         assert 'str_replace_editor' not in registry
 
     def test_total_count(self, tmp_path: Path) -> None:
-        """Total tools = 11 native builtin (CC names, no legacy tools)."""
+        """Total tools = 10 native builtin (CC names, no legacy tools)."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 11
+        assert len(registry) == 10
 
     def test_web_search_is_native_builtin(self, tmp_path: Path) -> None:
         """WebSearchTool is registered as native builtin with CC name."""
@@ -452,12 +452,11 @@ class TestExpBuiltinTools:
         )
         registry = ToolRegistry()
         exp._init_builtin_tools(ctx, registry, ['*'])
-        assert len(registry) == 5
+        assert len(registry) == 4
         assert "TodoWrite" in registry
         assert "WebSearch" in registry
         assert "WebFetch" in registry
         assert "Bohrium" in registry
-        assert "AskQuestion" in registry
 
     async def test_explicit_builtin_config_filters_tools(self, tmp_path: Path) -> None:
         """Non-empty explicit tool list registers only the requested tools."""

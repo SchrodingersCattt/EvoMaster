@@ -307,18 +307,6 @@ class AgentRunService:
                 }
             )
 
-            # -- Stage 4b: AskQuestion bridge --
-            from matmaster.integration.interaction_bridge import AskQuestionBridge
-            from src.services.stream_service import RedisReplyQueue
-
-            bridge = AskQuestionBridge(
-                session_id=session_id,
-                send_cb=send_cb,
-                reply_queue=RedisReplyQueue(session_id),
-                timeout_seconds=1800,
-            )
-            pg_ctx = pg_ctx.model_copy(update={'interaction_bridge': bridge})
-
             # -- Stage 5: History --
             raw_events = (
                 events_table.get_session_events(

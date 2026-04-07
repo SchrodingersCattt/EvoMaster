@@ -206,7 +206,7 @@ def _run_worker_loop() -> None:
         user_info_display = (
             f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
         )
-        redis_dao.delete_interaction_reply_list(session_id)
+        redis_dao.delete_confirmation_reply_list(session_id)
         # 清除可能残留的上一轮 stop key（含 session 级），避免上一轮 finally 中 delete 失败导致本轮一启动即被误判为已请求停止
         logger.info(
             'Agent worker: clear stop keys before run session_id=%s task_id=%s',
@@ -214,8 +214,8 @@ def _run_worker_loop() -> None:
             task_id,
         )
         redis_dao.delete_stop_requested(session_id, task_id)
-        redis_dao.set_interaction_run_active(session_id)
-        redis_dao.set_interaction_run_context(session_id, task_id, invocation_id or '')
+        redis_dao.set_confirmation_run_active(session_id)
+        redis_dao.set_confirmation_run_context(session_id, task_id, invocation_id or '')
 
         def send_cb(p: dict, _sid: str = session_id) -> None:
             # 不在此处写 DB：run_agent 内 event_callback 已写，此处再写会导致同一条事件落库两次
@@ -248,7 +248,7 @@ def _run_worker_loop() -> None:
                     task_id,
                     fail_reason or 'unknown',
                 )
-                redis_dao.delete_interaction_run_active(session_id)
+                redis_dao.delete_confirmation_run_active(session_id)
                 LogContext.clear()
                 continue
 
@@ -352,7 +352,7 @@ def _run_worker_loop() -> None:
             if acquired:
                 _current_session_id = None
                 LogContext.clear()
-            redis_dao.delete_interaction_run_active(session_id)
+            redis_dao.delete_confirmation_run_active(session_id)
             redis_dao.delete_stop_requested(session_id, task_id)
             if acquired:
                 sessions_service.release_session_run(

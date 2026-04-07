@@ -342,22 +342,13 @@ async def test_sse_frames_match_frontend_contract_without_mysql():
         'status': 'success',
         'info': {'auto_save': True},
     }
-    # confirmation_request backward-compat: mapped to ask_question format
     assert frames[2]['content'] == {
-        'request_id': 'planner',
-        'questions': [
-            {
-                'question': 'Proceed?',
-                'header': 'Confirmation',
-                'options': [
-                    {'label': 'yes', 'description': ''},
-                    {'label': 'no', 'description': ''},
-                ],
-            }
-        ],
-        'metadata': {},
+        'question': 'Proceed?',
+        'mode': 'timeout',
+        'timeout_seconds': 20,
+        'context': 'ctx',
+        'actions': ['yes', 'no'],
         'origin': 'planner',
-        'preview_format': 'markdown',
     }
     assert frames[3]['content'] == {'message': 'boom', 'traceback': 'tb'}
     assert frames[4]['content'] == {
