@@ -91,7 +91,7 @@ MatMaster 的对话与任务执行以 **根目录 `app.py` + `src/`（API）** �
   - `uv run python -c "from matmaster.core.playground import Playground; print('OK')"`
   - `uv run pytest ...`
   - `uv run python app.py` 等。
-- **版本约定**：`pyproject.toml` 中 `requires-python = ">=3.10"`；实际开发/CI 使用 uv 安装的版本（如 3.13）。涉及语法或类型注解（如是否保留 `from __future__ import annotations`）时，以 **uv 环境中的 Python 版本** 为准做验证与决策。
+- **版本约定**：`pyproject.toml` 中 `requires-python = ">=3.11"`；实际开发/CI 使用 uv 安装的版本（如 3.13）。涉及语法或类型注解（如是否保留 `from __future__ import annotations`）时，以 **uv 环境中的 Python 版本** 为准做验证与决策。
 
 ---
 
