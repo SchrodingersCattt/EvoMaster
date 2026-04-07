@@ -6,9 +6,10 @@ import json
 import shutil
 import tempfile
 import zipfile
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Iterator, NamedTuple
+from typing import Any, NamedTuple
 from uuid import uuid4
 
 from matmaster.tools.tool_result import ToolResult

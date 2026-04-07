@@ -5,9 +5,9 @@ import argparse
 import shlex
 import subprocess
 import sys
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
 
 ZERO_SHA = "0" * 40
 DEFAULT_BASE_REF = "origin/main"
