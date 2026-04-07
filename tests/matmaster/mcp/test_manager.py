@@ -40,18 +40,18 @@ class TestMCPToolManagerInstantiation:
         assert isinstance(m.tools_by_server, dict)
         assert len(m.tools_by_server) == 0
 
-    def test_path_adaptor_servers_is_empty_set(self):
+    def test_calculation_preflight_servers_is_empty_set(self):
         from matmaster.mcp.manager import MCPToolManager
 
         m = MCPToolManager()
-        assert isinstance(m.path_adaptor_servers, set)
-        assert len(m.path_adaptor_servers) == 0
+        assert isinstance(m.calculation_preflight_servers, set)
+        assert len(m.calculation_preflight_servers) == 0
 
-    def test_path_adaptor_factory_is_none(self):
+    def test_calculation_preflight_factory_is_none(self):
         from matmaster.mcp.manager import MCPToolManager
 
         m = MCPToolManager()
-        assert m.path_adaptor_factory is None
+        assert m.calculation_preflight_factory is None
 
     def test_sync_tools_by_server_is_empty_dict(self):
         from matmaster.mcp.manager import MCPToolManager
@@ -175,23 +175,23 @@ class TestMCPToolManagerBuildTools:
         # The first server's tool stays
         assert "srv_build_bulk" in m.tools_by_server["srv"]
 
-    def test_has_path_adaptor_false_without_factory(self):
+    def test_has_calculation_preflight_false_without_factory(self):
         m = self._make_manager()
         conn = self._fake_conn()
         tools_info = self._make_tools_info(["run"])
         m._build_tools("srv", conn, tools_info)
         tool_info = m.tools_by_server["srv"]["srv_run"]
-        assert tool_info["has_path_adaptor"] is False
+        assert tool_info["has_calculation_preflight"] is False
 
-    def test_has_path_adaptor_true_when_configured(self):
+    def test_has_calculation_preflight_true_when_configured(self):
         m = self._make_manager()
-        m.path_adaptor_servers = {"srv"}
-        m.path_adaptor_factory = lambda: MagicMock()
+        m.calculation_preflight_servers = {"srv"}
+        m.calculation_preflight_factory = lambda: MagicMock()
         conn = self._fake_conn()
         tools_info = self._make_tools_info(["run"])
         m._build_tools("srv", conn, tools_info)
         tool_info = m.tools_by_server["srv"]["srv_run"]
-        assert tool_info["has_path_adaptor"] is True
+        assert tool_info["has_calculation_preflight"] is True
 
     def test_no_mcp_tool_instances_in_tools_by_server(self):
         """tools_by_server stores plain dicts, not MCPTool instances."""

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from matmaster.integration.runtime_bridge.models import ResolvedCredential
+from matmaster.bohrium.types import BohriumCredentials
 
 from .errors import BohriumCredentialError
 
@@ -19,26 +19,25 @@ class BohriumContext:
     user_no: str = ""
 
     @classmethod
-    def from_resolved_credential(
-        cls, cred: ResolvedCredential, *, sandbox: bool
+    def from_credentials(
+        cls,
+        cred: BohriumCredentials,
+        *,
+        sandbox: bool,
+        source: str = "runtime",
     ) -> BohriumContext:
-        values = cred.values
-        access_key = str(values.get("access_key") or "").strip()
-        if not access_key:
+        if not cred.access_key:
             raise BohriumCredentialError(
                 "Bohrium credentials unavailable. Provide via session or BOHRIUM_ACCESS_KEY."
             )
-
-        raw_project_id = values.get("project_id", -1)
-        project_id = raw_project_id if isinstance(raw_project_id, int) else -1
         return cls(
-            access_key=access_key,
-            project_id=project_id,
-            base_url=str(values.get("base_url") or "").strip(),
-            credential_source=cred.source,
+            access_key=cred.access_key,
+            project_id=cred.project_id,
+            base_url=cred.base_url,
+            credential_source=source,
             sandbox=sandbox,
-            user_id=values.get("user_id"),
-            user_no=str(values.get("user_no") or "").strip(),
+            user_id=cred.user_id,
+            user_no=cred.user_no,
         )
 
 

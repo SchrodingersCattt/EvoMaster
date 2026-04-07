@@ -630,7 +630,7 @@ class Exp:
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
 
         # MCP runtime config: ALWAYS self-load from config_dir.
-        # Independent of skills_config -- MCP runtime config (path_adaptor,
+        # Independent of skills_config -- MCP runtime config (calculation_preflight,
         # calculation_executors) is a separate concern from skill routing.
         from matmaster.config.loader import _load_raw
 
@@ -652,9 +652,11 @@ class Exp:
         if not config_path.is_absolute():
             config_path = resolved_config_dir / config_path
 
-        if mcp_config.get('path_adaptor') == 'calculation':
+        if mcp_config.get('calculation_preflight') == 'calculation':
             try:
-                from matmaster.adaptors.calculation import resolve_mcp_config_path
+                from matmaster.mcp.calculation.config_env import (
+                    resolve_mcp_config_path,
+                )
 
                 config_path = resolve_mcp_config_path(config_path)
             except ImportError:
