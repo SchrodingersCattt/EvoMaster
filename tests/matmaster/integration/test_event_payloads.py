@@ -61,25 +61,22 @@ class TestPublicContentForEvent:
             'reason': 'user stop'
         }
 
-    def test_confirmation_request_returns_confirmation_shape(self) -> None:
+    def test_confirmation_request_backward_compat_maps_to_ask_question_format(
+        self,
+    ) -> None:
         payload = {
             'type': 'confirmation_request',
             'source': 'System',
             'question': 'Proceed?',
-            'timeout_seconds': 30,
-            'context': 'tool context',
             'mode': 'timeout',
             'actions': ['confirm', 'cancel'],
             'origin': 'tool:X',
         }
-        assert _public_content_for_event('confirmation_request', payload) == {
-            'question': 'Proceed?',
-            'mode': 'timeout',
-            'timeout_seconds': 30,
-            'context': 'tool context',
-            'actions': ['confirm', 'cancel'],
-            'origin': 'tool:X',
-        }
+        result = _public_content_for_event('confirmation_request', payload)
+        assert result['request_id'] == 'tool:X'
+        assert len(result['questions']) == 1
+        assert result['questions'][0]['question'] == 'Proceed?'
+        assert result['questions'][0]['header'] == 'Confirmation'
 
     def test_confirmation_timeout_returns_question_and_default(self) -> None:
         payload = {
@@ -202,6 +199,53 @@ class TestToolResultPayloadMapping:
             },
         )
         assert result['info'] == {'exit_code': 0, 'signal': None}
+
+
+class TestAskQuestionPayloadMapping:
+    """AskQuestion event family SSE payload mapping."""
+
+    def test_ask_question_maps_all_fields(self) -> None:
+        result = _public_content_for_event(
+            'ask_question',
+            {
+                'type': 'ask_question',
+                'request_id': 'aq_1',
+                'questions': [{'question': 'Which?', 'header': 'H', 'options': []}],
+                'metadata': {'source': 'tool'},
+                'origin': 'tool:AskQuestion',
+                'preview_format': 'markdown',
+            },
+        )
+        assert result['request_id'] == 'aq_1'
+        assert len(result['questions']) == 1
+        assert result['origin'] == 'tool:AskQuestion'
+        assert result['preview_format'] == 'markdown'
+
+    def test_ask_question_reply_maps_answers(self) -> None:
+        result = _public_content_for_event(
+            'ask_question_reply',
+            {
+                'type': 'ask_question_reply',
+                'request_id': 'aq_1',
+                'answers': {'Q1': 'A1'},
+                'annotations': {'Q1': {'notes': 'extra'}},
+            },
+        )
+        assert result['answers'] == {'Q1': 'A1'}
+        assert result['annotations'] == {'Q1': {'notes': 'extra'}}
+
+    def test_ask_question_timeout_maps_reason(self) -> None:
+        result = _public_content_for_event(
+            'ask_question_timeout',
+            {
+                'type': 'ask_question_timeout',
+                'request_id': 'aq_1',
+                'questions': [],
+                'reason': 'timeout',
+            },
+        )
+        assert result['request_id'] == 'aq_1'
+        assert result['reason'] == 'timeout'
 
 
 class TestSourceNormalization:

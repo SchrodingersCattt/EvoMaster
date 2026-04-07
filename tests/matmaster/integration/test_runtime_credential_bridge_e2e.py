@@ -8,11 +8,11 @@ fallback chains.
 from __future__ import annotations
 
 import asyncio
-import sys
-import types
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import matmaster.tools.builtin.bohrium_tool.api as bohrium_api_module
+import matmaster.tools.builtin.bohrium_tool.open_sdk as bohrium_open_sdk_module
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.tool_result import ToolResult
 
@@ -83,9 +83,6 @@ class TestBohriumToolAndRemoteShare:
         input_dir.mkdir()
         (input_dir / "test.inp").write_text("data", encoding="utf-8")
 
-        # Mock the API calls
-        import matmaster.tools.builtin.bohrium_tool as bmod
-
         post_calls = []
 
         def fake_post(base_url, path, access_key, payload, timeout=30):
@@ -102,12 +99,7 @@ class TestBohriumToolAndRemoteShare:
                 }
             return {"code": 0, "data": {"jobId": "j2", "bohrJobId": "b2"}}
 
-        monkeypatch.setattr(bmod, "_post", fake_post)
-
-        # Mock tiefblue SDK
-        sdk_module = types.ModuleType("bohrium_open_sdk")
-        opensdk_module = types.ModuleType("bohrium_open_sdk.opensdk")
-        tiefblue_module = types.ModuleType("bohrium_open_sdk.opensdk._tiefblue_client")
+        monkeypatch.setattr(bohrium_api_module, "_post", fake_post)
 
         class FakeTiefblue:
             def __init__(self, **kw):
@@ -116,30 +108,20 @@ class TestBohriumToolAndRemoteShare:
             def upload_from_file_multi_part(self, **kw):
                 return {}
 
-        tiefblue_module.Tiefblue = FakeTiefblue
-        sdk_module.opensdk = opensdk_module
-        opensdk_module._tiefblue_client = tiefblue_module
-
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-
-        with monkeypatch.context() as m:
-            m.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
-            m.setitem(sys.modules, "bohrium_open_sdk.opensdk", opensdk_module)
-            m.setitem(
-                sys.modules,
-                "bohrium_open_sdk.opensdk._tiefblue_client",
-                tiefblue_module,
+        monkeypatch.setattr(
+            bohrium_open_sdk_module, "_load_tiefblue_client", lambda: FakeTiefblue
+        )
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "action": "submit",
+                    "input_dir": str(input_dir),
+                    "image": "test:latest",
+                    "cmd": "echo hi",
+                }
             )
-            result = asyncio.run(
-                tool.execute(
-                    {
-                        "action": "submit",
-                        "input_dir": str(input_dir),
-                        "image": "test:latest",
-                        "cmd": "echo hi",
-                    }
-                )
-            )
+        )
 
         assert isinstance(result, ToolResult)
         assert result.status == "success"
@@ -155,8 +137,6 @@ class TestBohriumToolAndRemoteShare:
 
         session = _RemoteShareSession()
         tool = BohriumTool(session=session, workdir=tmp_path)
-
-        import matmaster.tools.builtin.bohrium_tool as bmod
 
         post_calls = []
         upload_calls = []
@@ -177,11 +157,7 @@ class TestBohriumToolAndRemoteShare:
                 }
             return {"code": 0, "data": {"jobId": "j2", "bohrJobId": "b2"}}
 
-        monkeypatch.setattr(bmod, "_post", fake_post)
-
-        sdk_module = types.ModuleType("bohrium_open_sdk")
-        opensdk_module = types.ModuleType("bohrium_open_sdk.opensdk")
-        tiefblue_module = types.ModuleType("bohrium_open_sdk.opensdk._tiefblue_client")
+        monkeypatch.setattr(bohrium_api_module, "_post", fake_post)
 
         class FakeTiefblue:
             def __init__(self, **kw):
@@ -191,30 +167,20 @@ class TestBohriumToolAndRemoteShare:
                 upload_calls.append(kw)
                 return {}
 
-        tiefblue_module.Tiefblue = FakeTiefblue
-        sdk_module.opensdk = opensdk_module
-        opensdk_module._tiefblue_client = tiefblue_module
-
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-
-        with monkeypatch.context() as m:
-            m.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
-            m.setitem(sys.modules, "bohrium_open_sdk.opensdk", opensdk_module)
-            m.setitem(
-                sys.modules,
-                "bohrium_open_sdk.opensdk._tiefblue_client",
-                tiefblue_module,
+        monkeypatch.setattr(
+            bohrium_open_sdk_module, "_load_tiefblue_client", lambda: FakeTiefblue
+        )
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "action": "submit",
+                    "input_dir": "/share/inputs",
+                    "image": "test:latest",
+                    "cmd": "echo hi",
+                }
             )
-            result = asyncio.run(
-                tool.execute(
-                    {
-                        "action": "submit",
-                        "input_dir": "/share/inputs",
-                        "image": "test:latest",
-                        "cmd": "echo hi",
-                    }
-                )
-            )
+        )
 
         assert isinstance(result, ToolResult)
         assert result.status == "success"
