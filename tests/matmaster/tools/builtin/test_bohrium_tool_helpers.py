@@ -35,7 +35,8 @@ def _patch_bridge(monkeypatch, cred: ResolvedCredential | None = None):
     import matmaster.integration.runtime_bridge.adapters.bohrium as adapter_mod
     import matmaster.tools.builtin.bohrium_tool.tool as tool_mod
 
-    resolver = lambda session=None, explicit=None: cred or _fake_cred()
+    def resolver(session=None, explicit=None):
+        return cred or _fake_cred()
     monkeypatch.setattr(adapter_mod, "resolve_bohrium_credentials", resolver)
     monkeypatch.setattr(tool_mod, "resolve_bohrium_credentials", resolver)
 
