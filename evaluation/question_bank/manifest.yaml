@@ -112,7 +112,7 @@ banks:
 
   - path: "structure_construction/sc_elec.yaml"
     capability: "structure_construction"
-    questions: 2
+    questions: 1
 
   - path: "batch_processing/bp_elec.yaml"
     capability: "batch_processing"
@@ -126,7 +126,7 @@ banks:
 
   - path: "input_generation/ig_abacus.yaml"
     capability: "input_generation_abacus"
-    questions: 2
+    questions: 8
 
   # --- DPA / MLIP workflow evaluation ---
 
