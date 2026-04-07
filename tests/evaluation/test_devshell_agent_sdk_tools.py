@@ -320,3 +320,13 @@ def test_run_optimization_followup_returns_warning_when_report_missing(
     )
 
     assert rc == 1
+
+
+def test_default_history_dir_is_outside_results(tmp_path: Path) -> None:
+    cfg = _build_config(tmp_path)
+    loop = DevshellAgentLoop(cfg)
+
+    history_dir = loop._history_root()
+
+    assert history_dir == tmp_path / "evaluation" / "devshell_agent_history"
+    assert "results" not in str(history_dir)

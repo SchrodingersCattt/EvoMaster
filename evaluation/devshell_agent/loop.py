@@ -44,6 +44,7 @@ class AgentLoopConfig:
     eval_ingest_submit_timeout: float = 120.0
     enable_checklist_agent: bool = True
     checklist_permission_mode: str = ""
+    history_root: Path | None = None
 
 
 class DevshellAgentLoop:
@@ -441,6 +442,14 @@ class DevshellAgentLoop:
         exp = (self._cfg.defaults.exp or "").strip()
         return exp if exp else "direct"
 
+    def _history_root(self) -> Path:
+        if self._cfg.history_root is not None:
+            return self._cfg.history_root.resolve()
+        return (self._cfg.repo_root / "evaluation" / "devshell_agent_history").resolve()
+
+    def _history_session_dir(self) -> Path:
+        return self._history_root() / self._cfg.session_dir.name
+
     def _iteration_user_message(self, *, it: int) -> str:
         cfg = self._cfg
         extra = cfg.extra_instruction.strip()
@@ -469,6 +478,7 @@ class DevshellAgentLoop:
             "started_at_utc": datetime.now(timezone.utc).isoformat(),
             "repo_root": str(cfg.repo_root.resolve()),
             "session_dir": str(session_dir.resolve()),
+            "history_root": str(self._history_root()),
             "max_iterations": cfg.max_iterations,
             "target_mean_score": cfg.target_mean_score,
             "permission_mode": cfg.permission_mode,
@@ -495,6 +505,71 @@ class DevshellAgentLoop:
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+
+    def _write_iteration_history(
+        self,
+        *,
+        it: int,
+        state: AgentLoopSharedState,
+        outcome: dict[str, Any],
+    ) -> None:
+        history_dir = self._history_session_dir() / "iterations"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "iteration_index": it,
+            "outcome": outcome,
+            "optimization_reports": [
+                row
+                for row in state.optimization_reports
+                if int(row.get("iteration_index", -1)) == it
+            ],
+            "checklist_reports": [
+                row
+                for row in state.checklist_revision_reports
+                if int(row.get("iteration_index", -1)) == it
+            ],
+            "optimization_delegations": [
+                row
+                for row in state.optimization_delegations_pending
+                if int(row.get("iteration_index", -1)) == it
+            ],
+        }
+        (history_dir / f"iter_{it:02d}.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    def _write_session_history_summary(
+        self,
+        *,
+        state: AgentLoopSharedState,
+        exit_code: int,
+    ) -> None:
+        session_dir = self._history_session_dir()
+        session_dir.mkdir(parents=True, exist_ok=True)
+        summary = {
+            "session_dir": str(self._cfg.session_dir.resolve()),
+            "exit_code": exit_code,
+            "outcomes": state.outcomes,
+            "optimization_reports": state.optimization_reports,
+            "checklist_revision_reports": state.checklist_revision_reports,
+        }
+        (session_dir / "session_summary.json").write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        index_path = self._history_root() / "index.jsonl"
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        row = {
+            "session_name": self._cfg.session_dir.name,
+            "session_dir": str(self._cfg.session_dir.resolve()),
+            "exit_code": exit_code,
+            "history_dir": str(session_dir),
+            "outcome_count": len(state.outcomes),
+        }
+        with index_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     async def run(self) -> int:
         """Run up to ``max_iterations`` SDK rounds; return 0 on clean stop, 1 on warnings."""
@@ -595,6 +670,7 @@ class DevshellAgentLoop:
                         continue
 
                     last = matching[-1]
+                    self._write_iteration_history(it=it, state=state, outcome=last)
                     score = int(last.get("macro_mean_0_100", 0))
                     met = bool(last.get("target_met"))
 
@@ -636,6 +712,7 @@ class DevshellAgentLoop:
                         )
                         break
 
+        self._write_session_history_summary(state=state, exit_code=exit_code)
         return exit_code
 
     def _checklist_permission_mode_resolved(self) -> str:
