@@ -14,6 +14,7 @@ from evaluation.devshell_agent.config_state import (
     DevshellAgentCliDefaults,
     parallel_scoring_checklist_workers_from_jobs,
 )
+from evaluation.devshell_agent.feishu_round_notify import notify_after_scoring_async
 from evaluation.devshell_agent.subprocess_runner import (
     DevshellEvalSubprocess,
     RunDevshellEvalParams,
@@ -316,13 +317,15 @@ class MatmasterEvalMcpToolkit:
             print(out, file=sys.stderr, end="" if out.endswith("\n") else "\n")
         if err.strip():
             print(err, file=sys.stderr, end="" if err.endswith("\n") else "\n")
-        return {
+        result = {
             "attempted": True,
             "ok": rc == 0,
             "exit_code": rc,
             "stdout_tail": (out or "")[-4000:],
             "stderr_tail": (err or "")[-4000:],
         }
+        notify_after_scoring_async(run_dir=run_dir, ingest_result=result)
+        return result
 
     async def _run_devshell_eval(self, args: dict[str, Any]) -> dict[str, Any]:
         tag = str(args["iteration_tag"]).strip()
