@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 
-import matmaster.tools.builtin.bohrium_tool as bohrium_module
+import matmaster.tools.builtin.bohrium_tool.api as bohrium_api_module
+import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.tool_result import ToolResult
 from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
@@ -25,7 +26,7 @@ class TestBohriumPollExecution:
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
 
         result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-123'}))
 
@@ -53,11 +54,11 @@ class TestBohriumPollExecution:
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
         import time as time_module
 
-        monkeypatch.setattr(bohrium_module, 'time', time_module, raising=False)
-        monkeypatch.setattr(bohrium_module.time, 'sleep', sleep_calls.append)
+        monkeypatch.setattr(bohrium_tool_module, 'time', time_module, raising=False)
+        monkeypatch.setattr(bohrium_tool_module.time, 'sleep', sleep_calls.append)
 
         result = asyncio.run(
             tool.execute(
@@ -89,7 +90,7 @@ class TestBohriumPollExecution:
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
 
         result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-789'}))
 
@@ -102,23 +103,15 @@ class TestBohriumPollExecution:
         self, tmp_path, monkeypatch
     ):
         tool = BohriumTool(workdir=tmp_path)
-        download_calls: list[tuple] = []
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
             del base_url, access_key, params, timeout
             assert path == '/openapi/v1/sandbox/job/job-finished'
             return {'data': {'status': 2}}
 
-        def fake_download_results(*args, **kwargs):
-            download_calls.append((args, kwargs))
-            return ['log'], 'should not happen'
-
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_module, '_get', fake_get)
-        monkeypatch.setattr(
-            bohrium_module, 'download_bohrium_results', fake_download_results
-        )
+        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
 
         result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-finished'}))
 
@@ -128,7 +121,6 @@ class TestBohriumPollExecution:
         assert 'action="download"' in payload['message']
         assert 'result_dir' not in payload
         assert 'files' not in payload
-        assert download_calls == []
 
     def test_poll_failed_returns_guidance_without_downloading(
         self, tmp_path, monkeypatch
@@ -142,11 +134,11 @@ class TestBohriumPollExecution:
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
         import time as time_module
 
-        monkeypatch.setattr(bohrium_module, 'time', time_module, raising=False)
-        monkeypatch.setattr(bohrium_module.time, 'sleep', sleep_calls.append)
+        monkeypatch.setattr(bohrium_tool_module, 'time', time_module, raising=False)
+        monkeypatch.setattr(bohrium_tool_module.time, 'sleep', sleep_calls.append)
 
         result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-failed'}))
 

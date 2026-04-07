@@ -13,6 +13,7 @@ from matmaster.types.messages import (
     ToolCallData,
     ToolMessage,
     UserMessage,
+    parse_tool_arguments,
 )
 
 # ── Role enum ──────────────────────────────────────────
@@ -142,6 +143,32 @@ class TestToolCallData:
         assert tc.id == "tc1"
         assert tc.name == "fn"
         assert tc.arguments == {"a": 1}
+
+
+class TestParseToolArguments:
+    def test_parse_tool_arguments_repairs_literal_newlines_in_strings(self) -> None:
+        raw = (
+            '{"file_path": "/tmp/report.md", '
+            '"content": "# Title\n\n## Section\nbody"}'
+        )
+
+        assert parse_tool_arguments(raw) == {
+            "file_path": "/tmp/report.md",
+            "content": "# Title\n\n## Section\nbody",
+        }
+
+    def test_parse_tool_arguments_accepts_valid_json_prefix(self) -> None:
+        raw = '{"file_path": "/tmp/report.md", "content": "ok"} trailing noise'
+
+        assert parse_tool_arguments(raw) == {
+            "file_path": "/tmp/report.md",
+            "content": "ok",
+        }
+
+    def test_parse_tool_arguments_keeps_raw_for_hopeless_payload(self) -> None:
+        raw = "not valid json {"
+
+        assert parse_tool_arguments(raw) == {"_raw": raw}
 
 
 # ── LLMResponse ───────────────────────────────────────

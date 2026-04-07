@@ -17,7 +17,7 @@ from matmaster.types.topology import ToolPlane
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MCP_TOOL_TIMEOUT = 120.0
-_DEFAULT_LAZY_MCP_CONNECT_TIMEOUT = 5.0
+_DEFAULT_LAZY_MCP_CONNECT_TIMEOUT = 10.0
 _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT = 10.0
 
 # Shutdown budgets -- semantically separate from connect/execution timeouts.
@@ -186,7 +186,7 @@ class LazyMCPTool:
         if cancel_token is None:
             try:
                 return await call_coro
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return self._timeout_result()
 
         call_task = asyncio.create_task(call_coro)
@@ -199,13 +199,13 @@ class LazyMCPTool:
             task.cancel()
             try:
                 await task
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (asyncio.CancelledError, TimeoutError):
                 pass
 
         if call_task in done:
             try:
                 return call_task.result()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return self._timeout_result()
 
         return self._cancelled_result()

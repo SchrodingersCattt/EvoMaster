@@ -174,6 +174,55 @@ def test_repair_preserves_tool_call_order():
     assert tool_ids == ['c1', 'c2', 'c3']
 
 
+def test_events_to_dialog_messages_deduplicates_pending_tool_calls():
+    events = [
+        {"source": "User", "type": "query", "content": "do stuff"},
+        {
+            "source": "MatMaster",
+            "type": "tool_call",
+            "content": {"id": "c1", "name": "bash", "args": {"cmd": "pwd"}},
+        },
+        {
+            "source": "MatMaster",
+            "type": "tool_call",
+            "content": {"id": "c1", "name": "bash", "args": {"cmd": "pwd"}},
+        },
+        {
+            "source": "MatMaster",
+            "type": "tool_result",
+            "content": {"id": "c1", "name": "bash", "result": "/tmp"},
+        },
+    ]
+
+    msgs = ChatHistoryConverter.events_to_dialog_messages(events)
+
+    assistant_msgs = [
+        m for m in msgs if m["role"] == "assistant" and m.get("tool_calls")
+    ]
+    assert len(assistant_msgs) == 1
+    assert len(assistant_msgs[0]["tool_calls"]) == 1
+    assert assistant_msgs[0]["tool_calls"][0]["id"] == "c1"
+
+
+def test_events_to_dialog_messages_skips_orphan_tool_result():
+    events = [
+        {"source": "User", "type": "query", "content": "q"},
+        {
+            "source": "MatMaster",
+            "type": "tool_result",
+            "content": {"id": "orphan", "name": "bash", "result": "oops"},
+        },
+        {"source": "MatMaster", "type": "response", "content": "done"},
+    ]
+
+    msgs = ChatHistoryConverter.events_to_dialog_messages(events)
+
+    tool_msgs = [m for m in msgs if m["role"] == "tool"]
+    assert tool_msgs == []
+    assert msgs[-1]["role"] == "assistant"
+    assert msgs[-1]["content"] == "done"
+
+
 def test_events_to_dialog_messages_repairs_incomplete_turn():
     """End-to-end: events with missing tool_result produce valid message list."""
     events = [
