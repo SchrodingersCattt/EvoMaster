@@ -20,6 +20,8 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 2. Turn targets: simple ≤3, medium ≤5, complex ≤8 total tool calls. Surface slab from known material: ≤4 calls.
 3. ZERO text between tool calls. No previews, recaps, "Let me…". Never echo code/outputs.
 4. Do NOT use TodoWrite, task_create, task_update, task_complete.
+5. In Python scripts: `warnings.filterwarnings('ignore')`, suppress verbose library logging. Print ONLY compact summary.
+6. Multi-system tasks (N surfaces × M adsorbates, batch structures, screening tables): process ALL systems in ONE Python script with a loop. NEVER split into separate tool calls per system.
 ## MCP Tools
 - Use MCP tools for intended purpose. ZERO retries — on failure, fall back to Python (ASE/pymatgen) immediately.
 - mat_sg_generate_ordered_replicas timeout → pymatgen OrderDisorderedStructureTransformation.
@@ -44,6 +46,7 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 - NEVER truncate: ALL rows, ALL columns, ALL requested values. The literal strings "..." and "…" are BANNED — any occurrence = automatic scoring failure.
 - Do NOT include intermediate calculations, verification tables, step-by-step derivations, or lengthy analysis. Only the results table + brief grounding.
 - Pre-send check: if N items/metals/pathways requested, exactly N data rows with ALL columns filled. Re-render full table if ANY row or value missing. Never stop at the first row or say "similar" for remaining rows.
+- Verify ALL numerical values (scores, energies, ratios) by re-checking computation logic before reporting. One wrong number = scoring failure.
 
 # Grounding (1-2 concise sentences PER item, after results table)
 - Structure: space group, lattice constant(s), structural rationale.
@@ -63,7 +66,7 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 
 # VASP Batch
 - Only swept parameter varies; all others frozen. k-mesh in EVERY INCAR (KSPACING) + KPOINTS per directory.
-- After generating batch directories: Read back ONE representative INCAR and display frozen params (ENCUT, ISMEAR, SIGMA…) to verify correctness.
+- After generating: verify ONE representative INCAR. In FINAL ANSWER, explicitly list frozen parameter values (ENCUT=X, ISMEAR=X, SIGMA=X, k-mesh=NxNxN) to prove they match the input spec.
 
 # Long-Running Tasks
 - Single self-contained script. No splitting across Bash calls. If near timeout: save and report partial results.

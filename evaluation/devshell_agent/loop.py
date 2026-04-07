@@ -81,11 +81,16 @@ class DevshellAgentLoop:
 - 如需解释低分原因，可再阅读题库 YAML、workspace 交付物和事件日志；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
 
 ## 修改范围
-- **可写（产品侧，按证据小步修改）**：`config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/`；`matmaster/core/` 仅在框架层缺陷明确时再动。
+- **可写（产品侧，按证据小步修改）**：`config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/`；`matmaster/core/` 仅在框架层缺陷明确时再动。对 skills：**既允许改现有 Skill，也允许在 `matmaster/skills/` 下新建** Skill 目录与文件；新建内容须能被本轮 `run_devshell_eval` 所用 `--exp` 的 **`skills_root`** 发现（默认 `mm-devshell` 可能对 `direct` 做收窄，见 `matmaster/devshell/exp_patch.py`）；若新 Skill 落在当前 roots 外，应挪入已挂载根下或按需换 `--exp`/配置使评测加载到。
 - **缓存目录**：`matmaster/cache/` 下 JSON 视为生成物，**不要**作为常规手改目标；若改动影响 MCP schema / lazy tool 可见性，在仓库根执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成。
 - **默认不优先**：`src/`、`app.py` 仅在失败与 HTTP API / Worker 链路明确相关时再考虑。
 - **不可写**：`evaluation/question_bank/**`（见上节）；避免无关大重构。
 - 保持改动可审：尽量小步、可解释。
+
+## 产品侧改动优先级与系统提示词泛化（硬约束）
+- **优先顺序**：先 **`matmaster/skills/`**（领域流程与可复用约束；**现有 Skill 不足时允许新建**，见上节 `skills_root` 约定）、再 **`matmaster/tools/`**（工具行为与描述），然后 **`config/`**、MCP、`matmaster/adaptors/calculation/`、`matmaster/devshell/` 等；**`matmaster/exps/` 仅在与「通用角色 / 安全 / 全会话一致的工作方式」相关、且难以在 Skill 或工具中表达时再改**，且每次改动都须能说明**为何不**放在 skills/tools。
+- **`matmaster/exps/` 中的系统提示与 developer 指令须保持通用**：不得把某次评测里具体题目的 **`scoring_checklist` 逐条改写进 TOML**、不得仅为对齐某题判分项而堆叠题目专属规则（这是对题库的**过拟合**，会损害非评测场景下的行为与可维护性）。
+- 若 `item.score_reason` 指向 checklist 某条：先判断能否用 **Skill 文案** 或 **工具契约** 稳定满足该类要求；确需动 exp 时，只增加**可跨题复用**的抽象表述，并仍遵守下文 token 预算与 `exp_prompt_budget`。
 
 ## MatMaster 实验提示词（优化策略 + 体量硬上限）
 - **优先删减与合并**：在增补新规则前，先删除或合并与 `_base.toml` / 同文件内已有条目**重复、矛盾或过时**的表述；禁止仅靠堆叠新段落规避问题。
@@ -415,7 +420,7 @@ class DevshellAgentLoop:
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
 2. 获取本轮判分与宏平均：**优先**在 `eval_runs/<iteration_tag>/pending_ingest/*.json` 读取已写入的 `item.score`（及低分题的 `item.score_reason`）；编排器在每次 `run_devshell_eval` 结束后会对该目录执行 `score_devshell_tasks.py --submit` 并上报，通常无需再跑脚本。仅在 pending 尚无分数或需对**改动后的**产物重新判分时，再执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录>`（可加 `--dry-run` 仅打印；**不要** `--submit`）。
-3. 若未达标：在**允许的路径**内修改提示词/工具/配置（如 `config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/`；`matmaster/core/` 仅在框架缺陷明确时；**不要**改 `evaluation/question_bank/`）。`matmaster/cache/` 不作为常规手改目标；若改动影响 MCP schema / lazy tool 可见性，执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成。优化提示时**先删并合并重复/矛盾表述，再考虑增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出）应**优先压到 ≤ 12000**，且**不得超过 15000**（gpt-4o tiktoken）。每次改完相关 TOML 后、`git commit` 前执行：
+3. 若未达标：在**允许的路径**内按**优先级**调整：**先** `matmaster/skills/`（可改现有 Skill，**也可新建**；须落在本轮生效的 `skills_root` 内）、再 `matmaster/tools/`，**谨慎**改 `matmaster/exps/`（系统提示须通用，禁止把本题 `scoring_checklist` 逐条抄进 TOML 来过拟合提分）；其余如 `config/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/`；`matmaster/core/` 仅在框架缺陷明确时；**不要**改 `evaluation/question_bank/`）。`matmaster/cache/` 不作为常规手改目标；若改动影响 MCP schema / lazy tool 可见性，执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成。优化提示时**先删并合并重复/矛盾表述，再考虑增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出）应**优先压到 ≤ 12000**，且**不得超过 15000**（gpt-4o tiktoken）。每次改完相关 TOML 后、`git commit` 前执行：
    `uv run python -m evaluation.devshell_agent.exp_prompt_budget {budget_exp}`
    **exit 非 0 不得提交**。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**。若你认为问题在 **checklist / 参考答案** 而非产品侧，调用 **escalate_checklist_revision** 并仍在第 4 步前完成主流程。
 4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（如有）；若本轮曾回滚无效改动，分数应以回滚后的最终状态为准。
