@@ -120,6 +120,20 @@ class DevshellAgentLoop:
 - 无 `run_devshell_eval`；不调用 `report_iteration_outcome` 或 `escalate_checklist_revision`。仅使用 **report_checklist_revision** 与本仓库读写工具。
 """
 
+    SYSTEM_PROMPT_OPTIMIZATION = """你是 MatMaster 仓库内的 **DevShell 评测迭代 — 产品侧优化助手**。
+
+你与主 Agent、Checklist Agent 都不是同一角色：你只负责 **产品侧代码与提示优化**，不得修改或读取 `evaluation/` 下任何目录，不得查看题库、reference_answers、scoring_checklist 或评测代码。
+
+## 硬约束
+- **禁止**读取或编辑 `evaluation/**`。
+- **允许**编辑产品侧路径，如 `matmaster/`、`config/`，以及在失败明确与服务链路相关时审慎编辑 `src/`。
+- 仅根据主 Agent 交给你的**脱敏问题摘要**与允许查看的非 `evaluation/` 证据路径工作。
+- 结束前**必须**调用 **report_optimization_result**，汇报本次子回合的修改摘要、文件与 commit。
+
+## Git
+- 本子回合内的实质性修改应独立 commit，消息建议 `devshell_agent_opt iter=<轮次> round=<子回合> <简述>`。
+"""
+
     def __init__(self, config: AgentLoopConfig) -> None:
         self._cfg = config
 
@@ -541,6 +555,15 @@ class DevshellAgentLoop:
                     async for message in client.receive_response():
                         self._log_sdk_message(message, loop_log)
 
+                    opt_rc = await self._run_optimization_followups_if_needed(
+                        it=it,
+                        state=state,
+                        mcp_server=mcp_server,
+                        loop_log=loop_log,
+                    )
+                    if opt_rc >= 1:
+                        exit_code = 1
+
                     follow_rc = await self._run_checklist_followup_if_needed(
                         it=it,
                         state=state,
@@ -658,6 +681,101 @@ class DevshellAgentLoop:
 - 任务：仅在 **evaluation/question_bank/** 内做必要 YAML 修订；若判分器 / validator 本身存在明确口径缺陷，可在 **evaluation/core/** 内做对应修复。遵守 `evaluation/AGENTS_evaluation.md` 的题库 `id` 规则。
 - 结束前**必须**调用 **report_checklist_revision**（`iteration_index={it}`）。
 """
+
+    def _optimization_user_message(
+        self, *, it: int, delegation: dict[str, Any]
+    ) -> str:
+        session_dir = self._cfg.session_dir.resolve()
+        blob = json.dumps(delegation, ensure_ascii=False, indent=2)
+        return f"""## 产品侧优化子回合（第 {it} 轮）
+
+主 Agent 已提交以下 **delegate_optimization** 工单（JSON）：
+
+```json
+{blob}
+```
+
+- **会话目录**（仅供查看非 `evaluation/` 产物）：`{session_dir}`
+- 任务：仅在**产品侧目录**做必要优化，不得查看或编辑 `evaluation/**`。
+- 结束前**必须**调用 **report_optimization_result**（`iteration_index={it}`，`optimization_round={delegation.get("optimization_round")}`）。
+"""
+
+    async def _run_optimization_followups_if_needed(
+        self,
+        *,
+        it: int,
+        state: AgentLoopSharedState,
+        mcp_server: Any,
+        loop_log: TextIO,
+    ) -> int:
+        """Run optimization agent(s) if needed.
+
+        Returns:
+            0: ok
+            1: warning (e.g. missing report_optimization_result)
+        """
+        delegations = self._optimization_escalations_for_iteration(it, state)
+        if not delegations:
+            return 0
+
+        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+
+        from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
+
+        optimization_allowed = [
+            *MatmasterEvalMcpToolkit.optimization_agent_mcp_tool_names(),
+            "Read",
+            "Glob",
+            "Grep",
+            "Edit",
+            "Write",
+            "Bash",
+        ]
+        warning = 0
+        for delegation in delegations:
+            n_reports_before = len(state.optimization_reports)
+            co = ClaudeAgentOptions(
+                system_prompt=self.SYSTEM_PROMPT_OPTIMIZATION,
+                cwd=str(self._cfg.repo_root.resolve()),
+                max_turns=max(32, int(self._cfg.defaults.jobs) * 6),
+                mcp_servers={MatmasterEvalMcpToolkit.MCP_SERVER_NAME: mcp_server},
+                allowed_tools=optimization_allowed,
+                permission_mode=self._cfg.permission_mode,
+            )
+            self._log_line(
+                "optimization agent: "
+                f"iteration {it}, round {delegation.get('optimization_round')}",
+                loop_log,
+            )
+            async with ClaudeSDKClient(options=co) as cc:
+                await cc.query(
+                    self._optimization_user_message(it=it, delegation=delegation)
+                )
+                async for message in cc.receive_response():
+                    self._log_sdk_message(message, loop_log)
+
+            reports = [
+                row
+                for row in state.optimization_reports[n_reports_before:]
+                if int(row.get("iteration_index", -1)) == it
+                and int(row.get("optimization_round", -1))
+                == int(delegation.get("optimization_round", -1))
+            ]
+            if not reports:
+                self._log_line(
+                    "warning: optimization agent did not call "
+                    f"report_optimization_result for iteration {it} round "
+                    f"{delegation.get('optimization_round')}",
+                    loop_log,
+                )
+                warning = 1
+
+        state.optimization_delegations_pending = [
+            row
+            for row in state.optimization_delegations_pending
+            if int(row.get("iteration_index", -1)) != it
+        ]
+        return warning
 
     async def _run_checklist_followup_if_needed(
         self,

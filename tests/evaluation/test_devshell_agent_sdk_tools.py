@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import importlib
 import sys
 import types
@@ -27,10 +28,36 @@ def _tool(*_args: object, **_kwargs: object):
     return _decorator
 
 
+class _DummyClaudeAgentOptions:
+    def __init__(self, **kwargs: object) -> None:
+        self.kwargs = kwargs
+
+
+class _FakeClaudeClient:
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        self.args = args
+        self.kwargs = kwargs
+
+    async def __aenter__(self) -> "_FakeClaudeClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def query(self, _message: str) -> None:
+        return None
+
+    async def receive_response(self):
+        if False:
+            yield None
+
+
 sys.modules.setdefault(
     "claude_agent_sdk",
     types.SimpleNamespace(
         create_sdk_mcp_server=lambda **kwargs: kwargs,
+        ClaudeAgentOptions=_DummyClaudeAgentOptions,
+        ClaudeSDKClient=_FakeClaudeClient,
         tool=_tool,
     ),
 )
@@ -264,3 +291,32 @@ def test_optimization_followup_needed_only_when_queue_has_current_iteration(
 
     assert loop._optimization_escalations_for_iteration(1, state) == []
     assert len(loop._optimization_escalations_for_iteration(2, state)) == 1
+
+
+def test_run_optimization_followup_returns_warning_when_report_missing(
+    tmp_path: Path,
+) -> None:
+    state = _build_state(tmp_path)
+    state.optimization_delegations_pending.append(
+        {
+            "iteration_index": 1,
+            "optimization_round": 1,
+            "problem_summary": "demo",
+            "symptom": "demo",
+            "suggested_focus": ["matmaster/skills"],
+            "allowed_evidence_paths": ["matmaster/skills/demo/SKILL.md"],
+            "notes": "demo",
+        }
+    )
+    loop = DevshellAgentLoop(_build_config(tmp_path))
+
+    rc = asyncio.run(
+        loop._run_optimization_followups_if_needed(
+            it=1,
+            state=state,
+            mcp_server={},
+            loop_log=io.StringIO(),
+        )
+    )
+
+    assert rc == 1
