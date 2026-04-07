@@ -149,10 +149,18 @@
 - `matmaster/tools/tool_result.py`
 - `matmaster/mcp/connection.py`
 - `matmaster/mcp/manager.py`
+- `matmaster/integration/bohrium_api.py`
+- `matmaster/integration/bohrium_env.py`
+- `matmaster/integration/runtime_bridge/adapters/bohrium.py`
 - `matmaster/tools/builtin/bohrium_tool/api.py`
+- `matmaster/tools/builtin/bohrium_tool/tool.py`
 - `matmaster/tools/builtin/bohrium_tool/open_sdk.py`
 - `matmaster/tools/builtin/bohrium_tool/paths.py`
 - `matmaster/tools/builtin/bohrium_tool/transfers.py`
+- `matmaster/adaptors/calculation/job_service.py`
+- `matmaster/skills/playground-skills/bohrium-job/scripts/list_images.py`
+- `matmaster/skills/playground-skills/bohrium-job/scripts/list_machines.py`
+- `matmaster/skills/playground-skills/bohrium-job/scripts/poll_job.py`
 
 ---
 
@@ -161,12 +169,33 @@
 - `src/utils/constant.py` is not a blind migration target. Keep `BOHRIUM_DEFAULT_IMAGE_ID`, `BOHRIUM_DEFAULT_IMAGE_NAME`, and `BOHRIUM_CORE_BASE_URL` in `src/` because they are consumed by startup/service orchestration.
 - Runtime-side Bohrium endpoint resolution must preserve today's `matmaster/integration/bohrium_api.py` behavior: prod defaults to `https://openapi.dp.tech`, non-prod defaults to `https://openapi.{env}.dp.tech`, and `BOHRIUM_BASE_URL` remains the explicit override.
 - `src/services/bohrium_node_service.py` currently follows `src/utils/constant.py::BOHRIUM_OPENAPI_HOST`, whose prod fallback differs from `bohrium_api.py`. This refactor should not silently collapse those two rules into one helper. Keep node-lifecycle host selection unchanged unless a dedicated follow-up validates both domains are intentionally equivalent in production.
+- Current repo evidence shows a production dual-host matrix that must be preserved during Task 1:
+  - Runtime/integration family: `matmaster/integration/bohrium_api.py`, `matmaster/integration/runtime_bridge/adapters/bohrium.py`, `matmaster/integration/bohrium_env.py`, `matmaster/tools/builtin/bohrium_tool/tool.py`, and `matmaster/adaptors/calculation/job_service.py` resolve prod to `https://openapi.dp.tech`.
+  - Node/service family: `src/utils/constant.py` and `src/services/bohrium_node_service.py` resolve prod to `https://open.bohrium.com` when `BOHRIUM_BASE_URL` is unset.
+  - Skill-script family: `matmaster/skills/playground-skills/bohrium-job/scripts/list_images.py`, `list_machines.py`, and `poll_job.py` prefer `src.utils.constant.BOHRIUM_OPENAPI_HOST` and otherwise fall back to `https://open.bohrium.com`.
+  - Explicit `BOHRIUM_BASE_URL` remains the only supported way to collapse these families onto one domain in a deployment.
+- Because the mixed-domain behavior already exists in production, Task 1 must preserve the current family-specific defaults rather than normalizing everything to a single host. Blind unification is a 404 risk for node, machine, image, and job APIs.
 - `BOHRIUM_USE_SANDBOX` remains a Bohrium job-protocol switch, not a runtime-contract concern. The refactor must preserve the current API split between sandbox paths such as `/openapi/v1/sandbox/job/create` and standard HPC paths such as `/openapi/v1/job/create` plus `/openapi/v2/job/add`, along with their different payloads, job ID typing, and download flows.
 - `machine`, `scassType`, `diskSize`, `ossPath`, `download_url`, and sandbox `resultUrl` handling are compatibility-sensitive. Refactoring credential sourcing must not rewrite these protocol-level behaviors unless a dedicated follow-up spec covers it.
 
 ---
 
 ### Task 1: Introduce runtime contracts, Bohrium value types, and endpoint helpers
+
+Task 1 only migrates the runtime/integration host rule currently defined by
+`matmaster/integration/bohrium_api.py`. It must not rewrite:
+
+- `src/services/bohrium_node_service.py`
+- `src/utils/constant.py::BOHRIUM_OPENAPI_HOST`
+- `matmaster/skills/playground-skills/bohrium-job/scripts/list_images.py`
+- `matmaster/skills/playground-skills/bohrium-job/scripts/list_machines.py`
+- `matmaster/skills/playground-skills/bohrium-job/scripts/poll_job.py`
+
+Audit the split before changing code:
+
+```bash
+rg -n "get_bohrium_base_url\\(|BOHRIUM_OPENAPI_HOST|BOHRIUM_BASE_URL" src matmaster
+```
 
 **Files:**
 - Create: `matmaster/calculation_runtimes/__init__.py`
