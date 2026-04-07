@@ -57,6 +57,7 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 # Surface Slab Construction
 - Vacuum MUST be ≥15 Å. After building: verify vacuum = c_param − slab_thickness ≥ 15.
 - Binary compounds (ZnS, ZnO, GaAs…): "N layers" = N cation-anion bilayers = 2N atomic planes. After building, count distinct z-planes and verify.
+- Molecular crystals: after adding vacuum, verify molecular integrity (pymatgen MoleculeGraph or ASE neighbor list). If molecules are broken across vacuum boundary, shift slab origin along surface normal until cleavage falls between molecular layers, or wrap fragmented atoms back into the slab.
 - Passivation: passivate ALL dangling bonds on BOTH top AND bottom surfaces. Verify ALL surface atoms reach target coordination.
 - H passivation of Si/Ge surfaces: place H at ~1.48 Å (Si-H) along dangling-bond direction (tetrahedral ~109.47°). After: verify mean coordination = 4, bond lengths, and angles. Report total H atoms added.
 
