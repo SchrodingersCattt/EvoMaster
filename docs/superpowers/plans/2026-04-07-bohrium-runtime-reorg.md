@@ -81,8 +81,6 @@
   Purpose: become the only runtime composition root and temporarily dual-write `_bohrium_runtime` plus `_bohrium_credentials`.
 - `src/services/agent_run_service.py`
   Purpose: stop hand-assembling Bohrium meta dicts and write `BohriumRuntimeSnapshot`-derived data into `PlaygroundContext`.
-- `src/services/bohrium_node_service.py`
-  Purpose: keep node-lifecycle OpenAPI host selection aligned with the runtime-side endpoint helper instead of drifting to a second rule set.
 - `matmaster/types/context.py`
   Purpose: keep `with_bohrium()` aligned with `BohriumRuntimeSnapshot`.
 - `matmaster/mcp/manager.py`
@@ -108,7 +106,7 @@
 - `evaluation/eval_tooling_snapshot.py`
   Purpose: import calculation config resolution from the new MCP client namespace.
 - `tests/matmaster/test_bohrium_setup_injection.py`
-  Purpose: verify startup registration behavior and the migration-period dual-write.
+  Purpose: extend the existing `BohriumSetupService` orchestration tests with startup registration behavior and the migration-period dual-write.
 - `tests/matmaster/tools/test_script_env.py`
   Purpose: align shell env tests with runtime handle usage.
 - `tests/matmaster/tools/builtin/test_bash_tool.py`
@@ -145,7 +143,6 @@
 ### Existing files to reference while implementing
 
 - `src/utils/constant.py`
-- `src/services/bohrium_node_service.py`
 - `src/services/user_service.py`
 - `matmaster/core/playground.py`
 - `matmaster/types/session.py`
@@ -161,7 +158,9 @@
 
 ## Compatibility Guardrails
 
-- `src/utils/constant.py` is not a blind migration target. Keep `BOHRIUM_DEFAULT_IMAGE_ID`, `BOHRIUM_DEFAULT_IMAGE_NAME`, and `BOHRIUM_CORE_BASE_URL` in `src/` because they are consumed by startup/service orchestration. This refactor only needs to ensure that any new `matmaster/bohrium/endpoints.py` host logic stays semantically aligned with the existing OpenAPI host rule used by node services.
+- `src/utils/constant.py` is not a blind migration target. Keep `BOHRIUM_DEFAULT_IMAGE_ID`, `BOHRIUM_DEFAULT_IMAGE_NAME`, and `BOHRIUM_CORE_BASE_URL` in `src/` because they are consumed by startup/service orchestration.
+- Runtime-side Bohrium endpoint resolution must preserve today's `matmaster/integration/bohrium_api.py` behavior: prod defaults to `https://openapi.dp.tech`, non-prod defaults to `https://openapi.{env}.dp.tech`, and `BOHRIUM_BASE_URL` remains the explicit override.
+- `src/services/bohrium_node_service.py` currently follows `src/utils/constant.py::BOHRIUM_OPENAPI_HOST`, whose prod fallback differs from `bohrium_api.py`. This refactor should not silently collapse those two rules into one helper. Keep node-lifecycle host selection unchanged unless a dedicated follow-up validates both domains are intentionally equivalent in production.
 - `BOHRIUM_USE_SANDBOX` remains a Bohrium job-protocol switch, not a runtime-contract concern. The refactor must preserve the current API split between sandbox paths such as `/openapi/v1/sandbox/job/create` and standard HPC paths such as `/openapi/v1/job/create` plus `/openapi/v2/job/add`, along with their different payloads, job ID typing, and download flows.
 - `machine`, `scassType`, `diskSize`, `ossPath`, `download_url`, and sandbox `resultUrl` handling are compatibility-sensitive. Refactoring credential sourcing must not rewrite these protocol-level behaviors unless a dedicated follow-up spec covers it.
 
@@ -178,7 +177,6 @@
 - Create: `matmaster/bohrium/types.py`
 - Create: `matmaster/bohrium/errors.py`
 - Create: `matmaster/bohrium/endpoints.py`
-- Modify: `src/services/bohrium_node_service.py`
 - Test: `tests/matmaster/calculation_runtimes/test_registry.py`
 - Test: `tests/matmaster/bohrium/test_types.py`
 
@@ -227,10 +225,10 @@ def test_bohrium_base_url_prefers_explicit_env(monkeypatch) -> None:
     assert get_bohrium_base_url() == "https://openapi.custom.dp.tech"
 
 
-def test_bohrium_base_url_keeps_current_prod_default(monkeypatch) -> None:
+def test_bohrium_base_url_keeps_existing_runtime_prod_default(monkeypatch) -> None:
     monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
     monkeypatch.setenv("SERVICE_ENV", "prod")
-    assert get_bohrium_base_url() == "https://open.bohrium.com"
+    assert get_bohrium_base_url() == "https://openapi.dp.tech"
 
 
 def test_bohrium_service_env_defaults_to_test(monkeypatch) -> None:
@@ -495,19 +493,8 @@ def get_bohrium_base_url() -> str:
         return override
     env = get_bohrium_service_env()
     if env == "prod":
-        return "https://open.bohrium.com"
+        return "https://openapi.dp.tech"
     return f"https://openapi.{env}.dp.tech"
-```
-
-```python
-"""src/services/bohrium_node_service.py"""
-from matmaster.bohrium.endpoints import get_bohrium_base_url
-from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID
-
-
-class BohriumNodeService:
-    def __init__(self) -> None:
-        self._host = get_bohrium_base_url().rstrip("/")
 ```
 
 - [ ] **Step 4: Run the new foundational tests**
@@ -525,7 +512,7 @@ Expected:
 - all selected tests `PASS`
 - no import from `matmaster.integration.runtime_bridge`
 - `get_bohrium_base_url()` stays aligned with the current prod/test fallback
-  semantics used by `src.utils.constant`
+  semantics used by `matmaster.integration.bohrium_api`
 
 - [ ] **Step 5: Commit the foundational contracts**
 
@@ -535,7 +522,6 @@ git add \
   matmaster/bohrium/types.py \
   matmaster/bohrium/errors.py \
   matmaster/bohrium/endpoints.py \
-  src/services/bohrium_node_service.py \
   matmaster/calculation_runtimes/__init__.py \
   matmaster/calculation_runtimes/base.py \
   matmaster/calculation_runtimes/types.py \
@@ -1021,13 +1007,32 @@ skill sync, and abort flow stay in place. The concrete methods to touch are:
 - `_restore_bohrium_runtime_state()`
 - `_cleanup_bohrium_after_run()`
 
+`BohriumSetupService` is already a thin delegator over these module-level
+functions. Keep that delegation intact and extend the existing
+`tests/matmaster/test_bohrium_setup_injection.py` coverage instead of replacing
+its current service-orchestration assertions.
+
+The first runtime attached by `_apply_run_credentials_to_session()` is a
+credential-only placeholder for pre-SSH phases. Its empty execution fields are
+acceptable only if `build_env()` keeps projecting credentials without depending
+on execution metadata. Consumers that need `execution()` must observe the
+rebuilt SSH runtime after `_setup_bohrium_for_run()` finishes.
+
+Switching `pg_ctx.with_bohrium()` from `bohrium_result._asdict()` to
+`runtime_snapshot.model_dump()` is an intentional metadata-shape change. Before
+landing this task, grep the repo for `run_meta["bohrium"]` field consumers and
+confirm that only generic storage/tests depend on the old key set.
+
 - [ ] **Step 1: Write the failing startup registration tests**
 
 ```python
 """tests/matmaster/test_bohrium_setup_injection.py"""
 from types import SimpleNamespace
 
-from src.services.agent_run_bohrium import _apply_run_credentials_to_session
+from src.services.agent_run_bohrium import (
+    BohriumSetupResult,
+    _apply_run_credentials_to_session,
+)
 from matmaster.bohrium.runtime import get_runtime
 
 
@@ -1145,11 +1150,16 @@ def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
         )
 
 
-def _cleanup_bohrium_after_run(...):
+def _cleanup_bohrium_after_run(
+    *,
+    session_id: str,
+    sessions_service: Any,
+    event_callback: Callable[..., None],
+    pg_for_run: Any,
+    ssh_attached: bool,
+) -> None:
     """Run-final cleanup removes runtime slots from the active session objects."""
-    if session is not None:
-        detach_runtime(session)
-    _restore_bohrium_runtime_state(session_id, pg)
+    _restore_bohrium_runtime_state(session_id, pg_for_run)
 ```
 
 ```python
@@ -1164,6 +1174,14 @@ class BohriumSetupResult(NamedTuple):
     execution_workdir: str | None
     session_type: str | None
     runtime_snapshot: BohriumRuntimeSnapshot | None
+
+
+# Update every return site in _setup_bohrium_for_run(), not just the SSH happy path:
+return BohriumSetupResult(False, None, None, None, None, None)
+return BohriumSetupResult(False, ((False, reason), elapsed_ms), None, None, None, None)
+
+# Audit command before leaving Task 3:
+# rg -n "return BohriumSetupResult\\(" src/services/agent_run_bohrium.py
 
 
 execution = BohriumExecutionContext(
@@ -1202,6 +1220,9 @@ bohrium_meta = (
     else {}
 )
 pg_ctx = pg_ctx.with_bohrium(bohrium_meta)
+
+# Repo audit before landing:
+# rg -n 'run_meta\\[.?["'\"']bohrium["'\"']|with_bohrium\\(' src matmaster tests
 ```
 
 - [ ] **Step 4: Run the startup-focused tests plus one live-path smoke test**
@@ -1248,6 +1269,7 @@ The concrete call sites in current code are:
 - `bash_tool.BashTool._execute()` after `plan_shell_command()`
 - `glob_tool.GlobTool._execute()` before `session.exec_bash()`
 - `grep_tool.GrepTool._execute_internal()` before `session.exec_bash()`
+- `grep_tool.GrepTool._list_candidate_files()` in the semantic-search fallback path
 
 - [ ] **Step 1: Write the failing consumer tests around runtime env usage**
 
@@ -1315,6 +1337,11 @@ def test_bash_tool_reads_runtime_env(monkeypatch):
     assert result.endswith("[Command finished with exit code 0]")
 ```
 
+Also extend `tests/matmaster/tools/builtin/test_grep_tool.py` with a case that
+forces `_list_candidate_files()` through the semantic-search fallback path, so
+both legacy `build_service_env()` call sites are covered before Task 8 deletes
+`runtime_bridge`.
+
 - [ ] **Step 2: Run the shell/script tests to expose the old bridge dependency**
 
 Run:
@@ -1378,6 +1405,15 @@ from matmaster.bohrium.runtime import get_runtime
 runtime = get_runtime(session)
 env = runtime.build_env() if runtime is not None else {}
 cmd = inject_env(cmd, env, session)
+
+# also update _list_candidate_files()
+runtime = get_runtime(session)
+env = runtime.build_env() if runtime is not None else {}
+result = session.exec_bash(
+    command=inject_env(find_cmd, env, session),
+    timeout=30,
+    cancel_token=self._cancel_token_for_exec(),
+)
 ```
 
 - [ ] **Step 4: Run the updated shell/script test slice**
@@ -1675,6 +1711,11 @@ registry on top of it:
 - `tool_info["has_path_adaptor"]` -> `tool_info["has_calculation_preflight"]`
 - `LazyMCPConnector._path_adaptors` -> `_calculation_preflights`
 - `get_path_adaptor()` -> `get_calculation_preflight()`
+
+Because `lazy_mcp.py` currently imports `CalculationPreflightError` at module
+import time, Task 6 must land before Task 8 deletes
+`matmaster.adaptors.calculation.path_adaptor`. Do not split those two tasks
+across a partial rollout boundary.
 
 - [ ] **Step 1: Write the failing preflight and `lazy_mcp` tests**
 
@@ -2505,17 +2546,37 @@ Expected:
 - [ ] **Step 5: Commit the legacy-module removal**
 
 ```bash
-git add -A
+git add \
+  src/services/agent_run_bohrium.py \
+  tests/matmaster/architecture/test_bohrium_runtime_boundaries.py \
+  tests/matmaster/integration/test_runtime_bridge.py \
+  tests/matmaster/test_bohrium_env.py \
+  matmaster/integration/runtime_bridge/__init__.py \
+  matmaster/integration/runtime_bridge/resolver.py \
+  matmaster/integration/runtime_bridge/env_projector.py \
+  matmaster/integration/runtime_bridge/models.py \
+  matmaster/integration/runtime_bridge/adapters/bohrium.py \
+  matmaster/integration/bohrium_env.py \
+  matmaster/integration/bohrium_api.py \
+  matmaster/adaptors/calculation/__init__.py \
+  matmaster/adaptors/calculation/path_adaptor.py \
+  matmaster/adaptors/calculation/path_selectors.py \
+  matmaster/adaptors/calculation/env_config.py \
+  matmaster/adaptors/calculation/job_service.py \
+  matmaster/adaptors/calculation/oss_io.py \
+  tests/matmaster/adaptors/calculation/test_path_adaptor.py \
+  tests/matmaster/adaptors/calculation/test_path_selectors.py \
+  tests/matmaster/adaptors/calculation/test_env_config.py \
+  tests/matmaster/adaptors/calculation/test_job_service.py
 git commit -m "refactor: remove legacy Bohrium bridge modules"
 ```
 
 ## Coverage Check
 
 - Runtime contracts, value objects, endpoint resolution: Task 1
-- `constant.py` / node-service OpenAPI host alignment without moving startup-only defaults: Task 1
-- Current prod default host remains `https://open.bohrium.com`, matching today's
-  `src/utils/constant.py` semantics rather than the older `openapi.dp.tech`
-  assumption: Task 1
+- `constant.py` stays in `src/`, while runtime-side endpoint resolution preserves
+  current `bohrium_api.py` semantics and does not force node-service host
+  unification in the same refactor: Task 1
 - Runtime handle, env, submission builder, session attach/get/detach: Task 2
 - Startup-first registration and migration-period dual-write: Task 3
 - Shell/script env consumer migration: Task 4
