@@ -178,6 +178,49 @@
 - `BOHRIUM_USE_SANDBOX` remains a Bohrium job-protocol switch, not a runtime-contract concern. The refactor must preserve the current API split between sandbox paths such as `/openapi/v1/sandbox/job/create` and standard HPC paths such as `/openapi/v1/job/create` plus `/openapi/v2/job/add`, along with their different payloads, job ID typing, and download flows.
 - `machine`, `scassType`, `diskSize`, `ossPath`, `download_url`, and sandbox `resultUrl` handling are compatibility-sensitive. Refactoring credential sourcing must not rewrite these protocol-level behaviors unless a dedicated follow-up spec covers it.
 
+## Bohrium Host Mapping
+
+Use this table as the Task 1 compatibility checklist. The goal is not to
+normalize all hosts, but to preserve which host family each API surface uses
+today.
+
+| Host family | Prod default | Host source | Typical path prefixes | Current consumers | Task 1 handling |
+| --- | --- | --- | --- | --- | --- |
+| Runtime / integration OpenAPI | `https://openapi.dp.tech` | `matmaster/integration/bohrium_api.py::get_bohrium_base_url()` | `/openapi/v1/sandbox/job/*`, `/openapi/v1/job/*`, `/openapi/v2/job/add`, `/openapi/v2/image/public`, `/openapi/v1/calc/list` | `runtime_bridge/adapters/bohrium.py`, `bohrium_env.py`, `bohrium_tool/tool.py`, `adaptors/calculation/job_service.py` | This is the only host rule Task 1 may migrate into `matmaster/bohrium/endpoints.py`. |
+| Node / service OpenAPI | `https://open.bohrium.com` | `src/utils/constant.py::BOHRIUM_OPENAPI_HOST` | `/openapi/v1/node/add`, `/openapi/v1/node/list`, `/openapi/v1/node/restart/*`, `/openapi/v1/node/del/*`, `/openapi/v2/image/private` | `src/services/bohrium_node_service.py` | Do not rewrite in Task 1. Keep node lifecycle on its current host source. |
+| Skill-script OpenAPI | `https://open.bohrium.com` when `src.utils.constant` is importable | Prefer `src.utils.constant.BOHRIUM_OPENAPI_HOST`, else `BOHRIUM_BASE_URL`, else literal fallback | `/openapi/v2/image/public`, `/openapi/v1/calc/list`, `/openapi/v1/sandbox/job/*`, `/openapi/v1/job/*`, `/openapi/v1/sandbox/job/file/token` | `skills/playground-skills/bohrium-job/scripts/list_images.py`, `list_machines.py`, `poll_job.py` | Treat as separate compatibility surface. Do not implicitly switch to runtime-side helper. |
+| Sandbox object storage data plane | Dynamic per response | `storeHost` from sandbox create response, `resultUrl` host from job detail, or `host/storeHost` from sandbox file-token response | `/api/download/*`, `/api/iterate` | `bohrium_tool/open_sdk.py`, `bohrium_tool/transfers.py`, skill `poll_job.py` | Never replace with OpenAPI base URL. These hosts are response-driven. |
+| Tiefblue NAS data plane | `https://tiefblue-nas-acs-bj.bohrium.com` | `adaptors/calculation/job_service.py::_tiefblue_nas_host()` | `/api/iterate`, host returned by sandbox file-token for `/api/download/*` | `adaptors/calculation/job_service.py` | Preserve as-is during namespace move to `matmaster/bohrium/jobs.py`. |
+
+### Path Prefix To Host Source
+
+| Path prefix or flow | Correct host source today | Notes |
+| --- | --- | --- |
+| `/openapi/v1/node/*` | `src.utils.constant.BOHRIUM_OPENAPI_HOST` | Used only by node lifecycle service. |
+| `/openapi/v2/image/private` | `src.utils.constant.BOHRIUM_OPENAPI_HOST` | Node reuse checks depend on this. |
+| `/openapi/v1/sandbox/job/create` | Runtime/integration base URL | Used by builtin Bohrium tool and runtime-side job helpers. |
+| `/openapi/v1/sandbox/job/add` | Runtime/integration base URL | Sandbox submit control plane. |
+| `/openapi/v1/job/create` | Runtime/integration base URL | Standard HPC create path. |
+| `/openapi/v2/job/add` | Runtime/integration base URL | Standard HPC add path. |
+| `/openapi/v1/job/{id}` | Runtime/integration base URL | Standard HPC job detail. |
+| `/openapi/v1/sandbox/job/{id}` | Runtime/integration base URL for builtin/runtime code; skill scripts currently hit their own OpenAPI family | Keep this split explicit until separately validated. |
+| `/openapi/v1/sandbox/job/file/token` | Runtime/integration base URL for builtin/runtime code; skill scripts currently use their own OpenAPI family | Returns a data-plane host and token; downloading then leaves the OpenAPI domain. |
+| `/openapi/v2/image/public` | Runtime/integration base URL in builtin tool; skill scripts use skill-script OpenAPI family | Same path family, two existing host defaults. |
+| `/openapi/v1/calc/list` | Runtime/integration base URL in builtin tool; skill scripts use skill-script OpenAPI family | Same path family, two existing host defaults. |
+| `storeHost + /api/download/*` | Response field from sandbox create response | Used for upload/download URL generation, not configurable via runtime endpoint helper. |
+| `resultUrl host + /api/iterate` / `/api/download/*` | Response field from sandbox job detail | Used by sandbox artifact enumeration and download. |
+| `tiefblue-nas-acs-bj*.bohrium.com/api/iterate` | `_tiefblue_nas_host()` | Used only by `job_service.py` NAS listing path. |
+
+### Task 1 Smoke Checklist
+
+Before finalizing Task 1, verify that the new endpoint helper only replaces
+runtime/integration consumers and that no code path listed below changes host
+family:
+
+```bash
+rg -n "get_bohrium_base_url\\(|BOHRIUM_OPENAPI_HOST|storeHost|resultUrl|tiefblue" src matmaster
+```
+
 ---
 
 ### Task 1: Introduce runtime contracts, Bohrium value types, and endpoint helpers
