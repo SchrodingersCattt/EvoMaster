@@ -49,6 +49,7 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 - Do NOT include intermediate calculations, verification tables, or step-by-step derivations. Only the results table + brief grounding.
 - Pre-send check: count exactly N data rows with ALL columns filled. Re-render if ANY value missing.
 - Verify ALL numerical values by re-checking computation logic before reporting.
+- Formatting: use ASCII hyphen-minus (`-`, not Unicode `−`) for negative numbers. Scores/energies: write `-0.385` not `−0.385`.
 
 # Grounding (1-2 concise sentences PER item, after results table)
 - Structure: space group, lattice constant(s), structural rationale.
