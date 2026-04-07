@@ -62,6 +62,7 @@ matmaster/
   bohrium/
     __init__.py
     credentials.py
+    endpoints.py
     env.py
     executor.py
     storage.py
@@ -102,6 +103,7 @@ matmaster/
 - 路径物化
 - OSS 上传下载
 - OpenAPI job 相关客户端逻辑
+- Bohrium API endpoint / service env 解析
 
 凡是显式依赖以下 Bohrium 语义的内容，都属于这一层：
 
@@ -131,6 +133,10 @@ matmaster/
 
 这是 calculation MCP 的协议前处理层。
 
+这里的 `mcp` 明确指 本项目现有的 MCP client 侧命名空间，而不是 server-side handler。
+当前 `matmaster/mcp/` 已经承载 `connection.py` 与 `manager.py` 等 client 运行时逻辑，因此
+`matmaster/mcp/calculation/` 表示的是 与 MCP client 调用链相邻的 calculation preflight 子模块。
+
 它负责理解这次 MCP 调用本身，而不是负责实现 Bohrium 领域行为。职责包括：
 
 - 识别远程工具名
@@ -141,6 +147,41 @@ matmaster/
 - 组装最终提交参数
 
 它通过 runtime object 消费 Bohrium 能力，但不拥有 Bohrium 主实现。
+
+### 3.3 文件迁移映射
+
+以下映射是本次重构的显式迁移目标：
+
+- `matmaster/integration/runtime_bridge/resolver.py`
+  -> `matmaster/bohrium/credentials.py`
+- `matmaster/integration/runtime_bridge/env_projector.py`
+  -> `matmaster/bohrium/env.py`
+- `matmaster/integration/runtime_bridge/models.py`
+  -> `matmaster/bohrium/types.py`
+- `matmaster/integration/runtime_bridge/adapters/bohrium.py`
+  -> `matmaster/bohrium/credentials.py` + `env.py` + `executor.py`
+- `matmaster/integration/bohrium_env.py`
+  -> `matmaster/bohrium/env.py` + `executor.py` + `storage.py`
+- `matmaster/integration/bohrium_api.py`
+  -> `matmaster/bohrium/endpoints.py`
+- `matmaster/adaptors/calculation/path_adaptor.py`
+  -> `matmaster/mcp/calculation/preflight.py`
+- `matmaster/adaptors/calculation/path_selectors.py`
+  -> `matmaster/mcp/calculation/selectors.py`
+- `matmaster/adaptors/calculation/env_config.py`
+  -> `matmaster/mcp/calculation/config_env.py`
+- `matmaster/adaptors/calculation/oss_io.py`
+  -> `matmaster/bohrium/oss.py`
+- `matmaster/adaptors/calculation/job_service.py`
+  -> `matmaster/bohrium/jobs.py`
+
+同时需要同步更新以下消费方 import：
+
+- `matmaster/core/exp.py`
+- `matmaster/tools/cache_mcp_schemas.py`
+- `evaluation/eval_tooling_snapshot.py`
+- `matmaster/tools/builtin/bohrium_tool/`
+- shell/script builtin tools
 
 ## 4. `agent_run_bohrium.py` 的新角色
 
@@ -161,6 +202,16 @@ matmaster/
 - 让后续所有模块围绕 runtime object 工作
 
 换句话说，它是唯一允许从原始 run 数据装配 Bohrium runtime 的入口。
+
+### 4.1.1 迁移期兼容策略
+
+虽然目标架构要求停止公开使用 `session._bohrium_credentials`，但迁移实施时允许一个很短的内部双写阶段：
+
+- `agent_run_bohrium.py` 在 attach `session._bohrium_runtime` 的同时，暂时继续设置 `_bohrium_credentials`
+- 所有新改代码一律禁止继续消费 `_bohrium_credentials`
+- 当 shell/script、`bohrium_tool`、calculation preflight 迁移完成后，最终 cleanup wave 中删除 `_bohrium_credentials`
+
+该双写仅用于迁移顺序解耦，不构成长期兼容承诺，也不应在最终目标结构中保留。
 
 ### 4.2 保留在 `src/services/` 的职责
 
@@ -208,16 +259,27 @@ matmaster/
 
 #### `BohriumExecutionContext`
 
-表示当前 run 的执行面状态，字段建议包括：
+这是纯数据上下文对象，不持有活跃 session 引用。字段建议包括：
 
 - `session_type`
-- `execution_session`
 - `execution_workdir`
 - `remote_workspace_root`
 - `remote_project_root`
 - `node_id`
 - `node_ip`
 - `ssh_attached`
+
+活跃连接对象例如 `execution_session`、`session`、SSH handle 不进入该值对象，而由 `BohriumRuntimeHandle` 自身持有。
+
+#### `BohriumRuntimeSnapshot`
+
+这是可序列化运行时摘要，用于：
+
+- `PlaygroundContext.with_bohrium(...)`
+- 事件与日志元数据
+- 非 session consumer 的只读状态传播
+
+字段应与 `BohriumExecutionContext` 对齐，但不持有活跃连接引用。
 
 #### `BohriumSubmissionSpec`
 
@@ -226,6 +288,8 @@ matmaster/
 - `executor`
 - `storage`
 - 可能的 submission mode 或调度元数据
+
+它不承载 model alias 解析结果。model alias 解析仍属于 preflight 层，因为它依赖 tool description 与 schema 语义解释，而不是 Bohrium runtime 物化。
 
 ### 5.2 统一入口对象
 
@@ -237,6 +301,8 @@ matmaster/
 
 - `credentials() -> BohriumCredentials`
 - `execution() -> BohriumExecutionContext`
+- `snapshot() -> BohriumRuntimeSnapshot`
+- `execution_session() -> Any | None`
 - `build_env() -> dict[str, str]`
 - `build_submission(request) -> BohriumSubmissionSpec`
 - `materialize_input_path(...) -> str`
@@ -280,6 +346,12 @@ matmaster/
 - 遍历参数树并定位要改写的 leaf
 - 组装最终 args
 
+因此：
+
+- `SubmissionRequest` 由 preflight 构造
+- model alias 改写结果保留在 preflight 处理后的参数树中
+- runtime 不负责理解 tool description 或 schema
+
 ### 7.2 `runtime.py` 负责什么
 
 `matmaster/bohrium/runtime.py` 负责把已确定的提交意图物化为 Bohrium 载荷：
@@ -319,6 +391,8 @@ matmaster/
 - 附加 MCP 计算后端
 
 为了不把今天的 Bohrium 结构彻底封死，保留 `calculation_runtimes/` 作为窄接口层。
+
+这里特意不使用 `providers/` 命名，以避免与现有 LLM provider 目录 `matmaster/providers/` 混淆。
 
 ### 8.2 该层的最小能力接口
 
@@ -372,6 +446,8 @@ shell/script 和 mcp calculation 都消费同一个 runtime root object，只是
 - `materialize_input_path(...)`
 - `execution()`
 
+`matmaster/tools/builtin/bohrium_tool/` 也属于这一规则的消费方，不再直接 import `resolve_bohrium_credentials` 或 `ResolvedCredential`。
+
 ### 9.3 新纪律
 
 除 runtime 模块内部外：
@@ -379,6 +455,7 @@ shell/script 和 mcp calculation 都消费同一个 runtime root object，只是
 - 任何代码不得直接读取 `session._bohrium_credentials`
 - 任何代码不得自行拼装 Bohrium env / executor / storage
 - 任何代码不得继续 import `runtime_bridge` 或 `bohrium_env`
+- `bohrium_tool/models.py` 不再 import `ResolvedCredential`，改为消费 `BohriumCredentials` 或 runtime snapshot
 
 ## 10. 异常边界
 
@@ -411,6 +488,7 @@ shell/script 和 mcp calculation 都消费同一个 runtime root object，只是
 
 - startup 相关测试围绕 `agent_run_bohrium` 是否成功注册 runtime
 - shell/script/builtin tool 测试 patch `get_runtime()` 或 fake runtime handle
+- `bohrium_tool` 测试改为 patch runtime handle，而不是 patch `resolve_bohrium_credentials`
 - calculation preflight 测试 patch `build_submission()` 与 `materialize_input_path()`
 - Bohrium 领域核心单测分别覆盖 credentials、env、submission、paths、jobs、oss
 
@@ -423,6 +501,15 @@ shell/script 和 mcp calculation 都消费同一个 runtime root object，只是
 - `inject_bohrium_executor`
 - `get_bohrium_storage_config`
 - 直接伪造 `session._bohrium_credentials`
+
+### 11.3 新增结构约束测试
+
+重构完成后，需要新增结构守卫测试，确保旧入口不会重新引入：
+
+- 生产代码中不再出现 `from matmaster.integration.runtime_bridge`
+- 生产代码中不再出现 `from matmaster.integration.bohrium_env`
+- 生产代码中不再出现对 `session._bohrium_credentials` 的直接消费
+- `bohrium_tool/models.py` 不再依赖 `ResolvedCredential`
 
 ## 12. 迁移顺序
 
@@ -441,11 +528,14 @@ shell/script 和 mcp calculation 都消费同一个 runtime root object，只是
 ### 12.2 推荐迁移顺序
 
 1. 定义 Bohrium 核心类型与 runtime attach/get API
-2. 改造 `agent_run_bohrium.py`，最先切到新 runtime object
-3. 改造 shell/script/builtin tool，统一从 runtime handle 取 env 与 execution
-4. 改造 calculation preflight，切到 `build_submission()` 与 `materialize_input_path()`
-5. 迁移 job / oss / path 模块与测试目录
-6. 删除旧入口与历史目录
+2. 迁移 `bohrium_api.py` 到 `matmaster/bohrium/endpoints.py`
+3. 改造 `agent_run_bohrium.py`，最先切到新 runtime object，并进入短暂双写期
+4. 改造 shell/script/builtin tool，统一从 runtime handle 取 env 与 execution
+5. 改造 `matmaster/tools/builtin/bohrium_tool/`，停止直接消费 runtime bridge 模型与函数
+6. 改造 calculation preflight，切到 `build_submission()` 与 `materialize_input_path()`
+7. 更新 `exp.py`、`cache_mcp_schemas.py`、`eval_tooling_snapshot.py` 等 `resolve_mcp_config_path` 消费方
+8. 迁移 job / oss / path 模块与测试目录
+9. 删除 `_bohrium_credentials`、旧入口与历史目录
 
 ## 13. 非目标
 
