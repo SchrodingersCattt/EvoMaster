@@ -51,10 +51,10 @@ smearing_sigma   0.01
 **STRU** — atomic structure:
 ```
 ATOMIC_SPECIES
-Si  28.085  Si_ONCV_PBE-1.0.upf
+Si  28.085  Si.upf
 
 NUMERICAL_ORBITAL
-Si_gga_8au_100Ry_2s2p1d.orb
+Si_gga_7au_100Ry_2s2p1d.orb
 
 LATTICE_CONSTANT
 1.8897259886    # Bohr
@@ -101,11 +101,20 @@ If the user provides complete INPUT + STRU + KPT files with pseudopotentials and
 - **INPUT**: computation parameters (generated or user-provided)
 - **STRU**: atomic structure file; must reference pseudopotential and orbital files
 - **KPT**: k-point specification
-- **Pseudopotentials** (`.upf`): one per element
-  - Download from [AIS Square ABACUS-APNS-PPORBs-v1](https://www.aissquare.com/datasets/detail?pageType=datasets&name=ABACUS-APNS-PPORBs-v1&id=326)
-  - Fallback: [GitHub PP_ORB](https://github.com/deepmodeling/abacus-develop/tree/develop/tests/PP_ORB)
-- **Orbital files** (`.orb`, LCAO only): numerical atomic orbital basis
-  - Download from [ABACUS orbital repository](http://abacus.deepmodeling.com/orbitals/)
+- **Pseudopotentials** (`.upf`) and **Orbital files** (`.orb`, LCAO only): one per element.
+  **Download source: AIS Square (mandatory).** Do NOT use GitHub or any other source.
+  ```bash
+  wget -q "https://store.aissquare.com/datasets/dc875646-a526-41f1-a180-d54b218fc80a/ABACUS-APNS-PPORBs-v1.zip" && unzip -qo ABACUS-APNS-PPORBs-v1.zip
+  # The zip extracts to three directories:
+  #   apns-pseudopotentials-v1/<Element>.upf
+  #   apns-orbitals-efficiency-v1/<Element>_gga_*au_100Ry_*.orb  (efficiency set)
+  #   apns-orbitals-precision-v1/<Element>_gga_*au_100Ry_*.orb   (precision set)
+  # Copy needed element files into the working directory, e.g. for Si:
+  cp apns-pseudopotentials-v1/Si.upf .
+  cp apns-orbitals-efficiency-v1/Si_gga_7au_100Ry_2s2p1d.orb .
+  ```
+  This zip contains matched `.upf` + `.orb` pairs for all elements. If the download fails, retry with `wget --retry-connrefused --tries=3`.
+  Note: pseudopotential filename is `<Element>.upf` (e.g. `Si.upf`), not `Si_ONCV_PBE-1.0.upf`.
 
 ## Physical Checks
 
