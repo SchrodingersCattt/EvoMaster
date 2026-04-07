@@ -178,6 +178,7 @@ matmaster/
 同时需要同步更新以下消费方 import：
 
 - `matmaster/core/exp.py`
+- `matmaster/tools/lazy_mcp.py`
 - `matmaster/tools/cache_mcp_schemas.py`
 - `evaluation/eval_tooling_snapshot.py`
 - `matmaster/tools/builtin/bohrium_tool/`
@@ -257,6 +258,16 @@ matmaster/
 
 它只表达这个 run 的 Bohrium 身份，不包含节点、SSH 和 workspace 信息。
 
+其构造器或工厂函数需要内置当前运行时桥已经承担的规范化规则，至少包括：
+
+- `access_key` 强制转为 `str` 并执行 `strip()`
+- `project_id` 尽量规范化为 `int`，失败时回落到约定的 sentinel
+- `user_id` 尽量规范化为 `int`，失败时回落到约定的 sentinel 或 `None`
+- `user_no` 统一转为去空白字符串
+- `base_url` 去掉尾部 `/`
+
+这些规则属于凭证可靠性的核心守卫，不允许下放给调用方自行处理。
+
 #### `BohriumExecutionContext`
 
 这是纯数据上下文对象，不持有活跃 session 引用。字段建议包括：
@@ -320,17 +331,16 @@ matmaster/
 
 ### 6.2 Context 挂载
 
-`PlaygroundContext` 中只保留可序列化摘要，例如：
+`PlaygroundContext` 中不再散落保存裸字段，而是保存 `BohriumRuntimeSnapshot`
+或由其展开得到的等价可序列化摘要。
 
-- `node_id`
-- `session_type`
-- `execution_workdir`
-- `ssh_attached`
-
-即：
+推荐做法是：
 
 - session 上挂完整 runtime object
-- context 上挂运行时摘要
+- context 上挂 `runtime.snapshot()`
+
+如果现有 `with_bohrium(...)` API 仍要求传入 `dict`，则该 `dict` 必须由
+`BohriumRuntimeSnapshot` 单点导出，而不是在调用方重复拼装字段。
 
 ## 7. Preflight 与 Runtime 的边界
 
@@ -532,10 +542,11 @@ shell/script 和 mcp calculation 都消费同一个 runtime root object，只是
 3. 改造 `agent_run_bohrium.py`，最先切到新 runtime object，并进入短暂双写期
 4. 改造 shell/script/builtin tool，统一从 runtime handle 取 env 与 execution
 5. 改造 `matmaster/tools/builtin/bohrium_tool/`，停止直接消费 runtime bridge 模型与函数
-6. 改造 calculation preflight，切到 `build_submission()` 与 `materialize_input_path()`
-7. 更新 `exp.py`、`cache_mcp_schemas.py`、`eval_tooling_snapshot.py` 等 `resolve_mcp_config_path` 消费方
-8. 迁移 job / oss / path 模块与测试目录
-9. 删除 `_bohrium_credentials`、旧入口与历史目录
+6. 改造 `matmaster/tools/lazy_mcp.py`，替换 `CalculationPreflightError`、`get_calculation_path_adaptor` 与 `resolve_args()` 的旧 adaptor 接入点
+7. 改造 calculation preflight，切到 `build_submission()` 与 `materialize_input_path()`
+8. 更新 `exp.py`、`cache_mcp_schemas.py`、`eval_tooling_snapshot.py` 等 `resolve_mcp_config_path` 消费方
+9. 迁移 job / oss / path 模块与测试目录
+10. 删除 `_bohrium_credentials`、旧入口与历史目录
 
 ## 13. 非目标
 
