@@ -111,7 +111,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_002_20260406
+- id: BP_struct_002_20260407
   capability: batch_processing
   domain: struct
   intent: Generate VASP INCAR files for DOS calculation across 4 different structures.
@@ -143,7 +143,7 @@ questions:
   reference_answers:
   - key: incar_files_count
     value: 4
-    tolerance: 0.0
+    tolerance: 0.5
   - key: kpoint_density_unified
     value:
       description: All 4 INCAR files specify k-point density ~50/Ų

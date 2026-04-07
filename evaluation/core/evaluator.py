@@ -560,7 +560,7 @@ class BinaryEvaluator:
             f'Context:\n{context}\n\n'
             'Return JSON only.'
         )
-        max_judge_attempts = 2
+        max_judge_attempts = 3
         last_parse_error = ''
         for _attempt in range(max_judge_attempts):
             with self._llm_lock:
