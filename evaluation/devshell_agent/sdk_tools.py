@@ -190,6 +190,91 @@ class MatmasterEvalMcpToolkit:
         "required": ["iteration_index", "no_changes", "rationale"],
     }
 
+    DELEGATE_OPTIMIZATION_SCHEMA: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "iteration_index": {
+                "type": "integer",
+                "description": "Same 1-based iteration as the current user message.",
+            },
+            "problem_summary": {
+                "type": "string",
+                "description": "Sanitized product-side problem summary.",
+            },
+            "symptom": {
+                "type": "string",
+                "description": "Observed external symptom without rubric wording.",
+            },
+            "suggested_focus": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Product-side directories or modules to inspect.",
+            },
+            "allowed_evidence_paths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Non-evaluation evidence paths safe for the optimization agent.",
+            },
+            "notes": {
+                "type": "string",
+                "description": "Sanitized notes without raw score_reason or rubric text.",
+            },
+        },
+        "required": [
+            "iteration_index",
+            "problem_summary",
+            "symptom",
+            "suggested_focus",
+            "allowed_evidence_paths",
+            "notes",
+        ],
+    }
+
+    REPORT_OPTIMIZATION_RESULT_SCHEMA: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "iteration_index": {
+                "type": "integer",
+                "description": "Must match the optimization sub-round iteration.",
+            },
+            "optimization_round": {
+                "type": "integer",
+                "description": "1-based optimization round within the iteration.",
+            },
+            "summary": {
+                "type": "string",
+                "description": "Short Markdown summary of the product-side changes.",
+            },
+            "files_touched": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Repo-relative product-side files touched in this sub-round.",
+            },
+            "commit_shas": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Commit SHA(s) created in this optimization sub-round.",
+            },
+            "needs_more_work": {
+                "type": "boolean",
+                "description": "Whether the main agent should consider another optimization round.",
+            },
+            "followup_suggestion": {
+                "type": "string",
+                "description": "Suggested next step for the main agent.",
+            },
+        },
+        "required": [
+            "iteration_index",
+            "optimization_round",
+            "summary",
+            "files_touched",
+            "commit_shas",
+            "needs_more_work",
+            "followup_suggestion",
+        ],
+    }
+
     def __init__(self, state: AgentLoopSharedState) -> None:
         self._state = state
         self._subprocess = DevshellEvalSubprocess(state.repo_root)
@@ -209,7 +294,14 @@ class MatmasterEvalMcpToolkit:
     @classmethod
     def allowed_tool_names(cls) -> list[str]:
         """MCP tools for the main (product) iteration agent."""
-        return cls.main_agent_mcp_tool_names()
+        return [
+            *cls.main_agent_mcp_tool_names(),
+            f"mcp__{cls.MCP_SERVER_NAME}__delegate_optimization",
+        ]
+
+    @classmethod
+    def optimization_agent_mcp_tool_names(cls) -> list[str]:
+        return [f"mcp__{cls.MCP_SERVER_NAME}__report_optimization_result"]
 
     def _append_outcome_jsonl(self, row: dict[str, Any]) -> None:
         path = self._state.session_dir / "outcomes.jsonl"
@@ -219,6 +311,18 @@ class MatmasterEvalMcpToolkit:
 
     def _append_checklist_revision_jsonl(self, row: dict[str, Any]) -> None:
         path = self._state.session_dir / "checklist_revisions.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    def _append_optimization_delegation_jsonl(self, row: dict[str, Any]) -> None:
+        path = self._state.session_dir / "optimization_delegations.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    def _append_optimization_report_jsonl(self, row: dict[str, Any]) -> None:
+        path = self._state.session_dir / "optimization_reports.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -444,6 +548,58 @@ class MatmasterEvalMcpToolkit:
             ]
         }
 
+    async def _delegate_optimization(self, args: dict[str, Any]) -> dict[str, Any]:
+        iteration_index = int(args["iteration_index"])
+        next_round = (
+            self._state.optimization_rounds_by_iteration.get(iteration_index, 0) + 1
+        )
+        self._state.optimization_rounds_by_iteration[iteration_index] = next_round
+        row = {
+            "iteration_index": iteration_index,
+            "optimization_round": next_round,
+            "problem_summary": str(args["problem_summary"]),
+            "symptom": str(args["symptom"]),
+            "suggested_focus": list(args.get("suggested_focus") or []),
+            "allowed_evidence_paths": list(args.get("allowed_evidence_paths") or []),
+            "notes": str(args["notes"]),
+        }
+        self._state.optimization_delegations_pending.append(row)
+        self._append_optimization_delegation_jsonl(row)
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": DevshellEvalSubprocess.format_tool_result_text(
+                        {
+                            "queued": True,
+                            "iteration_index": row["iteration_index"],
+                            "optimization_round": row["optimization_round"],
+                        }
+                    ),
+                }
+            ],
+            "is_error": False,
+        }
+
+    async def _report_optimization_result(self, args: dict[str, Any]) -> dict[str, Any]:
+        row = dict(args)
+        self._state.optimization_reports.append(row)
+        self._append_optimization_report_jsonl(row)
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": DevshellEvalSubprocess.format_tool_result_text(
+                        {
+                            "recorded": True,
+                            "iteration_index": row.get("iteration_index"),
+                            "optimization_round": row.get("optimization_round"),
+                        }
+                    ),
+                }
+            ]
+        }
+
     def build_mcp_server(self) -> Any:
         """Return ``McpSdkServerConfig`` for ``ClaudeAgentOptions.mcp_servers``."""
         toolkit = self
@@ -501,6 +657,30 @@ class MatmasterEvalMcpToolkit:
         ) -> dict[str, Any]:
             return await toolkit._report_checklist_revision(args)
 
+        @tool(
+            "delegate_optimization",
+            (
+                "Queue a follow-up product-only optimization agent for this iteration. "
+                "Use sanitized summaries only and never include raw rubric or score_reason text."
+            ),
+            self.DELEGATE_OPTIMIZATION_SCHEMA,
+        )
+        async def delegate_optimization_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await toolkit._delegate_optimization(args)
+
+        @tool(
+            "report_optimization_result",
+            (
+                "Call exactly once at the end of an optimization sub-round to record "
+                "what product-side changes were made."
+            ),
+            self.REPORT_OPTIMIZATION_RESULT_SCHEMA,
+        )
+        async def report_optimization_result_tool(
+            args: dict[str, Any],
+        ) -> dict[str, Any]:
+            return await toolkit._report_optimization_result(args)
+
         return create_sdk_mcp_server(
             name=self.MCP_SERVER_NAME,
             version="1.1.0",
@@ -509,6 +689,8 @@ class MatmasterEvalMcpToolkit:
                 report_iteration_outcome_tool,
                 escalate_checklist_revision_tool,
                 report_checklist_revision_tool,
+                delegate_optimization_tool,
+                report_optimization_result_tool,
             ],
         )
 

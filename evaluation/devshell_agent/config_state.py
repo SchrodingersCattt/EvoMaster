@@ -51,3 +51,8 @@ class AgentLoopSharedState:
     eval_output_dirs: list[Path] = field(default_factory=list)
     checklist_escalations_pending: list[dict[str, Any]] = field(default_factory=list)
     checklist_revision_reports: list[dict[str, Any]] = field(default_factory=list)
+    optimization_delegations_pending: list[dict[str, Any]] = field(
+        default_factory=list
+    )
+    optimization_reports: list[dict[str, Any]] = field(default_factory=list)
+    optimization_rounds_by_iteration: dict[int, int] = field(default_factory=dict)

@@ -138,3 +138,69 @@ def test_checklist_revision_sdk_max_turns_floor(tmp_path: Path) -> None:
     state = _build_state(tmp_path)
 
     assert checklist_max_turns_for_shared_state(state) == 64
+
+
+def test_delegate_optimization_records_round_and_payload(tmp_path: Path) -> None:
+    state = _build_state(tmp_path)
+    toolkit_cls = _sdk_tools_module().MatmasterEvalMcpToolkit
+    toolkit = toolkit_cls(state)
+
+    result = asyncio.run(
+        toolkit._delegate_optimization(
+            {
+                "iteration_index": 1,
+                "problem_summary": "Need stronger reusable workflow guidance.",
+                "symptom": "Low score due to missing deliverable structure.",
+                "suggested_focus": ["matmaster/skills"],
+                "allowed_evidence_paths": ["matmaster/skills/result-analysis/SKILL.md"],
+                "notes": "Do not expose raw rubric text.",
+            }
+        )
+    )
+
+    assert result["is_error"] is False
+    assert state.optimization_delegations_pending == [
+        {
+            "iteration_index": 1,
+            "optimization_round": 1,
+            "problem_summary": "Need stronger reusable workflow guidance.",
+            "symptom": "Low score due to missing deliverable structure.",
+            "suggested_focus": ["matmaster/skills"],
+            "allowed_evidence_paths": ["matmaster/skills/result-analysis/SKILL.md"],
+            "notes": "Do not expose raw rubric text.",
+        }
+    ]
+
+
+def test_report_optimization_result_persists_jsonl(tmp_path: Path) -> None:
+    state = _build_state(tmp_path)
+    toolkit_cls = _sdk_tools_module().MatmasterEvalMcpToolkit
+    toolkit = toolkit_cls(state)
+
+    asyncio.run(
+        toolkit._report_optimization_result(
+            {
+                "iteration_index": 1,
+                "optimization_round": 2,
+                "summary": "Updated reusable skill instructions.",
+                "files_touched": ["matmaster/skills/demo/SKILL.md"],
+                "commit_shas": ["abc1234"],
+                "needs_more_work": False,
+                "followup_suggestion": "Re-run eval.",
+            }
+        )
+    )
+
+    assert state.optimization_reports == [
+        {
+            "iteration_index": 1,
+            "optimization_round": 2,
+            "summary": "Updated reusable skill instructions.",
+            "files_touched": ["matmaster/skills/demo/SKILL.md"],
+            "commit_shas": ["abc1234"],
+            "needs_more_work": False,
+            "followup_suggestion": "Re-run eval.",
+        }
+    ]
+    log_path = tmp_path / "session" / "optimization_reports.jsonl"
+    assert log_path.is_file()
