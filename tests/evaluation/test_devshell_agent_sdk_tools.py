@@ -13,7 +13,11 @@ from evaluation.devshell_agent.config_state import (
     AgentLoopSharedState,
     DevshellAgentCliDefaults,
 )
-from evaluation.devshell_agent.loop import checklist_max_turns_for_shared_state
+from evaluation.devshell_agent.loop import (
+    AgentLoopConfig,
+    DevshellAgentLoop,
+    checklist_max_turns_for_shared_state,
+)
 
 
 def _tool(*_args: object, **_kwargs: object):
@@ -59,6 +63,31 @@ def _build_state(tmp_path: Path) -> AgentLoopSharedState:
     state.eval_ingest_submit_each_iteration = True
     state.eval_ingest_submit_timeout = 42.0
     return state
+
+
+def _build_config(tmp_path: Path) -> AgentLoopConfig:
+    return AgentLoopConfig(
+        repo_root=tmp_path,
+        session_dir=tmp_path / "session",
+        defaults=DevshellAgentCliDefaults(
+            modes=["direct"],
+            jobs=2,
+            limit=1,
+            questions=None,
+            capabilities=None,
+            model="claude-sonnet-4-6",
+            exp=None,
+            eval_ingest_pending_only=True,
+            no_export_review=False,
+            task_timeout_sec=600.0,
+            eval_config=None,
+            extra_args=[],
+        ),
+        max_iterations=2,
+        target_mean_score=80,
+        permission_mode="acceptEdits",
+        max_sdk_turns=100,
+    )
 
 
 def test_run_devshell_eval_submits_immediately_after_run(tmp_path: Path) -> None:
@@ -204,3 +233,34 @@ def test_report_optimization_result_persists_jsonl(tmp_path: Path) -> None:
     ]
     log_path = tmp_path / "session" / "optimization_reports.jsonl"
     assert log_path.is_file()
+
+
+def test_main_agent_allowed_tools_exclude_edit_write_and_bash() -> None:
+    allowed = DevshellAgentLoop.main_agent_allowed_tools()
+
+    assert "Edit" not in allowed
+    assert "Write" not in allowed
+    assert "Bash" not in allowed
+    assert "mcp__matmaster_eval__delegate_optimization" in allowed
+
+
+def test_optimization_followup_needed_only_when_queue_has_current_iteration(
+    tmp_path: Path,
+) -> None:
+    state = _build_state(tmp_path)
+    state.optimization_delegations_pending.append(
+        {
+            "iteration_index": 2,
+            "optimization_round": 1,
+            "problem_summary": "demo",
+            "symptom": "demo",
+            "suggested_focus": ["matmaster/skills"],
+            "allowed_evidence_paths": ["matmaster/skills/demo/SKILL.md"],
+            "notes": "demo",
+        }
+    )
+
+    loop = DevshellAgentLoop(_build_config(tmp_path))
+
+    assert loop._optimization_escalations_for_iteration(1, state) == []
+    assert len(loop._optimization_escalations_for_iteration(2, state)) == 1

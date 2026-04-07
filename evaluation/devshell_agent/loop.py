@@ -124,6 +124,27 @@ class DevshellAgentLoop:
         self._cfg = config
 
     @staticmethod
+    def main_agent_allowed_tools() -> list[str]:
+        from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
+
+        return [
+            *MatmasterEvalMcpToolkit.allowed_tool_names(),
+            "Read",
+            "Glob",
+            "Grep",
+        ]
+
+    @staticmethod
+    def _optimization_escalations_for_iteration(
+        it: int, state: AgentLoopSharedState
+    ) -> list[dict[str, Any]]:
+        return [
+            row
+            for row in state.optimization_delegations_pending
+            if int(row.get("iteration_index", -1)) == it
+        ]
+
+    @staticmethod
     def _log_line(msg: str, loop_log: TextIO) -> None:
         print(msg, file=sys.stderr, flush=True)
         loop_log.write(msg + "\n")
@@ -490,15 +511,7 @@ class DevshellAgentLoop:
         toolkit = MatmasterEvalMcpToolkit(state)
         mcp_server = toolkit.build_mcp_server()
 
-        allowed_tools = [
-            *MatmasterEvalMcpToolkit.allowed_tool_names(),
-            "Read",
-            "Glob",
-            "Grep",
-            "Edit",
-            "Write",
-            "Bash",
-        ]
+        allowed_tools = self.main_agent_allowed_tools()
 
         options = ClaudeAgentOptions(
             system_prompt=self.SYSTEM_PROMPT_MAIN,
