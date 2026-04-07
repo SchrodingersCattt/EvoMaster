@@ -11,6 +11,7 @@ all tests exercise run_agent() exclusively.
 from __future__ import annotations
 
 import inspect
+import json
 from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -104,6 +105,22 @@ class _FakeExp:
 
     async def _run_cleanup_callbacks(self) -> None:
         pass
+
+
+class _ImmediateReplyQueue:
+    """测试用 reply queue，立即返回预设 envelope。"""
+
+    def __init__(self, envelope: str) -> None:
+        self._envelope = envelope
+
+    def put_content(self, content: str) -> None:
+        self._envelope = content
+
+    def put_cancel(self) -> None:
+        self._envelope = ''
+
+    def get(self, timeout: float | None = None) -> str | None:
+        return self._envelope
 
 
 # ---------------------------------------------------------------------------
@@ -630,3 +647,82 @@ async def test_persistence_receives_events():
     assert 'thought' in persist_types
     assert 'run_result' in persist_types
     assert 'stream_closed' in persist_types
+
+
+@pytest.mark.asyncio
+async def test_ask_question_bridge_send_cb_receives_public_sse_payload():
+    """AskQuestionBridge 发给 send_cb 的必须是前端可消费的公开 SSE payload。"""
+
+    async def ask_then_finish(ctx):
+        await ctx.interaction_bridge.ask(
+            session_id='s1',
+            task_id='t1',
+            invocation_id='inv-1',
+            request_id='aq_1',
+            questions=[
+                {
+                    'question': 'Q1',
+                    'header': 'H1',
+                    'options': [
+                        {'label': 'A1', 'description': 'desc'},
+                        {'label': 'A2', 'description': 'desc'},
+                    ],
+                    'allow_freeform': True,
+                    'multi_select': False,
+                }
+            ],
+            metadata={'scene': 'test'},
+            cancel_token=None,
+        )
+        yield RunResultEvent(source='agent', status='completed', reason='natural')
+
+    send_cb = MagicMock()
+    reply_queue = _ImmediateReplyQueue(
+        json.dumps(
+            {
+                'payload': {
+                    'answers': {'Q1': 'A1'},
+                    'annotations': {},
+                }
+            }
+        )
+    )
+
+    async with _patched_service(ask_then_finish) as (svc, _, __):
+        with patch(
+            'src.services.stream_service.RedisReplyQueue',
+            return_value=reply_queue,
+        ):
+            await svc.run_agent(
+                session_id='s1',
+                user_prompt='hi',
+                send_cb=send_cb,
+                cancel_token=_make_cancel_token(),
+                mode='direct',
+                task_id='t1',
+                invocation_id='inv-1',
+            )
+
+    payload = send_cb.call_args_list[0].args[0]
+    assert payload['type'] == 'ask_question'
+    assert payload['session_id'] == 's1'
+    assert payload['task_id'] == 't1'
+    assert payload['invocation_id'] == 'inv-1'
+    assert payload['content'] == {
+        'request_id': 'aq_1',
+        'questions': [
+            {
+                'question': 'Q1',
+                'header': 'H1',
+                'options': [
+                    {'label': 'A1', 'description': 'desc'},
+                    {'label': 'A2', 'description': 'desc'},
+                ],
+                'allow_freeform': True,
+                'multi_select': False,
+            }
+        ],
+        'metadata': {'scene': 'test'},
+        'origin': 'tool:AskQuestion',
+        'preview_format': 'markdown',
+    }

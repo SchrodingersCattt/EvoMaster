@@ -363,7 +363,7 @@ class ChatSessionsService:
         sid = session_id.strip()
         redis_dao = get_redis_dao()
         redis_dao.publish(REDIS_STOP_CHANNEL, sid)
-        ctx = redis_dao.get_confirmation_run_context(sid)
+        ctx = redis_dao.get_interaction_run_context(sid)
         task_id = (ctx.get('task_id', '') or '').strip() if ctx else ''
         if redis_dao.set_stop_requested(sid, task_id):
             logger.debug(

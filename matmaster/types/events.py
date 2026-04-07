@@ -1,8 +1,8 @@
 """Event type hierarchy for the matmaster event system.
 
-Defines all 19 event types in two categories:
+Defines all 22 event types in two categories:
 - AgentEvent (9 types): emitted by the kernel during agent execution
-- SystemEvent (10 types): emitted by service-layer components
+- SystemEvent (13 types): emitted by service-layer components
 
 BusEvent = AgentEvent | SystemEvent -- the unified event union type.
 
@@ -150,6 +150,35 @@ class ConfirmationTimeoutEvent(EventBase):
     default_reply: str | None = None
 
 
+class AskQuestionEvent(EventBase):
+    """Structured multi-choice question event sent to user."""
+
+    type: Literal["ask_question"] = "ask_question"
+    request_id: str
+    questions: list[dict[str, Any]]
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    origin: str | None = None
+    preview_format: str = "markdown"
+
+
+class AskQuestionReplyEvent(EventBase):
+    """User reply to a structured question."""
+
+    type: Literal["ask_question_reply"] = "ask_question_reply"
+    request_id: str
+    answers: dict[str, str]
+    annotations: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+class AskQuestionTimeoutEvent(EventBase):
+    """Structured question timeout event."""
+
+    type: Literal["ask_question_timeout"] = "ask_question_timeout"
+    request_id: str
+    questions: list[dict[str, Any]]
+    reason: str = "timeout"
+
+
 class ContextCompactionEvent(EventBase):
     """Context compaction event."""
 
@@ -240,6 +269,9 @@ SystemEvent = Annotated[
     Union[
         ConfirmationRequestEvent,
         ConfirmationTimeoutEvent,
+        AskQuestionEvent,
+        AskQuestionReplyEvent,
+        AskQuestionTimeoutEvent,
         ContextCompactionEvent,
         ExpRunEvent,
         CancelledEvent,
@@ -267,6 +299,9 @@ BusEvent = Annotated[
         # SystemEvent types
         ConfirmationRequestEvent,
         ConfirmationTimeoutEvent,
+        AskQuestionEvent,
+        AskQuestionReplyEvent,
+        AskQuestionTimeoutEvent,
         ContextCompactionEvent,
         ExpRunEvent,
         CancelledEvent,

@@ -76,7 +76,7 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 builtin = [
     "Bash", "Read", "Write", "Edit",
     "Glob", "Grep",
-    "Agent", "WebSearch", "WebFetch", "Bohrium",
+    "Agent", "WebSearch", "WebFetch", "Bohrium", "AskQuestion",
 ]
 mcp = "*"
 

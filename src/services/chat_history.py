@@ -385,12 +385,15 @@ class ChatHistoryConverter:
         """
         out: list[dict] = []
         pending_tool_calls: list[dict] = []
+        pending_tool_call_ids: set[str] = set()
+        active_tool_turn_ids: set[str] = set()
         pending_reasoning: str | None = None
         last_assistant_text_idx: int | None = None
         assistant_state_tool_ids: set[str] = set()
         response_seen_in_turn = False
 
         def flush_tool_calls() -> None:
+            nonlocal active_tool_turn_ids
             if not pending_tool_calls:
                 return
             msg = AssistantMessage(
@@ -400,7 +403,11 @@ class ChatHistoryConverter:
                 ],
             )
             out.append(msg.model_dump())
+            active_tool_turn_ids = {
+                str(tc.get("id") or "") for tc in pending_tool_calls if tc.get("id")
+            }
             pending_tool_calls.clear()
+            pending_tool_call_ids.clear()
 
         for ev in events:
             source = normalize_event_source(ev.get('source'))
@@ -418,6 +425,7 @@ class ChatHistoryConverter:
                 flush_tool_calls()
                 last_assistant_text_idx = None
                 assistant_state_tool_ids.clear()
+                active_tool_turn_ids.clear()
                 response_seen_in_turn = False
                 text = cls._user_content(ev)
                 out.append(UserMessage(content=text).model_dump())
@@ -426,6 +434,7 @@ class ChatHistoryConverter:
             if _is_matmaster_source(source) and typ in ('thought', 'planner_reply'):
                 flush_tool_calls()
                 assistant_state_tool_ids.clear()
+                active_tool_turn_ids.clear()
                 last_assistant_text_idx = None
                 text = cls._assistant_content(ev)
                 if text:
@@ -435,6 +444,7 @@ class ChatHistoryConverter:
             if _is_matmaster_source(source) and typ == 'response':
                 flush_tool_calls()
                 assistant_state_tool_ids.clear()
+                active_tool_turn_ids.clear()
                 last_assistant_text_idx = None
                 text = cls._assistant_content(ev)
                 if text or pending_reasoning:
@@ -451,6 +461,7 @@ class ChatHistoryConverter:
 
             if _is_matmaster_source(source) and typ == 'assistant_state':
                 flush_tool_calls()
+                active_tool_turn_ids.clear()
                 raw_content = ev.get('content')
                 try:
                     msg = AssistantMessage.model_validate(
@@ -493,9 +504,15 @@ class ChatHistoryConverter:
             if typ == 'tool_call':
                 tc = cls._tool_call_from_event(ev)
                 if tc:
-                    if tc.get('id') in assistant_state_tool_ids:
+                    tc_id = str(tc.get('id') or '')
+                    if (
+                        tc_id in assistant_state_tool_ids
+                        or tc_id in pending_tool_call_ids
+                    ):
                         continue
                     pending_tool_calls.append(tc)
+                    if tc_id:
+                        pending_tool_call_ids.add(tc_id)
                 continue
 
             if typ == 'tool_result':
@@ -503,7 +520,17 @@ class ChatHistoryConverter:
                 if triple:
                     flush_tool_calls()
                     call_id, name, content = triple
+                    if (
+                        call_id not in active_tool_turn_ids
+                        and call_id not in assistant_state_tool_ids
+                    ):
+                        logger.warning(
+                            "chat_history: skipping orphan tool_result call_id=%s context=events_to_dialog_messages",
+                            call_id[:64],
+                        )
+                        continue
                     assistant_state_tool_ids.discard(call_id)
+                    active_tool_turn_ids.discard(call_id)
                     out.append(
                         ToolMessage(
                             tool_call_id=call_id,
@@ -516,6 +543,7 @@ class ChatHistoryConverter:
             if _is_matmaster_source(source) and typ in ('run_result', 'finish'):
                 flush_tool_calls()
                 assistant_state_tool_ids.clear()
+                active_tool_turn_ids.clear()
                 last_assistant_text_idx = None
                 if response_seen_in_turn:
                     pending_reasoning = None
