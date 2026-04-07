@@ -6,7 +6,10 @@ import asyncio
 import json
 from typing import Any
 
-from matmaster.integration.interaction_bridge import AskQuestionBridge, AskQuestionResponse
+from matmaster.integration.interaction_bridge import (
+    AskQuestionBridge,
+    AskQuestionResponse,
+)
 from matmaster.tools.builtin.ask_question_tool import AskQuestionTool
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.tool_spec import ToolExecutionContext
