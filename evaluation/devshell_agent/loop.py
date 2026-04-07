@@ -788,15 +788,7 @@ class DevshellAgentLoop:
 
         from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
-        optimization_allowed = [
-            *MatmasterEvalMcpToolkit.optimization_agent_mcp_tool_names(),
-            "Read",
-            "Glob",
-            "Grep",
-            "Edit",
-            "Write",
-            "Bash",
-        ]
+        optimization_allowed = MatmasterEvalMcpToolkit.optimization_agent_tool_names()
         warning = 0
         for delegation in delegations:
             n_reports_before = len(state.optimization_reports)
@@ -889,15 +881,7 @@ class DevshellAgentLoop:
         from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
         n_reports_before = len(state.checklist_revision_reports)
-        checklist_allowed = [
-            *MatmasterEvalMcpToolkit.checklist_agent_mcp_tool_names(),
-            "Read",
-            "Glob",
-            "Grep",
-            "Edit",
-            "Write",
-            "Bash",
-        ]
+        checklist_allowed = MatmasterEvalMcpToolkit.checklist_agent_tool_names()
         co = ClaudeAgentOptions(
             system_prompt=self.SYSTEM_PROMPT_CHECKLIST,
             cwd=str(cfg.repo_root.resolve()),

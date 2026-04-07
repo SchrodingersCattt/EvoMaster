@@ -344,3 +344,63 @@ def test_default_history_dir_is_outside_results(tmp_path: Path) -> None:
 
     assert history_dir == tmp_path / "evaluation" / "devshell_agent_history"
     assert "results" not in str(history_dir)
+
+
+def test_optimization_agent_uses_restricted_mcp_fs_tools_only() -> None:
+    toolkit_cls = _sdk_tools_module().MatmasterEvalMcpToolkit
+
+    tool_names = toolkit_cls.optimization_agent_tool_names()
+
+    assert "Read" not in tool_names
+    assert "Edit" not in tool_names
+    assert "Write" not in tool_names
+    assert "Bash" not in tool_names
+    assert "mcp__matmaster_eval__optimization_read_text" in tool_names
+    assert "mcp__matmaster_eval__optimization_replace_text" in tool_names
+
+
+def test_checklist_agent_uses_restricted_mcp_fs_tools_only() -> None:
+    toolkit_cls = _sdk_tools_module().MatmasterEvalMcpToolkit
+
+    tool_names = toolkit_cls.checklist_agent_tool_names()
+
+    assert "Read" not in tool_names
+    assert "Edit" not in tool_names
+    assert "Write" not in tool_names
+    assert "Bash" not in tool_names
+    assert "mcp__matmaster_eval__checklist_read_text" in tool_names
+    assert "mcp__matmaster_eval__checklist_replace_text" in tool_names
+
+
+def test_optimization_path_guard_blocks_evaluation_reads(tmp_path: Path) -> None:
+    state = _build_state(tmp_path)
+    toolkit_cls = _sdk_tools_module().MatmasterEvalMcpToolkit
+    toolkit = toolkit_cls(state)
+
+    try:
+        toolkit._resolve_agent_path(
+            "evaluation/question_bank/structure_construction/sc_struct.yaml",
+            role="optimization",
+            write=False,
+        )
+    except ValueError as exc:
+        assert "optimization" in str(exc)
+    else:
+        raise AssertionError("expected optimization path guard to reject evaluation")
+
+
+def test_checklist_path_guard_blocks_product_writes(tmp_path: Path) -> None:
+    state = _build_state(tmp_path)
+    toolkit_cls = _sdk_tools_module().MatmasterEvalMcpToolkit
+    toolkit = toolkit_cls(state)
+
+    try:
+        toolkit._resolve_agent_path(
+            "matmaster/skills/result-analysis/SKILL.md",
+            role="checklist",
+            write=True,
+        )
+    except ValueError as exc:
+        assert "checklist" in str(exc)
+    else:
+        raise AssertionError("expected checklist path guard to reject product write")

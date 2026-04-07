@@ -275,6 +275,93 @@ class MatmasterEvalMcpToolkit:
         ],
     }
 
+    READ_TEXT_SCHEMA: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Repo-relative or absolute file path.",
+            }
+        },
+        "required": ["path"],
+    }
+
+    WRITE_TEXT_SCHEMA: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Repo-relative or absolute file path.",
+            },
+            "content": {
+                "type": "string",
+                "description": "Full file content to write.",
+            },
+        },
+        "required": ["path", "content"],
+    }
+
+    REPLACE_TEXT_SCHEMA: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Repo-relative or absolute file path.",
+            },
+            "old_text": {
+                "type": "string",
+                "description": "Exact text to replace.",
+            },
+            "new_text": {
+                "type": "string",
+                "description": "Replacement text.",
+            },
+            "replace_all": {
+                "type": "boolean",
+                "description": "Replace all occurrences instead of the first match.",
+            },
+        },
+        "required": ["path", "old_text", "new_text"],
+    }
+
+    GLOB_PATHS_SCHEMA: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "base_dir": {
+                "type": "string",
+                "description": "Repo-relative or absolute directory to search under.",
+            },
+            "pattern": {
+                "type": "string",
+                "description": "Glob pattern such as `*.py`.",
+            },
+        },
+        "required": ["base_dir", "pattern"],
+    }
+
+    GREP_TEXT_SCHEMA: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "base_dir": {
+                "type": "string",
+                "description": "Repo-relative or absolute directory to search under.",
+            },
+            "pattern": {
+                "type": "string",
+                "description": "Plain-text substring to search for.",
+            },
+            "file_pattern": {
+                "type": "string",
+                "description": "Optional glob used to limit files, default `*`.",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum number of matches to return.",
+            },
+        },
+        "required": ["base_dir", "pattern"],
+    }
+
     def __init__(self, state: AgentLoopSharedState) -> None:
         self._state = state
         self._subprocess = DevshellEvalSubprocess(state.repo_root)
@@ -303,6 +390,39 @@ class MatmasterEvalMcpToolkit:
     def optimization_agent_mcp_tool_names(cls) -> list[str]:
         return [f"mcp__{cls.MCP_SERVER_NAME}__report_optimization_result"]
 
+    @classmethod
+    def optimization_agent_fs_tool_names(cls) -> list[str]:
+        prefix = f"mcp__{cls.MCP_SERVER_NAME}__optimization_"
+        return [
+            prefix + "read_text",
+            prefix + "glob_paths",
+            prefix + "grep_text",
+            prefix + "write_text",
+            prefix + "replace_text",
+        ]
+
+    @classmethod
+    def optimization_agent_tool_names(cls) -> list[str]:
+        return [
+            *cls.optimization_agent_mcp_tool_names(),
+            *cls.optimization_agent_fs_tool_names(),
+        ]
+
+    @classmethod
+    def checklist_agent_fs_tool_names(cls) -> list[str]:
+        prefix = f"mcp__{cls.MCP_SERVER_NAME}__checklist_"
+        return [
+            prefix + "read_text",
+            prefix + "glob_paths",
+            prefix + "grep_text",
+            prefix + "write_text",
+            prefix + "replace_text",
+        ]
+
+    @classmethod
+    def checklist_agent_tool_names(cls) -> list[str]:
+        return [*cls.checklist_agent_mcp_tool_names(), *cls.checklist_agent_fs_tool_names()]
+
     def _append_outcome_jsonl(self, row: dict[str, Any]) -> None:
         path = self._state.session_dir / "outcomes.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -326,6 +446,192 @@ class MatmasterEvalMcpToolkit:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    @staticmethod
+    def _is_under(path: Path, root: Path) -> bool:
+        try:
+            path.relative_to(root)
+            return True
+        except ValueError:
+            return False
+
+    def _display_path(self, path: Path) -> str:
+        repo_root = self._state.repo_root.resolve()
+        session_dir = self._state.session_dir.resolve()
+        if self._is_under(path, repo_root):
+            return str(path.relative_to(repo_root))
+        if self._is_under(path, session_dir):
+            return str(path)
+        return str(path)
+
+    def _resolve_agent_path(self, raw_path: str, *, role: str, write: bool) -> Path:
+        repo_root = self._state.repo_root.resolve()
+        session_dir = self._state.session_dir.resolve()
+        evaluation_root = (repo_root / "evaluation").resolve()
+        question_bank_root = (evaluation_root / "question_bank").resolve()
+        evaluation_core_root = (evaluation_root / "core").resolve()
+        git_root = (repo_root / ".git").resolve()
+
+        candidate = Path(raw_path)
+        path = candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
+
+        if self._is_under(path, git_root):
+            raise ValueError(f"{role} path access denied: {raw_path}")
+
+        if role == "optimization":
+            if write:
+                if not self._is_under(path, repo_root) or self._is_under(path, evaluation_root):
+                    raise ValueError(f"optimization path access denied: {raw_path}")
+            else:
+                if self._is_under(path, session_dir):
+                    return path
+                if not self._is_under(path, repo_root) or self._is_under(path, evaluation_root):
+                    raise ValueError(f"optimization path access denied: {raw_path}")
+            return path
+
+        if role == "checklist":
+            if write:
+                if not (
+                    self._is_under(path, question_bank_root)
+                    or self._is_under(path, evaluation_core_root)
+                ):
+                    raise ValueError(f"checklist path access denied: {raw_path}")
+            else:
+                if not (
+                    self._is_under(path, evaluation_root)
+                    or self._is_under(path, session_dir)
+                ):
+                    raise ValueError(f"checklist path access denied: {raw_path}")
+            return path
+
+        raise ValueError(f"unknown role: {role}")
+
+    async def _read_text(self, *, role: str, args: dict[str, Any]) -> dict[str, Any]:
+        path = self._resolve_agent_path(str(args["path"]), role=role, write=False)
+        text = path.read_text(encoding="utf-8")
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": DevshellEvalSubprocess.format_tool_result_text(
+                        {"path": self._display_path(path), "content": text}
+                    ),
+                }
+            ]
+        }
+
+    async def _write_text(self, *, role: str, args: dict[str, Any]) -> dict[str, Any]:
+        path = self._resolve_agent_path(str(args["path"]), role=role, write=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(str(args["content"]), encoding="utf-8")
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": DevshellEvalSubprocess.format_tool_result_text(
+                        {"written": True, "path": self._display_path(path)}
+                    ),
+                }
+            ]
+        }
+
+    async def _replace_text(self, *, role: str, args: dict[str, Any]) -> dict[str, Any]:
+        path = self._resolve_agent_path(str(args["path"]), role=role, write=True)
+        old_text = str(args["old_text"])
+        new_text = str(args["new_text"])
+        replace_all = bool(args.get("replace_all", False))
+        content = path.read_text(encoding="utf-8")
+        count = content.count(old_text)
+        if count == 0:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": DevshellEvalSubprocess.format_tool_result_text(
+                            {
+                                "replaced": False,
+                                "path": self._display_path(path),
+                                "reason": "old_text_not_found",
+                            }
+                        ),
+                    }
+                ],
+                "is_error": True,
+            }
+        updated = (
+            content.replace(old_text, new_text)
+            if replace_all
+            else content.replace(old_text, new_text, 1)
+        )
+        path.write_text(updated, encoding="utf-8")
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": DevshellEvalSubprocess.format_tool_result_text(
+                        {
+                            "replaced": True,
+                            "path": self._display_path(path),
+                            "matches_found": count,
+                            "replace_all": replace_all,
+                        }
+                    ),
+                }
+            ]
+        }
+
+    async def _glob_paths(self, *, role: str, args: dict[str, Any]) -> dict[str, Any]:
+        base_dir = self._resolve_agent_path(str(args["base_dir"]), role=role, write=False)
+        pattern = str(args["pattern"])
+        matches = sorted(
+            self._display_path(path)
+            for path in base_dir.rglob(pattern)
+        )
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": DevshellEvalSubprocess.format_tool_result_text(
+                        {"base_dir": self._display_path(base_dir), "matches": matches}
+                    ),
+                }
+            ]
+        }
+
+    async def _grep_text(self, *, role: str, args: dict[str, Any]) -> dict[str, Any]:
+        base_dir = self._resolve_agent_path(str(args["base_dir"]), role=role, write=False)
+        needle = str(args["pattern"])
+        file_pattern = str(args.get("file_pattern") or "*")
+        limit = max(1, int(args.get("limit") or 20))
+        hits: list[dict[str, Any]] = []
+        for path in sorted(base_dir.rglob(file_pattern)):
+            if len(hits) >= limit or not path.is_file():
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except UnicodeDecodeError:
+                continue
+            for lineno, line in enumerate(lines, start=1):
+                if needle in line:
+                    hits.append(
+                        {
+                            "path": self._display_path(path),
+                            "line": lineno,
+                            "text": line,
+                        }
+                    )
+                    if len(hits) >= limit:
+                        break
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": DevshellEvalSubprocess.format_tool_result_text(
+                        {"base_dir": self._display_path(base_dir), "hits": hits}
+                    ),
+                }
+            ]
+        }
 
     def _build_sanitized_run_summary(self, run_dir: Path) -> dict[str, Any]:
         pending_dir = run_dir / "pending_ingest"
@@ -717,6 +1023,88 @@ class MatmasterEvalMcpToolkit:
         ) -> dict[str, Any]:
             return await toolkit._report_optimization_result(args)
 
+        @tool(
+            "optimization_read_text",
+            "Read a product-side file with evaluation paths hard-blocked.",
+            self.READ_TEXT_SCHEMA,
+        )
+        async def optimization_read_text_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await toolkit._read_text(role="optimization", args=args)
+
+        @tool(
+            "optimization_glob_paths",
+            "Glob product-side paths with evaluation paths hard-blocked.",
+            self.GLOB_PATHS_SCHEMA,
+        )
+        async def optimization_glob_paths_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await toolkit._glob_paths(role="optimization", args=args)
+
+        @tool(
+            "optimization_grep_text",
+            "Search product-side text with evaluation paths hard-blocked.",
+            self.GREP_TEXT_SCHEMA,
+        )
+        async def optimization_grep_text_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await toolkit._grep_text(role="optimization", args=args)
+
+        @tool(
+            "optimization_write_text",
+            "Write a product-side file with evaluation paths hard-blocked.",
+            self.WRITE_TEXT_SCHEMA,
+        )
+        async def optimization_write_text_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await toolkit._write_text(role="optimization", args=args)
+
+        @tool(
+            "optimization_replace_text",
+            "Replace text in a product-side file with evaluation paths hard-blocked.",
+            self.REPLACE_TEXT_SCHEMA,
+        )
+        async def optimization_replace_text_tool(
+            args: dict[str, Any],
+        ) -> dict[str, Any]:
+            return await toolkit._replace_text(role="optimization", args=args)
+
+        @tool(
+            "checklist_read_text",
+            "Read an evaluation-side file or session evidence file with product paths blocked.",
+            self.READ_TEXT_SCHEMA,
+        )
+        async def checklist_read_text_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await toolkit._read_text(role="checklist", args=args)
+
+        @tool(
+            "checklist_glob_paths",
+            "Glob evaluation-side paths or session evidence paths with product paths blocked.",
+            self.GLOB_PATHS_SCHEMA,
+        )
+        async def checklist_glob_paths_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await toolkit._glob_paths(role="checklist", args=args)
+
+        @tool(
+            "checklist_grep_text",
+            "Search evaluation-side text or session evidence with product paths blocked.",
+            self.GREP_TEXT_SCHEMA,
+        )
+        async def checklist_grep_text_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await toolkit._grep_text(role="checklist", args=args)
+
+        @tool(
+            "checklist_write_text",
+            "Write an evaluation/question_bank or evaluation/core file only.",
+            self.WRITE_TEXT_SCHEMA,
+        )
+        async def checklist_write_text_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await toolkit._write_text(role="checklist", args=args)
+
+        @tool(
+            "checklist_replace_text",
+            "Replace text in an evaluation/question_bank or evaluation/core file only.",
+            self.REPLACE_TEXT_SCHEMA,
+        )
+        async def checklist_replace_text_tool(args: dict[str, Any]) -> dict[str, Any]:
+            return await toolkit._replace_text(role="checklist", args=args)
+
         return create_sdk_mcp_server(
             name=self.MCP_SERVER_NAME,
             version="1.1.0",
@@ -727,6 +1115,16 @@ class MatmasterEvalMcpToolkit:
                 report_checklist_revision_tool,
                 delegate_optimization_tool,
                 report_optimization_result_tool,
+                optimization_read_text_tool,
+                optimization_glob_paths_tool,
+                optimization_grep_text_tool,
+                optimization_write_text_tool,
+                optimization_replace_text_tool,
+                checklist_read_text_tool,
+                checklist_glob_paths_tool,
+                checklist_grep_text_tool,
+                checklist_write_text_tool,
+                checklist_replace_text_tool,
             ],
         )
 
