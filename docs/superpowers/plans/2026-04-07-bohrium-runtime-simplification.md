@@ -879,6 +879,10 @@ def _sandbox_download_log(
     return False
 
 
+# Keep this fallback in transfers.py for now: it is part of artifact retrieval,
+# not the control-plane job lifecycle API surface.
+
+
 def _merge_log_file(files: list[str], log_downloaded: bool) -> list[str]:
     if not log_downloaded or "log" in files:
         return files
@@ -910,9 +914,16 @@ def _sandbox_download_objects(
             continue
         dest_path = result_dir / relative_path
         dest_path.parent.mkdir(parents=True, exist_ok=True)
-        _sandbox_download_object(root_host, root_token, object_path, dest_path)
-        downloaded.append(relative_path)
-        count += 1
+        try:
+            _sandbox_download_object(root_host, root_token, object_path, dest_path)
+            downloaded.append(relative_path)
+            count += 1
+        except Exception:
+            logger.debug(
+                "sandbox object download failed object=%s",
+                object_path,
+                exc_info=True,
+            )
     return downloaded
 
 
@@ -1439,25 +1450,82 @@ from .transfers import (
 logger = logging.getLogger(__name__)
 
 
+def build_bohrium_context(*, session, require_project: bool = False) -> BohriumContext:
+    cred = resolve_bohrium_credentials(session=session)
+    ctx = BohriumContext.from_resolved_credential(cred, sandbox=use_sandbox())
+    if require_project and ctx.project_id <= 0:
+        raise BohriumError(
+            "Bohrium project ID unavailable. Provide via session or BOHRIUM_PROJECT_ID."
+        )
+    if not ctx.base_url:
+        ctx = BohriumContext(
+            access_key=ctx.access_key,
+            project_id=ctx.project_id,
+            base_url=get_bohrium_base_url(),
+            credential_source=ctx.credential_source,
+            sandbox=ctx.sandbox,
+            user_id=ctx.user_id,
+            user_no=ctx.user_no,
+        )
+    return ctx
+
+
+def submit_job_via_runtime(
+    *,
+    input_dir: str | Path,
+    image: str,
+    cmd: str,
+    machine: str,
+    job_name: str,
+    disk_size: int,
+    workdir: Path,
+    session,
+) -> tuple[int | str, int | str]:
+    ctx = build_bohrium_context(session=session, require_project=True)
+    source = resolve_input_source(
+        raw_path=str(input_dir),
+        workdir=workdir,
+        session=session,
+    )
+
+    cmd_stripped = cmd.rstrip()
+    if not cmd_stripped.endswith("> log 2>&1"):
+        cmd = cmd_stripped + " > log 2>&1"
+
+    with prepare_input_archive(source, session=session) as zip_path:
+        create_data = create_job(ctx, job_name=job_name)
+        upload = upload_input_archive(create_data=create_data, zip_path=zip_path)
+        add_data = add_job(
+            ctx,
+            create_data=create_data,
+            upload=upload,
+            image=image,
+            cmd=cmd,
+            machine=machine,
+            job_name=job_name,
+            disk_size=disk_size,
+        )
+
+    if ctx.sandbox:
+        raw_jid = add_data.get("jobId")
+        if raw_jid is None:
+            raise BohriumError("Missing jobId in sandbox add response")
+        job_id: int | str = str(raw_jid).strip()
+        bohr_raw = add_data.get("bohrJobId")
+        bohr_job_id = str(bohr_raw).strip() if bohr_raw not in (None, "", 0) else job_id
+        return job_id, bohr_job_id
+
+    job_id = int(add_data["jobId"])
+    bohr_job_id = int(add_data.get("bohrJobId") or add_data["jobId"])
+    return job_id, bohr_job_id
+
+
 class BohriumTool(BuiltinTool):
     def _build_context(self, *, require_project: bool = False) -> BohriumContext:
-        cred = resolve_bohrium_credentials(session=self._session)
-        ctx = BohriumContext.from_resolved_credential(cred, sandbox=use_sandbox())
-        if require_project and ctx.project_id <= 0:
-            raise BohriumError(
-                "Bohrium project ID unavailable. Provide via session or BOHRIUM_PROJECT_ID."
-            )
-        if not ctx.base_url:
-            ctx = BohriumContext(
-                access_key=ctx.access_key,
-                project_id=ctx.project_id,
-                base_url=get_bohrium_base_url(),
-                credential_source=ctx.credential_source,
-                sandbox=ctx.sandbox,
-                user_id=ctx.user_id,
-                user_no=ctx.user_no,
-            )
-        return ctx
+        return build_bohrium_context(
+            session=self._session,
+            require_project=require_project,
+        )
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
         try:
@@ -1509,24 +1577,9 @@ from .tool import BohriumTool
 __all__ = ["BohriumTool"]
 ```
 
-Also extract a top-level helper in `matmaster/tools/builtin/bohrium_tool/tool.py`:
+`BohriumTool._submit(...)` is now a thin `ToolResult` wrapper around `submit_job_via_runtime(...)`, so the skill script imports exactly the same submit workflow instead of recreating create/upload/add sequencing.
 
-```python
-def submit_job_via_runtime(
-    *,
-    input_dir: str | Path,
-    image: str,
-    cmd: str,
-    machine: str,
-    job_name: str,
-    disk_size: int,
-    workdir: Path,
-    session,
-) -> tuple[int | str, int | str]:
-    ...
-```
-
-`BohriumTool._submit(...)` should become a thin `ToolResult` wrapper around this shared helper so that the skill script can import exactly the same submit workflow instead of recreating create/upload/add sequencing.
+Step 3 also needs to migrate the remaining action surface from the legacy `__init__.py` into `tool.py`: `_poll`, `_list_images`, `_list_machines`, and the action dispatch method that routes `submit`, `poll`, `download`, `list_images`, and `list_machines`. Preserve the existing JSON payload shapes and user-facing messages while swapping the internals to `api.py`, `paths.py`, and `transfers.py`.
 
 Also update `tests/matmaster/tools/builtin/test_bohrium_tool.py` to replace:
 
@@ -1700,6 +1753,8 @@ __all__ = [
     "resolve_credentials",
 ]
 ```
+
+This keeps the existing adapter naming contract explicit: every service adapter exposed through `runtime_bridge` must provide `resolve_<service>_credentials`, `build_<service>_env`, and `inject_<service>_mcp_args`.
 
 ```python
 # matmaster/integration/runtime_bridge/models.py
