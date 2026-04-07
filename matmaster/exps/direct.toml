@@ -51,7 +51,8 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 # Grounding (1-2 concise sentences PER item, after results table)
 - Structure: space group, lattice constant(s), structural rationale.
 - Polar surfaces (ZnS(001), ZnO(001), type-III): MUST note polarity problem + mitigation. Omission = fail.
-- Disorder → ordered: For EACH named CIF explain: (a) specific disorder (e.g., "C1 site 0.6/0.4 split occupancy"), (b) resolution method and why the chosen config is valid (valence, charge balance, connectivity), (c) what changes in the ordered replica. Listing filenames/formulas without chemical reasoning = fail. Report BOTH the original disordered formula (as parsed, with fractional occupancy) AND the ordered FULL EXPANDED formula (e.g., H144C48N24Cl24O96), NOT reduced.
+- Disorder → ordered: For EACH named CIF explain: (a) specific disorder (e.g., "C1 site 0.6/0.4 split occupancy"), (b) resolution method and why the chosen config is valid (valence, charge balance, connectivity), (c) what changes in the ordered replica. Listing filenames/formulas without chemical reasoning = fail. Report BOTH the original disordered formula AND the ordered FULL EXPANDED formula, NOT reduced.
+- Chemical formulas: ALWAYS write as one concatenated string without spaces (e.g., `H144C48N24Cl24O96`). NEVER use space-separated element groups (NOT `H144 C48 N24 Cl24 O96`). If a CIF/tool returns spaces, concatenate before reporting.
 - NEVER claim files exist unless verified in workspace.
 
 # Surface Slab Construction

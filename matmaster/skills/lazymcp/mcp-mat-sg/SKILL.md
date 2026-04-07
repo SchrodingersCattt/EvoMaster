@@ -13,7 +13,7 @@ mcp_server: mat_sg
 
 ## generate_ordered_replicas
 
-- Report **both** the original disordered formula (fractional occupancy, e.g. "K1 H13.98 C6 …") **and** the ordered replica expanded formula (integer stoichiometry, e.g. "H144C48N24Cl24O96").
+- Report **both** the original disordered formula **and** the ordered replica expanded formula (integer stoichiometry). Write formulas as concatenated strings without spaces: `H144C48N24Cl24O96` (NOT `H144 C48 N24 Cl24 O96`). If CIF returns space-separated elements, concatenate them.
 - For each replica, explain: (a) which sites are disordered and how, (b) how the ordered config was chosen (valence/charge balance/connectivity), (c) what changed. A bare filename list without chemical reasoning = fail.
 - On timeout → fall back to pymatgen `OrderDisorderedStructureTransformation`.
 
