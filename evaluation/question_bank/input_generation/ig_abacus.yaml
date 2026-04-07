@@ -209,7 +209,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: markers_contains
-    criterion: Final answer text or generated files include required INPUT/KPT markers: calculation scf, basis_type pw, out_pot 2, and a Gamma-centered k-mesh with third component equal to 1.
+    criterion: "Final answer text or generated files include required INPUT/KPT markers: calculation scf, basis_type pw, out_pot 2, and a Gamma-centered k-mesh with third component equal to 1."
     axis: correctness
     verify: contains_all
   - id: grounding_source
