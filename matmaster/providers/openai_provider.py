@@ -201,6 +201,19 @@ def _extract_cached_tokens(usage: Any) -> int:
     return 0
 
 
+def _is_non_retryable_tool_protocol_bad_request(err_str: str) -> bool:
+    text = err_str.lower()
+    patterns = (
+        "duplicate ids",
+        "unexpected `tool_use_id`",
+        "must have a corresponding `tool_use` block",
+        "expected toolresult blocks",
+        "exceeds the number of tooluse blocks",
+        "wrong number of tooluse blocks",
+    )
+    return any(pattern in text for pattern in patterns)
+
+
 class OpenAIProvider:
     """LLMProvider implementation backed by the OpenAI Python SDK.
 
@@ -553,10 +566,15 @@ class OpenAIProvider:
         except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
             raise LLMError(str(exc), retryable=False, error_category="auth") from exc
         except openai.BadRequestError as exc:
-            err_str = str(exc).lower()
-            if "context" in err_str and ("length" in err_str or "token" in err_str):
+            err_str = str(exc)
+            err_text = err_str.lower()
+            if "context" in err_text and ("length" in err_text or "token" in err_text):
                 raise LLMError(
                     str(exc), retryable=False, error_category="context_overflow"
+                ) from exc
+            if _is_non_retryable_tool_protocol_bad_request(err_str):
+                raise LLMError(
+                    str(exc), retryable=False, error_category="bad_request"
                 ) from exc
             raise LLMError(
                 str(exc), retryable=True, error_category="bad_request"
