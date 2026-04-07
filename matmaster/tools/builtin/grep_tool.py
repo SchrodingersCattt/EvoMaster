@@ -13,6 +13,7 @@ import asyncio
 import re
 from typing import Any, ClassVar
 
+from matmaster.bohrium.runtime import get_runtime
 from matmaster.tools.filesystem_semantics.snapshots import FileSemanticSnapshot
 from matmaster.tools.filesystem_semantics.text_resolution import resolve_text_bytes
 from matmaster.tools.tool_result import ToolResult
@@ -227,10 +228,10 @@ class GrepTool(BuiltinTool):
             cmd += f" | head -{head_limit}"
         # head_limit == 0: no head pipe (unlimited)
 
-        from matmaster.integration.runtime_bridge import build_service_env
         from matmaster.tools.script_env import inject_env
 
-        env = build_service_env("bohrium", session=session)
+        runtime = get_runtime(session)
+        env = runtime.build_env() if runtime is not None else {}
         cmd = inject_env(cmd, env, session)
 
         result = session.exec_bash(
@@ -288,16 +289,13 @@ class GrepTool(BuiltinTool):
         if session.is_file(safe_path):
             return [safe_path]
 
-        from matmaster.integration.runtime_bridge import build_service_env
         from matmaster.tools.script_env import inject_env
 
         find_cmd = GlobTool._build_find_command(file_glob or "**", safe_path)
+        runtime = get_runtime(session)
+        env = runtime.build_env() if runtime is not None else {}
         result = session.exec_bash(
-            command=inject_env(
-                find_cmd,
-                build_service_env("bohrium", session=session),
-                session,
-            ),
+            command=inject_env(find_cmd, env, session),
             timeout=30,
             cancel_token=self._cancel_token_for_exec(),
         )

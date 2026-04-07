@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from matmaster.bohrium.runtime import get_runtime
 from matmaster.tools.filesystem_semantics.shell_planner import plan_shell_command
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
@@ -99,13 +100,13 @@ class BashTool(BuiltinTool):
         timeout_ms = min(int(timeout_ms), 600_000)  # cap at 10min
         timeout_s = timeout_ms / 1000  # float division preserves sub-second
 
-        from matmaster.integration.runtime_bridge import build_service_env
         from matmaster.tools.script_env import (
             prepare_inline_command,
             prepare_script_command,
         )
 
-        env = build_service_env("bohrium", session=session)
+        runtime = get_runtime(session)
+        env = runtime.build_env() if runtime is not None else {}
         plan = plan_shell_command(command)
         if plan.mode == "script":
             command = prepare_script_command(
