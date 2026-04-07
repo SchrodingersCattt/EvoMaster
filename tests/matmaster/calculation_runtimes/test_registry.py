@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import cast
 
 from matmaster.calculation_runtimes.base import CalculationRuntime
-from matmaster.calculation_runtimes.registry import get_runtime_factory, register_runtime
+from matmaster.calculation_runtimes.registry import (
+    get_runtime_factory,
+    register_runtime,
+)
 
 
 class _FakeRuntime:
@@ -21,7 +24,9 @@ class _FakeRuntime:
 
 
 def test_register_and_resolve_runtime_factory() -> None:
-    register_runtime("fake", lambda session=None: cast(CalculationRuntime, _FakeRuntime()))
+    register_runtime(
+        "fake", lambda session=None: cast(CalculationRuntime, _FakeRuntime())
+    )
 
     factory = get_runtime_factory("fake")
     runtime = factory(None)

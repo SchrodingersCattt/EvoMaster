@@ -11,14 +11,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from matmaster.config.exp import ExpConfig
+from matmaster.bohrium.credentials import normalize_bohrium_credentials
 from matmaster.bohrium.endpoints import get_bohrium_base_url
-from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime, detach_runtime
+from matmaster.bohrium.runtime import (
+    BohriumRuntimeHandle,
+    attach_runtime,
+    detach_runtime,
+)
 from matmaster.bohrium.types import (
     BohriumExecutionContext,
     BohriumRuntimeSnapshot,
 )
-from matmaster.bohrium.credentials import normalize_bohrium_credentials
+from matmaster.config.exp import ExpConfig
 from matmaster.integration.workspace_resolver import (
     get_remote_session_workspace_root,
     load_workspace_config_dict,
@@ -885,8 +889,7 @@ def _setup_bohrium_for_run(
                 credentials=normalize_bohrium_credentials(
                     {
                         **run_creds,
-                        "base_url": run_creds.get("base_url")
-                        or get_bohrium_base_url(),
+                        "base_url": run_creds.get("base_url") or get_bohrium_base_url(),
                     }
                 ),
                 execution=BohriumExecutionContext(

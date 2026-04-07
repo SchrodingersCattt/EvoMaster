@@ -6,9 +6,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from .oss import upload_file_to_oss
-
 from .errors import BohriumPathMaterializationError
+from .oss import upload_file_to_oss
 
 _URL_RE = re.compile(r'https?://[^\s,\'"<>)}\]]+')
 
@@ -50,8 +49,10 @@ def materialize_input_path(
     workspace_root = Path(workspace_root)
     resolved = workspace_path_to_local(value, workspace_root)
 
-    if _is_remote_session(session) and hasattr(session, "download") and hasattr(
-        session, "is_file"
+    if (
+        _is_remote_session(session)
+        and hasattr(session, "download")
+        and hasattr(session, "is_file")
     ):
         remote_path = str(resolved).replace("\\", "/")
         if not session.is_file(remote_path):

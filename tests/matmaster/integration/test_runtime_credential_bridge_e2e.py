@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import matmaster.tools.builtin.bohrium_tool.api as bohrium_api_module
 import matmaster.tools.builtin.bohrium_tool.open_sdk as bohrium_open_sdk_module

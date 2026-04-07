@@ -13,9 +13,7 @@ class _ActorConnector:
         self.session = session
         self.calculation_preflight = calculation_preflight
         self.call_tool = AsyncMock(return_value=[{"text": "actor_result"}])
-        self.get_calculation_preflight = AsyncMock(
-            return_value=calculation_preflight
-        )
+        self.get_calculation_preflight = AsyncMock(return_value=calculation_preflight)
 
 
 class TestLazyMCPToolActorRouting:

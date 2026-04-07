@@ -470,7 +470,9 @@ def query_job_status(
         logger.warning("query_job_status(%s) value error: %s", bid, exc)
         return f"Error:{exc}"
     except Exception as exc:
-        logger.error("query_job_status(%s) unexpected error: %s", bid, exc, exc_info=True)
+        logger.error(
+            "query_job_status(%s) unexpected error: %s", bid, exc, exc_info=True
+        )
         return f"Error:{exc}"
 
 

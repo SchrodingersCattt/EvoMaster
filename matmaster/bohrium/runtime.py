@@ -19,7 +19,7 @@ from .types import (
 
 
 class SupportsBohriumRuntimeSlot(Protocol):
-    _bohrium_runtime: "BohriumRuntimeHandle | None"
+    _bohrium_runtime: BohriumRuntimeHandle | None
 
 
 class BohriumRuntimeHandle:
@@ -60,7 +60,9 @@ class BohriumRuntimeHandle:
     def build_submission(self, request: SubmissionRequest) -> BohriumSubmissionSpec:
         return BohriumSubmissionSpec(
             executor=build_executor(request.executor_template, self.credentials()),
-            storage=build_storage(self.credentials()) if request.needs_storage else None,
+            storage=(
+                build_storage(self.credentials()) if request.needs_storage else None
+            ),
             submission_mode=request.submission_mode,
         )
 
@@ -80,7 +82,9 @@ class BohriumRuntimeHandle:
         )
 
 
-def attach_runtime(session: SupportsBohriumRuntimeSlot, runtime: BohriumRuntimeHandle) -> None:
+def attach_runtime(
+    session: SupportsBohriumRuntimeSlot, runtime: BohriumRuntimeHandle
+) -> None:
     session._bohrium_runtime = runtime
 
 

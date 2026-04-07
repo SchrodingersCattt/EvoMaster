@@ -3,13 +3,13 @@ from __future__ import annotations
 from .credentials import credentials_from_env, normalize_bohrium_credentials
 from .endpoints import get_bohrium_base_url, get_bohrium_service_env
 from .env import build_bohrium_env
-from .executor import build_executor
 from .errors import (
     BohriumCredentialError,
     BohriumPathMaterializationError,
     BohriumRuntimeNotInitialized,
     BohriumSubmissionBuildError,
 )
+from .executor import build_executor
 from .runtime import (
     BohriumRuntimeHandle,
     attach_runtime,

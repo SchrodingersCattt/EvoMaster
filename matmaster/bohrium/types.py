@@ -15,7 +15,7 @@ class BohriumCredentials:
     base_url: str
 
     @classmethod
-    def from_mapping(cls, values: dict[str, Any]) -> "BohriumCredentials":
+    def from_mapping(cls, values: dict[str, Any]) -> BohriumCredentials:
         access_key = str(values.get("access_key") or "").strip()
         raw_project_id = values.get("project_id", -1)
         raw_user_id = values.get("user_id")
