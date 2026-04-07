@@ -12,6 +12,13 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from matmaster.config.exp import ExpConfig
+from matmaster.bohrium.endpoints import get_bohrium_base_url
+from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime, detach_runtime
+from matmaster.bohrium.types import (
+    BohriumExecutionContext,
+    BohriumRuntimeSnapshot,
+)
+from matmaster.bohrium.credentials import normalize_bohrium_credentials
 from matmaster.integration.workspace_resolver import (
     get_remote_session_workspace_root,
     load_workspace_config_dict,
@@ -162,8 +169,11 @@ def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
     ssh = runtime.get('ssh_session')
     orig = runtime.get('original_session')
     orig_owns = runtime.get('original_owns_session', True)
+    if orig is not None:
+        detach_runtime(orig)
     if ssh is not None:
         try:
+            detach_runtime(ssh)
             if getattr(ssh, 'is_open', False):
                 ssh.close()
         except Exception as close_err:
@@ -278,6 +288,7 @@ class BohriumSetupResult(NamedTuple):
     execution_session: Any | None
     execution_workdir: str | None
     session_type: str | None
+    runtime_snapshot: BohriumRuntimeSnapshot | None
 
 
 class BohriumSetupService:
@@ -483,9 +494,34 @@ def _load_run_credentials(
 
 
 def _apply_run_credentials_to_session(session: Any, run_creds: dict[str, Any]) -> None:
-    """Attach transient Bohrium credentials to the active session object."""
-    if run_creds and session:
-        session._bohrium_credentials = run_creds
+    """Attach transient Bohrium credentials and a placeholder runtime."""
+    if not run_creds or session is None:
+        return
+
+    normalized = normalize_bohrium_credentials(
+        {
+            **run_creds,
+            "base_url": run_creds.get("base_url") or get_bohrium_base_url(),
+        }
+    )
+    execution = BohriumExecutionContext(
+        session_type="local",
+        execution_workdir="",
+        remote_workspace_root="",
+        remote_project_root="",
+        node_id=None,
+        node_ip=None,
+        ssh_attached=False,
+    )
+    attach_runtime(
+        session,
+        BohriumRuntimeHandle(
+            credentials=normalized,
+            execution=execution,
+            execution_session=session,
+        ),
+    )
+    session._bohrium_credentials = dict(run_creds)
 
 
 def _remote_session_workspace_root() -> str:
@@ -546,14 +582,16 @@ def _setup_bohrium_for_run(
         )
 
     if not run_creds:
-        return BohriumSetupResult(False, None, None, None, None)
+        return BohriumSetupResult(False, None, None, None, None, None)
 
     project_id = run_creds.get('project_id')
     if project_id is not None:
         project_id = int(project_id)
     access_key = (run_creds.get('access_key') or '').strip()
     if not access_key or project_id is None:
-        return BohriumSetupResult(False, None, None, None, None)
+        return BohriumSetupResult(False, None, None, None, None, None)
+
+    _apply_run_credentials_to_session(getattr(pg, 'session', None), run_creds)
 
     node_id: int | None = None
     node_ip = None
@@ -837,14 +875,42 @@ def _setup_bohrium_for_run(
                 except Exception:
                     pass
                 raise
+
+            remote_project_root = getattr(ssh_session, 'remote_project_root', '')
+            if not isinstance(remote_project_root, str) or not remote_project_root:
+                remote_project_root = (
+                    skill_sync_spec.remote_project_root if skill_sync_spec else ''
+                )
+
+            runtime = BohriumRuntimeHandle(
+                credentials=normalize_bohrium_credentials(
+                    {
+                        **run_creds,
+                        "base_url": run_creds.get("base_url")
+                        or get_bohrium_base_url(),
+                    }
+                ),
+                execution=BohriumExecutionContext(
+                    session_type="ssh",
+                    execution_workdir=ssh_working_dir,
+                    remote_workspace_root=remote_workspace_root,
+                    remote_project_root=remote_project_root,
+                    node_id=node_id,
+                    node_ip=node_ip,
+                    ssh_attached=True,
+                ),
+                execution_session=ssh_session,
+            )
+            attach_runtime(ssh_session, runtime)
             return BohriumSetupResult(
                 True,
                 None,
                 ssh_session,
                 ssh_working_dir,
                 'ssh',
+                runtime.snapshot(),
             )
-        return BohriumSetupResult(False, None, None, None, None)
+        return BohriumSetupResult(False, None, None, None, None, None)
     except Exception as e:
         reason = f'Bohrium 节点创建失败: {e}'
         logger.warning(
@@ -865,7 +931,7 @@ def _setup_bohrium_for_run(
         except Exception:
             pass
         return BohriumSetupResult(
-            False, ((False, reason), elapsed_ms), None, None, None
+            False, ((False, reason), elapsed_ms), None, None, None, None
         )
 
 
@@ -890,6 +956,8 @@ def _cleanup_bohrium_after_run(
     )
     # Runtime restore is keyed off stored Bohrium swap state, not ssh_attached.
     _restore_bohrium_runtime_state(session_id, pg_for_run)
+    if pg_for_run is not None:
+        detach_runtime(getattr(pg_for_run, 'session', None))
 
     session_data = SESSIONS.get(session_id, {})
     node_id = session_data.pop('bohrium_node_id', None)
