@@ -226,9 +226,7 @@ class AgentRunService:
             loop = asyncio.get_running_loop()
 
             def _dispatch_from_thread(event: BusEvent) -> None:
-                loop.call_soon_threadsafe(
-                    lambda: asyncio.create_task(fanout.dispatch(event))
-                )
+                fanout.dispatch_from_thread(loop, event)
 
             bohrium_svc = BohriumSetupService(
                 self._sessions_service,

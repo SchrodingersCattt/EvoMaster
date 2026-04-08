@@ -109,6 +109,20 @@ class _BlockingHandler:
         await self.release.wait()
 
 
+class _QueuedThreadsafeLoop:
+    """Minimal loop stub that queues thread-safe callbacks until released."""
+
+    def __init__(self) -> None:
+        self.callbacks: list[tuple[object, tuple[object, ...]]] = []
+
+    def call_soon_threadsafe(self, callback, *args) -> None:
+        self.callbacks.append((callback, args))
+
+    def run_next(self) -> None:
+        callback, args = self.callbacks.pop(0)
+        callback(*args)
+
+
 class _OrderTracker:
     """Tracks dispatch ordering across handlers via shared list."""
 
@@ -475,5 +489,53 @@ class TestRunEventFanoutPersistenceBarrier:
         ]
         assert [event.reason for event in persistence.completed] == [
             "before-spawn-window",
+            "after-barrier",
+        ]
+
+    async def test_flush_barrier_waits_thread_bridge_dispatch_reserved_before_start(
+        self,
+    ) -> None:
+        """Barrier must see thread-bridge dispatches queued before loop callback starts."""
+        from matmaster.integration.fanout import RunEventFanout
+
+        queued_loop = _QueuedThreadsafeLoop()
+        sse = _BlockingHandler()
+        persistence = _BlockingPersistence()
+
+        fanout = RunEventFanout(
+            sse_handler=sse,
+            persistence_handler=persistence,
+        )
+
+        first_event = RunResultEvent(source="Agent", reason="queued-thread-bridge")
+        fanout.dispatch_from_thread(queued_loop, first_event)
+
+        barrier_task = asyncio.create_task(fanout.flush_persistence_barrier())
+        await asyncio.sleep(0)
+        assert barrier_task.done() is False
+
+        queued_loop.run_next()
+        await sse.started.wait()
+        await asyncio.sleep(0)
+        assert barrier_task.done() is False
+
+        sse.release.set()
+        await persistence.started.wait()
+        await asyncio.sleep(0)
+        assert barrier_task.done() is False
+
+        persistence.release.set()
+        await barrier_task
+
+        second_event = RunResultEvent(source="Agent", reason="after-barrier")
+        await fanout.dispatch(second_event)
+        await fanout.drain_and_close()
+
+        assert [event.reason for event in sse.received] == [
+            "queued-thread-bridge",
+            "after-barrier",
+        ]
+        assert [event.reason for event in persistence.completed] == [
+            "queued-thread-bridge",
             "after-barrier",
         ]

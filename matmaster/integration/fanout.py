@@ -74,6 +74,33 @@ class RunEventFanout:
         self._extra_handlers = [*self._extra_handlers, handler]
 
     async def dispatch(self, event: BusEvent) -> None:
+        """Dispatch an event from the event-loop thread."""
+        seq = self._reserve_dispatch_seq()
+        await self._dispatch_with_seq(seq, event)
+
+    def dispatch_from_thread(self, loop: Any, event: BusEvent) -> None:
+        """Reserve dispatch ordering before scheduling from another thread."""
+        seq = self._reserve_dispatch_seq()
+
+        def _start_dispatch() -> None:
+            try:
+                asyncio.create_task(self._dispatch_with_seq(seq, event))
+            except Exception:
+                self._pre_persistence_dispatches.discard(seq)
+                raise
+
+        try:
+            loop.call_soon_threadsafe(_start_dispatch)
+        except Exception:
+            self._pre_persistence_dispatches.discard(seq)
+            raise
+
+    def _reserve_dispatch_seq(self) -> int:
+        seq = self._next_dispatch_seq()
+        self._pre_persistence_dispatches.add(seq)
+        return seq
+
+    async def _dispatch_with_seq(self, seq: int, event: BusEvent) -> None:
         """Dispatch event to all handlers.
 
         Order:
@@ -84,8 +111,6 @@ class RunEventFanout:
         Per-handler exceptions are caught and logged. One failing
         handler does not prevent others from receiving the event.
         """
-        seq = self._next_dispatch_seq()
-        self._pre_persistence_dispatches.add(seq)
         try:
             # 1. SSE first -- latency-sensitive
             await self._safe_handle(self._sse, event)
