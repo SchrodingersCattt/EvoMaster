@@ -13,6 +13,8 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 
 from matmaster.types.events import (
     BusEvent,
@@ -121,6 +123,32 @@ class _QueuedThreadsafeLoop:
     def run_next(self) -> None:
         callback, args = self.callbacks.pop(0)
         callback(*args)
+
+
+class _NoopThreadsafeLoop:
+    """Loop stub that accepts thread-safe scheduling without running callbacks."""
+
+    def call_soon_threadsafe(self, callback, *args) -> None:
+        pass
+
+
+class _SlowFalseSeq:
+    """Comparable set entry that slows barrier iteration for race reproduction."""
+
+    def __init__(self, value: int, started: threading.Event) -> None:
+        self._value = value
+        self._started = started
+
+    def __hash__(self) -> int:
+        return hash(self._value)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _SlowFalseSeq) and other._value == self._value
+
+    def __le__(self, other: object) -> bool:
+        self._started.set()
+        time.sleep(0.001)
+        return False
 
 
 class _OrderTracker:
@@ -539,3 +567,37 @@ class TestRunEventFanoutPersistenceBarrier:
             "queued-thread-bridge",
             "after-barrier",
         ]
+
+    async def test_flush_barrier_avoids_set_size_error_during_thread_reserve(self) -> None:
+        """Barrier should not crash when thread bridge reserves while barrier checks state."""
+        from matmaster.integration.fanout import RunEventFanout
+
+        iteration_started = threading.Event()
+        mutation_done = threading.Event()
+        noop_loop = _NoopThreadsafeLoop()
+
+        fanout = RunEventFanout(
+            sse_handler=_CollectorHandler(),
+            persistence_handler=_CollectorHandler(),
+        )
+        fanout._dispatch_seq = 0
+        fanout._pre_persistence_dispatches = {
+            _SlowFalseSeq(i, iteration_started) for i in range(128)
+        }
+
+        def _reserve_from_thread() -> None:
+            iteration_started.wait(timeout=1)
+            for idx in range(16):
+                fanout.dispatch_from_thread(
+                    noop_loop,
+                    ThoughtEvent(source="Agent", content=f"race-{idx}"),
+                )
+            mutation_done.set()
+
+        reserve_thread = threading.Thread(target=_reserve_from_thread)
+        reserve_thread.start()
+
+        await fanout.flush_persistence_barrier()
+
+        reserve_thread.join(timeout=1)
+        assert mutation_done.is_set() is True

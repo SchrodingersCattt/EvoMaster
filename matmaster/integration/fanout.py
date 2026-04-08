@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import threading
 from typing import Any, Protocol, runtime_checkable
 
 from matmaster.types.events import BusEvent
@@ -60,6 +61,7 @@ class RunEventFanout:
         self._sse = sse_handler
         self._persistence = persistence_handler
         self._extra_handlers: list[Any] = list(extra_handlers) if extra_handlers else []
+        self._dispatch_state_lock = threading.Lock()
         self._dispatch_seq = 0
         self._pre_persistence_dispatches: set[int] = set()
         self._pending_persistence: set[asyncio.Task[None]] = set()
@@ -86,19 +88,33 @@ class RunEventFanout:
             try:
                 asyncio.create_task(self._dispatch_with_seq(seq, event))
             except Exception:
-                self._pre_persistence_dispatches.discard(seq)
+                self._discard_pre_persistence_dispatch(seq)
                 raise
 
         try:
             loop.call_soon_threadsafe(_start_dispatch)
         except Exception:
-            self._pre_persistence_dispatches.discard(seq)
+            self._discard_pre_persistence_dispatch(seq)
             raise
 
     def _reserve_dispatch_seq(self) -> int:
-        seq = self._next_dispatch_seq()
-        self._pre_persistence_dispatches.add(seq)
-        return seq
+        with self._dispatch_state_lock:
+            seq = self._next_dispatch_seq()
+            self._pre_persistence_dispatches.add(seq)
+            return seq
+
+    def _discard_pre_persistence_dispatch(self, seq: int) -> None:
+        with self._dispatch_state_lock:
+            self._pre_persistence_dispatches.discard(seq)
+
+    def _capture_barrier_fence_seq(self) -> int:
+        with self._dispatch_state_lock:
+            return self._dispatch_seq
+
+    def _has_pre_persistence_dispatch_at_or_before(self, fence_seq: int) -> bool:
+        with self._dispatch_state_lock:
+            pending = tuple(self._pre_persistence_dispatches)
+        return any(seq <= fence_seq for seq in pending)
 
     async def _dispatch_with_seq(self, seq: int, event: BusEvent) -> None:
         """Dispatch event to all handlers.
@@ -125,7 +141,7 @@ class RunEventFanout:
             # 3. Persistence as background task
             self._spawn_persistence(seq, event)
         finally:
-            self._pre_persistence_dispatches.discard(seq)
+            self._discard_pre_persistence_dispatch(seq)
 
     def _next_dispatch_seq(self) -> int:
         self._dispatch_seq += 1
@@ -150,11 +166,9 @@ class RunEventFanout:
 
     async def flush_persistence_barrier(self) -> None:
         """Wait for dispatches started before the barrier to reach persistence."""
-        fence_seq = self._dispatch_seq
+        fence_seq = self._capture_barrier_fence_seq()
 
-        while any(
-            seq <= fence_seq for seq in self._pre_persistence_dispatches
-        ):
+        while self._has_pre_persistence_dispatch_at_or_before(fence_seq):
             await asyncio.sleep(0)
 
         pending = [
