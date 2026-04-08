@@ -8,8 +8,7 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
 
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
 ``manifest.json`` carries ``eval_tooling`` (default: same as interactive ``mm-devshell`` without ``--exp`` —
-``direct`` from ``matmaster/exps/direct.toml``; ``matmaster_exp`` is labeled ``devshell`` when the inner
-run omits ``--exp``).
+``direct`` from ``matmaster/exps/direct.toml``).
 The same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
 When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
 labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
@@ -147,20 +146,13 @@ def _mm_devshell_exp_cmd_suffix(exp_cli: str | None) -> list[str]:
 def _eval_tooling_snapshot_for_exp_cli(
     *, repo_root: Path, exp_cli: str | None
 ) -> dict[str, Any]:
-    from evaluation.eval_tooling_snapshot import (
-        snapshot_devshell_eval_tooling,
-        snapshot_eval_tooling,
-    )
+    """Resolve ``--exp`` to the ``matmaster/exps/{name}.toml`` snapshot (default: ``direct``)."""
+    from evaluation.eval_tooling_snapshot import snapshot_eval_tooling
 
-    if exp_cli is None or exp_cli == "devshell":
-        return snapshot_devshell_eval_tooling(repo_root=repo_root)
-    return snapshot_eval_tooling(repo_root=repo_root, exp_name=exp_cli)
-
-
-def _manifest_matmaster_exp_label(exp_cli: str | None) -> str:
-    if exp_cli is None or exp_cli == "devshell":
-        return "devshell"
-    return exp_cli
+    name = (exp_cli or "").strip() or "direct"
+    if name == "devshell":
+        name = "direct"
+    return snapshot_eval_tooling(repo_root=repo_root, exp_name=name)
 
 
 class _TeeTextIO:
@@ -296,9 +288,10 @@ def main() -> int:
         type=str,
         default=None,
         help=(
-            "Forwarded to ``mm-devshell run --exp`` when set. Omit this flag (default) for the same "
-            "patched ``direct`` as interactive devshell (narrowed skills_root; manifest "
-            "``matmaster_exp``: devshell). Use ``direct`` for full packaged skill trees (unpatched exp)."
+            "Forwarded to ``mm-devshell run --exp`` when set. Omit this flag (default) to use the "
+            "same ``direct`` exp as interactive ``mm-devshell`` (``load_exp_config('direct')``). "
+            "Eval tooling snapshots use ``matmaster/exps/{exp}.toml`` (e.g. full "
+            "``matmaster/skills`` tree for ``direct``)."
         ),
     )
     parser.add_argument(
@@ -560,7 +553,6 @@ def main() -> int:
         "task_timeout_sec": args.task_timeout,
         "dry_run": False,
         "eval_tooling": eval_tooling_snapshot,
-        "matmaster_exp": _manifest_matmaster_exp_label(exp_cli),
     }
     if ingest_url:
         manifest["eval_ingest_url"] = ingest_url

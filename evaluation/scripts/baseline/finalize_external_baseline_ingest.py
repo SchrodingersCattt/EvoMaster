@@ -206,7 +206,7 @@ def main() -> int:
         post_eval_ingest,
         upload_eval_task_artifacts_to_oss,
     )
-    from evaluation.eval_tooling_snapshot import snapshot_devshell_eval_tooling
+    from evaluation.eval_tooling_snapshot import snapshot_eval_tooling
 
     ingest_url: str | None = None
     if not args.no_eval_ingest:
@@ -240,7 +240,7 @@ def main() -> int:
 
     eval_tooling = manifest.get("eval_tooling")
     if not isinstance(eval_tooling, dict):
-        eval_tooling = snapshot_devshell_eval_tooling(repo_root=REPO_ROOT)
+        eval_tooling = snapshot_eval_tooling(repo_root=REPO_ROOT, exp_name="direct")
 
     is_cc_baseline_manifest = bool(manifest.get("prepare_cc_baseline")) or (
         manifest.get("eval_runner") == "claude_code_baseline"
