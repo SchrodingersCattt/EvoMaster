@@ -13,6 +13,97 @@ class ChatEventsTable(BaseTable):
 
     table_name = 'evo_chat_events'
 
+    @staticmethod
+    def _row_to_event(row: dict) -> dict:
+        try:
+            content = json.loads(row['content'])
+        except (json.JSONDecodeError, TypeError):
+            content = row['content']
+
+        ev = {
+            'source': row['source'],
+            'type': row['type'],
+            'content': content,
+            'session_id': row['session_id'],
+            'task_id': row.get('task_id'),
+            'invocation_id': row.get('invocation_id'),
+            'spawn_id': row.get('spawn_id'),
+        }
+        if row.get('created_at') is not None:
+            ev['created_at_ms'] = int(row['created_at'].timestamp() * 1000)
+
+        if (
+            row.get('source') == 'User'
+            and row.get('type') == 'query'
+            and isinstance(content, dict)
+            and 'content' in content
+        ):
+            ev['content'] = content.get('content', '')
+            ev['files'] = content.get('files', [])
+            ev['workspace_paths'] = content.get('workspace_paths', [])
+
+        return ev
+
+    def get_history_checkpoints(
+        self,
+        session_id: str,
+        spawn_id: str | None,
+        limit: int = 5,
+    ) -> list[dict]:
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                if spawn_id is None:
+                    spawn_filter = ' AND spawn_id IS NULL'
+                    params = (session_id,)
+                else:
+                    spawn_filter = ' AND spawn_id = %s'
+                    params = (session_id, spawn_id)
+
+                sql = f'''
+                    SELECT id, session_id, source, type, content, task_id, invocation_id, spawn_id, created_at
+                    FROM {self.table_name}
+                    WHERE session_id = %s
+                      AND type = 'history_checkpoint'
+                      {spawn_filter}
+                    ORDER BY id DESC
+                '''
+                if limit:
+                    sql += f' LIMIT {limit}'
+                cursor.execute(sql, params)
+                rows = list(cursor.fetchall())
+                return [self._row_to_event(row) for row in rows]
+
+    def get_scope_events_after_id(
+        self,
+        session_id: str,
+        spawn_id: str | None,
+        after_id: int,
+        limit: int | None = None,
+    ) -> list[dict]:
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                if spawn_id is None:
+                    spawn_filter = ' AND spawn_id IS NULL'
+                    params = (session_id, after_id)
+                else:
+                    spawn_filter = ' AND spawn_id = %s'
+                    params = (session_id, spawn_id, after_id)
+
+                sql = f'''
+                    SELECT id, session_id, source, type, content, task_id, invocation_id, spawn_id, created_at
+                    FROM {self.table_name}
+                    WHERE session_id = %s
+                      {spawn_filter}
+                      AND id > %s
+                      AND type NOT IN ('compact_boundary', 'history_checkpoint')
+                    ORDER BY created_at ASC, id ASC
+                '''
+                if limit:
+                    sql += f' LIMIT {limit}'
+                cursor.execute(sql, params)
+                rows = list(cursor.fetchall())
+                return [self._row_to_event(row) for row in rows]
+
     def get_session_events(
         self,
         session_id: str,
