@@ -12,6 +12,9 @@
       --questions SC_struct_007
 
 说明见 ``evaluation/docs/devshell/devshell_agent_sdk_loop.md``。
+
+无人值守：默认 ``--permission-mode bypassPermissions``（Claude Agent SDK），避免 Bash/git
+等工具因 “requires approval” 在无人工点击时失败；交互式可改用 ``acceptEdits``。
 """
 
 from __future__ import annotations
@@ -77,8 +80,13 @@ class DevshellAgentLoopCli:
         p.add_argument(
             "--permission-mode",
             type=str,
-            default="acceptEdits",
-            help="ClaudeAgentOptions.permission_mode (e.g. acceptEdits).",
+            default="bypassPermissions",
+            help=(
+                "ClaudeAgentOptions.permission_mode. SDK: default | acceptEdits | plan | "
+                "bypassPermissions | dontAsk. Default bypassPermissions for unattended "
+                "runs (auto-approves Bash/git). Use acceptEdits for stricter interactive "
+                "approval."
+            ),
         )
         p.add_argument(
             "--max-sdk-turns",
@@ -142,7 +150,11 @@ class DevshellAgentLoopCli:
             "--checklist-permission-mode",
             type=str,
             default="",
-            help="ClaudeAgentOptions.permission_mode for checklist agent (default: same as --permission-mode).",
+            help=(
+                "ClaudeAgentOptions.permission_mode for checklist agent only "
+                "(default: same as --permission-mode). Set explicitly if checklist "
+                "needs a different mode than main/optimization."
+            ),
         )
 
         p.add_argument(
