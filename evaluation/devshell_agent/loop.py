@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
+from evaluation.devshell_agent import loop_prompts as _loop_prompts
 from evaluation.devshell_agent.config_state import (
     AgentLoopSharedState,
     DevshellAgentCliDefaults,
@@ -45,6 +46,10 @@ class AgentLoopConfig:
     enable_checklist_agent: bool = True
     checklist_permission_mode: str = ""
     history_root: Path | None = None
+    #: After each optimization sub-round, stage product-side paths and ``git commit``.
+    enable_optimization_auto_commit: bool = True
+    #: Skip ``exp_prompt_budget`` checks before commit (e.g. broken local env).
+    optimization_auto_commit_skip_budget: bool = False
 
 
 class DevshellAgentLoop:
@@ -56,80 +61,9 @@ class DevshellAgentLoop:
     _SDK_LOG_TEXT_BLOCK_MAX_CHARS = 100_000
     _SDK_LOG_SYSTEM_DATA_MAX_CHARS = 24_000
 
-    SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编排助手（产品 / Agent 行为侧）**。
-
-## 工具分工
-- **run_devshell_eval**：在仓库根目录下执行 `evaluation/scripts/devshell/run_devshell_eval.py`（子进程，优先 `uv run python`）。输出目录为会话下的 `eval_runs/<iteration_tag>/`，并返回**脱敏后的**评分摘要。
-- **report_iteration_outcome**：每一轮结束时**必须**调用一次，记录宏平均分数与是否达标。
-- **escalate_checklist_revision**：当你判断低分主要来自 **题库评分项 / scoring_checklist / reference_answers** 不公或错误时调用；**不得**亲自改题库。编排器会在本轮主会话结束后启动**另一 Agent** 专改 `evaluation/question_bank/`。
-- **delegate_optimization**：当你判断问题主要在产品侧实现、提示或工具契约时调用。编排器会在本轮主会话结束后启动**另一 Agent** 专做产品侧优化。
-
-## 防作弊：题库与 checklist（硬约束）
-- **禁止**读取 `evaluation/**`，也**禁止**编辑任何代码或文件。
-- 需要调整评测标准时：调用 **escalate_checklist_revision**，由 checklist 专责 Agent 执行。
-- 需要产品侧优化时：调用 **delegate_optimization**，由 optimization 专责 Agent 执行。
-- 你的职责是根据 `run_devshell_eval` 返回的**脱敏摘要**做分流、总结与停止决策，而不是亲自改仓库。
-
-## Git 工作流（自迭代必守）
-- 你自己**不提交代码改动**；产品侧 commit 由 optimization Agent 执行，题库/evaluator 侧 commit 由 checklist Agent 执行。
-- 你需要在每轮总结里如实说明本轮触发了哪些子 Agent、它们是否产出了 commit，以及为何继续或停止。
-
-## 判分原则（与 `evaluation/docs/devshell/devshell_claude_code_eval.md` 一致）
-- 单次任务的**权威判分**来自 `evaluation/scripts/devshell/score_devshell_tasks.py`（`BinaryEvaluator`，基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl`）。
-- 你看到的是编排器提供的**脱敏摘要**，其中宏平均与任务分数仍与 `pending_ingest` 口径一致，但不暴露原始 `score_reason` 文本。
-- 你**不得**自行再读题库、evaluator 或原始 checklist 文本来解释低分。
-
-## 修改范围
-- 你自己**不可写任何路径**。
-- 对产品侧的建议应通过 **delegate_optimization** 转交。
-- 对评测侧的建议应通过 **escalate_checklist_revision** 转交。
-
-## 产品侧改动优先级与系统提示词泛化（硬约束）
-- **优先顺序**：先 **`matmaster/skills/`**（领域流程与可复用约束；**现有 Skill 不足时允许新建**，见上节 `skills_root` 约定）、再 **`matmaster/tools/`**（工具行为与描述），然后 **`config/`**、MCP、`matmaster/adaptors/calculation/`、`matmaster/devshell/` 等；**`matmaster/exps/` 仅在与「通用角色 / 安全 / 全会话一致的工作方式」相关、且难以在 Skill 或工具中表达时再改**，且每次改动都须能说明**为何不**放在 skills/tools。
-- **`matmaster/exps/` 中的系统提示与 developer 指令须保持通用**：不得把某次评测里具体题目的 **`scoring_checklist` 逐条改写进 TOML**、不得仅为对齐某题判分项而堆叠题目专属规则（这是对题库的**过拟合**，会损害非评测场景下的行为与可维护性）。
-- 若 `item.score_reason` 指向 checklist 某条：先判断能否用 **Skill 文案** 或 **工具契约** 稳定满足该类要求；确需动 exp 时，只增加**可跨题复用**的抽象表述，并仍遵守下文 token 预算与 `exp_prompt_budget`。
-
-## MatMaster 实验提示词（优化策略 + 体量硬上限）
-- **优先删减与合并**：在增补新规则前，先删除或合并与 `_base.toml` / 同文件内已有条目**重复、矛盾或过时**的表述；禁止仅靠堆叠新段落规避问题。
-- **系统 prompt token 预算**：对 `ContextBuilder.build()` 产出的**完整初始系统 prompt**（含 `system_prompt` + `developer_instructions` + tool descriptions + skill meta info）使用 tiktoken **gpt-4o 编码**计数；**推荐控制在 12000 以内**，**硬上限为 15000（含 15000）**。
-- **自检命令**：每次修改 `matmaster/exps/` 下相关 TOML 后、在 `git commit` 前于仓库根执行
-  `uv run python -m evaluation.devshell_agent.exp_prompt_budget <exp>`
-  其中 `<exp>` 与本轮 `run_devshell_eval` 所用 `--exp` 一致；若未传 `--exp`，默认按 `direct` 自检（若你改的是其它 exp 名则改用该名）。**命令 exit 非 0 时不得提交**，应先压缩文案直至达标。
-
-## 轮次结束
-- 调用 **report_iteration_outcome**，`iteration_index` 必须与当前轮次编号一致，`macro_mean_0_100` 为整数 0–100，`target_met` 表示是否达到用户给定目标分，`rationale` 用 Markdown 简述判分与下一步。
-"""
-
-    SYSTEM_PROMPT_CHECKLIST = """你是 MatMaster 仓库内的 **DevShell 评测迭代 — checklist / 题库专责助手**。
-
-你与上一会话中的「产品侧」Agent **不是同一角色**：你只负责 **评测语义与题库 YAML / evaluator**，不负责改 `config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/`、`matmaster/devshell/`、`matmaster/core/` 等产品侧目录。
-
-## 硬约束
-- **仅允许**使用 Edit/Write 修改路径前缀为 `evaluation/question_bank/`（题库 YAML）或 `evaluation/core/`（evaluator / checker 代码）的文件。**禁止**编辑产品侧目录（`config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/`、`matmaster/devshell/`、`matmaster/core/` 等）及 `evaluation/scripts/`。
-- 修改 `scoring_checklist`、`reference_answers`、题干等时遵守仓库 `evaluation/AGENTS_evaluation.md`：若变更影响评测语义，须按该文档更新对应题目的顶层 `id`。
-- 使用 **Read / Glob / Grep** 阅读证据（含本会话目录下的 `eval_runs/`、workspace、events、题库）。
-- **report_checklist_revision**：本专责回合结束时**必须**调用一次，说明是否改动了题库、改了哪些文件、或为何维持不变。
-
-## Git
-- 每次改动题库后单独 `git commit`，消息建议 `devshell_agent_checklist iter=<轮次> <简述>`。
-
-## 工具
-- 无 `run_devshell_eval`；不调用 `report_iteration_outcome` 或 `escalate_checklist_revision`。仅使用 **report_checklist_revision** 与本仓库读写工具。
-"""
-
-    SYSTEM_PROMPT_OPTIMIZATION = """你是 MatMaster 仓库内的 **DevShell 评测迭代 — 产品侧优化助手**。
-
-你与主 Agent、Checklist Agent 都不是同一角色：你只负责 **产品侧代码与提示优化**，不得修改或读取 `evaluation/` 下任何目录，不得查看题库、reference_answers、scoring_checklist 或评测代码。
-
-## 硬约束
-- **禁止**读取或编辑 `evaluation/**`。
-- **允许**编辑产品侧路径，如 `matmaster/`、`config/`，以及在失败明确与服务链路相关时审慎编辑 `src/`。
-- 仅根据主 Agent 交给你的**脱敏问题摘要**与允许查看的非 `evaluation/` 证据路径工作。
-- 结束前**必须**调用 **report_optimization_result**，汇报本次子回合的修改摘要、文件与 commit。
-
-## Git
-- 本子回合内的实质性修改应独立 commit，消息建议 `devshell_agent_opt iter=<轮次> round=<子回合> <简述>`。
-"""
+    SYSTEM_PROMPT_MAIN = _loop_prompts.SYSTEM_PROMPT_MAIN
+    SYSTEM_PROMPT_CHECKLIST = _loop_prompts.SYSTEM_PROMPT_CHECKLIST
+    SYSTEM_PROMPT_OPTIMIZATION = _loop_prompts.SYSTEM_PROMPT_OPTIMIZATION
 
     def __init__(self, config: AgentLoopConfig) -> None:
         self._cfg = config
@@ -454,7 +388,7 @@ class DevshellAgentLoop:
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
 2. 读取 **run_devshell_eval** 返回的**脱敏摘要**，以其中的 `macro_mean_0_100` 与 `task_scores` 作为本轮判断依据。不要自行读取 `evaluation/**` 或原始 `score_reason`。
-3. 若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
+3. 若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**（优先填写 **failure_buckets**、**capabilities_affected**；**allowed_evidence_paths** 尽量用会话级路径如 ``eval_runs/iter_XX/raw_runs.jsonl``，避免逐题 workspace）；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
 4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（主 Agent 自身通常为空）；在 `rationale` 中总结本轮分流、子 Agent 结果与下一步。
 {extra_block}
 """
@@ -481,6 +415,8 @@ class DevshellAgentLoop:
             "eval_ingest_submit_timeout": cfg.eval_ingest_submit_timeout,
             "enable_checklist_agent": cfg.enable_checklist_agent,
             "enable_optimization_agent": True,
+            "enable_optimization_auto_commit": cfg.enable_optimization_auto_commit,
+            "optimization_auto_commit_skip_budget": cfg.optimization_auto_commit_skip_budget,
             "max_checklist_sdk_turns": checklist_revision_sdk_max_turns_from_jobs(
                 cfg.defaults.jobs
             ),
@@ -748,9 +684,50 @@ class DevshellAgentLoop:
 - 结束前**必须**调用 **report_checklist_revision**（`iteration_index={it}`）。
 """
 
-    def _optimization_user_message(
-        self, *, it: int, delegation: dict[str, Any]
-    ) -> str:
+    @staticmethod
+    def _optimization_delegation_slug(delegation: dict[str, Any]) -> str:
+        for key in ("notes", "problem_summary"):
+            s = str(delegation.get(key) or "").strip()
+            if s:
+                return s[:80]
+        return "optimization"
+
+    def _apply_optimization_auto_commit(
+        self,
+        *,
+        it: int,
+        delegation: dict[str, Any],
+        state: AgentLoopSharedState,
+        loop_log: TextIO,
+    ) -> None:
+        cfg = self._cfg
+        if not cfg.enable_optimization_auto_commit:
+            return
+        from evaluation.devshell_agent.optimization_auto_commit import (
+            commit_optimization_changes,
+        )
+
+        rnd = int(delegation.get("optimization_round", -1))
+        slug = self._optimization_delegation_slug(delegation)
+        res = commit_optimization_changes(
+            cfg.repo_root,
+            cfg.session_dir,
+            iteration_index=it,
+            optimization_round=rnd,
+            slug=slug,
+            skip_exp_budget=cfg.optimization_auto_commit_skip_budget,
+            log=loop_log,
+        )
+        if res.commit_sha:
+            for row in state.optimization_reports:
+                if (
+                    int(row.get("iteration_index", -1)) == it
+                    and int(row.get("optimization_round", -1)) == rnd
+                ):
+                    row["commit_shas"] = [res.commit_sha]
+                    break
+
+    def _optimization_user_message(self, *, it: int, delegation: dict[str, Any]) -> str:
         session_dir = self._cfg.session_dir.resolve()
         blob = json.dumps(delegation, ensure_ascii=False, indent=2)
         return f"""## 产品侧优化子回合（第 {it} 轮）
@@ -827,6 +804,13 @@ class DevshellAgentLoop:
                     loop_log,
                 )
                 warning = 1
+            else:
+                self._apply_optimization_auto_commit(
+                    it=it,
+                    delegation=delegation,
+                    state=state,
+                    loop_log=loop_log,
+                )
 
         state.optimization_delegations_pending = [
             row

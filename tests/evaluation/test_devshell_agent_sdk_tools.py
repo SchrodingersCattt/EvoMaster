@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import importlib
+import io
 import json
 import sys
 import types
@@ -39,7 +39,7 @@ class _FakeClaudeClient:
         self.args = args
         self.kwargs = kwargs
 
-    async def __aenter__(self) -> "_FakeClaudeClient":
+    async def __aenter__(self) -> _FakeClaudeClient:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
@@ -156,7 +156,10 @@ def test_run_devshell_eval_submits_immediately_after_run(tmp_path: Path) -> None
 
     assert result["is_error"] is False
     assert '"macro_mean_0_100": 65' in result["content"][0]["text"]
-    assert "Checklist wording says too much about the task." not in result["content"][0]["text"]
+    assert (
+        "Checklist wording says too much about the task."
+        not in result["content"][0]["text"]
+    )
     assert mock_run.call_count == 1
     mock_submit.assert_called_once_with(
         repo_root=tmp_path,
@@ -233,6 +236,8 @@ def test_delegate_optimization_records_round_and_payload(tmp_path: Path) -> None
             "problem_summary": "Need stronger reusable workflow guidance.",
             "symptom": "Low score due to missing deliverable structure.",
             "suggested_focus": ["matmaster/skills"],
+            "failure_buckets": [],
+            "capabilities_affected": [],
             "allowed_evidence_paths": ["matmaster/skills/result-analysis/SKILL.md"],
             "notes": "Do not expose raw rubric text.",
         }
@@ -296,6 +301,8 @@ def test_optimization_followup_needed_only_when_queue_has_current_iteration(
             "problem_summary": "demo",
             "symptom": "demo",
             "suggested_focus": ["matmaster/skills"],
+            "failure_buckets": [],
+            "capabilities_affected": [],
             "allowed_evidence_paths": ["matmaster/skills/demo/SKILL.md"],
             "notes": "demo",
         }
@@ -318,6 +325,8 @@ def test_run_optimization_followup_returns_warning_when_report_missing(
             "problem_summary": "demo",
             "symptom": "demo",
             "suggested_focus": ["matmaster/skills"],
+            "failure_buckets": [],
+            "capabilities_affected": [],
             "allowed_evidence_paths": ["matmaster/skills/demo/SKILL.md"],
             "notes": "demo",
         }
