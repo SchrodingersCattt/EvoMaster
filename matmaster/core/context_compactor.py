@@ -149,6 +149,24 @@ class ContextCompactor:
         """Record the messages length after the last LLM call."""
         self._last_llm_message_count = count
 
+    async def preflight_if_needed(self, messages: list[Message]) -> None:
+        """Compact eagerly before the next turn when history is already too large."""
+        if not self._config.enabled:
+            return
+
+        estimated = estimate_tokens(messages, safety_margin=1.1)
+        threshold = self._config.context_window_tokens * self._config.trigger_ratio
+        if estimated < threshold:
+            return
+
+        await self._compact_messages(
+            messages,
+            estimated_tokens=estimated,
+            threshold=threshold,
+            phase="preflight",
+            turn=0,
+        )
+
     async def compact_if_needed(
         self, messages: list[Message], last_usage: dict[str, int], turn: int
     ) -> None:
@@ -167,6 +185,24 @@ class ContextCompactor:
         if estimated < threshold:
             return
 
+        await self._compact_messages(
+            messages,
+            estimated_tokens=estimated,
+            threshold=threshold,
+            phase="runtime",
+            turn=turn,
+        )
+
+    async def _compact_messages(
+        self,
+        messages: list[Message],
+        *,
+        estimated_tokens: int,
+        threshold: float,
+        phase: str,
+        turn: int,
+    ) -> None:
+        """Compact messages in place and emit a structured decision event."""
         if not messages:
             return
         if not isinstance(messages[0], SystemMessage):
@@ -190,7 +226,9 @@ class ContextCompactor:
             # No old turns to compress -- all turns are retained.
             # Fall back to truncating large tool results within retained
             # turns to prevent context overflow on the next LLM call.
-            truncated = self._truncate_tool_results(messages, estimated, threshold)
+            truncated = self._truncate_tool_results(
+                messages, estimated_tokens, threshold
+            )
             if truncated > 0:
                 self._compaction_count += 1
                 self._last_compaction_turn = turn
@@ -200,7 +238,7 @@ class ContextCompactor:
                     "estimated=%d threshold=%d truncated_messages=%d",
                     self._compaction_count,
                     turn,
-                    estimated,
+                    estimated_tokens,
                     int(threshold),
                     truncated,
                 )
@@ -210,32 +248,47 @@ class ContextCompactor:
                             source="context_compactor",
                             payload={
                                 "compaction_count": self._compaction_count,
-                                "trigger_tokens": estimated,
+                                "phase": phase,
                                 "strategy": "tool_truncation",
+                                "durability": "ephemeral",
+                                "trigger_tokens": estimated_tokens,
                                 "retained_turns": kept_count,
+                                "checkpoint_attempted": False,
+                                "checkpoint_written": False,
+                                "failure_reason": None,
                             },
                         )
                     )
             return
 
         old_messages = messages[compressible_start:compressible_end]
-        self._compaction_count += 1
         strategy = "summary"
+        durability = "durable"
+        failure_reason: str | None = None
         flat_recent = [m for turn_messages in recent_turns for m in turn_messages]
 
         try:
             summary = await self._summarize(old_messages)
             compact_msg = SystemMessage(content=f"[Compacted Context]\n{summary}")
             messages[:] = [system_msg, compact_msg, initial_task_msg, *flat_recent]
-        except Exception:
+        except Exception as exc:
+            if phase == "preflight":
+                logger.warning(
+                    "Preflight compaction summary failed; aborting without fallback",
+                    exc_info=True,
+                )
+                raise
             logger.warning(
                 "Compaction #%d summary failed, falling back to sliding_window",
-                self._compaction_count,
+                self._compaction_count + 1,
                 exc_info=True,
             )
             strategy = "sliding_window"
+            durability = "ephemeral"
+            failure_reason = str(exc)
             messages[:] = [system_msg, initial_task_msg, *flat_recent]
 
+        self._compaction_count += 1
         self._last_compaction_turn = turn
         self._last_llm_message_count = len(messages)
 
@@ -244,7 +297,7 @@ class ContextCompactor:
             "estimated_tokens=%d threshold=%d strategy=%s retained_turns=%d",
             self._compaction_count,
             turn,
-            estimated,
+            estimated_tokens,
             int(threshold),
             strategy,
             kept_count,
@@ -256,9 +309,14 @@ class ContextCompactor:
                     source="context_compactor",
                     payload={
                         "compaction_count": self._compaction_count,
-                        "trigger_tokens": estimated,
+                        "phase": phase,
                         "strategy": strategy,
+                        "durability": durability,
+                        "trigger_tokens": estimated_tokens,
                         "retained_turns": kept_count,
+                        "checkpoint_attempted": False,
+                        "checkpoint_written": False,
+                        "failure_reason": failure_reason,
                     },
                 )
             )
@@ -351,9 +409,54 @@ class ContextCompactor:
 
     async def _summarize(self, old_messages: list[Message]) -> str:
         """Use the summary provider to condense old conversation messages."""
-        conversation_text = "\n".join(
-            f"[{msg.role.value}]: {msg.content or ''}" for msg in old_messages
-        )
+        blocks: list[str] = []
+        for msg in old_messages:
+            if isinstance(msg, AssistantMessage):
+                blocks.append(
+                    json.dumps(
+                        {
+                            "role": msg.role.value,
+                            "content": msg.content,
+                            "reasoning_content": msg.reasoning_content,
+                            "tool_calls": [
+                                {
+                                    "id": tool_call.id,
+                                    "name": tool_call.name,
+                                    "arguments": tool_call.arguments,
+                                }
+                                for tool_call in msg.tool_calls or []
+                            ],
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
+                continue
+
+            if isinstance(msg, ToolMessage):
+                blocks.append(
+                    json.dumps(
+                        {
+                            "role": "tool",
+                            "tool_call_id": msg.tool_call_id,
+                            "tool_name": msg.tool_name,
+                            "content": msg.content,
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
+                continue
+
+            blocks.append(
+                json.dumps(
+                    {"role": msg.role.value, "content": msg.content},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+
+        conversation_text = "\n".join(blocks)
         api_messages = [
             {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
             {
@@ -362,6 +465,6 @@ class ContextCompactor:
             },
         ]
         response = await self._summary_provider.chat(api_messages)
-        if not response.content:
+        if not response.content or not response.content.strip():
             raise ValueError("Summary LLM returned empty content")
         return response.content
