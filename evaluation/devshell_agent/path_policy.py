@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# ``matmaster/exps/``: never auto-commit; optimization agent must not edit in-loop.
+# Human-reviewed proposals go next to the session (see ``PROPOSED_MATMASTER_EXPS_CHANGES_NAME``).
+MATMASTER_EXPS_PREFIX = "matmaster/exps"
+
+# Written under ``evaluation/devshell_agent_history/<session>/`` by the optimization agent only.
+PROPOSED_MATMASTER_EXPS_CHANGES_NAME = "proposed_matmaster_exps_changes.md"
+
 
 def is_under(path: Path, root: Path) -> bool:
     """True if ``path`` is ``root`` or a path inside ``root``."""
@@ -14,6 +21,16 @@ def is_under(path: Path, root: Path) -> bool:
         return False
 
 
+def is_blocked_matmaster_exps_path(repo_root: Path, path: Path) -> bool:
+    """True if *path* is under ``matmaster/exps/`` (resolved under *repo_root*)."""
+    rr = repo_root.resolve()
+    try:
+        key = str(path.resolve().relative_to(rr)).replace("\\", "/")
+    except ValueError:
+        return False
+    return key == MATMASTER_EXPS_PREFIX or key.startswith(f"{MATMASTER_EXPS_PREFIX}/")
+
+
 def is_path_committable_for_optimization(repo_root: Path, rel: str) -> bool:
     """Paths safe to ``git add`` after an optimization sub-round.
 
@@ -21,6 +38,8 @@ def is_path_committable_for_optimization(repo_root: Path, rel: str) -> bool:
     """
     rel = rel.replace("\\", "/").strip()
     if not rel or rel.startswith("../") or "/../" in rel:
+        return False
+    if rel == MATMASTER_EXPS_PREFIX or rel.startswith(f"{MATMASTER_EXPS_PREFIX}/"):
         return False
     rr = repo_root.resolve()
     abs_path = (rr / rel).resolve()

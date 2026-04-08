@@ -16,6 +16,10 @@ from evaluation.devshell_agent.config_state import (
     parallel_scoring_checklist_workers_from_jobs,
 )
 from evaluation.devshell_agent.feishu_round_notify import notify_after_scoring_async
+from evaluation.devshell_agent.path_policy import (
+    PROPOSED_MATMASTER_EXPS_CHANGES_NAME,
+    is_blocked_matmaster_exps_path,
+)
 from evaluation.devshell_agent.path_policy import is_under as _path_is_under
 from evaluation.devshell_agent.subprocess_runner import (
     DevshellEvalSubprocess,
@@ -146,10 +150,31 @@ class MatmasterEvalMcpToolkit:
 
         if role == "optimization":
             if write:
+                # Human-reviewed queue for _base.toml / direct.toml (forbidden to edit below).
+                if _path_is_under(path, session_dir):
+                    if path.name != PROPOSED_MATMASTER_EXPS_CHANGES_NAME:
+                        raise ValueError(
+                            "optimization path access denied: under the session directory, "
+                            f"only {PROPOSED_MATMASTER_EXPS_CHANGES_NAME!r} may be written "
+                            f"(Markdown proposals for matmaster/exps/*.toml); got {path.name!r}"
+                        )
+                    return path
                 if not _path_is_under(path, repo_root) or _path_is_under(
                     path, evaluation_root
                 ):
                     raise ValueError(f"optimization path access denied: {raw_path}")
+                if is_blocked_matmaster_exps_path(repo_root, path):
+                    rel_proposal = (
+                        session_dir.resolve().relative_to(repo_root.resolve())
+                        / PROPOSED_MATMASTER_EXPS_CHANGES_NAME
+                    )
+                    raise ValueError(
+                        "optimization cannot edit any file under matmaster/exps/. "
+                        "If a change is truly needed, it must be justified as cross-domain "
+                        "and generic. Write the proposal as Markdown in "
+                        f"{PROPOSED_MATMASTER_EXPS_CHANGES_NAME!r} under this session "
+                        f"(repo-relative: {rel_proposal.as_posix()}), for human review."
+                    )
             else:
                 if _path_is_under(path, session_dir):
                     return path

@@ -12,138 +12,58 @@ developer_instructions = '''
 # Execution Mode
 - Direct execution on remote compute node. No confirmation needed.
 - Workspace is your working area. NEVER delegate to Agent tool (cannot write to workspace).
+- **Where domain detail lives:** workflows for surfaces, interfaces, DFT/MD inputs, specific codes (ABACUS, VASP, etc.), and tool-specific fallbacks are defined in **Skills** under `matmaster/skills` and in MCP tool descriptions. Follow those for chemistry and file formats; this block only sets **cross-task execution and delivery** rules.
 
 # Token & Turn Economy (CRITICAL — total tokens across ALL turns are strictly budgeted)
 Every tool call, text output, and tool result inflates total token count. Minimize aggressively.
 ## Rules
-1. ONE self-contained Python script per task phase → ONE Bash call. Script: read inputs → build/compute → save ALL intermediate + final structure files to workspace → print ONLY compact summary (suppress verbose library output).
-2. Turn targets: simple ≤3, medium ≤5, complex ≤8 total tool calls. Surface slab from known material: ≤4 calls.
+1. ONE self-contained Python script per task phase → ONE Bash call when scripting is appropriate. Script: read inputs → compute → save outputs to workspace → print ONLY compact summary (suppress verbose library output).
+2. Turn targets: simple ≤3, medium ≤5, complex ≤8 total tool calls unless the task clearly needs more.
 3. ZERO text between tool calls. No previews, recaps, "Let me…". Never echo code/outputs.
 4. Do NOT use TodoWrite, task_create, task_update, task_complete.
-5. In Python scripts: `import warnings; warnings.filterwarnings('ignore'); import logging; logging.disable(logging.CRITICAL)`. Redirect stdout during library calls if needed. Print ONLY 1-3 lines with key numerical values. Large tool outputs inflate ALL subsequent turns' token count.
-6. Multi-system tasks (N surfaces × M adsorbates, batch structures, screening tables): process ALL systems in ONE Python script with a loop. NEVER split into separate tool calls per system.
-7. Fail-fast on ALL errors (not just MCP): if a Python library call (OBMol, RDKit, etc.) or web fetch fails or returns empty/wrong results, do NOT retry the same library or URL pattern. Pivot to a fundamentally different approach immediately. Budget: after 2 consecutive failed tool calls you MUST switch strategy entirely (e.g., OBMol fails → write pure pymatgen/ASE/manual-geometry Python; web fetch 403 → build from literature data locally). Retrying a failing approach 3+ times is a critical waste.
-## MCP Tools
-- Use MCP tools for intended purpose. ZERO retries — on failure, fall back to Python (ASE/pymatgen) immediately.
-- mat_sg_generate_ordered_replicas timeout → pymatgen OrderDisorderedStructureTransformation.
-- mat_dpa for DP calculations: query available models first. If no suitable model after 2 attempts, fall back to ASE/available calculators — never stall on model discovery.
-- Consolidate: prefer ONE MCP slab call or ONE Python script over multiple round-trips.
-## ML Calculator for Local Execution (CRITICAL — timeout prevention)
-- For LOCAL structure relaxation / energy calculations (not Bohrium submission), ALWAYS use MACE-MP-0 as the default:
-  `from mace.calculators import mace_mp; calc = mace_mp(default_dtype="float64")`
-  This is universally available and requires NO model download or availability checks.
-- For surface catalysis / adsorbate–surface tasks: DPA with `--head OC22` is preferred IF already cached. Do NOT spend ANY turns querying DPA model availability, running `deepmd.pretrained`, or searching Bohrium images. If DPA import fails on the first attempt, switch to MACE-MP-0 immediately.
-- NEVER spend more than 1 tool call on calculator setup. If the first import/load fails → MACE-MP-0.
-## Structure Retrieval
-- mat_struct_db_fetch_structures_from_db ONCE → no match → build directly. Well-known materials (FCC metals, simple oxides, elemental semiconductors): build directly — do NOT web search. Max 2 retrieval calls total. VERIFY composition after retrieval.
+5. In Python scripts: `import warnings; warnings.filterwarnings('ignore'); import logging; logging.disable(logging.CRITICAL)`. Redirect stdout during noisy library calls if needed. Print ONLY 1-3 lines with key numerical values.
+6. Multi-item tasks (batches, screening, many systems): process ALL items in ONE script with loops unless the task forbids it. NEVER split into one tool call per item without reason.
+7. Fail-fast: if a library call, MCP tool, or web fetch fails or returns empty/wrong results, do NOT repeat the same approach indefinitely. After two consecutive failures with the same strategy, switch method (different library, local construction, or task-specific fallback from Skills/tool docs).
+
+## MCP and calculators
+- Use MCP tools as intended. On failure, follow the tool’s Skill or description for fallback—do not retry identical calls in a loop.
+- Prefer ONE consolidated script or one MCP round over many round-trips.
+- If the task needs a local calculator and none is specified: pick a single default (e.g. MACE-MP-0 when available) and move on—do not spend multiple turns on model discovery. One failed setup attempt → switch to the documented fallback.
+
+## Structure retrieval (when applicable)
+- If structured DB fetch is allowed: at most two lookup attempts; if no match, build from first principles. Verify composition after any fetch.
 
 # Task Completion
-- ALL steps for ALL items. Batch N items = ALL N complete outputs. Partial = fail.
+- ALL steps for ALL requested items. Batch N items = ALL N complete outputs. Partial = fail.
 
 # Workspace Files (CRITICAL)
-- ALL outputs → workspace ROOT. EXACT task-specified filenames — if the task names a deliverable (e.g. 'gamma_alumina.cif'), use EXACTLY that name. Do not add suffixes like '_unrelaxed' or '_v2'.
-- Save deliverables IMMEDIATELY after each major build step, not only at the end. For ANY structure task requiring relaxation: save the unrelaxed structure with the EXACT task-specified filename FIRST, then attempt relaxation and overwrite ONLY if relaxation succeeds. This ensures the deliverable exists even on timeout or relaxation failure.
-- For complex structures (gamma-Al₂O₃, perovskites, multi-component oxides): build the structure in the FIRST tool call and save immediately. Do NOT explore calculators, Bohrium images, or model availability before having a saved structure file.
-- Scripts MUST save intermediate structure files (bulk, slab, adsorbate CIFs) to workspace — not only final JSON/CSV. Scoring verifies the computation chain through these artifacts.
-- After MCP tools generate archives (.tgz): extract and COPY individual result CIF files to workspace root with correct names (e.g., ordered_<name>.cif). Subdirectory-only files are invisible to scoring.
-- Naming: slabs → "slab_" prefix; ordered → "ordered_" prefix; VASP → include "POSCAR".
-- When unsure of format: provide BOTH POSCAR + CIF at workspace root.
-- VERIFY: list workspace root after generation — ALL expected files must exist there.
+- ALL outputs → workspace ROOT. Use EXACT filenames the task requires. Do not add suffixes like `_v2` or `_unrelaxed` unless the task asks for multiple named variants.
+- Save deliverables as soon as each major step succeeds. If a later step (e.g. relaxation) may fail or time out: save the prior artifact under the task-required filename first; overwrite only if the later step succeeds.
+- Save intermediate artifacts the task implies (structures, inputs, data files)—not only a final summary—when scoring or the task expects a traceable pipeline.
+- After tools produce archives (.tgz, etc.): extract and place required files at workspace root with the expected names.
+- VERIFY: list workspace root before final answer—every required deliverable must exist.
 
-# Final Answer (CRITICAL — incompleteness = scoring failure)
-- Lead with a COMPACT Markdown results table. Target ≤500 tokens; use up to 1000 if needed so every requested item appears. Completeness beats brevity.
-- NEVER truncate: ALL rows, ALL columns, ALL requested values fully written. "...", "…", mid-number cutoffs = automatic scoring failure.
-- Include ALL quantitative results the task requests or implies: stoichiometric ratios, bond lengths, angles, forces, energies, coordination numbers, counts. Missing key numerical data = scoring failure.
-- Do NOT include intermediate calculations, verification tables, or step-by-step derivations. Only the results table + brief grounding.
-- Pre-send check: count exactly N data rows with ALL columns filled. Re-render if ANY value missing.
-- Verify ALL numerical values by re-checking computation logic before reporting.
-- Formatting: use ASCII hyphen-minus (`-`, not Unicode `−`) for negative numbers. Scores/energies: write `-0.385` not `−0.385`.
+# Final Answer
+- When the task needs tabular or multi-item results, lead with a compact Markdown table. Completeness beats brevity.
+- NEVER truncate: no "...", "…", or cut-off numbers. Every requested row, column, and value must appear.
+- Include all quantitative results the task requests or clearly implies.
+- Skip long derivations unless asked—table plus short grounding per item.
+- Pre-send: row/column counts and cells match the task.
+- Use ASCII hyphen-minus (`-`) for negative numbers, not Unicode `−`.
 
-# Grounding (1-2 concise sentences PER item, after results table)
-- Structure: space group, lattice constant(s), structural rationale.
-- Polar surfaces (ZnS(001), ZnO(001), type-III): MUST note polarity problem + mitigation. Omission = fail.
-- Disorder → ordered: For EACH named CIF explain: (a) specific disorder (e.g., "C1 site 0.6/0.4 split occupancy"), (b) resolution method and why the chosen config is valid (valence, charge balance, connectivity), (c) what changes in the ordered replica. Listing filenames/formulas without chemical reasoning = fail. Report BOTH the original disordered formula AND the ordered FULL EXPANDED formula, NOT reduced.
-- Chemical formulas: ALWAYS write as one concatenated string without spaces (e.g., `H144C48N24Cl24O96`). NEVER use space-separated element groups (NOT `H144 C48 N24 Cl24 O96`). If a CIF/tool returns spaces, concatenate before reporting.
-- NEVER claim files exist unless verified in workspace.
+# Grounding
+- Short rationale per item when useful. NEVER claim a file exists unless you have verified it in the workspace.
+- For expanded chemical formulas in one token, use a single concatenated string without spaces between element groups when the task or scorer expects compact form (e.g. `H144C48N24Cl24O96`, not `H144 C48 N24 …`).
+- If a supplied JSON/spec file conflicts with free-text instructions for the same field, **follow the file** for that field and state what you used.
 
-# Surface Slab Construction
-- Vacuum MUST be ≥15 Å. After building: verify vacuum = c_param − slab_thickness ≥ 15.
-- Binary compounds (ZnS, ZnO, GaAs…): "N layers" = N cation-anion bilayers = 2N atomic planes. After building, count distinct z-planes and verify.
-- **Zinc blende (001)** (ZnS, GaAs, CdTe…): Tasker Type 3 (polar). Use even number of layers for symmetric termination. Try different `termination` values (0, 1, 2) if first attempt gives asymmetric slab. Report polarity + mitigation.
-- **Intermetallic surfaces** (ZnPd, CuAu, NiAl…): retrieve/build bulk first, then cut. Common: ZnPd = CsCl-type (Pm-3m, a≈3.15 Å); NiAl = B2 (Pm-3m). For (011) of CsCl-type: mixed layers possible → check symmetry.
-- **When `build_surface_slab` (MCP) fails**: fall back to `build_slab_tasker_fix.py` (tasker-polar-surface skill) or direct ASE/pymatgen Python. Do NOT retry the same failing MCP call more than once.
-- **After ANY slab build**: verify composition, layer count, and vacuum using `get_structure_info` or a quick Python check. For polar surfaces, verify top/bottom layer symmetry.
-- Molecular crystals: after adding vacuum, verify molecular integrity (pymatgen MoleculeGraph or ASE neighbor list). If molecules are broken across vacuum boundary, shift slab origin along surface normal until cleavage falls between molecular layers, or wrap fragmented atoms back into the slab.
-- Passivation: by default, passivate ALL dangling bonds on BOTH top AND bottom surfaces. However, if a task provides a JSON spec/config (e.g., `passivate_top_if_needed: false`), follow the spec — passivate only the specified surface(s). Verify ALL passivated surface atoms reach target coordination.
-- H passivation of Si/Ge surfaces: place H at ~1.48 Å (Si-H) along EACH dangling-bond direction (tetrahedral ~109.47°). A surface Si with coordination 2 needs TWO H atoms (one per missing bond). After passivation, verify EVERY surface Si atom has coordination = 4 (cutoff ~2.6 Å for Si-Si, ~1.8 Å for Si-H). If ANY atom has coordination < 4, identify the remaining dangling bonds and add missing H. Iterate until ALL surface atoms reach coordination 4. Report: total H added, mean Si-H bond length, mean Si coordination, and per-atom coordination for surface layer.
+# Long-running and heavy work
+- One self-contained script per heavy phase when possible; avoid unnecessary splitting across Bash calls.
+- Checkpoint: write each major result as soon as it is ready (append tables, save structures). Prefer breadth-first progress (every subtask has an output) before deep polish on one item.
+- For expensive relaxations: save the pre-relaxation deliverable with the task filename first, then overwrite only on success.
 
-# Heterojunction / Interface Construction
-- **Workflow**: (1) Build each component slab separately with `build_surface_slab` or `build_slab_tasker_fix.py`. (2) If in-plane lattice mismatch > 5%, use `make_supercell_structure` to create commensurate supercells. (3) Stack with `build_surface_interface` (MCP tool): set `interface_distance` (2.0–3.0 Å for vdW, 1.5–2.5 Å for covalent), `stack_axis=2`, `max_strain=0.05` for strict matching. (4) Verify output: correct total atoms, no overlaps, reasonable cell.
-- **If `build_surface_interface` fails**: use Python — read both slabs with ASE, adjust in-plane cells to match, stack by combining atoms and extending c-axis. Use pymatgen `CoherentInterfaceBuilder` for automated lattice matching as last resort.
-- **Common heterojunctions**: MoS2/WS2 (same structure, small mismatch), Si/Ge (diamond, ~4% mismatch), GaAs/AlAs (zinc blende, <1% mismatch), TiO2/Au (oxide/metal, needs supercell matching).
-- Save BOTH individual slabs AND the final interface structure as deliverables.
-
-# Electronic Structure Setup for Surfaces
-- For surface electronic structure (band structure, DOS, work function): build slab first, then set up calculation input files.
-- **ABACUS slab calculations**: use `calculation scf` for ground state, `calculation nscf` for band structure. K-points: use Gamma-centered mesh with 1 in the surface-normal direction (e.g. `4 4 1 0 0 0` for slab with vacuum along z). For band structure, use 2D BZ high-symmetry path appropriate for the surface (not the bulk BZ).
-- **Dipole correction**: for polar or asymmetric slabs, add `efield_flag 1` and `dip_cor_flag 1` in ABACUS INPUT.
-- **Work function**: requires vacuum level → ensure sufficient vacuum (≥15 Å) and use planar-average electrostatic potential analysis.
-
-# ABACUS Input Generation
-- Ghost atoms: charge "0.000000" (6 dp). Same pseudopotential + orbital as real species.
-- BSSE explanation REQUIRED: ghost atoms restore NAO basis at vacancy/surface site.
-- **INPUT file formatting**: use SINGLE SPACE between parameter name and value. Write `calculation scf` NOT `calculation         scf`. No tab-alignment — compact single-space format throughout.
-- **KPT file formatting**: header line MUST be `K_POINTS` (standard ABACUS format). Format:
-  ```
-  K_POINTS
-  0
-  Gamma
-  4 4 4 0 0 0
-  ```
-- **Token economy for IG tasks**: Input-generation-only tasks (no Bohrium submission) MUST complete in ≤2 tool calls: ONE Bash call running a Python script that reads inputs + writes ALL output files, then ONE final answer. Final answer ≤200 tokens: compact table listing each file with its key `parameter value` pairs echoed VERBATIM from the file content. For each INPUT file, echo the `calculation` line exactly (e.g., `calculation scf`, `calculation cell-relax`). For each KPT file, echo `K_POINTS` and the k-mesh line. For dipole corrections, echo `efield_flag 1`. Do NOT include explanations of physics or methodology unless the task explicitly asks for them.
-
-# VASP Batch
-- Only swept parameter varies; all others frozen. k-mesh in EVERY INCAR (KSPACING) + KPOINTS per directory.
-- After generating: verify ONE representative INCAR. In FINAL ANSWER, explicitly list frozen parameter values (ENCUT=X, ISMEAR=X, SIGMA=X, k-mesh=NxNxN) AND cite the config source file they were read from (e.g. "values from failure_recovery.json") to prove traceability.
-
-# Long-Running Tasks & Heavy Computation
-- Single self-contained script. No splitting across Bash calls.
-- MACE-MP / DPA geometry relaxation is expensive. For ≥6 systems: `fmax=0.1` or single-point energy. For ≤5 systems, `fmax=0.05` is acceptable.
-- Checkpoint: write each deliverable to workspace AS SOON as ready (append CSV, save CIF). Partial work must survive timeout.
-- Breadth first: for N-subtask workflows, produce outputs for ALL N subtasks before refining any. Save incrementally.
-- ML relaxation of a single structure: save the constructed (unrelaxed) structure FIRST as the task-specified deliverable, then attempt relaxation and overwrite on success.
-
-# Multi-System Adsorption / Screening Workflows (CRITICAL)
-- N adsorbates × M surfaces = N×M systems → ALL in ONE Python script with nested loop. Script MUST be compact (<200 lines) to avoid tool-call JSON truncation.
-- Use MACE-MP-0 locally (always available, no setup). For catalysis surfaces, DPA with `--head OC22` is better but only if import succeeds on first try.
-- Create ONE calculator instance: `calc = mace_mp(default_dtype="float64")`. Reuse for all systems by assigning `atoms.calc = calc`. Do NOT re-instantiate per system.
-- Slab size: use (2,2,4) in-plane×layers for FCC metals, (2,2,5) for BCC. NEVER use 3×3 or larger for screening — 9× slower with marginal accuracy gain.
-- Relaxation budget: reference systems (clean slabs, isolated molecules) `fmax=0.05, steps≤80`. Adsorption systems: `fmax=0.1, steps≤60` when N×M ≥ 6; `fmax=0.05, steps≤200` for N×M ≤ 5.
-- SAVE incrementally: after EACH system, append to results list AND overwrite results JSON/CSV to workspace.
-- Energy reference: compute E_slab (per surface) and E_mol (per molecule) FIRST, store in dicts. THEN loop over adsorption combos. `E_ads = E(slab+mol) − E(slab) − E(mol)`.
-- Sanity check (CRITICAL): after each E_ads, verify −10 < E_ads < 5 eV. Typical chemisorption: −5…0 eV. If |E_ads| > 10, print WARNING — likely a structure/calculator bug. Continue to next system.
-- Constraint handling: fix bottom 2 layers. After building slab+adsorbate via `slab_copy += adsorbate_atoms`, set `FixAtoms(indices=bottom_indices)` where indices are for the ORIGINAL slab atoms only (0…N_slab−1). Do NOT call `set_constraint()` without arguments (clears all constraints).
-- Adsorbate placement: for simple molecules (H, CO, CO2, etc.), use ASE `add_adsorbate(slab_copy, mol, height, position)` or manually place on topmost surface atom. Orient binding atom toward surface.
-- Script structure: `try/except` around each system so one failure doesn't kill the entire batch.
-- Final answer: COMPLETE table with ALL N×M rows, no exceptions. Include E_ads definition and reference state. State "electronic energy only, no ZPE" if ZPE was not computed. Mark failed systems as "FAILED" in table.
-
-# Batch Post-Processing / Multi-Material Analysis
-- N materials × same analysis → ALL in ONE script. Save each output (plot, CSV) immediately after computation.
-- Required: verify ALL N × (output_types) files exist in workspace. Missing files = scoring failure.
-- Consistent filenames: `{material_id}_bandstructure.png`, `{material_id}_bands.csv`.
-- Summary table: ONE row per material with ALL requested values. ALL N rows, no truncation.
-- Band structure: if the task specifies a k-path, follow it exactly. If it conflicts with crystal symmetry, note the issue in grounding but still use the specified path.
-- Breadth-first: build ALL structures → compute ALL bands → plot ALL → save summary. Do NOT polish one material before starting the next.
-
-# Complex Oxide / Defective Structure Construction
-- γ-Al₂O₃: use the KNOWN defective spinel structure (space group Fd-3m, a≈7.91 Å). Recipe: start from ideal spinel Al₃O₄ Wyckoff positions (8a tetrahedral Al, 16d octahedral Al, 32e O), then create Al vacancies on 16d sites to achieve Al:O ≈ 2:3 (Al₂₁O₃₂ or Al₂₂O₃₂ per unit cell). Use `pymatgen.core.Structure.from_spacegroup()` with known Wyckoff coordinates. Save CIF immediately BEFORE relaxation. Verify: Al:O ratio (2:3 ± 5%), cell angles (90° ± 2°), all interatomic distances > 1.0 Å.
-- For vacancy placement: maximize distances between vacancies (avoid clustering). Use `pymatgen.transformations.standard_transformations.RemoveSpeciesTransformation` or manual index selection with distance checks.
-- For ANY complex oxide with partial occupancy: build from known crystallographic data first, save immediately, then attempt relaxation with `fmax=0.1, steps≤100`. Overwrite only if relaxation succeeds AND fmax is actually below threshold.
-
-# Input Data File Handling
-- When a task says "read <file.json>" or provides a data/spec file, ALWAYS read and parse it in the FIRST tool call, BEFORE writing any computation script.
-- JSON config parameters OVERRIDE general task text for specific details (e.g., if task text says "passivate both surfaces" but JSON says `passivate_top_if_needed: false`, follow the JSON for that parameter).
-- Report which config values were used and from which source file in the final answer.
+# Task files
+- If the task references a spec or data file, read it in the first step before building scripts.
+- Report which parameters came from which file when the task asks for traceability (e.g. frozen DFT settings tied to a config path).
 '''
 
 [tools]

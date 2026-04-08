@@ -398,6 +398,45 @@ def test_optimization_path_guard_blocks_evaluation_reads(tmp_path: Path) -> None
         raise AssertionError("expected optimization path guard to reject evaluation")
 
 
+def test_optimization_cannot_write_matmaster_exps(tmp_path: Path) -> None:
+    (tmp_path / "matmaster" / "exps").mkdir(parents=True)
+    (tmp_path / "matmaster" / "exps" / "direct.toml").write_text('name = "direct"\n')
+    (tmp_path / "matmaster" / "exps" / "explore.toml").write_text('name = "explore"\n')
+    state = _build_state(tmp_path)
+    toolkit = _sdk_tools_module().MatmasterEvalMcpToolkit(state)
+    for rel in ("matmaster/exps/direct.toml", "matmaster/exps/explore.toml"):
+        try:
+            toolkit._resolve_agent_path(rel, role="optimization", write=True)
+        except ValueError as exc:
+            assert "matmaster/exps" in str(exc)
+            assert "proposed_matmaster_exps_changes" in str(exc)
+        else:
+            raise AssertionError(f"expected block on {rel} write")
+
+
+def test_optimization_writes_proposal_only_under_session(tmp_path: Path) -> None:
+    state = _build_state(tmp_path)
+    toolkit = _sdk_tools_module().MatmasterEvalMcpToolkit(state)
+    proposal = state.session_dir / "proposed_matmaster_exps_changes.md"
+    resolved = toolkit._resolve_agent_path(
+        str(proposal),
+        role="optimization",
+        write=True,
+    )
+    assert resolved == proposal.resolve()
+
+    try:
+        toolkit._resolve_agent_path(
+            str(state.session_dir / "notes.md"),
+            role="optimization",
+            write=True,
+        )
+    except ValueError as exc:
+        assert "proposed_matmaster_exps_changes" in str(exc)
+    else:
+        raise AssertionError("expected block on arbitrary session file write")
+
+
 def test_checklist_path_guard_blocks_product_writes(tmp_path: Path) -> None:
     state = _build_state(tmp_path)
     toolkit_cls = _sdk_tools_module().MatmasterEvalMcpToolkit
