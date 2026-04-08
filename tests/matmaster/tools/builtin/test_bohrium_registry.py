@@ -7,6 +7,7 @@ import time
 from matmaster.tools.builtin.bohrium_tool.registry import (
     JobRecord,
     JobRegistry,
+    classify_poll_status,
     next_interval,
 )
 
@@ -27,6 +28,21 @@ class TestNextInterval:
 
     def test_poll_6_is_32_minutes(self):
         assert next_interval(6) == 1920
+
+
+class TestClassifyPollStatus:
+    def test_maps_finished_status(self):
+        assert classify_poll_status("Finished") == "finished"
+
+    def test_maps_failed_status(self):
+        assert classify_poll_status("Failed") == "failed"
+
+    def test_maps_running_status(self):
+        assert classify_poll_status("Running") == "running"
+
+    def test_maps_pending_like_statuses_to_running(self):
+        assert classify_poll_status("Pending") == "running"
+        assert classify_poll_status("Scheduling") == "running"
 
 
 class TestJobRegistry:

@@ -320,7 +320,10 @@ class Exp:
 
         from matmaster.types.tool_desc_ctx import ToolDescriptionContext
         from matmaster.types.tool_runner_state import ToolRunnerState
-        from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
+        from matmaster.tools.builtin.bohrium_tool.registry import (
+            JobRegistry,
+            classify_poll_status,
+        )
 
         desc_ctx = ToolDescriptionContext(
             session_kind=topology.session_kind,
@@ -376,13 +379,11 @@ class Exp:
                         job_id, job_name=str(ev.get('job_name') or '')
                     )
                 elif action == 'poll':
-                    status_raw = str(ev.get('status') or '').lower()
-                    if status_raw == 'finished':
-                        reg_status = 'finished'
-                    elif status_raw == 'failed':
-                        reg_status = 'failed'
-                    else:
-                        reg_status = 'running'
+                    reg_status = classify_poll_status(str(ev.get('status') or ''))
+                    # Rebuild only restores lifecycle state and poll count. The
+                    # cached payload is intentionally left empty because we reset
+                    # last_polled_at below, guaranteeing the first poll in a new
+                    # run is always fresh rather than served from stale cache.
                     bohrium_registry.update_poll(
                         job_id,
                         status=reg_status,

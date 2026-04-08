@@ -26,7 +26,11 @@ from matmaster.bohrium.endpoints import (
 )
 from matmaster.bohrium.runtime import get_runtime
 from matmaster.tools.builtin.base import BuiltinTool
-from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry, next_interval
+from matmaster.tools.builtin.bohrium_tool.registry import (
+    JobRegistry,
+    classify_poll_status,
+    next_interval,
+)
 from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim
@@ -355,14 +359,7 @@ class BohriumTool(BuiltinTool):
         if action != "poll":
             return result
 
-        status_name = str(data.get("status", "unknown")).lower()
-        if status_name == "finished":
-            reg_status = "finished"
-        elif status_name == "failed":
-            reg_status = "failed"
-        else:
-            reg_status = "running"
-
+        reg_status = classify_poll_status(str(data.get("status", "unknown")))
         registry.update_poll(job_id, status=reg_status, result=result.content)
 
         if reg_status != "running":

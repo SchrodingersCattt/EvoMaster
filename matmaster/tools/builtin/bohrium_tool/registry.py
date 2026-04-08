@@ -19,6 +19,16 @@ def next_interval(poll_count: int) -> int:
     return min(3600, 30 * 2**poll_count)
 
 
+def classify_poll_status(status: str) -> str:
+    """Map user-facing poll status strings to registry lifecycle states."""
+    normalized = (status or "").strip().lower()
+    if normalized == "finished":
+        return "finished"
+    if normalized == "failed":
+        return "failed"
+    return "running"
+
+
 @dataclass
 class JobRecord:
     """Single Bohrium job tracked by the registry."""
@@ -70,6 +80,9 @@ class JobRegistry:
     def should_throttle(self, job_id: str) -> tuple[bool, int]:
         """Check if a poll should be throttled."""
         rec = self._jobs.get(str(job_id))
+        # Terminal and downloaded jobs bypass throttling on purpose: an explicit
+        # re-poll after completion should always hit the API instead of serving
+        # stale cached state from the registry.
         if rec is None or rec.status not in ("submitted", "running"):
             return False, 0
         if rec.poll_count == 0:

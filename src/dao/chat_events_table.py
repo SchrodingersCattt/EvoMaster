@@ -169,7 +169,13 @@ class ChatEventsTable(BaseTable):
                 return cursor.rowcount > 0
 
     def get_bohrium_events(self, session_id: str) -> list[dict]:
-        """Return paired Bohrium tool call/result events for registry rebuild."""
+        """Return paired Bohrium tool call/result events for registry rebuild.
+
+        Intentionally does not apply a LIMIT: truncating the session history can
+        orphan submit/poll/download pairs and rebuild an inconsistent registry.
+        If this query becomes a hotspot, optimize with indexing or a bounded
+        window strategy that still preserves complete Bohrium event pairs.
+        """
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
