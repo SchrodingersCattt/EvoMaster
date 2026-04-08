@@ -79,6 +79,22 @@ class _SlowPersistence:
         self.completed.append(event)
 
 
+class _BlockingPersistence:
+    """Handler that blocks until released, for barrier tests."""
+
+    def __init__(self) -> None:
+        self.received: list[BusEvent] = []
+        self.completed: list[BusEvent] = []
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def handle(self, event: BusEvent) -> None:
+        self.received.append(event)
+        self.started.set()
+        await self.release.wait()
+        self.completed.append(event)
+
+
 class _OrderTracker:
     """Tracks dispatch ordering across handlers via shared list."""
 
@@ -344,3 +360,64 @@ class TestRunEventFanoutDrainAndClose:
 
         await fanout.drain_and_close()
         assert good_closer.closed is True
+
+
+class TestRunEventFanoutPersistenceBarrier:
+    """flush_persistence_barrier() waits pending persistence without closing fanout."""
+
+    async def test_flush_persistence_barrier_waits_pending_tasks(self) -> None:
+        """Barrier waits current persistence tasks, then fanout can keep dispatching."""
+        from matmaster.integration.fanout import RunEventFanout
+
+        persistence = _BlockingPersistence()
+        sse = _CollectorHandler()
+
+        fanout = RunEventFanout(
+            sse_handler=sse,
+            persistence_handler=persistence,
+        )
+
+        first_event = RunResultEvent(source="Agent", reason="before-barrier")
+        await fanout.dispatch(first_event)
+        await persistence.started.wait()
+
+        barrier_task = asyncio.create_task(fanout.flush_persistence_barrier())
+        await asyncio.sleep(0)
+        assert barrier_task.done() is False
+
+        persistence.release.set()
+        await barrier_task
+
+        second_event = RunResultEvent(source="Agent", reason="after-barrier")
+        await fanout.dispatch(second_event)
+        await fanout.drain_and_close()
+
+        assert [event.reason for event in persistence.completed] == [
+            "before-barrier",
+            "after-barrier",
+        ]
+        assert [event.reason for event in sse.received] == [
+            "before-barrier",
+            "after-barrier",
+        ]
+
+    async def test_flush_barrier_is_noop_when_no_pending_tasks(self) -> None:
+        """Barrier returns immediately when there is no pending persistence work."""
+        from matmaster.integration.fanout import RunEventFanout
+
+        persistence = _CollectorHandler()
+        sse = _CollectorHandler()
+
+        fanout = RunEventFanout(
+            sse_handler=sse,
+            persistence_handler=persistence,
+        )
+
+        await fanout.flush_persistence_barrier()
+
+        event = ThoughtEvent(source="Agent", content="still-open")
+        await fanout.dispatch(event)
+        await fanout.drain_and_close()
+
+        assert len(sse.received) == 1
+        assert len(persistence.received) == 1
