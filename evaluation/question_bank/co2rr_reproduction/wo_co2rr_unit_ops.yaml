@@ -5,7 +5,7 @@ version: v5
 capability: co2rr_reproduction
 domain: mech
 questions:
-- id: CR_SC_ZnPd011_20260406
+- id: CR_SC_ZnPd011_20260409
   capability: co2rr_reproduction
   domain: struct
   intent: Cut ZnPd (011) slab from Materials Project bulk (mp-1103252) with 3 layers
@@ -33,7 +33,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value: &cr_tok_struct
-      max: 12000
+      max: 24000
   scoring_checklist:
   - id: mp_and_miller
     criterion: 答案明确使用 mp-1103252 为体相来源，(011) 切面，3 层、2×2×1 扩胞，并提供结构文件。
@@ -55,7 +55,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_SC_ZnS001_20260406v2
+- id: CR_SC_ZnS001_20260409
   capability: co2rr_reproduction
   domain: struct
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per
@@ -216,7 +216,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_WO_limiting_potential_20260407v4
+- id: CR_WO_limiting_potential_20260409
   capability: co2rr_reproduction
   domain: elec
   intent: From free-energy steps on CO2RR-to-CO, HER, and CO2-to-HCOOH pathways,
@@ -244,7 +244,7 @@ questions:
     value: *cr_dur_std
   - key: token_budget_total
     value:
-      max: 14000
+      max: 22000
   scoring_checklist:
   - id: three_pathways_ul
     criterion: "In the FINAL delivered answer, all three reaction pathways are reported with their PDS (potential-determining step), ΔG_max (eV), and U_L (V): (1) CO₂→CO, (2) HER, (3) CO₂→HCOOH. NOTE: The answer may be in Chinese with markdown tables; lines like '|------|-------------|-----' are standard table header separators, NOT truncation indicators. Judge ONLY on whether the final answer text contains the three complete sets of (PDS, ΔG_max, U_L) values, regardless of intermediate computation steps."
@@ -366,7 +366,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_CO2RR_screening_20260406
+- id: CR_CO2RR_screening_20260409
   capability: co2rr_reproduction
   domain: mech
   intent: Build a three-metric catalyst screening score from U_L(CO2-to-CO), U_L(HER),
@@ -386,11 +386,11 @@ questions:
   - planner
   data_files:
   - key: scoring_spec
-    path: data/CR_CO2RR_screening_20260406/scoring_spec.json
+    path: data/CR_CO2RR_screening_20260409/scoring_spec.json
     oss_url: ''
     description: Closed-form three-metric screening score definition for CO2RR catalysts.
   - key: screening_candidates
-    path: data/CR_CO2RR_screening_20260406/screening_candidates.csv
+    path: data/CR_CO2RR_screening_20260409/screening_candidates.csv
     oss_url: ''
     description: Candidate catalysts with U_L and CO adsorption columns.
   reference_answers:
@@ -406,7 +406,7 @@ questions:
     value: *cr_dur_std
   - key: token_budget_total
     value:
-      max: 10000
+      max: 15000
   scoring_checklist:
   - id: top_catalyst_id
     criterion: 最终答案中推荐的排名第一催化剂 id 为 cat_B（可与说明文字同现，但必须一致）。

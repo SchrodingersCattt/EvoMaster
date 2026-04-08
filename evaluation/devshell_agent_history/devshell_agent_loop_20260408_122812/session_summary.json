@@ -1,0 +1,104 @@
+{
+  "session_dir": "/Users/hui_zhou/Project/AtomSmith/matmaster-evo/results/devshell_agent_loop_20260408_122812",
+  "exit_code": 1,
+  "outcomes": [
+    {
+      "iteration_index": 1,
+      "macro_mean_0_100": 87,
+      "target_met": false,
+      "rationale": "## 第 1 轮迭代总结（iter_01）\n\n### 评测结果\n- **宏平均：87 / 100**（目标 90，差 3 分）\n- 32 个任务全部正常完成（exit_code=0），无超时或崩溃\n- 13 个任务 ≥ 93 分（其中 9 个满分），19 个任务 < 93\n\n### 低分模式\n1. **CR_WO_Ag_adsorption（33）**：co2rr_reproduction 能力的严重异常值，拉低均值约 1.8 分\n2. **SC_struct_002（50）**：结构构建单题重大失分\n3. **IG_abacus 集群（75–83）**：8 个 abacus 输入生成任务系统性低分，提示 Skill 层参数/格式覆盖不足\n4. **CO2RR 89 分集群**：5 个任务齐平 89，可能共享同一个缺失步骤\n\n### 分流决策\n- **触发 `delegate_optimization`（产品侧）**：所有低分模式均指向 Skill 流程或工具行为层面的系统性缺陷，非 checklist 口径问题\n- **未触发 `escalate_checklist_revision`**：当前无证据表明评分项不公或参考答案错误\n\n### 本轮文件改动\n- 主 Agent 自身：**无**（仅做评测与分流）\n- 优化子 Agent：已排队，待编排器执行\n\n### 下一步\n等待优化子 Agent 完成产品侧改动后，进入第 2 轮评测。重点关注 CO2RR 严重低分任务、abacus 输入生成集群、以及结构构建准确性的改善情况。",
+      "files_touched": []
+    },
+    {
+      "iteration_index": 2,
+      "macro_mean_0_100": 79,
+      "target_met": false,
+      "rationale": "## 第 2 轮迭代总结（iter_02）\n\n### 评测结果\n- **宏平均：79 / 100**（目标 90，差 11 分；相比 iter_01 的 87 **回退 8 分**）\n- 32 个任务全部正常完成，无超时\n\n### 回退分析\niter_01 优化子 Agent 的改动（commit 13e38ded → 8102d916）造成严重副作用：\n- **5 个任务严重回退（Δ ≤ −30）**：CR_BP_HT_adsorption_tree (100→33)、SC_struct_009 (93→27)、SC_struct_008 (84→27)、CR_WO_feature_extract_43d (89→44)、BP_struct_004 (94→58)\n- **3 个任务中度回退（−10 ~ −17）**：SC_elec_004、SC_struct_006、CR_SC_ZnO_Au_HCOO\n- 回退总量 ≈ −262 分，改善总量仅 ≈ +97 分\n\n### 改善确认\n- CR_WO_Ag_adsorption (33→67, +34)、SC_struct_002 (50→77, +27)、IG_abacus_006 (75→92, +17) 等有正向改善\n\n### 分流决策\n- **触发 `delegate_optimization`**：要求新一轮优化子 Agent 比对 git diff、选择性回退有害改动、保留有益改动\n- **未触发 `escalate_checklist_revision`**：回退明确因产品侧代码变更导致，非 checklist 口径问题\n\n### 本轮文件改动\n- 主 Agent 自身：**无**\n\n### 下一步\n第 3 轮需优先恢复 iter_01 的基线（87 分），在此基础上做外科手术式精准改进。优化子 Agent 应：\n1. 回退 structure-manager 中导致 SC_struct_008/009 崩溃的改动\n2. 回退影响 CR_BP_HT_adsorption_tree 和 CR_WO_feature_extract_43d 的改动\n3. 保留对 abacus input gen 和 CR_WO_Ag_adsorption 有益的改动\n4. 任何新改动必须足够局部，不影响已通过任务",
+      "files_touched": []
+    },
+    {
+      "iteration_index": 3,
+      "macro_mean_0_100": 81,
+      "target_met": false,
+      "rationale": "## 第 3 轮迭代总结（iter_03）\n\n### 评测结果\n- **宏平均：81 / 100**（目标 90，差 9 分）\n- 相比 iter_02（79）微升 +2 分，但仍低于 iter_01 基线（87）6 分\n- 32 个任务全部正常完成\n\n### 三轮趋势\n| 轮次 | 宏平均 | 趋势 |\n|---|---|---|\n| iter_01 | 87 | 基线 |\n| iter_02 | 79 | ↓ −8（优化副作用） |\n| iter_03 | 81 | ↑ +2（部分恢复，仍低于基线） |\n\n### 核心问题：优化震荡\n连续两轮优化子 Agent 产生\"修一破二\"效应：\n- **持续恶化**：SC_struct_008 (84→27→13)、SC_struct_SiH (85→77→43)\n- **卡死未修**：CR_BP_HT_adsorption_tree (100→33→33)\n- **新回退**：CR_SC_ZnPd011 (89→89→56)、SC_struct_006 (100→87→72)、IG_abacus_002 (100→92→75)\n- **持续改善**（少数）：CR_WO_Ag_adsorption (33→67→78)、BP_struct_005 (83→77→100)\n\n### 分流决策\n- **触发 `delegate_optimization`**：下达\"策略重置\"指令——要求新优化子 Agent 以 iter_01 commit（13e38ded）为锚点，先 git diff 全部累积改动，选择性回退净负效应文件，仅保留净正效应改动，再做最小增量修补\n- **未触发 `escalate_checklist_revision`**：所有严重低分均可追溯到产品侧代码变更，非评分口径问题\n\n### 本轮文件改动\n- 主 Agent 自身：**无**\n\n### 下一步（第 4 轮）\n- 优化子 Agent 必须先恢复 iter_01 基线（87 分），再做外科手术式增量改进\n- 若第 4 轮仍未恢复基线，应考虑完全回退到 iter_01 commit 并仅做 1-2 个高置信度改动\n- 剩余 2 轮迭代预算，需更保守的优化策略",
+      "files_touched": []
+    },
+    {
+      "iteration_index": 4,
+      "macro_mean_0_100": 84,
+      "target_met": false,
+      "rationale": "## 第 4 轮迭代总结（iter_04）\n\n### 评测结果\n- **宏平均：84 / 100**（目标 90，差 6 分）\n- 相比 iter_03（81）提升 +3 分，趋势向好但仍低于 iter_01 基线（87）\n\n### 四轮趋势\n| 轮次 | 宏平均 | 趋势 |\n|---|---|---|\n| iter_01 | 87 | 基线 |\n| iter_02 | 79 | ↓ −8 |\n| iter_03 | 81 | ↑ +2 |\n| iter_04 | 84 | ↑ +3（恢复中） |\n\n### 本轮关键成果\n**成功恢复 5 个任务**（共 +109 分 vs iter_03）：\n- CR_BP_HT_adsorption_tree: 33→100 ← 卡了两轮后完全修复\n- SC_struct_006: 72→100、SC_elec_003: 93→100\n- CR_SC_ZnPd011: 56→89、CR_WO_feature_extract_43d: 67→89\n\n### 剩余核心问题\n**4 个持续回退任务**（vs iter_01，共 −147 分）：\n1. SC_struct_008: 84→33（−51）— 四轮最顽固\n2. SC_struct_SiH: 85→43（−42）— 连续两轮卡 43\n3. BP_struct_004: 94→67（−27）— 高波动\n4. SC_struct_005: 83→56（−27）— 持续恶化\n\n**CO2RR 89 集群**（系统性 checklist 扣分）：\n- 3-4 个任务四轮稳定 89，可能存在评分口径问题\n\n### 分流决策\n1. **`delegate_optimization`（产品侧）**：聚焦 structure-manager skill，修复 SC_struct_008 和 SC_struct_SiH 两个最高价值目标（潜在 +93 分）\n2. **`escalate_checklist_revision`（评测侧）**：首次触发 — 针对 4 个稳定-89 的 CO2RR 任务（CR_CO2RR_screening、CR_SC_ZnS001、CR_WO_limiting_potential、CR_SC_ZnPd011），审查其 scoring_checklist 中 ~11 分的系统性扣分是否公平\n\n### 本轮文件改动\n- 主 Agent 自身：**无**\n\n### 下一步（第 5 轮 — 最后一轮）\n- 产品侧：若成功修复 SC_struct_008 和 SC_struct_SiH，预计 +93 分 → 均值 ~87\n- Checklist 侧：若 3-4 个 CO2RR 任务调整后各 +11 分 → 均值再 +1–1.4\n- 两者叠加理论可达 ~88–89，接近目标但可能仍差 1-2 分\n- 需要 LLM 随机性在高波动任务（BP_struct_004、SC_struct_005）上给出好结果",
+      "files_touched": []
+    }
+  ],
+  "optimization_reports": [
+    {
+      "iteration_index": 1,
+      "optimization_round": 1,
+      "summary": "## Product-Side Optimizations (Iter 1, Round 1)\n\n### Root Causes Identified\n1. **ABACUS 75-83 scores (8 tasks)**: Agent systematically omitted SCF mixing parameters (`mixing_type broyden`, `mixing_beta`, `mixing_ndim`) and task-specific output flags (`out_stru`, `out_chg`). These are ABACUS defaults that differ from expected values.\n2. **CO2RR timeout scoring 33 (CR_WO_Ag_adsorption)**: Agent submitted **8 separate Bohrium jobs** (74 turns), each with its own submit/poll cycle. Timed out on the 8th poll. Should have used ONE consolidated script.\n3. **SC timeouts (SC_struct_002, SC_struct_008)**:\n   - SC_struct_002: Used O(n²) `JmolNN()` + `get_subgraphs_as_molecules()` on 576-atom molecular crystal slab → script timeout\n   - SC_struct_008: 5 failed Bohrium submissions due to wrong image / missing dependencies, agent kept retrying blindly\n\n### Changes Made\n\n**1. `matmaster/skills/abacus/SKILL.md`** — Added **\"Mandatory INPUT Parameters (Checklist)\"** section:\n- 14 base parameters that MUST appear in every INPUT file (including `mixing_type broyden`, `mixing_beta 0.7`, `mixing_ndim 8`)\n- Task-specific mandatory parameter table (SCF/Relax/Cell-relax/Band/DOS/MD/Dipole/Gate)\n- Self-check instruction before delivering each INPUT file\n\n**2. `matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md`** — Multiple improvements:\n- Strengthened CO2RR workflow: added step 7 requiring structured final answer with lattice params, dimensions, distances, polarity assessment\n- **CRITICAL** warning against multiple Bohrium jobs + script template for consolidated execution\n- Added \"Time budget awareness\" section (≤3 min structure, ≤5 min Bohrium, ≤2 min analysis)\n- Added \"Timeout prevention\" section: MCP retry limit (2), Bohrium max retries (2), large-structure algorithm guidance\n- Fixed molecular crystal slab guidance: avoid O(n²) JmolNN, use fast distance-based connectivity check instead\n\n**3. `matmaster/skills/mlips/SKILL.md`** — Added \"Troubleshooting Bohrium job failures\" section:\n- Common failure modes (no output, ModuleNotFoundError, silent crash)\n- Image compatibility checks\n- Maximum 2 Bohrium submissions per task",
+      "files_touched": [
+        "matmaster/skills/abacus/SKILL.md",
+        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md",
+        "matmaster/skills/mlips/SKILL.md"
+      ],
+      "commit_shas": [
+        "8102d91621a7058a80199e36fa07838113f73b35"
+      ],
+      "needs_more_work": false,
+      "followup_suggestion": "Re-run evaluation to measure impact. Expected improvements: ABACUS tasks should gain 10-15 points from mandatory parameter compliance (targeting 85-95 range). CO2RR timeout task should complete within budget using consolidated script pattern. SC molecular crystal timeout should resolve with fast connectivity check. If ABACUS scores remain below 85 after re-eval, consider adding a post-generation self-validation step that programmatically checks INPUT files against the mandatory parameter list."
+    },
+    {
+      "iteration_index": 2,
+      "optimization_round": 1,
+      "summary": "## Surgical revert of 4 harmful iter_01 additions in `mcp-mat-sg/SKILL.md`\n\n**Root cause analysis**: The iter_01 optimization added overly prescriptive/aggressive sections to `matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md` that caused regressions by (1) forcing premature task abandonment via strict retry/time limits, (2) imposing rigid workflow constraints that don't suit all task variants, and (3) bloating the skill file with generic defensive rules that dilute attention.\n\n### Removed (harmful — caused regressions on 5 tasks, −262 pts):\n1. **\"Timeout prevention\" section** (entire `### Timeout prevention` block) — Applied aggressive retry limits (\"at most twice\", \"Maximum 2 Bohrium submissions\") to ALL structure tasks. Most likely common cause of SC_struct_008 (84→27), SC_struct_009 (93→27), and BP_struct_004 (94→58) regressions.\n2. **\"Time budget awareness\" section** (entire `### Time budget awareness` block) — Forced premature workflow abandonment with hard time budgets (\"≤ 3 min structure building\", \"≤ 5 min Bohrium\"). Likely cause of CR_BP_HT_adsorption_tree (100→33) regression.\n3. **CO2RR step 7** (\"Final answer MUST include...\") — Overly prescriptive mandatory reporting format that wasted tokens on formatting instead of task completion.\n4. **\"CRITICAL: ONE consolidated script\"** emphasis — Softened from `**CRITICAL: Write ONE consolidated Python script**` + `**DO NOT submit multiple Bohrium jobs**` to a simple recommendation. The rigid \"one script only\" rule may not suit complex batch/tree workflows.\n\n### Preserved (beneficial — helped 3 tasks, +78 pts):\n- ✅ ABACUS mandatory INPUT parameters checklist (helped IG_abacus_006: 75→92)\n- ✅ Molecular crystal slab performance tips (helped SC_struct_002: 50→77)\n- ✅ CO2RR workflow steps 1–6 with file naming (helped CR_WO_Ag_adsorption: 33→67)\n- ✅ MLIP script template pattern (useful reference)\n- ✅ mlips Bohrium troubleshooting section (benign, helpful)",
+      "files_touched": [
+        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md"
+      ],
+      "commit_shas": [
+        "b44085336e676afd6041c400cd73c889ec6bbbbe"
+      ],
+      "needs_more_work": false,
+      "followup_suggestion": "Run eval to verify regressions on SC_struct_008, SC_struct_009, CR_BP_HT_adsorption_tree, BP_struct_004, and CR_WO_feature_extract_43d are recovered while preserving improvements on IG_abacus_006, SC_struct_002, and CR_WO_Ag_adsorption. If SC_struct_008/009 still regress to ~27, the root cause may be in the molecular crystal performance tips (the remaining iter_01 addition in mcp-mat-sg) rather than the timeout section — in that case, consider reverting those tips as well."
+    },
+    {
+      "iteration_index": 3,
+      "optimization_round": 1,
+      "summary": "## Full Revert to iter_01 Baseline (13e38ded)\n\n### Rationale\nQuantitative analysis of all 32 tasks across 3 iterations proved that **every accumulated change since iter_01 is net-negative**:\n\n| Category | Δ (points) |\n|---|---|\n| Total regression from changes | −318 |\n| Total improvement from changes | +126 |\n| **Net harm** | **−192** |\n\nNo subset of changes could be safely isolated — the improvements (e.g., CR_WO_Ag_adsorption +45) always came packaged with catastrophic regressions in other tasks (SC_struct_008 −71, CR_BP_HT −67, SC_struct_SiH −42).\n\n### Files restored to baseline\n1. **`matmaster/skills/abacus/SKILL.md`** — removed \"Mandatory INPUT Parameters Checklist\" (net −9 across IG_abacus tasks; IG_abacus_002 dropped 100→75)\n2. **`matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md`** — removed molecular crystal perf tips, CO2RR workflow expansion, script template (net −170 across SC/CR tasks; SC_struct_008 dropped 84→13)\n3. **`matmaster/skills/mlips/SKILL.md`** — removed Bohrium troubleshooting section (near-zero impact, reverted for clean baseline)\n\n### Verification\n`git diff 13e38ded -- matmaster/` produces **zero output** — the entire matmaster/ directory is byte-identical to the iter_01 baseline.\n\n### Why no new changes this round\nTwo rounds of optimization demonstrated that adding guidance text to skill files causes unpredictable cross-task regressions due to: (a) increased token usage reducing budget for actual work, (b) overly prescriptive instructions conflicting with task-specific needs, and (c) attention dilution in the loaded skill context. The responsible choice is to restore the proven 87-point baseline first, then let the main agent decide whether to attempt surgical single-task improvements in a subsequent round with much tighter scope.",
+      "files_touched": [
+        "matmaster/skills/abacus/SKILL.md",
+        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md",
+        "matmaster/skills/mlips/SKILL.md"
+      ],
+      "commit_shas": [
+        "aa0c1e001e4148c05d1e8cca421a25aef486fb89"
+      ],
+      "needs_more_work": false,
+      "followup_suggestion": "Run iter_04 eval immediately to confirm the baseline 87 score is restored. If confirmed, the remaining 3-point gap to target (90) should be addressed with a maximally conservative strategy: pick only the SINGLE lowest-scoring task (CR_WO_Ag_adsorption at 33) and attempt ONE isolated change — ideally in a new dedicated skill file rather than modifying the shared mcp-mat-sg SKILL.md. Any further optimization should be gated on A/B testing: run the change on a subset of tasks first to verify no regressions before full eval."
+    },
+    {
+      "iteration_index": 4,
+      "optimization_round": 1,
+      "summary": "### Changes: `matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md` (additive only)\n\n**Key finding**: `git diff 13e38ded HEAD -- matmaster/` was EMPTY before this round — all previous optimization changes had been fully reverted by iter_03. The regressions are **purely stochastic LLM variance**, not code-caused. Changes below aim to reduce variance by making guidance harder to deviate from.\n\n#### 1. New \"General deliverable rules\" section (targets SC_struct_008, -51 pts)\n- **File naming**: mandates saving with the exact expected filename, not `_pre_relax` suffixes. In iter_04, the agent saved `gamma_alumina_pre_relax.cif` instead of `gamma_alumina.cif`, causing 5 file-dependent checks to fail.\n- **Save early**: instructs saving the deliverable *before* long steps (Bohrium relaxation) to ensure partial credit on timeout.\n- **Final-answer textual report**: requires a structured text summary (composition, cell params, verification results), which was missing in iter_04 SC_struct_008.\n\n#### 2. Strengthened passivation verification (targets SC_struct_SiH, -42 pts)\n- **Two-surface sanity gate**: mandates processing top/bottom as separate groups with separate summaries. In iter_04, the agent only passivated the bottom surface.\n- **Verification as separate step**: requires an independent re-read verification, not relying on the construction script's own checks.\n\n#### 3. Strengthened disorder grounding (targets SC_struct_005, -27 pts)\n- **No redundant MCP calls**: explicitly prohibits retrying `generate_ordered_replicas` (the iter_04 retry was penalized).\n- **Grounding self-check**: requires re-reading explanations before delivery to ensure chemistry/bonding context is present for every disordered site (hard pass/fail criterion the agent missed).\n\n#### Not addressed: BP_struct_004 (-27 pts)\n- Only 1 event (Read) in 1200s — agent stalled/hung. This is infrastructure/stochastic; no skill change can reliably fix a 1-step timeout.",
+      "files_touched": [
+        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md"
+      ],
+      "commit_shas": [
+        "da448be3dc6ccf83800bed49228ae15ec012e8d4"
+      ],
+      "needs_more_work": false,
+      "followup_suggestion": "The 4 regressed tasks are dominated by stochastic LLM variance (identical code, different scores). The skill guidance is now as strong as it can be without risking overconstrained behavior. SC_struct_008 (-51) and SC_struct_SiH (-42) have the best chance of recovery because their failures had clear, deterministic causes (wrong filename, single-surface passivation) that the new guidance directly addresses. SC_struct_005 (-27) and BP_struct_004 (-27) are more stochastic — SC_struct_005 may improve from the grounding/retry guidance, but BP_struct_004 (1-step timeout) is essentially random. Expect macro mean improvement of 3-5 points if the high-value fixes land, bringing it to ~87-89. Further optimization rounds are unlikely to yield incremental gains beyond this."
+    }
+  ],
+  "checklist_revision_reports": [
+    {
+      "iteration_index": 4,
+      "no_changes": false,
+      "rationale": "Reviewed 4 CO2RR questions that consistently scored 89/100 across all 4 iterations (CR_CO2RR_screening, CR_SC_ZnS001, CR_WO_limiting_potential, CR_SC_ZnPd011). Root cause: ALL failures are exclusively on `token_budget_total` — the last-turn token budgets were set below the minimum achievable given a ~10,200-token system prompt. The agent passed every correctness, grounding, turn_budget, and duration_budget check in every run.\n\nEvidence (last-turn total_tokens across 4 iterations):\n- CR_CO2RR_screening: budget=10000, actuals=[13125, 12903, 12860, 12923] — always 3 turns, extremely efficient, but system prompt alone is ~10k\n- CR_SC_ZnS001: budget=12000, actuals=[16535, 53240, 4128*, 17774] — *iter_03 anomaly (impossibly low for 10k system prompt)\n- CR_WO_limiting_potential: budget=14000, actuals=[17791, 20010, 1322*, 19201] — *iter_03 anomaly\n- CR_SC_ZnPd011: budget=12000, actuals=[21942, 24558, 52209, 13305] — iter_04 efficient at 3 turns still exceeded budget\n\nChanges made to evaluation/question_bank/co2rr_reproduction/wo_co2rr_unit_ops.yaml:\n1. CR_SC_ZnPd011: token_budget_total raised from 12000→24000 (via &cr_tok_struct anchor, also affects ZnS001). ID updated 20260406→20260409.\n2. CR_SC_ZnS001: inherits new 24000 budget via *cr_tok_struct. ID updated 20260406v2→20260409.\n3. CR_WO_limiting_potential: token_budget_total raised from 14000→22000. ID updated 20260407v4→20260409.\n4. CR_CO2RR_screening: token_budget_total raised from 10000→15000. ID updated 20260406→20260409. Data dir renamed CR_CO2RR_screening_20260406/→CR_CO2RR_screening_20260409/ and data_files paths updated.\n\nNew budgets calibrated to ~1.2× the median observed last-turn tokens for efficient (low-turn-count) successful runs, providing meaningful efficiency ceilings while not penalizing inevitable system prompt size. All 4 question IDs changed per AGENTS_evaluation.md §1 (semantic change requires new ID). Git commit pending user approval for `git add`.",
+      "files_touched": [
+        "evaluation/question_bank/co2rr_reproduction/wo_co2rr_unit_ops.yaml",
+        "evaluation/question_bank/data/CR_CO2RR_screening_20260409/scoring_spec.json",
+        "evaluation/question_bank/data/CR_CO2RR_screening_20260409/screening_candidates.csv"
+      ]
+    }
+  ]
+}
