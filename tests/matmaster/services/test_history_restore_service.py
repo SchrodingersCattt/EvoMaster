@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from matmaster.types.messages import AssistantMessage, SystemMessage, UserMessage
+from src.dao.chat_events_table import ChatEventsTable
 from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_restore_service import HistoryRestoreService
 
@@ -89,6 +90,24 @@ class FakeEventsTable:
     ) -> list[dict]:
         self.calls.append(("get_session_events", session_id, limit, include_spawn))
         return list(self.session_events)
+
+
+def test_row_to_event_includes_event_id() -> None:
+    row = {
+        "id": 42,
+        "source": "MatMaster",
+        "type": "history_checkpoint",
+        "content": '{"covered_until_event_id": 10, "base_messages": []}',
+        "session_id": "sess-1",
+        "task_id": None,
+        "invocation_id": None,
+        "spawn_id": None,
+        "created_at": None,
+    }
+
+    event = ChatEventsTable._row_to_event(row)
+
+    assert event["id"] == 42
 
 
 def test_restore_uses_latest_valid_checkpoint() -> None:

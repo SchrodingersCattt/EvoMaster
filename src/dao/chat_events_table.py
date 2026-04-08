@@ -21,6 +21,7 @@ class ChatEventsTable(BaseTable):
             content = row['content']
 
         ev = {
+            'id': row.get('id'),
             'source': row['source'],
             'type': row['type'],
             'content': content,
