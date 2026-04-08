@@ -13,8 +13,6 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_SCHEMA_CACHE_TOOL_EXCLUDE: dict[str, set[str]] = {}
-
 
 class ToolSchemaCache:
     """Read-only cache of MCP tool schemas. No TTL, no auto-sync."""
@@ -36,7 +34,4 @@ class ToolSchemaCache:
         if not isinstance(schemas, list):
             logger.warning("Invalid cache format for '%s': expected list", server_name)
             return None
-        excluded = _SCHEMA_CACHE_TOOL_EXCLUDE.get(server_name, set())
-        if not excluded:
-            return schemas
-        return [tool for tool in schemas if tool.get('name') not in excluded]
+        return schemas

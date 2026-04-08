@@ -286,6 +286,27 @@ class TestChatStreamErrorCategory:
         assert exc_info.value.error_category == "bad_request"
         assert exc_info.value.retryable is True
 
+    async def test_content_shape_bad_request_is_non_retryable(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = openai.BadRequestError(
+            response=MagicMock(status_code=400, headers={}),
+            body=None,
+            message=(
+                "OpenAIException - {\"error\":{\"message\":"
+                "\"Invalid value for 'content': expected a string, got null.\","
+                "\"param\":\"messages.[2].content\"}}"
+            ),
+        )
+
+        with pytest.raises(LLMError) as exc_info:
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+            ]
+
+        assert exc_info.value.retryable is False
+        assert exc_info.value.error_category == "bad_request"
+
     @pytest.mark.parametrize(
         ("message", "category"),
         [
