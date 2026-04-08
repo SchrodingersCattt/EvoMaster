@@ -20,5 +20,11 @@ mcp_server: mat_sg
 ## add_hydrogens / passivation
 
 - Si/Ge surface passivation: target Si-H ≈ 1.48 Å along tetrahedral direction (~109.47°). Passivate **all** dangling bonds on **both** top and bottom surfaces.
-- After passivation: compute coordination numbers for ALL surface atoms (cutoff ~2.6 Å for Si). If ANY surface atom has coordination < 4, identify its dangling bonds and add missing H atoms. Iterate until every surface atom reaches coordination 4.
-- Save the passivated structure, then verify by re-reading and checking. Report: total H added, mean Si-H bond length, and confirmation that all surface Si atoms have coordination = 4.
+- **Key principle**: a surface Si atom with coordination N needs (4 − N) hydrogen atoms. For reconstructed surfaces like Si(100)-2×1, surface dimers have coordination 2 → each dimer atom needs 2 H atoms, not 1.
+- After passivation: compute coordination numbers for ALL surface atoms using TWO cutoffs:
+  - Si-Si bonds: cutoff 2.6 Å
+  - Si-H bonds: cutoff 1.8 Å
+  - Total coordination = (Si-Si neighbors) + (Si-H neighbors). Must equal 4 for every surface Si.
+- If ANY surface atom has coordination < 4 after first passivation pass, compute the missing bond directions (tetrahedral angles relative to existing bonds) and add H atoms at 1.48 Å along those directions. Re-check coordination. Iterate until ALL surface Si reach coordination = 4.
+- **Verification script** (mandatory): after saving the passivated structure, re-read it and print per-atom coordination for every Si atom. Flag any Si with coordination ≠ 4. The final answer MUST report mean Si coordination and confirm it equals 4.0.
+- Save the passivated structure, then verify by re-reading and checking. Report: total H added, mean Si-H bond length, per-atom coordination check, and confirmation that all surface Si atoms have coordination = 4.

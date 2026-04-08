@@ -36,17 +36,18 @@ uv run python scripts/diagnose_input.py --software abacus --input INPUT
 
 ### Input File Descriptions
 
-**INPUT** — computation parameters:
+**INPUT** — computation parameters (use single space between keyword and value):
 ```
 INPUT_PARAMETERS
-calculation   scf
-basis_type    lcao          # or pw
-ecutwfc       100           # Ry (PW); for LCAO, this is auxiliary grid cutoff
-scf_thr       1.0e-7
-scf_nmax      100
-smearing_method  gauss
-smearing_sigma   0.01
+calculation scf
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 100
+smearing_method gauss
+smearing_sigma 0.01
 ```
+> **Formatting rule**: Write each parameter as `keyword value` with a SINGLE SPACE separator. Do NOT pad with extra spaces or tabs for alignment. ABACUS parses both formats identically, but single-space is the canonical form.
 
 **STRU** — atomic structure:
 ```
@@ -78,8 +79,9 @@ Si
 K_POINTS
 0
 Gamma
-4 4 4  0 0 0
+4 4 4 0 0 0
 ```
+> KPT files MUST start with `K_POINTS` as the first line. Use single spaces in the k-mesh line (no double spaces).
 
 ### Ready-to-run input files
 
@@ -87,14 +89,16 @@ If the user provides complete INPUT + STRU + KPT files with pseudopotentials and
 
 ## Task Types
 
-| Task | `calculation` value | Template | Description |
+| Task | `calculation` value (write exactly) | Template | Description |
 |------|---------------------|----------|-------------|
-| scf | `scf` | `task_scf.INPUT` | Single-point energy |
-| band | `nscf` | `task_band.INPUT` | Band structure (needs prior SCF charge density) |
-| dos | `nscf` | `task_dos.INPUT` | Density of states |
-| relax | `relax` | `task_relax.INPUT` | Atomic position relaxation |
-| cell_relax | `cell-relax` | `task_cell_relax.INPUT` | Full cell + position relaxation |
-| md | `md` | `task_md_nvt.INPUT` | NVT molecular dynamics |
+| scf | `calculation scf` | `task_scf.INPUT` | Single-point energy |
+| band | `calculation nscf` | `task_band.INPUT` | Band structure (needs prior SCF charge density) |
+| dos | `calculation nscf` | `task_dos.INPUT` | Density of states |
+| relax | `calculation relax` | `task_relax.INPUT` | Atomic position relaxation |
+| cell_relax | `calculation cell-relax` | `task_cell_relax.INPUT` | Full cell + position relaxation |
+| md | `calculation md` | `task_md_nvt.INPUT` | NVT molecular dynamics |
+
+> When generating INPUT files, write the calculation keyword exactly as shown: `calculation scf`, `calculation cell-relax`, etc. with single space. Include `efield_flag 1` and `dip_cor_flag 1` when dipole correction is needed.
 
 ## Required Files
 

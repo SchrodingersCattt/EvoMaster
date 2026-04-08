@@ -1,0 +1,25 @@
+{
+  "iteration_index": 2,
+  "outcome": {
+    "iteration_index": 2,
+    "macro_mean_0_100": 88,
+    "target_met": false,
+    "rationale": "## 第 2 轮迭代总结\n\n### 评测结果\n- **全量宏平均（34题）**：88/100（↑29 vs iter_01 的 59）\n- **评分错误**：0（↓10 vs iter_01）\n- **目标**：90/100 → **未达标（差 2 分）**\n\n### 第 1 轮优化成效\n- ✅ 批处理系统性修复：全部 10 个 error 任务恢复评分（72–100）\n- ✅ IG_abacus 003–008 系统性提升至 92（从 75–83）\n- ✅ SC_struct_008 从 27→50（仍低但有改善）\n- ⚠️ 引入 4 项回退：SC_struct_005/006, SC_elec_003, CR_SC_ZnS001\n\n### 本轮分流\n\n#### delegate_optimization #1（顽固低分 · 高杠杆）\n- CR_WO_Ag_adsorption: **33**（两轮未变，修到 90 可贡献 +1.7 均分）\n- SC_struct_008: **50**, BP_struct_004: **72**, SC_struct_SiH: **78**\n\n#### delegate_optimization #2（回退修复 + 近满分提升）\n- 4 项回退任务（SC_struct_005/006, SC_elec_003, CR_SC_ZnS001）\n- SC_struct_002: 85, 及 6 个 89 分 co2rr 任务的共性行为缺口\n\n### 数学分析\n- 仅修复 CR_WO_Ag_adsorption 到 90：macro_mean ≈ 89.7\n- 叠加回退修复（4题各恢复 +10）：macro_mean ≈ 90.9 → **可达标**\n\n### 下一步（第 3 轮）\n等待优化 Agent 处理后重新评测。关键路径：CR_WO_Ag_adsorption 修复 + 回退消除。",
+    "files_touched": []
+  },
+  "optimization_reports": [
+    {
+      "iteration_index": 2,
+      "optimization_round": 1,
+      "summary": "## Product-Side Optimizations (iter=2, round=1)\n\n### Root Cause Analysis\n| Task | Score | Root Cause |\n|------|-------|------------|\n| CR_WO_Ag_adsorption | 33 | Only 1/12 adsorption combos completed before timeout; tool-call JSON truncation (script too long); unphysical E_ads = −109 eV due to constraint-clearing bug (`set_constraint()` without args); no E_ads sanity check |\n| SC_struct_008 | 50 | Random Al vacancy placement → fmax=22 eV/Å; MACE relaxation timeout; no known-crystal-structure recipe for γ-Al₂O₃ |\n| BP_struct_004 | 72 | LLM call failure on turn-2; no output files generated; no breadth-first batch guidance |\n| SC_struct_SiH | 78 | Agent passivated BOTH surfaces but JSON spec said `passivate_top_if_needed: false`; no rule for JSON-overrides-text |\n\n### Changes to `matmaster/exps/direct.toml` (+53 lines, 4 new sections)\n\n1. **Multi-System Adsorption section** (expanded): Script compactness (<200 lines to avoid JSON truncation), 2×2 slab default (not 3×3), single calculator instance reuse, E_ads sanity check (−10…+5 eV), proper constraint handling (never `set_constraint()` empty), complete N×M table + ZPE disclosure mandate, `fmax=0.1 steps≤60` for large batches\n2. **Batch Post-Processing section** (new): breadth-first generation, ALL N×output_type files mandatory, consistent filenames, k-path conflict handling\n3. **Complex Oxide Construction section** (new): γ-Al₂O₃ defective spinel recipe (Fd-3m, a≈7.91Å, Wyckoff-based build, Al vacancy on 16d octahedral sites → Al₂₁O₃₂), save-before-relax, distance-based vacancy placement\n4. **Input Data File Handling section** (new): JSON config overrides task text, read spec FIRST before computation, report config sources\n5. **Passivation guidance** (refined): honour JSON spec for top/bottom surface selection",
+      "files_touched": [
+        "matmaster/exps/direct.toml"
+      ],
+      "commit_shas": [],
+      "needs_more_work": false,
+      "followup_suggestion": "Commit the uncommitted changes in matmaster/exps/direct.toml (and the iter_01 changes in _base.toml, mcp-mat-sg/SKILL.md, abacus/SKILL.md that were never committed) before running iter_03 eval. The git add was blocked in the optimization agent sandbox. Key expected impact: CR_WO_Ag_adsorption should jump from 33 to ~70-90 (compact script + E_ads sanity + complete table), SC_struct_008 from 50 to ~70-80 (spinel recipe), SC_struct_SiH from 78 to ~85 (JSON spec precedence), BP_struct_004 from 72 to ~80 (batch output completeness)."
+    }
+  ],
+  "checklist_reports": [],
+  "optimization_delegations": []
+}
