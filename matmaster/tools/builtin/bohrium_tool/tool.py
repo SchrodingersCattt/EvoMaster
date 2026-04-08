@@ -510,6 +510,13 @@ class BohriumTool(BuiltinTool):
             job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
             detail_data = get_job_detail(ctx, job_id=job_id)
             code = detail_data.get('status', 0)
+
+            # Confirm failure/unknown before reporting terminal status
+            if code in _FAILURE_CODES or code not in (*_RUNNING_CODES, _SUCCESS_CODE):
+                code, _, detail_data = confirm_terminal_status(
+                    ctx, job_id=job_id, detail_data=detail_data,
+                )
+
             status_name = _STATUS_MAP.get(code, f'Unknown({code})')
 
             if code in _RUNNING_CODES:
@@ -616,11 +623,8 @@ class BohriumTool(BuiltinTool):
                 session=self._session,
             )
             detail_data = get_job_detail(ctx, job_id=job_id)
-            code, status_name, detail_data = confirm_terminal_status(
-                ctx,
-                job_id=job_id,
-                detail_data=detail_data,
-            )
+            code = detail_data.get('status', 0)
+            status_name = _STATUS_MAP.get(code, f'Unknown({code})')
             if code in _RUNNING_CODES:
                 return ToolResult(
                     status='error',
@@ -712,15 +716,16 @@ class BohriumTool(BuiltinTool):
                 filtered = all_images
 
             # Prepare fetch targets
-            to_fetch: list[tuple[Any, str]] = []
+            to_fetch: list[tuple[Any, str, str]] = []
             for record in filtered[:max_results]:
                 img_id = record.get('id') or record.get('imageId')
                 if img_id is not None:
                     name = record.get('name') or record.get('imageName') or ''
-                    to_fetch.append((img_id, name))
+                    desc = record.get('description') or ''
+                    to_fetch.append((img_id, name, desc))
 
-            def _fetch_versions(item: tuple[Any, str]) -> dict[str, Any]:
-                img_id, name = item
+            def _fetch_versions(item: tuple[Any, str, str]) -> dict[str, Any]:
+                img_id, name, description = item
                 try:
                     ver_data = _get(
                         ctx.base_url,
@@ -748,7 +753,10 @@ class BohriumTool(BuiltinTool):
                     if entry:
                         version_list.append(entry)
 
-                return {'id': img_id, 'name': name, 'versions': version_list}
+                result: dict[str, Any] = {'id': img_id, 'name': name, 'versions': version_list}
+                if description:
+                    result['description'] = description
+                return result
 
             # Parallel version queries to avoid N+1 latency
             with ThreadPoolExecutor(max_workers=8) as pool:
@@ -759,6 +767,7 @@ class BohriumTool(BuiltinTool):
                 content=json.dumps(
                     {
                         'success': True,
+                        'keyword': keyword,
                         'total_found': len(filtered),
                         'returned': len(results),
                         'images': results,
@@ -834,6 +843,7 @@ class BohriumTool(BuiltinTool):
                     {
                         'success': True,
                         'type': choose_type,
+                        'keyword': keyword,
                         'total_found': len(filtered),
                         'returned': len(results),
                         'machines': results,
