@@ -1,6 +1,6 @@
 ---
 name: mlips
-description: "Machine-learning interatomic potentials (MLIPs): structure optimization, phonon, molecular dynamics, elastic constants, NEB. Default model is DPA; also supports MACE, SevenNet, MatterSim. Bohrium GPU submission."
+description: "Machine-learning interatomic potentials (MLIPs): structure optimization, phonon, molecular dynamics, elastic constants, NEB, adsorption energy. Default model is DPA; also supports MACE, SevenNet, MatterSim. Bohrium GPU submission."
 skill_type: operator
 ---
 
@@ -123,6 +123,10 @@ python run_neb.py --initial initial.cif --final final.cif \
 **Important**: Both structures must be fully relaxed and have the same atoms in the same order.
 
 Output: `neb_band.pdf`, `result.json` (forward/reverse barrier in eV)
+
+### Adsorption Energy (catalysis)
+
+For E_ads calculations: copy `_calculator.py` into the working directory, write ONE script using `from _calculator import build_calculator` with `head="OC22"`, compute E_ads = E(slab+ads) − E(slab) − E(gas) for all surfaces × adsorbates in a single loop.
 
 ## Physical Checks
 

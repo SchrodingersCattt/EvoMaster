@@ -20,7 +20,13 @@ import urllib.request
 from pathlib import Path
 
 import numpy as np
-from ase.calculators.calculator import Calculator
+
+try:
+    from ase.calculators.calculator import Calculator
+except ImportError:
+    import subprocess, sys
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "ase"])
+    from ase.calculators.calculator import Calculator
 
 logger = logging.getLogger(__name__)
 
