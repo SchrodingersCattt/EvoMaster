@@ -61,7 +61,7 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
 
 - Report **both** the original disordered formula **and** the ordered replica expanded formula (integer stoichiometry). Write formulas as concatenated strings without spaces: `H144C48N24Cl24O96` (NOT `H144 C48 N24 Cl24 O96`). If CIF returns space-separated elements, concatenate them.
 - For each replica, explain: (a) which sites are disordered and how, (b) how the ordered config was chosen (valence/charge balance/connectivity), (c) what changed. A bare filename list without chemical reasoning = fail.
-- **Chemical/physical grounding is MANDATORY**: for every disordered site, explain the **bonding environment**, **valence state**, **coordination geometry**, or **crystallographic reason** that makes that disorder physically meaningful. For example: "Site 4a has 50% occupancy by Cl and 50% by Br because both halides are isoelectronic and similar in ionic radius (Cl⁻ 1.81 Å vs Br⁻ 1.96 Å), allowing substitutional mixing." Simply restating occupancy fractions without chemical context is insufficient and will score as a grounding failure.
+- **Chemical/physical grounding is MANDATORY**: for every disordered site, explain the **bonding environment**, **valence state**, **coordination geometry**, or **crystallographic reason** that makes that disorder physically meaningful. Your explanation MUST go beyond listing site labels and occupancy numbers — you must discuss at least ONE of: (a) why the disordered species can substitute for each other (ionic radius, charge, electronegativity), (b) what bonds/coordination surround the site (e.g., "tetrahedral coordination by 4 O²⁻ at 1.95 Å"), (c) how the ordered replica preserves charge neutrality and valence. **Bad** example (will fail): "Site 8f has 0.6 Mn and 0.4 Fe occupancy, so we chose Mn." **Good** example: "Site 8f is octahedrally coordinated by 6 O²⁻ (M–O 2.05–2.12 Å). Mn²⁺ (0.83 Å) and Fe²⁺ (0.78 Å) have similar ionic radii and both prefer octahedral coordination, enabling random substitution. The ordered replica selects Mn on all 8f sites, preserving the +2 charge balance with the surrounding oxide framework." Always tie back to bonding, coordination, or charge balance.
 - On timeout → fall back to pymatgen `OrderDisorderedStructureTransformation`.
 
 ## add_hydrogens / passivation
@@ -94,3 +94,11 @@ For CO2RR, HER, OER, and similar catalysis structure-preparation tasks:
 4. **Save each intermediate** (bulk, slab, slab+adsorbate) as separate files — the task often requires multiple deliverables.
 5. **Token economy**: do NOT search the web for standard adsorbate molecules (CO, OH, H2O, HCOO). Build them directly with `build_molecule_structures_from_smiles` or write XYZ coordinates in one Bash call.
 6. **Adsorbate geometry**: verify the adsorbate-surface distance is physically reasonable (typically 1.5–2.5 Å for chemisorption, 2.5–3.5 Å for physisorption). Report key distances in the final answer.
+
+### MLIP-based adsorption energy calculations
+When the task requires computing adsorption energies (E_ads) with MLIP/DPA models:
+- Write ONE consolidated Python script that loops over all surfaces × adsorbates, computes E_ads = E(slab+ads) − E(slab) − E(gas), and prints a complete results table.
+- The script MUST use `from _calculator import build_calculator` (copy `_calculator.py` from `matmaster/skills/mlips/scripts/` into the input directory).
+- For catalysis surfaces use head `OC22`: `build_calculator("DPA3.1-3M", head="OC22")`.
+- Submit to Bohrium with **image `registry.dp.tech/dptech/dpa-calculator:f7835422`** and **machine `c16_m64_1 * NVIDIA 4090`**. Do NOT use ABACUS/CP2K/other images — they lack ASE and deepmd-kit.
+- If the job fails (e.g. missing module), check the image first. ASE-dependent scripts require the DPA image.

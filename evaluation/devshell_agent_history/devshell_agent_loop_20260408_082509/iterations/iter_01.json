@@ -1,0 +1,27 @@
+{
+  "iteration_index": 1,
+  "outcome": {
+    "iteration_index": 1,
+    "macro_mean_0_100": 85,
+    "target_met": false,
+    "rationale": "## Iteration 1 Summary\n\n### Score\n- **Macro mean: 85/100** (target 90) — ❌ not met\n\n### Key Findings\n- 32/32 tasks completed and scored; 11 scored ≥90, 12 at 80–89, **9 below 80**\n- **Worst performers:** CR_SC_ZnO_Au_HCOO (56), SC_struct_005 (61), IG_abacus_001 (67), CR_WO_Ag_adsorption (67)\n- **Capability gaps:** structure_construction (5 tasks <80), co2rr_reproduction (2 tasks <80), input_generation_abacus (2 tasks <80)\n\n### Actions Taken\n- ✅ `delegate_optimization` called → product optimization sub-agent queued (round 1)\n- ❌ No `escalate_checklist_revision` — failure patterns appear product-side, not scoring-rubric issues\n- ❌ No files touched by main agent (as required)\n\n### Next Steps (Iteration 2)\n- Await optimization sub-agent results (expected: skill improvements in structure_construction, co2rr, abacus input generation)\n- Re-run eval with `iter_02` tag to measure lift\n- If <80 tasks persist with minimal product-side room, consider checklist escalation for borderline cases",
+    "files_touched": []
+  },
+  "optimization_reports": [
+    {
+      "iteration_index": 1,
+      "optimization_round": 1,
+      "summary": "## Changes made to `matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md`\n\nTargeted 6 specific failure modes across 3 capability domains (structure_construction, co2rr_reproduction, input_generation_abacus). All changes are in the **mcp-mat-sg** lazymcp skill, which IS loaded during eval.\n\n### 1. `generate_ordered_replicas` — chemical grounding (SC_struct_005: 61→target 80+)\n- Added MANDATORY chemical/physical grounding requirement: agent must explain bonding environment, valence, coordination geometry for each disordered site, not just restate occupancy fractions.\n\n### 2. `add_hydrogens / passivation` — both-surface enforcement (SC_struct_SiH: 77→target 90+)\n- Strengthened \"BOTH SURFACES MANDATORY\" with explicit algorithm: identify surface atoms by z_max (top) AND z_min (bottom), passivate both sets, verify top/bottom separately.\n\n### 3. `build_surface_slab` — layer count compliance (CR_SC_ZnO_Au_HCOO: 56→target 80+)\n- Added explicit rule: when reference/task specifies exact layer count, MUST use that exact number. Verify distinct z-planes after build.\n\n### 4. `build_surface_slab` — molecular crystal integrity (SC_struct_002: 75→target 85+)\n- Added molecular slab validation: check no covalent bonds broken, atom count = integer multiple of formula, no fragments.\n\n### 5. New section: **Geometry verification** (SC_struct_006: 72→80+, SC_struct_008: 74→80+)\n- Mandatory post-build checks: bond angles (sp3≈109.47°, sp2≈120°), cell angles, forces, atom counts.\n\n### 6. New section: **CO2RR workflow** (CR_SC_ZnO_Au_HCOO: 56→80+, token efficiency)\n- End-to-end catalysis workflow: bulk→slab→adsorbate with intermediate file saves, token economy tips (don't web-search standard molecules), geometry verification.\n\n## Not addressed (eval config limitation)\n**ABACUS input generation** (2 tasks below 80: IG_abacus_001=67, IG_abacus_006=75): The comprehensive ABACUS skill at `matmaster/skills/abacus/SKILL.md` is NOT loaded during eval because `skills_roots` is overridden to `lazymcp/` only. The ABACUS skill already has detailed guidance on KPT format, efield/dip_cor parameters, gate field, and multi-file generation — exactly what the failing tasks need. **Recommendation**: update the eval harness or skill loading to include `matmaster/skills/abacus/` (and potentially other operator skills) so that the agent sees ABACUS-specific guidance during eval. This alone could fix 2 tasks below 80 and push ~5 tasks from 80-89 to 90+.\n\n## Token budget (cross-cutting: 21/28 tasks)\nToken budget is the #1 failure mode but is primarily driven by agent behavior and system prompt size. The CO2RR workflow section includes token economy guidance (avoid unnecessary web searches for standard molecules). Deeper token optimization requires changes to `matmaster/exps/direct.toml` developer_instructions, which is outside scope.",
+      "files_touched": [
+        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md"
+      ],
+      "commit_shas": [
+        "58c1b7b69f8d81c804c27561543002210048bf07"
+      ],
+      "needs_more_work": true,
+      "followup_suggestion": "**Priority 1 (high impact, config-level)**: Fix the eval harness skills_roots to load ALL skills from `matmaster/skills/` (not just lazymcp). The manifest shows `skills_roots: [lazymcp]` while direct.toml says `skills_root: [matmaster/skills]` — this discrepancy means the ABACUS skill, tasker-polar-surface skill, structure-manager skill, and input-manual-helper skill are all invisible during eval. Loading them would provide the agent with detailed ABACUS input guidance (KPT format, efield/dipole parameters, gate field, multi-file generation) and rich slab construction workflows. Estimated lift: +2-3 points on macro mean from ABACUS tasks alone, plus improved structure construction quality from tasker-polar-surface.\n\n**Priority 2 (if another optimization round)**: Address token budget by (a) reviewing whether all lazymcp skill descriptions need to be in context for every task, and (b) adding task-type-specific skill loading so only relevant skills consume context tokens."
+    }
+  ],
+  "checklist_reports": [],
+  "optimization_delegations": []
+}
