@@ -473,12 +473,15 @@ class ChatHistoryConverter:
                 flush_tool_calls()
                 active_tool_turn_ids.clear()
                 raw_content = ev.get('content')
+                # Unwrap {"state": {...}} so _adapt_tool_calls_format reaches
+                # legacy nested tool_calls inside the wrapped payload.
+                inner = cls._assistant_state_payload(raw_content) or raw_content
                 try:
                     msg = restore_persisted_assistant_state(
                         _sanitize_trivial_tool_call_preamble(
-                            _adapt_tool_calls_format(raw_content)
+                            _adapt_tool_calls_format(inner)
                         )
-                        if raw_content
+                        if inner
                         else {}
                     )
                 except Exception as e:
