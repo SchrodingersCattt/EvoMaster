@@ -353,8 +353,7 @@ def test_run_agent_injects_bohrium_rebuild_events_into_pg_ctx_run_meta():
     assert ok is True
     svc._test_events_table.get_bohrium_events.assert_called_once_with('sess-1')
     assert (
-        svc._test_fake_exp.last_ctx.run_meta['bohrium_rebuild_events']
-        == rebuild_events
+        svc._test_fake_exp.last_ctx.run_meta['bohrium_rebuild_events'] == rebuild_events
     )
 
 

@@ -29,4 +29,3 @@ class TestToolSchemaCache:
         cache = ToolSchemaCache(tmp_path)
         result = cache.load('any_server')
         assert result is None
-

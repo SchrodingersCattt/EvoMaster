@@ -318,12 +318,12 @@ class Exp:
             skill_registry=self._skill_registry,
         )
 
-        from matmaster.types.tool_desc_ctx import ToolDescriptionContext
-        from matmaster.types.tool_runner_state import ToolRunnerState
         from matmaster.tools.builtin.bohrium_tool.registry import (
             JobRegistry,
             classify_poll_status,
         )
+        from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+        from matmaster.types.tool_runner_state import ToolRunnerState
 
         desc_ctx = ToolDescriptionContext(
             session_kind=topology.session_kind,

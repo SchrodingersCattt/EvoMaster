@@ -189,5 +189,3 @@ def confirm_terminal_status(
         if code not in _FAILURE_CODES:
             break
     return code, status_name, latest
-
-
