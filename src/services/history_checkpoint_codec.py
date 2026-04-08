@@ -91,6 +91,9 @@ def _has_invalid_tool_sequence(messages: list[Message]) -> bool:
             i += 1
             continue
 
+        if any(not str(tool_call.id) for tool_call in (message.tool_calls or [])):
+            return True
+
         declared_ids = [
             str(tool_call.id)
             for tool_call in (message.tool_calls or [])

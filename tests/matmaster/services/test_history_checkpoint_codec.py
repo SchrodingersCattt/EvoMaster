@@ -133,3 +133,16 @@ def test_validate_base_messages_rejects_unclosed_turn_before_new_assistant() -> 
 
     with pytest.raises(ValueError, match="tool sequence"):
         validate_base_messages(messages)
+
+
+def test_validate_base_messages_rejects_empty_tool_call_id() -> None:
+    messages = [
+        SystemMessage(content="sys"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[ToolCallData(id="", name="bash", arguments={"cmd": "pwd"})],
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="tool sequence"):
+        validate_base_messages(messages)
