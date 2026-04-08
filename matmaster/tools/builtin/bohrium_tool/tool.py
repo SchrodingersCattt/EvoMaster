@@ -26,7 +26,8 @@ from matmaster.bohrium.endpoints import (
 )
 from matmaster.bohrium.runtime import get_runtime
 from matmaster.tools.builtin.base import BuiltinTool
-from matmaster.tools.tool_result import ToolResult
+from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry, next_interval
+from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
@@ -256,6 +257,136 @@ class BohriumTool(BuiltinTool):
             session=self._session,
             require_project=require_project,
         )
+
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: Any,
+    ) -> str | ToolResult:
+        """Registry-aware execution with async-side throttle checks."""
+        import asyncio
+
+        action = arguments.get("action")
+        registry: JobRegistry | None = None
+        if exec_ctx is not None and hasattr(exec_ctx, "runner_state"):
+            runner_state = exec_ctx.runner_state
+            if runner_state is not None and hasattr(runner_state, "get"):
+                registry = runner_state.get("bohrium_job_registry")
+
+        if action == "poll" and registry is not None:
+            job_id = str(arguments.get("job_id", ""))
+            throttled, remaining = registry.should_throttle(job_id)
+            if throttled:
+                rec = registry.get(job_id)
+                payload: dict[str, Any]
+                if rec is not None and rec.last_result:
+                    try:
+                        payload = json.loads(rec.last_result)
+                    except (json.JSONDecodeError, TypeError):
+                        payload = {}
+                else:
+                    payload = {}
+                payload.update(
+                    {
+                        "success": True,
+                        "job_id": job_id,
+                        "status": payload.get(
+                            "status",
+                            rec.status.title() if rec is not None else "Unknown",
+                        ),
+                        "cached": True,
+                        "seconds_until_fresh": remaining,
+                        "message": (
+                            f"Cached status. Fresh check available in {remaining}s. "
+                            "Do other work first."
+                        ),
+                    }
+                )
+                return ToolResult(
+                    status="success",
+                    content=json.dumps(payload, ensure_ascii=False),
+                )
+
+        try:
+            result = await asyncio.to_thread(self._execute, arguments)
+        except Exception as exc:
+            self.logger.error("Tool %s failed: %s", self.name, exc, exc_info=True)
+            return f"Error: {exc}"
+
+        normalized = normalize_tool_result(result)
+        if registry is not None and action in ("submit", "poll", "download"):
+            normalized = self._update_registry(
+                registry,
+                action,
+                arguments,
+                normalized,
+            )
+
+        return normalized
+
+    def _update_registry(
+        self,
+        registry: JobRegistry,
+        action: str,
+        arguments: dict[str, Any],
+        result: ToolResult,
+    ) -> ToolResult:
+        """Update the in-memory registry after a successful tool call."""
+        if result.status == "error":
+            return result
+
+        try:
+            data = json.loads(result.content)
+        except (json.JSONDecodeError, TypeError):
+            return result
+
+        job_id = str(data.get("job_id", arguments.get("job_id", "")))
+        if not job_id:
+            return result
+
+        if action == "submit":
+            registry.register(job_id, job_name=str(arguments.get("job_name", "")))
+            return result
+
+        if action == "download":
+            registry.update_download(job_id)
+            return result
+
+        if action != "poll":
+            return result
+
+        status_name = str(data.get("status", "unknown")).lower()
+        if status_name == "finished":
+            reg_status = "finished"
+        elif status_name == "failed":
+            reg_status = "failed"
+        else:
+            reg_status = "running"
+
+        registry.update_poll(job_id, status=reg_status, result=result.content)
+
+        if reg_status != "running":
+            return result
+
+        rec = registry.get(job_id)
+        if rec is None:
+            return result
+
+        interval = next_interval(rec.poll_count - 1)
+        data["next_check_seconds"] = interval
+        data["message"] = (
+            f'Job is {data.get("status", "Running")}. '
+            f"Suggested next check in {interval}s. "
+            "Continue other work before polling again."
+        )
+        updated = ToolResult(
+            status=result.status,
+            content=json.dumps(data, ensure_ascii=False),
+            payload=result.payload,
+            meta=result.meta,
+        )
+        rec.last_result = updated.content
+        return updated
 
     def _log_request_context(
         self,
