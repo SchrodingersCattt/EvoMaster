@@ -10,7 +10,7 @@ questions:
     file (.hkl) and the data-collection summary (.p4p), the agent must determine the
     space group, solve the structure, refine it, and generate a validated CIF with
     no A-level checkCIF alerts.
-  human_prompt_seed: '文件 `A23050101A0735.hkl` 和 `A23050101A0735.p4p` 是一个有机铁配合物在 293 K
+  human_prompt_seed: '文件 `A23050101A0735.hkl` 和 `A23050101A0735.p4p` 是一个有机-无机杂化硝普盐在 293 K
     下采集的单晶 X 射线衍射数据（已经过数据还原）。请完成以下工作：
 
     1. 根据 .p4p 文件中的晶胞参数和系统消光规律，确定空间群；
@@ -57,9 +57,10 @@ questions:
     value: 1.048
     tolerance: 0.1
     unit: dimensionless
-  - key: space_group
-    value: P21
-    tolerance: null
+  - key: space_group_number
+    value: 4
+    tolerance: 0
+    unit: IT_number
   - key: cell_volume
     value: 1001.05
     tolerance: 5.0
@@ -96,11 +97,11 @@ questions:
     axis: correctness
     verify: numerical_range
     weight: 1.0
-  - id: space_group
-    criterion: The agent correctly identifies the space group as P2₁ (monoclinic, No.
-      4) and reports it in the answer or CIF.
+  - id: space_group_number
+    criterion: The agent correctly identifies the space group number as 4 (P2₁, monoclinic).
+      The answer or CIF must report space group No. 4.
     axis: correctness
-    verify: llm_binary_judge
+    verify: numerical_range
     weight: 1.5
   - id: cell_volume
     criterion: Refined unit cell volume is within tolerance of 1001.05 Å³.
@@ -143,7 +144,7 @@ questions:
     summary (.p4p), the agent must determine the space group, solve the structure,
     refine it with disorder modeling, and generate a validated CIF with no A-level
     checkCIF alerts.
-  human_prompt_seed: '文件 `A23050102A0375.hkl` 和 `A23050102A0375.p4p` 是一个有机铁配合物在 385 K
+  human_prompt_seed: '文件 `A23050102A0375.hkl` 和 `A23050102A0375.p4p` 是一个有机-无机杂化硝普盐在 385 K
     下采集的单晶 X 射线衍射数据（已经过数据还原）。该高温相中阳离子存在取向无序。请完成以下工作：
 
     1. 根据 .p4p 文件中的晶胞参数和系统消光规律，确定空间群；
@@ -191,9 +192,10 @@ questions:
     value: 1.022
     tolerance: 0.1
     unit: dimensionless
-  - key: space_group
-    value: P21
-    tolerance: null
+  - key: space_group_number
+    value: 4
+    tolerance: 0
+    unit: IT_number
   - key: cell_volume
     value: 1025.98
     tolerance: 5.0
@@ -230,11 +232,11 @@ questions:
     axis: correctness
     verify: numerical_range
     weight: 1.0
-  - id: space_group
-    criterion: The agent correctly identifies the space group as P2₁ (monoclinic, No.
-      4) and reports it in the answer or CIF.
+  - id: space_group_number
+    criterion: The agent correctly identifies the space group number as 4 (P2₁, monoclinic).
+      The answer or CIF must report space group No. 4.
     axis: correctness
-    verify: llm_binary_judge
+    verify: numerical_range
     weight: 1.5
   - id: cell_volume
     criterion: Refined unit cell volume is within tolerance of 1025.98 Å³.
