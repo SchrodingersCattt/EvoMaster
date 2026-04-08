@@ -144,12 +144,6 @@ Output: `neb_band.pdf`, `result.json` (forward/reverse barrier in eV)
 6. Read `result.json` and output files from `result_dir`
 7. Analyze results, iterate if needed
 
-### Troubleshooting Bohrium job failures
-- **No output / empty result**: verify the image has all required packages. The default DPA image (`registry.dp.tech/dptech/dpa-calculator:f7835422`) includes deepmd-kit, ASE, phonopy, pymatgen. If you need MACE/SevenNet/MatterSim, check with `Bohrium(action="list_images", keyword="lambench")`.
-- **ModuleNotFoundError**: prepend `pip install <package> &&` to the command, or activate the venv: `source /mcp_server/dpa/.venv/bin/activate && pip install <pkg> && python ...`.
-- **Job fails silently (no log file)**: the script likely crashed on import. Test imports first: `python -c "from _calculator import build_calculator; print('ok')" && python script.py`.
-- **Maximum retries**: do NOT submit more than 2 Bohrium jobs for the same task. If both fail, diagnose the root cause (wrong image, missing files, incompatible model) rather than blindly resubmitting.
-
 ## Output Files
 
 All scripts produce a `result.json` with key numerical results. Additional outputs:
