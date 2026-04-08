@@ -96,9 +96,7 @@ class JobRegistry:
     def pending_jobs(self) -> list[JobRecord]:
         """Return jobs in submitted or running state."""
         return [
-            rec
-            for rec in self._jobs.values()
-            if rec.status in ("submitted", "running")
+            rec for rec in self._jobs.values() if rec.status in ("submitted", "running")
         ]
 
     def all_jobs(self) -> list[JobRecord]:

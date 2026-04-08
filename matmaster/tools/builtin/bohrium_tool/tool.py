@@ -505,7 +505,9 @@ class BohriumTool(BuiltinTool):
             # Confirm failure/unknown before reporting terminal status
             if code in _FAILURE_CODES or code not in (*_RUNNING_CODES, _SUCCESS_CODE):
                 code, _, detail_data = confirm_terminal_status(
-                    ctx, job_id=job_id, detail_data=detail_data,
+                    ctx,
+                    job_id=job_id,
+                    detail_data=detail_data,
                 )
 
             status_name = _STATUS_MAP.get(code, f'Unknown({code})')
@@ -711,7 +713,11 @@ class BohriumTool(BuiltinTool):
                     if entry:
                         version_list.append(entry)
 
-                result: dict[str, Any] = {'id': img_id, 'name': name, 'versions': version_list}
+                result: dict[str, Any] = {
+                    'id': img_id,
+                    'name': name,
+                    'versions': version_list,
+                }
                 if description:
                     result['description'] = description
                 return result

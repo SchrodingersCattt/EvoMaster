@@ -158,7 +158,9 @@ class TestToolProtocolGuardrailsIntegration:
         async for _event in kernel.run_stream(spec, "run test"):
             pass
 
-        second_call_kwargs = mock_client.chat.completions.create.await_args_list[1].kwargs
+        second_call_kwargs = mock_client.chat.completions.create.await_args_list[
+            1
+        ].kwargs
         assistant_turn = second_call_kwargs["messages"][2]
 
         assert assistant_turn["role"] == "assistant"

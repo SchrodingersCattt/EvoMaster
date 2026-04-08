@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 
 from matmaster.tools.builtin.bohrium_tool.registry import (
-    JobRecord,
     JobRegistry,
     classify_poll_status,
     next_interval,

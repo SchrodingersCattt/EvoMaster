@@ -43,6 +43,10 @@ from matmaster.core.hooks import (
     UserPromptContext,
 )
 from matmaster.response_text import is_trivial_response_text
+from matmaster.types.message_normalization import (
+    normalize_messages_for_openai,
+    validate_openai_messages,
+)
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -52,10 +56,6 @@ from matmaster.types.messages import (
     ToolMessage,
     UserMessage,
     parse_tool_arguments,
-)
-from matmaster.types.message_normalization import (
-    normalize_messages_for_openai,
-    validate_openai_messages,
 )
 
 logger = logging.getLogger(__name__)
