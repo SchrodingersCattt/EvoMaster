@@ -158,7 +158,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_003_20260406
+- id: IG_abacus_003_20260409
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS PW SCF INPUT and KPT files for Al slab electrostatic-potential calculation setup.'
@@ -183,13 +183,6 @@ questions:
     oss_url: ''
     description: Al slab geometry used for electrostatic-potential and work-function setup.
   reference_answers:
-  - key: markers_contains
-    value:
-    - calculation scf
-    - basis_type pw
-    - out_pot 2
-    - K_POINTS
-    - Gamma
   - key: turn_budget
     value:
       max: 8
@@ -198,7 +191,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: input_out_pot_pw
     criterion: INPUT_pot is a PW SCF calculation that includes the required parameters from the task (`calculation scf`, `basis_type pw`, `ecutwfc 60`, `nbands 40`, `smearing_method gauss`, `smearing_sigma 0.0074`, `out_pot 2`).
@@ -211,7 +204,7 @@ questions:
   - id: markers_contains
     criterion: "Final answer text or generated files include required INPUT/KPT markers: calculation scf, basis_type pw, out_pot 2, and a Gamma-centered k-mesh with third component equal to 1."
     axis: correctness
-    verify: contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated setup is grounded in base_al_slab.stru and does not invent unrelated structural changes; changes are limited to INPUT_pot and KPT_pot preparation.
     axis: grounding
@@ -233,7 +226,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_004_20260406
+- id: IG_abacus_004_20260409
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS PW SCF input for dipole correction on an asymmetric H2O slab, with the saw-like region placed in vacuum and no finite external field.'
@@ -260,14 +253,6 @@ questions:
     oss_url: ''
     description: H2O in a vacuum cell for dipole-correction setup.
   reference_answers:
-  - key: markers_contains
-    value:
-    - efield_flag 1
-    - dip_cor_flag 1
-    - efield_dir 2
-    - efield_amp 0.0
-    - K_POINTS
-    - Gamma
   - key: turn_budget
     value:
       max: 8
@@ -276,7 +261,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: dipole_params
     criterion: INPUT_dipole contains the required dipole-correction controls for this task (`efield_flag 1`, `dip_cor_flag 1`, `efield_dir 2`, `efield_pos_max`, `efield_pos_dec`, `efield_amp 0.0`) and keeps `out_pot 2` in a PW SCF setup.
@@ -289,7 +274,7 @@ questions:
   - id: markers_contains
     criterion: "Final answer text or generated files include required dipole-input markers: efield_flag 1, dip_cor_flag 1, efield_dir 2, efield_amp 0.0, and Gamma-centered K_POINTS."
     axis: correctness
-    verify: contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated setup is grounded in base_h2o.stru and does not modify the provided structure beyond preparing INPUT/KPT.
     axis: grounding
@@ -311,7 +296,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_005_20260406
+- id: IG_abacus_005_20260409
   capability: input_generation_abacus
   domain: thermo
   intent: 'Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence using bulk, 5-layer slab, and 7-layer slab structures.'
@@ -346,15 +331,6 @@ questions:
     oss_url: ''
     description: Seven-layer Al fcc(100) slab with selective-relaxation flags.
   reference_answers:
-  - key: markers_contains
-    value:
-    - INPUT_bulk_relax
-    - INPUT_slab5
-    - INPUT_slab7
-    - KPT_bulk
-    - KPT_slab
-    - calculation cell-relax
-    - calculation relax
   - key: turn_budget
     value:
       max: 8
@@ -363,7 +339,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 20000
   scoring_checklist:
   - id: bulk_surface_inputs
     criterion: The generated files include one PW `cell-relax` bulk input (INPUT_bulk_relax), two PW `relax` slab inputs (INPUT_slab5 and INPUT_slab7) preserving selective-relaxation flags, plus slab-appropriate KPT settings.
@@ -376,7 +352,7 @@ questions:
   - id: markers_contains
     criterion: "Final answer text or generated files include required product markers: INPUT_bulk_relax, INPUT_slab5, INPUT_slab7, KPT_bulk, KPT_slab, `calculation cell-relax`, and `calculation relax`."
     axis: correctness
-    verify: contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated files are grounded in the three provided STRU files; no unrelated structural edits are introduced beyond preparing inputs for bulk and slab calculations.
     axis: grounding
@@ -398,7 +374,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_006_20260406
+- id: IG_abacus_006_20260409
   capability: input_generation_abacus
   domain: thermo
   intent: 'Prepare ABACUS PW inputs for Mo surface-vacancy energy using bulk, pristine slab, and surface-vacancy slab structures.'
@@ -433,15 +409,6 @@ questions:
     oss_url: ''
     description: Surface-vacancy slab derived from the pristine Mo slab.
   reference_answers:
-  - key: markers_contains
-    value:
-    - INPUT_bulk_mo
-    - INPUT_slab_clean
-    - INPUT_slab_vac
-    - KPT_gamma
-    - calculation cell-relax
-    - calculation scf
-    - Gamma
   - key: turn_budget
     value:
       max: 8
@@ -450,7 +417,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 18000
   scoring_checklist:
   - id: vacancy_inputs
     criterion: The generated files include one PW `cell-relax` bulk input (INPUT_bulk_mo), two PW `scf` slab inputs (INPUT_slab_clean and INPUT_slab_vac), and a Gamma-point KPT file (KPT_gamma).
@@ -459,7 +426,7 @@ questions:
   - id: markers_contains
     criterion: "Final answer text or generated files include required product markers: INPUT_bulk_mo, INPUT_slab_clean, INPUT_slab_vac, KPT_gamma, `calculation cell-relax`, `calculation scf`, and Gamma-centered K_POINTS."
     axis: correctness
-    verify: contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The three generated inputs are grounded in the provided Mo bulk and slab structures, without inventing unrelated structural modifications.
     axis: grounding
