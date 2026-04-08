@@ -5,12 +5,6 @@ skill_type: mcp-loader
 mcp_server: mat_sg
 ---
 
-## General deliverable rules
-
-- **File naming**: save the primary deliverable with the **exact filename** the task expects (e.g. `gamma_alumina.cif`, not `gamma_alumina_pre_relax.cif`). If you also need intermediate files (pre-relaxation, draft), save those with a distinct suffix (`_draft`, `_pre_relax`) but **always** keep the primary-name file present in the workspace.
-- **Save early for long tasks**: when the workflow includes a time-consuming step (Bohrium job, relaxation, large batch), save the constructed structure under its primary deliverable filename **before** starting the long step. If the step succeeds, overwrite with the improved version. This ensures the deliverable exists even on timeout.
-- **Final-answer textual report**: always include a structured text summary in your final response — composition, cell parameters, atom count, key distances/angles, verification results. Delivering bare filenames without a textual report loses scoring criteria.
-
 ## build_surface_slab
 
 - **Binary compounds** (ZnS, ZnO, GaAs, …): the `layers` parameter counts **cation-anion bilayers** (each bilayer = 2 atomic planes). A task requesting "N-layer slab" means pass `layers=N`. After building, verify: distinct z-planes = 2 × N, atom count = layers × atoms_per_bilayer × supercell multiplier.
@@ -69,8 +63,6 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
 - For each replica, explain: (a) which sites are disordered and how, (b) how the ordered config was chosen (valence/charge balance/connectivity), (c) what changed. A bare filename list without chemical reasoning = fail.
 - **Chemical/physical grounding is MANDATORY**: for every disordered site, explain the **bonding environment**, **valence state**, **coordination geometry**, or **crystallographic reason** that makes that disorder physically meaningful. Your explanation MUST go beyond listing site labels and occupancy numbers — you must discuss at least ONE of: (a) why the disordered species can substitute for each other (ionic radius, charge, electronegativity), (b) what bonds/coordination surround the site (e.g., "tetrahedral coordination by 4 O²⁻ at 1.95 Å"), (c) how the ordered replica preserves charge neutrality and valence. **Bad** example (will fail): "Site 8f has 0.6 Mn and 0.4 Fe occupancy, so we chose Mn." **Good** example: "Site 8f is octahedrally coordinated by 6 O²⁻ (M–O 2.05–2.12 Å). Mn²⁺ (0.83 Å) and Fe²⁺ (0.78 Å) have similar ionic radii and both prefer octahedral coordination, enabling random substitution. The ordered replica selects Mn on all 8f sites, preserving the +2 charge balance with the surrounding oxide framework." Always tie back to bonding, coordination, or charge balance.
 - On timeout → fall back to pymatgen `OrderDisorderedStructureTransformation`.
-- **No redundant MCP calls**: call `generate_ordered_replicas` exactly **once** per structure. If the call succeeds, do NOT repeat it. If it times out for one structure, switch to the pymatgen fallback immediately — do NOT retry the same MCP call, as retries are penalized.
-- **Grounding self-check**: before writing the final answer, re-read your per-structure explanations and verify that EVERY disordered site mentions at least one of: bonding environment, coordination geometry, ionic radius comparison, or charge-balance reasoning. If any site only states occupancy numbers without chemistry, add the missing context. This is a hard pass/fail criterion.
 
 ## add_hydrogens / passivation
 
@@ -84,13 +76,6 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
   4. Re-check coordination. Iterate until ALL surface Si reach coordination = 4.
 - **Verification script** (mandatory): after saving the passivated structure, re-read it and print per-atom coordination for every Si atom. Flag any Si with coordination ≠ 4. **Separately verify top-surface and bottom-surface atoms.** The final answer MUST report mean Si coordination and confirm it equals 4.0.
 - Save the passivated structure, then verify by re-reading and checking. Report: total H added, mean Si-H bond length, per-atom coordination check, top/bottom surface H counts, and confirmation that all surface Si atoms have coordination = 4.
-- **Two-surface sanity gate (CRITICAL)**: the passivation script MUST process top and bottom surfaces as two separate groups. Pseudocode:
-  1. `top_Si = [a for a in Si_atoms if a.z > z_max - threshold]`
-  2. `bot_Si = [a for a in Si_atoms if a.z < z_min + threshold]`
-  3. For EACH group independently: count under-coordinated atoms, add H, verify CN=4.
-  4. Print separate summaries: "Top: added N_top H to M_top Si" and "Bottom: added N_bot H to M_bot Si".
-  If N_top or N_bot is 0 for a multi-layer slab, the passivation is incomplete — re-examine before saving. Both counts MUST be > 0.
-- **Verification as a separate step**: after the passivation script writes the file, run a **separate** verification script (or second Bash call) that re-reads the saved file and independently checks per-atom coordination. Do NOT rely only on the construction script's own output — errors in the construction logic will propagate to its own checks.
 
 ## Geometry verification (after any structure build)
 
