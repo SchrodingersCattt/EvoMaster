@@ -5,55 +5,6 @@ version: v5
 capability: co2rr_reproduction
 domain: mech
 questions:
-- id: CR_SC_Fe001_20260406
-  capability: co2rr_reproduction
-  domain: struct
-  intent: Build Fe(001) surface slab with specified thickness and 2x2x1 supercell
-    per reproduction doc section 3.1.1.
-  human_prompt_seed: '纯金属 Fe 的 (001) 切面 slab 建模：至少 3 层原子、2×2×1 扩胞；真空层足够避免镜像相互作用（建议 ≥15 Å），
-    结构在 z 方向居中。输出 POSCAR 或 CIF，并简要说明 Miller 指数、层数、扩胞与真空厚度。
-
-    '
-  tags:
-  - co2rr_repro
-  - surface_slab
-  - fe
-  - '001'
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: turn_budget
-    value: &cr_turn_std
-      max: 22
-  - key: duration_budget
-    value: &cr_dur_std
-      max: 7200000
-  - key: token_budget_total
-    value: &cr_tok_struct
-      max: 12000
-  scoring_checklist:
-  - id: deliverables_check
-    criterion: 输出包含可下载/可引用的 slab 结构文件，并明确给出 (001) Miller 指数、层数不少于 3、2×2×1（或等价）扩胞与真空厚度。
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: 几何设定与交付物一致（非泛泛描述）；若使用构建工具，最终结构应与所述参数一致。仅依据最终答案与命名文件判断。
-    axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within a generous benchmark ceiling (tunable after calibration).
-    axis: efficiency
-    verify: token_budget
 - id: CR_SC_ZnPd011_20260406
   capability: co2rr_reproduction
   domain: struct
@@ -75,11 +26,14 @@ questions:
   data_files: []
   reference_answers:
   - key: turn_budget
-    value: *cr_turn_std
+    value: &cr_turn_std
+      max: 22
   - key: duration_budget
-    value: *cr_dur_std
+    value: &cr_dur_std
+      max: 7200000
   - key: token_budget_total
-    value: *cr_tok_struct
+    value: &cr_tok_struct
+      max: 12000
   scoring_checklist:
   - id: mp_and_miller
     criterion: 答案明确使用 mp-1103252 为体相来源，(011) 切面，3 层、2×2×1 扩胞，并提供结构文件。
