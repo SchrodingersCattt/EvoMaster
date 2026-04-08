@@ -87,3 +87,49 @@ def test_validate_base_messages_rejects_orphan_tool_after_assistant_text() -> No
 
     with pytest.raises(ValueError, match="tool sequence"):
         validate_base_messages(messages)
+
+
+def test_validate_base_messages_rejects_tool_id_mismatch() -> None:
+    messages = [
+        SystemMessage(content="sys"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})],
+        ),
+        ToolMessage(tool_call_id="tc-2", tool_name="bash", content="result"),
+    ]
+
+    with pytest.raises(ValueError, match="tool sequence"):
+        validate_base_messages(messages)
+
+
+def test_validate_base_messages_rejects_duplicate_tool_results() -> None:
+    messages = [
+        SystemMessage(content="sys"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[
+                ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"}),
+                ToolCallData(id="tc-2", name="bash", arguments={"cmd": "ls"}),
+            ],
+        ),
+        ToolMessage(tool_call_id="tc-1", tool_name="bash", content="result-1"),
+        ToolMessage(tool_call_id="tc-1", tool_name="bash", content="result-2"),
+    ]
+
+    with pytest.raises(ValueError, match="tool sequence"):
+        validate_base_messages(messages)
+
+
+def test_validate_base_messages_rejects_unclosed_turn_before_new_assistant() -> None:
+    messages = [
+        SystemMessage(content="sys"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})],
+        ),
+        AssistantMessage(content="next turn"),
+    ]
+
+    with pytest.raises(ValueError, match="tool sequence"):
+        validate_base_messages(messages)

@@ -81,26 +81,41 @@ def validate_base_messages(messages: list[Message]) -> None:
 
 
 def _has_invalid_tool_sequence(messages: list[Message]) -> bool:
-    seen_assistant_with_tool_calls = False
-    expecting_tool_messages = 0
+    i = 0
+    while i < len(messages):
+        message = messages[i]
 
-    for message in messages:
-        if isinstance(message, AssistantMessage):
-            tool_calls = message.tool_calls or []
-            if tool_calls:
-                seen_assistant_with_tool_calls = True
-                expecting_tool_messages = len(tool_calls)
-            else:
-                expecting_tool_messages = 0
-            continue
-
-        if isinstance(message, ToolMessage):
-            if expecting_tool_messages <= 0:
+        if not isinstance(message, AssistantMessage):
+            if isinstance(message, ToolMessage):
                 return True
-            expecting_tool_messages -= 1
+            i += 1
             continue
 
-        if expecting_tool_messages > 0:
+        declared_ids = [
+            str(tool_call.id)
+            for tool_call in (message.tool_calls or [])
+            if str(tool_call.id)
+        ]
+        if not declared_ids:
+            if i + 1 < len(messages) and isinstance(messages[i + 1], ToolMessage):
+                return True
+            i += 1
+            continue
+
+        seen_tool_ids: set[str] = set()
+        j = i + 1
+        while j < len(messages) and isinstance(messages[j], ToolMessage):
+            tool_id = str(messages[j].tool_call_id or "")
+            if tool_id in seen_tool_ids:
+                return True
+            if tool_id not in declared_ids:
+                return True
+            seen_tool_ids.add(tool_id)
+            j += 1
+
+        if len(seen_tool_ids) != len(declared_ids):
             return True
 
-    return any(isinstance(message, ToolMessage) for message in messages) and not seen_assistant_with_tool_calls
+        i = j
+
+    return False
