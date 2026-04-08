@@ -24,7 +24,7 @@ evaluation/question_bank/
 ├── safety_refusal/sr_general.yaml
 └── data/                                 # 题目输入数据文件（按题目 ID 子目录）
     ├── README.md
-    ├── BP_struct_001/
+    ├── BP_struct_002/
     └── ...
 ```
 
