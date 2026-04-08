@@ -249,6 +249,27 @@ class BohriumTool(BuiltinTool):
             '- When image or machine is unknown, call list_images / list_machines first.\n'
         )
 
+    _sandbox_catalog: ClassVar[dict[str, Any] | None] = None
+
+    @classmethod
+    def _load_sandbox_catalog(cls) -> dict[str, Any]:
+        if cls._sandbox_catalog is not None:
+            return cls._sandbox_catalog
+        config_path = Path(__file__).resolve().parents[4] / "config" / "config.yaml"
+        if not config_path.exists():
+            cls._sandbox_catalog = {}
+            return cls._sandbox_catalog
+        try:
+            import yaml
+
+            with open(config_path) as f:
+                raw = yaml.safe_load(f) or {}
+            cls._sandbox_catalog = (raw.get("bohrium") or {}).get("sandbox") or {}
+        except Exception:
+            logger.warning("Failed to load bohrium sandbox catalog", exc_info=True)
+            cls._sandbox_catalog = {}
+        return cls._sandbox_catalog
+
     def _build_context(self, *, require_project: bool = False) -> BohriumContext:
         return build_bohrium_context(
             session=self._session,
@@ -657,7 +678,36 @@ class BohriumTool(BuiltinTool):
         ctx: BohriumContext | None = None
         try:
             ctx = self._build_context()
-            self._log_request_context(action='list_images', ctx=ctx, sandbox=None)
+
+            # Sandbox: use hardcoded catalog when available, else fall back to API
+            catalog = self._load_sandbox_catalog() if ctx.sandbox else {}
+            sandbox_images = catalog.get("images") or []
+            if sandbox_images:
+                self._log_request_context(action='list_images', ctx=ctx, sandbox=True)
+                filtered = [
+                    img
+                    for img in sandbox_images
+                    if not keyword
+                    or keyword in str(img.get('name', '')).lower()
+                    or keyword in str(img.get('description', '')).lower()
+                ]
+                results = filtered[:max_results]
+                return ToolResult(
+                    status='success',
+                    content=json.dumps(
+                        {
+                            'success': True,
+                            'keyword': keyword,
+                            'total_found': len(filtered),
+                            'returned': len(results),
+                            'images': results,
+                            'source': 'sandbox_catalog',
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+
+            self._log_request_context(action='list_images', ctx=ctx, sandbox=False)
             data = _get(
                 ctx.base_url,
                 '/openapi/v2/image/public',
@@ -757,7 +807,39 @@ class BohriumTool(BuiltinTool):
         ctx: BohriumContext | None = None
         try:
             ctx = self._build_context()
-            self._log_request_context(action='list_machines', ctx=ctx, sandbox=None)
+
+            # Sandbox: use hardcoded catalog when available, else fall back to API
+            catalog = self._load_sandbox_catalog() if ctx.sandbox else {}
+            sandbox_machines = (catalog.get("machines") or {}).get(choose_type) or []
+            if sandbox_machines:
+                self._log_request_context(action='list_machines', ctx=ctx, sandbox=True)
+                if keyword:
+                    filtered = [
+                        m
+                        for m in sandbox_machines
+                        if keyword
+                        in str(m.get('skuEnName') or m.get('skuName') or '').lower()
+                    ]
+                else:
+                    filtered = list(sandbox_machines)
+                results = filtered[:max_results]
+                return ToolResult(
+                    status='success',
+                    content=json.dumps(
+                        {
+                            'success': True,
+                            'type': choose_type,
+                            'keyword': keyword,
+                            'total_found': len(filtered),
+                            'returned': len(results),
+                            'machines': results,
+                            'source': 'sandbox_catalog',
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+
+            self._log_request_context(action='list_machines', ctx=ctx, sandbox=False)
             data = _get(
                 ctx.base_url,
                 '/openapi/v1/calc/list',
