@@ -19,9 +19,7 @@ from evaluation.devshell_agent.config_state import (
 )
 from evaluation.devshell_agent.git_iteration import (
     append_iteration_head,
-    git_reset_hard,
     git_rev_parse_head,
-    head_at_iteration_start,
 )
 
 
@@ -40,7 +38,6 @@ class AgentLoopConfig:
     permission_mode: str
     max_sdk_turns: int
     extra_instruction: str = ""
-    git_reset_on_regression: bool = True
     eval_ingest_submit_each_iteration: bool = True
     eval_ingest_submit_timeout: float = 120.0
     enable_checklist_agent: bool = True
@@ -410,7 +407,6 @@ class DevshellAgentLoop:
                 for k, v in asdict(cfg.defaults).items()
             },
             "extra_instruction": cfg.extra_instruction,
-            "git_reset_on_regression": cfg.git_reset_on_regression,
             "eval_ingest_submit_each_iteration": cfg.eval_ingest_submit_each_iteration,
             "eval_ingest_submit_timeout": cfg.eval_ingest_submit_timeout,
             "enable_checklist_agent": cfg.enable_checklist_agent,
@@ -598,36 +594,6 @@ class DevshellAgentLoop:
                     self._write_iteration_history(it=it, state=state, outcome=last)
                     score = int(last.get("macro_mean_0_100", 0))
                     met = bool(last.get("target_met"))
-
-                    if cfg.git_reset_on_regression and it > 1:
-                        prev_rows = [
-                            o
-                            for o in state.outcomes
-                            if int(o.get("iteration_index", -1)) == it - 1
-                        ]
-                        if prev_rows:
-                            prev_score = int(prev_rows[-1].get("macro_mean_0_100", 0))
-                            if score < prev_score:
-                                saved = head_at_iteration_start(cfg.session_dir, it)
-                                if saved:
-                                    ok, msg = git_reset_hard(
-                                        repo_root=cfg.repo_root, rev=saved
-                                    )
-                                    self._log_line(
-                                        f"git regression guard: iter {it} mean {score} "
-                                        f"< iter {it - 1} mean {prev_score}; "
-                                        f"reset --hard {saved[:7]}… -> "
-                                        f"{'ok' if ok else 'failed'} {msg}",
-                                        loop_log,
-                                    )
-                                    if not ok:
-                                        exit_code = 1
-                                else:
-                                    self._log_line(
-                                        f"warning: regression at iter {it} but no "
-                                        f"head_at_start recorded; skip auto reset",
-                                        loop_log,
-                                    )
 
                     if met or score >= cfg.target_mean_score:
                         self._log_line(
