@@ -168,6 +168,21 @@ class FullToolRunner:
                     await on_result(tc, tr)
                 continue
 
+            # 2. Reject unparseable tool-call arguments (_raw fallback)
+            if "_raw" in tc.arguments:
+                tr = ToolResult(
+                    status="error",
+                    content=(
+                        "Tool call arguments could not be parsed as valid JSON. "
+                        "Please simplify argument content and retry."
+                    ),
+                    meta={"layer": "tool_runner", "reason": "raw_fallback"},
+                )
+                results[idx] = (tc, tr)
+                if on_result:
+                    await on_result(tc, tr)
+                continue
+
             if self._hook_executor is not None:
                 pre_ctx = PreToolCallContext(
                     tool_name=tc.name,
