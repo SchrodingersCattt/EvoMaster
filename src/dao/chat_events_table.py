@@ -168,6 +168,87 @@ class ChatEventsTable(BaseTable):
                 conn.commit()
                 return cursor.rowcount > 0
 
+    def get_bohrium_events(self, session_id: str) -> list[dict]:
+        """Return paired Bohrium tool call/result events for registry rebuild."""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f'''
+                    SELECT type, content, created_at
+                    FROM {self.table_name}
+                    WHERE session_id = %s
+                      AND type IN ('tool_call', 'tool_result')
+                    ORDER BY created_at ASC, id ASC
+                    ''',
+                    (session_id,),
+                )
+                rows = cursor.fetchall()
+
+        calls: dict[str, dict] = {}
+        results: list[dict] = []
+
+        for row in rows:
+            try:
+                content = (
+                    json.loads(row['content'])
+                    if isinstance(row['content'], str)
+                    else row['content']
+                )
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            if not isinstance(content, dict) or content.get('name') != 'Bohrium':
+                continue
+
+            call_id = str(content.get('call_id') or content.get('id') or '')
+            if not call_id:
+                continue
+
+            if row['type'] == 'tool_call':
+                args = content.get('args', {})
+                if not isinstance(args, dict):
+                    args = {}
+                calls[call_id] = {
+                    'action': str(args.get('action') or ''),
+                    'job_name': str(args.get('job_name') or ''),
+                }
+                continue
+
+            if row['type'] != 'tool_result':
+                continue
+
+            call_info = calls.get(call_id, {})
+            action = call_info.get('action', '')
+            if not action:
+                continue
+
+            if content.get('status') == 'error':
+                continue
+
+            result_raw = content.get('result', '')
+            try:
+                result_data = (
+                    json.loads(result_raw)
+                    if isinstance(result_raw, str)
+                    else result_raw
+                )
+            except (json.JSONDecodeError, TypeError):
+                result_data = {}
+            if not isinstance(result_data, dict):
+                result_data = {}
+
+            results.append(
+                {
+                    'action': action,
+                    'job_id': str(result_data.get('job_id') or ''),
+                    'status': str(result_data.get('status') or ''),
+                    'job_name': call_info.get('job_name', ''),
+                    'cached': bool(result_data.get('cached', False)),
+                }
+            )
+
+        return results
+
 
 @lru_cache
 def get_chat_events_table() -> ChatEventsTable:

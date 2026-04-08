@@ -5,6 +5,7 @@ Phase 34 Plan 1 Task 2: ESIN-01, ESIN-04, ESIN-05.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -247,6 +248,50 @@ class TestBuildRuntimeFullToolRunner:
 
         assert topology.control_root == "/tmp/ctrl"
         assert topology.workspace_root == "/tmp/exec"
+
+    def test_build_runtime_seeds_bohrium_registry_from_run_meta(self) -> None:
+        from matmaster.core.exp import Exp
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context().model_copy(
+            update={
+                "run_meta": {
+                    "bohrium_rebuild_events": [
+                        {
+                            "action": "submit",
+                            "job_id": "job-1",
+                            "job_name": "alpha",
+                            "status": "Submitted",
+                            "cached": False,
+                        },
+                        {
+                            "action": "poll",
+                            "job_id": "job-1",
+                            "status": "Running",
+                            "cached": False,
+                        },
+                        {
+                            "action": "poll",
+                            "job_id": "job-1",
+                            "status": "Running",
+                            "cached": True,
+                        },
+                    ]
+                }
+            }
+        )
+
+        runtime = asyncio.run(exp.build_runtime(ctx))
+
+        registry = runtime.spec.tool_runner.state.get("bohrium_job_registry")
+        assert registry is not None
+        rec = registry.get("job-1")
+        assert rec is not None
+        assert rec.job_name == "alpha"
+        assert rec.status == "running"
+        assert rec.poll_count == 1
+        assert rec.last_polled_at == 0.0
 
 
 # ── ESIN-01: run_stream() yields events and runs cleanup ─
