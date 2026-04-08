@@ -407,6 +407,10 @@ class Exp:
 
         # 9. Assemble final spec with all v2 fields
         run_meta = getattr(ctx, "run_meta", {}) or {}
+        checkpoint_sink_factory = run_meta.get('checkpoint_sink_factory')
+        checkpoint_sink = None
+        if callable(checkpoint_sink_factory):
+            checkpoint_sink = checkpoint_sink_factory(spawn_id=spawn_id)
         spec = spec.model_copy(
             update={
                 'tool_catalog': catalog,
@@ -421,6 +425,8 @@ class Exp:
                     **spec.meta,
                     'task_id': run_meta.get('task_id', ''),
                     'session_id': run_meta.get('session_id', ''),
+                    'checkpoint_sink_factory': checkpoint_sink_factory,
+                    'checkpoint_sink': checkpoint_sink,
                 },
             }
         )

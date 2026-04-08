@@ -19,9 +19,12 @@ from matmaster.types.events import (
     ThoughtEvent,
 )
 from matmaster.types.messages import (
+    AssistantMessage,
     LLMResponse,
     StreamChunk,
+    SystemMessage,
     ToolCallData,
+    UserMessage,
 )
 from matmaster.types.runtime import AgentRuntimeSpec
 
@@ -180,6 +183,51 @@ class TrivialToolPreambleProvider:
         else:
             yield StreamChunk(content="done")
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+
+
+class _DurablePreflightCompactor:
+    """Compactor test double that emits one durable preflight event."""
+
+    def __init__(self) -> None:
+        self._event_sink = None
+        self.preflight_calls = 0
+        self.runtime_calls = 0
+        self.message_counts: list[int] = []
+
+    def update_message_count(self, count: int) -> None:
+        self.message_counts.append(count)
+
+    async def preflight_if_needed(self, messages: list[Any]) -> None:
+        from matmaster.types.events import ContextCompactionEvent
+
+        self.preflight_calls += 1
+        task_message = messages[-1]
+        messages[:] = [
+            messages[0],
+            SystemMessage(content="[Compacted Context]\nsummary"),
+            task_message,
+        ]
+        if self._event_sink is not None:
+            await self._event_sink(
+                ContextCompactionEvent(
+                    source="context_compactor",
+                    payload={
+                        "phase": "preflight",
+                        "strategy": "summary",
+                        "durability": "durable",
+                        "trigger_tokens": 1234,
+                        "retained_turns": 1,
+                        "checkpoint_attempted": False,
+                        "checkpoint_written": False,
+                        "failure_reason": None,
+                    },
+                )
+            )
+
+    async def compact_if_needed(
+        self, messages: list[Any], last_usage: dict[str, int], turn: int
+    ) -> None:
+        self.runtime_calls += 1
 
 
 # ── _stream_llm_items() tests ─────────────────────────────
@@ -727,3 +775,69 @@ class TestCancellationTokenSupport:
 
         with pytest.raises(_KernelStopRequested):
             await task
+
+
+class TestCheckpointAwareCompaction:
+    @pytest.mark.asyncio
+    async def test_kernel_preflight_calls_checkpoint_sink_for_durable_compaction(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = ContentOnlyProvider()
+        compactor = _DurablePreflightCompactor()
+        checkpoint_calls: list[dict[str, Any]] = []
+
+        async def checkpoint_sink(
+            *, payload: dict[str, Any], base_messages: list[dict[str, Any]]
+        ) -> None:
+            checkpoint_calls.append(
+                {
+                    "payload": payload,
+                    "base_messages": base_messages,
+                }
+            )
+
+        spec = _make_spec(provider=provider).model_copy(
+            update={
+                "compactor": compactor,
+                "meta": {
+                    "checkpoint_sink": checkpoint_sink,
+                },
+            }
+        )
+
+        kernel = AgentKernel()
+        events: list[Any] = []
+        async for event in kernel.run_stream(
+            spec,
+            "test task",
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        ):
+            events.append(event)
+
+        assert compactor.preflight_calls == 1
+        assert checkpoint_calls == [
+            {
+                "payload": {
+                    "phase": "preflight",
+                    "strategy": "summary",
+                    "durability": "durable",
+                    "trigger_tokens": 1234,
+                    "retained_turns": 1,
+                    "checkpoint_attempted": False,
+                    "checkpoint_written": False,
+                    "failure_reason": None,
+                },
+                "base_messages": [
+                    SystemMessage(
+                        content="[Compacted Context]\nsummary"
+                    ).model_dump(mode="json"),
+                    UserMessage(content="test task").model_dump(mode="json"),
+                ],
+            }
+        ]
+        assert any(getattr(event, "type", None) == "context_compaction" for event in events)
