@@ -430,6 +430,45 @@ class TestCompactorEventEmission:
 class TestToolTruncationFallback:
     """Tool result truncation when no old turns to compress."""
 
+    async def test_preflight_does_not_silently_tool_truncate_without_old_turns(
+        self,
+    ) -> None:
+        """Preflight must fail explicitly instead of using runtime tool_truncation."""
+        from matmaster.core.context_compactor import ContextCompactor
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=500, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        received: list = []
+
+        async def sink(event):
+            received.append(event)
+
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="task"),
+            AssistantMessage(
+                content="calling tools",
+                tool_calls=[ToolCallData(id="tc-0", name="bash", arguments={})],
+            ),
+            ToolMessage(
+                content="big result " + "A" * 4000,
+                tool_call_id="tc-0",
+                tool_name="bash",
+            ),
+        ]
+
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=sink
+        )
+
+        with pytest.raises(ValueError, match="Preflight compaction requires"):
+            await compactor.preflight_if_needed(msgs)
+
+        assert len(provider.calls) == 0
+        assert len(received) == 0
+
     async def test_truncates_when_no_compressible_turns(self) -> None:
         """1 turn with huge tool results -> falls back to tool_truncation."""
         from matmaster.core.context_compactor import ContextCompactor

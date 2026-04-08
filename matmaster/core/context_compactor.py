@@ -223,6 +223,11 @@ class ContextCompactor:
         compressible_start = task_idx + 1
         compressible_end = len(messages) - sum(len(t) for t in recent_turns)
         if compressible_end <= compressible_start:
+            if phase == "preflight":
+                raise ValueError(
+                    "Preflight compaction requires compressible old turns; "
+                    "tool_truncation is runtime-only"
+                )
             # No old turns to compress -- all turns are retained.
             # Fall back to truncating large tool results within retained
             # turns to prevent context overflow on the next LLM call.
