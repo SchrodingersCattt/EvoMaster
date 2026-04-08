@@ -76,7 +76,31 @@ def validate_base_messages(messages: list[Message]) -> None:
             "checkpoint base_messages must start with compacted SystemMessage"
         )
 
-    if any(isinstance(message, ToolMessage) for message in messages) and not any(
-        isinstance(message, AssistantMessage) for message in messages
-    ):
+    if _has_invalid_tool_sequence(messages):
         raise ValueError("tool sequence in checkpoint base_messages is invalid")
+
+
+def _has_invalid_tool_sequence(messages: list[Message]) -> bool:
+    seen_assistant_with_tool_calls = False
+    expecting_tool_messages = 0
+
+    for message in messages:
+        if isinstance(message, AssistantMessage):
+            tool_calls = message.tool_calls or []
+            if tool_calls:
+                seen_assistant_with_tool_calls = True
+                expecting_tool_messages = len(tool_calls)
+            else:
+                expecting_tool_messages = 0
+            continue
+
+        if isinstance(message, ToolMessage):
+            if expecting_tool_messages <= 0:
+                return True
+            expecting_tool_messages -= 1
+            continue
+
+        if expecting_tool_messages > 0:
+            return True
+
+    return any(isinstance(message, ToolMessage) for message in messages) and not seen_assistant_with_tool_calls

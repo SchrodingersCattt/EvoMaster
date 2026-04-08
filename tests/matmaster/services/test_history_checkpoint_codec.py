@@ -76,3 +76,14 @@ def test_validate_base_messages_rejects_invalid_tool_sequence() -> None:
 
     with pytest.raises(ValueError, match="tool sequence"):
         validate_base_messages(messages)
+
+
+def test_validate_base_messages_rejects_orphan_tool_after_assistant_text() -> None:
+    messages = [
+        SystemMessage(content="sys"),
+        AssistantMessage(content="hello"),
+        ToolMessage(tool_call_id="tc-1", tool_name="bash", content="result"),
+    ]
+
+    with pytest.raises(ValueError, match="tool sequence"):
+        validate_base_messages(messages)
