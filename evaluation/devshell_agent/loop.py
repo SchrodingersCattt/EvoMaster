@@ -384,7 +384,7 @@ class DevshellAgentLoop:
 
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
-2. 读取 **run_devshell_eval** 返回的**脱敏摘要**，以其中的 `macro_mean_0_100` 与 `task_scores` 作为本轮判断依据。不要自行读取 `evaluation/**` 或原始 `score_reason`。
+2. 读取 **run_devshell_eval** 返回的**脱敏摘要**，以其中的 `macro_mean_0_100` 与 `task_scores` 作为本轮判断依据。除 **main_read_text / main_glob_paths / main_grep_text** 允许的 ``evaluation/devshell_agent_history/`` 整目录外，不要自行读取 `evaluation/**` 其它路径或原始 `score_reason`。
 3. 若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**（优先填写 **failure_buckets**、**capabilities_affected**；**allowed_evidence_paths** 尽量用会话级路径如 ``eval_runs/iter_XX/raw_runs.jsonl``，避免逐题 workspace）；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
 4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（主 Agent 自身通常为空）；在 `rationale` 中总结本轮分流、子 Agent 结果与下一步。
 {extra_block}

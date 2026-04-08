@@ -8,8 +8,18 @@ from pathlib import Path
 # Human-reviewed proposals go next to the session (see ``PROPOSED_MATMASTER_EXPS_CHANGES_NAME``).
 MATMASTER_EXPS_PREFIX = "matmaster/exps"
 
-# Written under ``evaluation/devshell_agent_history/<session>/`` by the optimization agent only.
+# Per-run snapshots live under ``evaluation/<segment>/<session_name>/``; ``index.jsonl`` is under ``<segment>/``.
+DEVSHELL_AGENT_HISTORY_SEGMENT = "devshell_agent_history"
+
+# Optimization agent writes this filename under the **results** session dir only (human review).
 PROPOSED_MATMASTER_EXPS_CHANGES_NAME = "proposed_matmaster_exps_changes.md"
+
+
+def devshell_main_agent_history_root(repo_root: Path) -> Path:
+    """Read-only root for the DevShell main agent: entire ``evaluation/devshell_agent_history/`` tree."""
+    return (
+        repo_root.resolve() / "evaluation" / DEVSHELL_AGENT_HISTORY_SEGMENT
+    ).resolve()
 
 
 def is_under(path: Path, root: Path) -> bool:
