@@ -71,8 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="NAME",
         help=(
-            "matmaster/exps/{NAME}.toml. Omit or `devshell`: use `direct` (same as "
-            "production). Any other NAME loads that exp file."
+            "matmaster/exps/{NAME}.toml. Omit --exp to load `direct` (same as production)."
         ),
     )
     common.add_argument(
@@ -211,12 +210,12 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     exp_override = None
     if exp_opt is not None or not args.config:
         try:
-            if not exp_opt or exp_opt == "devshell":
+            if not exp_opt:
                 exp_override = load_exp_config("direct")
             else:
                 exp_override = load_exp_config(exp_opt)
         except (FileNotFoundError, ValueError) as e:
-            label = exp_opt or "devshell"
+            label = exp_opt or "direct"
             print(f"Error loading exp '{label}': {e}", file=sys.stderr)
             sys.exit(1)
 
