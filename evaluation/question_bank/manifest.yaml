@@ -134,4 +134,10 @@ banks:
     capability: "workflow_orchestration"
     questions: 5
 
-# Total: 70 questions across 19 bank files
+  # --- Thermal / thermo-structural data fitting ---
+
+  - path: "data_fitting/df_thermo.yaml"
+    capability: "property_prediction"
+    questions: 1
+
+# Total: 71 questions across 20 bank files
