@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -85,15 +86,7 @@ def build_bohrium_context(*, session, require_project: bool = False) -> BohriumC
             "Bohrium project ID unavailable. Provide via session or BOHRIUM_PROJECT_ID."
         )
     if not ctx.base_url:
-        ctx = BohriumContext(
-            access_key=ctx.access_key,
-            project_id=ctx.project_id,
-            base_url=get_bohrium_base_url(),
-            credential_source=ctx.credential_source,
-            sandbox=ctx.sandbox,
-            user_id=ctx.user_id,
-            user_no=ctx.user_no,
-        )
+        ctx = replace(ctx, base_url=get_bohrium_base_url())
     return ctx
 
 
@@ -445,11 +438,9 @@ class BohriumTool(BuiltinTool):
         disk_size = int(args.get('disk_size', 50))
 
         ctx: BohriumContext | None = None
-        sandbox: bool | str = 'n/a'
         try:
             ctx = self._build_context(require_project=True)
-            sandbox = ctx.sandbox
-            self._log_request_context(action='submit', ctx=ctx, sandbox=sandbox)
+            self._log_request_context(action='submit', ctx=ctx, sandbox=ctx.sandbox)
             job_id, bohr_job_id = submit_job_via_runtime(
                 input_dir=str(input_dir),
                 image=str(image),
@@ -468,7 +459,7 @@ class BohriumTool(BuiltinTool):
                         'job_id': job_id,
                         'bohr_job_id': bohr_job_id,
                         'status': 'Submitted',
-                        'use_sandbox': sandbox,
+                        'use_sandbox': ctx.sandbox,
                     },
                     ensure_ascii=False,
                 ),
@@ -479,7 +470,7 @@ class BohriumTool(BuiltinTool):
             logger.error(
                 'bohrium submit failed action=submit base_url=%s sandbox=%s error=%s',
                 ctx.base_url if ctx is not None else '',
-                sandbox,
+                ctx.sandbox if ctx is not None else 'n/a',
                 exc,
                 exc_info=True,
             )
@@ -520,59 +511,27 @@ class BohriumTool(BuiltinTool):
             status_name = _STATUS_MAP.get(code, f'Unknown({code})')
 
             if code in _RUNNING_CODES:
-                return ToolResult(
-                    status='success',
-                    content=json.dumps(
-                        {
-                            'success': True,
-                            'job_id': job_id,
-                            'status': status_name,
-                            'message': (
-                                f'Job is {status_name}. '
-                                'Continue other work before polling again.'
-                            ),
-                        },
-                        ensure_ascii=False,
-                    ),
+                message = (
+                    f'Job is {status_name}. '
+                    'Continue other work before polling again.'
                 )
-
-            if code == _SUCCESS_CODE:
-                return ToolResult(
-                    status='success',
-                    content=json.dumps(
-                        {
-                            'success': True,
-                            'job_id': job_id,
-                            'status': 'Finished',
-                            'message': (
-                                'Job is Finished. Call '
-                                f'Bohrium(action="download", job_id={job_id!r}, '
-                                f'result_dir="results/run_{job_id}") '
-                                'to retrieve artifacts.'
-                            ),
-                        },
-                        ensure_ascii=False,
-                    ),
+            elif code == _SUCCESS_CODE:
+                status_name = 'Finished'
+                message = (
+                    'Job is Finished. Call '
+                    f'Bohrium(action="download", job_id={job_id!r}, '
+                    f'result_dir="results/run_{job_id}") '
+                    'to retrieve artifacts.'
                 )
-
-            if code in _FAILURE_CODES:
-                return ToolResult(
-                    status='success',
-                    content=json.dumps(
-                        {
-                            'success': True,
-                            'job_id': job_id,
-                            'status': status_name,
-                            'message': (
-                                'Job is Failed. Call '
-                                f'Bohrium(action="download", job_id={job_id!r}, '
-                                f'result_dir="results/run_{job_id}") '
-                                'to retrieve logs and artifacts.'
-                            ),
-                        },
-                        ensure_ascii=False,
-                    ),
+            elif code in _FAILURE_CODES:
+                message = (
+                    'Job is Failed. Call '
+                    f'Bohrium(action="download", job_id={job_id!r}, '
+                    f'result_dir="results/run_{job_id}") '
+                    'to retrieve logs and artifacts.'
                 )
+            else:
+                message = f'Unexpected status code {code}. Retry poll or check Bohrium console.'
 
             return ToolResult(
                 status='success',
@@ -581,7 +540,7 @@ class BohriumTool(BuiltinTool):
                         'success': True,
                         'job_id': job_id,
                         'status': status_name,
-                        'message': f'Unexpected status code {code}. Retry poll or check Bohrium console.',
+                        'message': message,
                     },
                     ensure_ascii=False,
                 ),
@@ -715,7 +674,6 @@ class BohriumTool(BuiltinTool):
             else:
                 filtered = all_images
 
-            # Prepare fetch targets
             to_fetch: list[tuple[Any, str, str]] = []
             for record in filtered[:max_results]:
                 img_id = record.get('id') or record.get('imageId')
