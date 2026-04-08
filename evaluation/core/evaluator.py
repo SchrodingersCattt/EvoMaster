@@ -23,6 +23,7 @@ from .evaluator_batch_checks import (
 from .evaluator_helpers import (
     build_llm_context,
     build_safety_eval_record,
+    check_checkcif_alerts,
     check_duration_budget,
     check_molcrys_local_env_from_evidence,
     check_molcrys_slab_integrity,
@@ -472,6 +473,12 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return check_molcrys_local_env_from_evidence(evidence=evidence, ref=ref)
+
+        # --- checkcif_no_a_alerts: IUCr checkCIF web service ---
+        if item.verify == 'checkcif_no_a_alerts':
+            if ref is None:
+                return False, 'missing reference answer'
+            return check_checkcif_alerts(evidence=evidence, ref=ref)
 
         # --- struct_file_* programmatic structure checks ---
         _STRUCT_FILE_DISPATCH = {
