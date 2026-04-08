@@ -53,6 +53,10 @@ from matmaster.types.messages import (
     UserMessage,
     parse_tool_arguments,
 )
+from matmaster.types.message_normalization import (
+    normalize_messages_for_openai,
+    validate_openai_messages,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -327,7 +331,8 @@ class AgentKernel:
 
             tool_defs = state.cached_tool_definitions
 
-            api_messages = [m.to_api_dict() for m in state.messages]
+            api_messages = normalize_messages_for_openai(state.messages)
+            validate_openai_messages(api_messages)
             self._validate_outbound_tool_turn(api_messages)
 
             llm_response: LLMResponse | None = None

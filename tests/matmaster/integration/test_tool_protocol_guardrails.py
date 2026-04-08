@@ -121,6 +121,50 @@ class TestToolProtocolGuardrailsIntegration:
         assert mock_client.chat.completions.create.await_count == 2
 
     @pytest.mark.asyncio
+    async def test_pure_tool_turn_sends_empty_string_content_on_second_call(
+        self,
+    ) -> None:
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.side_effect = [
+            _async_iter(
+                [
+                    _make_stream_chunk(
+                        tool_calls=[
+                            _make_tool_call_delta(
+                                index=0,
+                                call_id="tc-1",
+                                name="test_tool",
+                                arguments='{"x": 1}',
+                            )
+                        ]
+                    ),
+                    _make_stream_chunk(finish_reason="tool_calls"),
+                ]
+            ),
+            _async_iter(
+                [
+                    _make_stream_chunk(content="done", finish_reason="stop"),
+                ]
+            ),
+        ]
+        provider._client = mock_client
+
+        registry, _ = _make_tool_registry(tool_names=["test_tool"])
+        spec = _make_spec(provider=provider, tool_registry=registry, max_turns=2)
+        kernel = AgentKernel()
+
+        async for _event in kernel.run_stream(spec, "run test"):
+            pass
+
+        second_call_kwargs = mock_client.chat.completions.create.await_args_list[1].kwargs
+        assistant_turn = second_call_kwargs["messages"][2]
+
+        assert assistant_turn["role"] == "assistant"
+        assert assistant_turn["content"] == ""
+        assert assistant_turn["tool_calls"][0]["id"] == "tc-1"
+
+    @pytest.mark.asyncio
     async def test_malformed_history_fails_before_provider_call(self) -> None:
         provider = _NoCallProvider()
         registry, _ = _make_tool_registry(tool_names=["test_tool"])
