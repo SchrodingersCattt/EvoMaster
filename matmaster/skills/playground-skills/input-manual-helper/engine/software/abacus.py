@@ -147,6 +147,7 @@ _KNOWN_PARAMS: frozenset[str] = frozenset(
         "basis_type",
         "nspin",
         "nbands",
+        "nelec",
         "dft_functional",
         "smearing_method",
         "smearing_sigma",
@@ -172,6 +173,7 @@ _KNOWN_PARAMS: frozenset[str] = frozenset(
         "mixing_type",
         "mixing_beta",
         "mixing_ndim",
+        "mixing_gg0",
         "init_chg",
         "scf_os_ndim",
         # ionic / relax
@@ -203,6 +205,7 @@ _KNOWN_PARAMS: frozenset[str] = frozenset(
         "out_dipole",
         "out_mul",
         "out_allband",
+        "out_pot",
         "dos_sigma",
         "dos_emin_ev",
         "dos_emax_ev",
@@ -216,12 +219,20 @@ _KNOWN_PARAMS: frozenset[str] = frozenset(
         # deepks
         "deepks_out_labels",
         "deepks_scf",
-        # slab / field
+        # slab / field / dipole / gate
         "dip_cor_flag",
         "dip_cor_axis",
         "efield_flag",
         "efield_dir",
         "efield_amp",
+        "efield_pos_max",
+        "efield_pos_dec",
+        "gate_flag",
+        "zgate",
+        "block",
+        "block_down",
+        "block_up",
+        "block_height",
     }
 )
 
@@ -445,6 +456,25 @@ class AbacusBackend(SoftwareBackend):
                     "init_vel": 0,
                 }
             )
+        elif task in ("efield", "dipole", "dipole_correction"):
+            params.update(
+                {
+                    "calculation": "scf",
+                    "efield_flag": 1,
+                    "dip_cor_flag": 1,
+                    "efield_dir": 2,
+                    "efield_pos_max": 0.0,
+                    "efield_pos_dec": 0.1,
+                    "efield_amp": 0.0,
+                }
+            )
+        elif task in ("pot", "potential", "workfunction"):
+            params.update(
+                {
+                    "calculation": "scf",
+                    "out_pot": 2,
+                }
+            )
         # 覆盖用户指定参数
         for k, v in overrides.items():
             params[k.lower()] = v
@@ -499,6 +529,7 @@ class AbacusBackend(SoftwareBackend):
                 "mixing_type",
                 "mixing_beta",
                 "mixing_ndim",
+                "mixing_gg0",
                 "init_chg",
             ],
             # ionic / relax
@@ -523,6 +554,23 @@ class AbacusBackend(SoftwareBackend):
                 "md_restartfreq",
                 "init_vel",
             ],
+            # slab / field / dipole / gate
+            [
+                "efield_flag",
+                "dip_cor_flag",
+                "dip_cor_axis",
+                "efield_dir",
+                "efield_amp",
+                "efield_pos_max",
+                "efield_pos_dec",
+                "gate_flag",
+                "zgate",
+                "nelec",
+                "block",
+                "block_down",
+                "block_up",
+                "block_height",
+            ],
             # output
             [
                 "out_chg",
@@ -534,6 +582,7 @@ class AbacusBackend(SoftwareBackend):
                 "out_dipole",
                 "out_mul",
                 "out_allband",
+                "out_pot",
                 "dos_sigma",
                 "dos_emin_ev",
                 "dos_emax_ev",
@@ -545,11 +594,6 @@ class AbacusBackend(SoftwareBackend):
                 "deepks_out_labels",
                 "deepks_scf",
                 "cal_cond",
-                "dip_cor_flag",
-                "dip_cor_axis",
-                "efield_flag",
-                "efield_dir",
-                "efield_amp",
             ],
         ]
 

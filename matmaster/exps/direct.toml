@@ -69,9 +69,25 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 # Surface Slab Construction
 - Vacuum MUST be ≥15 Å. After building: verify vacuum = c_param − slab_thickness ≥ 15.
 - Binary compounds (ZnS, ZnO, GaAs…): "N layers" = N cation-anion bilayers = 2N atomic planes. After building, count distinct z-planes and verify.
+- **Zinc blende (001)** (ZnS, GaAs, CdTe…): Tasker Type 3 (polar). Use even number of layers for symmetric termination. Try different `termination` values (0, 1, 2) if first attempt gives asymmetric slab. Report polarity + mitigation.
+- **Intermetallic surfaces** (ZnPd, CuAu, NiAl…): retrieve/build bulk first, then cut. Common: ZnPd = CsCl-type (Pm-3m, a≈3.15 Å); NiAl = B2 (Pm-3m). For (011) of CsCl-type: mixed layers possible → check symmetry.
+- **When `build_surface_slab` (MCP) fails**: fall back to `build_slab_tasker_fix.py` (tasker-polar-surface skill) or direct ASE/pymatgen Python. Do NOT retry the same failing MCP call more than once.
+- **After ANY slab build**: verify composition, layer count, and vacuum using `get_structure_info` or a quick Python check. For polar surfaces, verify top/bottom layer symmetry.
 - Molecular crystals: after adding vacuum, verify molecular integrity (pymatgen MoleculeGraph or ASE neighbor list). If molecules are broken across vacuum boundary, shift slab origin along surface normal until cleavage falls between molecular layers, or wrap fragmented atoms back into the slab.
 - Passivation: by default, passivate ALL dangling bonds on BOTH top AND bottom surfaces. However, if a task provides a JSON spec/config (e.g., `passivate_top_if_needed: false`), follow the spec — passivate only the specified surface(s). Verify ALL passivated surface atoms reach target coordination.
 - H passivation of Si/Ge surfaces: place H at ~1.48 Å (Si-H) along EACH dangling-bond direction (tetrahedral ~109.47°). A surface Si with coordination 2 needs TWO H atoms (one per missing bond). After passivation, verify EVERY surface Si atom has coordination = 4 (cutoff ~2.6 Å for Si-Si, ~1.8 Å for Si-H). If ANY atom has coordination < 4, identify the remaining dangling bonds and add missing H. Iterate until ALL surface atoms reach coordination 4. Report: total H added, mean Si-H bond length, mean Si coordination, and per-atom coordination for surface layer.
+
+# Heterojunction / Interface Construction
+- **Workflow**: (1) Build each component slab separately with `build_surface_slab` or `build_slab_tasker_fix.py`. (2) If in-plane lattice mismatch > 5%, use `make_supercell_structure` to create commensurate supercells. (3) Stack with `build_surface_interface` (MCP tool): set `interface_distance` (2.0–3.0 Å for vdW, 1.5–2.5 Å for covalent), `stack_axis=2`, `max_strain=0.05` for strict matching. (4) Verify output: correct total atoms, no overlaps, reasonable cell.
+- **If `build_surface_interface` fails**: use Python — read both slabs with ASE, adjust in-plane cells to match, stack by combining atoms and extending c-axis. Use pymatgen `CoherentInterfaceBuilder` for automated lattice matching as last resort.
+- **Common heterojunctions**: MoS2/WS2 (same structure, small mismatch), Si/Ge (diamond, ~4% mismatch), GaAs/AlAs (zinc blende, <1% mismatch), TiO2/Au (oxide/metal, needs supercell matching).
+- Save BOTH individual slabs AND the final interface structure as deliverables.
+
+# Electronic Structure Setup for Surfaces
+- For surface electronic structure (band structure, DOS, work function): build slab first, then set up calculation input files.
+- **ABACUS slab calculations**: use `calculation scf` for ground state, `calculation nscf` for band structure. K-points: use Gamma-centered mesh with 1 in the surface-normal direction (e.g. `4 4 1 0 0 0` for slab with vacuum along z). For band structure, use 2D BZ high-symmetry path appropriate for the surface (not the bulk BZ).
+- **Dipole correction**: for polar or asymmetric slabs, add `efield_flag 1` and `dip_cor_flag 1` in ABACUS INPUT.
+- **Work function**: requires vacuum level → ensure sufficient vacuum (≥15 Å) and use planar-average electrostatic potential analysis.
 
 # ABACUS Input Generation
 - Ghost atoms: charge "0.000000" (6 dp). Same pseudopotential + orbital as real species.
