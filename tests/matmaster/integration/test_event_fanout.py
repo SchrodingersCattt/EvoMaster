@@ -95,6 +95,20 @@ class _BlockingPersistence:
         self.completed.append(event)
 
 
+class _BlockingHandler:
+    """Handler that blocks until released, for dispatch window tests."""
+
+    def __init__(self) -> None:
+        self.received: list[BusEvent] = []
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def handle(self, event: BusEvent) -> None:
+        self.received.append(event)
+        self.started.set()
+        await self.release.wait()
+
+
 class _OrderTracker:
     """Tracks dispatch ordering across handlers via shared list."""
 
@@ -421,3 +435,45 @@ class TestRunEventFanoutPersistenceBarrier:
 
         assert len(sse.received) == 1
         assert len(persistence.received) == 1
+
+    async def test_flush_barrier_waits_dispatches_started_before_spawn(self) -> None:
+        """Barrier must wait for pre-existing dispatches stuck before persistence spawn."""
+        from matmaster.integration.fanout import RunEventFanout
+
+        sse = _BlockingHandler()
+        persistence = _BlockingPersistence()
+
+        fanout = RunEventFanout(
+            sse_handler=sse,
+            persistence_handler=persistence,
+        )
+
+        first_event = RunResultEvent(source="Agent", reason="before-spawn-window")
+        dispatch_task = asyncio.create_task(fanout.dispatch(first_event))
+        await sse.started.wait()
+
+        barrier_task = asyncio.create_task(fanout.flush_persistence_barrier())
+        await asyncio.sleep(0)
+        assert barrier_task.done() is False
+
+        sse.release.set()
+        await persistence.started.wait()
+        await asyncio.sleep(0)
+        assert barrier_task.done() is False
+
+        persistence.release.set()
+        await barrier_task
+        await dispatch_task
+
+        second_event = RunResultEvent(source="Agent", reason="after-barrier")
+        await fanout.dispatch(second_event)
+        await fanout.drain_and_close()
+
+        assert [event.reason for event in sse.received] == [
+            "before-spawn-window",
+            "after-barrier",
+        ]
+        assert [event.reason for event in persistence.completed] == [
+            "before-spawn-window",
+            "after-barrier",
+        ]

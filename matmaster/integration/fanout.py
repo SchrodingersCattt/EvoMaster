@@ -60,7 +60,10 @@ class RunEventFanout:
         self._sse = sse_handler
         self._persistence = persistence_handler
         self._extra_handlers: list[Any] = list(extra_handlers) if extra_handlers else []
+        self._dispatch_seq = 0
+        self._pre_persistence_dispatches: set[int] = set()
         self._pending_persistence: set[asyncio.Task[None]] = set()
+        self._pending_persistence_by_seq: dict[int, asyncio.Task[None]] = {}
 
     def add_handler(self, handler: Any) -> None:
         """Register a new extra handler for future dispatches.
@@ -81,31 +84,59 @@ class RunEventFanout:
         Per-handler exceptions are caught and logged. One failing
         handler does not prevent others from receiving the event.
         """
-        # 1. SSE first -- latency-sensitive
-        await self._safe_handle(self._sse, event)
+        seq = self._next_dispatch_seq()
+        self._pre_persistence_dispatches.add(seq)
+        try:
+            # 1. SSE first -- latency-sensitive
+            await self._safe_handle(self._sse, event)
 
-        # 2. Extra handlers in registration order
-        # Snapshot to ensure add_handler() during dispatch does not
-        # affect the current event (same semantics as EventRouter).
-        extra = self._extra_handlers
-        for handler in extra:
-            await self._safe_handle(handler, event)
+            # 2. Extra handlers in registration order
+            # Snapshot to ensure add_handler() during dispatch does not
+            # affect the current event (same semantics as EventRouter).
+            extra = self._extra_handlers
+            for handler in extra:
+                await self._safe_handle(handler, event)
 
-        # 3. Persistence as background task
-        self._spawn_persistence(event)
+            # 3. Persistence as background task
+            self._spawn_persistence(seq, event)
+        finally:
+            self._pre_persistence_dispatches.discard(seq)
 
-    def _spawn_persistence(self, event: BusEvent) -> None:
+    def _next_dispatch_seq(self) -> int:
+        self._dispatch_seq += 1
+        return self._dispatch_seq
+
+    def _spawn_persistence(self, seq: int, event: BusEvent) -> None:
         """Schedule persistence as a background task with strong reference."""
         task = asyncio.create_task(
             self._safe_handle(self._persistence, event),
             name="persist-event",
         )
         self._pending_persistence.add(task)
-        task.add_done_callback(self._pending_persistence.discard)
+        self._pending_persistence_by_seq[seq] = task
+
+        def _cleanup(done_task: asyncio.Task[None]) -> None:
+            self._pending_persistence.discard(done_task)
+            current = self._pending_persistence_by_seq.get(seq)
+            if current is done_task:
+                self._pending_persistence_by_seq.pop(seq, None)
+
+        task.add_done_callback(_cleanup)
 
     async def flush_persistence_barrier(self) -> None:
-        """Wait for the current snapshot of pending persistence tasks."""
-        pending = list(self._pending_persistence)
+        """Wait for dispatches started before the barrier to reach persistence."""
+        fence_seq = self._dispatch_seq
+
+        while any(
+            seq <= fence_seq for seq in self._pre_persistence_dispatches
+        ):
+            await asyncio.sleep(0)
+
+        pending = [
+            task
+            for seq, task in self._pending_persistence_by_seq.items()
+            if seq <= fence_seq
+        ]
         if not pending:
             return
         await asyncio.gather(*pending, return_exceptions=True)
