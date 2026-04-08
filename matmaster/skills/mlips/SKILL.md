@@ -12,13 +12,13 @@ Universal machine-learning interatomic potentials for atomistic simulations. All
 
 | Item | Default Value |
 |------|---------------|
-| image | `registry.dp.tech/dptech/dpa-calculator:f7835422` |
+| image | `registry.dp.tech/dptech/dpa-calculator:38d02225` |
 | machine | `c16_m64_1 * NVIDIA 4090` |
 | cmd | `python {script} {args} > log 2>&1` |
 
 > The default image has DPA (deepmd-kit), ASE, phonopy, pymatgen pre-installed.
 > When passing `cmd` / `command`, you can prepend `pip install ... &&` to install missing packages if needed.
-> If you need packages installed into the bundled virtual environment, activate `/mcp_server/dpa/.venv` first, e.g. `source /mcp_server/dpa/.venv/bin/activate && pip install ... && python ...`.
+> If you need packages installed into the bundled virtual environment, activate `/mcp_server/AI4S-agent-tools/.venv` first, e.g. `source /mcp_server/AI4S-agent-tools/.venv/bin/activate && pip install ... && python ...`.
 > For MACE / SevenNet / MatterSim models, verify the image has the required packages or use `Bohrium(action="list_images", keyword="lambench")` to find an image that includes them.
 
 ## Available Models
@@ -137,9 +137,9 @@ Output: `neb_band.pdf`, `result.json` (forward/reverse barrier in eV)
 1. Prepare structure file (CIF/POSCAR/XYZ)
 2. Copy the relevant script(s) and `_calculator.py` to a working directory
 3. For MD: create a `stages.json` file with stage definitions
-4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dpa-calculator:f7835422", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
+4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dpa-calculator:38d02225", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
     - If dependencies are missing, `cmd` can include installation first, e.g. `pip install sevenn && python optimize_structure.py --structure input.cif --model SevenNet-0 > log 2>&1`
-    - If the package must be installed into the image's virtual environment, use `source /mcp_server/dpa/.venv/bin/activate && pip install sevenn && python optimize_structure.py --structure input.cif --model SevenNet-0 > log 2>&1`
+    - If the package must be installed into the image's virtual environment, use `source /mcp_server/AI4S-agent-tools/.venv/bin/activate && pip install sevenn && python optimize_structure.py --structure input.cif --model SevenNet-0 > log 2>&1`
 5. Poll: `Bohrium(action="poll", job_id=<id>)`
 6. Read `result.json` and output files from `result_dir`
 7. Analyze results, iterate if needed
