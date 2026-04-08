@@ -1,0 +1,499 @@
+from __future__ import annotations
+
+from typing import Any
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+
+from matmaster.types.messages import AssistantMessage, SystemMessage, UserMessage
+from src.services.history_checkpoint_codec import serialize_base_messages
+from src.services.history_checkpoint_service import HistoryCheckpointService
+from src.services.history_restore_service import HistoryRestoreService
+
+
+def _user_event(
+    content: str,
+    *,
+    task_id: str | None = None,
+    spawn_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "source": "User",
+        "type": "query",
+        "content": content,
+        "task_id": task_id,
+        "spawn_id": spawn_id,
+    }
+
+
+def _response_event(
+    content: str,
+    *,
+    task_id: str | None = None,
+    spawn_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "source": "MatMaster",
+        "type": "response",
+        "content": content,
+        "task_id": task_id,
+        "spawn_id": spawn_id,
+    }
+
+
+class InMemoryEventsTable:
+    def __init__(self) -> None:
+        self._events: list[dict[str, Any]] = []
+        self._next_id = 1
+        self.calls: list[tuple[Any, ...]] = []
+
+    def add_event(
+        self,
+        session_id: str,
+        source: str,
+        event_type: str,
+        content: Any,
+        *,
+        task_id: str | None = None,
+        invocation_id: str | None = None,
+        spawn_id: str | None = None,
+    ) -> int:
+        event = {
+            "id": self._next_id,
+            "session_id": session_id,
+            "source": source,
+            "type": event_type,
+            "content": content,
+            "task_id": task_id,
+            "invocation_id": invocation_id,
+            "spawn_id": spawn_id,
+        }
+        self._next_id += 1
+        self._events.append(event)
+        return event["id"]
+
+    def add_checkpoint_pair(
+        self,
+        session_id: str,
+        *,
+        task_id: str | None,
+        invocation_id: str | None,
+        spawn_id: str | None,
+        covered_until_event_id: int,
+        base_messages: list[dict[str, Any]],
+        reason: str = "summary",
+    ) -> bool:
+        self.calls.append(
+            (
+                "add_checkpoint_pair",
+                session_id,
+                task_id,
+                invocation_id,
+                spawn_id,
+                covered_until_event_id,
+                reason,
+            )
+        )
+        self.add_event(
+            session_id,
+            "System",
+            "compact_boundary",
+            {
+                "covered_until_event_id": covered_until_event_id,
+                "reason": reason,
+            },
+            task_id=task_id,
+            invocation_id=invocation_id,
+            spawn_id=spawn_id,
+        )
+        self.add_event(
+            session_id,
+            "System",
+            "history_checkpoint",
+            {
+                "covered_until_event_id": covered_until_event_id,
+                "base_messages": base_messages,
+            },
+            task_id=task_id,
+            invocation_id=invocation_id,
+            spawn_id=spawn_id,
+        )
+        return True
+
+    def get_history_checkpoints(
+        self,
+        session_id: str,
+        spawn_id: str | None,
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        self.calls.append(("get_history_checkpoints", session_id, spawn_id, limit))
+        rows = [
+            event
+            for event in self._events
+            if event["session_id"] == session_id
+            and event["type"] == "history_checkpoint"
+            and event.get("spawn_id") == spawn_id
+        ]
+        rows.sort(key=lambda event: int(event["id"]), reverse=True)
+        return rows[:limit]
+
+    def get_scope_events_after_id(
+        self,
+        session_id: str,
+        spawn_id: str | None,
+        after_id: int,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        self.calls.append(
+            ("get_scope_events_after_id", session_id, spawn_id, after_id, limit)
+        )
+        rows = [
+            event
+            for event in self._events
+            if event["session_id"] == session_id
+            and event.get("spawn_id") == spawn_id
+            and int(event["id"]) > after_id
+            and event["type"] not in {"compact_boundary", "history_checkpoint"}
+        ]
+        rows.sort(key=lambda event: int(event["id"]))
+        if limit is not None:
+            return rows[:limit]
+        return rows
+
+    def get_latest_scope_event_id(self, session_id: str, spawn_id: str | None) -> int:
+        self.calls.append(("get_latest_scope_event_id", session_id, spawn_id))
+        ids = [
+            int(event["id"])
+            for event in self._events
+            if event["session_id"] == session_id
+            and event.get("spawn_id") == spawn_id
+            and event["type"] not in {"compact_boundary", "history_checkpoint"}
+        ]
+        return max(ids, default=0)
+
+    def get_session_events(
+        self,
+        session_id: str,
+        limit: int | None = None,
+        include_spawn: bool = False,
+    ) -> list[dict[str, Any]]:
+        self.calls.append(("get_session_events", session_id, limit, include_spawn))
+        rows = [
+            event
+            for event in self._events
+            if event["session_id"] == session_id
+            and (include_spawn or event.get("spawn_id") is None)
+        ]
+        rows.sort(key=lambda event: int(event["id"]))
+        if limit is not None:
+            return rows[:limit]
+        return rows
+
+    def history_checkpoints(self, *, spawn_id: str | None) -> list[dict[str, Any]]:
+        return [
+            event
+            for event in self._events
+            if event["type"] == "history_checkpoint"
+            and event.get("spawn_id") == spawn_id
+        ]
+
+    def compact_boundaries(self, *, spawn_id: str | None) -> list[dict[str, Any]]:
+        return [
+            event
+            for event in self._events
+            if event["type"] == "compact_boundary"
+            and event.get("spawn_id") == spawn_id
+        ]
+
+
+def _seed_scope_events(
+    events_table: InMemoryEventsTable,
+    *,
+    session_id: str,
+    spawn_id: str | None = None,
+    task_id: str | None = None,
+    user_content: str,
+    response_content: str,
+) -> None:
+    user_event = _user_event(user_content, task_id=task_id, spawn_id=spawn_id)
+    events_table.add_event(
+        session_id,
+        user_event["source"],
+        user_event["type"],
+        user_event["content"],
+        task_id=task_id,
+        spawn_id=spawn_id,
+    )
+    response_event = _response_event(
+        response_content, task_id=task_id, spawn_id=spawn_id
+    )
+    events_table.add_event(
+        session_id,
+        response_event["source"],
+        response_event["type"],
+        response_event["content"],
+        task_id=task_id,
+        spawn_id=spawn_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_restore_with_checkpoint_plus_incremental_events() -> None:
+    session_id = "sess-recovery"
+    events_table = InMemoryEventsTable()
+    fanout = Mock()
+    fanout.flush_persistence_barrier = AsyncMock()
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        user_content="old question before compaction",
+        response_content="old answer before compaction",
+    )
+
+    checkpoint_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
+        fanout=fanout,
+        session_id=session_id,
+        task_id="task-compaction",
+        invocation_id="inv-compaction",
+        spawn_id=None,
+    )
+    checkpoint_base_messages = serialize_base_messages(
+        [
+            SystemMessage(content="[Compacted Context]\nRecovered summary"),
+            UserMessage(content="restored durable question"),
+            AssistantMessage(content="restored durable answer"),
+        ]
+    )
+
+    await checkpoint_sink(
+        payload={"durability": "durable", "strategy": "summary"},
+        base_messages=checkpoint_base_messages,
+    )
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        task_id="task-follow-up",
+        user_content="incremental follow-up question",
+        response_content="incremental follow-up answer",
+    )
+
+    history = HistoryRestoreService(events_table).restore_history(
+        session_id=session_id,
+        spawn_id=None,
+        task_id=None,
+    )
+
+    assert [type(message) for message in history] == [
+        SystemMessage,
+        UserMessage,
+        AssistantMessage,
+        UserMessage,
+        AssistantMessage,
+    ]
+    assert [message.content for message in history] == [
+        "[Compacted Context]\nRecovered summary",
+        "restored durable question",
+        "restored durable answer",
+        "incremental follow-up question",
+        "incremental follow-up answer",
+    ]
+    fanout.flush_persistence_barrier.assert_awaited_once()
+    assert ("get_scope_events_after_id", session_id, None, 2, None) in events_table.calls
+
+
+@pytest.mark.asyncio
+async def test_ephemeral_compaction_does_not_trigger_checkpoint_sink() -> None:
+    session_id = "sess-ephemeral"
+    events_table = InMemoryEventsTable()
+    fanout = Mock()
+    fanout.flush_persistence_barrier = AsyncMock()
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        user_content="question before fallback",
+        response_content="answer before fallback",
+    )
+
+    checkpoint_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
+        fanout=fanout,
+        session_id=session_id,
+        task_id="task-runtime",
+        invocation_id="inv-runtime",
+        spawn_id=None,
+    )
+    base_messages = serialize_base_messages(
+        [SystemMessage(content="[Compacted Context]\nShould never persist")]
+    )
+
+    await checkpoint_sink(
+        payload={"durability": "ephemeral", "strategy": "sliding_window"},
+        base_messages=base_messages,
+    )
+    await checkpoint_sink(
+        payload={"durability": "ephemeral", "strategy": "tool_truncation"},
+        base_messages=base_messages,
+    )
+
+    fanout.flush_persistence_barrier.assert_not_awaited()
+    assert events_table.history_checkpoints(spawn_id=None) == []
+    assert events_table.compact_boundaries(spawn_id=None) == []
+    assert not any(call[0] == "get_latest_scope_event_id" for call in events_table.calls)
+    assert not any(call[0] == "add_checkpoint_pair" for call in events_table.calls)
+
+
+@pytest.mark.asyncio
+async def test_spawn_id_checkpoint_does_not_affect_parent_restore() -> None:
+    session_id = "sess-spawn-scope"
+    child_spawn_id = "child-1"
+    events_table = InMemoryEventsTable()
+    fanout = Mock()
+    fanout.flush_persistence_barrier = AsyncMock()
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        user_content="parent raw question",
+        response_content="parent raw answer",
+    )
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        spawn_id=child_spawn_id,
+        user_content="child question before checkpoint",
+        response_content="child answer before checkpoint",
+    )
+
+    child_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
+        fanout=fanout,
+        session_id=session_id,
+        task_id="task-child",
+        invocation_id="inv-child",
+        spawn_id=child_spawn_id,
+    )
+    child_base_messages = serialize_base_messages(
+        [
+            SystemMessage(content="[Compacted Context]\nchild summary"),
+            UserMessage(content="child restored question"),
+            AssistantMessage(content="child restored answer"),
+        ]
+    )
+
+    await child_sink(
+        payload={"durability": "durable", "strategy": "summary"},
+        base_messages=child_base_messages,
+    )
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        spawn_id=child_spawn_id,
+        task_id="task-child-follow-up",
+        user_content="child incremental question",
+        response_content="child incremental answer",
+    )
+
+    restore_service = HistoryRestoreService(events_table)
+    parent_history = restore_service.restore_history(
+        session_id=session_id,
+        spawn_id=None,
+        task_id=None,
+    )
+    child_history = restore_service.restore_history(
+        session_id=session_id,
+        spawn_id=child_spawn_id,
+        task_id=None,
+    )
+
+    assert [type(message) for message in parent_history] == [UserMessage, AssistantMessage]
+    assert [message.content for message in parent_history] == [
+        "parent raw question",
+        "parent raw answer",
+    ]
+    assert all("child" not in str(message.content) for message in parent_history)
+    assert [type(message) for message in child_history] == [
+        SystemMessage,
+        UserMessage,
+        AssistantMessage,
+        UserMessage,
+        AssistantMessage,
+    ]
+    assert [message.content for message in child_history] == [
+        "[Compacted Context]\nchild summary",
+        "child restored question",
+        "child restored answer",
+        "child incremental question",
+        "child incremental answer",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_restore_after_midrun_crash_uses_written_checkpoint() -> None:
+    session_id = "sess-midrun-crash"
+    events_table = InMemoryEventsTable()
+    fanout = Mock()
+    fanout.flush_persistence_barrier = AsyncMock()
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        task_id="task-before-crash",
+        user_content="question before checkpoint",
+        response_content="answer before checkpoint",
+    )
+
+    checkpoint_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
+        fanout=fanout,
+        session_id=session_id,
+        task_id="task-before-crash",
+        invocation_id="inv-before-crash",
+        spawn_id=None,
+    )
+    checkpoint_base_messages = serialize_base_messages(
+        [
+            SystemMessage(content="[Compacted Context]\ncheckpoint before crash"),
+            UserMessage(content="checkpointed question"),
+            AssistantMessage(content="checkpointed answer"),
+        ]
+    )
+
+    await checkpoint_sink(
+        payload={"durability": "durable", "strategy": "summary"},
+        base_messages=checkpoint_base_messages,
+    )
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        task_id="task-crashed-run",
+        user_content="question emitted before crash",
+        response_content="partial answer emitted before crash",
+    )
+
+    history = HistoryRestoreService(events_table).restore_history(
+        session_id=session_id,
+        spawn_id=None,
+        task_id="task-retry-after-crash",
+    )
+
+    assert [type(message) for message in history] == [
+        SystemMessage,
+        UserMessage,
+        AssistantMessage,
+        UserMessage,
+        AssistantMessage,
+    ]
+    assert [message.content for message in history] == [
+        "[Compacted Context]\ncheckpoint before crash",
+        "checkpointed question",
+        "checkpointed answer",
+        "question emitted before crash",
+        "partial answer emitted before crash",
+    ]
+    assert fanout.flush_persistence_barrier.await_count == 1
+    assert events_table.history_checkpoints(spawn_id=None)[0]["content"] == {
+        "covered_until_event_id": 2,
+        "base_messages": checkpoint_base_messages,
+    }
