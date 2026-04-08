@@ -129,15 +129,11 @@ class AgentKernel:
                 base_snapshot,
             ) = compactor_events.popleft()
             payload = getattr(compaction_event, "payload", {}) or {}
-            if (
-                callable(checkpoint_sink)
-                and payload.get("durability") == "durable"
-                and base_snapshot is not None
-            ):
-                await checkpoint_sink(
-                    payload=payload,
-                    base_messages=base_snapshot,
-                )
+            is_durable = payload.get("durability") == "durable"
+            if is_durable and callable(checkpoint_sink) and base_snapshot is not None:
+                payload["checkpoint_attempted"] = True
+                payload["checkpoint_written"] = False
+                payload["failure_reason"] = None
             yield _KernelItem(event=compaction_event)
             if spec.hook_executor is not None and hasattr(compaction_event, "payload"):
                 await spec.hook_executor.emit(
@@ -149,6 +145,23 @@ class AgentKernel:
                         strategy=payload.get("strategy", "unknown"),
                     ),
                 )
+            if is_durable and callable(checkpoint_sink) and base_snapshot is not None:
+                try:
+                    await checkpoint_sink(
+                        payload=payload,
+                        base_messages=base_snapshot,
+                    )
+                except Exception as exc:
+                    payload["checkpoint_written"] = False
+                    payload["failure_reason"] = str(exc)
+                    logger.warning(
+                        "checkpoint sink failed for compaction event strategy=%s",
+                        payload.get("strategy", "unknown"),
+                        exc_info=True,
+                    )
+                else:
+                    payload["checkpoint_written"] = True
+                    payload["failure_reason"] = None
 
     async def run_stream(
         self,
