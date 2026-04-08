@@ -138,7 +138,7 @@ def _normalize_mm_devshell_exp_cli(raw: str | None) -> str | None:
 
 def _mm_devshell_exp_cmd_suffix(exp_cli: str | None) -> list[str]:
     """Extra argv for ``matmaster.devshell run``; omit ``--exp`` when using direct default."""
-    if exp_cli is None or exp_cli == "devshell":
+    if exp_cli is None:
         return []
     return ["--exp", exp_cli]
 
@@ -150,8 +150,6 @@ def _eval_tooling_snapshot_for_exp_cli(
     from evaluation.eval_tooling_snapshot import snapshot_eval_tooling
 
     name = (exp_cli or "").strip() or "direct"
-    if name == "devshell":
-        name = "direct"
     return snapshot_eval_tooling(repo_root=repo_root, exp_name=name)
 
 
