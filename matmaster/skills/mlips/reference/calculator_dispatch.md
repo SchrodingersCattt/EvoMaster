@@ -64,7 +64,7 @@ model_name_or_path
 
 | Family | Known working image |
 |--------|-------------------|
-| DP (DPA) | `registry.dp.tech/dptech/dpa-calculator:38d02225` |
+| DP (DPA) | `registry.dp.tech/dptech/dpa-calculator:f99e827e` |
 | All families | `registry.dp.tech/dptech/dp/native/prod-375/lambench:v2.9` (LAMBench image) |
 
 > Use `Bohrium(action="list_images", keyword="lambench")` to find the latest multi-MLIP image.
