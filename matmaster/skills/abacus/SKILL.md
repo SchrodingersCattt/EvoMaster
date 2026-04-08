@@ -10,6 +10,47 @@ ABACUS (Atomic-orbital Based Ab-initio Computation at UStc) is an open-source DF
 
 **Action rule**: when the user asks you to generate ABACUS input files (INPUT, STRU, KPT), **always use the Write tool** to create the files in the working directory. Read any provided STRU files first, then Write all requested output files. Do not stop after only reading files.
 
+## Mandatory INPUT Parameters (Checklist)
+
+Every ABACUS INPUT file **must** include ALL of the following base parameters. Omitting any causes silent incorrect defaults and scoring failures.
+
+### Base parameters (ALWAYS include in every INPUT file)
+```
+INPUT_PARAMETERS
+suffix ABACUS
+ntype <N>                  # number of element species — MUST match STRU
+calculation <type>         # scf / relax / cell-relax / nscf / md
+basis_type <pw|lcao>       # pw or lcao
+ecutwfc <value>            # Ry — typically 50-100 for LCAO, 60-100 for PW
+pseudo_dir ./              # or path to pseudopotentials
+orbital_dir ./             # or path to orbitals (LCAO only, but include always)
+scf_thr 1e-7              # SCF convergence threshold
+scf_nmax 100              # max SCF iterations
+smearing_method gauss      # or fixed for insulators
+smearing_sigma 0.015       # Ry — adjust for metals vs insulators
+mixing_type broyden        # SCF charge mixing — ALWAYS include
+mixing_beta 0.7            # mixing fraction — ALWAYS include (reduce to 0.1-0.4 for magnetic)
+mixing_ndim 8              # mixing history — ALWAYS include
+```
+
+### Task-specific MANDATORY additions
+
+| Task | calculation | Additional MANDATORY parameters |
+|------|-------------|--------------------------------|
+| SCF | `scf` | `cal_force 0`, `cal_stress 0` |
+| Relax | `relax` | `cal_force 1`, `force_thr 1e-3`, `relax_nmax 100`, `relax_method bfgs`, `out_stru 1` |
+| Cell-relax | `cell-relax` | `cal_force 1`, `cal_stress 1`, `force_thr 1e-3`, `stress_thr 10.0`, `relax_nmax 200`, `relax_method bfgs`, `out_stru 1` |
+| Band (NSCF) | `nscf` | `init_chg file`, `nbands <N>`, `out_band 1` |
+| DOS (NSCF) | `nscf` | `init_chg file`, `nbands <N>`, `out_dos 1`, `dos_sigma 0.07`, `dos_edelta_ev 0.01` |
+| MD | `md` | `cal_force 1`, `md_type nvt`, `md_nstep <N>`, `md_dt 1.0`, `md_tfirst <T>`, `md_dumpfreq 10`, `init_vel 0` |
+| Dipole corr. | `scf` | `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <0/1/2>`, `efield_pos_max <val>`, `efield_pos_dec 0.1`, `efield_amp 0.0` |
+| Electrostatic pot. | `scf` | `out_pot 2` (add `nbands` for metals) |
+| Gate field | `scf` | `efield_flag 1`, `dip_cor_flag 1`, `gate_flag 1`, `zgate <val>`, `nelec <N>`, `block 1`, `block_down <val>`, `block_up <val>`, `block_height 0.1` |
+
+### Two-step workflow (band / DOS): ensure Step 1 SCF has `out_chg 1`
+
+> **Self-check before delivering**: after writing each INPUT file, mentally verify: (1) all base parameters present? (2) all task-specific mandatory parameters present? (3) `ntype` matches STRU species count? (4) parameters consistent across related INPUT files (same `ecutwfc`, `smearing_method`, `smearing_sigma`)?
+
 ## Bohrium Submission Config
 
 | Item | Default Value |
