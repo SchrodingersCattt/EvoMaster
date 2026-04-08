@@ -76,11 +76,11 @@ class TestBohriumMetadata:
         assert module_path.name == "__init__.py"
         assert module_path.parent.name == "bohrium_tool"
 
-    def test_poll_schema_exposes_wait_fields(self):
+    def test_poll_schema_has_no_wait_fields(self):
         properties = BohriumTool.json_schema["properties"]
-        assert properties["wait"]["type"] == "boolean"
-        assert properties["max_wait_seconds"]["type"] == "integer"
-        assert properties["poll_interval_seconds"]["type"] == "integer"
+        assert "wait" not in properties
+        assert "max_wait_seconds" not in properties
+        assert "poll_interval_seconds" not in properties
 
     def test_prompt_mentions_list_actions(self, tmp_path):
         tool = BohriumTool(workdir=tmp_path)
@@ -106,7 +106,7 @@ class TestBohriumMetadata:
         tool = BohriumTool(workdir=tmp_path)
         prompt = tool.prompt()
         assert prompt is not None
-        assert "single query" in prompt
+        assert "single-shot" in prompt
         assert 'action="download"' in prompt
         assert "does not download artifacts" in prompt
 

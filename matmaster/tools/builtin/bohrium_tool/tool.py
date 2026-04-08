@@ -5,7 +5,7 @@ This tool handles pure communication: submit, poll (single-query), list_images,
 list_machines. All software-specific knowledge lives in software skills.
 
 Design decisions:
-- poll defaults to single-shot (non-blocking), with optional short waits via wait=true
+- poll is single-shot and non-blocking
 - submit auto-appends "> log 2>&1" if missing
 - Credentials resolved via runtime bridge (session > env fallback)
 - Remote /share paths require active session with upload_directory
@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, ClassVar
@@ -56,27 +55,6 @@ from .transfers import (
 )
 
 logger = logging.getLogger(__name__)
-
-_DEFAULT_POLL_WAIT_SECONDS = 30
-_DEFAULT_POLL_INTERVAL_SECONDS = 5
-
-
-def _coerce_bool(value: Any, default: bool = False) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return bool(value)
-
-
-def _coerce_positive_int(value: Any, default: int) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
 
 
 def build_bohrium_context(*, session, require_project: bool = False) -> BohriumContext:
@@ -176,7 +154,7 @@ class BohriumTool(BuiltinTool):
     description: ClassVar[str] = (
         'Bohrium HPC platform operations. '
         'action="submit": package input directory and submit a job, returns job_id. '
-        'action="poll": query current job status; defaults to a single query and can wait briefly when wait=true. '
+        'action="poll": single-shot job status check, returns current status immediately. '
         'action="download": download artifacts for a finished or failed job into result_dir. '
         'action="list_images": query available Docker images by keyword. '
         'action="list_machines": query available machine types (cpu/gpu).'
@@ -224,18 +202,6 @@ class BohriumTool(BuiltinTool):
                 'type': 'string',
                 'description': 'Directory where downloaded artifacts will be stored. (download)',
             },
-            'wait': {
-                'type': 'boolean',
-                'description': 'Wait within this call when the job is still Running. Default: false. (poll)',
-            },
-            'max_wait_seconds': {
-                'type': 'integer',
-                'description': 'Maximum wait time when wait=true. Default: 30. (poll)',
-            },
-            'poll_interval_seconds': {
-                'type': 'integer',
-                'description': 'Interval between detail checks when wait=true. Default: 5. (poll)',
-            },
             # --- list ---
             'keyword': {
                 'type': 'string',
@@ -278,9 +244,8 @@ class BohriumTool(BuiltinTool):
             '- Load the corresponding software skill first (cp2k, qe, abacus, orca, '
             'lammps, gromacs, pyscf, abinit, pyatb) to obtain image, machine, and cmd.\n'
             '- submit: cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
-            '- poll: default single query (wait=false). Set wait=true to wait within '
-            'one call, and use max_wait_seconds / poll_interval_seconds to control '
-            'that loop. poll does not download artifacts.\n'
+            '- poll: single-shot status query only. It returns immediately and does '
+            'not download artifacts.\n'
             '- download: use action="download" only after poll reports Finished or '
             'Failed. Requires result_dir; retrieves logs and artifacts for analysis.\n'
             '- When image or machine is unknown, call list_images / list_machines first.\n'
@@ -409,107 +374,17 @@ class BohriumTool(BuiltinTool):
                 ),
             )
 
-        wait = _coerce_bool(args.get('wait'), default=False)
-        max_wait_seconds = _coerce_positive_int(
-            args.get('max_wait_seconds'), _DEFAULT_POLL_WAIT_SECONDS
-        )
-        poll_interval_seconds = _coerce_positive_int(
-            args.get('poll_interval_seconds'), _DEFAULT_POLL_INTERVAL_SECONDS
-        )
-
         ctx: BohriumContext | None = None
         try:
             ctx = self._build_context()
             sandbox = ctx.sandbox
             self._log_request_context(action='poll', ctx=ctx, sandbox=sandbox)
             job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
-            waited_seconds = 0
+            detail_data = get_job_detail(ctx, job_id=job_id)
+            code = detail_data.get('status', 0)
+            status_name = _STATUS_MAP.get(code, f'Unknown({code})')
 
-            while True:
-                detail_data = get_job_detail(ctx, job_id=job_id)
-                code = detail_data.get('status', 0)
-                status_name = _STATUS_MAP.get(code, f'Unknown({code})')
-
-                if code in _RUNNING_CODES:
-                    if wait:
-                        if waited_seconds >= max_wait_seconds:
-                            return ToolResult(
-                                status='success',
-                                content=json.dumps(
-                                    {
-                                        'success': True,
-                                        'job_id': job_id,
-                                        'status': status_name,
-                                        'message': (
-                                            f'Job is {status_name}. wait=true '
-                                            f'exhausted; waited {int(waited_seconds)}s '
-                                            'before returning.'
-                                        ),
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                            )
-                        sleep_seconds = min(
-                            poll_interval_seconds,
-                            max_wait_seconds - waited_seconds,
-                        )
-                        if sleep_seconds <= 0:
-                            continue
-                        time.sleep(sleep_seconds)
-                        waited_seconds += sleep_seconds
-                        continue
-
-                    return ToolResult(
-                        status='success',
-                        content=json.dumps(
-                            {
-                                'success': True,
-                                'job_id': job_id,
-                                'status': status_name,
-                                'message': f'Job is {status_name}. Call Bohrium(action="poll", job_id={job_id}) again later to check.',
-                            },
-                            ensure_ascii=False,
-                        ),
-                    )
-
-                if code == _SUCCESS_CODE:
-                    return ToolResult(
-                        status='success',
-                        content=json.dumps(
-                            {
-                                'success': True,
-                                'job_id': job_id,
-                                'status': 'Finished',
-                                'message': (
-                                    'Job is Finished. Call '
-                                    f'Bohrium(action="download", job_id={job_id!r}, '
-                                    f'result_dir="results/run_{job_id}") '
-                                    'to retrieve artifacts.'
-                                ),
-                            },
-                            ensure_ascii=False,
-                        ),
-                    )
-
-                if code in _FAILURE_CODES:
-                    return ToolResult(
-                        status='success',
-                        content=json.dumps(
-                            {
-                                'success': True,
-                                'job_id': job_id,
-                                'status': status_name,
-                                'message': (
-                                    'Job is Failed. Call '
-                                    f'Bohrium(action="download", job_id={job_id!r}, '
-                                    f'result_dir="results/run_{job_id}") '
-                                    'to retrieve logs and artifacts.'
-                                ),
-                            },
-                            ensure_ascii=False,
-                        ),
-                    )
-
+            if code in _RUNNING_CODES:
                 return ToolResult(
                     status='success',
                     content=json.dumps(
@@ -517,11 +392,65 @@ class BohriumTool(BuiltinTool):
                             'success': True,
                             'job_id': job_id,
                             'status': status_name,
-                            'message': f'Unexpected status code {code}. Retry poll or check Bohrium console.',
+                            'message': (
+                                f'Job is {status_name}. '
+                                'Continue other work before polling again.'
+                            ),
                         },
                         ensure_ascii=False,
                     ),
                 )
+
+            if code == _SUCCESS_CODE:
+                return ToolResult(
+                    status='success',
+                    content=json.dumps(
+                        {
+                            'success': True,
+                            'job_id': job_id,
+                            'status': 'Finished',
+                            'message': (
+                                'Job is Finished. Call '
+                                f'Bohrium(action="download", job_id={job_id!r}, '
+                                f'result_dir="results/run_{job_id}") '
+                                'to retrieve artifacts.'
+                            ),
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+
+            if code in _FAILURE_CODES:
+                return ToolResult(
+                    status='success',
+                    content=json.dumps(
+                        {
+                            'success': True,
+                            'job_id': job_id,
+                            'status': status_name,
+                            'message': (
+                                'Job is Failed. Call '
+                                f'Bohrium(action="download", job_id={job_id!r}, '
+                                f'result_dir="results/run_{job_id}") '
+                                'to retrieve logs and artifacts.'
+                            ),
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+
+            return ToolResult(
+                status='success',
+                content=json.dumps(
+                    {
+                        'success': True,
+                        'job_id': job_id,
+                        'status': status_name,
+                        'message': f'Unexpected status code {code}. Retry poll or check Bohrium console.',
+                    },
+                    ensure_ascii=False,
+                ),
+            )
 
         except Exception as exc:
             logger.error(
