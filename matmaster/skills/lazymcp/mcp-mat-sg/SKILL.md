@@ -20,12 +20,6 @@ mcp_server: mat_sg
   - **Faster alternative**: simply verify `total_atoms % atoms_per_molecule == 0` and check that no atom has fewer neighbors than expected for its element (C≥2, N≥1, O≥1, H≥1 for organic molecules). This catches 95% of fragmentation without expensive graph analysis.
 - **Post-build structure verification (mandatory)**: after every slab build, run `get_structure_info` (or equivalent) and verify: (a) composition matches expected formula, (b) atom count is correct for the specified layers × supercell, (c) vacuum gap ≥ 15 Å, (d) slab dimensionality is 2D. Do NOT skip verification — incorrect structures that go undetected cause scoring failures.
 
-### Timeout prevention (applies to all structure tasks)
-- **MCP tool retry limit**: if an MCP tool call (`build_surface_slab`, `build_surface_adsorbate`, etc.) fails, retry with different parameters **at most twice**. After 2 failures, fall back to direct Python code (ASE/pymatgen) immediately.
-- **Bohrium job failure**: if a Bohrium job returns no output or fails, **do not resubmit blindly**. First check: (1) is the image correct for the task? (DPA scripts need `dpa-calculator` image, not ABACUS/CP2K images), (2) does the script import available packages? (3) are all input files in the upload directory? Fix the root cause, then resubmit once. Maximum 2 Bohrium submissions per task.
-- **Large structure operations**: for structures > 300 atoms, avoid O(n²) algorithms (JmolNN, full distance matrix). Use neighbor lists (ASE `neighborlist.NeighborList`, scipy KDTree) or sparse representations instead.
-- **Script execution timeout**: if a Python script runs > 60 seconds locally, it is likely stuck in an expensive operation. Kill it and use a simpler algorithm.
-
 ## build_surface_interface (heterojunction / interface construction)
 
 Build a heterostructure interface by stacking two slab structures.
@@ -102,11 +96,10 @@ For CO2RR, HER, OER, and similar catalysis structure-preparation tasks:
 4. **Save each intermediate** (bulk, slab, slab+adsorbate) as **separate named files** — the task often requires multiple deliverables. Both CIF and POSCAR formats when requested.
 5. **Token economy**: do NOT search the web for standard adsorbate molecules (CO, OH, H2O, HCOO). Build them directly with `build_molecule_structures_from_smiles` or write XYZ coordinates in one Bash call.
 6. **Adsorbate geometry**: verify the adsorbate-surface distance is physically reasonable (typically 1.5–2.5 Å for chemisorption, 2.5–3.5 Å for physisorption). Report key distances in the final answer.
-7. **Final answer MUST include** (as a structured table or list): (a) lattice parameters of bulk, (b) slab dimensions (in-plane a×b, vacuum gap, total c), (c) atom count per structure, (d) adsorption site type and adsorbate-surface distance(s), (e) polarity assessment for polar surfaces (Tasker type, mitigation strategy used), (f) list of all output files with descriptions. Missing any of these causes scoring deductions.
 
 ### MLIP-based adsorption energy calculations
 When the task requires computing adsorption energies (E_ads) with MLIP/DPA models:
-- **CRITICAL: Write ONE consolidated Python script** that loops over ALL surfaces × adsorbates in a single execution, computes E_ads = E(slab+ads) − E(slab) − E(gas), and prints a complete results table. **DO NOT submit multiple separate Bohrium jobs** — each submit/poll cycle costs ~60 seconds, and submitting N separate jobs risks timeout. One script, one job, one result file.
+- Write ONE consolidated Python script that loops over all surfaces × adsorbates, computes E_ads = E(slab+ads) − E(slab) − E(gas), and prints a complete results table. Prefer a single Bohrium job where feasible — each submit/poll cycle costs ~60 seconds.
 - The script MUST use `from _calculator import build_calculator` (copy `_calculator.py` from `matmaster/skills/mlips/scripts/` into the input directory).
 - For catalysis surfaces use head `OC22`: `build_calculator("DPA3.1-3M", head="OC22")`.
 - Submit to Bohrium with **image `registry.dp.tech/dptech/dpa-calculator:f7835422`** and **machine `c16_m64_1 * NVIDIA 4090`**. Do NOT use ABACUS/CP2K/other images — they lack ASE and deepmd-kit.
@@ -132,8 +125,4 @@ When the task requires computing adsorption energies (E_ads) with MLIP/DPA model
   json.dump(results, open("results.json", "w"), indent=2)
   ```
 
-### Time budget awareness (CO2RR / catalysis workflows)
-- **Target**: complete the entire workflow in under 10 minutes. Budget: structure building ≤ 3 min, Bohrium job ≤ 5 min, analysis ≤ 2 min.
-- **If the task requires > 3 Bohrium jobs**: consolidate into 1–2 scripts maximum. Never submit more than 2 separate jobs.
-- **If a Bohrium poll takes > 3 minutes**: download partial results and move on. Do not block on a single poll indefinitely.
-- **If structure building fails after 2 attempts with MCP tools**: fall back to direct Python/ASE code immediately. Do not retry MCP tools more than twice.
+
