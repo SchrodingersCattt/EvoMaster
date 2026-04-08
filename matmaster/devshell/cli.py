@@ -71,8 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="NAME",
         help=(
-            "matmaster/exps/{NAME}.toml. Omit or `devshell`: use the patched direct exp "
-            "for interactive devshell defaults. `direct`: use the unpatched production exp."
+            "matmaster/exps/{NAME}.toml. Omit or `devshell`: use `direct` (same as "
+            "production). Any other NAME loads that exp file."
         ),
     )
     common.add_argument(
@@ -206,14 +206,13 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
 
     from matmaster.config.loader import load_exp_config
     from matmaster.devshell.config import DevConfig, load_dev_config
-    from matmaster.devshell.exp_patch import devshell_default_exp_config
 
     exp_opt = (getattr(args, "exp", None) or "").strip() or None
     exp_override = None
     if exp_opt is not None or not args.config:
         try:
             if not exp_opt or exp_opt == "devshell":
-                exp_override = devshell_default_exp_config()
+                exp_override = load_exp_config("direct")
             else:
                 exp_override = load_exp_config(exp_opt)
         except (FileNotFoundError, ValueError) as e:

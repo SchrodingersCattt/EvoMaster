@@ -8,9 +8,9 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
 
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
 ``manifest.json`` carries ``eval_tooling`` (default: same as interactive ``mm-devshell`` without ``--exp`` —
-patched ``direct`` / ``matmaster_exp`` ``devshell`` + narrowed ``skills_root``; use ``--exp direct`` for
-full skill trees from ``matmaster/exps/{name}.toml`` + ``matmaster_config/`` MCP);
-the same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
+``direct`` from ``matmaster/exps/direct.toml``; ``matmaster_exp`` is labeled ``devshell`` when the inner
+run omits ``--exp``).
+The same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
 When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
 labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
 
@@ -130,7 +130,7 @@ def _merge_eval_config(path: Path | None, overrides: dict[str, Any]) -> dict[str
 
 
 def _normalize_mm_devshell_exp_cli(raw: str | None) -> str | None:
-    """Normalize ``--exp``: None/blank → omit mm-devshell flag (patched direct default)."""
+    """Normalize ``--exp``: None/blank → omit mm-devshell flag (direct default)."""
     if raw is None:
         return None
     s = str(raw).strip()
@@ -138,7 +138,7 @@ def _normalize_mm_devshell_exp_cli(raw: str | None) -> str | None:
 
 
 def _mm_devshell_exp_cmd_suffix(exp_cli: str | None) -> list[str]:
-    """Extra argv for ``matmaster.devshell run``; omit ``--exp`` when using default patch."""
+    """Extra argv for ``matmaster.devshell run``; omit ``--exp`` when using direct default."""
     if exp_cli is None or exp_cli == "devshell":
         return []
     return ["--exp", exp_cli]

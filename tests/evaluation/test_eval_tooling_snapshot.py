@@ -29,16 +29,12 @@ def test_snapshot_eval_tooling_direct_matches_production_exp() -> None:
     assert "mat_master" in joined or "lazymcp" in joined
 
 
-def test_snapshot_devshell_is_direct_plus_narrow_skills() -> None:
+def test_snapshot_devshell_matches_direct_except_matmaster_exp_label() -> None:
+    """Default devshell tooling snapshot is ``direct``; only ingest label differs."""
     a = snapshot_devshell_eval_tooling(repo_root=REPO_ROOT)
     d = snapshot_eval_tooling(repo_root=REPO_ROOT, exp_name="direct")
     assert a["matmaster_exp"] == "devshell"
-    assert a["exp_config_name"] == "direct"
-    assert len(a["skills_roots"]) == 2
-    joined_roots = "\n".join(a["skills_roots"])
-    assert "mcp-mat-struct-db" in joined_roots
-    assert "mcp-mat-sg" in joined_roots
-    assert "mcp-mat-struct-db" in a["skill_names"]
-    assert "mcp-mat-sg" in a["skill_names"]
-    assert a["builtin_tool_names"] == d["builtin_tool_names"]
-    assert a["max_turns"] == d["max_turns"]
+    assert d["matmaster_exp"] == "direct"
+    a_rest = {k: v for k, v in a.items() if k != "matmaster_exp"}
+    d_rest = {k: v for k, v in d.items() if k != "matmaster_exp"}
+    assert a_rest == d_rest

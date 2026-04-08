@@ -5,8 +5,8 @@ Primary path: :func:`snapshot_eval_tooling` loads
 (``matmaster/exps/{name}.toml``) — same as production / ``AgentRunService``. MCP paths resolve
 through ``[skills].config_dir`` (typically ``matmaster_config/`` in repo).
 
-:func:`snapshot_devshell_eval_tooling` uses production ``direct`` with the same skill roots and
-``mcp_runtime_patch`` as mm-devshell default (see :mod:`matmaster.devshell.exp_patch`).
+:func:`snapshot_devshell_eval_tooling` is :func:`snapshot_eval_tooling` with ``exp_name="direct"``,
+but sets ``matmaster_exp`` to ``\"devshell\"`` for manifests when the inner ``mm-devshell`` run omits ``--exp``.
 
 Used to populate ingest ``extra.eval_tooling`` so runs can be correlated with the
 registered builtin list, skill catalog, and MCP server keys from config.
@@ -234,12 +234,6 @@ def snapshot_eval_tooling(
 
 
 def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
-    """Snapshot for mm-devshell default: ``direct`` + narrowed ``skills_root`` (see ``exp_patch``)."""
-    from matmaster.devshell.exp_patch import devshell_default_exp_config
-
-    exp_cfg = devshell_default_exp_config()
-    return _build_eval_tooling_dict(
-        repo_root=repo_root,
-        exp_cfg=exp_cfg,
-        matmaster_exp_reported="devshell",
-    )
+    """Same tooling snapshot as ``direct``; only ``matmaster_exp`` is ``devshell`` for labeling."""
+    out = snapshot_eval_tooling(repo_root=repo_root, exp_name="direct")
+    return {**out, "matmaster_exp": "devshell"}
