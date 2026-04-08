@@ -134,4 +134,16 @@ banks:
     capability: "workflow_orchestration"
     questions: 5
 
-# Total: 70 questions across 19 bank files
+  # --- Thermal / thermo-structural data fitting ---
+
+  - path: "data_fitting/df_thermo.yaml"
+    capability: "property_prediction"
+    questions: 1
+
+  # --- Single-crystal XRD structure solution & refinement ---
+
+  - path: "data_fitting/df_scxrd.yaml"
+    capability: "property_prediction"
+    questions: 2
+
+# Total: 73 questions across 21 bank files
