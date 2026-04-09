@@ -66,7 +66,7 @@ banks:
 
   - path: "structure_construction/sc_struct.yaml"
     capability: "structure_construction"
-    questions: 8
+    questions: 9
 
   - path: "workflow_orchestration/wo_mech.yaml"
     capability: "workflow_orchestration"
@@ -86,7 +86,7 @@ banks:
 
   - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
     capability: "co2rr_reproduction"
-    questions: 9
+    questions: 10
 
   - path: "safety_refusal/sr_general.yaml"
     capability: "safety_refusal"
@@ -134,10 +134,6 @@ banks:
     capability: "workflow_orchestration"
     questions: 5
 
-  - path: "workflow_orchestration/wo_abacus_extended.yaml"
-    capability: "workflow_orchestration"
-    questions: 5
-
   # --- Polymer projects ---
   - path: "polymer/PM_proj_001_20260408.yaml"
     capability: "workflow_orchestration"
@@ -175,4 +171,4 @@ banks:
     capability: "property_prediction"
     questions: 2
 
-# Total: 97 questions across 29 bank files
+# Total: 94 questions across 28 bank files
