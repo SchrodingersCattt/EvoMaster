@@ -2,7 +2,7 @@ version: v5
 capability: input_generation_abacus
 domain: elec
 questions:
-- id: IG_abacus_001_20260409
+- id: IG_abacus_001_20260409v4
   capability: input_generation_abacus
   domain: elec
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place empty-atom layers in vacuum, and write SCF INPUT with sparse k along vacuum.'
@@ -47,17 +47,17 @@ questions:
   - key: must_input_bsse_vacuum_kspacing
     value:
       filename: INPUT_bsse
-      pattern: kspacing\s+\S+\s+\S+\s+1(?:\.0+)?
+      pattern: kspacing\s+(?:\S+\s+\S+\s+1(?:\.0+)?|1(?:\.0+)?)
       flags: i
   - key: suggested_input_bsse_numerics
     value:
       filename: INPUT_bsse
-      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-7\s*$)
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*(?:#.*)?$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-7\s*(?:#.*)?$)
       flags: is
   - key: suggested_input_bsse_smearing
     value:
       filename: INPUT_bsse
-      pattern: (?ims)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*$)(?=.*^\s*smearing_sigma\s+0\.01(?:0+)?\s*$)
+      pattern: (?ims)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*(?:#.*)?$)(?=.*^\s*smearing_sigma\s+0\.01(?:0+)?\s*(?:#.*)?$)
       flags: is
   - key: variable_empty_layer_placement
     value: {}
@@ -88,7 +88,7 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: must_input_bsse_vacuum_kspacing
-    criterion: "[Must] INPUT_bsse sets sparse k-spacing along the vacuum axis (third component ~=1.0)."
+    criterion: "[Must] INPUT_bsse sets sparse vacuum-axis k-spacing (either single `kspacing 1.0` or three-component form with the third component ~=1.0)."
     axis: correctness
     verify: text_file_regex
     weight: 1.0
@@ -143,7 +143,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_002_20260409
+- id: IG_abacus_002_20260409v4
   capability: input_generation_abacus
   domain: mech
   intent: 'Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty ghost atom and SCF INPUT.'
@@ -188,17 +188,17 @@ questions:
   - key: must_input_vac_uniform_kspacing
     value:
       filename: INPUT_vac_bsse
-      pattern: kspacing\s+0\.1\d*\s+0\.1\d*\s+0\.1\d*
+      pattern: kspacing\s+(?:0\.1\d*(?:\s+0\.1\d*\s+0\.1\d*)?)
       flags: i
   - key: suggested_input_vac_numerics
     value:
       filename: INPUT_vac_bsse
-      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-7\s*$)
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*(?:#.*)?$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-7\s*(?:#.*)?$)
       flags: is
   - key: suggested_input_vac_smearing
     value:
       filename: INPUT_vac_bsse
-      pattern: (?ims)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*$)(?=.*^\s*smearing_sigma\s+0\.01(?:0+)?\s*$)
+      pattern: (?ims)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*(?:#.*)?$)(?=.*^\s*smearing_sigma\s+0\.01(?:0+)?\s*(?:#.*)?$)
       flags: is
   - key: variable_bsse_explanation
     value: {}
@@ -229,7 +229,7 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: must_input_vac_uniform_kspacing
-    criterion: "[Must] INPUT_vac_bsse uses uniform three-dimensional kspacing around 0.10."
+    criterion: "[Must] INPUT_vac_bsse uses kspacing around 0.10 (single-value isotropic form or explicit uniform three-component form)."
     axis: correctness
     verify: text_file_regex
     weight: 1.0
@@ -284,7 +284,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_003_20260409v3
+- id: IG_abacus_003_20260409v4
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS PW SCF INPUT and KPT files for Al slab electrostatic-potential calculation setup.'
@@ -339,7 +339,7 @@ questions:
   - key: variable_input_smearing
     value:
       filename: INPUT_pot
-      pattern: smearing_method\s+(?:gauss|gaussian).*\bsmearing_sigma\s+(?:0\.0074|0\.01)\b
+      pattern: smearing_method\s+(?:gauss(?:ian)?|fixed|mp2?|methfessel-paxton|mv|cold|marzari-vanderbilt|fd|fermi-dirac).*\bsmearing_sigma\s+(?:0\.0074|0\.01)\b
       flags: is
   - key: variable_kpt_inplane_density
     value:
@@ -421,7 +421,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_004_20260409v3
+- id: IG_abacus_004_20260409v4
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS PW SCF input for dipole correction on an asymmetric H2O slab, with the saw-like region placed in vacuum and no finite external field.'
@@ -472,7 +472,7 @@ questions:
   - key: suggested_input_dipole_numerics
     value:
       filename: INPUT_dipole
-      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*$)(?=.*^\s*out_pot\s+2\s*$)(?=.*^\s*efield_dir\s+2\s*$)
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*(?:#.*)?$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*(?:#.*)?$)(?=.*^\s*out_pot\s+2\s*(?:#.*)?$)(?=.*^\s*efield_dir\s+2\s*(?:#.*)?$)
       flags: is
   - key: variable_input_dipole_window
     value:
@@ -484,7 +484,7 @@ questions:
   - key: variable_input_dipole_smearing
     value:
       filename: INPUT_dipole
-      pattern: smearing_method\s+(?:fixed|gauss|gaussian)
+      pattern: smearing_method\s+(?:gauss(?:ian)?|fixed|mp2?|methfessel-paxton|mv|cold|marzari-vanderbilt|fd|fermi-dirac)
       flags: i
   - key: input_dipole_artifact
     value: INPUT_dipole
@@ -561,7 +561,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_005_20260409v3
+- id: IG_abacus_005_20260409v4
   capability: input_generation_abacus
   domain: thermo
   intent: 'Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence using bulk, 5-layer slab, and 7-layer slab structures.'
@@ -645,7 +645,7 @@ questions:
   - key: variable_input_bulk_smearing
     value:
       filename: INPUT_bulk_relax
-      pattern: smearing_method\s+(?:gauss|gaussian).*\bsmearing_sigma\s+(?:0\.0074|0\.01)\b
+      pattern: smearing_method\s+(?:gauss(?:ian)?|fixed|mp2?|methfessel-paxton|mv|cold|marzari-vanderbilt|fd|fermi-dirac).*\bsmearing_sigma\s+(?:0\.0074|0\.01)\b
       flags: is
   - key: variable_kpt_slab_inplane_density
     value:
@@ -975,7 +975,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_007_20260409
+- id: IG_abacus_007_20260409v3
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS LCAO spin-polarized electric-field SCF and NSCF band inputs for a nanoribbon, including a line-mode KPT from Gamma to Y.'
@@ -1028,7 +1028,7 @@ questions:
   - key: suggested_input_spin_numerics
     value:
       filename: INPUT_spin_elec_scf
-      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*$)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*$)(?=.*^\s*smearing_sigma\s+0\.001(?:0+)?\s*$)
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*(?:#.*)?$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*(?:#.*)?$)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*(?:#.*)?$)(?=.*^\s*smearing_sigma\s+0\.001(?:0+)?\s*(?:#.*)?$)
       flags: is
   - key: suggested_input_spin_mixing
     value:
@@ -1135,7 +1135,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_008_20260409
+- id: IG_abacus_008_20260409v3
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS PW SCF input combining dipole correction with compensating charge for a charged H2O slab, including gate-plane and barrier parameters.'
@@ -1165,7 +1165,7 @@ questions:
   - key: must_input_gate_core
     value:
       filename: INPUT_gate
-      pattern: (?ims)(?=.*^\s*calculation\s+scf\s*$)(?=.*^\s*basis_type\s+pw\s*$)(?=.*^\s*efield_flag\s+1\s*$)(?=.*^\s*dip_cor_flag\s+1\s*$)(?=.*^\s*gate_flag\s+(?:1|true)\s*$)(?=.*^\s*block\s+(?:1|true)\s*$)(?=.*^\s*efield_amp\s+0(?:\.0+)?\s*$)
+      pattern: (?ims)(?=.*^\s*calculation\s+scf\s*(?:#.*)?$)(?=.*^\s*basis_type\s+pw\s*(?:#.*)?$)(?=.*^\s*efield_flag\s+1\s*(?:#.*)?$)(?=.*^\s*dip_cor_flag\s+1\s*(?:#.*)?$)(?=.*^\s*gate_flag\s+(?:1|true)\s*(?:#.*)?$)(?=.*^\s*block\s+(?:1|true)\s*(?:#.*)?$)(?=.*^\s*efield_amp\s+0(?:\.0+)?\s*(?:#.*)?$)
       flags: is
   - key: must_kpt_gate_gamma
     value:
@@ -1182,7 +1182,7 @@ questions:
   - key: suggested_input_gate_numerics
     value:
       filename: INPUT_gate
-      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*$)(?=.*^\s*out_pot\s+2\s*$)
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*(?:#.*)?$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*(?:#.*)?$)(?=.*^\s*out_pot\s+2\s*(?:#.*)?$)
       flags: is
   - key: suggested_gate_plane_and_barrier_fields
     value:
@@ -1197,7 +1197,7 @@ questions:
   - key: variable_input_gate_smearing_mixing
     value:
       filename: INPUT_gate
-      pattern: smearing_method\s+(?:gauss|gaussian).*mixing_type\s+broyden
+      pattern: smearing_method\s+(?:gauss(?:ian)?|fixed|mp2?|methfessel-paxton|mv|cold|marzari-vanderbilt|fd|fermi-dirac).*mixing_type\s+broyden
       flags: is
   - key: variable_input_gate_window
     value:
