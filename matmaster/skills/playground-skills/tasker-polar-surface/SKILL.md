@@ -48,6 +48,20 @@ When cutting a surface slab from a bulk crystal (especially ionic or oxide), app
 - 用 **mat_sn_*** 或 **web-search** 搜该 (formula, 晶面)，如 "ZnO 0001 symmetric slab layers", "<formula> <hkl> slab construction vacuum"。
 - 从论文/教程里提取：**层数**（或 repeat units）、**真空厚度**、以及是否推荐某种**终止面**（如上下都是 O 终止）。
 
+#### ⚠ Layer counting — `-L` maps to ASE `surface()` layers, not bilayers
+
+The `-L` (repeat-layers) parameter equals ASE's `layers` arg — one "layer" = **one atomic plane** (a single-species sheet). For compound crystals this is NOT one formula-unit bilayer:
+
+| Structure type | Example | Atomic planes per bilayer | `-L` for 3 bilayers |
+|----------------|---------|--------------------------|---------------------|
+| Zinc blende (001) | ZnS | 2 (Zn + S) | `-L 6` |
+| Rocksalt (001) | MgO | 2 (Mg + O) | `-L 6` |
+| Wurtzite (0001) | ZnO | 2 (Zn + O) | `-L 6` |
+| Fluorite (111) | CeO₂ | 3 (O + Ce + O) | `-L 9` |
+| Perovskite (001) | SrTiO₃ | 2 (SrO + TiO₂) | `-L 6` |
+
+**Rule**: When a task says "N-layer slab", first determine how many **atomic planes per repeat bilayer** for the given crystal and Miller index, then set `-L = N × (planes per bilayer)`. After building, **count the resulting atomic planes** in the checker output (`layer_summary`) to verify. If the count exceeds the task requirement, reduce `-L` and rebuild. For a Type 3 symmetric slab fix, the script may add ≤1 extra plane — budget for this.
+
 ### Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）
 
 - **根据用户或文献需求传参**：用户明确要求的层数、厚度、真空、扩胞、电荷等，必须通过 script_args 传给脚本，不要只用默认值。

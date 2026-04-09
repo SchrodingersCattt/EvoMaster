@@ -70,9 +70,16 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 
 ### 3. Surface Passivation
 * **passivate_surface.py** — Add H to saturate dangling bonds on slab surfaces (both top and bottom).
-    * `python passivate_surface.py slab.cif [-o passivated.cif] [--element Si] [--bond-length 1.48] [--cutoff 2.6]`
+    * `python passivate_surface.py slab.cif [-o passivated.cif] [--element Si] [--bond-length 1.48] [--cutoff 2.6] [--target-coordination 4] [--surface-fraction 0.25]`
     * Identifies under-coordinated surface atoms, places H along missing tetrahedral directions, verifies result.
     * Default for Si (Si-H 1.48 A, Si-Si cutoff 2.6 A). Adjust `--element`, `--bond-length`, `--cutoff` for other materials (e.g. Ge-H 1.53 A).
+    * **Passivation must produce a structure file**: This script **must output a POSCAR/CIF file** (via `-o`). Do not stop after writing a specification JSON — the task is not complete until the actual passivated structure file exists in the workspace and has been validated with `assess_structure.py`.
+    * **Both surfaces**: By default the script passivates both top and bottom surfaces. If the task asks for both-surface passivation, use the default. If only one surface is needed, the script handles this internally — just run it and report which surfaces were passivated.
+    * **Typical workflow (execute, don't just plan)**:
+      1. Build or obtain the slab (e.g. Si(100) via ASE/pymatgen)
+      2. Run `passivate_surface.py` with `-o <output_file>` — **produces the passivated structure**
+      3. Run `assess_structure.py` on the output to validate
+      4. Report: number of H atoms added, representative Si-H bond length, coordination check results
 
 ### 4. Format Conversion
 * **convert_format.py** (dpdata-based)
@@ -149,7 +156,9 @@ After constructing any structure for electronic property calculations:
 ## Rules
 
 * If no CIF/POSCAR file is delivered to the user, `task_completed` must be `partial`, never `true` — even if you found crystal parameters from literature.
+* **Grounding depth for structure analysis**: When reporting on structural properties (disorder, defects, coordination, composition), always provide **physical/chemical explanations**, not just labels. For disordered structures: explain which specific crystallographic sites are disordered and why (e.g., split positions for metal cations, rotational disorder of organic ligands, partial occupancy of guest molecules), how occupancy patterns relate to symmetry constraints, and what changes structurally when building the ordered replica. A table row saying "contains fractional occupancy" is insufficient — the grounding must trace the structural physics of each specific material.
 * Structure identification must include database identifiers (CCDC REFCODE / ICSD collection code) when the structure has been deposited. If the paper you fetched does not contain them, search for the original experimental paper that first reported the structure.
 * After obtaining any new structure (any method), run `assess_structure.py`. If it reports "Slab" for a Bulk task, warn the user.
 * For LAMMPS conversions, **always** provide `--type-map`. If the source .lmp uses a non-atomic atom_style, **always** provide `--atom-style`.
 * On `missing_dependency` from any script, install the package on the remote session before retrying.
+* **Deliverable-first execution**: Always prioritize producing actual structure files (CIF, POSCAR, etc.) in the workspace. Do not stop at planning or spec-generation steps — a JSON spec describing what to build is not a deliverable. If a script fails, retry with adjusted parameters or fall back to inline Python, but always aim to write the final structure file before finishing. For multi-component construction tasks (e.g., bulk + slab + adsorbate), build each component as a separate file and verify each exists.

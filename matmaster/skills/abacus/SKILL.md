@@ -362,11 +362,27 @@ efield_pos_dec 0.10
 - Combine with `dip_cor_flag 1` to also correct the dipole artifact when applying a finite field.
 
 ### Gate Field
+
+A complete gate-field INPUT should include **both** the standard SCF parameters and the gate/dipole/barrier block. Write them together in one file (do not split into separate steps):
+
 ```
 INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 200
+smearing_method gauss
+smearing_sigma 0.01
+mixing_type broyden
+mixing_beta 0.4
+out_pot 2
 efield_flag 1
 dip_cor_flag 1
 efield_dir 2
+efield_pos_max 0.95
+efield_pos_dec 0.10
+efield_amp 0.0
 gate_flag 1
 zgate 0.7
 nelec 8
@@ -375,6 +391,8 @@ block_down 0.45
 block_up 0.55
 block_height 0.1
 ```
+- Include `out_pot 2` to output the electrostatic potential — essential for analyzing the gate effect on the potential profile.
+- `mixing_type broyden` with `mixing_beta 0.4`: recommended for slab/surface systems with vacuum (improves SCF convergence).
 - `gate_flag 1`: place compensating charge sheet at fractional z = `zgate` (in vacuum).
 - `nelec`: **Always count electrons from your actual system first.** Set to the system's neutral electron count by default (e.g. 8 for H₂O). Only change from neutral to simulate a charged system (e.g. 9 = adding one electron). **Never copy example values blindly — always derive from your structure.**
 - `block 1` + `block_down/block_up/block_height`: potential barrier in vacuum to prevent electron spillage.
