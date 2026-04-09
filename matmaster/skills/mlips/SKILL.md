@@ -62,6 +62,7 @@ Pass `--charge` and `--spin` only when using DPA3.2-5M. Other models ignore thes
 | md | `run_molecular_dynamics.py` | Multi-stage MD (NVT/NPT/NVE) |
 | elastic | `calculate_elastic.py` | Elastic constants (needs relaxed structure) |
 | neb | `run_neb.py` | NEB transition-state search |
+| adsorption | `calculate_adsorption.py` | Adsorption energies E_ads on slab surfaces |
 
 ## Script Usage
 
@@ -126,7 +127,16 @@ Output: `neb_band.pdf`, `result.json` (forward/reverse barrier in eV)
 
 ### Adsorption Energy (catalysis)
 
-For E_ads calculations: copy `_calculator.py` into the working directory, write ONE script using `from _calculator import build_calculator` with `head="OC22"`, compute E_ads = E(slab+ads) − E(slab) − E(gas) for all surfaces × adsorbates in a single loop.
+```bash
+python calculate_adsorption.py --slabs slab_001.cif slab_011.cif \
+    --adsorbates CO H OH COOH --model DPA3.1-3M --head OC22 \
+    [--height 2.0] [--fmax 0.03] [--fix-fraction 0.3]
+```
+
+Built-in adsorbates: H, C, O, N, CO, CO2, H2, H2O, OH, OOH, COOH, HCOO, CHO.
+For custom molecules, provide a file path. Copy both `_calculator.py` and `calculate_adsorption.py` to the working directory.
+
+Output: `adsorption_results.json` (all energies + E_ads table), `{slab}_{ads}_relaxed.cif` per combination.
 
 ## Physical Checks
 

@@ -60,7 +60,13 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
         * **Bulk vs Slab**: Vacuum gap > 15Å in one direction -> Slab; in 3 directions -> Molecule.
         * **Sanity**: Fails if `min_dist < 0.5 Å` (hard overlap cutoff, PBC-aware).
 
-### 3. Format Conversion
+### 3. Surface Passivation
+* **passivate_surface.py** — Add H to saturate dangling bonds on slab surfaces (both top and bottom).
+    * `python passivate_surface.py slab.cif [-o passivated.cif] [--element Si] [--bond-length 1.48] [--cutoff 2.6]`
+    * Identifies under-coordinated surface atoms, places H along missing tetrahedral directions, verifies result.
+    * Default for Si (Si-H 1.48 A, Si-Si cutoff 2.6 A). Adjust `--element`, `--bond-length`, `--cutoff` for other materials (e.g. Ge-H 1.53 A).
+
+### 4. Format Conversion
 * **convert_format.py** (dpdata-based)
     * **Formats**: CIF, POSCAR, LAMMPS data/dump, XYZ, extXYZ, Gaussian, GROMACS, ABACUS, DeePMD, etc.
     * **Output JSON**: `{"success": true, "output": "POSCAR", "info": {"atom_names": ["O","H"], "natoms": 3, ...}}`
