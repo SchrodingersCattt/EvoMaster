@@ -14,7 +14,6 @@ from matmaster.types.messages import (
     ToolMessage,
     UserMessage,
 )
-
 from src.services.chat_history import ChatHistoryConverter
 
 _ROLE_TO_MESSAGE_MODEL: dict[str, type[Message]] = {
@@ -30,7 +29,7 @@ def _message_role_name(raw: dict[str, Any]) -> str:
     if isinstance(role, str):
         return role.strip().lower()
     if role is not None and hasattr(role, "value"):
-        return str(getattr(role, "value")).strip().lower()
+        return str(role.value).strip().lower()
     return str(role or "").strip().lower()
 
 

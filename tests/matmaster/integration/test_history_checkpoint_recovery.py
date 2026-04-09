@@ -201,8 +201,7 @@ class InMemoryEventsTable:
         return [
             event
             for event in self._events
-            if event["type"] == "compact_boundary"
-            and event.get("spawn_id") == spawn_id
+            if event["type"] == "compact_boundary" and event.get("spawn_id") == spawn_id
         ]
 
 
@@ -300,7 +299,13 @@ async def test_restore_with_checkpoint_plus_incremental_events() -> None:
         "incremental follow-up answer",
     ]
     fanout.flush_persistence_barrier.assert_awaited_once()
-    assert ("get_scope_events_after_id", session_id, None, 2, None) in events_table.calls
+    assert (
+        "get_scope_events_after_id",
+        session_id,
+        None,
+        2,
+        None,
+    ) in events_table.calls
 
 
 @pytest.mark.asyncio
@@ -340,7 +345,9 @@ async def test_ephemeral_compaction_does_not_trigger_checkpoint_sink() -> None:
     fanout.flush_persistence_barrier.assert_not_awaited()
     assert events_table.history_checkpoints(spawn_id=None) == []
     assert events_table.compact_boundaries(spawn_id=None) == []
-    assert not any(call[0] == "get_latest_scope_event_id" for call in events_table.calls)
+    assert not any(
+        call[0] == "get_latest_scope_event_id" for call in events_table.calls
+    )
     assert not any(call[0] == "add_checkpoint_pair" for call in events_table.calls)
 
 
@@ -407,7 +414,10 @@ async def test_spawn_id_checkpoint_does_not_affect_parent_restore() -> None:
         task_id=None,
     )
 
-    assert [type(message) for message in parent_history] == [UserMessage, AssistantMessage]
+    assert [type(message) for message in parent_history] == [
+        UserMessage,
+        AssistantMessage,
+    ]
     assert [message.content for message in parent_history] == [
         "parent raw question",
         "parent raw answer",

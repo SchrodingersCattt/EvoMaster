@@ -49,7 +49,7 @@ class CancellationToken:
         if timeout is not None:
             try:
                 return await asyncio.wait_for(asyncio.ensure_future(fut), timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return False
 
         return await fut

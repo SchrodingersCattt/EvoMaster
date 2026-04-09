@@ -22,9 +22,7 @@ def test_serialize_base_messages_uses_model_dump_json() -> None:
         UserMessage(content="task"),
         AssistantMessage(
             content=None,
-            tool_calls=[
-                ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})
-            ],
+            tool_calls=[ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})],
             reasoning_content="reasoning",
         ),
         ToolMessage(tool_call_id="tc-1", tool_name="bash", content="ok"),
@@ -44,9 +42,7 @@ def test_deserialize_base_messages_roundtrip() -> None:
         UserMessage(content="task"),
         AssistantMessage(
             content=None,
-            tool_calls=[
-                ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})
-            ],
+            tool_calls=[ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})],
             reasoning_content="reasoning",
         ),
         ToolMessage(tool_call_id="tc-1", tool_name="bash", content="ok"),

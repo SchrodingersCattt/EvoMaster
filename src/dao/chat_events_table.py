@@ -105,9 +105,7 @@ class ChatEventsTable(BaseTable):
                 rows = list(cursor.fetchall())
                 return [self._row_to_event(row) for row in rows]
 
-    def get_latest_scope_event_id(
-        self, session_id: str, spawn_id: str | None
-    ) -> int:
+    def get_latest_scope_event_id(self, session_id: str, spawn_id: str | None) -> int:
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 if spawn_id is None:

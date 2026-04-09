@@ -568,7 +568,9 @@ class TestRunEventFanoutPersistenceBarrier:
             "after-barrier",
         ]
 
-    async def test_flush_barrier_avoids_set_size_error_during_thread_reserve(self) -> None:
+    async def test_flush_barrier_avoids_set_size_error_during_thread_reserve(
+        self,
+    ) -> None:
         """Barrier should not crash when thread bridge reserves while barrier checks state."""
         from matmaster.integration.fanout import RunEventFanout
 

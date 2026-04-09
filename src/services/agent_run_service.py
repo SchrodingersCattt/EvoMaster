@@ -312,6 +312,7 @@ class AgentRunService:
 
             def _checkpoint_sink_factory(*, spawn_id: str | None = None):
                 if checkpoint_service is None:
+
                     async def _noop_checkpoint_sink(
                         *,
                         payload: dict[str, Any],

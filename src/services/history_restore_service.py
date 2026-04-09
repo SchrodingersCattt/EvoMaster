@@ -4,7 +4,6 @@ import logging
 from typing import Any
 
 from matmaster.types.messages import Message
-
 from src.services.chat_history import ChatHistoryConverter
 from src.services.history_checkpoint_codec import (
     deserialize_base_messages,

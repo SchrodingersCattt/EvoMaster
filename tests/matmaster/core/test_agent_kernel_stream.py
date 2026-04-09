@@ -835,14 +835,16 @@ class TestCheckpointAwareCompaction:
                     "failure_reason": None,
                 },
                 "base_messages": [
-                    SystemMessage(
-                        content="[Compacted Context]\nsummary"
-                    ).model_dump(mode="json"),
+                    SystemMessage(content="[Compacted Context]\nsummary").model_dump(
+                        mode="json"
+                    ),
                     UserMessage(content="test task").model_dump(mode="json"),
                 ],
             }
         ]
-        assert any(getattr(event, "type", None) == "context_compaction" for event in events)
+        assert any(
+            getattr(event, "type", None) == "context_compaction" for event in events
+        )
 
     @pytest.mark.asyncio
     async def test_kernel_yields_compaction_event_before_checkpoint_sink(self) -> None:
@@ -958,7 +960,13 @@ class TestExpCheckpointSinkScopeResolution:
             child_runtime = await exp.build_runtime(ctx, spawn_id="child-1")
 
         assert seen_spawn_ids == [None, "child-1"]
-        assert parent_runtime.spec.meta["checkpoint_sink_factory"] is checkpoint_sink_factory
-        assert child_runtime.spec.meta["checkpoint_sink_factory"] is checkpoint_sink_factory
+        assert (
+            parent_runtime.spec.meta["checkpoint_sink_factory"]
+            is checkpoint_sink_factory
+        )
+        assert (
+            child_runtime.spec.meta["checkpoint_sink_factory"]
+            is checkpoint_sink_factory
+        )
         assert parent_runtime.spec.meta["checkpoint_sink"] is parent_sink
         assert child_runtime.spec.meta["checkpoint_sink"] is child_sink
