@@ -8,9 +8,8 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
 
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
 ``manifest.json`` carries ``eval_tooling`` (default: same as interactive ``mm-devshell`` without ``--exp`` —
-patched ``direct`` / ``matmaster_exp`` ``devshell`` + narrowed ``skills_root``; use ``--exp direct`` for
-full skill trees from ``matmaster/exps/{name}.toml`` + ``matmaster_config/`` MCP);
-the same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
+``direct`` from ``matmaster/exps/direct.toml``).
+The same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
 When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
 labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
 
@@ -43,7 +42,7 @@ Usage (from repository root)::
 
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --model claude-opus-4-6 --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --limit 3
-    uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --capabilities structure_construction --limit 3
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --slices structure_construction --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-export-review --limit 3   # skip Markdown bundle
     uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run-dir results/devshell_eval_*  # manual only
@@ -130,7 +129,7 @@ def _merge_eval_config(path: Path | None, overrides: dict[str, Any]) -> dict[str
 
 
 def _normalize_mm_devshell_exp_cli(raw: str | None) -> str | None:
-    """Normalize ``--exp``: None/blank → omit mm-devshell flag (patched direct default)."""
+    """Normalize ``--exp``: None/blank → omit mm-devshell flag (direct default)."""
     if raw is None:
         return None
     s = str(raw).strip()
@@ -138,8 +137,8 @@ def _normalize_mm_devshell_exp_cli(raw: str | None) -> str | None:
 
 
 def _mm_devshell_exp_cmd_suffix(exp_cli: str | None) -> list[str]:
-    """Extra argv for ``matmaster.devshell run``; omit ``--exp`` when using default patch."""
-    if exp_cli is None or exp_cli == "devshell":
+    """Extra argv for ``matmaster.devshell run``; omit ``--exp`` when using direct default."""
+    if exp_cli is None:
         return []
     return ["--exp", exp_cli]
 
@@ -147,20 +146,11 @@ def _mm_devshell_exp_cmd_suffix(exp_cli: str | None) -> list[str]:
 def _eval_tooling_snapshot_for_exp_cli(
     *, repo_root: Path, exp_cli: str | None
 ) -> dict[str, Any]:
-    from evaluation.eval_tooling_snapshot import (
-        snapshot_devshell_eval_tooling,
-        snapshot_eval_tooling,
-    )
+    """Resolve ``--exp`` to the ``matmaster/exps/{name}.toml`` snapshot (default: ``direct``)."""
+    from evaluation.eval_tooling_snapshot import snapshot_eval_tooling
 
-    if exp_cli is None or exp_cli == "devshell":
-        return snapshot_devshell_eval_tooling(repo_root=repo_root)
-    return snapshot_eval_tooling(repo_root=repo_root, exp_name=exp_cli)
-
-
-def _manifest_matmaster_exp_label(exp_cli: str | None) -> str:
-    if exp_cli is None or exp_cli == "devshell":
-        return "devshell"
-    return exp_cli
+    name = (exp_cli or "").strip() or "direct"
+    return snapshot_eval_tooling(repo_root=repo_root, exp_name=name)
 
 
 class _TeeTextIO:
@@ -296,18 +286,20 @@ def main() -> int:
         type=str,
         default=None,
         help=(
-            "Forwarded to ``mm-devshell run --exp`` when set. Omit this flag (default) for the same "
-            "patched ``direct`` as interactive devshell (narrowed skills_root; manifest "
-            "``matmaster_exp``: devshell). Use ``direct`` for full packaged skill trees (unpatched exp)."
+            "Forwarded to ``mm-devshell run --exp`` when set. Omit this flag (default) to use the "
+            "same ``direct`` exp as interactive ``mm-devshell`` (``load_exp_config('direct')``). "
+            "Eval tooling snapshots use ``matmaster/exps/{exp}.toml`` (e.g. full "
+            "``matmaster/skills`` tree for ``direct``)."
         ),
     )
     parser.add_argument(
-        "--capabilities",
-        nargs="+",
+        "--slices",
         default=None,
+        metavar="EXPR",
         help=(
-            "Only run questions with these capability values "
-            "(e.g. structure_construction, batch_processing)"
+            "OR-of-slices filter: cap cap[dom] cap[d1,d2] (whitespace separates "
+            'slices; no spaces inside "[...]") '
+            '(e.g. "workflow_orchestration[polymer] input_generation_abacus")'
         ),
     )
     parser.add_argument(
@@ -450,20 +442,26 @@ def main() -> int:
         return 2
     py = args.python or Path(sys.executable)
 
+    sys.path.insert(0, str(REPO_ROOT))
+    from evaluation.core.slice_parser import parse_slices_expression
+
+    slices_override = None
+    if args.slices is not None:
+        slices_override = [s.model_dump() for s in parse_slices_expression(args.slices)]
+
     cfg_dict = _merge_eval_config(
         args.eval_config if args.eval_config.is_file() else None,
         {
             "question_bank_dir": (
                 str(args.question_bank_dir) if args.question_bank_dir else None
             ),
-            "include_capabilities": args.capabilities,
+            "include_slices": slices_override,
             "modes": args.modes,
             "include_question_ids": args.questions,
         },
     )
 
     # Lazy imports after potential chdir
-    sys.path.insert(0, str(REPO_ROOT))
     from evaluation.core.runner import (
         _apply_filters,
         _flatten_banks,
@@ -560,7 +558,6 @@ def main() -> int:
         "task_timeout_sec": args.task_timeout,
         "dry_run": False,
         "eval_tooling": eval_tooling_snapshot,
-        "matmaster_exp": _manifest_matmaster_exp_label(exp_cli),
     }
     if ingest_url:
         manifest["eval_ingest_url"] = ingest_url

@@ -20,7 +20,7 @@ def test_build_run_devshell_eval_argv_minimal() -> None:
         jobs=2,
         limit=3,
         questions=None,
-        capabilities=None,
+        slices=None,
         model="claude-sonnet-4-6",
         exp=None,
         eval_ingest_pending_only=True,

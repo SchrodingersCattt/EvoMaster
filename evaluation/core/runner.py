@@ -5,7 +5,7 @@ Current v5 runner behavior:
 - evaluate() returns EvalRunRecord directly (no raw dict intermediary)
 - load_question_banks() accepts only v5 question banks
 - _flatten_banks() no longer returns a rubric_map (Rubric class removed)
-- _apply_filters() uses capability filters and explicit question IDs
+- _apply_filters() uses slice filters (OR of capability[+domain]) and question IDs
 - expand_run_plan() no longer reads repeat_override from QuestionItem
 """
 
@@ -24,6 +24,7 @@ from .evidence import EvidenceBundle, EvidenceExtractor
 from .mat_runner import run_mat_task
 from .reporter import append_raw_run, write_reports
 from .schemas import (
+    CapabilitySlice,
     EvalConfig,
     EvalRunRecord,
     QuestionBank,
@@ -160,13 +161,28 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _question_matches_slice(question: QuestionItem, sl: CapabilitySlice) -> bool:
+    if question.capability.lower() != sl.capability.lower():
+        return False
+    if sl.domains is None:
+        return True
+    allowed = {d.lower() for d in sl.domains}
+    return question.domain.lower() in allowed
+
+
 def _apply_filters(
     questions: list[QuestionItem], config: EvalConfig
 ) -> list[QuestionItem]:
-    """Filter questions by capability and/or explicit IDs."""
-    if config.include_capabilities:
-        caps = {c.lower() for c in config.include_capabilities}
-        questions = [q for q in questions if q.capability.lower() in caps]
+    """Filter questions by OR-of-slices and/or explicit IDs."""
+    if config.include_slices:
+        picked: list[QuestionItem] = []
+        seen: set[str] = set()
+        for q in questions:
+            if any(_question_matches_slice(q, sl) for sl in config.include_slices):
+                if q.id not in seen:
+                    seen.add(q.id)
+                    picked.append(q)
+        questions = picked
 
     if config.include_question_ids:
         ids = set(config.include_question_ids)
@@ -174,7 +190,7 @@ def _apply_filters(
 
     if not questions:
         raise ValueError(
-            'No questions remaining after applying --capabilities / --questions filters'
+            'No questions remaining after applying --slices / --questions filters'
         )
     return questions
 

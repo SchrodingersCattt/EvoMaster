@@ -247,6 +247,22 @@ class BohriumTool(BuiltinTool):
             '- download: use action="download" only after poll reports Finished or '
             'Failed. Requires result_dir; retrieves logs and artifacts for analysis.\n'
             '- When image or machine is unknown, call list_images / list_machines first.\n'
+            '\n'
+            '### Common software defaults\n'
+            '| Software | Image | Machine | Command |\n'
+            '|----------|-------|---------|--------|\n'
+            '| **MLIP/DPA** (ASE+deepmd) | `registry.dp.tech/dptech/dpa-calculator:f7835422` '
+            '| `c16_m64_1 * NVIDIA 4090` | `python <script>.py > log 2>&1` |\n'
+            '| ABACUS | `registry.dp.tech/dptech/abacus:LTSv3.10.1` '
+            '| `c32_m128_cpu` | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |\n'
+            '| CP2K | `registry.dp.tech/dptech/cp2k:2024.1` '
+            '| `c32_m128_cpu` | `OMP_NUM_THREADS=1 mpirun -np 32 cp2k.popt -i input.inp > log 2>&1` |\n'
+            '| QE | `registry.dp.tech/dptech/quantum-espresso:7.1` '
+            '| `c32_m128_cpu` | `OMP_NUM_THREADS=1 mpirun -np 32 pw.x -i pw.in > log 2>&1` |\n'
+            '\n'
+            'The **MLIP/DPA image** includes deepmd-kit, ASE, phonopy, pymatgen pre-installed. '
+            'For ANY Python script that imports ASE or uses DPA/MACE/deepmd calculators, '
+            'you MUST use this image — other images (ABACUS, CP2K, etc.) do NOT have ASE/deepmd.\n'
         )
 
     _sandbox_catalog: ClassVar[dict[str, Any] | None] = None

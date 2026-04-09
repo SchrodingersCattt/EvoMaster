@@ -5,11 +5,8 @@ Primary path: :func:`snapshot_eval_tooling` loads
 (``matmaster/exps/{name}.toml``) — same as production / ``AgentRunService``. MCP paths resolve
 through ``[skills].config_dir`` (typically ``matmaster_config/`` in repo).
 
-:func:`snapshot_devshell_eval_tooling` uses production ``direct`` with the same skill roots and
-``mcp_runtime_patch`` as mm-devshell default (see :mod:`matmaster.devshell.exp_patch`).
-
-Used to populate ingest ``extra.eval_tooling`` so runs can be correlated with the
-registered builtin list, skill catalog, and MCP server keys from config.
+Used to populate ingest ``extra.eval_tooling`` and ``manifest.json`` so runs can be correlated with
+the registered builtin list, skill catalog, and MCP server keys from config.
 """
 
 from __future__ import annotations
@@ -84,22 +81,17 @@ def _resolve_builtin_tool_names(builtin_cfg: list[str]) -> list[str]:
 
 
 def _skills_roots_as_paths(skills_cfg: ExpSkillsConfig, repo_root: Path) -> list[Path]:
+    """Resolve ``[skills].skills_root`` the same way as :meth:`Exp._init_skill_tools` (repo-relative).
+
+    The umbrella path ``matmaster/skills`` is kept as-is so :class:`SkillRegistry` snapshots match
+    runtime scanning (all sub-trees: lazymcp, abacus, etc.).
+    """
     raw = skills_cfg.skills_root
     paths: list[Path] = []
 
     def _append_root(raw_root: str) -> None:
         p = Path(str(raw_root))
         resolved = p if p.is_absolute() else (repo_root / p).resolve()
-        legacy_umbrella = (repo_root / "matmaster/skills").resolve()
-        if resolved == legacy_umbrella:
-            compat_roots = [
-                (repo_root / "matmaster/skills/lazymcp").resolve(),
-            ]
-            for compat in compat_roots:
-                if compat.exists():
-                    _append_unique_path(paths, compat)
-            if paths:
-                return
         _append_unique_path(paths, resolved)
 
     if isinstance(raw, list):
@@ -163,7 +155,6 @@ def _build_eval_tooling_dict(
     *,
     repo_root: Path,
     exp_cfg: ExpConfig,
-    matmaster_exp_reported: str,
 ) -> dict[str, Any]:
     """JSON-serializable tooling snapshot from an already-resolved :class:`ExpConfig`."""
     repo_root = repo_root.resolve()
@@ -195,7 +186,6 @@ def _build_eval_tooling_dict(
 
     return {
         "schema": "matmaster_eval_tooling_v1",
-        "matmaster_exp": matmaster_exp_reported,
         "devshell_agent_name": exp_cfg.name,
         "devshell_max_turns": exp_cfg.max_turns,
         "session_type": session_type,
@@ -218,10 +208,7 @@ def snapshot_eval_tooling(
     repo_root: Path,
     exp_name: str = "direct",
 ) -> dict[str, Any]:
-    """Snapshot from ``matmaster/exps/{exp_name}.toml`` (production-aligned).
-
-    ``matmaster_exp`` in the output equals *exp_name*.
-    """
+    """Snapshot from ``matmaster/exps/{exp_name}.toml`` (production-aligned)."""
     from matmaster.config.loader import load_exp_config
 
     name = exp_name.strip()
@@ -229,17 +216,4 @@ def snapshot_eval_tooling(
     return _build_eval_tooling_dict(
         repo_root=repo_root,
         exp_cfg=exp_cfg,
-        matmaster_exp_reported=name,
-    )
-
-
-def snapshot_devshell_eval_tooling(*, repo_root: Path) -> dict[str, Any]:
-    """Snapshot for mm-devshell default: ``direct`` + narrowed ``skills_root`` (see ``exp_patch``)."""
-    from matmaster.devshell.exp_patch import devshell_default_exp_config
-
-    exp_cfg = devshell_default_exp_config()
-    return _build_eval_tooling_dict(
-        repo_root=repo_root,
-        exp_cfg=exp_cfg,
-        matmaster_exp_reported="devshell",
     )

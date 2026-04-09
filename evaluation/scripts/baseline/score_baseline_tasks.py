@@ -846,7 +846,7 @@ def main() -> int:
         if scores_valid:
             avg = round(sum(scores_valid) / len(scores_valid))
             print(
-                "\n  Average score: {}/100 ({} task(s))".format(avg, len(scores_valid)),
+                f"\n  Average score: {avg}/100 ({len(scores_valid)} task(s))",
                 file=sys.stderr,
             )
         print(
