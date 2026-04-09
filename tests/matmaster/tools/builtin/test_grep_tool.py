@@ -64,6 +64,21 @@ class TestGrepToolMetadata:
         )
 
 
+class TestGrepToolDescriptionPromptSplit:
+    def test_description_is_short_summary(self) -> None:
+        assert GrepTool.description.startswith("Search file contents by regex")
+        assert "\n" not in GrepTool.description
+        assert len(GrepTool.description) < 200
+
+    def test_prompt_contains_usage_points(self) -> None:
+        tool = GrepTool()
+        prompt = tool.prompt()
+        assert prompt is not None
+        assert "ripgrep" in prompt
+        assert "regex" in prompt
+        assert "Grep" in prompt
+
+
 class TestGrepExecution:
     def test_no_matches(self):
         tool = GrepTool(session=make_session(output=""), workdir="/workspace")

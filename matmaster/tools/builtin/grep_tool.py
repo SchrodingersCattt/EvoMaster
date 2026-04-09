@@ -40,16 +40,8 @@ class GrepTool(BuiltinTool):
 
     name: ClassVar[str] = "Grep"
     description: ClassVar[str] = (
-        "A powerful search tool built on ripgrep\n\n"
-        "  Usage:\n"
-        "  - ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` "
-        "as a Bash command.\n"
-        "  - Supports full regex syntax (e.g., \"log.*Error\", \"function\\s+\\w+\")\n"
-        "  - Filter files with glob parameter (e.g., \"*.js\", \"**/*.tsx\")\n"
-        "  - Output modes: \"content\" shows matching lines, "
-        "\"files_with_matches\" shows only file paths (default), "
-        "\"count\" shows match counts\n"
-        "  - Pattern syntax: Uses ripgrep when available, falls back to grep"
+        "Search file contents by regex, powered by ripgrep "
+        "with glob / type / multiline filtering."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
@@ -129,6 +121,20 @@ class GrepTool(BuiltinTool):
     fast_path_eligible: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 20_000
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
+
+    def prompt(self, ctx=None) -> str:
+        return (
+            "A powerful search tool built on ripgrep\n\n"
+            "  Usage:\n"
+            "  - ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` "
+            "as a Bash command.\n"
+            "  - Supports full regex syntax (e.g., \"log.*Error\", \"function\\s+\\w+\")\n"
+            "  - Filter files with glob parameter (e.g., \"*.js\", \"**/*.tsx\")\n"
+            "  - Output modes: \"content\" shows matching lines, "
+            "\"files_with_matches\" shows only file paths (default), "
+            "\"count\" shows match counts\n"
+            "  - Pattern syntax: Uses ripgrep when available, falls back to grep"
+        )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
