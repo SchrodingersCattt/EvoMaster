@@ -10,9 +10,12 @@ Behavioral contract:
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from matmaster.mcp.calculation.config_env import resolve_mcp_config_path
 
 
 class TestCacheMcpSchemasImports:
@@ -43,14 +46,22 @@ class TestCacheMcpSchemasImports:
             "matmaster.mcp.manager" in source or "from matmaster.mcp" in source
         ), "cache_mcp_schemas.py does not use matmaster.mcp.manager"
 
-    def test_module_imports_matmaster_adaptors_calculation(self):
-        """generate_cache uses matmaster.adaptors.calculation for resolve_mcp_config_path."""
+    def test_module_imports_matmaster_mcp_calculation(self):
+        """generate_cache uses matmaster.mcp.calculation for resolve_mcp_config_path."""
         import matmaster.tools.cache_mcp_schemas as mod
 
         source = inspect.getsource(mod)
         assert (
-            "matmaster.adaptors.calculation" in source
-        ), "cache_mcp_schemas.py does not use matmaster.adaptors.calculation"
+            "matmaster.mcp.calculation" in source
+        ), "cache_mcp_schemas.py does not use matmaster.mcp.calculation"
+
+    def test_resolve_mcp_config_path_is_importable_from_new_namespace(
+        self, tmp_path: Path
+    ) -> None:
+        config_file = tmp_path / "mcp_config.json"
+        config_file.write_text("{}", encoding="utf-8")
+
+        assert resolve_mcp_config_path(config_file) == config_file
 
 
 class TestCacheMcpSchemasGenerateCache:
@@ -85,7 +96,7 @@ class TestCacheMcpSchemasGenerateCache:
                     "remote_tool_name": "run",
                     "description": "Run something",
                     "input_schema": {"type": "object", "properties": {}},
-                    "has_path_adaptor": False,
+                    "has_calculation_preflight": False,
                     "connection": MagicMock(),
                 }
             }

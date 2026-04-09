@@ -5,7 +5,7 @@ This tool handles pure communication: submit, poll (single-query), list_images,
 list_machines. All software-specific knowledge lives in software skills.
 
 Design decisions:
-- poll defaults to single-shot (non-blocking), with optional short waits via wait=true
+- poll is single-shot and non-blocking
 - submit auto-appends "> log 2>&1" if missing
 - Credentials resolved via runtime bridge (session > env fallback)
 - Remote /share paths require active session with upload_directory
@@ -15,20 +15,24 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, ClassVar
 
-from matmaster.integration.bohrium_api import (
+from matmaster.bohrium.credentials import credentials_from_env
+from matmaster.bohrium.endpoints import (
     get_bohrium_base_url,
     get_bohrium_service_env,
 )
-from matmaster.integration.runtime_bridge.adapters.bohrium import (
-    resolve_bohrium_credentials,
-)
+from matmaster.bohrium.runtime import get_runtime
 from matmaster.tools.builtin.base import BuiltinTool
-from matmaster.tools.tool_result import ToolResult
+from matmaster.tools.builtin.bohrium_tool.registry import (
+    JobRegistry,
+    classify_poll_status,
+    next_interval,
+)
+from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
@@ -58,45 +62,31 @@ from .transfers import (
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_POLL_WAIT_SECONDS = 30
-_DEFAULT_POLL_INTERVAL_SECONDS = 5
-
-
-def _coerce_bool(value: Any, default: bool = False) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return bool(value)
-
-
-def _coerce_positive_int(value: Any, default: int) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
-
 
 def build_bohrium_context(*, session, require_project: bool = False) -> BohriumContext:
-    cred = resolve_bohrium_credentials(session=session)
-    ctx = BohriumContext.from_resolved_credential(cred, sandbox=use_sandbox())
+    runtime = get_runtime(session) if session is not None else None
+    if runtime is not None:
+        cred = runtime.credentials()
+        source = "runtime"
+    else:
+        cred = credentials_from_env()
+        if cred is None:
+            raise BohriumError(
+                "Bohrium credentials unavailable. Provide via session or BOHRIUM_ACCESS_KEY."
+            )
+        source = "env"
+
+    ctx = BohriumContext.from_credentials(
+        cred,
+        sandbox=use_sandbox(),
+        source=source,
+    )
     if require_project and ctx.project_id <= 0:
         raise BohriumError(
             "Bohrium project ID unavailable. Provide via session or BOHRIUM_PROJECT_ID."
         )
     if not ctx.base_url:
-        ctx = BohriumContext(
-            access_key=ctx.access_key,
-            project_id=ctx.project_id,
-            base_url=get_bohrium_base_url(),
-            credential_source=ctx.credential_source,
-            sandbox=ctx.sandbox,
-            user_id=ctx.user_id,
-            user_no=ctx.user_no,
-        )
+        ctx = replace(ctx, base_url=get_bohrium_base_url())
     return ctx
 
 
@@ -162,7 +152,7 @@ class BohriumTool(BuiltinTool):
     description: ClassVar[str] = (
         'Bohrium HPC platform operations. '
         'action="submit": package input directory and submit a job, returns job_id. '
-        'action="poll": query current job status; defaults to a single query and can wait briefly when wait=true. '
+        'action="poll": single-shot job status check, returns current status immediately. '
         'action="download": download artifacts for a finished or failed job into result_dir. '
         'action="list_images": query available Docker images by keyword. '
         'action="list_machines": query available machine types (cpu/gpu).'
@@ -210,18 +200,6 @@ class BohriumTool(BuiltinTool):
                 'type': 'string',
                 'description': 'Directory where downloaded artifacts will be stored. (download)',
             },
-            'wait': {
-                'type': 'boolean',
-                'description': 'Wait within this call when the job is still Running. Default: false. (poll)',
-            },
-            'max_wait_seconds': {
-                'type': 'integer',
-                'description': 'Maximum wait time when wait=true. Default: 30. (poll)',
-            },
-            'poll_interval_seconds': {
-                'type': 'integer',
-                'description': 'Interval between detail checks when wait=true. Default: 5. (poll)',
-            },
             # --- list ---
             'keyword': {
                 'type': 'string',
@@ -264,9 +242,8 @@ class BohriumTool(BuiltinTool):
             '- Load the corresponding software skill first (cp2k, qe, abacus, orca, '
             'lammps, gromacs, pyscf, abinit, pyatb) to obtain image, machine, and cmd.\n'
             '- submit: cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
-            '- poll: default single query (wait=false). Set wait=true to wait within '
-            'one call, and use max_wait_seconds / poll_interval_seconds to control '
-            'that loop. poll does not download artifacts.\n'
+            '- poll: single-shot status query only. It returns immediately and does '
+            'not download artifacts.\n'
             '- download: use action="download" only after poll reports Finished or '
             'Failed. Requires result_dir; retrieves logs and artifacts for analysis.\n'
             '- When image or machine is unknown, call list_images / list_machines first.\n'
@@ -288,11 +265,155 @@ class BohriumTool(BuiltinTool):
             'you MUST use this image — other images (ABACUS, CP2K, etc.) do NOT have ASE/deepmd.\n'
         )
 
+    _sandbox_catalog: ClassVar[dict[str, Any] | None] = None
+
+    @classmethod
+    def _load_sandbox_catalog(cls) -> dict[str, Any]:
+        if cls._sandbox_catalog is not None:
+            return cls._sandbox_catalog
+        config_path = Path(__file__).resolve().parents[4] / "config" / "config.yaml"
+        if not config_path.exists():
+            cls._sandbox_catalog = {}
+            return cls._sandbox_catalog
+        try:
+            import yaml
+
+            with open(config_path) as f:
+                raw = yaml.safe_load(f) or {}
+            cls._sandbox_catalog = (raw.get("bohrium") or {}).get("sandbox") or {}
+        except Exception:
+            logger.warning("Failed to load bohrium sandbox catalog", exc_info=True)
+            cls._sandbox_catalog = {}
+        return cls._sandbox_catalog
+
     def _build_context(self, *, require_project: bool = False) -> BohriumContext:
         return build_bohrium_context(
             session=self._session,
             require_project=require_project,
         )
+
+    async def execute_with_context(
+        self,
+        arguments: dict[str, Any],
+        exec_ctx: Any,
+    ) -> str | ToolResult:
+        """Registry-aware execution with async-side throttle checks."""
+        import asyncio
+
+        action = arguments.get("action")
+        registry: JobRegistry | None = None
+        if exec_ctx is not None and hasattr(exec_ctx, "runner_state"):
+            runner_state = exec_ctx.runner_state
+            if runner_state is not None and hasattr(runner_state, "get"):
+                registry = runner_state.get("bohrium_job_registry")
+
+        if action == "poll" and registry is not None:
+            job_id = str(arguments.get("job_id", ""))
+            throttled, remaining = registry.should_throttle(job_id)
+            if throttled:
+                rec = registry.get(job_id)
+                payload: dict[str, Any]
+                if rec is not None and rec.last_result:
+                    try:
+                        payload = json.loads(rec.last_result)
+                    except (json.JSONDecodeError, TypeError):
+                        payload = {}
+                else:
+                    payload = {}
+                payload.update(
+                    {
+                        "success": True,
+                        "job_id": job_id,
+                        "status": payload.get(
+                            "status",
+                            rec.status.title() if rec is not None else "Unknown",
+                        ),
+                        "cached": True,
+                        "seconds_until_fresh": remaining,
+                        "message": (
+                            f"Cached status. Fresh check available in {remaining}s. "
+                            "Do other work first."
+                        ),
+                    }
+                )
+                return ToolResult(
+                    status="success",
+                    content=json.dumps(payload, ensure_ascii=False),
+                )
+
+        try:
+            result = await asyncio.to_thread(self._execute, arguments)
+        except Exception as exc:
+            self.logger.error("Tool %s failed: %s", self.name, exc, exc_info=True)
+            return f"Error: {exc}"
+
+        normalized = normalize_tool_result(result)
+        if registry is not None and action in ("submit", "poll", "download"):
+            normalized = self._update_registry(
+                registry,
+                action,
+                arguments,
+                normalized,
+            )
+
+        return normalized
+
+    def _update_registry(
+        self,
+        registry: JobRegistry,
+        action: str,
+        arguments: dict[str, Any],
+        result: ToolResult,
+    ) -> ToolResult:
+        """Update the in-memory registry after a successful tool call."""
+        if result.status == "error":
+            return result
+
+        try:
+            data = json.loads(result.content)
+        except (json.JSONDecodeError, TypeError):
+            return result
+
+        job_id = str(data.get("job_id", arguments.get("job_id", "")))
+        if not job_id:
+            return result
+
+        if action == "submit":
+            registry.register(job_id, job_name=str(arguments.get("job_name", "")))
+            return result
+
+        if action == "download":
+            registry.update_download(job_id)
+            return result
+
+        if action != "poll":
+            return result
+
+        reg_status = classify_poll_status(str(data.get("status", "unknown")))
+        registry.update_poll(job_id, status=reg_status, result=result.content)
+
+        if reg_status != "running":
+            return result
+
+        rec = registry.get(job_id)
+        if rec is None:
+            return result
+
+        interval = next_interval(rec.poll_count - 1)
+        data["next_check_seconds"] = interval
+        data["message"] = (
+            f'Job is {data.get("status", "Running")}. '
+            f"Suggested next check in {interval}s. "
+            "Continue other work before polling again."
+        )
+        updated = ToolResult(
+            status=result.status,
+            content=json.dumps(data, ensure_ascii=False),
+            payload=result.payload,
+            meta=result.meta,
+        )
+        rec.last_result = updated.content
+        return updated
 
     def _log_request_context(
         self,
@@ -354,11 +475,9 @@ class BohriumTool(BuiltinTool):
         disk_size = int(args.get('disk_size', 50))
 
         ctx: BohriumContext | None = None
-        sandbox: bool | str = 'n/a'
         try:
             ctx = self._build_context(require_project=True)
-            sandbox = ctx.sandbox
-            self._log_request_context(action='submit', ctx=ctx, sandbox=sandbox)
+            self._log_request_context(action='submit', ctx=ctx, sandbox=ctx.sandbox)
             job_id, bohr_job_id = submit_job_via_runtime(
                 input_dir=str(input_dir),
                 image=str(image),
@@ -377,7 +496,7 @@ class BohriumTool(BuiltinTool):
                         'job_id': job_id,
                         'bohr_job_id': bohr_job_id,
                         'status': 'Submitted',
-                        'use_sandbox': sandbox,
+                        'use_sandbox': ctx.sandbox,
                     },
                     ensure_ascii=False,
                 ),
@@ -388,7 +507,7 @@ class BohriumTool(BuiltinTool):
             logger.error(
                 'bohrium submit failed action=submit base_url=%s sandbox=%s error=%s',
                 ctx.base_url if ctx is not None else '',
-                sandbox,
+                ctx.sandbox if ctx is not None else 'n/a',
                 exc,
                 exc_info=True,
             )
@@ -411,119 +530,60 @@ class BohriumTool(BuiltinTool):
                 ),
             )
 
-        wait = _coerce_bool(args.get('wait'), default=False)
-        max_wait_seconds = _coerce_positive_int(
-            args.get('max_wait_seconds'), _DEFAULT_POLL_WAIT_SECONDS
-        )
-        poll_interval_seconds = _coerce_positive_int(
-            args.get('poll_interval_seconds'), _DEFAULT_POLL_INTERVAL_SECONDS
-        )
-
         ctx: BohriumContext | None = None
         try:
             ctx = self._build_context()
             sandbox = ctx.sandbox
             self._log_request_context(action='poll', ctx=ctx, sandbox=sandbox)
             job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
-            waited_seconds = 0
+            detail_data = get_job_detail(ctx, job_id=job_id)
+            code = detail_data.get('status', 0)
 
-            while True:
-                detail_data = get_job_detail(ctx, job_id=job_id)
-                code = detail_data.get('status', 0)
-                status_name = _STATUS_MAP.get(code, f'Unknown({code})')
-
-                if code in _RUNNING_CODES:
-                    if wait:
-                        if waited_seconds >= max_wait_seconds:
-                            return ToolResult(
-                                status='success',
-                                content=json.dumps(
-                                    {
-                                        'success': True,
-                                        'job_id': job_id,
-                                        'status': status_name,
-                                        'message': (
-                                            f'Job is {status_name}. wait=true '
-                                            f'exhausted; waited {int(waited_seconds)}s '
-                                            'before returning.'
-                                        ),
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                            )
-                        sleep_seconds = min(
-                            poll_interval_seconds,
-                            max_wait_seconds - waited_seconds,
-                        )
-                        if sleep_seconds <= 0:
-                            continue
-                        time.sleep(sleep_seconds)
-                        waited_seconds += sleep_seconds
-                        continue
-
-                    return ToolResult(
-                        status='success',
-                        content=json.dumps(
-                            {
-                                'success': True,
-                                'job_id': job_id,
-                                'status': status_name,
-                                'message': f'Job is {status_name}. Call Bohrium(action="poll", job_id={job_id}) again later to check.',
-                            },
-                            ensure_ascii=False,
-                        ),
-                    )
-
-                if code == _SUCCESS_CODE:
-                    return ToolResult(
-                        status='success',
-                        content=json.dumps(
-                            {
-                                'success': True,
-                                'job_id': job_id,
-                                'status': 'Finished',
-                                'message': (
-                                    'Job is Finished. Call '
-                                    f'Bohrium(action="download", job_id={job_id!r}, '
-                                    f'result_dir="results/run_{job_id}") '
-                                    'to retrieve artifacts.'
-                                ),
-                            },
-                            ensure_ascii=False,
-                        ),
-                    )
-
-                if code in _FAILURE_CODES:
-                    return ToolResult(
-                        status='success',
-                        content=json.dumps(
-                            {
-                                'success': True,
-                                'job_id': job_id,
-                                'status': status_name,
-                                'message': (
-                                    'Job is Failed. Call '
-                                    f'Bohrium(action="download", job_id={job_id!r}, '
-                                    f'result_dir="results/run_{job_id}") '
-                                    'to retrieve logs and artifacts.'
-                                ),
-                            },
-                            ensure_ascii=False,
-                        ),
-                    )
-
-                return ToolResult(
-                    status='success',
-                    content=json.dumps(
-                        {
-                            'success': True,
-                            'job_id': job_id,
-                            'status': status_name,
-                            'message': f'Unexpected status code {code}. Retry poll or check Bohrium console.',
-                        },
-                        ensure_ascii=False,
-                    ),
+            # Confirm failure/unknown before reporting terminal status
+            if code in _FAILURE_CODES or code not in (*_RUNNING_CODES, _SUCCESS_CODE):
+                code, _, detail_data = confirm_terminal_status(
+                    ctx,
+                    job_id=job_id,
+                    detail_data=detail_data,
                 )
+
+            status_name = _STATUS_MAP.get(code, f'Unknown({code})')
+
+            if code in _RUNNING_CODES:
+                message = (
+                    f'Job is {status_name}. '
+                    'Continue other work before polling again.'
+                )
+            elif code == _SUCCESS_CODE:
+                status_name = 'Finished'
+                message = (
+                    'Job is Finished. Call '
+                    f'Bohrium(action="download", job_id={job_id!r}, '
+                    f'result_dir="results/run_{job_id}") '
+                    'to retrieve artifacts.'
+                )
+            elif code in _FAILURE_CODES:
+                message = (
+                    'Job is Failed. Call '
+                    f'Bohrium(action="download", job_id={job_id!r}, '
+                    f'result_dir="results/run_{job_id}") '
+                    'to retrieve logs and artifacts.'
+                )
+            else:
+                message = f'Unexpected status code {code}. Retry poll or check Bohrium console.'
+
+            return ToolResult(
+                status='success',
+                content=json.dumps(
+                    {
+                        'success': True,
+                        'job_id': job_id,
+                        'status': status_name,
+                        'message': message,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
 
         except Exception as exc:
             logger.error(
@@ -561,11 +621,8 @@ class BohriumTool(BuiltinTool):
                 session=self._session,
             )
             detail_data = get_job_detail(ctx, job_id=job_id)
-            code, status_name, detail_data = confirm_terminal_status(
-                ctx,
-                job_id=job_id,
-                detail_data=detail_data,
-            )
+            code = detail_data.get('status', 0)
+            status_name = _STATUS_MAP.get(code, f'Unknown({code})')
             if code in _RUNNING_CODES:
                 return ToolResult(
                     status='error',
@@ -637,7 +694,36 @@ class BohriumTool(BuiltinTool):
         ctx: BohriumContext | None = None
         try:
             ctx = self._build_context()
-            self._log_request_context(action='list_images', ctx=ctx, sandbox=None)
+
+            # Sandbox: use hardcoded catalog when available, else fall back to API
+            catalog = self._load_sandbox_catalog() if ctx.sandbox else {}
+            sandbox_images = catalog.get("images") or []
+            if sandbox_images:
+                self._log_request_context(action='list_images', ctx=ctx, sandbox=True)
+                filtered = [
+                    img
+                    for img in sandbox_images
+                    if not keyword
+                    or keyword in str(img.get('name', '')).lower()
+                    or keyword in str(img.get('description', '')).lower()
+                ]
+                results = filtered[:max_results]
+                return ToolResult(
+                    status='success',
+                    content=json.dumps(
+                        {
+                            'success': True,
+                            'keyword': keyword,
+                            'total_found': len(filtered),
+                            'returned': len(results),
+                            'images': results,
+                            'source': 'sandbox_catalog',
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+
+            self._log_request_context(action='list_images', ctx=ctx, sandbox=False)
             data = _get(
                 ctx.base_url,
                 '/openapi/v2/image/public',
@@ -656,16 +742,16 @@ class BohriumTool(BuiltinTool):
             else:
                 filtered = all_images
 
-            # Prepare fetch targets
-            to_fetch: list[tuple[Any, str]] = []
+            to_fetch: list[tuple[Any, str, str]] = []
             for record in filtered[:max_results]:
                 img_id = record.get('id') or record.get('imageId')
                 if img_id is not None:
                     name = record.get('name') or record.get('imageName') or ''
-                    to_fetch.append((img_id, name))
+                    desc = record.get('description') or ''
+                    to_fetch.append((img_id, name, desc))
 
-            def _fetch_versions(item: tuple[Any, str]) -> dict[str, Any]:
-                img_id, name = item
+            def _fetch_versions(item: tuple[Any, str, str]) -> dict[str, Any]:
+                img_id, name, description = item
                 try:
                     ver_data = _get(
                         ctx.base_url,
@@ -693,7 +779,14 @@ class BohriumTool(BuiltinTool):
                     if entry:
                         version_list.append(entry)
 
-                return {'id': img_id, 'name': name, 'versions': version_list}
+                result: dict[str, Any] = {
+                    'id': img_id,
+                    'name': name,
+                    'versions': version_list,
+                }
+                if description:
+                    result['description'] = description
+                return result
 
             # Parallel version queries to avoid N+1 latency
             with ThreadPoolExecutor(max_workers=8) as pool:
@@ -704,6 +797,7 @@ class BohriumTool(BuiltinTool):
                 content=json.dumps(
                     {
                         'success': True,
+                        'keyword': keyword,
                         'total_found': len(filtered),
                         'returned': len(results),
                         'images': results,
@@ -729,7 +823,39 @@ class BohriumTool(BuiltinTool):
         ctx: BohriumContext | None = None
         try:
             ctx = self._build_context()
-            self._log_request_context(action='list_machines', ctx=ctx, sandbox=None)
+
+            # Sandbox: use hardcoded catalog when available, else fall back to API
+            catalog = self._load_sandbox_catalog() if ctx.sandbox else {}
+            sandbox_machines = (catalog.get("machines") or {}).get(choose_type) or []
+            if sandbox_machines:
+                self._log_request_context(action='list_machines', ctx=ctx, sandbox=True)
+                if keyword:
+                    filtered = [
+                        m
+                        for m in sandbox_machines
+                        if keyword
+                        in str(m.get('skuEnName') or m.get('skuName') or '').lower()
+                    ]
+                else:
+                    filtered = list(sandbox_machines)
+                results = filtered[:max_results]
+                return ToolResult(
+                    status='success',
+                    content=json.dumps(
+                        {
+                            'success': True,
+                            'type': choose_type,
+                            'keyword': keyword,
+                            'total_found': len(filtered),
+                            'returned': len(results),
+                            'machines': results,
+                            'source': 'sandbox_catalog',
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+
+            self._log_request_context(action='list_machines', ctx=ctx, sandbox=False)
             data = _get(
                 ctx.base_url,
                 '/openapi/v1/calc/list',
@@ -779,6 +905,7 @@ class BohriumTool(BuiltinTool):
                     {
                         'success': True,
                         'type': choose_type,
+                        'keyword': keyword,
                         'total_found': len(filtered),
                         'returned': len(results),
                         'machines': results,

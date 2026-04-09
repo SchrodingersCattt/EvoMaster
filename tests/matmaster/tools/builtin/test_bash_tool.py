@@ -3,6 +3,8 @@
 import asyncio
 from unittest.mock import MagicMock
 
+from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
+from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bash_tool import BashTool
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
@@ -19,6 +21,29 @@ def make_session(output="hello", exit_code=0, working_dir="/workspace"):
         "working_dir": working_dir,
     }
     return s
+
+
+def attach_test_runtime(session: MagicMock) -> None:
+    runtime = BohriumRuntimeHandle(
+        credentials=BohriumCredentials(
+            access_key="ak",
+            project_id=42,
+            user_id=7,
+            user_no="U001",
+            base_url="https://openapi.test.dp.tech",
+        ),
+        execution=BohriumExecutionContext(
+            session_type="ssh",
+            execution_workdir="/share",
+            remote_workspace_root="/share",
+            remote_project_root="/share/.matmaster",
+            node_id=1,
+            node_ip="10.0.0.1",
+            ssh_attached=True,
+        ),
+        execution_session=session,
+    )
+    attach_runtime(session, runtime)
 
 
 def make_desc_ctx(session_kind="ssh", workspace_root="/share"):
@@ -203,9 +228,9 @@ class TestBashErrorStatus:
 
 
 class TestBashEnvInjection:
-    def test_bash_injects_bohrium_env_from_bridge(self):
+    def test_bash_reads_runtime_env(self):
         session = MagicMock()
-        session._bohrium_credentials = {"access_key": "ak", "project_id": 42}
+        attach_test_runtime(session)
         session.write_file = MagicMock()
         session.exec_bash = MagicMock(
             side_effect=[

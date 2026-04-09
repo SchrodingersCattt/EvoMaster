@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from matmaster.bohrium.runtime import get_runtime
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
@@ -86,10 +87,10 @@ class GlobTool(BuiltinTool):
 
         command = self._build_find_command(pattern, safe_path)
 
-        from matmaster.integration.runtime_bridge import build_service_env
         from matmaster.tools.script_env import inject_env
 
-        env = build_service_env("bohrium", session=session)
+        runtime = get_runtime(session)
+        env = runtime.build_env() if runtime is not None else {}
         command = inject_env(command, env, session)
 
         result = session.exec_bash(

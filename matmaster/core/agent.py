@@ -43,6 +43,10 @@ from matmaster.core.hooks import (
     UserPromptContext,
 )
 from matmaster.response_text import is_trivial_response_text
+from matmaster.types.message_normalization import (
+    normalize_messages_for_openai,
+    validate_openai_messages,
+)
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -327,7 +331,8 @@ class AgentKernel:
 
             tool_defs = state.cached_tool_definitions
 
-            api_messages = [m.to_api_dict() for m in state.messages]
+            api_messages = normalize_messages_for_openai(state.messages)
+            validate_openai_messages(api_messages)
             self._validate_outbound_tool_turn(api_messages)
 
             llm_response: LLMResponse | None = None
