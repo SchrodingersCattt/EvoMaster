@@ -669,9 +669,7 @@ def check_file_count(
         return False, f'workspace {root} does not exist or is not a directory'
 
     hits = [
-        p
-        for p in root.rglob("*")
-        if p.is_file() and fnmatch.fnmatch(p.name, pattern)
+        p for p in root.rglob("*") if p.is_file() and fnmatch.fnmatch(p.name, pattern)
     ]
     n = len(hits)
     ok = abs(n - expected) <= tolerance

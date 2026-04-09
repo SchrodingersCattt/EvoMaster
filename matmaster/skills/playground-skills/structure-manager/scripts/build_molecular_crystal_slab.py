@@ -33,24 +33,70 @@ from pathlib import Path
 
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # Covalent radii (Å) for bond detection
 # ---------------------------------------------------------------------------
 
 COVALENT_RADII = {
-    "H": 0.31, "He": 0.28, "Li": 1.28, "Be": 0.96, "B": 0.84,
-    "C": 0.76, "N": 0.71, "O": 0.66, "F": 0.57, "Ne": 0.58,
-    "Na": 1.66, "Mg": 1.41, "Al": 1.21, "Si": 1.11, "P": 1.07,
-    "S": 1.05, "Cl": 1.02, "Ar": 1.06, "K": 1.96, "Ca": 1.76,
-    "Sc": 1.70, "Ti": 1.60, "V": 1.53, "Cr": 1.39, "Mn": 1.39,
-    "Fe": 1.32, "Co": 1.26, "Ni": 1.24, "Cu": 1.32, "Zn": 1.22,
-    "Ga": 1.22, "Ge": 1.20, "As": 1.19, "Se": 1.20, "Br": 1.20,
-    "Kr": 1.16, "Rb": 2.10, "Sr": 1.95, "Y": 1.90, "Zr": 1.75,
-    "Nb": 1.64, "Mo": 1.54, "Ru": 1.46, "Rh": 1.42, "Pd": 1.39,
-    "Ag": 1.45, "Cd": 1.44, "In": 1.42, "Sn": 1.39, "Sb": 1.39,
-    "Te": 1.38, "I": 1.39, "Cs": 2.44, "Ba": 2.15, "La": 2.07,
-    "Pt": 1.36, "Au": 1.36, "Pb": 1.46, "Bi": 1.48,
+    "H": 0.31,
+    "He": 0.28,
+    "Li": 1.28,
+    "Be": 0.96,
+    "B": 0.84,
+    "C": 0.76,
+    "N": 0.71,
+    "O": 0.66,
+    "F": 0.57,
+    "Ne": 0.58,
+    "Na": 1.66,
+    "Mg": 1.41,
+    "Al": 1.21,
+    "Si": 1.11,
+    "P": 1.07,
+    "S": 1.05,
+    "Cl": 1.02,
+    "Ar": 1.06,
+    "K": 1.96,
+    "Ca": 1.76,
+    "Sc": 1.70,
+    "Ti": 1.60,
+    "V": 1.53,
+    "Cr": 1.39,
+    "Mn": 1.39,
+    "Fe": 1.32,
+    "Co": 1.26,
+    "Ni": 1.24,
+    "Cu": 1.32,
+    "Zn": 1.22,
+    "Ga": 1.22,
+    "Ge": 1.20,
+    "As": 1.19,
+    "Se": 1.20,
+    "Br": 1.20,
+    "Kr": 1.16,
+    "Rb": 2.10,
+    "Sr": 1.95,
+    "Y": 1.90,
+    "Zr": 1.75,
+    "Nb": 1.64,
+    "Mo": 1.54,
+    "Ru": 1.46,
+    "Rh": 1.42,
+    "Pd": 1.39,
+    "Ag": 1.45,
+    "Cd": 1.44,
+    "In": 1.42,
+    "Sn": 1.39,
+    "Sb": 1.39,
+    "Te": 1.38,
+    "I": 1.39,
+    "Cs": 2.44,
+    "Ba": 2.15,
+    "La": 2.07,
+    "Pt": 1.36,
+    "Au": 1.36,
+    "Pb": 1.46,
+    "Bi": 1.48,
 }
 
 _DEFAULT_RADIUS = 1.50
@@ -63,6 +109,7 @@ def _get_radius(element: str) -> float:
 # ---------------------------------------------------------------------------
 # Molecule detection (PBC-aware bond graph)
 # ---------------------------------------------------------------------------
+
 
 def detect_molecules(structure, bond_tol: float = 0.45) -> list[list[int]]:
     """Detect molecules in a periodic structure via covalent bond graph.
@@ -155,6 +202,7 @@ def molecules_intact(structure, bond_tol: float = 0.45) -> dict:
 # Slab cutting with molecule integrity verification
 # ---------------------------------------------------------------------------
 
+
 def build_molecular_slab(
     structure,
     miller_index: tuple[int, int, int],
@@ -171,7 +219,6 @@ def build_molecular_slab(
     Returns result dict with success status and slab info.
     """
     from pymatgen.core.surface import SlabGenerator
-    from pymatgen.io.cif import CifWriter
 
     n_unitcell = len(structure)
 
@@ -231,7 +278,7 @@ def build_molecular_slab(
         z_coords = np.array([s.frac_coords[2] for s in slab])
         z_unique = len(set(np.round(z_coords, 4)))
 
-        atom_count_ok = (n_slab == expected_atoms)
+        atom_count_ok = n_slab == expected_atoms
         integer_ratio = abs(ratio - round(ratio)) < 0.01
 
         score = 0
@@ -244,18 +291,20 @@ def build_molecular_slab(
         if len(mol_check["unique_formulas"]) <= 2:
             score += 3
 
-        candidates.append({
-            "index": i,
-            "slab": slab,
-            "n_atoms": n_slab,
-            "ratio": ratio,
-            "atom_count_matches": atom_count_ok,
-            "integer_ratio": integer_ratio,
-            "mol_integrity": mol_check,
-            "shift": float(slab.shift),
-            "z_unique_planes": z_unique,
-            "score": score,
-        })
+        candidates.append(
+            {
+                "index": i,
+                "slab": slab,
+                "n_atoms": n_slab,
+                "ratio": ratio,
+                "atom_count_matches": atom_count_ok,
+                "integer_ratio": integer_ratio,
+                "mol_integrity": mol_check,
+                "shift": float(slab.shift),
+                "z_unique_planes": z_unique,
+                "score": score,
+            }
+        )
 
     # Sort by score (highest first)
     candidates.sort(key=lambda c: c["score"], reverse=True)
@@ -287,27 +336,37 @@ def build_molecular_slab(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Cut a slab from a molecular crystal with molecule integrity checks."
     )
     ap.add_argument("--file", required=True, help="Input CIF/POSCAR file")
     ap.add_argument(
-        "--miller", nargs=3, type=int, required=True,
-        help="Miller indices, e.g. --miller 1 1 0"
+        "--miller",
+        nargs=3,
+        type=int,
+        required=True,
+        help="Miller indices, e.g. --miller 1 1 0",
     )
     ap.add_argument(
-        "--layers", type=int, required=True,
-        help="Number of layers (unit-cell repeats along surface normal)"
+        "--layers",
+        type=int,
+        required=True,
+        help="Number of layers (unit-cell repeats along surface normal)",
     )
     ap.add_argument("-o", "--output", default=None, help="Output CIF path")
     ap.add_argument(
-        "--vacuum", type=float, default=20.0,
-        help="Vacuum thickness in Å (default: 20.0)"
+        "--vacuum",
+        type=float,
+        default=20.0,
+        help="Vacuum thickness in Å (default: 20.0)",
     )
     ap.add_argument(
-        "--bond-tolerance", type=float, default=0.45,
-        help="Bond tolerance for molecule detection in Å (default: 0.45)"
+        "--bond-tolerance",
+        type=float,
+        default=0.45,
+        help="Bond tolerance for molecule detection in Å (default: 0.45)",
     )
     args = ap.parse_args()
 
@@ -318,6 +377,7 @@ def main() -> None:
 
     try:
         from pymatgen.core import Structure
+
         struct = Structure.from_file(str(path))
     except Exception as e:
         print(json.dumps({"success": False, "error": f"Failed to load: {e}"}))
@@ -331,9 +391,12 @@ def main() -> None:
     # Save slab if successful
     slab = result.pop("slab", None)
     if result["success"] and slab is not None:
-        out_path = args.output or f"{path.stem}_slab_{miller[0]}{miller[1]}{miller[2]}.cif"
+        out_path = (
+            args.output or f"{path.stem}_slab_{miller[0]}{miller[1]}{miller[2]}.cif"
+        )
         try:
             from pymatgen.io.cif import CifWriter
+
             writer = CifWriter(slab, symprec=0.01)
             writer.write_file(out_path)
         except Exception:
