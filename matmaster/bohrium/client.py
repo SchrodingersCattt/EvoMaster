@@ -383,7 +383,9 @@ def list_machines(
                     machine
                     for machine in sandbox_machines
                     if lowered_keyword
-                    in str(machine.get("skuEnName") or machine.get("skuName") or "").lower()
+                    in str(
+                        machine.get("skuEnName") or machine.get("skuName") or ""
+                    ).lower()
                 ]
             else:
                 filtered = list(sandbox_machines)

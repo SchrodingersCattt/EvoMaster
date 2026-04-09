@@ -699,7 +699,9 @@ class BohriumTool(BuiltinTool):
             self._log_request_context(
                 action='list_images',
                 ctx=ctx,
-                sandbox=bool(ctx.sandbox and payload.get('source') == 'sandbox_catalog'),
+                sandbox=bool(
+                    ctx.sandbox and payload.get('source') == 'sandbox_catalog'
+                ),
             )
 
             return ToolResult(
@@ -733,7 +735,9 @@ class BohriumTool(BuiltinTool):
             self._log_request_context(
                 action='list_machines',
                 ctx=ctx,
-                sandbox=bool(ctx.sandbox and payload.get('source') == 'sandbox_catalog'),
+                sandbox=bool(
+                    ctx.sandbox and payload.get('source') == 'sandbox_catalog'
+                ),
             )
 
             return ToolResult(

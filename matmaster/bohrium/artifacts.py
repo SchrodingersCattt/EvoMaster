@@ -288,5 +288,3 @@ def download_job_artifacts(
     _download_to_file(result_url, zip_path)
     files = _extract_zip(zip_path, result_dir)
     return files, _read_log(result_dir)
-
-
