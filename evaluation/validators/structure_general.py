@@ -43,7 +43,9 @@ def _resolve_file(workspace: Path, pattern: str) -> Path | None:
 
     Resolution order:
     1. Exact filename match (case-sensitive).
-    2. ``fnmatch`` glob expansion – newest file wins.
+    2. **Recursive** ``fnmatch`` glob expansion – newest file wins.
+       The pattern is matched against the *basename* so that files inside
+       subdirectories (e.g. ``calc_001/POSCAR``) are found too.
     """
     exact = workspace / pattern
     if exact.is_file():
@@ -51,7 +53,7 @@ def _resolve_file(workspace: Path, pattern: str) -> Path | None:
 
     hits = [
         p
-        for p in workspace.iterdir()
+        for p in workspace.rglob("*")
         if p.is_file() and fnmatch.fnmatch(p.name, pattern)
     ]
     if not hits:
@@ -658,6 +660,7 @@ def check_file_count(
 ) -> tuple[bool, str]:
     """Count files matching *pattern* (fnmatch glob) inside *workspace_dir*.
 
+    Walks **recursively** so that files inside subdirectories are counted too.
     Useful for verifying that the agent produced the expected number of output
     structure files (e.g. 5 ordered-replica CIFs).
     """
@@ -666,7 +669,9 @@ def check_file_count(
         return False, f'workspace {root} does not exist or is not a directory'
 
     hits = [
-        p for p in root.iterdir() if p.is_file() and fnmatch.fnmatch(p.name, pattern)
+        p
+        for p in root.rglob("*")
+        if p.is_file() and fnmatch.fnmatch(p.name, pattern)
     ]
     n = len(hits)
     ok = abs(n - expected) <= tolerance

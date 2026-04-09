@@ -8,13 +8,16 @@ from pathlib import Path
 
 
 def _resolve_file(workspace: Path, filename: str) -> Path | None:
-    """Resolve *filename* in *workspace* via exact match first, then fnmatch."""
+    """Resolve *filename* in *workspace* via exact match first, then fnmatch.
+
+    Walks **recursively** so that files inside subdirectories are found too.
+    """
     exact = workspace / filename
     if exact.is_file():
         return exact
     hits = [
         p
-        for p in workspace.iterdir()
+        for p in workspace.rglob("*")
         if p.is_file() and fnmatch.fnmatch(p.name, filename)
     ]
     if not hits:

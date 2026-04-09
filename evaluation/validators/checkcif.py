@@ -153,9 +153,13 @@ def check_checkcif_no_a_alerts(
     if not ws.is_dir():
         return False, f'workspace_dir not found: {workspace_dir}'
 
-    # Find CIF files matching the pattern
-    pattern = str(ws / filename)
-    matches = sorted(glob.glob(pattern))
+    # Find CIF files matching the pattern (recurse into subdirectories)
+    pattern = str(ws / '**' / filename)
+    matches = sorted(glob.glob(pattern, recursive=True))
+    if not matches:
+        # Also try flat match for exact filenames (e.g. "foo.cif")
+        flat = str(ws / filename)
+        matches = sorted(glob.glob(flat))
     if not matches:
         return False, f'no CIF file matching {filename!r} found in {workspace_dir}'
 
