@@ -11,8 +11,10 @@ from types import SimpleNamespace
 
 import requests
 
+from matmaster.bohrium.endpoints import use_sandbox
 from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
 from matmaster.bohrium.types import (
+    BohriumContext,
     BohriumCredentials,
     BohriumExecutionContext,
 )
@@ -50,7 +52,7 @@ def _patch_bridge(monkeypatch, cred: FakeCredentialSpec | None = None):
     fake_cred = cred or _fake_cred()
 
     def build_ctx(*, session=None, require_project: bool = False):
-        ctx = tool_mod.BohriumContext.from_credentials(
+        ctx = BohriumContext.from_credentials(
             BohriumCredentials(
                 access_key=fake_cred.access_key,
                 project_id=fake_cred.project_id,
@@ -58,10 +60,10 @@ def _patch_bridge(monkeypatch, cred: FakeCredentialSpec | None = None):
                 user_no=fake_cred.user_no,
                 base_url=fake_cred.base_url,
             ),
-            sandbox=tool_mod.use_sandbox(),
+            sandbox=use_sandbox(),
             source=fake_cred.source,
         )
-        if require_project and ctx.project_id <= 0:
+        if require_project and ctx.credentials.project_id <= 0:
             raise tool_mod.BohriumError(
                 "Bohrium project ID unavailable. Provide via session or BOHRIUM_PROJECT_ID."
             )
@@ -103,6 +105,7 @@ def _install_fake_tiefblue(monkeypatch, upload_calls: list[tuple[str, str, dict]
         "bohrium_open_sdk.opensdk._tiefblue_client",
         tiefblue_module,
     )
+    monkeypatch.setattr("matmaster.bohrium.upload._oss2", None, raising=False)
 
 
 def _fake_submit_post_factory(post_calls: list[tuple[str, dict, str]]):
@@ -134,7 +137,7 @@ def _fake_submit_post_factory(post_calls: list[tuple[str, dict, str]]):
 
 
 def test_build_bohrium_context_reads_runtime_handle() -> None:
-    from matmaster.tools.builtin.bohrium_tool.tool import build_bohrium_context
+    from matmaster.bohrium.credentials import build_bohrium_context
 
     session = SimpleNamespace()
     attach_runtime(
@@ -162,11 +165,11 @@ def test_build_bohrium_context_reads_runtime_handle() -> None:
 
     ctx = build_bohrium_context(session=session, require_project=True)
 
-    assert ctx.project_id == 42
+    assert ctx.credentials.project_id == 42
 
 
 def test_build_bohrium_context_falls_back_to_env(monkeypatch) -> None:
-    from matmaster.tools.builtin.bohrium_tool.tool import build_bohrium_context
+    from matmaster.bohrium.credentials import build_bohrium_context
 
     monkeypatch.setenv("BOHRIUM_ACCESS_KEY", "env-ak")
     monkeypatch.setenv("BOHRIUM_PROJECT_ID", "9")
@@ -174,8 +177,8 @@ def test_build_bohrium_context_falls_back_to_env(monkeypatch) -> None:
 
     ctx = build_bohrium_context(session=None, require_project=True)
 
-    assert ctx.access_key == "env-ak"
-    assert ctx.project_id == 9
+    assert ctx.credentials.access_key == "env-ak"
+    assert ctx.credentials.project_id == 9
     assert ctx.credential_source == "env"
 
 

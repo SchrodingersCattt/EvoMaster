@@ -16,3 +16,8 @@ def get_bohrium_base_url() -> str:
     if service_env == "prod":
         return "https://openapi.dp.tech"
     return f"https://openapi.{service_env}.dp.tech"
+
+
+def use_sandbox() -> bool:
+    """Check whether Bohrium sandbox mode is enabled."""
+    return os.environ.get("BOHRIUM_USE_SANDBOX", "1").strip() == "1"

@@ -1,17 +1,29 @@
 from __future__ import annotations
 
 
-class BohriumCredentialError(RuntimeError):
+class BohriumError(RuntimeError):
+    """Base class for all Bohrium errors."""
+
+
+class BohriumCredentialError(BohriumError):
     """Raised when Bohrium credentials cannot be resolved."""
 
 
-class BohriumRuntimeNotInitialized(RuntimeError):
+class BohriumAPIError(BohriumError):
+    """Raised when Bohrium OpenAPI returns an error."""
+
+
+class BohriumTransferError(BohriumError):
+    """Raised when archive upload, download, or publish fails."""
+
+
+class BohriumRuntimeNotInitialized(BohriumError):
     """Raised when the current session has no attached Bohrium runtime."""
 
 
-class BohriumSubmissionBuildError(RuntimeError):
+class BohriumSubmissionBuildError(BohriumError):
     """Raised when a submission spec cannot be built from runtime state."""
 
 
-class BohriumPathMaterializationError(RuntimeError):
+class BohriumPathMaterializationError(BohriumError):
     """Raised when a calculation input path cannot be converted to a remote URL."""

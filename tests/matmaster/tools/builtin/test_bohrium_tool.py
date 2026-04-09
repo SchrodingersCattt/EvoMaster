@@ -15,12 +15,12 @@ import pytest
 import requests
 
 import matmaster.tools.builtin.bohrium_tool as bohrium_module
-import matmaster.tools.builtin.bohrium_tool.api as bohrium_api_module
+import matmaster.bohrium.client as bohrium_client_module
 import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
+from matmaster.bohrium.endpoints import use_sandbox
 from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
 from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
-from matmaster.tools.builtin.bohrium_tool.api import use_sandbox
 from matmaster.tools.tool_result import ToolResult
 from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
     FakeRemoteSession,
@@ -145,12 +145,12 @@ class TestBohriumExecution:
                 )
 
         monkeypatch.setattr(
-            bohrium_api_module.requests, "get", lambda *args, **kwargs: FakeResponse()
+            bohrium_client_module.requests, "get", lambda *args, **kwargs: FakeResponse()
         )
 
         with caplog.at_level(logging.WARNING):
             with pytest.raises(requests.HTTPError):
-                bohrium_api_module._get(
+                bohrium_client_module._get(
                     "https://openapi.test.dp.tech",
                     "/openapi/v1/calc/list",
                     "secret-ak",
@@ -175,12 +175,12 @@ class TestBohriumExecution:
                 )
 
         monkeypatch.setattr(
-            bohrium_api_module.requests, "post", lambda *args, **kwargs: FakeResponse()
+            bohrium_client_module.requests, "post", lambda *args, **kwargs: FakeResponse()
         )
 
         with caplog.at_level(logging.WARNING):
             with pytest.raises(requests.HTTPError):
-                bohrium_api_module._post(
+                bohrium_client_module._post(
                     "https://open.bohrium.com",
                     "/openapi/v1/sandbox/job/create",
                     "secret-ak",
@@ -213,7 +213,7 @@ class TestBohriumExecution:
             ),
         )
         monkeypatch.setattr(
-            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_client_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with monkeypatch.context() as m:
@@ -298,7 +298,7 @@ class TestBohriumExecution:
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(
-            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_client_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with monkeypatch.context() as m:
@@ -333,7 +333,7 @@ class TestBohriumExecution:
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(
-            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_client_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with monkeypatch.context() as m:
@@ -370,7 +370,7 @@ class TestBohriumExecution:
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(
-            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_client_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with (
@@ -548,7 +548,7 @@ class TestBohriumExecution:
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(
-            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_client_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with monkeypatch.context() as m:
@@ -582,7 +582,7 @@ class TestBohriumExecution:
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(
-            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_client_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with monkeypatch.context() as m:
@@ -666,7 +666,7 @@ class TestBohriumExecution:
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, "_post", fake_post)
+        monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
 
         with monkeypatch.context() as m:
             m.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
@@ -708,39 +708,26 @@ class TestBohriumExecution:
 
     def test_list_images_filters_and_returns_versions(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
-        get_calls: list[tuple[str, dict | None]] = []
+        calls: list[tuple[str, str, int, bool]] = []
 
-        def fake_get(base_url, path, access_key, params=None, timeout=30):
-            get_calls.append((path, params))
-            if path == "/openapi/v2/image/public":
-                return {
-                    "data": {
-                        "items": [
-                            {
-                                "id": 1,
-                                "name": "CP2K",
-                                "description": "CP2K production image",
-                            },
-                            {"id": 2, "name": "GROMACS", "description": "MD image"},
-                        ]
+        def fake_list_images(ctx, *, keyword, max_results):
+            calls.append((ctx.credentials.access_key, keyword, max_results, ctx.sandbox))
+            return {
+                "success": True,
+                "keyword": keyword,
+                "total_found": 1,
+                "returned": 1,
+                "images": [
+                    {
+                        "id": 1,
+                        "name": "CP2K",
+                        "versions": [{"version": "2024.1"}],
                     }
-                }
-            if path == "/openapi/v2/image/public/1/version":
-                return {
-                    "data": {
-                        "items": [
-                            {
-                                "url": "registry.dp.tech/dptech/cp2k:2024.1",
-                                "version": "2024.1",
-                                "resourceType": "CPU",
-                            }
-                        ]
-                    }
-                }
-            raise AssertionError(f"unexpected path: {path}")
+                ],
+            }
 
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_tool_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_tool_module, "list_images", fake_list_images)
 
         result = asyncio.run(
             tool.execute({"action": "list_images", "keyword": "cp2k", "max_results": 5})
@@ -753,38 +740,33 @@ class TestBohriumExecution:
         assert payload["returned"] == 1
         assert payload["images"][0]["name"] == "CP2K"
         assert payload["images"][0]["versions"][0]["version"] == "2024.1"
-        assert get_calls[0][0] == "/openapi/v2/image/public"
-        assert get_calls[1][0] == "/openapi/v2/image/public/1/version"
+        assert calls == [("access-key", "cp2k", 5, True)]
 
     def test_list_machines_filters_by_type_and_keyword(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
-        get_calls: list[tuple[str, dict | None]] = []
-        monkeypatch.setenv("BOHRIUM_USE_SANDBOX", "0")
+        calls: list[tuple[str, str, str, int, bool]] = []
 
-        def fake_get(base_url, path, access_key, params=None, timeout=30):
-            get_calls.append((path, params))
-            assert path == "/openapi/v1/calc/list"
+        def fake_list_machines(ctx, *, machine_type, keyword, max_results):
+            calls.append(
+                (
+                    ctx.credentials.access_key,
+                    machine_type,
+                    keyword,
+                    max_results,
+                    ctx.sandbox,
+                )
+            )
             return {
-                "data": {
-                    "items": [
-                        {
-                            "skuEnName": "c6_m60_1 * NVIDIA 4090",
-                            "gpu": "4090",
-                            "gpuCoreNum": 1,
-                            "hasStock": True,
-                        },
-                        {
-                            "skuEnName": "c32_m128_cpu",
-                            "cpuCoreNum": 32,
-                            "memory": 128,
-                            "hasStock": True,
-                        },
-                    ]
-                }
+                "success": True,
+                "type": machine_type,
+                "keyword": keyword,
+                "total_found": 1,
+                "returned": 1,
+                "machines": [{"skuEnName": "c6_m60_1 * NVIDIA 4090"}],
             }
 
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_tool_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_tool_module, "list_machines", fake_list_machines)
 
         result = asyncio.run(
             tool.execute(
@@ -804,7 +786,7 @@ class TestBohriumExecution:
         assert payload["total_found"] == 1
         assert payload["returned"] == 1
         assert payload["machines"][0]["skuEnName"] == "c6_m60_1 * NVIDIA 4090"
-        assert get_calls[0][1]["chooseType"] == "gpu"
+        assert calls == [("access-key", "gpu", "4090", 10, True)]
 
 
 # ---------------------------------------------------------------------------
@@ -831,7 +813,7 @@ class TestBohriumSessionCredentials:
             get_calls.append((path, access_key))
             return {"data": {"status": 1}}  # Running
 
-        monkeypatch.setattr(bohrium_api_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
 
         result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
@@ -900,7 +882,7 @@ class TestBohriumSessionCredentials:
         opensdk_module._tiefblue_client = tiefblue_module
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-        monkeypatch.setattr(bohrium_api_module, "_post", fake_post)
+        monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
 
         with monkeypatch.context() as m:
             m.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
@@ -954,7 +936,7 @@ class TestBohriumSessionCredentials:
             get_calls.append((path, access_key))
             return {"data": {"status": 1}}
 
-        monkeypatch.setattr(bohrium_api_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
 
         result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
         assert result.status == "success"

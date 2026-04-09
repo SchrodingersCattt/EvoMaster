@@ -66,3 +66,48 @@ class BohriumSubmissionSpec:
     executor: dict[str, Any] | None
     storage: dict[str, Any] | None
     submission_mode: str
+
+
+@dataclass(frozen=True)
+class BohriumContext:
+    """Resolved Bohrium service context for API calls."""
+
+    credentials: BohriumCredentials
+    sandbox: bool
+    credential_source: str
+
+    @classmethod
+    def from_credentials(
+        cls,
+        cred: BohriumCredentials,
+        *,
+        sandbox: bool,
+        source: str = "runtime",
+    ) -> BohriumContext:
+        from .errors import BohriumCredentialError
+
+        if not cred.access_key:
+            raise BohriumCredentialError(
+                "Bohrium credentials unavailable. Provide via session or BOHRIUM_ACCESS_KEY."
+            )
+        return cls(credentials=cred, sandbox=sandbox, credential_source=source)
+
+    @property
+    def access_key(self) -> str:
+        return self.credentials.access_key
+
+    @property
+    def project_id(self) -> int:
+        return self.credentials.project_id
+
+    @property
+    def base_url(self) -> str:
+        return self.credentials.base_url
+
+    @property
+    def user_id(self) -> int | None:
+        return self.credentials.user_id
+
+    @property
+    def user_no(self) -> str:
+        return self.credentials.user_no

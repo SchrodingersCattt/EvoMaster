@@ -6,6 +6,8 @@ from urllib.parse import quote
 
 from .errors import BohriumTransferError
 
+_oss2 = None
+
 
 @dataclass(frozen=True)
 class UploadedArchive:
@@ -14,14 +16,17 @@ class UploadedArchive:
 
 
 def _load_tiefblue_client():
+    global _oss2
+    if _oss2 is not None:
+        return _oss2
     try:
         from bohrium_open_sdk.opensdk._tiefblue_client import Tiefblue as TiefblueClient
     except ImportError as exc:
         raise BohriumTransferError(
             "bohrium_open_sdk not installed. Run: pip install bohrium_open_sdk"
         ) from exc
-
-    return TiefblueClient
+    _oss2 = TiefblueClient
+    return _oss2
 
 
 def _build_download_url(store_host: str, oss_key: str, token: str) -> str:
