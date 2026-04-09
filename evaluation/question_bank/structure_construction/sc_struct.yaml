@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: struct
 questions:
-- id: SC_struct_hetero_20260404
+- id: SC_struct_hetero_20260409
   capability: structure_construction
   domain: struct
   intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled
@@ -110,7 +110,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_002_20260405v2
+- id: SC_struct_002_20260409
   capability: structure_construction
   domain: struct
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular
@@ -230,7 +230,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260406
+- id: SC_struct_SiH_20260409
   capability: structure_construction
   domain: struct
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab
@@ -345,7 +345,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_004_20260405
+- id: SC_struct_004_20260409
   capability: structure_construction
   domain: struct
   intent: Exfoliate a MoS2 monolayer from bulk 2H-MoS2 and verify the 2D structure.
@@ -436,7 +436,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260409
+- id: SC_struct_005_20260409v2
   capability: structure_construction
   domain: struct
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and
