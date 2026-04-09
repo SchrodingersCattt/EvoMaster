@@ -237,7 +237,6 @@ class QuestionItem(BaseModel):
             'batch_consistent_calls',
             'duration_budget',
             'turn_budget',
-            'token_budget',
             'molcrys_slab_molecular_integrity',
             'molcrys_local_env',
             'sc005_disorder_formulas',

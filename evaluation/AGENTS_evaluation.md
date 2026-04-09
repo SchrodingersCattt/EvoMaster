@@ -128,7 +128,6 @@ evaluation/question_bank/
 | `batch_consistent_calls` | `dict` | 批量调用一致性 |
 | `duration_budget` | `{"max": int}`（毫秒） | 运行时间预算 |
 | `turn_budget` | `{"max": int}`（轮次数） | Agent 轮次（step）预算；`total_steps <= max` 则 pass |
-| `token_budget` | `{"max": int}`（token） | 用最后一轮 LLM 的 `total_tokens` 做预算检查；建议按题型设置上限 |
 | `molcrys_slab_molecular_integrity` | `{"unit_cell_atoms": int, "slab_atoms": int, "layers": int}` | 分子晶体 slab 完整性 |
 | `sc005_disorder_formulas` | `dict` | 无序结构化学式 |
 | `struct_file_atom_count` | `{"filename": str, "expected": int, "tolerance": float}` | 用 pymatgen 读结构文件验证总原子数 |
@@ -155,6 +154,7 @@ evaluation/question_bank/
 | `event_type_called` | 检查事件类型是否被触发 |
 | `source_type_used` | 检查数据源类型 |
 | `call_count_range` | 分析工具调用次数（建议也配上 ref） |
+| `token_budget` | 用 **最后一轮 LLM** 的原始 ``total_tokens``（**不**扣 cache）：``EvidenceBundle.token_usage_last_turn.total_tokens``（轨迹取 max ``step_id`` 的 ``meta.usage``；无 ``total_tokens`` 时用 prompt+completion 推导）。对 **external baseline** 这类只有整轮汇总、没有 ``usage_vendor_by_turn`` 的摘要，允许用 ``summary.usage.total_tokens / num_turns`` 近似最后一轮。ingest 顶层 ``item["tokens"]`` / ``extra["tokens_last_turn"]`` 与 :func:`evaluation.eval_ingest_client.extract_ingest_tokens` 对齐：有 ``usage_vendor_by_turn`` 时取最后一项的 ``total_tokens``；baseline 若启用近似口径则按 ``summary.usage.total_tokens / num_turns``；其余情况回退到 ``summary.usage.total_tokens``（整表累加标量）。建议配上 ref，格式同 `duration_budget`） |
 
 ---
 

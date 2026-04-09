@@ -25,7 +25,7 @@ questions:
   - planner
   data_files:
   - key: base_slab
-    path: data/IG_abacus_001_20260409v3/base_slab.stru
+    path: data/IG_abacus_001_20260404/base_slab.stru
     oss_url: ''
     description: Fe slab STRU without Fe_empty (starting geometry for BSSE setup).
   reference_answers:
@@ -168,7 +168,7 @@ questions:
   - planner
   data_files:
   - key: base_vacancy
-    path: data/IG_abacus_002_20260409v3/base_vacancy.stru
+    path: data/IG_abacus_002_20260404/base_vacancy.stru
     oss_url: ''
     description: 53-Fe supercell with one vacancy (no Fe_empty yet).
   reference_answers:
@@ -309,7 +309,7 @@ questions:
   - planner
   data_files:
   - key: base_al_slab
-    path: data/IG_abacus_003_20260409v3/base_al_slab.stru
+    path: data/IG_abacus_003_20260406/base_al_slab.stru
     oss_url: ''
     description: Al slab geometry used for electrostatic-potential and work-function setup.
   reference_answers:
@@ -447,7 +447,7 @@ questions:
   - planner
   data_files:
   - key: base_h2o
-    path: data/IG_abacus_004_20260409v3/base_h2o.stru
+    path: data/IG_abacus_004_20260406/base_h2o.stru
     oss_url: ''
     description: H2O in a vacuum cell for dipole-correction setup.
   reference_answers:
@@ -592,15 +592,15 @@ questions:
   - planner
   data_files:
   - key: bulk_al_fcc
-    path: data/IG_abacus_005_20260409v3/bulk_al_fcc.stru
+    path: data/IG_abacus_005_20260406/bulk_al_fcc.stru
     oss_url: ''
     description: Bulk Al fcc structure for equilibrium energy reference.
   - key: slab_al_fcc100_5l
-    path: data/IG_abacus_005_20260409v3/slab_al_fcc100_5l.stru
+    path: data/IG_abacus_005_20260406/slab_al_fcc100_5l.stru
     oss_url: ''
     description: Five-layer Al fcc(100) slab with selective-relaxation flags.
   - key: slab_al_fcc100_7l
-    path: data/IG_abacus_005_20260409v3/slab_al_fcc100_7l.stru
+    path: data/IG_abacus_005_20260406/slab_al_fcc100_7l.stru
     oss_url: ''
     description: Seven-layer Al fcc(100) slab with selective-relaxation flags.
   reference_answers:
@@ -794,15 +794,15 @@ questions:
   - planner
   data_files:
   - key: mo_bulk
-    path: data/IG_abacus_006_20260409v3/mo_bulk.stru
+    path: data/IG_abacus_006_20260406/mo_bulk.stru
     oss_url: ''
     description: Bulk Mo reference structure.
   - key: mo110_pristine
-    path: data/IG_abacus_006_20260409v3/mo110_pristine.stru
+    path: data/IG_abacus_006_20260406/mo110_pristine.stru
     oss_url: ''
     description: Pristine Mo(110)-like slab for surface-vacancy benchmark.
   - key: mo110_surface_vac
-    path: data/IG_abacus_006_20260409v3/mo110_surface_vac.stru
+    path: data/IG_abacus_006_20260406/mo110_surface_vac.stru
     oss_url: ''
     description: Surface-vacancy slab derived from the pristine Mo slab.
   reference_answers:
@@ -1006,7 +1006,7 @@ questions:
   - planner
   data_files:
   - key: nanoribbon
-    path: data/IG_abacus_007_20260409v2/nanoribbon.stru
+    path: data/IG_abacus_007_20260406/nanoribbon.stru
     oss_url: ''
     description: Nanoribbon structure with vacuum for electric-field and band-structure setup.
   reference_answers:
@@ -1170,7 +1170,7 @@ questions:
   - planner
   data_files:
   - key: base_h2o_gate
-    path: data/IG_abacus_008_20260409v2/base_h2o_gate.stru
+    path: data/IG_abacus_008_20260406/base_h2o_gate.stru
     oss_url: ''
     description: H2O in a vacuum cell for compensating-charge setup.
   reference_answers:
