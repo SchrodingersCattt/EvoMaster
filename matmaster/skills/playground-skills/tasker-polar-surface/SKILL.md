@@ -304,6 +304,60 @@ The script prints JSON with `compliant`, `symmetric`, `reason`, `layer_summary`,
 - After a compliant slab is confirmed, use structure-manager (e.g. `assess_structure.py`) for sanity/dimensionality if needed.
 - **吸附分子**：需要在 slab 上加吸附分子时，优先使用 `add_adsorbate_batch.py`（本地脚本，支持批量），而非 MCP `mat_sg_build_surface_adsorbate`（仅支持单次调用）。尤其是批量场景下必须使用本地脚本。单个结构时两者均可。
 
+## High-Throughput Adsorption Screening Workflow
+
+For batch adsorption screening tasks (multiple surfaces × multiple adsorbates × multiple sites), follow this end-to-end pipeline:
+
+### Step 1: Batch Slab Generation
+Generate all required surface slabs in one batch call:
+```bash
+python build_slab_tasker_fix.py --batch slab_config.json
+```
+Where `slab_config.json` lists each (material, miller, layers, vacuum) combination.
+
+### Step 2: Batch Slab Validation
+Validate all generated slabs:
+```bash
+python check_slab_tasker.py --batch check_config.json
+```
+Filter for `compliant: true` slabs only. Report non-compliant slabs but do not block the entire pipeline.
+
+### Step 3: Adsorption Site Enumeration
+For each compliant slab, enumerate symmetry-distinct adsorption sites using ONE of:
+
+**Option A** — MCP `mat_sg_build_surface_adsorbate` with `enumerate_all=true` (single slab at a time, discovers all sites):
+- Returns all symmetry-distinct configurations (ontop, bridge, hollow, etc.)
+- Best for: detailed single-surface studies where you need all unique sites
+
+**Option B** — `add_adsorbate_batch.py` with explicit site list (batch-friendly):
+- Write a batch config with each (slab, adsorbate, site) combination:
+```json
+[
+  {"surface": "slab_Cu111.vasp", "adsorbate": "CO.xyz", "shift": "ontop", "height": 2.0, "output": "Cu111_CO_ontop.cif"},
+  {"surface": "slab_Cu111.vasp", "adsorbate": "CO.xyz", "shift": "fcc", "height": 2.0, "output": "Cu111_CO_fcc.cif"},
+  {"surface": "slab_Cu111.vasp", "adsorbate": "CO.xyz", "shift": "hcp", "height": 2.0, "output": "Cu111_CO_hcp.cif"},
+  {"surface": "slab_Cu111.vasp", "adsorbate": "CO.xyz", "shift": "bridge", "height": 2.0, "output": "Cu111_CO_bridge.cif"},
+  {"surface": "slab_Ag111.vasp", "adsorbate": "CO.xyz", "shift": "ontop", "height": 2.0, "output": "Ag111_CO_ontop.cif"}
+]
+```
+- Best for: HT screening across multiple surfaces with known standard sites
+
+**Common adsorption sites for FCC(111)**: ontop, fcc, hcp, bridge (4 sites)
+**Common adsorption sites for FCC(100)**: ontop, bridge, hollow (3 sites)
+**Common adsorption sites for BCC(110)**: ontop, short-bridge, long-bridge, hollow (4 sites)
+
+### Step 4: Calculation (if required)
+If the task includes adsorption energy calculation:
+- Use `calculate_adsorption.py` from the **mlips** skill for MLIP-based energies.
+- Or prepare ABACUS/DFT inputs for each configuration and submit as batch Bohrium jobs.
+- Collect E(slab+ads), E(slab), E(gas) → E_ads = E(slab+ads) − E(slab) − E(gas).
+
+### Pipeline Orchestration Rules
+1. **Breadth-first**: Generate ALL slabs before checking ANY. Check ALL before adding adsorbates. This maximizes throughput.
+2. **Fail-forward**: One failed slab/check does not block other structures. Track failures and report at end.
+3. **Naming convention**: Use systematic naming `{material}_{miller}_{adsorbate}_{site}.cif` for traceability.
+4. **Token economy**: Use batch modes (--batch config.json) instead of sequential single calls. One batch call replaces N individual calls.
+
 ## Additional resources
 
 - **reference.md**: Tasker type examples and common materials (MgO, TiO2, ZnO, etc.).

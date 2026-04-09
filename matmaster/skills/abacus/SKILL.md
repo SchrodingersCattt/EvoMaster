@@ -104,6 +104,144 @@ If the user provides complete INPUT + STRU + KPT files with pseudopotentials and
 
 > When generating INPUT files, write the calculation keyword exactly as shown: `calculation scf`, `calculation cell-relax`, etc. with single space. Include `efield_flag 1` and `dip_cor_flag 1` when dipole correction is needed.
 
+### Complete INPUT Examples for Electronic Property Calculations
+
+Electronic property calculations (band structure, DOS) require a **two-step workflow**: SCF to converge charge density, then NSCF to compute the property on a different k-grid.
+
+#### Step 1: SCF INPUT (charge density output enabled)
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 100
+smearing_method gauss
+smearing_sigma 0.01
+out_chg 1
+```
+> **`out_chg 1` is mandatory** for any SCF that feeds a subsequent NSCF step. It writes charge density files (`SPIN1_CHG.cube`) to `OUT.ABACUS/`. Without it, the NSCF step has no charge density to read.
+
+SCF KPT — use uniform Monkhorst-Pack mesh:
+```
+K_POINTS
+0
+Gamma
+8 8 8 0 0 0
+```
+
+#### Step 2a: NSCF Band Structure INPUT
+```
+INPUT_PARAMETERS
+calculation nscf
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 300
+init_chg file
+out_band 1
+nbands 40
+symmetry 0
+smearing_method gauss
+smearing_sigma 0.01
+```
+
+**Required NSCF parameters** (the agent MUST include all of these):
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| `init_chg` | `file` | Read converged charge density from SCF `OUT.ABACUS/SPIN1_CHG.cube`. **Without this, NSCF re-runs SCF from scratch.** |
+| `out_band` | `1` | Write band eigenvalues to `OUT.ABACUS/BANDS_1.dat` |
+| `nbands` | integer | Number of bands to compute. Set to `total_electrons/2 + 20` (insulator) or `total_electrons/2 × 1.5` (metal). Must exceed occupied band count. |
+| `symmetry` | `0` | **Mandatory for line-mode k-paths.** Symmetry reduction folds/reorders k-points and breaks the band path. |
+
+Band structure KPT (line mode, example FCC: Γ→X→M→Γ):
+```
+K_POINTS
+4
+Line
+0.000  0.000  0.000  40  // Gamma
+0.500  0.000  0.000  40  // X
+0.500  0.500  0.000  40  // M
+0.000  0.000  0.000  1   // Gamma
+```
+
+#### Step 2b: NSCF Density of States INPUT
+```
+INPUT_PARAMETERS
+calculation nscf
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 300
+init_chg file
+out_dos 1
+dos_edelta_ev 0.01
+dos_sigma 0.07
+dos_nche 100
+nbands 40
+symmetry 0
+smearing_method gauss
+smearing_sigma 0.01
+```
+
+**DOS-specific parameters**:
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| `out_dos` | `1` | Write DOS data to `OUT.ABACUS/DOS1_smearing.dat` |
+| `dos_edelta_ev` | `0.01` | Energy grid spacing in eV (finer = higher resolution) |
+| `dos_sigma` | `0.07` | Gaussian smearing width for DOS (eV) |
+| `dos_nche` | `100` | Chebyshev expansion order for LCAO DOS (higher = more accurate) |
+
+DOS KPT — use **dense uniform mesh** (NOT line-mode):
+```
+K_POINTS
+0
+Gamma
+12 12 12 0 0 0
+```
+
+#### Two-Step Workflow: File Management on Bohrium
+
+Since Bohrium runs jobs as a single command, use a shell script to chain SCF and NSCF:
+
+```bash
+#!/bin/bash
+# Step 1: SCF (produces charge density)
+cp INPUT_scf INPUT
+cp KPT_scf KPT
+OMP_NUM_THREADS=1 mpirun -np 16 abacus
+# Step 2: NSCF (reads charge density, computes band/DOS)
+cp INPUT_nscf INPUT
+cp KPT_nscf KPT
+OMP_NUM_THREADS=1 mpirun -np 16 abacus
+```
+
+**Input directory must contain**: `INPUT_scf`, `INPUT_nscf`, `KPT_scf`, `KPT_nscf`, `STRU`, `.upf`, `.orb`, and the shell script (`run.sh`).
+**Submit**: `--cmd "bash run.sh > log 2>&1"`
+
+> **Critical file dependency**: NSCF reads `OUT.ABACUS/SPIN1_CHG.cube` produced by SCF. Both steps must run in the same directory. Do NOT delete `OUT.ABACUS/` between steps.
+
+### ABACUS Output Files Reference
+
+After a successful run, results are in `OUT.ABACUS/`:
+
+| File | Produced by | Contains |
+|------|-------------|----------|
+| `running_scf.log` | SCF | Total energy, Fermi energy, convergence, forces, stress |
+| `running_nscf.log` | NSCF | Fermi energy, eigenvalue info |
+| `SPIN1_CHG.cube` | SCF with `out_chg 1` | Charge density (cube format) |
+| `BANDS_1.dat` | NSCF with `out_band 1` | Band eigenvalues along k-path |
+| `DOS1_smearing.dat` | NSCF with `out_dos 1` | Density of states |
+| `ElecStaticPot.cube` | `out_pot 2` | Electrostatic potential (work function) |
+| `STRU_ION*_D` | Relax | Relaxed structure at each ionic step |
+
+**Reading results from logs**: Key patterns to grep:
+- Total energy: `!FINAL_ETOT_IS <energy> eV`
+- Fermi energy: `EFERMI = <energy> eV`
+- Convergence: `charge density convergence is achieved`
+- Forces: lines after `TOTAL-FORCE (eV/Angstrom)` header
+- Stress: lines after `TOTAL-STRESS (KBAR)` header
+
 ## STRU File Format (Detailed)
 
 The STRU file has five sections, in order:
@@ -296,10 +434,9 @@ Line
 0.000  0.000  0.000  1   // Gamma (endpoint)
 ```
 
-**Band structure workflow** (two-step):
-1. SCF step: `calculation scf` with standard KPT (Monkhorst-Pack grid or `kspacing`).
-2. NSCF step: `calculation nscf`, `init_chg file`, `out_band 1`, with line-mode KPT along the high-symmetry path.
-   The NSCF INPUT should keep all settings from SCF (nspin, efield, etc.) and add `nbands` explicitly.
+**Band structure workflow** (two-step — see "Complete INPUT Examples for Electronic Property Calculations" above for full INPUT files):
+1. **SCF step**: `calculation scf` with uniform KPT mesh. **Must include `out_chg 1`** to save charge density.
+2. **NSCF step**: `calculation nscf` with **all of**: `init_chg file`, `out_band 1`, `nbands <N>`, `symmetry 0`. Use line-mode KPT along the high-symmetry path. Keep all other settings from SCF (basis_type, ecutwfc, nspin, efield, smearing, etc.).
 
 ## Multi-File Generation for Comparative Studies
 
@@ -331,6 +468,27 @@ Generate INPUT for each component:
   ```
   For uniform bulk: `kspacing 0.10` (single value applies to all three directions equally).
 - For bulk vacancy supercells: use uniform kspacing, e.g. `kspacing 0.10` or equivalent Monkhorst-Pack grid matching the supercell size.
+
+## Output Control Parameters
+
+These parameters control what ABACUS writes to `OUT.ABACUS/`. Include them in INPUT as needed.
+
+| Parameter | Values | Default | Purpose |
+|-----------|--------|---------|---------|
+| `out_chg` | `0`/`1` | `0` | Write charge density to `SPIN1_CHG.cube`. **Required for SCF→NSCF workflows.** |
+| `out_band` | `0`/`1` | `0` | Write band eigenvalues to `BANDS_1.dat`. For NSCF band structure. |
+| `out_dos` | `0`/`1` | `0` | Write DOS to `DOS1_smearing.dat`. For NSCF DOS. |
+| `out_pot` | `0`/`1`/`2` | `0` | Write electrostatic potential. `2` = total Hartree+local → `ElecStaticPot.cube`. |
+| `out_stru` | `0`/`1` | `0` | Write relaxed structure files (`STRU_ION*_D`). For relax/cell-relax. |
+| `out_wfc_lcao` | `0`/`1` | `0` | Write LCAO wavefunction coefficients. For post-processing (PyATB, Wannier). |
+| `cal_force` | `0`/`1` | `0` | Calculate and print atomic forces. Set `1` for relax or force analysis. |
+| `cal_stress` | `0`/`1` | `0` | Calculate and print stress tensor. Set `1` for cell-relax or EOS. |
+| `init_chg` | `atomic`/`file` | `atomic` | Charge density init. `file` = read from prior SCF. **Required for NSCF.** |
+| `nbands` | integer | auto | Number of bands. Must be set explicitly for NSCF (> occupied bands). |
+| `symmetry` | `0`/`1` | `1` | `0` = disable symmetry. **Mandatory for NSCF with line-mode k-paths.** |
+
+> **Common mistake**: forgetting `out_chg 1` in the SCF step, then the NSCF step with `init_chg file` fails silently or recomputes SCF.
+> **Common mistake**: leaving `symmetry 1` (default) in NSCF band structure — the k-path gets folded/reordered, producing wrong band plots.
 
 ## Required Files
 

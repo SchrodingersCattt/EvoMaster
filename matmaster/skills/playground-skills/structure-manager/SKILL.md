@@ -92,10 +92,49 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
         * **Reading**: Always specify `--atom-style` to match the source file (e.g., `full` for molecular systems). Auto-detection can fail silently.
         * **Writing**: For non-atomic styles (full, charge), the script goes through ASE's `lammps-data` writer (with `specorder=type_map` to guarantee correct type numbering). dpdata's own writer only supports atomic style. Charges default to 0.0 if not present in source.
 
+## Structure Construction for Electronic Property Calculations
+
+When the task requires building a structure **specifically for electronic property calculations** (band structure, DOS, charge density, work function), apply these domain rules:
+
+### Primitive vs Conventional Cell
+- **Band structure**: use the **primitive cell** (not conventional) to get the standard high-symmetry k-path. Conventional cells have folded bands that are harder to interpret. If the user provides a conventional cell, convert to primitive using pymatgen `SpacegroupAnalyzer.get_primitive_standard_structure()` before generating the k-path.
+- **DOS**: either primitive or supercell is fine, but use a **dense uniform k-mesh** (not line-mode).
+- **Work function**: use a **slab** with sufficient vacuum (≥ 20 Å recommended) and include dipole correction.
+
+### K-path Selection by Crystal System
+| Crystal system | Key high-symmetry points | Example path |
+|---------------|------------------------|-------------|
+| FCC (cubic) | Γ, X, W, K, L | Γ→X→W→K→Γ→L |
+| BCC (cubic) | Γ, H, N, P | Γ→H→N→Γ→P→H |
+| Hexagonal | Γ, M, K, A | Γ→M→K→Γ (2D: skip A) |
+| Tetragonal | Γ, X, M, Z | Γ→X→M→Γ→Z |
+| Simple cubic | Γ, X, M, R | Γ→X→M→Γ→R→X |
+
+Use pymatgen `HighSymmKpath(structure)` to auto-generate the correct k-path for any crystal.
+
+### Supercell for Defect Electronic Structure
+- For point defects (vacancy, substitution): build a supercell large enough that the defect does not interact with its periodic images (minimum ~10 Å between defect and nearest image). Typical: 3×3×3 for bulk, 2×2 or 3×3 in-plane for slabs.
+- Use **Γ-point only** or sparse k-mesh for large supercells.
+- For charged defects: add compensating background charge or use explicit countercharge methods.
+
+### Heterostructure for Band Alignment
+- Build each component slab separately with `build_surface_slab` or `build_slab_tasker_fix.py`.
+- Match in-plane lattice parameters (strain < 5%) using supercell matching.
+- Stack with `build_surface_interface` (MCP) or manual ASE stacking.
+- Verify: no overlapping atoms, correct atom count, sufficient vacuum.
+
+### Structure Verification for Electronic Calculations
+After constructing any structure for electronic property calculations:
+1. Run `assess_structure.py` — confirm dimensionality matches intent (bulk = 3D, slab = 2D).
+2. Verify **atom count** matches formula × supercell size.
+3. For slabs: confirm vacuum ≥ 15 Å (20 Å for work function), k-points = 1 in vacuum direction.
+4. For primitive cells: confirm the cell is actually primitive (not conventional with doubled atom count).
+
 ## When to use
 
 * "Get / search / find / retrieve the crystal structure of X" → Try MCP database tools (`mat_struct_db_*`) first for simple inorganic formulas. If not found, or if the material is complex (organic, hybrid, molecular crystal, MOF, co-crystal, energetic salt, etc.), use the literature-based search path: `mat_sn_*` → `extract_info_from_webpage` → `fetch_web_structure.py` / report identifiers.
 * "Build from SMILES or prototype" → use MCP structure generator (`mat_sg_*`).
+* "Build a structure for band structure / DOS / electronic property calculation" → see "Structure Construction for Electronic Property Calculations" above. Use primitive cell for band structure, dense k-mesh for DOS.
 * "I have a direct CIF/POSCAR URL, download it" → `fetch_web_structure.py --url`.
 * "Get the structure from a journal SI or open repository page" → `fetch_web_structure.py --page`.
 * "Get the crystal structure of X" where X is in CCDC/ICSD → report database identifier (REFCODE / collection code) + crystallographic parameters (space group, lattice constants, formula, Z) from literature; do not attempt to download or reconstruct.

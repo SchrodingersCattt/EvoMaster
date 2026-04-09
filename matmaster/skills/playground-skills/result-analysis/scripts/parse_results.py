@@ -57,7 +57,7 @@ def parse_lammps(filepath: Path) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Parse open-source calculation output to JSON (LAMMPS supported; commercial codes not supported)."
+        description="Parse open-source calculation output to JSON (LAMMPS supported; for ABACUS use parse_abacus.py; commercial codes not supported)."
     )
     ap.add_argument(
         "--file", required=True, help="Path to LAMMPS log or other supported output"
@@ -66,7 +66,7 @@ def main() -> None:
         "--type",
         required=True,
         choices=["lammps"],
-        help="Software type (open-source only)",
+        help="Software type (open-source only; for ABACUS use parse_abacus.py)",
     )
     args = ap.parse_args()
     path = Path(args.file)
