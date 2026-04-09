@@ -355,6 +355,11 @@ class BohriumSetupService:
         - 'error' -> ErrorEvent + StreamClosedEvent
         - 'stream_closed' -> StreamClosedEvent
         - all others -> BohriumNodeEvent
+
+        The sink is responsible for the actual thread handoff. In production,
+        AgentRunService injects fanout.dispatch_from_thread(), so the bridge
+        builds BusEvent objects in the worker thread and fanout owns the single
+        call_soon_threadsafe hop onto the run loop.
         """
         from matmaster.types.events import (
             BohriumNodeEvent,
