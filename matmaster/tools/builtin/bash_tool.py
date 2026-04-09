@@ -41,10 +41,16 @@ class BashTool(BuiltinTool):
             "timeout": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 600000,
+                "maximum": 3600000,
                 "description": (
-                    "Optional timeout in milliseconds (max 600000). "
-                    "Default: 120000ms (2 minutes)."
+                    "Optional timeout in milliseconds. "
+                    "Default: 120000ms (2 minutes). "
+                    "Max 600000ms (10 min) for general commands. "
+                    "Exception: pure `sleep N` commands "
+                    "may set timeout up to 3600000ms (1 hour), for use as "
+                    "polling intervals between HPC job status checks. "
+                    "Compound commands like `sleep 3600 && ...` are NOT "
+                    "eligible for the higher cap. "
                 ),
             },
             "description": {
@@ -97,7 +103,7 @@ class BashTool(BuiltinTool):
             return "Error: command is required and must not be empty."
 
         timeout_ms = arguments.get("timeout", 120_000)
-        timeout_ms = min(int(timeout_ms), 600_000)  # cap at 10min
+        timeout_ms = min(int(timeout_ms), 3_600_000)  # cap at 1h (sleep only)
         timeout_s = timeout_ms / 1000  # float division preserves sub-second
 
         from matmaster.tools.script_env import (
