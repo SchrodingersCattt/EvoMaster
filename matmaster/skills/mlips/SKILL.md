@@ -12,7 +12,7 @@ Universal machine-learning interatomic potentials for atomistic simulations. All
 
 | Item | Default Value |
 |------|---------------|
-| image | `registry.dp.tech/dptech/dpa-calculator:f99e827e` |
+| image | `registry.dp.tech/dptech/dpa-calculator:894fe8cc` |
 | machine | `c16_m64_1 * NVIDIA 4090` |
 | cmd | `python {script} {args} > log 2>&1` |
 
@@ -137,7 +137,7 @@ Output: `neb_band.pdf`, `result.json` (forward/reverse barrier in eV)
 1. Prepare structure file (CIF/POSCAR/XYZ)
 2. Copy the relevant script(s) and `_calculator.py` to a working directory
 3. For MD: create a `stages.json` file with stage definitions
-4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dpa-calculator:f99e827e", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
+4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dpa-calculator:894fe8cc", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
     - If dependencies are missing, `cmd` can include installation first, e.g. `pip install sevenn && python optimize_structure.py --structure input.cif --model SevenNet-0 > log 2>&1`
     - If the package must be installed into the image's virtual environment, use `source /mcp_server/AI4S-agent-tools/.venv/bin/activate && pip install sevenn && python optimize_structure.py --structure input.cif --model SevenNet-0 > log 2>&1`
 5. Poll: `Bohrium(action="poll", job_id=<id>)`
