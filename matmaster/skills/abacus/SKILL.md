@@ -104,32 +104,6 @@ If the user provides complete INPUT + STRU + KPT files with pseudopotentials and
 
 > When generating INPUT files, write the calculation keyword exactly as shown: `calculation scf`, `calculation cell-relax`, etc. with single space. Include `efield_flag 1` and `dip_cor_flag 1` when dipole correction is needed.
 
-### Parameters Reference
-
-Key parameters for ABACUS INPUT files. Include those applicable to your specific system and task type — not every parameter is needed for every calculation. Use physical judgment rather than adding parameters blindly:
-
-| Parameter | When Required | Value |
-|-----------|---------------|-------|
-| `scf_thr` | **Every INPUT** | `1e-7` (standard); `1e-8` (force/stress sensitive) |
-| `scf_nmax` | **Every INPUT** | `100` (standard); `200` (magnetic/difficult) |
-| `smearing_method` | Metals, slabs, magnetic, transition metals | `gauss` — use for all metallic/magnetic systems; `fixed` only for wide-gap insulators |
-| `smearing_sigma` | Whenever smearing ≠ fixed | `0.01`–`0.015` Ry |
-| `ecutwfc` | **Every INPUT** | PW: 60–100 Ry. LCAO: 50–100 Ry production; **20–30 Ry is acceptable for LCAO** quick tests / BSSE comparisons (auxiliary grid only) |
-| `cal_force` | relax / cell-relax / md | `1` |
-| `cal_stress` | cell-relax | `1` |
-| `out_stru` | relax / cell-relax | `1` |
-| `relax_nmax` | relax / cell-relax | `100` (or `200`) |
-| `nspin` | Magnetic systems (Fe, Co, Ni, Mn, Cr…) | `2` |
-| `mixing_beta` | Magnetic metals | `0.1`–`0.4` (not default 0.7) |
-| `mixing_ndim` | Magnetic metals | `20` |
-| `mixing_gg0` | Magnetic metals | `1.5` |
-| `nbands` | nscf (band/DOS) | Explicit value ≥ nelec/2 + 20 (e.g. `40` for Si) |
-| `out_band` | Band structure | `1` |
-| `out_dos` | DOS calculation | `1` |
-| `out_pot` | Work function / electrostatic potential | `2` |
-| `out_chg` | SCF step preceding nscf | `1` |
-| `init_chg` | nscf step (band/DOS) | `file` |
-
 ## STRU File Format (Detailed)
 
 The STRU file has five sections, in order:

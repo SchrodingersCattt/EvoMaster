@@ -102,7 +102,6 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 * "Check if this structure is reasonable" → `assess_structure.py`.
 * "Convert this CIF to POSCAR" / "Convert POSCAR to LAMMPS data" → `convert_format.py`.
 * **"Cut a surface slab from a molecular crystal"** → `build_molecular_crystal_slab.py`. Use this FIRST for any molecular crystal (organic, MOF, co-crystal, hybrid) slab task. Do NOT write custom SlabGenerator scripts from scratch for molecular crystals — it wastes many turns.
-* **"Fix / repair a structure file"** (failure recovery) → When the task **explicitly says** to fix geometric issues while **freezing** computation parameters (INCAR, KPOINTS, etc.), ONLY modify the structure file (POSCAR/CIF). Do NOT change input parameters. **Scope**: this rule applies ONLY when the task contains explicit "freeze/keep parameters unchanged" instructions. It does NOT apply to passivation, surface reconstruction, slab building, or other structure-construction tasks where no parameter freeze is mentioned.
 
 ## Tool (via Skill)
 
@@ -115,5 +114,3 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 * After obtaining any new structure (any method), run `assess_structure.py`. If it reports "Slab" for a Bulk task, warn the user.
 * For LAMMPS conversions, **always** provide `--type-map`. If the source .lmp uses a non-atomic atom_style, **always** provide `--atom-style`.
 * On `missing_dependency` from any script, install the package on the remote session before retrying.
-* **Frozen-parameter tasks**: when a task **explicitly** says to fix/repair a structure while freezing or keeping computation parameters unchanged: (a) ONLY modify structure files, (b) preserve INCAR/KPOINTS/other input files exactly. **Scope**: applies ONLY to explicit "freeze parameter" instructions — NOT to general structure building, passivation, or reconstruction tasks.
-* **Save-early**: for multi-step tasks, save each deliverable under the task-required filename as soon as ready. Budget your turns — do not spend excessive turns on verification if it risks timeout.

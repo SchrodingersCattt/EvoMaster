@@ -22,7 +22,7 @@ mcp_server: mat_sg
   ```
   This script automatically: (a) detects molecules via PBC-aware bond graph, (b) enumerates all slab terminations, (c) verifies molecule integrity for each, (d) selects the best termination. **Do NOT write custom slab-cutting Python scripts from scratch** — this wastes many turns.
   If the script fails or no termination preserves molecules, then fall back to manual pymatgen `SlabGenerator` with `in_unit_planes=True`, systematically trying different `shift` values. Key verification: (1) no covalent bond is broken across the slab boundary, (2) atom count = layers × unit-cell atoms, (3) no isolated molecular fragments exist.
-- **Post-build structure verification**: after slab builds, quickly check with one `get_structure_info` call: (a) composition matches formula, (b) atom count is correct, (c) vacuum ≥ 15 Å. Keep verification to ONE call — do not add multiple verification rounds that risk timeout on complex tasks.
+- **Post-build structure verification**: after slab builds, verify with `get_structure_info`: (a) composition matches formula, (b) atom count is correct, (c) vacuum ≥ 15 Å. If any check fails, fix and re-verify before delivering.
 
 ## build_surface_interface (heterojunction / interface construction)
 
