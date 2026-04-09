@@ -120,7 +120,7 @@ When a task requires relaxing a structure with MLIP/DPA models:
   calc = build_calculator("DPA3.1-3M")  # or with head="OC22" for catalysis
   ```
 - Use ASE's `LBFGS` optimizer with `ExpCellFilter` for cell+position relaxation (or `BFGS` for positions-only).
-- Submit to Bohrium with **image `registry.dp.tech/dptech/dpa-calculator:f7835422`** and **machine `c16_m64_1 * NVIDIA 4090`**.
+- Submit to Bohrium with **image `registry.dp.tech/dptech/dpa-calculator:e13a296f`** and **machine `c16_m64_1 * NVIDIA 4090`**.
 - **Do NOT waste turns searching for calculator backends** (no `glob.glob("/opt/**/*.pb")`, no trying multiple import paths). Use `build_calculator` from `_calculator.py` directly — it handles model discovery.
 - **Save-early pattern**: save the unrelaxed structure under the task-required filename BEFORE submitting relaxation. Overwrite only if relaxation succeeds and produces physically reasonable results (fmax < threshold, no broken bonds). This ensures a deliverable exists even if relaxation times out.
 
@@ -147,6 +147,6 @@ When the task requires computing adsorption energies (E_ads) with MLIP/DPA model
 - Write ONE consolidated Python script that loops over all surfaces × adsorbates, computes E_ads = E(slab+ads) − E(slab) − E(gas), and prints a complete results table.
 - The script MUST use `from _calculator import build_calculator` (copy `_calculator.py` from `matmaster/skills/mlips/scripts/` into the input directory).
 - For catalysis surfaces use head `OC22`: `build_calculator("DPA3.1-3M", head="OC22")`.
-- Submit to Bohrium with **image `registry.dp.tech/dptech/dpa-calculator:f7835422`** and **machine `c16_m64_1 * NVIDIA 4090`**. Do NOT use ABACUS/CP2K/other images — they lack ASE and deepmd-kit.
+- Submit to Bohrium with **image `registry.dp.tech/dptech/dpa-calculator:e13a296f`** and **machine `c16_m64_1 * NVIDIA 4090`**. Do NOT use ABACUS/CP2K/other images — they lack ASE and deepmd-kit.
 - If the job fails (e.g. missing module), check the image first. ASE-dependent scripts require the DPA image.
 - **Time budget**: these tasks involve structure building + Bohrium submission + result parsing. Submit the computation job as early as possible — minimize turns spent on setup/verification before submission. Save intermediate structures early so partial credit is secured even if the computation times out.

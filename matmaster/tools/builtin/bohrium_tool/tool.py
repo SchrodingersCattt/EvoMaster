@@ -233,7 +233,7 @@ class BohriumTool(BuiltinTool):
             '### Common software defaults\n'
             '| Software | Image | Machine | Command |\n'
             '|----------|-------|---------|--------|\n'
-            '| **MLIP/DPA** (ASE+deepmd) | `registry.dp.tech/dptech/dpa-calculator:f7835422` '
+            '| **MLIP/DPA** (ASE+deepmd) | `registry.dp.tech/dptech/dpa-calculator:e13a296f` '
             '| `c16_m64_1 * NVIDIA 4090` | `python <script>.py > log 2>&1` |\n'
             '| ABACUS | `registry.dp.tech/dptech/abacus:LTSv3.10.1` '
             '| `c32_m128_cpu` | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |\n'
