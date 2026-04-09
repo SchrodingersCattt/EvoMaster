@@ -104,9 +104,9 @@ If the user provides complete INPUT + STRU + KPT files with pseudopotentials and
 
 > When generating INPUT files, write the calculation keyword exactly as shown: `calculation scf`, `calculation cell-relax`, etc. with single space. Include `efield_flag 1` and `dip_cor_flag 1` when dipole correction is needed.
 
-### Mandatory Parameters Checklist
+### Parameters Reference
 
-Before completing ANY ABACUS input file, verify ALL applicable parameters are present. Omitting any produces an incomplete input:
+Key parameters for ABACUS INPUT files. Include those applicable to your specific system and task type — not every parameter is needed for every calculation. Use physical judgment rather than adding parameters blindly:
 
 | Parameter | When Required | Value |
 |-----------|---------------|-------|
@@ -249,7 +249,7 @@ efield_pos_dec 0.10
 - `efield_amp`: field strength in a.u. (1 a.u. = 51.4 V/A). Typical small field: ~1e-3 a.u.
 - Combine with `dip_cor_flag 1` to also correct the dipole artifact when applying a finite field.
 
-### Gate Field (Charged Slab)
+### Gate Field
 ```
 INPUT_PARAMETERS
 efield_flag 1
@@ -257,15 +257,16 @@ dip_cor_flag 1
 efield_dir 2
 gate_flag 1
 zgate 0.7
-nelec 9
+nelec 8
 block 1
 block_down 0.45
 block_up 0.55
 block_height 0.1
 ```
 - `gate_flag 1`: place compensating charge sheet at fractional z = `zgate` (in vacuum).
-- `nelec`: total electrons; differs from neutral to simulate charging (e.g. neutral H2O = 8e, charged = 9e).
+- `nelec`: **Always count electrons from your actual system first.** Set to the system's neutral electron count by default (e.g. 8 for H₂O). Only change from neutral to simulate a charged system (e.g. 9 = adding one electron). **Never copy example values blindly — always derive from your structure.**
 - `block 1` + `block_down/block_up/block_height`: potential barrier in vacuum to prevent electron spillage.
+- `zgate`, `block_down`, `block_up`: fractional z-coordinates — **adjust based on your slab geometry**. Place gate and barrier in the vacuum region away from atoms. Do not copy example values without verifying they suit your system's atom positions.
 
 ## Electrostatic Potential Output
 

@@ -102,7 +102,7 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 * "Check if this structure is reasonable" → `assess_structure.py`.
 * "Convert this CIF to POSCAR" / "Convert POSCAR to LAMMPS data" → `convert_format.py`.
 * **"Cut a surface slab from a molecular crystal"** → `build_molecular_crystal_slab.py`. Use this FIRST for any molecular crystal (organic, MOF, co-crystal, hybrid) slab task. Do NOT write custom SlabGenerator scripts from scratch for molecular crystals — it wastes many turns.
-* **"Fix / repair a structure file"** (failure recovery) → When the task says to fix geometric issues in a structure while **freezing** all computation parameters (INCAR, KPOINTS, etc.), strictly ONLY modify the structure file (POSCAR/CIF). Do NOT add, remove, or change ANY parameters in INCAR or other input files — even "helpful" additions like IBRION, ISIF, or NSW. Frozen means frozen.
+* **"Fix / repair a structure file"** (failure recovery) → When the task **explicitly says** to fix geometric issues while **freezing** computation parameters (INCAR, KPOINTS, etc.), ONLY modify the structure file (POSCAR/CIF). Do NOT change input parameters. **Scope**: this rule applies ONLY when the task contains explicit "freeze/keep parameters unchanged" instructions. It does NOT apply to passivation, surface reconstruction, slab building, or other structure-construction tasks where no parameter freeze is mentioned.
 
 ## Tool (via Skill)
 
@@ -115,5 +115,5 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 * After obtaining any new structure (any method), run `assess_structure.py`. If it reports "Slab" for a Bulk task, warn the user.
 * For LAMMPS conversions, **always** provide `--type-map`. If the source .lmp uses a non-atomic atom_style, **always** provide `--atom-style`.
 * On `missing_dependency` from any script, install the package on the remote session before retrying.
-* **Frozen-parameter tasks**: when a task says to fix/repair a structure while freezing or keeping all computation parameters unchanged, you MUST: (a) ONLY modify the structure file (POSCAR, CIF, etc.), (b) copy the original INCAR/KPOINTS/other input files EXACTLY as-is — do NOT add, remove, or change any parameters (no IBRION, ISIF, NSW, or other "helpful" additions), (c) if the original files have specific settings, preserve every single one. Violating parameter freeze = scoring failure.
-* **Save-early rule**: for complex multi-step tasks (slab building + relaxation, multiple structures), save each deliverable under the task-required filename as soon as it is ready. If a later step may fail or time out, the early save ensures partial credit. Overwrite only when the later step succeeds.
+* **Frozen-parameter tasks**: when a task **explicitly** says to fix/repair a structure while freezing or keeping computation parameters unchanged: (a) ONLY modify structure files, (b) preserve INCAR/KPOINTS/other input files exactly. **Scope**: applies ONLY to explicit "freeze parameter" instructions — NOT to general structure building, passivation, or reconstruction tasks.
+* **Save-early**: for multi-step tasks, save each deliverable under the task-required filename as soon as ready. Budget your turns — do not spend excessive turns on verification if it risks timeout.

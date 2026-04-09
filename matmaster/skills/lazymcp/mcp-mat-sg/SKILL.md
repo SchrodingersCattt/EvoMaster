@@ -22,7 +22,7 @@ mcp_server: mat_sg
   ```
   This script automatically: (a) detects molecules via PBC-aware bond graph, (b) enumerates all slab terminations, (c) verifies molecule integrity for each, (d) selects the best termination. **Do NOT write custom slab-cutting Python scripts from scratch** — this wastes many turns.
   If the script fails or no termination preserves molecules, then fall back to manual pymatgen `SlabGenerator` with `in_unit_planes=True`, systematically trying different `shift` values. Key verification: (1) no covalent bond is broken across the slab boundary, (2) atom count = layers × unit-cell atoms, (3) no isolated molecular fragments exist.
-- **Post-build structure verification (mandatory)**: after every slab build, run `get_structure_info` (or equivalent) and verify: (a) composition matches expected formula, (b) atom count is correct for the specified layers × supercell, (c) vacuum gap ≥ 15 Å, (d) slab dimensionality is 2D. Do NOT skip verification — incorrect structures that go undetected cause scoring failures.
+- **Post-build structure verification**: after slab builds, quickly check with one `get_structure_info` call: (a) composition matches formula, (b) atom count is correct, (c) vacuum ≥ 15 Å. Keep verification to ONE call — do not add multiple verification rounds that risk timeout on complex tasks.
 
 ## build_surface_interface (heterojunction / interface construction)
 
@@ -149,3 +149,4 @@ When the task requires computing adsorption energies (E_ads) with MLIP/DPA model
 - For catalysis surfaces use head `OC22`: `build_calculator("DPA3.1-3M", head="OC22")`.
 - Submit to Bohrium with **image `registry.dp.tech/dptech/dpa-calculator:f7835422`** and **machine `c16_m64_1 * NVIDIA 4090`**. Do NOT use ABACUS/CP2K/other images — they lack ASE and deepmd-kit.
 - If the job fails (e.g. missing module), check the image first. ASE-dependent scripts require the DPA image.
+- **Time budget**: these tasks involve structure building + Bohrium submission + result parsing. Submit the computation job as early as possible — minimize turns spent on setup/verification before submission. Save intermediate structures early so partial credit is secured even if the computation times out.
