@@ -19,10 +19,12 @@ from .errors import (
 from .executor import build_executor
 from .runtime import (
     BohriumRuntimeHandle,
+    attach_local_bohrium_runtime_from_run_credentials,
     attach_runtime,
     detach_runtime,
     get_runtime,
     require_runtime,
+    try_attach_local_bohrium_runtime_from_env,
 )
 from .status import (
     FAILURE_CODES,
@@ -58,6 +60,7 @@ __all__ = [
     "RUNNING_CODES",
     "STATUS_MAP",
     "SUCCESS_CODE",
+    "attach_local_bohrium_runtime_from_run_credentials",
     "attach_runtime",
     "build_bohrium_context",
     "build_bohrium_env",
@@ -71,5 +74,6 @@ __all__ = [
     "normalize_bohrium_credentials",
     "require_runtime",
     "status_name",
+    "try_attach_local_bohrium_runtime_from_env",
     "use_sandbox",
 ]
