@@ -168,6 +168,7 @@ EVAL_TEMPLATE = """\
         -e LITELLM_PROXY_API_KEY \\
         -e LITELLM_PROXY_API_BASE \\
         -e BASELINE_EVAL_LAYOUT=capabilities \\
+        -e BASELINE_SLICES="${EVAL_CAP}" \\
         -e BASELINE_CAPABILITIES="${EVAL_CAP}" \\
         -e BASELINE_MODES="${BASELINE_MODES}" \\
         -e BASELINE_LIMIT="${BASELINE_LIMIT}" \\

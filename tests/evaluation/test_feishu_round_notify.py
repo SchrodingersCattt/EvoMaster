@@ -36,6 +36,8 @@ def test_build_markdown_success(tmp_path: Path) -> None:
     assert t == "green"
     assert "80" in md
     assert "宏平均" in md
+    assert "判分说明（节选）" not in md
+    assert "bad" not in md
 
 
 def test_load_pending_rows(tmp_path: Path) -> None:

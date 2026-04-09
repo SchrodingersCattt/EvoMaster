@@ -329,6 +329,31 @@ class TestSSHSessionExecBash:
             or "timed out" in result["stdout"].lower()
         )
 
+    def test_command_finishing_at_deadline_is_not_misclassified_as_timeout(
+        self, ssh_config, mock_paramiko
+    ):
+        """A final output chunk at the deadline should still allow success."""
+        from matmaster.sessions.ssh import SSHSession
+
+        session = SSHSession(ssh_config)
+        session.open()
+
+        channel = MagicMock()
+        channel.recv_ready.side_effect = [True, False, False]
+        channel.recv.side_effect = [b"done\n", b""]
+        channel.recv_stderr_ready.return_value = False
+        # First loop sees "not ready"; a deadline-edge re-check should observe exit.
+        channel.exit_status_ready.side_effect = [False, True]
+        channel.recv_exit_status.return_value = 0
+        mock_paramiko["transport"].open_session.return_value = channel
+
+        with patch("matmaster.sessions.ssh.time.monotonic", side_effect=[0.0, 1.0]):
+            result = session.exec_bash('echo "done"', timeout=1)
+
+        assert result["exit_code"] == 0
+        assert result["stdout"] == "done\n"
+        channel.close.assert_not_called()
+
     def test_cancel_token_cancels(self, ssh_config, mock_paramiko):
         """exec_bash returns exit_code=130 when cancel_token is set."""
         from matmaster.sessions.ssh import SSHSession

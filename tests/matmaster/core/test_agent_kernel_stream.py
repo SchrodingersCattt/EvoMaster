@@ -6,7 +6,9 @@ yields, and compactor deque integration. Phase 34 Plan 1 Task 1.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -19,9 +21,12 @@ from matmaster.types.events import (
     ThoughtEvent,
 )
 from matmaster.types.messages import (
+    AssistantMessage,
     LLMResponse,
     StreamChunk,
+    SystemMessage,
     ToolCallData,
+    UserMessage,
 )
 from matmaster.types.runtime import AgentRuntimeSpec
 
@@ -180,6 +185,51 @@ class TrivialToolPreambleProvider:
         else:
             yield StreamChunk(content="done")
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+
+
+class _DurablePreflightCompactor:
+    """Compactor test double that emits one durable preflight event."""
+
+    def __init__(self) -> None:
+        self._event_sink = None
+        self.preflight_calls = 0
+        self.runtime_calls = 0
+        self.message_counts: list[int] = []
+
+    def update_message_count(self, count: int) -> None:
+        self.message_counts.append(count)
+
+    async def preflight_if_needed(self, messages: list[Any]) -> None:
+        from matmaster.types.events import ContextCompactionEvent
+
+        self.preflight_calls += 1
+        task_message = messages[-1]
+        messages[:] = [
+            messages[0],
+            SystemMessage(content="[Compacted Context]\nsummary"),
+            task_message,
+        ]
+        if self._event_sink is not None:
+            await self._event_sink(
+                ContextCompactionEvent(
+                    source="context_compactor",
+                    payload={
+                        "phase": "preflight",
+                        "strategy": "summary",
+                        "durability": "durable",
+                        "trigger_tokens": 1234,
+                        "retained_turns": 1,
+                        "checkpoint_attempted": False,
+                        "checkpoint_written": False,
+                        "failure_reason": None,
+                    },
+                )
+            )
+
+    async def compact_if_needed(
+        self, messages: list[Any], last_usage: dict[str, int], turn: int
+    ) -> None:
+        self.runtime_calls += 1
 
 
 # ── _stream_llm_items() tests ─────────────────────────────
@@ -727,3 +777,196 @@ class TestCancellationTokenSupport:
 
         with pytest.raises(_KernelStopRequested):
             await task
+
+
+class TestCheckpointAwareCompaction:
+    @pytest.mark.asyncio
+    async def test_kernel_preflight_calls_checkpoint_sink_for_durable_compaction(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = ContentOnlyProvider()
+        compactor = _DurablePreflightCompactor()
+        checkpoint_calls: list[dict[str, Any]] = []
+
+        async def checkpoint_sink(
+            *, payload: dict[str, Any], base_messages: list[dict[str, Any]]
+        ) -> None:
+            checkpoint_calls.append(
+                {
+                    "payload": payload,
+                    "base_messages": base_messages,
+                }
+            )
+
+        spec = _make_spec(provider=provider).model_copy(
+            update={
+                "compactor": compactor,
+                "meta": {
+                    "checkpoint_sink": checkpoint_sink,
+                },
+            }
+        )
+
+        kernel = AgentKernel()
+        events: list[Any] = []
+        async for event in kernel.run_stream(
+            spec,
+            "test task",
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        ):
+            events.append(event)
+
+        assert compactor.preflight_calls == 1
+        assert checkpoint_calls == [
+            {
+                "payload": {
+                    "phase": "preflight",
+                    "strategy": "summary",
+                    "durability": "durable",
+                    "trigger_tokens": 1234,
+                    "retained_turns": 1,
+                    "checkpoint_attempted": True,
+                    "checkpoint_written": True,
+                    "failure_reason": None,
+                },
+                "base_messages": [
+                    SystemMessage(content="[Compacted Context]\nsummary").model_dump(
+                        mode="json"
+                    ),
+                    UserMessage(content="test task").model_dump(mode="json"),
+                ],
+            }
+        ]
+        assert any(
+            getattr(event, "type", None) == "context_compaction" for event in events
+        )
+
+    @pytest.mark.asyncio
+    async def test_kernel_yields_compaction_event_before_checkpoint_sink(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = ContentOnlyProvider()
+        compactor = _DurablePreflightCompactor()
+        sequence: list[str] = []
+
+        async def checkpoint_sink(
+            *, payload: dict[str, Any], base_messages: list[dict[str, Any]]
+        ) -> None:
+            sequence.append("sink")
+
+        spec = _make_spec(provider=provider).model_copy(
+            update={
+                "compactor": compactor,
+                "meta": {
+                    "checkpoint_sink": checkpoint_sink,
+                },
+            }
+        )
+
+        kernel = AgentKernel()
+        async for event in kernel.run_stream(
+            spec,
+            "test task",
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        ):
+            if getattr(event, "type", None) == "context_compaction":
+                sequence.append("event")
+
+        assert sequence == ["event", "sink"]
+
+    @pytest.mark.asyncio
+    async def test_kernel_updates_compaction_payload_when_checkpoint_sink_fails(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = ContentOnlyProvider()
+        compactor = _DurablePreflightCompactor()
+        sequence: list[str] = []
+        compaction_event = None
+
+        async def checkpoint_sink(
+            *, payload: dict[str, Any], base_messages: list[dict[str, Any]]
+        ) -> None:
+            sequence.append("sink")
+            raise RuntimeError("checkpoint unavailable")
+
+        spec = _make_spec(provider=provider).model_copy(
+            update={
+                "compactor": compactor,
+                "meta": {
+                    "checkpoint_sink": checkpoint_sink,
+                },
+            }
+        )
+
+        kernel = AgentKernel()
+        async for event in kernel.run_stream(
+            spec,
+            "test task",
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        ):
+            if getattr(event, "type", None) == "context_compaction":
+                sequence.append("event")
+                compaction_event = event
+
+        assert sequence == ["event", "sink"]
+        assert compaction_event is not None
+        assert compaction_event.payload["checkpoint_attempted"] is True
+        assert compaction_event.payload["checkpoint_written"] is False
+        assert compaction_event.payload["failure_reason"] == "checkpoint unavailable"
+
+
+class TestExpCheckpointSinkScopeResolution:
+    @pytest.mark.asyncio
+    async def test_build_runtime_resolves_checkpoint_sink_by_spawn_scope(self) -> None:
+        from matmaster.config.exp import ExpConfig
+        from matmaster.core.exp import Exp
+        from matmaster.types.context import PlaygroundContext
+
+        parent_sink = object()
+        child_sink = object()
+        seen_spawn_ids: list[str | None] = []
+
+        def checkpoint_sink_factory(*, spawn_id: str | None = None):
+            seen_spawn_ids.append(spawn_id)
+            if spawn_id == "child-1":
+                return child_sink
+            return parent_sink
+
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/test-exp"),
+            session_type="local",
+            cache_area=Path("/tmp/test-exp-cache"),
+            execution_workdir="/tmp/test-exp",
+            llm_provider=ContentOnlyProvider(),
+            run_meta={"checkpoint_sink_factory": checkpoint_sink_factory},
+        )
+        exp = Exp(ExpConfig(name="test"))
+
+        with patch("matmaster.core.agent.AgentKernel"):
+            parent_runtime = await exp.build_runtime(ctx, spawn_id=None)
+            child_runtime = await exp.build_runtime(ctx, spawn_id="child-1")
+
+        assert seen_spawn_ids == [None, "child-1"]
+        assert (
+            parent_runtime.spec.meta["checkpoint_sink_factory"]
+            is checkpoint_sink_factory
+        )
+        assert (
+            child_runtime.spec.meta["checkpoint_sink_factory"]
+            is checkpoint_sink_factory
+        )
+        assert parent_runtime.spec.meta["checkpoint_sink"] is parent_sink
+        assert child_runtime.spec.meta["checkpoint_sink"] is child_sink

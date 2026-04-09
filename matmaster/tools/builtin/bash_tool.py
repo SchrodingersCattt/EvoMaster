@@ -8,6 +8,7 @@ CC name: Bash
 
 from __future__ import annotations
 
+import re
 from typing import Any, ClassVar
 
 from matmaster.bohrium.runtime import get_runtime
@@ -18,6 +19,13 @@ from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
 from .base import BuiltinTool
+
+# Pure `sleep N` pattern (integer or decimal seconds). Only commands matching
+# this exact form are allowed to use the extended 1h timeout cap; anything
+# compound (e.g. `sleep 3600 && foo`) gets clamped to the general 10m ceiling.
+_PURE_SLEEP_RE = re.compile(r"\s*sleep\s+\d+(?:\.\d+)?\s*")
+_GENERAL_TIMEOUT_CAP_MS = 600_000
+_SLEEP_TIMEOUT_CAP_MS = 3_600_000
 
 
 class BashTool(BuiltinTool):
@@ -41,10 +49,16 @@ class BashTool(BuiltinTool):
             "timeout": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 600000,
+                "maximum": 3600000,
                 "description": (
-                    "Optional timeout in milliseconds (max 600000). "
-                    "Default: 120000ms (2 minutes)."
+                    "Optional timeout in milliseconds. "
+                    "Default: 120000ms (2 minutes). "
+                    "Max 600000ms (10 min) for general commands. "
+                    "Exception: pure `sleep N` commands "
+                    "may set timeout up to 3600000ms (1 hour), for use as "
+                    "polling intervals between HPC job status checks. "
+                    "Compound commands like `sleep 3600 && ...` are NOT "
+                    "eligible for the higher cap. "
                 ),
             },
             "description": {
@@ -96,8 +110,13 @@ class BashTool(BuiltinTool):
         if not command:
             return "Error: command is required and must not be empty."
 
-        timeout_ms = arguments.get("timeout", 120_000)
-        timeout_ms = min(int(timeout_ms), 600_000)  # cap at 10min
+        timeout_ms = int(arguments.get("timeout", 120_000))
+        cap = (
+            _SLEEP_TIMEOUT_CAP_MS
+            if _PURE_SLEEP_RE.fullmatch(command)
+            else _GENERAL_TIMEOUT_CAP_MS
+        )
+        timeout_ms = min(timeout_ms, cap)
         timeout_s = timeout_ms / 1000  # float division preserves sub-second
 
         from matmaster.tools.script_env import (

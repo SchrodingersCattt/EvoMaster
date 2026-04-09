@@ -180,7 +180,18 @@ class AskQuestionTimeoutEvent(EventBase):
 
 
 class ContextCompactionEvent(EventBase):
-    """Context compaction event."""
+    """Context compaction decision emitted by the history compactor.
+
+    ``payload`` remains an open dict for forward compatibility. Current keys:
+    - ``phase``: ``preflight`` | ``runtime``
+    - ``strategy``: ``summary`` | ``sliding_window`` | ``tool_truncation``
+    - ``durability``: ``durable`` | ``ephemeral``
+    - ``trigger_tokens``: int
+    - ``retained_turns``: int
+    - ``checkpoint_attempted``: bool
+    - ``checkpoint_written``: bool
+    - ``failure_reason``: str | None
+    """
 
     type: Literal["context_compaction"] = "context_compaction"
     payload: dict[str, Any]

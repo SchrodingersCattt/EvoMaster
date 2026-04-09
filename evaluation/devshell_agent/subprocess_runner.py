@@ -22,7 +22,7 @@ class RunDevshellEvalParams:
     jobs: int
     limit: int | None
     questions: list[str] | None
-    capabilities: list[str] | None
+    slices: str | None
     model: str | None
     exp: str | None
     eval_ingest_pending_only: bool
@@ -59,9 +59,8 @@ class DevshellEvalSubprocess:
         if params.questions:
             cmd.append("--questions")
             cmd.extend(params.questions)
-        if params.capabilities:
-            cmd.append("--capabilities")
-            cmd.extend(params.capabilities)
+        if params.slices:
+            cmd.extend(["--slices", params.slices])
         if params.model:
             cmd.extend(["--model", params.model])
         if params.exp:

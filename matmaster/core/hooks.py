@@ -12,9 +12,10 @@ import asyncio
 import enum
 import logging
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, TypeVar
 
 from matmaster.tools.tool_result import ToolResult
 

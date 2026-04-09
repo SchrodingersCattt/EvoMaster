@@ -40,6 +40,14 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 
 ## Scripts
 
+### 0. Molecular Crystal Slab Cutting
+* **build_molecular_crystal_slab.py** — Cut a surface slab from a molecular crystal (organic, MOF, co-crystal, hybrid salt, etc.) with automatic molecule integrity verification.
+    * **Usage**: `python build_molecular_crystal_slab.py --file input.cif --miller 1 1 0 --layers 4 [-o output.cif] [--vacuum 20.0] [--bond-tolerance 0.45]`
+    * **When to use**: Whenever the input structure is a molecular crystal (contains discrete molecules, not a purely covalent/ionic 3D network). The script: (a) detects molecules via covalent bond graph (PBC-aware), (b) enumerates all terminations from pymatgen SlabGenerator with `in_unit_planes=True`, (c) checks molecule integrity for each termination, (d) selects the best slab preserving intact molecules.
+    * **Output JSON**: `{"success": true, "molecules_intact": true, "atom_count_matches_expected": true, "n_atoms": 576, "expected_atoms": 576, "output_file": "output.cif", ...}`
+    * **Key checks reported**: molecule integrity (fragmented or not), atom count vs expected (layers × unit-cell atoms), number of terminations evaluated, molecule formula consistency.
+    * **Prefer this over manual pymatgen SlabGenerator scripting** for molecular crystals — it handles the tricky PBC-aware molecule detection and multi-termination evaluation in one call, saving significant time.
+
 ### 1. Download / Page Extraction
 * **fetch_web_structure.py**
     * `--url <url>` — download a direct structure file link.
@@ -60,7 +68,13 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
         * **Bulk vs Slab**: Vacuum gap > 15Å in one direction -> Slab; in 3 directions -> Molecule.
         * **Sanity**: Fails if `min_dist < 0.5 Å` (hard overlap cutoff, PBC-aware).
 
-### 3. Format Conversion
+### 3. Surface Passivation
+* **passivate_surface.py** — Add H to saturate dangling bonds on slab surfaces (both top and bottom).
+    * `python passivate_surface.py slab.cif [-o passivated.cif] [--element Si] [--bond-length 1.48] [--cutoff 2.6]`
+    * Identifies under-coordinated surface atoms, places H along missing tetrahedral directions, verifies result.
+    * Default for Si (Si-H 1.48 A, Si-Si cutoff 2.6 A). Adjust `--element`, `--bond-length`, `--cutoff` for other materials (e.g. Ge-H 1.53 A).
+
+### 4. Format Conversion
 * **convert_format.py** (dpdata-based)
     * **Formats**: CIF, POSCAR, LAMMPS data/dump, XYZ, extXYZ, Gaussian, GROMACS, ABACUS, DeePMD, etc.
     * **Output JSON**: `{"success": true, "output": "POSCAR", "info": {"atom_names": ["O","H"], "natoms": 3, ...}}`
@@ -87,6 +101,7 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 * "Get the crystal structure of X" where X is in CCDC/ICSD → report database identifier (REFCODE / collection code) + crystallographic parameters (space group, lattice constants, formula, Z) from literature; do not attempt to download or reconstruct.
 * "Check if this structure is reasonable" → `assess_structure.py`.
 * "Convert this CIF to POSCAR" / "Convert POSCAR to LAMMPS data" → `convert_format.py`.
+* **"Cut a surface slab from a molecular crystal"** → `build_molecular_crystal_slab.py`. Use this FIRST for any molecular crystal (organic, MOF, co-crystal, hybrid) slab task. Do NOT write custom SlabGenerator scripts from scratch for molecular crystals — it wastes many turns.
 
 ## Tool (via Skill)
 

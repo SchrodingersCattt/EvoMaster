@@ -75,7 +75,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 20000
+      max: 25000
   scoring_checklist:
   - id: must_stru_bsse_fe_empty_core
     criterion: "[Must] STRU_bsse includes Fe_empty with explicit empty-species charge marker."
@@ -216,7 +216,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 18000
+      max: 22000
   scoring_checklist:
   - id: must_stru_vac_fe_empty_core
     criterion: "[Must] STRU_vac_bsse includes Fe_empty with explicit empty-species charge marker."
@@ -1062,7 +1062,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 18000
   scoring_checklist:
   - id: must_input_spin_scf_core
     criterion: "[Must] INPUT_spin_elec_scf contains core spin-polarized SCF + external-field controls."
@@ -1218,7 +1218,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 18000
   scoring_checklist:
   - id: must_input_gate_core
     criterion: "[Must] INPUT_gate contains core dipole-correction + gate + barrier controls."

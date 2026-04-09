@@ -15,6 +15,7 @@ from matmaster.bohrium.credentials import normalize_bohrium_credentials
 from matmaster.bohrium.endpoints import get_bohrium_base_url
 from matmaster.bohrium.runtime import (
     BohriumRuntimeHandle,
+    attach_local_bohrium_runtime_from_run_credentials,
     attach_runtime,
     detach_runtime,
 )
@@ -301,11 +302,6 @@ class BohriumSetupService:
     ) -> tuple[dict[str, Any], str | None, str]:
         return _load_run_credentials(self._sessions_service, session_id)
 
-    def _apply_run_credentials_to_session(
-        self, session: Any, run_creds: dict[str, Any]
-    ) -> None:
-        _apply_run_credentials_to_session(session, run_creds)
-
     def _setup_bohrium_for_run(
         self,
         *,
@@ -355,6 +351,11 @@ class BohriumSetupService:
         - 'error' -> ErrorEvent + StreamClosedEvent
         - 'stream_closed' -> StreamClosedEvent
         - all others -> BohriumNodeEvent
+
+        The sink is responsible for the actual thread handoff. In production,
+        AgentRunService injects fanout.dispatch_from_thread(), so the bridge
+        builds BusEvent objects in the worker thread and fanout owns the single
+        call_soon_threadsafe hop onto the run loop.
         """
         from matmaster.types.events import (
             BohriumNodeEvent,
@@ -366,46 +367,43 @@ class BohriumSetupService:
         assert sink is not None  # noqa: S101 -- caller guarantees
 
         def _cb(source: Any, event_type: str, content: Any, **extra: Any) -> None:
-            def _do_emit() -> None:
-                try:
-                    if event_type == 'error':
-                        msg = content if isinstance(content, str) else str(content)
-                        sink(ErrorEvent(source=str(source), message=msg))
-                        sink(
-                            StreamClosedEvent(
-                                source=str(source),
-                                end_reason='error',
-                                task_completed=False,
-                                treat_as_failure=True,
-                            )
-                        )
-                        return
-                    if event_type == 'stream_closed':
-                        body = '' if content is None else str(content)
-                        sink(
-                            StreamClosedEvent(
-                                source=str(source),
-                                content=body,
-                                task_completed=False,
-                                end_reason='error',
-                                treat_as_failure=True,
-                            )
-                        )
-                        return
+            try:
+                if event_type == 'error':
+                    msg = content if isinstance(content, str) else str(content)
+                    sink(ErrorEvent(source=str(source), message=msg))
                     sink(
-                        BohriumNodeEvent(
+                        StreamClosedEvent(
                             source=str(source),
-                            payload={
-                                'type': event_type,
-                                'content': content,
-                                **extra,
-                            },
+                            end_reason='error',
+                            task_completed=False,
+                            treat_as_failure=True,
                         )
                     )
-                except Exception:
-                    logger.debug('bohrium event bridge error type=%s', event_type)
-
-            loop.call_soon_threadsafe(_do_emit)
+                    return
+                if event_type == 'stream_closed':
+                    body = '' if content is None else str(content)
+                    sink(
+                        StreamClosedEvent(
+                            source=str(source),
+                            content=body,
+                            task_completed=False,
+                            end_reason='error',
+                            treat_as_failure=True,
+                        )
+                    )
+                    return
+                sink(
+                    BohriumNodeEvent(
+                        source=str(source),
+                        payload={
+                            'type': event_type,
+                            'content': content,
+                            **extra,
+                        },
+                    )
+                )
+            except Exception:
+                logger.debug('bohrium event bridge error type=%s', event_type)
 
         return _cb
 
@@ -487,36 +485,6 @@ def _load_run_credentials(
     return run_creds, user_id_for_ak, org_id
 
 
-def _apply_run_credentials_to_session(session: Any, run_creds: dict[str, Any]) -> None:
-    """Attach transient Bohrium credentials and a placeholder runtime."""
-    if not run_creds or session is None:
-        return
-
-    normalized = normalize_bohrium_credentials(
-        {
-            **run_creds,
-            "base_url": run_creds.get("base_url") or get_bohrium_base_url(),
-        }
-    )
-    execution = BohriumExecutionContext(
-        session_type="local",
-        execution_workdir="",
-        remote_workspace_root="",
-        remote_project_root="",
-        node_id=None,
-        node_ip=None,
-        ssh_attached=False,
-    )
-    attach_runtime(
-        session,
-        BohriumRuntimeHandle(
-            credentials=normalized,
-            execution=execution,
-            execution_session=session,
-        ),
-    )
-
-
 def _remote_session_workspace_root() -> str:
     """Return Bohrium SSH shared workspace root."""
     return str(
@@ -584,7 +552,9 @@ def _setup_bohrium_for_run(
     if not access_key or project_id is None:
         return BohriumSetupResult(False, None, None, None, None, None)
 
-    _apply_run_credentials_to_session(getattr(pg, 'session', None), run_creds)
+    attach_local_bohrium_runtime_from_run_credentials(
+        getattr(pg, 'session', None), run_creds
+    )
 
     node_id: int | None = None
     node_ip = None
@@ -812,7 +782,9 @@ def _setup_bohrium_for_run(
             swapped = False
             ssh_session.open()
             try:
-                _apply_run_credentials_to_session(ssh_session, run_creds)
+                attach_local_bohrium_runtime_from_run_credentials(
+                    ssh_session, run_creds
+                )
                 pg.session = ssh_session
                 pg._owns_session = False
                 _agent = getattr(pg, 'agent', None)

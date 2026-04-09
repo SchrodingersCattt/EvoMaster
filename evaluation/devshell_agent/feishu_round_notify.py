@@ -138,21 +138,6 @@ def _build_markdown_body(
             ["", f"（{missing} 题 pending 中无 `item.score`，可能判分未完成）"]
         )
 
-    lines.extend(["", "**判分说明（节选）**"])
-    shown = 0
-    for r in rows:
-        reason = (r.get("score_reason") or "").strip()
-        if not reason:
-            continue
-        lines.append(f"- `{r['question_id']}`：{reason}")
-        shown += 1
-        if shown >= 24:
-            lines.append("- …（判分说明过多已省略，见 `pending_ingest/`）")
-            break
-
-    if submit_ok and not any((r.get("score_reason") or "").strip() for r in rows):
-        lines.append("- （无 score_reason 文本）")
-
     if not submit_ok and stderr_tail.strip():
         tail = stderr_tail.strip()
         if len(tail) > 3500:

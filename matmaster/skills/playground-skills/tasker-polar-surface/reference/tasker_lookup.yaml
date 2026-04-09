@@ -50,5 +50,89 @@ entries:
     note: "Wurtzite basal; polar."
     ref: "Tasker 1979"
 
+  # --- Zinc blende compounds ---
+  - formula: ZnS
+    miller: "0 0 1"
+    tasker_type: 3
+    note: "Zinc blende (001); alternating Zn and S layers → polar. Use symmetric slab (even layers) or pseudo-H passivation."
+    ref: "Tasker 1979; zinc blende surfaces"
+  - formula: ZnS
+    miller: "1 1 0"
+    tasker_type: 1
+    note: "Zinc blende (110); stoichiometric layers containing both Zn and S → non-polar."
+    ref: "Tasker 1979"
+  - formula: ZnS
+    miller: "1 1 1"
+    tasker_type: 3
+    note: "Zinc blende (111); alternating cation/anion → polar. Use symmetric slab."
+    ref: "Tasker 1979"
+  - formula: GaAs
+    miller: "0 0 1"
+    tasker_type: 3
+    note: "Zinc blende (001); polar. Use symmetric termination."
+    ref: "Common in III-V surface science"
+  - formula: GaAs
+    miller: "1 1 0"
+    tasker_type: 1
+    note: "Zinc blende (110); non-polar cleavage plane."
+    ref: "Common in III-V surface science"
+  - formula: CdTe
+    miller: "0 0 1"
+    tasker_type: 3
+    note: "Zinc blende (001); polar."
+    ref: "II-VI surfaces"
+  - formula: CdTe
+    miller: "1 1 0"
+    tasker_type: 1
+    note: "Zinc blende (110); non-polar."
+    ref: "II-VI surfaces"
+  # --- Intermetallic compounds ---
+  - formula: ZnPd
+    miller: "0 1 1"
+    tasker_type: 2
+    note: "CsCl-type intermetallic (011); stacking may create dipole in finite slab. Use symmetric termination."
+    ref: "CO2RR catalyst literature; ZnPd surfaces"
+  - formula: ZnPd
+    miller: "1 0 0"
+    tasker_type: 1
+    note: "CsCl-type (100); each layer contains both Zn and Pd → stoichiometric → non-polar."
+    ref: "CsCl-type surface classification"
+  - formula: ZnPd
+    miller: "1 1 1"
+    tasker_type: 3
+    note: "CsCl-type (111); alternating Zn/Pd layers → polar."
+    ref: "CsCl-type surface classification"
+  - formula: CuAu
+    miller: "0 0 1"
+    tasker_type: 2
+    note: "L10 ordered alloy (001); can be polar depending on termination."
+    ref: "Intermetallic surfaces"
+  - formula: NiAl
+    miller: "1 1 0"
+    tasker_type: 1
+    note: "B2/CsCl-type (110); mixed layers → non-polar."
+    ref: "Intermetallic surfaces"
+  # --- Additional common oxides ---
+  - formula: CeO2
+    miller: "1 1 1"
+    tasker_type: 1
+    note: "Fluorite (111); stoichiometric O-Ce-O trilayers → non-polar. Most stable CeO2 surface."
+    ref: "Ceria surface science"
+  - formula: CeO2
+    miller: "1 0 0"
+    tasker_type: 3
+    note: "Fluorite (100); polar. Needs reconstruction."
+    ref: "Ceria surface science"
+  - formula: SrTiO3
+    miller: "0 0 1"
+    tasker_type: 3
+    note: "Perovskite (001); alternating SrO/TiO2 layers → polar. Use symmetric slab with same termination on both sides (SrO-SrO or TiO2-TiO2)."
+    ref: "Perovskite surface science"
+  - formula: BaTiO3
+    miller: "0 0 1"
+    tasker_type: 3
+    note: "Perovskite (001); polar like SrTiO3."
+    ref: "Perovskite surface science"
+
 # Normalization: formula should be normalized (e.g. MgO not Mg1O1).
 # Miller: 3-index for cubic/ortho, 4-index for hexagonal (e.g. 1 0 -1 0 for prism).

@@ -121,13 +121,13 @@ CLI:
 ```bash
 uv run python -m evaluation.cli \
   --eval-config evaluation/config.yaml \
-  --capabilities batch_processing workflow_orchestration \
+  --slices 'batch_processing workflow_orchestration[polymer]' \
   --questions DF_mech_001 WO_mech_001
 ```
 
 常用参数：
 
-- `--capabilities`: 按 capability 过滤题目。
+- `--slices`: OR-of-slices，语法 `cap cap[dom] cap[d1,d2]`（**括号外**空格分隔，`[]` 内禁止空格；与 `evaluation/config.yaml` 中 `include_slices` 一致）。
 - `--questions`: 按 v5 question id 过滤题目。
 - `--modes`: 选择 `direct` / `planner`。
 - `--k`: 每题重复次数。
@@ -149,10 +149,8 @@ evaluation/scripts/matter_cli/run_mat_master_eval_bg.sh start
 
 ### Batch Processing 题库说明
 
-`batch_processing` capability 用于考察 **严格变量控制** 能力，而非简单的批量执行。当前共 5 道题，覆盖以下场景：
+`batch_processing` capability 用于考察 **严格变量控制** 能力，而非简单的批量执行。当前共 3 道题，覆盖以下场景：
 
-- **BP_struct_001**: 同一 MCP 工具的批量调用，仅一个几何参数（真空厚度）变化，其他参数（Miller 指标、层数等）冻结。
-- **BP_struct_002**: 多结构批量输入生成，统一 k-point 密度（50 points/Ų）和电子学参数（ISMEAR、SIGMA），尽管结构尺度不同导致 k 点网格数目不同。
 - **BP_struct_003**: 收敛测试，ENCUT 参数扫描，其他参数（k-mesh、ISMEAR、SIGMA）完全冻结，验证系统参数扫描能力。
 - **BP_struct_004**: 批量后处理一致性，3 种材料使用相同分析参数（k-path、能量窗口、费米面参考点），输出格式统一。
 - **BP_struct_005**: 批量失败恢复，5 个结构因几何问题失败后，仅修复几何参数，计算设置（k-mesh、ISMEAR、SIGMA、ENCUT）全程冻结。

@@ -143,7 +143,8 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
     assert "--verbose" in cmd0
     assert "--exp" not in cmd0
     man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-    assert man["matmaster_exp"] == "devshell"
+    assert man["eval_tooling"]["exp_config_name"] == "direct"
+    assert "matmaster_exp" not in man
 
 
 def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> None:
@@ -206,7 +207,8 @@ def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> 
     assert "--verbose" not in cmd0
     assert "--exp" not in cmd0
     man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-    assert man["matmaster_exp"] == "devshell"
+    assert man["eval_tooling"]["exp_config_name"] == "direct"
+    assert "matmaster_exp" not in man
 
 
 def test_devshell_eval_exp_direct_forwards_flag(tmp_path, monkeypatch) -> None:
@@ -270,4 +272,5 @@ def test_devshell_eval_exp_direct_forwards_flag(tmp_path, monkeypatch) -> None:
     assert "--exp" in cmd0
     assert cmd0[cmd0.index("--exp") + 1] == "direct"
     man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-    assert man["matmaster_exp"] == "direct"
+    assert man["eval_tooling"]["exp_config_name"] == "direct"
+    assert "matmaster_exp" not in man

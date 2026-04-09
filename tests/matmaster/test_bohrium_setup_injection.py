@@ -177,6 +177,22 @@ class TestBohriumEventBridgeMapping:
         finally:
             loop.close()
 
+    def test_bridge_emits_to_threadsafe_sink_without_loop_spin(self):
+        """Thread-safe sinks should receive events immediately from worker callbacks."""
+        sink, collected = self._collect_events()
+        svc = _make_service(event_sink=sink)
+        loop = asyncio.new_event_loop()
+
+        try:
+            bridge = svc._make_event_bridge(loop)
+            bridge('System', 'bohrium_node', {'status': 'ready'})
+
+            assert len(collected) == 1
+            assert isinstance(collected[0], BohriumNodeEvent)
+            assert collected[0].payload['content']['status'] == 'ready'
+        finally:
+            loop.close()
+
 
 class TestBohriumSetupServiceConstructor:
     """Verify constructor accepts event_sink instead of bus."""
@@ -228,7 +244,9 @@ class TestBohriumSetupServiceLocation:
 
 
 def test_apply_run_credentials_registers_runtime_without_dual_write() -> None:
-    from src.services.agent_run_bohrium import _apply_run_credentials_to_session
+    from matmaster.bohrium.runtime import (
+        attach_local_bohrium_runtime_from_run_credentials,
+    )
 
     session = SimpleNamespace()
     run_creds = {
@@ -239,7 +257,7 @@ def test_apply_run_credentials_registers_runtime_without_dual_write() -> None:
         "base_url": "https://openapi.test.dp.tech/",
     }
 
-    _apply_run_credentials_to_session(session, run_creds)
+    attach_local_bohrium_runtime_from_run_credentials(session, run_creds)
 
     runtime = get_runtime(session)
     assert runtime is not None

@@ -111,3 +111,67 @@ def require_runtime(session: SupportsBohriumRuntimeSlot) -> BohriumRuntimeHandle
 def detach_runtime(session: SupportsBohriumRuntimeSlot) -> None:
     if hasattr(session, "_bohrium_runtime"):
         del session._bohrium_runtime
+
+
+def attach_local_bohrium_runtime_from_run_credentials(
+    session: Any,
+    run_creds: dict[str, Any],
+) -> None:
+    """Attach Bohrium credentials and a local placeholder runtime to the session.
+
+    Used by API agent runs, DevShell, and evaluation so MCP calculation preflight
+    (executor/storage injection) can call :meth:`BohriumRuntimeHandle.build_submission`.
+    Does not create SSH or remote nodes.
+    """
+    from .credentials import normalize_bohrium_credentials
+    from .endpoints import get_bohrium_base_url
+
+    if not run_creds or session is None:
+        return
+
+    normalized = normalize_bohrium_credentials(
+        {
+            **run_creds,
+            "base_url": run_creds.get("base_url") or get_bohrium_base_url(),
+        }
+    )
+    execution = BohriumExecutionContext(
+        session_type="local",
+        execution_workdir="",
+        remote_workspace_root="",
+        remote_project_root="",
+        node_id=None,
+        node_ip=None,
+        ssh_attached=False,
+    )
+    attach_runtime(
+        session,
+        BohriumRuntimeHandle(
+            credentials=normalized,
+            execution=execution,
+            execution_session=session,
+        ),
+    )
+
+
+def try_attach_local_bohrium_runtime_from_env(session: Any) -> None:
+    """If ``credentials_from_env()`` succeeds, attach a local placeholder runtime.
+
+    No-op when ``BOHRIUM_ACCESS_KEY`` (etc.) is unset. Intended for DevShell and
+    offline evaluation runs aligned with production MCP tools.
+    """
+    from .credentials import credentials_from_env
+
+    cred = credentials_from_env()
+    if cred is None or session is None:
+        return
+    attach_local_bohrium_runtime_from_run_credentials(
+        session,
+        {
+            "access_key": cred.access_key,
+            "project_id": cred.project_id,
+            "user_id": cred.user_id,
+            "user_no": cred.user_no,
+            "base_url": cred.base_url,
+        },
+    )
