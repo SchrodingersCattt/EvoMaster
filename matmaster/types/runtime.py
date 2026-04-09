@@ -26,8 +26,7 @@ class CompactionConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    enabled: bool = False
-    context_window_tokens: int = 128_000
+    context_limit: int = 200_000
     trigger_ratio: float = 0.9
     strategy: str = "summary"  # 'sliding_window' | 'summary' | 'latest_half'
     compaction_llm: str | None = None  # key in config.llm

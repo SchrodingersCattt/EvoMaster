@@ -511,8 +511,7 @@ class TestBuildRuntimeCompactorEventSink:
         from matmaster.core.exp import Exp
 
         compaction_cfg = CompactionConfig(
-            enabled=True,
-            context_window_tokens=128000,
+            context_limit=128000,
             trigger_ratio=0.9,
         )
         config = _make_exp_config()

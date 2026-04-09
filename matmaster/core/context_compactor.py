@@ -151,11 +151,8 @@ class ContextCompactor:
 
     async def preflight_if_needed(self, messages: list[Message]) -> None:
         """Compact eagerly before the next turn when history is already too large."""
-        if not self._config.enabled:
-            return
-
         estimated = estimate_tokens(messages, safety_margin=1.1)
-        threshold = self._config.context_window_tokens * self._config.trigger_ratio
+        threshold = self._config.context_limit * self._config.trigger_ratio
         if estimated < threshold:
             return
 
@@ -171,9 +168,6 @@ class ContextCompactor:
         self, messages: list[Message], last_usage: dict[str, int], turn: int
     ) -> None:
         """Check threshold and compact messages in place when needed."""
-        if not self._config.enabled:
-            return
-
         if turn <= self._last_compaction_turn + 1:
             return
 
@@ -181,7 +175,7 @@ class ContextCompactor:
         delta_messages = messages[self._last_llm_message_count :]
         delta_tokens = estimate_tokens(delta_messages, safety_margin=1.1)
         estimated = base_tokens + delta_tokens
-        threshold = self._config.context_window_tokens * self._config.trigger_ratio
+        threshold = self._config.context_limit * self._config.trigger_ratio
         if estimated < threshold:
             return
 
@@ -327,7 +321,7 @@ class ContextCompactor:
         self, turns: list[list[Message]]
     ) -> tuple[list[list[Message]], int]:
         """Select recent turns to retain based on the retention rule."""
-        window = self._config.context_window_tokens
+        window = self._config.context_limit
         budget_20 = int(window * 0.2)
         budget_40 = int(window * 0.4)
 

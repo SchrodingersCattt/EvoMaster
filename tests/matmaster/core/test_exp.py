@@ -557,7 +557,7 @@ class TestExecutionWorkdirBinding:
 
 
 class TestExpCompaction:
-    async def test_assemble_compaction_defaults_disabled(self) -> None:
+    async def test_assemble_compaction_defaults_present(self) -> None:
         from matmaster.types.runtime import CompactionConfig
 
         exp = Exp(ExpConfig(name='test'))
@@ -566,7 +566,7 @@ class TestExpCompaction:
 
         spec = await exp.assemble(ctx)
         assert isinstance(spec.compaction, CompactionConfig)
-        assert spec.compaction.enabled is False
+        assert "enabled" not in type(spec.compaction).model_fields
 
     async def test_assemble_default_compaction(self) -> None:
         exp = Exp(ExpConfig(name="test"))
@@ -574,16 +574,17 @@ class TestExpCompaction:
         ctx.llm_provider = None
 
         spec = await exp.assemble(ctx)
-        assert spec.compaction.enabled is False
+        assert spec.compaction.strategy == "summary"
 
-    async def test_build_runtime_compactor_none_when_disabled(self) -> None:
+    async def test_build_runtime_creates_compactor_when_llm_exists(self) -> None:
         exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=[])))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.compactor is None
+        assert runtime.spec.compactor is not None
+        assert runtime.spec.compactor._summary_provider is runtime.spec.llm_provider
 
 
 # ── TestSessionlessBuiltins ────────────────────────────

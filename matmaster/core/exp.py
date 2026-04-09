@@ -333,7 +333,7 @@ class Exp:
 
         # 6. Compaction: event_sink=None, _run_items() injects local sink at runtime
         compactor = None
-        if spec.compaction.enabled and spec.llm_provider is not None:
+        if spec.llm_provider is not None:
             from matmaster.core.context_compactor import ContextCompactor
 
             summary_provider = spec.llm_provider
