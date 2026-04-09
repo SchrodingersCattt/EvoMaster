@@ -165,4 +165,10 @@ banks:
     capability: "property_prediction"
     questions: 1
 
-# Total: 77 questions across 21 bank files
+  # --- Single-crystal XRD structure solution & refinement ---
+
+  - path: "data_fitting/df_scxrd.yaml"
+    capability: "property_prediction"
+    questions: 2
+
+# Total: 94 questions across 28 bank files
