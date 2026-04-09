@@ -17,7 +17,7 @@
     },
     "mat_compdart": {
       "transport": "http",
-      "url": "http://pfmx1355864.bohrium.tech:50003/mcp",
+      "url": "https://dart-uuid1754393230.appspace.bohrium.com/mcp?token=b3a955c99823427683843616328023d8",
       "headers": {}
     },
     "mat_struct_db": {
