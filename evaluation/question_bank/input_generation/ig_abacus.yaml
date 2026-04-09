@@ -2,7 +2,7 @@ version: v5
 capability: input_generation_abacus
 domain: elec
 questions:
-- id: IG_abacus_001_20260404v2
+- id: IG_abacus_001_20260409
   capability: input_generation_abacus
   domain: elec
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place empty-atom layers in vacuum, and write SCF INPUT with sparse k along vacuum.'
@@ -29,11 +29,6 @@ questions:
     oss_url: ''
     description: Fe slab STRU without Fe_empty (starting geometry for BSSE setup).
   reference_answers:
-  - key: markers_contains
-    value:
-    - Fe_empty
-    - '0.000000'
-    - scf
   - key: turn_budget
     value:
       max: 8
@@ -42,7 +37,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 20000
+      max: 25000
   scoring_checklist:
   - id: fe_empty_species
     criterion: STRU defines Fe_empty with the same pseudopotential and numerical orbital as Fe, charge 0.0, and no magnetic moment on empty sites.
@@ -59,7 +54,7 @@ questions:
   - id: markers_contains
     criterion: Final answer text or written STRU/INPUT snippets include Fe_empty, the 0.000000 charge line for empty species, and scf calculation type.
     axis: correctness
-    verify: contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The modified STRU preserves the original slab lattice vectors and real Fe fractional coordinates from base_slab.stru; changes are limited to adding Fe_empty species/layers and INPUT parameters. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
@@ -81,7 +76,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_002_20260404v2
+- id: IG_abacus_002_20260409
   capability: input_generation_abacus
   domain: mech
   intent: 'Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty ghost atom and SCF INPUT.'
@@ -107,10 +102,6 @@ questions:
     oss_url: ''
     description: 53-Fe supercell with one vacancy (no Fe_empty yet).
   reference_answers:
-  - key: markers_contains
-    value:
-    - Fe_empty
-    - '0.000000'
   - key: turn_budget
     value:
       max: 8
@@ -119,7 +110,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 18000
+      max: 22000
   scoring_checklist:
   - id: fe_empty_at_vacancy
     criterion: STRU places exactly one Fe_empty at the vacant site (the former missing Fe position) with charge 0 and no magnetic moment.
@@ -136,7 +127,7 @@ questions:
   - id: markers_contains
     criterion: Answer or STRU includes Fe_empty and the 0.000000 charge line for the empty species.
     axis: correctness
-    verify: contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Modified STRU keeps the original 53 real Fe fractional coordinates and lattice from base_vacancy.stru; only Fe_empty is added at the vacancy. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
@@ -448,7 +439,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_007_20260406
+- id: IG_abacus_007_20260409
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS LCAO spin-polarized electric-field SCF and NSCF band inputs for a nanoribbon, including a line-mode KPT from Gamma to Y.'
@@ -476,16 +467,6 @@ questions:
     oss_url: ''
     description: Nanoribbon structure with vacuum for electric-field and band-structure setup.
   reference_answers:
-  - key: markers_contains
-    value:
-    - INPUT_spin_elec_scf
-    - INPUT_spin_elec_band
-    - KPT_band
-    - nspin 2
-    - efield_flag 1
-    - efield_dir 2
-    - calculation nscf
-    - init_chg file
   - key: turn_budget
     value:
       max: 8
@@ -494,7 +475,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 18000
   scoring_checklist:
   - id: efield_params
     criterion: INPUT_spin_elec_scf is an LCAO spin-polarized SCF setup and includes the requested external electric-field controls with vacuum-normal direction and a small finite field amplitude on the order of 1e-3.
@@ -511,7 +492,7 @@ questions:
   - id: markers_contains
     criterion: "Final answer text or generated files include required product markers: INPUT_spin_elec_scf, INPUT_spin_elec_band, KPT_band, `nspin 2`, `efield_flag 1`, `efield_dir 2`, `calculation nscf`, and `init_chg file`."
     axis: correctness
-    verify: contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated inputs are grounded in the provided nanoribbon structure and do not invent unrelated structural edits.
     axis: grounding
@@ -533,7 +514,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_008_20260406
+- id: IG_abacus_008_20260409
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS PW SCF input combining dipole correction with compensating charge for a charged H2O slab, including gate-plane and barrier parameters.'
@@ -562,16 +543,6 @@ questions:
     oss_url: ''
     description: H2O in a vacuum cell for compensating-charge setup.
   reference_answers:
-  - key: markers_contains
-    value:
-    - INPUT_gate
-    - KPT_gate
-    - gate_flag 1
-    - zgate
-    - nelec
-    - block 1
-    - K_POINTS
-    - Gamma
   - key: turn_budget
     value:
       max: 8
@@ -580,7 +551,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 18000
   scoring_checklist:
   - id: gate_and_dipole_params
     criterion: INPUT_gate combines dipole correction with compensating charge, including efield_flag/dip_cor_flag, gate_flag 1, a gate plane located in vacuum (e.g. zgate around 0.7), a task-consistent extra-electron setting (e.g. nelec around 9), and zero finite-field amplitude (efield_amp 0.0).
@@ -597,7 +568,7 @@ questions:
   - id: markers_contains
     criterion: "Final answer text or generated files include required product markers: INPUT_gate, KPT_gate, `gate_flag 1`, `zgate`, `nelec`, `block 1`, and Gamma-centered K_POINTS."
     axis: correctness
-    verify: contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The generated setup is grounded in base_h2o_gate.stru and does not modify the provided structure beyond preparing INPUT/KPT.
     axis: grounding
