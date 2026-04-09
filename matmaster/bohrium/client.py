@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 import requests
 
 from .errors import BohriumAPIError
-from .status import FAILURE_CODES, SUCCESS_CODE, status_name
+from .status import FAILURE_CODES, status_name
 from .types import BohriumContext
 from .upload import UploadedArchive
 
@@ -118,7 +118,9 @@ def create_job(ctx: BohriumContext, *, job_name: str) -> dict[str, Any]:
             "jobName": job_name,
         }
     )
-    response = _post(ctx.credentials.base_url, path, ctx.credentials.access_key, payload)
+    response = _post(
+        ctx.credentials.base_url, path, ctx.credentials.access_key, payload
+    )
     if response.get("code") != 0:
         raise BohriumAPIError(f"job/create failed: {response}")
     return response["data"]
@@ -160,7 +162,9 @@ def add_job(
             "logFiles": ["log"],
         }
         path = "/openapi/v2/job/add"
-    response = _post(ctx.credentials.base_url, path, ctx.credentials.access_key, payload)
+    response = _post(
+        ctx.credentials.base_url, path, ctx.credentials.access_key, payload
+    )
     if response.get("code") != 0:
         raise BohriumAPIError(f"job/add failed: {response}")
     return response["data"]
@@ -172,7 +176,10 @@ def get_job_detail(ctx: BohriumContext, *, job_id: int | str) -> dict[str, Any]:
         if ctx.sandbox
         else f"/openapi/v1/job/{job_id}"
     )
-    return _get(ctx.credentials.base_url, path, ctx.credentials.access_key).get("data") or {}
+    return (
+        _get(ctx.credentials.base_url, path, ctx.credentials.access_key).get("data")
+        or {}
+    )
 
 
 def confirm_terminal_status(

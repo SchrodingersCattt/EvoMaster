@@ -350,7 +350,9 @@ def download_job_directory(
     abs_prefix = root_prefix + normalized_dir if root_prefix else normalized_dir
 
     objects = _sandbox_iterate_objects(host, token, abs_prefix)
-    file_objects = [obj for obj in objects if isinstance(obj, dict) and not obj.get("isDir")]
+    file_objects = [
+        obj for obj in objects if isinstance(obj, dict) and not obj.get("isDir")
+    ]
 
     if not file_objects:
         raise BohriumTransferError(

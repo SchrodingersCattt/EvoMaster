@@ -14,8 +14,8 @@ from unittest.mock import patch
 import pytest
 import requests
 
-import matmaster.tools.builtin.bohrium_tool as bohrium_module
 import matmaster.bohrium.client as bohrium_client_module
+import matmaster.tools.builtin.bohrium_tool as bohrium_module
 import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
 from matmaster.bohrium.endpoints import use_sandbox
 from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
@@ -145,7 +145,9 @@ class TestBohriumExecution:
                 )
 
         monkeypatch.setattr(
-            bohrium_client_module.requests, "get", lambda *args, **kwargs: FakeResponse()
+            bohrium_client_module.requests,
+            "get",
+            lambda *args, **kwargs: FakeResponse(),
         )
 
         with caplog.at_level(logging.WARNING):
@@ -175,7 +177,9 @@ class TestBohriumExecution:
                 )
 
         monkeypatch.setattr(
-            bohrium_client_module.requests, "post", lambda *args, **kwargs: FakeResponse()
+            bohrium_client_module.requests,
+            "post",
+            lambda *args, **kwargs: FakeResponse(),
         )
 
         with caplog.at_level(logging.WARNING):
@@ -711,7 +715,9 @@ class TestBohriumExecution:
         calls: list[tuple[str, str, int, bool]] = []
 
         def fake_list_images(ctx, *, keyword, max_results):
-            calls.append((ctx.credentials.access_key, keyword, max_results, ctx.sandbox))
+            calls.append(
+                (ctx.credentials.access_key, keyword, max_results, ctx.sandbox)
+            )
             return {
                 "success": True,
                 "keyword": keyword,

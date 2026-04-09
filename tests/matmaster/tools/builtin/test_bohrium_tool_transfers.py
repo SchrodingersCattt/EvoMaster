@@ -15,7 +15,10 @@ from matmaster.tools.builtin.bohrium_tool.models import (
     BohriumDownloadTarget,
     BohriumInputSource,
 )
-from matmaster.tools.builtin.bohrium_tool.transfers import prepare_input_archive, publish_download_target
+from matmaster.tools.builtin.bohrium_tool.transfers import (
+    prepare_input_archive,
+    publish_download_target,
+)
 from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
     FakeRemoteSession,
     _FakeDownloadResponse,

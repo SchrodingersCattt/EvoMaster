@@ -31,10 +31,12 @@ def test_no_status_map_in_bohrium_tool() -> None:
 def test_deleted_modules_do_not_exist() -> None:
     bohrium_dir = _BOHRIUM_TOOL_DIR.parents[2] / "bohrium"
     assert not (bohrium_dir / "jobs.py").exists(), "bohrium/jobs.py should be deleted"
-    assert not (_BOHRIUM_TOOL_DIR / "api.py").exists(), "bohrium_tool/api.py should be deleted"
-    assert not (_BOHRIUM_TOOL_DIR / "open_sdk.py").exists(), (
-        "bohrium_tool/open_sdk.py should be deleted"
-    )
+    assert not (
+        _BOHRIUM_TOOL_DIR / "api.py"
+    ).exists(), "bohrium_tool/api.py should be deleted"
+    assert not (
+        _BOHRIUM_TOOL_DIR / "open_sdk.py"
+    ).exists(), "bohrium_tool/open_sdk.py should be deleted"
 
 
 def test_bohrium_tool_does_not_import_private_client_helpers() -> None:
@@ -46,9 +48,9 @@ def test_bohrium_tool_does_not_import_private_client_helpers() -> None:
         if node.module != "matmaster.bohrium.client":
             continue
         imported = {alias.name for alias in node.names}
-        assert all(not name.startswith("_") for name in imported), (
-            "tool.py should not import private helpers from matmaster.bohrium.client"
-        )
-        assert "list_sandbox_machines" not in imported, (
-            "tool.py should use public list_machines/list_images from client.py"
-        )
+        assert all(
+            not name.startswith("_") for name in imported
+        ), "tool.py should not import private helpers from matmaster.bohrium.client"
+        assert (
+            "list_sandbox_machines" not in imported
+        ), "tool.py should use public list_machines/list_images from client.py"
