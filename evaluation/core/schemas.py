@@ -92,6 +92,7 @@ DomainLiteral = Literal[
     'optical',
     'general',
     'incar',
+    'polymer',
 ]
 
 
