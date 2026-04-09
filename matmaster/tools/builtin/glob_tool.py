@@ -41,12 +41,8 @@ class GlobTool(BuiltinTool):
 
     name: ClassVar[str] = "Glob"
     description: ClassVar[str] = (
-        "- Fast file pattern matching tool that works with any codebase size\n"
-        "- Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\"\n"
-        "- Returns matching file paths sorted by modification time\n"
-        "- Use this tool when you need to find files by name patterns\n"
-        "- When you are doing an open ended search that may require multiple "
-        "rounds of globbing and grepping, use the Agent tool instead"
+        "Fast file pattern matching via glob syntax (e.g. **/*.py), "
+        "works with any codebase size."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
@@ -73,6 +69,16 @@ class GlobTool(BuiltinTool):
     fast_path_eligible: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 8_000
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
+
+    def prompt(self, ctx=None) -> str:
+        return (
+            "- Fast file pattern matching tool that works with any codebase size\n"
+            "- Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\"\n"
+            "- Returns matching file paths sorted by modification time\n"
+            "- Use this tool when you need to find files by name patterns\n"
+            "- When you are doing an open ended search that may require multiple "
+            "rounds of globbing and grepping, use the Agent tool instead"
+        )
 
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
         session = self._require_session()

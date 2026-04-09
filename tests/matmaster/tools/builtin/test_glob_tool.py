@@ -64,6 +64,21 @@ class TestGlobToolMetadata:
         )
 
 
+class TestGlobToolDescriptionPromptSplit:
+    def test_description_is_short_summary(self) -> None:
+        assert GlobTool.description.startswith("Fast file pattern matching")
+        assert "\n-" not in GlobTool.description
+        assert len(GlobTool.description) < 200
+
+    def test_prompt_contains_usage_points(self) -> None:
+        tool = GlobTool()
+        prompt = tool.prompt()
+        assert prompt is not None
+        assert "**/*.js" in prompt or "**/*.ts" in prompt
+        assert "modification time" in prompt
+        assert "Agent tool" in prompt
+
+
 # ---------------------------------------------------------------------------
 # _build_find_command — command generation
 # ---------------------------------------------------------------------------
