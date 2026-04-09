@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
 from typing import Any
+from urllib.parse import urlencode
 
 import requests
 
@@ -46,7 +48,31 @@ def _compact_log_text(text: str, *, max_chars: int = 200) -> str:
     return compact[: max_chars - 3] + "..."
 
 
-def _log_http_error(method: str, url: str, response: Any) -> None:
+def _build_curl(
+    method: str,
+    url: str,
+    access_key: str,
+    *,
+    params: dict[str, Any] | None = None,
+    payload: dict[str, Any] | None = None,
+) -> str:
+    """Build a reproducible curl command for debugging (access_key masked)."""
+    masked_key = _mask_secret(access_key)
+    full_url = url
+    if params:
+        full_url += "?" + urlencode(params, doseq=True)
+    parts = [f"curl -X {method} '{full_url}'"]
+    parts.append(f"-H 'accessKey: {masked_key}'")
+    if method.upper() == "POST":
+        parts.append("-H 'Content-Type: application/json'")
+    else:
+        parts.append("-H 'Accept: application/json'")
+    if payload is not None:
+        parts.append(f"-d '{json.dumps(payload, ensure_ascii=False)}'")
+    return " \\\n  ".join(parts)
+
+
+def _log_http_error(method: str, url: str, response: Any, *, curl: str = "") -> None:
     logger.warning(
         "Bohrium HTTP error method=%s url=%s status=%s response_body=%s",
         method,
@@ -54,6 +80,8 @@ def _log_http_error(method: str, url: str, response: Any) -> None:
         getattr(response, "status_code", "unknown"),
         _compact_log_text(getattr(response, "text", "")),
     )
+    if curl:
+        logger.warning("Bohrium request curl:\n%s", curl)
 
 
 def _get(
@@ -64,14 +92,16 @@ def _get(
     params: dict[str, Any] | None = None,
     timeout: int = 30,
 ) -> dict[str, Any]:
+    url = f"{base_url}{path}"
     response = requests.get(
-        f"{base_url}{path}",
+        url,
         headers={"accessKey": access_key, "Accept": "application/json"},
         params=params or {},
         timeout=timeout,
     )
     if not response.ok:
-        _log_http_error("GET", f"{base_url}{path}", response)
+        curl = _build_curl("GET", url, access_key, params=params)
+        _log_http_error("GET", url, response, curl=curl)
     response.raise_for_status()
     return response.json()
 
@@ -84,14 +114,16 @@ def _post(
     *,
     timeout: int = 30,
 ) -> dict[str, Any]:
+    url = f"{base_url}{path}"
     response = requests.post(
-        f"{base_url}{path}",
+        url,
         headers={"accessKey": access_key, "Content-Type": "application/json"},
         json=payload,
         timeout=timeout,
     )
     if not response.ok:
-        _log_http_error("POST", f"{base_url}{path}", response)
+        curl = _build_curl("POST", url, access_key, payload=payload)
+        _log_http_error("POST", url, response, curl=curl)
     response.raise_for_status()
     return response.json()
 
@@ -112,6 +144,17 @@ def create_job(ctx: BohriumContext, *, job_name: str) -> dict[str, Any]:
     )
     response = _post(ctx.base_url, path, ctx.access_key, payload)
     if response.get("code") != 0:
+        curl = _build_curl(
+            "POST",
+            f"{ctx.base_url}{path}",
+            ctx.access_key,
+            payload=payload,
+        )
+        logger.warning(
+            "Bohrium job/create business error: %s\ncurl:\n%s",
+            response,
+            curl,
+        )
         raise BohriumAPIError(f"job/create failed: {response}")
     return response["data"]
 
@@ -154,6 +197,17 @@ def add_job(
         path = "/openapi/v2/job/add"
     response = _post(ctx.base_url, path, ctx.access_key, payload)
     if response.get("code") != 0:
+        curl = _build_curl(
+            "POST",
+            f"{ctx.base_url}{path}",
+            ctx.access_key,
+            payload=payload,
+        )
+        logger.warning(
+            "Bohrium job/add business error: %s\ncurl:\n%s",
+            response,
+            curl,
+        )
         raise BohriumAPIError(f"job/add failed: {response}")
     return response["data"]
 

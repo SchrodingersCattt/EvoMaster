@@ -64,5 +64,32 @@ bohrium:
   sandbox:
     images: []
     machines:
-      cpu: []
-      gpu: []
+      cpu:
+        - skuEnName: "c2_m4_cpu"
+          cpuCoreNum: 2
+          memory: 4
+        - skuEnName: "c2_m8_cpu"
+          cpuCoreNum: 2
+          memory: 8
+        - skuEnName: "c8_m32_cpu"
+          cpuCoreNum: 8
+          memory: 32
+        - skuEnName: "c32_m128_cpu"
+          cpuCoreNum: 32
+          memory: 128
+      gpu:
+        - skuEnName: "c8_m32_1 * NVIDIA 4090"
+          cpuCoreNum: 8
+          memory: 32
+          gpu: "NVIDIA GeForce RTX 4090"
+          gpuCoreNum: 1
+        - skuEnName: "c16_m64_1 * NVIDIA 4090"
+          cpuCoreNum: 16
+          memory: 64
+          gpu: "NVIDIA GeForce RTX 4090"
+          gpuCoreNum: 1
+        - skuEnName: "c16_m64_1 * NVIDIA 5090"
+          cpuCoreNum: 16
+          memory: 64
+          gpu: "NVIDIA GeForce RTX 5090"
+          gpuCoreNum: 1
