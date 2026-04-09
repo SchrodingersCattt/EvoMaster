@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from matmaster.tools.builtin.bohrium_tool.errors import BohriumTransferError
-from matmaster.tools.builtin.bohrium_tool.open_sdk import upload_input_archive
+from matmaster.bohrium.errors import BohriumTransferError
+from matmaster.bohrium.upload import upload_input_archive
 from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
     _install_fake_tiefblue,
 )
@@ -46,6 +46,7 @@ def test_upload_input_archive_surfaces_missing_sdk(
             raise ImportError("bohrium_open_sdk is unavailable")
         return original_import(name, globals, locals, fromlist, level)
 
+    monkeypatch.setattr("matmaster.bohrium.upload._oss2", None, raising=False)
     monkeypatch.setattr(builtins, "__import__", fake_import)
     zip_path = tmp_path / "input.zip"
     zip_path.write_bytes(b"zip-bytes")

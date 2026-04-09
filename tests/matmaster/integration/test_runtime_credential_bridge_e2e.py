@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-import matmaster.tools.builtin.bohrium_tool.api as bohrium_api_module
-import matmaster.tools.builtin.bohrium_tool.open_sdk as bohrium_open_sdk_module
+import matmaster.bohrium.client as bohrium_client_module
+import matmaster.bohrium.upload as bohrium_upload_module
+from matmaster.bohrium.credentials import build_bohrium_context
 from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime, get_runtime
 from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
@@ -123,7 +124,7 @@ class TestBohriumToolAndRemoteShare:
                 }
             return {"code": 0, "data": {"jobId": "j2", "bohrJobId": "b2"}}
 
-        monkeypatch.setattr(bohrium_api_module, "_post", fake_post)
+        monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
 
         class FakeTiefblue:
             def __init__(self, **kw):
@@ -134,7 +135,7 @@ class TestBohriumToolAndRemoteShare:
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         monkeypatch.setattr(
-            bohrium_open_sdk_module, "_load_tiefblue_client", lambda: FakeTiefblue
+            bohrium_upload_module, "_load_tiefblue_client", lambda: FakeTiefblue
         )
         result = asyncio.run(
             tool.execute(
@@ -179,7 +180,7 @@ class TestBohriumToolAndRemoteShare:
                 }
             return {"code": 0, "data": {"jobId": "j2", "bohrJobId": "b2"}}
 
-        monkeypatch.setattr(bohrium_api_module, "_post", fake_post)
+        monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
 
         class FakeTiefblue:
             def __init__(self, **kw):
@@ -191,7 +192,7 @@ class TestBohriumToolAndRemoteShare:
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         monkeypatch.setattr(
-            bohrium_open_sdk_module, "_load_tiefblue_client", lambda: FakeTiefblue
+            bohrium_upload_module, "_load_tiefblue_client", lambda: FakeTiefblue
         )
         result = asyncio.run(
             tool.execute(
@@ -266,18 +267,20 @@ class TestCalculationPreflightUsesRuntime:
         assert env.get("BOHRIUM_ACCESS_KEY") == "adaptor-ak"
 
 
-class TestBohriumJobsUseRuntime:
-    def test_get_access_key_uses_session_runtime(self, monkeypatch):
+class TestBohriumContextBuildUsesRuntime:
+    def test_build_context_uses_session_runtime(self, monkeypatch):
         monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
-        from matmaster.bohrium.jobs import _get_access_key
 
         session = _session_with_runtime(access_key="js-ak")
-        ak = _get_access_key(session=session)
-        assert ak == "js-ak"
+        ctx = build_bohrium_context(session=session)
+        assert ctx.credentials.access_key == "js-ak"
+        assert ctx.credential_source == "runtime"
 
-    def test_get_access_key_falls_back_to_env(self, monkeypatch):
+    def test_build_context_falls_back_to_env(self, monkeypatch):
         monkeypatch.setenv("BOHRIUM_ACCESS_KEY", "env-ak")
-        from matmaster.bohrium.jobs import _get_access_key
+        monkeypatch.setenv("BOHRIUM_PROJECT_ID", "9")
 
-        ak = _get_access_key()
-        assert ak == "env-ak"
+        ctx = build_bohrium_context(session=None, require_project=True)
+        assert ctx.credentials.access_key == "env-ak"
+        assert ctx.credentials.project_id == 9
+        assert ctx.credential_source == "env"

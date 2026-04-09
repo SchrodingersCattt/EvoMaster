@@ -6,13 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from matmaster.tools.builtin.bohrium_tool.models import (
+from matmaster.bohrium.artifacts import download_job_artifacts
+from matmaster.bohrium.types import (
     BohriumContext,
+    BohriumCredentials,
+)
+from matmaster.tools.builtin.bohrium_tool.models import (
     BohriumDownloadTarget,
     BohriumInputSource,
 )
 from matmaster.tools.builtin.bohrium_tool.transfers import (
-    download_job_artifacts,
     prepare_input_archive,
     publish_download_target,
 )
@@ -78,9 +81,13 @@ def test_download_job_artifacts_preserves_sandbox_zip_object_fallback(
         publish_mode="staged_upload",
     )
     ctx = BohriumContext(
-        access_key="ak",
-        project_id=42,
-        base_url="https://openapi.test.dp.tech",
+        credentials=BohriumCredentials(
+            access_key="ak",
+            project_id=42,
+            user_id=None,
+            user_no="",
+            base_url="https://openapi.test.dp.tech",
+        ),
         credential_source="env",
         sandbox=True,
     )
@@ -90,13 +97,13 @@ def test_download_job_artifacts_preserves_sandbox_zip_object_fallback(
         zf.writestr("log", "done\n")
 
     monkeypatch.setattr(
-        "matmaster.tools.builtin.bohrium_tool.transfers.requests.get",
+        "matmaster.bohrium.artifacts.requests.get",
         lambda url, timeout=300, stream=True: _FakeDownloadResponse(
             content=buffer.getvalue()
         ),
     )
     monkeypatch.setattr(
-        "matmaster.tools.builtin.bohrium_tool.transfers.requests.post",
+        "matmaster.bohrium.artifacts.requests.post",
         lambda *args, **kwargs: _FakeDownloadResponse(
             json_data={
                 "code": 0,
@@ -114,7 +121,7 @@ def test_download_job_artifacts_preserves_sandbox_zip_object_fallback(
         detail_data={
             "resultUrl": "https://store.example/api/download/prefix/job-1.zip?token=root-token"
         },
-        target=target,
+        result_dir=target.staging_dir,
         ctx=ctx,
     )
 
@@ -134,14 +141,18 @@ def test_download_job_artifacts_returns_bad_zip_marker_without_crashing(
         publish_mode="direct",
     )
     ctx = BohriumContext(
-        access_key="ak",
-        project_id=42,
-        base_url="https://openapi.test.dp.tech",
+        credentials=BohriumCredentials(
+            access_key="ak",
+            project_id=42,
+            user_id=None,
+            user_no="",
+            base_url="https://openapi.test.dp.tech",
+        ),
         credential_source="env",
         sandbox=False,
     )
     monkeypatch.setattr(
-        "matmaster.tools.builtin.bohrium_tool.transfers.requests.get",
+        "matmaster.bohrium.artifacts.requests.get",
         lambda url, timeout=300, stream=True: _FakeDownloadResponse(
             content=b"not-a-zip"
         ),
@@ -150,7 +161,7 @@ def test_download_job_artifacts_returns_bad_zip_marker_without_crashing(
     files, log_tail = download_job_artifacts(
         job_id=1,
         detail_data={"resultUrl": "https://store.example/out.zip"},
-        target=target,
+        result_dir=target.staging_dir,
         ctx=ctx,
     )
 

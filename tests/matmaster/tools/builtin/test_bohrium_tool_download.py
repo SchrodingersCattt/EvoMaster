@@ -6,9 +6,9 @@ import asyncio
 import json
 from pathlib import Path
 
-import matmaster.tools.builtin.bohrium_tool.api as bohrium_api_module
+import matmaster.bohrium.artifacts as bohrium_artifacts_module
+import matmaster.bohrium.client as bohrium_client_module
 import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
-import matmaster.tools.builtin.bohrium_tool.transfers as bohrium_transfers_module
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.tool_result import ToolResult
 from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
@@ -40,7 +40,7 @@ class TestBohriumDownloadExecution:
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
 
         result = asyncio.run(
             tool.execute(
@@ -81,15 +81,15 @@ class TestBohriumDownloadExecution:
             del base_url, access_key, params, timeout
             return {'data': {'status': 2, 'resultUrl': 'https://store.example/out.zip'}}
 
-        def fake_download_artifacts(*, job_id, detail_data, target, ctx):
+        def fake_download_artifacts(*, job_id, detail_data, result_dir, ctx):
             del job_id, detail_data, ctx
-            target.staging_dir.mkdir(parents=True, exist_ok=True)
-            (target.staging_dir / 'log').write_text('done\n', encoding='utf-8')
+            result_dir.mkdir(parents=True, exist_ok=True)
+            (result_dir / 'log').write_text('done\n', encoding='utf-8')
             return ['log'], 'done\n'
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
         monkeypatch.setattr(
             bohrium_tool_module, 'download_job_artifacts', fake_download_artifacts
         )
@@ -119,13 +119,13 @@ class TestBohriumDownloadExecution:
             del base_url, path, access_key, params, timeout
             return {'data': {'status': 2}}
 
-        def fake_download_artifacts(*, job_id, detail_data, target, ctx):
-            del job_id, detail_data, target, ctx
+        def fake_download_artifacts(*, job_id, detail_data, result_dir, ctx):
+            del job_id, detail_data, result_dir, ctx
             raise RuntimeError('boom')
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
         monkeypatch.setattr(
             bohrium_tool_module, 'download_job_artifacts', fake_download_artifacts
         )
@@ -158,15 +158,15 @@ class TestBohriumDownloadExecution:
             idx += 1
             return {'data': payload}
 
-        def fake_download_artifacts(*, job_id, detail_data, target, ctx):
+        def fake_download_artifacts(*, job_id, detail_data, result_dir, ctx):
             del job_id, detail_data, ctx
-            target.staging_dir.mkdir(parents=True, exist_ok=True)
-            (target.staging_dir / 'log').write_text('boom\n', encoding='utf-8')
+            result_dir.mkdir(parents=True, exist_ok=True)
+            (result_dir / 'log').write_text('boom\n', encoding='utf-8')
             return ['log'], 'boom\n'
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
         monkeypatch.setattr(
             bohrium_tool_module, 'download_job_artifacts', fake_download_artifacts
         )
@@ -200,15 +200,15 @@ class TestBohriumDownloadExecution:
             del base_url, access_key, params, timeout
             return {'data': {'status': 2}}
 
-        def fake_download_artifacts(*, job_id, detail_data, target, ctx):
+        def fake_download_artifacts(*, job_id, detail_data, result_dir, ctx):
             del job_id, detail_data, ctx
-            target.staging_dir.mkdir(parents=True, exist_ok=True)
-            (target.staging_dir / 'log').write_text('done\n', encoding='utf-8')
+            result_dir.mkdir(parents=True, exist_ok=True)
+            (result_dir / 'log').write_text('done\n', encoding='utf-8')
             return ['log'], 'done\n'
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
         monkeypatch.setattr(
             bohrium_tool_module, 'download_job_artifacts', fake_download_artifacts
         )
@@ -243,15 +243,15 @@ class TestBohriumDownloadExecution:
             del base_url, access_key, params, timeout
             return {'data': {'status': 2}}
 
-        def fake_download_artifacts(*, job_id, detail_data, target, ctx):
+        def fake_download_artifacts(*, job_id, detail_data, result_dir, ctx):
             del job_id, detail_data, ctx
-            target.staging_dir.mkdir(parents=True, exist_ok=True)
-            (target.staging_dir / 'log').write_text('done\n', encoding='utf-8')
+            result_dir.mkdir(parents=True, exist_ok=True)
+            (result_dir / 'log').write_text('done\n', encoding='utf-8')
             return ['log'], 'done\n'
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
         monkeypatch.setattr(
             bohrium_tool_module, 'download_job_artifacts', fake_download_artifacts
         )
@@ -281,7 +281,7 @@ class TestBohriumDownloadExecution:
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
 
         result = asyncio.run(
             tool.execute(
@@ -380,11 +380,11 @@ class TestBohriumDownloadExecution:
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
         monkeypatch.setattr(
-            bohrium_transfers_module.requests, 'post', fake_requests_post
+            bohrium_artifacts_module.requests, 'post', fake_requests_post
         )
-        monkeypatch.setattr(bohrium_transfers_module.requests, 'get', fake_requests_get)
+        monkeypatch.setattr(bohrium_artifacts_module.requests, 'get', fake_requests_get)
         import time as time_module
 
         monkeypatch.setattr(bohrium_tool_module, 'time', time_module, raising=False)

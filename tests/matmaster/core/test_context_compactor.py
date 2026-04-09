@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -321,6 +323,94 @@ class TestCompactorEventEmission:
         assert event.payload["strategy"] == "summary"
         assert event.payload["trigger_tokens"] > 0
 
+    async def test_preflight_summary_emits_durable_event(self) -> None:
+        from matmaster.core.context_compactor import ContextCompactor
+        from matmaster.types.events import ContextCompactionEvent
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        received: list = []
+
+        async def sink(event):
+            received.append(event)
+
+        msgs = _build_long_conversation(5)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=sink
+        )
+
+        await compactor.preflight_if_needed(msgs)
+
+        assert len(received) == 1
+        event = received[0]
+        assert isinstance(event, ContextCompactionEvent)
+        assert event.payload["phase"] == "preflight"
+        assert event.payload["strategy"] == "summary"
+        assert event.payload["durability"] == "durable"
+
+    async def test_runtime_sliding_window_is_ephemeral(self) -> None:
+        from matmaster.core.context_compactor import ContextCompactor
+        from matmaster.types.events import ContextCompactionEvent
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
+        )
+        provider = FailingSummaryProvider()
+        received: list = []
+
+        async def sink(event):
+            received.append(event)
+
+        msgs = _build_long_conversation(10)
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=sink
+        )
+        compactor.update_message_count(len(msgs))
+
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+
+        assert len(received) == 1
+        event = received[0]
+        assert isinstance(event, ContextCompactionEvent)
+        assert event.payload["phase"] == "runtime"
+        assert event.payload["strategy"] == "sliding_window"
+        assert event.payload["durability"] == "ephemeral"
+
+    async def test_preflight_summary_failure_raises_instead_of_silent_fallback(
+        self,
+    ) -> None:
+        from matmaster.core.context_compactor import ContextCompactor
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
+        )
+        provider = FailingSummaryProvider()
+        msgs = _build_long_conversation(5)
+        compactor = ContextCompactor(config=config, summary_provider=provider)
+
+        with pytest.raises(RuntimeError, match="LLM unavailable"):
+            await compactor.preflight_if_needed(msgs)
+
+    async def test_summary_input_contains_tool_name_and_call_id(self) -> None:
+        from matmaster.core.context_compactor import ContextCompactor
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        msgs = _build_long_conversation(5)
+        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor.update_message_count(len(msgs))
+
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+
+        prompt_text = provider.calls[0][1]["content"]
+        assert "tool_call_id" in prompt_text
+        assert "tool_name" in prompt_text
+        assert "bash" in prompt_text
+
     async def test_no_event_when_no_sink(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
@@ -339,6 +429,45 @@ class TestCompactorEventEmission:
 
 class TestToolTruncationFallback:
     """Tool result truncation when no old turns to compress."""
+
+    async def test_preflight_does_not_silently_tool_truncate_without_old_turns(
+        self,
+    ) -> None:
+        """Preflight must fail explicitly instead of using runtime tool_truncation."""
+        from matmaster.core.context_compactor import ContextCompactor
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=500, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        received: list = []
+
+        async def sink(event):
+            received.append(event)
+
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="task"),
+            AssistantMessage(
+                content="calling tools",
+                tool_calls=[ToolCallData(id="tc-0", name="bash", arguments={})],
+            ),
+            ToolMessage(
+                content="big result " + "A" * 4000,
+                tool_call_id="tc-0",
+                tool_name="bash",
+            ),
+        ]
+
+        compactor = ContextCompactor(
+            config=config, summary_provider=provider, event_sink=sink
+        )
+
+        with pytest.raises(ValueError, match="Preflight compaction requires"):
+            await compactor.preflight_if_needed(msgs)
+
+        assert len(provider.calls) == 0
+        assert len(received) == 0
 
     async def test_truncates_when_no_compressible_turns(self) -> None:
         """1 turn with huge tool results -> falls back to tool_truncation."""

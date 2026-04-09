@@ -6,7 +6,7 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-import matmaster.tools.builtin.bohrium_tool.api as bohrium_api_module
+import matmaster.bohrium.client as bohrium_client_module
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
 from matmaster.tools.tool_result import ToolResult
@@ -38,7 +38,7 @@ class TestPollWithRegistry:
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
 
         result = asyncio.run(
             tool.execute_with_context(
@@ -66,7 +66,7 @@ class TestPollWithRegistry:
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
 
         asyncio.run(
             tool.execute_with_context(
@@ -98,7 +98,7 @@ class TestPollWithRegistry:
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
 
         result = asyncio.run(
             tool.execute_with_context(
@@ -120,7 +120,7 @@ class TestPollWithRegistry:
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
 
         result = asyncio.run(
             tool.execute_with_context(
