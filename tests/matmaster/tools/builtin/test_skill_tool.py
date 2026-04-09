@@ -35,6 +35,18 @@ class TestSkillToolMetadata:
         assert "args" not in tool.json_schema["properties"]
 
 
+class TestSkillToolDescriptionSlim:
+    def test_description_is_short_summary(self) -> None:
+        assert SkillTool.description.startswith("Activate a skill by name")
+        assert len(SkillTool.description) < 200
+
+    def test_prompt_remains_detailed(self) -> None:
+        tool = SkillTool(skill_registry=make_registry())
+        prompt = tool.prompt()
+        assert prompt is not None
+        assert "How to invoke" in prompt or "slash command" in prompt.lower()
+
+
 class TestSkillExecution:
     def test_skill_not_found(self):
         tool = SkillTool(skill_registry=make_registry(skill=None))
