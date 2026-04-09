@@ -2,99 +2,6 @@ version: v5
 capability: batch_processing
 domain: struct
 questions:
-- id: BP_struct_002_20260407a
-  capability: batch_processing
-  domain: struct
-  intent: Generate VASP INCAR files for DOS calculation across 4 different structures.
-    Enforce unified k-point density (~50 k-points/Ų despite different structure sizes)
-    and identical electronic parameters across all structures.
-  human_prompt_seed: '从 `dos_input_prep.json` 读取 4 种材料的 DOS 计算配置（Si, Cu, Al, Fe）。
-
-    对每种材料生成对应的 VASP INCAR 文件，要求： 1. k-point 密度统一为 ~50 points/Ų（虽然不同结构尺度不同，k 点网格数目不同）
-    2. ISMEAR=0, SIGMA=0.05, NEDOS=2000 在所有 4 个文件中完全相同 3. 其他电子学参数（LORBIT, NSW 等）一致
-
-    关键考察点： 1. 理解 k-point 密度概念（不是k点个数） 2. 为不同大小的结构计算合适的 k 点网格 3. 确保非几何参数（ISMEAR 等）的一致性
-    4. 生成标准格式的 INCAR 文件
-
-    '
-  tags:
-  - batch_operation
-  - input_generation
-  - dos_calculation
-  - kpoint_density
-  mode_scope:
-  - direct
-  - planner
-  data_files:
-  - key: dos_input_prep
-    path: data/BP_struct_002/dos_input_prep.json
-    oss_url: ''
-    description: DOS input preparation config for 4 structures with unified k-point
-      density.
-  reference_answers:
-  - key: incar_files_count
-    value: 4
-    tolerance: 0.5
-  - key: kpoint_density_unified
-    value:
-      description: All 4 INCAR files specify k-point density ~50/Ų
-      tolerance_percent: 5.0
-  - key: electronic_parameters_identical
-    value:
-      ISMEAR: 0
-      SIGMA: 0.05
-      NEDOS: 2000
-  - key: grounding_config_used
-    value: Configuration from dos_input_prep.json
-  - key: no_manual_kpoint_tuning
-    value: Systematic k-point density calculation
-  - key: turn_budget
-    value: &id000
-      max: 20
-  - key: duration_budget
-    value: &id001
-      max: 7200000
-  - key: token_budget_total
-    value: &id002
-      max: 35000
-  scoring_checklist:
-  - id: incar_files_count
-    criterion: Exactly 4 INCAR files generated (one per material).
-    axis: correctness
-    verify: numerical_range
-  - id: kpoint_density_unified
-    criterion: All 4 INCAR files follow unified k-point density strategy (~50 points/Ų),
-      even though raw k-point counts differ due to structure sizes.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: electronic_parameters_identical
-    criterion: ISMEAR=0, SIGMA=0.05, NEDOS=2000 are identical across all 4 INCAR files.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_config_used
-    criterion: Configuration values (ISMEAR, SIGMA, etc.) match the provided manifest
-      exactly.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_manual_kpoint_tuning
-    criterion: Agent computed k-point grids systematically (e.g., using density formula),
-      not by trial-and-error.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
-      a generous benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark
-      ceiling (tunable per task after calibration).
-    axis: efficiency
-    verify: token_budget
 - id: BP_struct_003_20260406
   capability: batch_processing
   domain: struct
@@ -148,11 +55,14 @@ questions:
   - key: grounding_config_used
     value: Parameters from convergence_encut.json
   - key: turn_budget
-    value: *id000
+    value: &id000
+      max: 20
   - key: duration_budget
-    value: *id001
+    value: &id001
+      max: 7200000
   - key: token_budget_total
-    value: *id002
+    value: &id002
+      max: 35000
   scoring_checklist:
   - id: incar_files_count
     criterion: Exactly 5 INCAR files are generated, one per ENCUT value.
