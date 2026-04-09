@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from matmaster.bohrium.runtime import try_attach_local_bohrium_runtime_from_env
 from matmaster.config.loader import load_exp_config, load_llm_config
 from matmaster.core.exp import Exp
 from matmaster.providers.llm_factory import build_provider
@@ -160,6 +161,7 @@ def run_mat_task(
         llm_config=llm_config,
         run_meta={"source": "evaluation", "task_id": task_id, "mode": mode},
     )
+    try_attach_local_bohrium_runtime_from_env(session)
 
     # 5. Build runtime and run kernel
     exp = Exp(exp_config)
