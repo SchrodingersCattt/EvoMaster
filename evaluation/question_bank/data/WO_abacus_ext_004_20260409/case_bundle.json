@@ -1,0 +1,13 @@
+{
+  "task": "vibrational_zpe_analysis",
+  "unit": "cm^-1",
+  "conversion": {
+    "cm^-1_to_eV": 0.000123984
+  },
+  "scale_factor": 0.97,
+  "frequencies_cm^-1": {
+    "H2O": [1595, 3657, 3756],
+    "CO2": [667, 1333, 2349]
+  },
+  "zpe_definition": "ZPE = 0.5 * sum(scaled_frequencies_eV)"
+}

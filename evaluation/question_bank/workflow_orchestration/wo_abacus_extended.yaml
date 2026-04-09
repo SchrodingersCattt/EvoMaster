@@ -1,0 +1,407 @@
+version: v5
+capability: workflow_orchestration
+domain: elec
+questions:
+- id: WO_abacus_ext_001_20260409
+  capability: workflow_orchestration
+  domain: elec
+  intent: Analyze mock Bader-charge outputs for ionic vs metallic systems and quantify relative charge-transfer magnitude.
+  human_prompt_seed: |
+    读取 `case_bundle.json` 中两套体系的 Bader 电荷结果（NaCl 与 CoPt3）。
+
+    请完成：
+    1) 计算 NaCl 中 |q_Na|；
+    2) 计算 CoPt3 中 |q_Co| / |q_Pt| 的比值（使用给定的平均原子电荷）；
+    3) 判断哪一套体系表现出更强离子性，并给出一句理由。
+  tags:
+  - abacus
+  - bader
+  - charge_transfer
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: case_bundle
+    path: data/WO_abacus_ext_001_20260409/case_bundle.json
+    oss_url: ''
+    description: Mock Bader charges for NaCl and CoPt3.
+  reference_answers:
+  - key: nacl_abs_na_charge_e
+    value: 0.84
+    tolerance: 0.05
+  - key: copt_charge_ratio
+    value: 2.3333
+    tolerance: 0.15
+  - key: ionic_system
+    value: NaCl
+  - key: required_fields
+    value:
+    - nacl_abs_charge
+    - copt_ratio
+    - ionic_system
+    - brief_reason
+  - key: turn_budget
+    value: &id001
+      max: 8
+  - key: duration_budget
+    value: &id002
+      max: 7200000
+  - key: token_budget_total
+    value: &id003
+      max: 8000
+  scoring_checklist:
+  - id: nacl_abs_na_charge_e
+    criterion: Absolute Na Bader charge in NaCl is correctly computed.
+    axis: correctness
+    verify: numerical_range
+  - id: copt_charge_ratio
+    criterion: "|q_Co|/|q_Pt| ratio in CoPt3 is correctly computed from provided averages."
+    axis: correctness
+    verify: numerical_range
+  - id: ionic_system
+    criterion: Correctly identifies NaCl as the more ionic system.
+    axis: correctness
+    verify: exact_match
+  - id: required_fields
+    criterion: Report includes NaCl absolute charge, CoPt3 ratio, ionic-system judgment, and one-sentence rationale.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: All computed values and judgments are grounded in the provided case_bundle.json numbers, not generic chemistry recall.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_abacus_ext_002_20260409
+  capability: workflow_orchestration
+  domain: elec
+  intent: Post-process charge-density-difference integrals to quantify net transfer and asymmetry in an interface system.
+  human_prompt_seed: |
+    读取 `case_bundle.json`，其中给出了界面体系的电荷密度差积分结果：
+    - 电子累积区积分（positive）
+    - 电子耗尽区积分（negative）
+
+    请完成：
+    1) 计算净电荷转移量 Δq = positive + negative（单位 e）；
+    2) 计算不对称比值 R = positive / |negative|；
+    3) 根据题面给定的空间分区说明，判断电子主要从哪一侧转移到哪一侧，并简述依据。
+  tags:
+  - abacus
+  - charge_density_difference
+  - interface
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: case_bundle
+    path: data/WO_abacus_ext_002_20260409/case_bundle.json
+    oss_url: ''
+    description: Mock charge-density-difference integrated values and region labels.
+  reference_answers:
+  - key: net_transfer_e
+    value: 0.002
+    tolerance: 0.01
+  - key: asymmetry_ratio
+    value: 1.016
+    tolerance: 0.03
+  - key: required_fields
+    value:
+    - net_transfer
+    - asymmetry_ratio
+    - transfer_direction
+    - reasoning
+  - key: turn_budget
+    value: *id001
+  - key: duration_budget
+    value: *id002
+  - key: token_budget_total
+    value: *id003
+  scoring_checklist:
+  - id: net_transfer_e
+    criterion: Net transfer charge is correctly computed from provided integrals.
+    axis: correctness
+    verify: numerical_range
+  - id: asymmetry_ratio
+    criterion: Positive/negative integral asymmetry ratio is correctly computed.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report includes net transfer, asymmetry ratio, transfer direction, and concise evidence-based explanation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Transfer-direction conclusion is grounded in region definitions and integral signs in case_bundle.json.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_abacus_ext_003_20260409
+  capability: workflow_orchestration
+  domain: elec
+  intent: Compute work-function shift from vacuum potential and Fermi-level summaries for clean and adsorbed slabs.
+  human_prompt_seed: |
+    读取 `case_bundle.json`，其中包含 clean slab 和 adsorbed slab 的：
+    - 真空能级 V_vac（eV）
+    - 费米能级 E_F（eV）
+
+    请完成：
+    1) 分别计算两种表面的功函数 Φ = V_vac - E_F；
+    2) 计算功函数变化量 ΔΦ = Φ_ads - Φ_clean；
+    3) 判断吸附后功函数是升高还是降低，并给出简短物理解释（偶极方向/界面电荷重排角度）。
+  tags:
+  - abacus
+  - work_function
+  - surface
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: case_bundle
+    path: data/WO_abacus_ext_003_20260409/case_bundle.json
+    oss_url: ''
+    description: Mock vacuum and Fermi levels for clean and adsorbed slabs.
+  reference_answers:
+  - key: phi_clean_eV
+    value: 4.28
+    tolerance: 0.05
+  - key: phi_ads_eV
+    value: 4.32
+    tolerance: 0.05
+  - key: delta_phi_eV
+    value: 0.04
+    tolerance: 0.05
+  - key: required_fields
+    value:
+    - phi_clean
+    - phi_ads
+    - delta_phi
+    - trend
+    - brief_explanation
+  - key: turn_budget
+    value: *id001
+  - key: duration_budget
+    value: *id002
+  - key: token_budget_total
+    value: *id003
+  scoring_checklist:
+  - id: phi_clean_eV
+    criterion: Clean-slab work function is correctly computed.
+    axis: correctness
+    verify: numerical_range
+  - id: phi_ads_eV
+    criterion: Adsorbed-slab work function is correctly computed.
+    axis: correctness
+    verify: numerical_range
+  - id: delta_phi_eV
+    criterion: Work-function shift ΔΦ is correctly computed.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report includes both work functions, ΔΦ, trend (increase/decrease), and concise physical interpretation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Work-function results are grounded in case_bundle.json V_vac and E_F values with explicit formula usage.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_abacus_ext_004_20260409
+  capability: workflow_orchestration
+  domain: kinetic
+  intent: Derive zero-point energies from mock vibrational frequencies and compare scaled ZPE between molecules.
+  human_prompt_seed: |
+    读取 `case_bundle.json`，其中给出了 H2O 与 CO2 的振动频率（cm^-1）及统一缩放因子。
+
+    请完成：
+    1) 先按给定缩放因子修正频率，再计算两者的 ZPE（eV）；
+    2) 计算两者 ZPE 差值 ΔZPE = ZPE(H2O) - ZPE(CO2)；
+    3) 用一句话解释为何三原子分子的振动模数量和频率分布会影响 ZPE 大小。
+
+    说明：可使用换算系数 1 cm^-1 = 1.23984e-4 eV。
+  tags:
+  - abacus
+  - vibration
+  - zpe
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: case_bundle
+    path: data/WO_abacus_ext_004_20260409/case_bundle.json
+    oss_url: ''
+    description: Mock vibrational frequencies and scaling factor for H2O and CO2.
+  reference_answers:
+  - key: zpe_h2o_eV
+    value: 0.5417
+    tolerance: 0.02
+  - key: zpe_co2_eV
+    value: 0.2615
+    tolerance: 0.02
+  - key: delta_zpe_eV
+    value: 0.2802
+    tolerance: 0.02
+  - key: required_fields
+    value:
+    - scaled_frequencies
+    - zpe_h2o
+    - zpe_co2
+    - delta_zpe
+    - brief_physical_note
+  - key: turn_budget
+    value: *id001
+  - key: duration_budget
+    value: *id002
+  - key: token_budget_total
+    value: *id003
+  scoring_checklist:
+  - id: zpe_h2o_eV
+    criterion: Scaled H2O ZPE is correctly computed.
+    axis: correctness
+    verify: numerical_range
+  - id: zpe_co2_eV
+    criterion: Scaled CO2 ZPE is correctly computed.
+    axis: correctness
+    verify: numerical_range
+  - id: delta_zpe_eV
+    criterion: ZPE difference ΔZPE is correctly computed.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report includes scaled frequencies, both ZPE values, ΔZPE, and a brief physically consistent interpretation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: All ZPE numbers are grounded in frequencies and scaling factor from case_bundle.json with explicit conversion.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_abacus_ext_005_20260409
+  capability: workflow_orchestration
+  domain: general
+  intent: Perform pre-run quality check on mock ABACUS input bundle and provide a prioritized fix plan.
+  human_prompt_seed: |
+    读取 `case_bundle.json`，其中包含一个待提交任务的输入文件摘要（INPUT/KPT/STRU 元信息）。
+
+    请完成：
+    1) 识别该输入包里会导致“无法直接稳定开跑”的关键问题数量；
+    2) 按优先级给出修复清单（每条说明“问题 -> 修改建议 -> 预期影响”）；
+    3) 给出“最小可运行修复集”（最少改动即可开始测试计算）。
+  tags:
+  - abacus
+  - input_prepare
+  - preflight_check
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: case_bundle
+    path: data/WO_abacus_ext_005_20260409/case_bundle.json
+    oss_url: ''
+    description: Mock problematic INPUT/KPT/STRU metadata for preflight diagnosis.
+  reference_answers:
+  - key: critical_issue_count
+    value: 3
+    tolerance: 0.1
+  - key: required_fields
+    value:
+    - issue_count
+    - prioritized_fix_list
+    - minimal_runnable_patch
+    - expected_effects
+  - key: turn_budget
+    value: *id001
+  - key: duration_budget
+    value: *id002
+  - key: token_budget_total
+    value: *id003
+  scoring_checklist:
+  - id: critical_issue_count
+    criterion: Correctly identifies the number of critical blocking issues in the provided bundle.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report includes prioritized fixes, minimal runnable patch, and expected effect of each change.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: All identified issues are traceable to explicit fields in case_bundle.json rather than generic checklist advice.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget

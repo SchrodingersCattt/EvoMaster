@@ -1,0 +1,20 @@
+{
+  "task": "bader_charge_analysis",
+  "systems": {
+    "NaCl": {
+      "average_bader_charge_e": {
+        "Na": 0.84,
+        "Cl": -0.84
+      },
+      "note": "Rocksalt NaCl reference."
+    },
+    "CoPt3": {
+      "average_bader_charge_e": {
+        "Co": 0.42,
+        "Pt": -0.18
+      },
+      "note": "L12 CoPt3 magnetic alloy reference."
+    }
+  },
+  "instruction_hint": "Use absolute values when comparing charge-transfer magnitude."
+}

@@ -1,0 +1,26 @@
+{
+  "task": "abacus_preflight_quality_check",
+  "input_summary": {
+    "calculation": "scf",
+    "basis_type": "",
+    "ecutwfc": 55,
+    "smearing_method": "gaussian",
+    "smearing_sigma": 0.001,
+    "kspacing": "0.10 0.10 0.10",
+    "gamma_only": 1
+  },
+  "kpt_summary": {
+    "present": false,
+    "mode": "missing"
+  },
+  "structure_summary": {
+    "system_type": "isolated_molecule",
+    "vacuum_axis": "all",
+    "spin_expected": "non_spin_polarized"
+  },
+  "known_blockers": [
+    "basis_type is empty",
+    "kpt file is missing while gamma_only setting is inconsistent with kspacing",
+    "molecule setup keeps dense periodic kspacing instead of gamma-only molecular style"
+  ]
+}
