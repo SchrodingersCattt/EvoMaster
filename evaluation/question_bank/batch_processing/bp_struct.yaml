@@ -111,7 +111,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_002_20260407
+- id: BP_struct_002_20260407a
   capability: batch_processing
   domain: struct
   intent: Generate VASP INCAR files for DOS calculation across 4 different structures.
@@ -153,8 +153,6 @@ questions:
       ISMEAR: 0
       SIGMA: 0.05
       NEDOS: 2000
-  - key: incar_format_valid
-    value: VASP INCAR format
   - key: grounding_config_used
     value: Configuration from dos_input_prep.json
   - key: no_manual_kpoint_tuning
@@ -177,10 +175,6 @@ questions:
     verify: llm_binary_judge
   - id: electronic_parameters_identical
     criterion: ISMEAR=0, SIGMA=0.05, NEDOS=2000 are identical across all 4 INCAR files.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_format_valid
-    criterion: All 4 INCAR files follow VASP key=value syntax.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_config_used

@@ -134,4 +134,41 @@ banks:
     capability: "workflow_orchestration"
     questions: 5
 
-# Total: 70 questions across 19 bank files
+  # --- Polymer projects ---
+  - path: "polymer/PM_proj_001_20260408.yaml"
+    capability: "workflow_orchestration"
+    questions: 1
+
+  - path: "polymer/PM_proj_002_20260408.yaml"
+    capability: "workflow_orchestration"
+    questions: 1
+
+  - path: "polymer/PM_proj_003_20260408.yaml"
+    capability: "workflow_orchestration"
+    questions: 1
+
+  - path: "polymer/PM_proj_004_20260408.yaml"
+    capability: "workflow_orchestration"
+    questions: 1
+
+  - path: "polymer/PM_proj_005_20260408.yaml"
+    capability: "workflow_orchestration"
+    questions: 1
+
+  - path: "polymer/PM_proj_006_20260408.yaml"
+    capability: "workflow_orchestration"
+    questions: 1
+
+  # --- Thermal / thermo-structural data fitting ---
+
+  - path: "data_fitting/df_thermo.yaml"
+    capability: "property_prediction"
+    questions: 1
+
+  # --- Single-crystal XRD structure solution & refinement ---
+
+  - path: "data_fitting/df_scxrd.yaml"
+    capability: "property_prediction"
+    questions: 2
+
+# Total: 94 questions across 28 bank files

@@ -216,6 +216,20 @@ def _is_non_retryable_tool_protocol_bad_request(err_str: str) -> bool:
     return any(pattern in text for pattern in patterns)
 
 
+def _is_non_retryable_content_shape_bad_request(err_str: str) -> bool:
+    text = err_str.lower()
+    return (
+        "invalid value for 'content'" in text
+        and "expected a string" in text
+        and "got null" in text
+    ) or (
+        "messages." in text
+        and ".content" in text
+        and "expected a string" in text
+        and "got null" in text
+    )
+
+
 class OpenAIProvider:
     """LLMProvider implementation backed by the OpenAI Python SDK.
 
@@ -574,7 +588,9 @@ class OpenAIProvider:
                 raise LLMError(
                     str(exc), retryable=False, error_category="context_overflow"
                 ) from exc
-            if _is_non_retryable_tool_protocol_bad_request(err_str):
+            if _is_non_retryable_tool_protocol_bad_request(
+                err_str
+            ) or _is_non_retryable_content_shape_bad_request(err_str):
                 raise LLMError(
                     str(exc), retryable=False, error_category="bad_request"
                 ) from exc

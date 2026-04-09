@@ -20,4 +20,5 @@ mcp_server: mat_sg
 ## add_hydrogens / passivation
 
 - Si/Ge surface passivation: target Si-H ≈ 1.48 Å along tetrahedral direction (~109.47°). Passivate **all** dangling bonds on **both** top and bottom surfaces.
-- After passivation, verify every surface atom reaches coordination 4. Report total H atoms added and a representative Si-H bond length.
+- After passivation: compute coordination numbers for ALL surface atoms (cutoff ~2.6 Å for Si). If ANY surface atom has coordination < 4, identify its dangling bonds and add missing H atoms. Iterate until every surface atom reaches coordination 4.
+- Save the passivated structure, then verify by re-reading and checking. Report: total H added, mean Si-H bond length, and confirmation that all surface Si atoms have coordination = 4.

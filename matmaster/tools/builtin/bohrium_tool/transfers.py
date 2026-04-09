@@ -368,6 +368,10 @@ def download_job_artifacts(
         )
     result_url = str(detail_data.get("resultUrl") or detail_data.get("result") or "")
     if not result_url:
+        out_files = (detail_data.get("jobFiles") or {}).get("outFiles") or []
+        if out_files and isinstance(out_files[0], dict):
+            result_url = out_files[0].get("url", "")
+    if not result_url:
         return [], "(no resultUrl in job detail)"
 
     zip_path = result_dir / "out.zip"

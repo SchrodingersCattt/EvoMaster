@@ -17,6 +17,8 @@ import requests
 import matmaster.tools.builtin.bohrium_tool as bohrium_module
 import matmaster.tools.builtin.bohrium_tool.api as bohrium_api_module
 import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
+from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
+from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.builtin.bohrium_tool.api import use_sandbox
 from matmaster.tools.tool_result import ToolResult
@@ -27,6 +29,38 @@ from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
     _install_fake_tiefblue,
     _patch_bridge,
 )
+
+
+def _session_with_runtime(
+    *,
+    access_key: str = "session-ak",
+    project_id: int = 42,
+) -> SimpleNamespace:
+    session = SimpleNamespace(is_open=True)
+    attach_runtime(
+        session,
+        BohriumRuntimeHandle(
+            credentials=BohriumCredentials(
+                access_key=access_key,
+                project_id=project_id,
+                user_id=7,
+                user_no="U001",
+                base_url="https://openapi.test.dp.tech",
+            ),
+            execution=BohriumExecutionContext(
+                session_type="ssh",
+                execution_workdir="/share",
+                remote_workspace_root="/share",
+                remote_project_root="/share/.matmaster",
+                node_id=1,
+                node_ip="10.0.0.1",
+                ssh_attached=True,
+            ),
+            execution_session=session,
+        ),
+    )
+    return session
+
 
 # ---------------------------------------------------------------------------
 # TestBohriumMetadata
@@ -42,11 +76,11 @@ class TestBohriumMetadata:
         assert module_path.name == "__init__.py"
         assert module_path.parent.name == "bohrium_tool"
 
-    def test_poll_schema_exposes_wait_fields(self):
+    def test_poll_schema_has_no_wait_fields(self):
         properties = BohriumTool.json_schema["properties"]
-        assert properties["wait"]["type"] == "boolean"
-        assert properties["max_wait_seconds"]["type"] == "integer"
-        assert properties["poll_interval_seconds"]["type"] == "integer"
+        assert "wait" not in properties
+        assert "max_wait_seconds" not in properties
+        assert "poll_interval_seconds" not in properties
 
     def test_prompt_mentions_list_actions(self, tmp_path):
         tool = BohriumTool(workdir=tmp_path)
@@ -72,7 +106,7 @@ class TestBohriumMetadata:
         tool = BohriumTool(workdir=tmp_path)
         prompt = tool.prompt()
         assert prompt is not None
-        assert "single query" in prompt
+        assert "single-shot" in prompt
         assert 'action="download"' in prompt
         assert "does not download artifacts" in prompt
 
@@ -787,10 +821,7 @@ class TestBohriumSessionCredentials:
         monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
         monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
 
-        session = SimpleNamespace(
-            _bohrium_credentials={"access_key": "session-ak", "project_id": 42},
-            is_open=True,
-        )
+        session = _session_with_runtime()
         tool = BohriumTool(session=session, workdir=tmp_path)
 
         get_calls = []
@@ -834,10 +865,7 @@ class TestBohriumSessionCredentials:
         input_dir.mkdir()
         (input_dir / "input.inp").write_text("data", encoding="utf-8")
 
-        session = SimpleNamespace(
-            _bohrium_credentials={"access_key": "session-ak", "project_id": 42},
-            is_open=True,
-        )
+        session = _session_with_runtime()
         tool = BohriumTool(session=session, workdir=tmp_path)
 
         post_calls = []

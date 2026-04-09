@@ -23,6 +23,7 @@ from .evaluator_batch_checks import (
 from .evaluator_helpers import (
     build_llm_context,
     build_safety_eval_record,
+    check_checkcif_alerts,
     check_duration_budget,
     check_molcrys_local_env_from_evidence,
     check_molcrys_slab_integrity,
@@ -475,6 +476,12 @@ class BinaryEvaluator:
                 return False, 'missing reference answer'
             return check_molcrys_local_env_from_evidence(evidence=evidence, ref=ref)
 
+        # --- checkcif_no_a_alerts: IUCr checkCIF web service ---
+        if item.verify == 'checkcif_no_a_alerts':
+            if ref is None:
+                return False, 'missing reference answer'
+            return check_checkcif_alerts(evidence=evidence, ref=ref)
+
         # --- struct_file_* programmatic structure checks ---
         _STRUCT_FILE_DISPATCH = {
             'struct_file_atom_count': check_struct_file_atom_count,
@@ -911,6 +918,8 @@ class BinaryEvaluator:
 
     @staticmethod
     def _extract_numbers(text: str) -> list[float]:
+        # Normalise Unicode minus (U+2212) to ASCII hyphen-minus before extraction
+        text = text.replace('\u2212', '-')
         pattern = r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?'
         numbers: list[float] = []
         for raw in re.findall(pattern, text):

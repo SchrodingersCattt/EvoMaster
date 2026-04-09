@@ -1,6 +1,6 @@
 """Session credential -> script environment bridge.
 
-Env injection for shell commands. The runtime bridge resolves credentials;
+Env injection for shell commands. The Bohrium runtime resolves credentials;
 this module handles wrapping commands with export statements.
 """
 
@@ -61,14 +61,13 @@ def inject_env(cmd: str, env: dict[str, str], session: Any) -> str:
 
 
 def inject(cmd: str, session: Any) -> str:
-    """Wrap shell command with session credentials as env vars.
+    """Wrap shell command with runtime-backed env vars when available."""
+    from matmaster.bohrium.runtime import get_runtime
 
-    Uses the runtime bridge to resolve Bohrium credentials.
-    Returns cmd unchanged if no credentials found.
-    """
-    from matmaster.integration.runtime_bridge import build_service_env
-
-    env = build_service_env("bohrium", session=session)
+    runtime = get_runtime(session)
+    if runtime is None:
+        return cmd
+    env = runtime.build_env()
     return inject_env(cmd, env, session)
 
 

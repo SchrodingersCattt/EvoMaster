@@ -1,0 +1,91 @@
+from __future__ import annotations
+
+import logging
+from collections.abc import Iterable
+from typing import Any
+
+from matmaster.response_text import is_trivial_response_text
+from matmaster.types.errors import LLMError
+from matmaster.types.messages import AssistantMessage, Message
+
+logger = logging.getLogger(__name__)
+
+_OPENAI_COMPATIBLE_ROLES = {"system", "user", "assistant", "tool"}
+
+
+def _message_to_api_dict(message: Message | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(message, Message):
+        return message.to_api_dict()
+    return dict(message)
+
+
+def _is_assistant_like_payload(raw: Any) -> bool:
+    return (
+        isinstance(raw, dict)
+        and raw.get("role") == "assistant"
+        and any(key in raw for key in ("content", "tool_calls", "reasoning_content"))
+    )
+
+
+def normalize_messages_for_openai(
+    messages: Iterable[Message | dict[str, Any]],
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    changed_indices: list[int] = []
+
+    for idx, message in enumerate(messages):
+        payload = _message_to_api_dict(message)
+        if "content" not in payload or payload.get("content") is None:
+            payload["content"] = ""
+            changed_indices.append(idx)
+        normalized.append(payload)
+
+    if changed_indices:
+        logger.debug(
+            "Normalized outbound OpenAI-compatible messages with empty-string content at indices=%s",
+            changed_indices,
+        )
+
+    return normalized
+
+
+def validate_openai_messages(messages: list[dict[str, Any]]) -> None:
+    for idx, message in enumerate(messages):
+        role = message.get("role")
+        if role not in _OPENAI_COMPATIBLE_ROLES:
+            raise LLMError(
+                f"Unsupported outbound message role at index {idx}: {role!r}",
+                retryable=False,
+                error_category="payload_validation",
+            )
+
+        content = message.get("content")
+        if not isinstance(content, str):
+            raise LLMError(
+                f"Outbound message content must be string at index {idx}, got {type(content).__name__}",
+                retryable=False,
+                error_category="payload_validation",
+            )
+
+
+def restore_persisted_assistant_state(raw: Any) -> AssistantMessage:
+    if isinstance(raw, dict) and isinstance(raw.get("state"), dict):
+        candidate = dict(raw["state"])
+    elif _is_assistant_like_payload(raw):
+        candidate = dict(raw)
+    else:
+        raise ValueError(
+            f"assistant_state payload is not restorable: {type(raw).__name__}"
+        )
+
+    if (
+        isinstance(candidate.get("tool_calls"), list)
+        and candidate["tool_calls"]
+        and is_trivial_response_text(candidate.get("content"))
+    ):
+        candidate["content"] = None
+
+    if not _is_assistant_like_payload(candidate):
+        raise ValueError("assistant_state payload must describe an assistant message")
+
+    return AssistantMessage.model_validate(candidate)

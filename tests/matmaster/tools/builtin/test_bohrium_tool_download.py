@@ -190,7 +190,7 @@ class TestBohriumDownloadExecution:
         assert payload['status'] == 'Failed'
         assert payload['files'] == ['log']
         assert payload['log_tail'] == 'boom\n'
-        assert sleep_calls == [3, 3]
+        assert sleep_calls == []
 
     def test_download_remote_share_stages_and_uploads(self, tmp_path, monkeypatch):
         session = FakeRemoteSession(is_open=True)
@@ -418,4 +418,4 @@ class TestBohriumDownloadExecution:
             encoding='utf-8'
         ) == 'warning details\n'
         assert (result_dir / 'bader_bin').read_bytes() == b'binary'
-        assert sleep_calls == [3, 3]
+        assert sleep_calls == []

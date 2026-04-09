@@ -66,6 +66,8 @@ VerifyLiteral = Literal[
     'struct_file_count',
     # surface termination check
     'struct_file_surface_termination',
+    # IUCr checkCIF web service (single-crystal XRD validation)
+    'checkcif_no_a_alerts',
     # plain-text file checks
     'text_file_contains_all',
     'text_file_regex',
@@ -95,6 +97,8 @@ DomainLiteral = Literal[
     'optical',
     'general',
     'incar',
+    'scxrd',
+    'polymer',
 ]
 
 

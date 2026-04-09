@@ -1,5 +1,10 @@
 """Deterministic validators for MATTER evaluation (optional heavy deps)."""
 
+from .checkcif import (
+    CheckCIFResult,
+    check_checkcif_no_a_alerts,
+    run_checkcif,
+)
 from .structure_general import (
     check_atom_count,
     check_bond_angle,
@@ -22,6 +27,10 @@ from .structure_molcrys import (
 from .text_file import check_text_file_contains_all, check_text_file_regex
 
 __all__ = [
+    # checkcif (IUCr web service)
+    'CheckCIFResult',
+    'check_checkcif_no_a_alerts',
+    'run_checkcif',
     # structure_general (pymatgen-backed + file-system)
     'check_atom_count',
     'check_bond_angle',
