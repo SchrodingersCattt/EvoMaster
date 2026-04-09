@@ -59,7 +59,8 @@ uv run python scripts/diagnose_input.py --software abacus --input INPUT
 
 **After generation and diagnosis:**
 - Place INPUT, STRU, KPT, pseudopotentials, and orbital files in one directory.
-- Submit via `bohrium-job` skill with `submit_job.py --input-dir <dir> --image registry.dp.tech/dptech/abacus:3.7.5 --cmd "OMP_NUM_THREADS=4 mpirun -np 8 abacus > log 2>&1"`.
+- Submit via `bohrium-job` skill with `submit_job.py --input-dir <dir> --image registry.dp.tech/dptech/abacus:LTSv3.10.1 --cmd "OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1"`.
+  (Use half the CPU core count for `-np`; e.g. 32-core machine → `mpirun -np 16`.)
 
 ### CP2K, QE, ABINIT, LAMMPS, ORCA input generation (render_input.py + diagnose_input.py)
 

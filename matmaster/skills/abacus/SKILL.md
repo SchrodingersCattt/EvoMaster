@@ -10,6 +10,8 @@ ABACUS (Atomic-orbital Based Ab-initio Computation at UStc) is an open-source DF
 
 **Action rule**: when the user asks you to generate ABACUS input files (INPUT, STRU, KPT), **always use the Write tool** to create the files in the working directory. Read any provided STRU files first, then Write all requested output files. Do not stop after only reading files.
 
+**Efficiency rule**: Be concise — write input files directly with minimal preamble. Do NOT explain each parameter line-by-line or repeat file contents in prose. After writing all files, a brief summary (2-4 sentences) of key settings is sufficient. Lengthy explanations waste tokens without adding value.
+
 ## Bohrium Submission Config
 
 | Item | Default Value |
@@ -101,6 +103,32 @@ If the user provides complete INPUT + STRU + KPT files with pseudopotentials and
 | md | `calculation md` | `task_md_nvt.INPUT` | NVT molecular dynamics |
 
 > When generating INPUT files, write the calculation keyword exactly as shown: `calculation scf`, `calculation cell-relax`, etc. with single space. Include `efield_flag 1` and `dip_cor_flag 1` when dipole correction is needed.
+
+### Mandatory Parameters Checklist
+
+Before completing ANY ABACUS input file, verify ALL applicable parameters are present. Omitting any produces an incomplete input:
+
+| Parameter | When Required | Value |
+|-----------|---------------|-------|
+| `scf_thr` | **Every INPUT** | `1e-7` (standard); `1e-8` (force/stress sensitive) |
+| `scf_nmax` | **Every INPUT** | `100` (standard); `200` (magnetic/difficult) |
+| `smearing_method` | Metals, slabs, magnetic, transition metals | `gauss` — use for all metallic/magnetic systems; `fixed` only for wide-gap insulators |
+| `smearing_sigma` | Whenever smearing ≠ fixed | `0.01`–`0.015` Ry |
+| `ecutwfc` | **Every INPUT** | PW: 60–100 Ry. LCAO: 50–100 Ry production; **20–30 Ry is acceptable for LCAO** quick tests / BSSE comparisons (auxiliary grid only) |
+| `cal_force` | relax / cell-relax / md | `1` |
+| `cal_stress` | cell-relax | `1` |
+| `out_stru` | relax / cell-relax | `1` |
+| `relax_nmax` | relax / cell-relax | `100` (or `200`) |
+| `nspin` | Magnetic systems (Fe, Co, Ni, Mn, Cr…) | `2` |
+| `mixing_beta` | Magnetic metals | `0.1`–`0.4` (not default 0.7) |
+| `mixing_ndim` | Magnetic metals | `20` |
+| `mixing_gg0` | Magnetic metals | `1.5` |
+| `nbands` | nscf (band/DOS) | Explicit value ≥ nelec/2 + 20 (e.g. `40` for Si) |
+| `out_band` | Band structure | `1` |
+| `out_dos` | DOS calculation | `1` |
+| `out_pot` | Work function / electrostatic potential | `2` |
+| `out_chg` | SCF step preceding nscf | `1` |
+| `init_chg` | nscf step (band/DOS) | `file` |
 
 ## STRU File Format (Detailed)
 
@@ -259,8 +287,13 @@ INPUT_PARAMETERS
 nspin 2
 ```
 - Set initial magnetic moments per species in the STRU file's ATOMIC_POSITIONS block (e.g. `2.0` for Fe, `0.0` for non-magnetic species).
-- For difficult convergence, reduce `mixing_beta` (e.g. `0.1`-`0.4`) and increase `mixing_ndim` (e.g. `20`).
-- Optional: `mixing_gg0 1.5` can help convergence for magnetic metals by enhancing long-wavelength mixing.
+- For magnetic metals, **always** set these three mixing parameters together (they are NOT optional for magnetic systems):
+  ```
+  mixing_beta 0.1
+  mixing_ndim 20
+  mixing_gg0 1.5
+  ```
+  `mixing_beta 0.1`–`0.4` prevents charge oscillation; `mixing_ndim 20` stores more history; `mixing_gg0 1.5` enhances long-wavelength mixing critical for magnetic metals. Omitting these risks SCF non-convergence.
 - `smearing_method gauss` or `smearing_method gaussian` (both accepted) with `smearing_sigma 0.01` is typical for metals.
 
 ## Band Structure for 1D/2D Systems
@@ -275,7 +308,18 @@ Line
 0.000  0.000  0.000  100  // Gamma
 0.000  0.500  0.000  1    // Y (endpoint)
 ```
-Use `Line` mode with dense interpolation (80-120 points). The k-path follows the periodic direction only.
+Use `Line` mode with dense interpolation (80-120 points per segment). The k-path follows the periodic direction only. For a nanoribbon periodic along y: Gamma (0,0,0) → Y (0,0.5,0). For periodic along x: Gamma → X (0.5,0,0). For periodic along z: Gamma → Z (0,0,0.5).
+
+**KPT for 2D materials** (graphene, MoS₂, hexagonal BZ):
+```
+K_POINTS
+4
+Line
+0.000  0.000  0.000  40  // Gamma
+0.500  0.000  0.000  40  // M
+0.333  0.333  0.000  40  // K
+0.000  0.000  0.000  1   // Gamma (endpoint)
+```
 
 **Band structure workflow** (two-step):
 1. SCF step: `calculation scf` with standard KPT (Monkhorst-Pack grid or `kspacing`).
@@ -303,10 +347,15 @@ Generate INPUT for each component:
 - Use consistent `basis_type pw`, `ecutwfc`, `smearing_method`, `smearing_sigma` across all.
 
 ### KPT for Slab Calculations
-- In-plane directions: use dense mesh matching the periodicity (e.g. `12 12` or `20 20` for metals).
-- Vacuum direction: **always `1`** (single k-point; no periodicity).
-- Example: `20 20 1 0 0 0` for an fcc(100) slab.
-- For `kspacing` mode: use large kspacing (~1.0) in the vacuum direction, normal kspacing (~0.10-0.15) in periodic directions.
+- In-plane directions: use dense mesh matching periodicity. **Minimum `12 12` for metals**; `20 20` for accurate surface energy.
+- Vacuum direction: **always `1`** (single k-point; no periodicity). This is critical — never use more than 1 k-point in the vacuum direction.
+- Example KPT file: `20 20 1 0 0 0` for an fcc(100) slab.
+- For `kspacing` mode: ABACUS accepts **three separate values** (`kspacing kx ky kz`). For slabs, use normal kspacing in periodic directions and a **large value (≥ 0.5)** in the vacuum direction:
+  ```
+  kspacing 0.10 0.10 1.00    # slab with vacuum along z
+  ```
+  For uniform bulk: `kspacing 0.10` (single value applies to all three directions equally).
+- For bulk vacancy supercells: use uniform kspacing, e.g. `kspacing 0.10` or equivalent Monkhorst-Pack grid matching the supercell size.
 
 ## Required Files
 

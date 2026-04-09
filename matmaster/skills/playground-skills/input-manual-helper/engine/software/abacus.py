@@ -429,6 +429,7 @@ class AbacusBackend(SoftwareBackend):
                 {
                     "calculation": "nscf",
                     "nbands": 20,
+                    "init_chg": "file",
                     "out_band": 1,
                 }
             )
@@ -437,6 +438,7 @@ class AbacusBackend(SoftwareBackend):
                 {
                     "calculation": "nscf",
                     "nbands": 20,
+                    "init_chg": "file",
                     "out_dos": 1,
                     "dos_sigma": 0.07,
                     "dos_edelta_ev": 0.01,
