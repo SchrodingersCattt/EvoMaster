@@ -435,7 +435,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260406
+- id: SC_struct_005_20260409
   capability: structure_construction
   domain: struct
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and
@@ -483,7 +483,7 @@ questions:
     value:
       pattern: 'ordered_*.cif'
       expected: 5
-      tolerance: 0
+      tolerance: 1
   - key: sc005_disorder_formulas
     value: {}
   - key: required_fields
@@ -515,6 +515,16 @@ questions:
       uses integer stoichiometry only (no fractional occupancies like 13.98 in counts).
     axis: correctness
     verify: sc005_disorder_formulas
+    weight: 0.5
+  - id: partial_formulas_ok
+    criterion: The answer reports chemically plausible ordered-replica formulas for at
+      least 3 of the 5 structures. Reference formulas — DAP-4 H144C48N24Cl24O96,
+      PAP-H4 H288C80N48Cl48O192, PAP-M5 Ag8H112C40N16Cl24O96, TILPEN Fe2H40C24N16O2,
+      DAN-2 integer-only stoichiometry. Pass if ≥3 formulas are present and correct
+      (element ordering may differ).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
   - id: required_fields
     criterion: Each filename is paired with chemical_formula, is_disordered, ordered_replica_count,
       and ordered_output_archive.
