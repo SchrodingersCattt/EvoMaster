@@ -110,6 +110,59 @@ class _KernelStopRequested(Exception):
 class AgentKernel:
     """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""
 
+    @staticmethod
+    def _build_base_snapshot(messages: list[Message]) -> list[dict[str, Any]]:
+        return [message.model_dump(mode="json") for message in messages[1:]]
+
+    async def _drain_compactor_events(
+        self,
+        *,
+        spec: AgentRuntimeSpec,
+        compactor_events: deque[tuple[Any, int, int, list[dict[str, Any]] | None]],
+        checkpoint_sink: Any,
+    ) -> AsyncIterator[_KernelItem]:
+        while compactor_events:
+            (
+                compaction_event,
+                messages_before,
+                messages_after,
+                base_snapshot,
+            ) = compactor_events.popleft()
+            payload = getattr(compaction_event, "payload", {}) or {}
+            is_durable = payload.get("durability") == "durable"
+            if is_durable and callable(checkpoint_sink) and base_snapshot is not None:
+                payload["checkpoint_attempted"] = True
+                payload["checkpoint_written"] = False
+                payload["failure_reason"] = None
+            yield _KernelItem(event=compaction_event)
+            if spec.hook_executor is not None and hasattr(compaction_event, "payload"):
+                await spec.hook_executor.emit(
+                    HookEvent.CONTEXT_COMPACTION,
+                    CompactionContext(
+                        messages_before=messages_before,
+                        messages_after=messages_after,
+                        trigger_tokens=payload.get("trigger_tokens", 0),
+                        strategy=payload.get("strategy", "unknown"),
+                    ),
+                )
+            if is_durable and callable(checkpoint_sink) and base_snapshot is not None:
+                try:
+                    await checkpoint_sink(
+                        payload=payload,
+                        base_messages=base_snapshot,
+                    )
+                except Exception as exc:
+                    payload["checkpoint_written"] = False
+                    payload["failure_reason"] = str(exc)
+                    logger.warning(
+                        "checkpoint sink failed for compaction event strategy=%s",
+                        payload.get("strategy", "unknown"),
+                        exc_info=True,
+                    )
+                else:
+                    payload["checkpoint_written"] = True
+                    payload["failure_reason"] = None
+
     async def run_stream(
         self,
         spec: AgentRuntimeSpec,
@@ -255,18 +308,35 @@ class AgentKernel:
             ]
         )
 
-        compactor_events: deque[tuple[Any, int, int]] = deque()
+        checkpoint_sink = spec.meta.get("checkpoint_sink")
+        compactor_events: deque[tuple[Any, int, int, list[dict[str, Any]] | None]] = (
+            deque()
+        )
         compaction_prev_count = len(state.messages)
 
         async def _compactor_sink(event: Any) -> None:
             nonlocal compaction_prev_count
             messages_after = len(state.messages)
-            compactor_events.append((event, compaction_prev_count, messages_after))
+            payload = getattr(event, "payload", {}) or {}
+            base_snapshot = None
+            if payload.get("durability") == "durable":
+                base_snapshot = self._build_base_snapshot(state.messages)
+            compactor_events.append(
+                (event, compaction_prev_count, messages_after, base_snapshot)
+            )
             compaction_prev_count = messages_after
 
         if spec.compactor:
             spec.compactor._event_sink = _compactor_sink
             spec.compactor.update_message_count(len(state.messages))
+            compaction_prev_count = len(state.messages)
+            await spec.compactor.preflight_if_needed(state.messages)
+            async for item in self._drain_compactor_events(
+                spec=spec,
+                compactor_events=compactor_events,
+                checkpoint_sink=checkpoint_sink,
+            ):
+                yield item
 
         turn_usage: dict[str, int] = {}
 
@@ -282,26 +352,12 @@ class AgentKernel:
                 await spec.compactor.compact_if_needed(
                     state.messages, turn_usage, state.turn
                 )
-                while compactor_events:
-                    (
-                        compaction_event,
-                        messages_before,
-                        messages_after,
-                    ) = compactor_events.popleft()
-                    yield _KernelItem(event=compaction_event)
-                    if spec.hook_executor is not None and hasattr(
-                        compaction_event, "payload"
-                    ):
-                        payload = getattr(compaction_event, "payload", {}) or {}
-                        await spec.hook_executor.emit(
-                            HookEvent.CONTEXT_COMPACTION,
-                            CompactionContext(
-                                messages_before=messages_before,
-                                messages_after=messages_after,
-                                trigger_tokens=payload.get("trigger_tokens", 0),
-                                strategy=payload.get("strategy", "unknown"),
-                            ),
-                        )
+                async for item in self._drain_compactor_events(
+                    spec=spec,
+                    compactor_events=compactor_events,
+                    checkpoint_sink=checkpoint_sink,
+                ):
+                    yield item
 
             # ── Tool definitions resolution (version-aware caching) ──
             if (

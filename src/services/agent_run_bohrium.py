@@ -355,6 +355,11 @@ class BohriumSetupService:
         - 'error' -> ErrorEvent + StreamClosedEvent
         - 'stream_closed' -> StreamClosedEvent
         - all others -> BohriumNodeEvent
+
+        The sink is responsible for the actual thread handoff. In production,
+        AgentRunService injects fanout.dispatch_from_thread(), so the bridge
+        builds BusEvent objects in the worker thread and fanout owns the single
+        call_soon_threadsafe hop onto the run loop.
         """
         from matmaster.types.events import (
             BohriumNodeEvent,
@@ -366,46 +371,43 @@ class BohriumSetupService:
         assert sink is not None  # noqa: S101 -- caller guarantees
 
         def _cb(source: Any, event_type: str, content: Any, **extra: Any) -> None:
-            def _do_emit() -> None:
-                try:
-                    if event_type == 'error':
-                        msg = content if isinstance(content, str) else str(content)
-                        sink(ErrorEvent(source=str(source), message=msg))
-                        sink(
-                            StreamClosedEvent(
-                                source=str(source),
-                                end_reason='error',
-                                task_completed=False,
-                                treat_as_failure=True,
-                            )
-                        )
-                        return
-                    if event_type == 'stream_closed':
-                        body = '' if content is None else str(content)
-                        sink(
-                            StreamClosedEvent(
-                                source=str(source),
-                                content=body,
-                                task_completed=False,
-                                end_reason='error',
-                                treat_as_failure=True,
-                            )
-                        )
-                        return
+            try:
+                if event_type == 'error':
+                    msg = content if isinstance(content, str) else str(content)
+                    sink(ErrorEvent(source=str(source), message=msg))
                     sink(
-                        BohriumNodeEvent(
+                        StreamClosedEvent(
                             source=str(source),
-                            payload={
-                                'type': event_type,
-                                'content': content,
-                                **extra,
-                            },
+                            end_reason='error',
+                            task_completed=False,
+                            treat_as_failure=True,
                         )
                     )
-                except Exception:
-                    logger.debug('bohrium event bridge error type=%s', event_type)
-
-            loop.call_soon_threadsafe(_do_emit)
+                    return
+                if event_type == 'stream_closed':
+                    body = '' if content is None else str(content)
+                    sink(
+                        StreamClosedEvent(
+                            source=str(source),
+                            content=body,
+                            task_completed=False,
+                            end_reason='error',
+                            treat_as_failure=True,
+                        )
+                    )
+                    return
+                sink(
+                    BohriumNodeEvent(
+                        source=str(source),
+                        payload={
+                            'type': event_type,
+                            'content': content,
+                            **extra,
+                        },
+                    )
+                )
+            except Exception:
+                logger.debug('bohrium event bridge error type=%s', event_type)
 
         return _cb
 

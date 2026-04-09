@@ -15,7 +15,7 @@ import inspect
 import json
 from contextlib import asynccontextmanager
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -139,7 +139,10 @@ def _standard_patches():
         patch('src.services.agent_run_service.WorkspaceHandler'),
         patch('src.services.agent_run_service.BohriumSetupService'),
         patch('src.services.agent_run_service.derive_skill_sync_spec'),
-        patch('src.services.agent_run_service.ChatHistoryConverter'),
+        patch(
+            'src.services.agent_run_service.HistoryRestoreService',
+            create=True,
+        ),
         patch('src.services.agent_run_service.get_redis_dao'),
         patch('src.services.agent_run_service.use_quota', new_callable=AsyncMock),
         patch(
@@ -167,7 +170,7 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         workspace_handler_cls = mocks[4]
         bohrium_cls = mocks[5]
         mocks[6]
-        history_cls = mocks[7]
+        history_restore_cls = mocks[7]
         redis_fn = mocks[8]
 
         # PlaygroundManager mock
@@ -213,10 +216,10 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         bohrium_inst.run_cleanup = AsyncMock()
         bohrium_cls.return_value = bohrium_inst
 
-        # ChatHistory mock
-        history_cls.exclude_spawn_events.return_value = []
-        history_cls.exclude_task_events.return_value = []
-        history_cls.events_to_messages.return_value = []
+        # HistoryRestoreService mock
+        history_restore_inst = MagicMock()
+        history_restore_inst.restore_history.return_value = []
+        history_restore_cls.return_value = history_restore_inst
 
         # Redis mock
         redis_mock = MagicMock()
@@ -320,6 +323,70 @@ async def test_run_agent_injects_event_sink_into_pg_ctx_run_meta():
     injected = svc._test_fake_exp.last_ctx.run_meta['event_sink']
     assert callable(injected)
     assert svc._test_fake_exp.last_ctx.run_meta['task_id'] == 'task-1'
+
+
+@pytest.mark.asyncio
+async def test_run_agent_uses_history_restore_service_and_injects_spawn_aware_checkpoint_factory():
+    run_result = RunResultEvent(source='agent', status='completed', reason='natural')
+    restored_history = [MagicMock(name='restored_message')]
+    checkpoint_sink = AsyncMock(name='checkpoint_sink')
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        with (
+            patch(
+                'src.services.agent_run_service.HistoryRestoreService',
+                create=True,
+            ) as restore_cls,
+            patch(
+                'src.services.agent_run_service.HistoryCheckpointService',
+                create=True,
+            ) as checkpoint_cls,
+        ):
+            restore_inst = MagicMock()
+            restore_inst.restore_history.return_value = restored_history
+            restore_cls.return_value = restore_inst
+
+            checkpoint_inst = MagicMock()
+            checkpoint_inst.build_checkpoint_sink.return_value = checkpoint_sink
+            checkpoint_cls.return_value = checkpoint_inst
+
+            ok, _elapsed = await svc.run_agent(
+                session_id='sess-1',
+                user_prompt='hello',
+                send_cb=AsyncMock(),
+                cancel_token=_make_cancel_token(),
+                mode='direct',
+                task_id='task-1',
+                invocation_id='inv-1',
+            )
+
+        assert ok is True
+        restore_cls.assert_called_once_with(svc._test_events_table)
+        restore_inst.restore_history.assert_called_once_with(
+            session_id='sess-1',
+            spawn_id=None,
+            task_id='task-1',
+            raw_limit=ANY,
+        )
+        assert svc._test_fake_exp.last_run_kwargs is not None
+        assert svc._test_fake_exp.last_run_kwargs['history'] == restored_history
+
+        checkpoint_cls.assert_called_once_with(svc._test_events_table)
+        checkpoint_sink_factory = svc._test_fake_exp.last_ctx.run_meta[
+            'checkpoint_sink_factory'
+        ]
+        assert callable(checkpoint_sink_factory)
+
+        built_sink = checkpoint_sink_factory(spawn_id='spawn-child-1')
+
+        checkpoint_inst.build_checkpoint_sink.assert_called_once_with(
+            fanout=ANY,
+            session_id='sess-1',
+            task_id='task-1',
+            invocation_id='inv-1',
+            spawn_id='spawn-child-1',
+        )
+        assert built_sink is checkpoint_sink
 
 
 def test_run_agent_injects_bohrium_rebuild_events_into_pg_ctx_run_meta():
@@ -515,7 +582,7 @@ async def test_exception_emits_error_and_closed():
         persistence_handler_cls = mocks[3]
         workspace_handler_cls = mocks[4]
         bohrium_cls = mocks[5]
-        history_cls = mocks[7]
+        history_restore_cls = mocks[7]
         redis_fn = mocks[8]
 
         pg_ctx = _make_mock_pg_ctx()
@@ -556,9 +623,9 @@ async def test_exception_emits_error_and_closed():
         bohrium_inst.run_cleanup = AsyncMock()
         bohrium_cls.return_value = bohrium_inst
 
-        history_cls.exclude_spawn_events.return_value = []
-        history_cls.exclude_task_events.return_value = []
-        history_cls.events_to_messages.return_value = []
+        history_restore_inst = MagicMock()
+        history_restore_inst.restore_history.return_value = []
+        history_restore_cls.return_value = history_restore_inst
         redis_fn.return_value = MagicMock()
         events_table_fn.return_value = MagicMock()
 
