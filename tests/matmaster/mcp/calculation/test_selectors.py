@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from matmaster.adaptors.calculation.path_selectors import (
+from matmaster.mcp.calculation.selectors import (
     collect_path_selectors,
     is_output_like_path_name,
     rewrite_selected_paths,

@@ -10,6 +10,7 @@ all tests exercise run_agent() exclusively.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 from contextlib import asynccontextmanager
@@ -245,6 +246,7 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
             svc._pg_manager = pg_mgr
             svc._test_fake_exp = fake_exp
             svc._test_pg_ctx = pg_ctx
+            svc._test_events_table = events_table_fn.return_value
 
             yield svc, sse_received, persist_received
 
@@ -318,6 +320,41 @@ async def test_run_agent_injects_event_sink_into_pg_ctx_run_meta():
     injected = svc._test_fake_exp.last_ctx.run_meta['event_sink']
     assert callable(injected)
     assert svc._test_fake_exp.last_ctx.run_meta['task_id'] == 'task-1'
+
+
+def test_run_agent_injects_bohrium_rebuild_events_into_pg_ctx_run_meta():
+    run_result = RunResultEvent(source='agent', status='completed', reason='natural')
+    rebuild_events = [
+        {
+            'action': 'submit',
+            'job_id': 'job-1',
+            'job_name': 'alpha',
+            'status': 'Submitted',
+            'cached': False,
+        }
+    ]
+
+    async def _run() -> tuple[Any, Any]:
+        async with _patched_service([run_result]) as (svc, _sse, _persist):
+            svc._test_events_table.get_bohrium_events.return_value = rebuild_events
+
+            ok, _elapsed = await svc.run_agent(
+                session_id='sess-1',
+                user_prompt='hello',
+                send_cb=AsyncMock(),
+                cancel_token=_make_cancel_token(),
+                mode='direct',
+                task_id='task-1',
+            )
+            return svc, ok
+
+    svc, ok = asyncio.run(_run())
+
+    assert ok is True
+    svc._test_events_table.get_bohrium_events.assert_called_once_with('sess-1')
+    assert (
+        svc._test_fake_exp.last_ctx.run_meta['bohrium_rebuild_events'] == rebuild_events
+    )
 
 
 @pytest.mark.asyncio

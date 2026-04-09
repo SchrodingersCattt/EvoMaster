@@ -130,6 +130,7 @@ class TestBohriumSetupLifecycle:
             execution_session=None,
             execution_workdir="/remote/exec/wd",
             session_type=None,
+            runtime_snapshot=None,
         )
 
         with (

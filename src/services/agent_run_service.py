@@ -243,8 +243,11 @@ class AgentRunService:
             ssh_attached = bohrium_result.ssh_attached
             if bohrium_result.abort_result is not None:
                 return bohrium_result.abort_result
-            bohrium_meta = dict(bohrium_result._asdict())
-            bohrium_meta.pop('execution_session', None)
+            bohrium_meta = (
+                bohrium_result.runtime_snapshot.model_dump()
+                if bohrium_result.runtime_snapshot is not None
+                else {}
+            )
             pg_ctx = pg_ctx.with_bohrium(bohrium_meta)
             if bohrium_result.execution_session is not None:
                 execution_workdir = bohrium_result.execution_workdir or ''
@@ -346,6 +349,24 @@ class AgentRunService:
             history = ChatHistoryConverter.events_to_messages(
                 ChatHistoryConverter.exclude_task_events(parent_events, task_id)
             )
+            bohrium_rebuild_events: list[dict] = []
+            try:
+                if events_table is not None:
+                    bohrium_rebuild_events = events_table.get_bohrium_events(session_id)
+            except Exception:
+                logger.warning(
+                    'Failed to load Bohrium events for registry rebuild',
+                    exc_info=True,
+                )
+            if bohrium_rebuild_events:
+                pg_ctx = pg_ctx.model_copy(
+                    update={
+                        'run_meta': {
+                            **pg_ctx.run_meta,
+                            'bohrium_rebuild_events': bohrium_rebuild_events,
+                        }
+                    }
+                )
 
             # -- Stage 6: Generator event stream --
             run_result_event = None

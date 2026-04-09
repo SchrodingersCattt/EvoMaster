@@ -8,12 +8,12 @@ from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
 
 
 class _ActorConnector:
-    def __init__(self, path_adaptor=None, *, session=None):
+    def __init__(self, calculation_preflight=None, *, session=None):
         self.workspace_path = "/fake/workspace"
         self.session = session
-        self.path_adaptor = path_adaptor
+        self.calculation_preflight = calculation_preflight
         self.call_tool = AsyncMock(return_value=[{"text": "actor_result"}])
-        self.get_path_adaptor = AsyncMock(return_value=path_adaptor)
+        self.get_calculation_preflight = AsyncMock(return_value=calculation_preflight)
 
 
 class TestLazyMCPToolActorRouting:
@@ -37,10 +37,12 @@ class TestLazyMCPToolActorRouting:
         assert result.status == "success"
         assert result.content == "actor_result"
 
-    async def test_path_adaptor_comes_from_connector_lookup(self):
-        adaptor = MagicMock()
-        adaptor.resolve_args.return_value = {"value": "resolved"}
-        connector = _ActorConnector(path_adaptor=adaptor, session=MagicMock())
+    async def test_calculation_preflight_comes_from_connector_lookup(self):
+        preflight = MagicMock()
+        preflight.prepare_call.return_value = {"value": "resolved"}
+        connector = _ActorConnector(
+            calculation_preflight=preflight, session=MagicMock()
+        )
         tool = LazyMCPTool(
             server_name="mat_sg",
             tool_name="mat_sg_run",
@@ -52,7 +54,7 @@ class TestLazyMCPToolActorRouting:
 
         await tool.execute({"value": "raw"})
 
-        connector.get_path_adaptor.assert_awaited_once_with("mat_sg")
+        connector.get_calculation_preflight.assert_awaited_once_with("mat_sg")
         connector.call_tool.assert_awaited_once_with(
             "mat_sg", "run", {"value": "resolved"}
         )
@@ -71,8 +73,8 @@ class TestLazyMCPConnectorActorRouting:
         fake_manager = MagicMock()
         fake_manager.connections = {}
         fake_manager.tools_by_server = {}
-        fake_manager.path_adaptor_factory = None
-        fake_manager.path_adaptor_servers = set()
+        fake_manager.calculation_preflight_factory = None
+        fake_manager.calculation_preflight_servers = set()
         fake_manager.loop = loop
         fake_manager.cleanup = AsyncMock()
 
@@ -110,8 +112,8 @@ class TestLazyMCPConnectorActorRouting:
         fake_manager = MagicMock()
         fake_manager.connections = {}
         fake_manager.tools_by_server = {}
-        fake_manager.path_adaptor_factory = None
-        fake_manager.path_adaptor_servers = set()
+        fake_manager.calculation_preflight_factory = None
+        fake_manager.calculation_preflight_servers = set()
         fake_manager.loop = loop
         fake_manager.cleanup = AsyncMock()
 
@@ -149,8 +151,8 @@ class TestLazyMCPConnectorActorRouting:
         fake_manager = MagicMock()
         fake_manager.connections = {}
         fake_manager.tools_by_server = {}
-        fake_manager.path_adaptor_factory = None
-        fake_manager.path_adaptor_servers = set()
+        fake_manager.calculation_preflight_factory = None
+        fake_manager.calculation_preflight_servers = set()
         fake_manager.loop = loop
         fake_manager.cleanup = AsyncMock()
         connector._manager = fake_manager

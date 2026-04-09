@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from matmaster.adaptors.calculation.path_adaptor import CalculationPreflightError
+from matmaster.mcp.calculation.errors import CalculationPreflightError
 from matmaster.tools.lazy_mcp import (
     _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT,
     LazyMCPConnector,
@@ -27,17 +27,17 @@ from matmaster.types.topology import ToolPlane
 class FakeConnector:
     """Fake LazyMCPConnector for actor-routed tool tests."""
 
-    def __init__(self, path_adaptor=None, *, session=None):
+    def __init__(self, calculation_preflight=None, *, session=None):
         self.workspace_path = "/fake/workspace"
         self.session = session
-        self._path_adaptor = path_adaptor
-        self.path_adaptor_calls: list[str] = []
+        self._calculation_preflight = calculation_preflight
+        self.calculation_preflight_calls: list[str] = []
         self.call_tool_calls: list[tuple[str, str, dict]] = []
         self._call_tool = AsyncMock(return_value=[MagicMock(text="result_text")])
 
-    async def get_path_adaptor(self, server_name: str):
-        self.path_adaptor_calls.append(server_name)
-        return self._path_adaptor
+    async def get_calculation_preflight(self, server_name: str):
+        self.calculation_preflight_calls.append(server_name)
+        return self._calculation_preflight
 
     async def call_tool(
         self,
@@ -179,7 +179,7 @@ class TestLazyMCPToolExecution:
             connector=connector,
         )
         await tool.execute({"param": "value"})
-        assert connector.path_adaptor_calls == ["mat_sg"]
+        assert connector.calculation_preflight_calls == ["mat_sg"]
         connector._call_tool.assert_awaited_once_with(
             "mat_sg", "build_bulk", {"param": "value"}
         )
@@ -499,13 +499,13 @@ class TestLazyMCPToolFormatResult:
         assert tool._format_result(items) == "42"
 
 
-class TestLazyMCPToolPathAdaptor:
-    """Test path_adaptor integration in LazyMCPTool.execute."""
+class TestLazyMCPToolCalculationPreflight:
+    """Test calculation preflight integration in LazyMCPTool.execute."""
 
-    async def test_path_adaptor_resolve_args_called(self):
-        mock_adaptor = MagicMock()
-        mock_adaptor.resolve_args.return_value = {"resolved": "path"}
-        connector = FakeConnector(path_adaptor=mock_adaptor)
+    async def test_calculation_preflight_prepare_call_called(self):
+        mock_preflight = MagicMock()
+        mock_preflight.prepare_call.return_value = {"resolved": "path"}
+        connector = FakeConnector(calculation_preflight=mock_preflight)
         tool = LazyMCPTool(
             server_name="mat_sg",
             tool_name="mat_sg_run",
@@ -515,16 +515,18 @@ class TestLazyMCPToolPathAdaptor:
             connector=connector,
         )
         await tool.execute({"input": "/local/file"})
-        mock_adaptor.resolve_args.assert_called_once()
+        mock_preflight.prepare_call.assert_called_once()
         connector._call_tool.assert_awaited_once_with(
             "mat_sg", "run", {"resolved": "path"}
         )
 
-    async def test_path_adaptor_receives_connector_session(self):
-        mock_adaptor = MagicMock()
-        mock_adaptor.resolve_args.return_value = {"resolved": "path"}
+    async def test_calculation_preflight_receives_connector_session(self):
+        mock_preflight = MagicMock()
+        mock_preflight.prepare_call.return_value = {"resolved": "path"}
         fake_session = MagicMock()
-        connector = FakeConnector(path_adaptor=mock_adaptor, session=fake_session)
+        connector = FakeConnector(
+            calculation_preflight=mock_preflight, session=fake_session
+        )
         tool = LazyMCPTool(
             server_name="mat_sg",
             tool_name="mat_sg_run",
@@ -536,14 +538,14 @@ class TestLazyMCPToolPathAdaptor:
 
         await tool.execute({"input": "/local/file"})
 
-        assert mock_adaptor.resolve_args.call_args.kwargs["session"] is fake_session
+        assert mock_preflight.prepare_call.call_args.kwargs["session"] is fake_session
 
     async def test_calculation_preflight_failure_returns_tool_error(self):
-        mock_adaptor = MagicMock()
-        mock_adaptor.resolve_args.side_effect = CalculationPreflightError(
+        mock_preflight = MagicMock()
+        mock_preflight.prepare_call.side_effect = CalculationPreflightError(
             "preflight failed"
         )
-        connector = FakeConnector(path_adaptor=mock_adaptor)
+        connector = FakeConnector(calculation_preflight=mock_preflight)
         tool = LazyMCPTool(
             server_name="mat_dpa",
             tool_name="mat_dpa_submit_calculate_elastic_constants",
@@ -559,10 +561,10 @@ class TestLazyMCPToolPathAdaptor:
         assert "preflight failed" in result.content
         connector._call_tool.assert_not_awaited()
 
-    async def test_generic_path_adaptor_failure_still_falls_back(self):
-        mock_adaptor = MagicMock()
-        mock_adaptor.resolve_args.side_effect = Exception("resolve failed")
-        connector = FakeConnector(path_adaptor=mock_adaptor)
+    async def test_generic_preflight_failure_still_falls_back(self):
+        mock_preflight = MagicMock()
+        mock_preflight.prepare_call.side_effect = Exception("resolve failed")
+        connector = FakeConnector(calculation_preflight=mock_preflight)
         tool = LazyMCPTool(
             server_name="mat_sg",
             tool_name="mat_sg_run",
@@ -575,8 +577,8 @@ class TestLazyMCPToolPathAdaptor:
         await tool.execute(original_args)
         connector._call_tool.assert_awaited_once_with("mat_sg", "run", original_args)
 
-    async def test_no_path_adaptor_passes_args_directly(self):
-        connector = FakeConnector(path_adaptor=None)
+    async def test_no_calculation_preflight_passes_args_directly(self):
+        connector = FakeConnector(calculation_preflight=None)
         tool = LazyMCPTool(
             server_name="s",
             tool_name="s_t",
@@ -594,36 +596,40 @@ class FakeMCPManager:
     """Minimal MCPToolManager mock for configure_mcp_manager tests."""
 
     def __init__(self):
-        self.path_adaptor_servers: set = set()
-        self.path_adaptor_factory = None
+        self.calculation_preflight_servers: set = set()
+        self.calculation_preflight_factory = None
         self.sync_tools_by_server: dict = {}
         self.tool_include_only: dict = {}
 
 
 class TestConfigureMCPManager:
-    def test_sets_path_adaptor_servers_from_explicit_list(self):
+    def test_sets_calculation_preflight_servers_from_explicit_list(self):
         manager = FakeMCPManager()
         config = {
-            "path_adaptor": "calculation",
+            "calculation_preflight": "calculation",
             "calculation_servers": ["mat_sg", "mat_dpa"],
         }
         configure_mcp_manager(manager, config)
-        assert manager.path_adaptor_servers == {"mat_sg", "mat_dpa"}
+        assert manager.calculation_preflight_servers == {"mat_sg", "mat_dpa"}
 
-    def test_path_adaptor_servers_fallback_to_all_servers(self):
+    def test_calculation_preflight_servers_fallback_to_all_servers(self):
         """When calculation_servers is absent, fallback to all_server_names."""
         manager = FakeMCPManager()
-        config = {"path_adaptor": "calculation"}
+        config = {"calculation_preflight": "calculation"}
         configure_mcp_manager(
             manager, config, all_server_names={"mat_sg", "mat_sn", "mat_doc"}
         )
-        assert manager.path_adaptor_servers == {"mat_sg", "mat_sn", "mat_doc"}
+        assert manager.calculation_preflight_servers == {
+            "mat_sg",
+            "mat_sn",
+            "mat_doc",
+        }
 
     def test_sync_tools_only_inside_calculation_branch(self):
-        """sync_tools_by_server is only set when path_adaptor == calculation."""
+        """sync_tools_by_server is only set when calculation_preflight == calculation."""
         manager = FakeMCPManager()
         config = {
-            "path_adaptor": "calculation",
+            "calculation_preflight": "calculation",
             "calculation_executors": {
                 "mat_sg": {"sync_tools": ["build_bulk_structure_by_wyckoff"]},
             },
@@ -634,7 +640,7 @@ class TestConfigureMCPManager:
         )
 
     def test_sync_tools_not_set_without_calculation(self):
-        """Without path_adaptor=calculation, sync_tools_by_server stays empty."""
+        """Without calculation_preflight=calculation, sync_tools_by_server stays empty."""
         manager = FakeMCPManager()
         config = {
             "calculation_executors": {
@@ -662,30 +668,24 @@ class TestConfigureMCPManager:
     def test_empty_config_noop(self):
         manager = FakeMCPManager()
         configure_mcp_manager(manager, {})
-        assert manager.path_adaptor_servers == set()
+        assert manager.calculation_preflight_servers == set()
         assert manager.sync_tools_by_server == {}
         assert manager.tool_include_only == {}
 
-    def test_path_adaptor_factory_uses_matmaster(self):
-        """Verify factory uses matmaster.adaptors.calculation, not evomaster."""
+    def test_calculation_preflight_factory_uses_client_namespace(self):
+        """Verify factory uses matmaster.mcp.calculation.preflight."""
         manager = FakeMCPManager()
         config = {
-            "path_adaptor": "calculation",
+            "calculation_preflight": "calculation",
             "calculation_servers": ["mat_sg"],
         }
-        # The import is inside configure_mcp_manager's try block as a lazy import
-        # from matmaster.adaptors.calculation. We patch at the source module.
-        with patch(
-            "matmaster.adaptors.calculation.get_calculation_path_adaptor"
-        ) as mock_factory:
-            mock_factory.return_value = MagicMock()
+        with patch("matmaster.mcp.calculation.preflight.CalculationPreflight") as cls:
+            cls.return_value = MagicMock()
             configure_mcp_manager(manager, config)
 
-        # Factory should be set (the actual import from matmaster.adaptors.calculation)
-        assert manager.path_adaptor_factory is not None
-        # Calling the factory should invoke get_calculation_path_adaptor
-        manager.path_adaptor_factory()
-        mock_factory.assert_called_once_with(config)
+        assert manager.calculation_preflight_factory is not None
+        manager.calculation_preflight_factory()
+        cls.assert_called_once_with(config.get("calculation_executors") or {})
 
 
 class TestResolveLazyMCPToolTimeout:
@@ -884,8 +884,8 @@ class TestLazyMCPConnector:
         )
         fake_manager = MagicMock()
         fake_manager.connections = {}
-        fake_manager.path_adaptor_factory = None
-        fake_manager.path_adaptor_servers = set()
+        fake_manager.calculation_preflight_factory = None
+        fake_manager.calculation_preflight_servers = set()
         fake_manager.loop = object()
         connector._manager = fake_manager
 
@@ -922,8 +922,8 @@ class TestLazyMCPConnector:
         )
         fake_manager = MagicMock()
         fake_manager.connections = {}
-        fake_manager.path_adaptor_factory = None
-        fake_manager.path_adaptor_servers = set()
+        fake_manager.calculation_preflight_factory = None
+        fake_manager.calculation_preflight_servers = set()
         fake_manager.loop = object()
         connector._manager = fake_manager
 
