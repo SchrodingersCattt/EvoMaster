@@ -318,10 +318,7 @@ class Exp:
             skill_registry=self._skill_registry,
         )
 
-        from matmaster.tools.builtin.bohrium_tool.registry import (
-            JobRegistry,
-            classify_poll_status,
-        )
+        from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
         from matmaster.types.tool_desc_ctx import ToolDescriptionContext
         from matmaster.types.tool_runner_state import ToolRunnerState
 
@@ -365,34 +362,10 @@ class Exp:
         capability_policy = DefaultCapabilityPolicy()
         scheduler = ToolScheduler()
         runner_state = ToolRunnerState()
-        bohrium_registry = JobRegistry()
+        bohrium_registry = JobRegistry.rebuild_from_events(
+            (ctx.run_meta or {}).get('bohrium_rebuild_events')
+        )
         runner_state.set('bohrium_job_registry', bohrium_registry)
-        bohrium_rebuild_events = (ctx.run_meta or {}).get('bohrium_rebuild_events')
-        if bohrium_rebuild_events:
-            for ev in bohrium_rebuild_events:
-                action = str(ev.get('action') or '')
-                job_id = str(ev.get('job_id') or '')
-                if not job_id or ev.get('cached'):
-                    continue
-                if action == 'submit':
-                    bohrium_registry.register(
-                        job_id, job_name=str(ev.get('job_name') or '')
-                    )
-                elif action == 'poll':
-                    reg_status = classify_poll_status(str(ev.get('status') or ''))
-                    # Rebuild only restores lifecycle state and poll count. The
-                    # cached payload is intentionally left empty because we reset
-                    # last_polled_at below, guaranteeing the first poll in a new
-                    # run is always fresh rather than served from stale cache.
-                    bohrium_registry.update_poll(
-                        job_id,
-                        status=reg_status,
-                        result='',
-                    )
-                elif action == 'download':
-                    bohrium_registry.update_download(job_id)
-            for rec in bohrium_registry.all_jobs():
-                rec.last_polled_at = 0.0
         self._register_cleanup(runner_state.clear)
 
         full_runner = FullToolRunner(
