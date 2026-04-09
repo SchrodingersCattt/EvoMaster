@@ -52,14 +52,12 @@ questions:
   - key: suggested_input_bsse_numerics
     value:
       filename: INPUT_bsse
-      tokens:
-      - ecutwfc 100
-      - scf_thr 1e-7
-      flags: i
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-7\s*$)
+      flags: is
   - key: suggested_input_bsse_smearing
     value:
       filename: INPUT_bsse
-      pattern: smearing_method\s+gaussian.*smearing_sigma\s+0\.01
+      pattern: (?ims)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*$)(?=.*^\s*smearing_sigma\s+0\.01(?:0+)?\s*$)
       flags: is
   - key: variable_empty_layer_placement
     value: {}
@@ -97,10 +95,10 @@ questions:
   - id: suggested_input_bsse_numerics
     criterion: "[Suggested] INPUT_bsse follows benchmark numeric settings (`ecutwfc 100`, `scf_thr 1e-7`)."
     axis: correctness
-    verify: text_file_contains_all
+    verify: text_file_regex
     weight: 0.6
   - id: suggested_input_bsse_smearing
-    criterion: "[Suggested] INPUT_bsse uses benchmark smearing controls (gaussian + sigma 0.01)."
+    criterion: "[Suggested] INPUT_bsse uses benchmark smearing controls (gauss/gaussian + sigma 0.01)."
     axis: correctness
     verify: text_file_regex
     weight: 0.6
@@ -195,14 +193,12 @@ questions:
   - key: suggested_input_vac_numerics
     value:
       filename: INPUT_vac_bsse
-      tokens:
-      - ecutwfc 100
-      - scf_thr 1e-7
-      flags: i
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-7\s*$)
+      flags: is
   - key: suggested_input_vac_smearing
     value:
       filename: INPUT_vac_bsse
-      pattern: smearing_method\s+gaussian.*smearing_sigma\s+0\.01
+      pattern: (?ims)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*$)(?=.*^\s*smearing_sigma\s+0\.01(?:0+)?\s*$)
       flags: is
   - key: variable_bsse_explanation
     value: {}
@@ -240,10 +236,10 @@ questions:
   - id: suggested_input_vac_numerics
     criterion: "[Suggested] INPUT_vac_bsse follows benchmark numeric settings (`ecutwfc 100`, `scf_thr 1e-7`)."
     axis: correctness
-    verify: text_file_contains_all
+    verify: text_file_regex
     weight: 0.6
   - id: suggested_input_vac_smearing
-    criterion: "[Suggested] INPUT_vac_bsse uses benchmark smearing controls (gaussian + sigma 0.01)."
+    criterion: "[Suggested] INPUT_vac_bsse uses benchmark smearing controls (gauss/gaussian + sigma 0.01)."
     axis: correctness
     verify: text_file_regex
     weight: 0.6
@@ -476,12 +472,8 @@ questions:
   - key: suggested_input_dipole_numerics
     value:
       filename: INPUT_dipole
-      tokens:
-      - ecutwfc 100
-      - scf_thr 1e-6
-      - out_pot 2
-      - efield_dir 2
-      flags: i
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*$)(?=.*^\s*out_pot\s+2\s*$)(?=.*^\s*efield_dir\s+2\s*$)
+      flags: is
   - key: variable_input_dipole_window
     value:
       filename: INPUT_dipole
@@ -526,7 +518,7 @@ questions:
   - id: suggested_input_dipole_numerics
     criterion: "[Suggested] INPUT_dipole follows benchmark numeric settings (ecut/scf_thr/out_pot/dir)."
     axis: correctness
-    verify: text_file_contains_all
+    verify: text_file_regex
     weight: 0.6
   - id: variable_input_dipole_window
     criterion: "[Variable] INPUT_dipole provides dipole window position controls (`efield_pos_max`, `efield_pos_dec`)."
@@ -1036,12 +1028,8 @@ questions:
   - key: suggested_input_spin_numerics
     value:
       filename: INPUT_spin_elec_scf
-      tokens:
-      - ecutwfc 100
-      - scf_thr 1e-6
-      - smearing_method gaussian
-      - smearing_sigma 0.001
-      flags: i
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*$)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*$)(?=.*^\s*smearing_sigma\s+0\.001(?:0+)?\s*$)
+      flags: is
   - key: suggested_input_spin_mixing
     value:
       filename: INPUT_spin_elec_scf
@@ -1094,7 +1082,7 @@ questions:
   - id: suggested_input_spin_numerics
     criterion: "[Suggested] SCF input follows benchmark numeric setup (`ecutwfc/scf_thr/smearing`)."
     axis: correctness
-    verify: text_file_contains_all
+    verify: text_file_regex
     weight: 0.6
   - id: suggested_input_spin_mixing
     criterion: "[Suggested] SCF input includes benchmark mixing controls."
@@ -1177,15 +1165,8 @@ questions:
   - key: must_input_gate_core
     value:
       filename: INPUT_gate
-      tokens:
-      - calculation scf
-      - basis_type pw
-      - efield_flag 1
-      - dip_cor_flag 1
-      - gate_flag 1
-      - block 1
-      - efield_amp 0.0
-      flags: i
+      pattern: (?ims)(?=.*^\s*calculation\s+scf\s*$)(?=.*^\s*basis_type\s+pw\s*$)(?=.*^\s*efield_flag\s+1\s*$)(?=.*^\s*dip_cor_flag\s+1\s*$)(?=.*^\s*gate_flag\s+(?:1|true)\s*$)(?=.*^\s*block\s+(?:1|true)\s*$)(?=.*^\s*efield_amp\s+0(?:\.0+)?\s*$)
+      flags: is
   - key: must_kpt_gate_gamma
     value:
       filename: KPT_gate
@@ -1201,11 +1182,8 @@ questions:
   - key: suggested_input_gate_numerics
     value:
       filename: INPUT_gate
-      tokens:
-      - ecutwfc 100
-      - scf_thr 1e-6
-      - out_pot 2
-      flags: i
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*$)(?=.*^\s*out_pot\s+2\s*$)
+      flags: is
   - key: suggested_gate_plane_and_barrier_fields
     value:
       filename: INPUT_gate
@@ -1245,7 +1223,7 @@ questions:
   - id: must_input_gate_core
     criterion: "[Must] INPUT_gate contains core dipole-correction + gate + barrier controls."
     axis: correctness
-    verify: text_file_contains_all
+    verify: text_file_regex
     weight: 1.0
   - id: must_kpt_gate_gamma
     criterion: "[Must] KPT_gate is Gamma-centered."
@@ -1260,7 +1238,7 @@ questions:
   - id: suggested_input_gate_numerics
     criterion: "[Suggested] INPUT_gate follows benchmark numeric settings (`ecutwfc/scf_thr/out_pot`)."
     axis: correctness
-    verify: text_file_contains_all
+    verify: text_file_regex
     weight: 0.6
   - id: suggested_gate_plane_and_barrier_fields
     criterion: "[Suggested] INPUT_gate includes gate-plane and barrier field parameters (`zgate`, `nelec`, `block_down/up/height`)."
