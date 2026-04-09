@@ -244,7 +244,9 @@ class TestBohriumSetupServiceLocation:
 
 
 def test_apply_run_credentials_registers_runtime_without_dual_write() -> None:
-    from src.services.agent_run_bohrium import _apply_run_credentials_to_session
+    from matmaster.bohrium.runtime import (
+        attach_local_bohrium_runtime_from_run_credentials,
+    )
 
     session = SimpleNamespace()
     run_creds = {
@@ -255,7 +257,7 @@ def test_apply_run_credentials_registers_runtime_without_dual_write() -> None:
         "base_url": "https://openapi.test.dp.tech/",
     }
 
-    _apply_run_credentials_to_session(session, run_creds)
+    attach_local_bohrium_runtime_from_run_credentials(session, run_creds)
 
     runtime = get_runtime(session)
     assert runtime is not None
