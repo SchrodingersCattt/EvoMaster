@@ -237,6 +237,53 @@ class TestExpBuildRuntime:
             "Run a shell command in the session workspace and return its output."
         )
 
+    async def test_builtin_tool_prompts_layered_correctly(
+        self, tmp_path: Path
+    ) -> None:
+        """End-to-end: builtin prompts go to system_prompt, descriptions are short."""
+        exp = Exp(
+            ExpConfig(
+                name="test",
+                system_prompt="Base.",
+                tools=ExpToolsConfig(
+                    builtin=["Bash", "Glob", "Grep", "Read", "Write", "Edit"]
+                ),
+            )
+        )
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=MagicMock(spec=Session),
+            llm_provider=MockLLMProvider(),
+        )
+
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
+
+        sys_prompt = runtime.spec.system_prompt
+
+        assert "Use dedicated tools instead of shell equivalents" in sys_prompt
+        assert "pattern matching" in sys_prompt.lower()
+        assert "ripgrep" in sys_prompt.lower()
+
+        desc_ctx = ToolDescriptionContext(
+            session_kind=runtime.spec.runtime_topology.session_kind,
+            workspace_root=runtime.spec.runtime_topology.workspace_root,
+            topology=runtime.spec.runtime_topology,
+        )
+        defs = runtime.spec.tool_catalog.build_definitions(desc_ctx)
+        by_name = {d["function"]["name"]: d["function"]["description"] for d in defs}
+
+        assert by_name["Bash"] == (
+            "Run a shell command in the session workspace and return its output."
+        )
+        assert by_name["Glob"].startswith("Fast file pattern matching")
+        assert by_name["Grep"].startswith("Search file contents by regex")
+        assert "\n-" not in by_name["Glob"]
+        assert "\n-" not in by_name["Grep"]
+
     async def test_agent_tool_uses_model_visible_exp_discovery(
         self, tmp_path: Path
     ) -> None:
