@@ -72,15 +72,29 @@ FROM ${BASE_IMAGE}
 
 USER root
 
-# 从 toolchain 挂载 /usr，仅复制 Node 与全局模块（不重跑 apt/npm）
-RUN --mount=type=bind,from=eval-toolchain,source=/usr,target=/_tc/usr,readonly \
+# 从 toolchain 挂载根树，仅复制 Node 与全局模块（不重跑 apt/npm）。
+# 仅挂载 /usr 会漏掉 NodeSource/发行版把 node 装在 /usr/local/bin 的情况（CI 曾报 cp: .../usr/bin/node: No such file）。
+RUN --mount=type=bind,from=eval-toolchain,source=/,target=/_tc,readonly \
     set -eux; \
-    cp "/_tc/usr/bin/node" /usr/bin/node; \
-    cp "/_tc/usr/bin/npm" /usr/bin/npm; \
-    if [ -f "/_tc/usr/bin/npx" ]; then cp "/_tc/usr/bin/npx" /usr/bin/npx; fi; \
+    if [ -e "/_tc/usr/local/bin/node" ]; then cp -a "/_tc/usr/local/bin/node" /usr/bin/node; \
+    elif [ -e "/_tc/usr/bin/node" ]; then cp -a "/_tc/usr/bin/node" /usr/bin/node; \
+    elif [ -e "/_tc/usr/bin/nodejs" ]; then cp -a "/_tc/usr/bin/nodejs" /usr/bin/node; \
+    else echo "node binary not found in eval-toolchain"; \
+         ls -la /_tc/usr/bin 2>/dev/null | head -40 || true; \
+         ls -la /_tc/usr/local/bin 2>/dev/null | head -40 || true; \
+         exit 1; \
+    fi; \
+    if [ -e "/_tc/usr/local/bin/npm" ]; then cp -a "/_tc/usr/local/bin/npm" /usr/bin/npm; \
+    elif [ -e "/_tc/usr/bin/npm" ]; then cp -a "/_tc/usr/bin/npm" /usr/bin/npm; \
+    else echo "npm not found"; exit 1; \
+    fi; \
+    if [ -f "/_tc/usr/local/bin/npx" ]; then cp -a "/_tc/usr/local/bin/npx" /usr/bin/npx; \
+    elif [ -f "/_tc/usr/bin/npx" ]; then cp -a "/_tc/usr/bin/npx" /usr/bin/npx; \
+    fi; \
     if [ -f "/_tc/usr/bin/claude" ]; then cp -a "/_tc/usr/bin/claude" /usr/bin/claude; fi; \
-    mkdir -p /usr/lib/node_modules; \
-    cp -a "/_tc/usr/lib/node_modules/." /usr/lib/node_modules/; \
+    mkdir -p /usr/lib/node_modules /usr/local/lib/node_modules; \
+    if [ -d "/_tc/usr/lib/node_modules" ]; then cp -a "/_tc/usr/lib/node_modules/." /usr/lib/node_modules/; fi; \
+    if [ -d "/_tc/usr/local/lib/node_modules" ]; then cp -a "/_tc/usr/local/lib/node_modules/." /usr/local/lib/node_modules/; fi; \
     mkdir -p /usr/local/bin; \
     if [ -f "/_tc/usr/local/bin/claude" ]; then cp -a "/_tc/usr/local/bin/claude" /usr/local/bin/claude; fi
 
