@@ -196,7 +196,7 @@ class TestExpBuildRuntime:
         ]
         assert matching_callbacks
 
-    async def test_bash_prompt_is_not_collected_into_system_prompt(
+    async def test_bash_prompt_is_collected_into_system_prompt(
         self, tmp_path: Path
     ) -> None:
         exp = Exp(
@@ -219,8 +219,7 @@ class TestExpBuildRuntime:
             runtime = await exp.build_runtime(ctx)
 
         assert "Base persona text." in runtime.spec.system_prompt
-        assert "Avoid using this tool to run" not in runtime.spec.system_prompt
-        assert "Use dedicated tools instead of shell equivalents" not in (
+        assert "Use dedicated tools instead of shell equivalents" in (
             runtime.spec.system_prompt
         )
         desc_ctx = ToolDescriptionContext(
@@ -229,10 +228,13 @@ class TestExpBuildRuntime:
             topology=runtime.spec.runtime_topology,
         )
         defs = runtime.spec.tool_catalog.build_definitions(desc_ctx)
-        assert any(
+        bash_def = next(d for d in defs if d["function"]["name"] == "Bash")
+        assert (
             "Use dedicated tools instead of shell equivalents"
-            in d["function"]["description"]
-            for d in defs
+            not in bash_def["function"]["description"]
+        )
+        assert bash_def["function"]["description"] == (
+            "Run a shell command in the session workspace and return its output."
         )
 
     async def test_agent_tool_uses_model_visible_exp_discovery(
