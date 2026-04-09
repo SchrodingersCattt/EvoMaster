@@ -39,6 +39,8 @@ from .evaluator_helpers import (
     check_struct_file_layer_count,
     check_struct_file_stoichiometry_ratio,
     check_struct_file_surface_termination,
+    check_text_file_contains_all_from_evidence,
+    check_text_file_regex_from_evidence,
     check_token_budget,
     check_turn_budget,
 )
@@ -498,6 +500,15 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return _STRUCT_FILE_DISPATCH[item.verify](evidence=evidence, ref=ref)
+
+        _TEXT_FILE_DISPATCH = {
+            'text_file_contains_all': check_text_file_contains_all_from_evidence,
+            'text_file_regex': check_text_file_regex_from_evidence,
+        }
+        if item.verify in _TEXT_FILE_DISPATCH:
+            if ref is None:
+                return False, 'missing reference answer'
+            return _TEXT_FILE_DISPATCH[item.verify](evidence=evidence, ref=ref)
 
         if item.verify == 'llm_binary_judge':
             if item.axis == 'grounding':
