@@ -14,6 +14,7 @@ from matmaster.types.session import (
     LocalSessionConfig,
     Session,
     SessionConfig,
+    SessionFileStat,
     SSHSessionConfig,
 )
 from matmaster.types.topology import SessionCapabilities
@@ -46,6 +47,10 @@ class TestSessionProtocol:
             def write_file(self, path, content, encoding="utf-8"): ...
             def path_exists(self, path): ...
             def is_file(self, path): ...
+
+            def stat_file(self, path):
+                return SessionFileStat(size=0, mtime=0.0)
+
             def download(self, path, timeout=None): ...
             def upload_directory(self, local_dir, remote_dir, exclude=None): ...
 

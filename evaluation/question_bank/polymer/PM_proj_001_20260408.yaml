@@ -1,0 +1,89 @@
+version: v5
+capability: workflow_orchestration
+domain: polymer
+questions:
+- id: PM_proj_001_20260408
+  capability: workflow_orchestration
+  domain: polymer
+  intent: Screen PEO, PCL, and PTMC solid polymer electrolytes for LiTFSI using curated QM, MD, and ranking-model evidence.
+  human_prompt_seed: |
+    文件 `project_bundle.json` 汇总了三类 LiTFSI 固态聚合物电解质候选（PEO、PCL、PTMC）的建模、量化、MD 和简化 ranking 指标。
+    请像做课题汇报一样完成以下任务：
+    1. 比较不同候选的 Li+ 配位强度、局域结构、链段运动和扩散能力；
+    2. 解释“强配位不等于高迁移率”的 trade-off；
+    3. 输出最终 shortlist，明确最推荐的体系及理由；
+    4. 给出至少一个建议实验验证方向。
+  tags:
+  - polymer
+  - electrolyte
+  - lithium
+  - qm_md_ml
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: project_bundle
+    path: data/PM_proj_001_20260408/project_bundle.json
+    description: Curated multiscale bundle with candidate structures, QM coordination metrics, MD transport metrics, and a precomputed ranking score.
+  reference_answers:
+  - key: best_candidate
+    value: PTMC-LiTFSI
+  - key: ptmc_d_li_cm2_s
+    value: 3.1e-07
+    tolerance: 8.0e-08
+  - key: peo_coordination_energy_eV
+    value: -4.42
+    tolerance: 0.12
+  - key: required_fields
+    value:
+    - ranking_table
+    - coordination_tradeoff
+    - diffusion_discussion
+    - shortlist
+    - experiment_suggestion
+  - key: turn_budget
+    value:
+      max: 24
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 14000
+  scoring_checklist:
+  - id: ptmc_d_li_cm2_s
+    criterion: PTMC-LiTFSI Li+ diffusion coefficient is reported within tolerance of the curated project bundle value (~3.1e-7 cm^2/s).
+    axis: correctness
+    verify: numerical_range
+  - id: peo_coordination_energy_eV
+    criterion: PEO-LiTFSI coordination energy is reported within tolerance of the curated QM bundle value (~-4.42 eV).
+    axis: correctness
+    verify: numerical_range
+  - id: shortlist_correctness
+    criterion: Final shortlist identifies PTMC-LiTFSI as the best-balanced candidate and ranks PEO-LiTFSI ahead of PCL-LiTFSI overall.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: required_fields
+    criterion: Report includes a ranking table, explicit coordination-vs-mobility trade-off discussion, diffusion discussion, final shortlist, and at least one concrete experiment suggestion.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: The answer explicitly grounds the final recommendation in the provided QM, MD, and ranking metrics from project_bundle.json rather than generic polymer-electrolyte knowledge.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: efficiency_judge
+    criterion: Completes the screening workflow in a direct analysis pipeline without redundant reformulation or repeated recalculation.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

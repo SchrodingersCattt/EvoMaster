@@ -3,6 +3,8 @@
 import asyncio
 from unittest.mock import MagicMock
 
+from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
+from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bash_tool import BashTool
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
@@ -19,6 +21,29 @@ def make_session(output="hello", exit_code=0, working_dir="/workspace"):
         "working_dir": working_dir,
     }
     return s
+
+
+def attach_test_runtime(session: MagicMock) -> None:
+    runtime = BohriumRuntimeHandle(
+        credentials=BohriumCredentials(
+            access_key="ak",
+            project_id=42,
+            user_id=7,
+            user_no="U001",
+            base_url="https://openapi.test.dp.tech",
+        ),
+        execution=BohriumExecutionContext(
+            session_type="ssh",
+            execution_workdir="/share",
+            remote_workspace_root="/share",
+            remote_project_root="/share/.matmaster",
+            node_id=1,
+            node_ip="10.0.0.1",
+            ssh_attached=True,
+        ),
+        execution_session=session,
+    )
+    attach_runtime(session, runtime)
 
 
 def make_desc_ctx(session_kind="ssh", workspace_root="/share"):
@@ -71,10 +96,18 @@ class TestBashToolMetadata:
             )
         )
 
-        assert "Avoid using this tool to run" in defs[0]["function"]["description"]
+        assert (
+            "Use dedicated tools instead of shell equivalents"
+            in defs[0]["function"]["description"]
+        )
 
     def test_schema_disallows_additional_properties(self):
         assert BashTool.json_schema["additionalProperties"] is False
+
+    def test_bash_claims_workspace_and_session_exclusive(self):
+        claims = {(claim.resource, claim.mode) for claim in BashTool.resource_claims}
+        assert ("workspace", "exclusive") in claims
+        assert ("session", "exclusive") in claims
 
 
 class TestBashExecution:
@@ -117,6 +150,53 @@ class TestBashExecution:
         result = asyncio.run(tool.execute({"command": "ls"}))
         assert "error" in result.lower()
 
+    def test_bash_tool_uses_script_mode_for_heredoc(self):
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "stdout": "ok",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "working_dir": "/workspace",
+                    "output": "ok",
+                },
+            ]
+        )
+        tool = BashTool(session=session, workdir="/workspace")
+        asyncio.run(
+            tool.execute(
+                {"command": "python3 << 'PYEOF'\nprint(1)\nPYEOF", "description": "run"}
+            )
+        )
+        written = session.write_file.call_args[0][1]
+        assert "python3 << 'PYEOF'" in written
+        final_cmd = session.exec_bash.call_args.kwargs["command"]
+        assert final_cmd.startswith("bash ")
+
+    def test_bash_heredoc_does_not_inline_original_command(self):
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "stdout": "ok",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "working_dir": "/workspace",
+                    "output": "ok",
+                },
+            ]
+        )
+        tool = BashTool(session=session, workdir="/workspace")
+        asyncio.run(tool.execute({"command": "python3 << 'PYEOF'\nprint(1)\nPYEOF"}))
+        final_cmd = session.exec_bash.call_args.kwargs["command"]
+        assert "python3 << 'PYEOF'" not in final_cmd
+        assert final_cmd.startswith("bash ")
+
 
 class TestBashErrorStatus:
     def test_nonzero_exit_returns_error_status(self):
@@ -148,9 +228,9 @@ class TestBashErrorStatus:
 
 
 class TestBashEnvInjection:
-    def test_bash_injects_bohrium_env_from_bridge(self):
+    def test_bash_reads_runtime_env(self):
         session = MagicMock()
-        session._bohrium_credentials = {"access_key": "ak", "project_id": 42}
+        attach_test_runtime(session)
         session.write_file = MagicMock()
         session.exec_bash = MagicMock(
             side_effect=[

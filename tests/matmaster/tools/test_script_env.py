@@ -1,22 +1,44 @@
 """Tests for matmaster.tools.script_env — env injection bridge.
 
-Credential resolution is tested in tests/matmaster/integration/test_runtime_bridge.py.
+Credential resolution is tested in tests/matmaster/integration/test_runtime_credential_bridge_e2e.py.
 These tests focus on the injection mechanics: file-based wrapping, inline fallback,
 and the inject_env / inject public API.
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _session_with_creds(**creds) -> MagicMock:
+def _session_with_runtime(**creds) -> MagicMock:
+    from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
+    from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
+
     s = MagicMock()
-    s._bohrium_credentials = creds
+    runtime = BohriumRuntimeHandle(
+        credentials=BohriumCredentials(
+            access_key=creds.get("access_key", "ak123"),
+            project_id=creds.get("project_id", 456),
+            user_id=creds.get("user_id", 7),
+            user_no=creds.get("user_no", "U001"),
+            base_url=creds.get("base_url", "https://openapi.test.dp.tech"),
+        ),
+        execution=BohriumExecutionContext(
+            session_type="ssh",
+            execution_workdir="/share",
+            remote_workspace_root="/share",
+            remote_project_root="/share/.matmaster",
+            node_id=1,
+            node_ip="10.0.0.1",
+            ssh_attached=True,
+        ),
+        execution_session=s,
+    )
+    attach_runtime(s, runtime)
     return s
 
 
@@ -30,39 +52,27 @@ def _bare_session() -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-class TestInjectDelegatesToBridge:
-    """Verify inject() calls build_service_env and delegates to inject_env."""
+class TestInjectReadsRuntime:
+    """Verify inject() reads env from the attached runtime handle."""
 
-    def test_inject_calls_bridge_and_wraps(self) -> None:
+    def test_inject_reads_runtime_and_wraps(self) -> None:
         from matmaster.tools.script_env import inject
 
-        session = _session_with_creds(access_key="ak123", project_id=456)
+        session = _session_with_runtime(access_key="ak123", project_id=456)
         session.write_file = MagicMock()
         session.exec_bash = MagicMock(
             return_value={"stdout": "", "stderr": "", "exit_code": 0}
         )
 
-        with patch(
-            "matmaster.integration.runtime_bridge.build_service_env",
-            return_value={"BOHRIUM_ACCESS_KEY": "ak123", "BOHRIUM_PROJECT_ID": "456"},
-        ) as mock_build:
-            result = inject("python run.py", session)
-            mock_build.assert_called_once_with("bohrium", session=session)
-
+        result = inject("python run.py", session)
         assert result.startswith("( . ")
         assert "python run.py" in result
 
-    def test_inject_noop_when_bridge_returns_empty(self) -> None:
+    def test_inject_noop_when_runtime_is_missing(self) -> None:
         from matmaster.tools.script_env import inject
 
         session = _bare_session()
-
-        with patch(
-            "matmaster.integration.runtime_bridge.build_service_env",
-            return_value={},
-        ):
-            result = inject("python run.py", session)
-
+        result = inject("python run.py", session)
         assert result == "python run.py"
 
 
@@ -77,7 +87,7 @@ class TestInjectViaFile:
     def test_writes_file_and_wraps_command(self) -> None:
         from matmaster.tools.script_env import inject
 
-        session = _session_with_creds(access_key="ak123", project_id=456)
+        session = _session_with_runtime(access_key="ak123", project_id=456)
         session.write_file = MagicMock()
         session.exec_bash = MagicMock(
             return_value={"stdout": "", "stderr": "", "exit_code": 0}
@@ -103,7 +113,7 @@ class TestInjectViaFile:
     def test_chmod_called_after_write(self) -> None:
         from matmaster.tools.script_env import inject
 
-        session = _session_with_creds(access_key="ak")
+        session = _session_with_runtime(access_key="ak")
         call_order = []
         session.write_file = MagicMock(
             side_effect=lambda *a: call_order.append("write")
@@ -130,7 +140,7 @@ class TestInjectFallback:
     def test_fallback_on_write_failure(self) -> None:
         from matmaster.tools.script_env import inject
 
-        session = _session_with_creds(access_key="ak123")
+        session = _session_with_runtime(access_key="ak123")
         session.write_file = MagicMock(side_effect=OSError("disk full"))
 
         result = inject("python run.py", session)
@@ -141,7 +151,7 @@ class TestInjectFallback:
     def test_fallback_on_chmod_failure(self) -> None:
         from matmaster.tools.script_env import inject
 
-        session = _session_with_creds(access_key="ak123")
+        session = _session_with_runtime(access_key="ak123")
         session.write_file = MagicMock()
         session.exec_bash = MagicMock(side_effect=OSError("exec failed"))
 
@@ -212,3 +222,46 @@ class TestInjectEnv:
 
         session = MagicMock()
         assert inject_env("python run.py", {}, session) == "python run.py"
+
+
+class TestPrepareCommandHelpers:
+    """Tests for the split inline/script preparation helpers."""
+
+    def test_prepare_inline_command_uses_file_wrapping(self) -> None:
+        from matmaster.tools.script_env import prepare_inline_command
+
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            return_value={"stdout": "", "stderr": "", "exit_code": 0}
+        )
+
+        result = prepare_inline_command(
+            "echo hi", {"BOHRIUM_ACCESS_KEY": "ak"}, session
+        )
+
+        assert result.startswith("( . ")
+        session.write_file.assert_called_once()
+        session.exec_bash.assert_called_once()
+
+    def test_prepare_script_command_writes_script_with_env(self) -> None:
+        from matmaster.tools.script_env import prepare_script_command
+
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            return_value={"stdout": "", "stderr": "", "exit_code": 0}
+        )
+
+        result = prepare_script_command(
+            "echo hi",
+            {"BOHRIUM_ACCESS_KEY": "ak"},
+            session,
+            shell_path="bash",
+        )
+
+        written = session.write_file.call_args[0][1]
+        assert "#!/usr/bin/env bash" in written
+        assert "export BOHRIUM_ACCESS_KEY=" in written
+        assert "echo hi" in written
+        assert result.startswith("bash ")

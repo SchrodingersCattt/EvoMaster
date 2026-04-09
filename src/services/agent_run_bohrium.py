@@ -11,6 +11,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from matmaster.bohrium.credentials import normalize_bohrium_credentials
+from matmaster.bohrium.endpoints import get_bohrium_base_url
+from matmaster.bohrium.runtime import (
+    BohriumRuntimeHandle,
+    attach_runtime,
+    detach_runtime,
+)
+from matmaster.bohrium.types import (
+    BohriumExecutionContext,
+    BohriumRuntimeSnapshot,
+)
 from matmaster.config.exp import ExpConfig
 from matmaster.integration.workspace_resolver import (
     get_remote_session_workspace_root,
@@ -75,53 +86,43 @@ def derive_skill_sync_spec(
     )
 
 
-def _clear_remote_proxy_shell() -> str:
-    """Bash snippet for root on Bohrium SSH nodes: wget/curl/git/pip + env.
-
-    GNU wget only accepts ``use_proxy = on|off``; ``use_proxy = no`` is invalid and
-    leaves /etc/wgetrc proxy (e.g. ga.dp.tech:8118) in effect.
-
-    Pip reads ``~/.pip/pip.conf`` / ``/etc/pip.conf`` ``[global] proxy=`` independently
-    of shell env; strip those lines so ``pip install`` does not force ga.dp.tech.
-    """
-    return (
-        'rm -f /root/speedUp.sh /speedUp.sh; '
-        'printf %s\\n '
-        "'# matmaster-evo: disable platform proxy for OSS/outbound' "
-        "'use_proxy = off' "
-        "'proxy =' "
-        "'http_proxy =' "
-        "'https_proxy =' "
-        "'ftp_proxy =' "
-        '> /root/.wgetrc; '
-        'printf %s\\n '
-        "'# matmaster-evo: disable curl default proxy' "
-        "'proxy = \"\"' "
-        "'noproxy = \"*\"' "
-        '> /root/.curlrc; '
-        'git config --global --unset-all http.proxy 2>/dev/null; true; '
-        'git config --global --unset-all https.proxy 2>/dev/null; true; '
-        '[ -f /root/.pip/pip.conf ] && sed -i '
-        "'/^[[:space:]]*proxy[[:space:]]*=/d' "
-        '/root/.pip/pip.conf 2>/dev/null; true; '
-        '[ -f /etc/pip.conf ] && sed -i '
-        "'/^[[:space:]]*proxy[[:space:]]*=/d' "
-        '/etc/pip.conf 2>/dev/null; true; '
-        'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= '
-        'NO_PROXY= no_proxy= ftp_proxy= FTP_PROXY=; '
-        'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY '
-        'NO_PROXY no_proxy ftp_proxy FTP_PROXY WGETRC 2>/dev/null; '
-    )
+# Bash snippet for root on Bohrium SSH nodes: wget/curl/git/pip + env.
+# GNU wget only accepts ``use_proxy = on|off``; ``use_proxy = no`` is invalid and
+# leaves /etc/wgetrc proxy (e.g. ga.dp.tech:8118) in effect.
+# Pip reads ``~/.pip/pip.conf`` / ``/etc/pip.conf`` ``[global] proxy=`` independently
+# of shell env; strip those lines so ``pip install`` does not force ga.dp.tech.
+_CLEAR_REMOTE_PROXY_SCRIPT: str = (
+    'rm -f /root/speedUp.sh /speedUp.sh; '
+    'printf %s\\n '
+    "'# matmaster-evo: disable platform proxy for OSS/outbound' "
+    "'use_proxy = off' "
+    "'proxy =' "
+    "'http_proxy =' "
+    "'https_proxy =' "
+    "'ftp_proxy =' "
+    '> /root/.wgetrc; '
+    'printf %s\\n '
+    "'# matmaster-evo: disable curl default proxy' "
+    "'proxy = \"\"' "
+    "'noproxy = \"*\"' "
+    '> /root/.curlrc; '
+    'git config --global --unset-all http.proxy 2>/dev/null; true; '
+    'git config --global --unset-all https.proxy 2>/dev/null; true; '
+    '[ -f /root/.pip/pip.conf ] && sed -i '
+    "'/^[[:space:]]*proxy[[:space:]]*=/d' "
+    '/root/.pip/pip.conf 2>/dev/null; true; '
+    '[ -f /etc/pip.conf ] && sed -i '
+    "'/^[[:space:]]*proxy[[:space:]]*=/d' "
+    '/etc/pip.conf 2>/dev/null; true; '
+    'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= '
+    'NO_PROXY= no_proxy= ftp_proxy= FTP_PROXY=; '
+    'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY '
+    'NO_PROXY no_proxy ftp_proxy FTP_PROXY WGETRC 2>/dev/null; '
+)
 
 
 _SKILL_SYNC_EXCLUDE = frozenset(
-    {
-        '__pycache__',
-        '.git',
-        'node_modules',
-        '.mypy_cache',
-        '.pytest_cache',
-    }
+    {'__pycache__', '.git', 'node_modules', '.mypy_cache', '.pytest_cache'}
 )
 
 
@@ -132,7 +133,7 @@ def _store_bohrium_runtime(
     original_owns_session: bool,
     ssh_session: Any,
 ) -> None:
-    """Persist Bohrium SSH swap state for cleanup (SESSIONS[session_id]['bohrium_runtime'])."""
+    """Persist Bohrium SSH swap state for cleanup."""
     if session_id not in SESSIONS:
         SESSIONS[session_id] = {}
     SESSIONS[session_id]['bohrium_runtime'] = {
@@ -166,8 +167,11 @@ def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
     ssh = runtime.get('ssh_session')
     orig = runtime.get('original_session')
     orig_owns = runtime.get('original_owns_session', True)
+    if orig is not None:
+        detach_runtime(orig)
     if ssh is not None:
         try:
+            detach_runtime(ssh)
             if getattr(ssh, 'is_open', False):
                 ssh.close()
         except Exception as close_err:
@@ -179,27 +183,11 @@ def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
         _restore_playground_session(pg, orig, orig_owns)
 
 
-def _upload_directory(
-    env: Any, local_dir: str, remote_dir: str, exclude: set[str] | None = None
-) -> None:
-    """Upload a directory tree; prefer tarball when SSHEnv supports it."""
-    ex = exclude or set()
-    if hasattr(env, 'upload_directory_tarball'):
-        env.upload_directory_tarball(local_dir, remote_dir, exclude=ex)
-    else:
-        env.upload_directory(local_dir, remote_dir, exclude=ex)
-
-
 def _sync_skills_to_ssh_session(
     ssh_session: Any,
     skill_sync_spec: SkillSyncSpec | None,
-    pg: Any,
 ) -> bool:
-    """Upload project skill trees and set remote_project_root on SSHSession.
-
-    Returns True if at least one directory was uploaded without error; False if
-    skipped, nothing uploaded, or sync failed.
-    """
+    """Upload project skill trees and set remote_project_root on SSHSession."""
     spec = skill_sync_spec
     if spec is None:
         logger.debug('run_agent: skill sync skipped (no SkillSyncSpec)')
@@ -220,7 +208,7 @@ def _sync_skills_to_ssh_session(
                 remote_dest = f"{spec.remote_project_root.rstrip('/')}/{rel.as_posix()}"
             except ValueError:
                 remote_dest = f"{spec.remote_project_root.rstrip('/')}/{lp.name}"
-            _upload_directory(ssh_session, str(lp), remote_dest, exclude)
+            ssh_session.upload_directory(str(lp), remote_dest, exclude=exclude)
             synced_any = True
         ssh_session.remote_project_root = spec.remote_project_root
         if synced_any:
@@ -256,7 +244,7 @@ def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
             'run_agent: clear_remote_proxy (%s) running (wgetrc/curlrc/pip.conf + env)',
             phase,
         )
-        script = _clear_remote_proxy_shell()
+        script = _CLEAR_REMOTE_PROXY_SCRIPT
         env = getattr(session, '_env', None)
         if env is not None and hasattr(env, 'ssh_bash_noninteractive'):
             # Avoid tmux send-keys on very long lines (remote tmux: unknown command C-m).
@@ -294,6 +282,7 @@ class BohriumSetupResult(NamedTuple):
     execution_session: Any | None
     execution_workdir: str | None
     session_type: str | None
+    runtime_snapshot: BohriumRuntimeSnapshot | None
 
 
 class BohriumSetupService:
@@ -485,9 +474,7 @@ def _load_run_credentials(
         pid = row.get('project_id')
         if pid is not None:
             run_creds['project_id'] = int(pid)
-    user_id_for_ak = sessions_service.get_session_user_id(session_id)
-    if run_creds.get('user_id') is None and user_id_for_ak is not None:
-        run_creds['user_id'] = user_id_for_ak
+    user_id_for_ak = run_creds.get('user_id')
     org_id = (run_creds.get('org_id') or '').strip()
     if user_id_for_ak and org_id:
         run_creds['access_key'] = (
@@ -501,9 +488,33 @@ def _load_run_credentials(
 
 
 def _apply_run_credentials_to_session(session: Any, run_creds: dict[str, Any]) -> None:
-    """Attach transient Bohrium credentials to the active session object."""
-    if run_creds and session:
-        session._bohrium_credentials = run_creds
+    """Attach transient Bohrium credentials and a placeholder runtime."""
+    if not run_creds or session is None:
+        return
+
+    normalized = normalize_bohrium_credentials(
+        {
+            **run_creds,
+            "base_url": run_creds.get("base_url") or get_bohrium_base_url(),
+        }
+    )
+    execution = BohriumExecutionContext(
+        session_type="local",
+        execution_workdir="",
+        remote_workspace_root="",
+        remote_project_root="",
+        node_id=None,
+        node_ip=None,
+        ssh_attached=False,
+    )
+    attach_runtime(
+        session,
+        BohriumRuntimeHandle(
+            credentials=normalized,
+            execution=execution,
+            execution_session=session,
+        ),
+    )
 
 
 def _remote_session_workspace_root() -> str:
@@ -564,14 +575,16 @@ def _setup_bohrium_for_run(
         )
 
     if not run_creds:
-        return BohriumSetupResult(False, None, None, None, None)
+        return BohriumSetupResult(False, None, None, None, None, None)
 
     project_id = run_creds.get('project_id')
     if project_id is not None:
         project_id = int(project_id)
     access_key = (run_creds.get('access_key') or '').strip()
     if not access_key or project_id is None:
-        return BohriumSetupResult(False, None, None, None, None)
+        return BohriumSetupResult(False, None, None, None, None, None)
+
+    _apply_run_credentials_to_session(getattr(pg, 'session', None), run_creds)
 
     node_id: int | None = None
     node_ip = None
@@ -820,7 +833,7 @@ def _setup_bohrium_for_run(
                 _run_clear_remote_proxy(pg, 'post_ssh')
                 try:
                     skills_sync_ok = _sync_skills_to_ssh_session(
-                        ssh_session, skill_sync_spec, pg
+                        ssh_session, skill_sync_spec
                     )
                     if skills_sync_ok:
                         _emit_node_status(
@@ -855,14 +868,41 @@ def _setup_bohrium_for_run(
                 except Exception:
                     pass
                 raise
+
+            remote_project_root = getattr(ssh_session, 'remote_project_root', '')
+            if not isinstance(remote_project_root, str) or not remote_project_root:
+                remote_project_root = (
+                    skill_sync_spec.remote_project_root if skill_sync_spec else ''
+                )
+
+            runtime = BohriumRuntimeHandle(
+                credentials=normalize_bohrium_credentials(
+                    {
+                        **run_creds,
+                        "base_url": run_creds.get("base_url") or get_bohrium_base_url(),
+                    }
+                ),
+                execution=BohriumExecutionContext(
+                    session_type="ssh",
+                    execution_workdir=ssh_working_dir,
+                    remote_workspace_root=remote_workspace_root,
+                    remote_project_root=remote_project_root,
+                    node_id=node_id,
+                    node_ip=node_ip,
+                    ssh_attached=True,
+                ),
+                execution_session=ssh_session,
+            )
+            attach_runtime(ssh_session, runtime)
             return BohriumSetupResult(
                 True,
                 None,
                 ssh_session,
                 ssh_working_dir,
                 'ssh',
+                runtime.snapshot(),
             )
-        return BohriumSetupResult(False, None, None, None, None)
+        return BohriumSetupResult(False, None, None, None, None, None)
     except Exception as e:
         reason = f'Bohrium 节点创建失败: {e}'
         logger.warning(
@@ -883,7 +923,7 @@ def _setup_bohrium_for_run(
         except Exception:
             pass
         return BohriumSetupResult(
-            False, ((False, reason), elapsed_ms), None, None, None
+            False, ((False, reason), elapsed_ms), None, None, None, None
         )
 
 
@@ -895,12 +935,7 @@ def _cleanup_bohrium_after_run(
     pg_for_run: Any,
     ssh_attached: bool,
 ) -> None:
-    """Restore session state and cleanup or release Bohrium node.
-
-    Session restore is driven by ``SESSIONS[session_id]['bohrium_runtime']``.
-    ``ssh_attached`` is retained for public API compatibility and logging, but
-    it no longer gates whether the original session is restored.
-    """
+    """Restore session state and cleanup or release Bohrium node."""
     logger.debug(
         'cleanup_bohrium_after_run: session_id=%s ssh_attached=%s',
         session_id,
@@ -908,6 +943,8 @@ def _cleanup_bohrium_after_run(
     )
     # Runtime restore is keyed off stored Bohrium swap state, not ssh_attached.
     _restore_bohrium_runtime_state(session_id, pg_for_run)
+    if pg_for_run is not None:
+        detach_runtime(getattr(pg_for_run, 'session', None))
 
     session_data = SESSIONS.get(session_id, {})
     node_id = session_data.pop('bohrium_node_id', None)

@@ -15,7 +15,12 @@ import pytest
 import requests
 
 import matmaster.tools.builtin.bohrium_tool as bohrium_module
-from matmaster.tools.builtin.bohrium_tool import BohriumTool, _use_sandbox
+import matmaster.tools.builtin.bohrium_tool.api as bohrium_api_module
+import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
+from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
+from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
+from matmaster.tools.builtin.bohrium_tool import BohriumTool
+from matmaster.tools.builtin.bohrium_tool.api import use_sandbox
 from matmaster.tools.tool_result import ToolResult
 from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
     FakeRemoteSession,
@@ -24,6 +29,38 @@ from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
     _install_fake_tiefblue,
     _patch_bridge,
 )
+
+
+def _session_with_runtime(
+    *,
+    access_key: str = "session-ak",
+    project_id: int = 42,
+) -> SimpleNamespace:
+    session = SimpleNamespace(is_open=True)
+    attach_runtime(
+        session,
+        BohriumRuntimeHandle(
+            credentials=BohriumCredentials(
+                access_key=access_key,
+                project_id=project_id,
+                user_id=7,
+                user_no="U001",
+                base_url="https://openapi.test.dp.tech",
+            ),
+            execution=BohriumExecutionContext(
+                session_type="ssh",
+                execution_workdir="/share",
+                remote_workspace_root="/share",
+                remote_project_root="/share/.matmaster",
+                node_id=1,
+                node_ip="10.0.0.1",
+                ssh_attached=True,
+            ),
+            execution_session=session,
+        ),
+    )
+    return session
+
 
 # ---------------------------------------------------------------------------
 # TestBohriumMetadata
@@ -39,27 +76,39 @@ class TestBohriumMetadata:
         assert module_path.name == "__init__.py"
         assert module_path.parent.name == "bohrium_tool"
 
-    def test_poll_schema_exposes_wait_fields(self):
+    def test_poll_schema_has_no_wait_fields(self):
         properties = BohriumTool.json_schema["properties"]
-        assert properties["wait"]["type"] == "boolean"
-        assert properties["max_wait_seconds"]["type"] == "integer"
-        assert properties["poll_interval_seconds"]["type"] == "integer"
+        assert "wait" not in properties
+        assert "max_wait_seconds" not in properties
+        assert "poll_interval_seconds" not in properties
 
     def test_prompt_mentions_list_actions(self, tmp_path):
         tool = BohriumTool(workdir=tmp_path)
         prompt = tool.prompt()
         assert prompt is not None
-        assert "Bohrium" in prompt
-        assert "list_images" in prompt
-        assert "list_machines" in prompt
+        assert "skill" in prompt
+        assert "image" in prompt
+        assert "machine" in prompt
+        assert "submit" in prompt
+        assert "poll" in prompt
 
-    def test_prompt_mentions_poll_wait_mode(self, tmp_path):
+    def test_schema_exposes_download_action(self):
+        properties = BohriumTool.json_schema["properties"]
+        assert "download" in properties["action"]["enum"]
+        assert properties["result_dir"]["description"].endswith("(download)")
+
+    def test_capabilities_include_download(self):
+        assert BohriumTool.capabilities == frozenset(
+            {"bohrium.submit", "bohrium.query", "bohrium.download"}
+        )
+
+    def test_prompt_mentions_poll_and_download_modes(self, tmp_path):
         tool = BohriumTool(workdir=tmp_path)
         prompt = tool.prompt()
         assert prompt is not None
-        assert "single query" in prompt
-        assert "wait=true" in prompt
-        assert "failure confirmation" in prompt
+        assert "single-shot" in prompt
+        assert 'action="download"' in prompt
+        assert "does not download artifacts" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -70,11 +119,11 @@ class TestBohriumMetadata:
 class TestBohriumSandboxMode:
     def test_use_sandbox_defaults_true(self, monkeypatch):
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-        assert _use_sandbox() is True
+        assert use_sandbox() is True
 
     def test_use_sandbox_disabled_with_zero(self, monkeypatch):
         monkeypatch.setenv("BOHRIUM_USE_SANDBOX", "0")
-        assert _use_sandbox() is False
+        assert use_sandbox() is False
 
 
 # ---------------------------------------------------------------------------
@@ -96,12 +145,12 @@ class TestBohriumExecution:
                 )
 
         monkeypatch.setattr(
-            bohrium_module.requests, "get", lambda *args, **kwargs: FakeResponse()
+            bohrium_api_module.requests, "get", lambda *args, **kwargs: FakeResponse()
         )
 
         with caplog.at_level(logging.WARNING):
             with pytest.raises(requests.HTTPError):
-                bohrium_module._get(
+                bohrium_api_module._get(
                     "https://openapi.test.dp.tech",
                     "/openapi/v1/calc/list",
                     "secret-ak",
@@ -126,12 +175,12 @@ class TestBohriumExecution:
                 )
 
         monkeypatch.setattr(
-            bohrium_module.requests, "post", lambda *args, **kwargs: FakeResponse()
+            bohrium_api_module.requests, "post", lambda *args, **kwargs: FakeResponse()
         )
 
         with caplog.at_level(logging.WARNING):
             with pytest.raises(requests.HTTPError):
-                bohrium_module._post(
+                bohrium_api_module._post(
                     "https://open.bohrium.com",
                     "/openapi/v1/sandbox/job/create",
                     "secret-ak",
@@ -164,7 +213,7 @@ class TestBohriumExecution:
             ),
         )
         monkeypatch.setattr(
-            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with monkeypatch.context() as m:
@@ -210,6 +259,31 @@ class TestBohriumExecution:
         assert result.status == "error"
         assert "remote session" in result.content.lower()
 
+    def test_submit_unexpected_context_error_returns_tool_result(
+        self, tmp_path, monkeypatch
+    ):
+        tool = BohriumTool(workdir=tmp_path)
+
+        with patch.object(
+            BohriumTool,
+            "_build_context",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = asyncio.run(
+                tool.execute(
+                    {
+                        "action": "submit",
+                        "input_dir": "inputs",
+                        "image": "test:latest",
+                        "cmd": "echo hi",
+                    }
+                )
+            )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert result.content == "Submit failed: boom"
+
     def test_submit_relative_input_dir_resolves_under_workdir(
         self, tmp_path, monkeypatch
     ):
@@ -224,7 +298,7 @@ class TestBohriumExecution:
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(
-            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with monkeypatch.context() as m:
@@ -259,7 +333,7 @@ class TestBohriumExecution:
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(
-            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with monkeypatch.context() as m:
@@ -282,7 +356,7 @@ class TestBohriumExecution:
         assert upload_calls
         assert post_calls[1][1]["cmd"].endswith("> log 2>&1")
 
-    def test_submit_delegates_path_classification_to_resolve_output_path(
+    def test_submit_delegates_input_path_resolution_to_bohrium_paths(
         self, tmp_path, monkeypatch
     ):
         input_dir = tmp_path / "inputs"
@@ -296,20 +370,20 @@ class TestBohriumExecution:
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(
-            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with (
             monkeypatch.context() as m,
             patch(
-                "matmaster.tools.builtin.bohrium_tool.resolve_output_path",
+                "matmaster.tools.builtin.bohrium_tool.tool.resolve_input_source",
                 create=True,
-            ) as mock_resolve,
+            ) as mock_resolve_input,
         ):
-            mock_resolve.return_value = SimpleNamespace(
-                kind="local_abs",
-                normalized_path=str(input_dir),
-                requires_remote_session=False,
+            mock_resolve_input.return_value = SimpleNamespace(
+                kind="local_dir",
+                raw_path=str(input_dir),
+                resolved_path=str(input_dir),
             )
             _install_fake_tiefblue(m, upload_calls)
             result = asyncio.run(
@@ -325,7 +399,7 @@ class TestBohriumExecution:
 
         assert isinstance(result, ToolResult)
         assert result.status == "success"
-        mock_resolve.assert_called_once()
+        mock_resolve_input.assert_called_once()
 
     def test_remote_input_dir_missing_directory_surfaces_remote_error(
         self, tmp_path, monkeypatch
@@ -474,7 +548,7 @@ class TestBohriumExecution:
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(
-            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with monkeypatch.context() as m:
@@ -508,7 +582,7 @@ class TestBohriumExecution:
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(
-            bohrium_module, "_post", _fake_submit_post_factory(post_calls)
+            bohrium_api_module, "_post", _fake_submit_post_factory(post_calls)
         )
 
         with monkeypatch.context() as m:
@@ -592,7 +666,7 @@ class TestBohriumExecution:
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_module, "_post", fake_post)
+        monkeypatch.setattr(bohrium_api_module, "_post", fake_post)
 
         with monkeypatch.context() as m:
             m.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
@@ -666,7 +740,7 @@ class TestBohriumExecution:
             raise AssertionError(f"unexpected path: {path}")
 
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_tool_module, "_get", fake_get)
 
         result = asyncio.run(
             tool.execute({"action": "list_images", "keyword": "cp2k", "max_results": 5})
@@ -709,7 +783,7 @@ class TestBohriumExecution:
             }
 
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_tool_module, "_get", fake_get)
 
         result = asyncio.run(
             tool.execute(
@@ -747,10 +821,7 @@ class TestBohriumSessionCredentials:
         monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
         monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
 
-        session = SimpleNamespace(
-            _bohrium_credentials={"access_key": "session-ak", "project_id": 42},
-            is_open=True,
-        )
+        session = _session_with_runtime()
         tool = BohriumTool(session=session, workdir=tmp_path)
 
         get_calls = []
@@ -759,20 +830,18 @@ class TestBohriumSessionCredentials:
             get_calls.append((path, access_key))
             return {"data": {"status": 1}}  # Running
 
-        monkeypatch.setattr(bohrium_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_api_module, "_get", fake_get)
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
 
         result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
         assert result.status == "success"
         assert get_calls[0][1] == "session-ak"  # Used session credential, not env
 
-    def test_poll_remote_share_without_session_errors(self, tmp_path, monkeypatch):
-        """poll with /share/ result_dir and no session should error."""
+    def test_poll_rejects_result_dir_parameter(self, tmp_path, monkeypatch):
+        """poll no longer accepts result_dir — directs to download action."""
         monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
         monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
 
-        # Provide env credentials so we pass the credential check,
-        # but no session -- so path policy rejects the remote path
         _patch_bridge(monkeypatch)
         tool = BohriumTool(workdir=tmp_path)
 
@@ -782,7 +851,8 @@ class TestBohriumSessionCredentials:
             )
         )
         assert result.status == "error"
-        assert "remote session" in result.content.lower()
+        assert "no longer downloads artifacts" in result.content
+        assert 'action="download"' in result.content
 
     def test_submit_uses_session_credentials_when_env_missing(
         self, tmp_path, monkeypatch
@@ -795,10 +865,7 @@ class TestBohriumSessionCredentials:
         input_dir.mkdir()
         (input_dir / "input.inp").write_text("data", encoding="utf-8")
 
-        session = SimpleNamespace(
-            _bohrium_credentials={"access_key": "session-ak", "project_id": 42},
-            is_open=True,
-        )
+        session = _session_with_runtime()
         tool = BohriumTool(session=session, workdir=tmp_path)
 
         post_calls = []
@@ -832,7 +899,7 @@ class TestBohriumSessionCredentials:
         opensdk_module._tiefblue_client = tiefblue_module
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-        monkeypatch.setattr(bohrium_module, "_post", fake_post)
+        monkeypatch.setattr(bohrium_api_module, "_post", fake_post)
 
         with monkeypatch.context() as m:
             m.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
@@ -886,7 +953,7 @@ class TestBohriumSessionCredentials:
             get_calls.append((path, access_key))
             return {"data": {"status": 1}}
 
-        monkeypatch.setattr(bohrium_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_api_module, "_get", fake_get)
 
         result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
         assert result.status == "success"

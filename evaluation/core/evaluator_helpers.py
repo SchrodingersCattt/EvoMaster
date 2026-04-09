@@ -24,6 +24,7 @@ from evaluation.validators.structure_general import (
 )
 from evaluation.validators.structure_molcrys import (
     check_disorder_dan2_integer_formula,
+    check_molcrys_local_env,
     check_sc005_other_formulas_in_answer,
     verify_molecular_slab_layer_scaling,
 )
@@ -186,7 +187,7 @@ def build_llm_context(
     """
     lines = [
         f'Question intent: {question.intent}',
-        f"Final answer: {answer[:500]}{'...' if len(answer) > 500 else ''}",
+        f"Final answer: {answer[:4000]}{'...' if len(answer) > 4000 else ''}",
     ]
 
     if evidence is not None:
@@ -316,6 +317,26 @@ def check_sc005_disorder_formulas(*, answer: str) -> tuple[bool, str]:
     if not ok:
         return ok, reason
     return check_disorder_dan2_integer_formula(answer)
+
+
+def check_molcrys_local_env_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Bridge evaluator dispatch → MolCrysKit local-environment validator."""
+    if evidence is None or not evidence.workspace_dir:
+        return False, 'missing workspace_dir on evidence'
+    cfg: dict[str, Any] = ref.value if isinstance(ref.value, dict) else {}
+    filename = cfg.get('filename', '*.cif')
+    expected_formula = cfg.get('expected_formula', '')
+    z_value = int(cfg.get('z_value', 4))
+    if not expected_formula:
+        return False, 'reference answer missing expected_formula'
+    return check_molcrys_local_env(
+        evidence.workspace_dir,
+        filename=filename,
+        expected_formula=expected_formula,
+        z_value=z_value,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -504,6 +525,34 @@ def check_struct_file_count(
         pattern=cfg.get('pattern', '*.cif'),
         expected=int(cfg.get('expected', 0)),
         tolerance=int(cfg.get('tolerance', 0)),
+    )
+
+
+def check_checkcif_alerts(
+    *,
+    evidence: EvidenceBundle | None,
+    ref: ReferenceAnswer,
+) -> tuple[bool, str]:
+    """Evaluate checkcif_no_a_alerts: find CIF in workspace, run checkCIF.
+
+    ref.value must be a dict with optional keys:
+      - filename (str, default '*.cif'): glob pattern to find the CIF
+      - max_a_alerts (int, default 0): maximum allowed A-level alerts
+    """
+    from evaluation.validators.checkcif import check_checkcif_no_a_alerts
+
+    workspace_dir, _ = _get_workspace(evidence)
+    if workspace_dir is None:
+        return False, 'no workspace directory available in evidence'
+
+    val = ref.value or {}
+    filename = val.get('filename', '*.cif') if isinstance(val, dict) else '*.cif'
+    max_a_alerts = int(val.get('max_a_alerts', 0)) if isinstance(val, dict) else 0
+
+    return check_checkcif_no_a_alerts(
+        workspace_dir,
+        filename=filename,
+        max_a_alerts=max_a_alerts,
     )
 
 

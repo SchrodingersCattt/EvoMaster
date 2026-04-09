@@ -86,12 +86,12 @@ class PlaygroundContext(BaseModel):
             }
         )
 
-    def with_bohrium(self, result: dict[str, Any]) -> "PlaygroundContext":
-        """Return a new frozen instance with Bohrium result in run_meta.
+    def with_bohrium(self, snapshot: dict[str, Any]) -> "PlaygroundContext":
+        """Return a new frozen instance with Bohrium snapshot in run_meta.
 
         Since PlaygroundContext is frozen, this creates a copy with
         run_meta updated to include a 'bohrium' key. The original
         instance is not mutated.
         """
-        updated_meta = {**self.run_meta, "bohrium": result}
+        updated_meta = {**self.run_meta, "bohrium": snapshot}
         return self.model_copy(update={"run_meta": updated_meta})

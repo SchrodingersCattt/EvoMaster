@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.types.cancellation import CancellationToken
+from matmaster.types.session import SessionFileStat
 from matmaster.types.topology import SessionCapabilities
 
 
@@ -190,6 +191,11 @@ class LocalSession:
     def is_file(self, path: str) -> bool:
         """Check if path is a regular file."""
         return Path(path).is_file()
+
+    def stat_file(self, path: str) -> SessionFileStat:
+        """Return file metadata for semantic fingerprinting."""
+        st = Path(path).stat()
+        return SessionFileStat(size=st.st_size, mtime=st.st_mtime)
 
     def upload_directory(
         self, local_dir: str, remote_dir: str, exclude: set[str] | None = None

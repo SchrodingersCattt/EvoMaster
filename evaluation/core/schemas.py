@@ -46,6 +46,7 @@ VerifyLiteral = Literal[
     'turn_budget',
     'duration_budget',
     'molcrys_slab_molecular_integrity',
+    'molcrys_local_env',
     'sc005_disorder_formulas',
     'llm_binary_judge',
     'batch_single_variable_sweep',
@@ -65,6 +66,8 @@ VerifyLiteral = Literal[
     'struct_file_count',
     # surface termination check
     'struct_file_surface_termination',
+    # IUCr checkCIF web service (single-crystal XRD validation)
+    'checkcif_no_a_alerts',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
@@ -91,6 +94,8 @@ DomainLiteral = Literal[
     'optical',
     'general',
     'incar',
+    'scxrd',
+    'polymer',
 ]
 
 
@@ -234,6 +239,7 @@ class QuestionItem(BaseModel):
             'duration_budget',
             'turn_budget',
             'molcrys_slab_molecular_integrity',
+            'molcrys_local_env',
             'sc005_disorder_formulas',
         }
         for item in self.scoring_checklist:

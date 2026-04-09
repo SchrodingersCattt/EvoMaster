@@ -6,10 +6,26 @@ import io
 import sys
 import types
 import zipfile
+from dataclasses import dataclass
+from types import SimpleNamespace
 
 import requests
 
-from matmaster.integration.runtime_bridge.models import ResolvedCredential
+from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
+from matmaster.bohrium.types import (
+    BohriumCredentials,
+    BohriumExecutionContext,
+)
+
+
+@dataclass(frozen=True)
+class FakeCredentialSpec:
+    access_key: str = "access-key"
+    project_id: int = 42
+    source: str = "env"
+    base_url: str = "https://openapi.test.dp.tech"
+    user_id: int | None = 7
+    user_no: str = "U001"
 
 
 def _fake_cred(
@@ -17,28 +33,41 @@ def _fake_cred(
     project_id: int = 42,
     source: str = "env",
     base_url: str = "https://openapi.test.dp.tech",
-) -> ResolvedCredential:
-    """Build a ResolvedCredential for monkeypatching."""
-    return ResolvedCredential(
-        service="bohrium",
+) -> FakeCredentialSpec:
+    """Build a fake Bohrium credential spec for monkeypatching."""
+    return FakeCredentialSpec(
+        access_key=access_key,
+        project_id=project_id,
         source=source,
-        values={
-            "access_key": access_key,
-            "project_id": project_id,
-            "base_url": base_url,
-        },
+        base_url=base_url,
     )
 
 
-def _patch_bridge(monkeypatch, cred: ResolvedCredential | None = None):
-    """Monkeypatch resolve_bohrium_credentials at the adapter module."""
-    import matmaster.integration.runtime_bridge.adapters.bohrium as adapter_mod
+def _patch_bridge(monkeypatch, cred: FakeCredentialSpec | None = None):
+    """Monkeypatch Bohrium context construction for builtin-tool tests."""
+    import matmaster.tools.builtin.bohrium_tool.tool as tool_mod
 
-    monkeypatch.setattr(
-        adapter_mod,
-        "resolve_bohrium_credentials",
-        lambda session=None, explicit=None: cred or _fake_cred(),
-    )
+    fake_cred = cred or _fake_cred()
+
+    def build_ctx(*, session=None, require_project: bool = False):
+        ctx = tool_mod.BohriumContext.from_credentials(
+            BohriumCredentials(
+                access_key=fake_cred.access_key,
+                project_id=fake_cred.project_id,
+                user_id=fake_cred.user_id,
+                user_no=fake_cred.user_no,
+                base_url=fake_cred.base_url,
+            ),
+            sandbox=tool_mod.use_sandbox(),
+            source=fake_cred.source,
+        )
+        if require_project and ctx.project_id <= 0:
+            raise tool_mod.BohriumError(
+                "Bohrium project ID unavailable. Provide via session or BOHRIUM_PROJECT_ID."
+            )
+        return ctx
+
+    monkeypatch.setattr(tool_mod, "build_bohrium_context", build_ctx)
 
 
 def _install_fake_tiefblue(monkeypatch, upload_calls: list[tuple[str, str, dict]]):
@@ -104,6 +133,52 @@ def _fake_submit_post_factory(post_calls: list[tuple[str, dict, str]]):
     return fake_post
 
 
+def test_build_bohrium_context_reads_runtime_handle() -> None:
+    from matmaster.tools.builtin.bohrium_tool.tool import build_bohrium_context
+
+    session = SimpleNamespace()
+    attach_runtime(
+        session,
+        BohriumRuntimeHandle(
+            credentials=BohriumCredentials(
+                access_key="ak",
+                project_id=42,
+                user_id=7,
+                user_no="U001",
+                base_url="https://openapi.test.dp.tech",
+            ),
+            execution=BohriumExecutionContext(
+                session_type="ssh",
+                execution_workdir="/share",
+                remote_workspace_root="/share",
+                remote_project_root="/share/.matmaster",
+                node_id=1,
+                node_ip="10.0.0.1",
+                ssh_attached=True,
+            ),
+            execution_session=session,
+        ),
+    )
+
+    ctx = build_bohrium_context(session=session, require_project=True)
+
+    assert ctx.project_id == 42
+
+
+def test_build_bohrium_context_falls_back_to_env(monkeypatch) -> None:
+    from matmaster.tools.builtin.bohrium_tool.tool import build_bohrium_context
+
+    monkeypatch.setenv("BOHRIUM_ACCESS_KEY", "env-ak")
+    monkeypatch.setenv("BOHRIUM_PROJECT_ID", "9")
+    monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
+
+    ctx = build_bohrium_context(session=None, require_project=True)
+
+    assert ctx.access_key == "env-ak"
+    assert ctx.project_id == 9
+    assert ctx.credential_source == "env"
+
+
 class FakeRemoteSession:
     """Minimal fake remote session for Bohrium submit tests."""
 
@@ -124,6 +199,8 @@ class FakeRemoteSession:
         self.is_open = is_open
         self.exec_calls: list[str] = []
         self.download_calls: list[str] = []
+        self.upload_calls: list[tuple[str, str, object]] = []
+        self.upload_error: Exception | None = None
 
         self._exec_result = exec_result or {
             "stdout": "",
@@ -148,6 +225,11 @@ class FakeRemoteSession:
         if path in self._downloads:
             return self._downloads[path]
         return self._default_download
+
+    def upload_directory(self, local_dir: str, remote_dir: str, exclude=None) -> None:
+        self.upload_calls.append((local_dir, remote_dir, exclude))
+        if self.upload_error is not None:
+            raise self.upload_error
 
 
 def _zip_bytes(files: dict[str, str]) -> bytes:

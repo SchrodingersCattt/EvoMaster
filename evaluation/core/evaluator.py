@@ -23,7 +23,9 @@ from .evaluator_batch_checks import (
 from .evaluator_helpers import (
     build_llm_context,
     build_safety_eval_record,
+    check_checkcif_alerts,
     check_duration_budget,
+    check_molcrys_local_env_from_evidence,
     check_molcrys_slab_integrity,
     check_sc005_disorder_formulas,
     check_struct_file_atom_count,
@@ -467,6 +469,16 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return check_sc005_disorder_formulas(answer=answer)
+        if item.verify == 'molcrys_local_env':
+            if ref is None:
+                return False, 'missing reference answer'
+            return check_molcrys_local_env_from_evidence(evidence=evidence, ref=ref)
+
+        # --- checkcif_no_a_alerts: IUCr checkCIF web service ---
+        if item.verify == 'checkcif_no_a_alerts':
+            if ref is None:
+                return False, 'missing reference answer'
+            return check_checkcif_alerts(evidence=evidence, ref=ref)
 
         # --- struct_file_* programmatic structure checks ---
         _STRUCT_FILE_DISPATCH = {
@@ -555,7 +567,7 @@ class BinaryEvaluator:
             f'Context:\n{context}\n\n'
             'Return JSON only.'
         )
-        max_judge_attempts = 2
+        max_judge_attempts = 3
         last_parse_error = ''
         for _attempt in range(max_judge_attempts):
             with self._llm_lock:
@@ -895,6 +907,8 @@ class BinaryEvaluator:
 
     @staticmethod
     def _extract_numbers(text: str) -> list[float]:
+        # Normalise Unicode minus (U+2212) to ASCII hyphen-minus before extraction
+        text = text.replace('\u2212', '-')
         pattern = r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?'
         numbers: list[float] = []
         for raw in re.findall(pattern, text):

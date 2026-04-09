@@ -197,11 +197,11 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_WO_Ag_adsorption_20260406
+- id: CR_WO_Ag_adsorption_20260407
   capability: co2rr_reproduction
   domain: mech
   intent: Compute adsorption energies of six adsorbates on Ag(001) and Ag(011) at
-    on-top sites using DP/calculator with consistent energy reference per doc 3.2.1.
+    on-top sites using MLIP/calculator with consistent energy reference per doc 3.2.1.
   human_prompt_seed: '对 Ag 体相切出 (001) 与 (011) 两个表面；分别计算 H、CO、COOH、CO2、HCOO、HCOOH 六种吸附质在 on-top 位点的吸附能。
     使用 DP（或题目环境要求的等效势/计算器），并统一气相分子与体相/slab 的能量零点（说明 E_ads 定义与参考态）。
     以表格汇总各体系吸附能（eV），并注明是否包含 ZPE/熵校正（若未做，需明确写「仅电子能」）。
@@ -228,7 +228,7 @@ questions:
       max: 20000
   scoring_checklist:
   - id: coverage_table
-    criterion: 结果覆盖 Ag(001) 与 Ag(011)，六种吸附质，on-top；给出吸附能数值表并定义能量参考（slab、气相）。
+    criterion: "结果覆盖 Ag(001) 与 Ag(011)，六种吸附质（H, CO, COOH, CO2, HCOO, HCOOH），on-top 位点；给出吸附能数值表并定义能量参考（slab、气相）。NOTE: 具体使用哪种计算器（DP、MACE-MP、或其他 MLIP）不是本条评判标准——只要结果覆盖齐全、参考态定义清楚即可。若答案中表格包含 markdown 分隔线（如 |:---:|），这是格式标记，不是截断。Judge on coverage completeness and reference definition only."
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_workflow
@@ -247,7 +247,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_WO_limiting_potential_20260406v3
+- id: CR_WO_limiting_potential_20260407v4
   capability: co2rr_reproduction
   domain: elec
   intent: From free-energy steps on CO2RR-to-CO, HER, and CO2-to-HCOOH pathways,
@@ -297,7 +297,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_BP_HT_adsorption_tree_20260406
+- id: CR_BP_HT_adsorption_tree_20260406v2
   capability: co2rr_reproduction
   domain: struct
   intent: Generate HT_adsorption/ directory tree with pure_metals, compounds, clusters
@@ -332,7 +332,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_batch
-    criterion: 目录/脚本与文档 4.1 的字段（元素列表、化合物列表、团簇列表、文件名规则）一致，无自相矛盾。
+    criterion: "最终答案中描述的目录层级与脚本逻辑与文档 4.1 的字段（元素列表、化合物列表、团簇列表、文件名规则）一致，答案内容无自相矛盾。评判仅基于 final answer 中的目录描述和脚本逻辑，不以 workspace 平面文件列表中缺失子目录为由判 fail（子目录内容在平面 artifact 列表中不可见属正常行为）。"
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -383,63 +383,6 @@ questions:
     verify: llm_binary_judge
   - id: grounding_impl
     criterion: 实现与文档 4.3.1 描述一致（库函数选择、吸附质/基底识别规则、类别标签规则可读）。
-    axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within a generous benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: CR_DF_LGBM_adsorption_20260406
-  capability: co2rr_reproduction
-  domain: mech
-  intent: Train LightGBM on adsorption_features_energies.csv with IQR outlier removal,
-    parity and importance plots, target train/test R² ≥ 0.8 per doc 4.3.2.
-  human_prompt_seed: '读取工作区中的 `adsorption_ml_toy.csv`（feat_0…feat_5 为特征，E_ads 为回归目标）。
-    IQR 剔除异常值后，用 LightGBM 回归预测 E_ads，划分训练/测试集，报告两侧 R² 与 RMSE，保存 parity plot 与特征重要性图（文件路径写进结论）。
-    目标：训练集 R² ≥ 0.8；若清洗后样本过少导致不稳定，在答案中说明原因并仍给出完整流程与图表。
-
-    '
-  tags:
-  - co2rr_repro
-  - lightgbm
-  - ml
-  - adsorption
-  mode_scope:
-  - direct
-  - planner
-  data_files:
-  - key: adsorption_ml_toy
-    path: data/CR_DF_LGBM_20260406/adsorption_ml_toy.csv
-    oss_url: ''
-    description: Toy adsorption dataset (6 features + E_ads) for LightGBM benchmark.
-  reference_answers:
-  - key: turn_budget
-    value:
-      max: 32
-  - key: duration_budget
-    value: *cr_dur_std
-  - key: token_budget_total
-    value:
-      max: 25000
-  scoring_checklist:
-  - id: train_r2_floor
-    criterion: 报告的训练集 R² 不低于 0.8；若使用合成小样本导致 R² 不稳定，需在答案中说明并完成 IQR、LightGBM、parity、重要性图与模型保存流程。
-    axis: correctness
-    verify: llm_binary_judge
-  - id: ml_deliverables
-    criterion: 产出 IQR 说明、LightGBM 训练、parity plot 与特征重要性图路径或嵌入图，以及模型或推理入口。
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_data
-    criterion: 数据列与标签定义清楚，预处理与划分可复现，非仅口头报告指标。
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget

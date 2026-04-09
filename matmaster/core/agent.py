@@ -43,6 +43,10 @@ from matmaster.core.hooks import (
     UserPromptContext,
 )
 from matmaster.response_text import is_trivial_response_text
+from matmaster.types.message_normalization import (
+    normalize_messages_for_openai,
+    validate_openai_messages,
+)
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -327,7 +331,9 @@ class AgentKernel:
 
             tool_defs = state.cached_tool_definitions
 
-            api_messages = [m.to_api_dict() for m in state.messages]
+            api_messages = normalize_messages_for_openai(state.messages)
+            validate_openai_messages(api_messages)
+            self._validate_outbound_tool_turn(api_messages)
 
             llm_response: LLMResponse | None = None
             try:
@@ -354,6 +360,9 @@ class AgentKernel:
             )
             if spec.compactor:
                 spec.compactor.update_message_count(len(state.messages))
+
+            if response.tool_calls:
+                self._validate_tool_call_ids(response.tool_calls)
 
             if not response.tool_calls:
                 if not self._is_valid_natural_finish(response):
@@ -784,6 +793,62 @@ class AgentKernel:
             and response.reasoning_content is not None
             and not response.tool_calls
         )
+
+    @staticmethod
+    def _validate_tool_call_ids(tool_calls: list[ToolCallData]) -> None:
+        seen: set[str] = set()
+        duplicates: list[str] = []
+        for tc in tool_calls:
+            if tc.id in seen:
+                duplicates.append(tc.id)
+            else:
+                seen.add(tc.id)
+        if duplicates:
+            raise LLMError(
+                f"duplicate tool_call ids in assembled response: {sorted(set(duplicates))}",
+                retryable=False,
+                error_category="bad_request",
+            )
+
+    @staticmethod
+    def _validate_outbound_tool_turn(messages: list[dict[str, Any]]) -> None:
+        for i, message in enumerate(messages):
+            role = message.get("role")
+            if role != "assistant":
+                continue
+            tool_calls = message.get("tool_calls") or []
+            declared_ids = [
+                str(tc.get("id") or "")
+                for tc in tool_calls
+                if isinstance(tc, dict) and tc.get("id")
+            ]
+            if not declared_ids:
+                if i + 1 < len(messages) and messages[i + 1].get("role") == "tool":
+                    raise LLMError(
+                        "orphan tool message after assistant without tool_calls",
+                        retryable=False,
+                        error_category="bad_request",
+                    )
+                continue
+
+            seen_tool_ids: set[str] = set()
+            j = i + 1
+            while j < len(messages) and messages[j].get("role") == "tool":
+                tool_id = str(messages[j].get("tool_call_id") or "")
+                if tool_id in seen_tool_ids:
+                    raise LLMError(
+                        f"duplicate tool_result ids for assistant turn: {tool_id}",
+                        retryable=False,
+                        error_category="bad_request",
+                    )
+                if tool_id not in declared_ids:
+                    raise LLMError(
+                        f"tool_result without matching previous assistant tool_call: {tool_id}",
+                        retryable=False,
+                        error_category="bad_request",
+                    )
+                seen_tool_ids.add(tool_id)
+                j += 1
 
     @staticmethod
     def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:

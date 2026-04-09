@@ -801,6 +801,50 @@ def _make_runner_with_stop_mode(
     )
 
 
+class TestRawFallbackRejection:
+    """_raw fallback from parse_tool_arguments -> rejected before validation."""
+
+    @pytest.mark.asyncio
+    async def test_raw_fallback_returns_tool_runner_error(self) -> None:
+        catalog = _make_catalog("Bash")
+        runner = _make_runner(catalog)
+        ctx = _make_ctx()
+
+        tc = ToolCallData(
+            id="call_raw",
+            name="Bash",
+            arguments={"_raw": '{"command": "echo hi"...malformed'},
+        )
+        results = await runner.execute_batch([tc], ctx)
+
+        assert len(results) == 1
+        _, tr = results[0]
+        assert tr.status == "error"
+        assert tr.meta["layer"] == "tool_runner"
+        assert tr.meta["reason"] == "raw_fallback"
+        assert "JSON" in tr.content
+
+    @pytest.mark.asyncio
+    async def test_raw_fallback_fires_on_result_callback(self) -> None:
+        catalog = _make_catalog("Bash")
+        runner = _make_runner(catalog)
+        ctx = _make_ctx()
+
+        fired: list[str] = []
+
+        async def on_result(tc: ToolCallData, tr: ToolResult) -> None:
+            fired.append(tc.id)
+
+        tc = ToolCallData(
+            id="call_raw_cb",
+            name="Bash",
+            arguments={"_raw": "broken"},
+        )
+        await runner.execute_batch([tc], ctx, on_result=on_result)
+
+        assert fired == ["call_raw_cb"]
+
+
 class TestStopModeCancel:
     """FullToolRunner uses stop_mode to decide cancel behavior."""
 

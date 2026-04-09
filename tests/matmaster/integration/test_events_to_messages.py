@@ -277,6 +277,62 @@ class TestEventsToMessagesPreservesOrder:
         assert len(assistant_with_tools) == 1
         assert assistant_with_tools[0].content is None
 
+    def test_wrapped_assistant_state_restores_tool_calls_and_none_content(self):
+        events = [
+            _user_event("q"),
+            {
+                "source": "MatMaster",
+                "type": "assistant_state",
+                "content": {
+                    "state": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call-1",
+                                "name": "bash",
+                                "arguments": {"cmd": "pwd"},
+                            }
+                        ],
+                    }
+                },
+            },
+            _tool_result_event("call-1", "bash", "/tmp"),
+            _response_event("done"),
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assistant_with_tools = [
+            m for m in result if isinstance(m, AssistantMessage) and m.tool_calls
+        ]
+        assert len(assistant_with_tools) == 1
+        assert assistant_with_tools[0].content is None
+        assert assistant_with_tools[0].tool_calls[0].id == "call-1"
+
+    def test_wrapped_assistant_state_preserves_reasoning_content(self):
+        events = [
+            _user_event("q"),
+            {
+                "source": "MatMaster",
+                "type": "assistant_state",
+                "content": {
+                    "state": {
+                        "role": "assistant",
+                        "content": "answer",
+                        "reasoning_content": "hidden reasoning",
+                        "tool_calls": [],
+                    }
+                },
+            },
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assert isinstance(result[-1], AssistantMessage)
+        assert result[-1].content == "answer"
+        assert result[-1].reasoning_content == "hidden reasoning"
+
 
 class TestEventsToMessagesPersistenceRoundTrip:
     """Persisted public content shape remains readable by ChatHistoryConverter."""

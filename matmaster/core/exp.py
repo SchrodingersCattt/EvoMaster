@@ -318,6 +318,10 @@ class Exp:
             skill_registry=self._skill_registry,
         )
 
+        from matmaster.tools.builtin.bohrium_tool.registry import (
+            JobRegistry,
+            classify_poll_status,
+        )
         from matmaster.types.tool_desc_ctx import ToolDescriptionContext
         from matmaster.types.tool_runner_state import ToolRunnerState
 
@@ -361,6 +365,34 @@ class Exp:
         capability_policy = DefaultCapabilityPolicy()
         scheduler = ToolScheduler()
         runner_state = ToolRunnerState()
+        bohrium_registry = JobRegistry()
+        runner_state.set('bohrium_job_registry', bohrium_registry)
+        bohrium_rebuild_events = (ctx.run_meta or {}).get('bohrium_rebuild_events')
+        if bohrium_rebuild_events:
+            for ev in bohrium_rebuild_events:
+                action = str(ev.get('action') or '')
+                job_id = str(ev.get('job_id') or '')
+                if not job_id or ev.get('cached'):
+                    continue
+                if action == 'submit':
+                    bohrium_registry.register(
+                        job_id, job_name=str(ev.get('job_name') or '')
+                    )
+                elif action == 'poll':
+                    reg_status = classify_poll_status(str(ev.get('status') or ''))
+                    # Rebuild only restores lifecycle state and poll count. The
+                    # cached payload is intentionally left empty because we reset
+                    # last_polled_at below, guaranteeing the first poll in a new
+                    # run is always fresh rather than served from stale cache.
+                    bohrium_registry.update_poll(
+                        job_id,
+                        status=reg_status,
+                        result='',
+                    )
+                elif action == 'download':
+                    bohrium_registry.update_download(job_id)
+            for rec in bohrium_registry.all_jobs():
+                rec.last_polled_at = 0.0
         self._register_cleanup(runner_state.clear)
 
         full_runner = FullToolRunner(
@@ -630,7 +662,7 @@ class Exp:
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
 
         # MCP runtime config: ALWAYS self-load from config_dir.
-        # Independent of skills_config -- MCP runtime config (path_adaptor,
+        # Independent of skills_config -- MCP runtime config (calculation_preflight,
         # calculation_executors) is a separate concern from skill routing.
         from matmaster.config.loader import _load_raw
 
@@ -652,9 +684,11 @@ class Exp:
         if not config_path.is_absolute():
             config_path = resolved_config_dir / config_path
 
-        if mcp_config.get('path_adaptor') == 'calculation':
+        if mcp_config.get('calculation_preflight') == 'calculation':
             try:
-                from matmaster.adaptors.calculation import resolve_mcp_config_path
+                from matmaster.mcp.calculation.config_env import (
+                    resolve_mcp_config_path,
+                )
 
                 config_path = resolve_mcp_config_path(config_path)
             except ImportError:
@@ -732,12 +766,14 @@ class Exp:
                     registry.register(lazy_tool, source='mcp')
 
         skill_tool = SkillTool(
+            session=ctx.session,
             skill_registry=skill_registry,
             on_skill_hit=on_skill_hit,
         )
         registry.register(skill_tool, source='skill')
         registry.register(
             LegacyUseSkillTool(
+                session=ctx.session,
                 skill_registry=skill_registry,
                 on_skill_hit=on_skill_hit,
             ),

@@ -56,3 +56,13 @@ playground:
     credential_ref: "env:aliyun-oss"
 
 workspace: "./workspace"
+
+# Bohrium sandbox cluster resource catalog.
+# The sandbox cluster has no public list APIs; maintain available
+# images/machines here.  Empty lists → fall back to non-sandbox API.
+bohrium:
+  sandbox:
+    images: []
+    machines:
+      cpu: []
+      gpu: []

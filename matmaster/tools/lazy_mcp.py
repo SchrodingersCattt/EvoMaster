@@ -8,7 +8,8 @@ import logging
 import threading
 from typing import Any
 
-from matmaster.adaptors.calculation.path_adaptor import CalculationPreflightError
+from matmaster.bohrium.runtime import get_runtime
+from matmaster.mcp.calculation.errors import CalculationPreflightError
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
@@ -17,7 +18,7 @@ from matmaster.types.topology import ToolPlane
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MCP_TOOL_TIMEOUT = 120.0
-_DEFAULT_LAZY_MCP_CONNECT_TIMEOUT = 5.0
+_DEFAULT_LAZY_MCP_CONNECT_TIMEOUT = 10.0
 _DEFAULT_CALCULATION_SYNC_MCP_TOOL_TIMEOUT = 10.0
 
 # Shutdown budgets -- semantically separate from connect/execution timeouts.
@@ -139,22 +140,28 @@ class LazyMCPTool:
     async def _do_call(self, arguments: dict[str, Any]) -> ToolResult:
         """Raw MCP call: resolve args + actor-routed call_tool + format."""
         resolved_args = arguments
-        path_adaptor = await self._connector.get_path_adaptor(self._server_name)
-        if path_adaptor:
+        calculation_preflight = await self._connector.get_calculation_preflight(
+            self._server_name
+        )
+        if calculation_preflight:
             try:
-                resolved_args = path_adaptor.resolve_args(
+                session = getattr(self._connector, "session", None)
+                runtime = get_runtime(session) if session is not None else None
+                resolved_args = calculation_preflight.prepare_call(
                     workspace_path=self._connector.workspace_path,
                     args=arguments,
                     tool_name=self._name,
+                    remote_tool_name=self._remote_tool_name,
                     server_name=self._server_name,
                     tool_description=self._static_description,
                     input_schema=self._input_schema,
-                    session=getattr(self._connector, "session", None),
+                    runtime=runtime,
+                    session=session,
                 )
             except CalculationPreflightError as e:
                 return ToolResult(status="error", content=str(e))
             except Exception as e:
-                logger.warning("path_adaptor resolve_args failed: %s", e)
+                logger.warning("calculation_preflight prepare_call failed: %s", e)
 
         try:
             result_content = await self._connector.call_tool(
@@ -186,7 +193,7 @@ class LazyMCPTool:
         if cancel_token is None:
             try:
                 return await call_coro
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return self._timeout_result()
 
         call_task = asyncio.create_task(call_coro)
@@ -199,13 +206,13 @@ class LazyMCPTool:
             task.cancel()
             try:
                 await task
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (asyncio.CancelledError, TimeoutError):
                 pass
 
         if call_task in done:
             try:
                 return call_task.result()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return self._timeout_result()
 
         return self._cancelled_result()
@@ -303,21 +310,21 @@ def configure_mcp_manager(
             calculation_servers is absent). Playground passes parsed
             server names; LazyMCPConnector passes server_config keys.
     """
-    if mcp_config.get("path_adaptor") == "calculation":
+    if mcp_config.get("calculation_preflight") == "calculation":
         calc_servers = mcp_config.get("calculation_servers")
         if calc_servers:
-            manager.path_adaptor_servers = set(calc_servers)
+            manager.calculation_preflight_servers = set(calc_servers)
         elif all_server_names:
-            manager.path_adaptor_servers = set(all_server_names)
+            manager.calculation_preflight_servers = set(all_server_names)
         try:
-            from matmaster.adaptors.calculation import get_calculation_path_adaptor
+            from matmaster.mcp.calculation.preflight import CalculationPreflight
 
-            manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(
-                mcp_config
+            manager.calculation_preflight_factory = lambda: CalculationPreflight(
+                mcp_config.get("calculation_executors") or {}
             )
         except ImportError:
             logger.warning(
-                "matmaster.adaptors.calculation not available, skipping path_adaptor"
+                "matmaster.mcp.calculation not available, skipping preflight"
             )
 
         executors = mcp_config.get("calculation_executors") or {}
@@ -382,7 +389,7 @@ class LazyMCPConnector:
         self._manager: Any | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._loop_thread: threading.Thread | None = None
-        self._path_adaptors: dict[str, Any] = {}
+        self._calculation_preflights: dict[str, Any] = {}
         self._closing = False
         self.session = session
         self.workspace_path = workspace_path
@@ -454,16 +461,19 @@ class LazyMCPConnector:
             timeout=self._connect_timeout,
         )
 
-    async def get_path_adaptor(self, server_name: str) -> Any | None:
+    async def get_calculation_preflight(self, server_name: str) -> Any | None:
         manager = self._ensure_manager()
         if not (
-            manager.path_adaptor_factory and server_name in manager.path_adaptor_servers
+            manager.calculation_preflight_factory
+            and server_name in manager.calculation_preflight_servers
         ):
             return None
 
-        if server_name not in self._path_adaptors:
-            self._path_adaptors[server_name] = manager.path_adaptor_factory()
-        return self._path_adaptors[server_name]
+        if server_name not in self._calculation_preflights:
+            self._calculation_preflights[server_name] = (
+                manager.calculation_preflight_factory()
+            )
+        return self._calculation_preflights[server_name]
 
     async def call_tool(
         self,
@@ -483,8 +493,8 @@ class LazyMCPConnector:
     async def ensure_connection(self, server_name: str) -> dict[str, Any]:
         """Compatibility shim for legacy tests; avoid exposing raw connection use."""
         await self.ensure_actor(server_name)
-        path_adaptor = await self.get_path_adaptor(server_name)
-        return {"path_adaptor": path_adaptor}
+        calculation_preflight = await self.get_calculation_preflight(server_name)
+        return {"calculation_preflight": calculation_preflight}
 
     def connect_and_get_tool(self, server_name: str, remote_tool_name: str) -> Any:
         """Legacy sync method -- kept for backward compatibility.
@@ -525,7 +535,7 @@ class LazyMCPConnector:
                 self._loop.call_soon_threadsafe(self._loop.stop)
             if self._loop_thread:
                 self._loop_thread.join(timeout=_MCP_LOOP_JOIN_TIMEOUT)
-            self._path_adaptors.clear()
+            self._calculation_preflights.clear()
             self._manager = None
             self._loop = None
             self._loop_thread = None

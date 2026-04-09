@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import matmaster.config.loader as matmaster_loader
+from matmaster.bohrium.types import BohriumRuntimeSnapshot
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.context import PlaygroundContext
 from tests.matmaster.core.conftest import MockLLMProvider
@@ -86,6 +87,7 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
     mock_ssh.is_open = True
     mock_ssh._env = MagicMock()
     mock_ssh._env.upload_directory_tarball = MagicMock(return_value=1)
+    mock_ssh.remote_project_root = '/remote/proj'
 
     with patch.object(arb, 'SSHSession', return_value=mock_ssh) as mock_ssh_cls:
         svc = _make_bohrium_service()
@@ -459,6 +461,15 @@ def test_execution_binding_before_build_runtime(
         mock_exec,
         '/remote/ws',
         'ssh',
+        BohriumRuntimeSnapshot(
+            session_type='ssh',
+            execution_workdir='/remote/ws',
+            remote_workspace_root='/share',
+            remote_project_root='/share/.matmaster',
+            node_id=9,
+            node_ip='10.0.0.9',
+            ssh_attached=True,
+        ),
     )
 
     mock_llm = MagicMock()
@@ -547,12 +558,12 @@ def test_skill_sync_upload_exclude_set_does_not_exclude_skill_md(
     excludes: list[set[str]] = []
 
     def _capture_upload(
-        _env: Any, _local_dir: str, _remote_dir: str, exclude: set[str] | None = None
+        _local_dir: str, _remote_dir: str, exclude: set[str] | None = None
     ) -> None:
         excludes.append(set(exclude) if exclude is not None else set())
 
-    with patch.object(arb, '_upload_directory', side_effect=_capture_upload):
-        arb._sync_skills_to_ssh_session(ssh, spec, pg=MagicMock())
+    with patch.object(ssh, 'upload_directory', side_effect=_capture_upload):
+        arb._sync_skills_to_ssh_session(ssh, spec)
 
     assert excludes
     assert all('SKILL.md' not in ex for ex in excludes)
