@@ -1,122 +1,156 @@
-# AGENTS.md — AI 编程助手项目约定
+# AGENTS.md
 
-本文件为 AI 编程助手提供项目级约定与上下文，请在所有编辑与生成代码时遵守。
+`matmaster-evo` 项目级约定，供 AI 编程助手遵循。文档、注释与代码冲突时以 `matmaster/`、`src/`、`config/` 及对应测试为准。
 
----
+## 关键事实
 
+- 顶层**没有** `evomaster/` 目录。`playground/` 仅剩空壳。历史引用（`evomaster/adaptors/calculation/path_adaptor.py`、`evomaster/env/bohrium.py`、`playground/mat_master/`、`run.py`、`matmaster/integration/runtime_bridge/`）一律视为迁移残留。
+- 核心包：`matmaster/`（Agent 运行时）、`src/`（FastAPI + Worker + DAO 平台层）、`config/`（运行时配置）、`tests/`、`evaluation/`、`docs/`。
+- 入口：
+  - 平台 API：`uv run python app.py`（入口 `app.py`）
+  - Worker 守护：`uv run python -m src.worker.agent_worker`（入口 `src/worker/agent_worker.py`）
+  - 终端调试：`uv run python -m matmaster.devshell`（入口 `matmaster/devshell/__main__.py`）
+- 生产主链路：`src/services/agent_run_service.py` → `matmaster/core/playground.py` → `matmaster/core/exp.py` → `matmaster/core/agent.py` → `matmaster/integration/fanout.py`。
+
+## 执行分层
+
+- **`Playground`**（`matmaster/core/playground.py`）：创建 `run_dir/workspaces/{task_id}`、打开 session（local / ssh）、初始化日志与 cache，产出 frozen `PlaygroundContext`。
+- **`Exp`**（`matmaster/core/exp.py`）：`assemble(ctx)` 是纯数据变换产出 `AgentRuntimeSpec`；`build_runtime()` 才分配资源（`ToolRegistry`、`ToolCatalog`、`LLMProvider`、skills、hooks）并注册清理回调；`run_stream()` 的 `finally` 统一执行清理。
+- **`AgentKernel`**（`matmaster/core/agent.py`）：generator-first 异步事件循环，`_run_items()` yield `_KernelItem`（事件或终止项）。终止条件：LLM 无 `tool_calls`、`max_turns` 到达、`CancellationToken` 触发。循环内在 turn 开头、stream chunks、retry backoff、serial tool call 之间检查取消。
+- **`RunEventFanout`**（`matmaster/integration/fanout.py`）：对每次 run 建一次。派发顺序：await SSE handler → await 额外 handler → `asyncio.create_task` 丢 persistence handler。`drain_and_close()` 必须在 `Exp.run_stream()` 的 `finally` 中等待后台写入完成。
+
+**不变量：**
+
+- `PlaygroundContext` 与 `AgentRuntimeSpec` 构造后不可变（frozen dataclass / `ConfigDict(frozen=True)`）。可变状态集中在 `_KernelState` 等内部对象，生命周期绑定到单次 `_run_items()`。
+- 跨 turn 消息历史只追加，不原地修改。
+- 任何阻塞 > 250ms 的 I/O **必须**把 `CancellationToken` 传进去或间歇检查。
+
+## API / Worker 架构
+
+**生产只支持 Worker 队列模式**。API 进程不在自己的进程里跑 run。
+
+- **API**（`app.py`，多实例）：处理 HTTP / SSE、接 `/chat/send` 后写入 Redis 队列、订阅 Redis stream 事件转发前端、维护 session 状态与 `run_owner` / `run_interrupted` 判定。
+- **Worker**（`src/worker/agent_worker.py`，多实例）：从 Redis 队列 `BLPOP` 拉任务、调用 `run_agent_sync`、`publish` 事件到 Redis、写 DB、周期刷新 `worker_alive` 与 `session_run_owner` TTL。
+- **协调只走 Redis**。不得假设「处理 HTTP 请求的进程」与「跑该会话 agent 的进程」是同一进程。
+- `POST /stream` 必须配 `REDIS_URL`，否则返回 503。`mode: 'direct' | 'planner'` 只是任务类型，与执行位置无关。
+- **`run_interrupted` 心跳规则**：`session_run_owner` 默认 TTL 7200s。Worker 心跳循环除刷新 `worker_alive` 外，**必须**周期刷新当前 session 的 `session_run_owner` TTL（见 `src/worker/agent_worker.py::_worker_heartbeat_loop`、`src/services/worker_registry_service.py::refresh_session_run_owner`），否则长任务会被误判为 stale 并推送 `run_interrupted`。
+- **服务重启**：进程内内存（如 `SESSIONS`）会清空。跨请求状态必须区分「需持久化」（落 DB / Redis / OSS）与「仅当次 run 有效」。
+
+## 工具运行时 v2
+
+旧版 registry 直跑模式已废弃，新代码不要走老路径。
+
+- `ToolCatalog`（`matmaster/tools/tool_catalog.py`）：`ToolRegistry` 之上的 versioned 门面，把 `Tool` 编译成 `ToolInstance`。`register_overlay()` 递增版本触发重编译。
+- `FullToolRunner`（`matmaster/core/tool_runner.py`）执行顺序：catalog lookup → `StructuralValidation` → `CapabilityPolicy` → fast path → `ToolScheduler` → executor → release。
+- **所有层的失败必须包成 `ToolResult`**（`matmaster/tools/tool_result.py`），在 `meta["layer"]` 标明来源。不要裸抛异常跨 runner 层。
+- 发 LLM 消息前必须经 `matmaster/types/message_normalization.py::validate_openai_messages`。
+- 新增内置工具：`matmaster/tools/builtin/{name}_tool.py`。
+- 新增 MCP 包装工具：skill 放 `matmaster/skills/lazymcp/{server}/`，由 `matmaster/tools/lazy_mcp.py::LazyMCPTool` 按需连接。
+- 注册路径始终走 `ToolRegistry.register()` 再由 `ToolCatalog` 编译，不要绕过 Catalog 直接构造 runner。
+- `matmaster/tools/tool_registry.py` 仍存在（部分测试直接构造 `ToolRegistry`），属于迁移过渡期现状，不要在新代码里延续这种用法。
+
+## Skills、Exp 配置与 MCP
+
+- Exp 定义：`matmaster/exps/*.toml`（`_base.toml` 是共享基础 system prompt，`direct.toml` / `explore.toml` 继承）。字段映射到 `matmaster/config/exp.py::ExpConfig`。
+- Skill 注册：`matmaster/skills/registry.py` 全局注册与懒加载。每个 MCP server 在 `matmaster/skills/lazymcp/{server}/` 有描述性 skill 文件。
+- MCP server 注册表：`config/mcp.yaml`（server 名、tool 过滤、executor 绑定）。MCP endpoint URL：`config/mcp_config.{env}.json`，按 `SERVICE_ENV` 加载。
+- MCP 连接：`matmaster/mcp/connection.py`（stdio / SSE / streamable HTTP），默认 `MCP_CONNECT_TIMEOUT=15s`。MCP 工具默认执行超时 120s，在 `matmaster/tools/lazy_mcp.py` 调整。
+- 配置格式：per-agent `tools: { builtin, mcp }`，**不**用顶层 `agent`，**不**用旧的 `enable_tools`。Skills 对外仅导出 `Skill` 类型。
+
+## Bohrium 集成
+
+Bohrium 相关代码集中在 `matmaster/bohrium/`：
+
+- `credentials.py`：凭证归一化、`credentials_from_env()`、`build_bohrium_context()`
+- `runtime.py`：Runtime 句柄创建、attach/detach
+- `executor.py` / `storage.py`：executor（dispatcher / local）与 storage 配置构造
+- `endpoints.py` / `paths.py`：Bohrium API endpoint 与远端路径规范
+- `upload.py` / `oss.py` / `artifacts.py`：远端上传、OSS 对象键、artifact 跟踪
+- `env.py`：executor 环境变量注入
+
+**角色**：本仓库是 MCP 客户端 / Agent 侧，与 [dptech-corp/bohr-agent-sdk](https://github.com/dptech-corp/bohr-agent-sdk) 的 `CalculationMCPServer` 交互。本仓库负责把 `executor`、`storage` 与业务参数写入 CallTool `arguments`；Server 侧用 `init_executor(executor)` / `init_storage(storage)` 执行任务，不感知鉴权来源。
+
+**约束：**
+
+- 凭证优先级：显式参数 > session/runtime > 环境变量回退。生产凭证由 session 注入；`.env` 的 `BOHRIUM_ACCESS_KEY` 仅用于本地开发回退。
+- `executor.type == "dispatcher"`：注入 `machine.remote_profile` 与 `resources.envs`（如 `BOHRIUM_PROJECT_ID`）。
+- `executor.type == "local"`：只注入 `executor.env` 下的 `BOHRIUM_ACCESS_KEY` / `BOHRIUM_PROJECT_ID`，供 bohr-agent-sdk 的 LocalExecutor 使用（`matmaster/bohrium/env.py`）。
+- Executor 模板来源：`config/mcp.yaml` 的 `calculation_executors[server_name].executor` 或 `executor_map[tool_name]`。未出现在 `calculation_executors` 的 server 不注入 executor，仅在 `calculation_servers` 中时才注入 storage。
+- `path_params_by_tool`（可选）：`calculation_executors[server_name].path_params_by_tool` 把**远程工具名**映射到需按输入工件处理的 selector 列表，支持 `targets[].model_path` 这类嵌套 selector。selector 会对照解引用后的 schema 校验，拼写错误要尽早失败。未配置时走 schema → docstring → `*_path` 三层检测。
+- OSS 对象键格式：`{prefix}/{uuid}/{原始文件名}`，使 HTTPS URL 最后一截与本地 basename 一致。
+- 远端工作目录：Bohrium SSH / skill / bash **默认直接使用项目级共享目录 `/share`**，同一 `project_id` 下不同 session 共用，**不再创建 `/share/workspace/{session_id}`**。修改远端 cwd、prompt、文件浏览、下载落盘逻辑时必须遵守 project-scoped 语义。
+- `/share/...` 等远端路径输出需要活跃远程 session 执行 `upload_directory` 同步；无 session 时 poll 拒绝远端路径。
+- 修改 executor/storage 结构或凭证注入时，需交叉验证 bohr-agent-sdk 的 `src/dp/agent/server/calculation_mcp_server.py` 与 `executor/`、`storage/` 实现。
 
 ## 异常处理
 
-**应用已在全局做了 error handler，各层异常可向上抛出，由统一异常处理返回给调用方。**
+应用全局有统一 error handler，各层异常应向上抛出。
 
-- **DAO 层**：不要用 try/except 捕获并吞掉异常。避免在 DAO 里 `except ...: logger.error(...); return False/0` 等写法，否则上层无法区分“业务无数据”与“数据库错误”。
-- **服务层（如调用外部 HTTP 的 quota_service）**：可不在此处捕获，让异常向上抛出，由全局 handler 统一处理；若确有降级需求（如外部不可用时返回默认值），再在调用处或本层按需捕获并写明原因。
+- **DAO 层**：不要 `try/except` 捕获并吞掉异常。禁止写 `except ...: logger.error(...); return False/0`，上层无法区分「业务无数据」与「数据库错误」。
+- **Service 层**：默认让异常向上抛；确有降级需求（外部 API 不可用时返回默认值）才按需捕获，写清原因。
+- **Tool 执行链路**：失败包成 `ToolResult`，在 `meta["layer"]` 标明来源，不要跨 runner 层裸抛。
+- **Kernel 异常**：在 `Exp.run_stream()` 的 `finally` 兜底。cancellation 走 `_KernelStopRequested` / `asyncio.CancelledError` → cancelled terminal event，不与业务异常混用。
+- **API 层**：业务异常继承 `src/utils/exceptions.py::BaseErrorResponse`，配 `BaseResponse(code, msg, data)` 信封。
+- **自定义异常**：集中 `matmaster/types/errors.py`；领域相关放 `matmaster/{domain}/errors.py`。异常对象可挂 `retryable` / `error_category` / `attempts` 元数据（见 `LLMError`）供 provider 重试决策。
 
----
+## Python 环境
 
-## bohr-agent-sdk 与本项目的关系
-
-**bohr-agent-sdk**（[dptech-corp/bohr-agent-sdk](https://github.com/dptech-corp/bohr-agent-sdk)）是 Bohrium 官方的科学计算 Agent SDK，用于把科学计算程序封装成 MCP 标准服务。本仓库（matmaster-evo）作为 **MCP 客户端 / Agent 侧**，与基于 bohr-agent-sdk 部署的 **MCP Server** 配合使用。
-
-### 角色划分
-
-| 角色 | 本项目（matmaster-evo） | bohr-agent-sdk |
-|------|-------------------------|----------------|
-| 定位 | MCP 客户端：发起 CallTool，传 executor / storage 等参数 | MCP Server 侧：CalculationMCPServer 接收参数，执行/提交任务 |
-| 鉴权注入 | 在 Path Adaptor 中注入：`inject_bohrium_executor`、`get_bohrium_storage_config`（用 session 的 access_key 等） | Server 侧用收到的 executor / storage 做 `init_executor`、`init_storage`，不负责鉴权来源 |
-| 配置 | `mcp.calculation_executors`、`mcp.calculation_servers`（config.yaml） | Server 端自己的部署与工具实现 |
-
-### 数据流（executor / storage）
-
-1. **本仓库**：Path Adaptor（`evomaster/adaptors/calculation/path_adaptor.py`）根据 `calculation_executors` 解析出 executor 模板，经 `inject_bohrium_executor` 注入 access_key、project_id、user_id 及 `resources.envs`（如 `BOHRIUM_PROJECT_ID`）；storage 由 `get_bohrium_storage_config` 生成。二者写入工具参数 `args`，经 `MCPTool` → `mcp_connection.call_tool(tool_name, args)` 随 MCP 协议发出。
-2. **MCP Server（bohr-agent-sdk）**：CalculationMCPServer 收到的 CallTool `arguments` 中包含 `executor`、`storage` 与业务参数。`submit_job` / `run_job` 中调用 `init_executor(executor)`、`init_storage(storage)`，用 executor 提交任务（DispatcherExecutor 或 LocalExecutor），用 storage 做输入下载/结果上传。
-
-### 与本仓库直接相关的约定
-
-- **executor 类型**：本仓库对 `executor.type == "dispatcher"` 注入 machine.remote_profile 与 resources.envs；对 `executor.type == "local"` 仅注入 `executor.env` 的 BOHRIUM_ACCESS_KEY 与 BOHRIUM_PROJECT_ID，供 bohr-agent-sdk 的 LocalExecutor 在本地运行时使用（`evomaster/env/bohrium.py`）。
-- **配置结构**：executor 模板来自 `mcp_config.calculation_executors[server_name].executor` 或 `executor_map[tool_name]`；未出现在 `calculation_executors` 中的 server（如纯 DB 检索）不会注入 executor，仅会注入 storage（若在 `calculation_servers` 中）。
-- **path_params_by_tool**：可选。`calculation_executors[server_name].path_params_by_tool` 将 **远程工具名**（如 `submit_run_gromacs`）映射到需按输入工件处理的路径 selector 列表，既支持顶层参数名，也支持 `targets[].model_path` 这类嵌套 selector。selector 会对照解引用后的 schema 做校验，配置拼写错误需尽早失败。该配置适用于 MCP 将 `List[Path]` 暴露为无 `format: path` 的 string 数组、或 submit 工具 description 过短导致无法从 docstring 推断 Path 的场景；未配置时仍依赖 schema / docstring / `*_path` 三层检测。
-- **calculation OSS 对象键**：`evomaster/adaptors/calculation/oss_io.upload_file_to_oss` 使用 `{prefix}/{uuid}/{原始文件名}`，使 HTTPS URL 最后一截与本地 basename 一致，便于 bohr-agent-sdk 下载后与 `gmx` 等按 basename 引用一致。
-- **文档与兼容**：修改 Path Adaptor、executor/storage 结构或鉴权注入逻辑时，需考虑与 bohr-agent-sdk 的 CalculationMCPServer、DispatcherExecutor/LocalExecutor 及 storage 约定的兼容性；可参考 [bohr-agent-sdk 仓库](https://github.com/dptech-corp/bohr-agent-sdk) 的 `src/dp/agent/server/calculation_mcp_server.py` 与 `executor/`、`storage/` 实现。
-
----
-
-## EvoMaster 上游仓库与本项目的关系
-
-**EvoMaster**（[sjtu-sai-agents/EvoMaster](https://github.com/sjtu-sai-agents/EvoMaster)）是科学计算 Agent 的通用基础设施框架（SciMaster 系列背后的引擎）。本仓库（matmaster-evo）在**嵌入/复刻**其核心库的基础上，增加了 MatMaster 业务 Playground、Bohrium 集成与 MCP calculation 适配等。
-
-### 角色与版本
-
-| 维度 | 本项目（matmaster-evo） | EvoMaster 上游 |
-|------|-------------------------|----------------|
-| 定位 | 下游应用：基于 EvoMaster 的 evomaster 核心 + 自研 playground、服务端、MCP 适配 | 上游框架：Agent/Playground/Exp、Tools、Skills、Session 等通用实现 |
-| 当前基于版本 | v0.0.1 架构与 API | 上游已发布 v0.0.2（配置与多 Agent 等有较大变更） |
-| 代码对应 | 项目内 `evomaster/` 目录对应上游的 `evomaster/`；本仓库另有 `matmaster/`、`src/`、`evomaster/adaptors/` 等自有代码（历史 `playground/mat_master` 本地 Web 树已移除） | 上游 `evomaster/` + 上游仓库内各类 `playground/` 示例 |
-
-### 与本仓库直接相关的约定
-
-- **evomaster 目录**：本仓库的 `evomaster/` 来源于上游，但已包含本项目定制（如 `evomaster/adaptors/calculation/`、与 Bohrium/MCP 相关的逻辑）。修改 `evomaster/` 时需注意与上游的差异，避免破坏后续合并或参考上游时的可对照性。
-- **同步/升级上游**：若从上游拉取新特性，需参考上游 [v0.0.1 → v0.0.2 迁移指南](https://github.com/sjtu-sai-agents/EvoMaster/blob/main/docs/migration/MIGRATION_GUIDE_v0.0.1_to_v0.0.2.md)。本仓库的**迁移方案**（分阶段、带兼容层）已固化为 [docs/evomaster/migration.md](docs/evomaster/migration.md)。本仓库**已完成** v0.0.2 风格迁移：配置仅用 `agents`（无顶层 `agent`）、per-agent `tools: { builtin, mcp }`（无 `enable_tools`）、Skills 对外仅导出 `Skill`；与上游的剩余差异（如顶层 `skill` 配置、Skills 内部 knowledge/operator 目录）见 migration.md 的「未对齐或未完全集成」。
-- **文档与引用**：涉及 Agent/Playground/Exp、Tools、Skills 等通用行为时，可引用上游 [EvoMaster 文档](https://github.com/sjtu-sai-agents/EvoMaster)（如 architecture、agent、tools、skills）；本仓库特有逻辑（如 MatMaster、calculation path adaptor）以本仓库代码与 AGENTS.md 为准。
-
----
-
-## 服务架构（API / Worker 分离）
-
-本服务采用 **API 进程与 Worker 进程分离** 的架构，二者可独立扩缩容，通过 Redis 协调。
-
-| 角色 | 职责 | 入口与部署 |
-|------|------|------------|
-| **API** | 处理 HTTP 请求、SSE 订阅与流式推送；接收 /chat/send 后入队，通过 Redis 订阅 stream 事件并转发给前端；维护 session 状态、run_owner 查询与 run_interrupted 判定。**生产仅支持 Worker 队列模式**：发送消息需配置 `REDIS_URL`，未配置时 POST /stream 返回 503。 | `app.py`（如 uvicorn）；可多实例（多 Pod）。 |
-| **Worker** | 从 Redis 队列 BLPOP 拉取任务，执行 `run_agent_sync`；将事件 publish 到 Redis、写 DB；周期刷新 `worker_alive` 与当前 session 的 `session_run_owner` TTL。 | `src/worker/agent_worker.py` 独立进程（Dockerfile 可选 `--target worker`）；可多实例。 |
-
-- **协调方式**：API 与 Worker 之间通过 Redis 通信：任务队列、stream 事件发布/订阅、`session_run_owner` / `worker_alive`、stop 请求等。新增或修改功能时，不得依赖「处理当前 HTTP 请求的进程」与「执行该会话 agent 的进程」为同一进程。
-
-### MatMaster：平台 API 与会话 Playground
-
-MatMaster 的对话与任务执行以 **根目录 `app.py` + `src/`（API）** 与 **`src/worker/agent_worker.py`（Worker）** 为主路径；会话级工作区与归档等行为由 **`matmaster.core.playground`**（`matmaster/core/playground.py`）与 `AgentRunService` 协同完成。
-
-历史上曾存在独立的 **`playground/mat_master`** 本地 Web（Next + 另一 FastAPI 进程）；该目录树已从本仓库移除。修改会话、流式推送、鉴权或 agent 执行路径时，以 `src/` / `app.py` / Worker 为准。说明与入口见根目录 [README-zh.md](README-zh.md)。
-
-**`run_agent_sync`：** 当前以 `AgentRunService.run_agent_sync`（`src/services/agent_run_service.py`）为准。若检出中包含 [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md)，其中可能保留与历史本地 Web 栈的对照说明。
-
----
-
-## Python 与运行环境
-
-**本项目的 Python 运行时以 uv 管理的环境为准。**
-
-- **运行 / 验证时**：在项目根目录下应使用 **`uv run python`**（或先 `source .venv/bin/activate` 再执行 `python`），不要依赖系统 PATH 下第一个 `python`，以免误用其他环境（如系统 3.9、anaconda）导致行为不一致。
-- **示例**：验证导入、跑脚本、跑测试时统一用 uv 环境：
-  - `uv run python -c "from matmaster.core.playground import Playground; print('OK')"`
-  - `uv run pytest ...`
-  - `uv run python app.py` 等。
-- **版本约定**：`pyproject.toml` 中 `requires-python = ">=3.11"`；实际开发/CI 使用 uv 安装的版本（如 3.13）。涉及语法或类型注解（如是否保留 `from __future__ import annotations`）时，以 **uv 环境中的 Python 版本** 为准做验证与决策。
-
----
+- 运行时以 uv 管理的环境为准。**始终用 `uv run python`**（或 `source .venv/bin/activate`），不要依赖系统 PATH 下第一个 `python`。
+- `pyproject.toml` 的 `requires-python = ">=3.11"`。实际版本由 `.python-version` / `uv.lock` 锁定（当前 3.13）。Black `target-version=py313`，pyupgrade `--py311-plus`。
+- 类型注解：文件开头 `from __future__ import annotations`；用 `X | None`、`list[T]`、`dict[K, V]`；禁用 `Optional[X]`、`typing.List`。
+- 常见命令：`uv run pytest tests/matmaster/core`、`uv run python app.py`、`uv run python -m matmaster.devshell`。
 
 ## 代码风格（pre-commit 强制）
 
-以下规则由 `.pre-commit-config.yaml` 定义，本地 commit 与 CI 合入 main 时均强制执行。
+`.pre-commit-config.yaml` 在本地 commit 与 CI 均强制：
 
-1. **格式化（Black）**：行宽 88 字符，保留原始引号风格（`--skip-string-normalization`）；其余缩进、空行、尾逗号等遵循 black 默认规则。
-2. **Import 排序（isort `--profile black`）**：分组顺序为 标准库 → 第三方 → 本地，组间空一行；使用 black 兼容模式，二者不冲突。
-3. **死代码清理（autoflake + pyupgrade）**：自动删除未使用的 import 和变量；自动将旧式语法升级为现代写法（如 `format()` → f-string）。
-4. **静态检查（flake8 + flake8-bugbear）**：`max-line-length=88`，忽略 E501（行长由 black 管控）、E203（black 切片格式）、B008（FastAPI `Depends()` 等依赖注入）、B036；其余规则全部生效。
-5. **文件卫生**：单文件不超过 1000 行；自动修正行尾空白、文件末尾换行、混合换行符和 BOM；JSON 自动格式化并保留非 ASCII 原文。
+- **Black**：`--line-length=88 --skip-string-normalization --target-version=py313`
+- **isort**：`--profile black`，分组：标准库 → 第三方 → 本地，组间空行
+- **pyupgrade**：`--py311-plus`
+- **autoflake**：删除未用 import / 变量
+- **flake8 + flake8-bugbear**：`max-line-length=88`；忽略 `E501`、`E203`、`B008`（FastAPI `Depends()`）、`B036`
+- **单文件 ≤ 1000 行**（`.pre-commit/check_file_lines.py`）。超出必须重构。
+- **测试命名**：`test_*.py`（`name-tests-test --pytest-test-first`）。豁免列表见 `.pre-commit-config.yaml`。
+- **禁止提交凭证**。`detect-aws-credentials`、`detect-private-key` 钩子会阻断。`.env` 已在 `.gitignore`。
 
----
+## 测试
+
+- 框架：`pytest >= 9.0.2` + `pytest-asyncio >= 0.24.0`。`asyncio_mode = "auto"`，async 测试函数**不必**加 `@pytest.mark.asyncio`。
+- 结构严格镜像源码：`matmaster/core/agent.py` → `tests/matmaster/core/test_*.py`。
+- Fixtures：
+  - 全局：`tests/conftest.py`（`MockAsyncLLMProvider`、`MockAsyncTool`，Protocol 最小实现）
+  - 模块级：`tests/matmaster/{module}/conftest.py`（如 `tests/matmaster/core/conftest.py::build_mock_spec`）
+  - 工厂函数：`make_tool_call`、`build_mock_spec`、`_make_topology`
+- **要 mock**：LLM provider、外部 API、session、有副作用的 I/O。
+- **不要 mock**：`ToolResult`、`LLMResponse`、`ToolCallData` 等核心领域对象、pure function、Pydantic 模型——用真实实例测试。
+- 运行：`uv run pytest [path]` / `uv run pytest -k "name"` / `uv run pytest -v`。
+- 覆盖率未启用门禁。`src/services/agent_run_bohrium.py`、`src/services/sessions_service.py`、`src/services/stream_service.py` 缺服务层测试，新增相关逻辑需补 `tests/services/test_*.py`。
+
+## `docs/` 严禁 git 提交
+
+`docs/` 下任何文件**禁止**通过 git commit 入库。该目录为本地工作草稿，不是仓库的一部分。
+
+- 不要 `git add docs/...`
+- 不要 `git add -A` / `git add .` 间接包含它
+- `.gitignore` 或 deny-list 若未盖住 `docs/`，仍然不要提交
+
+## 迁移残留对照
+
+下列引用在旧文档/注释中可能出现，**不是当前入口**：
+
+- `evomaster/adaptors/calculation/path_adaptor.py` → 已下沉到 `matmaster/bohrium/` + `matmaster/tools/lazy_mcp.py` 的 schema/docstring/`*_path` 三层检测；MCP 参数注入走 `config/mcp.yaml::path_params_by_tool`
+- `evomaster/env/bohrium.py` → `matmaster/bohrium/env.py`
+- `playground/mat_master/` Web 栈 → 已删除，走 `app.py` + `src/` + `src/worker/agent_worker.py`
+- `run.py` 顶层入口 → 已删除，用 `app.py` / `src/worker/agent_worker.py` / `python -m matmaster.devshell`
+- `matmaster/integration/runtime_bridge/` → 不存在。Bohrium 凭证桥在 `matmaster/bohrium/credentials.py` + `runtime.py`
+- 顶层 `agent` / `enable_tools` 配置 → 改用 `agents.{name}` + per-agent `tools: { builtin, mcp }`
+- 旧 `tool_registry` 直跑模式 → 改用 `ToolCatalog` + `FullToolRunner`
 
 ## 其他约定
 
-- **配置目录**：产品主配置与 MCP JSON 位于 `config/`。`ConfigManager` / `get_config_manager()` 未指定 `config_dir` 时默认加载该目录下的 `config.yaml`。
-- **维护本文件**：在对话或开发过程中，若产生新的、值得固化的约定或逻辑（如架构决策、命名/用法约定、废弃说明等），应适时补充到 AGENTS.md，便于后续遵守。
-- **多实例与 Redis**：API 与 Worker 均可多实例部署。跨实例的协调一律使用 Redis（或其它共享存储）；事件顺序、用户回复、run 归属与存活判断等均依赖 Redis，不依赖进程内状态或「请求与执行同进程」的假设。
-- **服务重启**：新增或修改功能时需考虑服务重启场景。进程内内存（如 `SESSIONS`）在重启后会清空；若逻辑依赖跨请求的状态（如会话级鉴权、当前 run 所用资源），应区分「需持久化」与「仅当次 run 有效」：前者落库或共享存储，后者可保留在内存，并确保重启后新请求能从 DB/共享存储恢复必要信息继续工作。
-- **run_interrupted 与长任务**：API 通过 Redis 的 `session_run_owner` 与 `worker_alive` 判断 run 是否在别的 pod 上。`session_run_owner` 有 TTL（默认 7200s）；若 Worker 在 run 期间不刷新该 key，长任务超过 TTL 后 key 过期，用户刷新页面时 API 会看到 `run_owner=None`、DB 仍为 active，从而误判为 stale 并推送 run_interrupted。因此 Worker 心跳中除刷新 `worker_alive` 外，还需周期刷新当前 session 的 `session_run_owner` TTL（见 `agent_worker._worker_heartbeat_loop` 与 `WorkerRegistryService.refresh_session_run_owner`）。
-- **仅 Worker 队列模式**：run 只在 Worker 上执行，不再支持「在 API 进程内执行 run」。请求中的 `mode: 'direct' | 'planner'` 仅表示任务类型，与执行位置无关。发送消息（POST /stream）必须配置 `REDIS_URL`，否则返回 503。
-- **Bohrium 远端共享目录**：Bohrium SSH / skill / bash 的远端工作目录默认直接使用项目级共享目录 `/share`；同一 Bohrium `project_id` 下的不同 session 共用该目录，不再默认创建 `/share/workspace/{session_id}`。修改远端 cwd、prompt 提示、文件浏览或下载落盘逻辑时，应遵守这一 project-scoped 语义。
-- **Runtime Credential Bridge**：Bohrium 鉴权已统一走 `matmaster/integration/runtime_bridge/` 的凭证桥。所有消费 Bohrium 凭证的模块（`BohriumTool`、`CalculationPathAdaptor`、`job_service`、`bohrium_env`）通过桥解析凭证，优先级为：显式参数 > session/runtime > 环境变量回退。生产环境中凭证由 session 自动注入，`.env` 中设置 `BOHRIUM_ACCESS_KEY` 仅用于本地开发回退。`/share/...` 等远端路径输出需要活跃的远程 session 以执行 upload_directory 同步逻辑；无 session 时 poll 会拒绝远端路径。
-- **单文件行数**：若某源文件行数超过 1000 行，应进行重构（拆分为多个模块/子模块、抽取类或函数等），以利于维护与协作。
-- **评测模块约定**：`evaluation/` 目录的详细约定（题库格式、字段规则、verify 类型、数据流、编写指南等）统一维护在 [`evaluation/AGENTS_evaluation.md`](evaluation/AGENTS_evaluation.md)。修改评测相关规则时，**必须同步更新该文件**；若通用约定有变更，**必须同步更新本文件**。
-- （可在此补充项目的其他通用约定，如测试、提交信息、目录结构等。）
+- **配置目录**：`ConfigManager` / `get_config_manager()` 未指定 `config_dir` 时默认加载 `config/config.yaml`。
+- **多实例协调**：跨实例状态一律走 Redis（或其它共享存储），禁止依赖进程内状态或同进程假设。
+- **Checkpoint 兼容性**：context compaction 的 checkpoint 序列化受 `src/services/history_checkpoint_codec` 严格校验。修改消息序列规则或 compactor 状态结构时必须考虑反序列化回退，旧 checkpoint 不应 load 崩溃。
+- **日志脱敏**：`logger.warning(..., exc_info=True)` 是默认写法。`password` / `token` / `api_key` / `secret` 字段走现有 redaction；**不要**把 LLM prompt 或 tool 全量 schema 打到 DEBUG 日志。
+- **评测模块**：`evaluation/` 的详细约定在 [`evaluation/AGENTS_evaluation.md`](evaluation/AGENTS_evaluation.md)。修改评测规则**必须**同步该文件；通用约定变更**必须**同步本文件。
+- **维护本文件**：对话或开发中产生新的值得固化的约定（架构决策、命名约定、废弃说明）应及时补入。**代码与本文件冲突时以代码为准**，并立即更新本文件。
