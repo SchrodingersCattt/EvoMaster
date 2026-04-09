@@ -197,13 +197,33 @@ _SANDBOX_MACHINES: list[dict[str, Any]] = [
     {"skuEnName": "c2_m8_cpu", "cpuCoreNum": 2, "memory": 8},
     {"skuEnName": "c8_m32_cpu", "cpuCoreNum": 8, "memory": 32},
     {"skuEnName": "c32_m128_cpu", "cpuCoreNum": 32, "memory": 128},
-    {"skuEnName": "c8_m32_1 * NVIDIA 4090", "cpuCoreNum": 8, "memory": 32, "gpu": "NVIDIA GeForce RTX 4090", "gpuCoreNum": 1},
-    {"skuEnName": "c16_m64_1 * NVIDIA 4090", "cpuCoreNum": 16, "memory": 64, "gpu": "NVIDIA GeForce RTX 4090", "gpuCoreNum": 1},
-    {"skuEnName": "c16_m64_1 * NVIDIA 5090", "cpuCoreNum": 16, "memory": 64, "gpu": "NVIDIA GeForce RTX 5090", "gpuCoreNum": 1},
+    {
+        "skuEnName": "c8_m32_1 * NVIDIA 4090",
+        "cpuCoreNum": 8,
+        "memory": 32,
+        "gpu": "NVIDIA GeForce RTX 4090",
+        "gpuCoreNum": 1,
+    },
+    {
+        "skuEnName": "c16_m64_1 * NVIDIA 4090",
+        "cpuCoreNum": 16,
+        "memory": 64,
+        "gpu": "NVIDIA GeForce RTX 4090",
+        "gpuCoreNum": 1,
+    },
+    {
+        "skuEnName": "c16_m64_1 * NVIDIA 5090",
+        "cpuCoreNum": 16,
+        "memory": 64,
+        "gpu": "NVIDIA GeForce RTX 5090",
+        "gpuCoreNum": 1,
+    },
 ]
 
 
-def list_sandbox_machines(*, machine_type: str, keyword: str, max_results: int) -> list[dict[str, Any]]:
+def list_sandbox_machines(
+    *, machine_type: str, keyword: str, max_results: int
+) -> list[dict[str, Any]]:
     """Return the hardcoded sandbox machine list, filtered by machine_type and keyword."""
     if machine_type == "gpu":
         candidates = [m for m in _SANDBOX_MACHINES if "gpu" in m]
@@ -212,7 +232,6 @@ def list_sandbox_machines(*, machine_type: str, keyword: str, max_results: int) 
     lowered = keyword.lower()
     if lowered:
         candidates = [
-            m for m in candidates
-            if lowered in str(m.get("skuEnName") or "").lower()
+            m for m in candidates if lowered in str(m.get("skuEnName") or "").lower()
         ]
     return candidates[:max_results]

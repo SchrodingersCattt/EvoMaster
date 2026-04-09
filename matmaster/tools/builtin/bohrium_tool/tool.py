@@ -808,7 +808,9 @@ class BohriumTool(BuiltinTool):
         ctx: BohriumContext | None = None
         try:
             ctx = self._build_context()
-            self._log_request_context(action='list_machines', ctx=ctx, sandbox=ctx.sandbox)
+            self._log_request_context(
+                action='list_machines', ctx=ctx, sandbox=ctx.sandbox
+            )
 
             if ctx.sandbox:
                 results = list_sandbox_machines(
