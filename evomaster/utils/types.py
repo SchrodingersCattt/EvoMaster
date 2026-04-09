@@ -116,9 +116,12 @@ def _sanitize_api_payload_value(value: Any) -> Any:
             if key == 'reasoningContent' and isinstance(sanitized_item, dict):
                 if not str(sanitized_item.get('text') or '').strip():
                     continue
-            if key == 'provider_specific_fields' and isinstance(sanitized_item, dict):
-                if not sanitized_item:
-                    continue
+            if key == 'provider_specific_fields':
+                # provider_specific_fields 是 Bedrock 原生字段（如 reasoningContentBlocks），
+                # 不应出现在发给 LiteLLM 的 OpenAI 格式 payload 里。
+                # 注入此字段会触发 LiteLLM 的 Bedrock 格式检测，绕过正常的
+                # OpenAI→Anthropic 转换，导致 tool_use/tool_result 配对失败（Claude 400）。
+                continue
             sanitized_dict[key] = sanitized_item
         return sanitized_dict
 

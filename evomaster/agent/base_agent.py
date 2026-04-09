@@ -478,6 +478,7 @@ class BaseAgent(TrajectoryPersistenceMixin, ABC):
                 ''.join(traceback.format_stack(limit=50)),
             )
         max_retries = 3
+        _orphaned_tool_use_stripped = False
         for attempt in range(max_retries):
             try:
                 if self._on_llm_token is not None:
@@ -487,6 +488,49 @@ class BaseAgent(TrajectoryPersistenceMixin, ABC):
                 return self.llm.query(dialog_for_query)
             except Exception as e:
                 err_msg = str(e).lower()
+
+                # orphaned tool_use 错误（Claude/Bedrock 400）：
+                # api_message_extras 中的 provider_specific_fields 等 Bedrock 原生字段
+                # 注入 OpenAI 格式 payload 后，触发 LiteLLM 错误的 Anthropic 转换，
+                # 导致 tool_use/tool_result 配对失败。
+                # 自愈：剔除所有 AssistantMessage 的 api_message_extras.provider_specific_fields
+                # 后重试一次（仅重试一次，防止无限循环）。
+                is_orphaned_tool_use = (
+                    ('tool_use' in err_msg and 'tool_result' in err_msg)
+                    or ('ids were found without' in err_msg and 'tool' in err_msg)
+                )
+                if is_orphaned_tool_use and not _orphaned_tool_use_stripped:
+                    self.logger.warning(
+                        'Orphaned tool_use error (attempt %d) — stripping '
+                        'provider_specific_fields from api_message_extras and retrying. '
+                        'Error: %s',
+                        attempt + 1,
+                        e,
+                    )
+                    from evomaster.utils.types import AssistantMessage as _AssistantMessage
+                    cleaned_messages = []
+                    for msg in dialog_for_query.messages:
+                        if isinstance(msg, _AssistantMessage):
+                            extras = dict((msg.meta or {}).get('api_message_extras') or {})
+                            if 'provider_specific_fields' in extras:
+                                extras.pop('provider_specific_fields')
+                                new_meta = {**dict(msg.meta or {}), 'api_message_extras': extras}
+                                msg = _AssistantMessage(
+                                    content=msg.content,
+                                    tool_calls=msg.tool_calls,
+                                    reasoning_content=msg.reasoning_content,
+                                    meta=new_meta,
+                                )
+                        cleaned_messages.append(msg)
+                    from evomaster.utils.types import Dialog as _Dialog
+                    dialog_for_query = _Dialog(
+                        messages=cleaned_messages,
+                        tools=dialog_for_query.tools,
+                        meta=dialog_for_query.meta,
+                    )
+                    _orphaned_tool_use_stripped = True
+                    continue
+
                 is_context_error = any(
                     kw in err_msg
                     for kw in (
