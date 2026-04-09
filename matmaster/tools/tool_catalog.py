@@ -11,6 +11,8 @@ from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ToolInstance
 from matmaster.types.topology import RuntimeTopology
 
+_BUILTIN_PROMPT_SOURCES = frozenset({"builtin", "skill"})
+
 
 class ToolCatalog:
     """Facade over ToolRegistry with versioned overlay registration."""
@@ -109,7 +111,7 @@ class ToolCatalog:
             if inst is None or not inst.tool_spec.exposed_to_model:
                 continue
 
-            if name == "Bash":
+            if self._registry.get_source(name) not in _BUILTIN_PROMPT_SOURCES:
                 continue
 
             raw_tool = self._registry.get_raw(name)

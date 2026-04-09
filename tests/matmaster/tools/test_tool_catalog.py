@@ -168,6 +168,41 @@ class TestCatalogPrompts:
 
         assert prompts == "prompt:alpha:/tmp/workspace"
 
+    def test_collect_prompts_allowlist_skips_mcp_source(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="builtin")
+        registry.register(_DynamicTool("beta"), source="mcp")
+        catalog = ToolCatalog(registry, topology=_make_topology())
+
+        prompts = catalog.collect_prompts(_make_ctx())
+
+        assert "prompt:alpha:/tmp/workspace" in prompts
+        assert "prompt:beta" not in prompts
+
+    def test_collect_prompts_allowlist_skips_unknown_source(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="builtin")
+        registry.register(_DynamicTool("test_tool"), source="test")
+        registry.register(_DynamicTool("ghost"), source="unknown")
+        catalog = ToolCatalog(registry, topology=_make_topology())
+
+        prompts = catalog.collect_prompts(_make_ctx())
+
+        assert "prompt:alpha:/tmp/workspace" in prompts
+        assert "prompt:test_tool" not in prompts
+        assert "prompt:ghost" not in prompts
+
+    def test_collect_prompts_allowlist_includes_skill_source(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="builtin")
+        registry.register(_DynamicTool("my_skill"), source="skill")
+        catalog = ToolCatalog(registry, topology=_make_topology())
+
+        prompts = catalog.collect_prompts(_make_ctx())
+
+        assert "prompt:alpha:/tmp/workspace" in prompts
+        assert "prompt:my_skill:/tmp/workspace" in prompts
+
 
 class TestCatalogCancelInjection:
     def test_inject_cancel_token_sets_tool_attribute(self) -> None:
