@@ -528,6 +528,34 @@ def check_struct_file_count(
     )
 
 
+def check_checkcif_alerts(
+    *,
+    evidence: EvidenceBundle | None,
+    ref: ReferenceAnswer,
+) -> tuple[bool, str]:
+    """Evaluate checkcif_no_a_alerts: find CIF in workspace, run checkCIF.
+
+    ref.value must be a dict with optional keys:
+      - filename (str, default '*.cif'): glob pattern to find the CIF
+      - max_a_alerts (int, default 0): maximum allowed A-level alerts
+    """
+    from evaluation.validators.checkcif import check_checkcif_no_a_alerts
+
+    workspace_dir, _ = _get_workspace(evidence)
+    if workspace_dir is None:
+        return False, 'no workspace directory available in evidence'
+
+    val = ref.value or {}
+    filename = val.get('filename', '*.cif') if isinstance(val, dict) else '*.cif'
+    max_a_alerts = int(val.get('max_a_alerts', 0)) if isinstance(val, dict) else 0
+
+    return check_checkcif_no_a_alerts(
+        workspace_dir,
+        filename=filename,
+        max_a_alerts=max_a_alerts,
+    )
+
+
 def check_struct_file_surface_termination(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:
