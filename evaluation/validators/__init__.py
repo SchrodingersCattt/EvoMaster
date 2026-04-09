@@ -24,6 +24,7 @@ from .structure_molcrys import (
     check_sc005_other_formulas_in_answer,
     verify_molecular_slab_layer_scaling,
 )
+from .text_file import check_text_file_contains_all, check_text_file_regex
 
 __all__ = [
     # checkcif (IUCr web service)
@@ -42,6 +43,9 @@ __all__ = [
     'check_layer_count',
     'check_stoichiometry_ratio',
     'check_surface_termination',
+    # text_file (plain text file checks)
+    'check_text_file_contains_all',
+    'check_text_file_regex',
     # structure_molcrys (MolCrysKit-backed)
     'check_disorder_dan2_integer_formula',
     'check_molcrys_local_env',

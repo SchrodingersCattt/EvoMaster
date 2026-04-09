@@ -147,6 +147,8 @@ evaluation/question_bank/
 | `struct_file_count` | `{"pattern": str, "expected": int, "tolerance": int}` | 统计 workspace 中匹配 glob 的文件数（无需 pymatgen） |
 | `struct_file_surface_termination` | `{"filename": str, "element": str, "axis": "x"\|"y"\|"z", "side": "top"\|"bottom"\|"both", "layer_tol_A": float}` | 检查 slab 最外层（top/bottom/both）是否由指定元素构成；用于验证 O-terminated 或其他特定终止面（如 CeO2(111) 的 O 终止）|
 | `checkcif_no_a_alerts` | `{"filename": str, "max_a_alerts": int}` | 在 workspace 中找到匹配 `filename`（glob，默认 `*.cif`）的 CIF 文件，POST 到 IUCr checkCIF 服务（`https://checkcif.iucr.org/cgi-bin/checkcif_hkl.pl`），解析 HTML 响应中的 A/B/C/G 级别警告数，验证 A 级警告数 ≤ `max_a_alerts`（默认 0）。实现见 `evaluation/validators/checkcif.py`。|
+| `text_file_contains_all` | `{"filename": str, "tokens": list[str], "flags": str, "case_sensitive": bool, "normalize_whitespace": bool}` | 读取 workspace 文本文件并检查 `tokens` 全部出现；可选 `flags: "i"`、大小写与空白归一化控制 |
+| `text_file_regex` | `{"filename": str, "pattern": str, "flags": str}` | 读取 workspace 文本文件并做正则匹配（`flags` 支持 `i/m/s`） |
 
 ### 不需要对应 `reference_answers` 条目
 
