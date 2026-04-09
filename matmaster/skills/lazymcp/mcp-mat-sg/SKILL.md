@@ -78,16 +78,9 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
 
 ## add_hydrogens / passivation
 
-- Si/Ge surface passivation: target Si-H ≈ 1.48 Å along tetrahedral direction (~109.47°).
-- **⚠ BOTH SURFACES MANDATORY**: Passivate **all** dangling bonds on **both** top and bottom surfaces of the slab. A slab has TWO exposed surfaces — failing to passivate either one is a critical error. Identify surface atoms on BOTH sides by checking z-coordinates: atoms near z_max (top) AND atoms near z_min (bottom) are surface atoms. Both sets must be fully passivated.
-- **Key principle**: a surface Si atom with coordination N needs (4 − N) hydrogen atoms. For reconstructed surfaces like Si(100)-2×1, surface dimers have coordination 2 → each dimer atom needs 2 H atoms, not 1.
-- **Passivation algorithm**:
-  1. Compute coordination of every Si atom (Si-Si cutoff 2.6 Å, Si-H cutoff 1.8 Å).
-  2. Identify ALL under-coordinated Si (coordination < 4) on BOTH top and bottom surfaces.
-  3. For each, compute missing bond directions (tetrahedral angles relative to existing bonds) and add H atoms at 1.48 Å along those directions.
-  4. Re-check coordination. Iterate until ALL surface Si reach coordination = 4.
-- **Verification script** (mandatory): after saving the passivated structure, re-read it and print per-atom coordination for every Si atom. Flag any Si with coordination ≠ 4. **Separately verify top-surface and bottom-surface atoms.** The final answer MUST report mean Si coordination and confirm it equals 4.0.
-- Save the passivated structure, then verify by re-reading and checking. Report: total H added, mean Si-H bond length, per-atom coordination check, top/bottom surface H counts, and confirmation that all surface Si atoms have coordination = 4.
+**Preferred**: use `passivate_surface.py` from **structure-manager** skill — it handles detection, placement, and verification in one call. Pass `-o <output>` to produce the file directly.
+- **⚠ BOTH surfaces mandatory**: always passivate top AND bottom. Si-H ≈ 1.48 Å, Ge-H ≈ 1.53 Å.
+- After passivation, verify with `assess_structure.py` and report: H count per surface, mean bond length, all surface atoms coordination = 4.
 
 ## Complex / defective bulk structures
 
