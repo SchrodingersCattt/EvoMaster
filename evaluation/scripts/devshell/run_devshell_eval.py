@@ -42,7 +42,7 @@ Usage (from repository root)::
 
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --model claude-opus-4-6 --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --limit 3
-    uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --capabilities structure_construction --limit 3
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --slices structure_construction --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-export-review --limit 3   # skip Markdown bundle
     uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run-dir results/devshell_eval_*  # manual only
@@ -293,12 +293,13 @@ def main() -> int:
         ),
     )
     parser.add_argument(
-        "--capabilities",
-        nargs="+",
+        "--slices",
         default=None,
+        metavar="EXPR",
         help=(
-            "Only run questions with these capability values "
-            "(e.g. structure_construction, batch_processing)"
+            "OR-of-slices filter: cap cap[dom] cap[d1,d2] (whitespace separates "
+            'slices; no spaces inside "[...]") '
+            '(e.g. "workflow_orchestration[polymer] input_generation_abacus")'
         ),
     )
     parser.add_argument(
@@ -441,20 +442,26 @@ def main() -> int:
         return 2
     py = args.python or Path(sys.executable)
 
+    sys.path.insert(0, str(REPO_ROOT))
+    from evaluation.core.slice_parser import parse_slices_expression
+
+    slices_override = None
+    if args.slices is not None:
+        slices_override = [s.model_dump() for s in parse_slices_expression(args.slices)]
+
     cfg_dict = _merge_eval_config(
         args.eval_config if args.eval_config.is_file() else None,
         {
             "question_bank_dir": (
                 str(args.question_bank_dir) if args.question_bank_dir else None
             ),
-            "include_capabilities": args.capabilities,
+            "include_slices": slices_override,
             "modes": args.modes,
             "include_question_ids": args.questions,
         },
     )
 
     # Lazy imports after potential chdir
-    sys.path.insert(0, str(REPO_ROOT))
     from evaluation.core.runner import (
         _apply_filters,
         _flatten_banks,

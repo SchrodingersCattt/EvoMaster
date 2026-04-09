@@ -17,6 +17,7 @@ try:
     from .reporter import generate_rating_from_raw_runs
     from .runner import run_evaluation
     from .schemas import EvalConfig
+    from .slice_parser import parse_slices_expression
 except ImportError:
     _project_root = str(Path(__file__).resolve().parents[2])
     if _project_root not in sys.path:
@@ -24,6 +25,7 @@ except ImportError:
     from evaluation.core.reporter import generate_rating_from_raw_runs
     from evaluation.core.runner import run_evaluation
     from evaluation.core.schemas import EvalConfig
+    from evaluation.core.slice_parser import parse_slices_expression
 
 
 def main() -> int:
@@ -59,10 +61,14 @@ def main() -> int:
         help='Force using seed prompts (disable rewriting)',
     )
     parser.add_argument(
-        '--capabilities',
-        nargs='+',
+        '--slices',
         default=None,
-        help='Only run questions from these capabilities (e.g. --capabilities batch_processing workflow_orchestration)',
+        metavar='EXPR',
+        help=(
+            'OR-of-slices: whitespace between caps; cap[dom]; cap[d1,d2] — '
+            'no spaces inside [...] (e.g. '
+            '"workflow_orchestration[polymer] input_generation_abacus")'
+        ),
     )
     parser.add_argument(
         '--questions',
@@ -124,8 +130,10 @@ def main() -> int:
         eval_cfg['question_bank_dir'] = args.question_bank_dir
     if args.use_seed_prompt:
         eval_cfg['use_seed_prompt'] = True
-    if args.capabilities is not None:
-        eval_cfg['include_capabilities'] = args.capabilities
+    if args.slices is not None:
+        eval_cfg['include_slices'] = [
+            s.model_dump() for s in parse_slices_expression(args.slices)
+        ]
     if args.questions is not None:
         eval_cfg['include_question_ids'] = args.questions
 

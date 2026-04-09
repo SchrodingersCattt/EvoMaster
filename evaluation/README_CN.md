@@ -121,13 +121,13 @@ CLI:
 ```bash
 uv run python -m evaluation.cli \
   --eval-config evaluation/config.yaml \
-  --capabilities batch_processing workflow_orchestration \
+  --slices 'batch_processing workflow_orchestration[polymer]' \
   --questions DF_mech_001 WO_mech_001
 ```
 
 常用参数：
 
-- `--capabilities`: 按 capability 过滤题目。
+- `--slices`: OR-of-slices，语法 `cap cap[dom] cap[d1,d2]`（**括号外**空格分隔，`[]` 内禁止空格；与 `evaluation/config.yaml` 中 `include_slices` 一致）。
 - `--questions`: 按 v5 question id 过滤题目。
 - `--modes`: 选择 `direct` / `planner`。
 - `--k`: 每题重复次数。

@@ -396,9 +396,9 @@ class MatmasterEvalMcpToolkit:
         questions = d.questions
         if args.get("questions") is not None:
             questions = list(args["questions"])
-        capabilities = d.capabilities
-        if args.get("capabilities") is not None:
-            capabilities = list(args["capabilities"])
+        slices = d.slices
+        if args.get("slices") is not None:
+            slices = str(args["slices"]).strip() or None
         model = d.model if args.get("model") is None else str(args["model"])
         exp = d.exp if args.get("exp") is None else str(args["exp"])
         pending = (
@@ -425,7 +425,7 @@ class MatmasterEvalMcpToolkit:
             jobs=jobs,
             limit=limit,
             questions=questions,
-            capabilities=capabilities,
+            slices=slices,
             model=model,
             exp=exp,
             eval_ingest_pending_only=pending,

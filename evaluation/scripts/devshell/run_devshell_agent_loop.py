@@ -188,10 +188,9 @@ class DevshellAgentLoopCli:
             help="Forwarded to run_devshell_eval --questions",
         )
         p.add_argument(
-            "--capabilities",
-            nargs="+",
+            "--slices",
             default=None,
-            help="Forwarded to run_devshell_eval --capabilities",
+            help='Forwarded to run_devshell_eval --slices (e.g. "cap cap[dom]")',
         )
         p.add_argument(
             "--model",
@@ -271,7 +270,9 @@ class DevshellAgentLoopCli:
             jobs=int(args.jobs),
             limit=args.limit,
             questions=list(args.questions) if args.questions else None,
-            capabilities=list(args.capabilities) if args.capabilities else None,
+            slices=(
+                (str(args.slices).strip() or None) if args.slices is not None else None
+            ),
             model=args.model,
             exp=args.exp,
             eval_ingest_pending_only=bool(args.eval_ingest_pending_only),

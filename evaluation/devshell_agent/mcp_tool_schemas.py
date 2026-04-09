@@ -36,10 +36,13 @@ RUN_DEVSHELL_EVAL_SCHEMA: dict[str, Any] = {
             "items": {"type": "string"},
             "description": "Question IDs (default: CLI defaults).",
         },
-        "capabilities": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Capability filter (default: CLI defaults).",
+        "slices": {
+            "type": "string",
+            "description": (
+                "OR-of-slices for run_devshell_eval --slices: whitespace separates "
+                'slices; no spaces inside "[...]". E.g. '
+                '"workflow_orchestration[polymer] input_generation_abacus" (default: CLI).'
+            ),
         },
         "model": {
             "type": "string",

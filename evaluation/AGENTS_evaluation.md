@@ -76,7 +76,12 @@ evaluation/question_bank/
 
 #### domain 枚举
 
-`struct` / `elec` / `mech` / `thermo` / `kinetic` / `optical` / `general`
+`struct` / `elec` / `mech` / `thermo` / `kinetic` / `optical` / `general` / `incar` / `polymer`
+
+#### 运行筛选：`--slices` / `include_slices`
+
+- **CLI**：`--slices 'A B[a,b] C[d]'`。**括号外的空白**分隔 **OR** 分支；`[]` 内**禁止空白**（域名用逗号分隔，如 `[a,b]`）；无 `[]` 表示该 capability 下 **任意 domain**；`[dom]` 或 `[d1,d2]` 表示 domain 在列表内（列表内为 OR）。
+- **`evaluation/config.yaml`**：可用 `include_slices: [{ capability: "…", domains: ["…"] }, { capability: "…" }]`（`domains` 省略表示不限 domain）。
 
 ### `data_files` 每条（`DataFileRef`）
 
@@ -164,7 +169,7 @@ evaluation/question_bank/
 | `data_files` 的文件 | ✅ **间接**（复制到 workspace） | Runner 复制文件并追加提示 |
 | `intent` | ⚠️ 仅 prompt 改写模式 | LLM 裁判上下文；prompt 改写上下文 |
 | `id` | ❌ | task_id 标识；`--questions` 过滤 |
-| `capability` | ❌ | `--capabilities` 过滤；safety 路由；聚合 + 报告 |
+| `capability` | ❌ | `--slices` 过滤（见下）；safety 路由；聚合 + 报告 |
 | `domain` | ❌ | 聚合 + 报告 |
 | `mode_scope` | ❌ | 决定跑哪些 mode |
 | `tags` | ❌ | 目前未被代码消费（预留） |
@@ -250,10 +255,10 @@ scoring_checklist:
 ## 运行入口
 
 ```bash
-# 指定 capability 或题目 ID 运行
+# 指定切片（OR）或题目 ID 运行；切片语法：cap cap[dom] cap[d1,d2]（括号外空格分隔）
 uv run python -m evaluation.cli \
   --eval-config evaluation/config.yaml \
-  --capabilities batch_processing workflow_orchestration \
+  --slices 'batch_processing workflow_orchestration[polymer]' \
   --questions DF_mech_001 WO_mech_001
 
 # 后台运行（Linux）
