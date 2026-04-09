@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-from matmaster.tools.builtin.bohrium_tool.api import use_sandbox
+from matmaster.bohrium.endpoints import use_sandbox
 from matmaster.tools.builtin.bohrium_tool.tool import submit_job_via_runtime
 
 

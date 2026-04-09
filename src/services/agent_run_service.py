@@ -42,7 +42,8 @@ from src.services.agent_run_bohrium import (
     BohriumSetupService,
     derive_skill_sync_spec,
 )
-from src.services.chat_history import ChatHistoryConverter
+from src.services.history_checkpoint_service import HistoryCheckpointService
+from src.services.history_restore_service import HistoryRestoreService
 from src.services.quota_service import use_quota
 from src.services.sessions_service import get_sessions_service
 
@@ -226,9 +227,7 @@ class AgentRunService:
             loop = asyncio.get_running_loop()
 
             def _dispatch_from_thread(event: BusEvent) -> None:
-                loop.call_soon_threadsafe(
-                    lambda: asyncio.create_task(fanout.dispatch(event))
-                )
+                fanout.dispatch_from_thread(loop, event)
 
             bohrium_svc = BohriumSetupService(
                 self._sessions_service,
@@ -295,6 +294,12 @@ class AgentRunService:
             if pg_ctx.session is not None:
                 pg_ctx.session._cancel_token = cancel_token
 
+            checkpoint_service = (
+                HistoryCheckpointService(events_table)
+                if events_table is not None
+                else None
+            )
+
             async def _child_event_sink(event: BusEvent) -> None:
                 try:
                     await fanout.dispatch(event)
@@ -305,11 +310,31 @@ class AgentRunService:
                         exc_info=True,
                     )
 
+            def _checkpoint_sink_factory(*, spawn_id: str | None = None):
+                if checkpoint_service is None:
+
+                    async def _noop_checkpoint_sink(
+                        *,
+                        payload: dict[str, Any],
+                        base_messages: list[dict[str, Any]],
+                    ) -> None:
+                        return None
+
+                    return _noop_checkpoint_sink
+                return checkpoint_service.build_checkpoint_sink(
+                    fanout=fanout,
+                    session_id=session_id,
+                    task_id=task_id,
+                    invocation_id=invocation_id,
+                    spawn_id=spawn_id,
+                )
+
             pg_ctx = pg_ctx.model_copy(
                 update={
                     'run_meta': {
                         **pg_ctx.run_meta,
                         'event_sink': _child_event_sink,
+                        'checkpoint_sink_factory': _checkpoint_sink_factory,
                     }
                 }
             )
@@ -338,16 +363,15 @@ class AgentRunService:
             )
             pg_ctx = pg_ctx.model_copy(update={'interaction_bridge': bridge})
             # -- Stage 5: History --
-            raw_events = (
-                events_table.get_session_events(
-                    session_id, limit=_DIALOG_HISTORY_MAX_EVENTS
+            history = (
+                HistoryRestoreService(events_table).restore_history(
+                    session_id=session_id,
+                    spawn_id=None,
+                    task_id=task_id,
+                    raw_limit=_DIALOG_HISTORY_MAX_EVENTS,
                 )
-                if events_table
+                if events_table is not None
                 else []
-            )
-            parent_events = ChatHistoryConverter.exclude_spawn_events(raw_events)
-            history = ChatHistoryConverter.events_to_messages(
-                ChatHistoryConverter.exclude_task_events(parent_events, task_id)
             )
             bohrium_rebuild_events: list[dict] = []
             try:

@@ -177,6 +177,22 @@ class TestBohriumEventBridgeMapping:
         finally:
             loop.close()
 
+    def test_bridge_emits_to_threadsafe_sink_without_loop_spin(self):
+        """Thread-safe sinks should receive events immediately from worker callbacks."""
+        sink, collected = self._collect_events()
+        svc = _make_service(event_sink=sink)
+        loop = asyncio.new_event_loop()
+
+        try:
+            bridge = svc._make_event_bridge(loop)
+            bridge('System', 'bohrium_node', {'status': 'ready'})
+
+            assert len(collected) == 1
+            assert isinstance(collected[0], BohriumNodeEvent)
+            assert collected[0].payload['content']['status'] == 'ready'
+        finally:
+            loop.close()
+
 
 class TestBohriumSetupServiceConstructor:
     """Verify constructor accepts event_sink instead of bus."""

@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from matmaster.bohrium.types import BohriumCredentials
-from matmaster.tools.builtin.bohrium_tool.errors import BohriumCredentialError
-from matmaster.tools.builtin.bohrium_tool.models import BohriumContext
+from matmaster.bohrium.errors import BohriumCredentialError
+from matmaster.bohrium.types import BohriumContext, BohriumCredentials
 
 
 def test_bohrium_context_builds_from_bohrium_credentials() -> None:
@@ -18,13 +17,13 @@ def test_bohrium_context_builds_from_bohrium_credentials() -> None:
 
     ctx = BohriumContext.from_credentials(cred, sandbox=False)
 
-    assert ctx.access_key == "ak"
-    assert ctx.project_id == 42
-    assert ctx.base_url == "https://openapi.test.dp.tech"
+    assert ctx.credentials.access_key == "ak"
+    assert ctx.credentials.project_id == 42
+    assert ctx.credentials.base_url == "https://openapi.test.dp.tech"
     assert ctx.credential_source == "runtime"
     assert ctx.sandbox is False
-    assert ctx.user_id == 7
-    assert ctx.user_no == "U001"
+    assert ctx.credentials.user_id == 7
+    assert ctx.credentials.user_no == "U001"
 
 
 def test_context_from_credentials_rejects_missing_access_key() -> None:
