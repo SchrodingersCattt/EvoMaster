@@ -73,12 +73,13 @@ class TestBashToolMetadata:
         assert tool.prompt() is not None
         assert "Read" in tool.prompt()
 
-    def test_describe_uses_long_prompt_text(self):
+    def test_describe_returns_static_description(self):
         tool = BashTool()
         ctx = make_desc_ctx(session_kind="local", workspace_root="/tmp/workspace")
-        assert tool.describe(ctx) == tool.prompt(ctx)
+        assert tool.describe(ctx) == tool.description
+        assert tool.describe(ctx) != tool.prompt(ctx)
 
-    def test_definition_description_uses_prompt_text(self):
+    def test_definition_description_does_not_include_prompt_text(self):
         registry = ToolRegistry()
         registry.register(BashTool(), source="builtin")
         topology = RuntimeTopology(
@@ -96,9 +97,11 @@ class TestBashToolMetadata:
             )
         )
 
+        bash_def = next(d for d in defs if d["function"]["name"] == "Bash")
+        assert bash_def["function"]["description"] == BashTool.description
         assert (
             "Use dedicated tools instead of shell equivalents"
-            in defs[0]["function"]["description"]
+            not in bash_def["function"]["description"]
         )
 
     def test_schema_disallows_additional_properties(self):
