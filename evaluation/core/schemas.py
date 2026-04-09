@@ -95,6 +95,7 @@ DomainLiteral = Literal[
     'general',
     'incar',
     'scxrd',
+    'polymer',
 ]
 
 

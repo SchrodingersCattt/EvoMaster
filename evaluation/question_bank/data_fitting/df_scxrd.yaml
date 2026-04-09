@@ -15,9 +15,9 @@ questions:
 
     1. 根据 .p4p 文件中的晶胞参数和系统消光规律，确定空间群；
 
-    2. 使用 SHELXT（或等效程序）解析晶体结构；
+    2. 使用合适的程序解析晶体结构；
 
-    3. 使用 SHELXL 对结构进行全矩阵最小二乘精修，直至收敛；
+    3. 对结构进行全矩阵最小二乘精修，直至收敛；
 
     4. 生成 CIF 文件，并通过 IUCr checkCIF 验证（不允许有 A 类警告）；
 
@@ -27,8 +27,7 @@ questions:
   tags:
   - single_crystal_xrd
   - structure_solution
-  - shelxt
-  - shelxl
+  - structure_refinement
   - checkcif
   - ordered_structure
   - monoclinic
@@ -150,9 +149,9 @@ questions:
 
     1. 根据 .p4p 文件中的晶胞参数和系统消光规律，确定空间群；
 
-    2. 使用 SHELXT（或等效程序）解析晶体结构；
+    2. 使用合适的程序解析晶体结构；
 
-    3. 使用 SHELXL 对结构进行精修，需对无序部分进行合理建模（如分裂原子模型或约束/限制）；
+    3. 对结构进行精修，需对无序部分进行合理建模（如分裂原子模型或约束/限制）；
 
     4. 生成 CIF 文件，并通过 IUCr checkCIF 验证（不允许有 A 类警告）；
 
@@ -162,8 +161,7 @@ questions:
   tags:
   - single_crystal_xrd
   - structure_solution
-  - shelxt
-  - shelxl
+  - structure_refinement
   - checkcif
   - disordered_structure
   - monoclinic
