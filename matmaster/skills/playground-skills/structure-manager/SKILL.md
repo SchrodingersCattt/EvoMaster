@@ -40,6 +40,14 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 
 ## Scripts
 
+### 0. Molecular Crystal Slab Cutting
+* **build_molecular_crystal_slab.py** — Cut a surface slab from a molecular crystal (organic, MOF, co-crystal, hybrid salt, etc.) with automatic molecule integrity verification.
+    * **Usage**: `python build_molecular_crystal_slab.py --file input.cif --miller 1 1 0 --layers 4 [-o output.cif] [--vacuum 20.0] [--bond-tolerance 0.45]`
+    * **When to use**: Whenever the input structure is a molecular crystal (contains discrete molecules, not a purely covalent/ionic 3D network). The script: (a) detects molecules via covalent bond graph (PBC-aware), (b) enumerates all terminations from pymatgen SlabGenerator with `in_unit_planes=True`, (c) checks molecule integrity for each termination, (d) selects the best slab preserving intact molecules.
+    * **Output JSON**: `{"success": true, "molecules_intact": true, "atom_count_matches_expected": true, "n_atoms": 576, "expected_atoms": 576, "output_file": "output.cif", ...}`
+    * **Key checks reported**: molecule integrity (fragmented or not), atom count vs expected (layers × unit-cell atoms), number of terminations evaluated, molecule formula consistency.
+    * **Prefer this over manual pymatgen SlabGenerator scripting** for molecular crystals — it handles the tricky PBC-aware molecule detection and multi-termination evaluation in one call, saving significant time.
+
 ### 1. Download / Page Extraction
 * **fetch_web_structure.py**
     * `--url <url>` — download a direct structure file link.
@@ -93,6 +101,8 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 * "Get the crystal structure of X" where X is in CCDC/ICSD → report database identifier (REFCODE / collection code) + crystallographic parameters (space group, lattice constants, formula, Z) from literature; do not attempt to download or reconstruct.
 * "Check if this structure is reasonable" → `assess_structure.py`.
 * "Convert this CIF to POSCAR" / "Convert POSCAR to LAMMPS data" → `convert_format.py`.
+* **"Cut a surface slab from a molecular crystal"** → `build_molecular_crystal_slab.py`. Use this FIRST for any molecular crystal (organic, MOF, co-crystal, hybrid) slab task. Do NOT write custom SlabGenerator scripts from scratch for molecular crystals — it wastes many turns.
+* **"Fix / repair a structure file"** (failure recovery) → When the task says to fix geometric issues in a structure while **freezing** all computation parameters (INCAR, KPOINTS, etc.), strictly ONLY modify the structure file (POSCAR/CIF). Do NOT add, remove, or change ANY parameters in INCAR or other input files — even "helpful" additions like IBRION, ISIF, or NSW. Frozen means frozen.
 
 ## Tool (via Skill)
 
@@ -105,3 +115,5 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 * After obtaining any new structure (any method), run `assess_structure.py`. If it reports "Slab" for a Bulk task, warn the user.
 * For LAMMPS conversions, **always** provide `--type-map`. If the source .lmp uses a non-atomic atom_style, **always** provide `--atom-style`.
 * On `missing_dependency` from any script, install the package on the remote session before retrying.
+* **Frozen-parameter tasks**: when a task says to fix/repair a structure while freezing or keeping all computation parameters unchanged, you MUST: (a) ONLY modify the structure file (POSCAR, CIF, etc.), (b) copy the original INCAR/KPOINTS/other input files EXACTLY as-is — do NOT add, remove, or change any parameters (no IBRION, ISIF, NSW, or other "helpful" additions), (c) if the original files have specific settings, preserve every single one. Violating parameter freeze = scoring failure.
+* **Save-early rule**: for complex multi-step tasks (slab building + relaxation, multiple structures), save each deliverable under the task-required filename as soon as it is ready. If a later step may fail or time out, the early save ensures partial credit. Overwrite only when the later step succeeds.

@@ -15,7 +15,13 @@ mcp_server: mat_sg
 - **Wurtzite (0001)** (ZnO, GaN, InN, …): hexagonal → 3-index Miller `[0,0,1]`. Polar Type 3. Use even layers for symmetric slab.
 - **When the slab build fails or produces wrong composition**: try `repair=true` (or false if already true), and try different `termination` values. If MCP tool fails after 1 attempt, fall back to Python script (`build_slab_tasker_fix.py` from tasker-polar-surface skill) or direct ASE/pymatgen code.
 - **Layer count compliance**: when a reference document, paper, or task specification states an exact number of layers, you MUST use that exact number. Do NOT substitute a different layer count because it seems "more reasonable." After building, verify the actual number of distinct z-planes matches the specification (for binary compounds: distinct z-planes = 2 × N for N bilayers). If the built slab has the wrong layer count, rebuild with corrected parameters before proceeding.
-- **Molecular crystal slabs**: when cutting slabs from molecular crystals (organic, MOF, co-crystal, etc.), verify that all molecules remain intact after cutting. Check: (1) no covalent bond is broken across the slab boundary (use pymatgen or ASE to verify all intramolecular distances are reasonable), (2) atom count equals an integer multiple of the molecular formula, (3) no isolated fragments exist. If molecules are fragmented, adjust the slab thickness or termination to preserve molecular integrity.
+- **Molecular crystal slabs** (organic, MOF, co-crystal, etc.):
+  **Preferred workflow** — use `build_molecular_crystal_slab.py` from `structure-manager` skill:
+  ```
+  python build_molecular_crystal_slab.py --file input.cif --miller H K L --layers N [--vacuum 20.0]
+  ```
+  This script automatically: (a) detects molecules via PBC-aware bond graph, (b) enumerates all slab terminations, (c) verifies molecule integrity for each, (d) selects the best termination. **Do NOT write custom slab-cutting Python scripts from scratch** — this wastes many turns.
+  If the script fails or no termination preserves molecules, then fall back to manual pymatgen `SlabGenerator` with `in_unit_planes=True`, systematically trying different `shift` values. Key verification: (1) no covalent bond is broken across the slab boundary, (2) atom count = layers × unit-cell atoms, (3) no isolated molecular fragments exist.
 - **Post-build structure verification (mandatory)**: after every slab build, run `get_structure_info` (or equivalent) and verify: (a) composition matches expected formula, (b) atom count is correct for the specified layers × supercell, (c) vacuum gap ≥ 15 Å, (d) slab dimensionality is 2D. Do NOT skip verification — incorrect structures that go undetected cause scoring failures.
 
 ## build_surface_interface (heterojunction / interface construction)
@@ -63,6 +69,12 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
 - For each replica, explain: (a) which sites are disordered and how, (b) how the ordered config was chosen (valence/charge balance/connectivity), (c) what changed. A bare filename list without chemical reasoning = fail.
 - **Chemical/physical grounding is MANDATORY**: for every disordered site, explain the **bonding environment**, **valence state**, **coordination geometry**, or **crystallographic reason** that makes that disorder physically meaningful. Your explanation MUST go beyond listing site labels and occupancy numbers — you must discuss at least ONE of: (a) why the disordered species can substitute for each other (ionic radius, charge, electronegativity), (b) what bonds/coordination surround the site (e.g., "tetrahedral coordination by 4 O²⁻ at 1.95 Å"), (c) how the ordered replica preserves charge neutrality and valence. **Bad** example (will fail): "Site 8f has 0.6 Mn and 0.4 Fe occupancy, so we chose Mn." **Good** example: "Site 8f is octahedrally coordinated by 6 O²⁻ (M–O 2.05–2.12 Å). Mn²⁺ (0.83 Å) and Fe²⁺ (0.78 Å) have similar ionic radii and both prefer octahedral coordination, enabling random substitution. The ordered replica selects Mn on all 8f sites, preserving the +2 charge balance with the surrounding oxide framework." Always tie back to bonding, coordination, or charge balance.
 - On timeout → fall back to pymatgen `OrderDisorderedStructureTransformation`.
+- **Batch processing (multiple disordered structures)**: when the task requires ordering N ≥ 3 structures, process ALL in ONE consolidated script or MCP call loop. Do NOT spend more than ~3 minutes per structure. Strategy:
+  1. Call `generate_ordered_replicas` for each structure sequentially.
+  2. If the MCP tool is slow on one structure: set a mental budget of 2 MCP attempts per structure, then fall back to local pymatgen `OrderDisorderedStructureTransformation`.
+  3. Write chemical/physical grounding compactly — 2-3 sentences per disordered site, not paragraphs. Focus on: coordination geometry, ionic radius comparison, and charge balance. Skip lengthy derivations.
+  4. Save each ordered CIF immediately after generation (breadth-first: get ALL outputs saved before polishing any single one).
+  5. Assemble the final summary table at the end, not after each structure.
 
 ## add_hydrogens / passivation
 
@@ -76,6 +88,41 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
   4. Re-check coordination. Iterate until ALL surface Si reach coordination = 4.
 - **Verification script** (mandatory): after saving the passivated structure, re-read it and print per-atom coordination for every Si atom. Flag any Si with coordination ≠ 4. **Separately verify top-surface and bottom-surface atoms.** The final answer MUST report mean Si coordination and confirm it equals 4.0.
 - Save the passivated structure, then verify by re-reading and checking. Report: total H added, mean Si-H bond length, per-atom coordination check, top/bottom surface H counts, and confirmation that all surface Si atoms have coordination = 4.
+
+## Complex / defective bulk structures
+
+### γ-Al2O3 (defective spinel)
+γ-Al2O3 has a **defective spinel structure** (based on MgAl2O4 Fd-3m framework, with Al on both tetrahedral and octahedral sites and ordered vacancies). Multiple structural models exist:
+
+**Recommended approach** (fastest, most reliable):
+1. **Try Materials Project / structure database first**: search `mat_struct_db` for `Al2O3` and filter for spinel-like structures (Fd-3m or related). If γ-Al2O3 is available (e.g. mp-3163 or similar), download and verify.
+2. **If not in DB, build via Wyckoff positions** using the **Pinto/Digne model**:
+   - Space group: Fd-3m (No. 227) or I4₁/amd (tetragonal distorted variant)
+   - For Fd-3m cubic model (a ≈ 7.91 Å): Al on 8a (tetrahedral, occupancy ~1.0), Al on 16d (octahedral, occupancy ~0.833 — 5/6 occupied to maintain Al₂O₃ stoichiometry), O on 32e (u ≈ 0.26)
+   - After Wyckoff expansion, remove excess Al from 16d sites to achieve Al:O ≈ 2:3 (±5%)
+   - Use `build_bulk_structure_by_wyckoff` → then manually remove selected Al atoms from octahedral sites
+3. **Verify**: (a) Al:O ratio ≈ 2:3, (b) cell angles ≈ 90°, (c) BOTH tetrahedral and octahedral Al environments exist, (d) min interatomic distance > 1.0 Å
+
+**For relaxation** (if required): use MLIP — see "MLIP-based structure relaxation" section below. Save the **unrelaxed** structure with the task-required filename FIRST, then overwrite only if relaxation succeeds. This prevents losing the deliverable on timeout.
+
+### Other complex oxide structures
+- **Spinel** (MgAl2O4, Fe3O4, etc.): Fd-3m, cations on 8a (tetrahedral) + 16d (octahedral), anions on 32e.
+- **Perovskite** (SrTiO3, BaTiO3, etc.): Pm-3m ideal, Pnma/P4mm distorted. Use `build_bulk_structure_by_wyckoff` or fetch from DB.
+- **Garnet** (Y3Al5O12, etc.): Ia-3d. Large unit cell (~160 atoms). Prefer DB fetch.
+
+## MLIP-based structure relaxation
+
+When a task requires relaxing a structure with MLIP/DPA models:
+- Copy `_calculator.py` from `matmaster/skills/mlips/scripts/` into the working directory.
+- Write a self-contained Python script using:
+  ```python
+  from _calculator import build_calculator
+  calc = build_calculator("DPA3.1-3M")  # or with head="OC22" for catalysis
+  ```
+- Use ASE's `LBFGS` optimizer with `ExpCellFilter` for cell+position relaxation (or `BFGS` for positions-only).
+- Submit to Bohrium with **image `registry.dp.tech/dptech/dpa-calculator:f7835422`** and **machine `c16_m64_1 * NVIDIA 4090`**.
+- **Do NOT waste turns searching for calculator backends** (no `glob.glob("/opt/**/*.pb")`, no trying multiple import paths). Use `build_calculator` from `_calculator.py` directly — it handles model discovery.
+- **Save-early pattern**: save the unrelaxed structure under the task-required filename BEFORE submitting relaxation. Overwrite only if relaxation succeeds and produces physically reasonable results (fmax < threshold, no broken bonds). This ensures a deliverable exists even if relaxation times out.
 
 ## Geometry verification (after any structure build)
 
