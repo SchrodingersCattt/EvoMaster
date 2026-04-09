@@ -52,12 +52,12 @@ questions:
   - key: suggested_input_bsse_numerics
     value:
       filename: INPUT_bsse
-      pattern: ecutwfc\s+100.*scf_thr\s+1(?:\.0+)?e-7
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-7\s*$)
       flags: is
   - key: suggested_input_bsse_smearing
     value:
       filename: INPUT_bsse
-      pattern: smearing_method\s+(?:gauss|gaussian).*smearing_sigma\s+0\.01
+      pattern: (?ims)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*$)(?=.*^\s*smearing_sigma\s+0\.01(?:0+)?\s*$)
       flags: is
   - key: variable_empty_layer_placement
     value: {}
@@ -193,12 +193,12 @@ questions:
   - key: suggested_input_vac_numerics
     value:
       filename: INPUT_vac_bsse
-      pattern: ecutwfc\s+100.*scf_thr\s+1(?:\.0+)?e-7
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-7\s*$)
       flags: is
   - key: suggested_input_vac_smearing
     value:
       filename: INPUT_vac_bsse
-      pattern: smearing_method\s+(?:gauss|gaussian).*smearing_sigma\s+0\.01
+      pattern: (?ims)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*$)(?=.*^\s*smearing_sigma\s+0\.01(?:0+)?\s*$)
       flags: is
   - key: variable_bsse_explanation
     value: {}
@@ -472,7 +472,7 @@ questions:
   - key: suggested_input_dipole_numerics
     value:
       filename: INPUT_dipole
-      pattern: ecutwfc\s+100.*scf_thr\s+1(?:\.0+)?e-6.*out_pot\s+2.*efield_dir\s+2
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*$)(?=.*^\s*out_pot\s+2\s*$)(?=.*^\s*efield_dir\s+2\s*$)
       flags: is
   - key: variable_input_dipole_window
     value:
@@ -1028,7 +1028,7 @@ questions:
   - key: suggested_input_spin_numerics
     value:
       filename: INPUT_spin_elec_scf
-      pattern: ecutwfc\s+100.*scf_thr\s+1(?:\.0+)?e-6.*smearing_method\s+(?:gauss|gaussian).*smearing_sigma\s+0\.001
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*$)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*$)(?=.*^\s*smearing_sigma\s+0\.001(?:0+)?\s*$)
       flags: is
   - key: suggested_input_spin_mixing
     value:
@@ -1165,7 +1165,7 @@ questions:
   - key: must_input_gate_core
     value:
       filename: INPUT_gate
-      pattern: calculation\s+scf.*basis_type\s+pw.*efield_flag\s+1.*dip_cor_flag\s+1.*gate_flag\s+(?:1|true).*block\s+(?:1|true).*efield_amp\s+0(?:\.0+)?
+      pattern: (?ims)(?=.*^\s*calculation\s+scf\s*$)(?=.*^\s*basis_type\s+pw\s*$)(?=.*^\s*efield_flag\s+1\s*$)(?=.*^\s*dip_cor_flag\s+1\s*$)(?=.*^\s*gate_flag\s+(?:1|true)\s*$)(?=.*^\s*block\s+(?:1|true)\s*$)(?=.*^\s*efield_amp\s+0(?:\.0+)?\s*$)
       flags: is
   - key: must_kpt_gate_gamma
     value:
@@ -1182,7 +1182,7 @@ questions:
   - key: suggested_input_gate_numerics
     value:
       filename: INPUT_gate
-      pattern: ecutwfc\s+100.*scf_thr\s+1(?:\.0+)?e-6.*out_pot\s+2
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*$)(?=.*^\s*out_pot\s+2\s*$)
       flags: is
   - key: suggested_gate_plane_and_barrier_fields
     value:
