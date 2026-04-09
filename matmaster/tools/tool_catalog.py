@@ -80,10 +80,12 @@ class ToolCatalog:
             if inst is None or not inst.tool_spec.exposed_to_model:
                 continue
 
+            source = self._registry.get_source(name)
             raw_tool = self._registry.get_raw(name)
-            if ctx is not None:
+
+            if source == "mcp":
                 describe = getattr(raw_tool, "describe", None) if raw_tool else None
-                if callable(describe):
+                if ctx is not None and callable(describe):
                     description = describe(ctx)
                 else:
                     description = inst.tool_spec.description

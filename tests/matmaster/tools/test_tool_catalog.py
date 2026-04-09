@@ -126,8 +126,11 @@ class TestCatalogBuildDefinitions:
 
         assert defs[0]["function"]["description"] == "minimal alpha"
 
-    def test_build_definitions_with_ctx_uses_describe_when_available(self) -> None:
-        catalog = _make_catalog(_DynamicTool("alpha"))
+    def test_build_definitions_with_ctx_uses_describe_only_for_mcp(self) -> None:
+        """When ctx is provided, describe(ctx) is only consulted for mcp-sourced tools."""
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="mcp")
+        catalog = ToolCatalog(registry, topology=_make_topology())
 
         defs = catalog.build_definitions(_make_ctx())
 
@@ -147,6 +150,42 @@ class TestCatalogBuildDefinitions:
         names = {d["function"]["name"] for d in defs}
 
         assert names == {"visible"}
+
+    def test_build_definitions_mcp_source_uses_dynamic_describe(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="mcp")
+        catalog = ToolCatalog(registry, topology=_make_topology())
+
+        defs = catalog.build_definitions(_make_ctx())
+
+        assert defs[0]["function"]["description"] == "alpha on local"
+
+    def test_build_definitions_builtin_source_uses_static_description(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="builtin")
+        catalog = ToolCatalog(registry, topology=_make_topology())
+
+        defs = catalog.build_definitions(_make_ctx())
+
+        assert defs[0]["function"]["description"] == "minimal alpha"
+
+    def test_build_definitions_skill_source_uses_static_description(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="skill")
+        catalog = ToolCatalog(registry, topology=_make_topology())
+
+        defs = catalog.build_definitions(_make_ctx())
+
+        assert defs[0]["function"]["description"] == "minimal alpha"
+
+    def test_build_definitions_unknown_source_falls_back_to_static(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="test")
+        catalog = ToolCatalog(registry, topology=_make_topology())
+
+        defs = catalog.build_definitions(_make_ctx())
+
+        assert defs[0]["function"]["description"] == "minimal alpha"
 
 
 class TestCatalogPrompts:
