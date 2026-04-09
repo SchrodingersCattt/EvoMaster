@@ -1,27 +1,27 @@
 {
+  "checklist_reports": [],
   "iteration_index": 2,
-  "outcome": {
-    "iteration_index": 2,
-    "macro_mean_0_100": 79,
-    "target_met": false,
-    "rationale": "## 第 2 轮迭代总结（iter_02）\n\n### 评测结果\n- **宏平均：79 / 100**（目标 90，差 11 分；相比 iter_01 的 87 **回退 8 分**）\n- 32 个任务全部正常完成，无超时\n\n### 回退分析\niter_01 优化子 Agent 的改动（commit 13e38ded → 8102d916）造成严重副作用：\n- **5 个任务严重回退（Δ ≤ −30）**：CR_BP_HT_adsorption_tree (100→33)、SC_struct_009 (93→27)、SC_struct_008 (84→27)、CR_WO_feature_extract_43d (89→44)、BP_struct_004 (94→58)\n- **3 个任务中度回退（−10 ~ −17）**：SC_elec_004、SC_struct_006、CR_SC_ZnO_Au_HCOO\n- 回退总量 ≈ −262 分，改善总量仅 ≈ +97 分\n\n### 改善确认\n- CR_WO_Ag_adsorption (33→67, +34)、SC_struct_002 (50→77, +27)、IG_abacus_006 (75→92, +17) 等有正向改善\n\n### 分流决策\n- **触发 `delegate_optimization`**：要求新一轮优化子 Agent 比对 git diff、选择性回退有害改动、保留有益改动\n- **未触发 `escalate_checklist_revision`**：回退明确因产品侧代码变更导致，非 checklist 口径问题\n\n### 本轮文件改动\n- 主 Agent 自身：**无**\n\n### 下一步\n第 3 轮需优先恢复 iter_01 的基线（87 分），在此基础上做外科手术式精准改进。优化子 Agent 应：\n1. 回退 structure-manager 中导致 SC_struct_008/009 崩溃的改动\n2. 回退影响 CR_BP_HT_adsorption_tree 和 CR_WO_feature_extract_43d 的改动\n3. 保留对 abacus input gen 和 CR_WO_Ag_adsorption 有益的改动\n4. 任何新改动必须足够局部，不影响已通过任务",
-    "files_touched": []
-  },
+  "optimization_delegations": [],
   "optimization_reports": [
     {
-      "iteration_index": 2,
-      "optimization_round": 1,
-      "summary": "## Surgical revert of 4 harmful iter_01 additions in `mcp-mat-sg/SKILL.md`\n\n**Root cause analysis**: The iter_01 optimization added overly prescriptive/aggressive sections to `matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md` that caused regressions by (1) forcing premature task abandonment via strict retry/time limits, (2) imposing rigid workflow constraints that don't suit all task variants, and (3) bloating the skill file with generic defensive rules that dilute attention.\n\n### Removed (harmful — caused regressions on 5 tasks, −262 pts):\n1. **\"Timeout prevention\" section** (entire `### Timeout prevention` block) — Applied aggressive retry limits (\"at most twice\", \"Maximum 2 Bohrium submissions\") to ALL structure tasks. Most likely common cause of SC_struct_008 (84→27), SC_struct_009 (93→27), and BP_struct_004 (94→58) regressions.\n2. **\"Time budget awareness\" section** (entire `### Time budget awareness` block) — Forced premature workflow abandonment with hard time budgets (\"≤ 3 min structure building\", \"≤ 5 min Bohrium\"). Likely cause of CR_BP_HT_adsorption_tree (100→33) regression.\n3. **CO2RR step 7** (\"Final answer MUST include...\") — Overly prescriptive mandatory reporting format that wasted tokens on formatting instead of task completion.\n4. **\"CRITICAL: ONE consolidated script\"** emphasis — Softened from `**CRITICAL: Write ONE consolidated Python script**` + `**DO NOT submit multiple Bohrium jobs**` to a simple recommendation. The rigid \"one script only\" rule may not suit complex batch/tree workflows.\n\n### Preserved (beneficial — helped 3 tasks, +78 pts):\n- ✅ ABACUS mandatory INPUT parameters checklist (helped IG_abacus_006: 75→92)\n- ✅ Molecular crystal slab performance tips (helped SC_struct_002: 50→77)\n- ✅ CO2RR workflow steps 1–6 with file naming (helped CR_WO_Ag_adsorption: 33→67)\n- ✅ MLIP script template pattern (useful reference)\n- ✅ mlips Bohrium troubleshooting section (benign, helpful)",
-      "files_touched": [
-        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md"
-      ],
       "commit_shas": [
         "b44085336e676afd6041c400cd73c889ec6bbbbe"
       ],
+      "files_touched": [
+        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md"
+      ],
+      "followup_suggestion": "Run eval to verify regressions on SC_struct_008, SC_struct_009, CR_BP_HT_adsorption_tree, BP_struct_004, and CR_WO_feature_extract_43d are recovered while preserving improvements on IG_abacus_006, SC_struct_002, and CR_WO_Ag_adsorption. If SC_struct_008/009 still regress to ~27, the root cause may be in the molecular crystal performance tips (the remaining iter_01 addition in mcp-mat-sg) rather than the timeout section — in that case, consider reverting those tips as well.",
+      "iteration_index": 2,
       "needs_more_work": false,
-      "followup_suggestion": "Run eval to verify regressions on SC_struct_008, SC_struct_009, CR_BP_HT_adsorption_tree, BP_struct_004, and CR_WO_feature_extract_43d are recovered while preserving improvements on IG_abacus_006, SC_struct_002, and CR_WO_Ag_adsorption. If SC_struct_008/009 still regress to ~27, the root cause may be in the molecular crystal performance tips (the remaining iter_01 addition in mcp-mat-sg) rather than the timeout section — in that case, consider reverting those tips as well."
+      "optimization_round": 1,
+      "summary": "## Surgical revert of 4 harmful iter_01 additions in `mcp-mat-sg/SKILL.md`\n\n**Root cause analysis**: The iter_01 optimization added overly prescriptive/aggressive sections to `matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md` that caused regressions by (1) forcing premature task abandonment via strict retry/time limits, (2) imposing rigid workflow constraints that don't suit all task variants, and (3) bloating the skill file with generic defensive rules that dilute attention.\n\n### Removed (harmful — caused regressions on 5 tasks, −262 pts):\n1. **\"Timeout prevention\" section** (entire `### Timeout prevention` block) — Applied aggressive retry limits (\"at most twice\", \"Maximum 2 Bohrium submissions\") to ALL structure tasks. Most likely common cause of SC_struct_008 (84→27), SC_struct_009 (93→27), and BP_struct_004 (94→58) regressions.\n2. **\"Time budget awareness\" section** (entire `### Time budget awareness` block) — Forced premature workflow abandonment with hard time budgets (\"≤ 3 min structure building\", \"≤ 5 min Bohrium\"). Likely cause of CR_BP_HT_adsorption_tree (100→33) regression.\n3. **CO2RR step 7** (\"Final answer MUST include...\") — Overly prescriptive mandatory reporting format that wasted tokens on formatting instead of task completion.\n4. **\"CRITICAL: ONE consolidated script\"** emphasis — Softened from `**CRITICAL: Write ONE consolidated Python script**` + `**DO NOT submit multiple Bohrium jobs**` to a simple recommendation. The rigid \"one script only\" rule may not suit complex batch/tree workflows.\n\n### Preserved (beneficial — helped 3 tasks, +78 pts):\n- ✅ ABACUS mandatory INPUT parameters checklist (helped IG_abacus_006: 75→92)\n- ✅ Molecular crystal slab performance tips (helped SC_struct_002: 50→77)\n- ✅ CO2RR workflow steps 1–6 with file naming (helped CR_WO_Ag_adsorption: 33→67)\n- ✅ MLIP script template pattern (useful reference)\n- ✅ mlips Bohrium troubleshooting section (benign, helpful)"
     }
   ],
-  "checklist_reports": [],
-  "optimization_delegations": []
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 2,
+    "macro_mean_0_100": 79,
+    "rationale": "## 第 2 轮迭代总结（iter_02）\n\n### 评测结果\n- **宏平均：79 / 100**（目标 90，差 11 分；相比 iter_01 的 87 **回退 8 分**）\n- 32 个任务全部正常完成，无超时\n\n### 回退分析\niter_01 优化子 Agent 的改动（commit 13e38ded → 8102d916）造成严重副作用：\n- **5 个任务严重回退（Δ ≤ −30）**：CR_BP_HT_adsorption_tree (100→33)、SC_struct_009 (93→27)、SC_struct_008 (84→27)、CR_WO_feature_extract_43d (89→44)、BP_struct_004 (94→58)\n- **3 个任务中度回退（−10 ~ −17）**：SC_elec_004、SC_struct_006、CR_SC_ZnO_Au_HCOO\n- 回退总量 ≈ −262 分，改善总量仅 ≈ +97 分\n\n### 改善确认\n- CR_WO_Ag_adsorption (33→67, +34)、SC_struct_002 (50→77, +27)、IG_abacus_006 (75→92, +17) 等有正向改善\n\n### 分流决策\n- **触发 `delegate_optimization`**：要求新一轮优化子 Agent 比对 git diff、选择性回退有害改动、保留有益改动\n- **未触发 `escalate_checklist_revision`**：回退明确因产品侧代码变更导致，非 checklist 口径问题\n\n### 本轮文件改动\n- 主 Agent 自身：**无**\n\n### 下一步\n第 3 轮需优先恢复 iter_01 的基线（87 分），在此基础上做外科手术式精准改进。优化子 Agent 应：\n1. 回退 structure-manager 中导致 SC_struct_008/009 崩溃的改动\n2. 回退影响 CR_BP_HT_adsorption_tree 和 CR_WO_feature_extract_43d 的改动\n3. 保留对 abacus input gen 和 CR_WO_Ag_adsorption 有益的改动\n4. 任何新改动必须足够局部，不影响已通过任务",
+    "target_met": false
+  }
 }

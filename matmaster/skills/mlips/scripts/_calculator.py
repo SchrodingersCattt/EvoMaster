@@ -24,7 +24,9 @@ import numpy as np
 try:
     from ase.calculators.calculator import Calculator
 except ImportError:
-    import subprocess, sys
+    import subprocess
+    import sys
+
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "ase"])
     from ase.calculators.calculator import Calculator
 

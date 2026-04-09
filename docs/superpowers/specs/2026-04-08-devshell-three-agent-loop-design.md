@@ -443,4 +443,3 @@ Write an implementation plan that updates:
 - `evaluation/scripts/devshell/run_devshell_agent_loop.py`
 - `tests/evaluation/test_devshell_agent_sdk_tools.py`
 - loop-related documentation under `evaluation/AGENTS_evaluation.md`
-

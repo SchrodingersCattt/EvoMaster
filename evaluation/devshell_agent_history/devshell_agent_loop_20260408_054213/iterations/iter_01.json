@@ -1,17 +1,12 @@
 {
+  "checklist_reports": [],
   "iteration_index": 1,
-  "outcome": {
-    "iteration_index": 1,
-    "macro_mean_0_100": 65,
-    "target_met": false,
-    "rationale": "## 第 1 轮迭代总结\n\n### 评分\n- **宏平均：65/100**（目标 90，差距 25 分）\n- 32 个任务中 10 个 ≥90，6 个 58–89，13 个 ≤33（3 个 ≤28）\n\n### 失分聚类\n1. **ABACUS 输入生成**（4 任务 × 25 分）：IG_abacus_001/002/003/007 系统性失败，显示部分 ABACUS 场景缺乏生成知识\n2. **表面/slab/异质结构建**（8 任务 × 27–33 分）：SC_elec、SC_struct（SiH/hetero/005/006）、CR_SC（ZnPd011/ZnS001）、CR_BP_HT 大面积失分\n3. **中等失分**（3 任务 × 57–67 分）：BP_struct_002、SC_struct_008、IG_abacus_006 部分完成\n\n### 分流动作\n- ✅ **delegate_optimization #1**：聚焦 `input_generation_abacus` — ABACUS INPUT/STRU 生成的 skills/tools 补全\n- ✅ **delegate_optimization #2**：聚焦 `structure_construction` + `co2rr_reproduction` — 表面切割、异质结、电子结构建模的 skills/tools 补全\n- ❌ 未触发 `escalate_checklist_revision`：当前无明显 checklist 不公证据\n- 本轮主 Agent 未直接修改任何文件\n\n### 下一步\n第 2 轮将在两个 optimization 子 Agent 完成产品侧改动后重新评测，预期 ABACUS 和结构构建两大类显著提分。",
-    "files_touched": []
-  },
+  "optimization_delegations": [],
   "optimization_reports": [
     {
-      "iteration_index": 1,
-      "optimization_round": 2,
-      "summary": "## Root Cause & Fixes\n\n### Primary Root Cause: Missing MCP Tools & Skills in Devshell Filter\nThe `exp_patch.py` devshell filter exposed only 6 of 25 mat_sg MCP tools, **blocking critical capabilities**:\n- `build_surface_interface` — the ONLY tool for heterojunction assembly (SC_struct_hetero: 33/100)\n- `build_surface_adsorbate` — essential for CO2RR adsorption tasks (CR_SC_ZnPd011, CR_SC_ZnS001)\n- `make_supercell_structure`, `get_structure_info`, `apply_structure_transformation`\n\nAdditionally, only 2 skill roots were loaded (mcp-mat-struct-db, mcp-mat-sg), **excluding**:\n- `tasker-polar-surface` (surface construction workflow scripts + validation)\n- `structure-manager` (assess_structure.py for post-build verification)\n\nThis explains the zero-output failures (5/8 tasks): the agent received ~6000-token prompts with no surface workflow guidance, no interface tools, and no validation scripts — and couldn't determine how to proceed.\n\n### Changes Made\n\n1. **`matmaster/devshell/exp_patch.py`** — Expanded `DEVSHELL_MAT_SG_TOOLS` from 6→11 tools (+`build_surface_adsorbate`, `build_surface_interface`, `make_supercell_structure`, `get_structure_info`, `apply_structure_transformation`). Added `tasker-polar-surface` and `structure-manager` to skill roots (2→4 roots).\n\n2. **`matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md`** — Added sections for: zinc blende surface construction (ZnS, GaAs), intermetallic surfaces (ZnPd, CuAu), `build_surface_interface` heterojunction workflow, `build_surface_adsorbate` catalysis usage, `get_structure_info` verification, and MCP fallback strategies.\n\n3. **`tasker_lookup.yaml`** — Added 16 entries: zinc blende (ZnS, GaAs, CdTe), intermetallics (ZnPd, CuAu, NiAl), oxides (CeO2, SrTiO3, BaTiO3), silicon surfaces.\n\n4. **`reference.md`** — Expanded quick-lookup table from 4→16 material/surface entries.\n\n5. **`matmaster/exps/direct.toml`** — Added heterojunction construction workflow, electronic structure setup for surfaces (K-points, dipole correction), zinc blende/intermetallic surface recipes, and MCP fallback guidance.",
+      "commit_shas": [
+        "bf372eef406092805c10e62bcc4d81d1515e2d0e"
+      ],
       "files_touched": [
         "matmaster/devshell/exp_patch.py",
         "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md",
@@ -19,13 +14,18 @@
         "matmaster/skills/playground-skills/tasker-polar-surface/reference.md",
         "matmaster/exps/direct.toml"
       ],
-      "commit_shas": [
-        "bf372eef406092805c10e62bcc4d81d1515e2d0e"
-      ],
+      "followup_suggestion": "Re-run eval to measure improvement. The exp_patch.py tool/skill expansion is the highest-impact change — it unblocks heterojunction, adsorbate, and surface validation workflows entirely. If zero-output failures persist after this round, investigate whether the LLM gateway timeout (seen in SC_struct_hetero, SC_struct_SiH logs) is a separate infrastructure issue unrelated to prompt content. Medium-priority follow-up: the `add_adsorbate_batch.py` script referenced in tasker-polar-surface SKILL.md does not exist in the scripts directory — consider creating it or removing the reference to avoid agent confusion.",
+      "iteration_index": 1,
       "needs_more_work": true,
-      "followup_suggestion": "Re-run eval to measure improvement. The exp_patch.py tool/skill expansion is the highest-impact change — it unblocks heterojunction, adsorbate, and surface validation workflows entirely. If zero-output failures persist after this round, investigate whether the LLM gateway timeout (seen in SC_struct_hetero, SC_struct_SiH logs) is a separate infrastructure issue unrelated to prompt content. Medium-priority follow-up: the `add_adsorbate_batch.py` script referenced in tasker-polar-surface SKILL.md does not exist in the scripts directory — consider creating it or removing the reference to avoid agent confusion."
+      "optimization_round": 2,
+      "summary": "## Root Cause & Fixes\n\n### Primary Root Cause: Missing MCP Tools & Skills in Devshell Filter\nThe `exp_patch.py` devshell filter exposed only 6 of 25 mat_sg MCP tools, **blocking critical capabilities**:\n- `build_surface_interface` — the ONLY tool for heterojunction assembly (SC_struct_hetero: 33/100)\n- `build_surface_adsorbate` — essential for CO2RR adsorption tasks (CR_SC_ZnPd011, CR_SC_ZnS001)\n- `make_supercell_structure`, `get_structure_info`, `apply_structure_transformation`\n\nAdditionally, only 2 skill roots were loaded (mcp-mat-struct-db, mcp-mat-sg), **excluding**:\n- `tasker-polar-surface` (surface construction workflow scripts + validation)\n- `structure-manager` (assess_structure.py for post-build verification)\n\nThis explains the zero-output failures (5/8 tasks): the agent received ~6000-token prompts with no surface workflow guidance, no interface tools, and no validation scripts — and couldn't determine how to proceed.\n\n### Changes Made\n\n1. **`matmaster/devshell/exp_patch.py`** — Expanded `DEVSHELL_MAT_SG_TOOLS` from 6→11 tools (+`build_surface_adsorbate`, `build_surface_interface`, `make_supercell_structure`, `get_structure_info`, `apply_structure_transformation`). Added `tasker-polar-surface` and `structure-manager` to skill roots (2→4 roots).\n\n2. **`matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md`** — Added sections for: zinc blende surface construction (ZnS, GaAs), intermetallic surfaces (ZnPd, CuAu), `build_surface_interface` heterojunction workflow, `build_surface_adsorbate` catalysis usage, `get_structure_info` verification, and MCP fallback strategies.\n\n3. **`tasker_lookup.yaml`** — Added 16 entries: zinc blende (ZnS, GaAs, CdTe), intermetallics (ZnPd, CuAu, NiAl), oxides (CeO2, SrTiO3, BaTiO3), silicon surfaces.\n\n4. **`reference.md`** — Expanded quick-lookup table from 4→16 material/surface entries.\n\n5. **`matmaster/exps/direct.toml`** — Added heterojunction construction workflow, electronic structure setup for surfaces (K-points, dipole correction), zinc blende/intermetallic surface recipes, and MCP fallback guidance."
     }
   ],
-  "checklist_reports": [],
-  "optimization_delegations": []
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 1,
+    "macro_mean_0_100": 65,
+    "rationale": "## 第 1 轮迭代总结\n\n### 评分\n- **宏平均：65/100**（目标 90，差距 25 分）\n- 32 个任务中 10 个 ≥90，6 个 58–89，13 个 ≤33（3 个 ≤28）\n\n### 失分聚类\n1. **ABACUS 输入生成**（4 任务 × 25 分）：IG_abacus_001/002/003/007 系统性失败，显示部分 ABACUS 场景缺乏生成知识\n2. **表面/slab/异质结构建**（8 任务 × 27–33 分）：SC_elec、SC_struct（SiH/hetero/005/006）、CR_SC（ZnPd011/ZnS001）、CR_BP_HT 大面积失分\n3. **中等失分**（3 任务 × 57–67 分）：BP_struct_002、SC_struct_008、IG_abacus_006 部分完成\n\n### 分流动作\n- ✅ **delegate_optimization #1**：聚焦 `input_generation_abacus` — ABACUS INPUT/STRU 生成的 skills/tools 补全\n- ✅ **delegate_optimization #2**：聚焦 `structure_construction` + `co2rr_reproduction` — 表面切割、异质结、电子结构建模的 skills/tools 补全\n- ❌ 未触发 `escalate_checklist_revision`：当前无明显 checklist 不公证据\n- 本轮主 Agent 未直接修改任何文件\n\n### 下一步\n第 2 轮将在两个 optimization 子 Agent 完成产品侧改动后重新评测，预期 ABACUS 和结构构建两大类显著提分。",
+    "target_met": false
+  }
 }

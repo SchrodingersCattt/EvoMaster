@@ -1,27 +1,27 @@
 {
+  "checklist_reports": [],
   "iteration_index": 2,
-  "outcome": {
-    "iteration_index": 2,
-    "macro_mean_0_100": 81,
-    "target_met": false,
-    "rationale": "## Iteration 2 Summary\n\n### Score\n- **Macro mean: 81/100** (target 90) — ❌ not met\n- **Regression from iter 1:** 85 → 81 (-4 points)\n\n### What happened\nIter 1 optimization sub-agent's changes were **too aggressive**. While 4 targeted tasks improved dramatically (ZnO_Au_HCOO 56→100, abacus_001 67→100, struct_005 61→83, struct_002 89→100), **10 tasks regressed by ≥10 points each** (net -243 lost vs +121 gained).\n\n### Worst regressions (from iter 1 → iter 2)\n- SC_struct_008: 74→27 (-47)\n- SC_struct_006: 72→37 (-35)\n- CR_WO_Ag_adsorption: 67→33 (-34)\n- CR_SC_ZnS001: 89→56 (-33)\n- SC_struct_SiH: 77→50 (-27)\n- BP_struct_004: 100→78 (-22)\n\n### Actions Taken\n- ✅ `delegate_optimization` called (round 1) — with explicit instructions to: (a) compare git diff to identify regressive changes, (b) revert net-negative changes, (c) make mixed changes more targeted, (d) preserve iter 2 gains\n- ❌ No `escalate_checklist_revision` — all regressions are product-side (same checklist both iters)\n- ❌ No files touched by main agent\n\n### Next Steps (Iteration 3)\n- Optimization sub-agent should fix regressions while preserving gains\n- Expect recovery to ≥85 baseline + incremental improvement\n- If structure_construction tasks remain stubbornly low after regression fix, may escalate specific checklist items\n- Git commits: iter 1 = 59da4cf, iter 2 = 58c1b7b; optimization sub-agent will create new commit",
-    "files_touched": []
-  },
+  "optimization_delegations": [],
   "optimization_reports": [
     {
-      "iteration_index": 2,
-      "optimization_round": 1,
-      "summary": "## Surgical Partial Revert of Iter-01 mcp-mat-sg SKILL.md\n\n**Root cause**: The iter-01 optimization added ~30 lines of **mandatory verification steps** (Post-build verification, Geometry verification, prescriptive passivation rewrite, MANDATORY chemical grounding) that inflated token usage and turn counts, pushing 4 previously-completing tasks into timeout territory and degrading quality on 6 more.\n\n**Evidence** (iter_01 → iter_02 comparison):\n| Task | iter_01 (before) | iter_02 (after) | Root cause |\n|---|---|---|---|\n| BP_struct_004 | 9 turns, 249s ✓ | **TIMEOUT 1200s** | Mandatory verification on each batch item |\n| SC_struct_SiH | 7 turns, 219s ✓ | **TIMEOUT 1200s** | Prescriptive passivation rewrite |\n| SC_struct_006 | 29 turns, 784s ✓ | **TIMEOUT 1200s** | Verification overhead pushed past limit |\n| CR_SC_ZnPd011 | 9 turns, 93K tok | 33 turns, **594K tok** | Mandatory verification loops (6.4× tokens) |\n| SC_struct_005 | 10 turns, 274K tok | 15 turns, **552K tok** | MANDATORY grounding doubled tokens |\n| CR_SC_ZnS001 | 5 turns, 69K tok | 11 turns, **456K tok** | Rigid layer-count + verification cascade |\n\n**Changes made** (net +7 lines vs iter_01 baseline, down from +31):\n1. **Removed**: Post-build verification (mandatory), Geometry verification section, Molecular crystal slabs bullet, prescriptive passivation rewrite, rigid Layer count compliance, MANDATORY chemical grounding\n2. **Reverted**: passivation section → original concise form\n3. **Retained** (light, additive only):\n   - Soft \"Layer count\" 1-line hint\n   - Soft chemical/physical grounding suggestion (1 line)\n   - CO2RR tips section (3 concise lines) — likely drove CR_SC_ZnO_Au_HCOO +44pt gain\n\n**Expected outcome**: Recover the 10 regressed tasks (especially the 4 that timed out) while preserving the CO2RR workflow gain.",
-      "files_touched": [
-        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md"
-      ],
       "commit_shas": [
         "c6b9acedb4b81f0e77b3ecb6b2f189e106dbf50c"
       ],
+      "files_touched": [
+        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md"
+      ],
+      "followup_suggestion": "Re-run evaluation to verify the 10 regressions are recovered. If CR_SC_ZnO_Au_HCOO drops below 90, the CO2RR tips section may need strengthening in a follow-up round. The persistent-low tasks (IG_abacus_006=75, SC_struct_008/CR_WO_Ag_adsorption both at timeout) are pre-existing issues unrelated to this SKILL.md — they need separate investigation (possibly in ABACUS skill or task-specific tooling).",
+      "iteration_index": 2,
       "needs_more_work": false,
-      "followup_suggestion": "Re-run evaluation to verify the 10 regressions are recovered. If CR_SC_ZnO_Au_HCOO drops below 90, the CO2RR tips section may need strengthening in a follow-up round. The persistent-low tasks (IG_abacus_006=75, SC_struct_008/CR_WO_Ag_adsorption both at timeout) are pre-existing issues unrelated to this SKILL.md — they need separate investigation (possibly in ABACUS skill or task-specific tooling)."
+      "optimization_round": 1,
+      "summary": "## Surgical Partial Revert of Iter-01 mcp-mat-sg SKILL.md\n\n**Root cause**: The iter-01 optimization added ~30 lines of **mandatory verification steps** (Post-build verification, Geometry verification, prescriptive passivation rewrite, MANDATORY chemical grounding) that inflated token usage and turn counts, pushing 4 previously-completing tasks into timeout territory and degrading quality on 6 more.\n\n**Evidence** (iter_01 → iter_02 comparison):\n| Task | iter_01 (before) | iter_02 (after) | Root cause |\n|---|---|---|---|\n| BP_struct_004 | 9 turns, 249s ✓ | **TIMEOUT 1200s** | Mandatory verification on each batch item |\n| SC_struct_SiH | 7 turns, 219s ✓ | **TIMEOUT 1200s** | Prescriptive passivation rewrite |\n| SC_struct_006 | 29 turns, 784s ✓ | **TIMEOUT 1200s** | Verification overhead pushed past limit |\n| CR_SC_ZnPd011 | 9 turns, 93K tok | 33 turns, **594K tok** | Mandatory verification loops (6.4× tokens) |\n| SC_struct_005 | 10 turns, 274K tok | 15 turns, **552K tok** | MANDATORY grounding doubled tokens |\n| CR_SC_ZnS001 | 5 turns, 69K tok | 11 turns, **456K tok** | Rigid layer-count + verification cascade |\n\n**Changes made** (net +7 lines vs iter_01 baseline, down from +31):\n1. **Removed**: Post-build verification (mandatory), Geometry verification section, Molecular crystal slabs bullet, prescriptive passivation rewrite, rigid Layer count compliance, MANDATORY chemical grounding\n2. **Reverted**: passivation section → original concise form\n3. **Retained** (light, additive only):\n   - Soft \"Layer count\" 1-line hint\n   - Soft chemical/physical grounding suggestion (1 line)\n   - CO2RR tips section (3 concise lines) — likely drove CR_SC_ZnO_Au_HCOO +44pt gain\n\n**Expected outcome**: Recover the 10 regressed tasks (especially the 4 that timed out) while preserving the CO2RR workflow gain."
     }
   ],
-  "checklist_reports": [],
-  "optimization_delegations": []
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 2,
+    "macro_mean_0_100": 81,
+    "rationale": "## Iteration 2 Summary\n\n### Score\n- **Macro mean: 81/100** (target 90) — ❌ not met\n- **Regression from iter 1:** 85 → 81 (-4 points)\n\n### What happened\nIter 1 optimization sub-agent's changes were **too aggressive**. While 4 targeted tasks improved dramatically (ZnO_Au_HCOO 56→100, abacus_001 67→100, struct_005 61→83, struct_002 89→100), **10 tasks regressed by ≥10 points each** (net -243 lost vs +121 gained).\n\n### Worst regressions (from iter 1 → iter 2)\n- SC_struct_008: 74→27 (-47)\n- SC_struct_006: 72→37 (-35)\n- CR_WO_Ag_adsorption: 67→33 (-34)\n- CR_SC_ZnS001: 89→56 (-33)\n- SC_struct_SiH: 77→50 (-27)\n- BP_struct_004: 100→78 (-22)\n\n### Actions Taken\n- ✅ `delegate_optimization` called (round 1) — with explicit instructions to: (a) compare git diff to identify regressive changes, (b) revert net-negative changes, (c) make mixed changes more targeted, (d) preserve iter 2 gains\n- ❌ No `escalate_checklist_revision` — all regressions are product-side (same checklist both iters)\n- ❌ No files touched by main agent\n\n### Next Steps (Iteration 3)\n- Optimization sub-agent should fix regressions while preserving gains\n- Expect recovery to ≥85 baseline + incremental improvement\n- If structure_construction tasks remain stubbornly low after regression fix, may escalate specific checklist items\n- Git commits: iter 1 = 59da4cf, iter 2 = 58c1b7b; optimization sub-agent will create new commit",
+    "target_met": false
+  }
 }
