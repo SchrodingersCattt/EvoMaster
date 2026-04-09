@@ -1,9 +1,5 @@
 """WorkspaceHandler -- debounced workspace snapshot and upload.
 
-Migrates the workspace snapshot/upload logic from the event_callback
-closure in agent_run_service.py (lines 407-475) to a standalone
-EventHandler implementation.
-
 Key behavior:
 - Only triggers on ToolResultEvent (tool execution may change files)
 - Skips when ssh_attached (remote workspace)
@@ -23,7 +19,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.events import BusEvent, ToolResultEvent
 
 logger = logging.getLogger(__name__)
@@ -45,7 +40,6 @@ class WorkspaceHandler:
         session_id: str,
         task_id: str,
         ssh_attached: bool,
-        archival_config: WorkspaceArchivalConfig | None,
         workspace_path: Path,
         upload_fn: Callable[..., Any] | None = None,
         snapshot_fn: (
@@ -56,12 +50,11 @@ class WorkspaceHandler:
         self._session_id = session_id
         self._task_id = task_id
         self._ssh_attached = ssh_attached
-        self._archival_config = archival_config
         self._workspace_path = workspace_path
         self._upload_fn = upload_fn
         self._snapshot_fn = snapshot_fn or self._default_snapshot
         self._debounce_seconds = debounce_seconds
-        self._last_check_time: float = 0
+        self._last_check_time: float = 0.0
         self._last_snapshot: frozenset[tuple[str, float, int]] | None = None
         self._close_lock = threading.Lock()
         self._closed = False
@@ -75,11 +68,7 @@ class WorkspaceHandler:
         )
 
     async def handle(self, event: BusEvent) -> None:
-        """Process event -- only acts on ToolResultEvent.
-
-        Mirrors the tool_result branch of event_callback in
-        agent_run_service.py (lines 407-475).
-        """
+        """Process event -- only acts on ToolResultEvent."""
         if not isinstance(event, ToolResultEvent):
             return
 
@@ -118,11 +107,7 @@ class WorkspaceHandler:
     def _default_snapshot(
         self, workspace_path: Path
     ) -> frozenset[tuple[str, float, int]] | None:
-        """Walk workspace directory, collect (relative_path, mtime, size).
-
-        Migrated from _get_workspace_snapshot in agent_run_service.py
-        (lines 247-264).
-        """
+        """Walk workspace directory, collect (relative_path, mtime, size)."""
         if not workspace_path.is_dir():
             return None
 
@@ -151,6 +136,7 @@ class WorkspaceHandler:
         try:
             executor.submit(self._run_upload)
         except RuntimeError:
+            # Executor was shut down between snapshot and submit — benign race.
             logger.debug(
                 "WorkspaceHandler: skip upload after close session_id=%s",
                 self._session_id,

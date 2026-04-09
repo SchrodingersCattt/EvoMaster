@@ -8,7 +8,7 @@ from typing import Any
 class LLMError(Exception):
     """LLM call exception. retryable indicates whether caller should retry."""
 
-    def __init__(  # noqa: B042
+    def __init__(
         self,
         message: str,
         *,

@@ -18,13 +18,13 @@ All Pydantic models are frozen=True (immutable after construction).
 
 from __future__ import annotations
 
-import enum
+from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
 
-class ToolPlane(str, enum.Enum):
+class ToolPlane(str, Enum):
     """Execution plane for a tool."""
 
     SESSION_SHELL = "session_shell"

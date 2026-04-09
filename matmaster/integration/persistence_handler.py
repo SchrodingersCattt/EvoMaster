@@ -1,8 +1,9 @@
 """PersistenceHandler -- persists events to database.
 
-Filter rules migrated from _should_persist_event in agent_run_service.py:
+Filter rules:
 - Skip: log_line, llm_token
 - Skip: streaming ThoughtEvent / ResponseEvent deltas
+- Skip: trivial complete-response segments (e.g. "..." before a tool call)
 - Persist: everything else
 """
 
@@ -20,13 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class PersistenceHandler:
-    """Persists events to database via events_table.add_event().
-
-    Filter rules migrated from _should_persist_event in agent_run_service.py:
-    - Skip: log_line, llm_token
-    - Skip: streaming ThoughtEvent / ResponseEvent deltas
-    - Persist: everything else
-    """
+    """Persists events to database via events_table.add_event()."""
 
     _SKIP_TYPES = frozenset({'log_line', 'llm_token'})
     _STREAMING_STATES = frozenset({'start', 'streaming', 'end'})

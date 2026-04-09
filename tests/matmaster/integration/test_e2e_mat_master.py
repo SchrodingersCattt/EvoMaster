@@ -333,7 +333,7 @@ class TestMatMasterRunAgentE2E:
 
             # Verify: pipeline completed successfully -- use_quota called (success path)
             # use_quota is the strongest signal that kernel.run() returned a
-            # non-cancelled FinishEvent and post-processing ran.
+            # non-cancelled RunResultEvent and post-processing ran.
             assert mock_use_quota.called, 'use_quota should be called on success'
 
             # Verify: SSE events were sent (send_cb was called).

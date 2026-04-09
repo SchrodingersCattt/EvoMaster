@@ -20,8 +20,8 @@ from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.events import (
     AssistantStateEvent,
-    FinishEvent,
     ResponseEvent,
+    RunResultEvent,
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
@@ -61,7 +61,6 @@ class TestWorkspaceUpload:
             session_id="sess-1",
             task_id="task-1",
             ssh_attached=False,
-            archival_config=None,
             workspace_path=workspace_path,
             upload_fn=upload_fn,
             snapshot_fn=snapshot_fn,
@@ -92,7 +91,6 @@ class TestWorkspaceUpload:
             session_id="sess-1",
             task_id="task-1",
             ssh_attached=True,
-            archival_config=None,
             workspace_path=workspace_path,
             upload_fn=upload_fn,
             debounce_seconds=0,
@@ -200,7 +198,7 @@ class TestEventHandlerPersistence:
                 source="agent", call_id="c1", tool_name="bash", result="output"
             )
         )
-        await handler.handle(FinishEvent(source="agent", reason="natural"))
+        await handler.handle(RunResultEvent(source="agent", reason="natural"))
 
         assert mock_events_table.add_event.call_count == 3
 

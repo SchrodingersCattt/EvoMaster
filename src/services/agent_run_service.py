@@ -262,7 +262,6 @@ class AgentRunService:
                     session_id=session_id,
                     task_id=task_id,
                     ssh_attached=ssh_attached,
-                    archival_config=pg_ctx.archival,
                     workspace_path=pg_ctx.workdir,
                     upload_fn=_build_workspace_upload_fn(pg_ctx.archival),
                 )

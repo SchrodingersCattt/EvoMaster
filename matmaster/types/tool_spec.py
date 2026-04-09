@@ -20,13 +20,17 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from matmaster.types.cancellation import CancellationToken
+from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.topology import ToolPlane
+
+if TYPE_CHECKING:
+    from matmaster.tools.tool_result import ToolResult
 
 
 class ToolSpec(BaseModel):
@@ -96,11 +100,6 @@ class ToolExecutionContext:
     runner_state: ToolRunnerState | None = None
 
 
-# Import ToolResult for the executor type signature
-from matmaster.tools.tool_result import ToolResult  # noqa: E402
-from matmaster.types.tool_decision import ToolDecision  # noqa: E402
-
-
 @dataclass(frozen=True)
 class ToolInstance:
     """Frozen unit combining spec + binding + executor.
@@ -115,7 +114,7 @@ class ToolInstance:
     tool_binding: ToolBinding
     tool_executor: Callable[
         [dict[str, Any], ToolExecutionContext],
-        Awaitable[ToolResult | str | None],
+        Awaitable["ToolResult | str | None"],
     ]
     input_validator: (
         Callable[

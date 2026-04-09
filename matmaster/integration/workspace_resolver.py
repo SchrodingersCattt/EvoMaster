@@ -1,8 +1,4 @@
-"""Workspace resolver for remote SSH session roots.
-
-Migrated from playground.mat_master.core.workspace_resolver (Phase 29).
-Only the functions used by src/services/agent_run_bohrium.py are retained.
-"""
+"""Workspace resolver for remote SSH session roots."""
 
 from __future__ import annotations
 
@@ -27,19 +23,20 @@ def _default_project_root() -> Path:
 def _mat_master_config_path(project_root: Path | None = None) -> Path:
     """Return the main MatMaster config path."""
     root = project_root or _default_project_root()
-    return root / 'configs' / 'mat_master' / 'config.yaml'
+    return root / 'config' / 'config.yaml'
 
 
 @lru_cache
 def _load_workspace_config_from_file(config_path: str) -> dict[str, Any]:
     """Load config.yaml once for workspace settings."""
-    path = Path(config_path)
-    if not path.is_file():
-        return {}
     try:
-        data = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
+        data = yaml.safe_load(Path(config_path).read_text(encoding='utf-8')) or {}
+    except FileNotFoundError:
+        return {}
     except Exception as exc:
-        logger.debug('workspace resolver: load config failed path=%s err=%s', path, exc)
+        logger.debug(
+            'workspace resolver: load config failed path=%s err=%s', config_path, exc
+        )
         return {}
     return data if isinstance(data, dict) else {}
 
