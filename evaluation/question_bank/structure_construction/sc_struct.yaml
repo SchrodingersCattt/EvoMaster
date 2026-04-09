@@ -697,7 +697,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008_20260404
+- id: SC_struct_008_20260410
   capability: structure_construction
   domain: struct
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
@@ -798,6 +798,23 @@ questions:
       sanity check above 1.0 A, and a relaxed maximum-force check below 0.1 eV/A.
     axis: correctness
     verify: llm_binary_judge
+  - id: structure_knowledge
+    criterion: Agent demonstrates understanding that γ-Al2O3 adopts a defect-spinel
+      structure with aluminum occupying both tetrahedral and octahedral coordination
+      sites, reflected in the construction approach, final answer, or tool parameters.
+      This criterion can pass even if the final output file was not successfully
+      delivered, as long as the understanding is evident.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: relaxation_attempted
+    criterion: Agent initiates structure relaxation or geometry optimization on the
+      constructed γ-Al2O3 bulk model using any available calculator (MLIP, DP, or
+      force-field), even if the relaxation does not converge or the final file is
+      not delivered. Evidence may come from tool calls, scripts, or narrative.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
   - id: grounding_source
     criterion: The answer links Al:O stoichiometry, cell angles, tetrahedral vs octahedral
       Al sites, minimum contact distances, and post-relax forces to `gamma_alumina.cif`
