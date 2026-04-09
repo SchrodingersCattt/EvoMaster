@@ -29,8 +29,6 @@ from .status import (
     RUNNING_CODES,
     STATUS_MAP,
     SUCCESS_CODE,
-    TERMINAL_CODES,
-    classify_status,
     status_name,
 )
 from .storage import build_storage
@@ -60,13 +58,11 @@ __all__ = [
     "RUNNING_CODES",
     "STATUS_MAP",
     "SUCCESS_CODE",
-    "TERMINAL_CODES",
     "attach_runtime",
     "build_bohrium_context",
     "build_bohrium_env",
     "build_executor",
     "build_storage",
-    "classify_status",
     "credentials_from_env",
     "detach_runtime",
     "get_runtime",

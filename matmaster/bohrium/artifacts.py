@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import requests
 
+from .client import get_file_token
 from .errors import BohriumTransferError
 from .types import BohriumContext
 
@@ -120,8 +121,6 @@ def _sandbox_download_log(
     root_token: str,
     objects: list[dict],
 ) -> bool:
-    from .client import get_file_token
-
     log_path = result_dir / "log"
     try:
         log_host, log_object_path, log_token = get_file_token(
@@ -291,115 +290,3 @@ def download_job_artifacts(
     return files, _read_log(result_dir)
 
 
-def download_job_file(
-    ctx: BohriumContext,
-    *,
-    file_path: str,
-    bohr_job_id: str,
-    dest: Path,
-) -> Path:
-    from .client import get_file_token
-
-    normalized = str(file_path or "").replace("\\", "/").strip()
-    if normalized:
-        try:
-            _, root_path, _ = get_file_token(ctx, file_path="", bohr_job_id=bohr_job_id)
-            root_prefix = str(root_path or "").replace("\\", "/")
-            if root_prefix and not root_prefix.endswith("/"):
-                root_prefix += "/"
-            if root_prefix and normalized.startswith(root_prefix):
-                normalized = normalized[len(root_prefix) :].lstrip("/")
-        except Exception:
-            pass
-
-    host, remote_path, token = get_file_token(
-        ctx,
-        file_path=normalized,
-        bohr_job_id=bohr_job_id,
-    )
-    if not host or not remote_path or not token:
-        raise BohriumTransferError(
-            f"Cannot download '{normalized or file_path}' from job {bohr_job_id}: "
-            "incomplete file-token response (host/path/token empty)."
-        )
-    encoded_path = quote(remote_path, safe="/")
-    _download_to_file(
-        f"{host.rstrip('/')}/api/download/{encoded_path}?token={token}",
-        dest,
-        timeout=120,
-    )
-    return dest
-
-
-def download_job_directory(
-    ctx: BohriumContext,
-    *,
-    dir_path: str,
-    bohr_job_id: str,
-    dest_dir: Path,
-    max_bytes_per_file: int | None = None,
-) -> list[Path]:
-    from .client import get_file_token
-
-    normalized_dir = str(dir_path or "").replace("\\", "/").strip().rstrip("/")
-
-    host, root_path, token = get_file_token(ctx, file_path="", bohr_job_id=bohr_job_id)
-    root_prefix = str(root_path or "").replace("\\", "/")
-    if root_prefix and not root_prefix.endswith("/"):
-        root_prefix += "/"
-    abs_prefix = root_prefix + normalized_dir if root_prefix else normalized_dir
-
-    objects = _sandbox_iterate_objects(host, token, abs_prefix)
-    file_objects = [
-        obj for obj in objects if isinstance(obj, dict) and not obj.get("isDir")
-    ]
-
-    if not file_objects:
-        raise BohriumTransferError(
-            f"download_job_directory: no files found under '{normalized_dir}' "
-            f"in job {bohr_job_id} (prefix='{abs_prefix}')."
-        )
-
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    downloaded: list[Path] = []
-
-    for obj in file_objects:
-        remote_full_path = str(obj.get("path", "")).replace("\\", "/")
-        rel_path = remote_full_path
-        if root_prefix and rel_path.startswith(root_prefix):
-            rel_path = rel_path[len(root_prefix) :].lstrip("/")
-
-        if max_bytes_per_file is not None:
-            size = obj.get("size")
-            if isinstance(size, int) and size > max_bytes_per_file:
-                logger.info(
-                    "download_job_directory: skipping %s (%d bytes > limit %d)",
-                    rel_path,
-                    size,
-                    max_bytes_per_file,
-                )
-                continue
-
-        rel_inside_dir = rel_path
-        if rel_inside_dir.startswith(normalized_dir + "/"):
-            rel_inside_dir = rel_inside_dir[len(normalized_dir) + 1 :]
-
-        file_dest = dest_dir / rel_inside_dir
-        file_dest.parent.mkdir(parents=True, exist_ok=True)
-
-        try:
-            path = download_job_file(
-                ctx,
-                file_path=rel_path,
-                bohr_job_id=bohr_job_id,
-                dest=file_dest,
-            )
-            downloaded.append(path)
-        except Exception:
-            logger.warning(
-                "download_job_directory: failed to download %s",
-                rel_path,
-                exc_info=True,
-            )
-
-    return downloaded
