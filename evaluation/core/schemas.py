@@ -66,6 +66,9 @@ VerifyLiteral = Literal[
     'struct_file_count',
     # surface termination check
     'struct_file_surface_termination',
+    # plain-text file checks
+    'text_file_contains_all',
+    'text_file_regex',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
@@ -234,9 +237,12 @@ class QuestionItem(BaseModel):
             'batch_consistent_calls',
             'duration_budget',
             'turn_budget',
+            'token_budget',
             'molcrys_slab_molecular_integrity',
             'molcrys_local_env',
             'sc005_disorder_formulas',
+            'text_file_contains_all',
+            'text_file_regex',
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:
