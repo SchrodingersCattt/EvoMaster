@@ -101,41 +101,14 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 
 ## Structure Construction for Electronic Property Calculations
 
-When the task requires building a structure **specifically for electronic property calculations** (band structure, DOS, charge density, work function), apply these domain rules:
+For band structure, DOS, work function, or defect electronic structure, consult **`references/electronic_property_construction.md`** for detailed guidance (primitive vs conventional cell, k-path tables, supercell sizing, heterostructure band alignment).
 
-### Primitive vs Conventional Cell
-- **Band structure**: use the **primitive cell** (not conventional) to get the standard high-symmetry k-path. Conventional cells have folded bands that are harder to interpret. If the user provides a conventional cell, convert to primitive using pymatgen `SpacegroupAnalyzer.get_primitive_standard_structure()` before generating the k-path.
-- **DOS**: either primitive or supercell is fine, but use a **dense uniform k-mesh** (not line-mode).
-- **Work function**: use a **slab** with sufficient vacuum (≥ 20 Å recommended) and include dipole correction.
-
-### K-path Selection by Crystal System
-| Crystal system | Key high-symmetry points | Example path |
-|---------------|------------------------|-------------|
-| FCC (cubic) | Γ, X, W, K, L | Γ→X→W→K→Γ→L |
-| BCC (cubic) | Γ, H, N, P | Γ→H→N→Γ→P→H |
-| Hexagonal | Γ, M, K, A | Γ→M→K→Γ (2D: skip A) |
-| Tetragonal | Γ, X, M, Z | Γ→X→M→Γ→Z |
-| Simple cubic | Γ, X, M, R | Γ→X→M→Γ→R→X |
-
-Use pymatgen `HighSymmKpath(structure)` to auto-generate the correct k-path for any crystal.
-
-### Supercell for Defect Electronic Structure
-- For point defects (vacancy, substitution): build a supercell large enough that the defect does not interact with its periodic images (minimum ~10 Å between defect and nearest image). Typical: 3×3×3 for bulk, 2×2 or 3×3 in-plane for slabs.
-- Use **Γ-point only** or sparse k-mesh for large supercells.
-- For charged defects: add compensating background charge or use explicit countercharge methods.
-
-### Heterostructure for Band Alignment
-- Build each component slab separately with `build_surface_slab` or `build_slab_tasker_fix.py`.
-- Match in-plane lattice parameters (strain < 5%) using supercell matching.
-- Stack with `build_surface_interface` (MCP) or manual ASE stacking.
-- Verify: no overlapping atoms, correct atom count, sufficient vacuum.
-
-### Structure Verification for Electronic Calculations
-After constructing any structure for electronic property calculations:
-1. Run `assess_structure.py` — confirm dimensionality matches intent (bulk = 3D, slab = 2D).
-2. Verify **atom count** matches formula × supercell size.
-3. For slabs: confirm vacuum ≥ 15 Å (20 Å for work function), k-points = 1 in vacuum direction.
-4. For primitive cells: confirm the cell is actually primitive (not conventional with doubled atom count).
+Key rules:
+- **Band structure**: use **primitive cell** + pymatgen `HighSymmKpath(structure)` for k-path.
+- **DOS**: dense uniform k-mesh (not line-mode); primitive or supercell both fine.
+- **Work function**: slab with vacuum >= 20 A + dipole correction.
+- **Defects**: supercell >= 10 A between images; Gamma-only or sparse k-mesh.
+- After construction, verify with `assess_structure.py` (dimensionality, atom count, vacuum).
 
 ## When to use
 
