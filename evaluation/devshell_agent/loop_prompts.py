@@ -31,6 +31,11 @@ SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编
 
 ## 产品侧改动优先级与系统提示词泛化（硬约束）
 - **优先顺序**：先 **`matmaster/skills/`**（领域流程与可复用约束；**现有 Skill 不足时允许新建**，见上节 `skills_root` 约定）、再 **`matmaster/tools/`**（工具行为与描述），然后 **`config/`**、MCP、`matmaster/adaptors/calculation/`、`matmaster/devshell/` 等。
+- 若低分指向 `matmaster/skills/`：先做**分层判断**，不要默认把所有修复都塞进 `SKILL.md`。
+- **`SKILL.md` 只承载**：触发条件、何时使用、执行步骤、硬约束、少量高优先级例外。目标是让执行 Agent 首屏就读到高信号规则，而不是把资料库整个内联。
+- **`references/` / `reference/`**：放长篇背景、查表资料、长示例、参数说明、兼容性 notes。`SKILL.md` 只保留入口与引用，不要把整段参考直接抄进去。
+- **`scripts/` / 模板 / helper 文件**：放需要执行、复用、生成文件或进行复杂判断的逻辑；若最佳实践本质上是“调用一个现成步骤”，优先沉淀为脚本或模板，而不是在 `SKILL.md` 写成长篇手工算法。
+- **禁止**为了对齐一次低分，**不要把长篇参考、长表格、长案例直接堆进 `SKILL.md`**；也不要把本应落在脚本/模板中的可执行逻辑伪装成文档段落。优化目标是让 Skill 更短、更准、更易复用。
 - **`matmaster/exps/`（全部 TOML）**：**优化专责子 Agent 严禁直接修改**（编排器也不会自动提交该目录下任何文件）。若迭代认为必须调整 exp：由该子 Agent 仅在**本会话目录**下写入 `proposed_matmaster_exps_changes.md`（Markdown，供人审阅后手工合入）；**仅当**建议是**跨领域、极通用**的执行/交付契约时才值得动 `matmaster/exps/`，否则应改 Skills 或工具侧。
 - **`matmaster/exps/` 中的系统提示与 developer 指令须保持通用**：不得把某次评测里具体题目的 **`scoring_checklist` 逐条改写进 TOML**、不得仅为对齐某题判分项而堆叠题目专属规则（过拟合题库）。
 - 若 `item.score_reason` 指向 checklist 某条：先判断能否用 **Skill 文案** 或 **工具契约** 稳定满足；确需将来调整 exp 时，只增加**可跨题复用**的抽象表述，并遵守 token 预算与 `exp_prompt_budget`（由维护者手工改文件并自检）。
@@ -77,6 +82,13 @@ SYSTEM_PROMPT_OPTIMIZATION = """你是 MatMaster 仓库内的 **DevShell 评测�
 - **严禁**使用 Write / Replace 修改 ``matmaster/exps/`` 下**任何**文件（工具会拒绝）。
 - 若你认为**非改不可**：仅在**本会话目录**（与 `eval_runs/` 同级）新建或追加 **``proposed_matmaster_exps_changes.md``**，用 Markdown 写清：目标文件、动机、建议改动的**极短**摘要、为何属于**跨领域通用**契约（否则应改 Skills / 工具而非 exps）。由维护者审阅后**手工**编辑 TOML 并提交。
 - 领域流程、具体软件栈、题目类技巧：**写入 `matmaster/skills/` 等**，不要写进上述提案来绕过限制。
+
+## ``matmaster/skills/`` 分层约束
+- 若修改 `matmaster/skills/`，先判断内容应落在哪一层；不要把“能写进 Skill”误解为“都写进 `SKILL.md`”。
+- **`SKILL.md` 只承载**：触发条件、任务流程、硬约束、少量关键例外；保持短小、高信号、可快速扫读。
+- **`references/` / `reference/`**：放长篇参考、查表资料、参数说明、长案例、背景解释；`SKILL.md` 只保留导航入口。
+- **`scripts/`、模板、辅助文件**：放可执行逻辑、生成器、校验器、需要复用的步骤；如果一段“规则”本质上是算法或固定流程，优先脚本化而不是写成长段文字。
+- **禁止**把长篇参考、长表格、长案例直接堆进 `SKILL.md`；不要为了单次评测补分而让主 Skill 文档持续膨胀。
 
 ## Git
 - 你**无法**在本会话内执行 ``git``；实质性修改将由外层编排器在适当时机自动 ``git commit``（提交说明符合仓库 ``commit-msg`` 钩子）。``proposed_matmaster_exps_changes.md`` 若存在，通常随会话目录保留在 ``evaluation/devshell_agent_history/`` 下供审阅；是否纳入版本库由维护者决定。
