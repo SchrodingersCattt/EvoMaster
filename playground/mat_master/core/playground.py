@@ -115,23 +115,43 @@ class MatMasterPlayground(BasePlayground):
     def _create_tools_for_agent(self, skill_registry, tool_config):
         """Override: 在基类 registry 上增加 memory、peek_file、extract_webpage、monitor_job、aissq（每 agent 独立 tools）。"""
         registry = super()._create_tools_for_agent(skill_registry, tool_config)
+        builtin = tool_config.get('builtin', ['*']) or []
+
+        def _allowed(tool_name: str) -> bool:
+            return '*' in builtin or tool_name in builtin
+
         if self.run_dir is not None:
             self.memory_service.run_dir = Path(self.run_dir)
         memory_tools = get_memory_tools(self.memory_service)
         registry.register_many(memory_tools)
-        registry.register(get_peek_file_tool())
         from ..tools import get_aissq_download_tool, get_aissq_search_tool, get_extract_webpage_tool
 
-        registry.register(get_extract_webpage_tool())
-        registry.register(get_web_search_tool())
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
 
-        registry.register(MonitorJobTool())
-        registry.register(get_aissq_search_tool())
-        registry.register(get_aissq_download_tool())
+        registered_extras = []
+        if _allowed('peek_file'):
+            registry.register(get_peek_file_tool())
+            registered_extras.append('peek_file')
+        if _allowed('extract_info_from_webpage'):
+            registry.register(get_extract_webpage_tool())
+            registered_extras.append('extract_info_from_webpage')
+        if _allowed('web-search'):
+            registry.register(get_web_search_tool())
+            registered_extras.append('web-search')
+        if _allowed('monitor_job'):
+            registry.register(MonitorJobTool())
+            registered_extras.append('monitor_job')
+        if _allowed('aissq_search'):
+            registry.register(get_aissq_search_tool())
+            registered_extras.append('aissq_search')
+        if _allowed('aissq_download'):
+            registry.register(get_aissq_download_tool())
+            registered_extras.append('aissq_download')
         self.logger.info(
-            'Registered %d memory tools, peek_file, extract_info_from_webpage, web-search, monitor_job, aissq_search, aissq_download (per-agent registry)',
+            'Registered %d memory tools and %d builtin extras for this agent: %s',
             len(memory_tools),
+            len(registered_extras),
+            ', '.join(registered_extras) if registered_extras else '(none)',
         )
         return registry
 

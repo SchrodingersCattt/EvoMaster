@@ -87,8 +87,33 @@ agents:
   general:
     llm: "opus"
     max_turns: 200
+    # ABLATION v4: explicit skill subset only; remove literature-writing/search-oriented skills.
+    skills:
+      - calculation
+      - bohrium-job
+      - compliance-guardian
+      - composition-optimization
+      - input-manual-helper
+      - result-analysis
+      - structure-manager
     tools:
-      builtin: ["*"]
+      # ABLATION v3: explicit allowlist only; external web access must be impossible.
+      # Keep local file/task/bash/job tools, but exclude web-search, mm_web_search,
+      # web_fetch, and extract_info_from_webpage.
+      builtin:
+        - execute_bash
+        - list_dir
+        - read_file
+        - write_file
+        - edit_file
+        - glob
+        - grep
+        - task_create
+        - task_get
+        - task_list
+        - task_update
+        - task_complete
+        - monitor_job
       mcp: "*"
 
     context:
@@ -115,6 +140,7 @@ agents:
 # Mat Master
 # ============================================
 mat_master:
+  no_literature_mode: true
   crp:
     allow_list:
       - "ABACUS"
@@ -150,8 +176,8 @@ mat_master:
     direct_max_workers: 4
     planner_max_workers: 3
     rate_limit: null
-    # ABLATION: "mat_sn_" removed from auto-save patterns
-    tool_output_auto_save_patterns: ["mat_doc_", "web-search", "extract_info_from_webpage"]
+    # ABLATION v3: no web tools should be enabled or auto-saved.
+    tool_output_auto_save_patterns: ["mat_doc_"]
     # ABLATION: mat_sn_* entries removed from summarize patterns
     tool_obs_summarize_patterns: ["mat_sg_", "mat_doc_"]
     tool_obs_summarize_threshold: 10000

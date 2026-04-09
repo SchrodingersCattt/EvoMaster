@@ -307,6 +307,20 @@ class MatMasterAgent(MatMasterFinishGatesMixin, MatMasterToolExecutionMixin, Age
         working_dir_abs = str(Path(working_dir).absolute())
         working_dir_info = f"\n\nYou must perform all operations in this working directory; do not change directory. All file operations and commands must be run under: {working_dir_abs}"
         prompt = base + working_dir_info
+        _mat_cfg = (self._full_config_dict or {}).get('mat_master') or {}
+        if bool(_mat_cfg.get('no_literature_mode', False)):
+            prompt += (
+                '\n\n# No-literature ablation (hard rule)\n'
+                '- This run is a strict **no-literature / no-web** ablation.\n'
+                '- You MUST NOT use or attempt external retrieval tools or literature-writing workflows.\n'
+                '- Forbidden/unavailable: any `mat_sn_*` tool, `web-search`, '
+                '`extract_info_from_webpage`, `aissq_search`, `aissq_download`, '
+                '`deep-survey`, and `lit-data-organizer` for external evidence collection.\n'
+                '- Reason only from: (1) the task input, (2) files already present in the workspace, '
+                'and (3) local/remote calculation tools that are still available.\n'
+                '- If you mention background knowledge, treat it as model prior knowledge only; '
+                'do not present it as newly retrieved literature evidence.\n'
+            )
         if working_dir_abs == '/share' or working_dir_abs.startswith('/share/'):
             prompt += (
                 '\n\nThis working directory is under /share. '

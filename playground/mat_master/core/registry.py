@@ -138,6 +138,23 @@ class MatMasterSkillRegistry:
             by_name[n] = s
         return list(by_name.values())
 
+    def create_subset(self, skill_names: list[str]) -> "MatMasterSkillRegistry":
+        """Return a registry view containing only the requested skill names."""
+        if "*" in skill_names:
+            return self
+
+        wanted = set(skill_names)
+        subset = MatMasterSkillRegistry(
+            self.core_registry.create_subset(skill_names),
+            dynamic_root=None,
+            mat_skills_root=None,
+            user_skills_root=None,
+        )
+        subset._mat_skills = {name: skill for name, skill in self._mat_skills.items() if name in wanted}
+        subset._user_skills = {name: skill for name, skill in self._user_skills.items() if name in wanted}
+        subset._dynamic_skills = {name: skill for name, skill in self._dynamic_skills.items() if name in wanted}
+        return subset
+
     def get_meta_info_context(self) -> str:
         """Meta info for context: merged core + mat + user + dynamic."""
         lines = ['# Available Skills\n']
