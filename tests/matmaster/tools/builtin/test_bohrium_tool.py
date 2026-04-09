@@ -757,6 +757,67 @@ class TestBohriumExecution:
         assert get_calls[1][0] == "/openapi/v2/image/public/1/version"
 
     def test_list_machines_filters_by_type_and_keyword(self, tmp_path, monkeypatch):
+        """Sandbox with catalog: filters catalog machines, does NOT call _get."""
+        tool = BohriumTool(workdir=tmp_path)
+        get_calls: list[tuple[str, dict | None]] = []
+
+        def fake_get(base_url, path, access_key, params=None, timeout=30):
+            get_calls.append((path, params))
+            raise AssertionError("_get should not be called when catalog has data")
+
+        catalog = {
+            "machines": {
+                "gpu": [
+                    {
+                        "skuEnName": "c8_m32_1 * NVIDIA 4090",
+                        "cpuCoreNum": 8,
+                        "memory": 32,
+                        "gpu": "NVIDIA GeForce RTX 4090",
+                        "gpuCoreNum": 1,
+                    },
+                    {
+                        "skuEnName": "c16_m64_1 * NVIDIA 5090",
+                        "cpuCoreNum": 16,
+                        "memory": 64,
+                        "gpu": "NVIDIA GeForce RTX 5090",
+                        "gpuCoreNum": 1,
+                    },
+                ],
+                "cpu": [
+                    {"skuEnName": "c2_m4_cpu", "cpuCoreNum": 2, "memory": 4},
+                ],
+            }
+        }
+
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(bohrium_tool_module, "_get", fake_get)
+        monkeypatch.setattr(BohriumTool, "_sandbox_catalog", catalog)
+
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "action": "list_machines",
+                    "machine_type": "gpu",
+                    "keyword": "4090",
+                    "max_results": 10,
+                }
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        payload = json.loads(result.content)
+        assert payload["type"] == "gpu"
+        assert payload["source"] == "sandbox_catalog"
+        assert payload["total_found"] == 1
+        assert payload["returned"] == 1
+        assert payload["machines"][0]["skuEnName"] == "c8_m32_1 * NVIDIA 4090"
+        assert not get_calls
+
+    def test_list_machines_falls_back_to_api_when_catalog_empty(
+        self, tmp_path, monkeypatch
+    ):
+        """Sandbox with empty catalog: falls back to _get API call."""
         tool = BohriumTool(workdir=tmp_path)
         get_calls: list[tuple[str, dict | None]] = []
 
@@ -784,6 +845,7 @@ class TestBohriumExecution:
 
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_tool_module, "_get", fake_get)
+        monkeypatch.setattr(BohriumTool, "_sandbox_catalog", {})
 
         result = asyncio.run(
             tool.execute(
