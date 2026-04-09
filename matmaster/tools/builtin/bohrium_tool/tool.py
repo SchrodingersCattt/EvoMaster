@@ -1,12 +1,14 @@
 """Bohrium builtin tool orchestration.
 
 Single tool with action-based dispatch for Bohrium HPC operations.
-This tool handles pure communication: submit, poll (single-query), list_images,
-list_machines. All software-specific knowledge lives in software skills.
+This tool handles pure communication: submit, poll (single-query), download,
+kill, list_images, list_machines. All software-specific knowledge lives in
+software skills.
 
 Design decisions:
 - poll is single-shot and non-blocking
 - submit auto-appends "> log 2>&1" if missing
+- kill is asynchronous; callers must poll to confirm terminal state
 - Credentials resolved via runtime bridge (session > env fallback)
 - Remote /share paths require active session with upload_directory
 """
@@ -27,6 +29,7 @@ from matmaster.bohrium.client import (
     list_images,
     list_machines,
     mask_secret,
+    terminate_job,
 )
 from matmaster.bohrium.credentials import build_bohrium_context
 from matmaster.bohrium.endpoints import get_bohrium_service_env
@@ -121,6 +124,7 @@ class BohriumTool(BuiltinTool):
         'action="submit": package input directory and submit a job, returns job_id. '
         'action="poll": single-shot job status check, returns current status immediately. '
         'action="download": download artifacts for a finished or failed job into result_dir. '
+        'action="kill": request termination of a previously submitted job (sandbox only). '
         'action="list_images": query available Docker images by keyword. '
         'action="list_machines": query available machine types (cpu/gpu).'
     )
@@ -130,7 +134,14 @@ class BohriumTool(BuiltinTool):
         'properties': {
             'action': {
                 'type': 'string',
-                'enum': ['submit', 'poll', 'download', 'list_images', 'list_machines'],
+                'enum': [
+                    'submit',
+                    'poll',
+                    'download',
+                    'kill',
+                    'list_images',
+                    'list_machines',
+                ],
                 'description': 'Operation to perform.',
             },
             # --- submit ---
@@ -161,7 +172,7 @@ class BohriumTool(BuiltinTool):
             # --- poll ---
             'job_id': {
                 'type': ['integer', 'string'],
-                'description': 'Job ID returned by submit. (poll, download)',
+                'description': 'Job ID returned by submit. (poll, download, kill)',
             },
             'result_dir': {
                 'type': 'string',
@@ -193,6 +204,7 @@ class BohriumTool(BuiltinTool):
             'bohrium.submit',
             'bohrium.query',
             'bohrium.download',
+            'bohrium.kill',
         }
     )
     effect_level: ClassVar[str] = 'external_effect'
@@ -213,6 +225,9 @@ class BohriumTool(BuiltinTool):
             'not download artifacts.\n'
             '- download: use action="download" only after poll reports Finished or '
             'Failed. Requires result_dir; retrieves logs and artifacts for analysis.\n'
+            '- kill: cancel a Bohrium job previously submitted via this tool. Use only when '
+            'the user explicitly wants to stop a running job. The call is '
+            'asynchronous; follow up with poll to confirm terminal state. \n'
             '- When image or machine is unknown, call list_images / list_machines first.\n'
         )
 
@@ -278,7 +293,7 @@ class BohriumTool(BuiltinTool):
             return f"Error: {exc}"
 
         normalized = normalize_tool_result(result)
-        if registry is not None and action in ("submit", "poll", "download"):
+        if registry is not None and action in ("submit", "poll", "download", "kill"):
             normalized = self._update_registry(
                 registry,
                 action,
@@ -314,6 +329,10 @@ class BohriumTool(BuiltinTool):
 
         if action == "download":
             registry.update_download(job_id)
+            return result
+
+        if action == "kill":
+            registry.update_kill(job_id)
             return result
 
         if action != "poll":
@@ -373,6 +392,8 @@ class BohriumTool(BuiltinTool):
                 return self._poll(arguments)
             case 'download':
                 return self._download(arguments)
+            case 'kill':
+                return self._kill(arguments)
             case 'list_images':
                 return self._list_images(arguments)
             case 'list_machines':
@@ -381,7 +402,8 @@ class BohriumTool(BuiltinTool):
                 return ToolResult(
                     status='error',
                     content=f'Unknown action: {action!r}. '
-                    f'Must be one of: submit, poll, download, list_images, list_machines.',
+                    f'Must be one of: submit, poll, download, kill, '
+                    f'list_images, list_machines.',
                 )
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
@@ -469,7 +491,6 @@ class BohriumTool(BuiltinTool):
             detail_data = get_job_detail(ctx, job_id=job_id)
             code = detail_data.get('status', 0)
 
-            # Confirm failure/unknown before reporting terminal status
             if code in FAILURE_CODES or (
                 code not in RUNNING_CODES and code != SUCCESS_CODE
             ):
@@ -487,7 +508,6 @@ class BohriumTool(BuiltinTool):
                     'Continue other work before polling again.'
                 )
             elif code == SUCCESS_CODE:
-                status_label = 'Finished'
                 message = (
                     'Job is Finished. Call '
                     f'Bohrium(action="download", job_id={job_id!r}, '
@@ -619,6 +639,51 @@ class BohriumTool(BuiltinTool):
             )
             return ToolResult(status='error', content=f'Download failed: {exc}')
 
+    def _kill(self, args: dict[str, Any]) -> ToolResult:
+        raw_job_id = args.get('job_id')
+        if raw_job_id is None:
+            return ToolResult(
+                status='error', content='Missing required parameter: job_id'
+            )
+
+        ctx: BohriumContext | None = None
+        try:
+            ctx = self._build_context()
+            sandbox = ctx.sandbox
+            self._log_request_context(action='kill', ctx=ctx, sandbox=sandbox)
+            job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
+            response = terminate_job(ctx, job_id=job_id)
+            return ToolResult(
+                status='success',
+                content=json.dumps(
+                    {
+                        'success': True,
+                        'job_id': job_id,
+                        'status': 'Terminating',
+                        'message': (
+                            'Kill requested. The Bohrium kill RPC is '
+                            'asynchronous — call '
+                            f'Bohrium(action="poll", job_id={job_id!r}) '
+                            'to confirm the job reaches a terminal state '
+                            '(Stopped/Failed/Finished).'
+                        ),
+                        'response': response,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+        except BohriumError as exc:
+            return ToolResult(status='error', content=str(exc))
+        except Exception as exc:
+            logger.error(
+                'bohrium kill failed action=kill base_url=%s sandbox=%s error=%s',
+                ctx.credentials.base_url if ctx is not None else '',
+                ctx.sandbox if ctx is not None else 'n/a',
+                exc,
+                exc_info=True,
+            )
+            return ToolResult(status='error', content=f'Kill failed: {exc}')
+
     def _list_images(self, args: dict[str, Any]) -> ToolResult:
         keyword = (args.get('keyword') or '').strip().lower()
         max_results = int(args.get('max_results', 20))
@@ -626,15 +691,15 @@ class BohriumTool(BuiltinTool):
         ctx: BohriumContext | None = None
         try:
             ctx = self._build_context()
-            self._log_request_context(
-                action='list_images',
-                ctx=ctx,
-                sandbox=ctx.sandbox,
-            )
             payload = list_images(
                 ctx,
                 keyword=keyword,
                 max_results=max_results,
+            )
+            self._log_request_context(
+                action='list_images',
+                ctx=ctx,
+                sandbox=bool(ctx.sandbox and payload.get('source') == 'sandbox_catalog'),
             )
 
             return ToolResult(
@@ -659,14 +724,16 @@ class BohriumTool(BuiltinTool):
         ctx: BohriumContext | None = None
         try:
             ctx = self._build_context()
-            self._log_request_context(
-                action='list_machines', ctx=ctx, sandbox=ctx.sandbox
-            )
             payload = list_machines(
                 ctx,
                 machine_type=choose_type,
                 keyword=keyword,
                 max_results=max_results,
+            )
+            self._log_request_context(
+                action='list_machines',
+                ctx=ctx,
+                sandbox=bool(ctx.sandbox and payload.get('source') == 'sandbox_catalog'),
             )
 
             return ToolResult(

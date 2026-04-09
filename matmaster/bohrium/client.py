@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -223,107 +222,41 @@ def get_file_token(
     return data.get("host", ""), data.get("path", ""), data.get("token", "")
 
 
-def _extract_bohr_job_id(
-    job_id: str,
-    bohr_job_id: str | None = None,
-) -> str | None:
-    if bohr_job_id:
-        return bohr_job_id.strip()
-    if not job_id:
-        return None
-    parts = job_id.rsplit("/", 1)
-    candidate = (parts[1] if len(parts) == 2 else job_id).strip()
-    if candidate.isdigit():
-        return candidate
-    clean = candidate.replace("-", "")
-    if re.fullmatch(r"[0-9a-fA-F]{32}", clean):
-        return clean
-    if re.fullmatch(r"[0-9a-fA-F]{33,}", clean):
-        return None
-    return candidate
-
-
 def terminate_job(
     ctx: BohriumContext,
     *,
-    bohr_job_id: str,
-) -> tuple[bool, dict[str, Any]]:
-    bid = (bohr_job_id or "").strip()
-    if not bid:
-        return False, {"error": "bohr_job_id is required"}
-    try:
-        result = _post(
-            ctx.credentials.base_url,
-            f"/openapi/v1/sandbox/kill/{bid}",
-            ctx.credentials.access_key,
-            {},
+    job_id: int | str,
+) -> dict[str, Any]:
+    """Request termination of a Bohrium job.
+
+    Currently only supported in sandbox mode. The non-sandbox kill endpoint
+    has not been wired up; calling this on a non-sandbox context raises
+    ``BohriumAPIError``.
+
+    The underlying RPC is asynchronous: a successful response only means the
+    kill request was accepted. Callers should follow up with ``get_job_detail``
+    (or the tool-layer ``poll`` action) to confirm the job reached a terminal
+    state.
+    """
+    if not ctx.sandbox:
+        raise BohriumAPIError(
+            "kill is only supported in sandbox mode; "
+            "the non-sandbox termination endpoint is not wired up"
         )
-        if result.get("code") == 0:
-            return True, {
-                "bohr_job_id": bid,
-                "result": "terminate_requested",
-                "response": result,
-            }
-        return False, {
-            "bohr_job_id": bid,
-            "result": "terminate_failed",
-            "error": f"API returned code={result.get('code')}",
-        }
-    except Exception as exc:
-        return False, {
-            "bohr_job_id": bid,
-            "result": "terminate_failed",
-            "error": str(exc),
-        }
 
+    bid = str(job_id or "").strip()
+    if not bid:
+        raise BohriumAPIError("kill requires a non-empty job_id")
 
-_SANDBOX_MACHINES: list[dict[str, Any]] = [
-    {"skuEnName": "c2_m4_cpu", "cpuCoreNum": 2, "memory": 4},
-    {"skuEnName": "c2_m8_cpu", "cpuCoreNum": 2, "memory": 8},
-    {"skuEnName": "c8_m32_cpu", "cpuCoreNum": 8, "memory": 32},
-    {"skuEnName": "c32_m128_cpu", "cpuCoreNum": 32, "memory": 128},
-    {
-        "skuEnName": "c8_m32_1 * NVIDIA 4090",
-        "cpuCoreNum": 8,
-        "memory": 32,
-        "gpu": "NVIDIA GeForce RTX 4090",
-        "gpuCoreNum": 1,
-    },
-    {
-        "skuEnName": "c16_m64_1 * NVIDIA 4090",
-        "cpuCoreNum": 16,
-        "memory": 64,
-        "gpu": "NVIDIA GeForce RTX 4090",
-        "gpuCoreNum": 1,
-    },
-    {
-        "skuEnName": "c16_m64_1 * NVIDIA 5090",
-        "cpuCoreNum": 16,
-        "memory": 64,
-        "gpu": "NVIDIA GeForce RTX 5090",
-        "gpuCoreNum": 1,
-    },
-]
-
-
-def list_sandbox_machines(
-    *,
-    machine_type: str,
-    keyword: str,
-    max_results: int,
-) -> list[dict[str, Any]]:
-    if machine_type == "gpu":
-        candidates = [machine for machine in _SANDBOX_MACHINES if "gpu" in machine]
-    else:
-        candidates = [machine for machine in _SANDBOX_MACHINES if "gpu" not in machine]
-    lowered = keyword.lower()
-    if lowered:
-        candidates = [
-            machine
-            for machine in candidates
-            if lowered in str(machine.get("skuEnName") or "").lower()
-        ]
-    return candidates[:max_results]
+    response = _post(
+        ctx.credentials.base_url,
+        f"/openapi/v1/sandbox/kill/{bid}",
+        ctx.credentials.access_key,
+        {},
+    )
+    if response.get("code") != 0:
+        raise BohriumAPIError(f"kill failed: {response}")
+    return response.get("data") or {}
 
 
 def list_images(
@@ -337,22 +270,23 @@ def list_images(
     if ctx.sandbox:
         catalog = _load_sandbox_catalog()
         sandbox_images = catalog.get("images") or []
-        filtered = [
-            img
-            for img in sandbox_images
-            if not lowered_keyword
-            or lowered_keyword in str(img.get("name", "")).lower()
-            or lowered_keyword in str(img.get("description", "")).lower()
-        ]
-        results = filtered[:max_results]
-        return {
-            "success": True,
-            "keyword": lowered_keyword,
-            "total_found": len(filtered),
-            "returned": len(results),
-            "images": results,
-            "source": "sandbox_catalog",
-        }
+        if sandbox_images:
+            filtered = [
+                img
+                for img in sandbox_images
+                if not lowered_keyword
+                or lowered_keyword in str(img.get("name", "")).lower()
+                or lowered_keyword in str(img.get("description", "")).lower()
+            ]
+            results = filtered[:max_results]
+            return {
+                "success": True,
+                "keyword": lowered_keyword,
+                "total_found": len(filtered),
+                "returned": len(results),
+                "images": results,
+                "source": "sandbox_catalog",
+            }
 
     data = _get(
         ctx.credentials.base_url,
@@ -441,20 +375,28 @@ def list_machines(
     lowered_keyword = (keyword or "").strip().lower()
 
     if ctx.sandbox:
-        results = list_sandbox_machines(
-            machine_type=machine_type,
-            keyword=lowered_keyword,
-            max_results=max_results,
-        )
-        return {
-            "success": True,
-            "type": machine_type,
-            "sandbox": True,
-            "note": "Sandbox mode: machine list is a fixed preset, not queried from the platform.",
-            "total_found": len(results),
-            "returned": len(results),
-            "machines": results,
-        }
+        catalog = _load_sandbox_catalog()
+        sandbox_machines = (catalog.get("machines") or {}).get(machine_type) or []
+        if sandbox_machines:
+            if lowered_keyword:
+                filtered = [
+                    machine
+                    for machine in sandbox_machines
+                    if lowered_keyword
+                    in str(machine.get("skuEnName") or machine.get("skuName") or "").lower()
+                ]
+            else:
+                filtered = list(sandbox_machines)
+            results = filtered[:max_results]
+            return {
+                "success": True,
+                "type": machine_type,
+                "keyword": lowered_keyword,
+                "total_found": len(filtered),
+                "returned": len(results),
+                "machines": results,
+                "source": "sandbox_catalog",
+            }
 
     data = _get(
         ctx.credentials.base_url,

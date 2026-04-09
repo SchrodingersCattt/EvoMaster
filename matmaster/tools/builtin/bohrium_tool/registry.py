@@ -73,6 +73,12 @@ class JobRegistry:
         if rec is not None:
             rec.status = "downloaded"
 
+    def update_kill(self, job_id: str) -> None:
+        """Mark job as kill requested."""
+        rec = self._jobs.get(str(job_id))
+        if rec is not None:
+            rec.status = "terminating"
+
     def get(self, job_id: str) -> JobRecord | None:
         """Get job record or None."""
         return self._jobs.get(str(job_id))

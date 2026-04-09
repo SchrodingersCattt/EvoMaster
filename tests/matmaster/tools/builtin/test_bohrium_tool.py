@@ -97,9 +97,14 @@ class TestBohriumMetadata:
         assert "download" in properties["action"]["enum"]
         assert properties["result_dir"]["description"].endswith("(download)")
 
+    def test_schema_exposes_kill_action(self):
+        properties = BohriumTool.json_schema["properties"]
+        assert "kill" in properties["action"]["enum"]
+        assert "kill" in properties["job_id"]["description"]
+
     def test_capabilities_include_download(self):
         assert BohriumTool.capabilities == frozenset(
-            {"bohrium.submit", "bohrium.query", "bohrium.download"}
+            {"bohrium.submit", "bohrium.query", "bohrium.download", "bohrium.kill"}
         )
 
     def test_prompt_mentions_poll_and_download_modes(self, tmp_path):
@@ -109,6 +114,7 @@ class TestBohriumMetadata:
         assert "single-shot" in prompt
         assert 'action="download"' in prompt
         assert "does not download artifacts" in prompt
+        assert "kill" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -947,3 +953,44 @@ class TestBohriumSessionCredentials:
         result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
         assert result.status == "success"
         assert get_calls[0][1] == "env-ak"
+
+
+class TestBohriumKillAction:
+    """Tests for the kill action wiring (client helper + registry update)."""
+
+    def test_kill_sandbox_requests_termination(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("BOHRIUM_USE_SANDBOX", "1")
+        _patch_bridge(monkeypatch)
+        tool = BohriumTool(workdir=tmp_path)
+
+        calls: list[tuple[str, dict]] = []
+
+        def fake_post(base_url, path, access_key, payload, *, timeout=30):
+            del base_url, access_key, timeout
+            calls.append((path, payload))
+            return {"code": 0, "data": {"accepted": True}}
+
+        monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
+        result = asyncio.run(tool.execute({"action": "kill", "job_id": "abc-123"}))
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert calls == [("/openapi/v1/sandbox/kill/abc-123", {})]
+        payload = json.loads(result.content)
+        assert payload["status"] == "Terminating"
+        assert "poll" in payload["message"]
+
+    def test_kill_rejects_non_sandbox(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("BOHRIUM_USE_SANDBOX", "0")
+        _patch_bridge(monkeypatch)
+        tool = BohriumTool(workdir=tmp_path)
+
+        result = asyncio.run(tool.execute({"action": "kill", "job_id": "999"}))
+        assert result.status == "error"
+        assert "sandbox" in result.content.lower()
+
+    def test_kill_missing_job_id_returns_error(self, tmp_path):
+        tool = BohriumTool(workdir=tmp_path)
+        result = asyncio.run(tool.execute({"action": "kill"}))
+        assert result.status == "error"
+        assert "job_id" in result.content
