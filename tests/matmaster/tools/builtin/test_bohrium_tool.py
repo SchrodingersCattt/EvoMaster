@@ -759,6 +759,7 @@ class TestBohriumExecution:
     def test_list_machines_filters_by_type_and_keyword(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
         get_calls: list[tuple[str, dict | None]] = []
+        monkeypatch.setenv("BOHRIUM_USE_SANDBOX", "0")
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
             get_calls.append((path, params))

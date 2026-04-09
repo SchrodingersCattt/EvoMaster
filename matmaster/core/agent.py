@@ -330,7 +330,9 @@ class AgentKernel:
             spec.compactor._event_sink = _compactor_sink
             spec.compactor.update_message_count(len(state.messages))
             compaction_prev_count = len(state.messages)
-            await spec.compactor.preflight_if_needed(state.messages)
+            preflight_if_needed = getattr(spec.compactor, "preflight_if_needed", None)
+            if callable(preflight_if_needed):
+                await preflight_if_needed(state.messages)
             async for item in self._drain_compactor_events(
                 spec=spec,
                 compactor_events=compactor_events,
