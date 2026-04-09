@@ -324,5 +324,3 @@ BusEvent = Annotated[
     ],
     Field(discriminator="type"),
 ]
-
-

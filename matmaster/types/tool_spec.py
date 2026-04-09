@@ -114,7 +114,7 @@ class ToolInstance:
     tool_binding: ToolBinding
     tool_executor: Callable[
         [dict[str, Any], ToolExecutionContext],
-        Awaitable["ToolResult | str | None"],
+        Awaitable[ToolResult | str | None],
     ]
     input_validator: (
         Callable[
