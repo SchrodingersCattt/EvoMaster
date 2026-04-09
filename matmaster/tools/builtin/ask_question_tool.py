@@ -72,15 +72,9 @@ class AskQuestionTool(BuiltinTool):
         session: Any | None = None,
         workdir: Any | None = None,
         bridge: Any | None = None,
-        session_id: str = "",
-        task_id: str = "",
-        invocation_id: str | None = None,
     ) -> None:
         super().__init__(session=session, workdir=workdir)
         self._bridge = bridge
-        self._session_id = session_id
-        self._task_id = task_id
-        self._invocation_id = invocation_id
 
         # 同 AgentTool 模式：bridge 缺失时实例级遮蔽 ClassVar，
         # tool_compiler 读 tool.exposed_to_model 时优先命中实例属性
@@ -88,7 +82,7 @@ class AskQuestionTool(BuiltinTool):
             self.exposed_to_model = False
 
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
-        """AskQuestion 必须走 execute_with_context（需要 cancel_token），不支持无上下文调用。"""
+        """AskQuestion 走 execute_with_context；不支持 sync 调用路径。"""
         raise NotImplementedError(
             "AskQuestionTool requires execute_with_context; direct _execute is not supported"
         )
@@ -122,13 +116,9 @@ class AskQuestionTool(BuiltinTool):
         request_id = f"aq_{uuid.uuid4().hex[:12]}"
 
         response = await self._bridge.ask(
-            session_id=self._session_id,
-            task_id=self._task_id,
-            invocation_id=self._invocation_id,
             request_id=request_id,
             questions=normalized_questions,
             metadata=arguments.get("metadata"),
-            cancel_token=exec_ctx.cancel_token if exec_ctx else None,
         )
 
         content = self._render_answer_summary(

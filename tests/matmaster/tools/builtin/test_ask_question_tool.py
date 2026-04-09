@@ -187,9 +187,6 @@ class TestAskQuestionBridge:
 
         response = asyncio.run(
             bridge.ask(
-                session_id="session_1",
-                task_id="task_1",
-                invocation_id="inv_1",
                 request_id="aq_1",
                 questions=[
                     {
@@ -202,7 +199,6 @@ class TestAskQuestionBridge:
                     }
                 ],
                 metadata={},
-                cancel_token=None,
             )
         )
 
