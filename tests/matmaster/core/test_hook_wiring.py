@@ -73,6 +73,9 @@ class FakeCompactor:
     def update_message_count(self, count: int) -> None:
         self.message_counts.append(count)
 
+    async def preflight_if_needed(self, messages) -> None:
+        return None
+
     async def compact_if_needed(self, messages, turn_usage, turn) -> None:
         messages[:] = messages[:1]
         await self._event_sink(
@@ -90,6 +93,9 @@ class DoubleEventCompactor:
 
     def update_message_count(self, count: int) -> None:
         self.message_counts.append(count)
+
+    async def preflight_if_needed(self, messages) -> None:
+        return None
 
     async def compact_if_needed(self, messages, turn_usage, turn) -> None:
         messages[:] = messages[:2]

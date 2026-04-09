@@ -228,9 +228,6 @@ class ContextCompactor:
                     "Preflight compaction requires compressible old turns; "
                     "tool_truncation is runtime-only"
                 )
-            # No old turns to compress -- all turns are retained.
-            # Fall back to truncating large tool results within retained
-            # turns to prevent context overflow on the next LLM call.
             truncated = self._truncate_tool_results(
                 messages, estimated_tokens, threshold
             )
@@ -414,54 +411,10 @@ class ContextCompactor:
 
     async def _summarize(self, old_messages: list[Message]) -> str:
         """Use the summary provider to condense old conversation messages."""
-        blocks: list[str] = []
-        for msg in old_messages:
-            if isinstance(msg, AssistantMessage):
-                blocks.append(
-                    json.dumps(
-                        {
-                            "role": msg.role.value,
-                            "content": msg.content,
-                            "reasoning_content": msg.reasoning_content,
-                            "tool_calls": [
-                                {
-                                    "id": tool_call.id,
-                                    "name": tool_call.name,
-                                    "arguments": tool_call.arguments,
-                                }
-                                for tool_call in msg.tool_calls or []
-                            ],
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-                )
-                continue
-
-            if isinstance(msg, ToolMessage):
-                blocks.append(
-                    json.dumps(
-                        {
-                            "role": "tool",
-                            "tool_call_id": msg.tool_call_id,
-                            "tool_name": msg.tool_name,
-                            "content": msg.content,
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-                )
-                continue
-
-            blocks.append(
-                json.dumps(
-                    {"role": msg.role.value, "content": msg.content},
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            )
-
-        conversation_text = "\n".join(blocks)
+        conversation_text = "\n".join(
+            json.dumps(msg.model_dump(mode="json"), ensure_ascii=False)
+            for msg in old_messages
+        )
         api_messages = [
             {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
             {

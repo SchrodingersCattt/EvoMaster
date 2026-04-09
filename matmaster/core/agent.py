@@ -110,10 +110,6 @@ class _KernelStopRequested(Exception):
 class AgentKernel:
     """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""
 
-    @staticmethod
-    def _build_base_snapshot(messages: list[Message]) -> list[dict[str, Any]]:
-        return [message.model_dump(mode="json") for message in messages[1:]]
-
     async def _drain_compactor_events(
         self,
         *,
@@ -129,8 +125,10 @@ class AgentKernel:
                 base_snapshot,
             ) = compactor_events.popleft()
             payload = getattr(compaction_event, "payload", {}) or {}
-            is_durable = payload.get("durability") == "durable"
-            if is_durable and callable(checkpoint_sink) and base_snapshot is not None:
+            should_checkpoint = (
+                payload.get("durability") == "durable" and base_snapshot is not None
+            )
+            if should_checkpoint:
                 payload["checkpoint_attempted"] = True
                 payload["checkpoint_written"] = False
                 payload["failure_reason"] = None
@@ -145,7 +143,7 @@ class AgentKernel:
                         strategy=payload.get("strategy", "unknown"),
                     ),
                 )
-            if is_durable and callable(checkpoint_sink) and base_snapshot is not None:
+            if should_checkpoint:
                 try:
                     await checkpoint_sink(
                         payload=payload,
@@ -318,9 +316,11 @@ class AgentKernel:
             nonlocal compaction_prev_count
             messages_after = len(state.messages)
             payload = getattr(event, "payload", {}) or {}
-            base_snapshot = None
-            if payload.get("durability") == "durable":
-                base_snapshot = self._build_base_snapshot(state.messages)
+            base_snapshot: list[dict[str, Any]] | None = None
+            if callable(checkpoint_sink) and payload.get("durability") == "durable":
+                base_snapshot = [
+                    message.model_dump(mode="json") for message in state.messages[1:]
+                ]
             compactor_events.append(
                 (event, compaction_prev_count, messages_after, base_snapshot)
             )
@@ -329,10 +329,7 @@ class AgentKernel:
         if spec.compactor:
             spec.compactor._event_sink = _compactor_sink
             spec.compactor.update_message_count(len(state.messages))
-            compaction_prev_count = len(state.messages)
-            preflight_if_needed = getattr(spec.compactor, "preflight_if_needed", None)
-            if callable(preflight_if_needed):
-                await preflight_if_needed(state.messages)
+            await spec.compactor.preflight_if_needed(state.messages)
             async for item in self._drain_compactor_events(
                 spec=spec,
                 compactor_events=compactor_events,
