@@ -48,6 +48,7 @@ from .api import (
     confirm_terminal_status,
     create_job,
     get_job_detail,
+    list_sandbox_machines,
     use_sandbox,
 )
 from .errors import BohriumError, BohriumJobStateError
@@ -807,39 +808,30 @@ class BohriumTool(BuiltinTool):
         ctx: BohriumContext | None = None
         try:
             ctx = self._build_context()
+            self._log_request_context(action='list_machines', ctx=ctx, sandbox=ctx.sandbox)
 
-            # Sandbox: use hardcoded catalog when available, else fall back to API
-            catalog = self._load_sandbox_catalog() if ctx.sandbox else {}
-            sandbox_machines = (catalog.get("machines") or {}).get(choose_type) or []
-            if sandbox_machines:
-                self._log_request_context(action='list_machines', ctx=ctx, sandbox=True)
-                if keyword:
-                    filtered = [
-                        m
-                        for m in sandbox_machines
-                        if keyword
-                        in str(m.get('skuEnName') or m.get('skuName') or '').lower()
-                    ]
-                else:
-                    filtered = list(sandbox_machines)
-                results = filtered[:max_results]
+            if ctx.sandbox:
+                results = list_sandbox_machines(
+                    machine_type=choose_type,
+                    keyword=keyword,
+                    max_results=max_results,
+                )
                 return ToolResult(
                     status='success',
                     content=json.dumps(
                         {
                             'success': True,
                             'type': choose_type,
-                            'keyword': keyword,
-                            'total_found': len(filtered),
+                            'sandbox': True,
+                            'note': 'Sandbox mode: machine list is a fixed preset, not queried from the platform.',
+                            'total_found': len(results),
                             'returned': len(results),
                             'machines': results,
-                            'source': 'sandbox_catalog',
                         },
                         ensure_ascii=False,
                     ),
                 )
 
-            self._log_request_context(action='list_machines', ctx=ctx, sandbox=False)
             data = _get(
                 ctx.base_url,
                 '/openapi/v1/calc/list',
