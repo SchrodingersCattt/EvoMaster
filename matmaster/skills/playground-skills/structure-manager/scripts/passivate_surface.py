@@ -17,25 +17,25 @@ Works with pymatgen (local) — no GPU required.
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 import numpy as np
-
 
 # ---------------------------------------------------------------------------
 # Geometry: missing tetrahedral directions
 # ---------------------------------------------------------------------------
 
-def _missing_tetrahedral(existing_bond_vecs: list[np.ndarray],
-                         n_missing: int) -> list[np.ndarray]:
+
+def _missing_tetrahedral(
+    existing_bond_vecs: list[np.ndarray], n_missing: int
+) -> list[np.ndarray]:
     """Return *n_missing* unit vectors completing a tetrahedron."""
     n = len(existing_bond_vecs)
     if n_missing <= 0 or n >= 4:
         return []
 
     if n == 0:
-        tet = np.array([[1,1,1],[1,-1,-1],[-1,1,-1],[-1,-1,1]], float)
+        tet = np.array([[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]], float)
         tet /= np.linalg.norm(tet[0])
         return [tet[i] for i in range(min(n_missing, 4))]
 
@@ -60,7 +60,7 @@ def _missing_tetrahedral(existing_bond_vecs: list[np.ndarray],
         if n_nrm < 1e-3:
             return [s_hat]
         n_hat = n_vec / n_nrm
-        alpha = np.arccos(1.0 / np.sqrt(3.0))   # ~54.74 deg
+        alpha = np.arccos(1.0 / np.sqrt(3.0))  # ~54.74 deg
         d1 = s_hat * np.cos(alpha) + n_hat * np.sin(alpha)
         d2 = s_hat * np.cos(alpha) - n_hat * np.sin(alpha)
         return [d1 / np.linalg.norm(d1), d2 / np.linalg.norm(d2)][:n_missing]
@@ -86,9 +86,15 @@ def _missing_tetrahedral(existing_bond_vecs: list[np.ndarray],
 # Core passivation
 # ---------------------------------------------------------------------------
 
-def passivate(structure, element: str = "Si", cutoff: float = 2.6,
-              bond_length: float = 1.48, target_coord: int = 4,
-              surface_frac: float = 0.15):
+
+def passivate(
+    structure,
+    element: str = "Si",
+    cutoff: float = 2.6,
+    bond_length: float = 1.48,
+    target_coord: int = 4,
+    surface_frac: float = 0.15,
+):
     """Add H to under-coordinated *element* atoms on slab surfaces.
 
     Returns ``(new_structure, n_H_added)``.
@@ -100,11 +106,11 @@ def passivate(structure, element: str = "Si", cutoff: float = 2.6,
     z_top_cut = z_max - surface_frac * thickness
     z_bot_cut = z_min + surface_frac * thickness
 
-    h_cutoff = bond_length + 0.3          # for counting existing H neighbours
+    h_cutoff = bond_length + 0.3  # for counting existing H neighbours
 
     h_positions: list[np.ndarray] = []
 
-    for i, site in enumerate(structure):
+    for site in structure:
         if str(site.specie) != element:
             continue
         if not (site.coords[2] >= z_top_cut or site.coords[2] <= z_bot_cut):
@@ -142,8 +148,15 @@ def passivate(structure, element: str = "Si", cutoff: float = 2.6,
 # Verification
 # ---------------------------------------------------------------------------
 
-def verify(structure, element: str, cutoff: float, bond_length: float,
-           target_coord: int, surface_frac: float) -> int:
+
+def verify(
+    structure,
+    element: str,
+    cutoff: float,
+    bond_length: float,
+    target_coord: int,
+    surface_frac: float,
+) -> int:
     """Print per-atom coordination for surface atoms; return #under-coordinated."""
     coords = np.array([s.coords for s in structure])
     z = coords[:, 2]
@@ -160,14 +173,19 @@ def verify(structure, element: str, cutoff: float, bond_length: float,
         if not (site.coords[2] >= z_top_cut or site.coords[2] <= z_bot_cut):
             continue
         nbs = structure.get_neighbors(site, max(cutoff, h_cutoff))
-        coord = sum(1 for nb in nbs
-                    if (str(nb[0].specie) == element and nb[1] < cutoff)
-                    or (str(nb[0].specie) == "H" and nb[1] < h_cutoff))
+        coord = sum(
+            1
+            for nb in nbs
+            if (str(nb[0].specie) == element and nb[1] < cutoff)
+            or (str(nb[0].specie) == "H" and nb[1] < h_cutoff)
+        )
         surface = "top" if site.coords[2] >= z_top_cut else "bot"
         if coord < target_coord:
             under += 1
-            print(f"  WARN {element}[{i}] z={site.coords[2]:.2f} "
-                  f"coord={coord} ({surface})")
+            print(
+                f"  WARN {element}[{i}] z={site.coords[2]:.2f} "
+                f"coord={coord} ({surface})"
+            )
     return under
 
 
@@ -175,27 +193,46 @@ def verify(structure, element: str, cutoff: float, bond_length: float,
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Passivate slab surface with H")
     p.add_argument("structure", help="Input slab file (CIF / POSCAR)")
     p.add_argument("-o", "--output", default=None)
     p.add_argument("--element", default="Si")
-    p.add_argument("--bond-length", type=float, default=1.48,
-                   help="E-H bond length in Ang (default 1.48 for Si-H)")
-    p.add_argument("--cutoff", type=float, default=2.6,
-                   help="E-E bond cutoff in Ang (default 2.6 for Si-Si)")
+    p.add_argument(
+        "--bond-length",
+        type=float,
+        default=1.48,
+        help="E-H bond length in Ang (default 1.48 for Si-H)",
+    )
+    p.add_argument(
+        "--cutoff",
+        type=float,
+        default=2.6,
+        help="E-E bond cutoff in Ang (default 2.6 for Si-Si)",
+    )
     p.add_argument("--target-coordination", type=int, default=4)
-    p.add_argument("--surface-fraction", type=float, default=0.15,
-                   help="Fraction of slab thickness defining surface zone")
+    p.add_argument(
+        "--surface-fraction",
+        type=float,
+        default=0.15,
+        help="Fraction of slab thickness defining surface zone",
+    )
     args = p.parse_args()
 
     from pymatgen.core import Structure
+
     struct = Structure.from_file(args.structure)
     print(f"Input: {len(struct)} atoms, {struct.composition.reduced_formula}")
 
     result, n_h = passivate(
-        struct, args.element, args.cutoff, args.bond_length,
-        args.target_coordination, args.surface_fraction)
+        struct,
+        args.element,
+        args.cutoff,
+        args.bond_length,
+        args.target_coordination,
+        args.surface_fraction,
+    )
 
     out = args.output or f"{Path(args.structure).stem}_passivated.cif"
     result.to(filename=out)
@@ -203,11 +240,19 @@ def main() -> None:
     print(f"Added {n_h} H atoms → {len(result)} atoms total")
     print(f"Formula: {result.composition.reduced_formula}")
 
-    under = verify(result, args.element, args.cutoff, args.bond_length,
-                   args.target_coordination, args.surface_fraction)
+    under = verify(
+        result,
+        args.element,
+        args.cutoff,
+        args.bond_length,
+        args.target_coordination,
+        args.surface_fraction,
+    )
     if under == 0:
-        print(f"OK: all surface {args.element} atoms have "
-              f"coordination >= {args.target_coordination}")
+        print(
+            f"OK: all surface {args.element} atoms have "
+            f"coordination >= {args.target_coordination}"
+        )
     else:
         print(f"WARNING: {under} surface atoms still under-coordinated")
 
