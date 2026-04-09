@@ -58,7 +58,10 @@ def parse_scf_log(log_path: Path) -> dict:
             result["fermi_energy_eV"] = float(m[-1])
 
     # Convergence
-    if "charge density convergence is achieved" in text.lower() or "!FINAL_ETOT_IS" in text:
+    if (
+        "charge density convergence is achieved" in text.lower()
+        or "!FINAL_ETOT_IS" in text
+    ):
         result["converged"] = True
 
     # SCF iteration count
@@ -67,12 +70,16 @@ def parse_scf_log(log_path: Path) -> dict:
         result["n_scf_steps"] = max(int(s) for s in steps)
 
     # Magnetization
-    m = re.findall(r"total\s+magnetization\s*(?:=|:)\s*([-\d.eE+]+)", text, re.IGNORECASE)
+    m = re.findall(
+        r"total\s+magnetization\s*(?:=|:)\s*([-\d.eE+]+)", text, re.IGNORECASE
+    )
     if m:
         result["total_magnetization"] = float(m[-1])
 
     # Forces: look for max force value
-    force_vals = re.findall(r"(?:LARGEST GRADIENT|MAX_FORCE)\s*=?\s*([-\d.eE+]+)", text, re.IGNORECASE)
+    force_vals = re.findall(
+        r"(?:LARGEST GRADIENT|MAX_FORCE)\s*=?\s*([-\d.eE+]+)", text, re.IGNORECASE
+    )
     if force_vals:
         result["max_force_eV_A"] = float(force_vals[-1])
     else:
@@ -113,7 +120,11 @@ def parse_bands(bands_path: Path, fermi_eV: float = None) -> dict:
         return result
 
     try:
-        lines = [l.strip() for l in bands_path.read_text().strip().split("\n") if l.strip()]
+        lines = [
+            line.strip()
+            for line in bands_path.read_text().strip().split("\n")
+            if line.strip()
+        ]
 
         # ABACUS BANDS_1.dat format:
         # Line 1: n_bands n_kpoints
@@ -209,7 +220,10 @@ def parse_dos(dos_path: Path) -> dict:
                 except ValueError:
                     continue
         if energies:
-            result["energy_range_eV"] = [round(min(energies), 4), round(max(energies), 4)]
+            result["energy_range_eV"] = [
+                round(min(energies), 4),
+                round(max(energies), 4),
+            ]
             result["n_energy_points"] = len(energies)
     except Exception as e:
         result["warnings"].append(f"Error parsing DOS: {e}")
@@ -290,7 +304,9 @@ def main() -> None:
                 if fermi is None and result["scf"].get("fermi_energy_eV") is not None:
                     fermi = result["scf"]["fermi_energy_eV"]
             else:
-                result["scf"] = {"warning": "No ABACUS log file found in " + str(out_dir)}
+                result["scf"] = {
+                    "warning": "No ABACUS log file found in " + str(out_dir)
+                }
 
     if args.type in ("band", "all"):
         bands_path = out_dir / "BANDS_1.dat"
