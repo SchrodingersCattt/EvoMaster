@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: polymer
 questions:
-- id: PM_proj_003_20260408
+- id: pl_membrane
   capability: workflow_orchestration
   domain: polymer
   intent: Compare PIM-1, Matrimid, and 6FDA-DAM membranes for CO2/N2 separation by integrating solubility, diffusivity, free-volume, and ranking metrics.
@@ -23,7 +23,7 @@ questions:
   - planner
   data_files:
   - key: membrane_bundle
-    path: data/PM_proj_003_20260408/membrane_screening_bundle.json
+    path: data/pl_membrane/membrane_screening_bundle.json
     description: Membrane-screening bundle with solubility, diffusivity, permeability, selectivity, and free-volume descriptors for CO2/N2 separation.
   reference_answers:
   - key: best_balanced_candidate

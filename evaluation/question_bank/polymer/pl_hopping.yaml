@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: polymer
 questions:
-- id: PM_proj_006_20260408
+- id: pl_hopping
   capability: workflow_orchestration
   domain: polymer
   intent: Analyze Li+ hopping in PEO-LiTFSI by comparing PMF barriers and diffusion evidence for two salt-ratio conditions.
@@ -23,7 +23,7 @@ questions:
   - planner
   data_files:
   - key: free_energy_bundle
-    path: data/PM_proj_006_20260408/free_energy_hopping_bundle.json
+    path: data/pl_hopping/free_energy_hopping_bundle.json
     description: Free-energy bundle with PMF barriers, minima, state labels, and corresponding MD diffusion/coordination descriptors for two salt-ratio conditions.
   reference_answers:
   - key: lower_barrier_condition

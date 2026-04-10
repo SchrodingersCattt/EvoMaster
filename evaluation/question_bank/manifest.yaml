@@ -135,23 +135,23 @@ banks:
     questions: 5
 
   # --- Polymer projects ---
-  - path: "polymer/PM_proj_002_20260408.yaml"
+  - path: "polymer/pl_donor.yaml"
     capability: "workflow_orchestration"
     questions: 1
 
-  - path: "polymer/PM_proj_003_20260408.yaml"
+  - path: "polymer/pl_membrane.yaml"
     capability: "workflow_orchestration"
     questions: 1
 
-  - path: "polymer/PM_proj_004_20260408.yaml"
+  - path: "polymer/pl_rheology.yaml"
     capability: "workflow_orchestration"
     questions: 1
 
-  - path: "polymer/PM_proj_005_20260408.yaml"
+  - path: "polymer/pl_adhesion.yaml"
     capability: "workflow_orchestration"
     questions: 1
 
-  - path: "polymer/PM_proj_006_20260408.yaml"
+  - path: "polymer/pl_hopping.yaml"
     capability: "workflow_orchestration"
     questions: 1
 

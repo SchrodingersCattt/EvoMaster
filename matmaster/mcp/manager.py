@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from .connection import MCP_CONNECT_TIMEOUT, MCPConnection, create_connection
 
@@ -125,7 +126,7 @@ class _ManagedConn:
             await self._requests.put(None)
         try:
             await asyncio.wait_for(self._task, timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._task.cancel()
             try:
                 await self._task

@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: polymer
 questions:
-- id: PM_proj_005_20260408
+- id: pl_adhesion
   capability: workflow_orchestration
   domain: polymer
   intent: Compare polyimide adhesion on hydroxyl-rich, epoxy-rich, and carboxyl-rich graphene-oxide surfaces using curated adsorption, MD, and adhesion-work evidence.
@@ -23,7 +23,7 @@ questions:
   - planner
   data_files:
   - key: interface_bundle
-    path: data/PM_proj_005_20260408/interface_adhesion_bundle.json
+    path: data/pl_adhesion/interface_adhesion_bundle.json
     description: Interface bundle with adsorption energies, MD-derived contact descriptors, adhesion work, and surface-chemistry ranking.
   reference_answers:
   - key: best_surface

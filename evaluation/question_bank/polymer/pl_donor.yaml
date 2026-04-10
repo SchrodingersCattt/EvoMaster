@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: polymer
 questions:
-- id: PM_proj_002_20260408
+- id: pl_donor
   capability: workflow_orchestration
   domain: polymer
   intent: Pre-screen PM6, PTB7-Th, D18, and P3HT donor polymers for a Y6-like acceptor window using curated oligomer, conformational, and ranking data.
@@ -23,7 +23,7 @@ questions:
   - planner
   data_files:
   - key: donor_bundle
-    path: data/PM_proj_002_20260408/donor_prescreen_bundle.json
+    path: data/pl_donor/donor_prescreen_bundle.json
     description: Curated donor-polymer bundle with oligomer-level electronic structure, torsional descriptors, extrapolated gaps, and ranking metrics.
   reference_answers:
   - key: best_candidate
