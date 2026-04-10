@@ -31,16 +31,6 @@ The following are available for obtaining structures. Choose based on what ident
 - **Web page link extraction**: `fetch_web_structure.py --page <page_url>` — fetch an HTML page, extract all links whose path ends with a structure file extension (.cif/.vasp/.xyz/.res/.pdb/.mol2/.sdf), and download. Auto-downloads if exactly one match is found; returns the candidate list if multiple matches are found so you can pick one and call `--url`.
 - **Structure identification (gated databases)**: When the structure resides in a copyrighted or access-gated database (CCDC, ICSD, etc.), extract and report from literature: database identifier (CCDC REFCODE / deposition number, ICSD collection code), space group, lattice constants (a, b, c, α, β, γ), formula, Z, source DOI/URL. Do not attempt to download from these databases or reconstruct the structure with MCP tools — the result would likely be silently wrong. **Delivery**: 1–3 structures → list inline in the finish message; 4+ → save to a JSON file (keys: `identifier`, `database`, `space_group`, `lattice`, `formula`, `Z`, `source_doi`) and reference the file path. Set `task_completed=partial`.
 
-### Constructing Structures for Unusual / Non-Standard Compositions
-
-When database lookup (`mat_struct_db_*`) returns nothing and literature search finds no downloadable CIF for an unusual formula (binary hydrides, non-standard stoichiometries, hypothetical phases):
-
-1. **`mat_sg_build-crystal`**: Accepts space group + Wyckoff positions + lattice from literature — use this even without a downloadable CIF.
-2. **`ase.build`**: `molecule('SiH4')` for common molecules; `bulk()` for crystals; `surface()` / `fcc111()` etc. for slabs. Many hydrogen-containing species are available.
-3. **Inline pymatgen**: `Structure.from_spacegroup(sg, lattice, species, coords)` for arbitrary crystals; `Molecule(species, coords)` for 0D species.
-4. **H-atom placement**: Si-H ≈1.48 Å, C-H ≈1.09 Å, O-H ≈0.96 Å, N-H ≈1.01 Å. H positions are often missing from database entries — place them explicitly with correct bond lengths.
-5. A constructed structure with physical justification always beats `task_completed=partial` with no file. **Never give up at a failed database/literature lookup.**
-
 ## Validation (Mandatory)
 
 Always run `assess_structure.py` on any new structure regardless of how it was obtained. It returns:
@@ -109,15 +99,6 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
         * **Reading**: Always specify `--atom-style` to match the source file (e.g., `full` for molecular systems). Auto-detection can fail silently.
         * **Writing**: For non-atomic styles (full, charge), the script goes through ASE's `lammps-data` writer (with `specorder=type_map` to guarantee correct type numbering). dpdata's own writer only supports atomic style. Charges default to 0.0 if not present in source.
 
-### Conversion Troubleshooting
-
-If `convert_format.py` fails or produces wrong atom counts / formula for unusual compositions:
-
-1. **Inline pymatgen**: `Structure.from_file(input)` → `.to(fmt=..., filename=output)`. Handles CIF↔POSCAR↔XYZ natively.
-2. **ASE fallback**: `ase.io.read(input)` → `ase.io.write(output, atoms, format=...)`. Supports CIF, POSCAR, XYZ, LAMMPS-data, extXYZ.
-3. **Multi-element LAMMPS**: Always `--type-map` listing ALL elements (e.g., `--type-map Si H`). Element order defines LAMMPS type numbering.
-4. **Validate after every conversion**: Run `assess_structure.py`. If formula or atom count differs from input, the conversion went wrong — retry with fallback.
-
 ## Structure Construction for Electronic Property Calculations
 
 For band structure, DOS, work function, or defect electronic structure, consult **`references/electronic_property_construction.md`** for detailed guidance (primitive vs conventional cell, k-path tables, supercell sizing, heterostructure band alignment).
@@ -138,7 +119,6 @@ Key rules:
 * "Get the structure from a journal SI or open repository page" → `fetch_web_structure.py --page`.
 * "Get the crystal structure of X" where X is in CCDC/ICSD → report database identifier (REFCODE / collection code) + crystallographic parameters (space group, lattice constants, formula, Z) from literature; do not attempt to download or reconstruct.
 * "Check if this structure is reasonable" → `assess_structure.py`.
-* "Build/find/convert a structure with an unusual composition" (SiH, GeH, metal hydrides, non-standard stoichiometries, hypothetical phases) → Try database first, then literature; if neither has a CIF, **construct programmatically** using MCP `mat_sg_*`, `ase.build`, or inline pymatgen (see "Constructing Unusual Compositions" above). Do NOT stop at a failed lookup.
 * "Convert this CIF to POSCAR" / "Convert POSCAR to LAMMPS data" → `convert_format.py`.
 * **"Cut a surface slab from a molecular crystal"** → `build_molecular_crystal_slab.py`. Use this FIRST for any molecular crystal (organic, MOF, co-crystal, hybrid) slab task. Do NOT write custom SlabGenerator scripts from scratch for molecular crystals — it wastes many turns.
 
