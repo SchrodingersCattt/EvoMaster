@@ -1,0 +1,28 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 2,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [
+        "eb0c249b6f3213c4acbee782ae042e976357b26e"
+      ],
+      "files_touched": [
+        "matmaster/skills/playground-skills/project-manager/SKILL.md",
+        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md"
+      ],
+      "followup_suggestion": "Re-run evaluation to verify: (1) PM tasks de-capped from 75, (2) BP_struct_004 and SC_struct_SiH complete without timeout. If BP_struct_004 still times out, the root cause is API reliability (not skill overhead) and may need timeout increase or retry logic. CR_WO_Ag_adsorption (persistent timeout across all sessions) needs a deeper investigation in a future round — consider whether the task itself needs more turns or whether the adsorption workflow can be streamlined. SC_struct_008 and SC_struct_005 remain low (50, 56) and could benefit from targeted scripts in a subsequent round, but only after confirming the regressions are fixed.",
+      "iteration_index": 2,
+      "needs_more_work": true,
+      "optimization_round": 1,
+      "summary": "## Regression-First Optimization — iter_02 round 1\n\n### Root cause analysis\n\n1. **BP_struct_004 (94→64)** and **SC_struct_SiH (87→58)**: Both timed out (exit 124) in iter_02 but completed in iter_01. BP_struct_004 hit an API failure during execution; SC_struct_SiH spent 680 seconds (11 min) in a single reasoning turn with 42K reasoning chars.\n\n2. **PM tasks capped at 75**: The `project-manager` skill was newly created in iter_02 (the only new skill; 37 vs 36 skills). While not explicitly invoked via `use_skill` in any task, its presence in the skill index (name + description: \"Orchestrate multi-step computational materials science projects\") influenced the model's behavior. PM_proj_002 went from 10 turns → 7 turns (less thorough), dropping from 92→75.\n\n3. **CR_WO_Ag_adsorption (78→33)**: Timed out in BOTH iter_01 and iter_02 — persistent issue, not a regression from iter_01→iter_02 changes.\n\n### Changes made\n\n#### 1. Deleted `project-manager/SKILL.md` (−55 lines, −3752 bytes)\n- **Rationale**: The skill was net-harmful across all evidence:\n  - PM tasks: Converged to 75 (PM_proj_002 dropped from 92→75)\n  - Broad trigger conditions (\"multi-step project\", \"screening\", \"comparison\", \"systematic\") could interfere with BP_struct_004 (batch band structure) and SC_struct_SiH (multi-step passivation)\n  - The agent already naturally produces `project_bundle.json` and structured reports WITHOUT this skill (proved by iter_01 PM task outputs)\n  - Removing it restores iter_01 state (36 skills) where PM_proj_002 scored 92\n- **Expected impact**: PM_proj_002 ~75→92 (+17), PM tasks de-capped, reduced orchestration overhead for multi-step tasks\n\n#### 2. Trimmed `mcp-mat-sg/SKILL.md` passivation section (−7 lines)\n- **Rationale**: The section contained a detailed 4-step manual passivation algorithm + mandatory verification script that duplicated `passivate_surface.py` (structure-manager skill). Having two conflicting approaches (manual algorithm vs. one-call script) could cause excessive model reasoning — evidenced by SC_struct_SiH spending 42K reasoning chars in one turn.\n- **Replacement**: 3-line redirect to `passivate_surface.py` + key constraints (both surfaces, bond lengths, verification).\n- **Expected impact**: Clearer single-path for passivation tasks, reduced reasoning overhead for SC_struct_SiH.\n\n### Constraints satisfied\n- **Net line count**: −62 lines (net-negative ✓)\n- **Token budget**: 5696 tokens (target 12000, max 15000 ✓)\n- **No broad rules added**: Only deletions/simplifications\n- **14 high-scoring tasks protected**: No content added that increases overhead; only removed redundant content"
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 2,
+    "macro_mean_0_100": 83,
+    "rationale": "## 第 2 轮总结 (iter_02)\n\n### 得分\n- **宏平均 83/100**（与 iter_01 相同），目标 90，差距 7 分。\n- 36 个任务全部完成，总分 2991（与 iter_01 完全一致）。\n\n### 优化效果评估——\"打地鼠\"模式\n\n| 方向 | 任务数 | 分数变化 | 具体 |\n|------|--------|----------|------|\n| **改善** | 7 | **+174** | SC_struct_009(+66), CR_BP_HT(+67), SC_struct_008(+12), SC_elec_003(+10), IG_abacus_008(+9), SC_struct_002(+7), IG_abacus_007(+3) |\n| **回退** | 10 | **-174** | CR_WO_Ag(-45), BP_struct_004(-30), SC_struct_SiH(-29), PM_proj_002(-17), PM_proj_006(-17), CR_SC_ZnS001(-11), PM_proj_004(-8), PM_proj_005(-8), SC_struct_005(-5), IG_abacus_003(-4) |\n| **净效果** | — | **0** | 完全抵消 |\n\n### 回退根因分析\n\n1. **CR_WO_Ag_adsorption (78→33)**：跨9个会话持续性问题，每当 SKILL.md 增长就回退。根因大概率是 token 预算耗尽导致复杂工作流无法完成。\n2. **BP_struct_004 (94→64)**：此前三轮稳定在 94，新规则导致回退。\n3. **SC_struct_SiH (87→58)**：历史上极度 volatile（85→43→78→87→58），structure-manager 新规则可能干扰了钝化流程。\n4. **PM 任务系统性降级**：新建 `project-manager` skill 导致 5/6 PM 任务收敛到 75（PM_proj_002 从 92→75），PM_proj_006 进一步恶化（50→33）。新 skill 可能过度模板化，反而限制了 agent 的原生规划能力。\n\n### Git 状态\n- commit 从 `6327e20`（iter_01）变为 `c2f9335`（iter_02），确认 iter_01 optimization 子 Agent 改动已提交。\n- 新增 skill: `project-manager`（在 iter_02 skill_names 列表中首次出现）。\n\n### 分流决策\n- **已委派 `delegate_optimization`（round 1）**：REGRESSION-FIRST 策略。优先修复 3 个灾难回退（-104 pts），然后修复 PM skill capping（-42 pts），最后继续推进低分任务。\n- 硬约束：net-zero 或 net-negative 行数变化，保护 14 个 ≥93 高分任务，token 预算自检。\n- **未触发 `escalate_checklist_revision`**：回退明确由产品侧改动引起。SC_struct_005 (56) 虽持续低迷，但之前会话已修订过 checklist (v2)，暂不重复触发。\n\n### 下一步\n第 3 轮验证重点：\n1. 3 个灾难回退是否恢复到 iter_01 水平（+104 pts 潜力）\n2. PM 任务是否恢复（PM_proj_002 回到 ~92, PM_proj_004/005 回到 ~83, PM_proj_006 ≥50）\n3. 已有改善（SC_struct_009=93, CR_BP_HT=100）是否保持\n4. 若回退全部修复 + 改善保持 → 预期宏平均 ~87-88，距 90 仍需继续推进",
+    "target_met": false
+  }
+}
