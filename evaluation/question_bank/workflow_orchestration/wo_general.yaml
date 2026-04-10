@@ -1,0 +1,375 @@
+version: v5
+capability: workflow_orchestration
+domain: general
+questions:
+- id: WO_general_intake_001_20260410v3
+  capability: workflow_orchestration
+  domain: general
+  intent: Build a structured intake-and-analysis protocol with attachment-level triage priority and rejection criteria.
+  human_prompt_seed: '工作区已提供 `attachment_manifest.json`。
+
+
+    请先读取该文件，再生成：
+
+    1) `intake_checklist.json`：列出每个附件的补充信息需求；
+
+    2) `analysis_protocol.md`：包含分析流程、质量检查、异常处理；
+
+    3) `delivery_plan.md`：明确图/表/文字说明交付项。
+
+    4) `triage_policy.md`：给出附件优先级与“拒绝处理”条件（如关键元数据缺失）。
+
+
+    注意：不要假设未在清单出现的附件类型。
+
+    '
+  tags:
+  - userlog_derived
+  - attachment_analysis
+  - plotting
+  - image_analysis
+  - loop_oriented
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: attachment_manifest
+    path: data/WO_general_userlog_005_20260410v3/attachment_manifest.json
+    oss_url: ''
+    description: Attachment metadata list for protocol planning.
+  reference_answers:
+  - key: intake_artifact
+    value: intake_checklist.json
+  - key: protocol_artifact
+    value: analysis_protocol.md
+  - key: delivery_artifact
+    value: delivery_plan.md
+  - key: triage_artifact
+    value: triage_policy.md
+  - key: intake_required_tokens
+    value:
+      filename: intake_checklist.json
+      tokens:
+      - dsc_curve.csv
+      - sem_image.png
+      - 文件类型
+      - 单位
+      - 标尺
+      - 测试条件
+      flags: i
+  - key: protocol_required_tokens
+    value:
+      filename: analysis_protocol.md
+      tokens:
+      - 分析流程
+      - 质量检查
+      - 异常处理
+      - 缺失值
+      - 单位一致性
+      flags: i
+  - key: delivery_required_tokens
+    value:
+      filename: delivery_plan.md
+      tokens:
+      - 图
+      - 表
+      - 文字说明
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 7000
+  scoring_checklist:
+  - id: intake_artifact
+    criterion: Agent writes `intake_checklist.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: protocol_artifact
+    criterion: Agent writes `analysis_protocol.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: delivery_artifact
+    criterion: Agent writes `delivery_plan.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: triage_artifact
+    criterion: Agent writes `triage_policy.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: intake_required_tokens
+    criterion: Intake checklist is grounded in attachment manifest entries and requests concrete missing metadata.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: protocol_required_tokens
+    criterion: Analysis protocol includes workflow, quality checks, and abnormal-case handling.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: delivery_required_tokens
+    criterion: Delivery plan explicitly includes figures, tables, and explanatory text.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: The response stays grounded in `attachment_manifest.json` and does not fabricate unseen attachment content.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: WO_general_postproc_002_20260410v3
+  capability: workflow_orchestration
+  domain: general
+  intent: Produce structured post-processing pipeline artifacts with per-stage validation gates and rerun policy.
+  human_prompt_seed: '工作区已提供 `result_manifest.json`。
+
+
+    请先读取该文件，再生成：
+
+    1) `postproc_pipeline.json`：给出按步骤的后处理流程（含输入、输出、检查点、失败点）。
+
+    2) `report_outline.md`：列出最终报告图表/表格/文字解释结构。
+
+    3) `rerun_policy.md`：定义在哪些失败模式下重跑、如何降级交付。
+
+
+    要求：流程中必须覆盖能带、MSD、概率密度三类后处理对象。
+
+    '
+  tags:
+  - userlog_derived
+  - post_processing
+  - plotting
+  - report_generation
+  - loop_oriented
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: result_manifest
+    path: data/WO_general_userlog_006_20260410v3/result_manifest.json
+    oss_url: ''
+    description: Post-processing target manifest.
+  reference_answers:
+  - key: pipeline_artifact
+    value: postproc_pipeline.json
+  - key: outline_artifact
+    value: report_outline.md
+  - key: rerun_artifact
+    value: rerun_policy.md
+  - key: pipeline_required_tokens
+    value:
+      filename: postproc_pipeline.json
+      tokens:
+      - band
+      - msd
+      - density
+      - input
+      - output
+      - checkpoint
+      - failure_mode
+      flags: i
+  - key: outline_required_tokens
+    value:
+      filename: report_outline.md
+      tokens:
+      - 图表
+      - 表格
+      - 解释
+      - 能带
+      - MSD
+      - 概率密度
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 7000
+  scoring_checklist:
+  - id: pipeline_artifact
+    criterion: Agent writes `postproc_pipeline.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: outline_artifact
+    criterion: Agent writes `report_outline.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: rerun_artifact
+    criterion: Agent writes `rerun_policy.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: pipeline_required_tokens
+    criterion: Pipeline includes required post-processing targets and step metadata fields.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: outline_required_tokens
+    criterion: Report outline covers required outputs and three target analysis families.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: Deliverables are grounded in `result_manifest.json` and avoid fabricating unavailable numeric results.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: WO_general_planning_003_20260410v3
+  capability: workflow_orchestration
+  domain: general
+  intent: Produce phased execution and resource-control artifacts with explicit branch conditions and stop-loss policy.
+  human_prompt_seed: '工作区已提供 `mission_constraints.json`。
+
+
+    请先读取该文件，再生成：
+
+    1) `execution_plan.json`：分阶段计划（输入/输出/并行性/决策点）；
+
+    2) `resource_budget.json`：高开销步骤、估计耗时、简化策略；
+
+    3) `stage_gate.md`：写清“先筛选再深入计算”的 gate 规则和最终报告结构。
+
+    4) `stop_loss.md`：定义触发停止条件（时间/资源/质量）与应急降级方案。
+
+    '
+  tags:
+  - userlog_derived
+  - workflow_planning
+  - materials_computation
+  - task_decomposition
+  - loop_oriented
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: mission_constraints
+    path: data/WO_general_userlog_007_20260410v3/mission_constraints.json
+    oss_url: ''
+    description: Scope, budgets, and priorities for staged workflow planning.
+  reference_answers:
+  - key: execution_plan_artifact
+    value: execution_plan.json
+  - key: resource_budget_artifact
+    value: resource_budget.json
+  - key: stage_gate_artifact
+    value: stage_gate.md
+  - key: stop_loss_artifact
+    value: stop_loss.md
+  - key: execution_required_tokens
+    value:
+      filename: execution_plan.json
+      tokens:
+      - screening
+      - deep_calculation
+      - reporting
+      - inputs
+      - outputs
+      - parallel
+      - decision_gate
+      flags: i
+  - key: budget_required_tokens
+    value:
+      filename: resource_budget.json
+      tokens:
+      - expensive_steps
+      - estimated_hours
+      - simplification_strategies
+      flags: i
+  - key: stage_gate_required_tokens
+    value:
+      filename: stage_gate.md
+      tokens:
+      - 先筛选再深入计算
+      - 并行
+      - 报告结构
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 7000
+  scoring_checklist:
+  - id: execution_plan_artifact
+    criterion: Agent writes `execution_plan.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: resource_budget_artifact
+    criterion: Agent writes `resource_budget.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: stage_gate_artifact
+    criterion: Agent writes `stage_gate.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: stop_loss_artifact
+    criterion: Agent writes `stop_loss.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: execution_required_tokens
+    criterion: Execution plan includes staged flow, IO mapping, parallel hints, and decision gates.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: budget_required_tokens
+    criterion: Resource budget includes expensive steps, estimated hours, and simplification strategies.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: stage_gate_required_tokens
+    criterion: Stage gate document explicitly states screen-before-deep rule and report-structure guidance.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: Planning artifacts are grounded in `mission_constraints.json` and avoid fabricated calculation outcomes.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
