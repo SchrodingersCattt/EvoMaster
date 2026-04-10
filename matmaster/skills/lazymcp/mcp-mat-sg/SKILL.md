@@ -75,28 +75,22 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
   3. Write chemical/physical grounding compactly — 2-3 sentences per disordered site, not paragraphs. Focus on: coordination geometry, ionic radius comparison, and charge balance. Skip lengthy derivations.
   4. Save each ordered CIF immediately after generation (breadth-first: get ALL outputs saved before polishing any single one).
   5. Assemble the final summary table at the end, not after each structure.
+  6. **If approaching timeout**: call finish immediately with saved CIF files + whatever grounding exists. Delivered files with brief grounding > perfect grounding with no deliverable.
 
 ## add_hydrogens / passivation
 
-**Preferred**: use `passivate_surface.py` from **structure-manager** skill — it handles detection, placement, and verification in one call. Pass `-o <output>` to produce the file directly.
+**MANDATORY**: use `passivate_surface.py` from **structure-manager** skill — it handles detection, placement, and verification in one call. Pass `-o <output>` to produce the file directly. **Do NOT write custom passivation scripts from scratch** — this wastes many turns and risks errors.
 - **⚠ BOTH surfaces mandatory**: always passivate top AND bottom. Si-H ≈ 1.48 Å, Ge-H ≈ 1.53 Å.
 - After passivation, verify with `assess_structure.py` and report: H count per surface, mean bond length, all surface atoms coordination = 4.
 
 ## Complex / defective bulk structures
 
 ### γ-Al2O3 (defective spinel)
-γ-Al2O3 has a **defective spinel structure** (based on MgAl2O4 Fd-3m framework, with Al on both tetrahedral and octahedral sites and ordered vacancies). Multiple structural models exist:
-
-**Recommended approach** (fastest, most reliable):
-1. **Try Materials Project / structure database first**: search `mat_struct_db` for `Al2O3` and filter for spinel-like structures (Fd-3m or related). If γ-Al2O3 is available (e.g. mp-3163 or similar), download and verify.
-2. **If not in DB, build via Wyckoff positions** using the **Pinto/Digne model**:
-   - Space group: Fd-3m (No. 227) or I4₁/amd (tetragonal distorted variant)
-   - For Fd-3m cubic model (a ≈ 7.91 Å): Al on 8a (tetrahedral, occupancy ~1.0), Al on 16d (octahedral, occupancy ~0.833 — 5/6 occupied to maintain Al₂O₃ stoichiometry), O on 32e (u ≈ 0.26)
-   - After Wyckoff expansion, remove excess Al from 16d sites to achieve Al:O ≈ 2:3 (±5%)
-   - Use `build_bulk_structure_by_wyckoff` → then manually remove selected Al atoms from octahedral sites
-3. **Verify**: (a) Al:O ratio ≈ 2:3, (b) cell angles ≈ 90°, (c) BOTH tetrahedral and octahedral Al environments exist, (d) min interatomic distance > 1.0 Å
-
-**For relaxation** (if required): use MLIP — see "MLIP-based structure relaxation" section below. Save the **unrelaxed** structure with the task-required filename FIRST, then overwrite only if relaxation succeeds. This prevents losing the deliverable on timeout.
+**Fastest path** — run `build_gamma_al2o3.py` from **structure-manager** skill:
+```
+python build_gamma_al2o3.py [-o gamma_al2o3.cif] [--supercell 1 1 1]
+```
+Builds the Pinto/Digne Fd-3m model (a≈7.91 Å, Al on 8a tet + 16d oct, O on 32e), removes excess octahedral Al for Al₂O₃ stoichiometry, maximizes vacancy spacing, and validates (Al:O ≈ 2:3, both tet/oct environments, min distance > 1.0 Å). Alternatively, search `mat_struct_db` for `Al2O3` spinel-like. **Save-early**: save unrelaxed CIF with task filename FIRST, then relax with MLIP (see below) using `build_calculator` — do NOT search for model files.
 
 ### Other complex oxide structures
 - **Spinel** (MgAl2O4, Fe3O4, etc.): Fd-3m, cations on 8a (tetrahedral) + 16d (octahedral), anions on 32e.

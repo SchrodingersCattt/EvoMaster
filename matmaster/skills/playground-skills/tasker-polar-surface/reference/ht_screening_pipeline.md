@@ -47,3 +47,9 @@ Best for: HT screening across multiple surfaces with known standard sites.
 2. **Fail-forward**: one failed slab does not block others. Track failures, report at end.
 3. **Naming**: use `{material}_{miller}_{adsorbate}_{site}.cif` for traceability.
 4. **Token economy**: use `--batch config.json` instead of sequential single calls.
+
+## Time Budget (anti-timeout)
+- **1 turn** to plan the pipeline (do NOT iterate on the plan — commit and proceed).
+- **1 turn** to write ONE consolidated Python script covering all 4 steps. Consolidate slab building, validation, and adsorbate placement into a single executable script — do NOT write separate scripts per step.
+- **1 turn** to execute the script and verify results.
+- If computation (Step 4) is required: submit Bohrium job immediately after structure files exist. Save all intermediate files **before** submitting computation, so partial credit is secured even if computation times out.
