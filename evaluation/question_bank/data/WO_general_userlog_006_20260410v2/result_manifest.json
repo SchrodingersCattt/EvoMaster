@@ -1,0 +1,9 @@
+{
+  "available_results": [
+    "band_structure.json",
+    "msd_timeseries.csv",
+    "density_profile.dat"
+  ],
+  "targets": ["band", "msd", "density"],
+  "required_outputs": ["figures", "tables", "interpretation_text"]
+}

@@ -1,0 +1,14 @@
+{
+  "attachments": [
+    {
+      "name": "dsc_curve.csv",
+      "type": "table",
+      "expected_columns": ["temperature_C", "heat_flow_mW"]
+    },
+    {
+      "name": "sem_image.png",
+      "type": "image",
+      "required_meta": ["scale_bar_um", "magnification"]
+    }
+  ]
+}

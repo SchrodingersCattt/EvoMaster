@@ -1,170 +1,119 @@
-# manifest.yaml — MATTER v5 Question Bank Registry
-# Lists all MCP tools referenced by any question, plus bank file index.
-version: "v5"
-
+version: v5
 tools:
-  # --- Structure database (MCP mat_struct_db) ---
   mat_struct_db_fetch_structures_from_db:
-    server: "mat_struct_db"
-    category: "structure_retrieval"
-
-  # --- Structure construction (MCP mat_sg) ---
+    server: mat_struct_db
+    category: structure_retrieval
   mat_sg_generate_ordered_replicas:
-    server: "mat_sg"
-    category: "structure_construction"
+    server: mat_sg
+    category: structure_construction
   mat_sg_build_bulk_structure_by_template:
-    server: "mat_sg"
-    category: "structure_construction"
+    server: mat_sg
+    category: structure_construction
   mat_sg_build_bulk_structure_by_wyckoff:
-    server: "mat_sg"
-    category: "structure_construction"
+    server: mat_sg
+    category: structure_construction
   mat_sg_build_molecule_structures_from_smiles:
-    server: "mat_sg"
-    category: "structure_construction"
+    server: mat_sg
+    category: structure_construction
   mat_sg_build_surface_slab:
-    server: "mat_sg"
-    category: "structure_construction"
+    server: mat_sg
+    category: structure_construction
   mat_sg_build_surface_interface:
-    server: "mat_sg"
-    category: "structure_construction"
+    server: mat_sg
+    category: structure_construction
   mat_sg_add_hydrogens:
-    server: "mat_sg"
-    category: "structure_construction"
+    server: mat_sg
+    category: structure_construction
   mat_sg_make_defect_structure:
-    server: "mat_sg"
-    category: "structure_construction"
+    server: mat_sg
+    category: structure_construction
   mat_sg_make_amorphous_structure:
-    server: "mat_sg"
-    category: "structure_construction"
-
-  # --- MLIPs calculations (operator skill via Bohrium submit_job.py) ---
-  # MLIPs tasks are submitted via execute_bash (submit_job.py + MLIPs scripts).
-  # No dedicated MCP tool entries needed; evidence mapping uses
-  # when_args_contains on execute_bash for script-level classification.
-
-  # --- Bash execution (bohrium-job skill, scripts) ---
+    server: mat_sg
+    category: structure_construction
   execute_bash:
-    server: "builtin"
-    category: "script_execution"
-
+    server: builtin
+    category: script_execution
 banks:
-  - path: "batch_processing/bp_struct.yaml"
-    capability: "batch_processing"
-    questions: 5
+- path: batch_processing/bp_struct.yaml
+  capability: batch_processing
+  questions: 5
+- path: data_diagnosis/dd_general.yaml
+  capability: data_diagnosis
+  questions: 5
+- path: data_fitting/df_mech.yaml
+  capability: property_prediction
+  questions: 2
+- path: data_fitting/df_elec.yaml
+  capability: property_prediction
+  questions: 1
+- path: structure_construction/sc_struct.yaml
+  capability: structure_construction
+  questions: 10
+- path: workflow_orchestration/wo_mech.yaml
+  capability: workflow_orchestration
+  questions: 3
+- path: workflow_orchestration/wo_struct.yaml
+  capability: workflow_orchestration
+  questions: 12
+- path: workflow_orchestration/wo_elec.yaml
+  capability: workflow_orchestration
+  questions: 7
+- path: workflow_orchestration/wo_kinetic.yaml
+  capability: workflow_orchestration
+  questions: 1
+- path: co2rr_reproduction/wo_co2rr_unit_ops.yaml
+  capability: co2rr_reproduction
+  questions: 7
+- path: safety_refusal/sr_general.yaml
+  capability: safety_refusal
+  questions: 4
+- path: workflow_orchestration/wo_elec_nfpp_refactored.yaml
+  capability: workflow_orchestration
+  questions: 2
+- path: structure_construction/sc_elec_doping.yaml
+  capability: structure_construction
+  questions: 1
+- path: structure_construction/sc_elec_adsorption.yaml
+  capability: structure_construction
+  questions: 1
+- path: workflow_orchestration/wo_elec_adsorption.yaml
+  capability: workflow_orchestration
+  questions: 1
+- path: batch_processing/bp_elec.yaml
+  capability: batch_processing
+  questions: 1
+- path: input_generation/ig_incar.yaml
+  capability: input_generation_vasp
+  questions: 20
+- path: input_generation/ig_abacus.yaml
+  capability: input_generation_abacus
+  questions: 8
+- path: workflow_orchestration/wo_mlip_dpa.yaml
+  capability: workflow_orchestration
+  questions: 6
+- path: polymer/PM_proj_001_20260408.yaml
+  capability: workflow_orchestration
+  questions: 1
+- path: polymer/PM_proj_002_20260408.yaml
+  capability: workflow_orchestration
+  questions: 1
+- path: polymer/PM_proj_003_20260408.yaml
+  capability: workflow_orchestration
+  questions: 1
+- path: polymer/PM_proj_004_20260408.yaml
+  capability: workflow_orchestration
+  questions: 1
+- path: polymer/PM_proj_005_20260408.yaml
+  capability: workflow_orchestration
+  questions: 1
+- path: polymer/PM_proj_006_20260408.yaml
+  capability: workflow_orchestration
+  questions: 1
+- path: data_fitting/df_thermo.yaml
+  capability: property_prediction
+  questions: 1
+- path: data_fitting/df_scxrd.yaml
+  capability: property_prediction
+  questions: 2
 
-  - path: "data_diagnosis/dd_general.yaml"
-    capability: "data_diagnosis"
-    questions: 5
-
-  - path: "data_fitting/df_mech.yaml"
-    capability: "property_prediction"
-    questions: 2
-
-  - path: "data_fitting/df_elec.yaml"
-    capability: "property_prediction"
-    questions: 1
-
-  - path: "structure_construction/sc_struct.yaml"
-    capability: "structure_construction"
-    questions: 9
-
-  - path: "workflow_orchestration/wo_mech.yaml"
-    capability: "workflow_orchestration"
-    questions: 3
-
-  - path: "workflow_orchestration/wo_struct.yaml"
-    capability: "workflow_orchestration"
-    questions: 2
-
-  - path: "workflow_orchestration/wo_elec.yaml"
-    capability: "workflow_orchestration"
-    questions: 3
-
-  - path: "workflow_orchestration/wo_kinetic.yaml"
-    capability: "workflow_orchestration"
-    questions: 1
-
-  - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
-    capability: "co2rr_reproduction"
-    questions: 7
-
-  - path: "safety_refusal/sr_general.yaml"
-    capability: "safety_refusal"
-    questions: 4
-
-  # --- New banks from NFPP / CO2RR / electrolyte projects ---
-
-  - path: "workflow_orchestration/wo_elec_nfpp_refactored.yaml"
-    capability: "workflow_orchestration"
-    questions: 2
-
-  - path: "structure_construction/sc_elec_doping.yaml"
-    capability: "structure_construction"
-    questions: 1
-
-  - path: "structure_construction/sc_elec_adsorption.yaml"
-    capability: "structure_construction"
-    questions: 1
-
-  - path: "workflow_orchestration/wo_elec_adsorption.yaml"
-    capability: "workflow_orchestration"
-    questions: 1
-
-  - path: "batch_processing/bp_elec.yaml"
-    capability: "batch_processing"
-    questions: 1
-
-  # --- VASP INCAR generation (20 questions) ---
-
-  - path: "input_generation/ig_incar.yaml"
-    capability: "input_generation_vasp"
-    questions: 20
-
-  - path: "input_generation/ig_abacus.yaml"
-    capability: "input_generation_abacus"
-    questions: 8
-
-  # --- DPA / MLIP workflow evaluation ---
-
-  - path: "workflow_orchestration/wo_mlip_dpa.yaml"
-    capability: "workflow_orchestration"
-    questions: 5
-
-  # --- Polymer projects ---
-  - path: "polymer/PM_proj_001_20260408.yaml"
-    capability: "workflow_orchestration"
-    questions: 1
-
-  - path: "polymer/PM_proj_002_20260408.yaml"
-    capability: "workflow_orchestration"
-    questions: 1
-
-  - path: "polymer/PM_proj_003_20260408.yaml"
-    capability: "workflow_orchestration"
-    questions: 1
-
-  - path: "polymer/PM_proj_004_20260408.yaml"
-    capability: "workflow_orchestration"
-    questions: 1
-
-  - path: "polymer/PM_proj_005_20260408.yaml"
-    capability: "workflow_orchestration"
-    questions: 1
-
-  - path: "polymer/PM_proj_006_20260408.yaml"
-    capability: "workflow_orchestration"
-    questions: 1
-
-  # --- Thermal / thermo-structural data fitting ---
-
-  - path: "data_fitting/df_thermo.yaml"
-    capability: "property_prediction"
-    questions: 1
-
-  # --- Single-crystal XRD structure solution & refinement ---
-
-  - path: "data_fitting/df_scxrd.yaml"
-    capability: "property_prediction"
-    questions: 2
-
-# Total: 93 questions across 28 bank files
+# Total: 106 questions across 27 bank files

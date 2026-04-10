@@ -256,3 +256,367 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
+
+- id: WO_elec_post_001_20260409v2
+  capability: workflow_orchestration
+  domain: elec
+  intent: Analyze Bader-charge outputs from ABACUS-agent eval cases to verify charge neutrality and compare ionicity between NaCl and CsPbI3.
+  human_prompt_seed: '下面是 `google-adk` 的 Bader 评测样例输出（单位 e，正号表示失电子）：
+
+    - NaCl: q(Na)=+0.870609, q(Cl)=-0.870775
+
+    - CsPbI3: q(Cs)=+0.8987, q(Pb)=+0.7642, q(I)=-0.5542（每个 I）
+
+
+    请完成：
+
+    1) 检查每个化学式单元的电荷守恒。
+
+    2) 给出 NaCl 与 CsPbI3 的主要离子性特征（至少 2 点）。
+
+    3) 说明为什么“单个原子表观电荷更大”不必然等价于“键更离子化”。
+
+    '
+  tags:
+  - abacus
+  - bader
+  - google_adk_evalset
+  - charge_analysis
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: na_cl_transfer_e
+    value: 0.8707
+    tolerance: 0.03
+  - key: cspbi3_cs_transfer_e
+    value: 0.8987
+    tolerance: 0.04
+  - key: cspbi3_formula_charge_sum_e
+    value: 0.0003
+    tolerance: 0.02
+  - key: required_fields
+    value:
+    - charge_neutrality_check
+    - ionicity_comparison
+    - interpretation_note
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: na_cl_transfer_e
+    criterion: NaCl charge transfer magnitude is correctly stated (~0.871 e).
+    axis: correctness
+    verify: numerical_range
+  - id: cspbi3_cs_transfer_e
+    criterion: Cs-site charge transfer in CsPbI3 is correctly stated (~0.899 e).
+    axis: correctness
+    verify: numerical_range
+  - id: cspbi3_formula_charge_sum_e
+    criterion: Charge-neutrality check for one CsPbI3 formula unit is correctly evaluated as near zero net charge.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Answer includes charge-neutrality check, ionicity comparison points, and interpretation of why atomic charge alone does not fully determine bond ionicity.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Analysis is grounded in the provided Bader numbers and stoichiometry rather than generic statements.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: Bader analysis is completed directly from the provided values without unnecessary exploration.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: WO_elec_post_002_20260409v2
+  capability: workflow_orchestration
+  domain: elec
+  intent: Audit charge-density-difference workflow traces for molecular and alloy systems from ABACUS-agent eval cases.
+  human_prompt_seed: '下面是 `google-adk` 的两段电荷密度差任务描述摘要：
+
+    - H2O 案例：用 H2O.STRU，指定 O 为 0 号原子，并按“仅 O 子系统 vs 仅 H 子系统”与完整分子做电荷密度差。
+
+    - CoPt3 案例：用 CoPt3.STRU，指定 Co 为 0 号原子，且需考虑磁性设置（nspin=2, Co 初始磁矩），再按“仅 Co 子系统 vs 仅 Pt 子系统”与完整晶体做电荷密度差。
+
+
+    请完成：
+
+    1) 列出两案例共有的核心流程步骤（至少 2 步）。
+
+    2) 指出 CoPt3 相对 H2O 的关键额外设置及其物理原因。
+
+    3) 说明为何仅凭单个 `chg_density_diff.cube` 文件难以直接比较“分子体系 vs 合金体系”电荷重分布强弱。
+
+    '
+  tags:
+  - abacus
+  - charge_density_difference
+  - google_adk_evalset
+  - bonding_analysis
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: required_workflow_steps
+    value:
+    - abacus_prepare
+    - abacus_cal_charge_density_difference
+  - key: copt3_magnetic_setting
+    value:
+    - nspin=2
+    - Co init_mag
+  - key: required_fields
+    value:
+    - shared_workflow
+    - magnetic_setting_reason
+    - limitation_note
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: required_workflow_steps
+    criterion: Answer identifies the shared two-step workflow (`abacus_prepare` then `abacus_cal_charge_density_difference`) in both cases.
+    axis: correctness
+    verify: contains_all
+  - id: copt3_magnetic_setting
+    criterion: Answer states CoPt3 needs explicit magnetic settings (nspin=2 and Co initial moment) beyond the H2O case.
+    axis: correctness
+    verify: contains_all
+  - id: required_fields
+    criterion: Report includes shared workflow, CoPt3 magnetic-setting rationale, and at least one cross-system comparison limitation statement.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Analysis is grounded in the provided workflow traces and settings (subsystem partition + magnetic setup) rather than fabricated numeric integrals.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: The requested trace audit is completed directly from the provided case summaries without redundant exploration.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: WO_elec_post_003_20260409v2
+  capability: workflow_orchestration
+  domain: elec
+  intent: Post-process ABACUS work-function output for Al(110) and interpret vacuum-direction setup in the eval trace.
+  human_prompt_seed: '下面是 `google-adk` 的 work_function 评测样例关键信息：
+
+    - 体系：Al(110)
+
+    - 真空方向：y
+
+    - 最终报告功函数：4.23 eV
+
+
+    请完成：
+
+    1) 给出该案例功函数数值，并说明其物理定义（与真空能级、费米能级关系）。
+
+    2) 解释为何在该案例中需要显式指定真空方向为 y。
+
+    3) 说明该单案例结果在比较不同晶面（各向异性）时的局限。
+
+    '
+  tags:
+  - abacus
+  - work_function
+  - google_adk_evalset
+  - surface_electronic_property
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: phi_al110_eV
+    value: 4.23
+    tolerance: 0.12
+  - key: required_fields
+    value:
+    - phi_110
+    - definition_note
+    - vacuum_direction_reason
+    - anisotropy_limitation_note
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: phi_al110_eV
+    criterion: Work function for Al(110) is correctly stated around 4.23 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report includes Al(110) work function value, definition note, reason for vacuum-direction specification, and anisotropy-comparison limitation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: The answer is grounded in the provided single-case trace (Al110, vacuum_direction=y, phi=4.23 eV) without fabricating extra surface data.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: Work-function analysis is completed in a concise calculation flow without unnecessary exploration.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: WO_elec_post_004_20260409v2
+  capability: workflow_orchestration
+  domain: elec
+  intent: Compare vibration-analysis outputs for H2O and CO2 from ABACUS-agent eval cases and interpret imaginary-frequency artifacts.
+  human_prompt_seed: '下面是 `google-adk` vibration 评测样例中的结果摘要：
+
+    - H2O: ZPE = 0.5787 eV；虚频 = [59.4278i, 22.9472i, 9.9379i, 0.0060i]
+
+    - CO2: ZPE = 0.3097 eV；虚频 = ["11.64i", "11.64i", "0.06i", "0.04i"]
+
+
+    请完成：
+
+    1) 计算两者 ZPE 差值（H2O - CO2）。
+
+    2) 对比两者虚频幅值特征，并判断哪个体系“可能更接近稳定极小值”（需说明理由）。
+
+    3) 给出至少两条导致小虚频出现的常见数值原因。
+
+    '
+  tags:
+  - abacus
+  - vibration
+  - google_adk_evalset
+  - zpe
+  - post_processing
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: h2o_zpe_eV
+    value: 0.5787
+    tolerance: 0.03
+  - key: co2_zpe_eV
+    value: 0.3097
+    tolerance: 0.02
+  - key: zpe_delta_eV
+    value: 0.269
+    tolerance: 0.03
+  - key: required_fields
+    value:
+    - zpe_h2o
+    - zpe_co2
+    - zpe_difference
+    - imaginary_frequency_comparison
+    - numerical_artifact_causes
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: h2o_zpe_eV
+    criterion: H2O ZPE is correctly stated around 0.5787 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: co2_zpe_eV
+    criterion: CO2 ZPE is correctly stated around 0.3097 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: zpe_delta_eV
+    criterion: ZPE difference (H2O - CO2) is correctly computed around 0.269 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report includes both ZPE values, their difference, imaginary-frequency comparison, and at least two plausible numerical-artifact causes.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: All conclusions are grounded in the provided vibration summary values (ZPE and imaginary frequencies), without fabricated mode data.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: Frequency post-processing is completed directly with minimal redundant steps.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
