@@ -86,7 +86,7 @@ banks:
 
   - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
     capability: "co2rr_reproduction"
-    questions: 8
+    questions: 7
 
   - path: "safety_refusal/sr_general.yaml"
     capability: "safety_refusal"
@@ -167,4 +167,4 @@ banks:
     capability: "property_prediction"
     questions: 2
 
-# Total: 94 questions across 28 bank files
+# Total: 93 questions across 28 bank files
