@@ -23,6 +23,12 @@ from evaluation.devshell_agent.git_iteration import (
 )
 from evaluation.devshell_agent.sdk_logging import log_line, log_sdk_message
 
+# ``ClaudeAgentOptions(tools=...)``: empty built-in tool set (``--tools`` with no
+# Claude Code Read/Bash/Agent/...). MCP tools come only from ``mcp_servers``.
+# ``allowed_tools`` maps to ``--allowedTools`` (permission pre-approval), not
+# an exclusive allowlist.
+_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED: list[str] = []
+
 
 def checklist_max_turns_for_shared_state(state: AgentLoopSharedState) -> int:
     """Claude SDK ``max_turns`` for the question_bank checklist-revision agent."""
@@ -278,6 +284,7 @@ class DevshellAgentLoop:
             cwd=str(cfg.repo_root.resolve()),
             max_turns=cfg.max_sdk_turns,
             mcp_servers={MatmasterEvalMcpToolkit.MCP_SERVER_NAME: mcp_server},
+            tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
             allowed_tools=allowed_tools,
             permission_mode=cfg.permission_mode,
         )
@@ -670,6 +677,7 @@ class DevshellAgentLoop:
                 cwd=str(self._cfg.repo_root.resolve()),
                 max_turns=24,
                 mcp_servers={MatmasterEvalMcpToolkit.MCP_SERVER_NAME: mcp_server},
+                tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
                 allowed_tools=optimization_allowed,
                 permission_mode=self._cfg.permission_mode,
             )
@@ -737,6 +745,7 @@ class DevshellAgentLoop:
                 cwd=str(self._cfg.repo_root.resolve()),
                 max_turns=max(32, int(self._cfg.defaults.jobs) * 6),
                 mcp_servers={MatmasterEvalMcpToolkit.MCP_SERVER_NAME: mcp_server},
+                tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
                 allowed_tools=optimization_allowed,
                 permission_mode=self._cfg.permission_mode,
             )
@@ -841,6 +850,7 @@ class DevshellAgentLoop:
             cwd=str(cfg.repo_root.resolve()),
             max_turns=checklist_max_turns_for_shared_state(state),
             mcp_servers={MatmasterEvalMcpToolkit.MCP_SERVER_NAME: mcp_server},
+            tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
             allowed_tools=checklist_allowed,
             permission_mode=self._checklist_permission_mode_resolved(),
         )
