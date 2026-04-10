@@ -632,10 +632,15 @@ questions:
 - id: SC_struct_008_20260410
   capability: structure_construction
   domain: struct
-  intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry, geometry, coordination environments, and post-relaxation force.
-  human_prompt_seed: 'Construct a computation-ready γ-Al2O3 bulk model. Export as `gamma_alumina.cif`. In the final answer, explicitly report: (1) whether `gamma_alumina.cif` exists; (2) the Al:O ratio, which should be approximately 2:3 (±5%); (3) the three cell angles, each close to 90 degrees (±2 degrees); (4) whether both tetrahedral and octahedral [AlO] environments exist; (5) whether all interatomic distances are greater than 1.0 A; (6) the relaxed maximum force, which should be below 0.1 eV/A.
-
-    Also explicitly state the relaxation backend/calculator and key relaxation settings (e.g., force threshold and max steps), because force values are backend-dependent and should be interpreted under the stated setup.
+  intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
+    geometry, coordination environments, and post-relaxation force.
+  human_prompt_seed: 'Construct a computation-ready γ-Al2O3 bulk model. Export as
+    `gamma_alumina.cif`. In the final answer, explicitly report: (1) whether `gamma_alumina.cif`
+    exists; (2) the Al:O ratio, which should be approximately 2:3 (±5%); (3) the three
+    cell angles, each close to 90 degrees (±2 degrees); (4) whether both tetrahedral
+    and octahedral [AlO] environments exist; (5) whether all interatomic distances
+    are greater than 1.0 A; (6) the relaxed maximum force, which should be below 0.1
+    eV/A.
 
     '
   tags:
@@ -688,8 +693,6 @@ questions:
     - octahedral_alo
     - min_distance_check
     - max_force
-    - calculator_backend
-    - relaxation_setup
   - key: turn_budget
     value:
       max: 20
@@ -721,25 +724,38 @@ questions:
     axis: correctness
     verify: struct_file_cell_param
   - id: max_force_eV_A
-    criterion: Under the reported relaxation backend/settings, the relaxed maximum force is below 0.1 eV/A.
+    criterion: The reported relaxed maximum force is below 0.1 eV/A.
     axis: correctness
     verify: numerical_range
   - id: required_fields
-    criterion: The answer explicitly reports the Al:O ratio, all three cell angles, evidence for both tetrahedral and octahedral AlO environments, a minimum-distance sanity check above 1.0 A, a relaxed maximum-force check below 0.1 eV/A, and the calculator/relaxation settings used for that force.
+    criterion: The answer explicitly reports the Al:O ratio, all three cell angles,
+      evidence for both tetrahedral and octahedral AlO environments, a minimum-distance
+      sanity check above 1.0 A, and a relaxed maximum-force check below 0.1 eV/A.
     axis: correctness
     verify: llm_binary_judge
   - id: structure_knowledge
-    criterion: Agent demonstrates understanding that γ-Al2O3 adopts a defect-spinel structure with aluminum occupying both tetrahedral and octahedral coordination sites, reflected in the construction approach, final answer, or tool parameters. This criterion can pass even if the final output file was not successfully delivered, as long as the understanding is evident.
+    criterion: Agent demonstrates understanding that γ-Al2O3 adopts a defect-spinel
+      structure with aluminum occupying both tetrahedral and octahedral coordination
+      sites, reflected in the construction approach, final answer, or tool parameters.
+      This criterion can pass even if the final output file was not successfully
+      delivered, as long as the understanding is evident.
     axis: correctness
     verify: llm_binary_judge
     weight: 1.0
   - id: relaxation_attempted
-    criterion: Agent initiates structure relaxation or geometry optimization on the constructed γ-Al2O3 bulk model using any available calculator (MLIP, DP, or force-field), even if the relaxation does not converge or the final file is not delivered. Evidence may come from tool calls, scripts, or narrative.
+    criterion: Agent initiates structure relaxation or geometry optimization on the
+      constructed γ-Al2O3 bulk model using any available calculator (MLIP, DP, or
+      force-field), even if the relaxation does not converge or the final file is
+      not delivered. Evidence may come from tool calls, scripts, or narrative.
     axis: correctness
     verify: llm_binary_judge
     weight: 0.5
   - id: grounding_source
-    criterion: The answer links Al:O stoichiometry, cell angles, tetrahedral vs octahedral Al sites, minimum contact distances, and post-relax forces to `gamma_alumina.cif` and the stated relaxation, not handbook recall disconnected from that file. Judge solely from the final answer and named deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The answer links Al:O stoichiometry, cell angles, tetrahedral vs octahedral
+      Al sites, minimum contact distances, and post-relax forces to `gamma_alumina.cif`
+      and the stated relaxation, not handbook recall disconnected from that file. Judge solely from the final
+      answer and named deliverables; do not fail because the tool-call log omits MCP,
+      web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -751,15 +767,18 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: efficiency_judge
-    criterion: The gamma-alumina construction and relaxation workflow completes without redundant exploratory detours.
+    criterion: The gamma-alumina construction and relaxation workflow completes without
+      redundant exploratory detours.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_010_20260410
