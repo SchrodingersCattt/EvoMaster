@@ -530,7 +530,7 @@ questions:
   - key: qc_metrics_missing_rate_regex
     value:
       filename: qc_metrics.json
-      pattern: '"missing_rate_yield_pct"\s*:\s*0?\.1\b|"missing_rate_yield_pct"\s*:\s*10\b'
+      pattern: '"missing_rate_yield_pct"\s*:\s*(?:0?\.1(?:0+)?|10(?:\.0+)?|10%)\b'
       flags: i
   - key: qc_report_required_tokens
     value:
@@ -600,7 +600,7 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: qc_metrics_missing_rate_regex
-    criterion: '`qc_metrics.json` reports missing rate for `yield_pct` around 0.1 (or 10%).'
+    criterion: '`qc_metrics.json` reports missing rate for `yield_pct` around 0.1 / 10 / 10%.'
     axis: correctness
     verify: text_file_regex
   - id: qc_report_required_tokens

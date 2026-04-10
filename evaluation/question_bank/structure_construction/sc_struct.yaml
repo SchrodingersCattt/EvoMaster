@@ -635,6 +635,8 @@ questions:
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry, geometry, coordination environments, and post-relaxation force.
   human_prompt_seed: 'Construct a computation-ready γ-Al2O3 bulk model. Export as `gamma_alumina.cif`. In the final answer, explicitly report: (1) whether `gamma_alumina.cif` exists; (2) the Al:O ratio, which should be approximately 2:3 (±5%); (3) the three cell angles, each close to 90 degrees (±2 degrees); (4) whether both tetrahedral and octahedral [AlO] environments exist; (5) whether all interatomic distances are greater than 1.0 A; (6) the relaxed maximum force, which should be below 0.1 eV/A.
 
+    Also explicitly state the relaxation backend/calculator and key relaxation settings (e.g., force threshold and max steps), because force values are backend-dependent and should be interpreted under the stated setup.
+
     '
   tags:
   - bulk_structure
@@ -686,6 +688,8 @@ questions:
     - octahedral_alo
     - min_distance_check
     - max_force
+    - calculator_backend
+    - relaxation_setup
   - key: turn_budget
     value:
       max: 20
@@ -717,11 +721,11 @@ questions:
     axis: correctness
     verify: struct_file_cell_param
   - id: max_force_eV_A
-    criterion: The reported relaxed maximum force is below 0.1 eV/A.
+    criterion: Under the reported relaxation backend/settings, the relaxed maximum force is below 0.1 eV/A.
     axis: correctness
     verify: numerical_range
   - id: required_fields
-    criterion: The answer explicitly reports the Al:O ratio, all three cell angles, evidence for both tetrahedral and octahedral AlO environments, a minimum-distance sanity check above 1.0 A, and a relaxed maximum-force check below 0.1 eV/A.
+    criterion: The answer explicitly reports the Al:O ratio, all three cell angles, evidence for both tetrahedral and octahedral AlO environments, a minimum-distance sanity check above 1.0 A, a relaxed maximum-force check below 0.1 eV/A, and the calculator/relaxation settings used for that force.
     axis: correctness
     verify: llm_binary_judge
   - id: structure_knowledge
@@ -769,6 +773,7 @@ questions:
     (1) Ag(111) slab 为 (2 × 3) 面内超胞，并具有 7 个原子层；
 
     (2) 在金属基底上方加入 43 个 H2O 分子和 2 个 K 离子；
+        仅允许中性 H2O 分子，不允许引入 OH-/H3O+ 或水分解产物；
 
     (3) z 方向保留约 12 Å 真空层；
 
@@ -827,6 +832,7 @@ questions:
     - slab_layers
     - vacuum_A
     - interface_side
+    - neutral_water_only
   - key: turn_budget
     value:
       max: 20
@@ -846,7 +852,7 @@ questions:
     axis: correctness
     verify: struct_file_atom_count
   - id: water_count
-    criterion: The output CIF contains exactly 43 oxygen atoms, equivalent to 43 H2O molecules.
+    criterion: Under the neutral-water-only assumption, the output CIF contains exactly 43 oxygen atoms, equivalent to 43 H2O molecules.
     axis: correctness
     verify: struct_file_atom_count
   - id: k_count
@@ -862,7 +868,7 @@ questions:
     axis: correctness
     verify: struct_file_layer_count
   - id: required_fields
-    criterion: The answer explicitly reports the output structure file, Ag atom count, H2O molecule count, K ion count, slab layer count, vacuum thickness near 12 Å, and that solvent/ions are placed above one side of the slab rather than embedded into the metal.
+    criterion: The answer explicitly reports the output structure file, Ag atom count, H2O molecule count, K ion count, slab layer count, vacuum thickness near 12 Å, confirms neutral-water-only composition (no OH-/H3O+), and states that solvent/ions are placed above one side of the slab rather than embedded into the metal.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
@@ -996,7 +1002,7 @@ questions:
   capability: structure_construction
   domain: struct
   intent: Build and export three 1 mol/L Zn-salt aqueous model boxes near 2000 atoms with valid integer compositions and concrete structure artifacts.
-  human_prompt_seed: "工作区已提供 `electrolyte_system_spec.json`。\n\n请围绕 ZnSO4、ZnCl2、Zn(ClO4)2 三种锌盐水溶液，完成“电解液建模”任务：\n1) 生成 `composition_plan.json`：给出三种体系的整数配比（盐对数、水分子数、总原子数），要求浓度接近 1 mol/L，且总原子数在 1900~2100。\n2) 必须实际完成三套初始溶液盒子建模，并在工作区落盘结构文件：\n   - `znso4_1m_box.xyz`\n   - `zncl2_1m_box.xyz`\n   - `znclo4_1m_box.xyz`\n3) 生成 `build_workflow.md`：说明从离子/水分子初始结构准备、溶液盒子构建、电中性检查、初始弛豫到输入准备的步骤。\n\n额外要求：\n- 本题重心是建模，不要求提交 MD 轨迹、能量日志、RDF 或 MSD 分析结果。\n"
+  human_prompt_seed: "工作区已提供 `electrolyte_system_spec.json`。\n\n请围绕 ZnSO4、ZnCl2、Zn(ClO4)2 三种锌盐水溶液，完成“电解液建模”任务：\n1) 生成 `composition_plan.json`：给出三种体系的整数配比（盐对数、水分子数、总原子数），要求浓度接近 1 mol/L，且总原子数在 1900~2100。\n2) 必须实际完成三套初始溶液盒子建模，并在工作区落盘结构文件：\n   - `znso4_1m_box.xyz`\n   - `zncl2_1m_box.xyz`\n   - `znclo4_1m_box.xyz`\n3) 生成 `build_workflow.md`：说明从离子/水分子初始结构准备、溶液盒子构建、电中性检查、初始弛豫到输入准备的步骤。\n\n额外要求：\n- 本题重心是建模，不要求提交 MD 轨迹、能量日志、RDF 或 MSD 分析结果。\n- `composition_plan.json` 中 `n_formula_units` / `n_water` / `total_atoms` 必须是 JSON 整数字段，不得使用字符串、逗号分隔或科学计数法。\n"
   tags:
   - mlip
   - electrolyte
@@ -1098,15 +1104,15 @@ questions:
     axis: correctness
     verify: struct_file_atom_count
   - id: znso4_composition_regex
-    criterion: ZnSO4 system integer composition is consistent with 1 mol/L target and near-2000-atom constraint.
+    criterion: ZnSO4 system integer composition (JSON integer fields) is consistent with 1 mol/L target and near-2000-atom constraint.
     axis: correctness
     verify: text_file_regex
   - id: zncl2_composition_regex
-    criterion: ZnCl2 system integer composition is consistent with 1 mol/L target and near-2000-atom constraint.
+    criterion: ZnCl2 system integer composition (JSON integer fields) is consistent with 1 mol/L target and near-2000-atom constraint.
     axis: correctness
     verify: text_file_regex
   - id: znclo4_composition_regex
-    criterion: Zn(ClO4)2 system integer composition is consistent with 1 mol/L target and near-2000-atom constraint.
+    criterion: Zn(ClO4)2 system integer composition (JSON integer fields) is consistent with 1 mol/L target and near-2000-atom constraint.
     axis: correctness
     verify: text_file_regex
   - id: used_structure_source
