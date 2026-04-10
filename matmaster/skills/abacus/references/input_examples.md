@@ -1,5 +1,74 @@
 # ABACUS Complete INPUT Examples
 
+## Quick Reference: Mandatory Parameters by Task Type
+
+Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `scf_thr`, `scf_nmax`, `smearing_method`, `smearing_sigma`.
+
+| Task | Additional mandatory parameters | Common omission |
+|------|---------------------------------|-----------------|
+| SCF (pre-NSCF) | `out_chg 1` | Forgetting `out_chg` → NSCF cannot read charge |
+| Band (NSCF) | `init_chg file`, `out_band 1`, `nbands`, `symmetry 0` | Leaving `symmetry 1` → k-path folded |
+| DOS (NSCF) | `init_chg file`, `out_dos 1`, `dos_edelta_ev`, `dos_sigma`, `dos_nche`, `nbands`, `symmetry 0` | Missing `dos_nche` for LCAO |
+| Relax | `cal_force 1`, `force_thr_ev 0.01` | Missing `cal_force` → no force output |
+| Cell-relax | `cal_force 1`, `cal_stress 1`, `force_thr_ev 0.01`, `stress_thr 0.5` | Missing `cal_stress` |
+| Work function / dipole | `out_pot 2`, `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_amp 0.0` | Missing `efield_amp 0.0` (pure dipole correction) |
+| Spin-polarized | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` | Omitting mixing params → SCF diverges |
+| Slab KPT | Always `1` in vacuum direction (e.g. `20 20 1 0 0 0`) | Using dense mesh in vacuum direction |
+
+### Relaxation INPUT Example
+```
+INPUT_PARAMETERS
+calculation relax
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 100
+smearing_method gauss
+smearing_sigma 0.01
+cal_force 1
+force_thr_ev 0.01
+relax_nmax 100
+```
+
+### Cell Relaxation INPUT Example
+```
+INPUT_PARAMETERS
+calculation cell-relax
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 100
+smearing_method gauss
+smearing_sigma 0.01
+cal_force 1
+cal_stress 1
+force_thr_ev 0.01
+stress_thr 0.5
+relax_nmax 100
+```
+
+### Work Function / Electrostatic Potential INPUT Example
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 100
+smearing_method gauss
+smearing_sigma 0.01
+out_pot 2
+efield_flag 1
+dip_cor_flag 1
+efield_dir 2
+efield_pos_max 0.0
+efield_pos_dec 0.1
+efield_amp 0.0
+```
+Slab KPT for work function (z = vacuum): `20 20 1 0 0 0`
+
+---
+
 ## Two-Step Electronic Property Workflow
 
 Electronic property calculations (band structure, DOS) require: SCF → NSCF.

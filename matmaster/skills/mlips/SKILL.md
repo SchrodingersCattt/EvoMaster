@@ -156,7 +156,8 @@ Output: `adsorption_results.json` (all energies + E_ads table), `{slab}_{ads}_re
     - If the package must be installed into the image's virtual environment, use `source /mcp_server/AI4S-agent-tools/.venv/bin/activate && pip install sevenn && python optimize_structure.py --structure input.cif --model SevenNet-0 > log 2>&1`
 5. Poll: `Bohrium(action="poll", job_id=<id>)`
 6. Read `result.json` and output files from `result_dir`
-7. Analyze results, iterate if needed
+7. **Chain outputs**: use `*_optimized.cif` from optimization as input to subsequent tasks (phonon, elastic, MD). For multi-step workflows, always verify each step's `result.json` shows success before proceeding.
+8. **Save-early**: save intermediate results (optimized structure, partial data) under task-relevant filenames before starting the next step — this secures partial credit if later steps fail or timeout.
 
 ## Output Files
 

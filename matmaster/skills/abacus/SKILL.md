@@ -103,6 +103,7 @@ If the user provides complete INPUT + STRU + KPT files with pseudopotentials and
 | md | `calculation md` | `task_md_nvt.INPUT` | NVT molecular dynamics |
 
 > When generating INPUT files, write the calculation keyword exactly as shown: `calculation scf`, `calculation cell-relax`, etc. with single space. Include `efield_flag 1` and `dip_cor_flag 1` when dipole correction is needed.
+> **Before writing any INPUT**: consult **`references/input_examples.md`** § Quick Reference for the mandatory parameters per task type — missing even one (e.g. `cal_force` for relax, `out_chg` for SCF→NSCF) will produce incomplete results.
 
 ### Electronic Property Calculations (Band Structure / DOS)
 
