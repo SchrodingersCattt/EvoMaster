@@ -132,6 +132,17 @@ class MatmasterEvalMcpToolkit:
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
+    @staticmethod
+    def _optimization_execution_track(args: dict[str, Any]) -> str:
+        layers = [
+            str(x).strip()
+            for x in (args.get("candidate_layers") or [])
+            if str(x).strip()
+        ]
+        if layers == ["system_prompt"]:
+            return "proposal_only"
+        return "code_edit"
+
     def _display_path(self, path: Path) -> str:
         repo_root = self._state.repo_root.resolve()
         session_dir = self._state.session_dir.resolve()
@@ -620,6 +631,8 @@ class MatmasterEvalMcpToolkit:
             "problem_summary": str(args["problem_summary"]),
             "symptom": str(args["symptom"]),
             "suggested_focus": list(args.get("suggested_focus") or []),
+            "candidate_layers": list(args.get("candidate_layers") or []),
+            "execution_track": self._optimization_execution_track(args),
             "failure_buckets": list(args.get("failure_buckets") or []),
             "capabilities_affected": list(args.get("capabilities_affected") or []),
             "allowed_evidence_paths": list(args.get("allowed_evidence_paths") or []),
@@ -724,7 +737,8 @@ class MatmasterEvalMcpToolkit:
             (
                 "Queue a follow-up product-only optimization agent for this iteration. "
                 "Use sanitized summaries only; never include raw rubric or score_reason text. "
-                "Prefer failure_buckets and capabilities_affected over per-question paths; "
+                "Prefer failure_buckets, candidate_layers, and capabilities_affected "
+                "over per-question paths; "
                 "keep allowed_evidence_paths session-level (e.g. raw_runs.jsonl) when possible."
             ),
             _mts.DELEGATE_OPTIMIZATION_SCHEMA,

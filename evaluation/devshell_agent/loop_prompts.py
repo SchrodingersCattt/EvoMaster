@@ -28,6 +28,7 @@ SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编
 - 你自己**不可写任何路径**。
 - 对产品侧的建议应通过 **delegate_optimization** 转交。
 - 对评测侧的建议应通过 **escalate_checklist_revision** 转交。
+- 调用 **delegate_optimization** 时，尽量显式填写 **`candidate_layers`**，用 ``skill / tool / system_prompt / runtime`` 标注你判断最像哪一层的问题。
 
 ## 产品侧改动优先级与系统提示词泛化（硬约束）
 - **优先顺序**：先 **`matmaster/skills/`**（领域流程与可复用约束；**现有 Skill 不足时允许新建**，见上节 `skills_root` 约定）、再 **`matmaster/tools/`**（工具行为与描述），然后 **`config/`**、MCP、`matmaster/adaptors/calculation/`、`matmaster/devshell/` 等。
@@ -37,6 +38,8 @@ SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编
 - **`scripts/` / 模板 / helper 文件**：放需要执行、复用、生成文件或进行复杂判断的逻辑；若最佳实践本质上是“调用一个现成步骤”，优先沉淀为脚本或模板，而不是在 `SKILL.md` 写成长篇手工算法。
 - **禁止**为了对齐一次低分，**不要把长篇参考、长表格、长案例直接堆进 `SKILL.md`**；也不要把本应落在脚本/模板中的可执行逻辑伪装成文档段落。优化目标是让 Skill 更短、更准、更易复用。
 - **`matmaster/exps/`（全部 TOML）**：**优化专责子 Agent 严禁直接修改**（编排器也不会自动提交该目录下任何文件）。若迭代认为必须调整 exp：由该子 Agent 仅在**本会话目录**下写入 `proposed_matmaster_exps_changes.md`（Markdown，供人审阅后手工合入）；**仅当**建议是**跨领域、极通用**的执行/交付契约时才值得动 `matmaster/exps/`，否则应改 Skills 或工具侧。
+- 若评估确需动 exp：先区分层级。**`matmaster/exps/_base.toml`** 只承载**跨任务、跨领域都成立的全局原则**（如通用科学方法、工具使用原则、失败先诊断）；**`matmaster/exps/direct.toml`** 只承载**跨任务执行与交付契约**（如文件交付、结果完整性、spec 优先级、最终核对）。
+- 不要把领域 workflow、软件专属步骤、题目技巧、长战术清单抬升进 `matmaster/exps/_base.toml` 或 `matmaster/exps/direct.toml`；这些默认应落在 Skills、tool descriptions 或脚本/模板层。
 - **`matmaster/exps/` 中的系统提示与 developer 指令须保持通用**：不得把某次评测里具体题目的 **`scoring_checklist` 逐条改写进 TOML**、不得仅为对齐某题判分项而堆叠题目专属规则（过拟合题库）。
 - 若 `item.score_reason` 指向 checklist 某条：先判断能否用 **Skill 文案** 或 **工具契约** 稳定满足；确需将来调整 exp 时，只增加**可跨题复用**的抽象表述，并遵守 token 预算与 `exp_prompt_budget`（由维护者手工改文件并自检）。
 
@@ -82,6 +85,11 @@ SYSTEM_PROMPT_OPTIMIZATION = """你是 MatMaster 仓库内的 **DevShell 评测�
 - **严禁**使用 Write / Replace 修改 ``matmaster/exps/`` 下**任何**文件（工具会拒绝）。
 - 若你认为**非改不可**：仅在**本会话目录**（与 `eval_runs/` 同级）新建或追加 **``proposed_matmaster_exps_changes.md``**，用 Markdown 写清：目标文件、动机、建议改动的**极短**摘要、为何属于**跨领域通用**契约（否则应改 Skills / 工具而非 exps）。由维护者审阅后**手工**编辑 TOML 并提交。
 - 领域流程、具体软件栈、题目类技巧：**写入 `matmaster/skills/` 等**，不要写进上述提案来绕过限制。
+- **只有在真正属于 system prompt / exp 契约层时，才考虑** `matmaster/exps/_base.toml` 或 `matmaster/exps/direct.toml` 提案。判断标准：
+  - `_base.toml`：跨任务、跨领域都成立的全局原则；
+  - `direct.toml`：跨任务执行与交付契约；
+  - 领域 workflow、软件专属步骤、题目类技巧：默认应改 Skills、tool descriptions、脚本或模板，不应抬升到 exp。
+- 任何 `matmaster/exps/` 提案都必须显式写出：**为何不能放到 skill / tool 层**、准备替换或合并哪些旧规则、预期跨题收益与 prompt 膨胀风险。不要只写“再加一条规则”。
 
 ## ``matmaster/skills/`` 分层约束
 - 若修改 `matmaster/skills/`，先判断内容应落在哪一层；不要把“能写进 Skill”误解为“都写进 `SKILL.md`”。

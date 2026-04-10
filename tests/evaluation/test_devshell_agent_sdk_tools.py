@@ -222,6 +222,7 @@ def test_delegate_optimization_records_round_and_payload(tmp_path: Path) -> None
                 "problem_summary": "Need stronger reusable workflow guidance.",
                 "symptom": "Low score due to missing deliverable structure.",
                 "suggested_focus": ["matmaster/skills"],
+                "candidate_layers": ["skill"],
                 "allowed_evidence_paths": ["matmaster/skills/result-analysis/SKILL.md"],
                 "notes": "Do not expose raw rubric text.",
             }
@@ -236,6 +237,8 @@ def test_delegate_optimization_records_round_and_payload(tmp_path: Path) -> None
             "problem_summary": "Need stronger reusable workflow guidance.",
             "symptom": "Low score due to missing deliverable structure.",
             "suggested_focus": ["matmaster/skills"],
+            "candidate_layers": ["skill"],
+            "execution_track": "code_edit",
             "failure_buckets": [],
             "capabilities_affected": [],
             "allowed_evidence_paths": ["matmaster/skills/result-analysis/SKILL.md"],
@@ -356,6 +359,116 @@ def test_default_history_dir_is_outside_results(tmp_path: Path) -> None:
 
     assert history_dir == tmp_path / "evaluation" / "devshell_agent_history"
     assert "results" not in str(history_dir)
+
+
+def test_optimization_user_message_guides_system_prompt_candidates_to_proposal(
+    tmp_path: Path,
+) -> None:
+    loop = DevshellAgentLoop(_build_config(tmp_path))
+
+    message = loop._optimization_user_message(
+        it=1,
+        delegation={
+            "iteration_index": 1,
+            "optimization_round": 1,
+            "problem_summary": "Need cross-task execution contract cleanup.",
+            "symptom": "Same delivery-policy issue across tasks.",
+            "suggested_focus": ["matmaster/exps"],
+            "candidate_layers": ["system_prompt"],
+            "allowed_evidence_paths": [],
+            "notes": "proposal only",
+        },
+    )
+
+    assert "candidate_layers" in message
+    assert "`system_prompt`" in message
+    assert (
+        "默认不要修改 `matmaster/skills/`、`matmaster/tools/`、`src/` 等产品代码"
+        in message
+    )
+    assert (
+        "优先读取现有 `matmaster/exps/_base.toml` / `matmaster/exps/direct.toml`"
+        in message
+    )
+    assert "`proposed_matmaster_exps_changes.md`" in message
+
+
+def test_optimization_user_message_guides_skill_and_tool_candidates(
+    tmp_path: Path,
+) -> None:
+    loop = DevshellAgentLoop(_build_config(tmp_path))
+
+    message = loop._optimization_user_message(
+        it=1,
+        delegation={
+            "iteration_index": 1,
+            "optimization_round": 2,
+            "problem_summary": "Need sharper reusable guidance.",
+            "symptom": "Agent chooses wrong layer repeatedly.",
+            "suggested_focus": ["matmaster/skills", "matmaster/tools"],
+            "candidate_layers": ["skill", "tool"],
+            "allowed_evidence_paths": [],
+            "notes": "layered fix",
+        },
+    )
+
+    assert "`skill`" in message
+    assert "`tool`" in message
+    assert (
+        "优先检查 `matmaster/skills/`，并遵守 `SKILL.md` / `references` / `scripts` 分层约束"
+        in message
+    )
+    assert "优先检查 `matmaster/tools/` 与相关 tool descriptions" in message
+
+
+def test_proposal_only_optimization_skips_auto_commit_and_records_track(
+    tmp_path: Path,
+) -> None:
+    loop = DevshellAgentLoop(_build_config(tmp_path))
+    state = _build_state(tmp_path)
+    state.optimization_reports.append(
+        {
+            "iteration_index": 1,
+            "optimization_round": 1,
+            "summary": "Wrote proposal only.",
+            "files_touched": [],
+            "commit_shas": [],
+            "needs_more_work": True,
+            "followup_suggestion": "Review proposal.",
+        }
+    )
+    delegation = {
+        "iteration_index": 1,
+        "optimization_round": 1,
+        "problem_summary": "Need cross-task contract cleanup.",
+        "symptom": "Prompt layer issue.",
+        "suggested_focus": ["matmaster/exps"],
+        "candidate_layers": ["system_prompt"],
+        "execution_track": "proposal_only",
+        "allowed_evidence_paths": [],
+        "notes": "proposal only",
+    }
+
+    with patch(
+        "evaluation.devshell_agent.optimization_auto_commit.commit_optimization_changes"
+    ) as mock_commit:
+        loop._apply_optimization_auto_commit(
+            it=1,
+            delegation=delegation,
+            state=state,
+            loop_log=io.StringIO(),
+        )
+
+    mock_commit.assert_not_called()
+    track_path = tmp_path / "session" / "optimization_proposal_tracks.jsonl"
+    assert track_path.is_file()
+    rows = [
+        json.loads(line)
+        for line in track_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert rows[-1]["execution_track"] == "proposal_only"
+    assert rows[-1]["candidate_layers"] == ["system_prompt"]
 
 
 def test_optimization_agent_uses_restricted_mcp_fs_tools_only() -> None:

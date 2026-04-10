@@ -193,6 +193,17 @@ DELEGATE_OPTIMIZATION_SCHEMA: dict[str, Any] = {
             "items": {"type": "string"},
             "description": "Product-side directories or modules to inspect.",
         },
+        "candidate_layers": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "enum": ["skill", "tool", "system_prompt", "runtime"],
+            },
+            "description": (
+                "Optional likely ownership layers for the fix. Use one or more of "
+                "skill / tool / system_prompt / runtime to make the delegation more precise."
+            ),
+        },
         "failure_buckets": {
             "type": "array",
             "items": {"type": "string"},
