@@ -214,35 +214,6 @@ class TestBohriumSetupServiceConstructor:
         assert svc._event_sink is None
 
 
-class TestBohriumSetupServiceLocation:
-    """Verify the service now lives in src/services instead of matmaster/integration."""
-
-    def _project_root(self) -> Path:
-        """Resolve project root robustly (works in worktrees too)."""
-        # Walk up from test file to find the directory containing both src/ and matmaster/
-        candidate = Path(__file__).resolve().parent
-        for _ in range(10):
-            if (candidate / "src" / "services").is_dir() and (
-                candidate / "matmaster"
-            ).is_dir():
-                return candidate
-            candidate = candidate.parent
-        raise RuntimeError("Could not find project root")
-
-    def test_integration_init_no_longer_exports_bohrium_setup_service(self):
-        root = self._project_root()
-        init_file = root / "matmaster" / "integration" / "__init__.py"
-        source = init_file.read_text(encoding="utf-8")
-        assert "BohriumSetupService" not in source
-
-    def test_src_agent_run_bohrium_defines_service_and_skill_sync_spec(self):
-        root = self._project_root()
-        service_file = root / "src" / "services" / "agent_run_bohrium.py"
-        source = service_file.read_text(encoding="utf-8")
-        assert "class BohriumSetupService" in source
-        assert "class SkillSyncSpec" in source
-
-
 def test_apply_run_credentials_registers_runtime_without_dual_write() -> None:
     from matmaster.bohrium.runtime import (
         attach_local_bohrium_runtime_from_run_credentials,

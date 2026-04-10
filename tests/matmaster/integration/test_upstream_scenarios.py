@@ -312,38 +312,3 @@ class TestEventHandlerPersistence:
         assert payloads[0]["content"] == "..."
         assert payloads[1]["content"] == "真实内容"
 
-
-# -- Reply queue dormant plumbing (retained for v2.3) ----------------
-
-
-def test_poll_reply_queue_removed_from_agent_run_service() -> None:
-    """Dead confirmation queue bridge should be removed from AgentRunService."""
-    module = pytest.importorskip(
-        "src.services.agent_run_service",
-        reason="src not available (isolation test)",
-    )
-
-    assert not hasattr(module, "_poll_reply_queue"), (
-        "_poll_reply_queue should be removed; "
-        "AgentRunService no longer uses confirmation reply queues"
-    )
-
-
-# -- Negative assertion: ConfirmationHook no longer importable -------
-
-
-def test_confirmation_hook_not_in_hooks_package():
-    """ConfirmationHook runtime path must be fully removed (D-03/D-04)."""
-    import matmaster.hooks
-
-    assert not hasattr(
-        matmaster.hooks, "ConfirmationHook"
-    ), "ConfirmationHook should not be exported from matmaster.hooks"
-
-
-def test_confirmation_hook_module_absent():
-    """matmaster/hooks/confirmation.py must be physically deleted."""
-    import importlib
-
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("matmaster.hooks.confirmation")

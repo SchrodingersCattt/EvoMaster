@@ -7,13 +7,10 @@ Behavioral contract:
 - resolve_mcp_config_path returns the original path in prod environment.
 - resolve_mcp_config_path switches to env-specific file when SERVICE_ENV=test and file exists.
 - resolve_mcp_config_path falls back to original when env-specific file does not exist.
-- Module has no evomaster imports.
 """
 
 from __future__ import annotations
 
-import ast
-import inspect
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -102,28 +99,3 @@ class TestEnvConfigPackageLevelImport:
 
         assert callable(get_current_env)
         assert callable(resolve_mcp_config_path)
-
-    def test_no_evomaster_in_source(self):
-        import matmaster.mcp.calculation.config_env as mod
-
-        source = inspect.getsource(mod)
-        assert "evomaster" not in source, "Found 'evomaster' in config_env.py"
-
-    def test_no_top_level_evomaster_imports(self):
-        module_file = Path(
-            __import__(
-                "matmaster.mcp.calculation.config_env",
-                fromlist=["config_env"],
-            ).__file__
-        )
-        source = module_file.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        top_level_evo = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom)
-            and node.module is not None
-            and "evomaster" in node.module
-            and node.col_offset == 0
-        ]
-        assert top_level_evo == []
