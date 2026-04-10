@@ -9,16 +9,10 @@ mcp_server: mat_sg
 
 - **Binary compounds** (ZnS, ZnO, GaAs, …): the `layers` parameter counts **cation-anion bilayers** (each bilayer = 2 atomic planes). A task requesting "N-layer slab" means pass `layers=N`. After building, verify: distinct z-planes = 2 × N, atom count = layers × atoms_per_bilayer × supercell multiplier.
 - Always set `vacuum ≥ 15` Å. After building, verify vacuum = c − slab_thickness ≥ 15 Å.
-- Polar surfaces (ZnS(001), ZnO(001)): note the polarity problem in the final answer and mention a mitigation strategy (symmetric termination, dipole correction, pseudo-hydrogen passivation, etc.). For polar Type 3 surfaces (zinc blende (001), wurtzite (0001)), prefer even layers and symmetric termination; try different `termination` values (0, 1, 2) until both surfaces have the same composition. See **tasker-polar-surface** skill for detailed Tasker classification and the `build_slab_tasker_fix.py` script.
-- **When the slab build fails or produces wrong composition**: try `repair=true` (or false if already true), and try different `termination` values. If MCP tool fails after 1 attempt, fall back to `build_slab_tasker_fix.py` from tasker-polar-surface skill or direct ASE/pymatgen code.
+- **Polar surfaces** (ZnS(001), ZnO(001)): note the polarity problem in the final answer and mention a mitigation strategy (symmetric termination, dipole correction, pseudo-hydrogen passivation, etc.). For polar Type 3 surfaces (zinc blende (001), wurtzite (0001)), prefer even layers and symmetric termination; try different `termination` values (0, 1, 2) until both surfaces have the same composition.
+- **When the slab build fails or produces wrong composition**: try `repair=true` (or false if already true), and try different `termination` values. If MCP tool still fails after 2 attempts, fall back to direct ASE/pymatgen inline code.
 - **Layer count compliance**: when a reference document, paper, or task specification states an exact number of layers, you MUST use that exact number. Do NOT substitute a different layer count because it seems "more reasonable." After building, verify the actual number of distinct z-planes matches the specification (for binary compounds: distinct z-planes = 2 × N for N bilayers). If the built slab has the wrong layer count, rebuild with corrected parameters before proceeding.
-- **Molecular crystal slabs** (organic, MOF, co-crystal, etc.):
-  **Preferred workflow** — use `build_molecular_crystal_slab.py` from `structure-manager` skill:
-  ```
-  python build_molecular_crystal_slab.py --file input.cif --miller H K L --layers N [--vacuum 20.0]
-  ```
-  This script automatically: (a) detects molecules via PBC-aware bond graph, (b) enumerates all slab terminations, (c) verifies molecule integrity for each, (d) selects the best termination. **Do NOT write custom slab-cutting Python scripts from scratch** — this wastes many turns.
-  If the script fails or no termination preserves molecules, then fall back to manual pymatgen `SlabGenerator` with `in_unit_planes=True`, systematically trying different `shift` values. Key verification: (1) no covalent bond is broken across the slab boundary, (2) atom count = layers × unit-cell atoms, (3) no isolated molecular fragments exist.
+- **Molecular crystal slabs** (organic, MOF, co-crystal, etc.): use `build_molecular_crystal_slab.py` from **structure-manager** skill (`python build_molecular_crystal_slab.py --file input.cif --miller H K L --layers N`). Do NOT write custom slab-cutting scripts from scratch.
 - **Post-build verification**: after ANY structure build, verify ONCE with `get_structure_info`: composition, atom count, cell angles (cubic=90°, hex=90/90/120°), vacuum ≥ 15 Å for slabs. One check per structure — do not add separate verification passes.
 
 ## build_surface_adsorbate
@@ -38,23 +32,17 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
 
 - Report **both** the original disordered formula **and** the ordered replica expanded formula (integer stoichiometry). Write formulas as concatenated strings without spaces: `H144C48N24Cl24O96` (NOT `H144 C48 N24 Cl24 O96`). If CIF returns space-separated elements, concatenate them.
 - For each replica, explain: (a) which sites are disordered and how, (b) how the ordered config was chosen (valence/charge balance/connectivity), (c) what changed. A bare filename list without chemical reasoning = fail.
-- **Chemical/physical grounding is MANDATORY**: for every disordered site, explain the **bonding environment**, **valence state**, **coordination geometry**, or **crystallographic reason** that makes that disorder physically meaningful. Your explanation MUST go beyond listing site labels and occupancy numbers — you must discuss at least ONE of: (a) why the disordered species can substitute for each other (ionic radius, charge, electronegativity), (b) what bonds/coordination surround the site (e.g., "tetrahedral coordination by 4 O²⁻ at 1.95 Å"), (c) how the ordered replica preserves charge neutrality and valence. **Bad** example (will fail): "Site 8f has 0.6 Mn and 0.4 Fe occupancy, so we chose Mn." **Good** example: "Site 8f is octahedrally coordinated by 6 O²⁻ (M–O 2.05–2.12 Å). Mn²⁺ (0.83 Å) and Fe²⁺ (0.78 Å) have similar ionic radii and both prefer octahedral coordination, enabling random substitution. The ordered replica selects Mn on all 8f sites, preserving the +2 charge balance with the surrounding oxide framework." Always tie back to bonding, coordination, or charge balance.
+- **Chemical/physical grounding is MANDATORY**: for every disordered site, explain the bonding environment, valence state, or coordination geometry — not just occupancy numbers. Cover: why the species can substitute (ionic radius, charge similarity), the coordination environment (e.g., octahedral/tetrahedral, bond lengths), and how the ordered replica preserves charge balance. Write 2-3 focused sentences per disordered site.
 - On timeout → fall back to pymatgen `OrderDisorderedStructureTransformation`.
-- **Batch processing (multiple disordered structures)**: when the task requires ordering N ≥ 3 structures, process ALL in ONE consolidated script or MCP call loop. Do NOT spend more than ~3 minutes per structure. Strategy:
-  1. Call `generate_ordered_replicas` for each structure sequentially.
-  2. If the MCP tool is slow on one structure: set a mental budget of 2 MCP attempts per structure, then fall back to local pymatgen `OrderDisorderedStructureTransformation`.
-  3. Write chemical/physical grounding compactly — 2-3 sentences per disordered site, not paragraphs. Focus on: coordination geometry, ionic radius comparison, and charge balance. Skip lengthy derivations.
-  4. Save each ordered CIF immediately after generation (breadth-first: get ALL outputs saved before polishing any single one).
-  5. Assemble the final summary table at the end, not after each structure.
-  6. **If approaching timeout**: call finish immediately with saved CIF files + whatever grounding exists. Delivered files with brief grounding > perfect grounding with no deliverable.
+- **Batch processing (N ≥ 3 structures)**: process breadth-first — save each ordered CIF immediately before moving to the next. Budget ~2 MCP attempts per structure; if slow, fall back to pymatgen `OrderDisorderedStructureTransformation`. If approaching timeout, finish immediately with whatever files are saved. Delivered files with brief grounding > perfect grounding with no deliverable.
 
-## add_hydrogens / passivation
+## Surface passivation (semiconductor slabs)
 
-**MANDATORY**: use `passivate_surface.py` from **structure-manager** skill — it handles detection, placement, and verification in one call. Pass `-o <output>` to produce the file directly. Do NOT write custom passivation scripts from scratch.
-- **⚠ BOTH surfaces mandatory**: always passivate top AND bottom. Si-H ≈ 1.48 Å, Ge-H ≈ 1.53 Å.
-- After passivation, verify with `assess_structure.py` and report: H count per surface, mean bond length, all surface atoms coordination = 4.
+Use `passivate_surface.py` from **structure-manager** skill for semiconductor slab passivation (Si, Ge, etc.). Pass `-o <output>`. Passivate BOTH top and bottom surfaces. Si-H ≈ 1.48 Å, Ge-H ≈ 1.53 Å. After passivation, verify with `assess_structure.py`.
+
+> **Organic / molecular crystal hydrogenation** (adding H to complete valence on C, N, etc.): do NOT use `passivate_surface.py` — it is designed for semiconductor surfaces only. Instead, use OpenBabel (`obabel input.cif -O output.cif -h`) or write inline pymatgen/ASE code to place H atoms at standard bond lengths (C-H ≈ 1.09 Å, N-H ≈ 1.01 Å) with tetrahedral (sp3, 109.5°) or trigonal planar (sp2, 120°) geometry. Verify the output formula matches the expected hydrogenated composition. Do not hydrogenate carbonyl/ester O atoms — only C and N with incomplete valence.
 
 ## Complex / defective bulk structures
 
-- **γ-Al₂O₃**: run `build_gamma_al2o3.py` from **structure-manager** skill (`python build_gamma_al2o3.py [-o gamma_al2o3.cif]`). Save CIF first, then optionally relax with MLIP.
+- **γ-Al₂O₃**: run `build_gamma_al2o3.py` from **structure-manager** skill as the FIRST step (`python build_gamma_al2o3.py -o gamma_al2o3.cif`) — do NOT write custom build scripts. Save the CIF immediately, then relax with MLIP (`optimize_structure.py` from **mlips** skill). Relaxation is typically required for γ-Al₂O₃ tasks; target max force < 0.1 eV/Å.
 - **Other complex oxides** (spinel, perovskite, garnet): use `build_bulk_structure_by_wyckoff` or fetch from `mat_struct_db`.

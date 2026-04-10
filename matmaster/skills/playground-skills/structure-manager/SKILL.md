@@ -44,7 +44,7 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 * **build_gamma_al2o3.py** — Build a γ-Al₂O₃ defect-spinel structure directly.
     * **Usage**: `python build_gamma_al2o3.py [-o gamma_al2o3.cif]`
     * **When to use**: Any task requesting γ-alumina construction. This script handles the defect-spinel vacancy pattern automatically. **Use this first** — do NOT write custom build scripts from scratch.
-    * After building, optionally relax with MLIP (see mlips skill).
+    * After building, relax with MLIP (`optimize_structure.py` from mlips skill) — relaxation is typically required to achieve physical force convergence.
 
 ### 0b. Molecular Crystal Slab Cutting
 * **build_molecular_crystal_slab.py** — Cut a surface slab from a molecular crystal (organic, MOF, co-crystal, hybrid salt, etc.) with automatic molecule integrity verification.
