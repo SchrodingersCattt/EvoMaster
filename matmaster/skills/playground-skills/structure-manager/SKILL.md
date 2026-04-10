@@ -40,7 +40,13 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 
 ## Scripts
 
-### 0. Molecular Crystal Slab Cutting
+### 0a. γ-Al₂O₃ Builder
+* **build_gamma_al2o3.py** — Build a γ-Al₂O₃ defect-spinel structure directly.
+    * **Usage**: `python build_gamma_al2o3.py [-o gamma_al2o3.cif]`
+    * **When to use**: Any task requesting γ-alumina construction. This script handles the defect-spinel vacancy pattern automatically. **Use this first** — do NOT write custom build scripts from scratch.
+    * After building, optionally relax with MLIP (see mlips skill).
+
+### 0b. Molecular Crystal Slab Cutting
 * **build_molecular_crystal_slab.py** — Cut a surface slab from a molecular crystal (organic, MOF, co-crystal, hybrid salt, etc.) with automatic molecule integrity verification.
     * **Usage**: `python build_molecular_crystal_slab.py --file input.cif --miller 1 1 0 --layers 4 [-o output.cif] [--vacuum 20.0] [--bond-tolerance 0.45]`
     * **When to use**: Whenever the input structure is a molecular crystal (contains discrete molecules, not a purely covalent/ionic 3D network). The script: (a) detects molecules via covalent bond graph (PBC-aware), (b) enumerates all terminations from pymatgen SlabGenerator with `in_unit_planes=True`, (c) checks molecule integrity for each termination, (d) selects the best slab preserving intact molecules.
