@@ -20,12 +20,11 @@ Batch config JSON format:
 Output: JSON summary {"results": [{"surface":..,"adsorbate":..,"output":..,"success":bool,"error":..},..]}
 Exit code: 0 = all success, 1 = any failure.
 """
+
 import argparse
 import json
 import os
 import sys
-
-import numpy as np
 
 SITE_KEYWORDS = {"ontop", "fcc", "hcp", "bridge"}
 
@@ -72,7 +71,9 @@ def _auto_output(surface_path, output_dir=None):
     return name
 
 
-def process_single(surface_path, adsorbate_path, shift, height, output_path, quiet=False):
+def process_single(
+    surface_path, adsorbate_path, shift, height, output_path, quiet=False
+):
     """Place adsorbate on one slab. Returns result dict."""
     try:
         from ase.io import read, write
@@ -100,8 +101,10 @@ def process_single(surface_path, adsorbate_path, shift, height, output_path, qui
             "height": float(height),
         }
         if not quiet:
-            print(f"OK  {output_path}  ({len(slab)} atoms, +{len(slab)-n_slab} ads)",
-                  file=sys.stderr)
+            print(
+                f"OK  {output_path}  ({len(slab)} atoms, +{len(slab)-n_slab} ads)",
+                file=sys.stderr,
+            )
         return result
 
     except Exception as e:
@@ -138,24 +141,33 @@ def process_batch(config_path, quiet=False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Batch adsorbate placement on slab surfaces (ASE-based)")
-    parser.add_argument("-s", "--surface", nargs="+",
-                        help="Surface slab file(s)")
-    parser.add_argument("-a", "--adsorbate",
-                        help="Adsorbate molecule file (XYZ, CIF, POSCAR)")
-    parser.add_argument("-o", "--output",
-                        help="Output file (single-file mode only)")
-    parser.add_argument("--output-dir",
-                        help="Output directory for multi-file mode (auto-names: {stem}_ads.cif)")
-    parser.add_argument("--shift", default="0.5,0.5",
-                        help='Adsorption position: fractional "x,y" or keyword '
-                             '(ontop/fcc/hcp/bridge). Default: "0.5,0.5"')
-    parser.add_argument("--height", type=float, default=2.0,
-                        help="Adsorption height in Angstrom (default: 2.0)")
-    parser.add_argument("--batch",
-                        help="Batch config JSON file (overrides -s/-a)")
-    parser.add_argument("--quiet", action="store_true",
-                        help="Suppress verbose output to stderr")
+        description="Batch adsorbate placement on slab surfaces (ASE-based)"
+    )
+    parser.add_argument("-s", "--surface", nargs="+", help="Surface slab file(s)")
+    parser.add_argument(
+        "-a", "--adsorbate", help="Adsorbate molecule file (XYZ, CIF, POSCAR)"
+    )
+    parser.add_argument("-o", "--output", help="Output file (single-file mode only)")
+    parser.add_argument(
+        "--output-dir",
+        help="Output directory for multi-file mode (auto-names: {stem}_ads.cif)",
+    )
+    parser.add_argument(
+        "--shift",
+        default="0.5,0.5",
+        help='Adsorption position: fractional "x,y" or keyword '
+        '(ontop/fcc/hcp/bridge). Default: "0.5,0.5"',
+    )
+    parser.add_argument(
+        "--height",
+        type=float,
+        default=2.0,
+        help="Adsorption height in Angstrom (default: 2.0)",
+    )
+    parser.add_argument("--batch", help="Batch config JSON file (overrides -s/-a)")
+    parser.add_argument(
+        "--quiet", action="store_true", help="Suppress verbose output to stderr"
+    )
 
     args = parser.parse_args()
 
@@ -166,9 +178,13 @@ def main():
         if len(args.surface) == 1 and not args.output_dir:
             # Single-file mode
             r = process_single(
-                args.surface[0], args.adsorbate,
-                args.shift, args.height, args.output,
-                quiet=args.quiet)
+                args.surface[0],
+                args.adsorbate,
+                args.shift,
+                args.height,
+                args.output,
+                quiet=args.quiet,
+            )
             results.append(r)
         else:
             # Multi-file + shared params
@@ -177,12 +193,18 @@ def main():
             for surf in args.surface:
                 out_path = _auto_output(surf, out_dir)
                 r = process_single(
-                    surf, args.adsorbate,
-                    args.shift, args.height, out_path,
-                    quiet=args.quiet)
+                    surf,
+                    args.adsorbate,
+                    args.shift,
+                    args.height,
+                    out_path,
+                    quiet=args.quiet,
+                )
                 results.append(r)
     else:
-        parser.error("Provide either --batch CONFIG.json or (-s SURFACE(s) -a ADSORBATE)")
+        parser.error(
+            "Provide either --batch CONFIG.json or (-s SURFACE(s) -a ADSORBATE)"
+        )
         return
 
     # Output summary JSON to stdout
