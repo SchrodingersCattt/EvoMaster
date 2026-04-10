@@ -22,7 +22,7 @@ mcp_server: mat_sg
   ```
   This script automatically: (a) detects molecules via PBC-aware bond graph, (b) enumerates all slab terminations, (c) verifies molecule integrity for each, (d) selects the best termination. **Do NOT write custom slab-cutting Python scripts from scratch** — this wastes many turns.
   If the script fails or no termination preserves molecules, then fall back to manual pymatgen `SlabGenerator` with `in_unit_planes=True`, systematically trying different `shift` values. Key verification: (1) no covalent bond is broken across the slab boundary, (2) atom count = layers × unit-cell atoms, (3) no isolated molecular fragments exist.
-- **Post-build structure verification**: after slab builds, verify with `get_structure_info`: (a) composition matches formula, (b) atom count is correct, (c) vacuum ≥ 15 Å. If any check fails, fix and re-verify before delivering.
+- **Post-build verification**: after ANY structure build, verify ONCE with `get_structure_info`: composition, atom count, cell angles (cubic=90°, hex=90/90/120°), vacuum ≥ 15 Å for slabs. One check per structure — do not add separate verification passes.
 
 ## build_surface_interface (heterojunction / interface construction)
 
@@ -79,61 +79,27 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
 
 ## add_hydrogens / passivation
 
-**Preferred**: use `passivate_surface.py` from **structure-manager** skill — it handles detection, placement, and verification in one call. Pass `-o <output>` to produce the file directly.
+**MANDATORY**: use `passivate_surface.py` from **structure-manager** skill — it handles detection, placement, and verification in one call. Pass `-o <output>` to produce the file directly. Do NOT write custom passivation scripts from scratch.
 - **⚠ BOTH surfaces mandatory**: always passivate top AND bottom. Si-H ≈ 1.48 Å, Ge-H ≈ 1.53 Å.
 - After passivation, verify with `assess_structure.py` and report: H count per surface, mean bond length, all surface atoms coordination = 4.
 
 ## Complex / defective bulk structures
 
-### γ-Al2O3 (defective spinel)
-**Fastest path** — run `build_gamma_al2o3.py` from **structure-manager** skill:
-```
-python build_gamma_al2o3.py [-o gamma_al2o3.cif] [--supercell 1 1 1]
-```
-Builds the Pinto/Digne Fd-3m model (a≈7.91 Å, Al on 8a tet + 16d oct, O on 32e), removes excess octahedral Al for Al₂O₃ stoichiometry, maximizes vacancy spacing, and validates (Al:O ≈ 2:3, both tet/oct environments, min distance > 1.0 Å). Alternatively, search `mat_struct_db` for `Al2O3` spinel-like. **Save-early**: save unrelaxed CIF with task filename FIRST, then relax with MLIP (see below) using `build_calculator` — do NOT search for model files.
-
-### Other complex oxide structures
-- **Spinel** (MgAl2O4, Fe3O4, etc.): Fd-3m, cations on 8a (tetrahedral) + 16d (octahedral), anions on 32e.
-- **Perovskite** (SrTiO3, BaTiO3, etc.): Pm-3m ideal, Pnma/P4mm distorted. Use `build_bulk_structure_by_wyckoff` or fetch from DB.
-- **Garnet** (Y3Al5O12, etc.): Ia-3d. Large unit cell (~160 atoms). Prefer DB fetch.
+- **γ-Al₂O₃**: run `build_gamma_al2o3.py` from **structure-manager** skill (`python build_gamma_al2o3.py [-o gamma_al2o3.cif]`). Save CIF first, then optionally relax with MLIP.
+- **Other complex oxides** (spinel, perovskite, garnet): use `build_bulk_structure_by_wyckoff` or fetch from `mat_struct_db`.
 
 ## MLIP-based structure relaxation
 
-When a task requires relaxing a structure with MLIP/DPA models:
-- Copy `_calculator.py` from `matmaster/skills/mlips/scripts/` into the working directory.
-- Write a self-contained Python script using:
-  ```python
-  from _calculator import build_calculator
-  calc = build_calculator("DPA3.1-3M")  # or with head="OC22" for catalysis
-  ```
-- Use ASE's `LBFGS` optimizer with `ExpCellFilter` for cell+position relaxation (or `BFGS` for positions-only).
-- Submit to Bohrium with **image `registry.dp.tech/dptech/dpa-calculator:e13a296f`** and **machine `c16_m64_1 * NVIDIA 4090`**.
-- **Do NOT waste turns searching for calculator backends** (no `glob.glob("/opt/**/*.pb")`, no trying multiple import paths). Use `build_calculator` from `_calculator.py` directly — it handles model discovery.
-- **Save-early pattern**: save the unrelaxed structure under the task-required filename BEFORE submitting relaxation. Overwrite only if relaxation succeeds and produces physically reasonable results (fmax < threshold, no broken bonds). This ensures a deliverable exists even if relaxation times out.
-
-## Geometry verification (after any structure build)
-
-After building or modifying any structure, verify key geometric properties before delivering:
-- **Bond angles**: for tetrahedral sp3 centers (C, Si, Ge), angles should be near 109.47°. For planar sp2 centers, near 120°. If angles deviate by more than 5°, diagnose and fix.
-- **Cell angles**: for cubic systems all angles must be 90°; for hexagonal α=β=90°, γ=120°. If the built structure has wrong cell angles, the construction method or parameters are incorrect — rebuild.
-- **Forces/energy**: if a relaxation step is included and max force exceeds the threshold (typically 0.05 eV/Å for production), the relaxation did not converge. Report this and either continue relaxation or note the limitation.
-- **Atom count**: verify total atoms match expectations from composition × supercell size.
+See **mlips** skill for full guidance. Quick reference: copy `_calculator.py` from `matmaster/skills/mlips/scripts/`, use `from _calculator import build_calculator; calc = build_calculator("DPA3.1-3M")` (add `head="OC22"` for catalysis). Submit to Bohrium with image `registry.dp.tech/dptech/dpa-calculator:e13a296f`, machine `c16_m64_1 * NVIDIA 4090`. Do NOT search for calculator backends — `build_calculator` handles model discovery. **Save-early**: save unrelaxed structure under task filename BEFORE relaxation.
 
 ## CO2RR / catalysis surface+adsorbate workflow
 
 For CO2RR, HER, OER, and similar catalysis structure-preparation tasks:
-1. **Build or fetch bulk** → verify composition with `get_structure_info`.
-2. **Cut slab** → use exact layer count from the reference/task specification. Verify with `get_structure_info`.
-3. **Add adsorbate** → use `build_surface_adsorbate` with appropriate site and height. For CO2RR common adsorbates: HCOO (formate, bidentate), CO (atop), COOH (carboxyl), H, OH, H2O.
-4. **Save each intermediate** (bulk, slab, slab+adsorbate) as separate files — the task often requires multiple deliverables.
-5. **Token economy**: do NOT search the web for standard adsorbate molecules (CO, OH, H2O, HCOO). Build them directly with `build_molecule_structures_from_smiles` or write XYZ coordinates in one Bash call.
-6. **Adsorbate geometry**: verify the adsorbate-surface distance is physically reasonable (typically 1.5–2.5 Å for chemisorption, 2.5–3.5 Å for physisorption). Report key distances in the final answer.
+1. **Build or fetch bulk** → **cut slab** (exact layer count from task spec) → **add adsorbate** (`build_surface_adsorbate`). Common adsorbates: CO (atop), HCOO (bidentate), COOH, H, OH, H2O.
+2. **Verify once** after slab and after final structure with `get_structure_info` — do not verify every intermediate separately.
+3. **Save each intermediate** (bulk, slab, slab+adsorbate) as separate files.
+4. **Token economy**: build standard adsorbates directly via `build_molecule_structures_from_smiles` or inline XYZ — do NOT search the web.
+5. Report key adsorbate-surface distances (1.5–2.5 Å chemisorption, 2.5–3.5 Å physisorption).
 
 ### MLIP-based adsorption energy calculations
-When the task requires computing adsorption energies (E_ads) with MLIP/DPA models:
-- Write ONE consolidated Python script that loops over all surfaces × adsorbates, computes E_ads = E(slab+ads) − E(slab) − E(gas), and prints a complete results table.
-- The script MUST use `from _calculator import build_calculator` (copy `_calculator.py` from `matmaster/skills/mlips/scripts/` into the input directory).
-- For catalysis surfaces use head `OC22`: `build_calculator("DPA3.1-3M", head="OC22")`.
-- Submit to Bohrium with **image `registry.dp.tech/dptech/dpa-calculator:e13a296f`** and **machine `c16_m64_1 * NVIDIA 4090`**. Do NOT use ABACUS/CP2K/other images — they lack ASE and deepmd-kit.
-- If the job fails (e.g. missing module), check the image first. ASE-dependent scripts require the DPA image.
-- **Time budget**: these tasks involve structure building + Bohrium submission + result parsing. Submit the computation job as early as possible — minimize turns spent on setup/verification before submission. Save intermediate structures early so partial credit is secured even if the computation times out.
+Write ONE consolidated script looping surfaces × adsorbates: E_ads = E(slab+ads) − E(slab) − E(gas). Use `build_calculator("DPA3.1-3M", head="OC22")` (copy `_calculator.py` from mlips skill). Submit to Bohrium with DPA image. Submit early; save intermediate structures for partial credit.
