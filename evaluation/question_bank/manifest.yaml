@@ -135,10 +135,6 @@ banks:
     questions: 5
 
   # --- Polymer projects ---
-  - path: "polymer/PM_proj_001_20260408.yaml"
-    capability: "workflow_orchestration"
-    questions: 1
-
   - path: "polymer/PM_proj_002_20260408.yaml"
     capability: "workflow_orchestration"
     questions: 1

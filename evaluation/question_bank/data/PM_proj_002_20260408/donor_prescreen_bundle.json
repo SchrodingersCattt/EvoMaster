@@ -1,0 +1,98 @@
+{
+  "title": "Donor-polymer pre-screening for a Y6-like acceptor window",
+  "task": "polymer_donor_prescreening",
+  "acceptor_context": {
+    "name": "Y6-like acceptor window",
+    "target_acceptor_lumo_eV": -4.10,
+    "design_goal": "Balance Voc, absorption, and conformational order."
+  },
+  "systems": [
+    {
+      "name": "PM6",
+      "qm": {
+        "homo_eV": -5.45,
+        "lumo_eV": -3.36,
+        "oligomer_gap_eV": 2.09,
+        "extrapolated_gap_eV": 1.92
+      },
+      "conformation": {
+        "mean_backbone_dihedral_deg": 21.0,
+        "planarity_index": 0.76,
+        "disorder_index": 0.28
+      },
+      "ranking": {
+        "voc_proxy_score": 0.84,
+        "packing_score": 0.73,
+        "overall_score": 0.79
+      }
+    },
+    {
+      "name": "PTB7-Th",
+      "qm": {
+        "homo_eV": -5.23,
+        "lumo_eV": -3.32,
+        "oligomer_gap_eV": 1.98,
+        "extrapolated_gap_eV": 1.88
+      },
+      "conformation": {
+        "mean_backbone_dihedral_deg": 26.0,
+        "planarity_index": 0.69,
+        "disorder_index": 0.35
+      },
+      "ranking": {
+        "voc_proxy_score": 0.68,
+        "packing_score": 0.62,
+        "overall_score": 0.64
+      }
+    },
+    {
+      "name": "D18",
+      "qm": {
+        "homo_eV": -5.36,
+        "lumo_eV": -3.39,
+        "oligomer_gap_eV": 1.95,
+        "extrapolated_gap_eV": 1.84
+      },
+      "conformation": {
+        "mean_backbone_dihedral_deg": 15.0,
+        "planarity_index": 0.84,
+        "disorder_index": 0.22
+      },
+      "ranking": {
+        "voc_proxy_score": 0.79,
+        "packing_score": 0.88,
+        "overall_score": 0.86
+      }
+    },
+    {
+      "name": "P3HT",
+      "qm": {
+        "homo_eV": -5.02,
+        "lumo_eV": -2.98,
+        "oligomer_gap_eV": 2.04,
+        "extrapolated_gap_eV": 1.95
+      },
+      "conformation": {
+        "mean_backbone_dihedral_deg": 31.0,
+        "planarity_index": 0.58,
+        "disorder_index": 0.47
+      },
+      "ranking": {
+        "voc_proxy_score": 0.52,
+        "packing_score": 0.46,
+        "overall_score": 0.44
+      }
+    }
+  ],
+  "notes": [
+    "Use the extrapolated gap and HOMO jointly; the most negative HOMO is not automatically the best overall donor.",
+    "Lower mean backbone dihedral and lower disorder_index indicate better packing potential in this curated bundle."
+  ],
+  "expected_deliverables": [
+    "ranking_table",
+    "gap_extrapolation",
+    "conformational_note",
+    "shortlist",
+    "uncertainty_note"
+  ]
+}
