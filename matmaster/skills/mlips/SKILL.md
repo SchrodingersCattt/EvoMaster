@@ -146,6 +146,23 @@ Output: `adsorption_results.json` (all energies + E_ads table), `{slab}_{ads}_re
 - **MD timestep**: 0.5 fs (0.0005 ps) is safe for most systems; light elements (H) may need 0.2 fs
 - **Phonon mesh**: Higher `--mesh` gives better DOS but longer computation; 40 is a good default
 
+## Multi-Step Workflow Orchestration
+
+For complex tasks requiring multiple MLIP calculations (adsorption studies, MLIP training data generation, comparative analyses):
+
+### Adsorption Energy Workflow
+1. **Prepare slab(s)**: Obtain or build surface slabs. Optimize with `optimize_structure.py --relax-cell` first if not pre-relaxed.
+2. **Copy scripts**: ALWAYS copy BOTH `_calculator.py` AND the task script to the working directory. Missing `_calculator.py` → immediate import error.
+3. **Run adsorption**: Use `--head OC22` for catalysis/surface tasks (this is the default for `calculate_adsorption.py`). Specify all slabs and adsorbates in one command for automatic cross-combination.
+4. **Analyze results**: Read `adsorption_results.json` — report E_ads (eV) for each slab×adsorbate pair. Include the energy decomposition (E_combined, E_slab, E_gas).
+5. **Cross-reference**: For multi-surface studies, compare trends across surfaces/adsorbates. Report the complete energy table with physical interpretation (e.g., binding strength ranking, preferred adsorption sites).
+
+### General Multi-Step Rules
+- Each script produces `result.json` — always read it after job completion and extract key numerical results.
+- For sequential steps (optimize → phonon, optimize → elastic), use the `*_optimized.cif` output as input to the next step.
+- When comparing across models or structures, keep all other parameters identical.
+- Report derived quantities with supporting numerical evidence, not just qualitative statements.
+
 ## Submission Workflow
 
 1. Prepare structure file (CIF/POSCAR/XYZ)

@@ -173,6 +173,24 @@ Consult **`references/output_params.md`** for the full parameter table, output f
 - **Work function**: `out_pot 2` for electrostatic potential
 - **Relax/cell-relax**: `cal_force 1`, `cal_stress 1`
 
+## Per-Task Parameter Checklist
+
+Before writing INPUT, verify these parameters are present. Missing any → ABACUS may run incorrectly or produce no useful output.
+
+**Every task**: `ntype` (= species count in STRU), `pseudo_dir ./`, `orbital_dir ./` (LCAO only), `ecutwfc`, `basis_type`, `scf_thr 1.0e-7`, `scf_nmax 100`
+
+| Task | Additional REQUIRED parameters |
+|------|-------------------------------|
+| SCF (metals) | `smearing_method gauss`, `smearing_sigma 0.01` |
+| Relax | `cal_force 1`, `force_thr_ev 0.01` |
+| Cell-relax | `cal_force 1`, `cal_stress 1`, `stress_thr 5.0` |
+| Band (NSCF) | `init_chg file`, `symmetry 0`, `nbands`, `out_band 1` + line-mode KPT |
+| DOS (NSCF) | `init_chg file`, `symmetry 0`, `nbands`, `out_dos 1`, `dos_edelta_ev`, `dos_sigma`, `dos_nche` + dense KPT |
+| Electrostatic pot | `out_pot 2`; for slabs add `efield_flag 1`, `dip_cor_flag 1`, `efield_amp 0.0` |
+| MD | `md_type 1` (NVT), `md_nstep`, `md_dt`, `md_tfirst` |
+
+**Common mistakes**: (1) `ntype` not matching species count in STRU → crash; (2) missing `pseudo_dir`/`orbital_dir` → files not found; (3) LCAO without `NUMERICAL_ORBITAL` section in STRU → crash; (4) `out_chg 1` forgotten in SCF before NSCF → NSCF recomputes from scratch; (5) `out_pot 2` omitted for work function task → no `ElecStaticPot.cube` output.
+
 ## Required Files
 
 - **INPUT**: computation parameters (generated or user-provided)
