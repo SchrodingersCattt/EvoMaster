@@ -134,10 +134,23 @@ class DevshellAgentLoop:
     def _detect_p0_regression_from_eval_dirs(
         state: AgentLoopSharedState, loop_log: TextIO
     ) -> bool:
-        """Detect P0 regression: p0_gate dir exists but remaining dir does not."""
+        """Detect P0 regression: p0_gate dir exists but remaining dir does not.
+
+        ``run_devshell_eval`` two-phase layout is ``<tag>/p0_gate`` and
+        ``<tag>/remaining`` as **siblings**. ``eval_output_dirs`` records those
+        paths (or a single-phase ``<tag>``). We must resolve ``remaining`` as
+        ``p0_gate.parent / "remaining"``, not ``p0_gate / "remaining"``.
+        """
         for d in state.eval_output_dirs:
-            p0_gate_dir = d if d.name == "p0_gate" else (d / "p0_gate")
-            remaining_dir = d if d.name == "remaining" else (d / "remaining")
+            if d.name == "p0_gate":
+                p0_gate_dir = d
+                remaining_dir = d.parent / "remaining"
+            elif d.name == "remaining":
+                p0_gate_dir = d.parent / "p0_gate"
+                remaining_dir = d
+            else:
+                p0_gate_dir = d / "p0_gate"
+                remaining_dir = d / "remaining"
             if p0_gate_dir.is_dir() and not remaining_dir.is_dir():
                 log_line(
                     f"P0 gate directory found without remaining: {p0_gate_dir}",
