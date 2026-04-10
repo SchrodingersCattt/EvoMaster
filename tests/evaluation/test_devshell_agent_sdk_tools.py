@@ -391,6 +391,9 @@ def test_optimization_user_message_guides_system_prompt_candidates_to_proposal(
         in message
     )
     assert "`proposed_matmaster_exps_changes.md`" in message
+    assert "Target file" in message
+    assert "Existing rule(s) to replace or merge" in message
+    assert "Prompt budget impact" in message
 
 
 def test_optimization_user_message_guides_skill_and_tool_candidates(

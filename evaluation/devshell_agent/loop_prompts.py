@@ -90,6 +90,13 @@ SYSTEM_PROMPT_OPTIMIZATION = """你是 MatMaster 仓库内的 **DevShell 评测�
   - `direct.toml`：跨任务执行与交付契约；
   - 领域 workflow、软件专属步骤、题目类技巧：默认应改 Skills、tool descriptions、脚本或模板，不应抬升到 exp。
 - 任何 `matmaster/exps/` 提案都必须显式写出：**为何不能放到 skill / tool 层**、准备替换或合并哪些旧规则、预期跨题收益与 prompt 膨胀风险。不要只写“再加一条规则”。
+- 写入 `proposed_matmaster_exps_changes.md` 时，使用固定模板并逐项填写：
+  - `Target file`
+  - `Existing rule(s) to replace or merge`
+  - `Proposed text`
+  - `Why not skill/tool layer`
+  - `Expected cross-task benefit`
+  - `Prompt budget impact`
 
 ## ``matmaster/skills/`` 分层约束
 - 若修改 `matmaster/skills/`，先判断内容应落在哪一层；不要把“能写进 Skill”误解为“都写进 `SKILL.md`”。

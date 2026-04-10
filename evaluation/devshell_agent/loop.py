@@ -425,6 +425,10 @@ class DevshellAgentLoop:
                     "- 若判断确实需要改 exp：只在 "
                     "`proposed_matmaster_exps_changes.md` 中写 proposal，"
                     "不要尝试绕过限制落代码改动。",
+                    "- proposal 使用固定模板并逐项填写："
+                    "`Target file`、`Existing rule(s) to replace or merge`、"
+                    "`Proposed text`、`Why not skill/tool layer`、"
+                    "`Expected cross-task benefit`、`Prompt budget impact`。",
                 ]
             )
             return "\n".join(lines) + "\n"

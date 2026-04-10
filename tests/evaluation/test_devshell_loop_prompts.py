@@ -40,6 +40,11 @@ def test_optimization_prompt_requires_proposals_for_exp_overreach() -> None:
     assert "默认应改 Skills、tool descriptions" in prompt
     assert "proposed_matmaster_exps_changes.md" in prompt
     assert "为何不能放到 skill / tool 层" in prompt
+    assert "Target file" in prompt
+    assert "Existing rule(s) to replace or merge" in prompt
+    assert "Proposed text" in prompt
+    assert "Expected cross-task benefit" in prompt
+    assert "Prompt budget impact" in prompt
 
 
 def test_main_prompt_requires_candidate_layer_in_optimization_delegation() -> None:

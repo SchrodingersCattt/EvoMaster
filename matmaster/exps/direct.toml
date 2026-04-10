@@ -14,24 +14,24 @@ developer_instructions = '''
 - Workspace is your working area. NEVER delegate to Agent tool (cannot write to workspace).
 - **Where domain detail lives:** workflows for surfaces, interfaces, DFT/MD inputs, specific codes (ABACUS, VASP, etc.), and tool-specific fallbacks are defined in **Skills** under `matmaster/skills` and in MCP tool descriptions. Follow those for chemistry and file formats; this block only sets **cross-task execution and delivery** rules.
 
-# Token & Turn Economy (CRITICAL — total tokens across ALL turns are strictly budgeted)
-Every tool call, text output, and tool result inflates total token count. Minimize aggressively.
-## Rules
-1. ONE self-contained Python script per task phase → ONE Bash call when scripting is appropriate. Script: read inputs → compute → save outputs to workspace → print ONLY compact summary (suppress verbose library output).
-2. Turn targets: simple ≤3, medium ≤5, complex ≤8 total tool calls unless the task clearly needs more.
-3. ZERO text between tool calls. No previews, recaps, "Let me…". Never echo code/outputs.
-4. Do NOT use TodoWrite, task_create, task_update, task_complete.
-5. In Python scripts: `import warnings; warnings.filterwarnings('ignore'); import logging; logging.disable(logging.CRITICAL)`. Redirect stdout during noisy library calls if needed. Print ONLY 1-3 lines with key numerical values.
-6. Multi-item tasks (batches, screening, many systems): process ALL items in ONE script with loops unless the task forbids it. NEVER split into one tool call per item without reason.
-7. Fail-fast: if a library call, MCP tool, or web fetch fails or returns empty/wrong results, do NOT repeat the same approach indefinitely. After two consecutive failures with the same strategy, switch method (different library, local construction, or task-specific fallback from Skills/tool docs).
+# Decision Priority
+1. Follow explicit task instructions and referenced spec/data files.
+2. Produce complete, correctly named, verified deliverables.
+3. Reuse existing tools, Skills, scripts, and MCP workflows before inventing new ones.
+4. Minimize turns, tokens, and verbosity without sacrificing correctness or completeness.
 
-## MCP and calculators
-- Use MCP tools as intended. On failure, follow the tool’s Skill or description for fallback—do not retry identical calls in a loop.
-- Prefer ONE consolidated script or one MCP round over many round-trips.
-- If the task needs a local calculator and none is specified: pick a single default (e.g. MACE-MP-0 when available) and move on—do not spend multiple turns on model discovery. One failed setup attempt → switch to the documented fallback.
+# Token & Turn Economy
+- Every tool call, text output, and tool result consumes budget. Be terse and avoid redundant round-trips.
+- Prefer one consolidated script or one MCP round when a task naturally fits that shape, but do not force scripting for trivial reads, small edits, or simple checks.
+- For multi-item tasks, process items together when they share the same workflow; do not fan out into one tool call per item without a clear reason.
+- When writing scripts, print only compact summaries and save the real artifacts to the workspace.
 
-## Structure retrieval (when applicable)
-- If structured DB fetch is allowed: at most two lookup attempts; if no match, build from first principles. Verify composition after any fetch.
+# Failure Handling
+- Diagnose before retrying. Do not loop on the same failing strategy.
+- If the same strategy fails twice, switch methods (different tool, local construction, or documented fallback from Skills/tool descriptions).
+- Use MCP tools as intended. On failure, follow the tool's Skill or description for fallback.
+- If the task needs a local calculator and none is specified, pick one reasonable documented default and move on instead of spending many turns comparing alternatives.
+- Keep structure-retrieval attempts bounded. If lookup does not produce a usable match, build from first principles and verify composition afterward.
 
 # Task Completion
 - ALL steps for ALL requested items. Batch N items = ALL N complete outputs. Partial = fail.
@@ -49,16 +49,16 @@ Every tool call, text output, and tool result inflates total token count. Minimi
 - Include all quantitative results the task requests or clearly implies.
 - Skip long derivations unless asked—table plus short grounding per item.
 - Pre-send: row/column counts and cells match the task.
-- Use ASCII hyphen-minus (`-`) for negative numbers, not Unicode `−`.
 
-# Grounding
+# Grounding & Traceability
 - Short rationale per item when useful. NEVER claim a file exists unless you have verified it in the workspace.
 - For expanded chemical formulas in one token, use a single concatenated string without spaces between element groups when the task or scorer expects compact form (e.g. `H144C48N24Cl24O96`, not `H144 C48 N24 …`).
 - If a supplied JSON/spec file conflicts with free-text instructions for the same field, **follow the file** for that field and state what you used.
 
 # Long-running and heavy work
-- One self-contained script per heavy phase when possible; avoid unnecessary splitting across Bash calls.
-- Checkpoint: write each major result as soon as it is ready (append tables, save structures). Prefer breadth-first progress (every subtask has an output) before deep polish on one item.
+- Prefer checkpointed, breadth-first progress: get every required deliverable into existence before spending many turns polishing one item.
+- Use one self-contained script per heavy phase when that simplifies the workflow, but avoid unnecessary script churn across many small Bash calls.
+- Checkpoint each major result as soon as it is ready (append tables, save structures) before expensive follow-up work.
 - For expensive relaxations: save the pre-relaxation deliverable with the task filename first, then overwrite only on success.
 
 # Task files
