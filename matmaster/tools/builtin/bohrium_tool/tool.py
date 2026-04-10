@@ -215,11 +215,15 @@ class BohriumTool(BuiltinTool):
     exposed_to_model: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 0
 
+    # prompt() keeps workflow + cross-skill rules only. Per-software image/machine/cmd
+    # belong in matmaster/skills/<name>/SKILL.md — do not paste full default tables here
+    # (duplicates skills, drifts on tag bumps; see evaluation/AGENTS_evaluation.md DevShell).
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return (
             '## Bohrium tool usage\n'
             '- Load the corresponding software skill first (cp2k, qe, abacus, orca, '
-            'lammps, gromacs, pyscf, abinit, pyatb) to obtain image, machine, and cmd.\n'
+            'lammps, gromacs, pyscf, abinit, pyatb, mlips) to obtain image, machine, '
+            'and cmd.\n'
             '- submit: cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
             '- poll: single-shot status query only. It returns immediately and does '
             'not download artifacts.\n'
@@ -230,21 +234,9 @@ class BohriumTool(BuiltinTool):
             'asynchronous; follow up with poll to confirm terminal state. \n'
             '- When image or machine is unknown, call list_images / list_machines first.\n'
             '\n'
-            '### Common software defaults\n'
-            '| Software | Image | Machine | Command |\n'
-            '|----------|-------|---------|--------|\n'
-            '| **MLIP/DPA** (ASE+deepmd) | `registry.dp.tech/dptech/dpa-calculator:e13a296f` '
-            '| `c16_m64_1 * NVIDIA 4090` | `python <script>.py > log 2>&1` |\n'
-            '| ABACUS | `registry.dp.tech/dptech/abacus:LTSv3.10.1` '
-            '| `c32_m128_cpu` | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |\n'
-            '| CP2K | `registry.dp.tech/dptech/cp2k:2024.1` '
-            '| `c32_m128_cpu` | `OMP_NUM_THREADS=1 mpirun -np 32 cp2k.popt -i input.inp > log 2>&1` |\n'
-            '| QE | `registry.dp.tech/dptech/quantum-espresso:7.1` '
-            '| `c32_m128_cpu` | `OMP_NUM_THREADS=1 mpirun -np 32 pw.x -i pw.in > log 2>&1` |\n'
-            '\n'
-            'The **MLIP/DPA image** includes deepmd-kit, ASE, phonopy, pymatgen pre-installed. '
-            'For ANY Python script that imports ASE or uses DPA/MACE/deepmd calculators, '
-            'you MUST use this image — other images (ABACUS, CP2K, etc.) do NOT have ASE/deepmd.\n'
+            'Python that imports ASE or uses DPA/MACE/deepmd calculators must use the '
+            'dpa-calculator image from the mlips skill; ABACUS/CP2K/QE images lack '
+            'ASE/deepmd.\n'
         )
 
     def _build_context(self, *, require_project: bool = False) -> BohriumContext:

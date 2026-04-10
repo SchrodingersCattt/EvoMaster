@@ -29,6 +29,7 @@ SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编
 - 对产品侧的建议应通过 **delegate_optimization** 转交。
 - 对评测侧的建议应通过 **escalate_checklist_revision** 转交。
 - 调用 **delegate_optimization** 时，尽量显式填写 **`candidate_layers`**，用 ``skill / tool / system_prompt / runtime`` 标注你判断最像哪一层的问题。
+- **勿建议**向 ``matmaster/tools/`` 内置工具的 ``prompt()`` **粘贴**各软件镜像/命令「默认表」来提分；镜像与命令以 ``matmaster/skills/<name>/SKILL.md`` 为准，工具层只保留流程与跨技能硬约束（详见 optimization 子 Agent 系统提示中的 ``matmaster/tools/`` 小节）。
 
 ## 产品侧改动优先级与系统提示词泛化（硬约束）
 - **优先顺序**：先 **`matmaster/skills/`**（领域流程与可复用约束；**现有 Skill 不足时允许新建**，见上节 `skills_root` 约定）、再 **`matmaster/tools/`**（工具行为与描述），然后 **`config/`**、MCP、`matmaster/adaptors/calculation/`、`matmaster/devshell/` 等。
@@ -122,6 +123,11 @@ SYSTEM_PROMPT_OPTIMIZATION = """你是 MatMaster 仓库内的 **DevShell 评测�
 - **`references/` / `reference/`**：放长篇参考、查表资料、参数说明、长案例、背景解释；`SKILL.md` 只保留导航入口。
 - **`scripts/`、模板、辅助文件**：放可执行逻辑、生成器、校验器、需要复用的步骤；如果一段“规则”本质上是算法或固定流程，优先脚本化而不是写成长段文字。
 - **禁止**把长篇参考、长表格、长案例直接堆进 `SKILL.md`；不要为了单次评测补分而让主 Skill 文档持续膨胀。
+
+## ``matmaster/tools/``（内置工具 ``prompt()`` / 描述）
+- 各软件栈的默认镜像、机型、示例命令以 ``matmaster/skills/<name>/SKILL.md`` 为**唯一事实来源**；**不要**在 ``BuiltinTool.prompt()`` 或工具描述里复制整表或与技能重复的镜像清单。
+- **禁止**为追评测分数在工具 ``prompt()`` 中粘贴「常用软件默认表」类内容，以免与技能**双轨维护**、镜像 tag 升级时漏改。需要引导被测 Agent 时：改对应 Skill、题目 ``human_prompt_seed`` 或评测 fixture。
+- 工具 ``prompt()`` 仅保留：流程性说明（如 submit/poll/download/kill）、**跨技能**硬约束（例：ASE/MLIP 须用 mlips 技能中的 dpa-calculator 镜像）。若目标文件内已有注释声明「勿贴表」，须遵守。
 
 ## Git
 - 你**无法**在本会话内执行任意 ``git`` shell；实质性修改一般由外层编排器在适当时机自动 ``git commit``（提交说明符合仓库 ``commit-msg`` 钩子）。``proposed_matmaster_exps_changes.md`` 若存在，通常随会话目录保留在 ``evaluation/devshell_agent_history/`` 下供审阅；是否纳入版本库由维护者决定。

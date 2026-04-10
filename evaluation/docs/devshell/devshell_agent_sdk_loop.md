@@ -62,6 +62,7 @@ uv run python evaluation/scripts/devshell/run_devshell_agent_loop.py \
 
 ## 实现位置
 
+- `evaluation/devshell_agent/loop_prompts.py`：主 Agent / checklist / **optimization** 子 Agent 的系统提示；其中 optimization 含对 `matmaster/tools/` 内置 `prompt()` 的约束（勿向工具贴与技能重复的镜像/命令大表，见 `SYSTEM_PROMPT_OPTIMIZATION` 的 ``matmaster/tools/`` 小节）。
 - `evaluation/devshell_agent/subprocess_runner.py`：`DevshellEvalSubprocess`（组装 argv、子进程、`RunDevshellEvalParams`）
 - `evaluation/devshell_agent/sdk_tools.py`：`MatmasterEvalMcpToolkit`（`build_mcp_server` / `allowed_tool_names`）
 - `evaluation/devshell_agent/loop.py`：`DevshellAgentLoop`（`ClaudeSDKClient` 多轮 `query`）、`AgentLoopConfig`
