@@ -68,6 +68,10 @@ def _sdk_tools_module():
     return importlib.import_module("evaluation.devshell_agent.sdk_tools")
 
 
+def _sdk_tools_eval_run_module():
+    return importlib.import_module("evaluation.devshell_agent.sdk_tools_eval_run")
+
+
 def _build_state(tmp_path: Path) -> AgentLoopSharedState:
     state = AgentLoopSharedState(
         repo_root=tmp_path,
@@ -139,6 +143,7 @@ def test_run_devshell_eval_submits_immediately_after_run(tmp_path: Path) -> None
         encoding="utf-8",
     )
 
+    qb_mod = importlib.import_module("evaluation.devshell_agent.question_bank_ids")
     with (
         patch.object(
             toolkit._subprocess,
@@ -147,10 +152,11 @@ def test_run_devshell_eval_submits_immediately_after_run(tmp_path: Path) -> None
             return_value=(0, "stdout\n", "stderr\n"),
         ) as mock_run,
         patch.object(
-            _sdk_tools_module(),
+            _sdk_tools_eval_run_module(),
             "run_score_devshell_tasks_submit",
             return_value=(0, "", ""),
         ) as mock_submit,
+        patch.object(qb_mod, "collect_p0_question_ids", return_value=[]),
     ):
         result = asyncio.run(toolkit._run_devshell_eval({"iteration_tag": "iter_01"}))
 
@@ -178,6 +184,7 @@ def test_run_devshell_eval_skips_immediate_submit_when_pending_only_disabled(
     toolkit_cls = _sdk_tools_module().MatmasterEvalMcpToolkit
     toolkit = toolkit_cls(state)
 
+    qb_mod = importlib.import_module("evaluation.devshell_agent.question_bank_ids")
     with (
         patch.object(
             toolkit._subprocess,
@@ -186,10 +193,11 @@ def test_run_devshell_eval_skips_immediate_submit_when_pending_only_disabled(
             return_value=(0, "stdout\n", "stderr\n"),
         ),
         patch.object(
-            _sdk_tools_module(),
+            _sdk_tools_eval_run_module(),
             "run_score_devshell_tasks_submit",
             return_value=(0, "", ""),
         ) as mock_submit,
+        patch.object(qb_mod, "collect_p0_question_ids", return_value=[]),
     ):
         result = asyncio.run(
             toolkit._run_devshell_eval(

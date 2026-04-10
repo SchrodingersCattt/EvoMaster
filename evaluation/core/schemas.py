@@ -78,6 +78,7 @@ AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
 CapabilityLiteral = Literal[
     'knowledge_recall',
     'structure_construction',
+    'structure_retrieval',
     'property_prediction',
     'workflow_orchestration',
     'data_diagnosis',
