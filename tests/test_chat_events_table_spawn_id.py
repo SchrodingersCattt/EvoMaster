@@ -121,3 +121,76 @@ def test_events_service_get_session_events_passes_include_spawn() -> None:
     table.reset_mock()
     svc.get_session_events("sid-2", include_spawn=True)
     table.get_session_events.assert_called_once_with("sid-2", include_spawn=True)
+
+
+def test_get_bohrium_events_pairs_tool_call_and_result(
+    table_with_mocks: tuple[ChatEventsTable, MagicMock],
+) -> None:
+    table, cursor = table_with_mocks
+    ts = datetime(2026, 4, 8, 12, 0, 0)
+    cursor.fetchall.return_value = [
+        {
+            "type": "tool_call",
+            "content": (
+                '{"id":"c1","call_id":"c1","name":"Bohrium",'
+                '"args":{"action":"submit","job_name":"alpha"}}'
+            ),
+            "created_at": ts,
+        },
+        {
+            "type": "tool_result",
+            "content": (
+                '{"id":"c1","call_id":"c1","name":"Bohrium","status":"success",'
+                '"result":"{\\"job_id\\": \\"job-1\\", \\"status\\": \\"Submitted\\"}"}'
+            ),
+            "created_at": ts,
+        },
+        {
+            "type": "tool_call",
+            "content": (
+                '{"id":"c2","call_id":"c2","name":"Bohrium",'
+                '"args":{"action":"poll","job_id":"job-1"}}'
+            ),
+            "created_at": ts,
+        },
+        {
+            "type": "tool_result",
+            "content": (
+                '{"id":"c2","call_id":"c2","name":"Bohrium","status":"success",'
+                '"result":"{\\"job_id\\": \\"job-1\\", \\"status\\": \\"Running\\"}"}'
+            ),
+            "created_at": ts,
+        },
+        {
+            "type": "tool_call",
+            "content": '{"id":"c3","call_id":"c3","name":"bash","args":{"cmd":"pwd"}}',
+            "created_at": ts,
+        },
+        {
+            "type": "tool_result",
+            "content": (
+                '{"id":"c3","call_id":"c3","name":"bash","status":"success",'
+                '"result":"ok"}'
+            ),
+            "created_at": ts,
+        },
+    ]
+
+    out = table.get_bohrium_events("sess-bohrium")
+
+    assert out == [
+        {
+            "action": "submit",
+            "job_id": "job-1",
+            "status": "Submitted",
+            "job_name": "alpha",
+            "cached": False,
+        },
+        {
+            "action": "poll",
+            "job_id": "job-1",
+            "status": "Running",
+            "job_name": "",
+            "cached": False,
+        },
+    ]

@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from matmaster.bohrium.runtime import try_attach_local_bohrium_runtime_from_env
 from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.devshell.config import DevConfig
@@ -62,6 +63,7 @@ class DevRunner:
             llm_config=llm_config,
             run_meta={"source": "devshell"},
         )
+        try_attach_local_bohrium_runtime_from_env(session)
 
         # Exp config: use explicit exp override when provided, else derive from DevConfig.
         self._exp_config = (

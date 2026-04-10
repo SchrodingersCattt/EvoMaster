@@ -35,7 +35,7 @@ def _make_mcp_yaml(tmp_path: Path) -> None:
     (tmp_path / "mcp.yaml").write_text(
         yaml.dump(
             {
-                "path_adaptor": "calculation",
+                "calculation_preflight": "calculation",
                 "calculation_servers": ["mat_sg"],
             }
         )
@@ -157,7 +157,7 @@ class TestExpInitSkillTools:
         (tmp_path / "mcp.yaml").write_text(
             yaml.dump(
                 {
-                    "path_adaptor": "calculation",
+                    "calculation_preflight": "calculation",
                     "calculation_servers": ["mat_sg"],
                     "calculation_executors": {
                         "mat_sg": {
@@ -244,7 +244,7 @@ class TestExpInitSkillTools:
         mock_connector.assert_called_once_with(
             mcp_server_config={},
             mcp_config={
-                "path_adaptor": "calculation",
+                "calculation_preflight": "calculation",
                 "calculation_servers": ["mat_sg"],
             },
             session=ctx.session,

@@ -1,168 +1,153 @@
-"""Poll-focused tests for the builtin Bohrium tool."""
+"""Poll tests for Bohrium tool with registry-based throttle."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 
-import matmaster.tools.builtin.bohrium_tool.api as bohrium_api_module
-import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
+import matmaster.bohrium.client as bohrium_client_module
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
+from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
 from matmaster.tools.tool_result import ToolResult
-from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
-    _patch_bridge,
-)
+from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import _patch_bridge
 
 
-class TestBohriumPollExecution:
-    def test_poll_running_uses_sandbox_endpoint(self, tmp_path, monkeypatch):
+def _make_exec_ctx(registry: JobRegistry | None = None):
+    """Build a minimal exec_ctx with runner_state containing a registry."""
+    state = SimpleNamespace(
+        get=lambda key, default=None: (
+            registry if key == "bohrium_job_registry" else default
+        ),
+        set=lambda key, value: None,
+    )
+    return SimpleNamespace(
+        runner_state=state,
+        cancel_token=None,
+    )
+
+
+class TestPollWithRegistry:
+    def test_fresh_poll_calls_api_and_returns_next_check(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
-        get_calls: list[str] = []
+        registry = JobRegistry()
+        registry.register("job-1")
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
-            del base_url, access_key, params, timeout
-            get_calls.append(path)
-            return {'data': {'status': 1}}
+            return {"data": {"status": 1}}
 
-        monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
 
-        result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-123'}))
+        result = asyncio.run(
+            tool.execute_with_context(
+                {"action": "poll", "job_id": "job-1"},
+                _make_exec_ctx(registry),
+            )
+        )
 
         assert isinstance(result, ToolResult)
-        assert result.status == 'success'
         payload = json.loads(result.content)
-        assert payload['job_id'] == 'job-123'
-        assert payload['status'] == 'Running'
-        assert get_calls == ['/openapi/v1/sandbox/job/job-123']
+        assert payload["status"] == "Running"
+        assert payload["next_check_seconds"] == 30
+        assert payload.get("cached") is not True
+        assert registry.get("job-1").poll_count == 1
 
-    def test_poll_wait_retries_running_until_timeout(self, tmp_path, monkeypatch):
+    def test_throttled_poll_returns_cached(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
-        get_calls: list[str] = []
-        sleep_calls: list[float] = []
-        statuses = [1, 1, 1]
-        status_index = 0
+        registry = JobRegistry()
+        registry.register("job-1")
+        api_calls: list[str] = []
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
-            del base_url, access_key, params, timeout
-            nonlocal status_index
-            get_calls.append(path)
-            status = statuses[min(status_index, len(statuses) - 1)]
-            status_index += 1
-            return {'data': {'status': status}}
+            api_calls.append(path)
+            return {"data": {"status": 1}}
 
-        monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
-        import time as time_module
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
 
-        monkeypatch.setattr(bohrium_tool_module, 'time', time_module, raising=False)
-        monkeypatch.setattr(bohrium_tool_module.time, 'sleep', sleep_calls.append)
+        asyncio.run(
+            tool.execute_with_context(
+                {"action": "poll", "job_id": "job-1"},
+                _make_exec_ctx(registry),
+            )
+        )
+        assert len(api_calls) == 1
 
         result = asyncio.run(
-            tool.execute(
-                {
-                    'action': 'poll',
-                    'job_id': 'job-running',
-                    'wait': True,
-                    'max_wait_seconds': 10,
-                    'poll_interval_seconds': 5,
-                }
+            tool.execute_with_context(
+                {"action": "poll", "job_id": "job-1"},
+                _make_exec_ctx(registry),
             )
         )
 
-        assert result.status == 'success'
+        assert len(api_calls) == 1
         payload = json.loads(result.content)
-        assert payload['status'] == 'Running'
-        assert 'waited 10s' in payload['message']
-        assert get_calls == ['/openapi/v1/sandbox/job/job-running'] * 3
-        assert sleep_calls == [5, 5]
+        assert payload["cached"] is True
+        assert "seconds_until_fresh" in payload
 
-    def test_poll_running_without_wait_remains_single_shot(self, tmp_path, monkeypatch):
+    def test_terminal_status_not_throttled(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
-        get_calls: list[str] = []
+        registry = JobRegistry()
+        registry.register("job-1")
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
-            del base_url, access_key, params, timeout
-            get_calls.append(path)
-            return {'data': {'status': 1}}
+            return {"data": {"status": 2}}
 
-        monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
-
-        result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-789'}))
-
-        assert result.status == 'success'
-        payload = json.loads(result.content)
-        assert payload['status'] == 'Running'
-        assert get_calls == ['/openapi/v1/sandbox/job/job-789']
-
-    def test_poll_finished_returns_guidance_without_downloading(
-        self, tmp_path, monkeypatch
-    ):
-        tool = BohriumTool(workdir=tmp_path)
-
-        def fake_get(base_url, path, access_key, params=None, timeout=30):
-            del base_url, access_key, params, timeout
-            assert path == '/openapi/v1/sandbox/job/job-finished'
-            return {'data': {'status': 2}}
-
-        monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
-        _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
-
-        result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-finished'}))
-
-        assert result.status == 'success'
-        payload = json.loads(result.content)
-        assert payload['status'] == 'Finished'
-        assert 'action="download"' in payload['message']
-        assert 'result_dir' not in payload
-        assert 'files' not in payload
-
-    def test_poll_failed_returns_guidance_without_downloading(
-        self, tmp_path, monkeypatch
-    ):
-        tool = BohriumTool(workdir=tmp_path)
-        sleep_calls: list[float] = []
-
-        def fake_get(base_url, path, access_key, params=None, timeout=30):
-            del base_url, access_key, params, timeout
-            return {'data': {'status': -1}}
-
-        monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
-        _patch_bridge(monkeypatch)
-        monkeypatch.setattr(bohrium_api_module, '_get', fake_get)
-        import time as time_module
-
-        monkeypatch.setattr(bohrium_tool_module, 'time', time_module, raising=False)
-        monkeypatch.setattr(bohrium_tool_module.time, 'sleep', sleep_calls.append)
-
-        result = asyncio.run(tool.execute({'action': 'poll', 'job_id': 'job-failed'}))
-
-        assert result.status == 'success'
-        payload = json.loads(result.content)
-        assert payload['status'] == 'Failed'
-        assert 'action="download"' in payload['message']
-        assert sleep_calls == []
-
-    def test_poll_rejects_result_dir_parameter(self, tmp_path, monkeypatch):
-        tool = BohriumTool(workdir=tmp_path)
-        monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
-        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
 
         result = asyncio.run(
-            tool.execute(
-                {
-                    'action': 'poll',
-                    'job_id': 'job-1',
-                    'result_dir': 'results/run_job-1',
-                }
+            tool.execute_with_context(
+                {"action": "poll", "job_id": "job-1"},
+                _make_exec_ctx(registry),
             )
         )
 
-        assert result.status == 'error'
-        assert 'no longer downloads artifacts' in result.content
-        assert 'action="download"' in result.content
+        payload = json.loads(result.content)
+        assert payload["status"] == "Finished"
+        assert "next_check_seconds" not in payload
+        assert registry.get("job-1").status == "finished"
+
+    def test_poll_without_registry_still_works(self, tmp_path, monkeypatch):
+        tool = BohriumTool(workdir=tmp_path)
+
+        def fake_get(base_url, path, access_key, params=None, timeout=30):
+            return {"data": {"status": 1}}
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
+
+        result = asyncio.run(
+            tool.execute_with_context(
+                {"action": "poll", "job_id": "job-1"},
+                _make_exec_ctx(None),
+            )
+        )
+
+        payload = json.loads(result.content)
+        assert payload["status"] == "Running"
+
+    def test_submit_registers_job(self, tmp_path):
+        tool = BohriumTool(workdir=tmp_path)
+        registry = JobRegistry()
+
+        result = tool._update_registry(
+            registry,
+            "submit",
+            {"job_name": "test-run"},
+            ToolResult(
+                status="success",
+                content=json.dumps({"success": True, "job_id": "job-99"}),
+            ),
+        )
+
+        assert isinstance(result, ToolResult)
+        rec = registry.get("job-99")
+        assert rec is not None
+        assert rec.status == "submitted"
+        assert rec.job_name == "test-run"

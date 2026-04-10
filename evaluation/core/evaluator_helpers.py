@@ -28,6 +28,10 @@ from evaluation.validators.structure_molcrys import (
     check_sc005_other_formulas_in_answer,
     verify_molecular_slab_layer_scaling,
 )
+from evaluation.validators.text_file import (
+    check_text_file_contains_all,
+    check_text_file_regex,
+)
 
 from .evidence import EvidenceBundle, TokenUsage
 from .schemas import (
@@ -528,6 +532,34 @@ def check_struct_file_count(
     )
 
 
+def check_checkcif_alerts(
+    *,
+    evidence: EvidenceBundle | None,
+    ref: ReferenceAnswer,
+) -> tuple[bool, str]:
+    """Evaluate checkcif_no_a_alerts: find CIF in workspace, run checkCIF.
+
+    ref.value must be a dict with optional keys:
+      - filename (str, default '*.cif'): glob pattern to find the CIF
+      - max_a_alerts (int, default 0): maximum allowed A-level alerts
+    """
+    from evaluation.validators.checkcif import check_checkcif_no_a_alerts
+
+    workspace_dir, _ = _get_workspace(evidence)
+    if workspace_dir is None:
+        return False, 'no workspace directory available in evidence'
+
+    val = ref.value or {}
+    filename = val.get('filename', '*.cif') if isinstance(val, dict) else '*.cif'
+    max_a_alerts = int(val.get('max_a_alerts', 0)) if isinstance(val, dict) else 0
+
+    return check_checkcif_no_a_alerts(
+        workspace_dir,
+        filename=filename,
+        max_a_alerts=max_a_alerts,
+    )
+
+
 def check_struct_file_surface_termination(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:
@@ -542,4 +574,45 @@ def check_struct_file_surface_termination(
         axis=str(cfg.get('axis', 'z')),
         side=str(cfg.get('side', 'top')),
         layer_tol_A=float(cfg.get('layer_tol_A', 0.5)),
+    )
+
+
+def check_text_file_contains_all_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    raw_tokens = cfg.get('tokens', [])
+    if not isinstance(raw_tokens, list) or not raw_tokens:
+        return False, "reference answer must provide non-empty 'tokens' list"
+    flags = str(cfg.get('flags', '')).lower()
+    case_sensitive = bool(cfg.get('case_sensitive', False))
+    if 'i' in flags:
+        case_sensitive = False
+    return check_text_file_contains_all(
+        ws,
+        filename=str(cfg.get('filename', '')),
+        tokens=[str(token) for token in raw_tokens],
+        case_sensitive=case_sensitive,
+        normalize_whitespace=bool(cfg.get('normalize_whitespace', True)),
+    )
+
+
+def check_text_file_regex_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    pattern = str(cfg.get('pattern', ''))
+    if not pattern:
+        return False, "reference answer must provide non-empty 'pattern'"
+    return check_text_file_regex(
+        ws,
+        filename=str(cfg.get('filename', '')),
+        pattern=pattern,
+        flags=str(cfg.get('flags', '')),
     )

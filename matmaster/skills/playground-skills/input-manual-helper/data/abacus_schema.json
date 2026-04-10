@@ -764,6 +764,160 @@
   },
   {
     "category": "output",
+    "default": 0,
+    "description": "Output electrostatic potential. 0: no output. 1: write local ionic potential. 2: write total (Hartree + local) electrostatic potential to OUT.suffix/ElecStaticPot.cube. Value 2 is used for work function analysis (vacuum level - Fermi energy).",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#out_pot",
+    "enum_values": [
+      "0",
+      "1",
+      "2"
+    ],
+    "name": "out_pot",
+    "param_type": "integer"
+  },
+  {
+    "category": "system",
+    "default": 0,
+    "description": "Enable gate field (compensating charge sheet) for charged slab calculations. 0: off. 1: on. Place a compensating charge at fractional coordinate zgate in the vacuum region. Used with efield_flag=1 and dip_cor_flag=1.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#gate_flag",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "gate_flag",
+    "param_type": "integer",
+    "requires": [
+      "efield_flag"
+    ]
+  },
+  {
+    "category": "system",
+    "default": 0.5,
+    "description": "Fractional z-coordinate for the compensating charge sheet when gate_flag=1. Should be in the vacuum region (far from the slab). Typical: 0.5-0.8.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#zgate",
+    "name": "zgate",
+    "param_type": "float",
+    "requires": [
+      "gate_flag"
+    ],
+    "valid_range": [
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "category": "system",
+    "default": 0,
+    "description": "Enable potential barrier block in vacuum region to prevent electron spillage toward the compensating charge. 0: off. 1: on. Requires gate_flag=1.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#block",
+    "enum_values": [
+      "0",
+      "1"
+    ],
+    "name": "block",
+    "param_type": "integer",
+    "requires": [
+      "gate_flag"
+    ]
+  },
+  {
+    "category": "system",
+    "default": 0.45,
+    "description": "Lower boundary (fractional z) of the potential barrier block. Only used when block=1.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#block_down",
+    "name": "block_down",
+    "param_type": "float",
+    "requires": [
+      "block"
+    ],
+    "valid_range": [
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "category": "system",
+    "default": 0.55,
+    "description": "Upper boundary (fractional z) of the potential barrier block. Only used when block=1.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#block_up",
+    "name": "block_up",
+    "param_type": "float",
+    "requires": [
+      "block"
+    ],
+    "valid_range": [
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "category": "system",
+    "default": 0.1,
+    "description": "Height of the potential barrier block in Ry. Only used when block=1. Prevents electron leakage into the vacuum near the compensating charge sheet.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#block_height",
+    "name": "block_height",
+    "param_type": "float",
+    "requires": [
+      "block"
+    ],
+    "unit": "Ry"
+  },
+  {
+    "category": "system",
+    "default": 0.5,
+    "description": "Position of the maximum of the sawtooth potential for dipole correction, in fractional coordinates along efield_dir. Should be in the vacuum region, away from the slab.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#efield_pos_max",
+    "name": "efield_pos_max",
+    "param_type": "float",
+    "requires": [
+      "efield_flag"
+    ],
+    "valid_range": [
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "category": "system",
+    "default": 0.1,
+    "description": "Decay width of the sawtooth potential for dipole correction, in fractional coordinates. Controls the smoothness of the potential step in the vacuum region.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#efield_pos_dec",
+    "name": "efield_pos_dec",
+    "param_type": "float",
+    "requires": [
+      "efield_flag"
+    ],
+    "valid_range": [
+      0.0,
+      0.5
+    ]
+  },
+  {
+    "category": "electronic",
+    "default": null,
+    "description": "Total number of electrons in the system. By default ABACUS uses the number from the pseudopotentials. Override to simulate charged systems (e.g. for gate_flag calculations). Value must be > 0.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#nelec",
+    "name": "nelec",
+    "param_type": "float",
+    "valid_range": [
+      0.0,
+      100000.0
+    ]
+  },
+  {
+    "category": "scf",
+    "default": 0.0,
+    "description": "Kerker preconditioning parameter for charge mixing. Setting mixing_gg0 > 0 (e.g. 1.5) enhances mixing for long-wavelength charge oscillations, which helps convergence for metallic and magnetic systems.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#mixing_gg0",
+    "name": "mixing_gg0",
+    "param_type": "float",
+    "valid_range": [
+      0.0,
+      10.0
+    ]
+  },
+  {
+    "category": "output",
     "default": 100,
     "description": "Frequency (steps) for printing MD energy to running_md.log. Smaller values generate more detailed output.",
     "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#printe",

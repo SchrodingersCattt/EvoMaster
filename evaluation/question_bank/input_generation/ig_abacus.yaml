@@ -2,19 +2,19 @@ version: v5
 capability: input_generation_abacus
 domain: elec
 questions:
-- id: IG_abacus_001_20260404v2
+- id: IG_abacus_001_20260409v4
   capability: input_generation_abacus
   domain: elec
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place empty-atom layers in vacuum, and write SCF INPUT with sparse k along vacuum.'
   human_prompt_seed: |
-    读取工作区中的 `base_slab.stru`（Fe 合金表面 slab，仅真实 Fe 原子，尚未做 BSSE 校正）。
+    工作区中提供了仅含真实 Fe 原子的表面 slab 结构（尚未做 BSSE 校正）。
 
-    请为 ABACUS LCAO 单点 SCF 准备输入文件，要求对 NAO 基组的 BSSE 做 ghost/empty atom 校正：
-    1) 在 `STRU` 中新增 `Fe_empty` 物种：与 Fe 相同的赝势与数值轨道文件，但价电子电荷为 0，empty 原子不设置磁矩。
-    2) 在 slab 两侧真空区域各布置一层 empty Fe（参考距最外层真实 Fe 约 2.0 Å；empty 原子在面内可均匀铺开）。
-    3) 生成配套 `INPUT`：`calculation scf`，`ecutwfc 100`，`nspin 2`，`basis_type lcao`；沿真空方向使用稀疏 k（例如 `kspacing` 在真空方向取 1.0，另两个方向可用 0.14），`scf_thr 1e-7`，`smearing_method gaussian`，`smearing_sigma 0.01`。
+    请准备 ABACUS LCAO 单点输入用于 NAO-BSSE 校正：
+    1) 在结构中引入 empty/ghost 物种用于补足基组。
+    2) 在真空区域布置 empty 原子层，保证位于 slab 外侧而不是埋入体内。
+    3) 生成与该场景匹配的 SCF INPUT，沿真空方向使用单点/稀疏采样。
 
-    将完整 `STRU` 写入 `STRU_bsse`，将 `INPUT` 写入 `INPUT_bsse`（当前工作目录）。
+    将结果写入当前目录：`STRU_bsse`、`INPUT_bsse`。
   tags:
   - abacus
   - bsse
@@ -29,11 +29,44 @@ questions:
     oss_url: ''
     description: Fe slab STRU without Fe_empty (starting geometry for BSSE setup).
   reference_answers:
-  - key: markers_contains
+  - key: must_stru_bsse_fe_empty_core
     value:
-    - Fe_empty
-    - '0.000000'
-    - scf
+      filename: STRU_bsse
+      tokens:
+      - Fe_empty
+      - '0.000000'
+      flags: i
+  - key: must_input_bsse_core
+    value:
+      filename: INPUT_bsse
+      tokens:
+      - calculation scf
+      - basis_type lcao
+      - nspin 2
+      flags: i
+  - key: must_input_bsse_vacuum_kspacing
+    value:
+      filename: INPUT_bsse
+      pattern: kspacing\s+(?:\S+\s+\S+\s+1(?:\.0+)?|1(?:\.0+)?)
+      flags: i
+  - key: suggested_input_bsse_numerics
+    value:
+      filename: INPUT_bsse
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*(?:#.*)?$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-7\s*(?:#.*)?$)
+      flags: is
+  - key: suggested_input_bsse_smearing
+    value:
+      filename: INPUT_bsse
+      pattern: (?ims)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*(?:#.*)?$)(?=.*^\s*smearing_sigma\s+0\.01(?:0+)?\s*(?:#.*)?$)
+      flags: is
+  - key: variable_empty_layer_placement
+    value: {}
+  - key: variable_fe_empty_species_quality
+    value: {}
+  - key: stru_bsse_artifact
+    value: STRU_bsse
+  - key: input_bsse_artifact
+    value: INPUT_bsse
   - key: turn_budget
     value:
       max: 8
@@ -42,24 +75,53 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 20000
+      max: 25000
   scoring_checklist:
-  - id: fe_empty_species
-    criterion: STRU defines Fe_empty with the same pseudopotential and numerical orbital as Fe, charge 0.0, and no magnetic moment on empty sites.
+  - id: must_stru_bsse_fe_empty_core
+    criterion: "[Must] STRU_bsse includes Fe_empty with explicit empty-species charge marker."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_bsse_core
+    criterion: "[Must] INPUT_bsse uses LCAO SCF core controls (`calculation scf`, `basis_type lcao`, `nspin 2`)."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_bsse_vacuum_kspacing
+    criterion: "[Must] INPUT_bsse sets sparse vacuum-axis k-spacing (either single `kspacing 1.0` or three-component form with the third component ~=1.0)."
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: suggested_input_bsse_numerics
+    criterion: "[Suggested] INPUT_bsse follows benchmark numeric settings (`ecutwfc 100`, `scf_thr 1e-7`)."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.6
+  - id: suggested_input_bsse_smearing
+    criterion: "[Suggested] INPUT_bsse uses benchmark smearing controls (gauss/gaussian + sigma 0.01)."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.6
+  - id: variable_empty_layer_placement
+    criterion: "[Variable] Empty Fe layers are placed on both slab sides in vacuum, not buried inside slab."
     axis: correctness
     verify: llm_binary_judge
-  - id: empty_layer_placement
-    criterion: Empty Fe atoms are placed on both slab sides in the vacuum region at roughly ~2.0 Å from the outermost real Fe layers (not buried inside the slab).
+    weight: 0.3
+  - id: variable_fe_empty_species_quality
+    criterion: "[Variable] Fe_empty species configuration is physically consistent with ghost-basis usage (matching PP/orbital, no spurious empty-site magnetic setup)."
     axis: correctness
     verify: llm_binary_judge
-  - id: input_scf_kspacing
-    criterion: INPUT requests an SCF LCAO run with nspin 2, ecutwfc 100 Ry, and a sparse k-grid along the vacuum direction (e.g. kspacing third component 1.0) while keeping reasonable in-plane k-spacing.
+    weight: 0.3
+  - id: stru_bsse_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `STRU_bsse` must be written to the workspace.
     axis: correctness
-    verify: llm_binary_judge
-  - id: markers_contains
-    criterion: Final answer text or written STRU/INPUT snippets include Fe_empty, the 0.000000 charge line for empty species, and scf calculation type.
+    verify: artifact_exists
+    weight: 0.5
+  - id: input_bsse_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_bsse` must be written to the workspace.
     axis: correctness
-    verify: contains_all
+    verify: artifact_exists
+    weight: 0.5
   - id: grounding_source
     criterion: The modified STRU preserves the original slab lattice vectors and real Fe fractional coordinates from base_slab.stru; changes are limited to adding Fe_empty species/layers and INPUT parameters. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
@@ -68,10 +130,10 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: Produces STRU_bsse and INPUT_bsse without unnecessary exploratory steps or redundant file rewrites.
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
     axis: efficiency
-    verify: llm_binary_judge
+    verify: no_retries
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
@@ -81,18 +143,19 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_002_20260404v2
+- id: IG_abacus_002_20260409v4
   capability: input_generation_abacus
   domain: mech
   intent: 'Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty ghost atom and SCF INPUT.'
   human_prompt_seed: |
-    读取工作区中的 `base_vacancy.stru`：bcc Fe 3×3×3 传统胞超胞，已去掉一个 Fe 原子形成空位（53 个真实 Fe）。
+    工作区中提供了一个 Fe 体相空位结构（已去掉一个 Fe 原子）。
 
-    请为 ABACUS LCAO 单点 SCF 做 BSSE 校正：在空位位置放置一个 `Fe_empty`（与 Fe 相同赝势与数值轨道、电荷 0、无磁矩），并在答案中简要说明为何空位处需要 ghost 基组（NAO 在空位处基组不完备带来的 BSSE）。
+    请准备 ABACUS LCAO 单点输入用于 vacancy 位置的 BSSE 校正：
+    1) 在空位处引入 Fe_empty ghost 基组位点。
+    2) 生成与体相场景匹配的 SCF INPUT（均匀三维采样）。
+    3) 在最终回答中简要说明 vacancy 场景为何需要 ghost 基组补偿。
 
-    生成配套 `INPUT`：`calculation scf`，`nspin 2`，`ecutwfc 100`，`basis_type lcao`，均匀 `kspacing`（例如三方向均 0.10），`scf_thr 1e-7`，`smearing_method gaussian`，`smearing_sigma 0.01`。
-
-    将完整 `STRU` 写入 `STRU_vac_bsse`，将 `INPUT` 写入 `INPUT_vac_bsse`。
+    将结果写入当前目录：`STRU_vac_bsse`、`INPUT_vac_bsse`。
   tags:
   - abacus
   - bsse
@@ -107,10 +170,44 @@ questions:
     oss_url: ''
     description: 53-Fe supercell with one vacancy (no Fe_empty yet).
   reference_answers:
-  - key: markers_contains
+  - key: must_stru_vac_fe_empty_core
     value:
-    - Fe_empty
-    - '0.000000'
+      filename: STRU_vac_bsse
+      tokens:
+      - Fe_empty
+      - '0.000000'
+      flags: i
+  - key: must_input_vac_core
+    value:
+      filename: INPUT_vac_bsse
+      tokens:
+      - calculation scf
+      - basis_type lcao
+      - nspin 2
+      flags: i
+  - key: must_input_vac_uniform_kspacing
+    value:
+      filename: INPUT_vac_bsse
+      pattern: kspacing\s+(?:0\.1\d*(?:\s+0\.1\d*\s+0\.1\d*)?)
+      flags: i
+  - key: suggested_input_vac_numerics
+    value:
+      filename: INPUT_vac_bsse
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*(?:#.*)?$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-7\s*(?:#.*)?$)
+      flags: is
+  - key: suggested_input_vac_smearing
+    value:
+      filename: INPUT_vac_bsse
+      pattern: (?ims)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*(?:#.*)?$)(?=.*^\s*smearing_sigma\s+0\.01(?:0+)?\s*(?:#.*)?$)
+      flags: is
+  - key: variable_bsse_explanation
+    value: {}
+  - key: variable_fe_empty_at_vacancy
+    value: {}
+  - key: stru_vac_bsse_artifact
+    value: STRU_vac_bsse
+  - key: input_vac_bsse_artifact
+    value: INPUT_vac_bsse
   - key: turn_budget
     value:
       max: 8
@@ -119,24 +216,53 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 18000
+      max: 22000
   scoring_checklist:
-  - id: fe_empty_at_vacancy
-    criterion: STRU places exactly one Fe_empty at the vacant site (the former missing Fe position) with charge 0 and no magnetic moment.
+  - id: must_stru_vac_fe_empty_core
+    criterion: "[Must] STRU_vac_bsse includes Fe_empty with explicit empty-species charge marker."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_vac_core
+    criterion: "[Must] INPUT_vac_bsse uses LCAO SCF core controls (`calculation scf`, `basis_type lcao`, `nspin 2`)."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_vac_uniform_kspacing
+    criterion: "[Must] INPUT_vac_bsse uses kspacing around 0.10 (single-value isotropic form or explicit uniform three-component form)."
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: suggested_input_vac_numerics
+    criterion: "[Suggested] INPUT_vac_bsse follows benchmark numeric settings (`ecutwfc 100`, `scf_thr 1e-7`)."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.6
+  - id: suggested_input_vac_smearing
+    criterion: "[Suggested] INPUT_vac_bsse uses benchmark smearing controls (gauss/gaussian + sigma 0.01)."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.6
+  - id: variable_bsse_explanation
+    criterion: "[Variable] Final answer explains why vacancy-site ghost basis is needed for NAO BSSE correction."
     axis: correctness
     verify: llm_binary_judge
-  - id: bsse_explanation
-    criterion: Answer explains that the vacancy removes basis completeness for NAO and that Fe_empty supplies ghost basis functions to reduce BSSE in LCAO.
+    weight: 0.3
+  - id: variable_fe_empty_at_vacancy
+    criterion: "[Variable] Fe_empty is placed at the vacancy position (not elsewhere) with physically consistent vacancy-ghost intent."
     axis: correctness
     verify: llm_binary_judge
-  - id: input_bulk_scf
-    criterion: INPUT is a collinear SCF LCAO run with uniform kspacing suitable for bulk (no vacuum-only k sparsity trick), nspin 2, ecutwfc 100 Ry.
+    weight: 0.3
+  - id: stru_vac_bsse_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `STRU_vac_bsse` must be written to the workspace.
     axis: correctness
-    verify: llm_binary_judge
-  - id: markers_contains
-    criterion: Answer or STRU includes Fe_empty and the 0.000000 charge line for the empty species.
+    verify: artifact_exists
+    weight: 0.5
+  - id: input_vac_bsse_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_vac_bsse` must be written to the workspace.
     axis: correctness
-    verify: contains_all
+    verify: artifact_exists
+    weight: 0.5
   - id: grounding_source
     criterion: Modified STRU keeps the original 53 real Fe fractional coordinates and lattice from base_vacancy.stru; only Fe_empty is added at the vacancy. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
@@ -145,10 +271,10 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: Produces STRU_vac_bsse and INPUT_vac_bsse without unnecessary exploration.
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
     axis: efficiency
-    verify: llm_binary_judge
+    verify: no_retries
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
@@ -158,18 +284,18 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_003_20260406
+- id: IG_abacus_003_20260409v4
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS PW SCF INPUT and KPT files for Al slab electrostatic-potential calculation setup.'
   human_prompt_seed: |
-    读取工作区中的 `base_al_slab.stru`（Al slab，已包含真空层）。
+    工作区中提供了一个带真空层的 Al slab 结构（STRU）。
 
-    请为 ABACUS 准备一套用于静电势分析的平面波单点 SCF 输入：
-    1) 生成 `INPUT_pot`，要求至少包含：`calculation scf`、`basis_type pw`、`ecutwfc 60`、`nbands 40`、`smearing_method gauss`、`smearing_sigma 0.0074`、`out_pot 2`。
-    2) 生成 `KPT_pot`，采用 Gamma-centered 自动网格：面内应较密且不低于 `12 12`，真空方向必须为 `1`（`20 20 1` 可作为一组合理示例）。
+    请为该体系准备 ABACUS 平面波单点输入，用于后续静电势分析：
+    1) 生成一份可直接运行的 SCF 输入文件，并确保包含静电势输出所需设置。
+    2) 生成与 slab 几何相匹配的 K 点设置：面内采样应足够，法向方向使用单点采样。
 
-    将完整文件写到当前目录：`INPUT_pot`、`KPT_pot`。
+    将结果写入当前目录：`INPUT_pot`、`KPT_pot`。
   tags:
   - abacus
   - electrostatic_potential
@@ -183,13 +309,47 @@ questions:
     oss_url: ''
     description: Al slab geometry used for electrostatic-potential and work-function setup.
   reference_answers:
-  - key: markers_contains
+  - key: must_input_core
     value:
-    - calculation scf
-    - basis_type pw
-    - out_pot 2
-    - K_POINTS
-    - Gamma
+      filename: INPUT_pot
+      tokens:
+      - calculation scf
+      - basis_type pw
+      - out_pot 2
+      flags: i
+  - key: must_kpt_gamma_marker
+    value:
+      filename: KPT_pot
+      tokens:
+      - K_POINTS
+      - Gamma
+      flags: i
+  - key: must_kpt_vacuum_axis_one
+    value:
+      filename: KPT_pot
+      pattern: ^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$
+      flags: m
+  - key: suggested_input_numerics
+    value:
+      filename: INPUT_pot
+      tokens:
+      - ecutwfc 60
+      - nbands 40
+      flags: i
+  - key: variable_input_smearing
+    value:
+      filename: INPUT_pot
+      pattern: smearing_method\s+(?:gauss(?:ian)?|fixed|mp2?|methfessel-paxton|mv|cold|marzari-vanderbilt|fd|fermi-dirac).*\bsmearing_sigma\s+(?:0\.0074|0\.01)\b
+      flags: is
+  - key: variable_kpt_inplane_density
+    value:
+      filename: KPT_pot
+      pattern: ^\s*(?:1[2-9]|[2-9]\d|[1-9]\d{2,})\s+(?:1[2-9]|[2-9]\d|[1-9]\d{2,})\s+1(?:\s+\d+){0,3}\s*$
+      flags: m
+  - key: input_pot_artifact
+    value: INPUT_pot
+  - key: kpt_pot_artifact
+    value: KPT_pot
   - key: turn_budget
     value:
       max: 8
@@ -200,18 +360,46 @@ questions:
     value:
       max: 8000
   scoring_checklist:
-  - id: input_out_pot_pw
-    criterion: INPUT_pot is a PW SCF calculation that includes the required parameters from the task (`calculation scf`, `basis_type pw`, `ecutwfc 60`, `nbands 40`, `smearing_method gauss`, `smearing_sigma 0.0074`, `out_pot 2`).
+  - id: must_input_core
+    criterion: "[Must] INPUT_pot contains core mandatory controls for this task (`calculation scf`, `basis_type pw`, `out_pot 2`)."
     axis: correctness
-    verify: llm_binary_judge
-  - id: kpt_dense_inplane
-    criterion: KPT_pot uses a Gamma-centered mesh with dense in-plane sampling (not lower than 12x12) and exactly one k-point along the vacuum direction.
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_kpt_gamma_marker
+    criterion: "[Must] KPT_pot is a Gamma-centered K-point file."
     axis: correctness
-    verify: llm_binary_judge
-  - id: markers_contains
-    criterion: "Final answer text or generated files include required INPUT/KPT markers: calculation scf, basis_type pw, out_pot 2, and a Gamma-centered k-mesh with third component equal to 1."
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_kpt_vacuum_axis_one
+    criterion: "[Must] KPT_pot sets exactly one k-point along the slab vacuum axis."
     axis: correctness
-    verify: contains_all
+    verify: text_file_regex
+    weight: 1.0
+  - id: suggested_input_numerics
+    criterion: "[Suggested] INPUT_pot uses the benchmark numeric setup (`ecutwfc 60`, `nbands 40`)."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.6
+  - id: variable_input_smearing
+    criterion: "[Variable] INPUT_pot uses an acceptable smearing style/value for this benchmark family."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.3
+  - id: variable_kpt_inplane_density
+    criterion: "[Variable] KPT_pot uses sufficiently dense in-plane sampling while keeping vacuum-axis single-point."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.3
+  - id: input_pot_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_pot` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
+  - id: kpt_pot_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `KPT_pot` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
   - id: grounding_source
     criterion: The generated setup is grounded in base_al_slab.stru and does not invent unrelated structural changes; changes are limited to INPUT_pot and KPT_pot preparation.
     axis: grounding
@@ -220,10 +408,10 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: Produces INPUT_pot and KPT_pot efficiently without unnecessary exploration.
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
     axis: efficiency
-    verify: llm_binary_judge
+    verify: no_retries
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
@@ -233,19 +421,18 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_004_20260406
+- id: IG_abacus_004_20260409v4
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS PW SCF input for dipole correction on an asymmetric H2O slab, with the saw-like region placed in vacuum and no finite external field.'
   human_prompt_seed: |
-    读取工作区中的 `base_h2o.stru`（真空中的 H2O 非对称 slab / molecule-in-box 示例）。
+    工作区中提供了一个带较大真空区的 H2O 结构（STRU）。
 
-    请为 ABACUS 准备一套仅用于偶极修正的平面波单点 SCF 输入：
-    1) 生成 `INPUT_dipole`，要求包含：`calculation scf`、`basis_type pw`、`ecutwfc 100`、`scf_thr 1e-6`、`smearing_method fixed`、`out_pot 2`。
-    2) 打开偶极修正参数：`efield_flag 1`、`dip_cor_flag 1`、`efield_dir 2`、`efield_pos_max 0.0`、`efield_pos_dec 0.1`、`efield_amp 0.0`。注意这里是偶极修正，不是施加有限外场。
-    3) 生成 `KPT_dipole`，对该大真空超胞使用 Gamma-centered `1 1 1` 网格。
+    请准备 ABACUS 平面波单点输入，目标是做偶极修正的静电势分析：
+    1) 生成一份 SCF INPUT，开启偶极修正相关设置，并明确这是“偶极修正场景”而非施加有限外场。
+    2) 生成与该大真空超胞匹配的 Gamma 点 KPT。
 
-    将完整文件写到当前目录：`INPUT_dipole`、`KPT_dipole`。
+    将结果写入当前目录：`INPUT_dipole`、`KPT_dipole`。
   tags:
   - abacus
   - dipole_correction
@@ -260,14 +447,49 @@ questions:
     oss_url: ''
     description: H2O in a vacuum cell for dipole-correction setup.
   reference_answers:
-  - key: markers_contains
+  - key: must_input_dipole_core
     value:
-    - efield_flag 1
-    - dip_cor_flag 1
-    - efield_dir 2
-    - efield_amp 0.0
-    - K_POINTS
-    - Gamma
+      filename: INPUT_dipole
+      tokens:
+      - calculation scf
+      - basis_type pw
+      - efield_flag 1
+      - dip_cor_flag 1
+      - efield_amp 0.0
+      flags: i
+  - key: must_kpt_dipole_gamma_marker
+    value:
+      filename: KPT_dipole
+      tokens:
+      - K_POINTS
+      - Gamma
+      flags: i
+  - key: must_kpt_dipole_single_point
+    value:
+      filename: KPT_dipole
+      pattern: ^\s*1\s+1\s+1(?:\s+\d+){0,3}\s*$
+      flags: m
+  - key: suggested_input_dipole_numerics
+    value:
+      filename: INPUT_dipole
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*(?:#.*)?$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*(?:#.*)?$)(?=.*^\s*out_pot\s+2\s*(?:#.*)?$)(?=.*^\s*efield_dir\s+2\s*(?:#.*)?$)
+      flags: is
+  - key: variable_input_dipole_window
+    value:
+      filename: INPUT_dipole
+      tokens:
+      - efield_pos_max
+      - efield_pos_dec
+      flags: i
+  - key: variable_input_dipole_smearing
+    value:
+      filename: INPUT_dipole
+      pattern: smearing_method\s+(?:gauss(?:ian)?|fixed|mp2?|methfessel-paxton|mv|cold|marzari-vanderbilt|fd|fermi-dirac)
+      flags: i
+  - key: input_dipole_artifact
+    value: INPUT_dipole
+  - key: kpt_dipole_artifact
+    value: KPT_dipole
   - key: turn_budget
     value:
       max: 8
@@ -278,18 +500,46 @@ questions:
     value:
       max: 8000
   scoring_checklist:
-  - id: dipole_params
-    criterion: INPUT_dipole contains the required dipole-correction controls for this task (`efield_flag 1`, `dip_cor_flag 1`, `efield_dir 2`, `efield_pos_max`, `efield_pos_dec`, `efield_amp 0.0`) and keeps `out_pot 2` in a PW SCF setup.
+  - id: must_input_dipole_core
+    criterion: "[Must] INPUT_dipole contains core mandatory dipole-correction controls."
     axis: correctness
-    verify: llm_binary_judge
-  - id: kpt_dipole_gamma
-    criterion: KPT_dipole is Gamma-centered and uses a 1x1x1 grid for the large-vacuum supercell in this task.
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_kpt_dipole_gamma_marker
+    criterion: "[Must] KPT_dipole is a Gamma-centered K-point file."
     axis: correctness
-    verify: llm_binary_judge
-  - id: markers_contains
-    criterion: "Final answer text or generated files include required dipole-input markers: efield_flag 1, dip_cor_flag 1, efield_dir 2, efield_amp 0.0, and Gamma-centered K_POINTS."
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_kpt_dipole_single_point
+    criterion: "[Must] KPT_dipole uses a single Gamma point (1x1x1)."
     axis: correctness
-    verify: contains_all
+    verify: text_file_regex
+    weight: 1.0
+  - id: suggested_input_dipole_numerics
+    criterion: "[Suggested] INPUT_dipole follows benchmark numeric settings (ecut/scf_thr/out_pot/dir)."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.6
+  - id: variable_input_dipole_window
+    criterion: "[Variable] INPUT_dipole provides dipole window position controls (`efield_pos_max`, `efield_pos_dec`)."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.3
+  - id: variable_input_dipole_smearing
+    criterion: "[Variable] INPUT_dipole uses an acceptable smearing style for this task family."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.3
+  - id: input_dipole_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_dipole` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
+  - id: kpt_dipole_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `KPT_dipole` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
   - id: grounding_source
     criterion: The generated setup is grounded in base_h2o.stru and does not modify the provided structure beyond preparing INPUT/KPT.
     axis: grounding
@@ -298,10 +548,10 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: Produces INPUT_dipole and KPT_dipole without unnecessary exploration.
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
     axis: efficiency
-    verify: llm_binary_judge
+    verify: no_retries
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
@@ -311,19 +561,19 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_005_20260406
+- id: IG_abacus_005_20260409v4
   capability: input_generation_abacus
   domain: thermo
   intent: 'Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence using bulk, 5-layer slab, and 7-layer slab structures.'
   human_prompt_seed: |
-    读取工作区中的三个结构文件：`bulk_al_fcc.stru`、`slab_al_fcc100_5l.stru`、`slab_al_fcc100_7l.stru`。
+    工作区中提供了体相与两种厚度 slab 的 Al fcc(100) 结构。
 
-    请为 Al fcc(100) 表面能收敛测试准备输入文件：
-    1) 为体相生成 `INPUT_bulk_relax`：采用 `calculation cell-relax`，`basis_type pw`，`ecutwfc 60`，`scf_nmax 100`，`relax_nmax 100`，`smearing_method gauss`，`smearing_sigma 0.0074`。
-    2) 为 5 层和 7 层 slab 分别生成 `INPUT_slab5`、`INPUT_slab7`：采用 `calculation relax`，保留给定 STRU 中的原子固定/弛豫标记，不改结构本身。
-    3) 生成 `KPT_bulk` 与 `KPT_slab`：bulk 使用三维均匀网格；slab 使用 Gamma-centered 网格，面内较密、真空方向为 1（例如 `20 20 1` 可作为合理示例）。
+    请为表面能收敛测试准备 ABACUS 平面波输入：
+    1) 体相输入使用 cell-relax。
+    2) 两个 slab 输入使用离子弛豫，并保留原 STRU 中已有的固定/弛豫标记，不修改给定结构。
+    3) 提供体相与 slab 各自匹配的 K 点文件；其中 slab 需采用各向异性采样并在法向使用单点。
 
-    将完整文件写到当前目录：`INPUT_bulk_relax`、`INPUT_slab5`、`INPUT_slab7`、`KPT_bulk`、`KPT_slab`。
+    将结果写入当前目录：`INPUT_bulk_relax`、`INPUT_slab5`、`INPUT_slab7`、`KPT_bulk`、`KPT_slab`。
   tags:
   - abacus
   - surface_energy
@@ -346,15 +596,72 @@ questions:
     oss_url: ''
     description: Seven-layer Al fcc(100) slab with selective-relaxation flags.
   reference_answers:
-  - key: markers_contains
+  - key: must_input_bulk_relax_core
     value:
-    - INPUT_bulk_relax
-    - INPUT_slab5
-    - INPUT_slab7
-    - KPT_bulk
-    - KPT_slab
-    - calculation cell-relax
-    - calculation relax
+      filename: INPUT_bulk_relax
+      tokens:
+      - calculation cell-relax
+      - basis_type pw
+      flags: i
+  - key: must_input_slab5_relax_mode
+    value:
+      filename: INPUT_slab5
+      tokens:
+      - calculation relax
+      - basis_type pw
+      flags: i
+  - key: must_input_slab7_relax_mode
+    value:
+      filename: INPUT_slab7
+      tokens:
+      - calculation relax
+      - basis_type pw
+      flags: i
+  - key: must_kpt_slab_gamma_marker
+    value:
+      filename: KPT_slab
+      tokens:
+      - K_POINTS
+      - Gamma
+      flags: i
+  - key: must_kpt_slab_vacuum_axis_one
+    value:
+      filename: KPT_slab
+      pattern: ^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$
+      flags: m
+  - key: suggested_input_bulk_relax_numerics
+    value:
+      filename: INPUT_bulk_relax
+      tokens:
+      - ecutwfc 60
+      - scf_nmax 100
+      - relax_nmax 100
+      flags: i
+  - key: suggested_kpt_bulk_three_dimensional
+    value:
+      filename: KPT_bulk
+      pattern: ^\s*(?:[2-9]\d*|1\d+)\s+(?:[2-9]\d*|1\d+)\s+(?:[2-9]\d*|1\d+)(?:\s+\d+){0,3}\s*$
+      flags: m
+  - key: variable_input_bulk_smearing
+    value:
+      filename: INPUT_bulk_relax
+      pattern: smearing_method\s+(?:gauss(?:ian)?|fixed|mp2?|methfessel-paxton|mv|cold|marzari-vanderbilt|fd|fermi-dirac).*\bsmearing_sigma\s+(?:0\.0074|0\.01)\b
+      flags: is
+  - key: variable_kpt_slab_inplane_density
+    value:
+      filename: KPT_slab
+      pattern: ^\s*(?:1[2-9]|[2-9]\d|[1-9]\d{2,})\s+(?:1[2-9]|[2-9]\d|[1-9]\d{2,})\s+1(?:\s+\d+){0,3}\s*$
+      flags: m
+  - key: input_bulk_relax_artifact
+    value: INPUT_bulk_relax
+  - key: input_slab5_artifact
+    value: INPUT_slab5
+  - key: input_slab7_artifact
+    value: INPUT_slab7
+  - key: kpt_bulk_artifact
+    value: KPT_bulk
+  - key: kpt_slab_artifact
+    value: KPT_slab
   - key: turn_budget
     value:
       max: 8
@@ -365,18 +672,76 @@ questions:
     value:
       max: 8000
   scoring_checklist:
-  - id: bulk_surface_inputs
-    criterion: The generated files include one PW `cell-relax` bulk input (INPUT_bulk_relax), two PW `relax` slab inputs (INPUT_slab5 and INPUT_slab7) preserving selective-relaxation flags, plus slab-appropriate KPT settings.
+  - id: must_input_bulk_relax_core
+    criterion: "[Must] INPUT_bulk_relax uses PW cell-relax core controls."
     axis: correctness
-    verify: llm_binary_judge
-  - id: slab_kmesh
-    criterion: KPT_slab uses a Gamma-centered anisotropic mesh with only one k-point along the vacuum direction, while KPT_bulk remains a three-dimensional bulk mesh.
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_slab5_relax_mode
+    criterion: "[Must] INPUT_slab5 uses PW relax mode."
     axis: correctness
-    verify: llm_binary_judge
-  - id: markers_contains
-    criterion: "Final answer text or generated files include required product markers: INPUT_bulk_relax, INPUT_slab5, INPUT_slab7, KPT_bulk, KPT_slab, `calculation cell-relax`, and `calculation relax`."
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_slab7_relax_mode
+    criterion: "[Must] INPUT_slab7 uses PW relax mode."
     axis: correctness
-    verify: contains_all
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_kpt_slab_gamma_marker
+    criterion: "[Must] KPT_slab is Gamma-centered."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_kpt_slab_vacuum_axis_one
+    criterion: "[Must] KPT_slab sets exactly one k-point along the vacuum axis."
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: suggested_input_bulk_relax_numerics
+    criterion: "[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc/scf_nmax/relax_nmax`)."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.6
+  - id: suggested_kpt_bulk_three_dimensional
+    criterion: "[Suggested] KPT_bulk uses a three-dimensional bulk mesh."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.6
+  - id: variable_input_bulk_smearing
+    criterion: "[Variable] INPUT_bulk_relax uses an acceptable smearing setup for this benchmark family."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.3
+  - id: variable_kpt_slab_inplane_density
+    criterion: "[Variable] KPT_slab uses sufficiently dense in-plane sampling while keeping vacuum-axis single-point."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.3
+  - id: input_bulk_relax_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_bulk_relax` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.2
+  - id: input_slab5_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_slab5` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.2
+  - id: input_slab7_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_slab7` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.2
+  - id: kpt_bulk_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `KPT_bulk` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.2
+  - id: kpt_slab_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `KPT_slab` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.2
   - id: grounding_source
     criterion: The generated files are grounded in the three provided STRU files; no unrelated structural edits are introduced beyond preparing inputs for bulk and slab calculations.
     axis: grounding
@@ -385,10 +750,10 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: Produces the requested bulk/slab input files efficiently without unnecessary exploration.
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
     axis: efficiency
-    verify: llm_binary_judge
+    verify: no_retries
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
@@ -398,19 +763,19 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_006_20260406
+- id: IG_abacus_006_20260409v3
   capability: input_generation_abacus
   domain: thermo
   intent: 'Prepare ABACUS PW inputs for Mo surface-vacancy energy using bulk, pristine slab, and surface-vacancy slab structures.'
   human_prompt_seed: |
-    读取工作区中的三个结构文件：`mo_bulk.stru`、`mo110_pristine.stru`、`mo110_surface_vac.stru`。
+    工作区中提供了 Mo 体相、无缺陷表面和表面空位三套结构。
 
-    请为 Mo 表面 vacancy benchmark 准备输入文件：
-    1) 为体相生成 `INPUT_bulk_mo`，用于获得体相每原子能量；使用 `calculation cell-relax`。
-    2) 为无缺陷表面和带表面空位的 slab 分别生成 `INPUT_slab_clean` 与 `INPUT_slab_vac`，两者都采用 `calculation scf`。
-    3) 三个输入统一采用低成本 benchmark 风格：`basis_type pw`、较低截断能（例如 `ecutwfc 20` 可作为示例）、Gamma 点 `KPT_gamma`、较简单 smearing/mixing（可合理补齐）。
+    请为表面 vacancy benchmark 准备 ABACUS 平面波输入：
+    1) 体相输入用于获取每原子参考能，采用 cell-relax。
+    2) 无缺陷表面和表面空位两套 slab 输入采用 SCF，并保持可直接用于对比。
+    3) 三套计算使用一致的低成本 benchmark 风格参数，并提供共用的 Gamma 点 KPT 文件。
 
-    将完整文件写到当前目录：`INPUT_bulk_mo`、`INPUT_slab_clean`、`INPUT_slab_vac`、`KPT_gamma`。
+    将结果写入当前目录：`INPUT_bulk_mo`、`INPUT_slab_clean`、`INPUT_slab_vac`、`KPT_gamma`。
   tags:
   - abacus
   - surface_vacancy
@@ -433,15 +798,77 @@ questions:
     oss_url: ''
     description: Surface-vacancy slab derived from the pristine Mo slab.
   reference_answers:
-  - key: markers_contains
+  - key: must_input_bulk_mo_mode
     value:
-    - INPUT_bulk_mo
-    - INPUT_slab_clean
-    - INPUT_slab_vac
-    - KPT_gamma
-    - calculation cell-relax
-    - calculation scf
-    - Gamma
+      filename: INPUT_bulk_mo
+      tokens:
+      - calculation cell-relax
+      - basis_type pw
+      flags: i
+  - key: must_input_slab_clean_mode
+    value:
+      filename: INPUT_slab_clean
+      tokens:
+      - calculation scf
+      - basis_type pw
+      flags: i
+  - key: must_input_slab_vac_mode
+    value:
+      filename: INPUT_slab_vac
+      tokens:
+      - calculation scf
+      - basis_type pw
+      flags: i
+  - key: must_kpt_gamma_markers
+    value:
+      filename: KPT_gamma
+      tokens:
+      - K_POINTS
+      - Gamma
+      flags: i
+  - key: must_kpt_gamma_single_point
+    value:
+      filename: KPT_gamma
+      pattern: ^\s*1\s+1\s+1(?:\s+\d+){0,3}\s*$
+      flags: m
+  - key: suggested_bulk_low_cost_cutoff
+    value:
+      filename: INPUT_bulk_mo
+      pattern: ecutwfc\s+(?:1\d|20|2[0-9])
+      flags: i
+  - key: suggested_slab_clean_low_cost_cutoff
+    value:
+      filename: INPUT_slab_clean
+      pattern: ecutwfc\s+(?:1\d|20|2[0-9])
+      flags: i
+  - key: suggested_slab_vac_low_cost_cutoff
+    value:
+      filename: INPUT_slab_vac
+      pattern: ecutwfc\s+(?:1\d|20|2[0-9])
+      flags: i
+  - key: variable_bulk_smearing_or_mixing
+    value:
+      filename: INPUT_bulk_mo
+      pattern: (smearing_method|mixing_(?:type|beta|ndim|gg0))
+      flags: i
+  - key: variable_slab_smearing_or_mixing
+    value:
+      filename: INPUT_slab_clean
+      pattern: (smearing_method|mixing_(?:type|beta|ndim|gg0))
+      flags: i
+  - key: variable_slab_vac_smearing_or_mixing
+    value:
+      filename: INPUT_slab_vac
+      pattern: (smearing_method|mixing_(?:type|beta|ndim|gg0))
+      flags: i
+  - key: input_bulk_mo_artifact
+    value: INPUT_bulk_mo
+  - key: input_slab_clean_artifact
+    value: INPUT_slab_clean
+  - key: input_slab_vac_artifact
+    value: INPUT_slab_vac
+  - key: kpt_gamma_artifact
+    value: KPT_gamma
   - key: turn_budget
     value:
       max: 8
@@ -452,14 +879,81 @@ questions:
     value:
       max: 8000
   scoring_checklist:
-  - id: vacancy_inputs
-    criterion: The generated files include one PW `cell-relax` bulk input (INPUT_bulk_mo), two PW `scf` slab inputs (INPUT_slab_clean and INPUT_slab_vac), and a Gamma-point KPT file (KPT_gamma).
+  - id: must_input_bulk_mo_mode
+    criterion: "[Must] INPUT_bulk_mo uses PW cell-relax mode."
     axis: correctness
-    verify: llm_binary_judge
-  - id: markers_contains
-    criterion: "Final answer text or generated files include required product markers: INPUT_bulk_mo, INPUT_slab_clean, INPUT_slab_vac, KPT_gamma, `calculation cell-relax`, `calculation scf`, and Gamma-centered K_POINTS."
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_slab_clean_mode
+    criterion: "[Must] INPUT_slab_clean uses PW SCF mode."
     axis: correctness
-    verify: contains_all
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_slab_vac_mode
+    criterion: "[Must] INPUT_slab_vac uses PW SCF mode."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_kpt_gamma_markers
+    criterion: "[Must] KPT_gamma is a Gamma-centered K-point file."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_kpt_gamma_single_point
+    criterion: "[Must] KPT_gamma uses a single Gamma point (1x1x1)."
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: suggested_bulk_low_cost_cutoff
+    criterion: "[Suggested] INPUT_bulk_mo uses a low-cost cutoff for benchmark runs."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.6
+  - id: suggested_slab_clean_low_cost_cutoff
+    criterion: "[Suggested] INPUT_slab_clean uses a low-cost cutoff for benchmark runs."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.6
+  - id: suggested_slab_vac_low_cost_cutoff
+    criterion: "[Suggested] INPUT_slab_vac uses a low-cost cutoff for benchmark runs."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.6
+  - id: variable_bulk_smearing_or_mixing
+    criterion: "[Variable] INPUT_bulk_mo provides a reasonable smearing/mixing control."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.3
+  - id: variable_slab_smearing_or_mixing
+    criterion: "[Variable] INPUT_slab_clean provides a reasonable smearing/mixing control."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.3
+  - id: variable_slab_vac_smearing_or_mixing
+    criterion: "[Variable] INPUT_slab_vac provides a reasonable smearing/mixing control."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.3
+  - id: input_bulk_mo_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_bulk_mo` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.25
+  - id: input_slab_clean_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_slab_clean` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.25
+  - id: input_slab_vac_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_slab_vac` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.25
+  - id: kpt_gamma_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `KPT_gamma` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.25
   - id: grounding_source
     criterion: The three generated inputs are grounded in the provided Mo bulk and slab structures, without inventing unrelated structural modifications.
     axis: grounding
@@ -468,10 +962,10 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: Produces the requested Mo vacancy benchmark inputs efficiently without unnecessary exploration.
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
     axis: efficiency
-    verify: llm_binary_judge
+    verify: no_retries
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
@@ -481,20 +975,19 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_007_20260406
+- id: IG_abacus_007_20260409v3
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS LCAO spin-polarized electric-field SCF and NSCF band inputs for a nanoribbon, including a line-mode KPT from Gamma to Y.'
   human_prompt_seed: |
-    读取工作区中的 `nanoribbon.stru`。
+    工作区中提供了 nanoribbon 结构。
 
-    请为 nanoribbon 体系准备一套“自旋极化 + 外电场”的 LCAO 输入：
-    1) 生成 `INPUT_spin_elec_scf`：`calculation scf`、`nspin 2`、`basis_type lcao`、`ecutwfc 100`、`scf_thr 1e-6`、`smearing_method gaussian`、`smearing_sigma 0.001`、`mixing_beta 0.1`、`mixing_ndim 20`、`mixing_gg0 1.5`。
-    2) 在 SCF 输入中添加外电场参数：`efield_flag 1`、`efield_dir 2`、`efield_amp` 为约 `1e-3` 量级的小有限电场（例如 `0.0019440124`）、`efield_pos_max 0.95`、`efield_pos_dec 0.10`。
-    3) 生成 `INPUT_spin_elec_band`：采用 `calculation nscf`，从已有电荷密度读入（`init_chg file`），其余与自旋极化外场设置保持一致。
-    4) 生成 `KPT_band`：使用 line-mode，从 `Gamma (0 0 0)` 到 `Y (0 0.5 0)`，并采用足够致密的路径采样（例如 80–120 点，100 点是常用选择）。
+    请准备一套“自旋极化 + 外电场”ABACUS LCAO 输入：
+    1) 生成 SCF 输入，包含外电场控制参数。
+    2) 生成对应的 NSCF band 输入，要求读取已收敛电荷。
+    3) 生成 line-mode KPT，覆盖 Gamma 到 Y 的能带路径并保证采样足够密。
 
-    将完整文件写到当前目录：`INPUT_spin_elec_scf`、`INPUT_spin_elec_band`、`KPT_band`。
+    将结果写入当前目录：`INPUT_spin_elec_scf`、`INPUT_spin_elec_band`、`KPT_band`。
   tags:
   - abacus
   - electric_field
@@ -509,16 +1002,58 @@ questions:
     oss_url: ''
     description: Nanoribbon structure with vacuum for electric-field and band-structure setup.
   reference_answers:
-  - key: markers_contains
+  - key: must_input_spin_scf_core
     value:
-    - INPUT_spin_elec_scf
-    - INPUT_spin_elec_band
-    - KPT_band
-    - nspin 2
-    - efield_flag 1
-    - efield_dir 2
-    - calculation nscf
-    - init_chg file
+      filename: INPUT_spin_elec_scf
+      tokens:
+      - calculation scf
+      - nspin 2
+      - basis_type lcao
+      - efield_flag 1
+      - efield_dir 2
+      flags: i
+  - key: must_input_spin_band_core
+    value:
+      filename: INPUT_spin_elec_band
+      tokens:
+      - calculation nscf
+      - init_chg file
+      - nspin 2
+      flags: i
+  - key: must_kpt_band_path_core
+    value:
+      filename: KPT_band
+      pattern: (?is)(line|line_mode|line-mode).*(gamma|\bg\b)\s*0\s*0\s*0.*\by\b\s*0\s*0\.5\s*0
+      flags: is
+  - key: suggested_input_spin_numerics
+    value:
+      filename: INPUT_spin_elec_scf
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*(?:#.*)?$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*(?:#.*)?$)(?=.*^\s*smearing_method\s+(?:gauss|gaussian)\s*(?:#.*)?$)(?=.*^\s*smearing_sigma\s+0\.001(?:0+)?\s*(?:#.*)?$)
+      flags: is
+  - key: suggested_input_spin_mixing
+    value:
+      filename: INPUT_spin_elec_scf
+      tokens:
+      - mixing_beta 0.1
+      - mixing_ndim 20
+      - mixing_gg0 1.5
+      flags: i
+  - key: variable_efield_amp_small
+    value:
+      filename: INPUT_spin_elec_scf
+      pattern: efield_amp\s+0\.00[0-9]+
+      flags: i
+  - key: variable_kpt_band_density
+    value:
+      filename: KPT_band
+      pattern: \b(?:80|8[1-9]|9\d|10\d|11\d|120)\b
+      flags: i
+  - key: input_spin_scf_artifact
+    value: INPUT_spin_elec_scf
+  - key: input_spin_band_artifact
+    value: INPUT_spin_elec_band
+  - key: kpt_band_artifact
+    value: KPT_band
   - key: turn_budget
     value:
       max: 8
@@ -527,24 +1062,58 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 18000
   scoring_checklist:
-  - id: efield_params
-    criterion: INPUT_spin_elec_scf is an LCAO spin-polarized SCF setup and includes the requested external electric-field controls with vacuum-normal direction and a small finite field amplitude on the order of 1e-3.
+  - id: must_input_spin_scf_core
+    criterion: "[Must] INPUT_spin_elec_scf contains core spin-polarized SCF + external-field controls."
     axis: correctness
-    verify: llm_binary_judge
-  - id: nscf_reads_charge
-    criterion: INPUT_spin_elec_band is an NSCF run that reads converged charge density from file (`init_chg file`) and preserves the required spin-polarized electric-field setup.
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_spin_band_core
+    criterion: "[Must] INPUT_spin_elec_band is NSCF and reads converged charge (`init_chg file`)."
     axis: correctness
-    verify: llm_binary_judge
-  - id: band_path_kpt
-    criterion: KPT_band uses line-mode from Gamma (0 0 0) to Y (0 0.5 0) with sufficiently dense interpolation (e.g. around 100 points).
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_kpt_band_path_core
+    criterion: "[Must] KPT_band defines a line-mode path from Gamma to Y."
     axis: correctness
-    verify: llm_binary_judge
-  - id: markers_contains
-    criterion: "Final answer text or generated files include required product markers: INPUT_spin_elec_scf, INPUT_spin_elec_band, KPT_band, `nspin 2`, `efield_flag 1`, `efield_dir 2`, `calculation nscf`, and `init_chg file`."
+    verify: text_file_regex
+    weight: 1.0
+  - id: suggested_input_spin_numerics
+    criterion: "[Suggested] SCF input follows benchmark numeric setup (`ecutwfc/scf_thr/smearing`)."
     axis: correctness
-    verify: contains_all
+    verify: text_file_regex
+    weight: 0.6
+  - id: suggested_input_spin_mixing
+    criterion: "[Suggested] SCF input includes benchmark mixing controls."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.6
+  - id: variable_efield_amp_small
+    criterion: "[Variable] External-field amplitude is in a small finite-field range (around 1e-3)."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.3
+  - id: variable_kpt_band_density
+    criterion: "[Variable] KPT path interpolation density is in a reasonable range for band plotting."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.3
+  - id: input_spin_scf_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_spin_elec_scf` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.33
+  - id: input_spin_band_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_spin_elec_band` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.33
+  - id: kpt_band_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `KPT_band` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.34
   - id: grounding_source
     criterion: The generated inputs are grounded in the provided nanoribbon structure and do not invent unrelated structural edits.
     axis: grounding
@@ -553,10 +1122,10 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: Produces the SCF/NSCF electric-field files efficiently without unnecessary exploration.
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
     axis: efficiency
-    verify: llm_binary_judge
+    verify: no_retries
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
@@ -566,21 +1135,19 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_008_20260406
+- id: IG_abacus_008_20260409v3
   capability: input_generation_abacus
   domain: elec
   intent: 'Generate ABACUS PW SCF input combining dipole correction with compensating charge for a charged H2O slab, including gate-plane and barrier parameters.'
   human_prompt_seed: |
-    读取工作区中的 `base_h2o_gate.stru`（真空中的 H2O 示例）。
+    工作区中提供了带真空区的 H2O 结构。
 
-    请为“带偶极修正 + 补偿电荷”的带电表面模型准备输入：
-    1) 生成 `INPUT_gate`：`calculation scf`、`basis_type pw`、`ecutwfc 100`、`scf_thr 1e-6`、`smearing_method gauss`、`smearing_sigma 0.001`、`mixing_type broyden`、`mixing_beta 0.1`、`out_pot 2`。
-    2) 打开偶极修正：`efield_flag 1`、`dip_cor_flag 1`、`efield_dir 2`、`efield_pos_max 0.0`、`efield_pos_dec 0.1`、`efield_amp 0.0`。
-    3) 打开补偿电荷：`gate_flag 1`，将 gate 平面放在真空区（`zgate` 可取约 0.7 一带），并设置与目标带电态一致的 `nelec`（示例可用 `nelec 9`）。
-    4) 同时加入一个简单势垒以避免电子溢出：启用 `block 1`，并将势垒窗口放在真空中（例如 `block_down 0.45`、`block_up 0.55`、`block_height 0.1` 作为可行示例）。
-    5) 生成 `KPT_gate`，对该大真空超胞使用 Gamma-centered `1 1 1` 网格。
+    请准备“偶极修正 + 补偿电荷 + 势垒”场景下的 ABACUS 输入：
+    1) 生成 PW-SCF 的 INPUT，并启用偶极修正与补偿电荷控制。
+    2) 在 INPUT 中加入避免电子溢出的势垒相关设置。
+    3) 生成与大真空超胞匹配的 Gamma 点 KPT。
 
-    将完整文件写到当前目录：`INPUT_gate`、`KPT_gate`。
+    将结果写入当前目录：`INPUT_gate`、`KPT_gate`。
   tags:
   - abacus
   - compensating_charge
@@ -595,16 +1162,54 @@ questions:
     oss_url: ''
     description: H2O in a vacuum cell for compensating-charge setup.
   reference_answers:
-  - key: markers_contains
+  - key: must_input_gate_core
     value:
-    - INPUT_gate
-    - KPT_gate
-    - gate_flag 1
-    - zgate
-    - nelec
-    - block 1
-    - K_POINTS
-    - Gamma
+      filename: INPUT_gate
+      pattern: (?ims)(?=.*^\s*calculation\s+scf\s*(?:#.*)?$)(?=.*^\s*basis_type\s+pw\s*(?:#.*)?$)(?=.*^\s*efield_flag\s+1\s*(?:#.*)?$)(?=.*^\s*dip_cor_flag\s+1\s*(?:#.*)?$)(?=.*^\s*gate_flag\s+(?:1|true)\s*(?:#.*)?$)(?=.*^\s*block\s+(?:1|true)\s*(?:#.*)?$)(?=.*^\s*efield_amp\s+0(?:\.0+)?\s*(?:#.*)?$)
+      flags: is
+  - key: must_kpt_gate_gamma
+    value:
+      filename: KPT_gate
+      tokens:
+      - K_POINTS
+      - Gamma
+      flags: i
+  - key: must_kpt_gate_single_point
+    value:
+      filename: KPT_gate
+      pattern: ^\s*1\s+1\s+1(?:\s+\d+){0,3}\s*$
+      flags: m
+  - key: suggested_input_gate_numerics
+    value:
+      filename: INPUT_gate
+      pattern: (?ims)(?=.*^\s*ecutwfc\s+100(?:\.0+)?\s*(?:#.*)?$)(?=.*^\s*scf_thr\s+1(?:\.0+)?[eE]-6\s*(?:#.*)?$)(?=.*^\s*out_pot\s+2\s*(?:#.*)?$)
+      flags: is
+  - key: suggested_gate_plane_and_barrier_fields
+    value:
+      filename: INPUT_gate
+      tokens:
+      - zgate
+      - nelec
+      - block_down
+      - block_up
+      - block_height
+      flags: i
+  - key: variable_input_gate_smearing_mixing
+    value:
+      filename: INPUT_gate
+      pattern: smearing_method\s+(?:gauss(?:ian)?|fixed|mp2?|methfessel-paxton|mv|cold|marzari-vanderbilt|fd|fermi-dirac).*mixing_type\s+broyden
+      flags: is
+  - key: variable_input_gate_window
+    value:
+      filename: INPUT_gate
+      tokens:
+      - efield_pos_max
+      - efield_pos_dec
+      flags: i
+  - key: input_gate_artifact
+    value: INPUT_gate
+  - key: kpt_gate_artifact
+    value: KPT_gate
   - key: turn_budget
     value:
       max: 8
@@ -613,24 +1218,53 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 18000
   scoring_checklist:
-  - id: gate_and_dipole_params
-    criterion: INPUT_gate combines dipole correction with compensating charge, including efield_flag/dip_cor_flag, gate_flag 1, a gate plane located in vacuum (e.g. zgate around 0.7), a task-consistent extra-electron setting (e.g. nelec around 9), and zero finite-field amplitude (efield_amp 0.0).
+  - id: must_input_gate_core
+    criterion: "[Must] INPUT_gate contains core dipole-correction + gate + barrier controls."
     axis: correctness
-    verify: llm_binary_judge
-  - id: spillout_barrier
-    criterion: INPUT_gate also enables a simple spill-out barrier (`block 1`) with the barrier window located in vacuum (e.g. around 0.45–0.55) and a small positive barrier height.
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_kpt_gate_gamma
+    criterion: "[Must] KPT_gate is Gamma-centered."
     axis: correctness
-    verify: llm_binary_judge
-  - id: gate_plane_and_barrier_params
-    criterion: INPUT_gate contains the required compensating-charge and barrier controls (`gate_flag 1`, `zgate` in vacuum, task-consistent `nelec`, `block 1`, and vacuum-window barrier parameters such as `block_down`, `block_up`, `block_height`).
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_kpt_gate_single_point
+    criterion: "[Must] KPT_gate uses a single Gamma point (1x1x1)."
     axis: correctness
-    verify: llm_binary_judge
-  - id: markers_contains
-    criterion: "Final answer text or generated files include required product markers: INPUT_gate, KPT_gate, `gate_flag 1`, `zgate`, `nelec`, `block 1`, and Gamma-centered K_POINTS."
+    verify: text_file_regex
+    weight: 1.0
+  - id: suggested_input_gate_numerics
+    criterion: "[Suggested] INPUT_gate follows benchmark numeric settings (`ecutwfc/scf_thr/out_pot`)."
     axis: correctness
-    verify: contains_all
+    verify: text_file_regex
+    weight: 0.6
+  - id: suggested_gate_plane_and_barrier_fields
+    criterion: "[Suggested] INPUT_gate includes gate-plane and barrier field parameters (`zgate`, `nelec`, `block_down/up/height`)."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.6
+  - id: variable_input_gate_smearing_mixing
+    criterion: "[Variable] INPUT_gate uses an acceptable smearing/mixing style for this benchmark family."
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.3
+  - id: variable_input_gate_window
+    criterion: "[Variable] INPUT_gate includes dipole-window position controls (`efield_pos_max`, `efield_pos_dec`)."
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.3
+  - id: input_gate_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_gate` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
+  - id: kpt_gate_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `KPT_gate` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
   - id: grounding_source
     criterion: The generated setup is grounded in base_h2o_gate.stru and does not modify the provided structure beyond preparing INPUT/KPT.
     axis: grounding
@@ -639,10 +1273,10 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: Produces INPUT_gate and KPT_gate efficiently without unnecessary exploration.
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
     axis: efficiency
-    verify: llm_binary_judge
+    verify: no_retries
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
     axis: efficiency

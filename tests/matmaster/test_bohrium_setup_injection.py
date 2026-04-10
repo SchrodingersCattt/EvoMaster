@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from matmaster.integration.bohrium_env import BohriumSetupResult
+from matmaster.bohrium.runtime import get_runtime
 from matmaster.types.events import (
     BohriumNodeEvent,
     ErrorEvent,
@@ -39,6 +40,8 @@ class TestBohriumSetupServiceOrchestration:
 
     @pytest.mark.asyncio
     async def test_run_setup_loads_credentials_and_delegates(self):
+        from src.services.agent_run_bohrium import BohriumSetupResult
+
         sink = MagicMock()
         svc = _make_service(event_sink=sink)
         event_cb = MagicMock()
@@ -48,6 +51,7 @@ class TestBohriumSetupServiceOrchestration:
             execution_session=None,
             execution_workdir="/remote",
             session_type="ssh",
+            runtime_snapshot=None,
         )
 
         with (
@@ -173,6 +177,22 @@ class TestBohriumEventBridgeMapping:
         finally:
             loop.close()
 
+    def test_bridge_emits_to_threadsafe_sink_without_loop_spin(self):
+        """Thread-safe sinks should receive events immediately from worker callbacks."""
+        sink, collected = self._collect_events()
+        svc = _make_service(event_sink=sink)
+        loop = asyncio.new_event_loop()
+
+        try:
+            bridge = svc._make_event_bridge(loop)
+            bridge('System', 'bohrium_node', {'status': 'ready'})
+
+            assert len(collected) == 1
+            assert isinstance(collected[0], BohriumNodeEvent)
+            assert collected[0].payload['content']['status'] == 'ready'
+        finally:
+            loop.close()
+
 
 class TestBohriumSetupServiceConstructor:
     """Verify constructor accepts event_sink instead of bus."""
@@ -221,3 +241,49 @@ class TestBohriumSetupServiceLocation:
         source = service_file.read_text(encoding="utf-8")
         assert "class BohriumSetupService" in source
         assert "class SkillSyncSpec" in source
+
+
+def test_apply_run_credentials_registers_runtime_without_dual_write() -> None:
+    from matmaster.bohrium.runtime import (
+        attach_local_bohrium_runtime_from_run_credentials,
+    )
+
+    session = SimpleNamespace()
+    run_creds = {
+        "access_key": "ak",
+        "project_id": 42,
+        "user_id": "7",
+        "user_no": "U001",
+        "base_url": "https://openapi.test.dp.tech/",
+    }
+
+    attach_local_bohrium_runtime_from_run_credentials(session, run_creds)
+
+    runtime = get_runtime(session)
+    assert runtime is not None
+    assert runtime.credentials().access_key == "ak"
+    assert not hasattr(session, "_bohrium_credentials")
+
+
+def test_playground_context_with_bohrium_uses_snapshot_dict() -> None:
+    from matmaster.types.context import PlaygroundContext
+
+    ctx = PlaygroundContext(
+        workdir=Path("/tmp/work"),
+        session_type="local",
+        cache_area=Path("/tmp/cache"),
+    )
+
+    updated = ctx.with_bohrium(
+        {
+            "session_type": "ssh",
+            "execution_workdir": "/share",
+            "remote_workspace_root": "/share",
+            "remote_project_root": "/share/.matmaster",
+            "node_id": 9,
+            "node_ip": "10.0.0.9",
+            "ssh_attached": True,
+        }
+    )
+
+    assert updated.run_meta["bohrium"]["node_id"] == 9

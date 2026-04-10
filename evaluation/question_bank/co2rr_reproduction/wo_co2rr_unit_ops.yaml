@@ -5,56 +5,7 @@ version: v5
 capability: co2rr_reproduction
 domain: mech
 questions:
-- id: CR_SC_Fe001_20260406
-  capability: co2rr_reproduction
-  domain: struct
-  intent: Build Fe(001) surface slab with specified thickness and 2x2x1 supercell
-    per reproduction doc section 3.1.1.
-  human_prompt_seed: '纯金属 Fe 的 (001) 切面 slab 建模：至少 3 层原子、2×2×1 扩胞；真空层足够避免镜像相互作用（建议 ≥15 Å），
-    结构在 z 方向居中。输出 POSCAR 或 CIF，并简要说明 Miller 指数、层数、扩胞与真空厚度。
-
-    '
-  tags:
-  - co2rr_repro
-  - surface_slab
-  - fe
-  - '001'
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: turn_budget
-    value: &cr_turn_std
-      max: 22
-  - key: duration_budget
-    value: &cr_dur_std
-      max: 7200000
-  - key: token_budget_total
-    value: &cr_tok_struct
-      max: 12000
-  scoring_checklist:
-  - id: deliverables_check
-    criterion: 输出包含可下载/可引用的 slab 结构文件，并明确给出 (001) Miller 指数、层数不少于 3、2×2×1（或等价）扩胞与真空厚度。
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: 几何设定与交付物一致（非泛泛描述）；若使用构建工具，最终结构应与所述参数一致。仅依据最终答案与命名文件判断。
-    axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within a generous benchmark ceiling (tunable after calibration).
-    axis: efficiency
-    verify: token_budget
-- id: CR_SC_ZnPd011_20260406
+- id: CR_SC_ZnPd011_20260409
   capability: co2rr_reproduction
   domain: struct
   intent: Cut ZnPd (011) slab from Materials Project bulk (mp-1103252) with 3 layers
@@ -75,11 +26,14 @@ questions:
   data_files: []
   reference_answers:
   - key: turn_budget
-    value: *cr_turn_std
+    value: &cr_turn_std
+      max: 22
   - key: duration_budget
-    value: *cr_dur_std
+    value: &cr_dur_std
+      max: 7200000
   - key: token_budget_total
-    value: *cr_tok_struct
+    value: &cr_tok_struct
+      max: 24000
   scoring_checklist:
   - id: mp_and_miller
     criterion: 答案明确使用 mp-1103252 为体相来源，(011) 切面，3 层、2×2×1 扩胞，并提供结构文件。
@@ -101,13 +55,13 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_SC_ZnS001_20260406v2
+- id: CR_SC_ZnS001_20260410
   capability: co2rr_reproduction
   domain: struct
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per
     doc 3.1.2.
-  human_prompt_seed: 'ZnS 化合物 (001) 切面 slab：3 层厚度、2×2×1 扩胞，真空 ≥15 Å。若为极性表面，说明是否采用对称 slab 或偶极修正策略。
-    输出结构文件并简述终止面/化学计量处理。
+  human_prompt_seed: 'ZnS 化合物 (001) 切面 slab：3 层厚度、2×2×1 扩胞，真空 ≥15 Å。若为极性表面，说明是否采用对称
+    slab 或偶极修正策略。输出 slab 结构文件为 `ZnS_001_slab.cif`，并简述终止面/化学计量处理。
 
     '
   tags:
@@ -120,6 +74,15 @@ questions:
   - planner
   data_files: []
   reference_answers:
+  - key: file_exists
+    value: ZnS_001_slab.cif
+  - key: slab_layer_count
+    value:
+      filename: ZnS_001_slab.cif
+      expected: 7
+      tolerance: 2
+      axis: z
+      layer_tol_A: 0.5
   - key: turn_budget
     value: *cr_turn_std
   - key: duration_budget
@@ -127,20 +90,49 @@ questions:
   - key: token_budget_total
     value: *cr_tok_struct
   scoring_checklist:
-  - id: geometry_ok
-    criterion: 交付 ZnS(001) slab，3 层、2×2×1、真空与居中要求满足文档 3.1.2。
+  - id: file_exists
+    criterion: The output file `ZnS_001_slab.cif` exists in the workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: slab_layer_count
+    criterion: The number of distinct atomic z-planes in ZnS_001_slab.cif is
+      approximately 5-9 (expected 7 ± 2), consistent with 3 Zn-S bilayers of
+      zinc-blende (001). Atoms within 0.5 Å along z are merged into one plane.
+    axis: correctness
+    verify: struct_file_layer_count
+  - id: supercell_vacuum_ok
+    criterion: 交付的 ZnS(001) slab 采用 2×2×1 扩胞，真空层 ≥15 Å。
     axis: correctness
     verify: llm_binary_judge
+    weight: 1.0
+  - id: slab_centering_ok
+    criterion: 交付的 ZnS(001) slab 在 z 方向居中（slab 原子位于 cell 中央区域，非贴近
+      上下边界）。
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
   - id: polar_handling
-    criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称 slab、施加偶极修正等），所述策略与交付的结构文件一致。
+    criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称
+      slab、施加偶极修正等），所述策略与交付的结构文件一致。
     axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical slab construction or surface cut with the same
+      parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: The ZnS(001) slab construction and polar-surface handling complete
+      without redundant exploratory calls.
+    axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
@@ -197,7 +189,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_WO_Ag_adsorption_20260407
+- id: CR_WO_Ag_adsorption_20260408
   capability: co2rr_reproduction
   domain: mech
   intent: Compute adsorption energies of six adsorbates on Ag(001) and Ag(011) at
@@ -227,12 +219,27 @@ questions:
     value:
       max: 20000
   scoring_checklist:
-  - id: coverage_table
-    criterion: "结果覆盖 Ag(001) 与 Ag(011)，六种吸附质（H, CO, COOH, CO2, HCOO, HCOOH），on-top 位点；给出吸附能数值表并定义能量参考（slab、气相）。NOTE: 具体使用哪种计算器（DP、MACE-MP、或其他 MLIP）不是本条评判标准——只要结果覆盖齐全、参考态定义清楚即可。若答案中表格包含 markdown 分隔线（如 |:---:|），这是格式标记，不是截断。Judge on coverage completeness and reference definition only."
+  - id: workflow_setup
+    criterion: "Agent demonstrates correct computational approach: (a) builds or references
+      Ag bulk structure, (b) cuts or describes cutting (001) and (011) surface slabs,
+      (c) prepares or scripts adsorbate-slab structures for the six adsorbates (H,
+      CO, COOH, CO2, HCOO, HCOOH), and (d) uses an MLIP/DP calculator or submits
+      remote Bohrium computation jobs. A well-structured script, code, or submitted
+      computation jobs satisfying these elements counts as pass even if final numerical
+      results are not yet available (e.g. due to wall-clock timeout)."
     axis: correctness
     verify: llm_binary_judge
+  - id: coverage_table
+    criterion: "结果覆盖 Ag(001) 与 Ag(011)，六种吸附质（H, CO, COOH, CO2, HCOO, HCOOH），on-top
+      位点；给出吸附能数值表并定义能量参考（slab、气相）。NOTE: 具体使用哪种计算器（DP、MACE-MP、或其他
+      MLIP）不是本条评判标准——只要结果覆盖齐全、参考态定义清楚即可。若答案中表格包含 markdown
+      分隔线（如 |:---:|），这是格式标记，不是截断。Judge on coverage completeness and reference
+      definition only."
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
   - id: grounding_workflow
-    criterion: 叙述与表格自洽，能看出从体相/表面到吸附结构的计算链条；未凭空列出与步骤无关的数值。
+    criterion: "从 Agent 的产物（脚本、代码、已提交的 Bohrium 计算任务、或最终叙述/表格）中能看出从体相/表面到吸附结构的合理计算链条。若有最终表格，则叙述与数值需自洽；若仅有脚本或计算作业提交记录，则代码逻辑须体现合理的结构构建与能量计算流程。未凭空列出与实际步骤无关的数值。"
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -247,7 +254,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_WO_limiting_potential_20260407v4
+- id: CR_WO_limiting_potential_20260409
   capability: co2rr_reproduction
   domain: elec
   intent: From free-energy steps on CO2RR-to-CO, HER, and CO2-to-HCOOH pathways,
@@ -275,7 +282,7 @@ questions:
     value: *cr_dur_std
   - key: token_budget_total
     value:
-      max: 14000
+      max: 22000
   scoring_checklist:
   - id: three_pathways_ul
     criterion: "In the FINAL delivered answer, all three reaction pathways are reported with their PDS (potential-determining step), ΔG_max (eV), and U_L (V): (1) CO₂→CO, (2) HER, (3) CO₂→HCOOH. NOTE: The answer may be in Chinese with markdown tables; lines like '|------|-------------|-----' are standard table header separators, NOT truncation indicators. Judge ONLY on whether the final answer text contains the three complete sets of (PDS, ΔG_max, U_L) values, regardless of intermediate computation steps."
@@ -383,76 +390,6 @@ questions:
     verify: llm_binary_judge
   - id: grounding_impl
     criterion: 实现与文档 4.3.1 描述一致（库函数选择、吸附质/基底识别规则、类别标签规则可读）。
-    axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within a generous benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: CR_CO2RR_screening_20260406
-  capability: co2rr_reproduction
-  domain: mech
-  intent: Build a three-metric catalyst screening score from U_L(CO2-to-CO), U_L(HER),
-    and CO adsorption energy using the provided CSV and closed-form spec.
-  human_prompt_seed: '阅读 `scoring_spec.json` 与 `screening_candidates.csv`，严格按 spec 中的公式计算每条候选的 score_S，
-    输出完整排名表（含各行的 U_L_CO_V、U_L_HER_V、E_ads_CO_eV、selectivity_V、ads_penalty_eV、score_S），
-    并明确写出排名第一的 catalyst_id 及其 score_S（至少三位小数）。不要改动 CSV 中的数值。
-
-    '
-  tags:
-  - co2rr_repro
-  - screening
-  - limiting_potential
-  - adsorption
-  mode_scope:
-  - direct
-  - planner
-  data_files:
-  - key: scoring_spec
-    path: data/CR_CO2RR_screening_20260406/scoring_spec.json
-    oss_url: ''
-    description: Closed-form three-metric screening score definition for CO2RR catalysts.
-  - key: screening_candidates
-    path: data/CR_CO2RR_screening_20260406/screening_candidates.csv
-    oss_url: ''
-    description: Candidate catalysts with U_L and CO adsorption columns.
-  reference_answers:
-  - key: top_catalyst_id
-    value: cat_B
-  - key: top_score_S
-    value: -0.385
-    tolerance: 0.002
-  - key: turn_budget
-    value:
-      max: 18
-  - key: duration_budget
-    value: *cr_dur_std
-  - key: token_budget_total
-    value:
-      max: 10000
-  scoring_checklist:
-  - id: top_catalyst_id
-    criterion: 最终答案中推荐的排名第一催化剂 id 为 cat_B（可与说明文字同现，但必须一致）。
-    axis: correctness
-    verify: exact_match
-  - id: top_score_S
-    criterion: 报告的第一名 score_S 与按 spec 手算一致，约为 -0.385（允许数值读取误差）。
-    axis: correctness
-    verify: numerical_range
-  - id: full_ranking
-    criterion: 给出全部候选的 score_S 排序表，且每行中间量（selectivity_V、ads_penalty_eV）与公式一致。
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_spec
-    criterion: 计算与 scoring_spec.json 中公式一致，使用的列名与 CSV 一致，未篡改输入数据。
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget

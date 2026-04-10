@@ -24,7 +24,7 @@ evaluation/question_bank/
 ├── safety_refusal/sr_general.yaml
 └── data/                                 # 题目输入数据文件（按题目 ID 子目录）
     ├── README.md
-    ├── BP_struct_001/
+    ├── BP_struct_003/
     └── ...
 ```
 
@@ -76,7 +76,12 @@ evaluation/question_bank/
 
 #### domain 枚举
 
-`struct` / `elec` / `mech` / `thermo` / `kinetic` / `optical` / `general`
+`struct` / `elec` / `mech` / `thermo` / `kinetic` / `optical` / `general` / `incar` / `polymer`
+
+#### 运行筛选：`--slices` / `include_slices`
+
+- **CLI**：`--slices 'A B[a,b] C[d]'`。**括号外的空白**分隔 **OR** 分支；`[]` 内**禁止空白**（域名用逗号分隔，如 `[a,b]`）；无 `[]` 表示该 capability 下 **任意 domain**；`[dom]` 或 `[d1,d2]` 表示 domain 在列表内（列表内为 OR）。
+- **`evaluation/config.yaml`**：可用 `include_slices: [{ capability: "…", domains: ["…"] }, { capability: "…" }]`（`domains` 省略表示不限 domain）。
 
 ### `data_files` 每条（`DataFileRef`）
 
@@ -141,6 +146,9 @@ evaluation/question_bank/
 | `struct_file_layer_count` | `{"filename": str, "expected": int, "tolerance": float, "axis": str, "layer_tol_A": float}` | 沿指定轴在笛卡尔坐标下统计**不同原子平面**数：排序后，与当前平面锚点距离超过 `layer_tol_A`（Å）则开始新平面；默认 `layer_tol_A` 为 `0.25`。旧字段 `gap_threshold_A` 仍可读，但语义为平面合并容差（与现实现一致），新题请写 `layer_tol_A` |
 | `struct_file_count` | `{"pattern": str, "expected": int, "tolerance": int}` | 统计 workspace 中匹配 glob 的文件数（无需 pymatgen） |
 | `struct_file_surface_termination` | `{"filename": str, "element": str, "axis": "x"\|"y"\|"z", "side": "top"\|"bottom"\|"both", "layer_tol_A": float}` | 检查 slab 最外层（top/bottom/both）是否由指定元素构成；用于验证 O-terminated 或其他特定终止面（如 CeO2(111) 的 O 终止）|
+| `checkcif_no_a_alerts` | `{"filename": str, "max_a_alerts": int}` | 在 workspace 中找到匹配 `filename`（glob，默认 `*.cif`）的 CIF 文件，POST 到 IUCr checkCIF 服务（`https://checkcif.iucr.org/cgi-bin/checkcif_hkl.pl`），解析 HTML 响应中的 A/B/C/G 级别警告数，验证 A 级警告数 ≤ `max_a_alerts`（默认 0）。实现见 `evaluation/validators/checkcif.py`。|
+| `text_file_contains_all` | `{"filename": str, "tokens": list[str], "flags": str, "case_sensitive": bool, "normalize_whitespace": bool}` | 读取 workspace 文本文件并检查 `tokens` 全部出现；可选 `flags: "i"`、大小写与空白归一化控制 |
+| `text_file_regex` | `{"filename": str, "pattern": str, "flags": str}` | 读取 workspace 文本文件并做正则匹配（`flags` 支持 `i/m/s`） |
 
 ### 不需要对应 `reference_answers` 条目
 
@@ -164,7 +172,7 @@ evaluation/question_bank/
 | `data_files` 的文件 | ✅ **间接**（复制到 workspace） | Runner 复制文件并追加提示 |
 | `intent` | ⚠️ 仅 prompt 改写模式 | LLM 裁判上下文；prompt 改写上下文 |
 | `id` | ❌ | task_id 标识；`--questions` 过滤 |
-| `capability` | ❌ | `--capabilities` 过滤；safety 路由；聚合 + 报告 |
+| `capability` | ❌ | `--slices` 过滤（见下）；safety 路由；聚合 + 报告 |
 | `domain` | ❌ | 聚合 + 报告 |
 | `mode_scope` | ❌ | 决定跑哪些 mode |
 | `tags` | ❌ | 目前未被代码消费（预留） |
@@ -243,17 +251,17 @@ scoring_checklist:
 
 - 自迭代时「产品侧」可写资产以 `config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/` 等为准；`matmaster/core/` 仅在框架层缺陷明确时再动。`matmaster/cache/` 下 JSON 视为生成物，若改动影响 MCP schema / lazy tool 可见性，应执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成，而不是长期手改。默认不优先修改 `src/`、`app.py` 等 API / Worker 路径，除非失败与该链路明确相关。本仓库已移除历史 `playground/mat_master/` 目录树（与 EvoMaster 上游示例 `playground/` 不是同一概念）。
 - DevShell / IDE 流程：`evaluation/docs/devshell/devshell_claude_code_eval.md`（`run_devshell_eval.py` + `score_devshell_tasks.py` 自动评分）。
-- **程序化**多轮「跑题 → 判分 → 改提示词/工具」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。自迭代时模型侧约定「每处修改单独 commit、无效则 revert」；编排层可用 `--no-git-reset-on-regression` 关闭「较上一轮退步则 reset 到本轮起点」的保险。默认在 **`--eval-ingest-pending-only`** 下每轮结束后自动 `score_devshell_tasks.py --submit` 上报 ingest（见该文档）；`--no-eval-ingest-submit-each-iteration` 可关。**双 Agent**：主 Agent 不得改 `evaluation/question_bank/`；题库/checklist 调整经 `escalate_checklist_revision` 由专责会话处理（见该文档）。
+- **程序化**多轮「跑题 → 判分 → 分流优化」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。默认在 **`--eval-ingest-pending-only`** 下每轮结束后自动 `score_devshell_tasks.py --submit` 上报 ingest（见该文档）；`--no-eval-ingest-submit-each-iteration` 可关。**三 Agent**：主 Agent 只负责 Drive、读取脱敏摘要并显式委派，禁止编辑文件；**仅允许**通过 MCP `main_read_text` / `main_glob_paths` / `main_grep_text` 只读整棵 ``evaluation/devshell_agent_history/``（含各次 run 子目录与 ``index.jsonl``），**禁止**读取 `evaluation/**` 其余路径；Checklist Agent 可只读 `evaluation/question_bank/`、`evaluation/core/` 等，由 `escalate_checklist_revision` 触发，**写入仅限**会话目录下 `proposed_question_bank_changes.md`（proposal，不自动 git commit）；优化 Agent 仅处理产品侧目录，由 `delegate_optimization` 触发，禁止读取 `evaluation/**`（会话目录除外）。Checklist Agent 与优化 Agent 均应通过编排器提供的**受限 MCP 文件工具**读写，不再依赖内建 `Read/Edit/Write/Bash`。若 checklist follow-up 造成题目 `id` 集合变化，应立即停止外层循环。跨轮摘要持久化到 `evaluation/devshell_agent_history/`，不受 `results/` 清理影响。无人值守运行时默认 **`--permission-mode bypassPermissions`**（Claude Agent SDK），避免子会话中 Bash（如 `git`）因需人工批准而失败；交互式可改用 `acceptEdits`。
 
 ---
 
 ## 运行入口
 
 ```bash
-# 指定 capability 或题目 ID 运行
+# 指定切片（OR）或题目 ID 运行；切片语法：cap cap[dom] cap[d1,d2]（括号外空格分隔）
 uv run python -m evaluation.cli \
   --eval-config evaluation/config.yaml \
-  --capabilities batch_processing workflow_orchestration \
+  --slices 'batch_processing workflow_orchestration[polymer]' \
   --questions DF_mech_001 WO_mech_001
 
 # 后台运行（Linux）

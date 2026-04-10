@@ -168,6 +168,11 @@ class SSHSession:
             if channel.recv_stderr_ready():
                 stderr_chunks.append(channel.recv_stderr(65536))
             if time.monotonic() >= deadline:
+                # A command can finish right at the deadline: stdout is already
+                # readable, but Paramiko may not report exit_status_ready() until
+                # the next poll tick. Re-check once before classifying as timeout.
+                if channel.exit_status_ready():
+                    break
                 channel.close()
                 out = b"".join(stdout_chunks).decode("utf-8", errors="replace")
                 return {

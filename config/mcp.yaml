@@ -1,7 +1,7 @@
 # MCP service config
 # Endpoint addresses defined in mcp_config.{env}.json
 
-path_adaptor: "calculation"
+calculation_preflight: "calculation"
 calculation_servers:
   - "mat_sg"
   - "mat_compdart"

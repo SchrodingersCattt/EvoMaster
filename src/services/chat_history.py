@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from matmaster.response_text import is_trivial_response_text
+from matmaster.types.message_normalization import restore_persisted_assistant_state
 from matmaster.types.messages import (
     AssistantMessage,
     ToolCallData,
@@ -267,16 +268,25 @@ class ChatHistoryConverter:
     @staticmethod
     def _assistant_reasoning_content(raw: Any) -> str | None:
         """从 assistant_state 序列化内容中提取 reasoning_content。"""
-        if not isinstance(raw, dict):
+        payload = ChatHistoryConverter._assistant_state_payload(raw)
+        if not isinstance(payload, dict):
             return None
-        direct = raw.get('reasoning_content')
+        direct = payload.get('reasoning_content')
         if isinstance(direct, str) and direct:
             return direct
-        meta = raw.get('meta')
+        meta = payload.get('meta')
         if isinstance(meta, dict):
             fallback = meta.get('reasoning_content')
             if isinstance(fallback, str) and fallback:
                 return fallback
+        return None
+
+    @staticmethod
+    def _assistant_state_payload(raw: Any) -> dict[str, Any] | None:
+        if isinstance(raw, dict) and isinstance(raw.get("state"), dict):
+            return raw["state"]
+        if isinstance(raw, dict):
+            return raw
         return None
 
     @staticmethod
@@ -463,12 +473,15 @@ class ChatHistoryConverter:
                 flush_tool_calls()
                 active_tool_turn_ids.clear()
                 raw_content = ev.get('content')
+                # Unwrap {"state": {...}} so _adapt_tool_calls_format reaches
+                # legacy nested tool_calls inside the wrapped payload.
+                inner = cls._assistant_state_payload(raw_content) or raw_content
                 try:
-                    msg = AssistantMessage.model_validate(
+                    msg = restore_persisted_assistant_state(
                         _sanitize_trivial_tool_call_preamble(
-                            _adapt_tool_calls_format(raw_content)
+                            _adapt_tool_calls_format(inner)
                         )
-                        if raw_content
+                        if inner
                         else {}
                     )
                 except Exception as e:

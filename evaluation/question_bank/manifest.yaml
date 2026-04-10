@@ -86,7 +86,7 @@ banks:
 
   - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
     capability: "co2rr_reproduction"
-    questions: 10
+    questions: 7
 
   - path: "safety_refusal/sr_general.yaml"
     capability: "safety_refusal"
@@ -108,10 +108,6 @@ banks:
 
   - path: "workflow_orchestration/wo_elec_adsorption.yaml"
     capability: "workflow_orchestration"
-    questions: 1
-
-  - path: "structure_construction/sc_elec.yaml"
-    capability: "structure_construction"
     questions: 1
 
   - path: "batch_processing/bp_elec.yaml"
@@ -161,4 +157,10 @@ banks:
     capability: "property_prediction"
     questions: 1
 
-# Total: 77 questions across 21 bank files
+  # --- Single-crystal XRD structure solution & refinement ---
+
+  - path: "data_fitting/df_scxrd.yaml"
+    capability: "property_prediction"
+    questions: 2
+
+# Total: 93 questions across 28 bank files

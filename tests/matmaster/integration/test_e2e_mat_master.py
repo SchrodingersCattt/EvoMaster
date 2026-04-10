@@ -700,7 +700,7 @@ class TestMatMasterRunAgentE2E:
 
             async def _mock_setup(**kwargs):
                 return BohriumSetupResult(
-                    False, ((False, reason), 10), None, None, None
+                    False, ((False, reason), 10), None, None, None, None
                 )
 
             mock_bohrium_svc.run_setup = AsyncMock(side_effect=_mock_setup)

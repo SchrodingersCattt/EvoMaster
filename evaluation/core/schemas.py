@@ -9,7 +9,7 @@ Current v5 schema changes:
 - EvalRunRecord: binary pass counts + weighted scores (axis_weights from config applied)
 - EvaluationSummary: pass-rate oriented with AxisPassRates + weighted equivalents
 - QuestionBank: no longer requires rubric field
-- EvalConfig: added axis_weights for weighted aggregation
+- EvalConfig: axis_weights; ``include_slices`` (OR-of capability + optional domains)
 
 Scoring model:
 - LLM / deterministic verifiers produce binary (pass/fail) verdicts per checklist item
@@ -66,6 +66,11 @@ VerifyLiteral = Literal[
     'struct_file_count',
     # surface termination check
     'struct_file_surface_termination',
+    # IUCr checkCIF web service (single-crystal XRD validation)
+    'checkcif_no_a_alerts',
+    # plain-text file checks
+    'text_file_contains_all',
+    'text_file_regex',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
@@ -92,6 +97,7 @@ DomainLiteral = Literal[
     'optical',
     'general',
     'incar',
+    'scxrd',
     'polymer',
 ]
 
@@ -238,6 +244,8 @@ class QuestionItem(BaseModel):
             'molcrys_slab_molecular_integrity',
             'molcrys_local_env',
             'sc005_disorder_formulas',
+            'text_file_contains_all',
+            'text_file_regex',
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:
@@ -288,6 +296,27 @@ class LLMRuntimeConfig(BaseModel):
     timeout: int = 180
 
 
+class CapabilitySlice(BaseModel):
+    """One OR-branch in ``include_slices``: capability plus optional domain filter."""
+
+    capability: str
+    domains: list[str] | None = None
+
+    @field_validator('capability')
+    @classmethod
+    def _capability_non_empty(cls, value: str) -> str:
+        if not str(value).strip():
+            raise ValueError('capability cannot be empty')
+        return str(value).strip()
+
+    @field_validator('domains')
+    @classmethod
+    def _domains_non_empty_when_set(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None and not value:
+            raise ValueError('domains must be omitted or a non-empty list')
+        return value
+
+
 class EvalConfig(BaseModel):
     """Top-level evaluation config."""
 
@@ -302,7 +331,7 @@ class EvalConfig(BaseModel):
     mat_config_path: str = 'configs/mat_master/config.yaml'
     simulator_llm: LLMRuntimeConfig | None = None
     evaluator_llm: LLMRuntimeConfig | None = None
-    include_capabilities: list[str] | None = None
+    include_slices: list[CapabilitySlice] | None = None
     include_question_ids: list[str] | None = None
 
     # Axis weights for aggregation (default 1.0 each, normalized during calculation)
