@@ -4,6 +4,14 @@
     "msd_timeseries.csv",
     "density_profile.dat"
   ],
-  "targets": ["band", "msd", "density"],
-  "required_outputs": ["figures", "tables", "interpretation_text"]
+  "required_outputs": [
+    "figures",
+    "tables",
+    "interpretation_text"
+  ],
+  "targets": [
+    "band",
+    "msd",
+    "density"
+  ]
 }

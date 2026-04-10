@@ -1,7 +1,15 @@
 {
-  "phases": ["screening", "deep_calculation", "reporting"],
+  "deliverables": [
+    "report",
+    "figures",
+    "summary_table"
+  ],
   "max_total_hours": 72,
-  "priority_rule": "screen before deep calculation",
-  "deliverables": ["report", "figures", "summary_table"],
-  "must_control_cost": true
+  "must_control_cost": true,
+  "phases": [
+    "screening",
+    "deep_calculation",
+    "reporting"
+  ],
+  "priority_rule": "screen before deep calculation"
 }
