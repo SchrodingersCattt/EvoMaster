@@ -50,15 +50,15 @@ tools:
 banks:
   - path: "batch_processing/bp_struct.yaml"
     capability: "batch_processing"
-    questions: 5
+    questions: 3
 
   - path: "data_diagnosis/dd_general.yaml"
     capability: "data_diagnosis"
-    questions: 5
+    questions: 7
 
   - path: "data_fitting/df_mech.yaml"
     capability: "property_prediction"
-    questions: 2
+    questions: 3
 
   - path: "data_fitting/df_elec.yaml"
     capability: "property_prediction"
@@ -66,7 +66,7 @@ banks:
 
   - path: "structure_construction/sc_struct.yaml"
     capability: "structure_construction"
-    questions: 9
+    questions: 10
 
   - path: "workflow_orchestration/wo_mech.yaml"
     capability: "workflow_orchestration"
@@ -76,6 +76,10 @@ banks:
     capability: "workflow_orchestration"
     questions: 2
 
+  - path: "structure_retrieval/sr_struct_db.yaml"
+    capability: "structure_retrieval"
+    questions: 3
+
   - path: "workflow_orchestration/wo_elec.yaml"
     capability: "workflow_orchestration"
     questions: 3
@@ -83,6 +87,10 @@ banks:
   - path: "workflow_orchestration/wo_kinetic.yaml"
     capability: "workflow_orchestration"
     questions: 1
+
+  - path: "workflow_orchestration/wo_general.yaml"
+    capability: "workflow_orchestration"
+    questions: 3
 
   - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
     capability: "co2rr_reproduction"
@@ -128,30 +136,26 @@ banks:
 
   - path: "workflow_orchestration/wo_mlip_dpa.yaml"
     capability: "workflow_orchestration"
-    questions: 5
+    questions: 6
 
   # --- Polymer projects ---
-  - path: "polymer/PM_proj_001_20260408.yaml"
+  - path: "polymer/pl_donor.yaml"
     capability: "workflow_orchestration"
     questions: 1
 
-  - path: "polymer/PM_proj_002_20260408.yaml"
+  - path: "polymer/pl_membrane.yaml"
     capability: "workflow_orchestration"
     questions: 1
 
-  - path: "polymer/PM_proj_003_20260408.yaml"
+  - path: "polymer/pl_rheology.yaml"
     capability: "workflow_orchestration"
     questions: 1
 
-  - path: "polymer/PM_proj_004_20260408.yaml"
+  - path: "polymer/pl_adhesion.yaml"
     capability: "workflow_orchestration"
     questions: 1
 
-  - path: "polymer/PM_proj_005_20260408.yaml"
-    capability: "workflow_orchestration"
-    questions: 1
-
-  - path: "polymer/PM_proj_006_20260408.yaml"
+  - path: "polymer/pl_hopping.yaml"
     capability: "workflow_orchestration"
     questions: 1
 
@@ -167,4 +171,4 @@ banks:
     capability: "property_prediction"
     questions: 2
 
-# Total: 93 questions across 28 bank files
+# Total: 99 questions across 29 bank files

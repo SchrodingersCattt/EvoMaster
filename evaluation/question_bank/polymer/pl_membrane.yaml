@@ -2,12 +2,12 @@ version: v5
 capability: workflow_orchestration
 domain: polymer
 questions:
-- id: PM_proj_003_20260408
+- id: pl_membrane
   capability: workflow_orchestration
   domain: polymer
   intent: Compare PIM-1, Matrimid, and 6FDA-DAM membranes for CO2/N2 separation by integrating solubility, diffusivity, free-volume, and ranking metrics.
   human_prompt_seed: |
-    文件 `project_bundle.json` 汇总了 PIM-1、Matrimid 和 6FDA-DAM 三类聚合物膜在 CO2/N2 分离中的中间数据。
+    文件 `membrane_screening_bundle.json` 汇总了 PIM-1、Matrimid 和 6FDA-DAM 三类聚合物膜在 CO2/N2 分离中的中间数据。
     请完成一份膜材料筛选报告：
     1. 计算或核对各体系的 CO2 permeability 与 CO2/N2 selectivity；
     2. 区分哪些优势来自高溶解度，哪些来自高扩散性；
@@ -22,8 +22,8 @@ questions:
   - direct
   - planner
   data_files:
-  - key: project_bundle
-    path: data/PM_proj_003_20260408/project_bundle.json
+  - key: membrane_bundle
+    path: data/pl_membrane/membrane_screening_bundle.json
     description: Membrane-screening bundle with solubility, diffusivity, permeability, selectivity, and free-volume descriptors for CO2/N2 separation.
   reference_answers:
   - key: best_balanced_candidate
@@ -68,7 +68,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer uses the provided solubility, diffusivity, permeability, and free-volume evidence from project_bundle.json rather than generic membrane heuristics alone.
+    criterion: The answer uses the provided solubility, diffusivity, permeability, and free-volume evidence from membrane_screening_bundle.json rather than generic membrane heuristics alone.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge

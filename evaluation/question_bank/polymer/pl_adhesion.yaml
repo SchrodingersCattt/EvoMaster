@@ -2,12 +2,12 @@ version: v5
 capability: workflow_orchestration
 domain: polymer
 questions:
-- id: PM_proj_005_20260408
+- id: pl_adhesion
   capability: workflow_orchestration
   domain: polymer
   intent: Compare polyimide adhesion on hydroxyl-rich, epoxy-rich, and carboxyl-rich graphene-oxide surfaces using curated adsorption, MD, and adhesion-work evidence.
   human_prompt_seed: |
-    文件 `project_bundle.json` 汇总了聚酰亚胺短链与三类氧化石墨烯表面的界面项目数据。
+    文件 `interface_adhesion_bundle.json` 汇总了聚酰亚胺短链与三类氧化石墨烯表面的界面项目数据。
     请完成一个界面粘附分析报告：
     1. 比较不同表面化学条件下的吸附能、界面接触面积、链取向和粘附功；
     2. 说明哪类官能团更有利于增强界面；
@@ -22,8 +22,8 @@ questions:
   - direct
   - planner
   data_files:
-  - key: project_bundle
-    path: data/PM_proj_005_20260408/project_bundle.json
+  - key: interface_bundle
+    path: data/pl_adhesion/interface_adhesion_bundle.json
     description: Interface bundle with adsorption energies, MD-derived contact descriptors, adhesion work, and surface-chemistry ranking.
   reference_answers:
   - key: best_surface
@@ -68,7 +68,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer grounds interface conclusions in the provided adsorption, contact-area, orientation, and adhesion-work evidence from project_bundle.json.
+    criterion: The answer grounds interface conclusions in the provided adsorption, contact-area, orientation, and adhesion-work evidence from interface_adhesion_bundle.json.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge
