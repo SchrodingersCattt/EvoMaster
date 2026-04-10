@@ -6,7 +6,8 @@ questions:
   capability: data_diagnosis
   domain: general
   intent: Diagnose SCF non-convergence caused by missing spin polarization on a magnetic oxide.
-  human_prompt_seed: '读取 `case_bundle.json`，其中包含一个 Fe2O3 计算的 INCAR 参数、POSCAR 摘要和 OUTCAR 能量迭代摘录。 SCF 迭代 60 步仍未收敛，能量振幅约 0.25 eV。请诊断根本原因，并给出修复方案。
+  human_prompt_seed: '读取 `case_bundle.json`，其中包含一个 Fe2O3 计算的 INCAR 参数、POSCAR 摘要和 OUTCAR 能量迭代摘录。 SCF 迭代 60 步仍未收敛，能量振幅约 0.25
+    eV。请诊断根本原因，并给出修复方案。
 
     '
   tags:
@@ -31,13 +32,13 @@ questions:
     - fix_ISPIN
     - fix_MAGMOM
   - key: turn_budget
-    value:
+    value: &id000
       max: 8
   - key: duration_budget
-    value:
+    value: &id001
       max: 7200000
   - key: token_budget_total
-    value:
+    value: &id002
       max: 8000
   scoring_checklist:
   - id: root_cause
@@ -49,7 +50,8 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_evidence
-    criterion: Diagnosis is grounded in the provided case_bundle.json data (INCAR parameters, OUTCAR energy profile), not generic DFT advice.
+    criterion: Diagnosis is grounded in the provided case_bundle.json data (INCAR parameters, OUTCAR energy profile), not
+      generic DFT advice.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge
@@ -61,7 +63,8 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
+      per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
@@ -97,14 +100,11 @@ questions:
     - fix_ISMEAR
     - fix_SIGMA
   - key: turn_budget
-    value:
-      max: 8
+    value: *id000
   - key: duration_budget
-    value:
-      max: 7200000
+    value: *id001
   - key: token_budget_total
-    value:
-      max: 8000
+    value: *id002
   scoring_checklist:
   - id: root_cause
     criterion: Correctly identifies ISMEAR/SIGMA mismatch (Methfessel-Paxton on semiconductor Si) as root cause.
@@ -127,7 +127,8 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
+      per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
@@ -138,7 +139,8 @@ questions:
   capability: data_diagnosis
   domain: general
   intent: Diagnose relaxation non-convergence caused by EDIFF being too loose relative to EDIFFG.
-  human_prompt_seed: '读取 `case_bundle.json`，其中包含一个 LiCoO2 弛豫计算的 INCAR 参数和离子步摘录。 200 步 NSW 用完仍未收敛，力在 0.019-0.022 eV/A 之间振荡，且每步 SCF 仅 3 步就收敛了。 请诊断根本原因，并给出修复方案。
+  human_prompt_seed: '读取 `case_bundle.json`，其中包含一个 LiCoO2 弛豫计算的 INCAR 参数和离子步摘录。 200 步 NSW 用完仍未收敛，力在 0.019-0.022 eV/A 之间振荡，且每步
+    SCF 仅 3 步就收敛了。 请诊断根本原因，并给出修复方案。
 
     '
   tags:
@@ -163,14 +165,11 @@ questions:
     - fix_EDIFF
     - ediff_ediffg_rule
   - key: turn_budget
-    value:
-      max: 8
+    value: *id000
   - key: duration_budget
-    value:
-      max: 7200000
+    value: *id001
   - key: token_budget_total
-    value:
-      max: 8000
+    value: *id002
   scoring_checklist:
   - id: root_cause
     criterion: Correctly identifies EDIFF too loose (1E-3 causing force noise in LiCoO2 relax) as root cause.
@@ -181,7 +180,8 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_evidence
-    criterion: Diagnosis references specific values from the case_bundle.json (EDIFF=1E-3, force oscillation range, rapid SCF convergence pattern).
+    criterion: Diagnosis references specific values from the case_bundle.json (EDIFF=1E-3, force oscillation range, rapid
+      SCF convergence pattern).
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge
@@ -193,7 +193,8 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
+      per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
@@ -204,7 +205,8 @@ questions:
   capability: data_diagnosis
   domain: general
   intent: Diagnose relaxation divergence caused by POTIM too large combined with wrong initial phase.
-  human_prompt_seed: '读取 `case_bundle.json`，其中包含一个 CsPbI3 弛豫计算的 INCAR 参数和离子步摘录。 5 步内能量从 -19 eV 升到 +8 eV，力从 2.3 爆炸到 48 eV/A，体积剧烈波动。 请诊断根本原因，并给出修复方案。
+  human_prompt_seed: '读取 `case_bundle.json`，其中包含一个 CsPbI3 弛豫计算的 INCAR 参数和离子步摘录。 5 步内能量从 -19 eV 升到 +8 eV，力从 2.3 爆炸到 48 eV/A，体积剧烈波动。
+    请诊断根本原因，并给出修复方案。
 
     '
   tags:
@@ -230,25 +232,24 @@ questions:
     - fix_POTIM
     - fix_initial_structure
   - key: turn_budget
-    value:
-      max: 8
+    value: *id000
   - key: duration_budget
-    value:
-      max: 7200000
+    value: *id001
   - key: token_budget_total
-    value:
-      max: 8000
+    value: *id002
   scoring_checklist:
   - id: root_cause
     criterion: Identifies both POTIM too large (1.0) and wrong initial phase (cubic vs orthorhombic CsPbI3).
     axis: correctness
     verify: llm_binary_judge
   - id: required_fields
-    criterion: Provides evidence from energy/force divergence trajectory, and recommends both reducing POTIM and using correct Pnma phase.
+    criterion: Provides evidence from energy/force divergence trajectory, and recommends both reducing POTIM and using correct
+      Pnma phase.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_evidence
-    criterion: Both root causes are evidenced by specific data from case_bundle.json (POTIM=1.0 in INCAR, energy/force explosion pattern in OUTCAR).
+    criterion: Both root causes are evidenced by specific data from case_bundle.json (POTIM=1.0 in INCAR, energy/force explosion
+      pattern in OUTCAR).
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge
@@ -260,7 +261,8 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
+      per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
@@ -271,7 +273,8 @@ questions:
   capability: data_diagnosis
   domain: general
   intent: Given descriptions of mixed failed-job scenarios, classify failure modes and provide parameterized retry strategy.
-  human_prompt_seed: '假设你提交了一批 20 个 DFT 计算任务，其中 6 个失败了，失败原因如下： Job 3, 7: SCF 不收敛（含过渡金属，ISPIN=1）； Job 11: 内存不足（NCORE 设置不当）； Job 15, 18: KPOINTS 太密导致超时； Job 20: 输入文件 POTCAR 缺失。 请分类这些失败模式（至少 3 类），为每类给出参数化的重试方案和终止条件。
+  human_prompt_seed: '假设你提交了一批 20 个 DFT 计算任务，其中 6 个失败了，失败原因如下： Job 3, 7: SCF 不收敛（含过渡金属，ISPIN=1）； Job 11: 内存不足（NCORE 设置不当）；
+    Job 15, 18: KPOINTS 太密导致超时； Job 20: 输入文件 POTCAR 缺失。 请分类这些失败模式（至少 3 类），为每类给出参数化的重试方案和终止条件。
 
     '
   tags:
@@ -293,14 +296,11 @@ questions:
     - fallback_rule
     - stop_condition
   - key: turn_budget
-    value:
-      max: 8
+    value: *id000
   - key: duration_budget
-    value:
-      max: 7200000
+    value: *id001
   - key: token_budget_total
-    value:
-      max: 8000
+    value: *id002
   scoring_checklist:
   - id: failure_classes_count
     criterion: Identifies expected number of failure classes (≥ 3).
@@ -311,11 +311,14 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: Each failure class is grounded in the specific job descriptions provided in the prompt (Job IDs, error types); no generic advice without tracing to the prompt. Judge solely from the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: Each failure class is grounded in the specific job descriptions provided in the prompt (Job IDs, error types);
+      no generic advice without tracing to the prompt. Judge solely from the final answer; do not fail because the tool-call
+      log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge
-    criterion: Failure classification and retry policy are produced without unnecessary tool calls beyond reading the provided failure descriptions.
+    criterion: Failure classification and retry policy are produced without unnecessary tool calls beyond reading the provided
+      failure descriptions.
     axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget
@@ -323,7 +326,8 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
+      per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
