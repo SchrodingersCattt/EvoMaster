@@ -43,7 +43,7 @@
 - `ToolCatalog`（`matmaster/tools/tool_catalog.py`）：`ToolRegistry` 之上的 versioned 门面，把 `Tool` 编译成 `ToolInstance`。`register_overlay()` 递增版本触发重编译。
 - `FullToolRunner`（`matmaster/core/tool_runner.py`）执行顺序：catalog lookup → `StructuralValidation` → `CapabilityPolicy` → fast path → `ToolScheduler` → executor → release。
 - **所有层的失败必须包成 `ToolResult`**（`matmaster/tools/tool_result.py`），在 `meta["layer"]` 标明来源。不要裸抛异常跨 runner 层。
-- 发 LLM 消息前必须经 `matmaster/types/message_normalization.py::validate_openai_messages`。
+- 发 LLM 消息前必须经 `matmaster/types/message_normalization.py::normalize_and_validate_openai_messages`（同时做 role/content shape 与 tool-turn 配对校验）。
 - 新增内置工具：`matmaster/tools/builtin/{name}_tool.py`。
 - 新增 MCP 包装工具：skill 放 `matmaster/skills/lazymcp/{server}/`，由 `matmaster/tools/lazy_mcp.py::LazyMCPTool` 按需连接。
 - 注册路径始终走 `ToolRegistry.register()` 再由 `ToolCatalog` 编译，不要绕过 Catalog 直接构造 runner。
