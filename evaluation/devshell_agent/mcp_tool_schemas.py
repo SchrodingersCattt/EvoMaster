@@ -155,16 +155,22 @@ REPORT_CHECKLIST_REVISION_SCHEMA: dict[str, Any] = {
         },
         "no_changes": {
             "type": "boolean",
-            "description": "True if after review no YAML edit was needed.",
+            "description": (
+                "True if after review no proposal was needed (no substantive checklist/core fix)."
+            ),
         },
         "rationale": {
             "type": "string",
-            "description": "What was reviewed and what was changed or skipped.",
+            "description": "What was reviewed and what was proposed or skipped.",
         },
         "files_touched": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Repo-relative paths under evaluation/question_bank/ (if any).",
+            "description": (
+                "Repo-relative paths: typically proposed_question_bank_changes.md under the "
+                "session dir, and/or evaluation/question_bank/ or evaluation/core/ targets "
+                "named inside the proposal."
+            ),
         },
     },
     "required": ["iteration_index", "no_changes", "rationale"],

@@ -26,15 +26,16 @@ uv run python evaluation/scripts/devshell/run_devshell_agent_loop.py \
 
 - **会话目录**（默认 `results/devshell_agent_loop_<UTC>/`）：写入 `session_manifest.json`、`outcomes.jsonl`，评测子目录在 `eval_runs/<iteration_tag>/`。
 - **内层评测**：由工具 `run_devshell_eval` 子进程调用 `evaluation/scripts/devshell/run_devshell_eval.py`（默认 `--no-clean-results` 且显式 `--output-dir`，避免清空整个 `results/`）。
-- **双 Agent（防作弊）**：主 Agent **禁止** Edit/Write `evaluation/question_bank/**`；若认为 `scoring_checklist` / `reference_answers` 不公或错误，应调用 MCP 工具 **`escalate_checklist_revision`**。编排器在本轮主会话结束后，若队列非空，再启**第二个** SDK 会话（checklist 专责）：`allowed_tools` 仅含 `report_checklist_revision` + 读写工具，系统提示约束**只能**改 `evaluation/question_bank/`。关闭：`--no-enable-checklist-agent`。
+- **双 Agent（防作弊）**：主 Agent **禁止** Edit/Write `evaluation/question_bank/**`；若认为 `scoring_checklist` / `reference_answers` 不公或错误，应调用 MCP 工具 **`escalate_checklist_revision`**。编排器在本轮主会话结束后，若队列非空，再启**第二个** SDK 会话（checklist 专责）：`allowed_tools` 仅含 `report_checklist_revision` + 读写工具；可**只读** `evaluation/question_bank/`、`evaluation/core/` 等，**写入仅限**会话目录下的 **`proposed_question_bank_changes.md`**（Markdown proposal，与 `proposed_matmaster_exps_changes.md` 对称），由维护者审阅后手工合入题库 / evaluator，**不**自动 `git commit`。关闭：`--no-enable-checklist-agent`。
 - **提示词优化策略与体量**：主 Agent 系统提示要求**先删减/合并重复或矛盾表述再增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出，gpt-4o tiktoken）**推荐 ≤ 12000**，且**硬上限 ≤ 15000**。自检：`uv run python -m evaluation.devshell_agent.exp_prompt_budget <exp>`。
 - **判分与改仓库**：由 SDK 会话先调用仓库脚本 `evaluation/scripts/devshell/score_devshell_tasks.py --dry-run` 获取真实分数，再视需要检查低分任务的 workspace / events；原则与 [devshell_claude_code_eval.md](devshell_claude_code_eval.md) 一致。
 - **每轮结束**：模型应调用 `report_iteration_outcome`；外层在 `macro_mean_0_100 >= --target-mean-score` 或 `target_met` 时提前停止。
 - **每次 run 完成即 ingest 上报**：在 **`--eval-ingest-pending-only`**（默认）下，外层会在**每一次** `run_devshell_eval` 完成后，立刻对该输出目录执行 `score_devshell_tasks.py --submit`（写回 `pending_ingest` 分数并 POST），保证 `iter_01`、`iter_01b` 这类中间 tag 一打完分就上报，不再等整轮主 Agent 会话结束。日志追加到会话目录 `ingest_submit.jsonl`。若内层已改为即时 POST（`--no-eval-ingest-pending-only`），则不再自动 `--submit`，以免重复。关闭自动上报：`--no-eval-ingest-submit-each-iteration`；超时：`--eval-ingest-submit-timeout`。
 
-### Git：每改一次提交，无效则回滚
+### Git：optimization 自动提交与回滚；checklist 为 proposal
 
-- **系统提示**要求：每次 `Edit`/`Write` 后单独 `git commit`（消息建议带 `devshell_agent iter=…`），便于按条回滚；若某次改动经复评宏平均相对改动前**没有变好**，应对**该 commit** `git revert`（或本地未 push 时用 `git reset --hard HEAD~1`）。
+- **Optimization 子回合**：编排器在子回合结束后按 `.git/hooks` 对产品侧可提交路径尝试自动 `git commit`（见 `optimization_auto_commit`）。**题库 / evaluator**：checklist 子会话**不**自动提交；仅写入 `proposed_question_bank_changes.md`，由维护者合入后再提交。
+- **历史习惯（IDE / 文档驱动）**：若人工在会话外直接改仓库，仍可每次改动后单独 `git commit`（消息建议带 `devshell_agent iter=…`），便于按条回滚；若某次改动经复评宏平均相对改动前**没有变好**，可对该 commit `git revert`（或本地未 push 时用 `git reset --hard HEAD~1`）。
 - **编排层保险**（默认开启）：每轮开始前记录 `HEAD` 写入会话目录 `git_iteration_heads.jsonl`；若本轮 `report_iteration_outcome` 的宏平均**严格低于**上一轮，则对该仓库执行 `git reset --hard` 到**本轮开始**时的 `HEAD`（撤销本轮全部未达标退化）。关闭：`--no-git-reset-on-regression`。
 
 ## 与「仅 Claude Code 文档驱动」的关系

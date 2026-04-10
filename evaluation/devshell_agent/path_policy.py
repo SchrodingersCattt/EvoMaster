@@ -14,6 +14,9 @@ DEVSHELL_AGENT_HISTORY_SEGMENT = "devshell_agent_history"
 # Optimization agent writes this filename under the **results** session dir only (human review).
 PROPOSED_MATMASTER_EXPS_CHANGES_NAME = "proposed_matmaster_exps_changes.md"
 
+# Checklist agent writes this filename under the session dir only (human-reviewed YAML / core edits).
+PROPOSED_QUESTION_BANK_CHANGES_NAME = "proposed_question_bank_changes.md"
+
 
 def devshell_main_agent_history_root(repo_root: Path) -> Path:
     """Read-only root for the DevShell main agent: entire ``evaluation/devshell_agent_history/`` tree."""

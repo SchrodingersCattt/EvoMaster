@@ -573,6 +573,48 @@ def test_checklist_path_guard_blocks_product_writes(tmp_path: Path) -> None:
         raise AssertionError("expected checklist path guard to reject product write")
 
 
+def test_checklist_cannot_write_question_bank_yaml(tmp_path: Path) -> None:
+    (tmp_path / "evaluation" / "question_bank" / "b").mkdir(parents=True)
+    (tmp_path / "evaluation" / "question_bank" / "b" / "q.yaml").write_text(
+        "id: x\n", encoding="utf-8"
+    )
+    state = _build_state(tmp_path)
+    toolkit = _sdk_tools_module().MatmasterEvalMcpToolkit(state)
+    try:
+        toolkit._resolve_agent_path(
+            "evaluation/question_bank/b/q.yaml",
+            role="checklist",
+            write=True,
+        )
+    except ValueError as exc:
+        assert "proposed_question_bank_changes" in str(exc)
+    else:
+        raise AssertionError("expected block on direct question_bank write")
+
+
+def test_checklist_writes_proposal_only_under_session(tmp_path: Path) -> None:
+    state = _build_state(tmp_path)
+    toolkit = _sdk_tools_module().MatmasterEvalMcpToolkit(state)
+    proposal = state.session_dir / "proposed_question_bank_changes.md"
+    resolved = toolkit._resolve_agent_path(
+        str(proposal),
+        role="checklist",
+        write=True,
+    )
+    assert resolved == proposal.resolve()
+
+    try:
+        toolkit._resolve_agent_path(
+            str(state.session_dir / "notes.md"),
+            role="checklist",
+            write=True,
+        )
+    except ValueError as exc:
+        assert "proposed_question_bank_changes" in str(exc)
+    else:
+        raise AssertionError("expected block on arbitrary session file write")
+
+
 def test_main_path_guard_allows_history_session_reads(tmp_path: Path) -> None:
     hist = (
         tmp_path

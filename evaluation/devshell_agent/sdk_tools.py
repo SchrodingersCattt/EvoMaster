@@ -18,6 +18,7 @@ from evaluation.devshell_agent.config_state import (
 from evaluation.devshell_agent.feishu_round_notify import notify_after_scoring_async
 from evaluation.devshell_agent.path_policy import (
     PROPOSED_MATMASTER_EXPS_CHANGES_NAME,
+    PROPOSED_QUESTION_BANK_CHANGES_NAME,
     devshell_main_agent_history_root,
     is_blocked_matmaster_exps_path,
 )
@@ -219,11 +220,30 @@ class MatmasterEvalMcpToolkit:
 
         if role == "checklist":
             if write:
-                if not (
-                    _path_is_under(path, question_bank_root)
-                    or _path_is_under(path, evaluation_core_root)
+                # Human-reviewed queue for question_bank YAML / evaluation/core (forbidden in-loop).
+                if _path_is_under(path, session_dir):
+                    if path.name != PROPOSED_QUESTION_BANK_CHANGES_NAME:
+                        raise ValueError(
+                            "checklist path access denied: under the session directory, "
+                            f"only {PROPOSED_QUESTION_BANK_CHANGES_NAME!r} may be written "
+                            f"(Markdown proposals for evaluation/question_bank and "
+                            f"evaluation/core); got {path.name!r}"
+                        )
+                    return path
+                if _path_is_under(path, question_bank_root) or _path_is_under(
+                    path, evaluation_core_root
                 ):
-                    raise ValueError(f"checklist path access denied: {raw_path}")
+                    rel_proposal = (
+                        session_dir.resolve().relative_to(repo_root.resolve())
+                        / PROPOSED_QUESTION_BANK_CHANGES_NAME
+                    )
+                    raise ValueError(
+                        "checklist cannot edit question_bank or evaluation/core directly. "
+                        "Write proposals as Markdown in "
+                        f"{PROPOSED_QUESTION_BANK_CHANGES_NAME!r} under this session "
+                        f"(repo-relative: {rel_proposal.as_posix()}), for human review."
+                    )
+                raise ValueError(f"checklist path access denied: {raw_path}")
             else:
                 if not (
                     _path_is_under(path, evaluation_root)
@@ -592,8 +612,9 @@ class MatmasterEvalMcpToolkit:
                             "iteration_index": row["iteration_index"],
                             "note": (
                                 "Orchestrator runs a separate checklist-only agent after "
-                                "this iteration's main agent turn. Do not edit "
-                                "evaluation/question_bank/ yourself."
+                                "this iteration's main agent turn. It writes proposals to "
+                                f"{PROPOSED_QUESTION_BANK_CHANGES_NAME!r} under the session "
+                                "dir only; do not edit evaluation/question_bank/ yourself."
                             ),
                         }
                     ),
@@ -723,7 +744,8 @@ class MatmasterEvalMcpToolkit:
             "report_checklist_revision",
             (
                 "Call exactly once at the end of the checklist follow-up turn. "
-                "Record whether you edited any question_bank YAML and why."
+                "Record whether you wrote or updated proposed_question_bank_changes.md "
+                "(and a short summary), or why no proposal was needed."
             ),
             _mts.REPORT_CHECKLIST_REVISION_SCHEMA,
         )
@@ -861,7 +883,10 @@ class MatmasterEvalMcpToolkit:
 
         @tool(
             "checklist_write_text",
-            "Write an evaluation/question_bank or evaluation/core file only.",
+            (
+                f"Write session file {PROPOSED_QUESTION_BANK_CHANGES_NAME!r} only "
+                "(Markdown proposals for question_bank / evaluation/core; human merge)."
+            ),
             _mts.WRITE_TEXT_SCHEMA,
         )
         async def checklist_write_text_tool(args: dict[str, Any]) -> dict[str, Any]:
@@ -869,7 +894,9 @@ class MatmasterEvalMcpToolkit:
 
         @tool(
             "checklist_replace_text",
-            "Replace text in an evaluation/question_bank or evaluation/core file only.",
+            (
+                f"Replace text in session file {PROPOSED_QUESTION_BANK_CHANGES_NAME!r} only."
+            ),
             _mts.REPLACE_TEXT_SCHEMA,
         )
         async def checklist_replace_text_tool(args: dict[str, Any]) -> dict[str, Any]:

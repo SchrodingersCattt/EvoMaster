@@ -381,8 +381,8 @@ class DevshellAgentLoop:
 {blob}
 ```
 
-- **会话目录**（只读产物）：`{session_dir}`
-- 任务：仅在 **evaluation/question_bank/** 内做必要 YAML 修订；若判分器 / validator 本身存在明确口径缺陷，可在 **evaluation/core/** 内做对应修复。遵守 `evaluation/AGENTS_evaluation.md` 的题库 `id` 规则。
+- **会话目录**（可写 proposal）：`{session_dir}`
+- 任务：**不要**直接改 ``evaluation/question_bank/`` 或 ``evaluation/core/``；将必要修订写入 **`proposed_question_bank_changes.md`**（与会话目录下 `eval_runs/` 同级），遵守 `evaluation/AGENTS_evaluation.md` 的题库 `id` 规则（在提案中写明合入时是否需 bump `id`）。
 - 结束前**必须**调用 **report_checklist_revision**（`iteration_index={it}`）。
 """
 
