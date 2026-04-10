@@ -7,10 +7,12 @@ from pathlib import Path
 from evaluation.devshell_agent.exp_prompt_budget import (
     MAX_MATMASTER_EXP_STATIC_PROMPT_TOKENS,
     TARGET_MATMASTER_EXP_STATIC_PROMPT_TOKENS,
+    _build_full_prompt_text,
     budget_status,
     check_exp,
     token_count_gpt4o,
 )
+from matmaster.config.loader import load_exp_config
 
 
 def test_token_count_gpt4o_positive_for_text() -> None:
@@ -72,3 +74,18 @@ def test_check_exp_over_budget(tmp_path: Path) -> None:
     ok_tight, _, _, total2 = check_exp("tiny", exps_dir=exps, max_tokens=1)
     assert total2 == total
     assert ok_tight is False
+
+
+def test_full_prompt_text_excludes_local_tool_prompt_injections(
+    tmp_path: Path,
+) -> None:
+    exps = tmp_path / "exps"
+    exps.mkdir()
+    _write_minimal_toml(exps, tools_builtin='["Bash"]')
+
+    cfg = load_exp_config("tiny", exps_dir=exps)
+    text = _build_full_prompt_text(cfg)
+
+    assert "# Tools" in text
+    assert "Use the tools declared in function calling." in text
+    assert "Use dedicated tools instead of shell equivalents" not in text

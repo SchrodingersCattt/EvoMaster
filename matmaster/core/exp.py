@@ -319,17 +319,7 @@ class Exp:
         )
 
         from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
-        from matmaster.types.tool_desc_ctx import ToolDescriptionContext
         from matmaster.types.tool_runner_state import ToolRunnerState
-
-        desc_ctx = ToolDescriptionContext(
-            session_kind=topology.session_kind,
-            workspace_root=topology.workspace_root,
-            topology=topology,
-        )
-        tool_prompts = catalog.collect_prompts(desc_ctx)
-        if tool_prompts:
-            system_prompt = f"{system_prompt}\n\n{tool_prompts}"
 
         # 6. Compaction: event_sink=None, _run_items() injects local sink at runtime
         compactor = None

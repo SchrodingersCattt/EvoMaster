@@ -196,7 +196,7 @@ class TestExpBuildRuntime:
         ]
         assert matching_callbacks
 
-    async def test_bash_prompt_is_collected_into_system_prompt(
+    async def test_bash_prompt_moves_to_function_description(
         self, tmp_path: Path
     ) -> None:
         exp = Exp(
@@ -219,7 +219,11 @@ class TestExpBuildRuntime:
             runtime = await exp.build_runtime(ctx)
 
         assert "Base persona text." in runtime.spec.system_prompt
-        assert "Use dedicated tools instead of shell equivalents" in (
+        assert "# Tools" in runtime.spec.system_prompt
+        assert "Use the tools declared in function calling." in (
+            runtime.spec.system_prompt
+        )
+        assert "Use dedicated tools instead of shell equivalents" not in (
             runtime.spec.system_prompt
         )
         desc_ctx = ToolDescriptionContext(
@@ -231,16 +235,14 @@ class TestExpBuildRuntime:
         bash_def = next(d for d in defs if d["function"]["name"] == "Bash")
         assert (
             "Use dedicated tools instead of shell equivalents"
-            not in bash_def["function"]["description"]
+            in bash_def["function"]["description"]
         )
-        assert bash_def["function"]["description"] == (
-            "Run a shell command in the session workspace and return its output."
-        )
+        assert "/exec" in bash_def["function"]["description"]
 
     async def test_builtin_tool_prompts_layered_correctly(
         self, tmp_path: Path
     ) -> None:
-        """End-to-end: builtin prompts go to system_prompt, descriptions are short."""
+        """End-to-end: builtin prompts leave system_prompt and move into definitions."""
         exp = Exp(
             ExpConfig(
                 name="test",
@@ -264,9 +266,12 @@ class TestExpBuildRuntime:
 
         sys_prompt = runtime.spec.system_prompt
 
-        assert "Use dedicated tools instead of shell equivalents" in sys_prompt
-        assert "pattern matching" in sys_prompt.lower()
-        assert "ripgrep" in sys_prompt.lower()
+        assert "Base." in sys_prompt
+        assert "# Tools" in sys_prompt
+        assert "Use the tools declared in function calling." in sys_prompt
+        assert "Use dedicated tools instead of shell equivalents" not in sys_prompt
+        assert "pattern matching" not in sys_prompt.lower()
+        assert "ripgrep" not in sys_prompt.lower()
 
         desc_ctx = ToolDescriptionContext(
             session_kind=runtime.spec.runtime_topology.session_kind,
@@ -276,13 +281,11 @@ class TestExpBuildRuntime:
         defs = runtime.spec.tool_catalog.build_definitions(desc_ctx)
         by_name = {d["function"]["name"]: d["function"]["description"] for d in defs}
 
-        assert by_name["Bash"] == (
-            "Run a shell command in the session workspace and return its output."
-        )
-        assert by_name["Glob"].startswith("Fast file pattern matching")
-        assert by_name["Grep"].startswith("Search file contents by regex")
-        assert "\n-" not in by_name["Glob"]
-        assert "\n-" not in by_name["Grep"]
+        assert "Use dedicated tools instead of shell equivalents" in by_name["Bash"]
+        assert "Fast file pattern matching tool" in by_name["Glob"]
+        assert "ALWAYS use Grep for search tasks" in by_name["Grep"]
+        assert by_name["Read"].startswith("Use absolute paths.")
+        assert by_name["Edit"].startswith("Read the file first.")
 
     async def test_agent_tool_uses_model_visible_exp_discovery(
         self, tmp_path: Path
