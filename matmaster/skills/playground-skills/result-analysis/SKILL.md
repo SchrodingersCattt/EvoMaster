@@ -1,6 +1,6 @@
 ---
 name: result-analysis
-description: "Unified skill for PARSING calculation logs (LAMMPS, ABACUS, CP2K, QE, and other open-source codes) and VISUALIZING results (Publication Quality Plots). Use to extract energies, band gaps, DOS, forces, convergence, or to generate plots from JSON. Also supports multi-step workflow feature extraction — aggregating computed properties from completed calculation pipelines. Commercial software (VASP, Gaussian) is not supported."
+description: "Parse DFT/MD calculation logs (LAMMPS, ABACUS, CP2K, QE) and generate publication-quality plots. Extract energies, band gaps, DOS, forces, convergence. Not for VASP or Gaussian."
 skill_type: operator
 ---
 
