@@ -11,8 +11,6 @@ from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ToolInstance
 from matmaster.types.topology import RuntimeTopology
 
-_BUILTIN_PROMPT_SOURCES = frozenset({"builtin", "skill"})
-
 
 class ToolCatalog:
     """Facade over ToolRegistry with versioned overlay registration."""
@@ -89,6 +87,10 @@ class ToolCatalog:
                     description = describe(ctx)
                 else:
                     description = inst.tool_spec.description
+            elif source in {"builtin", "skill"}:
+                prompt = getattr(raw_tool, "prompt", None) if raw_tool else None
+                prompt_text = prompt(ctx) if callable(prompt) else None
+                description = prompt_text or inst.tool_spec.description
             else:
                 description = inst.tool_spec.description
 
@@ -104,28 +106,6 @@ class ToolCatalog:
             )
 
         return definitions
-
-    def collect_prompts(self, ctx: ToolDescriptionContext | None = None) -> str:
-        parts: list[str] = []
-
-        for name in sorted(tool.name for tool in self._registry.all_tools):
-            inst = self.get_tool(name)
-            if inst is None or not inst.tool_spec.exposed_to_model:
-                continue
-
-            if self._registry.get_source(name) not in _BUILTIN_PROMPT_SOURCES:
-                continue
-
-            raw_tool = self._registry.get_raw(name)
-            prompt = getattr(raw_tool, "prompt", None) if raw_tool else None
-            if not callable(prompt):
-                continue
-
-            value = prompt(ctx)
-            if value:
-                parts.append(value)
-
-        return "\n\n".join(parts)
 
     def inject_cancel_token(self, cancel_token: CancellationToken) -> None:
         for tool in self._registry.all_tools:

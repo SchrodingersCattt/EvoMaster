@@ -88,20 +88,19 @@ class TestBashToolMetadata:
             workspace_root="/tmp/workspace",
         )
         catalog = ToolCatalog(registry, topology=topology)
-
-        defs = catalog.build_definitions(
-            ToolDescriptionContext(
-                session_kind="local",
-                workspace_root="/tmp/workspace",
-                topology=topology,
-            )
+        desc_ctx = ToolDescriptionContext(
+            session_kind="local",
+            workspace_root="/tmp/workspace",
+            topology=topology,
         )
 
+        defs = catalog.build_definitions(desc_ctx)
+
         bash_def = next(d for d in defs if d["function"]["name"] == "Bash")
-        assert bash_def["function"]["description"] == BashTool.description
+        assert bash_def["function"]["description"] == BashTool().prompt(desc_ctx)
         assert (
             "Use dedicated tools instead of shell equivalents"
-            not in bash_def["function"]["description"]
+            in bash_def["function"]["description"]
         )
 
     def test_schema_disallows_additional_properties(self):
