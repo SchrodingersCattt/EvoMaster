@@ -62,6 +62,9 @@ class DevshellAgentLoop:
     SYSTEM_PROMPT_MAIN = _loop_prompts.SYSTEM_PROMPT_MAIN
     SYSTEM_PROMPT_CHECKLIST = _loop_prompts.SYSTEM_PROMPT_CHECKLIST
     SYSTEM_PROMPT_OPTIMIZATION = _loop_prompts.SYSTEM_PROMPT_OPTIMIZATION
+    SYSTEM_PROMPT_OPTIMIZATION_P0_REVERT = (
+        _loop_prompts.SYSTEM_PROMPT_OPTIMIZATION_P0_REVERT
+    )
 
     def __init__(self, config: AgentLoopConfig) -> None:
         self._cfg = config
@@ -113,11 +116,29 @@ class DevshellAgentLoop:
 
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
-2. 读取 **run_devshell_eval** 返回的**脱敏摘要**，以其中的 `macro_mean_0_100` 与 `task_scores` 作为本轮判断依据。除 **main_read_text / main_glob_paths / main_grep_text** 允许的 ``evaluation/devshell_agent_history/`` 整目录外，不要自行读取 `evaluation/**` 其它路径或原始 `score_reason`。
-3. 若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**（优先填写 **candidate_layers** 与 **failure_buckets**、**capabilities_affected**；`candidate_layers` 用 ``skill / tool / system_prompt / runtime`` 标注你判断最像哪一层；**allowed_evidence_paths** 尽量用会话级路径如 ``eval_runs/iter_XX/raw_runs.jsonl``，避免逐题 workspace）；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
-4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（主 Agent 自身通常为空）；在 `rationale` 中总结本轮分流、子 Agent 结果与下一步。
+2. 检查返回结果中是否有 `p0_gate_failed: true`（P0 回归门控失败）：
+   - **若 P0 回归**：不要调用 delegate_optimization 或 escalate_checklist_revision，直接跳到步骤 4 报告本轮失败。
+   - **若 P0 通过或无 P0 题目**：继续步骤 3。
+3. 读取**脱敏摘要**（`macro_mean_0_100` 与 `task_scores`）。除 **main_read_text / main_glob_paths / main_grep_text** 允许的 ``evaluation/devshell_agent_history/`` 整目录外，不要自行读取 `evaluation/**` 其它路径或原始 `score_reason`。若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**（优先填写 **candidate_layers** 与 **failure_buckets**、**capabilities_affected**；`candidate_layers` 用 ``skill / tool / system_prompt / runtime`` 标注你判断最像哪一层；**allowed_evidence_paths** 尽量用会话级路径如 ``eval_runs/iter_XX/raw_runs.jsonl``，避免逐题 workspace）；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
+4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（主 Agent 自身通常为空）；在 `rationale` 中总结本轮分流、子 Agent 结果与下一步。若 P0 回归，在 rationale 中说明回归详情。
 {extra_block}
 """
+
+    @staticmethod
+    def _detect_p0_regression_from_eval_dirs(
+        state: AgentLoopSharedState, loop_log: TextIO
+    ) -> bool:
+        """Detect P0 regression: p0_gate dir exists but remaining dir does not."""
+        for d in state.eval_output_dirs:
+            p0_gate_dir = d if d.name == "p0_gate" else (d / "p0_gate")
+            remaining_dir = d if d.name == "remaining" else (d / "remaining")
+            if p0_gate_dir.is_dir() and not remaining_dir.is_dir():
+                log_line(
+                    f"P0 gate directory found without remaining: {p0_gate_dir}",
+                    loop_log,
+                )
+                return True
+        return False
 
     def _write_session_manifest(self) -> None:
         cfg = self._cfg
@@ -313,6 +334,11 @@ class DevshellAgentLoop:
                         )
                         break
 
+                    # --- P0 regression handling ---
+                    p0_regressed = self._detect_p0_regression_from_eval_dirs(
+                        state, loop_log
+                    )
+
                     matching = [
                         o
                         for o in state.outcomes
@@ -327,9 +353,31 @@ class DevshellAgentLoop:
                         continue
 
                     last = matching[-1]
+                    if p0_regressed:
+                        last["p0_regression"] = True
+
+                    if p0_regressed and head0:
+                        rev_rc = await self._run_p0_revert_followup_if_needed(
+                            it=it,
+                            head0=head0,
+                            state=state,
+                            mcp_server=mcp_server,
+                            loop_log=loop_log,
+                        )
+                        if rev_rc >= 1:
+                            exit_code = 1
+
                     self._write_iteration_history(it=it, state=state, outcome=last)
                     score = int(last.get("macro_mean_0_100", 0))
                     met = bool(last.get("target_met"))
+
+                    if p0_regressed:
+                        log_line(
+                            f"Iteration {it} marked as optimization failure "
+                            f"(P0 regression); continuing to next iteration.",
+                            loop_log,
+                        )
+                        continue
 
                     if met or score >= cfg.target_mean_score:
                         log_line(
@@ -570,6 +618,93 @@ class DevshellAgentLoop:
 {guidance}
 - 结束前**必须**调用 **report_optimization_result**（`iteration_index={it}`，`optimization_round={delegation.get("optimization_round")}`）。
 """
+
+    @staticmethod
+    def _p0_revert_optimization_round(it: int) -> int:
+        """Synthetic ``optimization_round`` for P0 revert sub-rounds (avoid colliding with 1..n)."""
+        return 10_000 + int(it)
+
+    def _p0_revert_user_message(self, *, it: int, head0: str) -> str:
+        session_dir = self._cfg.session_dir.resolve()
+        rnd = self._p0_revert_optimization_round(it)
+        return f"""## P0 回归 — Git revert 专责回合（第 {it} 轮迭代）
+
+本轮 P0 宏平均相对上一轮**下降**。编排器已记录本轮迭代开局时的 ``HEAD`` = ``{head0}``。
+
+- **任务**：先调用 **git_revert_commits_after_base**，参数 ``base_sha`` **必须**为上述完整 SHA（与编排器授权一致）。该工具对 ``{head0}..HEAD`` 上每个提交**从新到旧**执行 ``git revert --no-edit``（**不**使用 ``git reset``）。
+- 若区间为空（无可 revert 的提交），工具会返回成功说明；你仍须调用 **report_optimization_result**。
+- **会话目录**（只读证据）：`{session_dir}`
+- 结束前**必须**调用 **report_optimization_result**（``iteration_index={it}``，``optimization_round={rnd}``），在摘要中说明 revert 结果。
+"""
+
+    async def _run_p0_revert_followup_if_needed(
+        self,
+        *,
+        it: int,
+        head0: str,
+        state: AgentLoopSharedState,
+        mcp_server: Any,
+        loop_log: TextIO,
+    ) -> int:
+        """Run optimization-shaped sub-round to ``git revert`` after P0 regression.
+
+        Returns:
+            0: ok
+            1: warning (e.g. missing ``report_optimization_result``)
+        """
+        base = head0.strip()
+        if not base:
+            return 0
+
+        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+
+        from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
+
+        rnd = self._p0_revert_optimization_round(it)
+        optimization_allowed = MatmasterEvalMcpToolkit.optimization_agent_tool_names()
+        n_reports_before = len(state.optimization_reports)
+        state.p0_revert_allowed_base_sha = base
+        try:
+            co = ClaudeAgentOptions(
+                system_prompt=self.SYSTEM_PROMPT_OPTIMIZATION_P0_REVERT,
+                cwd=str(self._cfg.repo_root.resolve()),
+                max_turns=24,
+                mcp_servers={MatmasterEvalMcpToolkit.MCP_SERVER_NAME: mcp_server},
+                allowed_tools=optimization_allowed,
+                permission_mode=self._cfg.permission_mode,
+            )
+            log_line(
+                f"P0 revert sub-round: iteration {it}, base={base[:12]}…",
+                loop_log,
+            )
+            async with ClaudeSDKClient(options=co) as cc:
+                await cc.query(self._p0_revert_user_message(it=it, head0=head0))
+                async for message in cc.receive_response():
+                    log_sdk_message(
+                        message,
+                        loop_log=loop_log,
+                        tool_result_max_chars=self._SDK_LOG_TOOL_RESULT_MAX_CHARS,
+                        stream_event_max_chars=self._SDK_LOG_STREAM_EVENT_MAX_CHARS,
+                        text_block_max_chars=self._SDK_LOG_TEXT_BLOCK_MAX_CHARS,
+                        system_data_max_chars=self._SDK_LOG_SYSTEM_DATA_MAX_CHARS,
+                    )
+        finally:
+            state.p0_revert_allowed_base_sha = None
+
+        reports = [
+            row
+            for row in state.optimization_reports[n_reports_before:]
+            if int(row.get("iteration_index", -1)) == it
+            and int(row.get("optimization_round", -1)) == rnd
+        ]
+        if not reports:
+            log_line(
+                "warning: P0 revert agent did not call report_optimization_result "
+                f"for iteration {it} round {rnd}",
+                loop_log,
+            )
+            return 1
+        return 0
 
     async def _run_optimization_followups_if_needed(
         self,

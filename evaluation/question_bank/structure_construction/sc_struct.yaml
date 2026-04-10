@@ -868,6 +868,7 @@ questions:
   - 111_surface
   - polar_surface
   - stoichiometry_check
+  priority: P0
   mode_scope:
   - direct
   - planner

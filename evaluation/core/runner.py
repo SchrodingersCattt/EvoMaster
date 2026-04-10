@@ -188,6 +188,10 @@ def _apply_filters(
         ids = set(config.include_question_ids)
         questions = [q for q in questions if q.id in ids]
 
+    if config.exclude_question_ids:
+        excluded = set(config.exclude_question_ids)
+        questions = [q for q in questions if q.id not in excluded]
+
     if not questions:
         raise ValueError(
             'No questions remaining after applying --slices / --questions filters'

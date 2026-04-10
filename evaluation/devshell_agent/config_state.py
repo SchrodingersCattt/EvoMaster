@@ -54,3 +54,8 @@ class AgentLoopSharedState:
     optimization_delegations_pending: list[dict[str, Any]] = field(default_factory=list)
     optimization_reports: list[dict[str, Any]] = field(default_factory=list)
     optimization_rounds_by_iteration: dict[int, int] = field(default_factory=dict)
+    #: P0 scores from the last iteration that passed the gate (question_id → score).
+    #: Updated only when P0 gate passes; used as baseline for regression detection.
+    last_p0_scores: dict[str, int] = field(default_factory=dict)
+    #: Set by loop before P0-revert optimization sub-round; must match tool arg ``base_sha``.
+    p0_revert_allowed_base_sha: str | None = None

@@ -26,6 +26,7 @@ questions:
   - encut_sweep
   - input_generation
   - single_variable
+  priority: P0
   mode_scope:
   - direct
   - planner

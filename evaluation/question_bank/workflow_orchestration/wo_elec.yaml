@@ -16,6 +16,7 @@ questions:
   - si
   - workflow
   - kpath
+  priority: P0
   mode_scope:
   - direct
   - planner

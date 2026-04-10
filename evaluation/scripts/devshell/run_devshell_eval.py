@@ -316,6 +316,12 @@ def main() -> int:
         help="Only run these question IDs",
     )
     parser.add_argument(
+        "--exclude-question-ids",
+        nargs="+",
+        default=None,
+        help="Exclude these question IDs from the run (applied after --questions/--slices)",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -458,6 +464,7 @@ def main() -> int:
             "include_slices": slices_override,
             "modes": args.modes,
             "include_question_ids": args.questions,
+            "exclude_question_ids": args.exclude_question_ids,
         },
     )
 

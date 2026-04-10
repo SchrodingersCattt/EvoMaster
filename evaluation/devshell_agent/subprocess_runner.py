@@ -30,6 +30,7 @@ class RunDevshellEvalParams:
     task_timeout_sec: float
     eval_config: Path | None
     extra_args: list[str]
+    exclude_question_ids: list[str] | None = None
 
 
 class DevshellEvalSubprocess:
@@ -73,6 +74,9 @@ class DevshellEvalSubprocess:
             cmd.extend(["--task-timeout", str(params.task_timeout_sec)])
         if params.eval_config is not None:
             cmd.extend(["--eval-config", str(params.eval_config)])
+        if params.exclude_question_ids:
+            cmd.append("--exclude-question-ids")
+            cmd.extend(params.exclude_question_ids)
         cmd.extend(["--output-dir", str(params.output_dir)])
         # Agent loop should not wipe unrelated results under results/
         cmd.append("--no-clean-results")

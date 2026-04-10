@@ -161,6 +161,7 @@ questions:
   - bsse
   - vacancy
   - empty_atom
+  priority: P0
   mode_scope:
   - direct
   - planner
@@ -300,6 +301,7 @@ questions:
   - abacus
   - electrostatic_potential
   - surface
+  priority: P0
   mode_scope:
   - direct
   - planner

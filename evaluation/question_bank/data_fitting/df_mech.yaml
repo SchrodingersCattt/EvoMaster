@@ -90,6 +90,7 @@ questions:
   - detonation
   - cj_point
   - energetic_materials
+  priority: P0
   mode_scope:
   - direct
   - planner

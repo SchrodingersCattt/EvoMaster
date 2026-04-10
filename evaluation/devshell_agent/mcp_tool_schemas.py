@@ -380,3 +380,18 @@ GREP_TEXT_SCHEMA: dict[str, Any] = {
     },
     "required": ["base_dir", "pattern"],
 }
+
+GIT_REVERT_COMMITS_AFTER_BASE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "base_sha": {
+            "type": "string",
+            "description": (
+                "Full 40-char commit SHA: revert every commit **after** this ancestor up to "
+                "HEAD (newest first). Must exactly match the SHA the orchestrator pinned for "
+                "this P0 revert round."
+            ),
+        },
+    },
+    "required": ["base_sha"],
+}

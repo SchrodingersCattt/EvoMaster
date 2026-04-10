@@ -22,6 +22,7 @@ questions:
       5. 按公式 E_ads = E(adsorbed) - E(slab) - E(CO) 计算吸附能；
       6. 输出吸附能(eV)及三个结构的能量值。
     tags: ["co2rr", "adsorption_energy", "workflow", "catalysis"]
+    priority: P0
     mode_scope: ["direct", "planner"]
     data_files: []
     reference_answers:

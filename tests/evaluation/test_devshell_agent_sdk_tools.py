@@ -485,6 +485,7 @@ def test_optimization_agent_uses_restricted_mcp_fs_tools_only() -> None:
     assert "Bash" not in tool_names
     assert "mcp__matmaster_eval__optimization_read_text" in tool_names
     assert "mcp__matmaster_eval__optimization_replace_text" in tool_names
+    assert "mcp__matmaster_eval__git_revert_commits_after_base" in tool_names
 
 
 def test_checklist_agent_uses_restricted_mcp_fs_tools_only() -> None:

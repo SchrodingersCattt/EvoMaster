@@ -202,6 +202,10 @@ class QuestionItem(BaseModel):
     intent: str
     human_prompt_seed: str
     tags: list[str] = Field(default_factory=list)
+    priority: str | None = Field(
+        default=None,
+        description='Gate priority. "P0" = regression gate (run first, block on regression).',
+    )
     mode_scope: list[ModeLiteral] = Field(default_factory=lambda: ['direct', 'planner'])
     data_files: list[DataFileRef] = Field(default_factory=list)
     reference_answers: list[ReferenceAnswer] = Field(default_factory=list)
@@ -333,6 +337,7 @@ class EvalConfig(BaseModel):
     evaluator_llm: LLMRuntimeConfig | None = None
     include_slices: list[CapabilitySlice] | None = None
     include_question_ids: list[str] | None = None
+    exclude_question_ids: list[str] | None = None
 
     # Axis weights for aggregation (default 1.0 each, normalized during calculation)
     axis_weights: dict[AxisLiteral, float] = Field(

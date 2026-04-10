@@ -64,7 +64,8 @@ evaluation/question_bank/
 | `domain` | **必填** | — | 枚举（见下方），用于聚合报告 |
 | `intent` | **必填** | — | 英文一句话描述题目意图；LLM 裁判上下文 + prompt 改写时使用 |
 | `human_prompt_seed` | **必填** | — | 直接发给 Agent 的用户 prompt（中英文皆可） |
-| `tags` | 可选 | `[]` | 标签，目前未被代码消费（开发者归类用） |
+| `tags` | 可选 | `[]` | 标签，开发者归类用 |
+| `priority` | 可选 | `None` | 门控优先级；`"P0"` = P0 回归门控（见下方 P0 Gate 章节） |
 | `mode_scope` | 可选 | `["direct", "planner"]` | 决定该题跑哪些 mode；不能为空 |
 | `data_files` | 可选 | `[]` | 输入数据文件引用；Runner 会复制到 Agent workspace |
 | `reference_answers` | **条件必填** | `[]` | 非 `safety_refusal` 题必须至少 1 条；`safety_refusal` 可为空 |
@@ -176,6 +177,7 @@ evaluation/question_bank/
 | `domain` | ❌ | 聚合 + 报告 |
 | `mode_scope` | ❌ | 决定跑哪些 mode |
 | `tags` | ❌ | 目前未被代码消费（预留） |
+| `priority` | ❌ | `"P0"` 触发 P0 回归门控 |
 | `reference_answers` | ❌ | Evaluator 的标准答案查找表 |
 | `scoring_checklist` | ❌ | Evaluator 逐条执行判分 |
 
@@ -252,6 +254,51 @@ scoring_checklist:
 - 自迭代时「产品侧」可写资产以 `config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/` 等为准；`matmaster/core/` 仅在框架层缺陷明确时再动。`matmaster/cache/` 下 JSON 视为生成物，若改动影响 MCP schema / lazy tool 可见性，应执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成，而不是长期手改。默认不优先修改 `src/`、`app.py` 等 API / Worker 路径，除非失败与该链路明确相关。本仓库已移除历史 `playground/mat_master/` 目录树（与 EvoMaster 上游示例 `playground/` 不是同一概念）。
 - DevShell / IDE 流程：`evaluation/docs/devshell/devshell_claude_code_eval.md`（`run_devshell_eval.py` + `score_devshell_tasks.py` 自动评分）。
 - **程序化**多轮「跑题 → 判分 → 分流优化」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。默认在 **`--eval-ingest-pending-only`** 下每轮结束后自动 `score_devshell_tasks.py --submit` 上报 ingest（见该文档）；`--no-eval-ingest-submit-each-iteration` 可关。**三 Agent**：主 Agent 只负责 Drive、读取脱敏摘要并显式委派，禁止编辑文件；**仅允许**通过 MCP `main_read_text` / `main_glob_paths` / `main_grep_text` 只读整棵 ``evaluation/devshell_agent_history/``（含各次 run 子目录与 ``index.jsonl``），**禁止**读取 `evaluation/**` 其余路径；Checklist Agent 可只读 `evaluation/question_bank/`、`evaluation/core/` 等，由 `escalate_checklist_revision` 触发，**写入仅限**会话目录下 `proposed_question_bank_changes.md`（proposal，不自动 git commit）；优化 Agent 仅处理产品侧目录，由 `delegate_optimization` 触发，禁止读取 `evaluation/**`（会话目录除外）。Checklist Agent 与优化 Agent 均应通过编排器提供的**受限 MCP 文件工具**读写，不再依赖内建 `Read/Edit/Write/Bash`。若 checklist follow-up 造成题目 `id` 集合变化，应立即停止外层循环。跨轮摘要持久化到 `evaluation/devshell_agent_history/`，不受 `results/` 清理影响。无人值守运行时默认 **`--permission-mode bypassPermissions`**（Claude Agent SDK），避免子会话中 Bash（如 `git`）因需人工批准而失败；交互式可改用 `acceptEdits`。
+
+---
+
+## P0 回归门控（P0 Gate）
+
+### 概述
+
+P0 题目是被标记为最高优先级的评测题。在 DevShell Agent 多轮迭代循环中，每轮评测会**先跑 P0 题目**，评分后与上一轮的 P0 分数做对比。若 P0 宏平均分下降，则：
+
+1. **跳过**当前轮剩余的非 P0 题目（节省时间和费用）
+2. 编排器在随后启动 **optimization 专责子回合**，由子 Agent 调用受控 MCP 工具 **git_revert_commits_after_base**，对本轮迭代开局 ``HEAD`` 之后的提交按从新到旧执行 **``git revert --no-edit``**（**不使用** ``git reset``），以撤销本轮产生的提交。
+3. 在 `outcomes` 中标记 `p0_regression: true`，视为**优化失败**
+4. 外层循环 **continue** 进入下一轮
+
+### 标记方式
+
+在题目 YAML 中设置 `priority: P0`：
+
+```yaml
+- id: WO_elec_001_20260404
+  capability: workflow_orchestration
+  domain: elec
+  priority: P0        # ← P0 回归门控题目
+  tags:
+    - band_structure
+```
+
+评测基础设施在运行时从题库扫描所有 `priority == "P0"` 的题目（`collect_p0_question_ids`），无需在配置文件中维护 ID 列表。
+
+### 执行流程
+
+1. `run_devshell_eval` MCP 工具通过 `collect_p0_question_ids` 扫描题库中 `priority == "P0"` 的题目，若存在则进入两阶段模式：
+   - **Phase 1（P0 gate）**：仅跑 P0 题目 → 评分 → 与 `last_p0_scores` 对比
+   - **Phase 2（remaining）**：仅跑非 P0 题目（`--exclude-question-ids`）→ 评分
+2. 合并两阶段结果，返回包含 `p0_gate_passed` / `p0_gate_failed` 的摘要
+3. `AgentLoopSharedState.last_p0_scores` 仅在 P0 gate 通过时更新
+
+### CLI 新增参数
+
+- `run_devshell_eval.py --exclude-question-ids ID1 ID2 ...` — 从 run plan 中排除指定题目
+
+### 与现有流程的兼容
+
+- 题库中无 `priority: P0` 题目时，行为与之前完全一致（单阶段执行）
+- 第一轮迭代（无历史 P0 分数）P0 gate 始终通过
 
 ---
 

@@ -214,6 +214,7 @@ questions:
   - potim
   - initial_structure
   - phase_mismatch
+  priority: P0
   mode_scope:
   - direct
   - planner

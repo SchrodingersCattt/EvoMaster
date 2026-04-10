@@ -96,6 +96,7 @@ questions:
   - formation_energy
   - supercell
   - MgO
+  priority: P0
   mode_scope:
   - direct
   - planner
