@@ -23,14 +23,18 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from pymatgen.core import Structure
 
 
 def build_gamma_al2o3(
     a: float = 7.906,
     supercell: tuple[int, int, int] = (1, 1, 1),
-) -> "Structure":
+) -> Structure:
     """Build gamma-Al2O3 defective spinel and return pymatgen Structure."""
     from pymatgen.core import Lattice, Structure
 
@@ -87,7 +91,9 @@ def build_gamma_al2o3(
         eights = (orig * 8.0) % 2.0
         return all(min(e, 2 - e) < 0.3 for e in eights)
 
-    tet_idx = [i for i in al_indices if _is_tetrahedral(struct[i].frac_coords, supercell)]
+    tet_idx = [
+        i for i in al_indices if _is_tetrahedral(struct[i].frac_coords, supercell)
+    ]
     oct_idx = [i for i in al_indices if i not in tet_idx]
     print(f"  Tetrahedral Al: {len(tet_idx)}, Octahedral Al: {len(oct_idx)}")
 
@@ -104,8 +110,13 @@ def build_gamma_al2o3(
         if step == 0:
             # First vacancy: pick the site most "central" (max avg distance to others)
             avg_d = [
-                np.mean([np.linalg.norm(oct_coords[j] - oct_coords[k])
-                         for k in remaining if k != j])
+                np.mean(
+                    [
+                        np.linalg.norm(oct_coords[j] - oct_coords[k])
+                        for k in remaining
+                        if k != j
+                    ]
+                )
                 for j in remaining
             ]
             best = remaining[int(np.argmax(avg_d))]
@@ -113,7 +124,9 @@ def build_gamma_al2o3(
             # Subsequent: pick the site farthest from all existing vacancies
             best, best_score = remaining[0], -1.0
             for j in remaining:
-                min_d = min(np.linalg.norm(oct_coords[j] - oct_coords[r]) for r in removed)
+                min_d = min(
+                    np.linalg.norm(oct_coords[j] - oct_coords[r]) for r in removed
+                )
                 if min_d > best_score:
                     best_score = min_d
                     best = j
@@ -162,20 +175,33 @@ def validate(struct, n_tet: int, n_oct: int) -> dict:
         "both_envs_ok": bool(n_tet > 0 and n_oct > 0),
         "note": "Idealized Wyckoff positions; MLIP relaxation recommended for realistic geometry.",
     }
-    checks["all_passed"] = bool(all(
-        checks[k] for k in ("ratio_ok", "angles_ok", "both_envs_ok")
-    ))
+    checks["all_passed"] = bool(
+        all(checks[k] for k in ("ratio_ok", "angles_ok", "both_envs_ok"))
+    )
     return checks
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Build gamma-Al2O3 defective spinel")
-    p.add_argument("-o", "--output", default="gamma_al2o3.cif",
-                   help="Output CIF path (default: gamma_al2o3.cif)")
-    p.add_argument("--lattice-param", type=float, default=7.906,
-                   help="Cubic lattice parameter in Angstrom (default: 7.906)")
-    p.add_argument("--supercell", type=int, nargs=3, default=[1, 1, 1],
-                   help="Supercell dimensions NX NY NZ (default: 1 1 1)")
+    p.add_argument(
+        "-o",
+        "--output",
+        default="gamma_al2o3.cif",
+        help="Output CIF path (default: gamma_al2o3.cif)",
+    )
+    p.add_argument(
+        "--lattice-param",
+        type=float,
+        default=7.906,
+        help="Cubic lattice parameter in Angstrom (default: 7.906)",
+    )
+    p.add_argument(
+        "--supercell",
+        type=int,
+        nargs=3,
+        default=[1, 1, 1],
+        help="Supercell dimensions NX NY NZ (default: 1 1 1)",
+    )
     args = p.parse_args()
 
     struct, n_tet, n_oct = build_gamma_al2o3(
@@ -187,7 +213,7 @@ def main() -> None:
     print(f"\nSaved: {args.output} ({len(struct)} atoms)")
 
     checks = validate(struct, n_tet, n_oct)
-    print(f"\n=== VALIDATION ===")
+    print("\n=== VALIDATION ===")
     print(json.dumps(checks, indent=2))
 
     if checks["all_passed"]:
