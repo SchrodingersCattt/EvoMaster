@@ -82,7 +82,7 @@ banks:
 
   - path: "workflow_orchestration/wo_elec.yaml"
     capability: "workflow_orchestration"
-    questions: 7
+    questions: 3
 
   - path: "workflow_orchestration/wo_kinetic.yaml"
     capability: "workflow_orchestration"
@@ -175,4 +175,4 @@ banks:
     capability: "property_prediction"
     questions: 2
 
-# Total: 103 questions across 29 bank files
+# Total: 99 questions across 29 bank files
