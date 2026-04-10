@@ -36,10 +36,10 @@ tools:
 banks:
 - path: batch_processing/bp_struct.yaml
   capability: batch_processing
-  questions: 5
+  questions: 3
 - path: data_diagnosis/dd_general.yaml
   capability: data_diagnosis
-  questions: 5
+  questions: 12
 - path: data_fitting/df_mech.yaml
   capability: property_prediction
   questions: 2
@@ -48,13 +48,13 @@ banks:
   questions: 1
 - path: structure_construction/sc_struct.yaml
   capability: structure_construction
-  questions: 10
+  questions: 9
 - path: workflow_orchestration/wo_mech.yaml
   capability: workflow_orchestration
   questions: 3
 - path: workflow_orchestration/wo_struct.yaml
   capability: workflow_orchestration
-  questions: 12
+  questions: 5
 - path: workflow_orchestration/wo_elec.yaml
   capability: workflow_orchestration
   questions: 7
@@ -116,4 +116,4 @@ banks:
   capability: property_prediction
   questions: 2
 
-# Total: 106 questions across 0 bank files
+# Total: 103 questions across 27 bank files
