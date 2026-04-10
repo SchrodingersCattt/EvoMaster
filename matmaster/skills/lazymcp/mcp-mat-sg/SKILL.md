@@ -79,7 +79,7 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
 
 ## add_hydrogens / passivation
 
-**MANDATORY**: use `passivate_surface.py` from **structure-manager** skill — it handles detection, placement, and verification in one call. Pass `-o <output>` to produce the file directly. **Do NOT write custom passivation scripts from scratch** — this wastes many turns and risks errors.
+**Preferred**: use `passivate_surface.py` from **structure-manager** skill — it handles detection, placement, and verification in one call. Pass `-o <output>` to produce the file directly.
 - **⚠ BOTH surfaces mandatory**: always passivate top AND bottom. Si-H ≈ 1.48 Å, Ge-H ≈ 1.53 Å.
 - After passivation, verify with `assess_structure.py` and report: H count per surface, mean bond length, all surface atoms coordination = 4.
 
