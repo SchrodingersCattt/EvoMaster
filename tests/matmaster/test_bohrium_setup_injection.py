@@ -58,7 +58,7 @@ class TestBohriumSetupServiceOrchestration:
             patch.object(
                 svc,
                 "_load_run_credentials",
-                return_value=({"ak": "test"}, "u1", "org1"),
+                return_value=({"access_key": "test"}, "u1", "org1"),
             ) as mock_load,
             patch.object(
                 svc,
@@ -78,7 +78,7 @@ class TestBohriumSetupServiceOrchestration:
         mock_setup.assert_called_once()
         kwargs = mock_setup.call_args.kwargs
         assert kwargs["session_id"] == "session-123"
-        assert kwargs["run_creds"] == {"ak": "test"}
+        assert kwargs["run_creds"] == {"access_key": "test"}
         assert kwargs["user_id_for_ak"] == "u1"
         assert kwargs["org_id"] == "org1"
         assert kwargs["event_callback"] is event_cb
@@ -134,6 +134,44 @@ class TestBohriumSetupServiceOrchestration:
             )
 
         assert mock_setup_sync.call_args.kwargs['bohrium_required'] is True
+
+    def test_run_setup_sync_required_access_key_failure_aborts_before_node_setup(
+        self,
+    ):
+        from src.services.user_service import BohriumAccessKeyFetchResult
+
+        svc = _make_service(event_sink=MagicMock())
+        sink = MagicMock()
+        failed = BohriumAccessKeyFetchResult(
+            status='timeout',
+            retryable=False,
+            attempts=3,
+            access_key=None,
+        )
+
+        with (
+            patch.object(
+                svc,
+                '_load_run_credentials',
+                return_value=({'project_id': 9}, 'u1', 'o1'),
+            ),
+            patch.object(svc, '_setup_bohrium_for_run') as mock_setup,
+            patch(
+                'src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result',
+                return_value=failed,
+            ),
+        ):
+            result = svc._run_setup_sync(
+                session_id='sess-1',
+                pg=object(),
+                skill_sync_spec=None,
+                event_callback=sink,
+                run_started_at=1.0,
+                bohrium_required=True,
+            )
+
+        assert result.abort_result is not None
+        mock_setup.assert_not_called()
 
 
 class TestBohriumEventBridgeMapping:

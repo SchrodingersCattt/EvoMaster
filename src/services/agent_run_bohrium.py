@@ -32,7 +32,7 @@ from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.services.bohrium_node_service import get_bohrium_node_service
 from src.services.sessions_service import SESSIONS
-from src.services.user_service import UserService
+from src.services.user_service import BohriumAccessKeyFetchResult, UserService
 from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 
 logger = logging.getLogger(__name__)
@@ -443,6 +443,70 @@ class BohriumSetupService:
         bohrium_required: bool = False,
     ) -> BohriumSetupResult:
         run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
+        access_key = str(run_creds.get('access_key') or '').strip()
+        if access_key:
+            ak_result = BohriumAccessKeyFetchResult(
+                status='success',
+                access_key=access_key,
+                retryable=False,
+            )
+        else:
+            ak_result = UserService.fetch_bohrium_access_key_result(
+                user_id_for_ak,
+                org_id,
+            )
+            if ak_result.access_key:
+                run_creds['access_key'] = ak_result.access_key
+
+        project_id = run_creds.get('project_id')
+        if bohrium_required and project_id is None:
+            reason = 'Bohrium project_id 缺失，无法建立 Bohrium 运行环境'
+            logger.warning(
+                'run_setup: required Bohrium project_id missing '
+                'session_id=%s user_id=%s org_id=%s status=%s attempts=%s',
+                session_id,
+                user_id_for_ak,
+                org_id,
+                ak_result.status,
+                ak_result.attempts,
+            )
+            event_callback('System', 'error', reason)
+            elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
+            return BohriumSetupResult(
+                False,
+                ((False, reason), elapsed_ms),
+                None,
+                None,
+                None,
+                None,
+            )
+
+        if bohrium_required and not ak_result.access_key:
+            reason = _build_access_key_failure_reason(ak_result)
+            logger.warning(
+                'run_setup: required Bohrium access_key lookup failed '
+                'session_id=%s user_id=%s org_id=%s project_id=%s status=%s '
+                'attempts=%s http_status=%s api_code=%s',
+                session_id,
+                user_id_for_ak,
+                org_id,
+                project_id,
+                ak_result.status,
+                ak_result.attempts,
+                ak_result.http_status,
+                ak_result.api_code,
+            )
+            event_callback('System', 'error', reason)
+            elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
+            return BohriumSetupResult(
+                False,
+                ((False, reason), elapsed_ms),
+                None,
+                None,
+                None,
+                None,
+            )
+
         return self._setup_bohrium_for_run(
             session_id=session_id,
             pg=pg,
@@ -494,15 +558,20 @@ def _load_run_credentials(
             run_creds['project_id'] = int(pid)
     user_id_for_ak = run_creds.get('user_id')
     org_id = (run_creds.get('org_id') or '').strip()
-    if user_id_for_ak and org_id:
-        run_creds['access_key'] = (
-            UserService.get_bohrium_access_key(user_id_for_ak, org_id) or ''
-        )
     if user_id_for_ak:
         user_no = UserService.get_user_no_by_user_id(user_id_for_ak)
         if user_no:
             run_creds['user_no'] = user_no
     return run_creds, user_id_for_ak, org_id
+
+
+def _build_access_key_failure_reason(result: BohriumAccessKeyFetchResult) -> str:
+    """Convert structured Bohrium AK fetch results to user-facing abort reasons."""
+    if result.status == 'timeout':
+        return 'Bohrium access_key 获取失败：请求 Bohrium Core 超时'
+    if result.status in {'no_items', 'no_valid_ak'}:
+        return 'Bohrium access_key 获取失败：当前用户在该组织下没有可用 AK'
+    return 'Bohrium access_key 获取失败：Bohrium Core 返回异常状态'
 
 
 def _remote_session_workspace_root() -> str:
