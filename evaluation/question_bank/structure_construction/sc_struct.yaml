@@ -230,7 +230,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260409
+- id: SC_struct_SiH_20260411
   capability: structure_construction
   domain: struct
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab
