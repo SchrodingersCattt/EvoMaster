@@ -373,6 +373,7 @@ def check_struct_file_atom_count(
         filename=cfg.get('filename', '*.cif'),
         expected=int(cfg.get('expected', 0)),
         tolerance=float(cfg.get('tolerance', 0)),
+        element=str(cfg.get('element')) if cfg.get('element') else None,
     )
 
 

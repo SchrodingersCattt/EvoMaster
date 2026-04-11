@@ -80,8 +80,9 @@ def check_atom_count(
     filename: str,
     expected: int,
     tolerance: float = 0,
+    element: str | None = None,
 ) -> tuple[bool, str]:
-    """Verify the total number of atoms in a structure file."""
+    """Verify total atoms, or atom count of a specific element when provided."""
     if not _PMG_AVAILABLE:
         return False, _IMPORT_MSG
     root = Path(workspace_dir)
@@ -92,9 +93,14 @@ def check_atom_count(
         struct = _load_structure(fpath)
     except Exception as exc:
         return False, f'could not parse {fpath.name}: {exc}'
-    actual = len(struct)
+    if element:
+        actual = float(struct.composition.get(str(element), 0))
+        label = f'{element}_count'
+    else:
+        actual = float(len(struct))
+        label = 'atom_count'
     hit = abs(actual - expected) <= tolerance
-    return hit, f'{fpath.name}: atom_count={actual}, expected={expected}±{tolerance}'
+    return hit, f'{fpath.name}: {label}={actual:g}, expected={expected}±{tolerance}'
 
 
 # ---------------------------------------------------------------------------

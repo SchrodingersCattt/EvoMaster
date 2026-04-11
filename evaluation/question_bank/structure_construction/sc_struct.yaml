@@ -966,7 +966,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_010_20260410
+- id: SC_struct_010_20260411v2
   capability: structure_construction
   domain: struct
   intent: Build a seven-layer Ag(111) slab with explicit water and potassium ions for an electrochemical interface initial model.
