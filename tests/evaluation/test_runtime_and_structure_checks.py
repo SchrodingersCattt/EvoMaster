@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from evaluation.core.evaluator import BinaryEvaluator
 from evaluation.core.evaluator_helpers import check_duration_budget
@@ -276,6 +277,17 @@ def test_check_layer_count_three_coarse_blocks_old_gap_method_would_be_three(
     diffs = _np.diff(coords)
     n_gap_layers = 1 + int(_np.sum(diffs > 0.8))
     assert n_gap_layers == 3
+
+
+def test_removed_slab_centered_verify_is_rejected() -> None:
+    from evaluation.core.schemas import ScoringCheckItem
+
+    with pytest.raises(ValidationError):
+        ScoringCheckItem(
+            id='legacy',
+            criterion='legacy slab-centering verifier should stay removed',
+            verify='struct_file_slab_centered',
+        )
 
 
 @pytest.mark.skipif(

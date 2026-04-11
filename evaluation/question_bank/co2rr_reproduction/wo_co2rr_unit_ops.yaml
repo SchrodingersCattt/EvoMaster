@@ -55,7 +55,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_SC_ZnS001_20260410
+- id: CR_SC_ZnS001_20260411
   capability: co2rr_reproduction
   domain: struct
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per
@@ -105,12 +105,6 @@ questions:
     axis: correctness
     verify: llm_binary_judge
     weight: 1.0
-  - id: slab_centering_ok
-    criterion: 交付的 ZnS(001) slab 在 z 方向居中（slab 原子位于 cell 中央区域，非贴近
-      上下边界）。
-    axis: correctness
-    verify: llm_binary_judge
-    weight: 0.5
   - id: polar_handling
     criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称
       slab、施加偶极修正等），所述策略与交付的结构文件一致。
