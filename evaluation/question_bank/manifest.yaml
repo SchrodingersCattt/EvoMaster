@@ -106,10 +106,6 @@ banks:
     capability: "workflow_orchestration"
     questions: 2
 
-  - path: "structure_construction/sc_elec_doping.yaml"
-    capability: "structure_construction"
-    questions: 1
-
   - path: "structure_construction/sc_elec_adsorption.yaml"
     capability: "structure_construction"
     questions: 1
