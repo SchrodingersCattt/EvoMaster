@@ -1,6 +1,6 @@
 ---
 name: mcp-mat-sg
-description: 当需要构建、生成或修改原子结构时调用本 skill。支持从 SMILES 构建分子、Wyckoff/模板构建晶体、切表面 slab、超胞、缺陷、掺杂、交联聚合物等。
+description: 当需要构建、生成或修改原子结构时调用本 skill。支持从 SMILES 构建分子、Wyckoff/模板构建晶体、切表面 slab、超胞、缺陷、掺杂、交联聚合物、表面钝化/加氢、无序结构有序化等。
 skill_type: mcp-loader
 mcp_server: mat_sg
 ---
@@ -34,15 +34,15 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
 - For each replica, explain: (a) which sites are disordered and how, (b) how the ordered config was chosen (valence/charge balance/connectivity), (c) what changed. A bare filename list without chemical reasoning = fail.
 - **Chemical/physical grounding is MANDATORY**: for every disordered site, explain the bonding environment, valence state, or coordination geometry — not just occupancy numbers. Cover: why the species can substitute (ionic radius, charge similarity), the coordination environment (e.g., octahedral/tetrahedral, bond lengths), and how the ordered replica preserves charge balance. Write 2-3 focused sentences per disordered site.
 - On timeout → fall back to pymatgen `OrderDisorderedStructureTransformation`.
-- **Batch processing (N ≥ 3 structures)**: process breadth-first — save each ordered CIF immediately before moving to the next. Budget ~2 MCP attempts per structure; if slow, fall back to pymatgen `OrderDisorderedStructureTransformation`. If approaching timeout, finish immediately with whatever files are saved. Delivered files with brief grounding > perfect grounding with no deliverable.
+- **Batch processing (N ≥ 3 structures)**: breadth-first — save each ordered CIF before moving on. Budget ~2 MCP attempts per structure; if slow, fall back to pymatgen `OrderDisorderedStructureTransformation`. On timeout, finish with saved files + brief per-structure grounding (1-2 sentences each). A summary table of filenames with zero chemistry explanation = fail even if all files delivered.
 
 ## Surface passivation (semiconductor slabs)
 
 > **Scope**: this section covers **adding H to under-coordinated surface atoms on existing slabs** or completing valence on organic molecular crystals. It does NOT apply to building **inorganic hydride bulk crystals** (SiH₄, Si₂H₆, GeH₄, B₂H₆, etc.) from scratch — for those, use standard MCP crystal building tools (`build_bulk_structure_by_wyckoff`, `mat_struct_db_*`) or direct ASE/pymatgen construction.
 
-Use `passivate_surface.py` from **structure-manager** skill for semiconductor slab passivation (Si, Ge, etc.). Pass `-o <output>`. Passivate BOTH top and bottom surfaces. Si-H ≈ 1.48 Å, Ge-H ≈ 1.53 Å. After passivation, verify with `assess_structure.py`.
+**ALWAYS** use `passivate_surface.py` from **structure-manager** skill for semiconductor passivation — do NOT write custom passivation code from scratch. Pass `-o <output>`. Passivate both surfaces unless spec explicitly restricts to one. Si-H ≈ 1.48 Å, Ge-H ≈ 1.53 Å. After passivation, verify with `assess_structure.py`; report H count + bond lengths in the final answer.
 
-> **Organic / molecular crystal hydrogenation** (adding H to complete valence on C, N, etc. in molecular crystals): do NOT use `passivate_surface.py` — it is designed for semiconductor surfaces only. Instead, use OpenBabel (`obabel input.cif -O output.cif -h`) or write inline pymatgen/ASE code to place H atoms at standard bond lengths (C-H ≈ 1.09 Å, N-H ≈ 1.01 Å) with tetrahedral (sp3, 109.5°) or trigonal planar (sp2, 120°) geometry. Verify the output formula matches the expected hydrogenated composition. Do not hydrogenate carbonyl/ester O atoms — only C and N with incomplete valence.
+> **Organic / molecular crystal hydrogenation**: do NOT use `passivate_surface.py` (semiconductor surfaces only). **Preferred**: `obabel input.cif -O output.cif -h` (single command, handles bond perception automatically). Fall back to inline code only if obabel is unavailable. Verify: formula matches expected; C-H ≈ 1.09 Å (sp3 109.5°), N-H ≈ 1.01 Å. Do not hydrogenate carbonyl/ester O — only under-valent C and N. In the final answer, briefly state which atom types received H and why others (e.g. aromatic C, carbonyl/ester O) did not.
 
 ## Complex / defective bulk structures
 
