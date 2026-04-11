@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -15,7 +16,9 @@ from evaluation.devshell_agent.feishu_round_notify import notify_after_scoring_a
 from evaluation.devshell_agent.subprocess_runner import (
     DevshellEvalSubprocess,
     RunDevshellEvalParams,
+    run_score_devshell_tasks,
     run_score_devshell_tasks_submit,
+    submit_scored_pending_ingest_dir,
 )
 
 
@@ -169,6 +172,69 @@ class MatmasterEvalMcpEvalRunMixin:
         notify_after_scoring_async(run_dir=run_dir, ingest_result=result)
         return result
 
+    def _run_score_devshell_tasks_no_submit(
+        self, params: RunDevshellEvalParams
+    ) -> tuple[int, str, str]:
+        state = self._state
+        return run_score_devshell_tasks(
+            repo_root=state.repo_root,
+            run_dir=params.output_dir,
+            eval_config=params.eval_config,
+            eval_ingest_timeout=float(state.eval_ingest_submit_timeout),
+            score_jobs=params.jobs,
+            parallel_checklist_workers=parallel_scoring_checklist_workers_from_jobs(
+                params.jobs
+            ),
+            submit=False,
+        )
+
+    def _maybe_post_scored_pending_ingest(
+        self,
+        *,
+        run_dir: Path,
+        params: RunDevshellEvalParams,
+    ) -> dict[str, Any]:
+        """POST ``pending_ingest/*.json`` after ``run_score_devshell_tasks`` (no ``--submit``)."""
+        state = self._state
+        if not state.eval_ingest_submit_each_iteration:
+            return {"attempted": False, "reason": "auto_submit_disabled"}
+        if not params.eval_ingest_pending_only:
+            return {"attempted": False, "reason": "pending_only_disabled"}
+        if "--no-eval-ingest" in params.extra_args:
+            return {"attempted": False, "reason": "eval_ingest_disabled"}
+        pending_dir = run_dir / "pending_ingest"
+        if not pending_dir.is_dir() or not any(pending_dir.glob("*.json")):
+            return {"attempted": False, "reason": "missing_pending_ingest"}
+
+        rc, out, err = submit_scored_pending_ingest_dir(
+            run_dir=run_dir,
+            eval_ingest_timeout=float(state.eval_ingest_submit_timeout),
+        )
+        log_path = state.session_dir / "ingest_submit.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_row = {
+            "run_dir": str(run_dir),
+            "mode": "post_scored_pending_only",
+            "exit_code": rc,
+            "stdout_tail": (out or "")[-8000:],
+            "stderr_tail": (err or "")[-8000:],
+        }
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(log_row, ensure_ascii=False) + "\n")
+        if out.strip():
+            print(out, file=sys.stderr, end="" if out.endswith("\n") else "\n")
+        if err.strip():
+            print(err, file=sys.stderr, end="" if err.endswith("\n") else "\n")
+        result = {
+            "attempted": True,
+            "ok": rc == 0,
+            "exit_code": rc,
+            "stdout_tail": (out or "")[-4000:],
+            "stderr_tail": (err or "")[-4000:],
+        }
+        notify_after_scoring_async(run_dir=run_dir, ingest_result=result)
+        return result
+
     def _read_scores_from_pending(self, run_dir: Path) -> dict[str, int]:
         """Read scored ``pending_ingest/*.json`` → ``{question_id: score}``."""
         pending_dir = run_dir / "pending_ingest"
@@ -186,6 +252,58 @@ class MatmasterEvalMcpEvalRunMixin:
             if isinstance(score, (int, float)) and q_id:
                 scores[q_id] = int(score)
         return scores
+
+    @staticmethod
+    def _merge_p0_and_rest_into_base_run_dir(
+        base_dir: Path, p0_dir: Path, rest_dir: Path
+    ) -> None:
+        """Merge phase dirs into ``base_dir`` for a single ``score_devshell_tasks --submit``.
+
+        ``run_devshell_eval`` writes sibling ``p0_gate/`` and ``remaining/``. Copying
+        ``raw_runs.jsonl``, ``workspaces/``, ``logs/``, and ``pending_ingest/`` into
+        the parent tag directory lets ingest + Feishu notify once with ``tag`` as title.
+        """
+        base_dir.mkdir(parents=True, exist_ok=True)
+        for sub in ("workspaces", "logs", "pending_ingest"):
+            target = base_dir / sub
+            if target.is_dir():
+                shutil.rmtree(target)
+            target.mkdir(parents=True, exist_ok=True)
+
+        merged_lines: list[str] = []
+        for src in (p0_dir / "raw_runs.jsonl", rest_dir / "raw_runs.jsonl"):
+            if src.is_file():
+                for line in src.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        merged_lines.append(line)
+        (base_dir / "raw_runs.jsonl").write_text(
+            "\n".join(merged_lines) + ("\n" if merged_lines else ""),
+            encoding="utf-8",
+        )
+
+        for phase_dir in (p0_dir, rest_dir):
+            ws = phase_dir / "workspaces"
+            if ws.is_dir():
+                for child in sorted(ws.iterdir()):
+                    if not child.is_dir():
+                        continue
+                    dest = base_dir / "workspaces" / child.name
+                    if dest.exists():
+                        shutil.rmtree(dest)
+                    shutil.copytree(child, dest)
+            logs = phase_dir / "logs"
+            if logs.is_dir():
+                for child in sorted(logs.iterdir()):
+                    if not child.is_dir():
+                        continue
+                    dest = base_dir / "logs" / child.name
+                    if dest.exists():
+                        shutil.rmtree(dest)
+                    shutil.copytree(child, dest)
+            pending = phase_dir / "pending_ingest"
+            if pending.is_dir():
+                for jf in sorted(pending.glob("*.json")):
+                    shutil.copy2(jf, base_dir / "pending_ingest" / jf.name)
 
     def _check_p0_regression(
         self, current_scores: dict[str, int]
@@ -308,7 +426,7 @@ class MatmasterEvalMcpEvalRunMixin:
         p0_dir.mkdir(parents=True, exist_ok=True)
         p0_rc, _, _ = self._run_subprocess_and_log(p0_params, phase_label="p0_gate")
 
-        p0_ingest = self._maybe_submit_run_dir_ingest(run_dir=p0_dir, params=p0_params)
+        p0_score_rc, _, _ = self._run_score_devshell_tasks_no_submit(p0_params)
         p0_scores = self._read_scores_from_pending(p0_dir)
         p0_summary = self._build_sanitized_run_summary(p0_dir)
 
@@ -317,12 +435,15 @@ class MatmasterEvalMcpEvalRunMixin:
         if regression is not None:
             self._state.last_eval_output_dir = p0_dir
             self._state.eval_output_dirs.append(p0_dir)
+            p0_ingest = self._maybe_post_scored_pending_ingest(
+                run_dir=p0_dir, params=p0_params
+            )
             payload: dict[str, Any] = {
                 "p0_gate_failed": True,
                 "p0_gate_regression": regression,
                 "p0_gate_scores": p0_summary,
                 "p0_gate_ingest_submit": p0_ingest,
-                "p0_gate_exit_code": p0_rc,
+                "p0_gate_exit_code": max(p0_rc, p0_score_rc),
                 "run_dir": str(p0_dir.resolve()),
                 "sanitized_summary": {
                     **p0_summary,
@@ -361,10 +482,13 @@ class MatmasterEvalMcpEvalRunMixin:
             rest_params, phase_label="remaining"
         )
 
-        rest_ingest = self._maybe_submit_run_dir_ingest(
-            run_dir=rest_dir, params=rest_params
-        )
+        rest_score_rc, _, _ = self._run_score_devshell_tasks_no_submit(rest_params)
         rest_scores = self._read_scores_from_pending(rest_dir)
+
+        self._merge_p0_and_rest_into_base_run_dir(base_dir, p0_dir, rest_dir)
+        ingest_submit = self._maybe_post_scored_pending_ingest(
+            run_dir=base_dir, params=rest_params
+        )
 
         self._state.last_eval_output_dir = base_dir
         self._state.eval_output_dirs.append(p0_dir)
@@ -377,16 +501,17 @@ class MatmasterEvalMcpEvalRunMixin:
             rest_dir=rest_dir,
         )
 
-        payload = DevshellEvalSubprocess.summarize_run_dir(p0_dir)
+        payload = DevshellEvalSubprocess.summarize_run_dir(base_dir)
         payload.update(
             {
                 "p0_gate_passed": True,
                 "p0_gate_scores": p0_summary,
                 "rest_scores_count": len(rest_scores),
                 "sanitized_summary": combined_summary,
-                "p0_gate_ingest_submit": p0_ingest,
-                "rest_ingest_submit": rest_ingest,
-                "exit_code": max(p0_rc, rest_rc),
+                "ingest_submit": ingest_submit,
+                "p0_gate_dir": str(p0_dir.resolve()),
+                "remaining_dir": str(rest_dir.resolve()),
+                "exit_code": max(p0_rc, p0_score_rc, rest_rc, rest_score_rc),
             }
         )
         return {
@@ -396,7 +521,7 @@ class MatmasterEvalMcpEvalRunMixin:
                     "text": DevshellEvalSubprocess.format_tool_result_text(payload),
                 }
             ],
-            "is_error": max(p0_rc, rest_rc) != 0,
+            "is_error": max(p0_rc, p0_score_rc, rest_rc, rest_score_rc) != 0,
         }
 
     def _build_combined_sanitized_summary(

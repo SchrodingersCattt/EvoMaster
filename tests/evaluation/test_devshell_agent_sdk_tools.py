@@ -212,6 +212,35 @@ def test_run_devshell_eval_skips_immediate_submit_when_pending_only_disabled(
     mock_submit.assert_not_called()
 
 
+def test_merge_p0_and_rest_into_base_run_dir_merges_artifacts(tmp_path: Path) -> None:
+    toolkit_cls = _sdk_tools_module().MatmasterEvalMcpToolkit
+    base = tmp_path / "iter_tag"
+    p0 = base / "p0_gate"
+    rest = base / "remaining"
+    (p0 / "workspaces" / "t1").mkdir(parents=True)
+    (p0 / "workspaces" / "t1" / "out.txt").write_text("p0", encoding="utf-8")
+    (p0 / "logs" / "t1").mkdir(parents=True)
+    (p0 / "pending_ingest").mkdir(parents=True)
+    (p0 / "pending_ingest" / "t1.json").write_text(
+        '{"item":{"question_id":"q1"}}', encoding="utf-8"
+    )
+    (p0 / "raw_runs.jsonl").write_text('{"task_id":"t1"}\n', encoding="utf-8")
+    (rest / "workspaces" / "t2").mkdir(parents=True)
+    (rest / "pending_ingest").mkdir(parents=True)
+    (rest / "pending_ingest" / "t2.json").write_text(
+        '{"item":{"question_id":"q2"}}', encoding="utf-8"
+    )
+    (rest / "raw_runs.jsonl").write_text('{"task_id":"t2"}\n', encoding="utf-8")
+
+    toolkit_cls._merge_p0_and_rest_into_base_run_dir(base, p0, rest)
+
+    merged = (base / "raw_runs.jsonl").read_text(encoding="utf-8")
+    assert merged.count('"task_id"') == 2
+    assert (base / "workspaces" / "t1" / "out.txt").read_text() == "p0"
+    assert (base / "pending_ingest" / "t1.json").is_file()
+    assert (base / "pending_ingest" / "t2.json").is_file()
+
+
 def test_checklist_revision_sdk_max_turns_floor(tmp_path: Path) -> None:
     state = _build_state(tmp_path)
 
