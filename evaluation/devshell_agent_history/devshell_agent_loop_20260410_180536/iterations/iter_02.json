@@ -1,0 +1,29 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 2,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [
+        "9372d60cd2eda0a160200e243bfec8fd7b0a7df8"
+      ],
+      "files_touched": [
+        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md",
+        "matmaster/skills/playground-skills/result-analysis/SKILL.md",
+        "matmaster/skills/playground-skills/structure-manager/SKILL.md"
+      ],
+      "followup_suggestion": "Run iter_03 to measure the regression recovery. Key metrics to watch: (1) SC_struct_008 should recover from 45 (γ-Al₂O₃ script now documented), (2) CR_SC_ZnS001 should recover from 75 (reduced prompt bloat + removed confusing layer mapping), (3) CR_SC_ZnPd011 and CR_SC_ZnO_Au should recover from 89 to 100 (token savings may push under budget), (4) hetero/adhesion/abacus gains should be preserved (their source files were NOT modified). If ZnS001 slab centering issue persists, consider adding a slab-centering note to the post-build verification. If SC_struct_002 (42) does not recover, it's likely model variance (empty final response), not a skill issue.",
+      "iteration_index": 2,
+      "needs_more_work": true,
+      "optimization_round": 1,
+      "summary": "## Changes Made — Fix Round 1 Regressions While Preserving Gains\n\n### Root Cause\nThe Round 1 changes to `mcp-mat-sg/SKILL.md` added ~120 lines of material-specific guidance (zinc blende, intermetallic, wurtzite, interface construction, CO2RR workflow, MLIP sections, layer count mapping). This caused:\n1. **Prompt bloat** → token budget overruns (ZnS001, ZnPd011, ZnO_Au, HT_adsorption)\n2. **Agent confusion** → extra exploratory turns from conflicting/verbose guidance\n3. **Layer count mapping note** potentially misleading the agent\n\n### Changes\n\n**1. `matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md`** — Aggressive trim (~65% size reduction):\n- **Removed**: Zinc blende (001), intermetallic surfaces, wurtzite (0001) material-specific paragraphs. Replaced with a single compact line pointing to `tasker-polar-surface` skill for detailed Tasker classification.\n- **Removed**: Confusing layer count mapping note (\"MCP layers=N ↔ -L 2N\") — tasker-polar-surface already has the proper reference table.\n- **Removed**: Entire `build_surface_interface` section (redundant with `electronic_property_construction.md` in structure-manager references, which was the actual source of the +67 hetero gain).\n- **Removed**: `MLIP-based structure relaxation` section (belongs in mlips skill).\n- **Removed**: `CO2RR / catalysis workflow` + `MLIP adsorption energy` sections (workflow guidance, not MCP tool description).\n- **Simplified**: Slab build fallback guidance (removed mapping, kept essentials).\n\n**2. `matmaster/skills/playground-skills/result-analysis/SKILL.md`**:\n- Shortened cross-result comparison directive from verbose paragraph to one sentence.\n\n**3. `matmaster/skills/playground-skills/structure-manager/SKILL.md`**:\n- Added `build_gamma_al2o3.py` to the script section (section 0a) — this script already existed in the skill's scripts/ directory but was undocumented in SKILL.md. Making it discoverable should help SC_struct_008 (γ-Al₂O₃ timeout task, score 45).\n\n### Preserved (untouched gains from Round 1)\n- `structure-manager/references/electronic_property_construction.md` — heterostructure guidance (+67)\n- `gromacs-system-prep/SKILL.md` — adhesion section (+42)\n- `abacus/references/input_examples.md` — quick reference table (+16)\n- `abacus/SKILL.md` — all ABACUS improvements intact\n\n### Expected Impact\n- **Token budget savings**: ~1500-2000 tokens per task that loads mcp-mat-sg, helping ZnS001 (67k→~65k), ZnPd011 (54k→~52k), ZnO_Au (20k→~18k) toward their budgets\n- **Turn reduction**: Removing verbose material-specific guidance should reduce exploratory turns, further reducing token accumulation\n- **SC_struct_008**: Prominent `build_gamma_al2o3.py` listing should help agent find the script faster\n- **Regression recovery**: Removing confusing layer count mapping and conflicting guidance should restore CR task scores closer to iter_01 levels"
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 2,
+    "macro_mean_0_100": 86,
+    "rationale": "## 第 2 轮迭代总结\n\n### 评分概况\n- **P0 门控**：✅ 通过（P0 均值 90/100）\n- **全量宏平均**：**86/100**（iter_01: 85 → +1，目标 90，未达标）\n- **满分任务**：11/36（iter_01: 8 → +3）\n- **≥90 任务**：17/36（iter_01: 14 → +3）\n\n### Round 1 优化效果评估\n\n**成功的改动：**\n- ✅ structure-manager/references/electronic_property_construction.md：SC_struct_hetero 33→100 (+67)\n- ✅ gromacs-system-prep/SKILL.md 聚合物粘附工作流：pl_adhesion 58→100 (+42)\n- ✅ abacus/references/input_examples.md：IG_abacus_001 72→88 (+16)\n\n**引发回归的改动：**\n- ❌ mcp-mat-sg/SKILL.md 层数映射规则：可能导致 SC_struct_008 (-42), SC_struct_002 (-25), SC_struct_006 (-12)\n- ❌ result-analysis/SKILL.md 跨结果表格指令：可能导致多个 CR 任务回归 (-11 to -14)\n- ❌ ABACUS 快速参考表可能引入部分参数冲突：IG_abacus_003 (-8), IG_abacus_007 (-5)\n\n### 当前最大失分任务\n1. SC_struct_002: **42** (回归 -25)\n2. SC_struct_008: **45** (回归 -42)\n3. CR_BP_HT_adsorption_tree: **56** (回归 -11)\n4. SC_struct_005: **56**\n5. SC_struct_006: **60** (回归 -12)\n6. WO_mlip_dpa_006: **70** (回归 -7)\n\n### 分流决策\n- ✅ 已委派 **delegate_optimization (round 1)**：重点修复 mcp-mat-sg / result-analysis / abacus 回归，保留 hetero/adhesion 收益，同时推高剩余低分任务\n- 未触发 escalate_checklist_revision\n\n### 下一步\n等待 optimization 子 Agent 修复回归后进入第 3 轮迭代。关键：需将 SC_struct_008 恢复到 87+，SC_struct_002 恢复到 67+，同时保持 hetero=100 和 adhesion=100 的收益。",
+    "target_met": false
+  }
+}
