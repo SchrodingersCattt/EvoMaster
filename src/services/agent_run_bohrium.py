@@ -414,24 +414,44 @@ class BohriumSetupService:
         playground: Any,
         skill_sync_spec: SkillSyncSpec | None,
         run_started_at: float,
+        bohrium_required: bool = False,
     ) -> BohriumSetupResult:
         """Load credentials, bridge events, and run setup in the executor."""
-        run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
         loop = asyncio.get_running_loop()
         event_cb = self._make_event_bridge(loop)
 
         return await loop.run_in_executor(
             None,
-            lambda: self._setup_bohrium_for_run(
+            lambda: self._run_setup_sync(
                 session_id=session_id,
                 pg=playground,
                 skill_sync_spec=skill_sync_spec,
-                run_creds=run_creds,
-                user_id_for_ak=user_id_for_ak,
-                org_id=org_id,
                 event_callback=event_cb,
                 run_started_at=run_started_at,
+                bohrium_required=bohrium_required,
             ),
+        )
+
+    def _run_setup_sync(
+        self,
+        *,
+        session_id: str,
+        pg: Any,
+        skill_sync_spec: SkillSyncSpec | None,
+        event_callback: Callable[..., None],
+        run_started_at: float,
+        bohrium_required: bool = False,
+    ) -> BohriumSetupResult:
+        run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
+        return self._setup_bohrium_for_run(
+            session_id=session_id,
+            pg=pg,
+            skill_sync_spec=skill_sync_spec,
+            run_creds=run_creds,
+            user_id_for_ak=user_id_for_ak,
+            org_id=org_id,
+            event_callback=event_callback,
+            run_started_at=run_started_at,
         )
 
     async def run_cleanup(

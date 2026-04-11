@@ -106,6 +106,35 @@ class TestBohriumSetupServiceOrchestration:
         assert kwargs["event_callback"] is event_cb
         assert kwargs["ssh_attached"] is True
 
+    @pytest.mark.asyncio
+    async def test_run_setup_delegates_bohrium_required_flag(self):
+        from src.services.agent_run_bohrium import BohriumSetupResult
+
+        svc = _make_service(event_sink=MagicMock())
+        event_cb = MagicMock()
+        expected = BohriumSetupResult(
+            True,
+            None,
+            None,
+            '/remote',
+            'ssh',
+            None,
+        )
+
+        with (
+            patch.object(svc, '_make_event_bridge', return_value=event_cb),
+            patch.object(svc, '_run_setup_sync', return_value=expected) as mock_setup_sync,
+        ):
+            await svc.run_setup(
+                session_id='sess-1',
+                playground=object(),
+                skill_sync_spec=None,
+                run_started_at=1.0,
+                bohrium_required=True,
+            )
+
+        assert mock_setup_sync.call_args.kwargs['bohrium_required'] is True
+
 
 class TestBohriumEventBridgeMapping:
     """_make_event_bridge() correctly maps callback types to BusEvent objects."""

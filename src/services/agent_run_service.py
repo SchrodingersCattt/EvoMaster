@@ -139,6 +139,7 @@ class AgentRunService:
         invocation_id: str | None = None,
         llm_override: str | None = None,
         model_override: str | None = None,
+        bohrium_required: bool = False,
     ) -> tuple[bool | tuple[bool, str], int]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -238,6 +239,7 @@ class AgentRunService:
                 playground=playground,
                 skill_sync_spec=skill_sync_spec,
                 run_started_at=run_started_at,
+                bohrium_required=bohrium_required,
             )
             ssh_attached = bohrium_result.ssh_attached
             if bohrium_result.abort_result is not None:
