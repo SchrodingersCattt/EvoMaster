@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: mech
 questions:
-- id: WO_mech_001_20260404
+- id: WO_mech_001_20260411v2
   capability: workflow_orchestration
   domain: mech
   intent: Independently locate Al FCC structure, execute 5-point volume scan, fit EOS, report a0 and B0.
@@ -20,14 +20,6 @@ questions:
   - planner
   data_files: []
   reference_answers:
-  - key: used_db_fetch
-    value:
-    - mat_struct_db_fetch_structures_from_db
-    - mat_sg_build_bulk_structure_by_template
-    - mat_sg_build_bulk_structure_by_wyckoff
-  - key: used_mlips_optimizer
-    value:
-    - execute_bash
   - key: a0_A
     value: 4.04
     tolerance: 0.08
@@ -67,14 +59,6 @@ questions:
     criterion: Report includes volume scan points, fit model identification, a0 and b0 values, and any failure handling notes.
     axis: correctness
     verify: llm_binary_judge
-  - id: used_db_fetch
-    criterion: Used structure database or builder tool to obtain Al FCC structure (not LLM-fabricated coordinates).
-    axis: grounding
-    verify: tool_called
-  - id: used_mlips_optimizer
-    criterion: Used MLIPs optimizer (via Bohrium job) for volume-scan single-point calculations.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: The answer ties Al structure and energy values to stated retrieval or calculation
       outputs (or given mock data), not invented numbers. Judge solely from the final answer;

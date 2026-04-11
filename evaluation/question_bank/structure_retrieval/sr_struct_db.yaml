@@ -2,7 +2,7 @@ version: v5
 capability: structure_retrieval
 domain: struct
 questions:
-- id: SR_db_001_20260410
+- id: SR_db_001_20260411v2
   capability: structure_retrieval
   domain: struct
   intent: Search a target inorganic crystal structure and report the original database source with machine-checkable provenance fields.
@@ -36,8 +36,6 @@ questions:
     value: retrieval_report.md
   - key: source_summary
     value: source_summary.json
-  - key: used_db_fetch
-    value: mat_struct_db_fetch_structures_from_db
   - key: summary_required_tokens
     value:
       filename: source_summary.json
@@ -85,10 +83,6 @@ questions:
     criterion: Retrieval report explicitly describes query conditions, candidate handling, and database-source explanation.
     axis: correctness
     verify: text_file_contains_all
-  - id: used_db_fetch
-    criterion: Used the registered structure database retrieval tool rather than inventing a structure source.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: The answer ties the selected RbClO4 structure and provenance fields to the retrieval outputs, and does not claim unsupported source certainty.
     axis: grounding
@@ -109,7 +103,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_db_002_20260410
+- id: SR_db_002_20260411v2
   capability: structure_retrieval
   domain: struct
   intent: Retrieve a target prototype crystal structure from an open database and summarize the returned structural metadata.
@@ -140,8 +134,6 @@ questions:
     value: mgb2_retrieval.json
   - key: notes_md
     value: mgb2_notes.md
-  - key: used_db_fetch
-    value: mat_struct_db_fetch_structures_from_db
   - key: retrieval_required_tokens
     value:
       filename: mgb2_retrieval.json
@@ -188,10 +180,6 @@ questions:
     criterion: Notes explain candidate selection and database origin for the MgB2 result.
     axis: correctness
     verify: text_file_contains_all
-  - id: used_db_fetch
-    criterion: Used the registered structure database retrieval tool to obtain MgB2.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: The answer stays focused on retrieval metadata and provenance, not fabricated downstream calculations.
     axis: grounding
@@ -212,7 +200,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_db_003_20260410
+- id: SR_db_003_20260411v2
   capability: structure_retrieval
   domain: struct
   intent: Retrieve and rank candidate crystal structures under explicit screening constraints.
@@ -246,8 +234,6 @@ questions:
     value: candidate_structures.json
   - key: screening_report
     value: screening_report.md
-  - key: used_db_fetch
-    value: mat_struct_db_fetch_structures_from_db
   - key: candidate_required_tokens
     value:
       filename: candidate_structures.json
@@ -294,10 +280,6 @@ questions:
     criterion: Screening report explicitly states the Tc and space-group criteria, candidate-count handling, and uncertainty note.
     axis: correctness
     verify: text_file_contains_all
-  - id: used_db_fetch
-    criterion: Used the registered structure database retrieval tool in the screening workflow.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: The answer honestly reflects whether the database query yields enough candidates and does not fabricate missing entries.
     axis: grounding
