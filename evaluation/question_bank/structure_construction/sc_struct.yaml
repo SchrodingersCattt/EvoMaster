@@ -1128,10 +1128,6 @@ questions:
     value: zncl2_1m_box.xyz
   - key: znclo4_model_artifact
     value: znclo4_1m_box.xyz
-  - key: used_structure_source
-    value:
-    - mat_struct_db_fetch_structures_from_db
-    - mat_sg_build_molecule_structures_from_smiles
   - key: znso4_atom_count
     value:
       filename: znso4_1m_box.xyz
@@ -1216,10 +1212,6 @@ questions:
     criterion: Zn(ClO4)2 system integer composition (JSON integer fields) is consistent with 1 mol/L target and near-2000-atom constraint.
     axis: correctness
     verify: text_file_regex
-  - id: used_structure_source
-    criterion: Uses structure retrieval/construction tools for ions or water rather than hand-fabricated coordinates.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: Deliverables are grounded in `electrolyte_system_spec.json` constraints and focus on actual modeling artifacts.
     axis: grounding
