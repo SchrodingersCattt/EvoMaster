@@ -265,7 +265,7 @@ scoring_checklist:
 P0 题目是被标记为最高优先级的评测题。在 DevShell Agent 多轮迭代循环中，每轮评测会**先跑 P0 题目**，评分后与上一轮的 P0 分数做对比。若 P0 宏平均分下降，则：
 
 1. **跳过**当前轮剩余的非 P0 题目（节省时间和费用）
-2. 编排器在随后启动 **optimization 专责子回合**，由子 Agent 调用受控 MCP 工具 **git_revert_commits_after_base**，对本轮迭代开局 ``HEAD`` 之后的提交按从新到旧执行 **``git revert --no-edit``**（**不使用** ``git reset``），以撤销本轮产生的提交。
+2. 编排器在随后启动 **optimization 专责子回合**，由子 Agent 调用受控 MCP 工具 **git_revert_commits_after_base**，以 **上一轮迭代开局时的 ``HEAD``**（与 ``last_p0_scores`` 更新时所用代码快照一致）为 ``base_sha``，对 ``base_sha..HEAD`` 上的提交按从新到旧执行 **``git revert --no-edit``**（**不使用** ``git reset``），以撤销**上一轮** optimization auto-commit 等在基线之后累积的提交（**不是**「本轮迭代开局 HEAD」：若本轮评测前尚未产生新 commit，旧逻辑会出现无可 revert 的空区间）。
 3. 在 `outcomes` 中标记 `p0_regression: true`，视为**优化失败**
 4. 外层循环 **continue** 进入下一轮
 

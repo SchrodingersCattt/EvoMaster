@@ -307,6 +307,9 @@ class DevshellAgentLoop:
         log_path = cfg.session_dir / "sdk_loop_console.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         exit_code = 0
+        #: HEAD at the **start** of the previous iteration; used as ``git revert`` base when
+        #: the current iteration's P0 gate regresses (``last_p0_scores`` matches that snapshot).
+        prev_iter_start_head: str | None = None
         with log_path.open("a", encoding="utf-8") as loop_log:
             async with ClaudeSDKClient(options=options) as client:
                 for it in range(1, cfg.max_iterations + 1):
@@ -370,34 +373,48 @@ class DevshellAgentLoop:
                             loop_log,
                         )
                         exit_code = 1
+                        if head0:
+                            prev_iter_start_head = head0
                         continue
 
                     last = matching[-1]
                     if p0_regressed:
                         last["p0_regression"] = True
 
-                    if p0_regressed and head0:
+                    if p0_regressed and prev_iter_start_head:
                         rev_rc = await self._run_p0_revert_followup_if_needed(
                             it=it,
-                            head0=head0,
+                            revert_base_sha=prev_iter_start_head,
                             state=state,
                             mcp_server=mcp_server,
                             loop_log=loop_log,
                         )
                         if rev_rc >= 1:
                             exit_code = 1
+                    elif p0_regressed and not prev_iter_start_head:
+                        log_line(
+                            "P0 regression but prev_iter_start_head is unset "
+                            f"(iteration {it}); skipping git revert sub-round",
+                            loop_log,
+                        )
 
                     self._write_iteration_history(it=it, state=state, outcome=last)
                     score = int(last.get("macro_mean_0_100", 0))
                     met = bool(last.get("target_met"))
 
                     if p0_regressed:
+                        tail = git_rev_parse_head(repo_root=cfg.repo_root)
+                        if tail:
+                            prev_iter_start_head = tail
                         log_line(
                             f"Iteration {it} marked as optimization failure "
                             f"(P0 regression); continuing to next iteration.",
                             loop_log,
                         )
                         continue
+
+                    if head0:
+                        prev_iter_start_head = head0
 
                     if met or score >= cfg.target_mean_score:
                         log_line(
@@ -644,14 +661,14 @@ class DevshellAgentLoop:
         """Synthetic ``optimization_round`` for P0 revert sub-rounds (avoid colliding with 1..n)."""
         return 10_000 + int(it)
 
-    def _p0_revert_user_message(self, *, it: int, head0: str) -> str:
+    def _p0_revert_user_message(self, *, it: int, revert_base_sha: str) -> str:
         session_dir = self._cfg.session_dir.resolve()
         rnd = self._p0_revert_optimization_round(it)
         return f"""## P0 回归 — Git revert 专责回合（第 {it} 轮迭代）
 
-本轮 P0 宏平均相对上一轮**下降**。编排器已记录本轮迭代开局时的 ``HEAD`` = ``{head0}``。
+本轮 P0 相对 ``last_p0_scores`` 基线**下降**；基线对应**上一轮迭代开局**（本轮优化提交之前）的仓库快照。编排器授权的 ``base_sha`` = ``{revert_base_sha}``。
 
-- **任务**：先调用 **git_revert_commits_after_base**，参数 ``base_sha`` **必须**为上述完整 SHA（与编排器授权一致）。该工具对 ``{head0}..HEAD`` 上每个提交**从新到旧**执行 ``git revert --no-edit``（**不**使用 ``git reset``）。
+- **任务**：先调用 **git_revert_commits_after_base**，参数 ``base_sha`` **必须**为上述完整 SHA。该工具对 ``{revert_base_sha}..HEAD`` 上每个提交**从新到旧**执行 ``git revert --no-edit``（**不**使用 ``git reset``），用于撤销**上一轮** optimization auto-commit 等在基线之后累积的提交。
 - 若区间为空（无可 revert 的提交），工具会返回成功说明；你仍须调用 **report_optimization_result**。
 - **会话目录**（只读证据）：`{session_dir}`
 - 结束前**必须**调用 **report_optimization_result**（``iteration_index={it}``，``optimization_round={rnd}``），在摘要中说明 revert 结果。
@@ -661,18 +678,21 @@ class DevshellAgentLoop:
         self,
         *,
         it: int,
-        head0: str,
+        revert_base_sha: str,
         state: AgentLoopSharedState,
         mcp_server: Any,
         loop_log: TextIO,
     ) -> int:
         """Run optimization-shaped sub-round to ``git revert`` after P0 regression.
 
+        ``revert_base_sha`` is the **start-of-(it-1)** HEAD (snapshot when the last
+        successful P0 gate updated ``last_p0_scores``), not the current iteration start.
+
         Returns:
             0: ok
             1: warning (e.g. missing ``report_optimization_result``)
         """
-        base = head0.strip()
+        base = revert_base_sha.strip()
         if not base:
             return 0
 
@@ -699,7 +719,9 @@ class DevshellAgentLoop:
                 loop_log,
             )
             async with ClaudeSDKClient(options=co) as cc:
-                await cc.query(self._p0_revert_user_message(it=it, head0=head0))
+                await cc.query(
+                    self._p0_revert_user_message(it=it, revert_base_sha=revert_base_sha)
+                )
                 async for message in cc.receive_response():
                     log_sdk_message(
                         message,

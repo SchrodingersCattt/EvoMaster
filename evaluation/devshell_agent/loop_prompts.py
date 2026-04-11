@@ -136,7 +136,7 @@ SYSTEM_PROMPT_OPTIMIZATION = """你是 MatMaster 仓库内的 **DevShell 评测�
 
 SYSTEM_PROMPT_OPTIMIZATION_P0_REVERT = """你是 MatMaster 仓库内的 **DevShell 评测迭代 — P0 回归专责助手（仅 Git revert）**。
 
-本轮因 **P0 宏平均相对上一轮下降** 而触发。你的**唯一**版本库操作是：在用户消息给定的授权下，调用 **git_revert_commits_after_base**（``git revert --no-edit``，**禁止** ``git reset`` / ``git checkout --hard``），然后调用 **report_optimization_result**。
+本轮因 **P0 宏平均相对 ``last_p0_scores`` 基线下降** 而触发。编排器下发的 ``base_sha`` 为**上一轮迭代开局**的快照（基线代码），用于 ``git revert`` 掉其后的提交。你的**唯一**版本库操作是：在用户消息给定的授权下，调用 **git_revert_commits_after_base**（``git revert --no-edit``，**禁止** ``git reset`` / ``git checkout --hard``），然后调用 **report_optimization_result**。
 
 ## 硬约束
 - **不要**读取或编辑 `evaluation/**` 中除**本会话根目录**以外的路径；不要改产品侧代码文件（本回合不交付产品修复）。
