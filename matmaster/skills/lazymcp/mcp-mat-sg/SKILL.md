@@ -34,7 +34,7 @@ Inspect a structure file for lattice parameters, composition, atom count, volume
 - For each replica, explain: (a) which sites are disordered and how, (b) how the ordered config was chosen (valence/charge balance/connectivity), (c) what changed. A bare filename list without chemical reasoning = fail.
 - **Chemical/physical grounding is MANDATORY**: for every disordered site, explain the bonding environment, valence state, or coordination geometry — not just occupancy numbers. Cover: why the species can substitute (ionic radius, charge similarity), the coordination environment (e.g., octahedral/tetrahedral, bond lengths), and how the ordered replica preserves charge balance. Write 2-3 focused sentences per disordered site.
 - On timeout → fall back to pymatgen `OrderDisorderedStructureTransformation`.
-- **Batch processing (N ≥ 3 structures)**: process breadth-first — save each ordered CIF immediately before moving to the next. Budget ~2 MCP attempts per structure; if slow, fall back to pymatgen `OrderDisorderedStructureTransformation`. If approaching timeout, finish immediately with whatever files are saved. A summary table of filenames with zero chemistry explanation = fail even if all files delivered.
+- **Batch processing (N ≥ 3 structures)**: process breadth-first — save each ordered CIF immediately before moving to the next. Budget ~2 MCP attempts per structure; if slow, fall back to pymatgen `OrderDisorderedStructureTransformation`. If approaching timeout, finish immediately with whatever files are saved. Delivered files with brief grounding > perfect grounding with no deliverable.
 
 ## Surface passivation (semiconductor slabs)
 
