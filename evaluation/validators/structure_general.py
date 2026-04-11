@@ -478,16 +478,20 @@ def check_coordination_number(
 
     coord_numbers: list[int] = []
     for ci in center_indices:
-        cn = 0
-        for j, sj in enumerate(sites):
-            if j == ci:
-                continue
-            if isinstance(struct, Molecule):
-                d = sites[ci].distance(sj)
-            else:
-                d = struct.get_distance(ci, j)
-            if d < cutoff_A:
-                cn += 1
+        if isinstance(struct, Molecule):
+            # Non-periodic: count direct distances (no PBC images)
+            cn = sum(
+                1
+                for j, sj in enumerate(sites)
+                if j != ci and sites[ci].distance(sj) < cutoff_A
+            )
+        else:
+            # Periodic structure: use get_neighbors which enumerates ALL
+            # periodic images within the cutoff.  The naive get_distance(ci, j)
+            # loop only returns one (MIC) distance per site-pair and therefore
+            # misses cases where the same site has two images both within the
+            # cutoff (e.g. a narrow cell where b ≈ 2 × bond_length).
+            cn = len(struct.get_neighbors(struct[ci], cutoff_A))
         coord_numbers.append(cn)
 
     mean_cn = float(np.mean(coord_numbers))
