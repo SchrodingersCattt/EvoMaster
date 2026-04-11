@@ -140,6 +140,10 @@ def _standard_patches():
         patch('src.services.agent_run_service.BohriumSetupService'),
         patch('src.services.agent_run_service.derive_skill_sync_spec'),
         patch(
+            'src.services.agent_run_service.materialize_user_skills_for_run',
+            return_value=[],
+        ),
+        patch(
             'src.services.agent_run_service.HistoryRestoreService',
             create=True,
         ),
@@ -169,9 +173,10 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         persistence_handler_cls = mocks[3]
         workspace_handler_cls = mocks[4]
         bohrium_cls = mocks[5]
-        mocks[6]
-        history_restore_cls = mocks[7]
-        redis_fn = mocks[8]
+        mocks[6]  # derive_skill_sync_spec
+        mocks[7]  # materialize_user_skills_for_run
+        history_restore_cls = mocks[8]
+        redis_fn = mocks[9]
 
         # PlaygroundManager mock
         pg_ctx = _make_mock_pg_ctx()
