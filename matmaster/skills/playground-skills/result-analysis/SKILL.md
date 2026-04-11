@@ -108,3 +108,4 @@ For other open-source DFT codes, parse outputs directly with Bash/Python:
 * When plotting, use JSON produced by your workflow or by `parse_results.py` / `parse_abacus.py`. Prioritize clarity over complexity.
 * For multi-step workflows, **always parse all available output files** before reporting — do not stop after reading only the log. Check for BANDS, DOS, and potential files too.
 * When computing derived quantities (surface energy, band gap, etc.), **show the formula used and the numerical values** so the user can verify.
+* **Cross-result comparison**: When aggregating results across multiple systems, present a comparison table with consistent units. Save as JSON/CSV for downstream use.
