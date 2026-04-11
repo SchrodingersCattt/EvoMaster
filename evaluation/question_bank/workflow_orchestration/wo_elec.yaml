@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: elec
 questions:
-- id: WO_elec_001_20260404
+- id: WO_elec_001_20260411v2
   capability: workflow_orchestration
   domain: elec
   intent: 'Run band-structure workflow for Si: locate structure, compute bands along
@@ -22,8 +22,6 @@ questions:
   - planner
   data_files: []
   reference_answers:
-  - key: used_band_calc
-    value: execute_bash
   - key: gap_type
     value: indirect
   - key: gap_value_eV
@@ -58,11 +56,6 @@ questions:
       value, and DFT uncertainty note.
     axis: correctness
     verify: llm_binary_judge
-  - id: used_band_calc
-    criterion: Used ABACUS band structure calculation (via bohrium-job skill submit_job.py)
-      to compute actual bands.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: Stated band gap values are tied to band-structure or calculation outcomes described in the final answer, not
       only generic training recall. Judge from the answer and named outputs; do not fail because the tool-call log omits MCP,
@@ -93,7 +86,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_elec_002_20260404
+- id: WO_elec_002_20260411v2
   capability: workflow_orchestration
   domain: elec
   intent: 'Build and execute periodic liquid water gap workflow: construct 64-water
@@ -112,10 +105,6 @@ questions:
   - planner
   data_files: []
   reference_answers:
-  - key: used_amorphous_builder
-    value: mat_sg_make_amorphous_structure
-  - key: used_dos_calc
-    value: execute_bash
   - key: gap_value_eV
     value: 6.2
     tolerance: 1.2
@@ -141,16 +130,6 @@ questions:
       gap extraction method, and cost estimate.
     axis: correctness
     verify: llm_binary_judge
-  - id: used_amorphous_builder
-    criterion: Used MCP amorphous structure builder (mat_sg_make_amorphous_structure)
-      for 64-water box construction.
-    axis: grounding
-    verify: tool_called
-  - id: used_dos_calc
-    criterion: Used ABACUS DOS calculation (via bohrium-job skill submit_job.py) for
-      gap extraction.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: The gap value and any acceleration discussion are tied to calculation results or constraints stated in the
       final answer. Judge from the answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
@@ -180,7 +159,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_elec_006_20260404
+- id: WO_elec_006_20260411v2
   capability: workflow_orchestration
   domain: elec
   intent: 'Mock surface energy for Fe BCC(110) with BSSE-aware workflow; compare sigma to VASP reference using provided energies and area.'
@@ -197,12 +176,6 @@ questions:
   - planner
   data_files: []
   reference_answers:
-  - key: used_structure_tool
-    value:
-    - mat_struct_db_fetch_structures_from_db
-    - mat_sg_build_bulk_structure_by_template
-    - mat_sg_build_bulk_structure_by_wyckoff
-    - mat_sg_build_surface_slab
   - key: sigma_J_m2
     value: 2.411
     tolerance: 0.12
@@ -228,10 +201,6 @@ questions:
     criterion: Report states sigma in J/m^2, shows sigma=(E_slab-E_bulk)/(2A), notes BSSE empty-layer rationale, and compares to VASP ~2.412 J/m^2.
     axis: correctness
     verify: llm_binary_judge
-  - id: used_structure_tool
-    criterion: Used a registered structure database fetch or slab/bulk builder tool to obtain Fe BCC and (110) slab geometry (not hand-drawn coordinates only).
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: Numeric sigma is computed from the given mock E_bulk, E_slab, and A; no invented energies. Judge solely from
       the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.

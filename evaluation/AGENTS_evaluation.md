@@ -136,7 +136,7 @@ evaluation/question_bank/
 | `turn_budget` | `{"max": int}`（轮次数） | Agent 轮次（step）预算；`total_steps <= max` 则 pass |
 | `molcrys_slab_molecular_integrity` | `{"unit_cell_atoms": int, "slab_atoms": int, "layers": int}` | 分子晶体 slab 完整性 |
 | `sc005_disorder_formulas` | `dict` | 无序结构化学式 |
-| `struct_file_atom_count` | `{"filename": str, "expected": int, "tolerance": float}` | 用 pymatgen 读结构文件验证总原子数 |
+| `struct_file_atom_count` | `{"filename": str, "expected": int, "tolerance": float, "element": str(可选)}` | 用 pymatgen 读结构文件验证原子数；未提供 `element` 时校验总原子数，提供时校验该元素计数 |
 | `struct_file_formula` | `{"filename": str, "formula": str}` | 用 pymatgen 读结构文件验证化学式（reduced composition 比较） |
 | `struct_file_bond_count` | `{"filename": str, "element_a": str, "element_b": str, "cutoff_A": float, "expected_count": int, "tolerance": float}` | 统计元素对间短于 cutoff 的键数 |
 | `struct_file_bond_length` | `{"filename": str, "element_a": str, "element_b": str, "cutoff_A": float, "expected": float, "tolerance": float}` | 计算元素对间键长均值并校验 |

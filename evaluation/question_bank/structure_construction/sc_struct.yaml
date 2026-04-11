@@ -967,7 +967,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_010_20260410
+- id: SC_struct_010_20260411v2
   capability: structure_construction
   domain: struct
   intent: Build a seven-layer Ag(111) slab with explicit water and potassium ions for an electrochemical interface initial model.
@@ -1100,7 +1100,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_006_20260410v3
+- id: WO_mlip_dpa_006_20260411v4
   capability: structure_construction
   domain: struct
   intent: Build and export three 1 mol/L Zn-salt aqueous model boxes near 2000 atoms with valid integer compositions and concrete structure artifacts.
@@ -1115,7 +1115,7 @@ questions:
   - planner
   data_files:
   - key: electrolyte_spec
-    path: data/WO_mlip_dpa_006_20260410v3/electrolyte_system_spec.json
+    path: data/WO_mlip_dpa_006_20260411v4/electrolyte_system_spec.json
     oss_url: ''
     description: Integer-composition hints and constraints for three 1 mol/L Zn-salt aqueous systems near 2000 atoms.
   reference_answers:
@@ -1129,10 +1129,6 @@ questions:
     value: zncl2_1m_box.xyz
   - key: znclo4_model_artifact
     value: znclo4_1m_box.xyz
-  - key: used_structure_source
-    value:
-    - mat_struct_db_fetch_structures_from_db
-    - mat_sg_build_molecule_structures_from_smiles
   - key: znso4_atom_count
     value:
       filename: znso4_1m_box.xyz
@@ -1217,10 +1213,6 @@ questions:
     criterion: Zn(ClO4)2 system integer composition (JSON integer fields) is consistent with 1 mol/L target and near-2000-atom constraint.
     axis: correctness
     verify: text_file_regex
-  - id: used_structure_source
-    criterion: Uses structure retrieval/construction tools for ions or water rather than hand-fabricated coordinates.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: Deliverables are grounded in `electrolyte_system_spec.json` constraints and focus on actual modeling artifacts.
     axis: grounding

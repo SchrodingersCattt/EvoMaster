@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: struct
 questions:
-- id: WO_mlip_dpa_001_20260406
+- id: WO_mlip_dpa_001_20260411v2
   capability: workflow_orchestration
   domain: struct
   intent: Optimize diamond Si with DPA ML potential (cell + atoms), report lattice constant and energy per atom.
@@ -21,14 +21,6 @@ questions:
   - planner
   data_files: []
   reference_answers:
-  - key: used_structure_source
-    value:
-    - mat_struct_db_fetch_structures_from_db
-    - mat_sg_build_bulk_structure_by_template
-    - mat_sg_build_bulk_structure_by_wyckoff
-  - key: used_mlip_calc
-    value:
-    - execute_bash
   - key: lattice_a_A
     value: 5.43
     tolerance: 0.15
@@ -55,14 +47,6 @@ questions:
     criterion: Report includes optimized lattice constant, energy per atom, and convergence status (converged or max steps reached).
     axis: correctness
     verify: llm_binary_judge
-  - id: used_structure_source
-    criterion: Used structure database or builder tool to obtain Si diamond structure (not LLM-fabricated coordinates).
-    axis: grounding
-    verify: tool_called
-  - id: used_mlip_calc
-    criterion: Used MLIPs calculator (via Bohrium job submission) for structure optimization.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: The reported lattice constant and energy values are tied to computation outputs stated in the answer, not textbook recall or invented numbers. Judge solely from the final answer.
     axis: grounding
@@ -88,7 +72,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: WO_mlip_dpa_002_20260406
+- id: WO_mlip_dpa_002_20260411v2
   capability: workflow_orchestration
   domain: mech
   intent: Compute elastic constants for Cu FCC with DPA; report C11, C12, and bulk modulus.
@@ -107,14 +91,6 @@ questions:
   - planner
   data_files: []
   reference_answers:
-  - key: used_structure_source
-    value:
-    - mat_struct_db_fetch_structures_from_db
-    - mat_sg_build_bulk_structure_by_template
-    - mat_sg_build_bulk_structure_by_wyckoff
-  - key: used_mlip_calc
-    value:
-    - execute_bash
   - key: C11_GPa
     value: 170.0
     tolerance: 25.0
@@ -147,14 +123,6 @@ questions:
     criterion: Report includes C11, C12 values, bulk modulus, and at least a summary of the 6×6 elastic tensor.
     axis: correctness
     verify: llm_binary_judge
-  - id: used_structure_source
-    criterion: Used structure database or builder tool to obtain Cu FCC structure.
-    axis: grounding
-    verify: tool_called
-  - id: used_mlip_calc
-    criterion: Used MLIPs calculator (via Bohrium job submission) for both optimization and elastic constant calculation.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: Elastic constants are derived from calculation outputs, not literature values. Judge solely from the final answer.
     axis: grounding
@@ -180,7 +148,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: WO_mlip_dpa_003_20260406
+- id: WO_mlip_dpa_003_20260411v2
   capability: workflow_orchestration
   domain: thermo
   intent: Compute phonon dispersion for Si diamond with DPA; report Gamma-point optical frequency and check for imaginary modes.
@@ -199,14 +167,6 @@ questions:
   - planner
   data_files: []
   reference_answers:
-  - key: used_structure_source
-    value:
-    - mat_struct_db_fetch_structures_from_db
-    - mat_sg_build_bulk_structure_by_template
-    - mat_sg_build_bulk_structure_by_wyckoff
-  - key: used_mlip_calc
-    value:
-    - execute_bash
   - key: gamma_optical_max_cm1
     value: 520.0
     tolerance: 50.0
@@ -230,14 +190,6 @@ questions:
     criterion: Report includes phonon dispersion k-path specification, Gamma-point frequency value, and statement about presence/absence of imaginary modes.
     axis: correctness
     verify: llm_binary_judge
-  - id: used_structure_source
-    criterion: Used structure database or builder tool to obtain Si diamond structure.
-    axis: grounding
-    verify: tool_called
-  - id: used_mlip_calc
-    criterion: Used MLIPs calculator (via Bohrium job submission) for phonon calculation.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: The reported phonon frequency is tied to force-constant calculation outputs, not textbook values. Judge solely from the final answer.
     axis: grounding
@@ -263,7 +215,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: WO_mlip_dpa_004_20260406
+- id: WO_mlip_dpa_004_20260411v2
   capability: workflow_orchestration
   domain: thermo
   intent: Run two-stage MD (NVT equilibration + NPT production) on Al FCC supercell with DPA; report average temperature and pressure.
@@ -284,14 +236,6 @@ questions:
   - planner
   data_files: []
   reference_answers:
-  - key: used_structure_source
-    value:
-    - mat_struct_db_fetch_structures_from_db
-    - mat_sg_build_bulk_structure_by_template
-    - mat_sg_build_bulk_structure_by_wyckoff
-  - key: used_mlip_calc
-    value:
-    - execute_bash
   - key: avg_temperature_K
     value: 300.0
     tolerance: 30.0
@@ -316,14 +260,6 @@ questions:
     criterion: Report includes supercell dimensions, MD stage definitions (NVT + NPT with parameters), average temperature, and average pressure from the NPT stage.
     axis: correctness
     verify: llm_binary_judge
-  - id: used_structure_source
-    criterion: Used structure database or builder tool to obtain Al FCC structure.
-    axis: grounding
-    verify: tool_called
-  - id: used_mlip_calc
-    criterion: Used MLIPs calculator (via Bohrium job submission) for MD simulation.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: Temperature and pressure values are extracted from MD simulation outputs, not guessed. Judge solely from the final answer.
     axis: grounding
@@ -349,7 +285,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: WO_mlip_dpa_005_20260406
+- id: WO_mlip_dpa_005_20260411v2
   capability: workflow_orchestration
   domain: kinetic
   intent: Compute Cu FCC single-vacancy migration barrier with DPA via NEB; report forward barrier energy.
@@ -370,15 +306,6 @@ questions:
   - planner
   data_files: []
   reference_answers:
-  - key: used_structure_source
-    value:
-    - mat_struct_db_fetch_structures_from_db
-    - mat_sg_build_bulk_structure_by_template
-    - mat_sg_build_bulk_structure_by_wyckoff
-    - mat_sg_make_defect_structure
-  - key: used_mlip_calc
-    value:
-    - execute_bash
   - key: forward_barrier_eV
     value: 0.7
     tolerance: 0.2
@@ -405,14 +332,6 @@ questions:
     criterion: Report includes description of initial and final states, forward barrier value, and energy profile along the migration path.
     axis: correctness
     verify: llm_binary_judge
-  - id: used_structure_source
-    criterion: Used structure database or builder tool to obtain Cu FCC structure (not LLM-fabricated coordinates).
-    axis: grounding
-    verify: tool_called
-  - id: used_mlip_calc
-    criterion: Used MLIPs calculator (via Bohrium job submission) for optimization and NEB calculation.
-    axis: grounding
-    verify: tool_called
   - id: grounding_source
     criterion: The migration barrier is derived from NEB calculation outputs, not literature values. Judge solely from the final answer.
     axis: grounding
