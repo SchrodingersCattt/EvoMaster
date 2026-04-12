@@ -83,7 +83,7 @@ evaluation/question_bank/
 | 字段 | 别名（规划用语） | 单选 / 多选 | 必须回答的一句话 |
 |------|------------------|-------------|------------------|
 | **`capability`** | Task（任务类） | **单选**（枚举之一） | 这道题要测的是哪一类**任务能力**？（例如：建结构、库检索、批量扫描、日志诊断、写 VASP/ABACUS 输入、多步编排与交付、安全拒答、CO₂RR 专题等。） |
-| **`domain`** | Subject（题材 / 主轴） | **单选**（枚举之一） | 这道题落在哪条**材料、物理或题库约定主轴**上？（如 `struct` / `elec` / `mech` / `thermo` / `kinetic` / `polymer` / `general`；输入规格主轴用 `incar`，单晶 XRD 用 `scxrd`。） |
+| **`domain`** | Subject（题材 / 主轴） | **单选**（枚举之一） | 这道题落在哪条**材料、物理或题库约定主轴**上？（如 `struct` / `elec` / `mech` / `thermo` / `kinetic` / `polymer` / `general`；输入规格主轴用 `incar`，单晶 XRD 用 `scxrd`，MLIP / 势函数与训练编排类用 `mlip`。） |
 | **`tags`** | Facet（主题 / 工具 / 项目线） | **多选**（字符串列表，可空） | 除 capability/domain 外，还需要哪些**可并列**的标记？（如产品线、工具链、内部专题、提示词契约类 `direct_contract` 等。） |
 
 **填写顺序（固定）**：先 **`capability`** → 再 **`domain`** → 最后按需补 **`tags`**。同一道题只有一个 capability、一个 domain；tags 可多个或没有。
@@ -121,7 +121,7 @@ evaluation/question_bank/
 
 与 `evaluation/core/schemas.py` 中 `DomainLiteral` **保持一致**：
 
-`struct` / `elec` / `mech` / `thermo` / `kinetic` / `optical` / `general` / `incar` / `scxrd` / `polymer`
+`struct` / `elec` / `mech` / `thermo` / `kinetic` / `optical` / `general` / `incar` / `scxrd` / `polymer` / `mlip`
 
 **语义说明**
 
@@ -129,6 +129,7 @@ evaluation/question_bank/
 - `incar`：强调 **VASP INCAR/输入规格** 类题目，与「电子结构现象」的 `elec` 可并存；选题时按题干主轴二选一即可。
 - `scxrd`：单晶 XRD 解析、精修等（见 `data_fitting/df_scxrd.yaml`）。
 - `polymer`：聚合物/软物质相关；`general`：跨领域或不易归入上列者。
+- `mlip`：**机器学习势（MLIP）**、势函数训练/评估/编排等与势函数工作流强绑定的主轴（与 `tags` 中的 `mlip` 可并存；需要 `--slices` 按域切分时优先用本枚举）。
 - `optical`：光学相关（当前题库未使用，**预留**；新题若主轴为光学性质可标此域以便聚合）。
 
 #### 新题填写 checklist（capability / domain / tags）
