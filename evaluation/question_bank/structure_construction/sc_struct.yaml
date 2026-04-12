@@ -230,7 +230,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260411
+- id: SC_struct_SiH_20260412
   capability: structure_construction
   domain: struct
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab
@@ -259,7 +259,7 @@ questions:
       filename: 'Si100_H_passivated_POSCAR'
       element_a: Si
       element_b: H
-      cutoff_A: 2.0
+      cutoff_A: 1.7
       expected: 1.48
       tolerance: 0.15
   - key: si_coordination
