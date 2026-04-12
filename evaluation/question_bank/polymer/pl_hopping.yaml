@@ -1,9 +1,9 @@
 version: v5
-capability: workflow_orchestration
+capability: scientific_analysis
 domain: polymer
 questions:
 - id: pl_hopping
-  capability: workflow_orchestration
+  capability: scientific_analysis
   domain: polymer
   intent: Analyze Li+ hopping in PEO-LiTFSI by comparing PMF barriers and diffusion evidence for two salt-ratio conditions.
   human_prompt_seed: |

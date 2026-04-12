@@ -89,7 +89,6 @@ banks:
     questions: 1
 
   - path: "workflow_orchestration/wo_general.yaml"
-    capability: "workflow_orchestration"
     questions: 9
 
   - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
@@ -135,23 +134,23 @@ banks:
 
   # --- Polymer projects ---
   - path: "polymer/pl_donor.yaml"
-    capability: "workflow_orchestration"
+    capability: "scientific_analysis"
     questions: 1
 
   - path: "polymer/pl_membrane.yaml"
-    capability: "workflow_orchestration"
+    capability: "scientific_analysis"
     questions: 1
 
   - path: "polymer/pl_rheology.yaml"
-    capability: "workflow_orchestration"
+    capability: "scientific_analysis"
     questions: 1
 
   - path: "polymer/pl_adhesion.yaml"
-    capability: "workflow_orchestration"
+    capability: "scientific_analysis"
     questions: 1
 
   - path: "polymer/pl_hopping.yaml"
-    capability: "workflow_orchestration"
+    capability: "scientific_analysis"
     questions: 1
 
   # --- Thermal / thermo-structural data fitting ---

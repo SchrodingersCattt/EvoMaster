@@ -1,9 +1,9 @@
 version: v5
-capability: workflow_orchestration
+capability: scientific_analysis
 domain: polymer
 questions:
 - id: pl_donor
-  capability: workflow_orchestration
+  capability: scientific_analysis
   domain: polymer
   intent: Pre-screen PM6, PTB7-Th, D18, and P3HT donor polymers for a Y6-like acceptor window using curated oligomer, conformational, and ranking data.
   human_prompt_seed: |

@@ -107,7 +107,7 @@ evaluation/question_bank/
 | `structure_construction` | 构建或修改结构（slab、界面、缺陷等），不强调「从数据库拉取」 |
 | `structure_retrieval` | 从结构数据库检索、筛选、汇总元数据（如 `mat_struct_db` 路径） |
 | `scientific_analysis` | 以科学数据、结构或计算结果为输入，产出数值、分类、拟合、精修、特征工程或后处理结果；不强调多步流程编排 |
-| `workflow_orchestration` | 多步骤编排、脚本/MCP 串联、报告类任务；**范围较宽**（含聚合物专题、MLIP 流程、`wo_general` 等），通常再用 `domain` 细分 |
+| `workflow_orchestration` | 存在**明确多步流程组织**、工具/脚本/MCP 串联、或阶段性交付依赖的任务；若题目主要是在已有数据/文献上做比较、综述、筛选、机理解释或推荐，而不是考察流程编排本身，优先标 `scientific_analysis` |
 | `execution_contract` | **执行与交付约定**（对应 `direct` 实验与 `matmaster/exps/`、系统提示中的硬性交付规则）：如 spec 与正文冲突以文件为准、归档解压到根目录、交付物精确命名等；**不是**领域科研 workflow，与 `workflow_orchestration` 区分 |
 | `data_diagnosis` | 根据日志/输入/输出诊断问题并给修复建议 |
 | `batch_processing` | 批量、扫描、多案例一致性与参数控制 |
@@ -135,7 +135,7 @@ evaluation/question_bank/
 1. **`capability`**：按**任务形态**选（建结构 / 查库 / 科学分析 / 批量 / 诊断 / 输入生成 / 编排 / **执行与交付约定** / 安全），与「测什么能力」一致；测 spec 优先级、归档解压、精确文件名等 **执行/交付契约** → `execution_contract`；不要仅因用了某软件就选 `workflow_orchestration`——若本质是输入生成，应用 `input_generation`。
 2. **`domain`**：按题干**材料/物理主轴**选；VASP INCAR 专项题优先 `incar`；单晶 XRD 用 `scxrd`；聚合物线用 `polymer`。`incar` 与 `elec` 不必同时纠结：以题干更强调「输入规格」还是「现象/性质」二选一即可。
 3. **粒度不够时**：可加 **`tags`**（如 `mlip`、`userlog`）做人读与二次分析；**tags 不参与 `--slices`**。若该维度需要**命令行一切就切**，应优先用 **`domain`**（或专题 capability），而不是只写 tags。
-4. **`workflow_orchestration` 较宽**：若题目属于编排类但主题明确，务必用 `domain` + `tags` 标清，避免聚合报告里只剩笼统的「workflow」。
+4. **`workflow_orchestration` 只留真编排题**：必须存在明确的阶段流程、工具链串联、上一步输出作为下一步输入，或流程/交付 gate；若只是基于给定 bundle / 文献做比较、筛选、推荐、方法综述或机理分析，优先标 `scientific_analysis`。
 5. **与 `evaluation/core/schemas.py` 一致**：`CapabilityLiteral` / `DomainLiteral` 未列出的取值会导致加载失败；需要新枚举时须同时改 **schemas + 本文档 + 相关 runner 假设**（若有）。
 
 #### capability / domain / tags 如何区分、何时用哪个
@@ -164,7 +164,7 @@ evaluation/question_bank/
 #### 基于 `--slices` 的命名与调整建议
 
 1. **先反推常用切片**：列出团队最常跑的命令，例如「只要电化学 workflow」「只要聚合物」「只要 ABACUS 输入」。把每条映射到 `capability` + `domain` 的组合是否**能一条 `--slices` 写出来**；若不能，优先考虑 **调整 domain**（或专题 capability），而不是加 tags。
-2. **`workflow_orchestration` + 多主题**：该 capability 很宽，**务必用 `domain` 区分**（如 `elec` / `polymer` / `struct`），否则只能 `workflow_orchestration` 全选或依赖题目 ID 列表。
+2. **`workflow_orchestration` + 多主题**：该 capability 只应用于确实考察流程组织的题；保留在该类中的题仍应**务必用 `domain` 区分**（如 `elec` / `polymer` / `struct`），否则只能 `workflow_orchestration` 全选或依赖题目 ID 列表。
 3. **专题线不要直接占用 capability**：如 `co2rr`、`userlog`、`mlip` 等优先放入 `tags`；只有当它本身就是独立**任务形态**时，才应升级成 capability。
 4. **不要指望 tags 驱动 CLI**：tags 适合 **文档化与二次分析**；**驱动切片**请用 capability/domain，或扩展 runner（见上）。
 5. **新增枚举值**：若出现「必须同时按某维度筛，但该维度既不适合塞 domain 也不适合塞 capability」的重复需求，再评估 **新 domain** 或 **runner 支持 tags 过滤**，避免 capability 无限膨胀。
@@ -422,7 +422,7 @@ evaluation/scripts/matter_cli/run_matmaster_evaluation_bg.ps1
 ### 当前模型的典型痛点
 
 - **`domain` 混用两种语义**：既有物理子域（`elec`、`mech`），也有方法/产物主轴（`incar`、`scxrd`），「正交」感弱。
-- **`capability` 宽度不一**：`workflow_orchestration` 仍偏大，后续若继续膨胀应再拆；`scientific_analysis` / `input_generation` 负责承接原先按历史名称或软件后端命名的题目。
+- **`workflow_orchestration` 的边界仍需维护**：它现在应只覆盖真编排题；若后续又开始吸收综述、推荐、比较类题目，应优先把这些题归回 `scientific_analysis`，而不是继续放大 workflow 桶。
 - **`tags` 不参与筛选**：与「常用维度」重叠时，作者会被迫把本该可切的维度塞进 `domain`，或只能枚举 `--questions`。
 
 重构的目标应是：**每个字段只回答一类问题**，且 **runner 能按团队最常用的组合做过滤**，而不只靠题目 ID。

@@ -1,6 +1,4 @@
 version: v5
-capability: workflow_orchestration
-domain: general
 questions:
 - id: WO_general_intake_001_20260410v3
   capability: workflow_orchestration
@@ -374,7 +372,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: WO_general_sse_006_20260411v1
-  capability: workflow_orchestration
+  capability: scientific_analysis
   domain: elec
   intent: Summarize sulfur-containing solid-electrolyte candidates for Li-metal interfaces by balancing interface stability and ionic conductivity from recent literature.
   human_prompt_seed: '请基于近年文献，推荐可用于锂金属负极界面的含硫固态电解质候选，并强调“界面稳定性 + 高离子电导”两方面的平衡。
@@ -465,7 +463,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: WO_general_perov_007_20260411v1
-  capability: workflow_orchestration
+  capability: scientific_analysis
   domain: general
   intent: Query high-efficiency perovskite additives and produce recommendation plus a proposal draft based on predicted performance.
   human_prompt_seed: '请围绕“高效率（>26%）钙钛矿添加剂设计”完成一份推荐与提案。
@@ -555,7 +553,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: WO_general_steel_008_20260411v1
-  capability: workflow_orchestration
+  capability: scientific_analysis
   domain: mech
   intent: Analyze Ni-content variation in duplex stainless-steel composition and summarize tensile-strength prediction trends.
   human_prompt_seed: '研究 2209/ER2209 近似成分中 Ni 含量变化对抗拉强度预测的影响。
@@ -644,7 +642,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: WO_general_ferro_009_20260411v1
-  capability: workflow_orchestration
+  capability: scientific_analysis
   domain: general
   intent: Explain principle, applications, and limitations of the double-wave method in Sawyer-Tower ferroelectric measurements.
   human_prompt_seed: '请围绕 Sawyer-Tower 铁电测试中的 double-wave method，给出结构化说明。
@@ -828,7 +826,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: WO_general_hea_005_20260411v1
-  capability: workflow_orchestration
+  capability: scientific_analysis
   domain: general
   intent: Evaluate phase-formation tendency of AlCr0.8CoFeNi HEA using descriptor calculations, binary-phase cues, and solid-solution prediction.
   human_prompt_seed: '请评估 AlCr0.8CoFeNi 高熵合金是否易形成固溶体，并给出可能结构趋势。

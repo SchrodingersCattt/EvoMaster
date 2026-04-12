@@ -40,6 +40,7 @@ v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵�
 说明：
 
 - `co2rr_reproduction/` 目录保留为专题题库目录，但题目的 `capability` 已回归真实任务形态（如 `structure_construction` / `scientific_analysis` / `workflow_orchestration` / `batch_processing`），专题属性由 tags 表达。
+- `workflow_orchestration` 现仅用于**明确多步流程组织**、工具链串联、阶段 gate 或上一步输出驱动下一步的任务；基于给定 bundle / 文献做比较、筛选、综述、推荐、机理解释的题目应优先归到 `scientific_analysis`。
 
 ## 加权评分 (v5+ 新增)
 

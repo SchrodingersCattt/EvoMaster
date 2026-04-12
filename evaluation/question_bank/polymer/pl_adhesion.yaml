@@ -1,9 +1,9 @@
 version: v5
-capability: workflow_orchestration
+capability: scientific_analysis
 domain: polymer
 questions:
 - id: pl_adhesion
-  capability: workflow_orchestration
+  capability: scientific_analysis
   domain: polymer
   intent: Compare polyimide adhesion on hydroxyl-rich, epoxy-rich, and carboxyl-rich graphene-oxide surfaces using curated adsorption, MD, and adhesion-work evidence.
   human_prompt_seed: |
