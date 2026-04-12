@@ -76,6 +76,11 @@ banks:
   - path: "scientific_analysis/sa_mech.yaml"
     capability: "scientific_analysis"
     domain: "alloy"
+    questions: 2
+
+  - path: "scientific_analysis/sa_semiconductor.yaml"
+    capability: "scientific_analysis"
+    domain: "semiconductor"
     questions: 1
 
   - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
@@ -149,4 +154,4 @@ banks:
     domain: "polymer"
     questions: 1
 
-# Total: 23 questions across 20 active bank files
+# Total: 25 questions across 21 active bank files
