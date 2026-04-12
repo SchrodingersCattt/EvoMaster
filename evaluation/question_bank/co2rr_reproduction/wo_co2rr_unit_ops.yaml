@@ -1,17 +1,16 @@
-# CO2RR 催化剂高通量筛选与 ML 构效关系 — 文档「单元操作」拆解（MATTER v5）
-# 来源：仓库根目录《CO(2)还原CO催化剂的高通量计算筛选和ML构效关系分析项目复现.docx》
-# 说明：以 llm_binary_judge + 预算类 verify 为主；数值/结构强校验需在稳定产出物（固定 POSCAR 名等）后收紧 tolerance。
 version: v5
+capability: structure_construction
+domain: struct
 questions:
 - id: CR_SC_ZnPd011_20260409
   capability: structure_construction
   domain: struct
   intent: Cut ZnPd (011) slab from Materials Project bulk (mp-1103252) with 3 layers
     and 2x2x1 supercell per doc 3.1.1.
-  human_prompt_seed: '使用体相结构 mp-1103252（ZnPd）切出 (011) 表面 slab：3 层厚度、2×2×1 扩胞，真空 ≥15 Å，z 向居中。
-    输出 POSCAR/CIF，并注明与 mp-1103252 的对应关系及切面/扩胞参数。
+  human_prompt_seed: '使用体相结构 mp-1103252（ZnPd）切出 (011) 表面 slab：3 层厚度、2×2×1 扩胞，真空 ≥15
+    Å，z 向居中。 输出 POSCAR/CIF，并注明与 mp-1103252 的对应关系及切面/扩胞参数。
 
-    '
+'
   tags:
   - co2rr_repro
   - alloy_slab
@@ -24,13 +23,13 @@ questions:
   data_files: []
   reference_answers:
   - key: turn_budget
-    value: &cr_turn_std
+    value:
       max: 22
   - key: duration_budget
-    value: &cr_dur_std
+    value:
       max: 7200000
   - key: token_budget_total
-    value: &cr_tok_struct
+    value:
       max: 24000
   scoring_checklist:
   - id: mp_and_miller
@@ -46,7 +45,8 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
@@ -61,7 +61,7 @@ questions:
   human_prompt_seed: 'ZnS 化合物 (001) 切面 slab：3 层厚度、2×2×1 扩胞，真空 ≥15 Å。若为极性表面，说明是否采用对称
     slab 或偶极修正策略。输出 slab 结构文件为 `ZnS_001_slab.cif`，并简述终止面/化学计量处理。
 
-    '
+'
   tags:
   - co2rr_repro
   - compound_slab
@@ -82,20 +82,23 @@ questions:
       axis: z
       layer_tol_A: 0.5
   - key: turn_budget
-    value: *cr_turn_std
+    value:
+      max: 22
   - key: duration_budget
-    value: *cr_dur_std
+    value:
+      max: 7200000
   - key: token_budget_total
-    value: *cr_tok_struct
+    value:
+      max: 24000
   scoring_checklist:
   - id: file_exists
     criterion: The output file `ZnS_001_slab.cif` exists in the workspace.
     axis: correctness
     verify: artifact_exists
   - id: slab_layer_count
-    criterion: The number of distinct atomic z-planes in ZnS_001_slab.cif is
-      approximately 5-9 (expected 7 ± 2), consistent with 3 Zn-S bilayers of
-      zinc-blende (001). Atoms within 0.5 Å along z are merged into one plane.
+    criterion: The number of distinct atomic z-planes in ZnS_001_slab.cif is approximately
+      5-9 (expected 7 ± 2), consistent with 3 Zn-S bilayers of zinc-blende (001).
+      Atoms within 0.5 Å along z are merged into one plane.
     axis: correctness
     verify: struct_file_layer_count
   - id: supercell_vacuum_ok
@@ -104,8 +107,7 @@ questions:
     verify: llm_binary_judge
     weight: 1.0
   - id: polar_handling
-    criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称
-      slab、施加偶极修正等），所述策略与交付的结构文件一致。
+    criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称 slab、施加偶极修正等），所述策略与交付的结构文件一致。
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -136,11 +138,11 @@ questions:
   domain: struct
   intent: Build Au13 cluster CIF, ZnO(001) two-layer 2x2x1 slab with Au single atom
     and HCOO adsorbate on-top per doc 3.1.3.
-  human_prompt_seed: '按文档 3.1.3：（1）用 ASE 或等价方式构建 Au13 团簇并保存为 CIF；（2）ZnO(001) 切面 slab，两层厚、2×2×1 扩胞；
-    （3）在两个表面 O 位点之一上放置单原子 Au；（4）在 Au 上放置 HCOO，采用 on-top 排布，初始吸附高度合理（约 1.5–2.5 Å）且无严重原子重叠。
-    输出团簇与 adslab 的结构文件，并附简短几何说明。
+  human_prompt_seed: '按文档 3.1.3：（1）用 ASE 或等价方式构建 Au13 团簇并保存为 CIF；（2）ZnO(001) 切面 slab，两层厚、2×2×1
+    扩胞； （3）在两个表面 O 位点之一上放置单原子 Au；（4）在 Au 上放置 HCOO，采用 on-top 排布，初始吸附高度合理（约 1.5–2.5
+    Å）且无严重原子重叠。 输出团簇与 adslab 的结构文件，并附简短几何说明。
 
-    '
+'
   tags:
   - co2rr_repro
   - cluster
@@ -156,7 +158,8 @@ questions:
     value:
       max: 28
   - key: duration_budget
-    value: *cr_dur_std
+    value:
+      max: 7200000
   - key: token_budget_total
     value:
       max: 16000
@@ -174,222 +177,8 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within a generous benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: CR_WO_Ag_adsorption_20260412
-  capability: workflow_orchestration
-  domain: mech
-  intent: Compute adsorption energies of six adsorbates on Ag(001) and Ag(011) at
-    on-top sites using MLIP/calculator with consistent energy reference per doc 3.2.1.
-  human_prompt_seed: '对 Ag 体相切出 (001) 与 (011) 两个表面；分别计算 H、CO、COOH、CO2、HCOO、HCOOH 六种吸附质在 on-top 位点的吸附能。
-    使用 DP（或题目环境要求的等效势/计算器），并统一气相分子与体相/slab 的能量零点（说明 E_ads 定义与参考态）。
-    以表格汇总各体系吸附能（eV），并注明是否包含 ZPE/熵校正（若未做，需明确写「仅电子能」）。
-
-    '
-  tags:
-  - co2rr_repro
-  - adsorption_energy
-  - ag
-  - deep_potential
-  - high_throughput_style
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: turn_budget
-    value:
-      max: 35
-  - key: duration_budget
-    value: *cr_dur_std
-  - key: token_budget_total
-    value:
-      max: 85000
-  scoring_checklist:
-  - id: workflow_setup
-    criterion: "Agent demonstrates correct computational approach: (a) builds or references
-      Ag bulk structure, (b) cuts or describes cutting (001) and (011) surface slabs,
-      (c) prepares or scripts adsorbate-slab structures for the six adsorbates (H,
-      CO, COOH, CO2, HCOO, HCOOH), and (d) uses an MLIP/DP calculator or submits
-      remote Bohrium computation jobs. A well-structured script, code, or submitted
-      computation jobs satisfying these elements counts as pass even if final numerical
-      results are not yet available (e.g. due to wall-clock timeout)."
-    axis: correctness
-    verify: llm_binary_judge
-  - id: coverage_table
-    criterion: "结果覆盖 Ag(001) 与 Ag(011)，六种吸附质（H, CO, COOH, CO2, HCOO, HCOOH），on-top
-      位点；给出吸附能数值表并定义能量参考（slab、气相）。NOTE: 具体使用哪种计算器（DP、MACE-MP、或其他
-      MLIP）不是本条评判标准——只要结果覆盖齐全、参考态定义清楚即可。若答案中表格包含 markdown
-      分隔线（如 |:---:|），这是格式标记，不是截断。Judge on coverage completeness and reference
-      definition only."
-    axis: correctness
-    verify: llm_binary_judge
-    weight: 2.0
-  - id: grounding_workflow
-    criterion: "从 Agent 的产物（脚本、代码、已提交的 Bohrium 计算任务、或最终叙述/表格）中能看出从体相/表面到吸附结构的合理计算链条。若有最终表格，则叙述与数值需自洽；若仅有脚本或计算作业提交记录，则代码逻辑须体现合理的结构构建与能量计算流程。未凭空列出与实际步骤无关的数值。"
-    axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within a generous benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: CR_WO_limiting_potential_20260412
-  capability: scientific_analysis
-  domain: elec
-  intent: From free-energy steps on CO2RR-to-CO, HER, and CO2-to-HCOOH pathways,
-    compute limiting potentials U_L = -ΔG_max/e per doc 3.2.2.
-  human_prompt_seed: '给定（或由你说明来源的）各中间态与气相参考的吉布斯自由能或等价能量数据，对以下三条路径计算极限电势 U_L = -ΔG_max/e：
-    （1）CO2(g)→CO* 路径含 CO2*、COOH*、CO* 等步骤；（2）HER：H* 形成；（3）CO2→HCOOH 路径含 HCOO*、HCOOH*。
-    使用文档中的 ΔG 表达式形式（含 E(slab)、E(ads)、0.5 E(H2)、eU 项），标出每条路径的决速步与 U_L（V），并汇总对比。
-
-    '
-  tags:
-  - co2rr_repro
-  - limiting_potential
-  - co2rr
-  - her
-  - free_energy
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: turn_budget
-    value:
-      max: 25
-  - key: duration_budget
-    value: *cr_dur_std
-  - key: token_budget_total
-    value:
-      max: 45000
-  scoring_checklist:
-  - id: three_pathways_ul
-    criterion: "In the FINAL delivered answer, all three reaction pathways are reported with their PDS (potential-determining step), ΔG_max (eV), and U_L (V): (1) CO₂→CO, (2) HER, (3) CO₂→HCOOH. NOTE: The answer may be in Chinese with markdown tables; lines like '|------|-------------|-----' are standard table header separators, NOT truncation indicators. Judge ONLY on whether the final answer text contains the three complete sets of (PDS, ΔG_max, U_L) values, regardless of intermediate computation steps."
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_energies
-    criterion: 使用的能量/自由能数据来源清楚（计算值、表格或明确假设），且代入与决速步判定一致。
-    axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within a generous benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: CR_BP_HT_adsorption_tree_20260406v2
-  capability: batch_processing
-  domain: struct
-  intent: Generate HT_adsorption/ directory tree with pure_metals, compounds, clusters
-    sections per doc 4.1 (high-level structure and naming).
-  human_prompt_seed: '构建高通量吸附建模数据集目录 HT_adsorption/，顶层包含 pure_metals、compounds、clusters 三部分，命名与层级遵循文档 4.1：
-    pure_metals 下按元素与 std-{structure} 组织，含 bulk/、slab/001/、slab/011/、adslab/001/、adslab/011/；slab 至少 5 层、真空 ≥15 Å、横向 ≥10 Å；
-    吸附分子 HCOOH、CO2、COOH、HCOO、H、CO；每个 slab 至少 top/bridge/hollow 三种位点，文件命名 {adsorbate}_{site}.xyz。
-    compounds 列表与 clusters（Au13 等）按文档列出。若无法一次生成全部元素，请生成可复现的脚本 + 对 Ag、ZnO、Au13 的完整示例子树，并说明如何扩展到全量。
-
-    '
-  tags:
-  - co2rr_repro
-  - batch_structure
-  - ht_dataset
-  - filesystem
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: turn_budget
-    value:
-      max: 30
-  - key: duration_budget
-    value: *cr_dur_std
-  - key: token_budget_total
-    value:
-      max: 40000
-  scoring_checklist:
-  - id: tree_and_script
-    criterion: 交付 HT_adsorption/ 层级说明或实际目录；含 bulk/slab/adslab 逻辑与吸附位点命名约定；至少对 Ag、ZnO、Au13 有可检查示例子树或等价产物。
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_batch
-    criterion: "最终答案中描述的目录层级与脚本逻辑与文档 4.1 的字段（元素列表、化合物列表、团簇列表、文件名规则）一致，答案内容无自相矛盾。评判仅基于 final answer 中的目录描述和脚本逻辑，不以 workspace 平面文件列表中缺失子目录为由判 fail（子目录内容在平面 artifact 列表中不可见属正常行为）。"
-    axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within a generous benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: CR_WO_feature_extract_43d_20260412
-  capability: scientific_analysis
-  domain: general
-  intent: Implement 43-dimensional feature extraction (40 continuous + 3 categorical)
-    from adslab POSCAR paths per doc 4.3.1.
-  human_prompt_seed: '编写脚本：输入为含多个子目录的数据集根路径，每个体系子目录内有 POSCAR（或等价结构文件）。用 pymatgen 或 ASE 读取结构，
-    识别吸附物与基底，吸附位点取吸附物几何中心；构造四类近邻环境（第一近邻同层、第二近邻同层、第二近邻下层、6 Å 内全体近邻），
-    对每类用距离倒数加权，汇总元素属性得到 40 维连续特征；另输出 3 个类别特征：吸附物种类、吸附类型（物理/化学吸附标签规则需在注释中说明）、基底类型。
-    输出 CSV 列名与维度说明。若工作区无完整数据集，可对单示例 POSCAR 演示流水线并说明如何批处理。
-
-    '
-  tags:
-  - co2rr_repro
-  - feature_engineering
-  - pymatgen
-  - ase
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: turn_budget
-    value:
-      max: 26
-  - key: duration_budget
-    value: *cr_dur_std
-  - key: token_budget_total
-    value:
-      max: 45000
-  scoring_checklist:
-  - id: script_and_schema
-    criterion: 脚本可执行或逻辑完整；明确 40+3 维定义、四类近邻、6 Å cutoff、加权方式与输出列说明。
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_impl
-    criterion: 实现与文档 4.3.1 描述一致（库函数选择、吸附质/基底识别规则、类别标签规则可读）。
-    axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling.
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total

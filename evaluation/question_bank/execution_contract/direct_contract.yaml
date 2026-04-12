@@ -1,4 +1,6 @@
 version: v5
+capability: execution_contract
+domain: general
 questions:
 - id: WO_direct_spec_priority_002_20260412
   capability: execution_contract

@@ -56,9 +56,11 @@ evaluation/question_bank/
 | 字段 | 必填？ | 说明 |
 |------|--------|------|
 | `version` | 可选（默认 `"v5"`） | 建议写 `v5`；Runner 遇到非 v5 会报错 |
-| `capability` | 可选 | 顶层 hint，**不影响运行**；`--slices` 与聚合只用**每道题**的 `capability`。**新 bank 可不写此行。** |
-| `domain` | 可选 | 顶层 hint，**不影响运行**；筛选与聚合只用**每道题**的 `domain`。**新 bank 可不写此行。** |
+| `capability` | **必填** | bank 的固定能力切片；**必须与该 bank 下每道题的 `capability` 完全一致**，否则加载报错 |
+| `domain` | **必填** | bank 的固定领域切片；**必须与该 bank 下每道题的 `domain` 完全一致**，否则加载报错 |
 | `questions` | **必填** | 至少 1 条题目 |
+
+**禁止 mixed bank**：一个 bank 文件只表示一个固定的 `(capability, domain)` 切片。若题目需要落在不同 capability 或 domain，必须拆成多个 bank 文件，而不是省略顶层字段规避校验。
 
 ### 每道题（`QuestionItem`）
 

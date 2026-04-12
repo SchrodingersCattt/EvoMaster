@@ -280,14 +280,34 @@ class QuestionBank(BaseModel):
     """Question bank file model (v5 format)."""
 
     version: str = 'v5'
-    capability: CapabilityLiteral | None = None  # optional top-level hint
-    domain: DomainLiteral | None = None  # optional top-level hint
+    capability: CapabilityLiteral | None = None
+    domain: DomainLiteral | None = None
     questions: list[QuestionItem]
 
     @model_validator(mode='after')
     def _validate_questions(self) -> 'QuestionBank':
         if not self.questions:
             raise ValueError('questions cannot be empty')
+        if self.capability is None:
+            raise ValueError('top-level capability is required for every bank')
+        mismatched_capabilities = sorted(
+            q.id for q in self.questions if q.capability != self.capability
+        )
+        if mismatched_capabilities:
+            raise ValueError(
+                'top-level capability must match every question capability; '
+                f'mismatched question ids: {mismatched_capabilities}'
+            )
+        if self.domain is None:
+            raise ValueError('top-level domain is required for every bank')
+        mismatched_domains = sorted(
+            q.id for q in self.questions if q.domain != self.domain
+        )
+        if mismatched_domains:
+            raise ValueError(
+                'top-level domain must match every question domain; '
+                f'mismatched question ids: {mismatched_domains}'
+            )
         return self
 
 

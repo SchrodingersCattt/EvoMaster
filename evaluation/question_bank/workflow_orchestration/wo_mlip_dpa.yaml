@@ -5,7 +5,8 @@ questions:
 - id: WO_mlip_dpa_001_20260411v2
   capability: workflow_orchestration
   domain: struct
-  intent: Optimize diamond Si with DPA ML potential (cell + atoms), report lattice constant and energy per atom.
+  intent: Optimize diamond Si with DPA ML potential (cell + atoms), report lattice
+    constant and energy per atom.
   human_prompt_seed: |
     使用 DPA 机器学习势对金刚石结构 Si 进行结构优化。
     从数据库获取或构建 Si 金刚石原胞（空间群 Fd-3m, a≈5.43 Å），
@@ -30,25 +31,29 @@ questions:
     - energy_per_atom
     - convergence_status
   - key: turn_budget
-    value: &tb_default
+    value:
       max: 18
   - key: duration_budget
-    value: &db_default
+    value:
       max: 7200000
   - key: token_budget_total
-    value: &tkb_default
+    value:
       max: 8000
   scoring_checklist:
   - id: lattice_a_A
-    criterion: Optimized Si lattice constant is within tolerance of experimental/DPA value (~5.43 Å).
+    criterion: Optimized Si lattice constant is within tolerance of experimental/DPA
+      value (~5.43 Å).
     axis: correctness
     verify: numerical_range
   - id: required_fields
-    criterion: Report includes optimized lattice constant, energy per atom, and convergence status (converged or max steps reached).
+    criterion: Report includes optimized lattice constant, energy per atom, and convergence
+      status (converged or max steps reached).
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The reported lattice constant and energy values are tied to computation outputs stated in the answer, not textbook recall or invented numbers. Judge solely from the final answer.
+    criterion: The reported lattice constant and energy values are tied to computation
+      outputs stated in the answer, not textbook recall or invented numbers. Judge
+      solely from the final answer.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -56,292 +61,8 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: Workflow (fetch/build structure → submit optimization → parse result) completes without unnecessary exploratory calls.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-
-- id: WO_mlip_dpa_002_20260411v2
-  capability: workflow_orchestration
-  domain: mech
-  intent: Compute elastic constants for Cu FCC with DPA; report C11, C12, and bulk modulus.
-  human_prompt_seed: |
-    计算 FCC Cu 的弹性常数。
-    从数据库获取或构建 Cu FCC 原胞，先做含晶格弛豫的结构优化（力收敛 0.01 eV/Å），
-    再用 DPA 机器学习势计算弹性张量。
-    报告 C11、C12 (GPa) 和 Voigt-Reuss-Hill 体模量 B (GPa)。
-  tags:
-  - mlip
-  - dpa
-  - elastic
-  - copper
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: C11_GPa
-    value: 170.0
-    tolerance: 25.0
-  - key: bulk_modulus_GPa
-    value: 140.0
-    tolerance: 20.0
-  - key: required_fields
-    value:
-    - C11
-    - C12
-    - bulk_modulus
-    - elastic_tensor
-  - key: turn_budget
-    value: &tb_elastic
-      max: 20
-  - key: duration_budget
-    value: *db_default
-  - key: token_budget_total
-    value: *tkb_default
-  scoring_checklist:
-  - id: C11_GPa
-    criterion: Cu C11 elastic constant is within tolerance of DPA/experimental value (~170 GPa).
-    axis: correctness
-    verify: numerical_range
-  - id: bulk_modulus_GPa
-    criterion: Cu bulk modulus is within tolerance (~140 GPa).
-    axis: correctness
-    verify: numerical_range
-  - id: required_fields
-    criterion: Report includes C11, C12 values, bulk modulus, and at least a summary of the 6×6 elastic tensor.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: Elastic constants are derived from calculation outputs, not literature values. Judge solely from the final answer.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical elastic or optimization submissions.
-    axis: efficiency
-    verify: no_retries
-  - id: efficiency_judge
-    criterion: Workflow (build → optimize → elastic calc → report) completes in a linear pipeline without redundant steps.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-
-- id: WO_mlip_dpa_003_20260411v2
-  capability: workflow_orchestration
-  domain: thermo
-  intent: Compute phonon dispersion for Si diamond with DPA; report Gamma-point optical frequency and check for imaginary modes.
-  human_prompt_seed: |
-    计算金刚石结构 Si 的声子色散关系。
-    从数据库获取或构建 Si 金刚石原胞，使用 DPA 机器学习势计算力常数矩阵，
-    沿 Γ-X-K-Γ-L 高对称路径绘制声子色散曲线。
-    报告 Γ 点最高光学支频率 (cm⁻¹) 以及是否存在虚频（判断动力学稳定性）。
-  tags:
-  - mlip
-  - dpa
-  - phonon
-  - silicon
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: gamma_optical_max_cm1
-    value: 520.0
-    tolerance: 50.0
-  - key: required_fields
-    value:
-    - dispersion_path
-    - gamma_frequency
-    - imaginary_check
-  - key: turn_budget
-    value: *tb_default
-  - key: duration_budget
-    value: *db_default
-  - key: token_budget_total
-    value: *tkb_default
-  scoring_checklist:
-  - id: gamma_optical_max_cm1
-    criterion: Si Gamma-point highest optical phonon frequency is within tolerance (~520 cm⁻¹).
-    axis: correctness
-    verify: numerical_range
-  - id: required_fields
-    criterion: Report includes phonon dispersion k-path specification, Gamma-point frequency value, and statement about presence/absence of imaginary modes.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The reported phonon frequency is tied to force-constant calculation outputs, not textbook values. Judge solely from the final answer.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical phonon calculation submissions.
-    axis: efficiency
-    verify: no_retries
-  - id: efficiency_judge
-    criterion: Phonon workflow (build → calculate force constants → dispersion → extract) completes without redundant steps.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-
-- id: WO_mlip_dpa_004_20260411v2
-  capability: workflow_orchestration
-  domain: thermo
-  intent: Run two-stage MD (NVT equilibration + NPT production) on Al FCC supercell with DPA; report average temperature and pressure.
-  human_prompt_seed: |
-    对 FCC Al 进行分子动力学模拟。
-    从数据库获取或构建 Al FCC 原胞，扩展为至少 2×2×2 超胞，
-    使用 DPA 机器学习势按以下流程运行：
-    1) NVT 平衡：300 K，2 ps
-    2) NPT 采样：300 K，0 GPa，5 ps
-    报告 NPT 阶段的平均温度 (K) 和平均压力 (GPa)。
-  tags:
-  - mlip
-  - dpa
-  - molecular_dynamics
-  - aluminum
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: avg_temperature_K
-    value: 300.0
-    tolerance: 30.0
-  - key: required_fields
-    value:
-    - supercell_size
-    - md_stages
-    - avg_temperature
-    - avg_pressure
-  - key: turn_budget
-    value: *tb_elastic
-  - key: duration_budget
-    value: *db_default
-  - key: token_budget_total
-    value: *tkb_default
-  scoring_checklist:
-  - id: avg_temperature_K
-    criterion: NPT average temperature is within tolerance of target 300 K.
-    axis: correctness
-    verify: numerical_range
-  - id: required_fields
-    criterion: Report includes supercell dimensions, MD stage definitions (NVT + NPT with parameters), average temperature, and average pressure from the NPT stage.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: Temperature and pressure values are extracted from MD simulation outputs, not guessed. Judge solely from the final answer.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical MD submissions with the same parameters.
-    axis: efficiency
-    verify: no_retries
-  - id: efficiency_judge
-    criterion: MD workflow (build supercell → configure stages → submit → parse thermo) completes without unnecessary exploration.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-
-- id: WO_mlip_dpa_005_20260411v2
-  capability: workflow_orchestration
-  domain: kinetic
-  intent: Compute Cu FCC single-vacancy migration barrier with DPA via NEB; report forward barrier energy.
-  human_prompt_seed: |
-    计算 FCC Cu 中单空位的迁移能垒。
-    从数据库获取或构建 Cu FCC 原胞，扩展为 3×3×3 超胞，
-    移除一个原子形成空位结构作为初态，将相邻原子移至空位位置形成末态。
-    分别优化初态和末态结构，然后使用 DPA 机器学习势做 NEB 计算（5 个中间像）。
-    报告正向迁移能垒 (eV) 和能量曲线趋势。
-  tags:
-  - mlip
-  - dpa
-  - neb
-  - vacancy
-  - copper
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: forward_barrier_eV
-    value: 0.7
-    tolerance: 0.2
-  - key: required_fields
-    value:
-    - initial_state
-    - final_state
-    - forward_barrier
-    - energy_profile
-  - key: turn_budget
-    value:
-      max: 24
-  - key: duration_budget
-    value: *db_default
-  - key: token_budget_total
-    value:
-      max: 10000
-  scoring_checklist:
-  - id: forward_barrier_eV
-    criterion: Cu vacancy forward migration barrier is within tolerance (~0.7 eV).
-    axis: correctness
-    verify: numerical_range
-  - id: required_fields
-    criterion: Report includes description of initial and final states, forward barrier value, and energy profile along the migration path.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The migration barrier is derived from NEB calculation outputs, not literature values. Judge solely from the final answer.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical NEB or optimization submissions with the same parameters.
-    axis: efficiency
-    verify: no_retries
-  - id: efficiency_judge
-    criterion: NEB workflow (build defect states → optimize endpoints → NEB → parse barrier) completes without unnecessary steps.
+    criterion: Workflow (fetch/build structure → submit optimization → parse result)
+      completes without unnecessary exploratory calls.
     axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget
@@ -359,22 +80,17 @@ questions:
 - id: WO_mlip_dpa_007_20260410v3
   capability: workflow_orchestration
   domain: struct
-  intent: Build a machine-checkable DP-GEN onboarding package with milestone gates and fallback actions from provided doc excerpts.
-  human_prompt_seed: '工作区已提供 `dpgen_docs_brief.md`（文档摘录）。
-
+  intent: Build a machine-checkable DP-GEN onboarding package with milestone gates
+    and fallback actions from provided doc excerpts.
+  human_prompt_seed: |
+    工作区已提供 `dpgen_docs_brief.md`（文档摘录）。
 
     请先读取该文件，再输出以下三个交付物：
-
     1) `onboarding_tutorial.md`：包含环境准备、安装、初始数据、训练、采样、标注、迭代、常见失败点、第一周计划。
-
     2) `dpgen_checklist.json`：包含键 `env_ready`, `data_ready`, `train_ready`, `sample_ready`, `label_ready`, `iter_ready`, `week1_plan`.
-
     3) `milestone_gate.md`：按 Day1~Day7 给出“通过条件 + 失败回退动作（fallback）”。
 
-
     最终回答中简要说明你如何把文档摘录转为可执行 onboarding，并指出最高风险环节。
-
-    '
   tags:
   - userlog_derived
   - dpgen
@@ -444,7 +160,8 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: required_sections
-    criterion: Tutorial covers core DP-GEN lifecycle sections and practical first-week guidance.
+    criterion: Tutorial covers core DP-GEN lifecycle sections and practical first-week
+      guidance.
     axis: correctness
     verify: text_file_contains_all
   - id: checklist_required_tokens
@@ -452,7 +169,8 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: grounding_source
-    criterion: Tutorial is grounded in `dpgen_docs_brief.md` and avoids unsupported claims not present in provided excerpts.
+    criterion: Tutorial is grounded in `dpgen_docs_brief.md` and avoids unsupported
+      claims not present in provided excerpts.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -460,7 +178,8 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: The response converges to required deliverables without unnecessary exploratory detours.
+    criterion: The response converges to required deliverables without unnecessary
+      exploratory detours.
     axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget
@@ -468,127 +187,19 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_010_20260411v1
-  capability: workflow_orchestration
-  domain: mlip
-  intent: Fine-tune a DPA3 potential for a fixed step budget and summarize key hyperparameters and outcomes.
-  human_prompt_seed: |
-    执行 DPA3 微调流程评估（Mock版）：
-    1. 先 query/检索并整理训练所需输入文件（数据集、模型配置、训练参数）；
-    2. 明确目标训练步数与学习率策略；
-    3. 不做真实训练，使用以下 mock 结果：
-       - train_steps = 3000
-       - lr_type = cosine
-       - start_lr = 1.0e-2
-       - stop_lr = 1.0e-5
-       - valid_ratio = 0.2
-       - best_valid_loss = 0.021
-       - status = converged_for_mock
-    4. 基于 mock 值做后处理并判断是否可进入下游验证。
-
-    请输出：
-    1) `dpa3_finetune_config.json`：记录 `input_files`、训练步数、学习率策略、loss 关键参数、验证划分；
-    2) `dpa3_finetune_report.md`：概述 query 输入梳理、mock 后处理过程、结果与改进建议。
-
-    最终回答请给出：本次微调是否满足继续下游验证的最低条件。
-  tags:
-  - userlog_derived
-  - dpa3
-  - finetune
-  - mlip_training
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: finetune_config
-    value: dpa3_finetune_config.json
-  - key: finetune_report
-    value: dpa3_finetune_report.md
-  - key: config_required_tokens
-    value:
-      filename: dpa3_finetune_config.json
-      tokens:
-      - train_steps
-      - lr_type
-      - start_lr
-      - stop_lr
-      - valid_ratio
-      flags: i
-  - key: report_required_tokens
-    value:
-      filename: dpa3_finetune_report.md
-      tokens:
-      - DPA3
-      - 训练
-      - 结果
-      - 建议
-      - 不确定性
-      flags: i
-  - key: best_valid_loss_mock
-    value: 0.021
-    tolerance: 0.01
-  - key: turn_budget
-    value:
-      max: 12
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 9000
-  scoring_checklist:
-  - id: finetune_config
-    criterion: Agent writes `dpa3_finetune_config.json` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: finetune_report
-    criterion: Agent writes `dpa3_finetune_report.md` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: config_required_tokens
-    criterion: Config JSON includes required training-control fields.
-    axis: correctness
-    verify: text_file_contains_all
-  - id: report_required_tokens
-    criterion: Report summarizes training outcome with uncertainty notes.
-    axis: correctness
-    verify: text_file_contains_all
-  - id: best_valid_loss_mock
-    criterion: Final answer includes a mock best validation loss near 0.021.
-    axis: correctness
-    verify: numerical_range
-  - id: grounding_source
-    criterion: Deliverables are grounded in generated finetune artifacts and avoid unsupported benchmark claims.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical training submissions with the same parameters.
-    axis: efficiency
-    verify: no_retries
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
 - id: WO_mlip_dpa_011_20260411v1
   capability: workflow_orchestration
   domain: struct
-  intent: Build and validate Nb-doped SrTiO3 supercell workflow, including relaxation and lattice-dynamics/mechanics checks.
+  intent: Build and validate Nb-doped SrTiO3 supercell workflow, including relaxation
+    and lattice-dynamics/mechanics checks.
   human_prompt_seed: |
     评估 Nb 掺杂 SrTiO3 工作流（Mock版）：
     1. 先 query/检索立方 SrTiO3（Pm-3m）输入结构，并说明 2x2x2 超胞 + 1 Ti->Nb 掺杂方案；
@@ -674,7 +285,8 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: report_tokens
-    criterion: Report covers doping workflow and caveats for downstream electronic analysis.
+    criterion: Report covers doping workflow and caveats for downstream electronic
+      analysis.
     axis: correctness
     verify: text_file_contains_all
   - id: relax_energy_drop_mock
@@ -682,7 +294,8 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Deliverables are grounded in generated workflow outputs and avoid fabricated stability claims.
+    criterion: Deliverables are grounded in generated workflow outputs and avoid fabricated
+      stability claims.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -694,240 +307,8 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: WO_mlip_dpa_009_20260411v1
-  capability: workflow_orchestration
-  domain: thermo
-  intent: Retrieve an MgB2 structure from open databases and compute its phonon spectrum with an ML potential workflow.
-  human_prompt_seed: |
-    执行 MgB2 “检索 + 声子”流程（Mock版）：
-    1. 先 query/检索 MgB2 结构并记录来源、结构标识与输入文件；
-    2. 说明拟采用的声子设置；
-    3. 不做真实计算，使用以下 mock 结果：
-       - retrieval_source = Materials Project
-       - structure_identifier = mp-763
-       - imaginary_mode_check = false
-       - gamma_e2g_mode_meV = 74.8
-       - output_artifacts = ["band.yaml", "dos.dat"]
-    4. 基于 mock 值完成后处理并判断“结构与声子结果一致性”。
-
-    请完成以下交付：
-    1) `mgb2_phonon_summary.json`：至少包含 `input_files`, `retrieval_source`, `structure_identifier`, `phonon_settings`, `imaginary_mode_check`, `output_artifacts`；
-    2) `mgb2_phonon_report.md`：说明 query 输入梳理、mock 后处理的两阶段流程、关键参数与不确定性。
-
-    最终回答中请简要说明：检索到的结构与声子结果是否相互一致。
-  tags:
-  - mlip
-  - dpa
-  - mgb2
-  - phonon
-  - retrieval_plus_calc
-  - userlog_derived
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: phonon_json
-    value: mgb2_phonon_summary.json
-  - key: phonon_report
-    value: mgb2_phonon_report.md
-  - key: json_required_tokens
-    value:
-      filename: mgb2_phonon_summary.json
-      tokens:
-      - retrieval_source
-      - structure_identifier
-      - phonon_settings
-      - imaginary_mode_check
-      - output_artifacts
-      - MgB2
-      flags: i
-  - key: report_required_tokens
-    value:
-      filename: mgb2_phonon_report.md
-      tokens:
-      - 检索
-      - MgB2
-      - 声子
-      - 参数
-      - 不确定性
-      flags: i
-  - key: gamma_e2g_mock
-    value: 74.8
-    tolerance: 10.0
-  - key: turn_budget
-    value:
-      max: 18
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 10000
-  scoring_checklist:
-  - id: phonon_json
-    criterion: Agent writes `mgb2_phonon_summary.json` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: phonon_report
-    criterion: Agent writes `mgb2_phonon_report.md` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: json_required_tokens
-    criterion: JSON includes retrieval metadata and phonon-result summary fields.
-    axis: correctness
-    verify: text_file_contains_all
-  - id: report_required_tokens
-    criterion: Report explains two-stage workflow and uncertainty caveats.
-    axis: correctness
-    verify: text_file_contains_all
-  - id: gamma_e2g_mock
-    criterion: Final answer includes a mock Gamma E2g mode near 74.8 meV.
-    axis: correctness
-    verify: numerical_range
-  - id: grounding_source
-    criterion: Final answer is grounded in both retrieval and phonon artifacts and does not fabricate unsupported structure/spectrum details.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical calls with the same parameters.
-    axis: efficiency
-    verify: no_retries
-  - id: efficiency_judge
-    criterion: Workflow proceeds compactly from retrieval to phonon computation and summary.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: WO_mlip_dpa_008_20260411v1
-  capability: workflow_orchestration
-  domain: thermo
-  intent: Run a short DPA molecular-dynamics simulation for Li2O at 300 K and summarize thermostat/time-step settings with trajectory statistics.
-  human_prompt_seed: |
-    执行 Li2O 短程 MD 流程评估（Mock版）：
-    1. 先 query/检索并整理 MD 所需输入文件（结构、势函数、积分与控温参数）；
-    2. 目标条件：300 K、1 ps、1 fs、NVT；
-    3. 不做真实 MD，使用以下 mock 结果：
-       - ensemble = NVT
-       - temperature_K = 300
-       - runtime_ps = 1.0
-       - timestep_fs = 1.0
-       - n_steps = 1000
-       - thermo_stats = {"T_avg": 301.2, "T_std": 7.8, "drift": "small"}
-    4. 基于 mock 值做后处理并判断是否满足目标条件。
-
-    请完成以下交付：
-    1) `li2o_md_summary.json`：至少包含 `input_files`, `ensemble`, `temperature_K`, `runtime_ps`, `timestep_fs`, `n_steps`, `thermo_stats`；
-    2) `li2o_md_report.md`：说明 query 输入梳理、mock 后处理流程、关键观察与误差来源。
-
-    最终回答中简要确认是否满足 300 K / 1 ps / 1 fs 三个条件。
-  tags:
-  - mlip
-  - dpa
-  - molecular_dynamics
-  - Li2O
-  - userlog_derived
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: md_summary_artifact
-    value: li2o_md_summary.json
-  - key: md_report_artifact
-    value: li2o_md_report.md
-  - key: summary_required_tokens
-    value:
-      filename: li2o_md_summary.json
-      tokens:
-      - ensemble
-      - temperature_K
-      - runtime_ps
-      - timestep_fs
-      - n_steps
-      - thermo_stats
-      - '300'
-      - '1'
-      flags: i
-  - key: report_required_tokens
-    value:
-      filename: li2o_md_report.md
-      tokens:
-      - NVT
-      - 300
-      - 1 ps
-      - 1 fs
-      - 温度
-      - 不确定性
-      flags: i
-  - key: temperature_avg_mock
-    value: 301.2
-    tolerance: 15.0
-  - key: turn_budget
-    value:
-      max: 16
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 9000
-  scoring_checklist:
-  - id: md_summary_artifact
-    criterion: Agent writes `li2o_md_summary.json` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: md_report_artifact
-    criterion: Agent writes `li2o_md_report.md` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: summary_required_tokens
-    criterion: MD summary JSON includes required simulation-parameter fields and basic runtime statistics.
-    axis: correctness
-    verify: text_file_contains_all
-  - id: report_required_tokens
-    criterion: Report describes MD setup, observed behavior, and uncertainty caveats.
-    axis: correctness
-    verify: text_file_contains_all
-  - id: temperature_avg_mock
-    criterion: Final answer includes a mock average temperature near 301.2 K.
-    axis: correctness
-    verify: numerical_range
-  - id: grounding_source
-    criterion: The final answer is grounded in MD output artifacts and does not invent trajectory statistics not present in generated results.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical MD submissions with the same parameters.
-    axis: efficiency
-    verify: no_retries
-  - id: efficiency_judge
-    criterion: Workflow proceeds directly from MD setup to execution and summary without redundant exploratory loops.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total

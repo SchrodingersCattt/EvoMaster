@@ -50,125 +50,240 @@ tools:
 banks:
   - path: "batch_processing/bp_struct.yaml"
     capability: "batch_processing"
+    domain: "struct"
     questions: 4
 
   - path: "data_diagnosis/dd_general.yaml"
     capability: "data_diagnosis"
+    domain: "general"
     questions: 7
 
   - path: "data_fitting/df_mech.yaml"
     capability: "scientific_analysis"
+    domain: "mech"
     questions: 3
 
   - path: "data_fitting/df_elec.yaml"
     capability: "scientific_analysis"
+    domain: "elec"
     questions: 1
 
   - path: "structure_construction/sc_struct.yaml"
     capability: "structure_construction"
+    domain: "struct"
     questions: 14
 
   - path: "workflow_orchestration/wo_mech.yaml"
     capability: "workflow_orchestration"
-    questions: 10
+    domain: "mech"
+    questions: 8
+
+  - path: "workflow_orchestration/wo_mech_struct.yaml"
+    capability: "workflow_orchestration"
+    domain: "struct"
+    questions: 1
+
+  - path: "workflow_orchestration/wo_mech_thermo.yaml"
+    capability: "workflow_orchestration"
+    domain: "thermo"
+    questions: 1
 
   - path: "workflow_orchestration/wo_struct.yaml"
     capability: "workflow_orchestration"
+    domain: "struct"
     questions: 3
 
   - path: "structure_retrieval/sr_struct_db.yaml"
     capability: "structure_retrieval"
+    domain: "struct"
     questions: 9
 
   - path: "workflow_orchestration/wo_elec.yaml"
     capability: "workflow_orchestration"
-    questions: 6
+    domain: "elec"
+    questions: 5
+
+  - path: "workflow_orchestration/wo_elec_thermo.yaml"
+    capability: "workflow_orchestration"
+    domain: "thermo"
+    questions: 1
 
   - path: "workflow_orchestration/wo_kinetic.yaml"
     capability: "workflow_orchestration"
+    domain: "kinetic"
     questions: 1
 
   - path: "workflow_orchestration/wo_general.yaml"
-    questions: 9
+    capability: "workflow_orchestration"
+    domain: "general"
+    questions: 3
+
+  - path: "workflow_orchestration/wo_general_mech.yaml"
+    capability: "workflow_orchestration"
+    domain: "mech"
+    questions: 1
+
+  - path: "scientific_analysis/sa_elec.yaml"
+    capability: "scientific_analysis"
+    domain: "elec"
+    questions: 1
+
+  - path: "scientific_analysis/sa_mech.yaml"
+    capability: "scientific_analysis"
+    domain: "mech"
+    questions: 1
+
+  - path: "scientific_analysis/sa_general.yaml"
+    capability: "scientific_analysis"
+    domain: "general"
+    questions: 3
 
   - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
-    questions: 7
+    capability: "structure_construction"
+    domain: "struct"
+    questions: 3
+
+  - path: "co2rr_reproduction/co2rr_wo_mech.yaml"
+    capability: "workflow_orchestration"
+    domain: "mech"
+    questions: 1
+
+  - path: "co2rr_reproduction/co2rr_sa_elec.yaml"
+    capability: "scientific_analysis"
+    domain: "elec"
+    questions: 1
+
+  - path: "co2rr_reproduction/co2rr_bp_struct.yaml"
+    capability: "batch_processing"
+    domain: "struct"
+    questions: 1
+
+  - path: "co2rr_reproduction/co2rr_sa_general.yaml"
+    capability: "scientific_analysis"
+    domain: "general"
+    questions: 1
 
   - path: "safety_refusal/sr_general.yaml"
     capability: "safety_refusal"
+    domain: "general"
     questions: 4
 
   # --- New banks from NFPP / CO2RR / electrolyte projects ---
 
   - path: "workflow_orchestration/wo_elec_nfpp_refactored.yaml"
     capability: "workflow_orchestration"
+    domain: "elec"
     questions: 2
 
   - path: "structure_construction/sc_elec_adsorption.yaml"
     capability: "structure_construction"
+    domain: "elec"
     questions: 1
 
   - path: "workflow_orchestration/wo_elec_adsorption.yaml"
     capability: "workflow_orchestration"
+    domain: "elec"
     questions: 1
 
   - path: "batch_processing/bp_elec.yaml"
     capability: "batch_processing"
+    domain: "elec"
     questions: 1
 
   # --- VASP INCAR generation (20 questions) ---
 
   - path: "input_generation/ig_incar.yaml"
     capability: "input_generation"
+    domain: "incar"
     questions: 20
 
   - path: "input_generation/ig_abacus.yaml"
     capability: "input_generation"
-    questions: 8
+    domain: "elec"
+    questions: 5
+
+  - path: "input_generation/ig_abacus_mech.yaml"
+    capability: "input_generation"
+    domain: "mech"
+    questions: 1
+
+  - path: "input_generation/ig_abacus_thermo.yaml"
+    capability: "input_generation"
+    domain: "thermo"
+    questions: 2
 
   # --- DPA / MLIP workflow evaluation ---
 
   - path: "workflow_orchestration/wo_mlip_dpa.yaml"
     capability: "workflow_orchestration"
-    questions: 10
+    domain: "struct"
+    questions: 3
+
+  - path: "workflow_orchestration/wo_mlip_dpa_mech.yaml"
+    capability: "workflow_orchestration"
+    domain: "mech"
+    questions: 1
+
+  - path: "workflow_orchestration/wo_mlip_dpa_thermo.yaml"
+    capability: "workflow_orchestration"
+    domain: "thermo"
+    questions: 4
+
+  - path: "workflow_orchestration/wo_mlip_dpa_kinetic.yaml"
+    capability: "workflow_orchestration"
+    domain: "kinetic"
+    questions: 1
+
+  - path: "workflow_orchestration/wo_mlip_dpa_mlip.yaml"
+    capability: "workflow_orchestration"
+    domain: "mlip"
+    questions: 1
 
   # --- Polymer projects ---
   - path: "polymer/pl_donor.yaml"
     capability: "scientific_analysis"
+    domain: "polymer"
     questions: 1
 
   - path: "polymer/pl_membrane.yaml"
     capability: "scientific_analysis"
+    domain: "polymer"
     questions: 1
 
   - path: "polymer/pl_rheology.yaml"
     capability: "scientific_analysis"
+    domain: "polymer"
     questions: 1
 
   - path: "polymer/pl_adhesion.yaml"
     capability: "scientific_analysis"
+    domain: "polymer"
     questions: 1
 
   - path: "polymer/pl_hopping.yaml"
     capability: "scientific_analysis"
+    domain: "polymer"
     questions: 1
 
   # --- Thermal / thermo-structural data fitting ---
 
   - path: "data_fitting/df_thermo.yaml"
     capability: "scientific_analysis"
+    domain: "thermo"
     questions: 1
 
   # --- Single-crystal XRD structure solution & refinement ---
 
   - path: "data_fitting/df_scxrd.yaml"
     capability: "scientific_analysis"
+    domain: "scxrd"
     questions: 2
 
   # --- direct.toml / system-prompt execution contract (MATTER) ---
 
   - path: "execution_contract/direct_contract.yaml"
     capability: "execution_contract"
+    domain: "general"
     questions: 3
 
-# Total: 100 questions across 28 bank files
+# Total: 100 questions across 45 bank files

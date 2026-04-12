@@ -10,7 +10,7 @@ questions:
   human_prompt_seed: '计算 Si 的能带结构：从数据库获取金刚石结构 Si，先做 SCF 计算， 然后沿高对称 k 路径 (G-X-L-G)
     计算能带，判断带隙类型（直接/间接）并输出带隙值 (eV)。 注意 DFT 带隙与实验值的偏差，给出不确定性说明。
 
-    '
+'
   tags:
   - band_structure
   - si
@@ -34,13 +34,13 @@ questions:
     - gap_value
     - uncertainty_note
   - key: turn_budget
-    value: &id000
+    value:
       max: 18
   - key: duration_budget
-    value: &id001
+    value:
       max: 7200000
   - key: token_budget_total
-    value: &id002
+    value:
       max: 8000
   scoring_checklist:
   - id: gap_type
@@ -57,8 +57,9 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: Stated band gap values are tied to band-structure or calculation outcomes described in the final answer, not
-      only generic training recall. Judge from the answer and named outputs; do not fail because the tool-call log omits MCP,
+    criterion: Stated band gap values are tied to band-structure or calculation outcomes
+      described in the final answer, not only generic training recall. Judge from
+      the answer and named outputs; do not fail because the tool-call log omits MCP,
       web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
@@ -94,7 +95,7 @@ questions:
   human_prompt_seed: '计算周期性液态水体系的 HOMO-LUMO gap： 构建 64 个水分子的周期性盒子（密度 ~1.0 g/cm3），
     使用杂化泛函或加速方案（如先 PBE 再 HSE 单点）计算电子 gap。 输出 gap 值 (eV)、所用加速策略和计算成本估算。
 
-    '
+'
   tags:
   - hybrid_method
   - liquid_water
@@ -115,11 +116,14 @@ questions:
     - gap_extraction
     - cost_note
   - key: turn_budget
-    value: *id000
+    value:
+      max: 18
   - key: duration_budget
-    value: *id001
+    value:
+      max: 7200000
   - key: token_budget_total
-    value: *id002
+    value:
+      max: 8000
   scoring_checklist:
   - id: gap_value_eV
     criterion: Gap value is in tolerance.
@@ -131,8 +135,9 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The gap value and any acceleration discussion are tied to calculation results or constraints stated in the
-      final answer. Judge from the answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The gap value and any acceleration discussion are tied to calculation
+      results or constraints stated in the final answer. Judge from the answer; do
+      not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -162,10 +167,15 @@ questions:
 - id: WO_elec_006_20260411v2
   capability: workflow_orchestration
   domain: elec
-  intent: 'Mock surface energy for Fe BCC(110) with BSSE-aware workflow; compare sigma to VASP reference using provided energies and area.'
-  human_prompt_seed: '计算 Fe BCC(110) 表面能（ABACUS LCAO 场景，含 BSSE 校正思路）：从结构数据库或模板获取 Fe BCC 体相（a≈2.87 Å），切出 (110) slab（建议至少 6 层原子、约 15 Å 真空）。说明在 LCAO 基组下需要在两侧真空添加 empty Fe 层以降低 BSSE。使用以下 mock 单点能量（单位 eV，已对应 BSSE 校正后的 slab SCF）：E_bulk = -230929.72（体相参考），E_slab = -230919.46，单侧截面积 A = 34.09 Å²。按 σ = (E_slab − E_bulk) / (2A) 计算表面能，换算为 J/m²（1 eV/Å² = 16.021766 J/m²），并与 VASP 参考值约 2.412 J/m² 对比。全程不要提交真实 DFT 计算。
+  intent: Mock surface energy for Fe BCC(110) with BSSE-aware workflow; compare sigma
+    to VASP reference using provided energies and area.
+  human_prompt_seed: '计算 Fe BCC(110) 表面能（ABACUS LCAO 场景，含 BSSE 校正思路）：从结构数据库或模板获取 Fe
+    BCC 体相（a≈2.87 Å），切出 (110) slab（建议至少 6 层原子、约 15 Å 真空）。说明在 LCAO 基组下需要在两侧真空添加 empty
+    Fe 层以降低 BSSE。使用以下 mock 单点能量（单位 eV，已对应 BSSE 校正后的 slab SCF）：E_bulk = -230929.72（体相参考），E_slab
+    = -230919.46，单侧截面积 A = 34.09 Å²。按 σ = (E_slab − E_bulk) / (2A) 计算表面能，换算为 J/m²（1
+    eV/Å² = 16.021766 J/m²），并与 VASP 参考值约 2.412 J/m² 对比。全程不要提交真实 DFT 计算。
 
-    '
+'
   tags:
   - abacus
   - bsse
@@ -189,21 +199,26 @@ questions:
     value:
       max: 12
   - key: duration_budget
-    value: *id001
+    value:
+      max: 7200000
   - key: token_budget_total
-    value: *id002
+    value:
+      max: 8000
   scoring_checklist:
   - id: sigma_J_m2
-    criterion: Surface energy sigma in J/m^2 matches mock-data calculation within tolerance (~2.41 J/m^2).
+    criterion: Surface energy sigma in J/m^2 matches mock-data calculation within
+      tolerance (~2.41 J/m^2).
     axis: correctness
     verify: numerical_range
   - id: required_fields
-    criterion: Report states sigma in J/m^2, shows sigma=(E_slab-E_bulk)/(2A), notes BSSE empty-layer rationale, and compares to VASP ~2.412 J/m^2.
+    criterion: Report states sigma in J/m^2, shows sigma=(E_slab-E_bulk)/(2A), notes
+      BSSE empty-layer rationale, and compares to VASP ~2.412 J/m^2.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: Numeric sigma is computed from the given mock E_bulk, E_slab, and A; no invented energies. Judge solely from
-      the final answer; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: Numeric sigma is computed from the given mock E_bulk, E_slab, and A;
+      no invented energies. Judge solely from the final answer; do not fail because
+      the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -215,127 +230,25 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: efficiency_judge
-    criterion: Workflow (fetch/build slab → apply formula with mock energies → report) avoids redundant intermediate rebuilds.
+    criterion: Workflow (fetch/build slab → apply formula with mock energies → report)
+      avoids redundant intermediate rebuilds.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
-    axis: efficiency
-    verify: token_budget
-- id: WO_elec_009_20260411v1
-  capability: workflow_orchestration
-  domain: thermo
-  intent: Compute Si phonon dispersion with ABACUS (including relaxation step) and summarize key spectrum outcomes.
-  human_prompt_seed: |
-    计算 Si 的声子特征（Mock版）：
-    1. 先 query/检索并梳理本任务所需输入文件（结构文件、参数文件、声子相关输入）；
-    2. 给出你会采用的声子设置（k 路径/采样、超胞或最小长度、位移步长）；
-    3. 不做真实 ABACUS 计算，使用以下 mock 结果进行后处理：
-       - supercell_or_min_length = "3x3x3"
-       - displacement_step = 0.01
-       - gamma_optical_frequency_THz = 15.6
-       - imaginary_mode_check = false
-    4. 汇总是否存在虚频，并给出结果可信度与不确定性说明。
-
-    请完成以下交付：
-    1) `si_phonon_abacus.json`：至少包含 `input_files`, `kpath_or_sampling`, `supercell_or_min_length`, `displacement_step`, `imaginary_mode_check`, `key_frequency_summary`；
-    2) `si_phonon_abacus_report.md`：说明 query 输入梳理 + mock 后处理流程、关键结论与不确定性。
-
-    最终回答请简要说明是否出现虚频，并标注为 mock 后处理结论。
-  tags:
-  - abacus
-  - phonon
-  - silicon
-  - workflow
-  - userlog_derived
-  mode_scope:
-  - direct
-  - planner
-  data_files: []
-  reference_answers:
-  - key: phonon_json
-    value: si_phonon_abacus.json
-  - key: phonon_report
-    value: si_phonon_abacus_report.md
-  - key: json_required_tokens
-    value:
-      filename: si_phonon_abacus.json
-      tokens:
-      - displacement_step
-      - imaginary_mode_check
-      - key_frequency_summary
-      - supercell_or_min_length
-      flags: i
-  - key: report_required_tokens
-    value:
-      filename: si_phonon_abacus_report.md
-      tokens:
-      - Si
-      - ABACUS
-      - phonon
-      - 优化
-      - 虚频
-      - 不确定性
-      flags: i
-  - key: gamma_freq_mock
-    value: 15.6
-    tolerance: 1.0
-  - key: turn_budget
-    value: *id000
-  - key: duration_budget
-    value: *id001
-  - key: token_budget_total
-    value:
-      max: 9000
-  scoring_checklist:
-  - id: phonon_json
-    criterion: Agent writes `si_phonon_abacus.json` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: phonon_report
-    criterion: Agent writes `si_phonon_abacus_report.md` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: json_required_tokens
-    criterion: JSON contains key phonon workflow and imaginary-mode-check fields.
-    axis: correctness
-    verify: text_file_contains_all
-  - id: report_required_tokens
-    criterion: Report explains relax→phonon workflow and uncertainty caveats.
-    axis: correctness
-    verify: text_file_contains_all
-  - id: gamma_freq_mock
-    criterion: Final answer includes a mock gamma optical frequency value near 15.6 THz.
-    axis: correctness
-    verify: numerical_range
-  - id: grounding_source
-    criterion: Final answer is grounded in generated phonon artifacts and does not fabricate unsupported dispersion conclusions.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical tool calls with the same parameter set.
-    axis: efficiency
-    verify: no_retries
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: WO_elec_007_20260411v1
   capability: workflow_orchestration
   domain: elec
-  intent: Compute Pd(111) work function with ABACUS under a z-direction vacuum setup and summarize key computational settings and output.
+  intent: Compute Pd(111) work function with ABACUS under a z-direction vacuum setup
+    and summarize key computational settings and output.
   human_prompt_seed: |
     计算 Pd(111) 表面功函数（Mock版）：
     1. 先 query/检索 Pd 体相与 Pd(111) slab 建模所需输入文件，并确认真空方向约束；
@@ -391,9 +304,11 @@ questions:
     value: 5.43
     tolerance: 0.3
   - key: turn_budget
-    value: *id000
+    value:
+      max: 18
   - key: duration_budget
-    value: *id001
+    value:
+      max: 7200000
   - key: token_budget_total
     value:
       max: 9000
@@ -407,11 +322,13 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: wf_required_tokens
-    criterion: JSON output includes work-function value and explicit z-direction vacuum setting.
+    criterion: JSON output includes work-function value and explicit z-direction vacuum
+      setting.
     axis: correctness
     verify: text_file_contains_all
   - id: report_required_tokens
-    criterion: Report explains setup rationale and output interpretation with uncertainty caveats.
+    criterion: Report explains setup rationale and output interpretation with uncertainty
+      caveats.
     axis: correctness
     verify: text_file_contains_all
   - id: wf_value_mock
@@ -419,7 +336,8 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: The final answer is grounded in generated work-function artifacts and does not fabricate unsupported setup or result details.
+    criterion: The final answer is grounded in generated work-function artifacts and
+      does not fabricate unsupported setup or result details.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -431,17 +349,20 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: WO_elec_008_20260411v1
   capability: workflow_orchestration
   domain: elec
-  intent: Perform ABACUS Bader charge analysis for Al2O3 and summarize per-atom charge transfer evidence.
+  intent: Perform ABACUS Bader charge analysis for Al2O3 and summarize per-atom charge
+    transfer evidence.
   human_prompt_seed: |
     对 Al2O3 执行 Bader 电荷分析（Mock版）：
     1. 先 query/检索并整理 Bader 分析所需输入文件（结构、电子密度、分割相关输入）；
@@ -499,9 +420,11 @@ questions:
     value: 2.31
     tolerance: 0.3
   - key: turn_budget
-    value: *id000
+    value:
+      max: 18
   - key: duration_budget
-    value: *id001
+    value:
+      max: 7200000
   - key: token_budget_total
     value:
       max: 9000
@@ -515,7 +438,8 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: bader_required_tokens
-    criterion: Bader summary JSON includes per-atom charge-transfer fields and element labels.
+    criterion: Bader summary JSON includes per-atom charge-transfer fields and element
+      labels.
     axis: correctness
     verify: text_file_contains_all
   - id: report_required_tokens
@@ -527,7 +451,8 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: The final answer is grounded in Bader-analysis artifacts and does not invent unsupported per-atom values.
+    criterion: The final answer is grounded in Bader-analysis artifacts and does not
+      invent unsupported per-atom values.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -539,10 +464,12 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
