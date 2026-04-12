@@ -18,6 +18,10 @@ When building structures **specifically for electronic property calculations** (
 
 Auto-generate with pymatgen `HighSymmKpath(structure)`.
 
+> **Task-specified k-labels**: When a task names high-symmetry points (e.g. M-Gamma-K), resolve coordinates from the **label's native BZ** (hexagonal: M=(½,0,0), K=(⅓,⅓,0) in fractional reciprocal coords). Do not relabel a different BZ's points.
+
+> **Post-processing without DFT data**: Use literature band parameters (gaps, effective masses) with numpy to generate synthetic dispersion. Do not implement tight-binding from scratch—this risks timeout.
+
 ## Supercell for Defect Electronic Structure
 - Point defects: supercell >= 10 A between defect and nearest image. Typical: 3x3x3 bulk, 2x2 or 3x3 in-plane for slabs.
 - Use G-point or sparse k-mesh for large supercells.
