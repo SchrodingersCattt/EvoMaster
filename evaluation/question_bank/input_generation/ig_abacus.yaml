@@ -143,7 +143,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_002_20260409v4
+- id: IG_abacus_002_20260409v5
   capability: input_generation_abacus
   domain: mech
   intent: 'Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty ghost atom and SCF INPUT.'
@@ -211,13 +211,13 @@ questions:
     value: INPUT_vac_bsse
   - key: turn_budget
     value:
-      max: 8
+      max: 12
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 22000
+      max: 30000
   scoring_checklist:
   - id: must_stru_vac_fe_empty_core
     criterion: "[Must] STRU_vac_bsse includes Fe_empty with explicit empty-species charge marker."
