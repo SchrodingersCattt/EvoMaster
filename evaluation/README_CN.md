@@ -22,14 +22,14 @@ v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵�
 ## 当前题库结构
 
 - `question_bank/manifest.yaml`: v5+ 题库注册表。
-- `question_bank/<子目录>/*.yaml`: 实际题库文件（子目录通常按题型或专题命名，例如 `workflow_orchestration/`、`co2rr_reproduction/`）。
+- `question_bank/<capability>/<xx>_<domain>.yaml`: 实际题库文件（**每个文件对应唯一的 `(capability, domain)`**；`<xx>` 为两字母 capability 简写，定义见 `evaluation/core/capability_abbrev.py`）。
 - `question_bank/data/<question_id>/`: 每道带本地输入的题目对应一个数据目录，目录名使用当前 v5 题号。
 
 当前 capability 列表：
 
 - `batch_processing`
 - `data_diagnosis`
-- `execution_contract`（执行与交付约定：spec 与正文冲突以文件为准、根目录交付、归档解压、精确文件名等，对应 `matmaster/exps/` 与 `execution_contract/direct_contract.yaml`）
+- `execution_contract`（执行与交付约定：spec 与正文冲突以文件为准、根目录交付、归档解压、精确文件名等，对应 `matmaster/exps/` 与 `execution_contract/ec_agnostic.yaml`）
 - `input_generation`（输入生成任务；VASP/ABACUS 等软件后端放在题目 tags 或 bank 语境中表达）
 - `scientific_analysis`
 - `structure_construction`
@@ -39,15 +39,14 @@ v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵�
 
 说明：
 
-- `co2rr_reproduction/` 目录保留为专题题库目录，但题目的 `capability` 已回归真实任务形态（如 `structure_construction` / `scientific_analysis` / `workflow_orchestration` / `batch_processing`），专题属性由 tags 表达。
+- CO₂RR 等专题题与其它同 `(capability, domain)` 题**合并为同一 YAML**（例如 `structure_construction/sc_catalysis.yaml`），专题属性由 `tags` 表达。
 - `workflow_orchestration` 现仅用于**明确多步流程组织**、工具链串联、阶段 gate 或上一步输出驱动下一步的任务；基于给定 bundle / 文献做比较、筛选、综述、推荐、机理解释的题目应优先归到 `scientific_analysis`。
 
 当前 `domain` 语义：
 
 - `domain` 仅表示业务线 / 应用场景，不再表示物理子域或方法轴。
-- active question bank 仅允许 `battery`、`catalysis`、`polymer`、`alloy`、`semiconductor`。
+- `domain` 枚举含五条业务线，以及无法归入时的 `agnostic`（见 `evaluation/AGENTS_evaluation.md`）。
 - 材料对象、方法、软件、专题线统一放入 `tags`。
-- 未完成业务线归类的历史 bank 需要移出 `evaluation/question_bank/`，不参与默认加载。
 
 ## 加权评分 (v5+ 新增)
 

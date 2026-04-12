@@ -1,5 +1,6 @@
 # manifest.yaml — MATTER v5 Question Bank Registry
 # Lists all MCP tools referenced by any question, plus bank file index.
+# Each bank file: `<capability>/<xx>_<domain>.yaml` — `xx` = 两字母简写；无法归入业务线时 `domain` 为 `agnostic`。
 version: "v5"
 
 tools:
@@ -48,120 +49,104 @@ tools:
     category: "script_execution"
 
 banks:
-  - path: "data_fitting/df_elec.yaml"
+  - path: "batch_processing/bp_catalysis.yaml"
+    capability: "batch_processing"
+    domain: "catalysis"
+    questions: 2
+
+  - path: "batch_processing/bp_agnostic.yaml"
+    capability: "batch_processing"
+    domain: "agnostic"
+    questions: 4
+
+  - path: "data_diagnosis/dd_agnostic.yaml"
+    capability: "data_diagnosis"
+    domain: "agnostic"
+    questions: 7
+
+  - path: "execution_contract/ec_agnostic.yaml"
+    capability: "execution_contract"
+    domain: "agnostic"
+    questions: 3
+
+  - path: "input_generation/ig_agnostic.yaml"
+    capability: "input_generation"
+    domain: "agnostic"
+    questions: 28
+
+  - path: "safety_refusal/sf_agnostic.yaml"
+    capability: "safety_refusal"
+    domain: "agnostic"
+    questions: 4
+
+  - path: "scientific_analysis/sa_alloy.yaml"
     capability: "scientific_analysis"
-    domain: "semiconductor"
-    questions: 1
-
-  - path: "workflow_orchestration/wo_mech_struct.yaml"
-    capability: "workflow_orchestration"
     domain: "alloy"
-    questions: 1
+    questions: 2
 
-  - path: "workflow_orchestration/wo_mech_thermo.yaml"
-    capability: "workflow_orchestration"
-    domain: "alloy"
-    questions: 1
-
-  - path: "workflow_orchestration/wo_general_mech.yaml"
-    capability: "workflow_orchestration"
-    domain: "alloy"
-    questions: 1
-
-  - path: "scientific_analysis/sa_elec.yaml"
+  - path: "scientific_analysis/sa_battery.yaml"
     capability: "scientific_analysis"
     domain: "battery"
     questions: 1
 
-  - path: "scientific_analysis/sa_mech.yaml"
+  - path: "scientific_analysis/sa_catalysis.yaml"
     capability: "scientific_analysis"
-    domain: "alloy"
+    domain: "catalysis"
     questions: 2
+
+  - path: "scientific_analysis/sa_agnostic.yaml"
+    capability: "scientific_analysis"
+    domain: "agnostic"
+    questions: 7
+
+  - path: "scientific_analysis/sa_polymer.yaml"
+    capability: "scientific_analysis"
+    domain: "polymer"
+    questions: 5
 
   - path: "scientific_analysis/sa_semiconductor.yaml"
     capability: "scientific_analysis"
     domain: "semiconductor"
-    questions: 1
+    questions: 2
 
-  - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
+  - path: "structure_construction/sc_catalysis.yaml"
     capability: "structure_construction"
     domain: "catalysis"
+    questions: 4
+
+  - path: "structure_construction/sc_agnostic.yaml"
+    capability: "structure_construction"
+    domain: "agnostic"
+    questions: 14
+
+  - path: "structure_retrieval/rt_agnostic.yaml"
+    capability: "structure_retrieval"
+    domain: "agnostic"
+    questions: 9
+
+  - path: "workflow_orchestration/wo_alloy.yaml"
+    capability: "workflow_orchestration"
+    domain: "alloy"
     questions: 3
 
-  - path: "co2rr_reproduction/co2rr_wo_mech.yaml"
-    capability: "workflow_orchestration"
-    domain: "catalysis"
-    questions: 1
-
-  - path: "co2rr_reproduction/co2rr_sa_elec.yaml"
-    capability: "scientific_analysis"
-    domain: "catalysis"
-    questions: 1
-
-  - path: "co2rr_reproduction/co2rr_bp_struct.yaml"
-    capability: "batch_processing"
-    domain: "catalysis"
-    questions: 1
-
-  - path: "co2rr_reproduction/co2rr_sa_general.yaml"
-    capability: "scientific_analysis"
-    domain: "catalysis"
-    questions: 1
-
-  - path: "workflow_orchestration/wo_elec_nfpp_refactored.yaml"
+  - path: "workflow_orchestration/wo_battery.yaml"
     capability: "workflow_orchestration"
     domain: "battery"
     questions: 2
 
-  - path: "structure_construction/sc_elec_adsorption.yaml"
-    capability: "structure_construction"
-    domain: "catalysis"
-    questions: 1
-
-  - path: "workflow_orchestration/wo_elec_adsorption.yaml"
-    capability: "workflow_orchestration"
-    domain: "catalysis"
-    questions: 1
-
   - path: "workflow_orchestration/wo_catalysis.yaml"
     capability: "workflow_orchestration"
     domain: "catalysis"
-    questions: 2
+    questions: 4
 
-  - path: "batch_processing/bp_elec.yaml"
-    capability: "batch_processing"
-    domain: "catalysis"
-    questions: 1
+  - path: "workflow_orchestration/wo_agnostic.yaml"
+    capability: "workflow_orchestration"
+    domain: "agnostic"
+    questions: 28
 
   - path: "workflow_orchestration/wo_semiconductor.yaml"
     capability: "workflow_orchestration"
     domain: "semiconductor"
     questions: 1
 
-  # --- Polymer projects ---
-  - path: "polymer/pl_donor.yaml"
-    capability: "scientific_analysis"
-    domain: "polymer"
-    questions: 1
-
-  - path: "polymer/pl_membrane.yaml"
-    capability: "scientific_analysis"
-    domain: "polymer"
-    questions: 1
-
-  - path: "polymer/pl_rheology.yaml"
-    capability: "scientific_analysis"
-    domain: "polymer"
-    questions: 1
-
-  - path: "polymer/pl_adhesion.yaml"
-    capability: "scientific_analysis"
-    domain: "polymer"
-    questions: 1
-
-  - path: "polymer/pl_hopping.yaml"
-    capability: "scientific_analysis"
-    domain: "polymer"
-    questions: 1
-
-# Total: 28 questions across 23 active bank files
+# Total: 132 questions across 20 active bank files

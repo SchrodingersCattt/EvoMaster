@@ -401,7 +401,7 @@ class HumanSimulator:
         return QuestionItem(
             id=f"LIT_{spec.id}",
             capability="workflow_orchestration",
-            domain="general",
+            domain="agnostic",
             intent=(
                 f"Reproduce {spec.calc_type} calculation for {spec.formula} "
                 f"from paper {spec.paper_id}."

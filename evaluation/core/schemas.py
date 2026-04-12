@@ -96,6 +96,7 @@ DomainLiteral = Literal[
     'polymer',
     'alloy',
     'semiconductor',
+    'agnostic',
 ]
 
 GENERIC_PROCESS_TAGS = {

@@ -6,15 +6,22 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from evaluation.core.capability_abbrev import (
+    CAPABILITY_TO_TWO_LETTER,
+    bank_yaml_basename,
+)
 from evaluation.core.schemas import QuestionBank
 
-VALID_BUSINESS_DOMAINS = [
+BUSINESS_LINE_DOMAINS = [
     'battery',
     'catalysis',
     'polymer',
     'alloy',
     'semiconductor',
 ]
+
+# All values accepted by DomainLiteral (schemas.py), including non-business-line bucket.
+VALID_ALL_DOMAINS = BUSINESS_LINE_DOMAINS + ['agnostic']
 
 REMOVED_LEGACY_DOMAINS = [
     'struct',
@@ -26,33 +33,8 @@ REMOVED_LEGACY_DOMAINS = [
     'incar',
     'scxrd',
     'mlip',
+    'domain_agnostic',
 ]
-
-DIRECT_MIGRATE_DOMAIN_EXPECTATIONS = {
-    'batch_processing/bp_elec.yaml': 'catalysis',
-    'co2rr_reproduction/co2rr_bp_struct.yaml': 'catalysis',
-    'co2rr_reproduction/co2rr_sa_elec.yaml': 'catalysis',
-    'co2rr_reproduction/co2rr_sa_general.yaml': 'catalysis',
-    'co2rr_reproduction/co2rr_wo_mech.yaml': 'catalysis',
-    'co2rr_reproduction/wo_co2rr_unit_ops.yaml': 'catalysis',
-    'data_fitting/df_elec.yaml': 'semiconductor',
-    'polymer/pl_adhesion.yaml': 'polymer',
-    'polymer/pl_donor.yaml': 'polymer',
-    'polymer/pl_hopping.yaml': 'polymer',
-    'polymer/pl_membrane.yaml': 'polymer',
-    'polymer/pl_rheology.yaml': 'polymer',
-    'scientific_analysis/sa_elec.yaml': 'battery',
-    'scientific_analysis/sa_mech.yaml': 'alloy',
-    'scientific_analysis/sa_semiconductor.yaml': 'semiconductor',
-    'structure_construction/sc_elec_adsorption.yaml': 'catalysis',
-    'workflow_orchestration/wo_catalysis.yaml': 'catalysis',
-    'workflow_orchestration/wo_elec_adsorption.yaml': 'catalysis',
-    'workflow_orchestration/wo_elec_nfpp_refactored.yaml': 'battery',
-    'workflow_orchestration/wo_general_mech.yaml': 'alloy',
-    'workflow_orchestration/wo_mech_struct.yaml': 'alloy',
-    'workflow_orchestration/wo_mech_thermo.yaml': 'alloy',
-    'workflow_orchestration/wo_semiconductor.yaml': 'semiconductor',
-}
 
 
 def _minimal_question(
@@ -75,6 +57,11 @@ def _minimal_question(
             }
         ],
     }
+
+
+def test_capability_two_letter_codes_are_unique() -> None:
+    vals = list(CAPABILITY_TO_TWO_LETTER.values())
+    assert len(vals) == len(set(vals))
 
 
 def test_question_bank_rejects_mismatched_top_level_capability_hint() -> None:
@@ -228,8 +215,8 @@ def test_question_bank_rejects_tag_with_noncanonical_case() -> None:
         )
 
 
-@pytest.mark.parametrize('domain', VALID_BUSINESS_DOMAINS)
-def test_question_bank_accepts_business_line_domains(domain: str) -> None:
+@pytest.mark.parametrize('domain', VALID_ALL_DOMAINS)
+def test_question_bank_accepts_all_literal_domains(domain: str) -> None:
     bank = QuestionBank.model_validate(
         {
             'version': 'v5',
@@ -290,20 +277,45 @@ def test_active_question_banks_use_only_business_line_domains() -> None:
         if bank_path.name == 'manifest.yaml':
             continue
         raw_bank = yaml.safe_load(bank_path.read_text(encoding='utf-8'))
-        assert raw_bank['domain'] in VALID_BUSINESS_DOMAINS, bank_path.as_posix()
+        dom = raw_bank['domain']
+        if dom == 'agnostic':
+            continue
+        assert dom in BUSINESS_LINE_DOMAINS, bank_path.as_posix()
         assert {q['domain'] for q in raw_bank['questions']} == {raw_bank['domain']}
 
 
-def test_direct_migrate_banks_match_phase1_domain_mapping() -> None:
+def test_agnostic_manifest_entries_match_bank_files() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    bank_root = repo_root / 'evaluation' / 'question_bank'
+    manifest = yaml.safe_load((bank_root / 'manifest.yaml').read_text(encoding='utf-8'))
+
+    for entry in manifest['banks']:
+        if entry.get('domain') != 'agnostic':
+            continue
+        path = bank_root / entry['path']
+        raw_bank = yaml.safe_load(path.read_text(encoding='utf-8'))
+        assert raw_bank['domain'] == 'agnostic', entry['path']
+        assert {q['domain'] for q in raw_bank['questions']} == {'agnostic'}, entry[
+            'path'
+        ]
+
+
+def test_bank_yaml_filename_matches_capability_and_domain() -> None:
+    """Each bank file is ``<capability>/<xx>_<domain>.yaml`` (``xx`` = 两字母简写)."""
     repo_root = Path(__file__).resolve().parents[2]
     bank_root = repo_root / 'evaluation' / 'question_bank'
 
-    for rel_path, expected_domain in DIRECT_MIGRATE_DOMAIN_EXPECTATIONS.items():
-        raw_bank = yaml.safe_load((bank_root / rel_path).read_text(encoding='utf-8'))
-        assert raw_bank['domain'] == expected_domain, rel_path
-        assert {q['domain'] for q in raw_bank['questions']} == {expected_domain}, (
-            rel_path
+    for bank_path in sorted(bank_root.glob('*/*.yaml')):
+        if bank_path.name == 'manifest.yaml':
+            continue
+        cap_dir = bank_path.parent.name
+        raw_bank = yaml.safe_load(bank_path.read_text(encoding='utf-8'))
+        assert raw_bank['capability'] == cap_dir, bank_path.as_posix()
+        expected_name = bank_yaml_basename(
+            capability=raw_bank['capability'], domain=raw_bank['domain']
         )
+        assert bank_path.name == expected_name, bank_path.as_posix()
+        assert {q['domain'] for q in raw_bank['questions']} == {raw_bank['domain']}
 
 
 def test_sa_general_phase2_split_banks_have_expected_question_ids() -> None:
@@ -311,23 +323,21 @@ def test_sa_general_phase2_split_banks_have_expected_question_ids() -> None:
     bank_root = repo_root / 'evaluation' / 'question_bank'
 
     sa_semiconductor = yaml.safe_load(
-        (
-            bank_root / 'scientific_analysis' / 'sa_semiconductor.yaml'
-        ).read_text(encoding='utf-8')
-    )
-    assert [q['id'] for q in sa_semiconductor['questions']] == [
-        'WO_general_perov_007_20260411v1'
-    ]
-
-    sa_mech = yaml.safe_load(
-        (bank_root / 'scientific_analysis' / 'sa_mech.yaml').read_text(
+        (bank_root / 'scientific_analysis' / 'sa_semiconductor.yaml').read_text(
             encoding='utf-8'
         )
     )
-    assert [q['id'] for q in sa_mech['questions']] == [
-        'WO_general_steel_008_20260411v1',
-        'WO_general_hea_005_20260411v1',
-    ]
+    semi_ids = [q['id'] for q in sa_semiconductor['questions']]
+    assert 'WO_general_perov_007_20260411v1' in semi_ids
+
+    sa_alloy = yaml.safe_load(
+        (bank_root / 'scientific_analysis' / 'sa_alloy.yaml').read_text(
+            encoding='utf-8'
+        )
+    )
+    alloy_ids = [q['id'] for q in sa_alloy['questions']]
+    assert 'WO_general_steel_008_20260411v1' in alloy_ids
+    assert 'WO_general_hea_005_20260411v1' in alloy_ids
 
 
 def test_phase2_split_banks_have_expected_question_ids() -> None:
@@ -335,23 +345,21 @@ def test_phase2_split_banks_have_expected_question_ids() -> None:
     bank_root = repo_root / 'evaluation' / 'question_bank'
 
     semiconductor_bank = yaml.safe_load(
-        (bank_root / 'workflow_orchestration/wo_semiconductor.yaml').read_text(
+        (bank_root / 'workflow_orchestration' / 'wo_semiconductor.yaml').read_text(
             encoding='utf-8'
         )
     )
     catalysis_bank = yaml.safe_load(
-        (bank_root / 'workflow_orchestration/wo_catalysis.yaml').read_text(
+        (bank_root / 'workflow_orchestration' / 'wo_catalysis.yaml').read_text(
             encoding='utf-8'
         )
     )
 
-    assert [q['id'] for q in semiconductor_bank['questions']] == [
-        'WO_elec_001_20260411v2'
-    ]
-    assert [q['id'] for q in catalysis_bank['questions']] == [
-        'WO_elec_006_20260411v2',
-        'WO_elec_007_20260411v1',
-    ]
+    wo_semi_ids = [q['id'] for q in semiconductor_bank['questions']]
+    assert 'WO_elec_001_20260411v2' in wo_semi_ids
+    wo_cat_ids = [q['id'] for q in catalysis_bank['questions']]
+    assert 'WO_elec_006_20260411v2' in wo_cat_ids
+    assert 'WO_elec_007_20260411v1' in wo_cat_ids
 
 
 def test_manifest_active_totals_after_phase2_splits() -> None:
@@ -359,5 +367,5 @@ def test_manifest_active_totals_after_phase2_splits() -> None:
     bank_root = repo_root / 'evaluation' / 'question_bank'
     manifest = yaml.safe_load((bank_root / 'manifest.yaml').read_text(encoding='utf-8'))
 
-    assert len(manifest['banks']) == 23
-    assert sum(int(entry['questions']) for entry in manifest['banks']) == 28
+    assert len(manifest['banks']) == 20
+    assert sum(int(entry['questions']) for entry in manifest['banks']) == 132

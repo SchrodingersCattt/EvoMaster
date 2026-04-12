@@ -13,21 +13,25 @@
 
 ```
 evaluation/question_bank/
-├── manifest.yaml                         # 题库注册表（工具声明 + bank 文件索引）
-├── batch_processing/bp_struct.yaml
-├── data_diagnosis/dd_general.yaml
-├── data_fitting/df_mech.yaml
-├── data_fitting/df_elec.yaml
-├── structure_construction/sc_struct.yaml
-├── workflow_orchestration/wo_*.yaml
-├── execution_contract/direct_contract.yaml   # capability execution_contract（direct 交付约定）
-├── co2rr_reproduction/wo_co2rr_unit_ops.yaml   # CO2RR 专题题库（按题目真实 capability 标注）
-├── safety_refusal/sr_general.yaml
-└── data/                                 # 题目输入数据文件（按题目 ID 子目录）
+├── manifest.yaml              # 题库注册表（path = `<capability>/<xx>_<domain>.yaml`，xx=两字母简写）
+├── batch_processing/          # 如 bp_catalysis.yaml、bp_agnostic.yaml
+├── data_diagnosis/
+├── execution_contract/
+├── input_generation/
+├── safety_refusal/
+├── scientific_analysis/
+├── structure_construction/
+├── structure_retrieval/
+├── workflow_orchestration/
+└── data/                      # 题目输入数据（按题目 ID 子目录；路径与 YAML 中 data_files 一致）
     ├── README.md
-    ├── BP_struct_003/
     └── ...
 ```
+
+**约定**：
+
+- **一个 bank 文件 = 唯一的 `(capability, domain)`**：路径为 ``<capability>/<xx>_<domain>.yaml``，其中 **`<xx>` 为两字母 capability 简写**（见 `evaluation/core/capability_abbrev.py` 中 `CAPABILITY_TO_TWO_LETTER`，含 `agnostic`）；同一文件内所有题目的 `domain` 与文件名中的 `domain` 一致。
+- 专题（如 CO₂RR）、工具线等用题目级 **`tags`** 或 `id` 前缀区分，不再拆成多个 bank 文件。
 
 ### 三层评分模型
 
@@ -85,7 +89,7 @@ evaluation/question_bank/
 | 字段 | 别名（规划用语） | 单选 / 多选 | 必须回答的一句话 |
 |------|------------------|-------------|------------------|
 | **`capability`** | Task（任务类） | **单选**（枚举之一） | 这道题要测的是哪一类**任务能力**？（例如：建结构、库检索、批量扫描、日志诊断、写 VASP/ABACUS 输入、多步编排与交付、安全拒答、CO₂RR 专题等。） |
-| **`domain`** | Subject（业务线 / 应用场景） | **单选**（枚举之一） | 这道题最终服务于哪条**业务线或应用场景**？仅允许 `battery` / `catalysis` / `polymer` / `alloy` / `semiconductor`。 |
+| **`domain`** | Subject（业务线 / 应用场景） | **单选**（枚举之一） | 这道题最终服务于哪条**业务线或应用场景**？五条业务线为 `battery` / `catalysis` / `polymer` / `alloy` / `semiconductor`；无法归入时任选 `agnostic`（见下方 domain 枚举）。 |
 | **`tags`** | Facet（主题 / 工具 / 项目线） | **多选**（字符串列表，可空） | 除 capability/domain 外，还需要哪些**可并列**的标记？（如产品线、工具链、内部专题、提示词契约类 `direct_contract` 等。） |
 
 **填写顺序（固定）**：先 **`capability`** → 再 **`domain`** → 最后按需补 **`tags`**。同一道题只有一个 capability、一个 domain；tags 可多个或没有。
@@ -124,28 +128,29 @@ evaluation/question_bank/
 
 #### domain 枚举
 
-与 `evaluation/core/schemas.py` 中 `DomainLiteral` **保持一致**：
+与 `evaluation/core/schemas.py` 中 `DomainLiteral` **保持一致**（共 **6** 个取值）：
 
-`battery` / `catalysis` / `polymer` / `alloy` / `semiconductor`
+`battery` / `catalysis` / `polymer` / `alloy` / `semiconductor` / `agnostic`
 
 **语义说明**
 
-- `domain` 仅表示**业务线 / 应用场景**，用于 `--slices`、报告聚合、bank 分组与覆盖统计；与 `capability` 正交。
+- `domain` 仅表示**业务线 / 应用场景**（或明确的非业务线归类），用于 `--slices`、报告聚合、bank 分组与覆盖统计；与 `capability` 正交。
 - `battery`：电池与储能业务线，如正负极、离子迁移、电解液、电池材料分析等。
 - `catalysis`：催化与表界面反应业务线，如吸附、反应路径、CO2RR、HER 等。
 - `polymer`：聚合物与软物质业务线。
 - `alloy`：合金与金属材料业务线。
 - `semiconductor`：半导体与电子材料业务线。
-- 材料对象、方法、软件、专题线不再进入 `domain`；统一通过 `tags` 表达。
+- `agnostic`：**无法稳定归入**上述五条业务线时的归类（如跨领域通用能力题、legacy 题库待复审题）；**active `question_bank/` 新题应优先**在五条业务线中选其一，仅在确实无单一业务主轴时使用本值。
+- 材料对象、方法、软件、专题线不再进入五条业务线 `domain`；统一通过 `tags` 表达。
 - 未纳入本轮业务线迁移的 bank 必须移出 `evaluation/question_bank/`，不能与 active business-line banks 混放。
-- 对 archive 中的 legacy bank，可在严格题级复审后拆出新的 active bank；迁回 active 的题必须同时满足单一 `capability` 与单一 business-line `domain`，未定性的题继续保留在 archive。
+- 对 `domain=agnostic` 的大卷，可在严格题级复审后拆出新的「仅五条业务线」bank；迁回时题必须同时满足单一 `capability` 与单一 **五条业务线之一**的 `domain`（未复审前可保留为 `agnostic`）。
 
 #### 新题填写 checklist（capability / domain / tags）
 
 新增或改写题目时建议按顺序自检：
 
 1. **`capability`**：按**任务形态**选（建结构 / 查库 / 科学分析 / 批量 / 诊断 / 输入生成 / 编排 / **执行与交付约定** / 安全），与「测什么能力」一致；测 spec 优先级、归档解压、精确文件名等 **执行/交付契约** → `execution_contract`；不要仅因用了某软件就选 `workflow_orchestration`——若本质是输入生成，应用 `input_generation`。
-2. **`domain`**：按题目的**最终业务目标 / 应用场景**选：`battery` / `catalysis` / `polymer` / `alloy` / `semiconductor` 五选一；不要再把物理轴、方法轴、软件轴写进 `domain`。
+2. **`domain`**：按题目的**最终业务目标 / 应用场景**选：五条业务线 **或** `agnostic`（见上）；不要再把物理轴、方法轴、软件轴写进 `domain`。
 3. **粒度不够时**：可加 **`tags`**（如 `mlip`、`userlog`、`abacus`、`scxrd`）做人读与二次分析；**tags 不参与 `--slices`**。若该维度需要**命令行一切就切**，应先确认它是否真的是稳定业务线，否则不要硬塞进 `domain`。
 4. **`workflow_orchestration` 只留真编排题**：必须存在明确的阶段流程、工具链串联、上一步输出作为下一步输入，或流程/交付 gate；若只是基于给定 bundle / 文献做比较、筛选、推荐、方法综述或机理分析，优先标 `scientific_analysis`。
 5. **与 `evaluation/core/schemas.py` 一致**：`CapabilityLiteral` / `DomainLiteral` 未列出的取值会导致加载失败；需要新枚举时须同时改 **schemas + 本文档 + 相关 runner 假设**（若有）。
@@ -155,7 +160,7 @@ evaluation/question_bank/
 | 维度 | 回答的问题 | 典型取值思路 | 谁消费 |
 |------|------------|----------------|--------|
 | **capability** | 这道题测**哪类任务能力**（建结构、查库、科学分析、批量、诊断、输入生成、编排、安全、执行契约等） | 与「任务形态」一致：能标 `input_generation` 或 `scientific_analysis` 就不要标成笼统的 `workflow_orchestration` | **`--slices`、聚合报告 `by_capability`**；加载时校验 |
-| **domain** | 这道题最终属于**哪条业务线 / 应用场景**（`battery` / `catalysis` / `polymer` / `alloy` / `semiconductor`） | 与「切片想怎么分」对齐：只有稳定业务线维度才能进入 **domain**；对象、方法、软件不要只因常用就塞进来 | **`--slices` 的 `cap[dom1,dom2]`**、按域聚合；加载时校验 |
+| **domain** | 这道题最终属于**哪条业务线 / 应用场景**（五条业务线或 `agnostic`） | 与「切片想怎么分」对齐：稳定业务线优先；无法唯一归类时用 `agnostic` | **`--slices` 的 `cap[dom1,dom2]`**、按域聚合；加载时校验 |
 | **tags** | **二级标签**：项目线、工具线、内部别名（如 `mlip`、`userlog`、`co2rr`） | 不承载「枚举完整性」；用于人读、检索、将来扩展 | **当前 runner 不参与筛选**（见下节）；可用于自建报表或外部分析 |
 
 **选用顺序（简版）**：先定 **capability**（任务形态）→ 再定 **domain**（题材/主轴，且兼顾你以后想怎么写 `--slices`）→ 需要更细、但**不值得**加新 domain 时再加 **tags**。
@@ -176,7 +181,7 @@ evaluation/question_bank/
 #### 基于 `--slices` 的命名与调整建议
 
 1. **先反推常用切片**：列出团队最常跑的命令，例如「只要电化学 workflow」「只要聚合物」「只要 ABACUS 输入」。把每条映射到 `capability` + `domain` 的组合是否**能一条 `--slices` 写出来**；若不能，优先考虑 **调整 domain**（或专题 capability），而不是加 tags。
-2. **`workflow_orchestration` + 多主题**：该 capability 只应用于确实考察流程组织的题；保留在该类中的题仍应**务必用 `domain` 区分业务线**（如 `battery` / `catalysis` / `polymer`），否则只能 `workflow_orchestration` 全选或依赖题目 ID 列表。
+2. **`workflow_orchestration` + 多主题**：该 capability 只应用于确实考察流程组织的题；保留在该类中的题仍应**务必用 `domain` 区分**（五条业务线之一，或确实无主轴时用 `agnostic`），否则只能 `workflow_orchestration` 全选或依赖题目 ID 列表。
 3. **专题线不要直接占用 capability 或 domain**：如 `co2rr`、`userlog`、`mlip`、`scxrd`、`abacus` 等优先放入 `tags`；只有当它本身就是独立**任务形态**时，才应升级成 capability。
 4. **不要指望 tags 驱动 CLI**：tags 适合 **文档化与二次分析**；**驱动切片**请用 capability/domain，或扩展 runner（见上）。
 5. **新增枚举值**：若出现「必须同时按某维度筛，但该维度既不适合塞 domain 也不适合塞 capability」的重复需求，再评估 **新 domain** 或 **runner 支持 tags 过滤**，避免 capability 无限膨胀。
@@ -384,7 +389,7 @@ P0 题目是被标记为最高优先级的评测题。在 DevShell Agent 多轮�
 
 评测基础设施在运行时从题库扫描所有 `priority == "P0"` 的题目（`collect_p0_question_ids`），无需在配置文件中维护 ID 列表。
 
-**`execution_contract` 契约 P0 集**：`question_bank/execution_contract/direct_contract.yaml` 中三道题均标记为 `priority: P0`，用于 DevShell 等流程中**优先运行**并与历史分数比对，锁住 direct 交付契约（spec 与正文冲突以文件为准、归档解压到根目录、交付物精确文件名）。其中 **spec 冲突题**的得分仅来自确定性项（`artifact_exists`、`text_file_regex`），**不包含** `llm_binary_judge`，避免 P0 门控被裁判方差放大。
+**`execution_contract` 契约 P0 集**：`question_bank/execution_contract/ec_agnostic.yaml` 中三道题均标记为 `priority: P0`，用于 DevShell 等流程中**优先运行**并与历史分数比对，锁住 direct 交付契约（spec 与正文冲突以文件为准、归档解压到根目录、交付物精确文件名）。其中 **spec 冲突题**的得分仅来自确定性项（`artifact_exists`、`text_file_regex`），**不包含** `llm_binary_judge`，避免 P0 门控被裁判方差放大。
 
 ### 执行流程
 

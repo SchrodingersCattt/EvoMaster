@@ -545,7 +545,7 @@ def test_optimization_path_guard_blocks_evaluation_reads(tmp_path: Path) -> None
 
     try:
         toolkit._resolve_agent_path(
-            "evaluation/question_bank/structure_construction/sc_struct.yaml",
+            "evaluation/question_bank/structure_construction/sc_agnostic.yaml",
             role="optimization",
             write=False,
         )
@@ -679,7 +679,7 @@ def test_main_path_guard_blocks_other_evaluation_reads(tmp_path: Path) -> None:
     toolkit = _sdk_tools_module().MatmasterEvalMcpToolkit(state)
     try:
         toolkit._resolve_agent_path(
-            "evaluation/question_bank/structure_construction/sc_struct.yaml",
+            "evaluation/question_bank/structure_construction/sc_agnostic.yaml",
             role="main",
             write=False,
         )
