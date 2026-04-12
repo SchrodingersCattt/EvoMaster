@@ -49,20 +49,50 @@ tools:
     category: "script_execution"
 
 banks:
+  - path: "batch_processing/bp_alloy.yaml"
+    capability: "batch_processing"
+    domain: "alloy"
+    questions: 1
+
+  - path: "batch_processing/bp_agnostic.yaml"
+    capability: "batch_processing"
+    domain: "agnostic"
+    questions: 1
+
+  - path: "batch_processing/bp_battery.yaml"
+    capability: "batch_processing"
+    domain: "battery"
+    questions: 1
+
   - path: "batch_processing/bp_catalysis.yaml"
     capability: "batch_processing"
     domain: "catalysis"
     questions: 2
 
-  - path: "batch_processing/bp_agnostic.yaml"
+  - path: "batch_processing/bp_semiconductor.yaml"
     capability: "batch_processing"
-    domain: "agnostic"
-    questions: 4
+    domain: "semiconductor"
+    questions: 1
 
   - path: "data_diagnosis/dd_agnostic.yaml"
     capability: "data_diagnosis"
     domain: "agnostic"
-    questions: 7
+    questions: 3
+
+  - path: "data_diagnosis/dd_battery.yaml"
+    capability: "data_diagnosis"
+    domain: "battery"
+    questions: 1
+
+  - path: "data_diagnosis/dd_catalysis.yaml"
+    capability: "data_diagnosis"
+    domain: "catalysis"
+    questions: 1
+
+  - path: "data_diagnosis/dd_semiconductor.yaml"
+    capability: "data_diagnosis"
+    domain: "semiconductor"
+    questions: 2
 
   - path: "execution_contract/ec_agnostic.yaml"
     capability: "execution_contract"
@@ -84,6 +114,11 @@ banks:
     domain: "alloy"
     questions: 2
 
+  - path: "scientific_analysis/sa_agnostic.yaml"
+    capability: "scientific_analysis"
+    domain: "agnostic"
+    questions: 6
+
   - path: "scientific_analysis/sa_battery.yaml"
     capability: "scientific_analysis"
     domain: "battery"
@@ -94,11 +129,6 @@ banks:
     domain: "catalysis"
     questions: 2
 
-  - path: "scientific_analysis/sa_agnostic.yaml"
-    capability: "scientific_analysis"
-    domain: "agnostic"
-    questions: 7
-
   - path: "scientific_analysis/sa_polymer.yaml"
     capability: "scientific_analysis"
     domain: "polymer"
@@ -107,17 +137,22 @@ banks:
   - path: "scientific_analysis/sa_semiconductor.yaml"
     capability: "scientific_analysis"
     domain: "semiconductor"
-    questions: 2
+    questions: 3
+
+  - path: "structure_construction/sc_agnostic.yaml"
+    capability: "structure_construction"
+    domain: "agnostic"
+    questions: 12
 
   - path: "structure_construction/sc_catalysis.yaml"
     capability: "structure_construction"
     domain: "catalysis"
     questions: 4
 
-  - path: "structure_construction/sc_agnostic.yaml"
+  - path: "structure_construction/sc_semiconductor.yaml"
     capability: "structure_construction"
-    domain: "agnostic"
-    questions: 14
+    domain: "semiconductor"
+    questions: 2
 
   - path: "structure_retrieval/rt_agnostic.yaml"
     capability: "structure_retrieval"
@@ -129,6 +164,11 @@ banks:
     domain: "alloy"
     questions: 3
 
+  - path: "workflow_orchestration/wo_agnostic.yaml"
+    capability: "workflow_orchestration"
+    domain: "agnostic"
+    questions: 25
+
   - path: "workflow_orchestration/wo_battery.yaml"
     capability: "workflow_orchestration"
     domain: "battery"
@@ -137,16 +177,11 @@ banks:
   - path: "workflow_orchestration/wo_catalysis.yaml"
     capability: "workflow_orchestration"
     domain: "catalysis"
-    questions: 4
-
-  - path: "workflow_orchestration/wo_agnostic.yaml"
-    capability: "workflow_orchestration"
-    domain: "agnostic"
-    questions: 28
+    questions: 6
 
   - path: "workflow_orchestration/wo_semiconductor.yaml"
     capability: "workflow_orchestration"
     domain: "semiconductor"
-    questions: 1
+    questions: 2
 
-# Total: 132 questions across 20 active bank files
+# Total: 132 questions across 27 active bank files
