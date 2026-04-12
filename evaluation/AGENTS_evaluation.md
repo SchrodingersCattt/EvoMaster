@@ -20,6 +20,7 @@ evaluation/question_bank/
 ├── data_fitting/df_elec.yaml
 ├── structure_construction/sc_struct.yaml
 ├── workflow_orchestration/wo_*.yaml
+├── execution_contract/direct_contract.yaml   # capability execution_contract（direct 交付约定）
 ├── co2rr_reproduction/wo_co2rr_unit_ops.yaml   # capability co2rr_reproduction 专题题库
 ├── safety_refusal/sr_general.yaml
 └── data/                                 # 题目输入数据文件（按题目 ID 子目录）
@@ -50,9 +51,9 @@ evaluation/question_bank/
 
 | 字段 | 必填？ | 说明 |
 |------|--------|------|
-| `version` | 可选（默认 `"v5"`） | 固定写 `v5`；Runner 遇到非 v5 会报错 |
-| `capability` | 可选 | 顶层 hint，不影响运行 |
-| `domain` | 可选 | 顶层 hint，不影响运行 |
+| `version` | 可选（默认 `"v5"`） | 建议写 `v5`；Runner 遇到非 v5 会报错 |
+| `capability` | 可选 | 顶层 hint，**不影响运行**；`--slices` 与聚合只用**每道题**的 `capability`。**新 bank 可不写此行。** |
+| `domain` | 可选 | 顶层 hint，**不影响运行**；筛选与聚合只用**每道题**的 `domain`。**新 bank 可不写此行。** |
 | `questions` | **必填** | 至少 1 条题目 |
 
 ### 每道题（`QuestionItem`）
@@ -71,18 +72,101 @@ evaluation/question_bank/
 | `reference_answers` | **条件必填** | `[]` | 非 `safety_refusal` 题必须至少 1 条；`safety_refusal` 可为空 |
 | `scoring_checklist` | **必填** | — | 至少 1 条评分项 |
 
+#### capability / domain / tags 语义约定（须遵守）
+
+字段名 **`capability` / `domain` / `tags` 为仓库与 `schemas.py` 中的正式列名**，**不计划**改为 `task` / `subject` / `facet`。规划讨论中的 **Task / Subject / Facet** 与三者**一一对应**，仅作口头与架构文档别名。
+
+| 字段 | 别名（规划用语） | 单选 / 多选 | 必须回答的一句话 |
+|------|------------------|-------------|------------------|
+| **`capability`** | Task（任务类） | **单选**（枚举之一） | 这道题要测的是哪一类**任务能力**？（例如：建结构、库检索、批量扫描、日志诊断、写 VASP/ABACUS 输入、多步编排与交付、安全拒答、CO₂RR 专题等。） |
+| **`domain`** | Subject（题材 / 主轴） | **单选**（枚举之一） | 这道题落在哪条**材料、物理或题库约定主轴**上？（如 `struct` / `elec` / `mech` / `thermo` / `kinetic` / `polymer` / `general`；输入规格主轴用 `incar`，单晶 XRD 用 `scxrd`。） |
+| **`tags`** | Facet（主题 / 工具 / 项目线） | **多选**（字符串列表，可空） | 除 capability/domain 外，还需要哪些**可并列**的标记？（如产品线、工具链、内部专题、提示词契约类 `direct_contract` 等。） |
+
+**填写顺序（固定）**：先 **`capability`** → 再 **`domain`** → 最后按需补 **`tags`**。同一道题只有一个 capability、一个 domain；tags 可多个或没有。
+
+**`tags` 没有（不写或 `tags: []`）怎么理解**：表示**不需要**额外 Facet 标记；**capability** + **domain** 已足够描述本题归类，题目合法且常见。只有当你还想打「第二条轴线」的信息（项目线、工具链、契约子类、内部分析用关键词）时才加字符串；**不要为了凑字段而填 tags**。
+
+**与 `--slices` 的关系**：Runner 当前仅按 **`capability` + `domain`** 过滤；**需要稳定用 CLI 切分的维度**应落在二者之一（或专题 capability），不要**只**写在 `tags` 里（除非已实现 tags 筛选，见下文「运行筛选」）。
+
+**正交性**：不要求数学意义上完全正交；若题干同时涉及「物理现象」与「输入文件形态」，按**唯一主轴**选一个 `domain`（文档已说明 `incar` 与 `elec` 等如何取舍）。`tags` 用于补充交叉信息，不替代上述二者。
+
 #### capability 枚举
 
-`knowledge_recall` / `structure_construction` / `property_prediction` / `workflow_orchestration` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation_vasp` / `input_generation_abacus` / `co2rr_reproduction`
+与 `evaluation/core/schemas.py` 中 `CapabilityLiteral` **保持一致**（加载题库时按此校验）：
+
+`knowledge_recall` / `structure_construction` / `structure_retrieval` / `property_prediction` / `workflow_orchestration` / `execution_contract` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation_vasp` / `input_generation_abacus` / `co2rr_reproduction`
+
+**语义说明（撰写与筛选时）**
+
+| 取值 | 含义 |
+|------|------|
+| `knowledge_recall` | 纯知识问答/回忆类（当前题库较少使用；预留） |
+| `structure_construction` | 构建或修改结构（slab、界面、缺陷等），不强调「从数据库拉取」 |
+| `structure_retrieval` | 从结构数据库检索、筛选、汇总元数据（如 `mat_struct_db` 路径） |
+| `property_prediction` | 由数据或计算流程得到数值/分类结果；题库中亦用于拟合、精修、后处理等**非纯编排**任务（名称偏历史，与「预测」不必字面一致） |
+| `workflow_orchestration` | 多步骤编排、脚本/MCP 串联、报告类任务；**范围较宽**（含聚合物专题、MLIP 流程、`wo_general` 等），通常再用 `domain` 细分 |
+| `execution_contract` | **执行与交付约定**（对应 `direct` 实验与 `matmaster/exps/`、系统提示中的硬性交付规则）：如 spec 与正文冲突以文件为准、归档解压到根目录、交付物精确命名等；**不是**领域科研 workflow，与 `workflow_orchestration` 区分 |
+| `data_diagnosis` | 根据日志/输入/输出诊断问题并给修复建议 |
+| `batch_processing` | 批量、扫描、多案例一致性与参数控制 |
+| `safety_refusal` | 合规与安全拒答 |
+| `input_generation_vasp` | VASP 输入（以 INCAR 等为主） |
+| `input_generation_abacus` | ABACUS 输入（STRU/KPT/INPUT 等） |
+| `co2rr_reproduction` | CO₂RR 复现专题（`domain` 仍可按子话题标 `struct`/`elec`/…） |
 
 #### domain 枚举
 
-`struct` / `elec` / `mech` / `thermo` / `kinetic` / `optical` / `general` / `incar` / `polymer`
+与 `evaluation/core/schemas.py` 中 `DomainLiteral` **保持一致**：
 
-#### 运行筛选：`--slices` / `include_slices`
+`struct` / `elec` / `mech` / `thermo` / `kinetic` / `optical` / `general` / `incar` / `scxrd` / `polymer`
 
-- **CLI**：`--slices 'A B[a,b] C[d]'`。**括号外的空白**分隔 **OR** 分支；`[]` 内**禁止空白**（域名用逗号分隔，如 `[a,b]`）；无 `[]` 表示该 capability 下 **任意 domain**；`[dom]` 或 `[d1,d2]` 表示 domain 在列表内（列表内为 OR）。
-- **`evaluation/config.yaml`**：可用 `include_slices: [{ capability: "…", domains: ["…"] }, { capability: "…" }]`（`domains` 省略表示不限 domain）。
+**语义说明**
+
+- 表示**材料/物理子领域或粗粒度主题**，用于 `--slices` 与报告聚合；与 `capability` 正交。
+- `incar`：强调 **VASP INCAR/输入规格** 类题目，与「电子结构现象」的 `elec` 可并存；选题时按题干主轴二选一即可。
+- `scxrd`：单晶 XRD 解析、精修等（见 `data_fitting/df_scxrd.yaml`）。
+- `polymer`：聚合物/软物质相关；`general`：跨领域或不易归入上列者。
+- `optical`：光学相关（当前题库未使用，**预留**；新题若主轴为光学性质可标此域以便聚合）。
+
+#### 新题填写 checklist（capability / domain / tags）
+
+新增或改写题目时建议按顺序自检：
+
+1. **`capability`**：按**任务形态**选（建结构 / 查库 / 批量 / 诊断 / 输入生成 / 编排 / **执行与交付约定** / 安全 / 专题等），与「测什么能力」一致；测 spec 优先级、归档解压、精确文件名等 **执行/交付契约** → `execution_contract`；不要仅因用了某软件就选 `workflow_orchestration`——若本质是输入生成，应用 `input_generation_*`。
+2. **`domain`**：按题干**材料/物理主轴**选；VASP INCAR 专项题优先 `incar`；单晶 XRD 用 `scxrd`；聚合物线用 `polymer`。`incar` 与 `elec` 不必同时纠结：以题干更强调「输入规格」还是「现象/性质」二选一即可。
+3. **粒度不够时**：可加 **`tags`**（如 `mlip`、`userlog`）做人读与二次分析；**tags 不参与 `--slices`**。若该维度需要**命令行一切就切**，应优先用 **`domain`**（或专题 capability），而不是只写 tags。
+4. **`workflow_orchestration` 较宽**：若题目属于编排类但主题明确，务必用 `domain` + `tags` 标清，避免聚合报告里只剩笼统的「workflow」。
+5. **与 `evaluation/core/schemas.py` 一致**：`CapabilityLiteral` / `DomainLiteral` 未列出的取值会导致加载失败；需要新枚举时须同时改 **schemas + 本文档 + 相关 runner 假设**（若有）。
+
+#### capability / domain / tags 如何区分、何时用哪个
+
+| 维度 | 回答的问题 | 典型取值思路 | 谁消费 |
+|------|------------|----------------|--------|
+| **capability** | 这道题测**哪类任务能力**（建结构、查库、批量、诊断、输入生成、编排、安全、专题等） | 与「工具链形态」一致：能标 `input_generation_*` 就不要标成笼统的 `workflow_orchestration` | **`--slices`、聚合报告 `by_capability`**；加载时校验 |
+| **domain** | 这道题在**哪个材料/物理或方法主轴**上（结构/电子/力学/专题域如 `polymer`/`scxrd`/`incar`） | 与「切片想怎么分」对齐：若团队常跑「电化学 workflow」，应用 `elec` 等 **domain**，而不是只靠 tags | **`--slices` 的 `cap[dom1,dom2]`**、按域聚合；加载时校验 |
+| **tags** | **二级标签**：项目线、工具线、内部别名（如 `mlip`、`userlog`、`co2rr`） | 不承载「枚举完整性」；用于人读、检索、将来扩展 | **当前 runner 不参与筛选**（见下节）；可用于自建报表或外部分析 |
+
+**选用顺序（简版）**：先定 **capability**（任务形态）→ 再定 **domain**（题材/主轴，且兼顾你以后想怎么写 `--slices`）→ 需要更细、但**不值得**加新 domain 时再加 **tags**。
+
+#### 运行筛选：`--slices` / `include_slices`（与 tags 的关系）
+
+实现见 `evaluation/core/runner.py` 的 `_question_matches_slice`：**只匹配题目的 `capability` 与 `domain`**。**`tags` 不会参与 `--slices` 过滤**。
+
+- **CLI**：`--slices 'A B[a,b] C[d]'`。
+  - **括号外空白**分隔多条 **slice**，多条之间为 **OR**（命中任一即保留该题）。
+  - **`cap`** 单独出现：该 capability 下 **任意 domain** 均命中。
+  - **`cap[a]`** 或 **`cap[a,b]`**：capability 相同 **且** `question.domain` 落在列表中（列表内为 **OR**）。
+  - **`[]` 内禁止空白**，域名用逗号分隔，如 `[elec,struct]`，不能写成 `[elec, struct]`。
+- **`evaluation/config.yaml`**：`include_slices: [{ capability: "…", domains: ["…"] }, …]`；某条省略 `domains` 时表示该 capability **不限 domain**（与 CLI 中单独的 `cap` 等价）。
+
+**若你希望「按 tags 跑子集」**：当前需 **`--questions` / `include_question_ids`** 显式列 ID，或把题目拆进**单独 bank 文件**后只加载该文件（取决于你们入口是否支持按文件过滤），或在未来给 runner 增加 `--tags`（需改代码）。在此之前，**需要频繁用 CLI 切分的维度应落在 `domain`（或独立 `capability`）上**，而不是只写在 `tags` 里。
+
+#### 基于 `--slices` 的命名与调整建议
+
+1. **先反推常用切片**：列出团队最常跑的命令，例如「只要电化学 workflow」「只要聚合物」「只要 ABACUS 输入」。把每条映射到 `capability` + `domain` 的组合是否**能一条 `--slices` 写出来**；若不能，优先考虑 **调整 domain**（或专题 capability），而不是加 tags。
+2. **`workflow_orchestration` + 多主题**：该 capability 很宽，**务必用 `domain` 区分**（如 `elec` / `polymer` / `struct`），否则只能 `workflow_orchestration` 全选或依赖题目 ID 列表。
+3. **专题 capability**（如 `co2rr_reproduction`）：适合「报告里要单独一列」且与 domain 正交；若专题内还要按 struct/elec 切，继续用 **per-question `domain`** + `co2rr_reproduction[struct,elec]` 这类写法。
+4. **不要指望 tags 驱动 CLI**：tags 适合 **文档化与二次分析**；**驱动切片**请用 capability/domain，或扩展 runner（见上）。
+5. **新增枚举值**：若出现「必须同时按某维度筛，但该维度既不适合塞 domain 也不适合塞 capability」的重复需求，再评估 **新 domain** 或 **runner 支持 tags 过滤**，避免 capability 无限膨胀。
 
 ### `data_files` 每条（`DataFileRef`）
 
@@ -103,6 +187,7 @@ evaluation/question_bank/
 | `unit` | 可选 | `""` | 单位标注（目前仅文档用途） |
 | `tool_name` | 可选 | `None` | 关联工具名 |
 | `tool_arg` | 可选 | `None` | 关联工具参数名 |
+| `workspace_resolve` | 可选 | `None` | `None` 或省略 = `recursive`（默认）；`root` = `artifact_exists` / `text_file_*` 仅在 **workspace 根目录**按文件名解析（单段 basename，无路径分隔符），不递归子目录 |
 
 ### `scoring_checklist` 每条（`ScoringCheckItem`）
 
@@ -148,8 +233,8 @@ evaluation/question_bank/
 | `struct_file_count` | `{"pattern": str, "expected": int, "tolerance": int}` | 统计 workspace 中匹配 glob 的文件数（无需 pymatgen） |
 | `struct_file_surface_termination` | `{"filename": str, "element": str, "axis": "x"\|"y"\|"z", "side": "top"\|"bottom"\|"both", "layer_tol_A": float}` | 检查 slab 最外层（top/bottom/both）是否由指定元素构成；用于验证 O-terminated 或其他特定终止面（如 CeO2(111) 的 O 终止）|
 | `checkcif_no_a_alerts` | `{"filename": str, "max_a_alerts": int}` | 在 workspace 中找到匹配 `filename`（glob，默认 `*.cif`）的 CIF 文件，POST 到 IUCr checkCIF 服务（`https://checkcif.iucr.org/cgi-bin/checkcif_hkl.pl`），解析 HTML 响应中的 A/B/C/G 级别警告数，验证 A 级警告数 ≤ `max_a_alerts`（默认 0）。实现见 `evaluation/validators/checkcif.py`。|
-| `text_file_contains_all` | `{"filename": str, "tokens": list[str], "flags": str, "case_sensitive": bool, "normalize_whitespace": bool}` | 读取 workspace 文本文件并检查 `tokens` 全部出现；可选 `flags: "i"`、大小写与空白归一化控制 |
-| `text_file_regex` | `{"filename": str, "pattern": str, "flags": str}` | 读取 workspace 文本文件并做正则匹配（`flags` 支持 `i/m/s`） |
+| `text_file_contains_all` | `{"filename": str, "tokens": list[str], "flags": str, "case_sensitive": bool, "normalize_whitespace": bool}` | 读取 workspace 文本文件并检查 `tokens` 全部出现；可选 `flags: "i"`、大小写与空白归一化控制；若该条 ref 上设 `workspace_resolve: root`，则只读**根目录**下该文件名 |
+| `text_file_regex` | `{"filename": str, "pattern": str, "flags": str}` | 读取 workspace 文本文件并做正则匹配（`flags` 支持 `i/m/s`）；若该条 ref 上设 `workspace_resolve: root`，则只读**根目录**下该文件名 |
 
 ### 不需要对应 `reference_answers` 条目
 
@@ -284,6 +369,8 @@ P0 题目是被标记为最高优先级的评测题。在 DevShell Agent 多轮�
 
 评测基础设施在运行时从题库扫描所有 `priority == "P0"` 的题目（`collect_p0_question_ids`），无需在配置文件中维护 ID 列表。
 
+**`execution_contract` 契约 P0 集**：`question_bank/execution_contract/direct_contract.yaml` 中三道题均标记为 `priority: P0`，用于 DevShell 等流程中**优先运行**并与历史分数比对，锁住 direct 交付契约（spec 与正文冲突以文件为准、归档解压到根目录、交付物精确文件名）。其中 **spec 冲突题**的得分仅来自确定性项（`artifact_exists`、`text_file_regex`），**不包含** `llm_binary_judge`，避免 P0 门控被裁判方差放大。
+
 ### 执行流程
 
 1. `run_devshell_eval` MCP 工具通过 `collect_p0_question_ids` 扫描题库中 `priority == "P0"` 的题目，若存在则进入两阶段模式：
@@ -320,3 +407,64 @@ evaluation/scripts/matter_cli/run_matmaster_evaluation_bg.ps1
 ```
 
 详细说明见 [`evaluation/README_CN.md`](README_CN.md)。
+
+---
+
+## 附录：若未来重构 taxonomy，三者如何更清晰、`--slices` 如何演进（规划）
+
+本节是**架构规划**，不是当前运行时的强制行为；落地时需同步改 `evaluation/core/schemas.py`、`slice_parser.py`、`runner._apply_filters`、CLI 与 DevShell 传参。
+
+### 当前模型的典型痛点
+
+- **`domain` 混用两种语义**：既有物理子域（`elec`、`mech`），也有方法/产物主轴（`incar`、`scxrd`），「正交」感弱。
+- **`capability` 宽度不一**：`workflow_orchestration` 过大；`property_prediction` 名实不完全一致。
+- **`tags` 不参与筛选**：与「常用维度」重叠时，作者会被迫把本该可切的维度塞进 `domain`，或只能枚举 `--questions`。
+
+重构的目标应是：**每个字段只回答一类问题**，且 **runner 能按团队最常用的组合做过滤**，而不只靠题目 ID。
+
+### 推荐的重构分层（可渐进）
+
+下面三列是**目标语义**（可与现有字段名映射或替换，不必一次改名全库）。
+
+| 目标轴 | 回答的唯一问题 | 与现状的对应思路 |
+|--------|----------------|------------------|
+| **任务类**（Task） | Agent 在做什么「类」的事：建结构、检索、批量扫描、诊断、写输入、多步编排、合规拒答、垂直专题等 | 对应并**收紧** `capability`；过宽的 `workflow_orchestration` 可拆成子类（如 `workflow_mcp`、`workflow_bash_pipeline`）或**强制**用第二轴表达 |
+| **题材类**（Subject） | 材料/过程属于哪条科学线：结构/电子/力学/热/动力学/聚合物等 | 对应 **`domain` 中纯「物理/材料」部分**；`incar`/`scxrd` 若保留，建议**迁出**为第三轴，避免与 Subject 混枚举 |
+| **主题/产品线**（Theme / Facet） | 项目线、工具链、内部专题：MLIP、CO₂RR、userlog、某客户包等 | 对应 **`tags` 或升级为结构化 `facets`**（如 `toolchain:mlip`）；**应能被 runner 参与过滤**（见下） |
+
+可选 **第四类**（若 Subject 与「方法/数据形态」仍打架）：单独 **`method` 或 `artifact`**（`xrd` / `incar` / `md_trajectory`），与 Subject 正交；这样 `--slices` 可以 `task × subject × method` 组合而不膨胀单一枚举。
+
+### 重构后 `--slices` 的调整方向
+
+**原则**：切片语法表达的是 **AND/OR 组合过滤**，且默认与报表维度一致（避免「文档里叫 domain、CLI 里叫别的」）。
+
+1. **最小演进（兼容优先）**
+   - 保留现有 `cap` 与 `cap[dom1,dom2]` 语义不变。
+   - **新增**可选参数，例如 `--tags-any tag1,tag2`（命中任一 tag）、`--tags-all`（全部命中），与 `include_slices` **AND** 组合（先按 slice 缩小，再按 tags 过滤）。
+   - 实现成本低，题库可逐步补全 tags，无需立刻拆 domain。
+
+2. **中等演进（表达式升级）**
+   - 引入 **显式键名**，避免 `cap[dom]` 隐式二元：例如
+     `--filter 'task:workflow_orchestration subject:elec' --filter 'task:input_generation_abacus'`
+     多条 `--filter` 之间 **OR**；单条内多键 **AND**。
+   - 或 **版本化**：`--slices-v2 '...'`，旧 `--slices` 长期别名到 v1。
+
+3. **配置驱动（复杂组合）**
+   - `eval_config.yaml` 中 `include_slices` 扩展为结构化对象，例如：
+     `{ "all_of": [{ "capability": "...", "domains": [...] }, { "tags_any": ["mlip"] }] }`
+   - 适合 CI/DevShell，CLI 只传配置文件路径。
+
+**不推荐**：无版本、无迁移期的「直接改 `cap[dom]` 含义」——会破坏历史报告与 ingest 对比。
+
+### 迁移与兼容（若动真格）
+
+1. **双写期**：题目同时保留旧 `capability`/`domain` 与新的 `task`/`subject`（或映射表在加载时填充）。
+2. **别名层**：`workflow_orchestration` → 映射到新的 task 枚举中的若干值，聚合报表可合并展示。
+3. **切片别名**：旧字符串 `workflow_orchestration[elec]` 解析为新过滤器，保证既有脚本可跑。
+4. **文档与 schema 同步**：任何新轴进入 `QuestionItem` 都必须进 `schemas.py` 与本文档。
+
+### 小结
+
+- **更清晰**：三轴各司其职——**任务类 / 题材类 / 主题或方法 facet**；混在一起的 `incar`、`scxrd` 宜迁到「方法/产物」轴或 facets。
+- **`--slices` 调整**：优先 **加 tags 过滤或结构化 filter**（AND/OR 明确），而不是仅改字符串语法；大改时用 **v2 + 兼容层**。
+- **落地顺序**：先 **tags 参与 runner 过滤**（收益/成本比最高）→ 再视报表需求拆 task/domain 枚举或加 `method` 轴。

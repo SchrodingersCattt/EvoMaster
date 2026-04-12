@@ -361,6 +361,11 @@ def _cfg(ref: ReferenceAnswer) -> dict[str, Any]:
     return ref.value if isinstance(ref.value, dict) else {}
 
 
+def _workspace_resolve_from_ref(ref: ReferenceAnswer) -> str:
+    """Plain-text / artifact checks: recursive (legacy) vs workspace root only."""
+    return ref.workspace_resolve or 'recursive'
+
+
 def check_struct_file_atom_count(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:
@@ -598,6 +603,7 @@ def check_text_file_contains_all_from_evidence(
         tokens=[str(token) for token in raw_tokens],
         case_sensitive=case_sensitive,
         normalize_whitespace=bool(cfg.get('normalize_whitespace', True)),
+        workspace_resolve=_workspace_resolve_from_ref(ref),
     )
 
 
@@ -616,4 +622,5 @@ def check_text_file_regex_from_evidence(
         filename=str(cfg.get('filename', '')),
         pattern=pattern,
         flags=str(cfg.get('flags', '')),
+        workspace_resolve=_workspace_resolve_from_ref(ref),
     )

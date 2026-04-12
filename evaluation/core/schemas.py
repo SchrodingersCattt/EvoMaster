@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # ---------------------------------------------------------------------------
 
 ModeLiteral = Literal['direct', 'planner']
+WorkspaceResolveLiteral = Literal['recursive', 'root']
 
 VerifyLiteral = Literal[
     'exact_match',
@@ -81,6 +82,7 @@ CapabilityLiteral = Literal[
     'structure_retrieval',
     'property_prediction',
     'workflow_orchestration',
+    'execution_contract',
     'data_diagnosis',
     'batch_processing',
     'safety_refusal',
@@ -133,6 +135,14 @@ class ReferenceAnswer(BaseModel):
     unit: str = ''
     tool_name: str | None = None
     tool_arg: str | None = None
+    workspace_resolve: WorkspaceResolveLiteral | None = Field(
+        default=None,
+        description=(
+            'Where to resolve plain filenames for artifact_exists / text_file_* checks. '
+            'None or "recursive" = match under workspace by basename (legacy). '
+            '"root" = only a direct child of workspace_dir (exact path).'
+        ),
+    )
 
     @field_validator('tolerance')
     @classmethod

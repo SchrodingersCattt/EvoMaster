@@ -30,6 +30,7 @@ v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵�
 - `batch_processing`
 - `co2rr_reproduction`（CO2RR 复现文档单元操作专用，便于单独过滤测评）
 - `data_diagnosis`
+- `execution_contract`（执行与交付约定：spec 与正文冲突以文件为准、根目录交付、归档解压、精确文件名等，对应 `matmaster/exps/` 与 `execution_contract/direct_contract.yaml`）
 - `input_generation_abacus` / `input_generation_vasp`
 - `property_prediction`
 - `structure_construction`

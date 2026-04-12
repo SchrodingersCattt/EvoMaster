@@ -13,6 +13,7 @@ import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from .evaluator_batch_checks import (
@@ -450,7 +451,7 @@ class BinaryEvaluator:
         if item.verify == 'artifact_exists':
             if ref is None:
                 return False, 'missing reference answer'
-            return self._check_artifact_exists(evidence=evidence, expected=ref.value)
+            return self._check_artifact_exists(evidence=evidence, ref=ref)
         if item.verify == 'token_budget':
             if ref is None:
                 return False, 'missing reference answer'
@@ -864,11 +865,34 @@ class BinaryEvaluator:
 
     @staticmethod
     def _check_artifact_exists(
-        *, evidence: EvidenceBundle | None, expected: Any
+        *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
     ) -> tuple[bool, str]:
         if evidence is None:
             return False, 'no EvidenceBundle provided'
-        needle = str(expected)
+        resolve = ref.workspace_resolve or 'recursive'
+        if resolve not in ('recursive', 'root'):
+            return False, f'invalid workspace_resolve: {ref.workspace_resolve!r}'
+        if isinstance(ref.value, dict):
+            return False, 'artifact_exists expects a string value, not a dict'
+        needle = str(ref.value).strip()
+
+        if resolve == 'root':
+            if not evidence.workspace_dir:
+                return False, 'missing workspace_dir on evidence'
+            if len(Path(needle).parts) != 1:
+                return (
+                    False,
+                    'workspace_resolve=root requires a bare filename (no path separators)',
+                )
+            root = Path(evidence.workspace_dir)
+            p = root / needle
+            if p.is_file():
+                return True, f'file at workspace root: {p}'
+            return (
+                False,
+                f"expected file at workspace root: {needle!r} (missing at {p})",
+            )
+
         for art in evidence.artifacts:
             if needle in art.path or needle == art.artifact_type:
                 return True, f'artifact found: {art.path}'

@@ -167,4 +167,10 @@ banks:
     capability: "property_prediction"
     questions: 2
 
-# Total: 99 questions across 29 bank files
+  # --- direct.toml / system-prompt execution contract (MATTER) ---
+
+  - path: "execution_contract/direct_contract.yaml"
+    capability: "execution_contract"
+    questions: 3
+
+# Total: 100 questions across 28 bank files

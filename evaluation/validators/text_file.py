@@ -7,11 +7,28 @@ import re
 from pathlib import Path
 
 
-def _resolve_file(workspace: Path, filename: str) -> Path | None:
-    """Resolve *filename* in *workspace* via exact match first, then fnmatch.
+def _resolve_file(
+    workspace: Path,
+    filename: str,
+    *,
+    workspace_resolve: str = 'recursive',
+) -> Path | None:
+    """Resolve *filename* under *workspace*.
 
-    Walks **recursively** so that files inside subdirectories are found too.
+    *recursive* (default): exact ``workspace/`` first, then newest basename match
+    anywhere under the workspace (rglob).
+
+    *root*: only ``workspace/<basename>`` if *filename* is a single path segment
+    (no ``/`` or ``\\``); otherwise no match.
     """
+    if workspace_resolve == 'root':
+        if len(Path(filename).parts) != 1:
+            return None
+        candidate = workspace / filename
+        if candidate.is_file():
+            return candidate
+        return None
+
     exact = workspace / filename
     if exact.is_file():
         return exact
@@ -40,10 +57,11 @@ def check_text_file_contains_all(
     tokens: list[str],
     case_sensitive: bool = False,
     normalize_whitespace: bool = True,
+    workspace_resolve: str = 'recursive',
 ) -> tuple[bool, str]:
     """Check that all tokens are present in a text file."""
     root = Path(workspace_dir)
-    fpath = _resolve_file(root, filename)
+    fpath = _resolve_file(root, filename, workspace_resolve=workspace_resolve)
     if fpath is None:
         return False, f'no file matching {filename!r} in {root}'
     try:
@@ -74,10 +92,11 @@ def check_text_file_regex(
     filename: str,
     pattern: str,
     flags: str = '',
+    workspace_resolve: str = 'recursive',
 ) -> tuple[bool, str]:
     """Check whether regex *pattern* matches content of *filename*."""
     root = Path(workspace_dir)
-    fpath = _resolve_file(root, filename)
+    fpath = _resolve_file(root, filename, workspace_resolve=workspace_resolve)
     if fpath is None:
         return False, f'no file matching {filename!r} in {root}'
     try:
