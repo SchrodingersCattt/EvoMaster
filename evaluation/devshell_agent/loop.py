@@ -21,6 +21,10 @@ from evaluation.devshell_agent.git_iteration import (
     append_iteration_head,
     git_rev_parse_head,
 )
+from evaluation.devshell_agent.loop_proposal_notify import (
+    notify_proposed_matmaster_exps_if_present,
+    notify_proposed_question_bank_if_present,
+)
 from evaluation.devshell_agent.sdk_logging import log_line, log_sdk_message
 
 # ``ClaudeAgentOptions(tools=...)``: empty built-in tool set (``--tools`` with no
@@ -825,6 +829,12 @@ class DevshellAgentLoop:
                     state=state,
                     loop_log=loop_log,
                 )
+            notify_proposed_matmaster_exps_if_present(
+                session_dir=self._cfg.session_dir,
+                iteration_index=it,
+                delegation=delegation,
+                optimization_reports=reports,
+            )
 
         state.optimization_delegations_pending = [
             row
@@ -912,6 +922,11 @@ class DevshellAgentLoop:
         ]
         new_reports = state.checklist_revision_reports[n_reports_before:]
         ok_reports = [r for r in new_reports if int(r.get("iteration_index", -1)) == it]
+        notify_proposed_question_bank_if_present(
+            session_dir=self._cfg.session_dir,
+            iteration_index=it,
+            checklist_reports=ok_reports,
+        )
         if not ok_reports:
             log_line(
                 f"warning: checklist agent did not call report_checklist_revision "
