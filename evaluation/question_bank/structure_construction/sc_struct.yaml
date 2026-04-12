@@ -1237,3 +1237,409 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: SC_struct_011_20260411v1
+  capability: structure_construction
+  domain: struct
+  intent: Build a multi-component Fe-Ni-Co-Cr-V alloy structure from an fcc-Ni 5x5x5 supercell template and report composition constraints.
+  human_prompt_seed: '请构建一个 Fe-Ni-Co-Cr-V 合金结构并导出为 `alloy_5x5x5_feni_cocrv.cif`。
+
+    目标组成比例（原子分数）：
+    Fe:Ni:Co:Cr:V = 0.635:0.165:0.10:0.05:0.05。
+
+    要求：
+    1) 先以 fcc-Ni 为模板，构建 5×5×5 超胞后再进行掺杂替换；
+    2) 生成 `alloy_composition_report.json`，至少包含：
+       `template`, `supercell`, `target_ratio`, `element_counts`, `notes`；
+    3) 在最终回答中说明比例如何映射到整数原子数，并给出可能的取整偏差说明。
+
+    '
+  tags:
+  - alloy
+  - supercell
+  - high_entropy_like
+  - userlog_derived
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: structure_artifact
+    value: alloy_5x5x5_feni_cocrv.cif
+  - key: report_artifact
+    value: alloy_composition_report.json
+  - key: report_required_tokens
+    value:
+      filename: alloy_composition_report.json
+      tokens:
+      - template
+      - supercell
+      - target_ratio
+      - element_counts
+      - Fe
+      - Ni
+      - Co
+      - Cr
+      - V
+      flags: i
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: structure_artifact
+    criterion: Agent writes `alloy_5x5x5_feni_cocrv.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: report_artifact
+    criterion: Agent writes `alloy_composition_report.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: report_required_tokens
+    criterion: Composition report includes template/supercell metadata and explicit element-count entries for Fe, Ni, Co, Cr, and V.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: The final answer ties alloy construction details to `alloy_5x5x5_feni_cocrv.cif` and `alloy_composition_report.json`, and explicitly discusses integer mapping or rounding of the target fractions.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: Workflow follows a compact path (template build → supercell → doping → report) without redundant loops.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: SC_struct_012_20260411v1
+  capability: structure_construction
+  domain: struct
+  intent: Construct corundum (alpha-Al2O3) using Wyckoff-position information and validate lattice/formula consistency.
+  human_prompt_seed: '请基于刚玉（corundum, alpha-Al2O3）的 Wyckoff 位点信息构建晶体结构，并导出为 `corundum_wyckoff.cif`。
+
+    已知目标信息：
+    - 空间群编号：167；
+    - 晶格常数近似：a=b≈4.7602 Å, c≈12.9933 Å；
+    - 采用 Wyckoff 位点方式构建，而不是只给出最终化学式。
+
+    交付物要求：
+    1) `corundum_wyckoff.cif`；
+    2) `wyckoff_construction_notes.md`，说明所用空间群、位点设置、坐标参数与结果检查要点。
+
+    最终回答需简要说明：为什么该结构与 corundum 一致，以及参数可能存在的小偏差来源。'
+  tags:
+  - wyckoff
+  - corundum
+  - Al2O3
+  - userlog_derived
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: structure_artifact
+    value: corundum_wyckoff.cif
+  - key: notes_artifact
+    value: wyckoff_construction_notes.md
+  - key: formula_check
+    value:
+      filename: corundum_wyckoff.cif
+      formula: Al2O3
+  - key: lattice_a
+    value:
+      filename: corundum_wyckoff.cif
+      param: a
+      expected: 4.7602
+      tolerance: 0.5
+  - key: lattice_c
+    value:
+      filename: corundum_wyckoff.cif
+      param: c
+      expected: 12.9933
+      tolerance: 1.0
+  - key: notes_required_tokens
+    value:
+      filename: wyckoff_construction_notes.md
+      tokens:
+      - Wyckoff
+      - 167
+      - Al2O3
+      - lattice
+      - coordinate
+      - uncertainty
+      flags: i
+  - key: turn_budget
+    value:
+      max: 16
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: structure_artifact
+    criterion: Agent writes `corundum_wyckoff.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: notes_artifact
+    criterion: Agent writes `wyckoff_construction_notes.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: formula_check
+    criterion: Output CIF has reduced formula consistent with Al2O3.
+    axis: correctness
+    verify: struct_file_formula
+  - id: lattice_a
+    criterion: Lattice parameter a is consistent with corundum reference scale.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: lattice_c
+    criterion: Lattice parameter c is consistent with corundum reference scale.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: notes_required_tokens
+    criterion: Notes describe Wyckoff-based construction details and uncertainty caveats.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: The final answer is grounded in `corundum_wyckoff.cif` and the Wyckoff-construction notes, rather than generic mineral background.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: Workflow converges quickly from Wyckoff information to structure export and documentation, without redundant rebuild loops.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: SC_struct_013_20260411v1
+  capability: structure_construction
+  domain: struct
+  intent: Construct and compare close-packed layer cross sections for fcc and hcp crystals, then expand both slabs to 5x5x1 supercells.
+  human_prompt_seed: '请演示 fcc 与 hcp 近密堆积结构的差异，完成以下建模任务并导出结构：
+
+    1) 先分别构建 fcc 与 hcp 体相模板结构；
+    2) 对两者各自切出近密堆积层截面，要求 5 个原子层，并设置约 1 层真空；
+    3) 将两个截面结构都扩展为 5×5×1 超胞；
+    4) 输出文件：
+       - `fcc_close_packed_5x5x1.cif`
+       - `hcp_close_packed_5x5x1.cif`
+       - `packing_comparison.md`（说明 fcc/hcp 堆垛差异与截面构建设置）。
+
+    最终回答需简要说明：你如何保证两种结构在可比条件下进行截面对比。'
+  tags:
+  - close_packing
+  - fcc
+  - hcp
+  - slab
+  - supercell
+  - userlog_derived
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: fcc_artifact
+    value: fcc_close_packed_5x5x1.cif
+  - key: hcp_artifact
+    value: hcp_close_packed_5x5x1.cif
+  - key: compare_artifact
+    value: packing_comparison.md
+  - key: compare_required_tokens
+    value:
+      filename: packing_comparison.md
+      tokens:
+      - fcc
+      - hcp
+      - close-packed
+      - 5
+      - layer
+      - vacuum
+      - 5x5x1
+      flags: i
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: fcc_artifact
+    criterion: Agent writes `fcc_close_packed_5x5x1.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: hcp_artifact
+    criterion: Agent writes `hcp_close_packed_5x5x1.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: compare_artifact
+    criterion: Agent writes `packing_comparison.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: compare_required_tokens
+    criterion: Comparison note explicitly covers fcc/hcp close-packed differences and key slab/supercell settings.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: The final answer is grounded in both generated CIF files and the comparison note, rather than generic textbook-only statements.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: Workflow completes in a compact sequence (build bulk → cut slabs → make supercells → compare) without redundant loops.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: SC_struct_014_20260411v1
+  capability: structure_construction
+  domain: struct
+  intent: Build a perovskite crystal from explicit space group and Wyckoff position inputs and verify formula/lattice consistency.
+  human_prompt_seed: '请按给定空间群和 Wyckoff 位点信息构建晶体结构，并导出 `srtio3_wyckoff.cif`：
+
+    - 空间群：Pm-3m（No. 221）
+    - 晶格常数：a=b=c=3.90 Å，alpha=beta=gamma=90°
+    - 位点：
+      - Sr: 1b (0.5, 0.5, 0.5)
+      - Ti: 1a (0.0, 0.0, 0.0)
+      - O:  3d (0.5, 0.0, 0.0)
+
+    同时生成 `wyckoff_build_report.md`，说明如何把上述位点映射到结构构建参数，并给出结果自检要点（化学式、晶格参数）。
+
+    最终回答需简要给出该结构类型（如立方钙钛矿）及潜在误差来源。'
+  tags:
+  - wyckoff
+  - perovskite
+  - SrTiO3
+  - spacegroup_221
+  - userlog_derived
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: structure_artifact
+    value: srtio3_wyckoff.cif
+  - key: report_artifact
+    value: wyckoff_build_report.md
+  - key: formula_check
+    value:
+      filename: srtio3_wyckoff.cif
+      formula: SrTiO3
+  - key: lattice_a
+    value:
+      filename: srtio3_wyckoff.cif
+      param: a
+      expected: 3.9
+      tolerance: 0.3
+  - key: report_required_tokens
+    value:
+      filename: wyckoff_build_report.md
+      tokens:
+      - Wyckoff
+      - 221
+      - SrTiO3
+      - Pm-3m
+      - lattice
+      - uncertainty
+      flags: i
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: structure_artifact
+    criterion: Agent writes `srtio3_wyckoff.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: report_artifact
+    criterion: Agent writes `wyckoff_build_report.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: formula_check
+    criterion: Output CIF has reduced formula consistent with SrTiO3.
+    axis: correctness
+    verify: struct_file_formula
+  - id: lattice_a
+    criterion: Lattice parameter a is consistent with the target cubic scale around 3.90 Å.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: report_required_tokens
+    criterion: Report explains Wyckoff-position mapping, space-group setting, and uncertainty caveats.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: The final answer is grounded in `srtio3_wyckoff.cif` and the report, not generic perovskite descriptions.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: Workflow converges directly from Wyckoff inputs to structure export and validation note without redundant exploratory steps.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget

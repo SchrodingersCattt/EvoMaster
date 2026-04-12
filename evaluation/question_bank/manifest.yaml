@@ -50,7 +50,7 @@ tools:
 banks:
   - path: "batch_processing/bp_struct.yaml"
     capability: "batch_processing"
-    questions: 3
+    questions: 4
 
   - path: "data_diagnosis/dd_general.yaml"
     capability: "data_diagnosis"
@@ -66,23 +66,23 @@ banks:
 
   - path: "structure_construction/sc_struct.yaml"
     capability: "structure_construction"
-    questions: 10
+    questions: 14
 
   - path: "workflow_orchestration/wo_mech.yaml"
     capability: "workflow_orchestration"
-    questions: 3
+    questions: 10
 
   - path: "workflow_orchestration/wo_struct.yaml"
     capability: "workflow_orchestration"
-    questions: 2
+    questions: 3
 
   - path: "structure_retrieval/sr_struct_db.yaml"
     capability: "structure_retrieval"
-    questions: 3
+    questions: 9
 
   - path: "workflow_orchestration/wo_elec.yaml"
     capability: "workflow_orchestration"
-    questions: 3
+    questions: 6
 
   - path: "workflow_orchestration/wo_kinetic.yaml"
     capability: "workflow_orchestration"
@@ -90,7 +90,7 @@ banks:
 
   - path: "workflow_orchestration/wo_general.yaml"
     capability: "workflow_orchestration"
-    questions: 3
+    questions: 9
 
   - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
     capability: "co2rr_reproduction"
@@ -132,7 +132,7 @@ banks:
 
   - path: "workflow_orchestration/wo_mlip_dpa.yaml"
     capability: "workflow_orchestration"
-    questions: 6
+    questions: 10
 
   # --- Polymer projects ---
   - path: "polymer/pl_donor.yaml"

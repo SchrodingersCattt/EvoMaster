@@ -226,3 +226,323 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
+- id: WO_elec_009_20260411v1
+  capability: workflow_orchestration
+  domain: thermo
+  intent: Compute Si phonon dispersion with ABACUS (including relaxation step) and summarize key spectrum outcomes.
+  human_prompt_seed: |
+    计算 Si 的声子特征（Mock版）：
+    1. 先 query/检索并梳理本任务所需输入文件（结构文件、参数文件、声子相关输入）；
+    2. 给出你会采用的声子设置（k 路径/采样、超胞或最小长度、位移步长）；
+    3. 不做真实 ABACUS 计算，使用以下 mock 结果进行后处理：
+       - supercell_or_min_length = "3x3x3"
+       - displacement_step = 0.01
+       - gamma_optical_frequency_THz = 15.6
+       - imaginary_mode_check = false
+    4. 汇总是否存在虚频，并给出结果可信度与不确定性说明。
+
+    请完成以下交付：
+    1) `si_phonon_abacus.json`：至少包含 `input_files`, `kpath_or_sampling`, `supercell_or_min_length`, `displacement_step`, `imaginary_mode_check`, `key_frequency_summary`；
+    2) `si_phonon_abacus_report.md`：说明 query 输入梳理 + mock 后处理流程、关键结论与不确定性。
+
+    最终回答请简要说明是否出现虚频，并标注为 mock 后处理结论。
+  tags:
+  - abacus
+  - phonon
+  - silicon
+  - workflow
+  - userlog_derived
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: phonon_json
+    value: si_phonon_abacus.json
+  - key: phonon_report
+    value: si_phonon_abacus_report.md
+  - key: json_required_tokens
+    value:
+      filename: si_phonon_abacus.json
+      tokens:
+      - displacement_step
+      - imaginary_mode_check
+      - key_frequency_summary
+      - supercell_or_min_length
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: si_phonon_abacus_report.md
+      tokens:
+      - Si
+      - ABACUS
+      - phonon
+      - 优化
+      - 虚频
+      - 不确定性
+      flags: i
+  - key: gamma_freq_mock
+    value: 15.6
+    tolerance: 1.0
+  - key: turn_budget
+    value: *id000
+  - key: duration_budget
+    value: *id001
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: phonon_json
+    criterion: Agent writes `si_phonon_abacus.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: phonon_report
+    criterion: Agent writes `si_phonon_abacus_report.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: json_required_tokens
+    criterion: JSON contains key phonon workflow and imaginary-mode-check fields.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: report_required_tokens
+    criterion: Report explains relax→phonon workflow and uncertainty caveats.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: gamma_freq_mock
+    criterion: Final answer includes a mock gamma optical frequency value near 15.6 THz.
+    axis: correctness
+    verify: numerical_range
+  - id: grounding_source
+    criterion: Final answer is grounded in generated phonon artifacts and does not fabricate unsupported dispersion conclusions.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: WO_elec_007_20260411v1
+  capability: workflow_orchestration
+  domain: elec
+  intent: Compute Pd(111) work function with ABACUS under a z-direction vacuum setup and summarize key computational settings and output.
+  human_prompt_seed: |
+    计算 Pd(111) 表面功函数（Mock版）：
+    1. 先 query/检索 Pd 体相与 Pd(111) slab 建模所需输入文件，并确认真空方向约束；
+    2. 列出关键设置（exchange-correlation functional、计算模式、真空方向、是否弛豫）；
+    3. 不做真实 ABACUS 计算，使用以下 mock 结果：
+       - work_function_eV = 5.43
+       - vacuum_direction = z
+       - functional = PBE
+       - calculation_mode = SCF
+    4. 基于以上数值完成后处理与结论解释。
+
+    请完成以下交付：
+    1) `pd111_work_function.json`：至少包含 `input_files`, `work_function_eV`, `vacuum_direction`, `functional`, `calculation_mode`, `notes`；
+    2) `pd111_work_function_report.md`：说明 query 输入梳理、mock 后处理流程和结果解读。
+
+    最终回答需明确给出功函数数值（eV）并确认 vacuum_direction=z。
+  tags:
+  - work_function
+  - pd111
+  - abacus
+  - surface
+  - userlog_derived
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: wf_json_artifact
+    value: pd111_work_function.json
+  - key: wf_report_artifact
+    value: pd111_work_function_report.md
+  - key: wf_required_tokens
+    value:
+      filename: pd111_work_function.json
+      tokens:
+      - work_function_eV
+      - vacuum_direction
+      - z
+      - functional
+      - calculation_mode
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: pd111_work_function_report.md
+      tokens:
+      - Pd(111)
+      - work function
+      - ABACUS
+      - z
+      - 不确定性
+      flags: i
+  - key: wf_value_mock
+    value: 5.43
+    tolerance: 0.3
+  - key: turn_budget
+    value: *id000
+  - key: duration_budget
+    value: *id001
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: wf_json_artifact
+    criterion: Agent writes `pd111_work_function.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: wf_report_artifact
+    criterion: Agent writes `pd111_work_function_report.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: wf_required_tokens
+    criterion: JSON output includes work-function value and explicit z-direction vacuum setting.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: report_required_tokens
+    criterion: Report explains setup rationale and output interpretation with uncertainty caveats.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: wf_value_mock
+    criterion: Final answer includes a mock work-function value near 5.43 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: grounding_source
+    criterion: The final answer is grounded in generated work-function artifacts and does not fabricate unsupported setup or result details.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: WO_elec_008_20260411v1
+  capability: workflow_orchestration
+  domain: elec
+  intent: Perform ABACUS Bader charge analysis for Al2O3 and summarize per-atom charge transfer evidence.
+  human_prompt_seed: |
+    对 Al2O3 执行 Bader 电荷分析（Mock版）：
+    1. 先 query/检索并整理 Bader 分析所需输入文件（结构、电子密度、分割相关输入）；
+    2. 明确分析目标：比较 Al 与 O 的电荷转移方向与幅度；
+    3. 不做真实计算，使用以下 mock 统计值：
+       - Al 平均 Bader 电荷 = +2.31 e
+       - O 平均 Bader 电荷 = -1.54 e
+       - 净电荷守恒误差 < 0.01 e
+    4. 基于 mock 值产出后处理摘要与结论。
+
+    请完成以下交付：
+    1) `al2o3_bader_summary.json`：至少包含 `input_files`, `atom_index`, `element`, `bader_charge`, `charge_transfer`；
+    2) `al2o3_bader_report.md`：说明 query 输入梳理、mock 后处理流程、主要电荷转移趋势与不确定性。
+
+    最终回答中请简要总结 Al 与 O 的电荷转移方向，并标注为 mock 后处理结果。
+  tags:
+  - bader
+  - charge_transfer
+  - Al2O3
+  - abacus
+  - userlog_derived
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: bader_json_artifact
+    value: al2o3_bader_summary.json
+  - key: bader_report_artifact
+    value: al2o3_bader_report.md
+  - key: bader_required_tokens
+    value:
+      filename: al2o3_bader_summary.json
+      tokens:
+      - atom_index
+      - element
+      - bader_charge
+      - charge_transfer
+      - Al
+      - O
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: al2o3_bader_report.md
+      tokens:
+      - Bader
+      - Al2O3
+      - charge
+      - transfer
+      - Al
+      - O
+      - 不确定性
+      flags: i
+  - key: al_bader_charge_mock
+    value: 2.31
+    tolerance: 0.3
+  - key: turn_budget
+    value: *id000
+  - key: duration_budget
+    value: *id001
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: bader_json_artifact
+    criterion: Agent writes `al2o3_bader_summary.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: bader_report_artifact
+    criterion: Agent writes `al2o3_bader_report.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: bader_required_tokens
+    criterion: Bader summary JSON includes per-atom charge-transfer fields and element labels.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: report_required_tokens
+    criterion: Report summarizes charge-transfer trend and uncertainty caveats.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: al_bader_charge_mock
+    criterion: Final answer includes a mock Al average Bader charge near +2.31 e.
+    axis: correctness
+    verify: numerical_range
+  - id: grounding_source
+    criterion: The final answer is grounded in Bader-analysis artifacts and does not invent unsupported per-atom values.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
