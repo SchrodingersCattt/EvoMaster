@@ -17,6 +17,41 @@ def test_macro_mean() -> None:
     assert _macro_mean([]) is None
 
 
+def test_build_markdown_sorts_scores_descending(tmp_path: Path) -> None:
+    rows = [
+        {"question_id": "low", "score": 40, "score_reason": "", "task_id": "a"},
+        {"question_id": "high", "score": 100, "score_reason": "", "task_id": "b"},
+        {"question_id": "mid", "score": 70, "score_reason": "", "task_id": "c"},
+    ]
+    _, md = _build_markdown_body(
+        tag="t",
+        run_dir=tmp_path,
+        rows=rows,
+        submit_ok=True,
+        stderr_tail="",
+    )
+    hi = md.find("`high`")
+    mid = md.find("`mid`")
+    lo = md.find("`low`")
+    assert hi != -1 and mid != -1 and lo != -1
+    assert hi < mid < lo
+
+
+def test_build_markdown_unscored_rows_last(tmp_path: Path) -> None:
+    rows = [
+        {"question_id": "pending", "score": None, "score_reason": "", "task_id": "p"},
+        {"question_id": "ok", "score": 50, "score_reason": "", "task_id": "o"},
+    ]
+    _, md = _build_markdown_body(
+        tag="t",
+        run_dir=tmp_path,
+        rows=rows,
+        submit_ok=True,
+        stderr_tail="",
+    )
+    assert md.find("`ok`") < md.find("`pending`")
+
+
 def test_build_markdown_success(tmp_path: Path) -> None:
     rows = [
         {

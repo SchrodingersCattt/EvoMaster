@@ -104,6 +104,18 @@ def _macro_mean(scores: list[int | None]) -> float | None:
     return sum(vals) / len(vals)
 
 
+def _rows_sorted_by_score_desc(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Feishu「各题得分」：分数从高到低；无有效 ``item.score`` 的排在末尾。"""
+    return sorted(
+        rows,
+        key=lambda r: (
+            0 if isinstance(r.get("score"), int) else 1,
+            -(r["score"] if isinstance(r.get("score"), int) else 0),
+            r["question_id"],
+        ),
+    )
+
+
 def _build_markdown_body(
     *,
     tag: str,
@@ -126,7 +138,7 @@ def _build_markdown_body(
         "",
         "**各题得分**",
     ]
-    for r in rows:
+    for r in _rows_sorted_by_score_desc(rows):
         sid = r["question_id"]
         sc = r["score"]
         sc_s = str(sc) if isinstance(sc, int) else "未写入"
