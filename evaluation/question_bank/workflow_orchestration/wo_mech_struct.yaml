@@ -1,10 +1,10 @@
 version: v5
 capability: workflow_orchestration
-domain: struct
+domain: alloy
 questions:
 - id: WO_mech_004_20260411v1
   capability: workflow_orchestration
-  domain: struct
+  domain: alloy
   intent: Optimize an alloy structure with APEX and summarize geometry-change evidence
     with machine-checkable artifacts.
   human_prompt_seed: |-
@@ -15,7 +15,6 @@ questions:
   tags:
   - apex
   - structure_optimization
-  - alloy
   - userlog_derived
   mode_scope:
   - direct

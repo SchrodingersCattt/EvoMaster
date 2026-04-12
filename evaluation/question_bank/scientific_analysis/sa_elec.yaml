@@ -1,10 +1,10 @@
 version: v5
 capability: scientific_analysis
-domain: elec
+domain: battery
 questions:
 - id: WO_general_sse_006_20260411v1
   capability: scientific_analysis
-  domain: elec
+  domain: battery
   intent: Summarize sulfur-containing solid-electrolyte candidates for Li-metal interfaces
     by balancing interface stability and ionic conductivity from recent literature.
   human_prompt_seed: |-

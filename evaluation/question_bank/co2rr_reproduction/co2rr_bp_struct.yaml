@@ -1,10 +1,10 @@
 version: v5
 capability: batch_processing
-domain: struct
+domain: catalysis
 questions:
 - id: CR_BP_HT_adsorption_tree_20260406v2
   capability: batch_processing
-  domain: struct
+  domain: catalysis
   intent: Generate HT_adsorption/ directory tree with pure_metals, compounds, clusters
     sections per doc 4.1 (high-level structure and naming).
   human_prompt_seed: '构建高通量吸附建模数据集目录 HT_adsorption/，顶层包含 pure_metals、compounds、clusters

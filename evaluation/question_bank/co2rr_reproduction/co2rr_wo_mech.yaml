@@ -1,10 +1,10 @@
 version: v5
 capability: workflow_orchestration
-domain: mech
+domain: catalysis
 questions:
 - id: CR_WO_Ag_adsorption_20260412
   capability: workflow_orchestration
-  domain: mech
+  domain: catalysis
   intent: Compute adsorption energies of six adsorbates on Ag(001) and Ag(011) at
     on-top sites using MLIP/calculator with consistent energy reference per doc 3.2.1.
   human_prompt_seed: '对 Ag 体相切出 (001) 与 (011) 两个表面；分别计算 H、CO、COOH、CO2、HCOO、HCOOH 六种吸附质在

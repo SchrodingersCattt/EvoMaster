@@ -1,10 +1,10 @@
 version: v5
 capability: workflow_orchestration
-domain: mech
+domain: alloy
 questions:
 - id: WO_general_mechmix_004_20260411v1
   capability: workflow_orchestration
-  domain: mech
+  domain: alloy
   intent: Compare database-retrieved alloy references with APEX elastic predictions
     for a Ni-Co-Cr composition at room temperature.
   human_prompt_seed: |-
@@ -13,7 +13,6 @@ questions:
     最终回答需简要判断该结果在室温机械性能评估上的可信度。
   tags:
   - userlog_derived
-  - alloy
   - elastic_constants
   - apex
   - database_compare

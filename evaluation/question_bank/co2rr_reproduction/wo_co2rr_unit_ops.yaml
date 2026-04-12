@@ -1,10 +1,10 @@
 version: v5
 capability: structure_construction
-domain: struct
+domain: catalysis
 questions:
 - id: CR_SC_ZnPd011_20260409
   capability: structure_construction
-  domain: struct
+  domain: catalysis
   intent: Cut ZnPd (011) slab from Materials Project bulk (mp-1103252) with 3 layers
     and 2x2x1 supercell per doc 3.1.1.
   human_prompt_seed: '使用体相结构 mp-1103252（ZnPd）切出 (011) 表面 slab：3 层厚度、2×2×1 扩胞，真空 ≥15
@@ -55,7 +55,7 @@ questions:
     verify: token_budget
 - id: CR_SC_ZnS001_20260411
   capability: structure_construction
-  domain: struct
+  domain: catalysis
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per
     doc 3.1.2.
   human_prompt_seed: 'ZnS 化合物 (001) 切面 slab：3 层厚度、2×2×1 扩胞，真空 ≥15 Å。若为极性表面，说明是否采用对称
@@ -135,7 +135,7 @@ questions:
     verify: token_budget
 - id: CR_SC_ZnO_Au_HCOO_20260406
   capability: structure_construction
-  domain: struct
+  domain: catalysis
   intent: Build Au13 cluster CIF, ZnO(001) two-layer 2x2x1 slab with Au single atom
     and HCOO adsorbate on-top per doc 3.1.3.
   human_prompt_seed: '按文档 3.1.3：（1）用 ASE 或等价方式构建 Au13 团簇并保存为 CIF；（2）ZnO(001) 切面 slab，两层厚、2×2×1

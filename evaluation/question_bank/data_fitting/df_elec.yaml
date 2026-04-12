@@ -1,10 +1,10 @@
 version: v5
 capability: scientific_analysis
-domain: elec
+domain: semiconductor
 questions:
 - id: DF_elec_001_20260404
   capability: scientific_analysis
-  domain: elec
+  domain: semiconductor
   intent: Determine band-gap type and value from given band-edge dataset.
   human_prompt_seed: 读取 `band_edges.json`，判断直接/间接带隙并输出带隙值 (eV)、VBM 和 CBM 的 k 点位置。
   tags:
