@@ -119,9 +119,11 @@ questions:
 
     - `surface_PUBMUU03.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/1774583701_surface_PUBMUU03.cif`
 
+
     任务：基于该结构切出 `(1, 1, 0)` 表面 slab，要求为 4 层。
 
     真空层不是重点，可以不特别说明或自行设定合理值。
+
 
     重点检查并在最终答案中明确报告：
 
@@ -132,6 +134,7 @@ questions:
     (3) 最终 slab 的原子总数；
 
     (4) 是否满足"最终原子数 = 单胞原子数的 4 倍"。
+
 
     输出 slab 结构文件为 `slab_PUBMUU03_110.cif`，并给出上述核查结论。
 
@@ -450,6 +453,7 @@ questions:
 
     - `disorder_TILPEN.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_TILPEN.cif`
 
+
     对每个结构，使用结构生成工具构造 ordered replica，并汇总：
 
     (1) `chemical_formula`（尽量保持工具/结构解析返回的原始字符串）；
@@ -459,6 +463,7 @@ questions:
     (3) `ordered_replica_count`；
 
     (4) `ordered_output_archive`。
+
 
     对 `disorder_DAN-2.cif` 的 ordered replica：`chemical_formula` 必须为**整数化学计量**（不得再出现类似
     `H13.98` 这类分数占位形式的计数）。
@@ -573,11 +578,13 @@ questions:
 
     - `DACMOR.cif` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/cda9f292ec4b411facb478d0486b54ce/DACMOR.cif`
 
+
     该结构为二乙酰吗啡（diacetylmorphine）分子晶体，从单晶XRD解析得到，但缺少了 H 原子。
 
     请对该结构补氢，并导出为 `dacmor_hydrogenated.cif`。
 
     要求：添加 H 原子使结构符合价键规则、具备化学意义。
+
 
     重点检查并在最终答案中明确报告：
 
@@ -588,6 +595,7 @@ questions:
     (3) 代表性的 H-C-H 键角（度）；
 
     (4) 补氢后分子的连接性是否完整（无断裂或多余键）。
+
 
     输出结构文件，并给出上述核查结论。
 
