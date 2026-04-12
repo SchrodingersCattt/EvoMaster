@@ -41,6 +41,8 @@ from .evaluator_helpers import (
     check_struct_file_stoichiometry_ratio,
     check_struct_file_surface_termination,
     check_text_file_contains_all_from_evidence,
+    check_text_file_kpt_path_from_evidence,
+    check_text_file_numeric_range_from_evidence,
     check_text_file_regex_from_evidence,
     check_token_budget,
     check_turn_budget,
@@ -504,6 +506,8 @@ class BinaryEvaluator:
 
         _TEXT_FILE_DISPATCH = {
             'text_file_contains_all': check_text_file_contains_all_from_evidence,
+            'text_file_kpt_path': check_text_file_kpt_path_from_evidence,
+            'text_file_numeric_range': check_text_file_numeric_range_from_evidence,
             'text_file_regex': check_text_file_regex_from_evidence,
         }
         if item.verify in _TEXT_FILE_DISPATCH:

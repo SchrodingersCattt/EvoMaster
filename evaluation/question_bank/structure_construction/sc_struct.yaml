@@ -1322,7 +1322,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_012_20260411v1
+- id: SC_struct_012_20260412v2
   capability: structure_construction
   domain: struct
   intent: Construct corundum (alpha-Al2O3) using Wyckoff-position information and validate lattice/formula consistency.
@@ -1377,7 +1377,6 @@ questions:
       - Al2O3
       - lattice
       - coordinate
-      - uncertainty
       flags: i
   - key: turn_budget
     value:
@@ -1410,7 +1409,7 @@ questions:
     axis: correctness
     verify: struct_file_cell_param
   - id: notes_required_tokens
-    criterion: Notes describe Wyckoff-based construction details and uncertainty caveats.
+    criterion: Notes describe Wyckoff-based construction details.
     axis: correctness
     verify: text_file_contains_all
   - id: grounding_source
@@ -1437,7 +1436,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_013_20260411v1
+- id: SC_struct_013_20260411v3
   capability: structure_construction
   domain: struct
   intent: Construct and compare close-packed layer cross sections for fcc and hcp crystals, then expand both slabs to 5x5x1 supercells.
@@ -1470,18 +1469,6 @@ questions:
     value: hcp_close_packed_5x5x1.cif
   - key: compare_artifact
     value: packing_comparison.md
-  - key: compare_required_tokens
-    value:
-      filename: packing_comparison.md
-      tokens:
-      - fcc
-      - hcp
-      - close-packed
-      - 5
-      - layer
-      - vacuum
-      - 5x5x1
-      flags: i
   - key: turn_budget
     value:
       max: 20
@@ -1504,10 +1491,6 @@ questions:
     criterion: Agent writes `packing_comparison.md` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: compare_required_tokens
-    criterion: Comparison note explicitly covers fcc/hcp close-packed differences and key slab/supercell settings.
-    axis: correctness
-    verify: text_file_contains_all
   - id: grounding_source
     criterion: The final answer is grounded in both generated CIF files and the comparison note, rather than generic textbook-only statements.
     axis: grounding

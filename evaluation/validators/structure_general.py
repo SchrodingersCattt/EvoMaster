@@ -522,6 +522,7 @@ def check_layer_count(
     tolerance: float = 0,
     axis: str = 'z',
     layer_tol_A: float = 0.25,
+    element: str | None = None,
 ) -> tuple[bool, str]:
     """Count distinct atomic planes along *axis* using Cartesian coordinates.
 
@@ -548,10 +549,20 @@ def check_layer_count(
         return False, f'axis must be x/y/z, got {axis!r}'
     ax = axis_map[axis.lower()]
 
-    coords = np.array([s.coords[ax] for s in struct.sites])
+    if element:
+        coords = np.array(
+            [
+                s.coords[ax]
+                for s in struct.sites
+                if getattr(s.specie, 'symbol', str(s.specie)) == element
+            ]
+        )
+    else:
+        coords = np.array([s.coords[ax] for s in struct.sites])
     coords_sorted = np.sort(coords)
     if len(coords_sorted) < 2:
-        return False, f'{fpath.name}: fewer than 2 atoms'
+        scope = f' for element {element}' if element else ''
+        return False, f'{fpath.name}: fewer than 2 atoms{scope}'
 
     # Count distinct planes: merge atoms within layer_tol_A of the current plane anchor.
     anchor = float(coords_sorted[0])
@@ -563,9 +574,10 @@ def check_layer_count(
             anchor = z
 
     hit = abs(n_layers - expected) <= tolerance
+    scope = f' for element {element}' if element else ''
     return (
         hit,
-        f'{fpath.name}: {n_layers} layers along {axis} (layer_tol={tol} Å), '
+        f'{fpath.name}: {n_layers} layers along {axis}{scope} (layer_tol={tol} Å), '
         f'expected={expected}±{tolerance}',
     )
 
