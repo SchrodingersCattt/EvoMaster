@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: struct
 questions:
-- id: BP_struct_003_20260406
+- id: BP_struct_003_20260412
   capability: batch_processing
   domain: struct
   intent: Generate 5 VASP INCAR input files for Al ENCUT convergence test (280, 300,
@@ -99,8 +99,11 @@ questions:
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_config_used
-    criterion: Parameter values (k-mesh, ISMEAR, SIGMA, NSW, ENCUT list) match the
-      provided convergence_encut.json configuration exactly.
+    criterion: "Parameter values in the generated INCAR files match the convergence_encut.json\
+      \ config exactly: k-mesh 8\xD78\xD78, ISMEAR=1, SIGMA=0.1, NSW=0, IBRION=-1,\
+      \ ALGO=Fast, ENCUT sweep [280, 300, 320, 340, 360] eV. The answer or files\
+      \ must show these values were derived from reading the JSON file, not invented\
+      \ independently."
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget

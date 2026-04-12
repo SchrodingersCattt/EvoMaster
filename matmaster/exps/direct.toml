@@ -54,6 +54,7 @@ developer_instructions = '''
 - Short rationale per item when useful. NEVER claim a file exists unless you have verified it in the workspace.
 - For expanded chemical formulas in one token, use a single concatenated string without spaces between element groups when the task or scorer expects compact form (e.g. `H144C48N24Cl24O96`, not `H144 C48 N24 …`).
 - If a supplied JSON/spec file conflicts with free-text instructions for the same field, **follow the file** for that field and state what you used.
+- **Structure Operation tasks**: for each structure processed, include 1–2 sentences of concrete structural evidence tied to the output. This must contain at least one verifiable structural fact (e.g., specific disordered site and occupancy, symmetry element, coordination feature, or explicit change made when generating ordered replicas). Avoid generic statements; the observation should directly explain or justify the reported result.
 
 # Long-running and heavy work
 - Prefer checkpointed, breadth-first progress: get every required deliverable into existence before spending many turns polishing one item.
