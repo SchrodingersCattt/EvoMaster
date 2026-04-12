@@ -246,6 +246,66 @@ def test_question_item_rejects_removed_domain_optical() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ('capability', 'domain'),
+    [
+        ('scientific_analysis', 'elec'),
+        ('input_generation', 'incar'),
+    ],
+)
+def test_question_item_accepts_new_capabilities(capability: str, domain: str) -> None:
+    from evaluation.core.schemas import QuestionItem
+
+    item = QuestionItem(
+        id=f'{capability}_ok',
+        capability=capability,
+        domain=domain,
+        intent='new capability should be accepted',
+        human_prompt_seed='x',
+        scoring_checklist=[
+            {
+                'id': 'unused',
+                'criterion': 'unused',
+                'axis': 'correctness',
+                'verify': 'llm_binary_judge',
+            }
+        ],
+        reference_answers=[{'key': 'unused', 'value': 'x'}],
+    )
+    assert item.capability == capability
+
+
+@pytest.mark.parametrize(
+    'capability',
+    [
+        'property_prediction',
+        'input_generation_vasp',
+        'input_generation_abacus',
+        'co2rr_reproduction',
+    ],
+)
+def test_question_item_rejects_removed_legacy_capabilities(capability: str) -> None:
+    from evaluation.core.schemas import QuestionItem
+
+    with pytest.raises(ValidationError, match=capability):
+        QuestionItem(
+            id='legacy_cap',
+            capability=capability,
+            domain='general',
+            intent='legacy capability should be rejected',
+            human_prompt_seed='x',
+            scoring_checklist=[
+                {
+                    'id': 'unused',
+                    'criterion': 'unused',
+                    'axis': 'correctness',
+                    'verify': 'llm_binary_judge',
+                }
+            ],
+            reference_answers=[{'key': 'unused', 'value': 'x'}],
+        )
+
+
 def test_safety_questions_also_count_token_and_duration_efficiency() -> None:
     from evaluation.core.schemas import QuestionItem, SafetyVetoRecord, TokenUsageRecord
 

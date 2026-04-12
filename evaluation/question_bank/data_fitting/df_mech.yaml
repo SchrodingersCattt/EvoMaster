@@ -1,9 +1,9 @@
 version: v5
-capability: property_prediction
+capability: scientific_analysis
 domain: mech
 questions:
 - id: DF_mech_001_20260404
-  capability: property_prediction
+  capability: scientific_analysis
   domain: mech
   intent: Fit equation of state from provided E-V data and report V0 and B0.
   human_prompt_seed: 使用 `ev_curve.json` 中的 E-V 数据拟合 Birch-Murnaghan 状态方程，输出 V0(A3) 与 B0(GPa)。
@@ -77,7 +77,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: DF_mech_002_20260404
-  capability: property_prediction
+  capability: scientific_analysis
   domain: mech
   intent: From MSST Hugoniot simulation data, fit the P-V Hugoniot curve and determine C-J detonation velocity and pressure
     for RDX.
@@ -155,7 +155,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: DF_mech_pressure_003_20260410v3
-  capability: property_prediction
+  capability: scientific_analysis
   domain: mech
   intent: Produce structured mechanical-pressure estimation with sensitivity analysis and go/no-go recommendation.
   human_prompt_seed: '工作区已提供 `implant_params.json`。

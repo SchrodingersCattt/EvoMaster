@@ -1,9 +1,9 @@
 version: v5
-capability: input_generation_abacus
+capability: input_generation
 domain: elec
 questions:
 - id: IG_abacus_001_20260409v4
-  capability: input_generation_abacus
+  capability: input_generation
   domain: elec
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place empty-atom layers in vacuum, and write SCF INPUT with sparse k along vacuum.'
   human_prompt_seed: |
@@ -144,7 +144,7 @@ questions:
     verify: token_budget
 
 - id: IG_abacus_002_20260409v5
-  capability: input_generation_abacus
+  capability: input_generation
   domain: mech
   intent: 'Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty ghost atom and SCF INPUT.'
   human_prompt_seed: |
@@ -286,7 +286,7 @@ questions:
     verify: token_budget
 
 - id: IG_abacus_003_20260409v4
-  capability: input_generation_abacus
+  capability: input_generation
   domain: elec
   intent: 'Generate ABACUS PW SCF INPUT and KPT files for Al slab electrostatic-potential calculation setup.'
   human_prompt_seed: |
@@ -424,7 +424,7 @@ questions:
     verify: token_budget
 
 - id: IG_abacus_004_20260409v4
-  capability: input_generation_abacus
+  capability: input_generation
   domain: elec
   intent: 'Generate ABACUS PW SCF input for dipole correction on an asymmetric H2O slab, with the saw-like region placed in vacuum and no finite external field.'
   human_prompt_seed: |
@@ -564,7 +564,7 @@ questions:
     verify: token_budget
 
 - id: IG_abacus_005_20260409v4
-  capability: input_generation_abacus
+  capability: input_generation
   domain: thermo
   intent: 'Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence using bulk, 5-layer slab, and 7-layer slab structures.'
   human_prompt_seed: |
@@ -766,7 +766,7 @@ questions:
     verify: token_budget
 
 - id: IG_abacus_006_20260409v3
-  capability: input_generation_abacus
+  capability: input_generation
   domain: thermo
   intent: 'Prepare ABACUS PW inputs for Mo surface-vacancy energy using bulk, pristine slab, and surface-vacancy slab structures.'
   human_prompt_seed: |
@@ -978,7 +978,7 @@ questions:
     verify: token_budget
 
 - id: IG_abacus_007_20260409v3
-  capability: input_generation_abacus
+  capability: input_generation
   domain: elec
   intent: 'Generate ABACUS LCAO spin-polarized electric-field SCF and NSCF band inputs for a nanoribbon, including a line-mode KPT from Gamma to Y.'
   human_prompt_seed: |
@@ -1138,7 +1138,7 @@ questions:
     verify: token_budget
 
 - id: IG_abacus_008_20260409v3
-  capability: input_generation_abacus
+  capability: input_generation
   domain: elec
   intent: 'Generate ABACUS PW SCF input combining dipole correction with compensating charge for a charged H2O slab, including gate-plane and barrier parameters.'
   human_prompt_seed: |

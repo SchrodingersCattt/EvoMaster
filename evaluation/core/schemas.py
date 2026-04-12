@@ -79,15 +79,13 @@ AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
 CapabilityLiteral = Literal[
     'structure_construction',
     'structure_retrieval',
-    'property_prediction',
+    'scientific_analysis',
     'workflow_orchestration',
     'execution_contract',
     'data_diagnosis',
     'batch_processing',
     'safety_refusal',
-    'input_generation_vasp',
-    'input_generation_abacus',
-    'co2rr_reproduction',
+    'input_generation',
 ]
 
 DomainLiteral = Literal[

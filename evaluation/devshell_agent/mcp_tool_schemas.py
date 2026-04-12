@@ -41,7 +41,7 @@ RUN_DEVSHELL_EVAL_SCHEMA: dict[str, Any] = {
             "description": (
                 "OR-of-slices for run_devshell_eval --slices: whitespace separates "
                 'slices; no spaces inside "[...]". E.g. '
-                '"workflow_orchestration[polymer] input_generation_abacus" (default: CLI).'
+                '"workflow_orchestration[polymer] input_generation" (default: CLI).'
             ),
         },
         "model": {

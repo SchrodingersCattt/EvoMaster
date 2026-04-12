@@ -21,7 +21,7 @@ evaluation/question_bank/
 ├── structure_construction/sc_struct.yaml
 ├── workflow_orchestration/wo_*.yaml
 ├── execution_contract/direct_contract.yaml   # capability execution_contract（direct 交付约定）
-├── co2rr_reproduction/wo_co2rr_unit_ops.yaml   # capability co2rr_reproduction 专题题库
+├── co2rr_reproduction/wo_co2rr_unit_ops.yaml   # CO2RR 专题题库（按题目真实 capability 标注）
 ├── safety_refusal/sr_general.yaml
 └── data/                                 # 题目输入数据文件（按题目 ID 子目录）
     ├── README.md
@@ -98,7 +98,7 @@ evaluation/question_bank/
 
 与 `evaluation/core/schemas.py` 中 `CapabilityLiteral` **保持一致**（加载题库时按此校验）：
 
-`structure_construction` / `structure_retrieval` / `property_prediction` / `workflow_orchestration` / `execution_contract` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation_vasp` / `input_generation_abacus` / `co2rr_reproduction`
+`structure_construction` / `structure_retrieval` / `scientific_analysis` / `workflow_orchestration` / `execution_contract` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation`
 
 **语义说明（撰写与筛选时）**
 
@@ -106,15 +106,13 @@ evaluation/question_bank/
 |------|------|
 | `structure_construction` | 构建或修改结构（slab、界面、缺陷等），不强调「从数据库拉取」 |
 | `structure_retrieval` | 从结构数据库检索、筛选、汇总元数据（如 `mat_struct_db` 路径） |
-| `property_prediction` | 由数据或计算流程得到数值/分类结果；题库中亦用于拟合、精修、后处理等**非纯编排**任务（名称偏历史，与「预测」不必字面一致） |
+| `scientific_analysis` | 以科学数据、结构或计算结果为输入，产出数值、分类、拟合、精修、特征工程或后处理结果；不强调多步流程编排 |
 | `workflow_orchestration` | 多步骤编排、脚本/MCP 串联、报告类任务；**范围较宽**（含聚合物专题、MLIP 流程、`wo_general` 等），通常再用 `domain` 细分 |
 | `execution_contract` | **执行与交付约定**（对应 `direct` 实验与 `matmaster/exps/`、系统提示中的硬性交付规则）：如 spec 与正文冲突以文件为准、归档解压到根目录、交付物精确命名等；**不是**领域科研 workflow，与 `workflow_orchestration` 区分 |
 | `data_diagnosis` | 根据日志/输入/输出诊断问题并给修复建议 |
 | `batch_processing` | 批量、扫描、多案例一致性与参数控制 |
 | `safety_refusal` | 合规与安全拒答 |
-| `input_generation_vasp` | VASP 输入（以 INCAR 等为主） |
-| `input_generation_abacus` | ABACUS 输入（STRU/KPT/INPUT 等） |
-| `co2rr_reproduction` | CO₂RR 复现专题（`domain` 仍可按子话题标 `struct`/`elec`/…） |
+| `input_generation` | 生成某类计算软件或工作流所需输入文件；软件后端（如 VASP、ABACUS）放在 `tags` 或 bank 语境中表达，而不再占用 capability |
 
 #### domain 枚举
 
@@ -134,7 +132,7 @@ evaluation/question_bank/
 
 新增或改写题目时建议按顺序自检：
 
-1. **`capability`**：按**任务形态**选（建结构 / 查库 / 批量 / 诊断 / 输入生成 / 编排 / **执行与交付约定** / 安全 / 专题等），与「测什么能力」一致；测 spec 优先级、归档解压、精确文件名等 **执行/交付契约** → `execution_contract`；不要仅因用了某软件就选 `workflow_orchestration`——若本质是输入生成，应用 `input_generation_*`。
+1. **`capability`**：按**任务形态**选（建结构 / 查库 / 科学分析 / 批量 / 诊断 / 输入生成 / 编排 / **执行与交付约定** / 安全），与「测什么能力」一致；测 spec 优先级、归档解压、精确文件名等 **执行/交付契约** → `execution_contract`；不要仅因用了某软件就选 `workflow_orchestration`——若本质是输入生成，应用 `input_generation`。
 2. **`domain`**：按题干**材料/物理主轴**选；VASP INCAR 专项题优先 `incar`；单晶 XRD 用 `scxrd`；聚合物线用 `polymer`。`incar` 与 `elec` 不必同时纠结：以题干更强调「输入规格」还是「现象/性质」二选一即可。
 3. **粒度不够时**：可加 **`tags`**（如 `mlip`、`userlog`）做人读与二次分析；**tags 不参与 `--slices`**。若该维度需要**命令行一切就切**，应优先用 **`domain`**（或专题 capability），而不是只写 tags。
 4. **`workflow_orchestration` 较宽**：若题目属于编排类但主题明确，务必用 `domain` + `tags` 标清，避免聚合报告里只剩笼统的「workflow」。
@@ -144,7 +142,7 @@ evaluation/question_bank/
 
 | 维度 | 回答的问题 | 典型取值思路 | 谁消费 |
 |------|------------|----------------|--------|
-| **capability** | 这道题测**哪类任务能力**（建结构、查库、批量、诊断、输入生成、编排、安全、专题等） | 与「工具链形态」一致：能标 `input_generation_*` 就不要标成笼统的 `workflow_orchestration` | **`--slices`、聚合报告 `by_capability`**；加载时校验 |
+| **capability** | 这道题测**哪类任务能力**（建结构、查库、科学分析、批量、诊断、输入生成、编排、安全、执行契约等） | 与「任务形态」一致：能标 `input_generation` 或 `scientific_analysis` 就不要标成笼统的 `workflow_orchestration` | **`--slices`、聚合报告 `by_capability`**；加载时校验 |
 | **domain** | 这道题在**哪个材料/物理或方法主轴**上（结构/电子/力学/专题域如 `polymer`/`scxrd`/`incar`） | 与「切片想怎么分」对齐：若团队常跑「电化学 workflow」，应用 `elec` 等 **domain**，而不是只靠 tags | **`--slices` 的 `cap[dom1,dom2]`**、按域聚合；加载时校验 |
 | **tags** | **二级标签**：项目线、工具线、内部别名（如 `mlip`、`userlog`、`co2rr`） | 不承载「枚举完整性」；用于人读、检索、将来扩展 | **当前 runner 不参与筛选**（见下节）；可用于自建报表或外部分析 |
 
@@ -167,7 +165,7 @@ evaluation/question_bank/
 
 1. **先反推常用切片**：列出团队最常跑的命令，例如「只要电化学 workflow」「只要聚合物」「只要 ABACUS 输入」。把每条映射到 `capability` + `domain` 的组合是否**能一条 `--slices` 写出来**；若不能，优先考虑 **调整 domain**（或专题 capability），而不是加 tags。
 2. **`workflow_orchestration` + 多主题**：该 capability 很宽，**务必用 `domain` 区分**（如 `elec` / `polymer` / `struct`），否则只能 `workflow_orchestration` 全选或依赖题目 ID 列表。
-3. **专题 capability**（如 `co2rr_reproduction`）：适合「报告里要单独一列」且与 domain 正交；若专题内还要按 struct/elec 切，继续用 **per-question `domain`** + `co2rr_reproduction[struct,elec]` 这类写法。
+3. **专题线不要直接占用 capability**：如 `co2rr`、`userlog`、`mlip` 等优先放入 `tags`；只有当它本身就是独立**任务形态**时，才应升级成 capability。
 4. **不要指望 tags 驱动 CLI**：tags 适合 **文档化与二次分析**；**驱动切片**请用 capability/domain，或扩展 runner（见上）。
 5. **新增枚举值**：若出现「必须同时按某维度筛，但该维度既不适合塞 domain 也不适合塞 capability」的重复需求，再评估 **新 domain** 或 **runner 支持 tags 过滤**，避免 capability 无限膨胀。
 
@@ -276,6 +274,8 @@ evaluation/question_bank/
 ### 1. ID 变更规则
 
 修改 `evaluation/question_bank/**/*.yaml` 中任一题目的题干、期望答案、`reference_answers`、`scoring_checklist` 或其他会影响评测语义的内容时，**必须同时更新该题的顶层 `id`**。新 `id` 可用时间戳或其他唯一后缀；若只是纯格式化、注释、空白或不影响语义的整理，可不改 `id`。
+
+仅调整 **`capability` / `domain` / `tags` 等分类元数据**、且**不改变**题干、期望产物、判分逻辑、`reference_answers`、`scoring_checklist` 或执行预算时，视为**切片/聚合口径整理**而非单题评测语义变更，**可不改 `id`**。若该分类改动会连带改变题目的筛选集合、对外题号约定或数据目录命名，再单独评估是否需要 bump。
 
 **程序化判分口径变更**：若修改 `evaluation/` 下某 `verify` 对应的 validator 实现，导致**同一 `reference_answers` 配置下的 pass/fail 含义发生变化**（例如层数由“粗间隙分块”改为“原子平面计数”），应视为评测语义变更：在题库中显式更新该题的 `human_prompt_seed` / `scoring_checklist` / `reference_answers` 等对判分的描述或参数，并**按上条规则更新该题顶层 `id`**（除非能证明全仓库无任何题目依赖旧语义且无需对齐题干——一般应对齐题库）。
 
@@ -422,7 +422,7 @@ evaluation/scripts/matter_cli/run_matmaster_evaluation_bg.ps1
 ### 当前模型的典型痛点
 
 - **`domain` 混用两种语义**：既有物理子域（`elec`、`mech`），也有方法/产物主轴（`incar`、`scxrd`），「正交」感弱。
-- **`capability` 宽度不一**：`workflow_orchestration` 过大；`property_prediction` 名实不完全一致。
+- **`capability` 宽度不一**：`workflow_orchestration` 仍偏大，后续若继续膨胀应再拆；`scientific_analysis` / `input_generation` 负责承接原先按历史名称或软件后端命名的题目。
 - **`tags` 不参与筛选**：与「常用维度」重叠时，作者会被迫把本该可切的维度塞进 `domain`，或只能枚举 `--questions`。
 
 重构的目标应是：**每个字段只回答一类问题**，且 **runner 能按团队最常用的组合做过滤**，而不只靠题目 ID。
@@ -450,7 +450,7 @@ evaluation/scripts/matter_cli/run_matmaster_evaluation_bg.ps1
 
 2. **中等演进（表达式升级）**
    - 引入 **显式键名**，避免 `cap[dom]` 隐式二元：例如
-     `--filter 'task:workflow_orchestration subject:elec' --filter 'task:input_generation_abacus'`
+     `--filter 'task:workflow_orchestration subject:elec' --filter 'task:input_generation'`
      多条 `--filter` 之间 **OR**；单条内多键 **AND**。
    - 或 **版本化**：`--slices-v2 '...'`，旧 `--slices` 长期别名到 v1。
 

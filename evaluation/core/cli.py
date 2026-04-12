@@ -67,7 +67,7 @@ def main() -> int:
         help=(
             'OR-of-slices: whitespace between caps; cap[dom]; cap[d1,d2] — '
             'no spaces inside [...] (e.g. '
-            '"workflow_orchestration[polymer] input_generation_abacus")'
+            '"workflow_orchestration[polymer] input_generation")'
         ),
     )
     parser.add_argument(

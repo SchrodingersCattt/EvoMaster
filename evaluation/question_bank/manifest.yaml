@@ -57,11 +57,11 @@ banks:
     questions: 7
 
   - path: "data_fitting/df_mech.yaml"
-    capability: "property_prediction"
+    capability: "scientific_analysis"
     questions: 3
 
   - path: "data_fitting/df_elec.yaml"
-    capability: "property_prediction"
+    capability: "scientific_analysis"
     questions: 1
 
   - path: "structure_construction/sc_struct.yaml"
@@ -93,7 +93,6 @@ banks:
     questions: 9
 
   - path: "co2rr_reproduction/wo_co2rr_unit_ops.yaml"
-    capability: "co2rr_reproduction"
     questions: 7
 
   - path: "safety_refusal/sr_general.yaml"
@@ -121,11 +120,11 @@ banks:
   # --- VASP INCAR generation (20 questions) ---
 
   - path: "input_generation/ig_incar.yaml"
-    capability: "input_generation_vasp"
+    capability: "input_generation"
     questions: 20
 
   - path: "input_generation/ig_abacus.yaml"
-    capability: "input_generation_abacus"
+    capability: "input_generation"
     questions: 8
 
   # --- DPA / MLIP workflow evaluation ---
@@ -158,13 +157,13 @@ banks:
   # --- Thermal / thermo-structural data fitting ---
 
   - path: "data_fitting/df_thermo.yaml"
-    capability: "property_prediction"
+    capability: "scientific_analysis"
     questions: 1
 
   # --- Single-crystal XRD structure solution & refinement ---
 
   - path: "data_fitting/df_scxrd.yaml"
-    capability: "property_prediction"
+    capability: "scientific_analysis"
     questions: 2
 
   # --- direct.toml / system-prompt execution contract (MATTER) ---

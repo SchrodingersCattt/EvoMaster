@@ -1,9 +1,9 @@
 version: v5
-capability: property_prediction
+capability: scientific_analysis
 domain: thermo
 questions:
 - id: DFT_pxrd_001_20260408
-  capability: property_prediction
+  capability: scientific_analysis
   domain: thermo
   intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
     parameters at each temperature, identify two structural phases (low-temperature RTP and

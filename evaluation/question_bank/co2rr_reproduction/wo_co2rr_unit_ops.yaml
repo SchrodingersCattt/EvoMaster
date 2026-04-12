@@ -2,11 +2,9 @@
 # 来源：仓库根目录《CO(2)还原CO催化剂的高通量计算筛选和ML构效关系分析项目复现.docx》
 # 说明：以 llm_binary_judge + 预算类 verify 为主；数值/结构强校验需在稳定产出物（固定 POSCAR 名等）后收紧 tolerance。
 version: v5
-capability: co2rr_reproduction
-domain: mech
 questions:
 - id: CR_SC_ZnPd011_20260409
-  capability: co2rr_reproduction
+  capability: structure_construction
   domain: struct
   intent: Cut ZnPd (011) slab from Materials Project bulk (mp-1103252) with 3 layers
     and 2x2x1 supercell per doc 3.1.1.
@@ -56,7 +54,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: CR_SC_ZnS001_20260411
-  capability: co2rr_reproduction
+  capability: structure_construction
   domain: struct
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per
     doc 3.1.2.
@@ -134,7 +132,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: CR_SC_ZnO_Au_HCOO_20260406
-  capability: co2rr_reproduction
+  capability: structure_construction
   domain: struct
   intent: Build Au13 cluster CIF, ZnO(001) two-layer 2x2x1 slab with Au single atom
     and HCOO adsorbate on-top per doc 3.1.3.
@@ -184,7 +182,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: CR_WO_Ag_adsorption_20260412
-  capability: co2rr_reproduction
+  capability: workflow_orchestration
   domain: mech
   intent: Compute adsorption energies of six adsorbates on Ag(001) and Ag(011) at
     on-top sites using MLIP/calculator with consistent energy reference per doc 3.2.1.
@@ -249,7 +247,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: CR_WO_limiting_potential_20260412
-  capability: co2rr_reproduction
+  capability: scientific_analysis
   domain: elec
   intent: From free-energy steps on CO2RR-to-CO, HER, and CO2-to-HCOOH pathways,
     compute limiting potentials U_L = -ΔG_max/e per doc 3.2.2.
@@ -299,7 +297,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: CR_BP_HT_adsorption_tree_20260406v2
-  capability: co2rr_reproduction
+  capability: batch_processing
   domain: struct
   intent: Generate HT_adsorption/ directory tree with pure_metals, compounds, clusters
     sections per doc 4.1 (high-level structure and naming).
@@ -349,7 +347,7 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: CR_WO_feature_extract_43d_20260412
-  capability: co2rr_reproduction
+  capability: scientific_analysis
   domain: general
   intent: Implement 43-dimensional feature extraction (40 continuous + 3 categorical)
     from adslab POSCAR paths per doc 4.3.1.

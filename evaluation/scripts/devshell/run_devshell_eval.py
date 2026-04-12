@@ -150,7 +150,7 @@ def main() -> int:
         help=(
             "OR-of-slices filter: cap cap[dom] cap[d1,d2] (whitespace separates "
             'slices; no spaces inside "[...]") '
-            '(e.g. "workflow_orchestration[polymer] input_generation_abacus")'
+            '(e.g. "workflow_orchestration[polymer] input_generation")'
         ),
     )
     parser.add_argument(

@@ -28,14 +28,18 @@ v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵�
 当前 capability 列表：
 
 - `batch_processing`
-- `co2rr_reproduction`（CO2RR 复现文档单元操作专用，便于单独过滤测评）
 - `data_diagnosis`
 - `execution_contract`（执行与交付约定：spec 与正文冲突以文件为准、根目录交付、归档解压、精确文件名等，对应 `matmaster/exps/` 与 `execution_contract/direct_contract.yaml`）
-- `input_generation_abacus` / `input_generation_vasp`
-- `property_prediction`
+- `input_generation`（输入生成任务；VASP/ABACUS 等软件后端放在题目 tags 或 bank 语境中表达）
+- `scientific_analysis`
 - `structure_construction`
+- `structure_retrieval`
 - `workflow_orchestration`
 - `safety_refusal`
+
+说明：
+
+- `co2rr_reproduction/` 目录保留为专题题库目录，但题目的 `capability` 已回归真实任务形态（如 `structure_construction` / `scientific_analysis` / `workflow_orchestration` / `batch_processing`），专题属性由 tags 表达。
 
 ## 加权评分 (v5+ 新增)
 
