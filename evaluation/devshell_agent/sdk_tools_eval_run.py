@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -65,6 +66,7 @@ class MatmasterEvalMcpEvalRunMixin:
         questions_override: list[str] | None = None,
         exclude_question_ids: list[str] | None = None,
         output_dir_override: Path | None = None,
+        eval_ingest_run_id: str | None = None,
     ) -> RunDevshellEvalParams:
         d: DevshellAgentCliDefaults = self._state.defaults
         tag = str(args["iteration_tag"]).strip()
@@ -116,6 +118,7 @@ class MatmasterEvalMcpEvalRunMixin:
             task_timeout_sec=task_timeout,
             eval_config=d.eval_config,
             extra_args=extra,
+            eval_ingest_run_id=eval_ingest_run_id,
             exclude_question_ids=exclude_question_ids,
         )
 
@@ -262,6 +265,8 @@ class MatmasterEvalMcpEvalRunMixin:
         ``run_devshell_eval`` writes sibling ``p0_gate/`` and ``remaining/``. Copying
         ``raw_runs.jsonl``, ``workspaces/``, ``logs/``, and ``pending_ingest/`` into
         the parent tag directory lets ingest + Feishu notify once with ``tag`` as title.
+        (P0 gate passes the same ``--eval-ingest-run-id`` to both phases so merged
+        ``pending_ingest`` shares one tools-server ``run_id``.)
         """
         base_dir.mkdir(parents=True, exist_ok=True)
         for sub in ("workspaces", "logs", "pending_ingest"):
@@ -415,6 +420,7 @@ class MatmasterEvalMcpEvalRunMixin:
     ) -> dict[str, Any]:
         """Two-phase eval: run P0 gate first, then remaining questions if gate passes."""
         base_dir = self._state.session_dir / "eval_runs" / tag
+        shared_ingest_run_id = str(uuid.uuid4())
 
         # --- Phase 1: P0 gate ---
         p0_dir = base_dir / "p0_gate"
@@ -422,6 +428,7 @@ class MatmasterEvalMcpEvalRunMixin:
             args,
             questions_override=list(p0_ids),
             output_dir_override=p0_dir,
+            eval_ingest_run_id=shared_ingest_run_id,
         )
         p0_dir.mkdir(parents=True, exist_ok=True)
         p0_rc, _, _ = self._run_subprocess_and_log(p0_params, phase_label="p0_gate")
@@ -476,6 +483,7 @@ class MatmasterEvalMcpEvalRunMixin:
             args,
             exclude_question_ids=list(p0_ids),
             output_dir_override=rest_dir,
+            eval_ingest_run_id=shared_ingest_run_id,
         )
         rest_dir.mkdir(parents=True, exist_ok=True)
         rest_rc, _, _ = self._run_subprocess_and_log(

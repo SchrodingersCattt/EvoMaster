@@ -30,6 +30,7 @@ class RunDevshellEvalParams:
     task_timeout_sec: float
     eval_config: Path | None
     extra_args: list[str]
+    eval_ingest_run_id: str | None = None
     exclude_question_ids: list[str] | None = None
 
 
@@ -68,6 +69,8 @@ class DevshellEvalSubprocess:
             cmd.extend(["--exp", params.exp])
         if params.eval_ingest_pending_only:
             cmd.append("--eval-ingest-pending-only")
+        if params.eval_ingest_run_id:
+            cmd.extend(["--eval-ingest-run-id", params.eval_ingest_run_id])
         if params.no_export_review:
             cmd.append("--no-export-review")
         if params.task_timeout_sec > 0:

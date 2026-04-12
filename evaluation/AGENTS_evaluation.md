@@ -382,10 +382,12 @@ P0 题目是被标记为最高优先级的评测题。在 DevShell Agent 多轮�
    - **Phase 2（remaining）**：仅跑非 P0 题目（`--exclude-question-ids`）→ 评分
 2. 合并两阶段结果，返回包含 `p0_gate_passed` / `p0_gate_failed` 的摘要
 3. `AgentLoopSharedState.last_p0_scores` 仅在 P0 gate 通过时更新
+4. 两阶段共用同一 ingest `run_id`：编排器为整轮生成一个 UUID，经 `--eval-ingest-run-id` 传给 Phase 1 与 Phase 2 的两次 `run_devshell_eval.py`，使 `pending_ingest` 与 manifest 在写入时即一致，tools-server 按 `run_id` 聚合为**一轮**评测（不再出现「P0 一拨、remaining 一拨」两个 `run_id`）。
 
 ### CLI 新增参数
 
 - `run_devshell_eval.py --exclude-question-ids ID1 ID2 ...` — 从 run plan 中排除指定题目
+- `run_devshell_eval.py --eval-ingest-run-id <UUID>` — 固定本次 run 的 ingest `run_id`（默认每进程随机 UUID）；P0 gate 编排器自动注入，一般无需手写
 
 ### 与现有流程的兼容
 
