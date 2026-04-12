@@ -9,13 +9,16 @@ from pydantic import ValidationError
 from evaluation.core.schemas import QuestionBank
 
 
-def _minimal_question(*, capability: str, domain: str) -> dict:
+def _minimal_question(
+    *, capability: str, domain: str, tags: list[str] | None = None
+) -> dict:
     return {
         'id': f'{capability}_{domain}',
         'capability': capability,
         'domain': domain,
         'intent': 'taxonomy test',
         'human_prompt_seed': 'x',
+        'tags': tags or [],
         'reference_answers': [{'key': 'unused', 'value': 'x'}],
         'scoring_checklist': [
             {
@@ -83,6 +86,60 @@ def test_question_bank_requires_top_level_domain() -> None:
                 'questions': [
                     _minimal_question(
                         capability='scientific_analysis', domain='general'
+                    )
+                ],
+            }
+        )
+
+
+def test_question_bank_rejects_question_tag_matching_own_capability() -> None:
+    with pytest.raises(ValidationError, match='must not repeat question capability'):
+        QuestionBank.model_validate(
+            {
+                'version': 'v5',
+                'capability': 'scientific_analysis',
+                'domain': 'general',
+                'questions': [
+                    _minimal_question(
+                        capability='scientific_analysis',
+                        domain='general',
+                        tags=['scientific_analysis'],
+                    )
+                ],
+            }
+        )
+
+
+def test_question_bank_rejects_question_tag_matching_own_domain() -> None:
+    with pytest.raises(ValidationError, match='must not repeat question domain'):
+        QuestionBank.model_validate(
+            {
+                'version': 'v5',
+                'capability': 'scientific_analysis',
+                'domain': 'general',
+                'questions': [
+                    _minimal_question(
+                        capability='scientific_analysis',
+                        domain='general',
+                        tags=['general'],
+                    )
+                ],
+            }
+        )
+
+
+def test_question_bank_rejects_generic_process_tag() -> None:
+    with pytest.raises(ValidationError, match='generic process tag'):
+        QuestionBank.model_validate(
+            {
+                'version': 'v5',
+                'capability': 'scientific_analysis',
+                'domain': 'general',
+                'questions': [
+                    _minimal_question(
+                        capability='scientific_analysis',
+                        domain='general',
+                        tags=['workflow'],
                     )
                 ],
             }

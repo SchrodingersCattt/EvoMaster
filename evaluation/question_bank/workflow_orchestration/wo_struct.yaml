@@ -16,7 +16,6 @@ questions:
   - surface_energy
   - MgO
   - slab_calculation
-  - workflow
   mode_scope:
   - direct
   - planner

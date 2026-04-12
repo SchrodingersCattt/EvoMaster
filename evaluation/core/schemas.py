@@ -101,6 +101,15 @@ DomainLiteral = Literal[
     'mlip',
 ]
 
+GENERIC_PROCESS_TAGS = {
+    'workflow',
+    'workflow_acceleration',
+    'workflow_closure',
+    'loop_oriented',
+    'plotting',
+    'structure_build',
+}
+
 
 # ---------------------------------------------------------------------------
 # Shared small models
@@ -230,8 +239,33 @@ class QuestionItem(BaseModel):
                 deduped.append(mode)
         return deduped
 
+    @field_validator('tags')
+    @classmethod
+    def _validate_tags(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for raw_tag in value:
+            tag = str(raw_tag).strip()
+            if not tag:
+                raise ValueError('tags must not contain empty strings')
+            if tag in GENERIC_PROCESS_TAGS:
+                raise ValueError(
+                    f'tag {tag!r} is a generic process tag; use a topic/tool/method tag instead'
+                )
+            if tag in seen:
+                raise ValueError(f'tags must be unique within a question: {tag!r}')
+            seen.add(tag)
+            cleaned.append(tag)
+        return cleaned
+
     @model_validator(mode='after')
     def _validate_scoring_contract(self) -> 'QuestionItem':
+        if self.capability in self.tags:
+            raise ValueError(
+                f'tag {self.capability!r} must not repeat question capability'
+            )
+        if self.domain in self.tags:
+            raise ValueError(f'tag {self.domain!r} must not repeat question domain')
         if not self.scoring_checklist:
             raise ValueError(
                 'question must include at least one scoring_checklist entry'

@@ -95,7 +95,6 @@ questions:
   - userlog_derived
   - dpgen
   - onboarding
-  - loop_oriented
   mode_scope:
   - direct
   - planner

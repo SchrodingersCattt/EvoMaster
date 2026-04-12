@@ -27,7 +27,6 @@ questions:
   - abacus
   - phonon
   - silicon
-  - workflow
   - userlog_derived
   mode_scope:
   - direct

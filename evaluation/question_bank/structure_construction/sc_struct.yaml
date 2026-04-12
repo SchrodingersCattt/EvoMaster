@@ -17,7 +17,6 @@ questions:
   - vdw
   - graphene
   - hBN
-  - structure_build
   mode_scope:
   - direct
   - planner
@@ -144,7 +143,6 @@ questions:
   - molecular_crystal
   - 110_surface
   - molecule_integrity
-  - structure_build
   mode_scope:
   - direct
   - planner
@@ -244,7 +242,6 @@ questions:
   - hydrogen_passivation
   - Si100
   - dangling_bond
-  - structure_build
   mode_scope:
   - direct
   - planner
@@ -474,7 +471,6 @@ questions:
 
     '
   tags:
-  - structure_construction
   - disorder_resolution
   - 3d_structure_perception
   - formula_identification
@@ -716,7 +712,6 @@ questions:
   - gamma_alumina
   - coordination_environment
   - relaxation_check
-  - structure_build
   mode_scope:
   - direct
   - planner

@@ -14,7 +14,6 @@ questions:
   tags:
   - band_structure
   - si
-  - workflow
   - kpath
   priority: P0
   mode_scope:
@@ -99,7 +98,7 @@ questions:
   tags:
   - hybrid_method
   - liquid_water
-  - workflow_acceleration
+  - hybrid_acceleration
   - gap
   mode_scope:
   - direct

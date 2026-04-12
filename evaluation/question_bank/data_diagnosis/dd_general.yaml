@@ -364,7 +364,6 @@ questions:
   - userlog_derived
   - proposal_review
   - scoring
-  - loop_oriented
   mode_scope:
   - direct
   - planner
@@ -471,9 +470,7 @@ questions:
   human_prompt_seed: "工作区中已提供 `experiment_metrics.csv`。\n\n请先读取该文件，再完成以下任务：\n1) 生成 `fig_spec.json`：给出 3 种图（折线、散点、箱线）的绘图规格，每个规格至少包含 `chart_type`、`x`、`y`、`group_by`、`title`、`reason`，且字段名必须来自 CSV。\n2) 生成 `qc_metrics.json`：至少包含以下键：\n   - `row_count`\n   - `missing_count_yield_pct`\n   - `missing_rate_yield_pct`\n   - `outlier_rule`\n   - `candidate_outliers_yield_pct`\n   - `unit_map`\n3) 生成 `data_qc_report.md`：包含缺失值检查、异常值规则（需写明 IQR 思路）、单位一致性检查、以及最终交付格式建议。\n4) 生成 `chart_priority.md`：给出 3 种图的优先级排序（P1/P2/P3）与使用边界。\n5) 在最终回答中简要说明你为何选择这 3 种图，并指出当前数据的至少 2 个局限。\n\n注意：不要虚构 CSV 中不存在的字段名。请在当前目录写出上述四个文件。\n"
   tags:
   - userlog_derived
-  - plotting
   - requirement_elicitation
-  - loop_oriented
   mode_scope:
   - direct
   - planner

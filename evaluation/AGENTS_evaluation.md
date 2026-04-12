@@ -92,6 +92,11 @@ evaluation/question_bank/
 
 **`tags` 没有（不写或 `tags: []`）怎么理解**：表示**不需要**额外 Facet 标记；**capability** + **domain** 已足够描述本题归类，题目合法且常见。只有当你还想打「第二条轴线」的信息（项目线、工具链、契约子类、内部分析用关键词）时才加字符串；**不要为了凑字段而填 tags**。
 
+**`tags` 的负面约束**：
+- **不要重复当前题自己的 `capability` 或 `domain`**；同一信息不应在三条轴上重复表达。
+- **不要使用泛过程占位词**，如 `workflow`、`workflow_acceleration`、`workflow_closure`、`loop_oriented`、`plotting`、`structure_build`。这类词只说明“做事方式”或编写过程，不是稳定的主题/工具/方法 Facet。
+- 优先写**主题 / 工具链 / 方法族**，例如 `abacus`、`bsse`、`co2rr_repro`、`bader`、`dpgen`；若只是想表达“这是个多步流程题”，应由 `capability=workflow_orchestration` 表达，而不是再写 `workflow` tag。
+
 **与 `--slices` 的关系**：Runner 当前仅按 **`capability` + `domain`** 过滤；**需要稳定用 CLI 切分的维度**应落在二者之一（或专题 capability），不要**只**写在 `tags` 里（除非已实现 tags 筛选，见下文「运行筛选」）。
 
 **正交性**：不要求数学意义上完全正交；若题干同时涉及「物理现象」与「输入文件形态」，按**唯一主轴**选一个 `domain`（文档已说明 `incar` 与 `elec` 等如何取舍）。`tags` 用于补充交叉信息，不替代上述二者。

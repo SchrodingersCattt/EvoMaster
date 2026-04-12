@@ -22,7 +22,6 @@ questions:
 
     '
   tags:
-  - structure_retrieval
   - provenance
   - rubidium_perchlorate
   - database_source
@@ -120,7 +119,6 @@ questions:
 
     '
   tags:
-  - structure_retrieval
   - mgb2
   - open_database
   - metadata_summary
@@ -220,7 +218,6 @@ questions:
 
     '
   tags:
-  - structure_retrieval
   - candidate_generation
   - superconductor
   - screening
@@ -317,7 +314,6 @@ questions:
 
     最终回答中简要确认是否满足“元素集合 + 空间群 + 数量上限”三项约束。'
   tags:
-  - structure_retrieval
   - materials_project
   - space_group_filter
   - userlog_derived
@@ -420,7 +416,6 @@ questions:
 
     最终回答需确认每条候选是否满足阈值条件。'
   tags:
-  - structure_retrieval
   - mof
   - sql_filter
   - coremof
@@ -532,7 +527,6 @@ questions:
 
     最终回答中确认每条候选如何满足上述组合约束。'
   tags:
-  - structure_retrieval
   - rare_earth
   - transition_metal
   - ternary_oxide
@@ -629,7 +623,6 @@ questions:
 
     最终回答需简要确认候选数量和可下载资源情况。'
   tags:
-  - structure_retrieval
   - heusler
   - spg225
   - download_link
@@ -728,7 +721,6 @@ questions:
 
     注意：本题是结构检索与汇总，不要求后续计算。'
   tags:
-  - structure_retrieval
   - alexandria
   - lmo
   - element_filter
@@ -831,7 +823,6 @@ questions:
 
     注意：本题仅评估检索与结构元数据汇总。'
   tags:
-  - structure_retrieval
   - oxide
   - band_gap_filter
   - userlog_derived

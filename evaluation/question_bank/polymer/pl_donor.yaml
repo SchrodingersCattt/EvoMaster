@@ -14,7 +14,6 @@ questions:
     3. 输出最终 shortlist，并分别说明“综合最优”和“高 Voc 候选”；
     4. 写出至少一个不确定性来源。
   tags:
-  - polymer
   - opv
   - donor
   - oligomer_extrapolation

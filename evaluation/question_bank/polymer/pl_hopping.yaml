@@ -14,7 +14,6 @@ questions:
     3. 结合常规 MD 中的配位和扩散信息，判断哪种条件更有利于 hopping；
     4. 说明如果进一步做实验或更高精度模拟，应优先验证什么。
   tags:
-  - polymer
   - free_energy
   - pmf
   - lithium_hopping

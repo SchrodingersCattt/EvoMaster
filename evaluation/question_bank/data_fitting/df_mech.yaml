@@ -181,7 +181,6 @@ questions:
   - userlog_derived
   - mechanical_estimation
   - biomedical
-  - loop_oriented
   mode_scope:
   - direct
   - planner

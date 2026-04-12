@@ -20,9 +20,7 @@ questions:
   tags:
   - userlog_derived
   - attachment_analysis
-  - plotting
   - image_analysis
-  - loop_oriented
   mode_scope:
   - direct
   - planner
@@ -149,9 +147,7 @@ questions:
   tags:
   - userlog_derived
   - post_processing
-  - plotting
   - report_generation
-  - loop_oriented
   mode_scope:
   - direct
   - planner
@@ -261,7 +257,6 @@ questions:
   - workflow_planning
   - materials_computation
   - task_decomposition
-  - loop_oriented
   mode_scope:
   - direct
   - planner
