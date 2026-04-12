@@ -338,7 +338,9 @@ def test_setup_with_required_bohrium_can_continue_after_retry_success() -> None:
             return_value=({'project_id': 99}, 'u1', 'o1'),
         ),
         patch.object(svc, '_make_event_bridge', return_value=MagicMock()),
-        patch.object(svc, '_setup_bohrium_for_run', return_value=expected) as mock_setup,
+        patch.object(
+            svc, '_setup_bohrium_for_run', return_value=expected
+        ) as mock_setup,
         patch(
             'src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result',
             return_value=access_key_result,

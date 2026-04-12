@@ -63,7 +63,7 @@ def test_fetch_bohrium_access_key_does_not_retry_no_items(monkeypatch):
 
 
 def test_fetch_bohrium_access_key_treats_blank_key_as_invalid(monkeypatch):
-    scripted = [_FakeResponse(200, {'code': 0, 'data': [{'access_key': '   '} ]})]
+    scripted = [_FakeResponse(200, {'code': 0, 'data': [{'access_key': '   '}]})]
     monkeypatch.setattr(
         'src.services.user_service.httpx.Client',
         lambda *args, **kwargs: _FakeClient(scripted),

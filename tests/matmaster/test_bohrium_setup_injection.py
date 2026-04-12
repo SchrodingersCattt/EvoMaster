@@ -123,7 +123,9 @@ class TestBohriumSetupServiceOrchestration:
 
         with (
             patch.object(svc, '_make_event_bridge', return_value=event_cb),
-            patch.object(svc, '_run_setup_sync', return_value=expected) as mock_setup_sync,
+            patch.object(
+                svc, '_run_setup_sync', return_value=expected
+            ) as mock_setup_sync,
         ):
             await svc.run_setup(
                 session_id='sess-1',
