@@ -110,7 +110,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  mm-devshell --workdir ./ws --log-dir ./logs\n"
             "  mm-devshell repl --workdir ./ws --log-dir ./logs\n"
-            "  mm-devshell run --workdir ./ws --log-dir ./logs -p \"Hello\"\n"
+            '  mm-devshell run --workdir ./ws --log-dir ./logs -p "Hello"\n'
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
@@ -161,6 +161,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     """Load LLM config, build provider, return DevRunner and related objects."""
+    import os
+
     root = _project_root()
     llm_yaml = root / "config" / "llm_config.yaml"
     main_yaml = root / "config" / "config.yaml"
@@ -195,8 +197,6 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
         sys.exit(1)
 
     # Load .env files (same as main app in src/utils/constant.py)
-    import os
-
     from dotenv import find_dotenv, load_dotenv
 
     load_dotenv()
