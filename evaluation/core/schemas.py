@@ -110,6 +110,22 @@ GENERIC_PROCESS_TAGS = {
     'structure_build',
 }
 
+CANONICAL_TAG_ALIASES = {
+    'HEA': 'hea',
+    'SrTiO3': 'srtio3',
+    'srti03': 'srtio3',
+    'Al2O3': 'al2o3',
+    'Li2O': 'li2o',
+    'MgO': 'mgo',
+    'CeO2': 'ceo2',
+    'MoS2': 'mos2',
+    'hBN': 'hbn',
+    'DACMOR': 'dacmor',
+    'Ag111': 'ag111',
+    'Si100': 'si100',
+    'CuCrZr': 'cucrzr',
+}
+
 
 # ---------------------------------------------------------------------------
 # Shared small models
@@ -248,6 +264,11 @@ class QuestionItem(BaseModel):
             tag = str(raw_tag).strip()
             if not tag:
                 raise ValueError('tags must not contain empty strings')
+            canonical = CANONICAL_TAG_ALIASES.get(tag)
+            if canonical is not None:
+                raise ValueError(
+                    f'tag {tag!r} is not canonical; use canonical tag {canonical!r}'
+                )
             if tag in GENERIC_PROCESS_TAGS:
                 raise ValueError(
                     f'tag {tag!r} is a generic process tag; use a topic/tool/method tag instead'

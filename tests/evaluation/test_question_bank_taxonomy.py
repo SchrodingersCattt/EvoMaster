@@ -146,6 +146,42 @@ def test_question_bank_rejects_generic_process_tag() -> None:
         )
 
 
+def test_question_bank_rejects_noncanonical_tag_alias() -> None:
+    with pytest.raises(ValidationError, match="use canonical tag 'srtio3'"):
+        QuestionBank.model_validate(
+            {
+                'version': 'v5',
+                'capability': 'scientific_analysis',
+                'domain': 'general',
+                'questions': [
+                    _minimal_question(
+                        capability='scientific_analysis',
+                        domain='general',
+                        tags=['SrTiO3'],
+                    )
+                ],
+            }
+        )
+
+
+def test_question_bank_rejects_tag_with_noncanonical_case() -> None:
+    with pytest.raises(ValidationError, match="use canonical tag 'hea'"):
+        QuestionBank.model_validate(
+            {
+                'version': 'v5',
+                'capability': 'scientific_analysis',
+                'domain': 'general',
+                'questions': [
+                    _minimal_question(
+                        capability='scientific_analysis',
+                        domain='general',
+                        tags=['HEA'],
+                    )
+                ],
+            }
+        )
+
+
 def test_manifest_bank_metadata_matches_bank_files() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     bank_root = repo_root / 'evaluation' / 'question_bank'

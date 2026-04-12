@@ -16,7 +16,7 @@ questions:
   - heterostructure
   - vdw
   - graphene
-  - hBN
+  - hbn
   mode_scope:
   - direct
   - planner
@@ -240,7 +240,7 @@ questions:
     '
   tags:
   - hydrogen_passivation
-  - Si100
+  - si100
   - dangling_bond
   mode_scope:
   - direct
@@ -353,7 +353,7 @@ questions:
   tags:
   - 2d_material
   - exfoliation
-  - MoS2
+  - mos2
   - monolayer
   mode_scope:
   - direct
@@ -599,7 +599,7 @@ questions:
   tags:
   - hydrogen_addition
   - molecular_crystal
-  - DACMOR
+  - dacmor
   - diacetylmorphine
   - geometry_validation
   - formula_check
@@ -859,7 +859,7 @@ questions:
     '
   tags:
   - surface_slab
-  - CeO2
+  - ceo2
   - 111_surface
   - polar_surface
   - stoichiometry_check
@@ -982,7 +982,7 @@ questions:
     '
   tags:
   - surface_interface
-  - Ag111
+  - ag111
   - explicit_solvent
   - potassium
   - electrochemical_interface
@@ -1341,7 +1341,7 @@ questions:
   tags:
   - wyckoff
   - corundum
-  - Al2O3
+  - al2o3
   - userlog_derived
   mode_scope:
   - direct
@@ -1551,7 +1551,7 @@ questions:
   tags:
   - wyckoff
   - perovskite
-  - SrTiO3
+  - srtio3
   - spacegroup_221
   - userlog_derived
   mode_scope:

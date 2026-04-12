@@ -96,6 +96,7 @@ evaluation/question_bank/
 - **不要重复当前题自己的 `capability` 或 `domain`**；同一信息不应在三条轴上重复表达。
 - **不要使用泛过程占位词**，如 `workflow`、`workflow_acceleration`、`workflow_closure`、`loop_oriented`、`plotting`、`structure_build`。这类词只说明“做事方式”或编写过程，不是稳定的主题/工具/方法 Facet。
 - 优先写**主题 / 工具链 / 方法族**，例如 `abacus`、`bsse`、`co2rr_repro`、`bader`、`dpgen`；若只是想表达“这是个多步流程题”，应由 `capability=workflow_orchestration` 表达，而不是再写 `workflow` tag。
+- **命名风格默认用 `lower_snake_case`**。材料名、化学式或缩写类 tag 也统一写成小写 canonical 形式，如 `hea`、`srtio3`、`al2o3`、`mgo`、`li2o`、`mgb2`、`hbn`；不要混用 `HEA` / `SrTiO3` / `Al2O3` / `MgO` 这类别名。
 
 **与 `--slices` 的关系**：Runner 当前仅按 **`capability` + `domain`** 过滤；**需要稳定用 CLI 切分的维度**应落在二者之一（或专题 capability），不要**只**写在 `tags` 里（除非已实现 tags 筛选，见下文「运行筛选」）。
 

@@ -392,7 +392,7 @@ questions:
     请完成以下交付： - `hea_alcr0.8cofeni_summary.json`：至少包含 `vec`, `mixing_enthalpy`, `mixing_entropy`, `binary_formation_energy_summary`, `solid_solution_prediction`, `possible_structure`； - `hea_alcr0.8cofeni_report.md`：解释判据、结论与不确定性。
     最终回答中简要给出“是否可能形成固溶体”的结论与依据。
   tags:
-  - HEA
+  - hea
   - phase_prediction
   - thermodynamic_descriptors
   - userlog_derived

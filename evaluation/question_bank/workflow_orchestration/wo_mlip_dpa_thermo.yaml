@@ -298,7 +298,7 @@ questions:
   - mlip
   - dpa
   - molecular_dynamics
-  - Li2O
+  - li2o
   - userlog_derived
   mode_scope:
   - direct

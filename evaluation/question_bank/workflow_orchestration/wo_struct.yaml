@@ -14,7 +14,7 @@ questions:
     '
   tags:
   - surface_energy
-  - MgO
+  - mgo
   - slab_calculation
   mode_scope:
   - direct
@@ -94,7 +94,7 @@ questions:
   - defect
   - formation_energy
   - supercell
-  - MgO
+  - mgo
   priority: P0
   mode_scope:
   - direct
