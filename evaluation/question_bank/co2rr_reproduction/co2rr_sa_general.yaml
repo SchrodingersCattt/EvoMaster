@@ -1,10 +1,10 @@
 version: v5
 capability: scientific_analysis
-domain: general
+domain: catalysis
 questions:
 - id: CR_WO_feature_extract_43d_20260412
   capability: scientific_analysis
-  domain: general
+  domain: catalysis
   intent: Implement 43-dimensional feature extraction (40 continuous + 3 categorical)
     from adslab POSCAR paths per doc 4.3.1.
   human_prompt_seed: '编写脚本：输入为含多个子目录的数据集根路径，每个体系子目录内有 POSCAR（或等价结构文件）。用 pymatgen 或

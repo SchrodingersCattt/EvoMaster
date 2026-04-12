@@ -1,6 +1,6 @@
 version: "v5"
 capability: "batch_processing"
-domain: "elec"
+domain: "catalysis"
 
 questions:
   # ============================================================
@@ -8,7 +8,7 @@ questions:
   # ============================================================
   - id: "BP_elec_001_20260406v2"
     capability: "batch_processing"
-    domain: "elec"
+    domain: "catalysis"
     intent: "Batch-compute H adsorption energy on 3 different metal (001) surfaces using mock energies to test batch workflow efficiency."
     human_prompt_seed: |
       批量计算 H 原子在 Cu(001)、Ag(001)、Au(001) 三种金属表面的吸附能，用于 HER 活性对比：
@@ -38,7 +38,7 @@ questions:
       - Cu: E_ads ≈ -0.62 eV
       - Ag: E_ads ≈ -0.73 eV
       - Au: E_ads ≈ -0.65 eV
-    tags: ["batch", "her", "adsorption", "metal_screening", "catalysis"]
+    tags: ["batch", "her", "adsorption", "metal_screening"]
     mode_scope: ["direct", "planner"]
     data_files: []
     reference_answers:

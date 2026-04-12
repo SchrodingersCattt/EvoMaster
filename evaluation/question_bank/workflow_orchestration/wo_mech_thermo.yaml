@@ -1,10 +1,10 @@
 version: v5
 capability: workflow_orchestration
-domain: thermo
+domain: alloy
 questions:
 - id: WO_mech_006_20260411v1
   capability: workflow_orchestration
-  domain: thermo
+  domain: alloy
   intent: Build the convex hull for a CuCrZr alloy and summarize stability interpretation
     artifacts.
   human_prompt_seed: |
@@ -26,7 +26,6 @@ questions:
   - convex_hull
   - stability
   - cucrzr
-  - alloy
   - userlog_derived
   mode_scope:
   - direct

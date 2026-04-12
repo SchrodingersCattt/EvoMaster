@@ -91,16 +91,11 @@ CapabilityLiteral = Literal[
 ]
 
 DomainLiteral = Literal[
-    'struct',
-    'elec',
-    'mech',
-    'thermo',
-    'kinetic',
-    'general',
-    'incar',
-    'scxrd',
+    'battery',
+    'catalysis',
     'polymer',
-    'mlip',
+    'alloy',
+    'semiconductor',
 ]
 
 GENERIC_PROCESS_TAGS = {

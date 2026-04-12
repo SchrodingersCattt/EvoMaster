@@ -1,10 +1,10 @@
 version: v5
 capability: scientific_analysis
-domain: mech
+domain: alloy
 questions:
 - id: WO_general_steel_008_20260411v1
   capability: scientific_analysis
-  domain: mech
+  domain: alloy
   intent: Analyze Ni-content variation in duplex stainless-steel composition and summarize
     tensile-strength prediction trends.
   human_prompt_seed: |-

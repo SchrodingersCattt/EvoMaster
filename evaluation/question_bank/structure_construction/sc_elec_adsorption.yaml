@@ -1,6 +1,6 @@
 version: "v5"
 capability: "structure_construction"
-domain: "elec"
+domain: "catalysis"
 
 questions:
   # ============================================================
@@ -8,7 +8,7 @@ questions:
   # ============================================================
   - id: "SC_elec_004_20260404"
     capability: "structure_construction"
-    domain: "elec"
+    domain: "catalysis"
     intent: "Build Ag(001) surface slab and place CO molecule at ontop site for adsorption calculation."
     human_prompt_seed: |
       构建CO在Ag(001)表面的吸附结构：
