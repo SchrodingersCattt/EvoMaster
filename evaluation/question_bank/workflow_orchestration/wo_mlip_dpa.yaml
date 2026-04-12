@@ -475,3 +475,397 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
+- id: WO_mlip_dpa_010_20260411v1
+  capability: workflow_orchestration
+  domain: mlip
+  intent: Fine-tune a DPA3 potential for a fixed step budget and summarize key hyperparameters and outcomes.
+  human_prompt_seed: '请对给定数据集执行 DPA3 微调（目标训练步数 3000），并整理核心配置与结果。
+
+    请输出：
+    1) `dpa3_finetune_config.json`：记录训练步数、学习率策略、loss 关键参数、验证划分；
+    2) `dpa3_finetune_report.md`：概述训练过程、可观察结果、后续改进建议与不确定性。
+
+    最终回答请给出：本次微调是否满足继续下游验证的最低条件。'
+  tags:
+  - userlog_derived
+  - dpa3
+  - finetune
+  - mlip_training
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: finetune_config
+    value: dpa3_finetune_config.json
+  - key: finetune_report
+    value: dpa3_finetune_report.md
+  - key: config_required_tokens
+    value:
+      filename: dpa3_finetune_config.json
+      tokens:
+      - train_steps
+      - lr_type
+      - start_lr
+      - stop_lr
+      - valid_ratio
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: dpa3_finetune_report.md
+      tokens:
+      - DPA3
+      - 训练
+      - 结果
+      - 建议
+      - 不确定性
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: finetune_config
+    criterion: Agent writes `dpa3_finetune_config.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: finetune_report
+    criterion: Agent writes `dpa3_finetune_report.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: config_required_tokens
+    criterion: Config JSON includes required training-control fields.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: report_required_tokens
+    criterion: Report summarizes training outcome with uncertainty notes.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: Deliverables are grounded in generated finetune artifacts and avoid unsupported benchmark claims.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical training submissions with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_dpa_011_20260411v1
+  capability: workflow_orchestration
+  domain: struct
+  intent: Build and validate Nb-doped SrTiO3 supercell workflow, including relaxation and lattice-dynamics/mechanics checks.
+  human_prompt_seed: '从数据库获取立方 SrTiO3（Pm-3m），构建 2x2x2 超胞并将 1 个 Ti 替换为 Nb（约 12.5%）。
+
+    请输出：
+    1) `srti03_nb125_relaxed.cif`：优化后的掺杂结构；
+    2) `srti03_nb125_checks.json`：至少包含 `elastic_status`, `phonon_status`, `scf_status`, `band_dos_status`；
+    3) `srti03_nb125_workflow_report.md`：说明构建-优化-检查流程、关键观察与不确定性。
+
+    最终回答请明确：该掺杂体系是否通过“可进入电子结构分析”的前置检查。'
+  tags:
+  - userlog_derived
+  - srti03
+  - doping
+  - elastic
+  - phonon
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: relaxed_struct
+    value: srti03_nb125_relaxed.cif
+  - key: checks_json
+    value: srti03_nb125_checks.json
+  - key: workflow_report
+    value: srti03_nb125_workflow_report.md
+  - key: checks_tokens
+    value:
+      filename: srti03_nb125_checks.json
+      tokens:
+      - elastic_status
+      - phonon_status
+      - scf_status
+      - band_dos_status
+      flags: i
+  - key: report_tokens
+    value:
+      filename: srti03_nb125_workflow_report.md
+      tokens:
+      - 超胞
+      - 掺杂
+      - 几何优化
+      - 弹性
+      - 声子
+      - 不确定性
+      flags: i
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: relaxed_struct
+    criterion: Agent writes optimized doped structure `srti03_nb125_relaxed.cif`.
+    axis: correctness
+    verify: artifact_exists
+  - id: checks_json
+    criterion: Agent writes `srti03_nb125_checks.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: workflow_report
+    criterion: Agent writes `srti03_nb125_workflow_report.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: checks_tokens
+    criterion: Check JSON includes elastic/phonon/SCF/band-DOS status fields.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: report_tokens
+    criterion: Report covers doping workflow and caveats for downstream electronic analysis.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: Deliverables are grounded in generated workflow outputs and avoid fabricated stability claims.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical workflow submissions with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_dpa_009_20260411v1
+  capability: workflow_orchestration
+  domain: thermo
+  intent: Retrieve an MgB2 structure from open databases and compute its phonon spectrum with an ML potential workflow.
+  human_prompt_seed: '先从开源数据库检索一个 MgB2 结构，再基于该结构计算声子谱。
+
+    请完成以下交付：
+    1) `mgb2_phonon_summary.json`：至少包含 `retrieval_source`, `structure_identifier`, `phonon_settings`, `imaginary_mode_check`, `output_artifacts`；
+    2) `mgb2_phonon_report.md`：说明检索与声子计算两阶段流程、关键参数与不确定性。
+
+    最终回答中请简要说明：检索到的结构与声子结果是否相互一致。'
+  tags:
+  - mlip
+  - dpa
+  - mgb2
+  - phonon
+  - retrieval_plus_calc
+  - userlog_derived
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: phonon_json
+    value: mgb2_phonon_summary.json
+  - key: phonon_report
+    value: mgb2_phonon_report.md
+  - key: json_required_tokens
+    value:
+      filename: mgb2_phonon_summary.json
+      tokens:
+      - retrieval_source
+      - structure_identifier
+      - phonon_settings
+      - imaginary_mode_check
+      - output_artifacts
+      - MgB2
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: mgb2_phonon_report.md
+      tokens:
+      - 检索
+      - MgB2
+      - 声子
+      - 参数
+      - 不确定性
+      flags: i
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: phonon_json
+    criterion: Agent writes `mgb2_phonon_summary.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: phonon_report
+    criterion: Agent writes `mgb2_phonon_report.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: json_required_tokens
+    criterion: JSON includes retrieval metadata and phonon-result summary fields.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: report_required_tokens
+    criterion: Report explains two-stage workflow and uncertainty caveats.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: Final answer is grounded in both retrieval and phonon artifacts and does not fabricate unsupported structure/spectrum details.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: Workflow proceeds compactly from retrieval to phonon computation and summary.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_dpa_008_20260411v1
+  capability: workflow_orchestration
+  domain: thermo
+  intent: Run a short DPA molecular-dynamics simulation for Li2O at 300 K and summarize thermostat/time-step settings with trajectory statistics.
+  human_prompt_seed: '对给定 Li2O 结构执行一次 DPA 分子动力学测试，目标条件为：
+
+    - 温度 300 K
+    - 总时长 1 ps
+    - 时间步长 1 fs
+    - 推荐 NVT 方案
+
+    请完成以下交付：
+
+    1) `li2o_md_summary.json`：至少包含 `ensemble`, `temperature_K`, `runtime_ps`, `timestep_fs`, `n_steps`, `thermo_stats`；
+    2) `li2o_md_report.md`：说明模拟设置、关键输出观察（温度稳定性等）和可能误差来源。
+
+    最终回答中简要确认是否满足 300 K / 1 ps / 1 fs 三个条件。'
+  tags:
+  - mlip
+  - dpa
+  - molecular_dynamics
+  - Li2O
+  - userlog_derived
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: md_summary_artifact
+    value: li2o_md_summary.json
+  - key: md_report_artifact
+    value: li2o_md_report.md
+  - key: summary_required_tokens
+    value:
+      filename: li2o_md_summary.json
+      tokens:
+      - ensemble
+      - temperature_K
+      - runtime_ps
+      - timestep_fs
+      - n_steps
+      - thermo_stats
+      - '300'
+      - '1'
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: li2o_md_report.md
+      tokens:
+      - NVT
+      - 300
+      - 1 ps
+      - 1 fs
+      - 温度
+      - 不确定性
+      flags: i
+  - key: turn_budget
+    value:
+      max: 16
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: md_summary_artifact
+    criterion: Agent writes `li2o_md_summary.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: md_report_artifact
+    criterion: Agent writes `li2o_md_report.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: summary_required_tokens
+    criterion: MD summary JSON includes required simulation-parameter fields and basic runtime statistics.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: report_required_tokens
+    criterion: Report describes MD setup, observed behavior, and uncertainty caveats.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: The final answer is grounded in MD output artifacts and does not invent trajectory statistics not present in generated results.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical MD submissions with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: Workflow proceeds directly from MD setup to execution and summary without redundant exploratory loops.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

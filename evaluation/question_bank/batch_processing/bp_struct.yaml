@@ -359,3 +359,299 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
+- id: BP_struct_001_20260406a
+  capability: batch_processing
+  domain: struct
+  intent: Batch-construct Si(100) surface slabs with varying vacuum thickness while
+    keeping all other geometric parameters (Miller index, layer count, supercell size)
+    constant. Verify strict variable control.
+  human_prompt_seed: '从 `surface_slab_params.json` 读取配置。 构造 5 个 Si(100) 表面 slab，改变真空厚度：10,
+    15, 20, 25, 30 Å。 其他参数严格保持固定：Miller 指标 [1,0,0], 4 层 Si, 3x3 超胞。 输出 5 个 CIF 文件，每个文件名包含真空厚度。
+
+    关键考察点： 1. 真空厚度参数按顺序变化 2. 所有其他构建参数保持恒定 3. 生成 5 个不同的输出文件
+
+    '
+  tags:
+  - batch_operation
+  - parameter_sweep
+  - single_variable
+  - surface_slab
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: surface_slab_params
+    path: data/BP_struct_001/surface_slab_params.json
+    oss_url: ''
+    description: Surface slab batch configuration with locked geometry and varying
+      vacuum.
+  reference_answers:
+  - key: vacuum_sweep_variable
+    value:
+      expected_values:
+      - 10.0
+      - 15.0
+      - 20.0
+      - 25.0
+      - 30.0
+  - key: locked_miller_index
+    value: '[1, 0, 0]'
+  - key: locked_layer_count
+    value: 4
+  - key: output_files_generated
+    value: 5
+    tolerance: 0.0
+  - key: no_redundant_calls
+    value: 5
+    tolerance: 0.0
+  - key: batch_efficiency
+    value: 5 slabs without re-querying
+  - key: turn_budget
+    value: &id000_ruct_001_20260406a
+      max: 20
+  - key: duration_budget
+    value: &id001_ruct_001_20260406a
+      max: 7200000
+  - key: token_budget_total
+    value: &id002_ruct_001_20260406a
+      max: 35000
+  scoring_checklist:
+  - id: vacuum_sweep_variable
+    criterion: 'The 5 generated slab files use vacuum thicknesses of exactly 10, 15,
+      20, 25, and 30 Å, with vacuum being the only structural parameter that varies
+      across files. Judge from the build script, log output, or file metadata.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: locked_miller_index
+    criterion: All 5 generated slabs use Miller index [1,0,0] (Si(100) surface), as
+      confirmed by the build script, log output, or output file metadata. Judge solely
+      from the final answer; do not fail because a specific MCP tool was not used.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: locked_layer_count
+    criterion: All 5 generated slabs have exactly 4 Si layers, as confirmed by the
+      build script, log output, or output file content. Judge solely from the final
+      answer; do not fail because a specific MCP tool was not used.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: output_files_generated
+    criterion: All 5 CIF/POSCAR files are generated and have distinct vacuum thickness
+      indicators.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_batch_consistency
+    criterion: The five outputs collectively reflect a single-parameter vacuum sweep
+      with Miller index, layer count, and supercell held fixed as specified.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_redundant_calls
+    criterion: No identical consecutive calls (tool_name + all args). Each call is
+      parameterically different.
+    axis: efficiency
+    verify: no_retries
+  - id: batch_efficiency
+    criterion: Batch construction completed without re-querying input data or recomputing
+      unchanged geometries.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: BP_struct_002_20260407a
+  capability: batch_processing
+  domain: struct
+  intent: Generate VASP INCAR files for DOS calculation across 4 different structures.
+    Enforce unified k-point density (~50 k-points/Ų despite different structure sizes)
+    and identical electronic parameters across all structures.
+  human_prompt_seed: '从 `dos_input_prep.json` 读取 4 种材料的 DOS 计算配置（Si, Cu, Al, Fe）。
+
+    对每种材料生成对应的 VASP INCAR 文件，要求： 1. k-point 密度统一为 ~50 points/Ų（虽然不同结构尺度不同，k 点网格数目不同）
+    2. ISMEAR=0, SIGMA=0.05, NEDOS=2000 在所有 4 个文件中完全相同 3. 其他电子学参数（LORBIT, NSW 等）一致
+
+    关键考察点： 1. 理解 k-point 密度概念（不是k点个数） 2. 为不同大小的结构计算合适的 k 点网格 3. 确保非几何参数（ISMEAR 等）的一致性
+    4. 生成标准格式的 INCAR 文件
+
+    '
+  tags:
+  - batch_operation
+  - input_generation
+  - dos_calculation
+  - kpoint_density
+  mode_scope:
+  - direct
+  - planner
+  data_files:
+  - key: dos_input_prep
+    path: data/BP_struct_002/dos_input_prep.json
+    oss_url: ''
+    description: DOS input preparation config for 4 structures with unified k-point
+      density.
+  reference_answers:
+  - key: incar_files_count
+    value: 4
+    tolerance: 0.5
+  - key: kpoint_density_unified
+    value:
+      description: All 4 INCAR files specify k-point density ~50/Ų
+      tolerance_percent: 5.0
+  - key: electronic_parameters_identical
+    value:
+      ISMEAR: 0
+      SIGMA: 0.05
+      NEDOS: 2000
+  - key: grounding_config_used
+    value: Configuration from dos_input_prep.json
+  - key: no_manual_kpoint_tuning
+    value: Systematic k-point density calculation
+  - key: turn_budget
+    value: *id000
+  - key: duration_budget
+    value: *id001
+  - key: token_budget_total
+    value: *id002
+  scoring_checklist:
+  - id: incar_files_count
+    criterion: Exactly 4 INCAR files generated (one per material).
+    axis: correctness
+    verify: numerical_range
+  - id: kpoint_density_unified
+    criterion: All 4 INCAR files follow unified k-point density strategy (~50 points/Ų),
+      even though raw k-point counts differ due to structure sizes.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: electronic_parameters_identical
+    criterion: ISMEAR=0, SIGMA=0.05, NEDOS=2000 are identical across all 4 INCAR files.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_config_used
+    criterion: Configuration values (ISMEAR, SIGMA, etc.) match the provided manifest
+      exactly.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_manual_kpoint_tuning
+    criterion: Agent computed k-point grids systematically (e.g., using density formula),
+      not by trial-and-error.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: BP_struct_006_20260411v1
+  capability: batch_processing
+  domain: struct
+  intent: Batch retrieve 20 lithium-containing structures and compute the average volume per atom from per-structure metadata.
+  human_prompt_seed: '批量检索 20 个含锂材料（结构文件可下载），并计算它们的平均单原子体积（average volume per atom）。
+
+    请完成以下交付：
+
+    1) `li20_volume_stats.json`：至少包含 `candidate_count`, `volume_per_atom_list`, `average_volume_per_atom`, `unit`；
+    2) `li20_retrieval_report.md`：说明检索条件（含锂、数量 20）、每条数据的体积/原子数来源，以及均值计算过程；
+    3) 在最终回答中给出平均值并说明该统计可能受哪些样本偏差影响。
+
+    注意：本题强调批量检索 + 统计汇总，不要求后续第一性原理计算。'
+  tags:
+  - batch_operation
+  - lithium
+  - structure_retrieval
+  - statistics
+  - userlog_derived
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: stats_json
+    value: li20_volume_stats.json
+  - key: retrieval_report
+    value: li20_retrieval_report.md
+  - key: stats_required_tokens
+    value:
+      filename: li20_volume_stats.json
+      tokens:
+      - candidate_count
+      - 20
+      - volume_per_atom_list
+      - average_volume_per_atom
+      - unit
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: li20_retrieval_report.md
+      tokens:
+      - 锂
+      - 20
+      - 体积
+      - 原子
+      - 平均
+      - 不确定性
+      flags: i
+  - key: turn_budget
+    value:
+      max: 16
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: stats_json
+    criterion: Agent writes `li20_volume_stats.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: retrieval_report
+    criterion: Agent writes `li20_retrieval_report.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: stats_required_tokens
+    criterion: Stats JSON contains batch-size and average-volume fields for 20 lithium-containing candidates.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: report_required_tokens
+    criterion: Report explains retrieval constraints and average-volume calculation rationale with uncertainty caveats.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_source
+    criterion: The final answer is grounded in retrieved structure metadata and explicitly distinguishes measured per-item values from computed aggregate statistics.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical retrieval calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
