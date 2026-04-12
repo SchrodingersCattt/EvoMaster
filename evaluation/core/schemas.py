@@ -71,6 +71,8 @@ VerifyLiteral = Literal[
     'checkcif_no_a_alerts',
     # plain-text file checks
     'text_file_contains_all',
+    'text_file_kpt_path',
+    'text_file_numeric_range',
     'text_file_regex',
 ]
 
@@ -312,6 +314,8 @@ class QuestionItem(BaseModel):
             'molcrys_local_env',
             'sc005_disorder_formulas',
             'text_file_contains_all',
+            'text_file_kpt_path',
+            'text_file_numeric_range',
             'text_file_regex',
         }
         for item in self.scoring_checklist:
