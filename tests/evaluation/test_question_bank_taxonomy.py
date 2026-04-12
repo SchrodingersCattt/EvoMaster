@@ -44,11 +44,13 @@ DIRECT_MIGRATE_DOMAIN_EXPECTATIONS = {
     'scientific_analysis/sa_elec.yaml': 'battery',
     'scientific_analysis/sa_mech.yaml': 'alloy',
     'structure_construction/sc_elec_adsorption.yaml': 'catalysis',
+    'workflow_orchestration/wo_catalysis.yaml': 'catalysis',
     'workflow_orchestration/wo_elec_adsorption.yaml': 'catalysis',
     'workflow_orchestration/wo_elec_nfpp_refactored.yaml': 'battery',
     'workflow_orchestration/wo_general_mech.yaml': 'alloy',
     'workflow_orchestration/wo_mech_struct.yaml': 'alloy',
     'workflow_orchestration/wo_mech_thermo.yaml': 'alloy',
+    'workflow_orchestration/wo_semiconductor.yaml': 'semiconductor',
 }
 
 
@@ -301,3 +303,36 @@ def test_direct_migrate_banks_match_phase1_domain_mapping() -> None:
         assert {q['domain'] for q in raw_bank['questions']} == {expected_domain}, (
             rel_path
         )
+
+
+def test_phase2_split_banks_have_expected_question_ids() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    bank_root = repo_root / 'evaluation' / 'question_bank'
+
+    semiconductor_bank = yaml.safe_load(
+        (bank_root / 'workflow_orchestration/wo_semiconductor.yaml').read_text(
+            encoding='utf-8'
+        )
+    )
+    catalysis_bank = yaml.safe_load(
+        (bank_root / 'workflow_orchestration/wo_catalysis.yaml').read_text(
+            encoding='utf-8'
+        )
+    )
+
+    assert [q['id'] for q in semiconductor_bank['questions']] == [
+        'WO_elec_001_20260411v2'
+    ]
+    assert [q['id'] for q in catalysis_bank['questions']] == [
+        'WO_elec_006_20260411v2',
+        'WO_elec_007_20260411v1',
+    ]
+
+
+def test_manifest_active_totals_after_wo_elec_phase2_split() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    bank_root = repo_root / 'evaluation' / 'question_bank'
+    manifest = yaml.safe_load((bank_root / 'manifest.yaml').read_text(encoding='utf-8'))
+
+    assert len(manifest['banks']) == 22
+    assert sum(int(entry['questions']) for entry in manifest['banks']) == 26

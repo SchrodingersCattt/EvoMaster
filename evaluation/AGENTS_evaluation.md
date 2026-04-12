@@ -138,6 +138,7 @@ evaluation/question_bank/
 - `semiconductor`：半导体与电子材料业务线。
 - 材料对象、方法、软件、专题线不再进入 `domain`；统一通过 `tags` 表达。
 - 未纳入本轮业务线迁移的 bank 必须移出 `evaluation/question_bank/`，不能与 active business-line banks 混放。
+- 对 archive 中的 legacy bank，可在严格题级复审后拆出新的 active bank；迁回 active 的题必须同时满足单一 `capability` 与单一 business-line `domain`，未定性的题继续保留在 archive。
 
 #### 新题填写 checklist（capability / domain / tags）
 
