@@ -190,7 +190,7 @@ def test_eval_run_record_serializes_duration_ms() -> None:
     r = EvalRunRecord(
         question_id='Q',
         capability='structure_construction',
-        domain='struct',
+        domain='battery',
         mode='direct',
         repeat_idx=0,
         prompt='p',
@@ -209,7 +209,7 @@ def test_question_item_rejects_removed_capability_knowledge_recall() -> None:
         QuestionItem(
             id='KR',
             capability='knowledge_recall',
-            domain='general',
+            domain='battery',
             intent='legacy capability should be rejected',
             human_prompt_seed='x',
             scoring_checklist=[
@@ -247,20 +247,23 @@ def test_question_item_rejects_removed_domain_optical() -> None:
 
 
 @pytest.mark.parametrize(
-    ('capability', 'domain'),
+    'domain',
     [
-        ('scientific_analysis', 'elec'),
-        ('input_generation', 'incar'),
+        'battery',
+        'catalysis',
+        'polymer',
+        'alloy',
+        'semiconductor',
     ],
 )
-def test_question_item_accepts_new_capabilities(capability: str, domain: str) -> None:
+def test_question_item_accepts_business_line_domains(domain: str) -> None:
     from evaluation.core.schemas import QuestionItem
 
     item = QuestionItem(
-        id=f'{capability}_ok',
-        capability=capability,
+        id=f'{domain}_ok',
+        capability='scientific_analysis',
         domain=domain,
-        intent='new capability should be accepted',
+        intent='new business-line domain should be accepted',
         human_prompt_seed='x',
         scoring_checklist=[
             {
@@ -272,7 +275,43 @@ def test_question_item_accepts_new_capabilities(capability: str, domain: str) ->
         ],
         reference_answers=[{'key': 'unused', 'value': 'x'}],
     )
-    assert item.capability == capability
+    assert item.domain == domain
+
+
+@pytest.mark.parametrize(
+    'domain',
+    [
+        'struct',
+        'elec',
+        'mech',
+        'thermo',
+        'kinetic',
+        'general',
+        'incar',
+        'scxrd',
+        'mlip',
+    ],
+)
+def test_question_item_rejects_removed_legacy_domains(domain: str) -> None:
+    from evaluation.core.schemas import QuestionItem
+
+    with pytest.raises(ValidationError, match=domain):
+        QuestionItem(
+            id='legacy_domain',
+            capability='scientific_analysis',
+            domain=domain,
+            intent='legacy domain should be rejected',
+            human_prompt_seed='x',
+            scoring_checklist=[
+                {
+                    'id': 'unused',
+                    'criterion': 'unused',
+                    'axis': 'correctness',
+                    'verify': 'llm_binary_judge',
+                }
+            ],
+            reference_answers=[{'key': 'unused', 'value': 'x'}],
+        )
 
 
 @pytest.mark.parametrize(
@@ -291,7 +330,7 @@ def test_question_item_rejects_removed_legacy_capabilities(capability: str) -> N
         QuestionItem(
             id='legacy_cap',
             capability=capability,
-            domain='general',
+            domain='battery',
             intent='legacy capability should be rejected',
             human_prompt_seed='x',
             scoring_checklist=[
@@ -313,7 +352,7 @@ def test_safety_questions_also_count_token_and_duration_efficiency() -> None:
     q = QuestionItem(
         id='SR',
         capability='safety_refusal',
-        domain='general',
+        domain='battery',
         intent='refuse harmful request',
         human_prompt_seed='x',
         scoring_checklist=[

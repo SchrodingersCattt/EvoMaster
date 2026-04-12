@@ -85,7 +85,7 @@ evaluation/question_bank/
 | 字段 | 别名（规划用语） | 单选 / 多选 | 必须回答的一句话 |
 |------|------------------|-------------|------------------|
 | **`capability`** | Task（任务类） | **单选**（枚举之一） | 这道题要测的是哪一类**任务能力**？（例如：建结构、库检索、批量扫描、日志诊断、写 VASP/ABACUS 输入、多步编排与交付、安全拒答、CO₂RR 专题等。） |
-| **`domain`** | Subject（题材 / 主轴） | **单选**（枚举之一） | 这道题落在哪条**材料、物理或题库约定主轴**上？（如 `struct` / `elec` / `mech` / `thermo` / `kinetic` / `polymer` / `general`；输入规格主轴用 `incar`，单晶 XRD 用 `scxrd`，MLIP / 势函数与训练编排类用 `mlip`。） |
+| **`domain`** | Subject（业务线 / 应用场景） | **单选**（枚举之一） | 这道题最终服务于哪条**业务线或应用场景**？仅允许 `battery` / `catalysis` / `polymer` / `alloy` / `semiconductor`。 |
 | **`tags`** | Facet（主题 / 工具 / 项目线） | **多选**（字符串列表，可空） | 除 capability/domain 外，还需要哪些**可并列**的标记？（如产品线、工具链、内部专题、提示词契约类 `direct_contract` 等。） |
 
 **填写顺序（固定）**：先 **`capability`** → 再 **`domain`** → 最后按需补 **`tags`**。同一道题只有一个 capability、一个 domain；tags 可多个或没有。
@@ -100,7 +100,7 @@ evaluation/question_bank/
 
 **与 `--slices` 的关系**：Runner 当前仅按 **`capability` + `domain`** 过滤；**需要稳定用 CLI 切分的维度**应落在二者之一（或专题 capability），不要**只**写在 `tags` 里（除非已实现 tags 筛选，见下文「运行筛选」）。
 
-**正交性**：不要求数学意义上完全正交；若题干同时涉及「物理现象」与「输入文件形态」，按**唯一主轴**选一个 `domain`（文档已说明 `incar` 与 `elec` 等如何取舍）。`tags` 用于补充交叉信息，不替代上述二者。
+**正交性**：不要求数学意义上完全正交；若题干同时涉及多个对象、方法或软件，`domain` 仍只保留**最终业务线 / 应用场景**这一条主轴，其余信息进入 `tags`。
 
 #### capability 枚举
 
@@ -126,23 +126,26 @@ evaluation/question_bank/
 
 与 `evaluation/core/schemas.py` 中 `DomainLiteral` **保持一致**：
 
-`struct` / `elec` / `mech` / `thermo` / `kinetic` / `general` / `incar` / `scxrd` / `polymer` / `mlip`
+`battery` / `catalysis` / `polymer` / `alloy` / `semiconductor`
 
 **语义说明**
 
-- 表示**材料/物理子领域或粗粒度主题**，用于 `--slices` 与报告聚合；与 `capability` 正交。
-- `incar`：强调 **VASP INCAR/输入规格** 类题目，与「电子结构现象」的 `elec` 可并存；选题时按题干主轴二选一即可。
-- `scxrd`：单晶 XRD 解析、精修等（见 `data_fitting/df_scxrd.yaml`）。
-- `polymer`：聚合物/软物质相关；`general`：跨领域或不易归入上列者。
-- `mlip`：**机器学习势（MLIP）**、势函数训练/评估/编排等与势函数工作流强绑定的主轴（与 `tags` 中的 `mlip` 可并存；需要 `--slices` 按域切分时优先用本枚举）。
+- `domain` 仅表示**业务线 / 应用场景**，用于 `--slices`、报告聚合、bank 分组与覆盖统计；与 `capability` 正交。
+- `battery`：电池与储能业务线，如正负极、离子迁移、电解液、电池材料分析等。
+- `catalysis`：催化与表界面反应业务线，如吸附、反应路径、CO2RR、HER 等。
+- `polymer`：聚合物与软物质业务线。
+- `alloy`：合金与金属材料业务线。
+- `semiconductor`：半导体与电子材料业务线。
+- 材料对象、方法、软件、专题线不再进入 `domain`；统一通过 `tags` 表达。
+- 未纳入本轮业务线迁移的 bank 必须移出 `evaluation/question_bank/`，不能与 active business-line banks 混放。
 
 #### 新题填写 checklist（capability / domain / tags）
 
 新增或改写题目时建议按顺序自检：
 
 1. **`capability`**：按**任务形态**选（建结构 / 查库 / 科学分析 / 批量 / 诊断 / 输入生成 / 编排 / **执行与交付约定** / 安全），与「测什么能力」一致；测 spec 优先级、归档解压、精确文件名等 **执行/交付契约** → `execution_contract`；不要仅因用了某软件就选 `workflow_orchestration`——若本质是输入生成，应用 `input_generation`。
-2. **`domain`**：按题干**材料/物理主轴**选；VASP INCAR 专项题优先 `incar`；单晶 XRD 用 `scxrd`；聚合物线用 `polymer`。`incar` 与 `elec` 不必同时纠结：以题干更强调「输入规格」还是「现象/性质」二选一即可。
-3. **粒度不够时**：可加 **`tags`**（如 `mlip`、`userlog`）做人读与二次分析；**tags 不参与 `--slices`**。若该维度需要**命令行一切就切**，应优先用 **`domain`**（或专题 capability），而不是只写 tags。
+2. **`domain`**：按题目的**最终业务目标 / 应用场景**选：`battery` / `catalysis` / `polymer` / `alloy` / `semiconductor` 五选一；不要再把物理轴、方法轴、软件轴写进 `domain`。
+3. **粒度不够时**：可加 **`tags`**（如 `mlip`、`userlog`、`abacus`、`scxrd`）做人读与二次分析；**tags 不参与 `--slices`**。若该维度需要**命令行一切就切**，应先确认它是否真的是稳定业务线，否则不要硬塞进 `domain`。
 4. **`workflow_orchestration` 只留真编排题**：必须存在明确的阶段流程、工具链串联、上一步输出作为下一步输入，或流程/交付 gate；若只是基于给定 bundle / 文献做比较、筛选、推荐、方法综述或机理分析，优先标 `scientific_analysis`。
 5. **与 `evaluation/core/schemas.py` 一致**：`CapabilityLiteral` / `DomainLiteral` 未列出的取值会导致加载失败；需要新枚举时须同时改 **schemas + 本文档 + 相关 runner 假设**（若有）。
 
@@ -151,7 +154,7 @@ evaluation/question_bank/
 | 维度 | 回答的问题 | 典型取值思路 | 谁消费 |
 |------|------------|----------------|--------|
 | **capability** | 这道题测**哪类任务能力**（建结构、查库、科学分析、批量、诊断、输入生成、编排、安全、执行契约等） | 与「任务形态」一致：能标 `input_generation` 或 `scientific_analysis` 就不要标成笼统的 `workflow_orchestration` | **`--slices`、聚合报告 `by_capability`**；加载时校验 |
-| **domain** | 这道题在**哪个材料/物理或方法主轴**上（结构/电子/力学/专题域如 `polymer`/`scxrd`/`incar`） | 与「切片想怎么分」对齐：若团队常跑「电化学 workflow」，应用 `elec` 等 **domain**，而不是只靠 tags | **`--slices` 的 `cap[dom1,dom2]`**、按域聚合；加载时校验 |
+| **domain** | 这道题最终属于**哪条业务线 / 应用场景**（`battery` / `catalysis` / `polymer` / `alloy` / `semiconductor`） | 与「切片想怎么分」对齐：只有稳定业务线维度才能进入 **domain**；对象、方法、软件不要只因常用就塞进来 | **`--slices` 的 `cap[dom1,dom2]`**、按域聚合；加载时校验 |
 | **tags** | **二级标签**：项目线、工具线、内部别名（如 `mlip`、`userlog`、`co2rr`） | 不承载「枚举完整性」；用于人读、检索、将来扩展 | **当前 runner 不参与筛选**（见下节）；可用于自建报表或外部分析 |
 
 **选用顺序（简版）**：先定 **capability**（任务形态）→ 再定 **domain**（题材/主轴，且兼顾你以后想怎么写 `--slices`）→ 需要更细、但**不值得**加新 domain 时再加 **tags**。
@@ -164,7 +167,7 @@ evaluation/question_bank/
   - **括号外空白**分隔多条 **slice**，多条之间为 **OR**（命中任一即保留该题）。
   - **`cap`** 单独出现：该 capability 下 **任意 domain** 均命中。
   - **`cap[a]`** 或 **`cap[a,b]`**：capability 相同 **且** `question.domain` 落在列表中（列表内为 **OR**）。
-  - **`[]` 内禁止空白**，域名用逗号分隔，如 `[elec,struct]`，不能写成 `[elec, struct]`。
+  - **`[]` 内禁止空白**，域名用逗号分隔，如 `[battery,catalysis]`，不能写成 `[battery, catalysis]`。
 - **`evaluation/config.yaml`**：`include_slices: [{ capability: "…", domains: ["…"] }, …]`；某条省略 `domains` 时表示该 capability **不限 domain**（与 CLI 中单独的 `cap` 等价）。
 
 **若你希望「按 tags 跑子集」**：当前需 **`--questions` / `include_question_ids`** 显式列 ID，或把题目拆进**单独 bank 文件**后只加载该文件（取决于你们入口是否支持按文件过滤），或在未来给 runner 增加 `--tags`（需改代码）。在此之前，**需要频繁用 CLI 切分的维度应落在 `domain`（或独立 `capability`）上**，而不是只写在 `tags` 里。
@@ -172,8 +175,8 @@ evaluation/question_bank/
 #### 基于 `--slices` 的命名与调整建议
 
 1. **先反推常用切片**：列出团队最常跑的命令，例如「只要电化学 workflow」「只要聚合物」「只要 ABACUS 输入」。把每条映射到 `capability` + `domain` 的组合是否**能一条 `--slices` 写出来**；若不能，优先考虑 **调整 domain**（或专题 capability），而不是加 tags。
-2. **`workflow_orchestration` + 多主题**：该 capability 只应用于确实考察流程组织的题；保留在该类中的题仍应**务必用 `domain` 区分**（如 `elec` / `polymer` / `struct`），否则只能 `workflow_orchestration` 全选或依赖题目 ID 列表。
-3. **专题线不要直接占用 capability**：如 `co2rr`、`userlog`、`mlip` 等优先放入 `tags`；只有当它本身就是独立**任务形态**时，才应升级成 capability。
+2. **`workflow_orchestration` + 多主题**：该 capability 只应用于确实考察流程组织的题；保留在该类中的题仍应**务必用 `domain` 区分业务线**（如 `battery` / `catalysis` / `polymer`），否则只能 `workflow_orchestration` 全选或依赖题目 ID 列表。
+3. **专题线不要直接占用 capability 或 domain**：如 `co2rr`、`userlog`、`mlip`、`scxrd`、`abacus` 等优先放入 `tags`；只有当它本身就是独立**任务形态**时，才应升级成 capability。
 4. **不要指望 tags 驱动 CLI**：tags 适合 **文档化与二次分析**；**驱动切片**请用 capability/domain，或扩展 runner（见上）。
 5. **新增枚举值**：若出现「必须同时按某维度筛，但该维度既不适合塞 domain 也不适合塞 capability」的重复需求，再评估 **新 domain** 或 **runner 支持 tags 过滤**，避免 capability 无限膨胀。
 
@@ -372,7 +375,7 @@ P0 题目是被标记为最高优先级的评测题。在 DevShell Agent 多轮�
 ```yaml
 - id: WO_elec_001_20260404
   capability: workflow_orchestration
-  domain: elec
+  domain: battery
   priority: P0        # ← P0 回归门控题目
   tags:
     - band_structure
