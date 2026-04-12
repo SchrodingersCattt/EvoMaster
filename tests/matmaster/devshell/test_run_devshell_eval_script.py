@@ -63,8 +63,6 @@ def test_prepare_cc_baseline_writes_task_meta(tmp_path) -> None:
             sys.executable,
             str(SCRIPT),
             "--prepare-cc-baseline",
-            "--modes",
-            "direct",
             "--limit",
             "1",
             "--no-eval-ingest",
@@ -123,8 +121,6 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
         "argv",
         [
             str(SCRIPT),
-            "--modes",
-            "direct",
             "--limit",
             "1",
             "--output-dir",
@@ -186,8 +182,6 @@ def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> 
         "argv",
         [
             str(SCRIPT),
-            "--modes",
-            "direct",
             "--limit",
             "1",
             "--output-dir",
@@ -250,8 +244,6 @@ def test_devshell_eval_exp_direct_forwards_flag(tmp_path, monkeypatch) -> None:
         "argv",
         [
             str(SCRIPT),
-            "--modes",
-            "direct",
             "--limit",
             "1",
             "--output-dir",

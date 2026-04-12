@@ -11,9 +11,6 @@ questions:
   - eos_fit
   - numeric_postprocess
   - bulk_modulus
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: ev_table
     path: data/DF_mech_001/ev_curve.json
@@ -93,9 +90,6 @@ questions:
   - cj_point
   - energetic_materials
   priority: P0
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: msst_data
     path: data/DF_mech_002/msst_hugoniot.json
@@ -187,9 +181,6 @@ questions:
   - userlog_derived
   - mechanical_estimation
   - biomedical
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: implant_params
     path: data/WO_general_userlog_004_20260410v3/implant_params.json
@@ -315,9 +306,6 @@ questions:
   - checkcif
   - ordered_structure
   - monoclinic
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_001_20260408/A23050101A0735.hkl
@@ -448,9 +436,6 @@ questions:
   - disordered_structure
   - monoclinic
   - high_temperature
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_002_20260408/A23050102A0375.hkl
@@ -575,9 +560,6 @@ questions:
   - thermal_expansion
   - phase_transition
   - monoclinic
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: vt_pxrd_data
     path: data/DFT_pxrd_001_20260408/_td-pxrd_test.txt

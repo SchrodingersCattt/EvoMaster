@@ -27,9 +27,6 @@ questions:
   - bsse
   - empty_atom
   - surface
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: base_slab
     path: data/IG_abacus_001_20260404/base_slab.stru
@@ -206,9 +203,6 @@ questions:
   - electrostatic_potential
   - surface
   priority: P0
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: base_al_slab
     path: data/IG_abacus_003_20260406/base_al_slab.stru
@@ -375,9 +369,6 @@ questions:
   - dipole_correction
   - electrostatic_potential
   - surface
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: base_h2o
     path: data/IG_abacus_004_20260406/base_h2o.stru
@@ -551,9 +542,6 @@ questions:
   - electric_field
   - nanoribbon
   - band_structure
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: nanoribbon
     path: data/IG_abacus_007_20260406/nanoribbon.stru
@@ -749,9 +737,6 @@ questions:
   - compensating_charge
   - dipole_correction
   - charged_surface
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: base_h2o_gate
     path: data/IG_abacus_008_20260406/base_h2o_gate.stru
@@ -937,9 +922,6 @@ questions:
   - vacancy
   - empty_atom
   priority: P0
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: base_vacancy
     path: data/IG_abacus_002_20260404/base_vacancy.stru
@@ -1123,9 +1105,6 @@ questions:
   - surface_energy
   - slab_convergence
   - pw
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: bulk_al_fcc
     path: data/IG_abacus_005_20260406/bulk_al_fcc.stru
@@ -1360,9 +1339,6 @@ questions:
   - surface_vacancy
   - defect
   - pw
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: mo_bulk
     path: data/IG_abacus_006_20260406/mo_bulk.stru
@@ -1668,9 +1644,6 @@ questions:
   - incar_generation
   - band_structure
   - non_scf
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_001/task_spec.json
@@ -1843,9 +1816,6 @@ questions:
   - scf
   - perovskite
   - semiconductor
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_002/task_spec.json
@@ -2028,9 +1998,6 @@ questions:
   - relaxation
   - perovskite
   - magnetic
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_003/task_spec.json
@@ -2263,9 +2230,6 @@ questions:
   - hse06
   - hybrid_functional
   - mof
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_004/task_spec.json
@@ -2479,9 +2443,6 @@ questions:
   - dft_plus_u
   - hubbard_u
   - transition_metal
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_005/task_spec.json
@@ -2690,9 +2651,6 @@ questions:
   - metagga
   - scan
   - rare_earth
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_006/task_spec.json
@@ -2871,9 +2829,6 @@ questions:
   - molecular_dynamics
   - heusler
   - magnetic
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_007/task_spec.json
@@ -3110,9 +3065,6 @@ questions:
   - elastic_constants
   - finite_differences
   - perovskite
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_008/task_spec.json
@@ -3285,9 +3237,6 @@ questions:
   - dfpt
   - dielectric
   - born_charges
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_009/task_spec.json
@@ -3424,9 +3373,6 @@ questions:
   - soc
   - spin_orbit
   - heavy_element
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_010/task_spec.json
@@ -3691,9 +3637,6 @@ questions:
   - dos
   - pdos
   - metallic
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_011/task_spec.json
@@ -3859,9 +3802,6 @@ questions:
   - transition_state
   - hse06
   - magnetic
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_012/task_spec.json
@@ -4093,9 +4033,6 @@ questions:
   - relaxation
   - carbide
   - metallic
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_013/task_spec.json
@@ -4261,9 +4198,6 @@ questions:
   - static
   - insulator
   - sio2
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_014/task_spec.json
@@ -4484,9 +4418,6 @@ questions:
   - hse06
   - soc
   - point_defect
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_015/task_spec.json
@@ -4671,9 +4602,6 @@ questions:
   - gw
   - precursor_scf
   - rare_earth
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_016/task_spec.json
@@ -4832,9 +4760,6 @@ questions:
   - bse_precursor
   - relaxation
   - metal
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_017/task_spec.json
@@ -5035,9 +4960,6 @@ questions:
   - magnetic
   - scf
   - double_perovskite
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_018/task_spec.json
@@ -5208,9 +5130,6 @@ questions:
   - scf
   - non_magnetic
   - insulator
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_019/task_spec.json
@@ -5381,9 +5300,6 @@ questions:
   - magnetic_metal
   - scf
   - selenide
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: task_spec
     path: data/IG_incar_020/task_spec.json

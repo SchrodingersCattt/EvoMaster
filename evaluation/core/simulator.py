@@ -408,7 +408,6 @@ class HumanSimulator:
             ),
             human_prompt_seed=prompt,
             tags=tags,
-            mode_scope=["planner"],
             data_files=data_files,
             reference_answers=ref_answers,
             scoring_checklist=checklist,

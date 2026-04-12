@@ -28,9 +28,6 @@ questions:
   - rubidium_perchlorate
   - database_source
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: retrieval_report
@@ -131,9 +128,6 @@ questions:
   - open_database
   - metadata_summary
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: retrieval_json
@@ -233,9 +227,6 @@ questions:
   - superconductor
   - screening
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: candidate_json
@@ -330,9 +321,6 @@ questions:
   - materials_project
   - space_group_filter
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: candidates_json
@@ -436,9 +424,6 @@ questions:
   - sql_filter
   - coremof
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: candidates_json
@@ -549,9 +534,6 @@ questions:
   - transition_metal
   - ternary_oxide
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: candidates_json
@@ -651,9 +633,6 @@ questions:
   - spg225
   - download_link
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: candidates_json
@@ -753,9 +732,6 @@ questions:
   - lmo
   - element_filter
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: candidates_json
@@ -859,9 +835,6 @@ questions:
   - oxide
   - band_gap_filter
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: candidates_json

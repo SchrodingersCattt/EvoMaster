@@ -17,9 +17,6 @@ questions:
   - zn_pd
   - '011'
   - mp_id
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -66,9 +63,6 @@ questions:
   - compound_slab
   - zns
   - polar_surface
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: file_exists
@@ -147,9 +141,6 @@ questions:
   - single_atom
   - adsorbate_initial
   - zno
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -204,9 +195,6 @@ questions:
   - slab
   - molecule_placement
   - silver
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: slab_layers

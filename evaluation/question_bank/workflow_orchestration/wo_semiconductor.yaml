@@ -16,9 +16,6 @@ questions:
   - si
   - kpath
   priority: P0
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: gap_type
@@ -102,9 +99,6 @@ questions:
   - phonon
   - silicon
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: phonon_json

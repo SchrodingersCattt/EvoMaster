@@ -17,9 +17,6 @@ questions:
   - doping
   - formation_energy
   priority: P0
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: formation_energy_eV
@@ -94,9 +91,6 @@ questions:
   - nfpp
   - voltage
   - intercalation
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: avg_voltage_V

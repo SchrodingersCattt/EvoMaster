@@ -24,9 +24,6 @@ questions:
   - interface
   - adhesion
   - graphene_oxide
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: interface_bundle
     path: data/pl_adhesion/interface_adhesion_bundle.json
@@ -123,9 +120,6 @@ questions:
   - opv
   - donor
   - oligomer_extrapolation
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: donor_bundle
     path: data/pl_donor/donor_prescreen_bundle.json
@@ -223,9 +217,6 @@ questions:
   - free_energy
   - pmf
   - lithium_hopping
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: free_energy_bundle
     path: data/pl_hopping/free_energy_hopping_bundle.json
@@ -323,9 +314,6 @@ questions:
   - membrane
   - gas_separation
   - permeability
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: membrane_bundle
     path: data/pl_membrane/membrane_screening_bundle.json
@@ -423,9 +411,6 @@ questions:
   - rheology
   - viscosity
   - electrolyte
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: rheology_bundle
     path: data/pl_rheology/rheology_window_bundle.json

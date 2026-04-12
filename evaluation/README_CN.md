@@ -141,8 +141,9 @@ uv run python -m evaluation.cli \
 
 - `--slices`: OR-of-slices，语法 `cap cap[dom] cap[d1,d2]`（**括号外**空格分隔，`[]` 内禁止空格；与 `evaluation/config.yaml` 中 `include_slices` 一致）。
 - `--questions`: 按 v5 question id 过滤题目。
-- `--modes`: 选择 `direct` / `planner`。
 - `--k`: 每题重复次数。
+
+评测 Runner 固定以 **direct** 任务模式执行（不再提供 `--modes` 或题内 `mode_scope`）。
 
 与 DevShell / baseline **不同**：该路径会跑 **BinaryEvaluator** 与 Playground **`run_mat_task`**（见 `core/runner.py` + `core/mat_runner.py`）。长时间或无人值守时可选用：
 

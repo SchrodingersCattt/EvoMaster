@@ -71,9 +71,6 @@ class MatmasterEvalMcpEvalRunMixin:
         d: DevshellAgentCliDefaults = self._state.defaults
         tag = str(args["iteration_tag"]).strip()
         out_dir = output_dir_override or (self._state.session_dir / "eval_runs" / tag)
-        modes = list(d.modes)
-        if args.get("modes"):
-            modes = list(args["modes"])
         jobs = d.jobs if args.get("jobs") is None else int(args["jobs"])
         limit = d.limit if args.get("limit") is None else int(args["limit"])
         questions = questions_override
@@ -106,7 +103,6 @@ class MatmasterEvalMcpEvalRunMixin:
             extra = list(args["extra_args"])
         return RunDevshellEvalParams(
             output_dir=out_dir,
-            modes=modes,
             jobs=jobs,
             limit=limit,
             questions=questions,

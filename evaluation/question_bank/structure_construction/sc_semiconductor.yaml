@@ -16,9 +16,6 @@ questions:
   - vdw
   - graphene
   - hbn
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: hetero_spec
     path: data/SC_struct_001/hetero_spec.json
@@ -122,9 +119,6 @@ questions:
   - hydrogen_passivation
   - si100
   - dangling_bond
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: hydrogen_cap_spec
     path: data/SC_struct_003/hydrogen_cap_spec.json

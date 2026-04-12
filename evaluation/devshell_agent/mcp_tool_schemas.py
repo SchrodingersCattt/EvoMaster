@@ -14,11 +14,6 @@ RUN_DEVSHELL_EVAL_SCHEMA: dict[str, Any] = {
                 "Each call should use a fresh tag."
             ),
         },
-        "modes": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Forwarded to run_devshell_eval --modes (default: CLI defaults).",
-        },
         "jobs": {
             "type": "integer",
             "description": (

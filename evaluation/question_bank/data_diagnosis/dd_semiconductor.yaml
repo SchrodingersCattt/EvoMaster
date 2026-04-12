@@ -13,9 +13,6 @@ questions:
   tags:
   - scf_diagnosis
   - smearing
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: case_bundle
     path: data/DD_general_002/case_bundle.json
@@ -88,9 +85,6 @@ questions:
   - initial_structure
   - phase_mismatch
   priority: P0
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: case_bundle
     path: data/DD_general_004/case_bundle.json

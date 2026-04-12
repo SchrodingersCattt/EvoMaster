@@ -237,21 +237,9 @@ class QuestionItem(BaseModel):
         default=None,
         description='Gate priority. "P0" = regression gate (run first, block on regression).',
     )
-    mode_scope: list[ModeLiteral] = Field(default_factory=lambda: ['direct', 'planner'])
     data_files: list[DataFileRef] = Field(default_factory=list)
     reference_answers: list[ReferenceAnswer] = Field(default_factory=list)
     scoring_checklist: list[ScoringCheckItem] = Field(default_factory=list)
-
-    @field_validator('mode_scope')
-    @classmethod
-    def _validate_mode_scope(cls, value: list[ModeLiteral]) -> list[ModeLiteral]:
-        if not value:
-            raise ValueError('mode_scope cannot be empty')
-        deduped: list[ModeLiteral] = []
-        for mode in value:
-            if mode not in deduped:
-                deduped.append(mode)
-        return deduped
 
     @field_validator('tags')
     @classmethod
@@ -407,7 +395,6 @@ class CapabilitySlice(BaseModel):
 class EvalConfig(BaseModel):
     """Top-level evaluation config."""
 
-    modes: list[ModeLiteral] = Field(default_factory=lambda: ['direct', 'planner'])
     k: int = 1
     question_bank_dir: str = 'evaluation/question_bank'
     output_dir: str = 'runs/mat_master_eval'
@@ -446,17 +433,6 @@ class EvalConfig(BaseModel):
         if value < 1:
             raise ValueError('k must be >= 1')
         return value
-
-    @field_validator('modes')
-    @classmethod
-    def _validate_modes(cls, value: list[ModeLiteral]) -> list[ModeLiteral]:
-        if not value:
-            raise ValueError('modes cannot be empty')
-        deduped: list[ModeLiteral] = []
-        for mode in value:
-            if mode not in deduped:
-                deduped.append(mode)
-        return deduped
 
 
 # ---------------------------------------------------------------------------

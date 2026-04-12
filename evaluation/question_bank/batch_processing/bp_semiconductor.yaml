@@ -23,9 +23,6 @@ questions:
   - post_processing
   - band_structure
   - analysis_consistency
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: postprocessing_bandstr
     path: data/BP_struct_004/postprocessing_bandstr.json

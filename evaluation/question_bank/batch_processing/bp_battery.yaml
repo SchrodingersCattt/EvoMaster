@@ -21,9 +21,6 @@ questions:
   - structure_retrieval
   - statistics
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: stats_json

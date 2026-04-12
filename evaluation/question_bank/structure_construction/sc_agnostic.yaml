@@ -36,9 +36,6 @@ questions:
   - molecular_crystal
   - 110_surface
   - molecule_integrity
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: unit_cell_atoms
@@ -136,9 +133,6 @@ questions:
   - exfoliation
   - mos2
   - monolayer
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: twod_spec
     path: data/SC_struct_004/twod_spec.json
@@ -255,9 +249,6 @@ questions:
   - disorder_resolution
   - 3d_structure_perception
   - formula_identification
-  mode_scope:
-  - direct
-  - planner
   reference_answers:
   - key: structures_processed
     value:
@@ -381,9 +372,6 @@ questions:
   - diacetylmorphine
   - geometry_validation
   - formula_check
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: dacmor_cif
     path: data/SC_struct_006/DACMOR.cif
@@ -488,9 +476,6 @@ questions:
   - gamma_alumina
   - coordination_environment
   - relaxation_check
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: file_exists
@@ -640,9 +625,6 @@ questions:
   - polar_surface
   - stoichiometry_check
   priority: P0
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: file_exists
@@ -760,9 +742,6 @@ questions:
   - explicit_solvent
   - potassium
   - electrochemical_interface
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: file_exists
@@ -897,9 +876,6 @@ questions:
   - electrolyte
   - aqueous_solution
   - modeling_focused
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: electrolyte_spec
     path: data/WO_mlip_dpa_006_20260411v4/electrolyte_system_spec.json
@@ -1051,9 +1027,6 @@ questions:
   - supercell
   - high_entropy_like
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: structure_artifact
@@ -1143,9 +1116,6 @@ questions:
   - corundum
   - al2o3
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: structure_artifact
@@ -1259,9 +1229,6 @@ questions:
   - slab
   - supercell
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: fcc_artifact
@@ -1339,9 +1306,6 @@ questions:
   - srtio3
   - spacegroup_221
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: structure_artifact

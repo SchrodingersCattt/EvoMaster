@@ -19,9 +19,6 @@ questions:
   - batch_structure
   - ht_dataset
   - filesystem
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -77,9 +74,6 @@ questions:
   - her
   - adsorption
   - metal_screening
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: E_ads_Cu

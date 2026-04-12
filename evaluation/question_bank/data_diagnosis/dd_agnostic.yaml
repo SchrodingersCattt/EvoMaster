@@ -16,9 +16,6 @@ questions:
   - failure_recovery
   - batch_jobs
   - retry_strategy
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: failure_classes_count
@@ -106,9 +103,6 @@ questions:
   - userlog_derived
   - proposal_review
   - scoring
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: proposal_excerpt
     path: data/WO_general_userlog_002_20260410v3/proposal_excerpt.md
@@ -223,9 +217,6 @@ questions:
   tags:
   - userlog_derived
   - requirement_elicitation
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: experiment_metrics
     path: data/WO_general_userlog_003_20260410v4/experiment_metrics.csv

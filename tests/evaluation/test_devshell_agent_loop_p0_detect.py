@@ -14,7 +14,6 @@ from evaluation.devshell_agent.loop import DevshellAgentLoop
 
 def _minimal_state(eval_output_dirs: list[Path]) -> AgentLoopSharedState:
     defaults = DevshellAgentCliDefaults(
-        modes=["direct"],
         jobs=1,
         limit=None,
         questions=None,

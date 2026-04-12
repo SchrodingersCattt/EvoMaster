@@ -18,9 +18,6 @@ questions:
   - elastic_constants
   - apex
   - database_compare
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -115,9 +112,6 @@ questions:
   - apex
   - structure_optimization
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: optimized_structure
@@ -214,9 +208,6 @@ questions:
   - stability
   - cucrzr
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: hull_summary_json

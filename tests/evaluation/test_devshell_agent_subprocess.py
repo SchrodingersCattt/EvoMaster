@@ -16,7 +16,6 @@ def test_build_run_devshell_eval_argv_minimal() -> None:
     out = repo / "results/run1"
     params = RunDevshellEvalParams(
         output_dir=out,
-        modes=["direct"],
         jobs=2,
         limit=3,
         questions=None,
@@ -32,7 +31,6 @@ def test_build_run_devshell_eval_argv_minimal() -> None:
     invoker = DevshellEvalSubprocess(repo)
     argv = invoker.build_argv(script, params)
     assert str(script) in map(str, argv)
-    assert "--modes" in argv and "direct" in argv
     assert "--jobs" in argv and "2" in argv
     assert "--limit" in argv and "3" in argv
     assert "--model" in argv and "claude-sonnet-4-6" in argv
@@ -50,7 +48,6 @@ def test_build_run_devshell_eval_argv_eval_ingest_run_id() -> None:
     out = repo / "results/run1"
     params = RunDevshellEvalParams(
         output_dir=out,
-        modes=["direct"],
         jobs=1,
         limit=None,
         questions=None,

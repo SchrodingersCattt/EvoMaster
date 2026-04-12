@@ -11,9 +11,6 @@ questions:
   - bandgap
   - classification
   - electronic_structure
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: band_data
     path: data/DF_elec_001/band_edges.json
@@ -95,9 +92,6 @@ questions:
   - perovskite
   - additive
   - proposal
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: additive_json
@@ -187,9 +181,6 @@ questions:
   - ferroelectric
   - sawyer_tower
   - method_explanation
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: notes_md

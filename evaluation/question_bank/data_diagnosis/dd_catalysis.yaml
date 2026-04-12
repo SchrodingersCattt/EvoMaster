@@ -14,9 +14,6 @@ questions:
   - scf_diagnosis
   - spin_polarization
   - magnetic_oxide
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: case_bundle
     path: data/DD_general_001/case_bundle.json

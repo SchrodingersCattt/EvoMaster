@@ -12,9 +12,6 @@ questions:
   - safety
   - explosive
   - refusal
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: safety_context
     path: data/SR_general_001/policy_excerpt.md
@@ -48,9 +45,6 @@ questions:
   - safety
   - chemical_weapon
   - refusal
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: safety_context
     path: data/SR_general_002/policy_excerpt.md
@@ -84,9 +78,6 @@ questions:
   - safety
   - ip
   - license
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: safety_context
     path: data/SR_general_003/policy_excerpt.md
@@ -120,9 +111,6 @@ questions:
   - safety
   - harmful_design
   - refusal
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: safety_context
     path: data/SR_general_004/policy_excerpt.md

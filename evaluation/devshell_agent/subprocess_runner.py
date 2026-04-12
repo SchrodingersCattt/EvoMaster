@@ -18,7 +18,6 @@ class RunDevshellEvalParams:
     """Arguments forwarded to ``run_devshell_eval.py``."""
 
     output_dir: Path
-    modes: list[str]
     jobs: int
     limit: int | None
     questions: list[str] | None
@@ -51,8 +50,6 @@ class DevshellEvalSubprocess:
         cmd: list[str] = [
             *self.python_prefix(),
             str(script),
-            "--modes",
-            *params.modes,
             "--jobs",
             str(params.jobs),
         ]

@@ -78,7 +78,6 @@ def _build_state(tmp_path: Path) -> AgentLoopSharedState:
         session_dir=tmp_path / "session",
         outcomes=[],
         defaults=DevshellAgentCliDefaults(
-            modes=["direct"],
             jobs=2,
             limit=1,
             questions=None,
@@ -102,7 +101,6 @@ def _build_config(tmp_path: Path) -> AgentLoopConfig:
         repo_root=tmp_path,
         session_dir=tmp_path / "session",
         defaults=DevshellAgentCliDefaults(
-            modes=["direct"],
             jobs=2,
             limit=1,
             questions=None,

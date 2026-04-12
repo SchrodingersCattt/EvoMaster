@@ -19,9 +19,6 @@ questions:
   - bsse
   - surface_energy
   - mock_energy
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: sigma_J_m2
@@ -100,9 +97,6 @@ questions:
   - abacus
   - surface
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: wf_json_artifact
@@ -202,9 +196,6 @@ questions:
   - ag
   - deep_potential
   - high_throughput_style
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -264,9 +255,6 @@ questions:
   - co2rr
   - adsorption_energy
   priority: P0
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: adsorption_energy_eV
@@ -336,9 +324,6 @@ questions:
   - surface_energy
   - mgo
   - slab_calculation
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: surface_energy_J_m2
@@ -416,9 +401,6 @@ questions:
   - supercell
   - mgo
   priority: P0
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: formation_energy_eV

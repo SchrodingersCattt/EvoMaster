@@ -41,8 +41,8 @@ See matmaster-tools-server ``docs/apifox-evaluation-openapi.json`` for the schem
 Usage (from repository root)::
 
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --model claude-opus-4-6 --limit 3
-    uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --limit 3
-    uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --slices structure_construction --limit 3
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --limit 3
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --slices structure_construction --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-export-review --limit 3   # skip Markdown bundle
     uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run-dir results/devshell_eval_*  # manual only
@@ -152,13 +152,6 @@ def main() -> int:
             'slices; no spaces inside "[...]") '
             '(e.g. "workflow_orchestration[polymer] input_generation")'
         ),
-    )
-    parser.add_argument(
-        "--modes",
-        nargs="+",
-        choices=["direct", "planner"],
-        default=None,
-        help="Modes to run (default from eval config)",
     )
     parser.add_argument(
         "--questions",
@@ -332,7 +325,6 @@ def main() -> int:
                 str(args.question_bank_dir) if args.question_bank_dir else None
             ),
             "include_slices": slices_override,
-            "modes": args.modes,
             "include_question_ids": args.questions,
             "exclude_question_ids": args.exclude_question_ids,
         },
@@ -363,7 +355,7 @@ def main() -> int:
 
     if not run_plan:
         print(
-            "No tasks in plan (check modes vs question.mode_scope, filters, --limit).",
+            "No tasks in plan (check filters, --limit).",
             file=sys.stderr,
         )
         return 1

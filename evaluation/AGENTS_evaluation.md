@@ -77,7 +77,6 @@ evaluation/question_bank/
 | `human_prompt_seed` | **必填** | — | 直接发给 Agent 的用户 prompt（中英文皆可） |
 | `tags` | 可选 | `[]` | 标签，开发者归类用 |
 | `priority` | 可选 | `None` | 门控优先级；`"P0"` = P0 回归门控（见下方 P0 Gate 章节） |
-| `mode_scope` | 可选 | `["direct", "planner"]` | 决定该题跑哪些 mode；不能为空 |
 | `data_files` | 可选 | `[]` | 输入数据文件引用；Runner 会复制到 Agent workspace |
 | `reference_answers` | **条件必填** | `[]` | 非 `safety_refusal` 题必须至少 1 条；`safety_refusal` 可为空 |
 | `scoring_checklist` | **必填** | — | 至少 1 条评分项 |
@@ -278,7 +277,6 @@ evaluation/question_bank/
 | `id` | ❌ | task_id 标识；`--questions` 过滤 |
 | `capability` | ❌ | `--slices` 过滤（见下）；safety 路由；聚合 + 报告 |
 | `domain` | ❌ | 聚合 + 报告 |
-| `mode_scope` | ❌ | 决定跑哪些 mode |
 | `tags` | ❌ | 目前未被代码消费（预留） |
 | `priority` | ❌ | `"P0"` 触发 P0 回归门控 |
 | `reference_answers` | ❌ | Evaluator 的标准答案查找表 |

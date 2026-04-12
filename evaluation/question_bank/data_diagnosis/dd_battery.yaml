@@ -15,9 +15,6 @@ questions:
   - relax_diagnosis
   - ediff_precision
   - force_noise
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: case_bundle
     path: data/DD_general_003/case_bundle.json

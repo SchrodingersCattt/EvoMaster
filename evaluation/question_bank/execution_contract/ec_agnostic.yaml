@@ -16,9 +16,6 @@ questions:
 
     '
   tags: []
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: run_spec
     path: data/WO_direct_001_spec_conflict/run_spec.json
@@ -102,9 +99,6 @@ questions:
 
     '
   tags: []
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: bundle_tgz
     path: data/WO_direct_002_tgz_extract/bundle.tgz
@@ -167,9 +161,6 @@ questions:
 
     '
   tags: []
-  mode_scope:
-  - direct
-  - planner
   reference_answers:
   - key: summary_md
     value: summary.md

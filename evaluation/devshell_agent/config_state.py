@@ -23,7 +23,6 @@ def checklist_revision_sdk_max_turns_from_jobs(jobs: int) -> int:
 class DevshellAgentCliDefaults:
     """CLI defaults merged into ``run_devshell_eval`` when the model omits fields."""
 
-    modes: list[str]
     jobs: int
     limit: int | None
     questions: list[str] | None

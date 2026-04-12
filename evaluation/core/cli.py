@@ -41,13 +41,6 @@ def main() -> int:
         help='Optional override for Mat Master config.yaml path',
     )
     parser.add_argument('--k', type=int, default=None, help='Repeat count override')
-    parser.add_argument(
-        '--modes',
-        nargs='+',
-        choices=['direct', 'planner'],
-        default=None,
-        help='Modes to evaluate (default from config)',
-    )
     parser.add_argument('--output-dir', default=None, help='Output directory override')
     parser.add_argument('--run-label', default=None, help='Run label override')
     parser.add_argument(
@@ -120,8 +113,6 @@ def main() -> int:
         eval_cfg['mat_config_path'] = args.mat_config
     if args.k is not None:
         eval_cfg['k'] = args.k
-    if args.modes is not None:
-        eval_cfg['modes'] = args.modes
     if args.output_dir is not None:
         eval_cfg['output_dir'] = args.output_dir
     if args.run_label is not None:

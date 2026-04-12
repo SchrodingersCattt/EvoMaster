@@ -203,18 +203,16 @@ def _apply_filters(
 def expand_run_plan(
     *, questions: list[QuestionItem], config: EvalConfig
 ) -> list[dict[str, Any]]:
-    """Expand mode × k repeat plan.
+    """Expand direct mode × k repeat plan.
 
-    v5: QuestionItem no longer has repeat_override — always uses config.k.
+    v5: MATTER eval runs only ``direct`` (no per-question mode scope).
     """
     plan: list[dict[str, Any]] = []
     for question in questions:
-        active_modes = [mode for mode in config.modes if mode in question.mode_scope]
-        for mode in active_modes:
-            for repeat_idx in range(config.k):
-                plan.append(
-                    {'question': question, 'mode': mode, 'repeat_idx': repeat_idx}
-                )
+        for repeat_idx in range(config.k):
+            plan.append(
+                {'question': question, 'mode': 'direct', 'repeat_idx': repeat_idx}
+            )
     return plan
 
 

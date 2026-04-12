@@ -16,9 +16,6 @@ questions:
   - liquid_water
   - hybrid_acceleration
   - gap
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: gap_value_eV
@@ -96,9 +93,6 @@ questions:
   - al2o3
   - abacus
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: bader_json_artifact
@@ -210,9 +204,6 @@ questions:
   - userlog_derived
   - attachment_analysis
   - image_analysis
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: attachment_manifest
     path: data/WO_general_userlog_005_20260410v3/attachment_manifest.json
@@ -341,9 +332,6 @@ questions:
   - userlog_derived
   - post_processing
   - report_generation
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: result_manifest
     path: data/WO_general_userlog_006_20260410v3/result_manifest.json
@@ -455,9 +443,6 @@ questions:
   - workflow_planning
   - materials_computation
   - task_decomposition
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: mission_constraints
     path: data/WO_general_userlog_007_20260410v3/mission_constraints.json
@@ -576,9 +561,6 @@ questions:
   - phonon_dispersion
   - graphene
   - frequency_extract
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: gamma_optical_max_cm1
@@ -657,9 +639,6 @@ questions:
   - eos
   - aluminum
   - database_search
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: a0_A
@@ -752,9 +731,6 @@ questions:
   - detonation_metrics
   - kamlet_jacobs
   - molecule_construction
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: detonation_velocity_m_s
@@ -858,9 +834,6 @@ questions:
   - bsse
   - vacancy
   - mock_energy
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: ef_Fe53Cr_eV
@@ -953,9 +926,6 @@ questions:
   - ni_co_cr
   - database_compare
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: elastic_compare_json
@@ -1053,9 +1023,6 @@ questions:
   - phase_prediction
   - thermodynamic_descriptors
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: hea_summary_json
@@ -1150,9 +1117,6 @@ questions:
   - elastic_constants
   - gaas
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1250,9 +1214,6 @@ questions:
   - elastic_constants
   - srtio3
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1354,9 +1315,6 @@ questions:
   - alloy
   - volume_scan
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: eos_summary_json
@@ -1461,9 +1419,6 @@ questions:
   - dpa
   - optimization
   - silicon
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: lattice_a_A
@@ -1546,9 +1501,6 @@ questions:
   - userlog_derived
   - dpgen
   - onboarding
-  mode_scope:
-  - direct
-  - planner
   data_files:
   - key: dpgen_docs
     path: data/WO_general_userlog_001_20260410v3/dpgen_docs_brief.md
@@ -1663,9 +1615,6 @@ questions:
   - doping
   - elastic
   - phonon
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: relaxed_struct
@@ -1775,9 +1724,6 @@ questions:
   - neb
   - vacancy
   - copper
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: forward_barrier_eV
@@ -1852,9 +1798,6 @@ questions:
   - dpa
   - elastic
   - copper
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: C11_GPa
@@ -1935,9 +1878,6 @@ questions:
   - dpa3
   - finetune
   - mlip_training
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: finetune_config
@@ -2038,9 +1978,6 @@ questions:
   - dpa
   - phonon
   - silicon
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: gamma_optical_max_cm1
@@ -2119,9 +2056,6 @@ questions:
   - dpa
   - molecular_dynamics
   - aluminum
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: avg_temperature_K
@@ -2197,9 +2131,6 @@ questions:
   - phonon
   - retrieval_plus_calc
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: phonon_json
@@ -2304,9 +2235,6 @@ questions:
   - molecular_dynamics
   - li2o
   - userlog_derived
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: md_summary_artifact
@@ -2420,9 +2348,6 @@ questions:
   - superconductivity
   - space_group_225
   - candidate_screening
-  mode_scope:
-  - direct
-  - planner
   data_files: []
   reference_answers:
   - key: candidate_json
