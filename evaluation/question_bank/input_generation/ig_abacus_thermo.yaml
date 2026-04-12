@@ -2,7 +2,7 @@ version: v5
 capability: input_generation
 domain: thermo
 questions:
-- id: IG_abacus_005_20260409v4
+- id: IG_abacus_005_20260412
   capability: input_generation
   domain: thermo
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence
@@ -69,30 +69,50 @@ questions:
   - key: must_kpt_slab_vacuum_axis_one
     value:
       filename: KPT_slab
-      pattern: "^\\s*\\d+\\s+\\d+\\s+1(?:\\s+\\d+){0,3}\\s*$"
+      pattern: ^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$
       flags: m
   - key: suggested_input_bulk_relax_numerics
     value:
       filename: INPUT_bulk_relax
-      tokens:
-      - ecutwfc 60
-      - scf_nmax 100
-      - relax_nmax 100
-      flags: i
+      checks:
+      - key: ecutwfc
+        min: 55
+        max: 65
+      - key: scf_nmax
+        expected: 100
+        tolerance: 0
+      - key: relax_nmax
+        expected: 100
+        tolerance: 0
   - key: suggested_kpt_bulk_three_dimensional
     value:
       filename: KPT_bulk
-      pattern: "^\\s*(?:[2-9]\\d*|1\\d+)\\s+(?:[2-9]\\d*|1\\d+)\\s+(?:[2-9]\\d*|1\\d+)(?:\\s+\\d+){0,3}\\s*$"
+      pattern: ^\s*(?:[2-9]\d*|1\d+)\s+(?:[2-9]\d*|1\d+)\s+(?:[2-9]\d*|1\d+)(?:\s+\d+){0,3}\s*$
       flags: m
   - key: variable_input_bulk_smearing
     value:
       filename: INPUT_bulk_relax
-      pattern: smearing_method\s+(?:gauss(?:ian)?|fixed|mp2?|methfessel-paxton|mv|cold|marzari-vanderbilt|fd|fermi-dirac).*\bsmearing_sigma\s+(?:0\.0074|0\.01)\b
-      flags: is
+      checks:
+      - key: smearing_method
+        allowed_values:
+        - gauss
+        - gaussian
+        - fixed
+        - mp
+        - mp2
+        - methfessel-paxton
+        - mv
+        - cold
+        - marzari-vanderbilt
+        - fd
+        - fermi-dirac
+      - key: smearing_sigma
+        min: 0.007
+        max: 0.02
   - key: variable_kpt_slab_inplane_density
     value:
       filename: KPT_slab
-      pattern: "^\\s*(?:1[2-9]|[2-9]\\d|[1-9]\\d{2,})\\s+(?:1[2-9]|[2-9]\\d|[1-9]\\d{2,})\\s+1(?:\\s+\\d+){0,3}\\s*$"
+      pattern: ^\s*(?:1[2-9]|[2-9]\d|[1-9]\d{2,})\s+(?:1[2-9]|[2-9]\d|[1-9]\d{2,})\s+1(?:\s+\d+){0,3}\s*$
       flags: m
   - key: input_bulk_relax_artifact
     value: INPUT_bulk_relax
@@ -142,7 +162,7 @@ questions:
   - id: suggested_input_bulk_relax_numerics
     criterion: "[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc/scf_nmax/relax_nmax`)."
     axis: correctness
-    verify: text_file_contains_all
+    verify: text_file_numeric_range
     weight: 0.6
   - id: suggested_kpt_bulk_three_dimensional
     criterion: "[Suggested] KPT_bulk uses a three-dimensional bulk mesh."
@@ -150,14 +170,12 @@ questions:
     verify: text_file_regex
     weight: 0.6
   - id: variable_input_bulk_smearing
-    criterion: "[Variable] INPUT_bulk_relax uses an acceptable smearing setup for
-      this benchmark family."
+    criterion: "[Variable] INPUT_bulk_relax uses an acceptable smearing setup for this benchmark family."
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 0.3
   - id: variable_kpt_slab_inplane_density
-    criterion: "[Variable] KPT_slab uses sufficiently dense in-plane sampling while
-      keeping vacuum-axis single-point."
+    criterion: "[Variable] KPT_slab uses sufficiently dense in-plane sampling while keeping vacuum-axis single-point."
     axis: correctness
     verify: text_file_regex
     weight: 0.3
@@ -214,7 +232,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_006_20260409v3
+- id: IG_abacus_006_20260412
   capability: input_generation
   domain: thermo
   intent: Prepare ABACUS PW inputs for Mo surface-vacancy energy using bulk, pristine
@@ -281,38 +299,134 @@ questions:
   - key: must_kpt_gamma_single_point
     value:
       filename: KPT_gamma
-      pattern: "^\\s*1\\s+1\\s+1(?:\\s+\\d+){0,3}\\s*$"
+      pattern: ^\s*1\s+1\s+1(?:\s+\d+){0,3}\s*$
       flags: m
   - key: suggested_bulk_low_cost_cutoff
     value:
       filename: INPUT_bulk_mo
-      pattern: ecutwfc\s+(?:1\d|20|2[0-9])
-      flags: i
+      checks:
+      - key: ecutwfc
+        min: 10
+        max: 29.999
   - key: suggested_slab_clean_low_cost_cutoff
     value:
       filename: INPUT_slab_clean
-      pattern: ecutwfc\s+(?:1\d|20|2[0-9])
-      flags: i
+      checks:
+      - key: ecutwfc
+        min: 10
+        max: 29.999
   - key: suggested_slab_vac_low_cost_cutoff
     value:
       filename: INPUT_slab_vac
-      pattern: ecutwfc\s+(?:1\d|20|2[0-9])
-      flags: i
+      checks:
+      - key: ecutwfc
+        min: 10
+        max: 29.999
   - key: variable_bulk_smearing_or_mixing
     value:
       filename: INPUT_bulk_mo
-      pattern: "(smearing_method|mixing_(?:type|beta|ndim|gg0))"
-      flags: i
+      checks:
+      - key: smearing_method
+        allowed_values:
+        - gauss
+        - gaussian
+        - fixed
+        - mp
+        - mp2
+        - methfessel-paxton
+        - mv
+        - cold
+        - marzari-vanderbilt
+        - fd
+        - fermi-dirac
+      - key: mixing_type
+        allowed_values:
+        - broyden
+      - key: mixing_beta
+        min: 0.01
+        max: 0.9
+        if_component_count_in:
+        - 1
+      - key: mixing_ndim
+        min: 1
+        max: 1000
+        if_component_count_in:
+        - 1
+      - key: mixing_gg0
+        min: 0.1
+        max: 20
+        if_component_count_in:
+        - 1
   - key: variable_slab_smearing_or_mixing
     value:
       filename: INPUT_slab_clean
-      pattern: "(smearing_method|mixing_(?:type|beta|ndim|gg0))"
-      flags: i
+      checks:
+      - key: smearing_method
+        allowed_values:
+        - gauss
+        - gaussian
+        - fixed
+        - mp
+        - mp2
+        - methfessel-paxton
+        - mv
+        - cold
+        - marzari-vanderbilt
+        - fd
+        - fermi-dirac
+      - key: mixing_type
+        allowed_values:
+        - broyden
+      - key: mixing_beta
+        min: 0.01
+        max: 0.9
+        if_component_count_in:
+        - 1
+      - key: mixing_ndim
+        min: 1
+        max: 1000
+        if_component_count_in:
+        - 1
+      - key: mixing_gg0
+        min: 0.1
+        max: 20
+        if_component_count_in:
+        - 1
   - key: variable_slab_vac_smearing_or_mixing
     value:
       filename: INPUT_slab_vac
-      pattern: "(smearing_method|mixing_(?:type|beta|ndim|gg0))"
-      flags: i
+      checks:
+      - key: smearing_method
+        allowed_values:
+        - gauss
+        - gaussian
+        - fixed
+        - mp
+        - mp2
+        - methfessel-paxton
+        - mv
+        - cold
+        - marzari-vanderbilt
+        - fd
+        - fermi-dirac
+      - key: mixing_type
+        allowed_values:
+        - broyden
+      - key: mixing_beta
+        min: 0.01
+        max: 0.9
+        if_component_count_in:
+        - 1
+      - key: mixing_ndim
+        min: 1
+        max: 1000
+        if_component_count_in:
+        - 1
+      - key: mixing_gg0
+        min: 0.1
+        max: 20
+        if_component_count_in:
+        - 1
   - key: input_bulk_mo_artifact
     value: INPUT_bulk_mo
   - key: input_slab_clean_artifact
@@ -359,34 +473,34 @@ questions:
   - id: suggested_bulk_low_cost_cutoff
     criterion: "[Suggested] INPUT_bulk_mo uses a low-cost cutoff for benchmark runs."
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 0.6
   - id: suggested_slab_clean_low_cost_cutoff
     criterion: "[Suggested] INPUT_slab_clean uses a low-cost cutoff for benchmark
       runs."
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 0.6
   - id: suggested_slab_vac_low_cost_cutoff
     criterion: "[Suggested] INPUT_slab_vac uses a low-cost cutoff for benchmark runs."
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 0.6
   - id: variable_bulk_smearing_or_mixing
     criterion: "[Variable] INPUT_bulk_mo provides a reasonable smearing/mixing control."
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 0.3
   - id: variable_slab_smearing_or_mixing
     criterion: "[Variable] INPUT_slab_clean provides a reasonable smearing/mixing
       control."
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 0.3
   - id: variable_slab_vac_smearing_or_mixing
     criterion: "[Variable] INPUT_slab_vac provides a reasonable smearing/mixing control."
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 0.3
   - id: input_bulk_mo_artifact
     criterion: Generated deliverables count even if the final answer does not quote

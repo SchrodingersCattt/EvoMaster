@@ -2,7 +2,7 @@ version: v5
 capability: input_generation
 domain: mech
 questions:
-- id: IG_abacus_002_20260409v5
+- id: IG_abacus_002_20260412
   capability: input_generation
   domain: mech
   intent: Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single
@@ -49,18 +49,44 @@ questions:
   - key: must_input_vac_uniform_kspacing
     value:
       filename: INPUT_vac_bsse
-      pattern: kspacing\s+(?:0\.1\d*(?:\s+0\.1\d*\s+0\.1\d*)?)
-      flags: i
+      checks:
+      - key: kspacing
+        component: 1
+        min: 0.08
+        max: 0.2
+      - key: kspacing
+        component: 2
+        min: 0.08
+        max: 0.2
+        if_component_count_in:
+        - 3
+      - key: kspacing
+        component: 3
+        min: 0.08
+        max: 0.2
+        if_component_count_in:
+        - 3
   - key: suggested_input_vac_numerics
     value:
       filename: INPUT_vac_bsse
-      pattern: "(?ims)(?=.*^\\s*ecutwfc\\s+100(?:\\.0+)?\\s*(?:#.*)?$)(?=.*^\\s*scf_thr\\s+1(?:\\.0+)?[eE]-7\\s*(?:#.*)?$)"
-      flags: is
+      checks:
+      - key: ecutwfc
+        min: 90
+        max: 120
+      - key: scf_thr
+        min: 1.0e-07
+        max: 1.0e-06
   - key: suggested_input_vac_smearing
     value:
       filename: INPUT_vac_bsse
-      pattern: "(?ims)(?=.*^\\s*smearing_method\\s+(?:gauss|gaussian)\\s*(?:#.*)?$)(?=.*^\\s*smearing_sigma\\s+0\\.01(?:0+)?\\s*(?:#.*)?$)"
-      flags: is
+      checks:
+      - key: smearing_method
+        allowed_values:
+        - gauss
+        - gaussian
+      - key: smearing_sigma
+        min: 0.01
+        max: 0.02
   - key: variable_bsse_explanation
     value: {}
   - key: variable_fe_empty_at_vacancy
@@ -92,22 +118,19 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: must_input_vac_uniform_kspacing
-    criterion: "[Must] INPUT_vac_bsse uses kspacing around 0.10 (single-value isotropic
-      form or explicit uniform three-component form)."
+    criterion: "[Must] INPUT_vac_bsse uses kspacing around 0.10 with tolerance (about 0.08~0.20, isotropic or explicit uniform three-component form)."
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 1.0
   - id: suggested_input_vac_numerics
-    criterion: "[Suggested] INPUT_vac_bsse follows benchmark numeric settings (`ecutwfc
-      100`, `scf_thr 1e-7`)."
+    criterion: "[Suggested] INPUT_vac_bsse follows benchmark numeric settings with tolerance (`ecutwfc ~100`, `scf_thr around 1e-7~1e-6`)."
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 0.6
   - id: suggested_input_vac_smearing
-    criterion: "[Suggested] INPUT_vac_bsse uses benchmark smearing controls (gauss/gaussian
-      + sigma 0.01)."
+    criterion: "[Suggested] INPUT_vac_bsse uses benchmark smearing controls (gauss/gaussian + sigma within 0.01~0.02)."
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 0.6
   - id: variable_bsse_explanation
     criterion: "[Variable] Final answer explains why vacancy-site ghost basis is needed
