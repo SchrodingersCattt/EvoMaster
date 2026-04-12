@@ -95,7 +95,6 @@ For other open-source DFT codes, parse outputs directly with Bash/Python:
 * "Extract features from this completed workflow" → `parse_abacus.py --type all` + aggregation
 * "What are the forces / stress from ABACUS?" → `parse_abacus.py --type scf`
 * "Compute the surface/formation/adsorption energy" → parse relevant outputs, then calculate
-* "Run or analyze HT adsorption screening (multiple surfaces × adsorbates × sites)" → load **tasker-polar-surface** skill, follow `reference/ht_screening_pipeline.md` for the 4-step batch pipeline. Use breadth-first execution and consolidated scripts to avoid timeout.
 * "Plot the energy convergence for my paper." → `plot_publication.py`
 * "Generate an EOS figure." → `plot_publication.py` with eos JSON (volumes, energies).
 
