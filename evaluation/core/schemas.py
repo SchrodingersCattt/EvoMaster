@@ -71,21 +71,26 @@ VerifyLiteral = Literal[
     'checkcif_no_a_alerts',
     # plain-text file checks
     'text_file_contains_all',
+    'text_file_kpt_path',
+    'text_file_numeric_range',
     'text_file_regex',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
 
 CapabilityLiteral = Literal[
+    'knowledge_recall',
     'structure_construction',
     'structure_retrieval',
-    'scientific_analysis',
+    'property_prediction',
     'workflow_orchestration',
     'execution_contract',
     'data_diagnosis',
     'batch_processing',
     'safety_refusal',
-    'input_generation',
+    'input_generation_vasp',
+    'input_generation_abacus',
+    'co2rr_reproduction',
 ]
 
 DomainLiteral = Literal[
@@ -94,11 +99,11 @@ DomainLiteral = Literal[
     'mech',
     'thermo',
     'kinetic',
+    'optical',
     'general',
     'incar',
     'scxrd',
     'polymer',
-    'mlip',
 ]
 
 
@@ -257,6 +262,8 @@ class QuestionItem(BaseModel):
             'molcrys_local_env',
             'sc005_disorder_formulas',
             'text_file_contains_all',
+            'text_file_kpt_path',
+            'text_file_numeric_range',
             'text_file_regex',
         }
         for item in self.scoring_checklist:

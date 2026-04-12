@@ -30,6 +30,8 @@ from evaluation.validators.structure_molcrys import (
 )
 from evaluation.validators.text_file import (
     check_text_file_contains_all,
+    check_text_file_kpt_path,
+    check_text_file_numeric_range,
     check_text_file_regex,
 )
 
@@ -623,5 +625,57 @@ def check_text_file_regex_from_evidence(
         filename=str(cfg.get('filename', '')),
         pattern=pattern,
         flags=str(cfg.get('flags', '')),
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
+
+
+def check_text_file_numeric_range_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    raw_checks = cfg.get('checks', [])
+    if not isinstance(raw_checks, list) or not raw_checks:
+        return False, "reference answer must provide non-empty 'checks' list"
+    checks: list[dict[str, Any]] = []
+    for item in raw_checks:
+        if not isinstance(item, dict):
+            return False, "each entry in 'checks' must be a dict"
+        checks.append(item)
+    return check_text_file_numeric_range(
+        ws,
+        filename=str(cfg.get('filename', '')),
+        checks=checks,
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
+
+
+def check_text_file_kpt_path_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    raw_required = cfg.get('required_points', [])
+    if not isinstance(raw_required, list) or not raw_required:
+        return False, "reference answer must provide non-empty 'required_points' list"
+    required_points: list[list[float]] = []
+    for item in raw_required:
+        if not isinstance(item, list) or len(item) != 3:
+            return False, "each entry in 'required_points' must be [x, y, z]"
+        try:
+            required_points.append([float(item[0]), float(item[1]), float(item[2])])
+        except (TypeError, ValueError):
+            return False, 'required_points entries must be numeric'
+    return check_text_file_kpt_path(
+        ws,
+        filename=str(cfg.get('filename', '')),
+        required_points=required_points,
+        tolerance=float(cfg.get('tolerance', 1.0e-6)),
+        require_line_mode=bool(cfg.get('require_line_mode', True)),
+        require_order=bool(cfg.get('require_order', True)),
         workspace_resolve=_workspace_resolve_from_ref(ref),
     )
