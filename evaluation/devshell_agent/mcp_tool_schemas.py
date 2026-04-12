@@ -47,7 +47,7 @@ RUN_DEVSHELL_EVAL_SCHEMA: dict[str, Any] = {
         "model": {
             "type": "string",
             "description": (
-                "LLM route for inner mm-devshell --model (default: claude-opus-4-6)."
+                "LLM route for inner mm-devshell --model (default: bedrock-claude-opus)."
             ),
         },
         "exp": {

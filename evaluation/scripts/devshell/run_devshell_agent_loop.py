@@ -195,8 +195,11 @@ class DevshellAgentLoopCli:
         p.add_argument(
             "--model",
             type=str,
-            default="claude-opus-4-6",
-            help="Forwarded to run_devshell_eval --model (inner mm-devshell route).",
+            default="bedrock-claude-opus",
+            help=(
+                "Forwarded to run_devshell_eval --model (inner mm-devshell route key; "
+                "default: bedrock-claude-opus → opus_bedrock in config/llm_config.yaml)."
+            ),
         )
         p.add_argument(
             "--exp",
