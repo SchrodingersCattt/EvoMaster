@@ -453,13 +453,22 @@ questions:
   capability: workflow_orchestration
   domain: mech
   intent: Calculate GaAs elastic constants and bulk modulus with ABACUS and summarize the tensor outputs.
-  human_prompt_seed: '使用 ABACUS 计算给定 GaAs 结构的弹性常数与体模量。
+  human_prompt_seed: |
+    计算 GaAs 弹性常数与体模量（Mock版）：
+    1. 先 query/检索并整理 ABACUS 弹性计算所需输入文件；
+    2. 给出关键设置（应变幅度、k 点、截断能/精度策略）；
+    3. 不做真实计算，使用以下 mock 结果：
+       - C11 = 118.4 GPa
+       - C12 = 53.7 GPa
+       - C44 = 59.2 GPa
+       - bulk_modulus_GPa = 75.3
+    4. 基于 mock 值完成后处理、一致性检查与解释。
 
     请完成以下交付：
-    1) `gaas_elastic_abacus.json`：至少包含 `C11`, `C12`, `C44`, `bulk_modulus_GPa`, `calculation_settings`；
-    2) `gaas_elastic_abacus_report.md`：说明关键参数（应变幅度、k 点/精度设置）与结果不确定性。
+    1) `gaas_elastic_abacus.json`：至少包含 `input_files`, `C11`, `C12`, `C44`, `bulk_modulus_GPa`, `calculation_settings`；
+    2) `gaas_elastic_abacus_report.md`：说明 query 输入梳理、mock 后处理流程与不确定性。
 
-    最终回答中简要给出 C11/C12/C44 与体模量。'
+    最终回答中简要给出 C11/C12/C44 与体模量。
   tags:
   - abacus
   - elastic_constants
@@ -494,6 +503,9 @@ questions:
       - bulk modulus
       - 不确定性
       flags: i
+  - key: gaas_c11_mock
+    value: 118.4
+    tolerance: 12.0
   - key: turn_budget
     value:
       max: 14
@@ -519,6 +531,10 @@ questions:
     criterion: Report explains settings and uncertainty caveats.
     axis: correctness
     verify: text_file_contains_all
+  - id: gaas_c11_mock
+    criterion: Final answer includes a mock C11 value near 118.4 GPa.
+    axis: correctness
+    verify: numerical_range
   - id: grounding_source
     criterion: Final answer is grounded in generated ABACUS elastic artifacts rather than unsupported recalled values.
     axis: grounding
@@ -543,13 +559,22 @@ questions:
   capability: workflow_orchestration
   domain: mech
   intent: Calculate SrTiO3 elastic constants with APEX and report full C11/C12/C44 outputs.
-  human_prompt_seed: '使用 APEX 计算 SrTiO3 的弹性常数，并输出完整的 C11/C12/C44 信息。
+  human_prompt_seed: |
+    计算 SrTiO3 弹性常数（Mock版）：
+    1. 先 query/检索并整理 APEX 弹性流程所需输入文件；
+    2. 说明采用的弹性方法与形变设置；
+    3. 不做真实计算，使用以下 mock 结果：
+       - C11 = 316.8 GPa
+       - C12 = 101.5 GPa
+       - C44 = 125.7 GPa
+       - elastic_method = finite_strain
+    4. 基于 mock 结果完成后处理与物理意义讨论。
 
     请完成以下交付：
-    1) `srtio3_elastic_apex.json`：至少包含 `C11`, `C12`, `C44`, `elastic_method`, `deformation_settings`；
-    2) `srtio3_elastic_apex_report.md`：说明计算流程、参数与结果可靠性讨论。
+    1) `srtio3_elastic_apex.json`：至少包含 `input_files`, `C11`, `C12`, `C44`, `elastic_method`, `deformation_settings`；
+    2) `srtio3_elastic_apex_report.md`：说明 query 输入梳理、mock 后处理流程与结果可靠性讨论。
 
-    最终回答中简要给出关键弹性常数并解释其物理含义。'
+    最终回答中简要给出关键弹性常数并解释其物理含义。
   tags:
   - apex
   - elastic_constants
@@ -585,6 +610,9 @@ questions:
       - C44
       - 不确定性
       flags: i
+  - key: srtio3_c11_mock
+    value: 316.8
+    tolerance: 25.0
   - key: turn_budget
     value:
       max: 14
@@ -610,6 +638,10 @@ questions:
     criterion: Report explains workflow and uncertainty caveats for APEX elastic results.
     axis: correctness
     verify: text_file_contains_all
+  - id: srtio3_c11_mock
+    criterion: Final answer includes a mock C11 value near 316.8 GPa.
+    axis: correctness
+    verify: numerical_range
   - id: grounding_source
     criterion: Final answer is grounded in generated APEX elastic outputs and does not invent unsupported tensor values.
     axis: grounding
@@ -731,19 +763,24 @@ questions:
   capability: workflow_orchestration
   domain: mech
   intent: Compute an equation-of-state workflow for an alloy and summarize volume-scan settings and fitted EOS outputs.
-  human_prompt_seed: '对给定合金结构执行 EOS（状态方程）计算流程。
-
-    要求：
-    - 体积扫描范围覆盖约 0.8~1.2；
-    - 包含结构弛豫设置说明；
-    - 输出可机检的 EOS 结果摘要。
+  human_prompt_seed: |
+    对给定合金结构执行 EOS 分析（Mock版）：
+    1. 先 query/检索并整理 EOS 所需输入文件与结构信息；
+    2. 明确体积扫描设置（0.8~1.2）与拟合模型；
+    3. 不做真实计算，使用以下 mock 数据：
+       - vol_start = 0.8
+       - vol_end = 1.2
+       - vol_step = 0.05
+       - fit_model = Birch-Murnaghan
+       - equilibrium_volume = 11.42 (Å^3/atom)
+       - bulk_modulus = 178.6 (GPa)
+    4. 基于 mock 值完成 EOS 后处理与结论解释。
 
     请完成以下交付：
+    1) `alloy_eos_summary.json`：至少包含 `input_files`, `vol_start`, `vol_end`, `vol_step`, `fit_model`, `equilibrium_volume`, `bulk_modulus`；
+    2) `alloy_eos_report.md`：说明 query 输入梳理、mock 后处理流程、体积扫描策略与不确定性。
 
-    1) `alloy_eos_summary.json`：至少包含 `vol_start`, `vol_end`, `vol_step`, `fit_model`, `equilibrium_volume`, `bulk_modulus`；
-    2) `alloy_eos_report.md`：说明 EOS 流程、体积扫描策略、关键结果与不确定性。
-
-    最终回答中简要说明该 EOS 结果能支持哪些定性判断。'
+    最终回答中简要说明该 EOS 结果能支持哪些定性判断。
   tags:
   - apex
   - eos
@@ -782,6 +819,9 @@ questions:
       - bulk modulus
       - 不确定性
       flags: i
+  - key: eos_bulk_modulus_mock
+    value: 178.6
+    tolerance: 20.0
   - key: turn_budget
     value:
       max: 14
@@ -807,6 +847,10 @@ questions:
     criterion: Report explains EOS workflow, scan strategy, and uncertainty caveats.
     axis: correctness
     verify: text_file_contains_all
+  - id: eos_bulk_modulus_mock
+    criterion: Final answer includes a mock bulk modulus near 178.6 GPa.
+    axis: correctness
+    verify: numerical_range
   - id: grounding_source
     criterion: Final answer is grounded in EOS artifacts and does not fabricate fitted results not present in outputs.
     axis: grounding
@@ -831,14 +875,21 @@ questions:
   capability: workflow_orchestration
   domain: thermo
   intent: Build the convex hull for a CuCrZr alloy and summarize stability interpretation artifacts.
-  human_prompt_seed: '对给定 CuCrZr 合金结构执行凸包（convex hull）分析，并输出稳定性解读。
+  human_prompt_seed: |
+    对 CuCrZr 执行凸包稳定性分析（Mock版）：
+    1. 先 query/检索并整理凸包分析所需输入文件与参考相信息；
+    2. 说明稳定性判据（hull distance 与稳定标签关系）；
+    3. 不做真实计算，使用以下 mock 结果：
+       - hull_distance = 0.024 eV/atom
+       - stability_label = metastable
+       - reference_phases = ["Cu", "Cr2Zr", "CuZr2"]
+    4. 基于 mock 值做稳定性后处理与结论解释。
 
     请完成以下交付：
+    1) `cucrzr_convex_hull_summary.json`：至少包含 `input_files`, `hull_distance`, `stability_label`, `reference_phases`, `notes`；
+    2) `cucrzr_convex_hull_report.md`：说明 query 输入梳理、mock 后处理流程、稳定性判据及不确定性。
 
-    1) `cucrzr_convex_hull_summary.json`：至少包含 `hull_distance`, `stability_label`, `reference_phases`, `notes`；
-    2) `cucrzr_convex_hull_report.md`：说明凸包构建流程、稳定性判据及不确定性。
-
-    最终回答中请明确说明该结构在热力学稳定性上的定性结论（稳定/亚稳/不稳定）。'
+    最终回答中请明确说明该结构在热力学稳定性上的定性结论（稳定/亚稳/不稳定）。
   tags:
   - convex_hull
   - stability
@@ -874,6 +925,9 @@ questions:
       - CuCrZr
       - 不确定性
       flags: i
+  - key: hull_distance_mock
+    value: 0.024
+    tolerance: 0.01
   - key: turn_budget
     value:
       max: 14
@@ -899,6 +953,10 @@ questions:
     criterion: Report explains convex-hull interpretation and uncertainty caveats.
     axis: correctness
     verify: text_file_contains_all
+  - id: hull_distance_mock
+    criterion: Final answer includes a mock hull distance near 0.024 eV/atom.
+    axis: correctness
+    verify: numerical_range
   - id: grounding_source
     criterion: Final answer is grounded in convex-hull artifacts and does not assert unsupported stability conclusions.
     axis: grounding

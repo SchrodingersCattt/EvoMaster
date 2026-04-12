@@ -479,13 +479,25 @@ questions:
   capability: workflow_orchestration
   domain: mlip
   intent: Fine-tune a DPA3 potential for a fixed step budget and summarize key hyperparameters and outcomes.
-  human_prompt_seed: '请对给定数据集执行 DPA3 微调（目标训练步数 3000），并整理核心配置与结果。
+  human_prompt_seed: |
+    执行 DPA3 微调流程评估（Mock版）：
+    1. 先 query/检索并整理训练所需输入文件（数据集、模型配置、训练参数）；
+    2. 明确目标训练步数与学习率策略；
+    3. 不做真实训练，使用以下 mock 结果：
+       - train_steps = 3000
+       - lr_type = cosine
+       - start_lr = 1.0e-2
+       - stop_lr = 1.0e-5
+       - valid_ratio = 0.2
+       - best_valid_loss = 0.021
+       - status = converged_for_mock
+    4. 基于 mock 值做后处理并判断是否可进入下游验证。
 
     请输出：
-    1) `dpa3_finetune_config.json`：记录训练步数、学习率策略、loss 关键参数、验证划分；
-    2) `dpa3_finetune_report.md`：概述训练过程、可观察结果、后续改进建议与不确定性。
+    1) `dpa3_finetune_config.json`：记录 `input_files`、训练步数、学习率策略、loss 关键参数、验证划分；
+    2) `dpa3_finetune_report.md`：概述 query 输入梳理、mock 后处理过程、结果与改进建议。
 
-    最终回答请给出：本次微调是否满足继续下游验证的最低条件。'
+    最终回答请给出：本次微调是否满足继续下游验证的最低条件。
   tags:
   - userlog_derived
   - dpa3
@@ -520,6 +532,9 @@ questions:
       - 建议
       - 不确定性
       flags: i
+  - key: best_valid_loss_mock
+    value: 0.021
+    tolerance: 0.01
   - key: turn_budget
     value:
       max: 12
@@ -546,6 +561,10 @@ questions:
     criterion: Report summarizes training outcome with uncertainty notes.
     axis: correctness
     verify: text_file_contains_all
+  - id: best_valid_loss_mock
+    criterion: Final answer includes a mock best validation loss near 0.021.
+    axis: correctness
+    verify: numerical_range
   - id: grounding_source
     criterion: Deliverables are grounded in generated finetune artifacts and avoid unsupported benchmark claims.
     axis: grounding
@@ -570,14 +589,24 @@ questions:
   capability: workflow_orchestration
   domain: struct
   intent: Build and validate Nb-doped SrTiO3 supercell workflow, including relaxation and lattice-dynamics/mechanics checks.
-  human_prompt_seed: '从数据库获取立方 SrTiO3（Pm-3m），构建 2x2x2 超胞并将 1 个 Ti 替换为 Nb（约 12.5%）。
+  human_prompt_seed: |
+    评估 Nb 掺杂 SrTiO3 工作流（Mock版）：
+    1. 先 query/检索立方 SrTiO3（Pm-3m）输入结构，并说明 2x2x2 超胞 + 1 Ti->Nb 掺杂方案；
+    2. 梳理后续检查所需输入文件（relax/elastic/phonon/SCF/band-DOS）；
+    3. 不做真实计算，使用以下 mock 检查结果：
+       - elastic_status = pass
+       - phonon_status = pass_no_imaginary
+       - scf_status = converged
+       - band_dos_status = generated
+       - relax_energy_drop_eV = 1.84
+    4. 基于 mock 值做后处理，判断是否通过电子结构分析前置检查。
 
     请输出：
-    1) `srti03_nb125_relaxed.cif`：优化后的掺杂结构；
-    2) `srti03_nb125_checks.json`：至少包含 `elastic_status`, `phonon_status`, `scf_status`, `band_dos_status`；
-    3) `srti03_nb125_workflow_report.md`：说明构建-优化-检查流程、关键观察与不确定性。
+    1) `srti03_nb125_relaxed.cif`：用于记录工作流引用的结构文件；
+    2) `srti03_nb125_checks.json`：至少包含 `input_files`, `elastic_status`, `phonon_status`, `scf_status`, `band_dos_status`；
+    3) `srti03_nb125_workflow_report.md`：说明 query 输入梳理、mock 后处理流程、关键观察与不确定性。
 
-    最终回答请明确：该掺杂体系是否通过“可进入电子结构分析”的前置检查。'
+    最终回答请明确：该掺杂体系是否通过“可进入电子结构分析”的前置检查。
   tags:
   - userlog_derived
   - srti03
@@ -615,6 +644,9 @@ questions:
       - 声子
       - 不确定性
       flags: i
+  - key: relax_energy_drop_mock
+    value: 1.84
+    tolerance: 0.8
   - key: turn_budget
     value:
       max: 14
@@ -645,6 +677,10 @@ questions:
     criterion: Report covers doping workflow and caveats for downstream electronic analysis.
     axis: correctness
     verify: text_file_contains_all
+  - id: relax_energy_drop_mock
+    criterion: Final answer includes a mock relaxation energy drop near 1.84 eV.
+    axis: correctness
+    verify: numerical_range
   - id: grounding_source
     criterion: Deliverables are grounded in generated workflow outputs and avoid fabricated stability claims.
     axis: grounding
@@ -669,13 +705,23 @@ questions:
   capability: workflow_orchestration
   domain: thermo
   intent: Retrieve an MgB2 structure from open databases and compute its phonon spectrum with an ML potential workflow.
-  human_prompt_seed: '先从开源数据库检索一个 MgB2 结构，再基于该结构计算声子谱。
+  human_prompt_seed: |
+    执行 MgB2 “检索 + 声子”流程（Mock版）：
+    1. 先 query/检索 MgB2 结构并记录来源、结构标识与输入文件；
+    2. 说明拟采用的声子设置；
+    3. 不做真实计算，使用以下 mock 结果：
+       - retrieval_source = Materials Project
+       - structure_identifier = mp-763
+       - imaginary_mode_check = false
+       - gamma_e2g_mode_meV = 74.8
+       - output_artifacts = ["band.yaml", "dos.dat"]
+    4. 基于 mock 值完成后处理并判断“结构与声子结果一致性”。
 
     请完成以下交付：
-    1) `mgb2_phonon_summary.json`：至少包含 `retrieval_source`, `structure_identifier`, `phonon_settings`, `imaginary_mode_check`, `output_artifacts`；
-    2) `mgb2_phonon_report.md`：说明检索与声子计算两阶段流程、关键参数与不确定性。
+    1) `mgb2_phonon_summary.json`：至少包含 `input_files`, `retrieval_source`, `structure_identifier`, `phonon_settings`, `imaginary_mode_check`, `output_artifacts`；
+    2) `mgb2_phonon_report.md`：说明 query 输入梳理、mock 后处理的两阶段流程、关键参数与不确定性。
 
-    最终回答中请简要说明：检索到的结构与声子结果是否相互一致。'
+    最终回答中请简要说明：检索到的结构与声子结果是否相互一致。
   tags:
   - mlip
   - dpa
@@ -713,6 +759,9 @@ questions:
       - 参数
       - 不确定性
       flags: i
+  - key: gamma_e2g_mock
+    value: 74.8
+    tolerance: 10.0
   - key: turn_budget
     value:
       max: 18
@@ -739,6 +788,10 @@ questions:
     criterion: Report explains two-stage workflow and uncertainty caveats.
     axis: correctness
     verify: text_file_contains_all
+  - id: gamma_e2g_mock
+    criterion: Final answer includes a mock Gamma E2g mode near 74.8 meV.
+    axis: correctness
+    verify: numerical_range
   - id: grounding_source
     criterion: Final answer is grounded in both retrieval and phonon artifacts and does not fabricate unsupported structure/spectrum details.
     axis: grounding
@@ -767,19 +820,24 @@ questions:
   capability: workflow_orchestration
   domain: thermo
   intent: Run a short DPA molecular-dynamics simulation for Li2O at 300 K and summarize thermostat/time-step settings with trajectory statistics.
-  human_prompt_seed: '对给定 Li2O 结构执行一次 DPA 分子动力学测试，目标条件为：
-
-    - 温度 300 K
-    - 总时长 1 ps
-    - 时间步长 1 fs
-    - 推荐 NVT 方案
+  human_prompt_seed: |
+    执行 Li2O 短程 MD 流程评估（Mock版）：
+    1. 先 query/检索并整理 MD 所需输入文件（结构、势函数、积分与控温参数）；
+    2. 目标条件：300 K、1 ps、1 fs、NVT；
+    3. 不做真实 MD，使用以下 mock 结果：
+       - ensemble = NVT
+       - temperature_K = 300
+       - runtime_ps = 1.0
+       - timestep_fs = 1.0
+       - n_steps = 1000
+       - thermo_stats = {"T_avg": 301.2, "T_std": 7.8, "drift": "small"}
+    4. 基于 mock 值做后处理并判断是否满足目标条件。
 
     请完成以下交付：
+    1) `li2o_md_summary.json`：至少包含 `input_files`, `ensemble`, `temperature_K`, `runtime_ps`, `timestep_fs`, `n_steps`, `thermo_stats`；
+    2) `li2o_md_report.md`：说明 query 输入梳理、mock 后处理流程、关键观察与误差来源。
 
-    1) `li2o_md_summary.json`：至少包含 `ensemble`, `temperature_K`, `runtime_ps`, `timestep_fs`, `n_steps`, `thermo_stats`；
-    2) `li2o_md_report.md`：说明模拟设置、关键输出观察（温度稳定性等）和可能误差来源。
-
-    最终回答中简要确认是否满足 300 K / 1 ps / 1 fs 三个条件。'
+    最终回答中简要确认是否满足 300 K / 1 ps / 1 fs 三个条件。
   tags:
   - mlip
   - dpa
@@ -819,6 +877,9 @@ questions:
       - 温度
       - 不确定性
       flags: i
+  - key: temperature_avg_mock
+    value: 301.2
+    tolerance: 15.0
   - key: turn_budget
     value:
       max: 16
@@ -845,6 +906,10 @@ questions:
     criterion: Report describes MD setup, observed behavior, and uncertainty caveats.
     axis: correctness
     verify: text_file_contains_all
+  - id: temperature_avg_mock
+    criterion: Final answer includes a mock average temperature near 301.2 K.
+    axis: correctness
+    verify: numerical_range
   - id: grounding_source
     criterion: The final answer is grounded in MD output artifacts and does not invent trajectory statistics not present in generated results.
     axis: grounding
