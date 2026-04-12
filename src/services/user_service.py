@@ -269,7 +269,12 @@ class UserService:
         Returns:
             access_key 字符串，无可用时返回 None。
         """
-        result = UserService.fetch_bohrium_access_key_result(user_id, org_id)
+        result = UserService.fetch_bohrium_access_key_result(
+            user_id,
+            org_id,
+            timeout=15.0,
+            retry_delays=(),
+        )
         return result.access_key
 
     @staticmethod

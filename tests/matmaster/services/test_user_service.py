@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from src.services.user_service import UserService
+from src.services.user_service import BohriumAccessKeyFetchResult, UserService
 
 
 class _FakeResponse:
@@ -73,3 +73,38 @@ def test_fetch_bohrium_access_key_treats_blank_key_as_invalid(monkeypatch):
 
     assert result.status == 'no_valid_ak'
     assert result.access_key is None
+
+
+def test_get_bohrium_access_key_keeps_cleanup_single_attempt_semantics(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def _fake_fetch(
+        user_id: str | None,
+        org_id: str | None,
+        *,
+        timeout: float = 2.0,
+        retry_delays: tuple[float, ...] = (0.5, 1.0),
+    ) -> BohriumAccessKeyFetchResult:
+        captured['user_id'] = user_id
+        captured['org_id'] = org_id
+        captured['timeout'] = timeout
+        captured['retry_delays'] = retry_delays
+        return BohriumAccessKeyFetchResult(
+            status='success',
+            access_key='ak-cleanup',
+            retryable=False,
+        )
+
+    monkeypatch.setattr(
+        UserService,
+        'fetch_bohrium_access_key_result',
+        staticmethod(_fake_fetch),
+    )
+
+    result = UserService.get_bohrium_access_key('u1', 'o1')
+
+    assert result == 'ak-cleanup'
+    assert captured['user_id'] == 'u1'
+    assert captured['org_id'] == 'o1'
+    assert captured['timeout'] == 15.0
+    assert captured['retry_delays'] == ()
