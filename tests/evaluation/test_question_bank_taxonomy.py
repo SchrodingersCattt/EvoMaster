@@ -130,13 +130,13 @@ def test_question_bank_rejects_question_tag_matching_own_capability() -> None:
         QuestionBank.model_validate(
             {
                 'version': 'v5',
-                'capability': 'scientific_analysis',
-                'domain': 'battery',
+                'capability': 'structure_retrieval',
+                'domain': 'agnostic',
                 'questions': [
                     _minimal_question(
-                        capability='scientific_analysis',
-                        domain='battery',
-                        tags=['scientific_analysis'],
+                        capability='structure_retrieval',
+                        domain='agnostic',
+                        tags=['structure_retrieval'],
                     )
                 ],
             }
@@ -149,12 +149,12 @@ def test_question_bank_rejects_question_tag_matching_own_domain() -> None:
             {
                 'version': 'v5',
                 'capability': 'scientific_analysis',
-                'domain': 'battery',
+                'domain': 'alloy',
                 'questions': [
                     _minimal_question(
                         capability='scientific_analysis',
-                        domain='battery',
-                        tags=['battery'],
+                        domain='alloy',
+                        tags=['alloy'],
                     )
                 ],
             }

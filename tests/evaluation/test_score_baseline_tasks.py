@@ -497,7 +497,7 @@ class TestScoreTask:
         return QuestionItem(
             id="SC_test_001",
             capability="structure_construction",
-            domain="struct",
+            domain="agnostic",
             intent="Test question",
             human_prompt_seed="Build something.",
             reference_answers=[

@@ -75,7 +75,7 @@ evaluation/question_bank/
 | `domain` | **必填** | — | 枚举（见下方），用于聚合报告 |
 | `intent` | **必填** | — | 英文一句话描述题目意图；LLM 裁判上下文 + prompt 改写时使用 |
 | `human_prompt_seed` | **必填** | — | 直接发给 Agent 的用户 prompt（中英文皆可） |
-| `tags` | 可选 | `[]` | 标签，开发者归类用 |
+| `tags` | 可选 | `[]` | 标签，取值限定为 `QuestionTag` 枚举（见 `evaluation/core/question_tags.py`）；可多选 |
 | `priority` | 可选 | `None` | 门控优先级；`"P0"` = P0 回归门控（见下方 P0 Gate 章节） |
 | `data_files` | 可选 | `[]` | 输入数据文件引用；Runner 会复制到 Agent workspace |
 | `reference_answers` | **条件必填** | `[]` | 非 `safety_refusal` 题必须至少 1 条；`safety_refusal` 可为空 |

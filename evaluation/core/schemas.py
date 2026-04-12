@@ -24,6 +24,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from evaluation.core.question_tags import QuestionTag
+
 # ---------------------------------------------------------------------------
 # Literal type aliases
 # ---------------------------------------------------------------------------
@@ -232,7 +234,7 @@ class QuestionItem(BaseModel):
     domain: DomainLiteral
     intent: str
     human_prompt_seed: str
-    tags: list[str] = Field(default_factory=list)
+    tags: list[QuestionTag] = Field(default_factory=list)
     priority: str | None = Field(
         default=None,
         description='Gate priority. "P0" = regression gate (run first, block on regression).',
@@ -241,9 +243,13 @@ class QuestionItem(BaseModel):
     reference_answers: list[ReferenceAnswer] = Field(default_factory=list)
     scoring_checklist: list[ScoringCheckItem] = Field(default_factory=list)
 
-    @field_validator('tags')
+    @field_validator('tags', mode='before')
     @classmethod
-    def _validate_tags(cls, value: list[str]) -> list[str]:
+    def _validate_tags_before(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise TypeError('tags must be a list')
         cleaned: list[str] = []
         seen: set[str] = set()
         for raw_tag in value:
@@ -267,11 +273,12 @@ class QuestionItem(BaseModel):
 
     @model_validator(mode='after')
     def _validate_scoring_contract(self) -> 'QuestionItem':
-        if self.capability in self.tags:
+        tag_values = {t.value for t in self.tags}
+        if self.capability in tag_values:
             raise ValueError(
                 f'tag {self.capability!r} must not repeat question capability'
             )
-        if self.domain in self.tags:
+        if self.domain in tag_values:
             raise ValueError(f'tag {self.domain!r} must not repeat question domain')
         if not self.scoring_checklist:
             raise ValueError(
