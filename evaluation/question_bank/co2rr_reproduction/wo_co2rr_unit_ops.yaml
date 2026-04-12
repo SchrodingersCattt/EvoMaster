@@ -183,7 +183,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_WO_Ag_adsorption_20260408
+- id: CR_WO_Ag_adsorption_20260412
   capability: co2rr_reproduction
   domain: mech
   intent: Compute adsorption energies of six adsorbates on Ag(001) and Ag(011) at
@@ -211,7 +211,7 @@ questions:
     value: *cr_dur_std
   - key: token_budget_total
     value:
-      max: 20000
+      max: 85000
   scoring_checklist:
   - id: workflow_setup
     criterion: "Agent demonstrates correct computational approach: (a) builds or references
@@ -248,7 +248,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_WO_limiting_potential_20260409
+- id: CR_WO_limiting_potential_20260412
   capability: co2rr_reproduction
   domain: elec
   intent: From free-energy steps on CO2RR-to-CO, HER, and CO2-to-HCOOH pathways,
@@ -276,7 +276,7 @@ questions:
     value: *cr_dur_std
   - key: token_budget_total
     value:
-      max: 22000
+      max: 45000
   scoring_checklist:
   - id: three_pathways_ul
     criterion: "In the FINAL delivered answer, all three reaction pathways are reported with their PDS (potential-determining step), ΔG_max (eV), and U_L (V): (1) CO₂→CO, (2) HER, (3) CO₂→HCOOH. NOTE: The answer may be in Chinese with markdown tables; lines like '|------|-------------|-----' are standard table header separators, NOT truncation indicators. Judge ONLY on whether the final answer text contains the three complete sets of (PDS, ΔG_max, U_L) values, regardless of intermediate computation steps."
@@ -348,7 +348,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: CR_WO_feature_extract_43d_20260406
+- id: CR_WO_feature_extract_43d_20260412
   capability: co2rr_reproduction
   domain: general
   intent: Implement 43-dimensional feature extraction (40 continuous + 3 categorical)
@@ -376,7 +376,7 @@ questions:
     value: *cr_dur_std
   - key: token_budget_total
     value:
-      max: 18000
+      max: 45000
   scoring_checklist:
   - id: script_and_schema
     criterion: 脚本可执行或逻辑完整；明确 40+3 维定义、四类近邻、6 Å cutoff、加权方式与输出列说明。
