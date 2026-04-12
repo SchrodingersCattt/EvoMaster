@@ -98,13 +98,12 @@ evaluation/question_bank/
 
 与 `evaluation/core/schemas.py` 中 `CapabilityLiteral` **保持一致**（加载题库时按此校验）：
 
-`knowledge_recall` / `structure_construction` / `structure_retrieval` / `property_prediction` / `workflow_orchestration` / `execution_contract` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation_vasp` / `input_generation_abacus` / `co2rr_reproduction`
+`structure_construction` / `structure_retrieval` / `property_prediction` / `workflow_orchestration` / `execution_contract` / `data_diagnosis` / `batch_processing` / `safety_refusal` / `input_generation_vasp` / `input_generation_abacus` / `co2rr_reproduction`
 
 **语义说明（撰写与筛选时）**
 
 | 取值 | 含义 |
 |------|------|
-| `knowledge_recall` | 纯知识问答/回忆类（当前题库较少使用；预留） |
 | `structure_construction` | 构建或修改结构（slab、界面、缺陷等），不强调「从数据库拉取」 |
 | `structure_retrieval` | 从结构数据库检索、筛选、汇总元数据（如 `mat_struct_db` 路径） |
 | `property_prediction` | 由数据或计算流程得到数值/分类结果；题库中亦用于拟合、精修、后处理等**非纯编排**任务（名称偏历史，与「预测」不必字面一致） |
@@ -121,7 +120,7 @@ evaluation/question_bank/
 
 与 `evaluation/core/schemas.py` 中 `DomainLiteral` **保持一致**：
 
-`struct` / `elec` / `mech` / `thermo` / `kinetic` / `optical` / `general` / `incar` / `scxrd` / `polymer` / `mlip`
+`struct` / `elec` / `mech` / `thermo` / `kinetic` / `general` / `incar` / `scxrd` / `polymer` / `mlip`
 
 **语义说明**
 
@@ -130,7 +129,6 @@ evaluation/question_bank/
 - `scxrd`：单晶 XRD 解析、精修等（见 `data_fitting/df_scxrd.yaml`）。
 - `polymer`：聚合物/软物质相关；`general`：跨领域或不易归入上列者。
 - `mlip`：**机器学习势（MLIP）**、势函数训练/评估/编排等与势函数工作流强绑定的主轴（与 `tags` 中的 `mlip` 可并存；需要 `--slices` 按域切分时优先用本枚举）。
-- `optical`：光学相关（当前题库未使用，**预留**；新题若主轴为光学性质可标此域以便聚合）。
 
 #### 新题填写 checklist（capability / domain / tags）
 

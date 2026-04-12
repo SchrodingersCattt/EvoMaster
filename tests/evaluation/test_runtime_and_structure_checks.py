@@ -202,6 +202,50 @@ def test_eval_run_record_serializes_duration_ms() -> None:
     assert dumped['duration_ms'] == 1234
 
 
+def test_question_item_rejects_removed_capability_knowledge_recall() -> None:
+    from evaluation.core.schemas import QuestionItem
+
+    with pytest.raises(ValidationError, match='knowledge_recall'):
+        QuestionItem(
+            id='KR',
+            capability='knowledge_recall',
+            domain='general',
+            intent='legacy capability should be rejected',
+            human_prompt_seed='x',
+            scoring_checklist=[
+                {
+                    'id': 'unused',
+                    'criterion': 'unused',
+                    'axis': 'correctness',
+                    'verify': 'llm_binary_judge',
+                }
+            ],
+            reference_answers=[{'key': 'unused', 'value': 'x'}],
+        )
+
+
+def test_question_item_rejects_removed_domain_optical() -> None:
+    from evaluation.core.schemas import QuestionItem
+
+    with pytest.raises(ValidationError, match='optical'):
+        QuestionItem(
+            id='OP',
+            capability='structure_construction',
+            domain='optical',
+            intent='legacy domain should be rejected',
+            human_prompt_seed='x',
+            scoring_checklist=[
+                {
+                    'id': 'unused',
+                    'criterion': 'unused',
+                    'axis': 'correctness',
+                    'verify': 'llm_binary_judge',
+                }
+            ],
+            reference_answers=[{'key': 'unused', 'value': 'x'}],
+        )
+
+
 def test_safety_questions_also_count_token_and_duration_efficiency() -> None:
     from evaluation.core.schemas import QuestionItem, SafetyVetoRecord, TokenUsageRecord
 

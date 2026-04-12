@@ -77,7 +77,6 @@ VerifyLiteral = Literal[
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
 
 CapabilityLiteral = Literal[
-    'knowledge_recall',
     'structure_construction',
     'structure_retrieval',
     'property_prediction',
@@ -97,7 +96,6 @@ DomainLiteral = Literal[
     'mech',
     'thermo',
     'kinetic',
-    'optical',
     'general',
     'incar',
     'scxrd',
