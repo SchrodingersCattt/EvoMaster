@@ -520,6 +520,7 @@ def check_struct_file_layer_count(
         tolerance=float(cfg.get('tolerance', 0)),
         axis=str(cfg.get('axis', 'z')),
         layer_tol_A=layer_tol,
+        element=str(cfg.get('element')) if cfg.get('element') else None,
     )
 
 
