@@ -43,6 +43,7 @@ DIRECT_MIGRATE_DOMAIN_EXPECTATIONS = {
     'polymer/pl_rheology.yaml': 'polymer',
     'scientific_analysis/sa_elec.yaml': 'battery',
     'scientific_analysis/sa_mech.yaml': 'alloy',
+    'scientific_analysis/sa_semiconductor.yaml': 'semiconductor',
     'structure_construction/sc_elec_adsorption.yaml': 'catalysis',
     'workflow_orchestration/wo_elec_adsorption.yaml': 'catalysis',
     'workflow_orchestration/wo_elec_nfpp_refactored.yaml': 'battery',
@@ -301,3 +302,36 @@ def test_direct_migrate_banks_match_phase1_domain_mapping() -> None:
         assert {q['domain'] for q in raw_bank['questions']} == {expected_domain}, (
             rel_path
         )
+
+
+def test_sa_general_phase2_split_banks_have_expected_question_ids() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    bank_root = repo_root / 'evaluation' / 'question_bank'
+
+    sa_semiconductor = yaml.safe_load(
+        (
+            bank_root / 'scientific_analysis' / 'sa_semiconductor.yaml'
+        ).read_text(encoding='utf-8')
+    )
+    assert [q['id'] for q in sa_semiconductor['questions']] == [
+        'WO_general_perov_007_20260411v1'
+    ]
+
+    sa_mech = yaml.safe_load(
+        (bank_root / 'scientific_analysis' / 'sa_mech.yaml').read_text(
+            encoding='utf-8'
+        )
+    )
+    assert [q['id'] for q in sa_mech['questions']] == [
+        'WO_general_steel_008_20260411v1',
+        'WO_general_hea_005_20260411v1',
+    ]
+
+
+def test_manifest_active_totals_after_sa_general_phase2_split() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    bank_root = repo_root / 'evaluation' / 'question_bank'
+    manifest = yaml.safe_load((bank_root / 'manifest.yaml').read_text(encoding='utf-8'))
+
+    assert len(manifest['banks']) == 21
+    assert sum(entry['questions'] for entry in manifest['banks']) == 25
