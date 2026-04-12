@@ -344,6 +344,14 @@ class EvalConfig(BaseModel):
     use_seed_prompt: bool = True
     max_workers: int = 1
     mat_config_path: str = 'configs/mat_master/config.yaml'
+    empty_completion_max_retries: int = Field(
+        default=1,
+        ge=0,
+        description=(
+            'Re-run a task when the kernel reports completed/natural with no tools and '
+            'an empty answer (transient empty LLM stream). Total attempts = 1 + this value.'
+        ),
+    )
     simulator_llm: LLMRuntimeConfig | None = None
     evaluator_llm: LLMRuntimeConfig | None = None
     include_slices: list[CapabilitySlice] | None = None

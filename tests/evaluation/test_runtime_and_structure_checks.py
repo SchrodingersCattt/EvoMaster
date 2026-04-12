@@ -137,10 +137,51 @@ def test_mat_runner_includes_duration_ms(
         task_id='tid',
         run_dir=tmp_path,
         mat_config_path=Path('configs/mat_master/config.yaml'),
+        empty_completion_max_retries=0,
     )
     assert 'duration_ms' in out
     assert isinstance(out['duration_ms'], int)
     assert out['duration_ms'] >= 0
+
+
+def test_run_mat_task_empty_completion_retry_sums_duration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second attempt runs when first is completed/natural with no answer or tools."""
+    from evaluation.core import mat_runner
+
+    first = {
+        "task_id": "tid",
+        "mode": "direct",
+        "answer": "",
+        "tool_calls": [],
+        "result": {"status": "completed", "reason": "natural"},
+        "status": "completed",
+        "duration_ms": 10,
+        "trajectory_path": "",
+    }
+    second = {
+        **first,
+        "answer": "recovered",
+        "duration_ms": 20,
+    }
+    seq = iter([first, second])
+
+    def _fake_once(**kwargs: object) -> dict:
+        return next(seq)
+
+    monkeypatch.setattr(mat_runner, "_run_mat_task_once", _fake_once)
+    out = mat_runner.run_mat_task(
+        prompt="hi",
+        mode="direct",
+        task_id="tid",
+        run_dir=tmp_path,
+        mat_config_path=Path("configs/mat_master/config.yaml"),
+        empty_completion_max_retries=1,
+    )
+    assert out["answer"] == "recovered"
+    assert out["empty_completion_retry_count"] == 1
+    assert out["duration_ms"] == 30
 
 
 def test_eval_run_record_serializes_duration_ms() -> None:

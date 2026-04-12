@@ -91,6 +91,7 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
             task_id=task_id,
             run_dir=mat_runs_dir,
             mat_config_path=mat_config_path,
+            empty_completion_max_retries=config.empty_completion_max_retries,
         )
         answer = str(mat_result.get('answer', '') or '')
         tool_calls: list[dict[str, Any]] = mat_result.get('tool_calls', [])

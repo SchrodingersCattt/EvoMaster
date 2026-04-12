@@ -43,6 +43,10 @@ evaluation/question_bank/
 | `grounding` | 是否使用了正确的工具/数据源，而非凭空编造 |
 | `efficiency` | 过程是否高效（无冗余调用、耗时/token 合理） |
 
+### `EvalConfig` 与 Agent 运行（`run_mat_task`）
+
+- **`empty_completion_max_retries`**（默认 `1`）：当单次运行结果为 `status=completed`、无工具调用、且无可见答案（含内核 `reason=natural` 或旧版 playground 无 `reason` 字段）时，视为「可能因网关/流式偶发空流」，**整题重跑**最多额外次数；`0` 表示关闭。`mat_result` 会附带 `empty_completion_retry_count`（实际执行的重试次数），`duration_ms` 为**多次尝试之和**。
+
 ---
 
 ## 字段必填 / 选填规则

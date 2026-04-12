@@ -35,6 +35,24 @@ def get_playground_class(name: str, config_path: Path | None = None) -> Any:
 _DEFAULT_GET_PLAYGROUND_CLASS = get_playground_class
 
 
+def _should_retry_empty_natural_completion(mat_result: dict[str, Any]) -> bool:
+    """True when the run completed without tools but produced no answer (retry candidate)."""
+    if str(mat_result.get("status") or "") != "completed":
+        return False
+    if str(mat_result.get("answer") or "").strip():
+        return False
+    tool_calls = mat_result.get("tool_calls") or []
+    if tool_calls:
+        return False
+    result = mat_result.get("result")
+    reason: str | None = None
+    if isinstance(result, dict) and "reason" in result:
+        reason = str(result.get("reason") or "")
+    if reason is not None and reason and reason != "natural":
+        return False
+    return True
+
+
 def _cleanup_playground_logging(playground: Any) -> None:
     """Remove playground-attached file handlers to avoid leaking logs across tests."""
     import logging
@@ -109,7 +127,7 @@ def _run_mat_task_with_playground(
     }
 
 
-def run_mat_task(
+def _run_mat_task_once(
     *,
     prompt: str,
     mode: ModeLiteral,
@@ -117,15 +135,7 @@ def run_mat_task(
     run_dir: Path,
     mat_config_path: Path,
 ) -> dict[str, Any]:
-    """Run one Mat Master evaluation task and extract answer text.
-
-    Args:
-        prompt: The user task prompt.
-        mode: 'direct' or 'planner'.
-        task_id: Unique identifier for this evaluation run.
-        run_dir: Root directory for storing run artifacts.
-        mat_config_path: Path to LLM config YAML (config/llm_config.yaml).
-    """
+    """Single agent invocation (no empty-completion retry)."""
     if get_playground_class is not _DEFAULT_GET_PLAYGROUND_CLASS:
         return _run_mat_task_with_playground(
             prompt=prompt,
@@ -215,6 +225,65 @@ def run_mat_task(
         "status": drain_result.status,
         "duration_ms": duration_ms,
     }
+
+
+def run_mat_task(
+    *,
+    prompt: str,
+    mode: ModeLiteral,
+    task_id: str,
+    run_dir: Path,
+    mat_config_path: Path,
+    empty_completion_max_retries: int = 1,
+) -> dict[str, Any]:
+    """Run one Mat Master evaluation task and extract answer text.
+
+    Args:
+        prompt: The user task prompt.
+        mode: 'direct' or 'planner'.
+        task_id: Unique identifier for this evaluation run.
+        run_dir: Root directory for storing run artifacts.
+        mat_config_path: Path to LLM config YAML (config/llm_config.yaml).
+        empty_completion_max_retries: When the kernel finishes with ``status=completed``,
+            ``reason=natural`` (or legacy playground without reason), no tool calls, and
+            an empty answer, re-run the task up to this many extra times to mitigate
+            transient empty LLM streams. ``duration_ms`` sums all attempts.
+    """
+    if empty_completion_max_retries < 0:
+        raise ValueError("empty_completion_max_retries must be >= 0")
+
+    last = _run_mat_task_once(
+        prompt=prompt,
+        mode=mode,
+        task_id=task_id,
+        run_dir=run_dir,
+        mat_config_path=mat_config_path,
+    )
+    total_duration_ms = int(last.get("duration_ms") or 0)
+    retries_done = 0
+    while (
+        retries_done < empty_completion_max_retries
+        and _should_retry_empty_natural_completion(last)
+    ):
+        logger.warning(
+            "run_mat_task: empty natural completion for task_id=%s, retry %d/%d",
+            task_id,
+            retries_done + 1,
+            empty_completion_max_retries,
+        )
+        last = _run_mat_task_once(
+            prompt=prompt,
+            mode=mode,
+            task_id=task_id,
+            run_dir=run_dir,
+            mat_config_path=mat_config_path,
+        )
+        total_duration_ms += int(last.get("duration_ms") or 0)
+        retries_done += 1
+
+    last["duration_ms"] = total_duration_ms
+    last["empty_completion_retry_count"] = retries_done
+    return last
 
 
 def _extract_tool_calls_from_messages(
