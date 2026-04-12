@@ -1,0 +1,198 @@
+version: v5
+capability: workflow_orchestration
+domain: catalysis
+questions:
+- id: WO_elec_006_20260411v2
+  capability: workflow_orchestration
+  domain: catalysis
+  intent: Mock surface energy for Fe BCC(110) with BSSE-aware workflow; compare sigma
+    to VASP reference using provided energies and area.
+  human_prompt_seed: '计算 Fe BCC(110) 表面能（ABACUS LCAO 场景，含 BSSE 校正思路）：从结构数据库或模板获取 Fe
+    BCC 体相（a≈2.87 Å），切出 (110) slab（建议至少 6 层原子、约 15 Å 真空）。说明在 LCAO 基组下需要在两侧真空添加 empty
+    Fe 层以降低 BSSE。使用以下 mock 单点能量（单位 eV，已对应 BSSE 校正后的 slab SCF）：E_bulk = -230929.72（体相参考），E_slab
+    = -230919.46，单侧截面积 A = 34.09 Å²。按 σ = (E_slab − E_bulk) / (2A) 计算表面能，换算为 J/m²（1
+    eV/Å² = 16.021766 J/m²），并与 VASP 参考值约 2.412 J/m² 对比。全程不要提交真实 DFT 计算。
+
+'
+  tags:
+  - abacus
+  - bsse
+  - surface_energy
+  - mock_energy
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: sigma_J_m2
+    value: 2.411
+    tolerance: 0.12
+  - key: required_fields
+    value:
+    - sigma_J_m2
+    - formula
+    - bsse_note
+    - vasp_compare
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: sigma_J_m2
+    criterion: Surface energy sigma in J/m^2 matches mock-data calculation within
+      tolerance (~2.41 J/m^2).
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report states sigma in J/m^2, shows sigma=(E_slab-E_bulk)/(2A), notes
+      BSSE empty-layer rationale, and compares to VASP ~2.412 J/m^2.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Numeric sigma is computed from the given mock E_bulk, E_slab, and A;
+      no invented energies. Judge solely from the final answer; do not fail because
+      the tool-call log omits MCP, web_search, or any specific tool.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical structure tool calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: efficiency_judge
+    criterion: Workflow (fetch/build slab → apply formula with mock energies → report)
+      avoids redundant intermediate rebuilds.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: WO_elec_007_20260411v1
+  capability: workflow_orchestration
+  domain: catalysis
+  intent: Compute Pd(111) work function with ABACUS under a z-direction vacuum setup
+    and summarize key computational settings and output.
+  human_prompt_seed: |
+    计算 Pd(111) 表面功函数（Mock版）：
+    1. 先 query/检索 Pd 体相与 Pd(111) slab 建模所需输入文件，并确认真空方向约束；
+    2. 列出关键设置（exchange-correlation functional、计算模式、真空方向、是否弛豫）；
+    3. 不做真实 ABACUS 计算，使用以下 mock 结果：
+       - work_function_eV = 5.43
+       - vacuum_direction = z
+       - functional = PBE
+       - calculation_mode = SCF
+    4. 基于以上数值完成后处理与结论解释。
+
+    请完成以下交付：
+    1) `pd111_work_function.json`：至少包含 `input_files`, `work_function_eV`, `vacuum_direction`, `functional`, `calculation_mode`, `notes`；
+    2) `pd111_work_function_report.md`：说明 query 输入梳理、mock 后处理流程和结果解读。
+
+    最终回答需明确给出功函数数值（eV）并确认 vacuum_direction=z。
+  tags:
+  - work_function
+  - pd111
+  - abacus
+  - surface
+  - userlog_derived
+  mode_scope:
+  - direct
+  - planner
+  data_files: []
+  reference_answers:
+  - key: wf_json_artifact
+    value: pd111_work_function.json
+  - key: wf_report_artifact
+    value: pd111_work_function_report.md
+  - key: wf_required_tokens
+    value:
+      filename: pd111_work_function.json
+      tokens:
+      - work_function_eV
+      - vacuum_direction
+      - z
+      - functional
+      - calculation_mode
+      flags: i
+  - key: report_required_tokens
+    value:
+      filename: pd111_work_function_report.md
+      tokens:
+      - Pd(111)
+      - work function
+      - ABACUS
+      - z
+      - 不确定性
+      flags: i
+  - key: wf_value_mock
+    value: 5.43
+    tolerance: 0.3
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: wf_json_artifact
+    criterion: Agent writes `pd111_work_function.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: wf_report_artifact
+    criterion: Agent writes `pd111_work_function_report.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: wf_required_tokens
+    criterion: JSON output includes work-function value and explicit z-direction vacuum
+      setting.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: report_required_tokens
+    criterion: Report explains setup rationale and output interpretation with uncertainty
+      caveats.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: wf_value_mock
+    criterion: Final answer includes a mock work-function value near 5.43 eV.
+    axis: correctness
+    verify: numerical_range
+  - id: grounding_source
+    criterion: The final answer is grounded in generated work-function artifacts and
+      does not fabricate unsupported setup or result details.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget

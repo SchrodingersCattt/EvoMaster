@@ -45,11 +45,13 @@ DIRECT_MIGRATE_DOMAIN_EXPECTATIONS = {
     'scientific_analysis/sa_mech.yaml': 'alloy',
     'scientific_analysis/sa_semiconductor.yaml': 'semiconductor',
     'structure_construction/sc_elec_adsorption.yaml': 'catalysis',
+    'workflow_orchestration/wo_catalysis.yaml': 'catalysis',
     'workflow_orchestration/wo_elec_adsorption.yaml': 'catalysis',
     'workflow_orchestration/wo_elec_nfpp_refactored.yaml': 'battery',
     'workflow_orchestration/wo_general_mech.yaml': 'alloy',
     'workflow_orchestration/wo_mech_struct.yaml': 'alloy',
     'workflow_orchestration/wo_mech_thermo.yaml': 'alloy',
+    'workflow_orchestration/wo_semiconductor.yaml': 'semiconductor',
 }
 
 
@@ -328,10 +330,34 @@ def test_sa_general_phase2_split_banks_have_expected_question_ids() -> None:
     ]
 
 
-def test_manifest_active_totals_after_sa_general_phase2_split() -> None:
+def test_phase2_split_banks_have_expected_question_ids() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    bank_root = repo_root / 'evaluation' / 'question_bank'
+
+    semiconductor_bank = yaml.safe_load(
+        (bank_root / 'workflow_orchestration/wo_semiconductor.yaml').read_text(
+            encoding='utf-8'
+        )
+    )
+    catalysis_bank = yaml.safe_load(
+        (bank_root / 'workflow_orchestration/wo_catalysis.yaml').read_text(
+            encoding='utf-8'
+        )
+    )
+
+    assert [q['id'] for q in semiconductor_bank['questions']] == [
+        'WO_elec_001_20260411v2'
+    ]
+    assert [q['id'] for q in catalysis_bank['questions']] == [
+        'WO_elec_006_20260411v2',
+        'WO_elec_007_20260411v1',
+    ]
+
+
+def test_manifest_active_totals_after_phase2_splits() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     bank_root = repo_root / 'evaluation' / 'question_bank'
     manifest = yaml.safe_load((bank_root / 'manifest.yaml').read_text(encoding='utf-8'))
 
-    assert len(manifest['banks']) == 21
-    assert sum(entry['questions'] for entry in manifest['banks']) == 25
+    assert len(manifest['banks']) == 23
+    assert sum(int(entry['questions']) for entry in manifest['banks']) == 28

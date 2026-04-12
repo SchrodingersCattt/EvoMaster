@@ -123,9 +123,19 @@ banks:
     domain: "catalysis"
     questions: 1
 
+  - path: "workflow_orchestration/wo_catalysis.yaml"
+    capability: "workflow_orchestration"
+    domain: "catalysis"
+    questions: 2
+
   - path: "batch_processing/bp_elec.yaml"
     capability: "batch_processing"
     domain: "catalysis"
+    questions: 1
+
+  - path: "workflow_orchestration/wo_semiconductor.yaml"
+    capability: "workflow_orchestration"
+    domain: "semiconductor"
     questions: 1
 
   # --- Polymer projects ---
@@ -154,4 +164,4 @@ banks:
     domain: "polymer"
     questions: 1
 
-# Total: 25 questions across 21 active bank files
+# Total: 28 questions across 23 active bank files
