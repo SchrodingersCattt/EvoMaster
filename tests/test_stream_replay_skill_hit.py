@@ -98,3 +98,81 @@ class TestReplayDedupeSpawnId:
         ]
         out = _dedupe_replayed_terminal_events(events)
         assert [e["type"] for e in out] == ["response"]
+
+
+class TestReplayCompactionNormalization:
+    def test_replay_converts_orphan_compaction_running_to_interrupted(self) -> None:
+        from src.services.stream_service import _normalize_replayed_compaction_events
+
+        events = [
+            {
+                "type": "compaction",
+                "task_id": "t1",
+                "spawn_id": None,
+                "content": {
+                    "compaction_id": "t1:root:1",
+                    "status": "running",
+                    "phase": "runtime",
+                },
+            }
+        ]
+
+        out = _normalize_replayed_compaction_events(events)
+
+        assert out[0]["type"] == "compaction"
+        assert out[0]["content"]["status"] == "interrupted"
+
+    def test_replay_keeps_closed_compaction_lifecycle(self) -> None:
+        from src.services.stream_service import _normalize_replayed_compaction_events
+
+        events = [
+            {
+                "type": "compaction",
+                "task_id": "t1",
+                "spawn_id": None,
+                "content": {
+                    "compaction_id": "t1:root:1",
+                    "status": "running",
+                    "phase": "runtime",
+                },
+            },
+            {
+                "type": "compaction",
+                "task_id": "t1",
+                "spawn_id": None,
+                "content": {
+                    "compaction_id": "t1:root:1",
+                    "status": "complete",
+                    "phase": "runtime",
+                    "strategy": "summary",
+                },
+            },
+        ]
+
+        out = _normalize_replayed_compaction_events(events)
+
+        assert [e["content"]["status"] for e in out] == ["running", "complete"]
+
+    def test_replay_skips_legacy_context_compaction_rows(self) -> None:
+        from src.services.stream_service import _normalize_replayed_compaction_events
+
+        events = [
+            {
+                "type": "context_compaction",
+                "task_id": "t1",
+                "spawn_id": None,
+                "content": {"phase": "runtime"},
+            }
+        ]
+
+        assert _normalize_replayed_compaction_events(events) == []
+
+    def test_replay_allows_public_compaction_to_reach_sse(self) -> None:
+        from src.services.stream_service import _should_emit_event_to_sse
+
+        event = {
+            "type": "compaction",
+            "content": {"compaction_id": "t1:root:1", "status": "complete"},
+        }
+
+        assert _should_emit_event_to_sse(event) is True
