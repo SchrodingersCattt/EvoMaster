@@ -201,7 +201,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_db_003_20260411v2
+- id: SR_db_003_20260411v3
   capability: structure_retrieval
   domain: agnostic
   intent: Retrieve and rank candidate crystal structures under explicit screening constraints.
