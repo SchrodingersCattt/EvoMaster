@@ -21,7 +21,6 @@ questions:
 
     '
   tags:
-  - general
   - phy_surface
   data_files:
   - key: interface_bundle
@@ -117,7 +116,6 @@ questions:
     '
   tags:
   - mat_polymer
-  - general
   data_files:
   - key: donor_bundle
     path: data/pl_donor/donor_prescreen_bundle.json

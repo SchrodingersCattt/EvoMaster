@@ -24,7 +24,6 @@ questions:
 
     '
   tags:
-  - general
   - phy_eos
   - meta_database
   - meta_userlog
@@ -224,7 +223,6 @@ questions:
     '
   tags:
   - wf_batch
-  - general
   - meta_userlog
   data_files: []
   reference_answers:
@@ -318,7 +316,6 @@ questions:
     最终回答中简要确认是否满足“元素集合 + 空间群 + 数量上限”三项约束。'
   tags:
   - meta_database
-  - general
   - meta_userlog
   data_files: []
   reference_answers:
@@ -420,7 +417,6 @@ questions:
     最终回答需确认每条候选是否满足阈值条件。'
   tags:
   - mat_mof
-  - general
   - meta_database
   - meta_userlog
   data_files: []
@@ -627,7 +623,6 @@ questions:
 
     最终回答需简要确认候选数量和可下载资源情况。'
   tags:
-  - general
   - phy_surface
   - meta_userlog
   data_files: []
@@ -727,7 +722,6 @@ questions:
   tags:
   - meta_database
   - chem_battery
-  - general
   - meta_userlog
   data_files: []
   reference_answers:

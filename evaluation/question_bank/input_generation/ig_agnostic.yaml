@@ -1331,7 +1331,6 @@ questions:
     '
   tags:
   - code_abacus
-  - general
   - phy_defect
   - wf_inputs
   data_files:
@@ -2818,7 +2817,6 @@ questions:
   tags:
   - wf_incar
   - phy_md
-  - general
   - phy_magnetism
   data_files:
   - key: task_spec
@@ -3784,7 +3782,6 @@ questions:
     band)+HSE06 过渡态搜索的 VASP INCAR。Fe 含磁性，需要固定总磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - wf_incar
-  - general
   - hybrid_functional
   - phy_magnetism
   data_files:
@@ -4179,7 +4176,6 @@ questions:
   tags:
   - wf_incar
   - phy_surface
-  - general
   - phy_electronic
   data_files:
   - key: task_spec
@@ -4582,7 +4578,6 @@ questions:
   tags:
   - wf_incar
   - wf_inputs
-  - general
   - phy_magnetism
   data_files:
   - key: task_spec
@@ -5280,7 +5275,6 @@ questions:
   - wf_incar
   - phy_magnetism
   - log_diagnosis
-  - general
   data_files:
   - key: task_spec
     path: data/IG_incar_020/task_spec.json

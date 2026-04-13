@@ -88,7 +88,6 @@ questions:
   tags:
   - meta_userlog
   - mat_perovskite
-  - general
   - wf_report
   data_files: []
   reference_answers:
@@ -176,7 +175,6 @@ questions:
     最终回答请用简短段落总结：该方法最适合与最不适合的使用场景。'
   tags:
   - meta_userlog
-  - general
   - phy_eos
   data_files: []
   reference_answers:

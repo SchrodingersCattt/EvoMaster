@@ -9,7 +9,6 @@ questions:
   human_prompt_seed: 使用 `ev_curve.json` 中的 E-V 数据拟合 Birch-Murnaghan 状态方程，输出 V0(A3) 与 B0(GPa)。
   tags:
   - phy_eos
-  - general
   data_files:
   - key: ev_table
     path: data/DF_mech_001/ev_curve.json
@@ -176,7 +175,6 @@ questions:
   tags:
   - meta_userlog
   - phy_elastic
-  - general
   data_files:
   - key: implant_params
     path: data/WO_general_userlog_004_20260410v3/implant_params.json
@@ -425,7 +423,6 @@ questions:
   - char_xrd
   - char_cif_validation
   - phy_defect
-  - general
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_002_20260408/A23050102A0375.hkl

@@ -33,7 +33,6 @@ questions:
     '
   tags:
   - phy_surface
-  - general
   data_files: []
   reference_answers:
   - key: unit_cell_atoms
@@ -244,7 +243,6 @@ questions:
   tags:
   - phy_defect
   - char_xrd
-  - general
   reference_answers:
   - key: structures_processed
     value:
@@ -363,7 +361,6 @@ questions:
     '
   tags:
   - phy_surface
-  - general
   - safety_hazard
   - log_diagnosis
   data_files:
@@ -466,7 +463,6 @@ questions:
 
     '
   tags:
-  - general
   - mat_oxide
   - log_diagnosis
   data_files: []
@@ -613,7 +609,6 @@ questions:
     '
   tags:
   - phy_surface
-  - general
   priority: P0
   data_files: []
   reference_answers:
@@ -863,7 +858,6 @@ questions:
   - code_mlip
   - chem_electrolyte
   - phy_md
-  - general
   data_files:
   - key: electrolyte_spec
     path: data/WO_mlip_dpa_006_20260411v4/electrolyte_system_spec.json

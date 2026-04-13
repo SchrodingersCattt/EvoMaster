@@ -54,4 +54,3 @@ class QuestionTag(StrEnum):
     electrostatics = 'electrostatics'
     bsse = 'bsse'
     hybrid_functional = 'hybrid_functional'
-    general = 'general'
