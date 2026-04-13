@@ -397,7 +397,7 @@ class HumanSimulator:
         ]
 
         # Only tags that exist in ``QuestionTag`` (literature TaskSpec is not the v5 bank).
-        tags_list: list[QuestionTag] = [QuestionTag.literature_review]
+        tags_list: list[QuestionTag] = [QuestionTag.meta_literature]
         for raw in spec.tags:
             try:
                 tags_list.append(QuestionTag(raw))

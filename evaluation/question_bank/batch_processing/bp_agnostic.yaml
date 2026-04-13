@@ -35,10 +35,10 @@ questions:
 
     '
   tags:
-  - batch_operation
-  - failure_recovery
-  - parameter_isolation
-  - input_generation
+  - wf_batch
+  - wf_recovery
+  - wf_sweep
+  - wf_inputs
   data_files:
   - key: failure_recovery
     path: data/BP_struct_005/failure_recovery.json

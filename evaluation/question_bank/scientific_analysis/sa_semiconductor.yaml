@@ -8,9 +8,7 @@ questions:
   intent: Determine band-gap type and value from given band-edge dataset.
   human_prompt_seed: 读取 `band_edges.json`，判断直接/间接带隙并输出带隙值 (eV)、VBM 和 CBM 的 k 点位置。
   tags:
-  - bandgap
-  - classification
-  - electronic_structure
+  - phy_electronic
   data_files:
   - key: band_data
     path: data/DF_elec_001/band_edges.json
@@ -88,10 +86,10 @@ questions:
 
     最终回答中简要说明：为什么该候选最值得优先验证。'
   tags:
-  - userlog_derived
-  - perovskite
-  - additive
-  - proposal
+  - meta_userlog
+  - mat_perovskite
+  - general
+  - wf_report
   data_files: []
   reference_answers:
   - key: additive_json
@@ -177,10 +175,9 @@ questions:
 
     最终回答请用简短段落总结：该方法最适合与最不适合的使用场景。'
   tags:
-  - userlog_derived
-  - ferroelectric
-  - sawyer_tower
-  - method_explanation
+  - meta_userlog
+  - general
+  - phy_eos
   data_files: []
   reference_answers:
   - key: notes_md

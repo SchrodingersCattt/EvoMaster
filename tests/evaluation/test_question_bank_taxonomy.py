@@ -10,6 +10,7 @@ from evaluation.core.capability_abbrev import (
     CAPABILITY_TO_TWO_LETTER,
     bank_yaml_basename,
 )
+from evaluation.core.question_tags import QuestionTag
 from evaluation.core.schemas import QuestionBank
 
 BUSINESS_LINE_DOMAINS = [
@@ -125,40 +126,23 @@ def test_question_bank_requires_top_level_domain() -> None:
         )
 
 
-def test_question_bank_rejects_question_tag_matching_own_capability() -> None:
-    with pytest.raises(ValidationError, match='must not repeat question capability'):
-        QuestionBank.model_validate(
-            {
-                'version': 'v5',
-                'capability': 'structure_retrieval',
-                'domain': 'agnostic',
-                'questions': [
-                    _minimal_question(
-                        capability='structure_retrieval',
-                        domain='agnostic',
-                        tags=['structure_retrieval'],
-                    )
-                ],
-            }
-        )
-
-
-def test_question_bank_rejects_question_tag_matching_own_domain() -> None:
-    with pytest.raises(ValidationError, match='must not repeat question domain'):
-        QuestionBank.model_validate(
-            {
-                'version': 'v5',
-                'capability': 'scientific_analysis',
-                'domain': 'alloy',
-                'questions': [
-                    _minimal_question(
-                        capability='scientific_analysis',
-                        domain='alloy',
-                        tags=['alloy'],
-                    )
-                ],
-            }
-        )
+def test_canonical_tags_disjoint_from_capability_domain_literals() -> None:
+    """Canonical tag strings use prefixes; they must not equal capability/domain literals."""
+    caps = {
+        'structure_construction',
+        'structure_retrieval',
+        'scientific_analysis',
+        'workflow_orchestration',
+        'execution_contract',
+        'data_diagnosis',
+        'batch_processing',
+        'safety_refusal',
+        'input_generation',
+    }
+    doms = {'battery', 'catalysis', 'polymer', 'alloy', 'semiconductor', 'agnostic'}
+    tag_values = {m.value for m in QuestionTag}
+    assert tag_values.isdisjoint(caps)
+    assert tag_values.isdisjoint(doms)
 
 
 def test_question_bank_rejects_generic_process_tag() -> None:

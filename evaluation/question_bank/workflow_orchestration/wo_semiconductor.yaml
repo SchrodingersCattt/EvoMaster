@@ -12,9 +12,9 @@ questions:
 
     '
   tags:
-  - band_structure
-  - si
-  - kpath
+  - phy_electronic
+  - phy_surface
+  - general
   priority: P0
   data_files: []
   reference_answers:
@@ -95,10 +95,10 @@ questions:
     \ `imaginary_mode_check`, `key_frequency_summary`；\n2) `si_phonon_abacus_report.md`：说明\
     \ query 输入梳理 + mock 后处理流程、关键结论与不确定性。\n\n最终回答请简要说明是否出现虚频，并标注为 mock 后处理结论。\n"
   tags:
-  - abacus
-  - phonon
-  - silicon
-  - userlog_derived
+  - code_abacus
+  - phy_phonon
+  - phy_surface
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: phonon_json

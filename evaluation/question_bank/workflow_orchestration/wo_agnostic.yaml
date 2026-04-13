@@ -12,10 +12,10 @@ questions:
 
     '
   tags:
-  - hybrid_method
-  - liquid_water
-  - hybrid_acceleration
-  - gap
+  - hybrid_functional
+  - phy_md
+  - wf_report
+  - phy_electronic
   data_files: []
   reference_answers:
   - key: gap_value_eV
@@ -88,11 +88,10 @@ questions:
     \ `charge_transfer`；\n2) `al2o3_bader_report.md`：说明 query 输入梳理、mock 后处理流程、主要电荷转移趋势与不确定性。\n\
     \n最终回答中请简要总结 Al 与 O 的电荷转移方向，并标注为 mock 后处理结果。\n"
   tags:
-  - bader
-  - charge_transfer
-  - al2o3
-  - abacus
-  - userlog_derived
+  - general
+  - phy_surface
+  - code_abacus
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: bader_json_artifact
@@ -201,9 +200,8 @@ questions:
 
     '
   tags:
-  - userlog_derived
-  - attachment_analysis
-  - image_analysis
+  - meta_userlog
+  - phy_surface
   data_files:
   - key: attachment_manifest
     path: data/WO_general_userlog_005_20260410v3/attachment_manifest.json
@@ -329,9 +327,8 @@ questions:
 
     '
   tags:
-  - userlog_derived
-  - post_processing
-  - report_generation
+  - meta_userlog
+  - wf_postprocess
   data_files:
   - key: result_manifest
     path: data/WO_general_userlog_006_20260410v3/result_manifest.json
@@ -439,10 +436,9 @@ questions:
 
     '
   tags:
-  - userlog_derived
-  - workflow_planning
-  - materials_computation
-  - task_decomposition
+  - meta_userlog
+  - wf_report
+  - meta_database
   data_files:
   - key: mission_constraints
     path: data/WO_general_userlog_007_20260410v3/mission_constraints.json
@@ -558,9 +554,9 @@ questions:
 
     '
   tags:
-  - phonon_dispersion
-  - graphene
-  - frequency_extract
+  - phy_phonon
+  - mat_2d
+  - wf_postprocess
   data_files: []
   reference_answers:
   - key: gamma_optical_max_cm1
@@ -636,9 +632,9 @@ questions:
 
     '
   tags:
-  - eos
-  - aluminum
-  - database_search
+  - phy_eos
+  - phy_surface
+  - meta_database
   data_files: []
   reference_answers:
   - key: a0_A
@@ -727,10 +723,8 @@ questions:
 
     '
   tags:
-  - energetic
-  - detonation_metrics
-  - kamlet_jacobs
-  - molecule_construction
+  - phy_eos
+  - phy_surface
   data_files: []
   reference_answers:
   - key: detonation_velocity_m_s
@@ -830,10 +824,10 @@ questions:
 
     '
   tags:
-  - abacus
+  - code_abacus
   - bsse
-  - vacancy
-  - mock_energy
+  - phy_defect
+  - log_diagnosis
   data_files: []
   reference_answers:
   - key: ef_Fe53Cr_eV
@@ -921,11 +915,11 @@ questions:
 
     最终回答中简要给出 C11/C12/C44/B 及与参考数据的一致性判断。'
   tags:
-  - apex
-  - elastic_constants
-  - ni_co_cr
-  - database_compare
-  - userlog_derived
+  - screening_hte
+  - phy_elastic
+  - phy_surface
+  - meta_database
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: elastic_compare_json
@@ -1019,10 +1013,9 @@ questions:
 
     最终回答中简要给出“是否可能形成固溶体”的结论与依据。'
   tags:
-  - hea
-  - phase_prediction
-  - thermodynamic_descriptors
-  - userlog_derived
+  - mat_hea
+  - wf_postprocess
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: hea_summary_json
@@ -1113,10 +1106,10 @@ questions:
     \ `calculation_settings`；\n2) `gaas_elastic_abacus_report.md`：说明 query 输入梳理、mock 后处理流程与不确定性。\n\
     \n最终回答中简要给出 C11/C12/C44 与体模量。\n"
   tags:
-  - abacus
-  - elastic_constants
-  - gaas
-  - userlog_derived
+  - code_abacus
+  - phy_elastic
+  - phy_surface
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1210,10 +1203,10 @@ questions:
     \ `deformation_settings`；\n2) `srtio3_elastic_apex_report.md`：说明 query 输入梳理、mock 后处理流程与结果可靠性讨论。\n\
     \n最终回答中简要给出关键弹性常数并解释其物理含义。\n"
   tags:
-  - apex
-  - elastic_constants
-  - srtio3
-  - userlog_derived
+  - screening_hte
+  - phy_elastic
+  - phy_surface
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1310,11 +1303,11 @@ questions:
     \ `bulk_modulus`；\n2) `alloy_eos_report.md`：说明 query 输入梳理、mock 后处理流程、体积扫描策略与不确定性。\n\n\
     最终回答中简要说明该 EOS 结果能支持哪些定性判断。\n"
   tags:
-  - apex
-  - eos
-  - alloy
-  - volume_scan
-  - userlog_derived
+  - screening_hte
+  - phy_eos
+  - mat_alloy
+  - wf_sweep
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: eos_summary_json
@@ -1415,10 +1408,10 @@ questions:
 
     '
   tags:
-  - mlip
-  - dpa
-  - optimization
-  - silicon
+  - code_mlip
+  - code_dpa
+  - wf_report
+  - phy_surface
   data_files: []
   reference_answers:
   - key: lattice_a_A
@@ -1498,9 +1491,9 @@ questions:
 
     '
   tags:
-  - userlog_derived
-  - dpgen
-  - onboarding
+  - meta_userlog
+  - code_dpgen
+  - wf_report
   data_files:
   - key: dpgen_docs
     path: data/WO_general_userlog_001_20260410v3/dpgen_docs_brief.md
@@ -1610,11 +1603,11 @@ questions:
     \ `band_dos_status`；\n3) `srti03_nb125_workflow_report.md`：说明 query 输入梳理、mock 后处理流程、关键观察与不确定性。\n\
     \n最终回答请明确：该掺杂体系是否通过“可进入电子结构分析”的前置检查。\n"
   tags:
-  - userlog_derived
-  - srtio3
-  - doping
-  - elastic
-  - phonon
+  - meta_userlog
+  - phy_surface
+  - phy_defect
+  - phy_elastic
+  - phy_phonon
   data_files: []
   reference_answers:
   - key: relaxed_struct
@@ -1719,11 +1712,11 @@ questions:
 
     '
   tags:
-  - mlip
-  - dpa
-  - neb
-  - vacancy
-  - copper
+  - code_mlip
+  - code_dpa
+  - general
+  - phy_defect
+  - phy_surface
   data_files: []
   reference_answers:
   - key: forward_barrier_eV
@@ -1794,10 +1787,10 @@ questions:
 
     '
   tags:
-  - mlip
-  - dpa
-  - elastic
-  - copper
+  - code_mlip
+  - code_dpa
+  - phy_elastic
+  - phy_surface
   data_files: []
   reference_answers:
   - key: C11_GPa
@@ -1874,10 +1867,9 @@ questions:
     \ `dpa3_finetune_config.json`：记录 `input_files`、训练步数、学习率策略、loss 关键参数、验证划分；\n2) `dpa3_finetune_report.md`：概述\
     \ query 输入梳理、mock 后处理过程、结果与改进建议。\n\n最终回答请给出：本次微调是否满足继续下游验证的最低条件。\n"
   tags:
-  - userlog_derived
-  - dpa3
-  - finetune
-  - mlip_training
+  - meta_userlog
+  - code_dpa
+  - code_mlip
   data_files: []
   reference_answers:
   - key: finetune_config
@@ -1974,10 +1966,10 @@ questions:
 
     '
   tags:
-  - mlip
-  - dpa
-  - phonon
-  - silicon
+  - code_mlip
+  - code_dpa
+  - phy_phonon
+  - phy_surface
   data_files: []
   reference_answers:
   - key: gamma_optical_max_cm1
@@ -2052,10 +2044,10 @@ questions:
 
     '
   tags:
-  - mlip
-  - dpa
-  - molecular_dynamics
-  - aluminum
+  - code_mlip
+  - code_dpa
+  - phy_md
+  - phy_surface
   data_files: []
   reference_answers:
   - key: avg_temperature_K
@@ -2125,12 +2117,12 @@ questions:
     \ `phonon_settings`, `imaginary_mode_check`, `output_artifacts`；\n2) `mgb2_phonon_report.md`：说明\
     \ query 输入梳理、mock 后处理的两阶段流程、关键参数与不确定性。\n\n最终回答中请简要说明：检索到的结构与声子结果是否相互一致。\n"
   tags:
-  - mlip
-  - dpa
-  - mgb2
-  - phonon
-  - retrieval_plus_calc
-  - userlog_derived
+  - code_mlip
+  - code_dpa
+  - phy_surface
+  - phy_phonon
+  - general
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: phonon_json
@@ -2230,11 +2222,11 @@ questions:
     \ `runtime_ps`, `timestep_fs`, `n_steps`, `thermo_stats`；\n2) `li2o_md_report.md`：说明 query\
     \ 输入梳理、mock 后处理流程、关键观察与误差来源。\n\n最终回答中简要确认是否满足 300 K / 1 ps / 1 fs 三个条件。\n"
   tags:
-  - mlip
-  - dpa
-  - molecular_dynamics
-  - li2o
-  - userlog_derived
+  - code_mlip
+  - code_dpa
+  - phy_md
+  - phy_surface
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: md_summary_artifact
@@ -2344,10 +2336,9 @@ questions:
 
     在最终回答中简要总结：是否满足“10 个候选 + Tc 阈值 + 空间群约束”三项要求。'
   tags:
-  - structure_generation
-  - superconductivity
-  - space_group_225
-  - candidate_screening
+  - general
+  - phy_surface
+  - wf_batch
   data_files: []
   reference_answers:
   - key: candidate_json

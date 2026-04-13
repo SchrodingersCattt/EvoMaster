@@ -13,11 +13,9 @@ questions:
 
     '
   tags:
-  - co2rr_repro
-  - limiting_potential
-  - co2rr
-  - her
-  - free_energy
+  - catalysis_lab
+  - chem_co2rr
+  - chem_her
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -68,10 +66,10 @@ questions:
 
     '
   tags:
-  - co2rr_repro
-  - feature_engineering
-  - pymatgen
-  - ase
+  - catalysis_lab
+  - chem_her
+  - code_pymatgen
+  - code_ase
   data_files: []
   reference_answers:
   - key: turn_budget

@@ -11,8 +11,7 @@ questions:
 
     '
   tags:
-  - scf_diagnosis
-  - smearing
+  - log_diagnosis
   data_files:
   - key: case_bundle
     path: data/DD_general_002/case_bundle.json
@@ -80,10 +79,7 @@ questions:
 
     '
   tags:
-  - relax_diagnosis
-  - potim
-  - initial_structure
-  - phase_mismatch
+  - log_diagnosis
   priority: P0
   data_files:
   - key: case_bundle

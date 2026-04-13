@@ -13,9 +13,8 @@ questions:
 
     '
   tags:
-  - failure_recovery
-  - batch_jobs
-  - retry_strategy
+  - wf_recovery
+  - wf_batch
   data_files: []
   reference_answers:
   - key: failure_classes_count
@@ -100,9 +99,9 @@ questions:
 
     '
   tags:
-  - userlog_derived
-  - proposal_review
-  - scoring
+  - meta_userlog
+  - meta_literature
+  - wf_postprocess
   data_files:
   - key: proposal_excerpt
     path: data/WO_general_userlog_002_20260410v3/proposal_excerpt.md
@@ -215,8 +214,8 @@ questions:
     4) 生成 `chart_priority.md`：给出 3 种图的优先级排序（P1/P2/P3）与使用边界。\n5) 在最终回答中简要说明你为何选择这 3 种图，并指出当前数据的至少\
     \ 2 个局限。\n\n注意：不要虚构 CSV 中不存在的字段名。请在当前目录写出上述四个文件。\n"
   tags:
-  - userlog_derived
-  - requirement_elicitation
+  - meta_userlog
+  - wf_report
   data_files:
   - key: experiment_metrics
     path: data/WO_general_userlog_003_20260410v4/experiment_metrics.csv

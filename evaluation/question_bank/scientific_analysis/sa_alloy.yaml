@@ -14,10 +14,10 @@ questions:
 
     最终回答请给出“Ni 含量变化-强度变化”的总体趋势判断。'
   tags:
-  - userlog_derived
-  - steel
-  - tensile_strength
-  - composition_tuning
+  - meta_userlog
+  - general
+  - phy_elastic
+  - mat_hea
   data_files: []
   reference_answers:
   - key: tensile_json
@@ -102,11 +102,10 @@ questions:
     请输出： 1) `hea_alcr0.8cofeni_kb_summary.json`（至少包含 `vec`, `mixing_enthalpy`, `mixing_entropy`,
     `binary_energy_summary`, `solid_solution_prediction`, `possible_structure`）； 2) `hea_alcr0.8cofeni_kb_report.md`（说明判据来源、结论与不确定性）。'
   tags:
-  - userlog_derived
-  - hea
-  - phase_prediction
-  - knowledge_base
-  - alloy_design
+  - meta_userlog
+  - mat_hea
+  - wf_postprocess
+  - meta_literature
   data_files: []
   reference_answers:
   - key: hea_json

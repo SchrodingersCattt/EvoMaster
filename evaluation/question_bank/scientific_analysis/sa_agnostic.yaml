@@ -8,9 +8,8 @@ questions:
   intent: Fit equation of state from provided E-V data and report V0 and B0.
   human_prompt_seed: 使用 `ev_curve.json` 中的 E-V 数据拟合 Birch-Murnaghan 状态方程，输出 V0(A3) 与 B0(GPa)。
   tags:
-  - eos_fit
-  - numeric_postprocess
-  - bulk_modulus
+  - phy_eos
+  - general
   data_files:
   - key: ev_table
     path: data/DF_mech_001/ev_curve.json
@@ -85,10 +84,7 @@ questions:
 
     '
   tags:
-  - hugoniot_fit
-  - detonation
-  - cj_point
-  - energetic_materials
+  - phy_eos
   priority: P0
   data_files:
   - key: msst_data
@@ -178,9 +174,9 @@ questions:
 
     '
   tags:
-  - userlog_derived
-  - mechanical_estimation
-  - biomedical
+  - meta_userlog
+  - phy_elastic
+  - general
   data_files:
   - key: implant_params
     path: data/WO_general_userlog_004_20260410v3/implant_params.json
@@ -300,12 +296,9 @@ questions:
 
     '
   tags:
-  - single_crystal_xrd
-  - structure_solution
-  - structure_refinement
-  - checkcif
-  - ordered_structure
-  - monoclinic
+  - char_xrd
+  - char_cif_validation
+  - phy_defect
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_001_20260408/A23050101A0735.hkl
@@ -429,13 +422,10 @@ questions:
 
     '
   tags:
-  - single_crystal_xrd
-  - structure_solution
-  - structure_refinement
-  - checkcif
-  - disordered_structure
-  - monoclinic
-  - high_temperature
+  - char_xrd
+  - char_cif_validation
+  - phy_defect
+  - general
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_002_20260408/A23050102A0375.hkl
@@ -555,11 +545,9 @@ questions:
 
     '
   tags:
-  - pawley_refinement
-  - variable_temperature_xrd
-  - thermal_expansion
-  - phase_transition
-  - monoclinic
+  - char_xrd
+  - phy_phonon
+  - wf_postprocess
   data_files:
   - key: vt_pxrd_data
     path: data/DFT_pxrd_001_20260408/_td-pxrd_test.txt

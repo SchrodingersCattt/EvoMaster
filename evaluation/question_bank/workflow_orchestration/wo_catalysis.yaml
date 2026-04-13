@@ -15,10 +15,10 @@ questions:
 
     '
   tags:
-  - abacus
+  - code_abacus
   - bsse
-  - surface_energy
-  - mock_energy
+  - phy_surface
+  - log_diagnosis
   data_files: []
   reference_answers:
   - key: sigma_J_m2
@@ -92,11 +92,10 @@ questions:
     \ `notes`；\n2) `pd111_work_function_report.md`：说明 query 输入梳理、mock 后处理流程和结果解读。\n\n最终回答需明确给出功函数数值（eV）并确认\
     \ vacuum_direction=z。\n"
   tags:
-  - work_function
-  - pd111
-  - abacus
-  - surface
-  - userlog_derived
+  - phy_electronic
+  - phy_surface
+  - code_abacus
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: wf_json_artifact
@@ -191,11 +190,10 @@ questions:
 
     '
   tags:
-  - co2rr_repro
-  - adsorption_energy
-  - ag
-  - deep_potential
-  - high_throughput_style
+  - catalysis_lab
+  - phy_surface
+  - code_mlip
+  - wf_batch
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -252,8 +250,8 @@ questions:
     4. 使用以下mock能量值（模拟DPA弛豫结果）：\n   - E_slab = -108.45 eV\n   - E_CO = -12.85 eV\n   - E_adsorbed\
     \ = -121.50 eV\n5. 按公式 E_ads = E(adsorbed) - E(slab) - E(CO) 计算吸附能；\n6. 输出吸附能(eV)及三个结构的能量值。\n"
   tags:
-  - co2rr
-  - adsorption_energy
+  - chem_co2rr
+  - phy_surface
   priority: P0
   data_files: []
   reference_answers:
@@ -321,9 +319,7 @@ questions:
 
     '
   tags:
-  - surface_energy
-  - mgo
-  - slab_calculation
+  - phy_surface
   data_files: []
   reference_answers:
   - key: surface_energy_J_m2
@@ -396,10 +392,9 @@ questions:
 
     '
   tags:
-  - defect
-  - formation_energy
-  - supercell
-  - mgo
+  - phy_defect
+  - wf_postprocess
+  - phy_surface
   priority: P0
   data_files: []
   reference_answers:

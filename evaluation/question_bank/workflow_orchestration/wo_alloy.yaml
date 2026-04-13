@@ -14,10 +14,10 @@ questions:
 
     最终回答需简要判断该结果在室温机械性能评估上的可信度。'
   tags:
-  - userlog_derived
-  - elastic_constants
-  - apex
-  - database_compare
+  - meta_userlog
+  - phy_elastic
+  - screening_hte
+  - meta_database
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -109,9 +109,9 @@ questions:
 
     最终回答中简要说明：优化后结构相对输入结构的主要变化（可定性描述）。'
   tags:
-  - apex
-  - structure_optimization
-  - userlog_derived
+  - screening_hte
+  - general
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: optimized_structure
@@ -204,10 +204,9 @@ questions:
     \ `hull_distance`, `stability_label`, `reference_phases`, `notes`；\n2) `cucrzr_convex_hull_report.md`：说明\
     \ query 输入梳理、mock 后处理流程、稳定性判据及不确定性。\n\n最终回答中请明确说明该结构在热力学稳定性上的定性结论（稳定/亚稳/不稳定）。\n"
   tags:
-  - convex_hull
-  - stability
-  - cucrzr
-  - userlog_derived
+  - wf_postprocess
+  - phy_surface
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: hull_summary_json

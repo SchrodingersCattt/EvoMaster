@@ -14,10 +14,9 @@ questions:
 
     最终回答中简要给出你最推荐的 2-3 个候选及理由。'
   tags:
-  - userlog_derived
-  - literature_review
-  - solid_electrolyte
-  - lithium_metal_interface
+  - meta_userlog
+  - meta_literature
+  - chem_battery
   data_files: []
   reference_answers:
   - key: candidates_json

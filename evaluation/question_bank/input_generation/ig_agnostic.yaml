@@ -23,10 +23,9 @@ questions:
 
     '
   tags:
-  - abacus
+  - code_abacus
   - bsse
-  - empty_atom
-  - surface
+  - phy_surface
   data_files:
   - key: base_slab
     path: data/IG_abacus_001_20260404/base_slab.stru
@@ -199,9 +198,9 @@ questions:
 
     '
   tags:
-  - abacus
-  - electrostatic_potential
-  - surface
+  - code_abacus
+  - electrostatics
+  - phy_surface
   priority: P0
   data_files:
   - key: base_al_slab
@@ -365,10 +364,9 @@ questions:
 
     '
   tags:
-  - abacus
-  - dipole_correction
-  - electrostatic_potential
-  - surface
+  - code_abacus
+  - electrostatics
+  - phy_surface
   data_files:
   - key: base_h2o
     path: data/IG_abacus_004_20260406/base_h2o.stru
@@ -538,10 +536,10 @@ questions:
 
     '
   tags:
-  - abacus
-  - electric_field
-  - nanoribbon
-  - band_structure
+  - code_abacus
+  - electrostatics
+  - mat_2d
+  - phy_electronic
   data_files:
   - key: nanoribbon
     path: data/IG_abacus_007_20260406/nanoribbon.stru
@@ -733,10 +731,9 @@ questions:
 
     '
   tags:
-  - abacus
-  - compensating_charge
-  - dipole_correction
-  - charged_surface
+  - code_abacus
+  - electrostatics
+  - phy_surface
   data_files:
   - key: base_h2o_gate
     path: data/IG_abacus_008_20260406/base_h2o_gate.stru
@@ -917,10 +914,9 @@ questions:
 
     '
   tags:
-  - abacus
+  - code_abacus
   - bsse
-  - vacancy
-  - empty_atom
+  - phy_defect
   priority: P0
   data_files:
   - key: base_vacancy
@@ -1101,10 +1097,9 @@ questions:
 
     '
   tags:
-  - abacus
-  - surface_energy
-  - slab_convergence
-  - pw
+  - code_abacus
+  - phy_surface
+  - wf_inputs
   data_files:
   - key: bulk_al_fcc
     path: data/IG_abacus_005_20260406/bulk_al_fcc.stru
@@ -1335,10 +1330,10 @@ questions:
 
     '
   tags:
-  - abacus
-  - surface_vacancy
-  - defect
-  - pw
+  - code_abacus
+  - general
+  - phy_defect
+  - wf_inputs
   data_files:
   - key: mo_bulk
     path: data/IG_abacus_006_20260406/mo_bulk.stru
@@ -1641,9 +1636,8 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 Lu4N4 体系生成一个能带结构计算的 VASP INCAR 文件。要求：非自洽计算，从已有电荷密度读取，输出投影能带。将完整的
     INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - incar_generation
-  - band_structure
-  - non_scf
+  - wf_incar
+  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_001/task_spec.json
@@ -1812,10 +1806,10 @@ questions:
 
     '
   tags:
-  - incar_generation
-  - scf
-  - perovskite
-  - semiconductor
+  - wf_incar
+  - log_diagnosis
+  - mat_perovskite
+  - mat_semiconductor
   data_files:
   - key: task_spec
     path: data/IG_incar_002/task_spec.json
@@ -1994,10 +1988,10 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 ErNaO3 生成一个结构弛豫(relaxation)计算的 VASP INCAR。需要同时优化离子位置和晶胞参数。Er
     含 f 电子，需要自旋极化。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - incar_generation
-  - relaxation
-  - perovskite
-  - magnetic
+  - wf_incar
+  - log_diagnosis
+  - mat_perovskite
+  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_003/task_spec.json
@@ -2226,10 +2220,9 @@ questions:
 
     '
   tags:
-  - incar_generation
-  - hse06
+  - wf_incar
   - hybrid_functional
-  - mof
+  - mat_mof
   data_files:
   - key: task_spec
     path: data/IG_incar_004/task_spec.json
@@ -2439,10 +2432,8 @@ questions:
     INCAR。需要对 Mo 的 d 轨道施加 Hubbard U 校正。元素顺序为 Rb, Pm, Mo, O。体系为磁性体系。将完整的 INCAR 写入当前目录下的 `INCAR`
     文件。
   tags:
-  - incar_generation
-  - dft_plus_u
-  - hubbard_u
-  - transition_metal
+  - wf_incar
+  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_005/task_spec.json
@@ -2647,10 +2638,10 @@ questions:
 
     '
   tags:
-  - incar_generation
-  - metagga
-  - scan
-  - rare_earth
+  - wf_incar
+  - hybrid_functional
+  - wf_sweep
+  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_006/task_spec.json
@@ -2825,10 +2816,10 @@ questions:
 
     '
   tags:
-  - incar_generation
-  - molecular_dynamics
-  - heusler
-  - magnetic
+  - wf_incar
+  - phy_md
+  - general
+  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_007/task_spec.json
@@ -3061,10 +3052,10 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 BaZrO3 生成一个弹性常数计算的 VASP INCAR。使用有限差分法计算弹性张量，位移幅度
     0.015 A。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - incar_generation
-  - elastic_constants
-  - finite_differences
-  - perovskite
+  - wf_incar
+  - phy_elastic
+  - wf_inputs
+  - mat_perovskite
   data_files:
   - key: task_spec
     path: data/IG_incar_008/task_spec.json
@@ -3233,10 +3224,8 @@ questions:
 
     '
   tags:
-  - incar_generation
-  - dfpt
-  - dielectric
-  - born_charges
+  - wf_incar
+  - wf_inputs
   data_files:
   - key: task_spec
     path: data/IG_incar_009/task_spec.json
@@ -3369,10 +3358,9 @@ questions:
 
     '
   tags:
-  - incar_generation
-  - soc
-  - spin_orbit
-  - heavy_element
+  - wf_incar
+  - phy_electronic
+  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_010/task_spec.json
@@ -3633,10 +3621,8 @@ questions:
 
     '
   tags:
-  - incar_generation
-  - dos
-  - pdos
-  - metallic
+  - wf_incar
+  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_011/task_spec.json
@@ -3797,11 +3783,10 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic
     band)+HSE06 过渡态搜索的 VASP INCAR。Fe 含磁性，需要固定总磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - incar_generation
-  - neb
-  - transition_state
-  - hse06
-  - magnetic
+  - wf_incar
+  - general
+  - hybrid_functional
+  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_012/task_spec.json
@@ -4028,11 +4013,10 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元碳化物表面 (Ta,V)2C (C33O2Ta16V16) 生成一个表面弛豫计算的
     VASP INCAR。表面计算需要固定晶胞形状，体系为金属。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - incar_generation
-  - surface
-  - relaxation
-  - carbide
-  - metallic
+  - wf_incar
+  - phy_surface
+  - log_diagnosis
+  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_013/task_spec.json
@@ -4193,11 +4177,10 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为氢钝化的 SiO2 slab 模型 H16O24Si12 生成一个静态计算的 VASP
     INCAR。体系是绝缘体 slab，需要固定晶胞形状。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - incar_generation
-  - slab
-  - static
-  - insulator
-  - sio2
+  - wf_incar
+  - phy_surface
+  - general
+  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_014/task_spec.json
@@ -4413,11 +4396,10 @@ questions:
     INCAR。含重元素 Bi 需要自旋轨道耦合，缺陷计算需要固定晶胞形状，使用 HSE06 获取准确缺陷能级。需要离子弛豫。将完整的 INCAR 写入当前目录下的 `INCAR`
     文件。
   tags:
-  - incar_generation
-  - defect
-  - hse06
-  - soc
-  - point_defect
+  - wf_incar
+  - phy_defect
+  - hybrid_functional
+  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_015/task_spec.json
@@ -4598,10 +4580,10 @@ questions:
 
     '
   tags:
-  - incar_generation
-  - gw
-  - precursor_scf
-  - rare_earth
+  - wf_incar
+  - wf_inputs
+  - general
+  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_016/task_spec.json
@@ -4756,10 +4738,10 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为简单金属 Al (FCC) 生成一个高精度结构优化的 VASP INCAR，作为后续光学计算的前驱步骤。需要高精度设置和完全优化晶胞参数。将完整的
     INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - incar_generation
-  - bse_precursor
-  - relaxation
-  - metal
+  - wf_incar
+  - wf_inputs
+  - log_diagnosis
+  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_017/task_spec.json
@@ -4956,10 +4938,10 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为双钙钛矿 Ca4TaOs 生成一个磁性自洽(SCF)计算的 VASP INCAR。体系含
     5d 过渡金属(Ta, Os)，需要自旋极化和适当的初始磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - incar_generation
-  - magnetic
-  - scf
-  - double_perovskite
+  - wf_incar
+  - phy_magnetism
+  - log_diagnosis
+  - mat_perovskite
   data_files:
   - key: task_spec
     path: data/IG_incar_018/task_spec.json
@@ -5126,10 +5108,9 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为硼酸铯 B12Cs4O20 生成一个非磁性绝缘体的静态 SCF 计算 VASP INCAR。体系为非磁性，宽带隙绝缘体。将完整的
     INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - incar_generation
-  - scf
-  - non_magnetic
-  - insulator
+  - wf_incar
+  - log_diagnosis
+  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_019/task_spec.json
@@ -5296,10 +5277,10 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元硒化物 Na3AlSe 生成一个磁性金属体系的静态 SCF 计算 VASP INCAR。体系为磁性金属，需要投影态密度。将完整的
     INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - incar_generation
-  - magnetic_metal
-  - scf
-  - selenide
+  - wf_incar
+  - phy_magnetism
+  - log_diagnosis
+  - general
   data_files:
   - key: task_spec
     path: data/IG_incar_020/task_spec.json

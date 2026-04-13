@@ -32,10 +32,8 @@ questions:
 
     '
   tags:
-  - surface_slab
-  - molecular_crystal
-  - 110_surface
-  - molecule_integrity
+  - phy_surface
+  - general
   data_files: []
   reference_answers:
   - key: unit_cell_atoms
@@ -129,10 +127,8 @@ questions:
 
     '
   tags:
-  - 2d_material
-  - exfoliation
-  - mos2
-  - monolayer
+  - mat_2d
+  - phy_surface
   data_files:
   - key: twod_spec
     path: data/SC_struct_004/twod_spec.json
@@ -246,9 +242,9 @@ questions:
 
     '
   tags:
-  - disorder_resolution
-  - 3d_structure_perception
-  - formula_identification
+  - phy_defect
+  - char_xrd
+  - general
   reference_answers:
   - key: structures_processed
     value:
@@ -366,12 +362,10 @@ questions:
 
     '
   tags:
-  - hydrogen_addition
-  - molecular_crystal
-  - dacmor
-  - diacetylmorphine
-  - geometry_validation
-  - formula_check
+  - phy_surface
+  - general
+  - safety_hazard
+  - log_diagnosis
   data_files:
   - key: dacmor_cif
     path: data/SC_struct_006/DACMOR.cif
@@ -472,10 +466,9 @@ questions:
 
     '
   tags:
-  - bulk_structure
-  - gamma_alumina
-  - coordination_environment
-  - relaxation_check
+  - general
+  - mat_oxide
+  - log_diagnosis
   data_files: []
   reference_answers:
   - key: file_exists
@@ -619,11 +612,8 @@ questions:
 
     '
   tags:
-  - surface_slab
-  - ceo2
-  - 111_surface
-  - polar_surface
-  - stoichiometry_check
+  - phy_surface
+  - general
   priority: P0
   data_files: []
   reference_answers:
@@ -737,11 +727,9 @@ questions:
 
     '
   tags:
-  - surface_interface
-  - ag111
-  - explicit_solvent
-  - potassium
-  - electrochemical_interface
+  - phy_surface
+  - phy_md
+  - chem_electrolyte
   data_files: []
   reference_answers:
   - key: file_exists
@@ -872,10 +860,10 @@ questions:
     \n额外要求：\n- 本题重心是建模，不要求提交 MD 轨迹、能量日志、RDF 或 MSD 分析结果。\n- `composition_plan.json` 中 `n_formula_units`\
     \ / `n_water` / `total_atoms` 必须是 JSON 整数字段，不得使用字符串、逗号分隔或科学计数法。\n"
   tags:
-  - mlip
-  - electrolyte
-  - aqueous_solution
-  - modeling_focused
+  - code_mlip
+  - chem_electrolyte
+  - phy_md
+  - general
   data_files:
   - key: electrolyte_spec
     path: data/WO_mlip_dpa_006_20260411v4/electrolyte_system_spec.json
@@ -1023,10 +1011,10 @@ questions:
 
     '
   tags:
-  - alloy
-  - supercell
-  - high_entropy_like
-  - userlog_derived
+  - mat_alloy
+  - phy_surface
+  - mat_hea
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: structure_artifact
@@ -1112,10 +1100,9 @@ questions:
 
     最终回答需简要说明：为什么该结构与 corundum 一致，以及参数可能存在的小偏差来源。'
   tags:
-  - wyckoff
-  - corundum
-  - al2o3
-  - userlog_derived
+  - phy_surface
+  - mat_oxide
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: structure_artifact
@@ -1223,12 +1210,8 @@ questions:
 
     最终回答需简要说明：你如何保证两种结构在可比条件下进行截面对比。'
   tags:
-  - close_packing
-  - fcc
-  - hcp
-  - slab
-  - supercell
-  - userlog_derived
+  - phy_surface
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: fcc_artifact
@@ -1301,11 +1284,9 @@ questions:
 
     最终回答需简要给出该结构类型（如立方钙钛矿）及潜在误差来源。'
   tags:
-  - wyckoff
-  - perovskite
-  - srtio3
-  - spacegroup_221
-  - userlog_derived
+  - phy_surface
+  - mat_perovskite
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: structure_artifact

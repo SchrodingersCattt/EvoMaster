@@ -19,10 +19,9 @@ questions:
 
     '
   tags:
-  - batch_operation
-  - post_processing
-  - band_structure
-  - analysis_consistency
+  - wf_batch
+  - wf_postprocess
+  - phy_electronic
   data_files:
   - key: postprocessing_bandstr
     path: data/BP_struct_004/postprocessing_bandstr.json

@@ -11,9 +11,8 @@ questions:
 
     '
   tags:
-  - scf_diagnosis
-  - spin_polarization
-  - magnetic_oxide
+  - log_diagnosis
+  - phy_electronic
   data_files:
   - key: case_bundle
     path: data/DD_general_001/case_bundle.json

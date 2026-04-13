@@ -15,10 +15,10 @@ questions:
 
     '
   tags:
-  - co2rr_repro
-  - batch_structure
-  - ht_dataset
-  - filesystem
+  - catalysis_lab
+  - wf_batch
+  - meta_database
+  - general
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -70,10 +70,9 @@ questions:
     \ HER 活性\n\n预期结果：\n- Cu: E_ads ≈ -0.62 eV\n- Ag: E_ads ≈ -0.73 eV\n- Au: E_ads ≈ -0.65\
     \ eV\n"
   tags:
-  - batch
-  - her
-  - adsorption
-  - metal_screening
+  - wf_batch
+  - chem_her
+  - phy_surface
   data_files: []
   reference_answers:
   - key: E_ads_Cu

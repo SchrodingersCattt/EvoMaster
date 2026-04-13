@@ -21,9 +21,8 @@ questions:
 
     '
   tags:
-  - interface
-  - adhesion
-  - graphene_oxide
+  - general
+  - phy_surface
   data_files:
   - key: interface_bundle
     path: data/pl_adhesion/interface_adhesion_bundle.json
@@ -117,9 +116,8 @@ questions:
 
     '
   tags:
-  - opv
-  - donor
-  - oligomer_extrapolation
+  - mat_polymer
+  - general
   data_files:
   - key: donor_bundle
     path: data/pl_donor/donor_prescreen_bundle.json
@@ -214,9 +212,9 @@ questions:
 
     '
   tags:
-  - free_energy
-  - pmf
-  - lithium_hopping
+  - chem_her
+  - phy_elastic
+  - chem_battery
   data_files:
   - key: free_energy_bundle
     path: data/pl_hopping/free_energy_hopping_bundle.json
@@ -311,9 +309,7 @@ questions:
 
     '
   tags:
-  - membrane
-  - gas_separation
-  - permeability
+  - phy_md
   data_files:
   - key: membrane_bundle
     path: data/pl_membrane/membrane_screening_bundle.json
@@ -408,9 +404,8 @@ questions:
 
     '
   tags:
-  - rheology
-  - viscosity
-  - electrolyte
+  - phy_elastic
+  - chem_electrolyte
   data_files:
   - key: rheology_bundle
     path: data/pl_rheology/rheology_window_bundle.json

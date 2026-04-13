@@ -75,7 +75,7 @@ evaluation/question_bank/
 | `domain` | **必填** | — | 枚举（见下方），用于聚合报告 |
 | `intent` | **必填** | — | 英文一句话描述题目意图；LLM 裁判上下文 + prompt 改写时使用 |
 | `human_prompt_seed` | **必填** | — | 直接发给 Agent 的用户 prompt（中英文皆可） |
-| `tags` | 可选 | `[]` | 标签，取值限定为 `QuestionTag` 枚举（见 `evaluation/core/question_tags.py`）；可多选 |
+| `tags` | 可选 | `[]` | 粗粒度 **facet** 标签，取值限定为 `QuestionTag`（`evaluation/core/question_tags.py`）；**不要**把晶面、化学式、MP id 等写进 tags（应写在题干 / `intent`） |
 | `priority` | 可选 | `None` | 门控优先级；`"P0"` = P0 回归门控（见下方 P0 Gate 章节） |
 | `data_files` | 可选 | `[]` | 输入数据文件引用；Runner 会复制到 Agent workspace |
 | `reference_answers` | **条件必填** | `[]` | 非 `safety_refusal` 题必须至少 1 条；`safety_refusal` 可为空 |
@@ -98,8 +98,9 @@ evaluation/question_bank/
 **`tags` 的负面约束**：
 - **不要重复当前题自己的 `capability` 或 `domain`**；同一信息不应在三条轴上重复表达。
 - **不要使用泛过程占位词**，如 `workflow`、`workflow_acceleration`、`workflow_closure`、`loop_oriented`、`plotting`、`structure_build`。这类词只说明“做事方式”或编写过程，不是稳定的主题/工具/方法 Facet。
-- 优先写**主题 / 工具链 / 方法族**，例如 `abacus`、`bsse`、`co2rr_repro`、`bader`、`dpgen`；若只是想表达“这是个多步流程题”，应由 `capability=workflow_orchestration` 表达，而不是再写 `workflow` tag。
-- **命名风格默认用 `lower_snake_case`**。材料名、化学式或缩写类 tag 也统一写成小写 canonical 形式，如 `hea`、`srtio3`、`al2o3`、`mgo`、`li2o`、`mgb2`、`hbn`；不要混用 `HEA` / `SrTiO3` / `Al2O3` / `MgO` 这类别名。
+- 优先写**主题 / 工具链 / 方法族**；若只是想表达“这是个多步流程题”，应由 `capability=workflow_orchestration` 表达，而不是再写 `workflow` tag。
+- **受控词表 + 前缀语义**：合法 tag 为数十个粗粒度值，例如 `meta_userlog`、`wf_batch`、`code_abacus`、`phy_surface`、`chem_co2rr`、`mat_hea` 等（完整列表见 `question_tags.py`）。**不要在 tags 里堆材料实例名**（如单个化学式、Miller 指数），以免与 `capability`/`domain` 信息重复且难以维护。
+- **命名风格**：仅使用词表内 `lower_snake_case` 字符串；材料名、化学式类 **legacy** 别名仍由 `schemas.CANONICAL_TAG_ALIASES` 拒绝并提示 canonical（归一化后进入上述词表）。
 
 **与 `--slices` 的关系**：Runner 当前仅按 **`capability` + `domain`** 过滤；**需要稳定用 CLI 切分的维度**应落在二者之一（或专题 capability），不要**只**写在 `tags` 里（除非已实现 tags 筛选，见下文「运行筛选」）。
 

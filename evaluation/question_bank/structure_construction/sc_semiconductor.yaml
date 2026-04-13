@@ -12,10 +12,9 @@ questions:
 
     '
   tags:
-  - heterostructure
-  - vdw
-  - graphene
-  - hbn
+  - phy_surface
+  - general
+  - mat_2d
   data_files:
   - key: hetero_spec
     path: data/SC_struct_001/hetero_spec.json
@@ -116,9 +115,7 @@ questions:
 
     '
   tags:
-  - hydrogen_passivation
-  - si100
-  - dangling_bond
+  - phy_surface
   data_files:
   - key: hydrogen_cap_spec
     path: data/SC_struct_003/hydrogen_cap_spec.json

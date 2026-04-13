@@ -24,10 +24,10 @@ questions:
 
     '
   tags:
-  - provenance
-  - rubidium_perchlorate
-  - database_source
-  - userlog_derived
+  - general
+  - phy_eos
+  - meta_database
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: retrieval_report
@@ -124,10 +124,10 @@ questions:
 
     '
   tags:
-  - mgb2
-  - open_database
-  - metadata_summary
-  - userlog_derived
+  - phy_surface
+  - meta_database
+  - wf_postprocess
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: retrieval_json
@@ -223,10 +223,9 @@ questions:
 
     '
   tags:
-  - candidate_generation
-  - superconductor
-  - screening
-  - userlog_derived
+  - wf_batch
+  - general
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: candidate_json
@@ -318,9 +317,9 @@ questions:
 
     最终回答中简要确认是否满足“元素集合 + 空间群 + 数量上限”三项约束。'
   tags:
-  - materials_project
-  - space_group_filter
-  - userlog_derived
+  - meta_database
+  - general
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: candidates_json
@@ -420,10 +419,10 @@ questions:
 
     最终回答需确认每条候选是否满足阈值条件。'
   tags:
-  - mof
-  - sql_filter
-  - coremof
-  - userlog_derived
+  - mat_mof
+  - general
+  - meta_database
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: candidates_json
@@ -530,10 +529,9 @@ questions:
 
     最终回答中确认每条候选如何满足上述组合约束。'
   tags:
-  - rare_earth
-  - transition_metal
-  - ternary_oxide
-  - userlog_derived
+  - phy_magnetism
+  - mat_oxide
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: candidates_json
@@ -629,10 +627,9 @@ questions:
 
     最终回答需简要确认候选数量和可下载资源情况。'
   tags:
-  - heusler
-  - spg225
-  - download_link
-  - userlog_derived
+  - general
+  - phy_surface
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: candidates_json
@@ -728,10 +725,10 @@ questions:
 
     注意：本题是结构检索与汇总，不要求后续计算。'
   tags:
-  - alexandria
-  - lmo
-  - element_filter
-  - userlog_derived
+  - meta_database
+  - chem_battery
+  - general
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: candidates_json
@@ -832,9 +829,9 @@ questions:
 
     注意：本题仅评估检索与结构元数据汇总。'
   tags:
-  - oxide
-  - band_gap_filter
-  - userlog_derived
+  - mat_oxide
+  - phy_electronic
+  - meta_userlog
   data_files: []
   reference_answers:
   - key: candidates_json

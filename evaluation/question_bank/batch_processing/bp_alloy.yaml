@@ -21,11 +21,9 @@ questions:
 
     '
   tags:
-  - batch_operation
-  - convergence_test
-  - encut_sweep
-  - input_generation
-  - single_variable
+  - wf_batch
+  - wf_sweep
+  - wf_inputs
   priority: P0
   data_files:
   - key: convergence_encut
