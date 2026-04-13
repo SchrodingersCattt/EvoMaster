@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
-from matmaster.types.events import ContextCompactionEvent
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import (
     AssistantMessage,
@@ -129,6 +129,29 @@ def parse_turns(messages: list[Message]) -> list[list[Message]]:
     return turns
 
 
+@dataclass(frozen=True)
+class CompactionPlan:
+    compaction_id: str
+    compaction_count: int
+    phase: Literal["preflight", "runtime"]
+    trigger_tokens: int
+    strategy: Literal["summary", "sliding_window", "tool_truncation"] | None = None
+    turn: int | None = None
+
+
+@dataclass(frozen=True)
+class CompactionResult:
+    compaction_id: str
+    compaction_count: int
+    phase: Literal["preflight", "runtime"]
+    strategy: Literal["summary", "sliding_window", "tool_truncation"]
+    durability: Literal["durable", "ephemeral"]
+    trigger_tokens: int
+    retained_turns: int
+    failure_reason: str | None
+    base_snapshot: list[dict[str, Any]] | None
+
+
 class ContextCompactor:
     """Runtime context compressor, called by kernel before each LLM invocation."""
 
@@ -137,10 +160,12 @@ class ContextCompactor:
         config: CompactionConfig,
         summary_provider: LLMProvider,
         event_sink: Callable[[Any], Awaitable[None]] | None = None,
+        compaction_scope: str = "root",
     ) -> None:
         self._config = config
         self._summary_provider = summary_provider
         self._event_sink = event_sink
+        self._compaction_scope = compaction_scope
         self._last_llm_message_count: int = 0
         self._last_compaction_turn: int = 0
         self._compaction_count: int = 0
@@ -151,54 +176,78 @@ class ContextCompactor:
 
     async def preflight_if_needed(self, messages: list[Message]) -> None:
         """Compact eagerly before the next turn when history is already too large."""
-        estimated = estimate_tokens(messages, safety_margin=1.1)
-        threshold = self._config.context_limit * self._config.trigger_ratio
-        if estimated < threshold:
+        plan = self._plan_preflight_compaction(messages)
+        if plan is None:
             return
 
-        await self._compact_messages(
-            messages,
-            estimated_tokens=estimated,
-            threshold=threshold,
-            phase="preflight",
-            turn=0,
-        )
+        await self.apply_compaction_plan(plan, messages)
 
     async def compact_if_needed(
         self, messages: list[Message], last_usage: dict[str, int], turn: int
     ) -> None:
         """Check threshold and compact messages in place when needed."""
-        if turn <= self._last_compaction_turn + 1:
+        plan = await self.plan_runtime_compaction(messages, last_usage, turn=turn)
+        if plan is None:
             return
 
-        base_tokens = last_usage.get("prompt_tokens", 0)
+        await self.apply_compaction_plan(plan, messages)
+
+    def _next_compaction_id(self) -> tuple[int, str]:
+        next_count = self._compaction_count + 1
+        return next_count, f"{self._compaction_scope}:{next_count}"
+
+    def _plan_preflight_compaction(
+        self,
+        messages: list[Message],
+    ) -> CompactionPlan | None:
+        estimated_tokens = estimate_tokens(messages, safety_margin=1.1)
+        threshold = self._config.context_limit * self._config.trigger_ratio
+        if estimated_tokens < threshold:
+            return None
+        count, compaction_id = self._next_compaction_id()
+        return CompactionPlan(
+            compaction_id=compaction_id,
+            compaction_count=count,
+            phase="preflight",
+            trigger_tokens=estimated_tokens,
+            turn=0,
+        )
+
+    async def plan_runtime_compaction(
+        self,
+        messages: list[Message],
+        turn_usage: dict[str, int],
+        *,
+        turn: int,
+    ) -> CompactionPlan | None:
+        if turn <= self._last_compaction_turn + 1:
+            return None
+
+        base_tokens = int(turn_usage.get("prompt_tokens") or 0)
         delta_messages = messages[self._last_llm_message_count :]
         delta_tokens = estimate_tokens(delta_messages, safety_margin=1.1)
-        estimated = base_tokens + delta_tokens
+        estimated_tokens = base_tokens + delta_tokens
         threshold = self._config.context_limit * self._config.trigger_ratio
-        if estimated < threshold:
-            return
+        if estimated_tokens < threshold:
+            return None
 
-        await self._compact_messages(
-            messages,
-            estimated_tokens=estimated,
-            threshold=threshold,
+        count, compaction_id = self._next_compaction_id()
+        return CompactionPlan(
+            compaction_id=compaction_id,
+            compaction_count=count,
             phase="runtime",
+            trigger_tokens=estimated_tokens,
             turn=turn,
         )
 
-    async def _compact_messages(
+    async def apply_compaction_plan(
         self,
+        plan: CompactionPlan,
         messages: list[Message],
-        *,
-        estimated_tokens: int,
-        threshold: float,
-        phase: str,
-        turn: int,
-    ) -> None:
-        """Compact messages in place and emit a structured decision event."""
+    ) -> CompactionResult:
+        """Apply a previously planned compaction and mutate messages in place."""
         if not messages:
-            return
+            raise ValueError("Cannot compact an empty message list")
         if not isinstance(messages[0], SystemMessage):
             raise TypeError(
                 f"messages[0] must be SystemMessage, got {type(messages[0])}"
@@ -217,45 +266,51 @@ class ContextCompactor:
         compressible_start = task_idx + 1
         compressible_end = len(messages) - sum(len(t) for t in recent_turns)
         if compressible_end <= compressible_start:
-            if phase == "preflight":
+            if plan.phase == "preflight":
                 raise ValueError(
                     "Preflight compaction requires compressible old turns; "
                     "tool_truncation is runtime-only"
                 )
             truncated = self._truncate_tool_results(
-                messages, estimated_tokens, threshold
+                messages,
+                plan.trigger_tokens,
+                self._config.context_limit * self._config.trigger_ratio,
             )
             if truncated > 0:
-                self._compaction_count += 1
-                self._last_compaction_turn = turn
+                self._compaction_count = plan.compaction_count
+                self._last_compaction_turn = plan.turn or 0
                 self._last_llm_message_count = len(messages)
                 logger.warning(
                     "Context compaction #%d (tool_truncation) at turn %d: "
                     "estimated=%d threshold=%d truncated_messages=%d",
                     self._compaction_count,
-                    turn,
-                    estimated_tokens,
-                    int(threshold),
+                    self._last_compaction_turn,
+                    plan.trigger_tokens,
+                    int(self._config.context_limit * self._config.trigger_ratio),
                     truncated,
                 )
-                if self._event_sink is not None:
-                    await self._event_sink(
-                        ContextCompactionEvent(
-                            source="context_compactor",
-                            payload={
-                                "compaction_count": self._compaction_count,
-                                "phase": phase,
-                                "strategy": "tool_truncation",
-                                "durability": "ephemeral",
-                                "trigger_tokens": estimated_tokens,
-                                "retained_turns": kept_count,
-                                "checkpoint_attempted": False,
-                                "checkpoint_written": False,
-                                "failure_reason": None,
-                            },
-                        )
-                    )
-            return
+                return CompactionResult(
+                    compaction_id=plan.compaction_id,
+                    compaction_count=plan.compaction_count,
+                    phase=plan.phase,
+                    strategy="tool_truncation",
+                    durability="ephemeral",
+                    trigger_tokens=plan.trigger_tokens,
+                    retained_turns=kept_count,
+                    failure_reason=None,
+                    base_snapshot=None,
+                )
+            return CompactionResult(
+                compaction_id=plan.compaction_id,
+                compaction_count=self._compaction_count,
+                phase=plan.phase,
+                strategy="tool_truncation",
+                durability="ephemeral",
+                trigger_tokens=plan.trigger_tokens,
+                retained_turns=kept_count,
+                failure_reason=None,
+                base_snapshot=None,
+            )
 
         old_messages = messages[compressible_start:compressible_end]
         strategy = "summary"
@@ -268,7 +323,7 @@ class ContextCompactor:
             compact_msg = SystemMessage(content=f"[Compacted Context]\n{summary}")
             messages[:] = [system_msg, compact_msg, initial_task_msg, *flat_recent]
         except Exception as exc:
-            if phase == "preflight":
+            if plan.phase == "preflight":
                 logger.warning(
                     "Preflight compaction summary failed; aborting without fallback",
                     exc_info=True,
@@ -276,7 +331,7 @@ class ContextCompactor:
                 raise
             logger.warning(
                 "Compaction #%d summary failed, falling back to sliding_window",
-                self._compaction_count + 1,
+                plan.compaction_count,
                 exc_info=True,
             )
             strategy = "sliding_window"
@@ -284,38 +339,37 @@ class ContextCompactor:
             failure_reason = str(exc)
             messages[:] = [system_msg, initial_task_msg, *flat_recent]
 
-        self._compaction_count += 1
-        self._last_compaction_turn = turn
+        self._compaction_count = plan.compaction_count
+        if plan.phase == "runtime":
+            self._last_compaction_turn = plan.turn or 0
         self._last_llm_message_count = len(messages)
 
         logger.warning(
             "Context compaction #%d triggered at turn %d: "
             "estimated_tokens=%d threshold=%d strategy=%s retained_turns=%d",
             self._compaction_count,
-            turn,
-            estimated_tokens,
-            int(threshold),
+            self._last_compaction_turn,
+            plan.trigger_tokens,
+            int(self._config.context_limit * self._config.trigger_ratio),
             strategy,
             kept_count,
         )
-
-        if self._event_sink is not None:
-            await self._event_sink(
-                ContextCompactionEvent(
-                    source="context_compactor",
-                    payload={
-                        "compaction_count": self._compaction_count,
-                        "phase": phase,
-                        "strategy": strategy,
-                        "durability": durability,
-                        "trigger_tokens": estimated_tokens,
-                        "retained_turns": kept_count,
-                        "checkpoint_attempted": False,
-                        "checkpoint_written": False,
-                        "failure_reason": failure_reason,
-                    },
-                )
-            )
+        base_snapshot = None
+        if durability == "durable":
+            base_snapshot = [
+                message.model_dump(mode="json") for message in messages[1:]
+            ]
+        return CompactionResult(
+            compaction_id=plan.compaction_id,
+            compaction_count=plan.compaction_count,
+            phase=plan.phase,
+            strategy=strategy,
+            durability=durability,
+            trigger_tokens=plan.trigger_tokens,
+            retained_turns=kept_count,
+            failure_reason=failure_reason,
+            base_snapshot=base_snapshot,
+        )
 
     def _select_recent_turns(
         self, turns: list[list[Message]]

@@ -160,6 +160,31 @@ class FailingSummaryProvider:
         yield StreamChunk(content="", finish_reason="stop")
 
 
+class DummySummaryProvider:
+    """Minimal summary provider that returns text or raises a configured error."""
+
+    def __init__(self, response: str | Exception) -> None:
+        self._response = response
+        self.calls: list[list[dict]] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        self.calls.append(messages)
+        if isinstance(self._response, Exception):
+            raise self._response
+        return LLMResponse(content=self._response, finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        if isinstance(self._response, Exception):
+            raise self._response
+        yield StreamChunk(content=self._response, finish_reason="stop")
+
+
 def _build_long_conversation(n_turns: int = 10) -> list:
     """Build a conversation with SystemMessage + UserMessage + N turns."""
     msgs = [
@@ -187,6 +212,10 @@ def _build_long_conversation(n_turns: int = 10) -> list:
             )
         )
     return msgs
+
+
+def _make_multi_turn_messages() -> list:
+    return _build_long_conversation(5)
 
 
 class TestCompactorThreshold:
@@ -228,6 +257,60 @@ class TestCompactorThreshold:
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
         assert len(provider.calls) == 1
+
+
+class TestCompactorPlanApply:
+    async def test_plan_runtime_compaction_returns_running_metadata(self) -> None:
+        from matmaster.core.context_compactor import ContextCompactor
+        from matmaster.types.runtime import CompactionConfig
+
+        provider = DummySummaryProvider("summary text")
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        compactor = ContextCompactor(
+            config=config,
+            summary_provider=provider,
+            event_sink=None,
+            compaction_scope="task-1:root",
+        )
+        msgs = _make_multi_turn_messages()
+        compactor.update_message_count(len(msgs))
+
+        plan = await compactor.plan_runtime_compaction(
+            msgs,
+            {"prompt_tokens": 950},
+            turn=2,
+        )
+
+        assert plan is not None
+        assert plan.compaction_id == "task-1:root:1"
+        assert plan.phase == "runtime"
+        assert plan.trigger_tokens == 950
+        assert plan.strategy is None
+
+    async def test_apply_compaction_plan_reports_fallback_strategy(self) -> None:
+        from matmaster.core.context_compactor import ContextCompactor
+        from matmaster.types.runtime import CompactionConfig
+
+        provider = DummySummaryProvider(RuntimeError("summary down"))
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        compactor = ContextCompactor(
+            config=config,
+            summary_provider=provider,
+            event_sink=None,
+            compaction_scope="task-1:root",
+        )
+        msgs = _make_multi_turn_messages()
+        compactor.update_message_count(len(msgs))
+
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        result = await compactor.apply_compaction_plan(plan, msgs)
+
+        assert result.compaction_id == "task-1:root:1"
+        assert result.strategy == "sliding_window"
+        assert result.durability == "ephemeral"
+        assert result.failure_reason == "summary down"
 
 
 class TestCompactorOutput:
