@@ -6,7 +6,12 @@ from evaluation.core.schemas import CapabilitySlice
 
 
 def _split_slice_segments(raw: str) -> list[str]:
-    """Split on whitespace outside ``[...]``; ``[...]`` must not contain whitespace."""
+    """Split on whitespace outside ``[...]``; ``[...]`` must not contain whitespace.
+
+    Whitespace after ``@`` (before the first tag) or after a comma in the tag list
+    stays in the same segment so ``cap@ wf_batch`` / ``cap@t1, t2`` surface the
+    tag-list rules (no spaces) instead of being split into a bare ``cap@`` slice.
+    """
     segments: list[str] = []
     buf: list[str] = []
     depth = 0
@@ -20,7 +25,13 @@ def _split_slice_segments(raw: str) -> list[str]:
             depth -= 1
             buf.append(ch)
         elif ch.isspace() and depth == 0:
-            seg = ''.join(buf).strip()
+            cur = ''.join(buf)
+            stripped = cur.strip()
+            # Keep one segment: cap@ … or cap@[dom]@…, … (comma-space in tag list).
+            if stripped.endswith('@') or stripped.endswith(','):
+                buf.append(ch)
+                continue
+            seg = stripped
             if seg:
                 segments.append(seg)
             buf = []

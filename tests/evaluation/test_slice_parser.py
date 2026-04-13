@@ -82,5 +82,11 @@ def test_rejects_empty_tag_after_at() -> None:
 
 
 def test_rejects_whitespace_after_at() -> None:
+    # Space after `@` stays in one segment; tag list must be comma-separated with no spaces.
+    with pytest.raises(ValueError, match='whitespace'):
+        parse_slices_expression('cap@ wf_batch')
+
+
+def test_rejects_whitespace_in_comma_separated_tags() -> None:
     with pytest.raises(ValueError, match='whitespace'):
         parse_slices_expression('cap@wf_batch, code_abacus')
