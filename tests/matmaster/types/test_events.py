@@ -16,9 +16,9 @@ from matmaster.types.events import (
     BohriumNodeEvent,
     BusEvent,
     CancelledEvent,
+    CompactionEvent,
     ConfirmationRequestEvent,
     ConfirmationTimeoutEvent,
-    ContextCompactionEvent,
     ErrorEvent,
     ExpRunEvent,
     McpConnectEvent,
@@ -180,9 +180,56 @@ class TestSystemEvents:
         assert evt.type == "confirmation_timeout"
         assert evt.default_reply is None
 
-    def test_context_compaction(self) -> None:
-        evt = ContextCompactionEvent(source="system", payload={"tokens_before": 100000})
-        assert evt.type == "context_compaction"
+    def test_compaction(self) -> None:
+        evt = CompactionEvent(
+            source="context_compactor",
+            compaction_id="task-1:root:1",
+            status="running",
+            phase="runtime",
+            trigger_tokens=950,
+        )
+        assert evt.type == "compaction"
+
+    def test_compaction_event_running_round_trip(self) -> None:
+        evt = CompactionEvent(
+            source="context_compactor",
+            compaction_id="task-1:root:1",
+            status="running",
+            phase="runtime",
+            trigger_tokens=950,
+        )
+
+        dumped = evt.model_dump(mode="json")
+        restored = CompactionEvent.model_validate(dumped)
+
+        assert restored.type == "compaction"
+        assert restored.compaction_id == "task-1:root:1"
+        assert restored.status == "running"
+        assert restored.phase == "runtime"
+        assert restored.strategy is None
+
+    def test_compaction_event_complete_round_trip(self) -> None:
+        evt = CompactionEvent(
+            source="context_compactor",
+            compaction_id="task-1:root:2",
+            status="complete",
+            phase="runtime",
+            strategy="summary",
+            durability="durable",
+            trigger_tokens=1200,
+            retained_turns=3,
+            checkpoint_written=True,
+            covered_until_event_id=88,
+        )
+
+        dumped = evt.model_dump(mode="json")
+        restored = CompactionEvent.model_validate(dumped)
+
+        assert restored.type == "compaction"
+        assert restored.status == "complete"
+        assert restored.strategy == "summary"
+        assert restored.checkpoint_written is True
+        assert restored.covered_until_event_id == 88
 
     def test_exp_run(self) -> None:
         evt = ExpRunEvent(source="system", exp_name="mat_master")
@@ -388,7 +435,13 @@ class TestSystemEventDiscriminator:
                 "request_id": "aq_1",
                 "questions": [],
             },
-            {"type": "context_compaction", "source": "s", "payload": {}},
+            {
+                "type": "compaction",
+                "source": "context_compactor",
+                "compaction_id": "task-1:root:1",
+                "status": "running",
+                "phase": "runtime",
+            },
             {"type": "exp_run", "source": "s", "exp_name": "e"},
             {"type": "cancelled", "source": "s"},
             {"type": "stream_closed", "source": "s"},
@@ -403,7 +456,7 @@ class TestSystemEventDiscriminator:
             AskQuestionEvent,
             AskQuestionReplyEvent,
             AskQuestionTimeoutEvent,
-            ContextCompactionEvent,
+            CompactionEvent,
             ExpRunEvent,
             CancelledEvent,
             StreamClosedEvent,
@@ -476,7 +529,13 @@ class TestBusEventUnion:
                 "request_id": "aq_1",
                 "questions": [],
             },
-            {"type": "context_compaction", "source": "s", "payload": {}},
+            {
+                "type": "compaction",
+                "source": "context_compactor",
+                "compaction_id": "task-1:root:1",
+                "status": "running",
+                "phase": "runtime",
+            },
             {"type": "exp_run", "source": "s", "exp_name": "e"},
             {"type": "cancelled", "source": "s"},
             {"type": "stream_closed", "source": "s"},
@@ -517,7 +576,12 @@ class TestEventSerializationRoundtrip:
             AskQuestionEvent(source="s", request_id="aq_1", questions=[]),
             AskQuestionReplyEvent(source="s", request_id="aq_1", answers={}),
             AskQuestionTimeoutEvent(source="s", request_id="aq_1", questions=[]),
-            ContextCompactionEvent(source="s", payload={}),
+            CompactionEvent(
+                source="context_compactor",
+                compaction_id="task-1:root:1",
+                status="running",
+                phase="runtime",
+            ),
             ExpRunEvent(source="s", exp_name="e"),
             CancelledEvent(source="s"),
             StreamClosedEvent(source="s"),
@@ -552,7 +616,7 @@ class TestNoTypeCollision:
             "ask_question",
             "ask_question_reply",
             "ask_question_timeout",
-            "context_compaction",
+            "compaction",
             "exp_run",
             "cancelled",
             "stream_closed",
@@ -583,7 +647,7 @@ _ALL_EVENT_CLASSES = [
     AskQuestionEvent,
     AskQuestionReplyEvent,
     AskQuestionTimeoutEvent,
-    ContextCompactionEvent,
+    CompactionEvent,
     ExpRunEvent,
     CancelledEvent,
     StreamClosedEvent,
@@ -608,7 +672,12 @@ def _make_event_instance(cls):
         AskQuestionEvent: {"request_id": "aq_1", "questions": []},
         AskQuestionReplyEvent: {"request_id": "aq_1", "answers": {}},
         AskQuestionTimeoutEvent: {"request_id": "aq_1", "questions": []},
-        ContextCompactionEvent: {"payload": {"tokens": 100}},
+        CompactionEvent: {
+            "compaction_id": "task-1:root:1",
+            "status": "running",
+            "phase": "runtime",
+            "trigger_tokens": 950,
+        },
         ExpRunEvent: {"exp_name": "mat_master"},
         WorkspaceUploadErrorEvent: {"message": "upload failed"},
         McpServerStatusEvent: {"server_name": "code-server"},

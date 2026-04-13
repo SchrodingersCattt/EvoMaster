@@ -98,6 +98,48 @@ class TestPublicContentForEvent:
             'exp_name': 'vasp-relax'
         }
 
+    def test_compaction_running_payload_maps_public_fields(self) -> None:
+        payload = {
+            'type': 'compaction',
+            'source': 'context_compactor',
+            'compaction_id': 'task-1:root:1',
+            'status': 'running',
+            'phase': 'runtime',
+            'trigger_tokens': 950,
+        }
+
+        assert _public_content_for_event('compaction', payload) == {
+            'compaction_id': 'task-1:root:1',
+            'status': 'running',
+            'phase': 'runtime',
+            'trigger_tokens': 950,
+        }
+
+    def test_compaction_complete_payload_maps_checkpoint_fields(self) -> None:
+        payload = {
+            'type': 'compaction',
+            'source': 'context_compactor',
+            'compaction_id': 'task-1:root:2',
+            'status': 'complete',
+            'phase': 'runtime',
+            'strategy': 'summary',
+            'durability': 'durable',
+            'checkpoint_written': True,
+            'covered_until_event_id': 88,
+            'retained_turns': 3,
+        }
+
+        assert _public_content_for_event('compaction', payload) == {
+            'compaction_id': 'task-1:root:2',
+            'status': 'complete',
+            'phase': 'runtime',
+            'strategy': 'summary',
+            'durability': 'durable',
+            'checkpoint_written': True,
+            'covered_until_event_id': 88,
+            'retained_turns': 3,
+        }
+
     def test_response_uses_content_field(self) -> None:
         payload = {'type': 'response', 'source': 'Agent', 'content': 'hello'}
 
