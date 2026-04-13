@@ -46,9 +46,7 @@ def test_upload_input_archive_surfaces_missing_sdk(
             raise ImportError("bohrium-sdk is unavailable")
         return original_import(name, globals, locals, fromlist, level)
 
-    monkeypatch.setattr(
-        "matmaster.bohrium.upload._tiefblue_cls", None, raising=False
-    )
+    monkeypatch.setattr("matmaster.bohrium.upload._tiefblue_cls", None, raising=False)
     monkeypatch.setattr(builtins, "__import__", fake_import)
     zip_path = tmp_path / "input.zip"
     zip_path.write_bytes(b"zip-bytes")
