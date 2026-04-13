@@ -67,6 +67,7 @@ def _should_emit_event_to_sse(event: dict) -> bool:
     Practical consequences:
     - assistant_state is always hidden in replay
     - log_line is always hidden in replay
+    - checkpoint bookkeeping events are always hidden in replay
     - direct-mode non-streaming thoughts may still appear in replay if they
       were persisted as completed events
 
@@ -79,6 +80,8 @@ def _should_emit_event_to_sse(event: dict) -> bool:
     if t == 'assistant_state':
         return False
     if t == 'skill_hit':
+        return False
+    if t in {'compact_boundary', 'history_checkpoint'}:
         return False
     return True
 

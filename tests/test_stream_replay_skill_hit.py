@@ -24,6 +24,31 @@ class TestReplayFilterSkillHit:
         event = {"type": "tool_call", "source": "MatMaster"}
         assert _should_emit_event_to_sse(event) is True
 
+    def test_should_not_emit_compact_boundary(self) -> None:
+        """Checkpoint boundary markers are internal-only and must stay out of replay SSE."""
+        from src.services.stream_service import _should_emit_event_to_sse
+
+        event = {
+            "type": "compact_boundary",
+            "source": "System",
+            "content": {"covered_until_event_id": 12, "reason": "summary"},
+        }
+        assert _should_emit_event_to_sse(event) is False
+
+    def test_should_not_emit_history_checkpoint(self) -> None:
+        """Checkpoint payloads are restore metadata and must not leak to replay SSE."""
+        from src.services.stream_service import _should_emit_event_to_sse
+
+        event = {
+            "type": "history_checkpoint",
+            "source": "System",
+            "content": {
+                "covered_until_event_id": 12,
+                "base_messages": [{"role": "user", "content": "hello"}],
+            },
+        }
+        assert _should_emit_event_to_sse(event) is False
+
 
 class TestReplayDedupeSpawnId:
     """Replay dedupe must key by (task_id, spawn_id) so subagent response does not hide parent run_result."""
