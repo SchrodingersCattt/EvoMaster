@@ -54,13 +54,13 @@ class TestExpConfig:
             "name": "test",
             "skills": {"enabled": True},
             "mcp": {"servers": []},
-            "compaction": {"enabled": True, "context_window_tokens": 64000},
+            "compaction": {"context_limit": 64000},
         }
         cfg = ExpConfig.model_validate(data)
         assert cfg.name == "test"
         assert cfg.skills.enabled is True
-        assert cfg.compaction.enabled is True
-        assert cfg.compaction.context_window_tokens == 64000
+        assert "enabled" not in type(cfg.compaction).model_fields
+        assert cfg.compaction.context_limit == 64000
         # mcp is still ignored
         assert not hasattr(cfg, "mcp") or not isinstance(
             getattr(cfg, "mcp", None), dict

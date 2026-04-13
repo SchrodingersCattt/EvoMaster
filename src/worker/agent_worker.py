@@ -195,6 +195,7 @@ def _run_worker_loop() -> None:
         mode = (payload.get('mode') or 'direct').strip().lower() or 'direct'
         llm_override = (payload.get('llm') or '').strip() or None
         model_override = (payload.get('model') or '').strip() or None
+        bohrium_required = bool(payload.get('bohrium_required'))
 
         if not session_id:
             logger.warning('Agent worker: skip job with empty session_id')
@@ -290,6 +291,7 @@ def _run_worker_loop() -> None:
                         invocation_id=invocation_id,
                         llm_override=llm_override,
                         model_override=model_override,
+                        bohrium_required=bohrium_required,
                     )
                 )
                 # run_agent 统一返回 (run_result, elapsed_ms)。run_result 可为 True、False 或 (False, reason)

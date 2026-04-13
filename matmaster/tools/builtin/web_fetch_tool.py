@@ -224,12 +224,8 @@ class WebFetchTool(BuiltinTool):
 
     name: ClassVar[str] = "WebFetch"
     description: ClassVar[str] = (
-        "- Fetches content from a specified URL and processes it\n"
-        "- Takes a URL and an optional prompt as input\n"
-        "- Fetches the URL content, converts HTML to markdown\n"
-        "- Returns the extracted content\n"
-        "- Use this tool when you need to retrieve and analyze web content\n"
-        "- Includes a 15-minute cache for repeated accesses"
+        "Fetch a URL and return its extracted content "
+        "(HTML -> markdown, with a 15-minute cache)."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
@@ -253,6 +249,16 @@ class WebFetchTool(BuiltinTool):
     max_result_chars: ClassVar[int] = 100_000
     plane: ClassVar[ToolPlane] = ToolPlane.EXTERNAL_SERVICE
     stop_mode: ClassVar[str] = "best_effort"
+
+    def prompt(self, ctx=None) -> str:
+        return (
+            "- Fetches content from a specified URL and processes it\n"
+            "- Takes a URL and an optional prompt as input\n"
+            "- Fetches the URL content, converts HTML to markdown\n"
+            "- Returns the extracted content\n"
+            "- Use this tool when you need to retrieve and analyze web content\n"
+            "- Includes a 15-minute cache for repeated accesses"
+        )
 
     def __init__(self, *, workdir: Path | None = None, **kwargs) -> None:
         super().__init__(workdir=workdir, **kwargs)

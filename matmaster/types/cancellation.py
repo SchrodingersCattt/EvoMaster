@@ -42,13 +42,14 @@ class CancellationToken:
             try:
                 loop.call_soon_threadsafe(_safe_set)
             except RuntimeError:
+                # Loop already closed; waiter abandoned, nothing to do.
                 pass
 
         self.on_cancel(_resolve)
 
         if timeout is not None:
             try:
-                return await asyncio.wait_for(asyncio.ensure_future(fut), timeout)
+                return await asyncio.wait_for(fut, timeout)
             except TimeoutError:
                 return False
 

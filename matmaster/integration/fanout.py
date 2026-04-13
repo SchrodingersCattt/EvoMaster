@@ -1,8 +1,5 @@
 """RunEventFanout -- per-run async fanout owner for event dispatch.
 
-Replaces the MessageBus + EventRouter transport with direct handler
-dispatch. Created per run, owned by AgentRunService.
-
 Dispatch order:
 1. SSE handler (awaited, latency-sensitive)
 2. Extra handlers in registration order (awaited)
@@ -60,7 +57,7 @@ class RunEventFanout:
     ) -> None:
         self._sse = sse_handler
         self._persistence = persistence_handler
-        self._extra_handlers: list[Any] = list(extra_handlers) if extra_handlers else []
+        self._extra_handlers: list[Any] = list(extra_handlers or [])
         self._dispatch_state_lock = threading.Lock()
         self._dispatch_seq = 0
         self._pre_persistence_dispatches: set[int] = set()

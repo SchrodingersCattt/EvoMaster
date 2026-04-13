@@ -81,9 +81,6 @@ class BashTool(BuiltinTool):
     max_result_chars: ClassVar[int] = 30_000
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_SHELL
 
-    def describe(self, ctx: ToolDescriptionContext | None = None) -> str:
-        return self.prompt(ctx)
-
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str:
         workspace_root = ctx.workspace_root if ctx is not None else None
         if workspace_root is None and self._workdir is not None:

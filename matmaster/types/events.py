@@ -324,9 +324,3 @@ BusEvent = Annotated[
     ],
     Field(discriminator="type"),
 ]
-
-
-# Legacy aliases kept during protocol migration. New code should use the
-# clearer RunResultEvent / StreamClosedEvent names.
-FinishEvent = RunResultEvent
-EndEvent = StreamClosedEvent

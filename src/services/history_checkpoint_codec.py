@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from matmaster.types.errors import LLMError
 from matmaster.types.message_normalization import (
-    normalize_messages_for_openai,
-    validate_openai_messages,
+    normalize_and_validate_openai_messages,
 )
 from matmaster.types.messages import (
     AssistantMessage,
@@ -62,8 +62,18 @@ def validate_base_messages(messages: list[Message]) -> None:
     if not messages:
         raise ValueError("base_messages must not be empty")
 
-    normalized_messages = normalize_messages_for_openai(messages)
-    validate_openai_messages(normalized_messages)
+    try:
+        normalize_and_validate_openai_messages(messages)
+    except LLMError as exc:
+        # checkpoint callers only contract on ValueError; translate every
+        # outbound-validation LLMError so nothing leaks across the boundary.
+        if exc.error_category == "bad_request":
+            raise ValueError(
+                "tool sequence in checkpoint base_messages is invalid"
+            ) from exc
+        raise ValueError(
+            f"checkpoint base_messages failed outbound validation: {exc}"
+        ) from exc
 
     ChatHistoryConverter.validate_dialog_messages_for_llm(
         serialize_base_messages(messages),
@@ -74,50 +84,3 @@ def validate_base_messages(messages: list[Message]) -> None:
         raise ValueError(
             "checkpoint base_messages must start with compacted SystemMessage"
         )
-
-    if _has_invalid_tool_sequence(messages):
-        raise ValueError("tool sequence in checkpoint base_messages is invalid")
-
-
-def _has_invalid_tool_sequence(messages: list[Message]) -> bool:
-    i = 0
-    while i < len(messages):
-        message = messages[i]
-
-        if not isinstance(message, AssistantMessage):
-            if isinstance(message, ToolMessage):
-                return True
-            i += 1
-            continue
-
-        if any(not str(tool_call.id) for tool_call in (message.tool_calls or [])):
-            return True
-
-        declared_ids = [
-            str(tool_call.id)
-            for tool_call in (message.tool_calls or [])
-            if str(tool_call.id)
-        ]
-        if not declared_ids:
-            if i + 1 < len(messages) and isinstance(messages[i + 1], ToolMessage):
-                return True
-            i += 1
-            continue
-
-        seen_tool_ids: set[str] = set()
-        j = i + 1
-        while j < len(messages) and isinstance(messages[j], ToolMessage):
-            tool_id = str(messages[j].tool_call_id or "")
-            if tool_id in seen_tool_ids:
-                return True
-            if tool_id not in declared_ids:
-                return True
-            seen_tool_ids.add(tool_id)
-            j += 1
-
-        if len(seen_tool_ids) != len(declared_ids):
-            return True
-
-        i = j
-
-    return False

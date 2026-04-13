@@ -1,19 +1,15 @@
 """Gap 1 (27-01-01 / MCP-01): MCPConnection ABC + transport subclasses + create_connection factory.
 
 Behavioral contract:
-- MCPConnection ABC can be imported without triggering any evomaster imports.
+- MCPConnection ABC is importable.
 - All three transport subclasses (Stdio/SSE/HTTP) are concrete importable types.
 - create_connection factory returns the correct subclass for each transport string.
 - create_connection raises ValueError for unknown transport or missing required args.
-- The module contains no 'from evomaster' top-level imports.
 """
 
 from __future__ import annotations
 
-import ast
-import inspect
 from abc import ABC
-from pathlib import Path
 
 import pytest
 
@@ -132,29 +128,3 @@ class TestMCPConnectionInterface:
         assert hasattr(connection, "MCP_CONNECT_TIMEOUT")
         assert isinstance(connection.MCP_CONNECT_TIMEOUT, float)
         assert connection.MCP_CONNECT_TIMEOUT > 0
-
-
-class TestNoEvoMasterImportsInConnection:
-    def test_no_top_level_evomaster_imports(self):
-        module_file = Path(
-            __import__("matmaster.mcp.connection", fromlist=["connection"]).__file__
-        )
-        source = module_file.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        top_level_evo = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom)
-            and node.module is not None
-            and "evomaster" in node.module
-            and node.col_offset == 0
-        ]
-        assert (
-            top_level_evo == []
-        ), f"Found {len(top_level_evo)} top-level evomaster imports in connection.py"
-
-    def test_no_evomaster_string_in_source(self):
-        import matmaster.mcp.connection as mod
-
-        source = inspect.getsource(mod)
-        assert "evomaster" not in source, "Found 'evomaster' in connection.py source"

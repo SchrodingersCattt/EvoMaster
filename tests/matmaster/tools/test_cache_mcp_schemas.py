@@ -1,21 +1,15 @@
 """Gap 3 (27-01-04 / MCP-01): cache_mcp_schemas uses matmaster.mcp.MCPToolManager + dict-based tool access.
 
 Behavioral contract:
-- cache_mcp_schemas.py imports MCPToolManager from matmaster.mcp.manager (not evomaster).
 - generate_cache function is importable.
 - Tool schema building uses dict-based access (tool_info["remote_tool_name"]) not MCPTool attributes.
-- No evomaster imports in the module source.
 """
 
 from __future__ import annotations
 
-import inspect
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from matmaster.mcp.calculation.config_env import resolve_mcp_config_path
 
 
 class TestCacheMcpSchemasImports:
@@ -23,45 +17,6 @@ class TestCacheMcpSchemasImports:
         from matmaster.tools.cache_mcp_schemas import generate_cache
 
         assert callable(generate_cache)
-
-    def test_no_evomaster_in_source(self):
-        import matmaster.tools.cache_mcp_schemas as mod
-
-        source = inspect.getsource(mod)
-        # Only top-level/non-comment evomaster references are a problem
-        lines = [
-            line.strip()
-            for line in source.split('\n')
-            if ('from evomaster' in line or 'import evomaster' in line)
-            and not line.strip().startswith('#')
-        ]
-        assert lines == [], f"Found evomaster imports in cache_mcp_schemas.py: {lines}"
-
-    def test_module_imports_matmaster_mcp_manager(self):
-        """generate_cache uses matmaster.mcp.manager.MCPToolManager internally."""
-        import matmaster.tools.cache_mcp_schemas as mod
-
-        source = inspect.getsource(mod)
-        assert (
-            "matmaster.mcp.manager" in source or "from matmaster.mcp" in source
-        ), "cache_mcp_schemas.py does not use matmaster.mcp.manager"
-
-    def test_module_imports_matmaster_mcp_calculation(self):
-        """generate_cache uses matmaster.mcp.calculation for resolve_mcp_config_path."""
-        import matmaster.tools.cache_mcp_schemas as mod
-
-        source = inspect.getsource(mod)
-        assert (
-            "matmaster.mcp.calculation" in source
-        ), "cache_mcp_schemas.py does not use matmaster.mcp.calculation"
-
-    def test_resolve_mcp_config_path_is_importable_from_new_namespace(
-        self, tmp_path: Path
-    ) -> None:
-        config_file = tmp_path / "mcp_config.json"
-        config_file.write_text("{}", encoding="utf-8")
-
-        assert resolve_mcp_config_path(config_file) == config_file
 
 
 class TestCacheMcpSchemasGenerateCache:

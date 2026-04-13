@@ -58,7 +58,10 @@ class PlaygroundContext(BaseModel):
     run_meta: dict[str, Any] = Field(default_factory=dict)
     session: Session | None = None
     config_dir: Path | None = None  # Playground config directory (per D-10)
-    llm_provider: Any = None  # LLMProvider instance (externally determined)
+    # llm_provider is intentionally ``Any`` so duck-typed mocks and partially-
+    # instantiated providers bypass Pydantic's strict isinstance check against
+    # the runtime_checkable ``LLMProvider`` Protocol.
+    llm_provider: Any = None
     llm_config: Any = None  # LLMConfig instance (externally loaded)
 
     @model_validator(mode="before")

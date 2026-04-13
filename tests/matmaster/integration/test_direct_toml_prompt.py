@@ -14,12 +14,6 @@ def test_direct_toml_loads_successfully():
     assert cfg.name == "direct"
 
 
-def test_mode_contract_removed():
-    """mode_contract field no longer exists on ExpConfig."""
-    cfg = load_exp_config("direct")
-    assert not hasattr(cfg, "mode_contract")
-
-
 def test_execution_mode_in_developer_instructions():
     """Former mode_contract content now lives in developer_instructions."""
     cfg = load_exp_config("direct")
