@@ -17,15 +17,14 @@ Usage:
   python solve_refine_scxrd.py --hkl data.hkl --cell "12 8 14 90 95 90" \\
          --sg P21 --wavelength 0.71073 -o refined.cif
 """
+
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
 import subprocess
 import sys
-import warnings
 from pathlib import Path
 
 import numpy as np
@@ -36,17 +35,17 @@ from scipy.optimize import least_squares
 # f(s) = Σ a_i exp(-b_i s²) + c,  s = sinθ/λ
 # ═══════════════════════════════════════════════════════════════════════
 _SF = {
-    "H":  ([0.4899, 0.2620, 0.1968, 0.0499], [20.659, 7.740, 49.552, 2.202], 0.0013),
-    "C":  ([2.3100, 1.0200, 1.5886, 0.8650], [20.844, 10.208, 0.569, 51.651], 0.2156),
-    "N":  ([12.213, 3.1322, 2.0125, 1.1663], [0.006, 9.893, 28.998, 0.583], -11.529),
-    "O":  ([3.0485, 2.2868, 1.5463, 0.8670], [13.277, 5.701, 0.324, 32.909], 0.2508),
-    "F":  ([3.5392, 2.6412, 1.5170, 1.0243], [10.283, 4.294, 0.262, 26.148], 0.2776),
+    "H": ([0.4899, 0.2620, 0.1968, 0.0499], [20.659, 7.740, 49.552, 2.202], 0.0013),
+    "C": ([2.3100, 1.0200, 1.5886, 0.8650], [20.844, 10.208, 0.569, 51.651], 0.2156),
+    "N": ([12.213, 3.1322, 2.0125, 1.1663], [0.006, 9.893, 28.998, 0.583], -11.529),
+    "O": ([3.0485, 2.2868, 1.5463, 0.8670], [13.277, 5.701, 0.324, 32.909], 0.2508),
+    "F": ([3.5392, 2.6412, 1.5170, 1.0243], [10.283, 4.294, 0.262, 26.148], 0.2776),
     "Si": ([6.2915, 3.0353, 1.9891, 1.5410], [2.439, 32.334, 0.679, 81.694], 1.1407),
-    "P":  ([6.4345, 4.1791, 1.7800, 1.4908], [1.907, 27.157, 0.526, 68.165], 1.1149),
-    "S":  ([6.9053, 5.2034, 1.4379, 1.5863], [1.468, 22.215, 0.254, 56.172], 0.8669),
+    "P": ([6.4345, 4.1791, 1.7800, 1.4908], [1.907, 27.157, 0.526, 68.165], 1.1149),
+    "S": ([6.9053, 5.2034, 1.4379, 1.5863], [1.468, 22.215, 0.254, 56.172], 0.8669),
     "Cl": ([11.460, 7.1964, 6.2556, 1.6455], [0.010, 1.166, 18.519, 47.778], -9.5574),
     "Br": ([17.179, 5.2358, 5.6377, 3.9851], [2.172, 16.580, 0.261, 41.433], 2.9557),
-    "I":  ([20.147, 18.995, 7.5138, 2.2735], [4.347, 0.381, 27.766, 66.878], 4.0712),
+    "I": ([20.147, 18.995, 7.5138, 2.2735], [4.347, 0.381, 27.766, 66.878], 4.0712),
     "Fe": ([11.770, 7.3573, 3.5222, 2.3045], [4.761, 0.307, 15.353, 76.881], 1.0369),
     "Cu": ([13.338, 7.1676, 5.6158, 1.6735], [3.583, 0.247, 11.397, 64.812], 1.1910),
     "Zn": ([14.074, 7.0318, 5.1652, 2.4100], [3.266, 0.233, 10.316, 58.710], 1.3041),
@@ -83,11 +82,19 @@ def _d_star_sq(hkl, cell):
     cas = (cb * cg - ca) / (sb * sg)
     cbs = (ca * cg - cb) / (sa * sg)
     cgs = (ca * cb - cg) / (sa * sb)
-    h, k, l = hkl[:, 0].astype(float), hkl[:, 1].astype(float), hkl[:, 2].astype(float)
-    return ((h * astar) ** 2 + (k * bstar) ** 2 + (l * cstar) ** 2
-            + 2 * h * k * astar * bstar * cgs
-            + 2 * h * l * astar * cstar * cbs
-            + 2 * k * l * bstar * cstar * cas)
+    h, k, ell = (
+        hkl[:, 0].astype(float),
+        hkl[:, 1].astype(float),
+        hkl[:, 2].astype(float),
+    )
+    return (
+        (h * astar) ** 2
+        + (k * bstar) ** 2
+        + (ell * cstar) ** 2
+        + 2 * h * k * astar * bstar * cgs
+        + 2 * h * ell * astar * cstar * cbs
+        + 2 * k * ell * bstar * cstar * cas
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -106,7 +113,7 @@ def parse_hkl(path: str) -> dict:
             ok = False
             if len(parts) >= 5:
                 try:
-                    h, k, l = int(parts[0]), int(parts[1]), int(parts[2])
+                    h, k, ell = int(parts[0]), int(parts[1]), int(parts[2])
                     fsq, sig = float(parts[3]), float(parts[4])
                     ok = True
                 except ValueError:
@@ -114,16 +121,19 @@ def parse_hkl(path: str) -> dict:
             # Fall back to fixed-width (I4, I4, I4, F8, F8)
             if not ok and len(s) >= 28:
                 try:
-                    h = int(s[0:4]); k = int(s[4:8]); l = int(s[8:12])
-                    fsq = float(s[12:20]); sig = float(s[20:28])
+                    h = int(s[0:4])
+                    k = int(s[4:8])
+                    ell = int(s[8:12])
+                    fsq = float(s[12:20])
+                    sig = float(s[20:28])
                     ok = True
                 except ValueError:
                     pass
             if not ok:
                 continue
-            if h == 0 and k == 0 and l == 0:
+            if h == 0 and k == 0 and ell == 0:
                 break
-            rows.append((h, k, l, fsq, sig))
+            rows.append((h, k, ell, fsq, sig))
     if not rows:
         raise ValueError(f"No reflections parsed from {path}")
     arr = np.array(rows)
@@ -142,16 +152,23 @@ def parse_p4p(path: str) -> dict:
                 cell = [float(x) for x in tok[1:7]]
             elif key in ("CTYPE", "SOURCE") and wl is None:
                 txt = " ".join(tok[1:]).upper()
-                if "MO" in txt: wl = 0.71073
-                elif "CU" in txt: wl = 1.54178
-                elif "AG" in txt: wl = 0.56086
+                if "MO" in txt:
+                    wl = 0.71073
+                elif "CU" in txt:
+                    wl = 1.54178
+                elif "AG" in txt:
+                    wl = 0.56086
             elif key in ("SPTS", "SPGRP", "SG") and sg is None:
                 sg = " ".join(tok[1:]).strip()
     return {"cell": cell, "wavelength": wl or 0.71073, "sg": sg}
 
 
 def parse_ins(path: str) -> dict:
-    cell = None; wl = None; sfac = []; latt = None; symm = []
+    cell = None
+    wl = None
+    sfac = []
+    latt = None
+    symm = []
     with open(path) as f:
         for line in f:
             tok = line.split()
@@ -167,8 +184,13 @@ def parse_ins(path: str) -> dict:
                 latt = int(tok[1])
             elif key == "SYMM":
                 symm.append(" ".join(tok[1:]))
-    return {"cell": cell, "wavelength": wl or 0.71073, "elements": sfac,
-            "latt": latt, "symm_ops_text": symm}
+    return {
+        "cell": cell,
+        "wavelength": wl or 0.71073,
+        "elements": sfac,
+        "latt": latt,
+        "symm_ops_text": symm,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -195,9 +217,18 @@ _SG_OPS: dict[int, list[tuple[np.ndarray, np.ndarray]]] = {
     ],
 }
 _SG_NAME_MAP = {
-    "P1": 1, "P-1": 2, "P21": 4, "P 21": 4, "P 2_1": 4, "P2₁": 4,
-    "P21/c": 14, "P 21/c": 14, "P2₁/c": 14, "P 2_1/c": 14,
-    "P212121": 19, "P 21 21 21": 19,
+    "P1": 1,
+    "P-1": 2,
+    "P21": 4,
+    "P 21": 4,
+    "P 2_1": 4,
+    "P2₁": 4,
+    "P21/c": 14,
+    "P 21/c": 14,
+    "P2₁/c": 14,
+    "P 2_1/c": 14,
+    "P212121": 19,
+    "P 21 21 21": 19,
 }
 
 
@@ -221,9 +252,12 @@ def _get_sg_ops(sg_input) -> tuple[list, int]:
     # Try pymatgen
     try:
         from pymatgen.symmetry.groups import SpaceGroup
+
         sg = SpaceGroup(sg_input)
-        ops = [(op.rotation_matrix.astype(float), op.translation_vector.astype(float))
-               for op in sg.symmetry_ops]
+        ops = [
+            (op.rotation_matrix.astype(float), op.translation_vector.astype(float))
+            for op in sg.symmetry_ops
+        ]
         return ops, sg.int_number
     except Exception:
         pass
@@ -234,13 +268,14 @@ def _get_sg_ops(sg_input) -> tuple[list, int]:
 # ═══════════════════════════════════════════════════════════════════════
 # Charge-flipping structure solution
 # ═══════════════════════════════════════════════════════════════════════
-def _charge_flipping(hkl, f_obs, cell, sg_ops, grid=96, cycles=800,
-                     delta_frac=0.85, n_trials=3):
+def _charge_flipping(
+    hkl, f_obs, cell, sg_ops, grid=96, cycles=800, delta_frac=0.85, n_trials=3
+):
     """Run charge flipping and return the best electron-density map."""
     N = grid
-    h, k, l = hkl[:, 0], hkl[:, 1], hkl[:, 2]
-    hi, ki, li = h % N, k % N, l % N
-    hf, kf, lf = (-h) % N, (-k) % N, (-l) % N
+    h, k, ell = hkl[:, 0], hkl[:, 1], hkl[:, 2]
+    hi, ki, li = h % N, k % N, ell % N
+    hf, kf, lf = (-h) % N, (-k) % N, (-ell) % N
 
     # Precompute symmetry index maps for averaging
     sg_maps = []
@@ -255,15 +290,18 @@ def _charge_flipping(hkl, f_obs, cell, sg_ops, grid=96, cycles=800,
                         frac += R[dim, d2] * idx / N
                 frac += t[dim]
                 mapped = np.round(frac * N).astype(int) % N
-                if dim == 0: mi = mapped
-                elif dim == 1: mj = mapped
-                else: mk = mapped
+                if dim == 0:
+                    mi = mapped
+                elif dim == 1:
+                    mj = mapped
+                else:
+                    mk = mapped
             sg_maps.append((mi, mj, mk))
 
     best_rho = None
     best_r = float("inf")
 
-    for trial in range(n_trials):
+    for _ in range(n_trials):
         phases = np.random.uniform(0, 2 * np.pi, len(f_obs))
         for _ in range(cycles):
             F_grid = np.zeros((N, N, N), dtype=complex)
@@ -312,6 +350,7 @@ def _charge_flipping(hkl, f_obs, cell, sg_ops, grid=96, cycles=800,
 def _find_atoms(rho, cell, sg_ops, sigma_thresh=4.5, min_dist_A=0.8):
     """Locate atoms as peaks in the electron density."""
     from scipy.ndimage import maximum_filter
+
     N = rho.shape[0]
     sigma = np.std(rho)
     threshold = sigma_thresh * sigma
@@ -334,7 +373,9 @@ def _find_atoms(rho, cell, sg_ops, sigma_thresh=4.5, min_dist_A=0.8):
                 equiv = (R @ xk + t) % 1.0
                 diff = frac[i] - equiv
                 diff -= np.round(diff)
-                dist = np.sqrt((diff[0] * a) ** 2 + (diff[1] * b) ** 2 + (diff[2] * c) ** 2)
+                dist = np.sqrt(
+                    (diff[0] * a) ** 2 + (diff[1] * b) ** 2 + (diff[2] * c) ** 2
+                )
                 if dist < min_dist_A:
                     duplicate = True
                     break
@@ -348,8 +389,22 @@ def _find_atoms(rho, cell, sg_ops, sigma_thresh=4.5, min_dist_A=0.8):
 
 def _assign_types(peak_vals, elements=None):
     """Guess atom types from peak heights."""
-    Z = {"H": 1, "C": 6, "N": 7, "O": 8, "F": 9, "Si": 14, "P": 15,
-         "S": 16, "Cl": 17, "Br": 35, "I": 53, "Fe": 26, "Cu": 29, "Zn": 30}
+    Z = {
+        "H": 1,
+        "C": 6,
+        "N": 7,
+        "O": 8,
+        "F": 9,
+        "Si": 14,
+        "P": 15,
+        "S": 16,
+        "Cl": 17,
+        "Br": 35,
+        "I": 53,
+        "Fe": 26,
+        "Cu": 29,
+        "Zn": 30,
+    }
     if elements is None:
         elements = ["C", "N", "O", "S", "Cl", "Br"]
     max_Z = max(Z.get(e, 6) for e in elements)
@@ -367,9 +422,13 @@ def _assign_types(peak_vals, elements=None):
 # ═══════════════════════════════════════════════════════════════════════
 def _calc_f(atoms, hkl, cell, wavelength, sg_ops):
     """F_calc for all reflections, given atom list of dicts."""
-    s_sq = _d_star_sq(hkl, cell) / 4.0   # (sinθ/λ)²
+    s_sq = _d_star_sq(hkl, cell) / 4.0  # (sinθ/λ)²
     F = np.zeros(len(hkl), dtype=complex)
-    h, k, l = hkl[:, 0].astype(float), hkl[:, 1].astype(float), hkl[:, 2].astype(float)
+    h, k, ell = (
+        hkl[:, 0].astype(float),
+        hkl[:, 1].astype(float),
+        hkl[:, 2].astype(float),
+    )
     for at in atoms:
         x, y, z = at["frac"]
         el = at["elem"]
@@ -379,7 +438,7 @@ def _calc_f(atoms, hkl, cell, wavelength, sg_ops):
             xn = R[0, 0] * x + R[0, 1] * y + R[0, 2] * z + t[0]
             yn = R[1, 0] * x + R[1, 1] * y + R[1, 2] * z + t[1]
             zn = R[2, 0] * x + R[2, 1] * y + R[2, 2] * z + t[2]
-            phase = 2 * np.pi * (h * xn + k * yn + l * zn)
+            phase = 2 * np.pi * (h * xn + k * yn + ell * zn)
             F += f_el * np.exp(1j * phase)
     return F
 
@@ -408,9 +467,13 @@ def _refine(atoms, hkl_data, cell, wavelength, sg_ops, max_iter=5):
         atms = []
         idx = 1
         for a in atoms:
-            atms.append({"elem": a["elem"],
-                         "frac": v[idx:idx + 3].tolist(),
-                         "B": max(0.5, v[idx + 3])})
+            atms.append(
+                {
+                    "elem": a["elem"],
+                    "frac": v[idx : idx + 3].tolist(),
+                    "B": max(0.5, v[idx + 3]),
+                }
+            )
             idx += 4
         return sc, atms
 
@@ -436,22 +499,35 @@ def _refine(atoms, hkl_data, cell, wavelength, sg_ops, max_iter=5):
     fo = np.sqrt(np.maximum(fsq_sel, 0))
     fc = np.sqrt(np.maximum(fsq_calc, 0))
     R1 = float(np.sum(np.abs(fo - fc)) / np.sum(fo)) if np.sum(fo) > 0 else 1.0
-    wR2 = float(np.sqrt(np.sum((w * (fsq_sel - fsq_calc)) ** 2)
-                         / np.sum((w * fsq_sel) ** 2))) if np.sum(fsq_sel) > 0 else 1.0
+    wR2 = (
+        float(
+            np.sqrt(
+                np.sum((w * (fsq_sel - fsq_calc)) ** 2) / np.sum((w * fsq_sel) ** 2)
+            )
+        )
+        if np.sum(fsq_sel) > 0
+        else 1.0
+    )
     n_par = len(result.x)
     n_obs = len(fsq_sel)
-    goof = float(np.sqrt(np.sum(result.fun ** 2) / max(n_obs - n_par, 1)))
+    goof = float(np.sqrt(np.sum(result.fun**2) / max(n_obs - n_par, 1)))
 
-    return atoms_fin, {"R1": round(R1, 4), "wR2": round(wR2, 4),
-                       "GOOF": round(goof, 3), "n_obs": n_obs, "n_params": n_par,
-                       "scale": round(float(sc_fin), 6)}
+    return atoms_fin, {
+        "R1": round(R1, 4),
+        "wR2": round(wR2, 4),
+        "GOOF": round(goof, 3),
+        "n_obs": n_obs,
+        "n_params": n_par,
+        "scale": round(float(sc_fin), 6),
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # CIF writer
 # ═══════════════════════════════════════════════════════════════════════
-def _write_cif(path, cell, sg_symbol, sg_number, atoms, rfactors,
-               wavelength, formula_str="?"):
+def _write_cif(
+    path, cell, sg_symbol, sg_number, atoms, rfactors, wavelength, formula_str="?"
+):
     V = round(_cell_volume(cell), 2)
     a, b, c, al, be, ga = cell
     lines = [
@@ -488,8 +564,10 @@ def _write_cif(path, cell, sg_symbol, sg_number, atoms, rfactors,
         elem_count[el] = elem_count.get(el, 0) + 1
         label = f"{el}{elem_count[el]}"
         x, y, z = at["frac"]
-        U = at.get("B", 2.0) / (8 * np.pi ** 2)
-        lines.append(f" {label:6s} {el:2s}  {x:10.5f} {y:10.5f} {z:10.5f}  {U:8.5f} Uiso")
+        U = at.get("B", 2.0) / (8 * np.pi**2)
+        lines.append(
+            f" {label:6s} {el:2s}  {x:10.5f} {y:10.5f} {z:10.5f}  {U:8.5f} Uiso"
+        )
 
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
     return V
@@ -518,8 +596,16 @@ def _formula_from_atoms(atoms, sg_ops):
 # ═══════════════════════════════════════════════════════════════════════
 def _try_shelx(hkl_path, cell, wavelength, sg_number, elements, prefix="struct"):
     """Attempt SHELX pipeline. Returns CIF path on success, else None."""
-    shelxs = shutil.which("shelxs") or shutil.which("shelxs-2018") or shutil.which("shelxs-97")
-    shelxl = shutil.which("shelxl") or shutil.which("shelxl-2018") or shutil.which("shelxl-97")
+    shelxs = (
+        shutil.which("shelxs")
+        or shutil.which("shelxs-2018")
+        or shutil.which("shelxs-97")
+    )
+    shelxl = (
+        shutil.which("shelxl")
+        or shutil.which("shelxl-2018")
+        or shutil.which("shelxl-97")
+    )
     if not shelxs or not shelxl:
         return None
 
@@ -539,9 +625,11 @@ def _try_shelx(hkl_path, cell, wavelength, sg_number, elements, prefix="struct")
     elif sg_number == 14:
         ins_lines.append("SYMM -X, 0.5+Y, 0.5-Z")
     elif sg_number == 19:
-        ins_lines += ["SYMM 0.5-X, -Y, 0.5+Z",
-                      "SYMM 0.5+X, 0.5-Y, -Z",
-                      "SYMM -X, 0.5+Y, 0.5-Z"]
+        ins_lines += [
+            "SYMM 0.5-X, -Y, 0.5+Z",
+            "SYMM 0.5+X, 0.5-Y, -Z",
+            "SYMM -X, 0.5+Y, 0.5-Z",
+        ]
 
     elems = elements or ["C", "H", "N", "O"]
     ins_lines.append("SFAC " + " ".join(elems))
@@ -578,7 +666,9 @@ def _try_shelx(hkl_path, cell, wavelength, sg_number, elements, prefix="struct")
 # Main pipeline
 # ═══════════════════════════════════════════════════════════════════════
 def main():
-    ap = argparse.ArgumentParser(description="SCXRD structure solution & CIF generation")
+    ap = argparse.ArgumentParser(
+        description="SCXRD structure solution & CIF generation"
+    )
     ap.add_argument("--hkl", required=True, help="HKL file (SHELX HKLF4)")
     ap.add_argument("--p4p", help="Bruker P4P file")
     ap.add_argument("--ins", help="SHELX INS file (alternative to P4P)")
@@ -586,9 +676,13 @@ def main():
     ap.add_argument("--sg", help="Space group symbol or number")
     ap.add_argument("--wavelength", type=float, help="Wavelength in Å")
     ap.add_argument("--elements", help='Expected elements, e.g. "C H N O S"')
-    ap.add_argument("--grid", type=int, default=96, help="Charge-flipping grid (default 96)")
+    ap.add_argument(
+        "--grid", type=int, default=96, help="Charge-flipping grid (default 96)"
+    )
     ap.add_argument("--cycles", type=int, default=800, help="CF cycles (default 800)")
-    ap.add_argument("--trials", type=int, default=3, help="CF random trials (default 3)")
+    ap.add_argument(
+        "--trials", type=int, default=3, help="CF random trials (default 3)"
+    )
     ap.add_argument("-o", "--output", default="refined.cif", help="Output CIF path")
     args = ap.parse_args()
 
@@ -615,7 +709,14 @@ def main():
     wl = wl or 0.71073
 
     if cell is None:
-        print(json.dumps({"success": False, "error": "No cell parameters found. Provide --p4p, --ins, or --cell."}))
+        print(
+            json.dumps(
+                {
+                    "success": False,
+                    "error": "No cell parameters found. Provide --p4p, --ins, or --cell.",
+                }
+            )
+        )
         sys.exit(1)
 
     sg_ops, sg_number = _get_sg_ops(sg_str)
@@ -633,26 +734,43 @@ def main():
     shelx_cif = _try_shelx(args.hkl, cell, wl, sg_number, elements)
     if shelx_cif:
         shutil.copy(shelx_cif, args.output)
-        print(json.dumps({
-            "success": True, "method": "SHELX",
-            "cif": args.output,
-            "cell_volume": round(_cell_volume(cell), 2),
-            "space_group": sg_symbol,
-            "space_group_number": sg_number,
-        }, indent=2))
+        print(
+            json.dumps(
+                {
+                    "success": True,
+                    "method": "SHELX",
+                    "cif": args.output,
+                    "cell_volume": round(_cell_volume(cell), 2),
+                    "space_group": sg_symbol,
+                    "space_group_number": sg_number,
+                },
+                indent=2,
+            )
+        )
         return
 
     print("SHELX not available; using Python charge-flipping…", file=sys.stderr)
 
     # ── Charge flipping ──
     f_obs = np.sqrt(np.maximum(hkl_data["fsq"], 0))
-    rho = _charge_flipping(hkl_data["hkl"], f_obs, cell, sg_ops,
-                           grid=args.grid, cycles=args.cycles, n_trials=args.trials)
+    rho = _charge_flipping(
+        hkl_data["hkl"],
+        f_obs,
+        cell,
+        sg_ops,
+        grid=args.grid,
+        cycles=args.cycles,
+        n_trials=args.trials,
+    )
 
     # ── Find atoms ──
     frac_coords, peak_vals = _find_atoms(rho, cell, sg_ops)
     if len(frac_coords) == 0:
-        print(json.dumps({"success": False, "error": "No atoms found in charge-flipping density"}))
+        print(
+            json.dumps(
+                {"success": False, "error": "No atoms found in charge-flipping density"}
+            )
+        )
         sys.exit(1)
 
     # Limit to reasonable number (avoid noise peaks)
@@ -662,8 +780,9 @@ def main():
     peak_vals = peak_vals[:max_atoms]
 
     types = _assign_types(peak_vals, elements)
-    atoms = [{"elem": t, "frac": list(fc), "B": 2.0}
-             for t, fc in zip(types, frac_coords)]
+    atoms = [
+        {"elem": t, "frac": list(fc), "B": 2.0} for t, fc in zip(types, frac_coords)
+    ]
     print(f"Atoms found: {len(atoms)}", file=sys.stderr)
 
     # ── Refine ──
@@ -672,13 +791,20 @@ def main():
     except Exception as e:
         print(f"Refinement error: {e}; writing unrefined CIF", file=sys.stderr)
         atoms_ref = atoms
-        rfactors = {"R1": 0.99, "wR2": 0.99, "GOOF": 0.0,
-                    "n_obs": n_ref, "n_params": 1 + 4 * len(atoms), "scale": 1.0}
+        rfactors = {
+            "R1": 0.99,
+            "wR2": 0.99,
+            "GOOF": 0.0,
+            "n_obs": n_ref,
+            "n_params": 1 + 4 * len(atoms),
+            "scale": 1.0,
+        }
 
     # ── Write CIF ──
     formula = _formula_from_atoms(atoms_ref, sg_ops)
-    vol = _write_cif(args.output, cell, sg_symbol, sg_number,
-                     atoms_ref, rfactors, wl, formula)
+    vol = _write_cif(
+        args.output, cell, sg_symbol, sg_number, atoms_ref, rfactors, wl, formula
+    )
 
     summary = {
         "success": True,
