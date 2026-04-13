@@ -7,8 +7,8 @@ from matmaster.types.message_normalization import (
     normalize_and_validate_openai_messages,
     normalize_messages_for_openai,
     restore_persisted_assistant_state,
-    validate_openai_tool_turn_sequence,
     validate_openai_messages,
+    validate_openai_tool_turn_sequence,
 )
 from matmaster.types.messages import AssistantMessage, ToolCallData, UserMessage
 

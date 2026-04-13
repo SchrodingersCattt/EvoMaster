@@ -311,4 +311,3 @@ class TestEventHandlerPersistence:
         assert [p.get("type") for p in payloads] == ["response", "response"]
         assert payloads[0]["content"] == "..."
         assert payloads[1]["content"] == "真实内容"
-

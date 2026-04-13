@@ -239,9 +239,7 @@ class TestExpBuildRuntime:
         )
         assert "/exec" in bash_def["function"]["description"]
 
-    async def test_builtin_tool_prompts_layered_correctly(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_builtin_tool_prompts_layered_correctly(self, tmp_path: Path) -> None:
         """End-to-end: builtin prompts leave system_prompt and move into definitions."""
         exp = Exp(
             ExpConfig(
