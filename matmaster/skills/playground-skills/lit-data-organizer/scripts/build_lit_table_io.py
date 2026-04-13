@@ -154,7 +154,11 @@ def auto_discover_tool_outputs(input_paths: list[Path]) -> list[Path]:
         for subdir in sorted(tool_outputs_dir.iterdir()):
             if not subdir.is_dir():
                 continue
-            if not (subdir.name.startswith('mat_sn_') or subdir.name == 'web-search'):
+            if not (
+                subdir.name.startswith('mat_sn_')
+                or subdir.name == 'web-search'
+                or subdir.name == 'PaperSearch'
+            ):
                 continue
             for json_file in sorted(subdir.glob('*.json')):
                 key = str(json_file.resolve())

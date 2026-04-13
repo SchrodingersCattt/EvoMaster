@@ -2,7 +2,7 @@
 name: deep-survey
 description: "Systematic literature evidence retrieval producing collected.json and optional reports. Use for comprehensive literature review — not for quick one-off lookups."
 skill_type: operator
-depends_on: mcp-mat-sn, mcp-mat-doc
+depends_on: mcp-mat-doc
 ---
 
 <!-- multi-server: mat_sn, mat_doc -->
