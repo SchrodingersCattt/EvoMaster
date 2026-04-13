@@ -34,13 +34,9 @@ dependencies = [
     "markdownify>=0.14.1",
     "tiktoken>=0.7.0",
     "pre-commit>=4.5.1",
-    "bohrium-open-sdk>=1.0.0",
 ]
 
 [project.optional-dependencies]
-bohrium-open = [
-    "bohrium-open-sdk>=1.0.0",
-]
 # DevShell 外层「跑评测 → 判分 → 改提示词/工具」编排（Claude Agent SDK + 内置 Claude Code 工具集）
 eval-agent = [
     "claude-agent-sdk>=0.1.0",

@@ -72,40 +72,32 @@ def _patch_bridge(monkeypatch, cred: FakeCredentialSpec | None = None):
     monkeypatch.setattr(tool_mod, "build_bohrium_context", build_ctx)
 
 
-def _install_fake_tiefblue(monkeypatch, upload_calls: list[tuple[str, str, dict]]):
-    """Install a fake Tiefblue SDK module into sys.modules."""
+def _install_fake_tiefblue(monkeypatch, upload_calls: list[tuple[str, str, str]]):
+    """Install a fake Tiefblue client via _load_tiefblue_client."""
 
     class FakeTiefblueClient:
-        def __init__(self, *, base_url):
+        def __init__(self, base_url=None):
             self.base_url = base_url
 
-        def upload_from_file_multi_part(
+        def upload_From_file_multi_part(
             self,
-            *,
             object_key,
             file_path,
-            custom_headers,
-            progress_bar,
+            token="",
+            progress_bar=False,
+            **kwargs,
         ):
-            upload_calls.append((object_key, file_path, custom_headers))
+            upload_calls.append((object_key, file_path, token))
             assert progress_bar is False
-            return {}
+            return None
 
-    sdk_module = types.ModuleType("bohrium_open_sdk")
-    opensdk_module = types.ModuleType("bohrium_open_sdk.opensdk")
-    tiefblue_module = types.ModuleType("bohrium_open_sdk.opensdk._tiefblue_client")
-    tiefblue_module.Tiefblue = FakeTiefblueClient
-    sdk_module.opensdk = opensdk_module
-    opensdk_module._tiefblue_client = tiefblue_module
-
-    monkeypatch.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
-    monkeypatch.setitem(sys.modules, "bohrium_open_sdk.opensdk", opensdk_module)
-    monkeypatch.setitem(
-        sys.modules,
-        "bohrium_open_sdk.opensdk._tiefblue_client",
-        tiefblue_module,
+    monkeypatch.setattr(
+        "matmaster.bohrium.upload._tiefblue_cls", None, raising=False
     )
-    monkeypatch.setattr("matmaster.bohrium.upload._oss2", None, raising=False)
+    monkeypatch.setattr(
+        "matmaster.bohrium.upload._load_tiefblue_client",
+        lambda: FakeTiefblueClient,
+    )
 
 
 def _fake_submit_post_factory(post_calls: list[tuple[str, dict, str]]):
