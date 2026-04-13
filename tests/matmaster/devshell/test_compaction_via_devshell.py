@@ -7,7 +7,7 @@
 4. 冷却机制: 连续 turn 不触发
 5. 摘要策略: summary provider 正常 → [Compacted Context] 摘要
 6. 滑动窗口回退: summary provider 失败 → sliding_window 截断
-7. 事件发射: event_sink 收到 ContextCompactionEvent
+7. 两阶段结果: plan/apply 返回稳定的 compaction 结果元数据
 8. 多轮压缩: 首次压缩后继续积累，再次触发
 9. retained turns 选择: 3 轮最低保留 + token budget 约束
 10. Kernel 集成: 完整 kernel loop 中压缩触发且结果正确
@@ -22,7 +22,6 @@ from matmaster.core.context_compactor import (
     estimate_tokens,
     parse_turns,
 )
-from matmaster.types.events import ContextCompactionEvent
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -345,47 +344,43 @@ class TestSlidingWindowFallback:
 # ── Test 7: 事件发射 ─────────────────────────────────────
 
 
-class TestEventEmission:
-    """验证 event_sink 收到 ContextCompactionEvent。"""
+class TestCompactionResults:
+    """验证两阶段 compaction 结果的公共元数据。"""
 
-    async def test_emits_compaction_event(self) -> None:
+    async def test_summary_result_metadata(self) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
-        collector = _EventCollector()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(
-            config=config, summary_provider=provider, event_sink=collector.sink
-        )
+        compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=3
+        )
+        result = await compactor.apply_compaction_plan(plan, msgs)
 
-        event = collector.get_nowait()
-        assert isinstance(event, ContextCompactionEvent)
-        assert event.payload["compaction_count"] == 1
-        assert event.payload["strategy"] == "summary"
-        assert event.payload["trigger_tokens"] > 0
-        assert event.payload["retained_turns"] >= 3
+        assert result.compaction_count == 1
+        assert result.strategy == "summary"
+        assert result.trigger_tokens > 0
+        assert result.retained_turns >= 3
 
-    async def test_fallback_event_strategy(self) -> None:
-        """回退策略的事件 strategy 字段为 sliding_window。"""
+    async def test_fallback_result_strategy(self) -> None:
+        """回退策略的 result.strategy 字段为 sliding_window。"""
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
-        collector = _EventCollector()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(
-            config=config, summary_provider=provider, event_sink=collector.sink
-        )
+        compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=3
+        )
+        result = await compactor.apply_compaction_plan(plan, msgs)
 
-        event = collector.get_nowait()
-        assert isinstance(event, ContextCompactionEvent)
-        assert event.payload["strategy"] == "sliding_window"
+        assert result.strategy == "sliding_window"
 
     async def test_no_event_without_bus(self) -> None:
-        """无 bus 时不抛异常。"""
+        """无 event_sink 时仍能完成压缩。"""
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
@@ -394,7 +389,6 @@ class TestEventEmission:
         )
         compactor.update_message_count(len(msgs))
 
-        # 应正常执行不抛异常
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
         assert compactor._compaction_count == 1
 
@@ -407,17 +401,18 @@ class TestMultipleCompactions:
 
     async def test_second_compaction(self) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
-        collector = _EventCollector()
         provider = MockSummaryProvider()
         msgs = _build_conversation(8)
-        compactor = ContextCompactor(
-            config=config, summary_provider=provider, event_sink=collector.sink
-        )
+        compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
         # 第一次压缩 at turn=3
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        first_plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=3
+        )
+        await compactor.apply_compaction_plan(first_plan, msgs)
         assert compactor._compaction_count == 1
+        assert first_plan.compaction_count == 1
         len_after_first = len(msgs)
 
         # 模拟继续积累新 turns
@@ -440,20 +435,13 @@ class TestMultipleCompactions:
         compactor.update_message_count(len(msgs))
 
         # 第二次压缩 at turn=6 (> 3+1)
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=6)
+        second_plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=6
+        )
+        await compactor.apply_compaction_plan(second_plan, msgs)
         assert compactor._compaction_count == 2
         assert len(msgs) < len_after_first + 10  # 再次被压缩
-
-        # bus 应有两个事件
-        events = []
-        while True:
-            try:
-                events.append(collector.get_nowait())
-            except asyncio.QueueEmpty:
-                break
-        assert len(events) == 2
-        assert events[0].payload["compaction_count"] == 1
-        assert events[1].payload["compaction_count"] == 2
+        assert second_plan.compaction_count == 2
 
 
 # ── Test 9: retained turns 选择逻辑 ─────────────────────
@@ -508,11 +496,8 @@ class TestToolTruncationFallback:
 
     async def test_truncation_when_single_turn_exceeds_threshold(self) -> None:
         """1 个 turn 就超限 -> 无可压缩旧 turn -> 截断大 tool result。"""
-        from matmaster.types.events import ContextCompactionEvent
-
         config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
         provider = MockSummaryProvider()
-        collector = _EventCollector()
 
         # 构造：1 turn with 3 大 tool results (每个 2000+ chars)
         msgs = [
@@ -542,12 +527,13 @@ class TestToolTruncationFallback:
             ),
         ]
 
-        compactor = ContextCompactor(
-            config=config, summary_provider=provider, event_sink=collector.sink
-        )
+        compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 600}, turn=3
+        )
+        result = await compactor.apply_compaction_plan(plan, msgs)
 
         # summary 不应被调用（没有旧 turn 可摘要）
         assert provider.call_count == 0
@@ -567,10 +553,7 @@ class TestToolTruncationFallback:
             assert "HEAD_" in m.content
             assert len(m.content) < 2000
 
-        # 事件 strategy=tool_truncation
-        event = collector.get_nowait()
-        assert isinstance(event, ContextCompactionEvent)
-        assert event.payload["strategy"] == "tool_truncation"
+        assert result.strategy == "tool_truncation"
 
     async def test_no_truncation_below_threshold(self) -> None:
         """即使只有 1 turn，未超阈值不截断。"""

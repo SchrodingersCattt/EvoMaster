@@ -499,3 +499,63 @@ async def test_restore_after_midrun_crash_uses_written_checkpoint() -> None:
         "base_messages": checkpoint_base_messages,
         "reason": "summary",
     }
+
+
+@pytest.mark.asyncio
+async def test_compaction_events_replay_but_do_not_enter_restore_tail() -> None:
+    session_id = "sess-compaction"
+    events_table = InMemoryEventsTable()
+    fanout = Mock()
+    fanout.flush_persistence_barrier = AsyncMock()
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        user_content="question before compaction",
+        response_content="answer before compaction",
+    )
+
+    checkpoint_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
+        fanout=fanout,
+        session_id=session_id,
+        task_id="task-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+    )
+
+    covered_until = await checkpoint_sink(
+        payload={"durability": "durable", "strategy": "summary"},
+        base_messages=serialize_base_messages(
+            [
+                SystemMessage(content="[Compacted Context]\nsummary"),
+                UserMessage(content="task"),
+            ]
+        ),
+    )
+
+    events_table.add_event(
+        session_id,
+        "MatMaster",
+        "compaction",
+        {
+            "compaction_id": "task-1:root:1",
+            "status": "complete",
+            "phase": "runtime",
+            "strategy": "summary",
+            "durability": "durable",
+            "checkpoint_written": True,
+            "covered_until_event_id": covered_until,
+        },
+        task_id="task-1",
+    )
+
+    restored = HistoryRestoreService(events_table).restore_history(
+        session_id=session_id,
+        spawn_id=None,
+        task_id="task-2",
+    )
+
+    assert [type(msg).__name__ for msg in restored] == [
+        "SystemMessage",
+        "UserMessage",
+    ]

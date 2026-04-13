@@ -191,7 +191,6 @@ class _DurablePreflightCompactor:
     """Compactor test double that emits one durable preflight event."""
 
     def __init__(self) -> None:
-        self._event_sink = None
         self.preflight_calls = 0
         self.runtime_calls = 0
         self.message_counts: list[int] = []
@@ -199,37 +198,54 @@ class _DurablePreflightCompactor:
     def update_message_count(self, count: int) -> None:
         self.message_counts.append(count)
 
-    async def preflight_if_needed(self, messages: list[Any]) -> None:
-        from matmaster.types.events import ContextCompactionEvent
+    def plan_preflight_compaction(self, messages: list[Any]):
+        from matmaster.core.context_compactor import CompactionPlan
 
         self.preflight_calls += 1
+        return CompactionPlan(
+            compaction_id="task-1:root:1",
+            compaction_count=1,
+            phase="preflight",
+            trigger_tokens=1234,
+            turn=0,
+        )
+
+    async def preflight_if_needed(self, messages: list[Any]) -> None:
+        return None
+
+    async def apply_compaction_plan(self, plan, messages: list[Any]):
+        from matmaster.core.context_compactor import CompactionResult
+
         task_message = messages[-1]
+        base_snapshot = [
+            SystemMessage(content="[Compacted Context]\nsummary").model_dump(
+                mode="json"
+            ),
+            task_message.model_dump(mode="json"),
+        ]
         messages[:] = [
             messages[0],
             SystemMessage(content="[Compacted Context]\nsummary"),
             task_message,
         ]
-        if self._event_sink is not None:
-            await self._event_sink(
-                ContextCompactionEvent(
-                    source="context_compactor",
-                    payload={
-                        "phase": "preflight",
-                        "strategy": "summary",
-                        "durability": "durable",
-                        "trigger_tokens": 1234,
-                        "retained_turns": 1,
-                        "checkpoint_attempted": False,
-                        "checkpoint_written": False,
-                        "failure_reason": None,
-                    },
-                )
-            )
+        return CompactionResult(
+            compaction_id=plan.compaction_id,
+            compaction_count=plan.compaction_count,
+            phase=plan.phase,
+            strategy="summary",
+            durability="durable",
+            trigger_tokens=plan.trigger_tokens,
+            retained_turns=1,
+            failure_reason=None,
+            base_snapshot=base_snapshot,
+        )
 
-    async def compact_if_needed(
-        self, messages: list[Any], last_usage: dict[str, int], turn: int
-    ) -> None:
+    async def plan_runtime_compaction(
+        self, messages: list[Any], turn_usage: dict[str, int], *, turn: int
+    ):
         self.runtime_calls += 1
+        return None
+
 
 
 class _LifecycleCompactor:
@@ -960,16 +976,7 @@ class TestCheckpointAwareCompaction:
         assert compactor.preflight_calls == 1
         assert checkpoint_calls == [
             {
-                "payload": {
-                    "phase": "preflight",
-                    "strategy": "summary",
-                    "durability": "durable",
-                    "trigger_tokens": 1234,
-                    "retained_turns": 1,
-                    "checkpoint_attempted": True,
-                    "checkpoint_written": True,
-                    "failure_reason": None,
-                },
+                "payload": {"durability": "durable", "strategy": "summary"},
                 "base_messages": [
                     SystemMessage(content="[Compacted Context]\nsummary").model_dump(
                         mode="json"
@@ -978,9 +985,7 @@ class TestCheckpointAwareCompaction:
                 ],
             }
         ]
-        assert any(
-            getattr(event, "type", None) == "context_compaction" for event in events
-        )
+        assert any(getattr(event, "type", None) == "compaction" for event in events)
 
     @pytest.mark.asyncio
     async def test_kernel_yields_compaction_event_before_checkpoint_sink(self) -> None:
@@ -1013,10 +1018,10 @@ class TestCheckpointAwareCompaction:
                 AssistantMessage(content="old answer"),
             ],
         ):
-            if getattr(event, "type", None) == "context_compaction":
+            if getattr(event, "type", None) == "compaction":
                 sequence.append("event")
 
-        assert sequence == ["event", "sink"]
+        assert sequence == ["event", "sink", "event"]
 
     @pytest.mark.asyncio
     async def test_kernel_updates_compaction_payload_when_checkpoint_sink_fails(
@@ -1053,15 +1058,15 @@ class TestCheckpointAwareCompaction:
                 AssistantMessage(content="old answer"),
             ],
         ):
-            if getattr(event, "type", None) == "context_compaction":
+            if getattr(event, "type", None) == "compaction":
                 sequence.append("event")
                 compaction_event = event
 
-        assert sequence == ["event", "sink"]
+        assert sequence == ["event", "sink", "event"]
         assert compaction_event is not None
-        assert compaction_event.payload["checkpoint_attempted"] is True
-        assert compaction_event.payload["checkpoint_written"] is False
-        assert compaction_event.payload["failure_reason"] == "checkpoint unavailable"
+        assert compaction_event.status == "complete"
+        assert compaction_event.checkpoint_written is False
+        assert compaction_event.failure_reason == "checkpoint unavailable"
 
 
 class TestExpCheckpointSinkScopeResolution:
