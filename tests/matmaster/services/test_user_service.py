@@ -30,6 +30,12 @@ class _FakeClient:
             raise item
         return item
 
+    def post(self, url, headers, json=None):
+        item = self._scripted.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
 
 def test_fetch_bohrium_access_key_retries_on_timeout_then_succeeds(monkeypatch):
     scripted = [
@@ -49,8 +55,14 @@ def test_fetch_bohrium_access_key_retries_on_timeout_then_succeeds(monkeypatch):
     assert result.retryable is False
 
 
-def test_fetch_bohrium_access_key_does_not_retry_no_items(monkeypatch):
-    scripted = [_FakeResponse(200, {'code': 0, 'data': []})]
+def test_fetch_bohrium_access_key_creates_when_list_empty(monkeypatch):
+    scripted = [
+        _FakeResponse(200, {'code': 0, 'data': []}),
+        _FakeResponse(
+            200,
+            {'code': 0, 'data': {'accessKey': 'ak-created'}},
+        ),
+    ]
     monkeypatch.setattr(
         'src.services.user_service.httpx.Client',
         lambda *args, **kwargs: _FakeClient(scripted),
@@ -58,12 +70,19 @@ def test_fetch_bohrium_access_key_does_not_retry_no_items(monkeypatch):
 
     result = UserService.fetch_bohrium_access_key_result('u1', 'o1')
 
-    assert result.status == 'no_items'
-    assert result.attempts == 1
+    assert result.status == 'success'
+    assert result.access_key == 'ak-created'
+    assert result.attempts == 2
 
 
-def test_fetch_bohrium_access_key_treats_blank_key_as_invalid(monkeypatch):
-    scripted = [_FakeResponse(200, {'code': 0, 'data': [{'access_key': '   '}]})]
+def test_fetch_bohrium_access_key_creates_when_list_has_only_blank_key(monkeypatch):
+    scripted = [
+        _FakeResponse(200, {'code': 0, 'data': [{'access_key': '   '}]}),
+        _FakeResponse(
+            200,
+            {'code': 0, 'data': {'access_key': 'ak-after-blank'}},
+        ),
+    ]
     monkeypatch.setattr(
         'src.services.user_service.httpx.Client',
         lambda *args, **kwargs: _FakeClient(scripted),
@@ -71,8 +90,26 @@ def test_fetch_bohrium_access_key_treats_blank_key_as_invalid(monkeypatch):
 
     result = UserService.fetch_bohrium_access_key_result('u1', 'o1')
 
-    assert result.status == 'no_valid_ak'
-    assert result.access_key is None
+    assert result.status == 'success'
+    assert result.access_key == 'ak-after-blank'
+    assert result.attempts == 2
+
+
+def test_fetch_bohrium_access_key_returns_create_error_when_add_fails(monkeypatch):
+    scripted = [
+        _FakeResponse(200, {'code': 0, 'data': []}),
+        _FakeResponse(400, {'code': 1, 'message': 'denied'}),
+    ]
+    monkeypatch.setattr(
+        'src.services.user_service.httpx.Client',
+        lambda *args, **kwargs: _FakeClient(scripted),
+    )
+
+    result = UserService.fetch_bohrium_access_key_result('u1', 'o1')
+
+    assert result.status == 'ak_create_http_4xx'
+    assert result.http_status == 400
+    assert result.attempts == 2
 
 
 def test_get_bohrium_access_key_keeps_cleanup_single_attempt_semantics(monkeypatch):

@@ -44,7 +44,7 @@ BOHRIUM_OPENAPI_HOST = os.getenv(
     (f'https://openapi{URL_PART}.dp.tech' if URL_PART else 'https://open.bohrium.com'),
 ).rstrip('/')
 
-# Bohrium Core API（如 ak/list 根据 user_id + org_id 获取 access_key）
+# Bohrium Core API（ak/list 列举 AK；ak/add 在无可用 AK 时自动创建，与前端 bohrapi/v1/ak/* 一致）
 BOHRIUM_CORE_BASE_URL = os.getenv(
     'BOHRIUM_CORE_BASE_URL',
     (
