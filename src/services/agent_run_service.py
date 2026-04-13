@@ -46,6 +46,10 @@ from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.history_restore_service import HistoryRestoreService
 from src.services.quota_service import use_quota
 from src.services.sessions_service import get_sessions_service
+from src.services.user_skills_sync import (
+    materialize_user_skills_for_run,
+    merge_user_skill_roots_into_exp_config,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -218,6 +222,20 @@ class AgentRunService:
             from matmaster.config.loader import load_exp_config
 
             exp_config = load_exp_config(exp_name)
+            user_id_for_skills = self._sessions_service.get_session_user_id(session_id)
+            if (
+                exp_config.skills.enabled
+                and user_id_for_skills
+                and user_id_for_skills.strip()
+            ):
+                user_skill_roots = await asyncio.to_thread(
+                    materialize_user_skills_for_run,
+                    user_id_for_skills.strip(),
+                    project_root=_project_root,
+                )
+                exp_config = merge_user_skill_roots_into_exp_config(
+                    exp_config, user_skill_roots
+                )
             skill_sync_spec = derive_skill_sync_spec(
                 exp_config, project_root=_project_root
             )
