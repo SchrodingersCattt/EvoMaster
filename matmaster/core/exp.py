@@ -214,7 +214,13 @@ class Exp:
             planes |= {ToolPlane.SESSION_SHELL, ToolPlane.SESSION_FS}
         if skills_enabled or any(
             name in builtin_cfg or "*" in builtin_cfg
-            for name in ("WebSearch", "WebFetch", "mm_web_search", "web_fetch")
+            for name in (
+                "WebSearch",
+                "WebFetch",
+                "PaperSearch",
+                "mm_web_search",
+                "web_fetch",
+            )
         ):
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
@@ -673,6 +679,24 @@ class Exp:
             if isinstance(cfg, dict) and cfg.get("sync_tools")
         }
 
+        builtin_cfg = self._config.tools.builtin or []
+        allow_builtin_all = "*" in builtin_cfg
+        allowed_builtin = set(builtin_cfg) if not allow_builtin_all else None
+        if (
+            allow_builtin_all
+            or (allowed_builtin is not None and "PaperSearch" in allowed_builtin)
+        ) and "PaperSearch" not in registry:
+            from matmaster.tools.builtin.paper_search_tool import PaperSearchTool
+
+            paper_tool = PaperSearchTool(
+                connector=connector,
+                mcp_config=mcp_config,
+            )
+            if catalog is not None:
+                catalog.register_overlay(paper_tool, source="builtin")
+            else:
+                registry.register(paper_tool, source="builtin")
+
         def on_skill_hit(mcp_server: str) -> None:
             schemas = schema_cache.load(mcp_server)
             if not schemas:
@@ -683,7 +707,13 @@ class Exp:
                 return
             include_only = mcp_config.get("tool_include_only") or {}
             allowed = include_only.get(mcp_server)
-            if isinstance(allowed, (list, tuple)) and allowed:
+            if (
+                allowed is not None
+                and isinstance(allowed, (list, tuple))
+                and len(allowed) == 0
+            ):
+                schemas = []
+            elif isinstance(allowed, (list, tuple)) and allowed:
                 allow_set = set(allowed)
                 schemas = [tool for tool in schemas if tool.get("name") in allow_set]
             tool_timeouts = mcp_config.get("tool_timeouts", {})

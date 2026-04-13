@@ -12,7 +12,8 @@ calculation_servers:
   - "mat_electron_microscope"
 # Per-server tool filter: only register these tools (original names). Omitted servers register all tools.
 tool_include_only:
-  mat_sn: ["search-papers-enhanced"]
+  # mat_sn: use builtin PaperSearch (search-papers-enhanced) instead of lazy MCP tools
+  mat_sn: []
   mat_doc:
     - extract_material_data_from_pdf
   mat_nmr:

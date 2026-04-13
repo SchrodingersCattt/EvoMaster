@@ -2,7 +2,7 @@
 name: structure-manager
 description: "Search, download, validate (assess_structure.py), and convert (convert_format.py) crystal structure files. Supports literature-based retrieval, database lookup, and direct URL download. Load this skill for any structure task beyond a simple DB formula query."
 skill_type: operator
-depends_on: mcp-mat-struct-db, mcp-mat-sg, mcp-mat-sn, mcp-mat-doc
+depends_on: mcp-mat-struct-db, mcp-mat-sg, mcp-mat-doc
 ---
 
 <!-- multi-server: mat_struct_db, mat_sg, mat_sn, mat_doc -->
