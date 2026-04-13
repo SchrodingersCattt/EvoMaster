@@ -205,7 +205,7 @@ questions:
   capability: structure_retrieval
   domain: agnostic
   intent: Retrieve and rank candidate crystal structures under explicit screening constraints.
-  human_prompt_seed: '以“超导临界温度大于 40 K、空间群编号为 225”为条件，生成 10 个候选晶体结构。
+  human_prompt_seed: '按“超导临界温度大于 40 K、空间群编号为 225”使用工具生成 10 个候选晶体结构。
 
 
     请完成以下交付：
@@ -218,7 +218,9 @@ questions:
     3) 在最终回答中总结：候选数是否满足要求，筛选中最可能出现的不确定性是什么。
 
 
-    注意：不要把重点放在后续计算，重点是数据库筛选与候选汇总。
+    注意：
+    - 本题是结构生成题，不是数据库检索题；
+    - 不要把重点放在后续计算，重点是候选生成结果与汇总。
 
     '
   tags:
@@ -278,8 +280,7 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: grounding_source
-    criterion: The answer honestly reflects whether the database query yields enough candidates
-      and does not fabricate missing entries.
+    criterion: The answer honestly reflects whether the generation step yields enough candidates and does not fabricate missing entries.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
