@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import MagicMock
 
+from matmaster.tools.builtin.skill_tool import SkillTool
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
@@ -117,17 +119,18 @@ class TestCatalogGetTool:
 
 
 class TestCatalogBuildDefinitions:
-    def test_build_definitions_without_ctx_uses_compiled_static_description(
-        self,
-    ) -> None:
+    def test_build_definitions_without_ctx_uses_builtin_prompt(self) -> None:
         catalog = _make_catalog(_DynamicTool("alpha"))
 
         defs = catalog.build_definitions()
 
-        assert defs[0]["function"]["description"] == "minimal alpha"
+        assert defs[0]["function"]["description"] == "dynamic prompt"
 
-    def test_build_definitions_with_ctx_uses_describe_when_available(self) -> None:
-        catalog = _make_catalog(_DynamicTool("alpha"))
+    def test_build_definitions_with_ctx_uses_describe_only_for_mcp(self) -> None:
+        """When ctx is provided, describe(ctx) is only consulted for mcp-sourced tools."""
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="mcp")
+        catalog = ToolCatalog(registry, topology=_make_topology())
 
         defs = catalog.build_definitions(_make_ctx())
 
@@ -148,25 +151,62 @@ class TestCatalogBuildDefinitions:
 
         assert names == {"visible"}
 
+    def test_build_definitions_mcp_source_uses_dynamic_describe(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="mcp")
+        catalog = ToolCatalog(registry, topology=_make_topology())
 
-class TestCatalogPrompts:
-    def test_collect_prompts_gathers_non_none_and_skips_missing_prompt(self) -> None:
-        catalog = _make_catalog(
-            _DynamicTool("alpha"),
-            _PromptlessTool("beta"),
-            _MinimalTool("gamma"),
+        defs = catalog.build_definitions(_make_ctx())
+
+        assert defs[0]["function"]["description"] == "alpha on local"
+
+    def test_build_definitions_builtin_source_uses_prompt(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="builtin")
+        catalog = ToolCatalog(registry, topology=_make_topology())
+
+        defs = catalog.build_definitions(_make_ctx())
+
+        assert defs[0]["function"]["description"] == "prompt:alpha:/tmp/workspace"
+
+    def test_build_definitions_builtin_promptless_falls_back_to_static(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_PromptlessTool("alpha"), source="builtin")
+        catalog = ToolCatalog(registry, topology=_make_topology())
+
+        defs = catalog.build_definitions(_make_ctx())
+
+        assert defs[0]["function"]["description"] == "minimal alpha"
+
+    def test_build_definitions_skill_source_uses_prompt(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="skill")
+        catalog = ToolCatalog(registry, topology=_make_topology())
+
+        defs = catalog.build_definitions(_make_ctx())
+
+        assert defs[0]["function"]["description"] == "prompt:alpha:/tmp/workspace"
+
+    def test_build_definitions_skill_tool_preserves_prompt_guidance(self) -> None:
+        registry = ToolRegistry()
+        registry.register(SkillTool(skill_registry=MagicMock()), source="skill")
+        catalog = ToolCatalog(registry, topology=_make_topology())
+
+        defs = catalog.build_definitions(_make_ctx())
+
+        assert (
+            "Execute a skill within the main conversation"
+            in defs[0]["function"]["description"]
         )
 
-        prompts = catalog.collect_prompts(_make_ctx())
+    def test_build_definitions_unknown_source_falls_back_to_static(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_DynamicTool("alpha"), source="test")
+        catalog = ToolCatalog(registry, topology=_make_topology())
 
-        assert prompts == "prompt:alpha:/tmp/workspace"
+        defs = catalog.build_definitions(_make_ctx())
 
-    def test_collect_prompts_defaults_to_legacy_behavior_without_metadata(self) -> None:
-        catalog = _make_catalog(_DynamicTool("alpha"))
-
-        prompts = catalog.collect_prompts(_make_ctx())
-
-        assert prompts == "prompt:alpha:/tmp/workspace"
+        assert defs[0]["function"]["description"] == "minimal alpha"
 
 
 class TestCatalogCancelInjection:

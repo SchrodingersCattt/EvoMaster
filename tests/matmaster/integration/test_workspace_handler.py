@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.events import (
-    FinishEvent,
+    RunResultEvent,
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
@@ -38,7 +38,6 @@ class TestWorkspaceHandler:
             session_id="sess1",
             task_id="task1",
             ssh_attached=ssh_attached,
-            archival_config=None,
             workspace_path=Path("/tmp/workspace"),
             upload_fn=upload_fn or MagicMock(),
             snapshot_fn=snapshot_fn,
@@ -51,7 +50,7 @@ class TestWorkspaceHandler:
         handler = self._make_handler(upload_fn=upload_fn)
 
         # These should all be ignored
-        await handler.handle(FinishEvent(source="Agent", reason="done"))
+        await handler.handle(RunResultEvent(source="Agent", reason="done"))
         await handler.handle(ThoughtEvent(source="Agent", content="thinking"))
         await handler.handle(
             ToolCallEvent(source="Agent", call_id="c1", tool_name="bash", arguments={})
@@ -166,7 +165,6 @@ class TestWorkspaceHandler:
             session_id="sess-1",
             task_id="task-1",
             ssh_attached=False,
-            archival_config=None,
             workspace_path=workspace_path,
             upload_fn=slow_upload,
             snapshot_fn=MagicMock(return_value=frozenset({("a.txt", 1.0, 100)})),
@@ -205,7 +203,6 @@ class TestWorkspaceHandler:
             session_id="sess-1",
             task_id="task-1",
             ssh_attached=False,
-            archival_config=None,
             workspace_path=workspace_path,
             upload_fn=slow_upload,
             snapshot_fn=MagicMock(return_value=frozenset({("a.txt", 1.0, 100)})),

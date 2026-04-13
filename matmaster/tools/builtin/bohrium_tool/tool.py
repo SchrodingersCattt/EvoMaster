@@ -120,13 +120,8 @@ class BohriumTool(BuiltinTool):
 
     name: ClassVar[str] = 'Bohrium'
     description: ClassVar[str] = (
-        'Bohrium HPC platform operations. '
-        'action="submit": package input directory and submit a job, returns job_id. '
-        'action="poll": single-shot job status check, returns current status immediately. '
-        'action="download": download artifacts for a finished or failed job into result_dir. '
-        'action="kill": request termination of a previously submitted job (sandbox only). '
-        'action="list_images": query available Docker images by keyword. '
-        'action="list_machines": query available machine types (cpu/gpu).'
+        'Bohrium HPC platform operations: submit / poll / download / kill '
+        'jobs, list available images / machines.'
     )
 
     json_schema: ClassVar[dict[str, Any]] = {
@@ -220,15 +215,21 @@ class BohriumTool(BuiltinTool):
             '## Bohrium tool usage\n'
             '- Load the corresponding software skill first (cp2k, qe, abacus, orca, '
             'lammps, gromacs, pyscf, abinit, pyatb) to obtain image, machine, and cmd.\n'
-            '- submit: cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
-            '- poll: single-shot status query only. It returns immediately and does '
-            'not download artifacts.\n'
-            '- download: use action="download" only after poll reports Finished or '
-            'Failed. Requires result_dir; retrieves logs and artifacts for analysis.\n'
-            '- kill: cancel a Bohrium job previously submitted via this tool. Use only when '
-            'the user explicitly wants to stop a running job. The call is '
-            'asynchronous; follow up with poll to confirm terminal state. \n'
             '- When image or machine is unknown, call list_images / list_machines first.\n'
+            '\n'
+            '### Actions\n'
+            '- **submit**: package input directory and submit a job, returns job_id. '
+            'cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
+            '- **poll**: single-shot job status check, returns current status immediately. '
+            'It does not download artifacts.\n'
+            '- **download**: download artifacts for a finished or failed job into result_dir. '
+            'Use only after poll reports Finished or Failed. Requires result_dir; '
+            'retrieves logs and artifacts for analysis.\n'
+            '- **kill**: request termination of a previously submitted job (sandbox only). '
+            'Use only when the user explicitly wants to stop a running job. The call is '
+            'asynchronous; follow up with poll to confirm terminal state.\n'
+            '- **list_images**: query available Docker images by keyword.\n'
+            '- **list_machines**: query available machine types (cpu / gpu).\n'
         )
 
     def _build_context(self, *, require_project: bool = False) -> BohriumContext:

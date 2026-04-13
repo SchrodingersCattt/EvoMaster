@@ -764,9 +764,6 @@ async def test_ask_question_bridge_send_cb_receives_public_sse_payload():
 
     async def ask_then_finish(ctx):
         await ctx.interaction_bridge.ask(
-            session_id='s1',
-            task_id='t1',
-            invocation_id='inv-1',
             request_id='aq_1',
             questions=[
                 {
@@ -781,7 +778,6 @@ async def test_ask_question_bridge_send_cb_receives_public_sse_payload():
                 }
             ],
             metadata={'scene': 'test'},
-            cancel_token=None,
         )
         yield RunResultEvent(source='agent', status='completed', reason='natural')
 

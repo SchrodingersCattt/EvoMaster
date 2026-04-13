@@ -333,7 +333,7 @@ class TestMatMasterRunAgentE2E:
 
             # Verify: pipeline completed successfully -- use_quota called (success path)
             # use_quota is the strongest signal that kernel.run() returned a
-            # non-cancelled FinishEvent and post-processing ran.
+            # non-cancelled RunResultEvent and post-processing ran.
             assert mock_use_quota.called, 'use_quota should be called on success'
 
             # Verify: SSE events were sent (send_cb was called).
@@ -731,6 +731,111 @@ class TestMatMasterRunAgentE2E:
 
         # abort_result is returned directly -- pipeline terminates before SSE dispatch
         assert result == ((False, reason), 10)
+
+    @patch('matmaster.config.loader.load_llm_config')
+    @patch('matmaster.providers.llm_factory.build_provider')
+    def test_bohrium_access_key_abort_emits_top_level_error_and_stream_closed(
+        self, mock_build_provider, mock_load_config, tmp_path: Path
+    ) -> None:
+        AgentRunService = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        ).AgentRunService
+        BohriumAccessKeyFetchResult = pytest.importorskip(
+            "src.services.user_service",
+            reason="src not available (isolation test)",
+        ).BohriumAccessKeyFetchResult
+
+        mock_sessions_svc = MagicMock()
+        mock_sessions_svc.get_session_user_id.return_value = 'u1'
+        mock_sessions_svc.get_session.return_value = {
+            'user_id': 'u1',
+            'org_id': 'o1',
+            'project_id': 9,
+        }
+
+        svc = AgentRunService(sessions_service=mock_sessions_svc)
+        mock_build_provider.return_value = MockLLMProvider('unused')
+        mock_load_config.return_value = MagicMock()
+
+        mock_pg = MagicMock()
+        mock_pg_ctx = _make_pg_ctx(tmp_path)
+        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_pg.config_path = Path('config/config.yaml')
+        mock_pg.session = None
+
+        reason = 'Bohrium access_key 获取失败：请求 Bohrium Core 超时'
+        failed_result = BohriumAccessKeyFetchResult(
+            status='timeout',
+            retryable=False,
+            attempts=3,
+            access_key=None,
+        )
+
+        with (
+            patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
+            patch(
+                'src.services.agent_run_service.get_chat_events_table'
+            ) as mock_events_table_fn,
+            patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
+            patch('src.services.agent_run_service.use_quota') as mock_use_quota,
+            patch(
+                'src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result',
+                return_value=failed_result,
+            ),
+            patch(
+                'src.services.agent_run_bohrium.UserService.get_user_no_by_user_id',
+                return_value=None,
+            ),
+        ):
+            mock_events_table = MagicMock()
+            mock_events_table.get_session_events.return_value = []
+            mock_events_table_fn.return_value = mock_events_table
+
+            mock_redis = MagicMock()
+            mock_redis_fn.return_value = mock_redis
+
+            async def _mock_use_quota(uid):
+                pass
+
+            mock_use_quota.side_effect = _mock_use_quota
+
+            sse_payloads: list[dict[str, Any]] = []
+
+            async def mock_send_cb(payload: dict[str, Any]) -> None:
+                sse_payloads.append(payload)
+
+            result = asyncio.run(
+                svc.run_agent(
+                    session_id='sess-bohrium-access-key-abort',
+                    user_prompt='test prompt',
+                    send_cb=mock_send_cb,
+                    cancel_token=CancellationController().token,
+                    mode='direct',
+                    task_id='task-bohrium-access-key-abort',
+                    bohrium_required=True,
+                )
+            )
+
+        assert result[0] == (False, reason)
+        assert isinstance(result[1], int)
+        assert result[1] >= 0
+        error_payload = next(
+            (payload for payload in sse_payloads if payload.get('type') == 'error'),
+            None,
+        )
+        assert error_payload is not None
+        assert error_payload['message'] == reason
+        stream_closed_payload = next(
+            (
+                payload
+                for payload in sse_payloads
+                if payload.get('type') == 'stream_closed'
+            ),
+            None,
+        )
+        assert stream_closed_payload is not None
+        assert stream_closed_payload['treat_as_failure'] is True
 
     @patch('matmaster.config.loader.load_llm_config')
     @patch('matmaster.providers.llm_factory.build_provider')

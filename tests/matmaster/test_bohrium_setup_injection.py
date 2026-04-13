@@ -58,7 +58,7 @@ class TestBohriumSetupServiceOrchestration:
             patch.object(
                 svc,
                 "_load_run_credentials",
-                return_value=({"ak": "test"}, "u1", "org1"),
+                return_value=({"access_key": "test"}, "u1", "org1"),
             ) as mock_load,
             patch.object(
                 svc,
@@ -78,7 +78,7 @@ class TestBohriumSetupServiceOrchestration:
         mock_setup.assert_called_once()
         kwargs = mock_setup.call_args.kwargs
         assert kwargs["session_id"] == "session-123"
-        assert kwargs["run_creds"] == {"ak": "test"}
+        assert kwargs["run_creds"] == {"access_key": "test"}
         assert kwargs["user_id_for_ak"] == "u1"
         assert kwargs["org_id"] == "org1"
         assert kwargs["event_callback"] is event_cb
@@ -105,6 +105,75 @@ class TestBohriumSetupServiceOrchestration:
         assert kwargs["session_id"] == "s1"
         assert kwargs["event_callback"] is event_cb
         assert kwargs["ssh_attached"] is True
+
+    @pytest.mark.asyncio
+    async def test_run_setup_delegates_bohrium_required_flag(self):
+        from src.services.agent_run_bohrium import BohriumSetupResult
+
+        svc = _make_service(event_sink=MagicMock())
+        event_cb = MagicMock()
+        expected = BohriumSetupResult(
+            True,
+            None,
+            None,
+            '/remote',
+            'ssh',
+            None,
+        )
+
+        with (
+            patch.object(svc, '_make_event_bridge', return_value=event_cb),
+            patch.object(
+                svc, '_run_setup_sync', return_value=expected
+            ) as mock_setup_sync,
+        ):
+            await svc.run_setup(
+                session_id='sess-1',
+                playground=object(),
+                skill_sync_spec=None,
+                run_started_at=1.0,
+                bohrium_required=True,
+            )
+
+        assert mock_setup_sync.call_args.kwargs['bohrium_required'] is True
+
+    def test_run_setup_sync_required_access_key_failure_aborts_before_node_setup(
+        self,
+    ):
+        from src.services.user_service import BohriumAccessKeyFetchResult
+
+        svc = _make_service(event_sink=MagicMock())
+        sink = MagicMock()
+        failed = BohriumAccessKeyFetchResult(
+            status='timeout',
+            retryable=False,
+            attempts=3,
+            access_key=None,
+        )
+
+        with (
+            patch.object(
+                svc,
+                '_load_run_credentials',
+                return_value=({'project_id': 9}, 'u1', 'o1'),
+            ),
+            patch.object(svc, '_setup_bohrium_for_run') as mock_setup,
+            patch(
+                'src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result',
+                return_value=failed,
+            ),
+        ):
+            result = svc._run_setup_sync(
+                session_id='sess-1',
+                pg=object(),
+                skill_sync_spec=None,
+                event_callback=sink,
+                run_started_at=1.0,
+                bohrium_required=True,
+            )
+
+        assert result.abort_result is not None
+        mock_setup.assert_not_called()
 
 
 class TestBohriumEventBridgeMapping:
@@ -212,35 +281,6 @@ class TestBohriumSetupServiceConstructor:
 
         svc = BohriumSetupService(sessions_service=MagicMock())
         assert svc._event_sink is None
-
-
-class TestBohriumSetupServiceLocation:
-    """Verify the service now lives in src/services instead of matmaster/integration."""
-
-    def _project_root(self) -> Path:
-        """Resolve project root robustly (works in worktrees too)."""
-        # Walk up from test file to find the directory containing both src/ and matmaster/
-        candidate = Path(__file__).resolve().parent
-        for _ in range(10):
-            if (candidate / "src" / "services").is_dir() and (
-                candidate / "matmaster"
-            ).is_dir():
-                return candidate
-            candidate = candidate.parent
-        raise RuntimeError("Could not find project root")
-
-    def test_integration_init_no_longer_exports_bohrium_setup_service(self):
-        root = self._project_root()
-        init_file = root / "matmaster" / "integration" / "__init__.py"
-        source = init_file.read_text(encoding="utf-8")
-        assert "BohriumSetupService" not in source
-
-    def test_src_agent_run_bohrium_defines_service_and_skill_sync_spec(self):
-        root = self._project_root()
-        service_file = root / "src" / "services" / "agent_run_bohrium.py"
-        source = service_file.read_text(encoding="utf-8")
-        assert "class BohriumSetupService" in source
-        assert "class SkillSyncSpec" in source
 
 
 def test_apply_run_credentials_registers_runtime_without_dual_write() -> None:

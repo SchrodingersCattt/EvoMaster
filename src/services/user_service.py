@@ -1,6 +1,8 @@
 """用户/组织上下文与关联查询：Request Header、BI 用户信息、Bohrium access_key。"""
 
 import logging
+import time
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Annotated, Any
 
@@ -11,6 +13,17 @@ from src.utils.constant import ACCOUNT_API_BASE_URL, BOHRIUM_CORE_BASE_URL
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+@dataclass(frozen=True)
+class BohriumAccessKeyFetchResult:
+    status: str
+    access_key: str | None = None
+    retryable: bool = False
+    attempts: int = 1
+    http_status: int | None = None
+    api_code: int | None = None
+    error_message: str | None = None
 
 
 class UserService:
@@ -256,16 +269,47 @@ class UserService:
         Returns:
             access_key 字符串，无可用时返回 None。
         """
+        result = UserService.fetch_bohrium_access_key_result(
+            user_id,
+            org_id,
+            timeout=15.0,
+            retry_delays=(),
+        )
+        return result.access_key
+
+    @staticmethod
+    def _fetch_bohrium_access_key_once(
+        user_id: str,
+        org_id: str,
+        *,
+        timeout: float,
+    ) -> BohriumAccessKeyFetchResult:
         url = f"{BOHRIUM_CORE_BASE_URL.rstrip('/')}/api/v1/ak/list"
+        if not (user_id or '').strip() or not (org_id or '').strip():
+            return BohriumAccessKeyFetchResult(
+                status='missing_user_or_org',
+                retryable=False,
+            )
         headers = {
             'X-User-Id': str(user_id),
             'X-Org-Id': str(org_id),
         }
         try:
-            with httpx.Client(timeout=15.0) as client:
+            with httpx.Client(timeout=timeout) as client:
                 r = client.get(url, headers=headers)
-                r.raise_for_status()
                 data = r.json()
+        except httpx.ReadTimeout as e:
+            logger.warning(
+                'get_bohrium_access_key: request timeout user_id=%s org_id=%s err=%s',
+                user_id,
+                org_id,
+                e,
+            )
+            return BohriumAccessKeyFetchResult(
+                status='timeout',
+                retryable=True,
+                error_message=str(e),
+            )
         except Exception as e:
             logger.warning(
                 'get_bohrium_access_key: request failed user_id=%s org_id=%s err=%s',
@@ -273,7 +317,36 @@ class UserService:
                 org_id,
                 e,
             )
-            return None
+            return BohriumAccessKeyFetchResult(
+                status='request_error',
+                retryable=True,
+                error_message=str(e),
+            )
+
+        if 500 <= r.status_code:
+            logger.warning(
+                'get_bohrium_access_key: http_5xx=%s user_id=%s org_id=%s',
+                r.status_code,
+                user_id,
+                org_id,
+            )
+            return BohriumAccessKeyFetchResult(
+                status='http_5xx',
+                retryable=True,
+                http_status=r.status_code,
+            )
+        if 400 <= r.status_code:
+            logger.warning(
+                'get_bohrium_access_key: http_4xx=%s user_id=%s org_id=%s',
+                r.status_code,
+                user_id,
+                org_id,
+            )
+            return BohriumAccessKeyFetchResult(
+                status='http_4xx',
+                retryable=False,
+                http_status=r.status_code,
+            )
 
         code = data.get('code', 0)
         if code != 0:
@@ -283,7 +356,11 @@ class UserService:
                 user_id,
                 org_id,
             )
-            return None
+            return BohriumAccessKeyFetchResult(
+                status='api_code_error',
+                retryable=True,
+                api_code=code,
+            )
 
         raw = data.get('data')
         items = (
@@ -297,7 +374,10 @@ class UserService:
                 user_id,
                 org_id,
             )
-            return None
+            return BohriumAccessKeyFetchResult(
+                status='no_items',
+                retryable=False,
+            )
 
         for item in items:
             if not isinstance(item, dict):
@@ -309,13 +389,46 @@ class UserService:
                     user_id,
                     org_id,
                 )
-                return ak.strip()
+                return BohriumAccessKeyFetchResult(
+                    status='success',
+                    access_key=ak.strip(),
+                    retryable=False,
+                )
         logger.debug(
             'get_bohrium_access_key: no valid ak in items user_id=%s org_id=%s',
             user_id,
             org_id,
         )
-        return None
+        return BohriumAccessKeyFetchResult(
+            status='no_valid_ak',
+            retryable=False,
+        )
+
+    @staticmethod
+    def fetch_bohrium_access_key_result(
+        user_id: str | None,
+        org_id: str | None,
+        *,
+        timeout: float = 2.0,
+        retry_delays: tuple[float, ...] = (0.5, 1.0),
+    ) -> BohriumAccessKeyFetchResult:
+        attempts = 0
+        result = BohriumAccessKeyFetchResult(status='missing_user_or_org')
+
+        for attempt_index in range(len(retry_delays) + 1):
+            attempts += 1
+            result = UserService._fetch_bohrium_access_key_once(
+                str(user_id or ''),
+                str(org_id or ''),
+                timeout=timeout,
+            )
+            result = replace(result, attempts=attempts)
+            if not result.retryable or result.status == 'success':
+                return result
+            if attempt_index < len(retry_delays):
+                time.sleep(retry_delays[attempt_index])
+
+        return result
 
 
 @lru_cache

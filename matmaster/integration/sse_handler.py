@@ -1,9 +1,11 @@
 """SSEHandler -- pushes events to SSE send_cb for frontend consumption.
 
-Filter rules migrated from _should_skip_push in agent_run_service.py:
+Filter rules:
 - Skip: assistant_state (internal-only)
+- Skip: skill_hit (persist-only)
 - Skip: Planner source streaming thought (ephemeral JSON)
 - Skip: direct mode non-streaming complete thought (persist-only)
+- Skip: ThoughtEvent/ResponseEvent with stream_state='complete' (aggregated)
 - Push: everything else
 
 Pure async handler -- send_cb is always awaited.
@@ -25,12 +27,6 @@ logger = logging.getLogger(__name__)
 
 class SSEHandler:
     """Pushes events to SSE send_cb for frontend consumption.
-
-    Filter rules migrated from _should_skip_push in agent_run_service.py:
-    - Skip: assistant_state (internal-only)
-    - Skip: Planner source streaming thought (ephemeral JSON)
-    - Skip: direct mode non-streaming complete thought (persist-only)
-    - Push: everything else
 
     Pure async handler -- send_cb is always awaited.
     """
@@ -116,10 +112,7 @@ class SSEHandler:
             await result
 
     def _should_skip(self, event: BusEvent) -> bool:
-        """Check if event should be skipped for SSE push.
-
-        Migrated from _should_skip_push in agent_run_service.py.
-        """
+        """Check if event should be skipped for SSE push."""
         event_type = getattr(event, 'type', '')
 
         if (

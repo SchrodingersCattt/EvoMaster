@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -20,44 +20,36 @@ from matmaster.core.hooks import HookExecutor
 
 from .llm_provider import LLMProvider
 
-if TYPE_CHECKING:
-    pass
-
 
 class CompactionConfig(BaseModel):
-    """Context compaction 配置。"""
+    """Context compaction configuration."""
 
     model_config = ConfigDict(frozen=True)
 
-    enabled: bool = False
-    context_window_tokens: int = 128_000
+    context_limit: int = 200_000
     trigger_ratio: float = 0.9
     strategy: str = "summary"  # 'sliding_window' | 'summary' | 'latest_half'
     compaction_llm: str | None = None  # key in config.llm
 
 
 class AgentRuntimeSpec(BaseModel):
-    """Exp 层输出的 agent 运行时规格契约。
+    """Agent runtime spec contract emitted by the Exp layer.
 
-    由 Exp.assemble(ctx: PlaygroundContext) 构建，
-    传递给 AgentKernel.run_stream(spec, task)。
-    frozen=True 保证 kernel 运行期间规格不变。
+    Built by Exp.assemble(ctx: PlaygroundContext) and passed to
+    AgentKernel.run_stream(spec, task). frozen=True ensures the spec
+    is immutable during kernel execution.
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    # LLM (Phase 2: typed as LLMProvider Protocol)
     # None is allowed during the assemble phase (ctx.llm_provider may be None);
     # build_runtime guarantees a real provider before kernel execution.
     llm_provider: LLMProvider | None = None
 
-    # Termination (CONT-05: simplified to max_turns field)
     max_turns: int = 100
 
-    # Hook executor
     hook_executor: HookExecutor | None = None
 
-    # Context
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     system_prompt: str = ""
     compactor: Any | None = None
@@ -65,22 +57,13 @@ class AgentRuntimeSpec(BaseModel):
     # Extensible metadata bag (prompt templates, MCP/skill config, etc.)
     meta: dict[str, Any] = Field(default_factory=dict)
 
-    # ── Tool Runtime v2 fields (Phase 32, all optional for backward compat) ──
     # Annotations are Any to avoid circular imports across the runtime stack.
-    # TYPE_CHECKING block provides static typing; model_validator below
-    # enforces runtime contracts.
+    # The model_validator below enforces runtime type contracts.
     tool_runner: Any | None = None
     tool_catalog: Any | None = None
     runtime_topology: Any | None = None
     capability_policy: Any | None = None  # Phase 33 defines CapabilityPolicy Protocol
     structural_validation: Any | None = None  # Phase 33 defines StructuralValidation
-
-    @property
-    def tool_registry(self) -> Any | None:
-        """Backward-compatible alias for tests and callers still expecting v1 specs."""
-        if self.tool_catalog is None:
-            return None
-        return getattr(self.tool_catalog, "registry", None)
 
     @model_validator(mode="after")
     def _check_v2_field_types(self) -> AgentRuntimeSpec:
@@ -103,17 +86,21 @@ class AgentRuntimeSpec(BaseModel):
 
 @dataclass(frozen=True)
 class KernelResult:
-    """AgentKernel 的终止结果摘要，由 run_stream 内部产生。
+    """Terminal result summary produced internally by AgentKernel.run_stream.
 
-    内核层专属，不参与总线传输。总线事件 RunResultEvent
-    在 run_stream() 中从 _TerminalItem 直接构造。
+    Kernel-layer only; not transported over the event bus. The bus event
+    ``RunResultEvent`` is constructed directly from ``_TerminalItem`` inside
+    ``run_stream()``.
 
-    num_turns 语义：已完成 LLM 调用的轮数。cancelled 路径在 turn 递增前退出，
-    所以 num_turns 反映的是已完成的轮数，不含被中断的当前轮。
+    ``num_turns`` counts completed LLM calls. The cancelled path exits before
+    incrementing the turn counter, so it reflects completed turns only and
+    does not include the interrupted current turn.
 
-    usage：各轮 LLM 调用的标量用量累加（prompt / completion / total / cache_read 等）。
-    usage_vendor_by_turn：按 LLM 调用顺序，每轮一条供应商原生 usage（无则为 ``{}``），
-    与 ``num_turns`` 已完成的轮次一一对应。
+    ``usage`` accumulates scalar usage fields across LLM calls
+    (prompt / completion / total / cache_read, etc.).
+    ``usage_vendor_by_turn`` holds vendor-native usage snapshots in LLM-call
+    order, one entry per turn (``{}`` when missing), aligned with
+    ``num_turns`` completed turns.
     """
 
     status: str

@@ -24,15 +24,18 @@ from matmaster.bohrium.types import (
     BohriumRuntimeSnapshot,
 )
 from matmaster.config.exp import ExpConfig
-from matmaster.integration.workspace_resolver import (
-    get_remote_session_workspace_root,
-    load_workspace_config_dict,
-)
 from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.services.bohrium_node_service import get_bohrium_node_service
+from src.services.bohrium_run_support import (
+    _build_access_key_failure_reason,
+    _creator_id_from_user,
+    _emit_node_status,
+    _load_run_credentials,
+    _remote_session_workspace_root,
+)
 from src.services.sessions_service import SESSIONS
-from src.services.user_service import UserService
+from src.services.user_service import BohriumAccessKeyFetchResult, UserService
 from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 
 logger = logging.getLogger(__name__)
@@ -414,24 +417,108 @@ class BohriumSetupService:
         playground: Any,
         skill_sync_spec: SkillSyncSpec | None,
         run_started_at: float,
+        bohrium_required: bool = False,
     ) -> BohriumSetupResult:
         """Load credentials, bridge events, and run setup in the executor."""
-        run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
         loop = asyncio.get_running_loop()
         event_cb = self._make_event_bridge(loop)
 
         return await loop.run_in_executor(
             None,
-            lambda: self._setup_bohrium_for_run(
+            lambda: self._run_setup_sync(
                 session_id=session_id,
                 pg=playground,
                 skill_sync_spec=skill_sync_spec,
-                run_creds=run_creds,
-                user_id_for_ak=user_id_for_ak,
-                org_id=org_id,
                 event_callback=event_cb,
                 run_started_at=run_started_at,
+                bohrium_required=bohrium_required,
             ),
+        )
+
+    def _run_setup_sync(
+        self,
+        *,
+        session_id: str,
+        pg: Any,
+        skill_sync_spec: SkillSyncSpec | None,
+        event_callback: Callable[..., None],
+        run_started_at: float,
+        bohrium_required: bool = False,
+    ) -> BohriumSetupResult:
+        run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
+        access_key = str(run_creds.get('access_key') or '').strip()
+        if access_key:
+            ak_result = BohriumAccessKeyFetchResult(
+                status='success',
+                access_key=access_key,
+                retryable=False,
+            )
+        else:
+            ak_result = UserService.fetch_bohrium_access_key_result(
+                user_id_for_ak,
+                org_id,
+            )
+            if ak_result.access_key:
+                run_creds['access_key'] = ak_result.access_key
+
+        project_id = run_creds.get('project_id')
+        if bohrium_required and project_id is None:
+            reason = 'Bohrium project_id 缺失，无法建立 Bohrium 运行环境'
+            logger.warning(
+                'run_setup: required Bohrium project_id missing '
+                'session_id=%s user_id=%s org_id=%s status=%s attempts=%s',
+                session_id,
+                user_id_for_ak,
+                org_id,
+                ak_result.status,
+                ak_result.attempts,
+            )
+            event_callback('System', 'error', reason)
+            elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
+            return BohriumSetupResult(
+                False,
+                ((False, reason), elapsed_ms),
+                None,
+                None,
+                None,
+                None,
+            )
+
+        if bohrium_required and not ak_result.access_key:
+            reason = _build_access_key_failure_reason(ak_result)
+            logger.warning(
+                'run_setup: required Bohrium access_key lookup failed '
+                'session_id=%s user_id=%s org_id=%s project_id=%s status=%s '
+                'attempts=%s http_status=%s api_code=%s',
+                session_id,
+                user_id_for_ak,
+                org_id,
+                project_id,
+                ak_result.status,
+                ak_result.attempts,
+                ak_result.http_status,
+                ak_result.api_code,
+            )
+            event_callback('System', 'error', reason)
+            elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
+            return BohriumSetupResult(
+                False,
+                ((False, reason), elapsed_ms),
+                None,
+                None,
+                None,
+                None,
+            )
+
+        return self._setup_bohrium_for_run(
+            session_id=session_id,
+            pg=pg,
+            skill_sync_spec=skill_sync_spec,
+            run_creds=run_creds,
+            user_id_for_ak=user_id_for_ak,
+            org_id=org_id,
+            event_callback=event_callback,
+            run_started_at=run_started_at,
         )
 
     async def run_cleanup(
@@ -454,73 +541,6 @@ class BohriumSetupService:
                 ssh_attached=ssh_attached,
             ),
         )
-
-
-def _load_run_credentials(
-    sessions_service: Any, session_id: str
-) -> tuple[dict[str, Any], str | None, str]:
-    """Load run credentials from the session store."""
-    row = sessions_service.get_session(session_id)
-    run_creds: dict[str, Any] = {}
-    if row:
-        uid = row.get('user_id')
-        if uid is not None:
-            run_creds['user_id'] = str(uid)
-        oid = row.get('org_id')
-        if oid is not None and str(oid).strip():
-            run_creds['org_id'] = str(oid).strip()
-        pid = row.get('project_id')
-        if pid is not None:
-            run_creds['project_id'] = int(pid)
-    user_id_for_ak = run_creds.get('user_id')
-    org_id = (run_creds.get('org_id') or '').strip()
-    if user_id_for_ak and org_id:
-        run_creds['access_key'] = (
-            UserService.get_bohrium_access_key(user_id_for_ak, org_id) or ''
-        )
-    if user_id_for_ak:
-        user_no = UserService.get_user_no_by_user_id(user_id_for_ak)
-        if user_no:
-            run_creds['user_no'] = user_no
-    return run_creds, user_id_for_ak, org_id
-
-
-def _remote_session_workspace_root() -> str:
-    """Return Bohrium SSH shared workspace root."""
-    return str(
-        get_remote_session_workspace_root(
-            load_workspace_config_dict(_PROJECT_ROOT), project_root=_PROJECT_ROOT
-        )
-    )
-
-
-def _creator_id_from_user(user_id: str | None) -> int:
-    """Convert user id to creator id."""
-    if user_id is None:
-        return 0
-    try:
-        return int(user_id)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _emit_node_status(
-    event_callback: Callable[..., None],
-    node_id: int | None,
-    status: str,
-    message: str,
-    ip: str | None = None,
-) -> None:
-    """Emit a Bohrium node status event."""
-    payload: dict[str, Any] = {
-        'status': status,
-        'message': message,
-    }
-    if node_id is not None:
-        payload['node_id'] = node_id
-    if ip:
-        payload['ip'] = ip
-    event_callback('System', 'bohrium_node', payload)
 
 
 def _setup_bohrium_for_run(

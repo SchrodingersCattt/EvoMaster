@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+_JSON_DECODER = json.JSONDecoder()
+
 
 class Role(str, Enum):
     """Message role in the conversation."""
@@ -46,7 +48,7 @@ def _coerce_parsed_tool_arguments(value: Any) -> dict[str, Any] | None:
     if isinstance(value, str):
         try:
             reparsed = json.loads(value)
-        except (json.JSONDecodeError, ValueError):
+        except json.JSONDecodeError:
             return None
         return _coerce_parsed_tool_arguments(reparsed)
     return None
@@ -55,6 +57,10 @@ def _coerce_parsed_tool_arguments(value: Any) -> dict[str, Any] | None:
 def _escape_literal_control_chars_in_strings(raw: str) -> str:
     """Escape raw control characters that commonly appear in multiline content."""
     if not raw:
+        return raw
+
+    # Fast path: no literal control chars anywhere → nothing to repair.
+    if "\n" not in raw and "\r" not in raw and "\t" not in raw:
         return raw
 
     repaired: list[str] = []
@@ -107,8 +113,8 @@ def _parse_tool_arguments_json_prefix(raw: str) -> dict[str, Any] | None:
         return None
 
     try:
-        parsed, end = json.JSONDecoder().raw_decode(text)
-    except ValueError:
+        parsed, end = _JSON_DECODER.raw_decode(text)
+    except json.JSONDecodeError:
         return None
 
     coerced = _coerce_parsed_tool_arguments(parsed)
@@ -140,7 +146,7 @@ def parse_tool_arguments(raw: str) -> dict[str, Any]:
     for candidate in candidates:
         try:
             parsed = json.loads(candidate)
-        except (json.JSONDecodeError, ValueError):
+        except json.JSONDecodeError:
             parsed = None
         coerced = _coerce_parsed_tool_arguments(parsed)
         if coerced is not None:

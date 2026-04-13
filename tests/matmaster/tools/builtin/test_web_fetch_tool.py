@@ -17,6 +17,20 @@ class TestWebFetchMetadata:
         assert tool._session is None
 
 
+class TestWebFetchToolDescriptionPromptSplit:
+    def test_description_is_short_summary(self) -> None:
+        assert WebFetchTool.description.startswith("Fetch a URL")
+        assert "\n-" not in WebFetchTool.description
+        assert len(WebFetchTool.description) < 200
+
+    def test_prompt_contains_usage_points(self) -> None:
+        tool = WebFetchTool()
+        prompt = tool.prompt()
+        assert prompt is not None
+        assert "markdown" in prompt
+        assert "cache" in prompt
+
+
 class TestExtractContent:
     def test_html_extraction(self):
         html = "<html><body><p>Hello world</p></body></html>"

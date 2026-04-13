@@ -11,6 +11,7 @@ thread (same contract as ToolRunnerState).
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 
@@ -108,3 +109,34 @@ class JobRegistry:
     def all_jobs(self) -> list[JobRecord]:
         """Return all tracked jobs."""
         return list(self._jobs.values())
+
+    @classmethod
+    def rebuild_from_events(cls, events: Iterable[dict] | None) -> JobRegistry:
+        """Rebuild a registry from persisted lifecycle events.
+
+        Restores state and poll counts only; ``last_polled_at`` is left at 0
+        so the first poll in a new run is always fresh rather than served
+        from stale cache.
+        """
+        registry = cls()
+        if not events:
+            return registry
+        for ev in events:
+            action = str(ev.get("action") or "")
+            job_id = str(ev.get("job_id") or "")
+            if not job_id or ev.get("cached"):
+                continue
+            if action == "submit":
+                registry.register(job_id, job_name=str(ev.get("job_name") or ""))
+            elif action == "poll":
+                registry.update_poll(
+                    job_id,
+                    status=classify_poll_status(str(ev.get("status") or "")),
+                    result="",
+                )
+                rec = registry.get(job_id)
+                if rec is not None:
+                    rec.last_polled_at = 0.0
+            elif action == "download":
+                registry.update_download(job_id)
+        return registry

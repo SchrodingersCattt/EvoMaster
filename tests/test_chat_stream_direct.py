@@ -8,6 +8,8 @@ import threading
 import uuid
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 # 测试中屏蔽 DB：任何真实 BaseTable 触发的连接直接报错（应通过 get_*_table mock 避免走到这里）
 _DB_DISABLED_ERROR = RuntimeError('DB disabled in test (use mock tables only)')
 
@@ -214,6 +216,105 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
     assert frames[4]['type'] == 'query'
     assert frames[4]['mode'] == 'direct'
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
+
+
+def test_prepare_send_message_marks_explicit_bohrium_requirement():
+    from src.models.chat import ChatSendRequest
+    from src.services.stream_service import ChatStreamService
+
+    sessions_service = MagicMock()
+    sessions_service.try_acquire_session_run.return_value = (True, None)
+    events_service = MagicMock()
+    deploy_state_service = MagicMock()
+    fake_redis = MagicMock()
+
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        agent_run_service=MagicMock(),
+        deploy_state_service=deploy_state_service,
+    )
+
+    req = ChatSendRequest(content='run', bohrium_project_id=42)
+
+    with (
+        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
+        patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
+    ):
+        ctx = service.prepare_send_message(
+            'sess-1',
+            req,
+            user_id='user-1',
+            org_id='org-1',
+        )
+
+    assert ctx is not None
+    assert ctx.bohrium_required is True
+
+
+@pytest.mark.asyncio
+async def test_generate_send_stream_enqueues_bohrium_required_flag():
+    from src.services.stream_service import ChatStreamService, SendStreamContext
+
+    service = ChatStreamService(
+        sessions_service=MagicMock(
+            get_session_status_payload=MagicMock(
+                return_value={
+                    'source': 'System',
+                    'type': 'status',
+                    'content': '',
+                    'session_id': 'sess-1',
+                }
+            )
+        ),
+        events_service=MagicMock(get_session_events=MagicMock(return_value=[])),
+        agent_run_service=MagicMock(),
+        deploy_state_service=MagicMock(),
+    )
+
+    ctx = SendStreamContext(
+        task_id='task-1',
+        invocation_id='inv-1',
+        mode='direct',
+        user_msg={'source': 'User', 'type': 'query', 'content': 'run'},
+        request_event_queue=asyncio.Queue(),
+        reply_queue=MagicMock(),
+        bohrium_required=True,
+    )
+
+    fake_redis = MagicMock()
+    fake_redis.create_client.return_value = None
+    fake_redis.set_session_run_queued.return_value = True
+    fake_redis.llen_agent_run_queue.return_value = 0
+    fake_redis.lpush_agent_run_job.side_effect = lambda job: True
+
+    async def _stream_closed_immediately(awaitable, timeout):
+        close = getattr(awaitable, 'close', None)
+        if callable(close):
+            close()
+        return {
+            'source': 'System',
+            'type': 'stream_closed',
+            'content': '',
+            'session_id': 'sess-1',
+        }
+
+    with (
+        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
+        patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
+        patch(
+            'src.services.stream_service.asyncio.wait_for',
+            side_effect=_stream_closed_immediately,
+        ),
+    ):
+        gen = service.generate_send_stream('sess-1', 'run', ctx)
+        await gen.__anext__()
+        await gen.__anext__()
+        await gen.__anext__()
+        await gen.aclose()
+
+    pushed_job = fake_redis.lpush_agent_run_job.call_args.args[0]
+    assert pushed_job['bohrium_required'] is True
 
 
 async def test_sse_frames_match_frontend_contract_without_mysql():

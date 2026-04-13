@@ -185,6 +185,31 @@ class TestToolProtocolGuardrailsIntegration:
         assert provider.call_count == 0
 
     @pytest.mark.asyncio
+    async def test_history_with_missing_tool_result_fails_before_provider_call(
+        self,
+    ) -> None:
+        provider = _NoCallProvider()
+        registry, _ = _make_tool_registry(tool_names=["test_tool"])
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+        history = [
+            AssistantMessage(
+                content=None,
+                tool_calls=[
+                    {"id": "tc-1", "name": "test_tool", "arguments": {"x": 1}},
+                    {"id": "tc-2", "name": "test_tool", "arguments": {"x": 2}},
+                ],
+            ),
+            ToolMessage(tool_call_id="tc-1", tool_name="test_tool", content="ok"),
+        ]
+
+        with pytest.raises(LLMError, match="missing tool_result ids"):
+            async for _event in kernel.run_stream(spec, "next turn", history=history):
+                pass
+
+        assert provider.call_count == 0
+
+    @pytest.mark.asyncio
     async def test_wrapped_assistant_state_history_normalizes_none_content_before_provider_call(
         self,
     ) -> None:

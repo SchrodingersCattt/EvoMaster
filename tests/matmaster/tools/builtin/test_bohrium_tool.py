@@ -112,7 +112,7 @@ class TestBohriumMetadata:
         prompt = tool.prompt()
         assert prompt is not None
         assert "single-shot" in prompt
-        assert 'action="download"' in prompt
+        assert "**download**" in prompt or "download artifacts" in prompt
         assert "does not download artifacts" in prompt
         assert "kill" in prompt
 

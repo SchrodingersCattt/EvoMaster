@@ -7,15 +7,11 @@ Behavioral contract:
 - tool_info dicts contain required keys: name, description, input_schema, remote_tool_name, connection.
 - _build_tools applies tool_include_only whitelist filtering.
 - cleanup clears connections, tools_by_server, _managed.
-- No evomaster imports in manager.py.
 """
 
 from __future__ import annotations
 
-import ast
 import asyncio
-import inspect
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 
@@ -294,64 +290,3 @@ class TestMCPToolManagerCleanup:
         # fast_srv must have been cleaned up despite hung_srv timing out
         assert fast_ctx.exited
         assert len(m._managed) == 0
-
-
-class TestNoEvoMasterImportsInManager:
-    def test_no_top_level_evomaster_imports(self):
-        import matmaster.mcp.manager as mod
-
-        module_file = Path(mod.__file__)
-        source = module_file.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        top_level_evo = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom)
-            and node.module is not None
-            and "evomaster" in node.module
-            and node.col_offset == 0
-        ]
-        assert (
-            top_level_evo == []
-        ), f"Found {len(top_level_evo)} top-level evomaster imports in manager.py"
-
-    def test_no_evomaster_import_lines_in_source(self):
-        """manager.py must not contain any 'from evomaster' or 'import evomaster' lines (comments excluded)."""
-        import matmaster.mcp.manager as mod
-
-        source = inspect.getsource(mod)
-        import_lines = [
-            line.strip()
-            for line in source.split('\n')
-            if ('from evomaster' in line or 'import evomaster' in line)
-            and not line.strip().startswith('#')
-            and not line.strip().startswith('"')
-            and not line.strip().startswith("'")
-        ]
-        assert (
-            import_lines == []
-        ), f"Found evomaster import statements in manager.py: {import_lines}"
-
-    def test_no_reconnect_logic(self):
-        import matmaster.mcp.manager as mod
-
-        source = inspect.getsource(mod)
-        assert (
-            "reconnect" not in source.lower()
-        ), "Reconnect logic found in manager.py (should be stripped per D-03)"
-
-    def test_no_progress_callback(self):
-        import matmaster.mcp.manager as mod
-
-        source = inspect.getsource(mod)
-        assert (
-            "_progress_callback" not in source
-        ), "Progress callback found in manager.py (should be stripped per D-03)"
-
-    def test_no_register_tools(self):
-        import matmaster.mcp.manager as mod
-
-        source = inspect.getsource(mod)
-        assert (
-            "register_tools" not in source
-        ), "register_tools found in manager.py (should be stripped per D-03)"

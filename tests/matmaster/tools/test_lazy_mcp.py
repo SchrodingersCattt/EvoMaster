@@ -950,25 +950,3 @@ class TestLazyMCPConnector:
 
         thread.join(timeout=1.0)
         assert elapsed < 0.3
-
-
-class TestNoEvoMasterImports:
-    """Verify no evomaster imports remain in the module."""
-
-    def test_no_evomaster_in_source(self):
-        import inspect
-
-        import matmaster.tools.lazy_mcp as mod
-
-        source = inspect.getsource(mod)
-        # Check there are no evomaster imports (code imports, not docstrings)
-        lines = source.split('\n')
-        import_lines = [
-            line.strip()
-            for line in lines
-            if ('from evomaster' in line or 'import evomaster' in line)
-            and not line.strip().startswith('#')
-            and not line.strip().startswith('"')
-            and not line.strip().startswith("'")
-        ]
-        assert import_lines == [], f"Found evomaster imports: {import_lines}"

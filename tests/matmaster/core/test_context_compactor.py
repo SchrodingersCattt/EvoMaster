@@ -193,9 +193,7 @@ class TestCompactorThreshold:
     async def test_skip_when_below_threshold(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=128000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=128000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         compactor = ContextCompactor(config=config, summary_provider=provider)
         msgs = [SystemMessage(content="sys"), UserMessage(content="task")]
@@ -207,9 +205,7 @@ class TestCompactorThreshold:
     async def test_trigger_when_above_threshold(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = ContextCompactor(config=config, summary_provider=provider)
@@ -221,9 +217,7 @@ class TestCompactorThreshold:
     async def test_cooldown_skips_consecutive_turn(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = ContextCompactor(config=config, summary_provider=provider)
@@ -240,9 +234,7 @@ class TestCompactorOutput:
     async def test_output_structure(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider(summary="Summarized content.")
         msgs = _build_long_conversation(10)
         compactor = ContextCompactor(config=config, summary_provider=provider)
@@ -262,9 +254,7 @@ class TestCompactorOutput:
     async def test_fallback_on_summary_failure(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
         msgs = _build_long_conversation(10)
         original_len = len(msgs)
@@ -283,7 +273,7 @@ class TestCompactorMessageCount:
     def test_update_message_count(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(enabled=True, context_window_tokens=128000)
+        config = CompactionConfig(context_limit=128000)
         provider = MockSummaryProvider()
         compactor = ContextCompactor(config=config, summary_provider=provider)
 
@@ -299,9 +289,7 @@ class TestCompactorEventEmission:
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.events import ContextCompactionEvent
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         received: list = []
 
@@ -327,9 +315,7 @@ class TestCompactorEventEmission:
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.events import ContextCompactionEvent
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         received: list = []
 
@@ -354,9 +340,7 @@ class TestCompactorEventEmission:
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.events import ContextCompactionEvent
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
         received: list = []
 
@@ -383,9 +367,7 @@ class TestCompactorEventEmission:
     ) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = ContextCompactor(config=config, summary_provider=provider)
@@ -396,9 +378,7 @@ class TestCompactorEventEmission:
     async def test_summary_input_contains_tool_name_and_call_id(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = ContextCompactor(config=config, summary_provider=provider)
@@ -414,9 +394,7 @@ class TestCompactorEventEmission:
     async def test_no_event_when_no_sink(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = ContextCompactor(
@@ -436,9 +414,7 @@ class TestToolTruncationFallback:
         """Preflight must fail explicitly instead of using runtime tool_truncation."""
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=500, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         received: list = []
 
@@ -474,9 +450,7 @@ class TestToolTruncationFallback:
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.events import ContextCompactionEvent
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=500, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         received: list = []
 
@@ -542,9 +516,7 @@ class TestToolTruncationFallback:
         """Small tool results (< 500 chars) are not truncated."""
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=500, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
         provider = MockSummaryProvider()
 
         msgs = [
@@ -569,9 +541,7 @@ class TestToolTruncationFallback:
         """Truncated content keeps head 200 + tail 100 chars."""
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=200, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=200, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         original_content = "HEAD_MARKER_" + "x" * 2000 + "_TAIL_MARKER"
 
@@ -605,9 +575,7 @@ class TestCompactorEventSink:
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.events import ContextCompactionEvent
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         received_events: list = []
 
@@ -632,9 +600,7 @@ class TestCompactorEventSink:
         """Compactor with event_sink=None does not error."""
         from matmaster.core.context_compactor import ContextCompactor
 
-        config = CompactionConfig(
-            enabled=True, context_window_tokens=1000, trigger_ratio=0.9
-        )
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = ContextCompactor(

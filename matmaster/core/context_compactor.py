@@ -151,11 +151,8 @@ class ContextCompactor:
 
     async def preflight_if_needed(self, messages: list[Message]) -> None:
         """Compact eagerly before the next turn when history is already too large."""
-        if not self._config.enabled:
-            return
-
         estimated = estimate_tokens(messages, safety_margin=1.1)
-        threshold = self._config.context_window_tokens * self._config.trigger_ratio
+        threshold = self._config.context_limit * self._config.trigger_ratio
         if estimated < threshold:
             return
 
@@ -171,9 +168,6 @@ class ContextCompactor:
         self, messages: list[Message], last_usage: dict[str, int], turn: int
     ) -> None:
         """Check threshold and compact messages in place when needed."""
-        if not self._config.enabled:
-            return
-
         if turn <= self._last_compaction_turn + 1:
             return
 
@@ -181,7 +175,7 @@ class ContextCompactor:
         delta_messages = messages[self._last_llm_message_count :]
         delta_tokens = estimate_tokens(delta_messages, safety_margin=1.1)
         estimated = base_tokens + delta_tokens
-        threshold = self._config.context_window_tokens * self._config.trigger_ratio
+        threshold = self._config.context_limit * self._config.trigger_ratio
         if estimated < threshold:
             return
 
@@ -228,9 +222,6 @@ class ContextCompactor:
                     "Preflight compaction requires compressible old turns; "
                     "tool_truncation is runtime-only"
                 )
-            # No old turns to compress -- all turns are retained.
-            # Fall back to truncating large tool results within retained
-            # turns to prevent context overflow on the next LLM call.
             truncated = self._truncate_tool_results(
                 messages, estimated_tokens, threshold
             )
@@ -330,7 +321,7 @@ class ContextCompactor:
         self, turns: list[list[Message]]
     ) -> tuple[list[list[Message]], int]:
         """Select recent turns to retain based on the retention rule."""
-        window = self._config.context_window_tokens
+        window = self._config.context_limit
         budget_20 = int(window * 0.2)
         budget_40 = int(window * 0.4)
 
@@ -414,54 +405,10 @@ class ContextCompactor:
 
     async def _summarize(self, old_messages: list[Message]) -> str:
         """Use the summary provider to condense old conversation messages."""
-        blocks: list[str] = []
-        for msg in old_messages:
-            if isinstance(msg, AssistantMessage):
-                blocks.append(
-                    json.dumps(
-                        {
-                            "role": msg.role.value,
-                            "content": msg.content,
-                            "reasoning_content": msg.reasoning_content,
-                            "tool_calls": [
-                                {
-                                    "id": tool_call.id,
-                                    "name": tool_call.name,
-                                    "arguments": tool_call.arguments,
-                                }
-                                for tool_call in msg.tool_calls or []
-                            ],
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-                )
-                continue
-
-            if isinstance(msg, ToolMessage):
-                blocks.append(
-                    json.dumps(
-                        {
-                            "role": "tool",
-                            "tool_call_id": msg.tool_call_id,
-                            "tool_name": msg.tool_name,
-                            "content": msg.content,
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-                )
-                continue
-
-            blocks.append(
-                json.dumps(
-                    {"role": msg.role.value, "content": msg.content},
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            )
-
-        conversation_text = "\n".join(blocks)
+        conversation_text = "\n".join(
+            json.dumps(msg.model_dump(mode="json"), ensure_ascii=False)
+            for msg in old_messages
+        )
         api_messages = [
             {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
             {

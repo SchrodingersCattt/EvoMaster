@@ -312,6 +312,54 @@ def test_cleanup_restores_when_ssh_attached_false(
     assert 'bohrium_runtime' not in SESSIONS['sess-x']
 
 
+def test_setup_with_required_bohrium_can_continue_after_retry_success() -> None:
+    from src.services.user_service import BohriumAccessKeyFetchResult
+
+    svc = _make_bohrium_service()
+    expected = BohriumSetupResult(
+        True,
+        None,
+        MagicMock(),
+        '/share',
+        'ssh',
+        None,
+    )
+    access_key_result = BohriumAccessKeyFetchResult(
+        status='success',
+        access_key='ak',
+        retryable=False,
+        attempts=2,
+    )
+
+    with (
+        patch.object(
+            svc,
+            '_load_run_credentials',
+            return_value=({'project_id': 99}, 'u1', 'o1'),
+        ),
+        patch.object(svc, '_make_event_bridge', return_value=MagicMock()),
+        patch.object(
+            svc, '_setup_bohrium_for_run', return_value=expected
+        ) as mock_setup,
+        patch(
+            'src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result',
+            return_value=access_key_result,
+        ),
+    ):
+        result = asyncio.run(
+            svc.run_setup(
+                session_id='sess-ok',
+                playground=MagicMock(),
+                skill_sync_spec=None,
+                run_started_at=1.0,
+                bohrium_required=True,
+            )
+        )
+
+    assert result is expected
+    assert mock_setup.call_args.kwargs['run_creds']['access_key'] == 'ak'
+
+
 def _make_no_attach_bohrium_result() -> MagicMock:
     """Bohrium mock with explicit None execution fields (bare MagicMock is truthy)."""
     r = MagicMock()

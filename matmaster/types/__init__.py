@@ -1,8 +1,13 @@
 """matmaster.types -- Type contracts for the three-layer architecture."""
 
+from .cancellation import CancellationController, CancellationToken, CancelledError
 from .context import PlaygroundContext
+from .errors import LLMError
 from .events import (
     AgentEvent,
+    AskQuestionEvent,
+    AskQuestionReplyEvent,
+    AskQuestionTimeoutEvent,
     AssistantStateEvent,
     BohriumNodeEvent,
     BusEvent,
@@ -10,10 +15,8 @@ from .events import (
     ConfirmationRequestEvent,
     ConfirmationTimeoutEvent,
     ContextCompactionEvent,
-    EndEvent,
     ErrorEvent,
     ExpRunEvent,
-    FinishEvent,
     McpConnectEvent,
     McpServerStatusEvent,
     ResponseEvent,
@@ -23,6 +26,7 @@ from .events import (
     SystemEvent,
     ThoughtEvent,
     ToolCallEvent,
+    ToolProgressEvent,
     ToolResultEvent,
     WorkspaceUploadErrorEvent,
 )
@@ -46,10 +50,19 @@ from .topology import RuntimeTopology, SessionCapabilities, ToolPlane
 from .worker_registry import WorkerRegistry
 
 __all__ = [
+    # cancellation
+    "CancellationController",
+    "CancellationToken",
+    "CancelledError",
     # context
     "PlaygroundContext",
+    # errors
+    "LLMError",
     # events
     "AgentEvent",
+    "AskQuestionEvent",
+    "AskQuestionReplyEvent",
+    "AskQuestionTimeoutEvent",
     "AssistantStateEvent",
     "BohriumNodeEvent",
     "BusEvent",
@@ -57,10 +70,8 @@ __all__ = [
     "ConfirmationRequestEvent",
     "ConfirmationTimeoutEvent",
     "ContextCompactionEvent",
-    "EndEvent",
     "ErrorEvent",
     "ExpRunEvent",
-    "FinishEvent",
     "McpConnectEvent",
     "McpServerStatusEvent",
     "ResponseEvent",
@@ -70,6 +81,7 @@ __all__ = [
     "SystemEvent",
     "ThoughtEvent",
     "ToolCallEvent",
+    "ToolProgressEvent",
     "ToolResultEvent",
     "WorkspaceUploadErrorEvent",
     # llm

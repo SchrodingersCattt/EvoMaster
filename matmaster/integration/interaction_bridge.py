@@ -1,6 +1,4 @@
-"""matmaster/integration/interaction_bridge.py
-
-AskQuestion 的通信桥梁：发送 ask_question 事件到 SSE bus，
+"""AskQuestion 的通信桥梁：发送 ask_question 事件到 SSE bus，
 阻塞等待用户通过 reply queue 返回的 envelope。
 """
 
@@ -9,10 +7,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import queue
 from collections.abc import Callable
 from typing import Any, Protocol, TypedDict, runtime_checkable
 
-from matmaster.types.cancellation import CancellationToken
 from matmaster.types.events import AskQuestionEvent, AskQuestionTimeoutEvent
 
 logger = logging.getLogger(__name__)
@@ -57,20 +55,15 @@ class AskQuestionBridge:
         """把事件 model_dump 推入 SSE bus。"""
         self._send_cb(event.model_dump(mode="json"))
 
-    def _wait_for_reply(
-        self,
-        request_id: str,
-        cancel_token: CancellationToken | None,
-    ) -> dict[str, Any]:
+    def _wait_for_reply(self, request_id: str) -> dict[str, Any]:
         """阻塞等待 reply queue 返回 envelope（同步，在 to_thread 中调用）。
 
-        超时或取消时发送 ask_question_timeout 事件并 raise。
+        超时时发送 ask_question_timeout 事件并 raise；
+        put_cancel() 送入的 None sentinel 会 raise CancelledError。
         """
-        import queue as _queue_mod
-
         try:
             raw = self._reply_queue.get(timeout=self._timeout_seconds)
-        except _queue_mod.Empty:
+        except queue.Empty:
             self._send_event(
                 AskQuestionTimeoutEvent(
                     source="System",
@@ -84,7 +77,6 @@ class AskQuestionBridge:
             )
 
         if raw is None:
-            # cancel sentinel
             raise asyncio.CancelledError(f"AskQuestion {request_id} cancelled by user")
 
         return json.loads(raw)
@@ -92,13 +84,9 @@ class AskQuestionBridge:
     async def ask(
         self,
         *,
-        session_id: str,
-        task_id: str,
-        invocation_id: str | None,
         request_id: str,
         questions: list[dict[str, Any]],
         metadata: dict[str, Any] | None,
-        cancel_token: CancellationToken | None,
     ) -> AskQuestionResponse:
         self._send_event(
             AskQuestionEvent(
@@ -110,9 +98,7 @@ class AskQuestionBridge:
                 preview_format="markdown",
             )
         )
-        envelope = await asyncio.to_thread(
-            self._wait_for_reply, request_id, cancel_token
-        )
+        envelope = await asyncio.to_thread(self._wait_for_reply, request_id)
         payload = envelope.get("payload", envelope)
         return {
             "request_id": request_id,

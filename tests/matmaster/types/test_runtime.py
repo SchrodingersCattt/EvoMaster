@@ -55,8 +55,8 @@ class _MockLLMProvider:
 class TestCompactionConfig:
     def test_defaults(self) -> None:
         config = CompactionConfig()
-        assert config.enabled is False
-        assert config.context_window_tokens == 128_000
+        assert "enabled" not in CompactionConfig.model_fields
+        assert config.context_limit == 200_000
         assert config.trigger_ratio == 0.9
         assert config.strategy == "summary"
         assert config.compaction_llm is None
@@ -64,16 +64,14 @@ class TestCompactionConfig:
     def test_frozen(self) -> None:
         config = CompactionConfig()
         with pytest.raises(ValidationError):
-            config.enabled = True
+            config.context_limit = 64_000
 
     def test_custom_values(self) -> None:
         config = CompactionConfig(
-            enabled=True,
-            context_window_tokens=200_000,
+            context_limit=240_000,
             strategy="summary",
         )
-        assert config.enabled is True
-        assert config.context_window_tokens == 200_000
+        assert config.context_limit == 240_000
         assert config.strategy == "summary"
 
 
@@ -93,7 +91,7 @@ class TestCompactionConfigUpdate:
     def test_frozen(self) -> None:
         cfg = CompactionConfig()
         with pytest.raises(Exception, match="frozen"):
-            cfg.enabled = True
+            cfg.trigger_ratio = 0.8
 
 
 # ── AgentRuntimeSpec ────────────────────────────────────

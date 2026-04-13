@@ -44,8 +44,7 @@ from matmaster.core.hooks import (
 )
 from matmaster.response_text import is_trivial_response_text
 from matmaster.types.message_normalization import (
-    normalize_messages_for_openai,
-    validate_openai_messages,
+    normalize_and_validate_openai_messages,
 )
 from matmaster.types.messages import (
     AssistantMessage,
@@ -110,10 +109,6 @@ class _KernelStopRequested(Exception):
 class AgentKernel:
     """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""
 
-    @staticmethod
-    def _build_base_snapshot(messages: list[Message]) -> list[dict[str, Any]]:
-        return [message.model_dump(mode="json") for message in messages[1:]]
-
     async def _drain_compactor_events(
         self,
         *,
@@ -129,8 +124,10 @@ class AgentKernel:
                 base_snapshot,
             ) = compactor_events.popleft()
             payload = getattr(compaction_event, "payload", {}) or {}
-            is_durable = payload.get("durability") == "durable"
-            if is_durable and callable(checkpoint_sink) and base_snapshot is not None:
+            should_checkpoint = (
+                payload.get("durability") == "durable" and base_snapshot is not None
+            )
+            if should_checkpoint:
                 payload["checkpoint_attempted"] = True
                 payload["checkpoint_written"] = False
                 payload["failure_reason"] = None
@@ -145,7 +142,7 @@ class AgentKernel:
                         strategy=payload.get("strategy", "unknown"),
                     ),
                 )
-            if is_durable and callable(checkpoint_sink) and base_snapshot is not None:
+            if should_checkpoint:
                 try:
                     await checkpoint_sink(
                         payload=payload,
@@ -318,9 +315,11 @@ class AgentKernel:
             nonlocal compaction_prev_count
             messages_after = len(state.messages)
             payload = getattr(event, "payload", {}) or {}
-            base_snapshot = None
-            if payload.get("durability") == "durable":
-                base_snapshot = self._build_base_snapshot(state.messages)
+            base_snapshot: list[dict[str, Any]] | None = None
+            if callable(checkpoint_sink) and payload.get("durability") == "durable":
+                base_snapshot = [
+                    message.model_dump(mode="json") for message in state.messages[1:]
+                ]
             compactor_events.append(
                 (event, compaction_prev_count, messages_after, base_snapshot)
             )
@@ -329,10 +328,7 @@ class AgentKernel:
         if spec.compactor:
             spec.compactor._event_sink = _compactor_sink
             spec.compactor.update_message_count(len(state.messages))
-            compaction_prev_count = len(state.messages)
-            preflight_if_needed = getattr(spec.compactor, "preflight_if_needed", None)
-            if callable(preflight_if_needed):
-                await preflight_if_needed(state.messages)
+            await spec.compactor.preflight_if_needed(state.messages)
             async for item in self._drain_compactor_events(
                 spec=spec,
                 compactor_events=compactor_events,
@@ -389,9 +385,7 @@ class AgentKernel:
 
             tool_defs = state.cached_tool_definitions
 
-            api_messages = normalize_messages_for_openai(state.messages)
-            validate_openai_messages(api_messages)
-            self._validate_outbound_tool_turn(api_messages)
+            api_messages = normalize_and_validate_openai_messages(state.messages)
 
             llm_response: LLMResponse | None = None
             try:
@@ -867,46 +861,6 @@ class AgentKernel:
                 retryable=False,
                 error_category="bad_request",
             )
-
-    @staticmethod
-    def _validate_outbound_tool_turn(messages: list[dict[str, Any]]) -> None:
-        for i, message in enumerate(messages):
-            role = message.get("role")
-            if role != "assistant":
-                continue
-            tool_calls = message.get("tool_calls") or []
-            declared_ids = [
-                str(tc.get("id") or "")
-                for tc in tool_calls
-                if isinstance(tc, dict) and tc.get("id")
-            ]
-            if not declared_ids:
-                if i + 1 < len(messages) and messages[i + 1].get("role") == "tool":
-                    raise LLMError(
-                        "orphan tool message after assistant without tool_calls",
-                        retryable=False,
-                        error_category="bad_request",
-                    )
-                continue
-
-            seen_tool_ids: set[str] = set()
-            j = i + 1
-            while j < len(messages) and messages[j].get("role") == "tool":
-                tool_id = str(messages[j].get("tool_call_id") or "")
-                if tool_id in seen_tool_ids:
-                    raise LLMError(
-                        f"duplicate tool_result ids for assistant turn: {tool_id}",
-                        retryable=False,
-                        error_category="bad_request",
-                    )
-                if tool_id not in declared_ids:
-                    raise LLMError(
-                        f"tool_result without matching previous assistant tool_call: {tool_id}",
-                        retryable=False,
-                        error_category="bad_request",
-                    )
-                seen_tool_ids.add(tool_id)
-                j += 1
 
     @staticmethod
     def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:

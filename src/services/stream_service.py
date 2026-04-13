@@ -210,6 +210,7 @@ class SendStreamContext:
     reply_queue: ReplyQueueLike  # ask_question 共用，POST /ask_question_reply 写入
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
+    bohrium_required: bool = False  # 本轮是否显式依赖 Bohrium access_key / project
 
 
 class ChatStreamService:
@@ -573,19 +574,22 @@ class ChatStreamService:
             req.model or ''
         ).strip() or None  # 本轮模型名，如 gemini-3-flash-preview / claude-sonnet-4-6
 
+        org_id_val = org_id.strip() if org_id else None
+        try:
+            project_id_val = (
+                int(req.bohrium_project_id)
+                if req.bohrium_project_id is not None
+                else None
+            )
+        except (TypeError, ValueError):
+            project_id_val = None
+        bohrium_required = bool(org_id_val and project_id_val is not None)
+
         # Bohrium：org_id / project_id 直接入库，需要时从库读，不常驻内存
         if req.bohrium_project_id is not None or org_id is not None:
-            try:
-                project_id_val = (
-                    int(req.bohrium_project_id)
-                    if req.bohrium_project_id is not None
-                    else None
-                )
-            except (TypeError, ValueError):
-                project_id_val = None
             self._sessions_service.set_session_bohrium(
                 sid,
-                org_id=org_id.strip() if org_id else None,
+                org_id=org_id_val,
                 project_id=project_id_val,
             )
 
@@ -623,6 +627,7 @@ class ChatStreamService:
             reply_queue=reply_queue,
             llm=llm,
             model=model,
+            bohrium_required=bohrium_required,
         )
 
     def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
@@ -766,6 +771,7 @@ class ChatStreamService:
                 'mode': mode,
                 'llm': ctx.llm,
                 'model': ctx.model,
+                'bohrium_required': ctx.bohrium_required,
                 'submitted_at': datetime.now(timezone.utc).isoformat(),
             }
             # 先设为 waiting 再入队，避免 Worker 接手后 set active 被此处覆盖（竞态）

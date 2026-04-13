@@ -23,9 +23,8 @@ class SkillTool(BuiltinTool):
 
     name: ClassVar[str] = "Skill"
     description: ClassVar[str] = (
-        "Execute a skill within the main conversation. "
-        "When users reference a slash command or /<something>, "
-        "they are referring to a skill. Use this tool to invoke it."
+        "Activate a skill by name and return its full documentation. "
+        "Users' slash commands like /commit also invoke skills via this tool."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
