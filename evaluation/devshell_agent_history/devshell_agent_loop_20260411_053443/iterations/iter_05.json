@@ -1,0 +1,24 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 5,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [],
+      "files_touched": [],
+      "followup_suggestion": "Repo is at baseline; the next eval iteration can proceed directly without further revert work.",
+      "iteration_index": 5,
+      "needs_more_work": false,
+      "optimization_round": 10005,
+      "summary": "**P0 revert round**: `git_revert_commits_after_base` with `base_sha=f8ebe2d2eca6bdb77b35f354e84cfdffbcab0142` found **no commits after base** — HEAD already equals the baseline snapshot. No reverts were necessary; the repo is already in the pre-optimization baseline state."
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 5,
+    "macro_mean_0_100": 87,
+    "p0_regression": true,
+    "rationale": "## 第 5 轮（最终轮）迭代总结 — P0 回归门控失败（第 4 次连续）\n\n### P0 门控结果\n- **P0 均值**：80/100（iter_01 基线: 94 → **-14 回归**）\n- **回归任务**：\n  - IG_abacus_002: 100 → **60** (-40)\n  - IG_abacus_003: 88 → **79** (-9)\n  - SC_struct_009: 93 → **80** (-13)\n- **非 P0 任务**：被跳过\n\n### 五轮 P0 任务完整趋势\n\n| 任务 | iter_01 | iter_02 | iter_03 | iter_04 | iter_05 | 中位数 |\n|------|---------|---------|---------|---------|---------|--------|\n| BP_struct_003 | 93 | 100 | 100 | 93 | **100** | 100 |\n| IG_abacus_002 | **100** | 83 | 33 | 33 | **60** | 60 |\n| IG_abacus_003 | 88 | 88 | 88 | 86 | **79** | 88 |\n| SC_struct_009 | 93 | 93 | 20 | 87 | **80** | 87 |\n| **P0 均值** | **94** | 91 | 60 | 75 | **80** | 84 |\n\n### 全会话五轮总结\n\n| 轮次 | P0 均值 | 全量宏平均 | 代码状态 | 结果 |\n|------|---------|------------|----------|------|\n| iter_01 | **94** | **87** | 基线 | ✅ 唯一完整轮次 |\n| iter_02 | 91 | N/A | 有优化 | ❌ P0 回归 → revert |\n| iter_03 | 60 | N/A | 基线（revert 后） | ❌ P0 噪声崩溃 |\n| iter_04 | 75 | N/A | 基线（未变） | ❌ P0 噪声持续 |\n| iter_05 | 80 | N/A | 基线（未变） | ❌ P0 噪声持续 |\n\n### 根因分析\n\n**本会话被 P0 门控机制与模型非确定性的耦合效应完全阻塞：**\n\n1. **iter_01 的 P0 基线被锚定在异常高值 (94)**：IG_abacus_002 得了 100 分，但该任务的历史中位数约 83（上一会话 5 轮数据：88→83→83→92→83）。100 分是正向异常值。\n\n2. **后续 4 轮全部未能达到基线**：在代码完全未变的情况下（iter_03/04/05），P0 均值分别为 60、75、80 — 均显著低于 iter_01 的 94。这证明 94 是不可复现的。\n\n3. **iter_02 的优化被 revert**：唯一一次产品侧优化因 IG_abacus_002 从 100→83（正常回落到中位数）触发了 P0 回归，被迫 revert。优化本身未必有害。\n\n4. **零有效优化完成**：5 轮迭代中，零轮保留了产品侧改动。最终仓库代码状态与 iter_01 开始时完全一致。\n\n### 最终状态\n- **仓库代码**：无任何改动（与会话开始时一致）\n- **最佳已知全量宏平均**：**87/100**（iter_01，唯一完整轮次）\n- **目标 90**：**未达标**\n- **真实可控宏平均**：约 87（基于 iter_01 全量数据，代码未变）\n\n### 系统性建议（面向编排器/维护者）\n\n1. **P0 基线应取多次采样的中位数或 P25**，而非单次运行值。iter_01 的 IG_abacus_002=100 是异常值，导致后续 4 轮被不合理地阻止。\n\n2. **高方差 P0 任务需要容忍阈值**：IG_abacus_002 的 5 轮方差 σ≈24，单次得分范围 33-100。以单次得分为基线、0 容差触发门控在统计上不合理。\n\n3. **P0 回归后不应消耗迭代配额**：iter_03/04/05 没有代码改动也没有全量评测，但消耗了 3 轮迭代配额。建议 P0 噪声失败（无新 commits 可 revert 时）不计入迭代次数限制。\n\n4. **前一会话也遇到类似问题**：20260410_180536 session 的 iter_05 同样因 IG_abacus_002 (92→83) 触发 P0 回归。这是一个系统性问题，不是偶发事件。\n\n### 经验教训\n- 87/100 的基线是历史最佳起始分，表明产品侧的 skill/tool 已处于较好状态\n- 达到 90 需要修复 SC_struct_006(47)、SC_struct_SiH(58)、SC_struct_005(61)、pl_hopping(67) 这几个结构性低分任务\n- 但 P0 门控使得任何优化尝试都无法通过验证\n- **下一个会话需要更鲁棒的 P0 门控策略**才能实现有效的迭代优化",
+    "target_met": false
+  }
+}

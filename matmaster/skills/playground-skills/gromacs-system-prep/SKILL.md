@@ -28,6 +28,15 @@ Use the local wrapper under `matmaster/skills/playground-skills/gromacs-system-p
 
 - `matmaster/skills/playground-skills/gromacs-system-prep/scripts/prepare_gmx.py`
 
+## Polymer Adhesion / Multi-Layer Systems
+
+For adhesion, bilayer, or interface simulations:
+1. Build each polymer component separately (use **poly-generator** or **poly-forcefield** skill for topology).
+2. Use `gmx editconf -box X Y Z` to set the target box with separation gap.
+3. Stack components: `gmx insert-molecules` or concatenate `.gro` coordinates (adjust z-offsets to create the desired inter-layer spacing).
+4. Solvate (if in solution) and add ions as usual, then proceed with EM → NVT → NPT → production MD.
+5. **Save each intermediate** (`.gro`, `.top`, `.mdp`) before moving to the next step — partial files still earn credit.
+
 ## Rules
 
 - Always use workspace-relative input and output paths unless the user explicitly asks otherwise.

@@ -1,6 +1,6 @@
 """LLM Provider factory: config-driven provider construction.
 
-Thin factory layer: resolve_route -> OpenAIProvider.
+Thin factory layer: resolve_route -> OpenAIProvider or BedrockProvider.
 All semantic resolution (family, temperature, reasoning) lives on
 LLMProfileConfig methods. This module only does the final mapping.
 """
@@ -8,8 +8,10 @@ LLMProfileConfig methods. This module only does the final mapping.
 from __future__ import annotations
 
 import logging
+import os
 
 from matmaster.config.llm import LLMConfig
+from matmaster.providers.bedrock_provider import BedrockProvider
 from matmaster.providers.openai_provider import OpenAIProvider
 
 logger = logging.getLogger(__name__)
@@ -21,8 +23,8 @@ def build_provider(
     model_override: str | None = None,
     llm_override: str | None = None,
     default_profile_key: str | None = None,
-) -> OpenAIProvider:
-    """Resolve route and build OpenAIProvider.
+) -> OpenAIProvider | BedrockProvider:
+    """Resolve route and build an LLM provider backend.
 
     Args:
         llm_config: Loaded LLMConfig instance.
@@ -38,12 +40,32 @@ def build_provider(
     profile = llm_config.get_profile(resolved.profile_key)
 
     logger.info(
-        "build_provider: route=%s profile=%s model=%s family=%s",
+        "build_provider: route=%s profile=%s model=%s family=%s provider=%s",
         resolved.route_key,
         resolved.profile_key,
         resolved.model,
         profile.effective_family(),
+        profile.provider,
     )
+
+    if profile.provider == "bedrock":
+        region = (
+            (profile.bedrock_region or "").strip()
+            or os.environ.get("AWS_REGION")
+            or os.environ.get("AWS_DEFAULT_REGION")
+            or "us-east-1"
+        )
+        return BedrockProvider(
+            model_id=resolved.model,
+            region=region,
+            temperature=profile.effective_temperature(),
+            max_tokens=profile.max_tokens,
+            timeout=profile.timeout,
+            stream_timeout=profile.stream_timeout,
+            stream_idle_timeout=profile.stream_idle_timeout,
+            max_retries=profile.max_retries,
+            retry_delay=profile.retry_delay,
+        )
 
     return OpenAIProvider(
         model=resolved.model,

@@ -130,6 +130,7 @@ class ABACUSValidator(BaseValidator):
         diags.extend(self._check_scf_nmax(text))
         diags.extend(self._check_smearing(text))
         diags.extend(self._check_nscf_bands(text))
+        diags.extend(self._check_efield(text))
         return diags
 
     # -----------------------------------------------------------------------
@@ -441,6 +442,38 @@ class ABACUSValidator(BaseValidator):
                     suggestion="Add: smearing_sigma  0.015",
                 )
             )
+        return diags
+
+    def _check_efield(self, text: str) -> list[Diagnostic]:
+        """Check electric field / dipole correction parameter consistency."""
+        diags: list[Diagnostic] = []
+        efield_flag = _parse_int(text, "efield_flag")
+        if efield_flag != 1:
+            return diags
+        # efield_dir should be set
+        efield_dir = _parse_int(text, "efield_dir")
+        if efield_dir is None:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message="efield_flag=1 but efield_dir not set. Default is 2 (z-axis). Set explicitly for clarity.",
+                    param="efield_dir",
+                    suggestion="Add: efield_dir  2",
+                )
+            )
+        # gate_flag checks
+        gate_flag = _parse_int(text, "gate_flag")
+        if gate_flag == 1:
+            dip_cor = _parse_int(text, "dip_cor_flag")
+            if dip_cor != 1:
+                diags.append(
+                    Diagnostic(
+                        severity=SEVERITY_WARNING,
+                        message="gate_flag=1 typically requires dip_cor_flag=1 for proper charged slab treatment.",
+                        param="dip_cor_flag",
+                        suggestion="Add: dip_cor_flag  1",
+                    )
+                )
         return diags
 
     def _check_nscf_bands(self, text: str) -> list[Diagnostic]:

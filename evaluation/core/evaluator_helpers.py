@@ -28,6 +28,12 @@ from evaluation.validators.structure_molcrys import (
     check_sc005_other_formulas_in_answer,
     verify_molecular_slab_layer_scaling,
 )
+from evaluation.validators.text_file import (
+    check_text_file_contains_all,
+    check_text_file_kpt_path,
+    check_text_file_numeric_range,
+    check_text_file_regex,
+)
 
 from .evidence import EvidenceBundle, TokenUsage
 from .schemas import (
@@ -357,6 +363,11 @@ def _cfg(ref: ReferenceAnswer) -> dict[str, Any]:
     return ref.value if isinstance(ref.value, dict) else {}
 
 
+def _workspace_resolve_from_ref(ref: ReferenceAnswer) -> str:
+    """Plain-text / artifact checks: recursive (legacy) vs workspace root only."""
+    return ref.workspace_resolve or 'recursive'
+
+
 def check_struct_file_atom_count(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:
@@ -369,6 +380,7 @@ def check_struct_file_atom_count(
         filename=cfg.get('filename', '*.cif'),
         expected=int(cfg.get('expected', 0)),
         tolerance=float(cfg.get('tolerance', 0)),
+        element=str(cfg.get('element')) if cfg.get('element') else None,
     )
 
 
@@ -510,6 +522,7 @@ def check_struct_file_layer_count(
         tolerance=float(cfg.get('tolerance', 0)),
         axis=str(cfg.get('axis', 'z')),
         layer_tol_A=layer_tol,
+        element=str(cfg.get('element')) if cfg.get('element') else None,
     )
 
 
@@ -570,4 +583,99 @@ def check_struct_file_surface_termination(
         axis=str(cfg.get('axis', 'z')),
         side=str(cfg.get('side', 'top')),
         layer_tol_A=float(cfg.get('layer_tol_A', 0.5)),
+    )
+
+
+def check_text_file_contains_all_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    raw_tokens = cfg.get('tokens', [])
+    if not isinstance(raw_tokens, list) or not raw_tokens:
+        return False, "reference answer must provide non-empty 'tokens' list"
+    flags = str(cfg.get('flags', '')).lower()
+    case_sensitive = bool(cfg.get('case_sensitive', False))
+    if 'i' in flags:
+        case_sensitive = False
+    return check_text_file_contains_all(
+        ws,
+        filename=str(cfg.get('filename', '')),
+        tokens=[str(token) for token in raw_tokens],
+        case_sensitive=case_sensitive,
+        normalize_whitespace=bool(cfg.get('normalize_whitespace', True)),
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
+
+
+def check_text_file_regex_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    pattern = str(cfg.get('pattern', ''))
+    if not pattern:
+        return False, "reference answer must provide non-empty 'pattern'"
+    return check_text_file_regex(
+        ws,
+        filename=str(cfg.get('filename', '')),
+        pattern=pattern,
+        flags=str(cfg.get('flags', '')),
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
+
+
+def check_text_file_numeric_range_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    raw_checks = cfg.get('checks', [])
+    if not isinstance(raw_checks, list) or not raw_checks:
+        return False, "reference answer must provide non-empty 'checks' list"
+    checks: list[dict[str, Any]] = []
+    for item in raw_checks:
+        if not isinstance(item, dict):
+            return False, "each entry in 'checks' must be a dict"
+        checks.append(item)
+    return check_text_file_numeric_range(
+        ws,
+        filename=str(cfg.get('filename', '')),
+        checks=checks,
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
+
+
+def check_text_file_kpt_path_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    raw_required = cfg.get('required_points', [])
+    if not isinstance(raw_required, list) or not raw_required:
+        return False, "reference answer must provide non-empty 'required_points' list"
+    required_points: list[list[float]] = []
+    for item in raw_required:
+        if not isinstance(item, list) or len(item) != 3:
+            return False, "each entry in 'required_points' must be [x, y, z]"
+        try:
+            required_points.append([float(item[0]), float(item[1]), float(item[2])])
+        except (TypeError, ValueError):
+            return False, 'required_points entries must be numeric'
+    return check_text_file_kpt_path(
+        ws,
+        filename=str(cfg.get('filename', '')),
+        required_points=required_points,
+        tolerance=float(cfg.get('tolerance', 1.0e-6)),
+        require_line_mode=bool(cfg.get('require_line_mode', True)),
+        require_order=bool(cfg.get('require_order', True)),
+        workspace_resolve=_workspace_resolve_from_ref(ref),
     )

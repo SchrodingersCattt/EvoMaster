@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
+from evaluation.devshell_agent import loop_prompts as _loop_prompts
 from evaluation.devshell_agent.config_state import (
     AgentLoopSharedState,
     DevshellAgentCliDefaults,
@@ -18,10 +19,19 @@ from evaluation.devshell_agent.config_state import (
 )
 from evaluation.devshell_agent.git_iteration import (
     append_iteration_head,
-    git_reset_hard,
     git_rev_parse_head,
-    head_at_iteration_start,
 )
+from evaluation.devshell_agent.loop_proposal_notify import (
+    notify_proposed_matmaster_exps_if_present,
+    notify_proposed_question_bank_if_present,
+)
+from evaluation.devshell_agent.sdk_logging import log_line, log_sdk_message
+
+# ``ClaudeAgentOptions(tools=...)``: empty built-in tool set (``--tools`` with no
+# Claude Code Read/Bash/Agent/...). MCP tools come only from ``mcp_servers``.
+# ``allowed_tools`` maps to ``--allowedTools`` (permission pre-approval), not
+# an exclusive allowlist.
+_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED: list[str] = []
 
 
 def checklist_max_turns_for_shared_state(state: AgentLoopSharedState) -> int:
@@ -39,11 +49,15 @@ class AgentLoopConfig:
     permission_mode: str
     max_sdk_turns: int
     extra_instruction: str = ""
-    git_reset_on_regression: bool = True
     eval_ingest_submit_each_iteration: bool = True
     eval_ingest_submit_timeout: float = 120.0
     enable_checklist_agent: bool = True
     checklist_permission_mode: str = ""
+    history_root: Path | None = None
+    #: After each optimization sub-round, stage product-side paths and ``git commit``.
+    enable_optimization_auto_commit: bool = True
+    #: Skip ``exp_prompt_budget`` checks before commit (e.g. broken local env).
+    optimization_auto_commit_skip_budget: bool = False
 
 
 class DevshellAgentLoop:
@@ -55,345 +69,31 @@ class DevshellAgentLoop:
     _SDK_LOG_TEXT_BLOCK_MAX_CHARS = 100_000
     _SDK_LOG_SYSTEM_DATA_MAX_CHARS = 24_000
 
-    SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编排助手（产品 / Agent 行为侧）**。
-
-## 工具分工
-- **run_devshell_eval**：在仓库根目录下执行 `evaluation/scripts/devshell/run_devshell_eval.py`（子进程，优先 `uv run python`）。输出目录为会话下的 `eval_runs/<iteration_tag>/`。
-- **report_iteration_outcome**：每一轮结束时**必须**调用一次，记录宏平均分数与是否达标。
-- **escalate_checklist_revision**：当你判断低分主要来自 **题库评分项 / scoring_checklist / reference_answers** 不公或错误时调用；**不得**亲自改题库。编排器会在本轮主会话结束后启动**另一 Agent** 专改 `evaluation/question_bank/`。
-- **Read / Glob / Grep / Edit / Write / Bash**：用于阅读题库与产物、修改配置与提示词。Bash 用于 `git` 与必要命令；避免与本流程无关的破坏性操作。
-
-## 防作弊：题库与 checklist（硬约束）
-- **禁止**使用 Edit/Write 创建或修改 `evaluation/question_bank/` 下**任何**路径（含 `scoring_checklist`、`reference_answers`、题干、`human_prompt_seed` 等）。禁止通过脚本或其它目录间接改写题库 YAML。
-- 需要调整评测标准时：**仅**能 **Read / Grep** 读题库；修改必须走 **escalate_checklist_revision**，由 checklist 专责 Agent 执行。
-- 结合 `pending_ingest` 的 `item.score_reason`、workspace 与 events 判断改动落点，**无固定先后顺序**：全局提示/约束优先看 `matmaster/exps/`；技能与 Skill 文案优先看 `matmaster/skills/`（以本轮 `--exp` 与 runtime patch 后实际生效的 `skills_root` 为准）；工具描述与内置工具行为优先看 `matmaster/tools/`；MCP / 模型 / 连接配置优先看 `config/`；远端计算路径、executor / storage、OSS 上传等问题再看 `matmaster/adaptors/calculation/`；`mm-devshell` 默认行为与入口补丁再看 `matmaster/devshell/`。避免无关大重构。
-
-## Git 工作流（自迭代必守）
-- **每次实质性修改**（每次 `Edit`/`Write` 落盘后）：对相应文件 `git add` 并 **`git commit` 一条独立记录**，消息建议 `devshell_agent iter=<轮次> <简述>`，使改动与 commit 一一对应、便于回滚。
-- **判断单次改动是否改善**：在该次改动前记下当时的宏平均（来自该轮 `pending_ingest/*.json` 的 `item.score` 算术平均，或与 `score_devshell_tasks.py` 输出一致）；改动并 commit 后，若需用分数验证，应再次对**能反映新代码**的产物跑分（通常需新的 `run_devshell_eval` + `iteration_tag`，或按题库说明复评）。若新宏平均 **不高于** 改动前基准（改善无效），应回滚**该条** commit：优先 `git revert HEAD --no-edit`；若该 commit 尚未 push 且历史仅本地迭代，可用 `git reset --hard HEAD~1`。
-- 不要用 `git push --force` 等破坏协作历史的操作。
-
-## 判分原则（与 `evaluation/docs/devshell/devshell_claude_code_eval.md` 一致）
-- 单次任务的**权威判分**来自 `evaluation/scripts/devshell/score_devshell_tasks.py`（`BinaryEvaluator`，基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl`）。
-- **宏平均**：须与上述脚本口径一致。本编排默认 `--eval-ingest-pending-only`：每轮 **run_devshell_eval** 结束后，编排器会对该目录执行 `score_devshell_tasks.py --submit`，将 `item.score` / `item.score_reason` 写入 `pending_ingest/<task_id>.json` 并上报 ingest。**优先**从这些 JSON 汇总宏平均（与已上报一致），**不要**手工臆造分数。
-- **低分明细**：**优先**读同一目录下 `pending_ingest/*.json` 的 `item.score_reason`；若有评测服务权限，也可 `GET` matmaster-tools-server `/api/v1/evaluation/questions/{question_id}/overview`，从 `iterations[].score_reason`（及基线各渠道字段）查看。避免仅为「看明细」再跑 `score_devshell_tasks.py --dry-run`（会重复跑判分，更慢且含 LLM 的项可能与已上报略有偏差）。
-- 仅在 pending 尚未写入分数、或你**修改了 workspace/证据需重新判分**时，再本地执行 `score_devshell_tasks.py --run-dir …`；若只需打印、不写盘，可用 `--dry-run`。**不要**自行再加 `--submit`（避免重复 ingest）。
-- 如需解释低分原因，可再阅读题库 YAML、workspace 交付物和事件日志；**不得**仅凭 `devshell_summary` / `final_content` 断言 checklist 通过。
-
-## 修改范围
-- **可写（产品侧，按证据小步修改）**：`config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/`；`matmaster/core/` 仅在框架层缺陷明确时再动。对 skills：**既允许改现有 Skill，也允许在 `matmaster/skills/` 下新建** Skill 目录与文件；新建内容须能被本轮 `run_devshell_eval` 所用 `--exp` 的 **`skills_root`** 发现（默认 `mm-devshell` 可能对 `direct` 做收窄，见 `matmaster/devshell/exp_patch.py`）；若新 Skill 落在当前 roots 外，应挪入已挂载根下或按需换 `--exp`/配置使评测加载到。
-- **缓存目录**：`matmaster/cache/` 下 JSON 视为生成物，**不要**作为常规手改目标；若改动影响 MCP schema / lazy tool 可见性，在仓库根执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成。
-- **默认不优先**：`src/`、`app.py` 仅在失败与 HTTP API / Worker 链路明确相关时再考虑。
-- **不可写**：`evaluation/question_bank/**`（见上节）；避免无关大重构。
-- 保持改动可审：尽量小步、可解释。
-
-## 产品侧改动优先级与系统提示词泛化（硬约束）
-- **优先顺序**：先 **`matmaster/skills/`**（领域流程与可复用约束；**现有 Skill 不足时允许新建**，见上节 `skills_root` 约定）、再 **`matmaster/tools/`**（工具行为与描述），然后 **`config/`**、MCP、`matmaster/adaptors/calculation/`、`matmaster/devshell/` 等；**`matmaster/exps/` 仅在与「通用角色 / 安全 / 全会话一致的工作方式」相关、且难以在 Skill 或工具中表达时再改**，且每次改动都须能说明**为何不**放在 skills/tools。
-- **`matmaster/exps/` 中的系统提示与 developer 指令须保持通用**：不得把某次评测里具体题目的 **`scoring_checklist` 逐条改写进 TOML**、不得仅为对齐某题判分项而堆叠题目专属规则（这是对题库的**过拟合**，会损害非评测场景下的行为与可维护性）。
-- 若 `item.score_reason` 指向 checklist 某条：先判断能否用 **Skill 文案** 或 **工具契约** 稳定满足该类要求；确需动 exp 时，只增加**可跨题复用**的抽象表述，并仍遵守下文 token 预算与 `exp_prompt_budget`。
-
-## MatMaster 实验提示词（优化策略 + 体量硬上限）
-- **优先删减与合并**：在增补新规则前，先删除或合并与 `_base.toml` / 同文件内已有条目**重复、矛盾或过时**的表述；禁止仅靠堆叠新段落规避问题。
-- **系统 prompt token 预算**：对 `ContextBuilder.build()` 产出的**完整初始系统 prompt**（含 `system_prompt` + `developer_instructions` + tool descriptions + skill meta info）使用 tiktoken **gpt-4o 编码**计数；**推荐控制在 12000 以内**，**硬上限为 15000（含 15000）**。
-- **自检命令**：每次修改 `matmaster/exps/` 下相关 TOML 后、在 `git commit` 前于仓库根执行
-  `uv run python -m evaluation.devshell_agent.exp_prompt_budget <exp>`
-  其中 `<exp>` 与本轮 `run_devshell_eval` 所用 `--exp` 一致；若未传 `--exp`，默认按 `direct` 自检（若你改的是其它 exp 名则改用该名）。**命令 exit 非 0 时不得提交**，应先压缩文案直至达标。
-
-## 轮次结束
-- 调用 **report_iteration_outcome**，`iteration_index` 必须与当前轮次编号一致，`macro_mean_0_100` 为整数 0–100，`target_met` 表示是否达到用户给定目标分，`rationale` 用 Markdown 简述判分与下一步。
-"""
-
-    SYSTEM_PROMPT_CHECKLIST = """你是 MatMaster 仓库内的 **DevShell 评测迭代 — checklist / 题库专责助手**。
-
-你与上一会话中的「产品侧」Agent **不是同一角色**：你只负责 **评测语义与题库 YAML / evaluator**，不负责改 `config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/`、`matmaster/devshell/`、`matmaster/core/` 等产品侧目录。
-
-## 硬约束
-- **仅允许**使用 Edit/Write 修改路径前缀为 `evaluation/question_bank/`（题库 YAML）或 `evaluation/core/`（evaluator / checker 代码）的文件。**禁止**编辑产品侧目录（`config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/`、`matmaster/devshell/`、`matmaster/core/` 等）及 `evaluation/scripts/`。
-- 修改 `scoring_checklist`、`reference_answers`、题干等时遵守仓库 `evaluation/AGENTS_evaluation.md`：若变更影响评测语义，须按该文档更新对应题目的顶层 `id`。
-- 使用 **Read / Glob / Grep** 阅读证据（含本会话目录下的 `eval_runs/`、workspace、events、题库）。
-- **report_checklist_revision**：本专责回合结束时**必须**调用一次，说明是否改动了题库、改了哪些文件、或为何维持不变。
-
-## Git
-- 每次改动题库后单独 `git commit`，消息建议 `devshell_agent_checklist iter=<轮次> <简述>`。
-
-## 工具
-- 无 `run_devshell_eval`；不调用 `report_iteration_outcome` 或 `escalate_checklist_revision`。仅使用 **report_checklist_revision** 与本仓库读写工具。
-"""
+    SYSTEM_PROMPT_MAIN = _loop_prompts.SYSTEM_PROMPT_MAIN
+    SYSTEM_PROMPT_CHECKLIST = _loop_prompts.SYSTEM_PROMPT_CHECKLIST
+    SYSTEM_PROMPT_OPTIMIZATION = _loop_prompts.SYSTEM_PROMPT_OPTIMIZATION
+    SYSTEM_PROMPT_OPTIMIZATION_P0_REVERT = (
+        _loop_prompts.SYSTEM_PROMPT_OPTIMIZATION_P0_REVERT
+    )
 
     def __init__(self, config: AgentLoopConfig) -> None:
         self._cfg = config
 
     @staticmethod
-    def _log_line(msg: str, loop_log: TextIO) -> None:
-        print(msg, file=sys.stderr, flush=True)
-        loop_log.write(msg + "\n")
-        loop_log.flush()
+    def main_agent_allowed_tools() -> list[str]:
+        from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
-    @classmethod
-    def _truncate_log_text(cls, text: str, max_chars: int) -> str:
-        if len(text) <= max_chars:
-            return text
-        return text[:max_chars] + f"\n… [log truncated, total_len={len(text)} chars]"
+        return [*MatmasterEvalMcpToolkit.allowed_tool_names()]
 
-    def _log_content_block_sdk(
-        self,
-        block: Any,
-        prefix: str,
-        loop_log: TextIO,
-    ) -> None:
-        from claude_agent_sdk import (  # type: ignore[import-untyped]
-            TextBlock,
-            ThinkingBlock,
-            ToolResultBlock,
-            ToolUseBlock,
-        )
-
-        tmax = self._SDK_LOG_TOOL_RESULT_MAX_CHARS
-        xmax = self._SDK_LOG_TEXT_BLOCK_MAX_CHARS
-
-        if isinstance(block, TextBlock):
-            raw = block.text
-            if not raw.strip():
-                self._log_line(f"{prefix}:text (empty)", loop_log)
-            else:
-                self._log_line(
-                    f"{prefix}:text\n{self._truncate_log_text(raw, xmax)}",
-                    loop_log,
-                )
-        elif isinstance(block, ThinkingBlock):
-            sig = block.signature
-            sig_short = f"{sig[:24]}…" if len(sig) > 24 else sig
-            self._log_line(
-                f"{prefix}:thinking chars={len(block.thinking)} "
-                f"signature_prefix={sig_short!r}",
-                loop_log,
-            )
-            if block.thinking.strip():
-                self._log_line(
-                    f"{prefix}:thinking_body\n"
-                    f"{self._truncate_log_text(block.thinking, tmax)}",
-                    loop_log,
-                )
-        elif isinstance(block, ToolUseBlock):
-            try:
-                inp = json.dumps(block.input, ensure_ascii=False, default=str)
-            except TypeError:
-                inp = repr(block.input)
-            inp = self._truncate_log_text(inp, tmax)
-            self._log_line(
-                f"{prefix}:tool_use id={block.id!r} name={block.name!r} input={inp}",
-                loop_log,
-            )
-        elif isinstance(block, ToolResultBlock):
-            c = block.content
-            if c is None:
-                body = "(none)"
-            elif isinstance(c, list):
-                try:
-                    body = json.dumps(c, ensure_ascii=False, default=str)
-                except TypeError:
-                    body = repr(c)
-            else:
-                body = str(c)
-            self._log_line(
-                f"{prefix}:tool_result tool_use_id={block.tool_use_id!r} "
-                f"is_error={block.is_error!r}",
-                loop_log,
-            )
-            self._log_line(
-                f"{prefix}:tool_result_body\n{self._truncate_log_text(body, tmax)}",
-                loop_log,
-            )
-        else:
-            self._log_line(
-                f"{prefix}:unknown_block {type(block).__name__} {block!r}", loop_log
-            )
-
-    def _log_sdk_message(self, message: Any, loop_log: TextIO) -> None:
-        """Log one Claude Agent SDK stream message (all known types)."""
-        from claude_agent_sdk import (  # type: ignore[import-untyped]
-            AssistantMessage,
-            RateLimitEvent,
-            ResultMessage,
-            StreamEvent,
-            SystemMessage,
-            TaskNotificationMessage,
-            TaskProgressMessage,
-            TaskStartedMessage,
-            UserMessage,
-        )
-
-        tmax = self._SDK_LOG_TOOL_RESULT_MAX_CHARS
-        smax = self._SDK_LOG_SYSTEM_DATA_MAX_CHARS
-        xev = self._SDK_LOG_STREAM_EVENT_MAX_CHARS
-
-        def j(x: Any) -> str:
-            try:
-                return json.dumps(x, ensure_ascii=False, default=str)
-            except TypeError:
-                return repr(x)
-
-        if isinstance(message, UserMessage):
-            self._log_line(
-                f"[sdk:user] uuid={message.uuid!r} "
-                f"parent_tool_use_id={message.parent_tool_use_id!r}",
-                loop_log,
-            )
-            if message.tool_use_result is not None:
-                self._log_line(
-                    f"[sdk:user] tool_use_result="
-                    f"{self._truncate_log_text(j(message.tool_use_result), tmax)}",
-                    loop_log,
-                )
-            c = message.content
-            if isinstance(c, str):
-                if c.strip():
-                    self._log_line(
-                        "[sdk:user:text]\n"
-                        f"{self._truncate_log_text(c, self._SDK_LOG_TEXT_BLOCK_MAX_CHARS)}",
-                        loop_log,
-                    )
-                else:
-                    self._log_line("[sdk:user:text] (empty)", loop_log)
-            else:
-                for i, block in enumerate(c):
-                    self._log_content_block_sdk(
-                        block, f"[sdk:user:block:{i}]", loop_log
-                    )
-            return
-
-        if isinstance(message, AssistantMessage):
-            parts = [
-                f"model={message.model!r}",
-                f"message_id={message.message_id!r}",
-                f"uuid={message.uuid!r}",
-                f"parent_tool_use_id={message.parent_tool_use_id!r}",
-            ]
-            if message.error:
-                parts.append(f"error={message.error!r}")
-            if message.stop_reason:
-                parts.append(f"stop_reason={message.stop_reason!r}")
-            if message.usage is not None:
-                parts.append(f"usage={j(message.usage)}")
-            self._log_line("[sdk:assistant] " + " ".join(parts), loop_log)
-            for i, block in enumerate(message.content):
-                self._log_content_block_sdk(
-                    block, f"[sdk:assistant:block:{i}]", loop_log
-                )
-            return
-
-        if isinstance(message, TaskStartedMessage):
-            self._log_line(
-                f"[sdk:system:task_started] subtype={message.subtype!r} "
-                f"task_id={message.task_id!r} description={message.description!r} "
-                f"uuid={message.uuid!r} session_id={message.session_id!r} "
-                f"tool_use_id={message.tool_use_id!r} task_type={message.task_type!r}",
-                loop_log,
-            )
-            return
-
-        if isinstance(message, TaskProgressMessage):
-            self._log_line(
-                f"[sdk:system:task_progress] subtype={message.subtype!r} "
-                f"task_id={message.task_id!r} description={message.description!r} "
-                f"uuid={message.uuid!r} session_id={message.session_id!r} "
-                f"tool_use_id={message.tool_use_id!r} "
-                f"last_tool_name={message.last_tool_name!r} "
-                f"usage={j(message.usage)}",
-                loop_log,
-            )
-            return
-
-        if isinstance(message, TaskNotificationMessage):
-            self._log_line(
-                f"[sdk:system:task_notification] subtype={message.subtype!r} "
-                f"task_id={message.task_id!r} status={message.status!r} "
-                f"output_file={message.output_file!r} summary={message.summary!r} "
-                f"uuid={message.uuid!r} session_id={message.session_id!r} "
-                f"tool_use_id={message.tool_use_id!r}",
-                loop_log,
-            )
-            if message.usage is not None:
-                self._log_line(
-                    f"[sdk:system:task_notification:usage] {j(message.usage)}",
-                    loop_log,
-                )
-            return
-
-        if isinstance(message, SystemMessage):
-            self._log_line(
-                f"[sdk:system] subtype={message.subtype!r} "
-                f"data={self._truncate_log_text(j(message.data), smax)}",
-                loop_log,
-            )
-            return
-
-        if isinstance(message, ResultMessage):
-            self._log_line(
-                f"[sdk:result] subtype={message.subtype!r} num_turns={message.num_turns} "
-                f"duration_ms={message.duration_ms} duration_api_ms={message.duration_api_ms} "
-                f"is_error={message.is_error} stop_reason={message.stop_reason!r} "
-                f"total_cost_usd={message.total_cost_usd!r} session_id={message.session_id!r} "
-                f"uuid={message.uuid!r}",
-                loop_log,
-            )
-            if message.usage:
-                self._log_line(f"[sdk:result:usage] {j(message.usage)}", loop_log)
-            if message.model_usage:
-                self._log_line(
-                    f"[sdk:result:model_usage] {j(message.model_usage)}", loop_log
-                )
-            if message.errors:
-                self._log_line(f"[sdk:result:errors] {j(message.errors)}", loop_log)
-            if message.permission_denials:
-                self._log_line(
-                    f"[sdk:result:permission_denials] "
-                    f"{self._truncate_log_text(j(message.permission_denials), tmax)}",
-                    loop_log,
-                )
-            if message.result:
-                self._log_line(
-                    f"[sdk:result:result]\n"
-                    f"{self._truncate_log_text(message.result, tmax)}",
-                    loop_log,
-                )
-            if message.structured_output is not None:
-                self._log_line(
-                    f"[sdk:result:structured_output] "
-                    f"{self._truncate_log_text(j(message.structured_output), tmax)}",
-                    loop_log,
-                )
-            return
-
-        if isinstance(message, StreamEvent):
-            ev = j(message.event)
-            self._log_line(
-                f"[sdk:stream_event] uuid={message.uuid!r} "
-                f"session_id={message.session_id!r} "
-                f"parent_tool_use_id={message.parent_tool_use_id!r} "
-                f"event={self._truncate_log_text(ev, xev)}",
-                loop_log,
-            )
-            return
-
-        if isinstance(message, RateLimitEvent):
-            ri = message.rate_limit_info
-            self._log_line(
-                f"[sdk:rate_limit] uuid={message.uuid!r} session_id={message.session_id!r} "
-                f"status={ri.status!r} rate_limit_type={ri.rate_limit_type!r} "
-                f"resets_at={ri.resets_at!r} utilization={ri.utilization!r}",
-                loop_log,
-            )
-            if ri.raw:
-                self._log_line(
-                    f"[sdk:rate_limit:raw] {self._truncate_log_text(j(ri.raw), smax)}",
-                    loop_log,
-                )
-            return
-
-        self._log_line(
-            f"[sdk:unhandled] {type(message).__name__}: {message!r}", loop_log
-        )
+    @staticmethod
+    def _optimization_escalations_for_iteration(
+        it: int, state: AgentLoopSharedState
+    ) -> list[dict[str, Any]]:
+        return [
+            row
+            for row in state.optimization_delegations_pending
+            if int(row.get("iteration_index", -1)) == it
+        ]
 
     @classmethod
     def default_session_dir(
@@ -406,12 +106,19 @@ class DevshellAgentLoop:
         exp = (self._cfg.defaults.exp or "").strip()
         return exp if exp else "direct"
 
+    def _history_root(self) -> Path:
+        if self._cfg.history_root is not None:
+            return self._cfg.history_root.resolve()
+        return (self._cfg.repo_root / "evaluation" / "devshell_agent_history").resolve()
+
+    def _history_session_dir(self) -> Path:
+        return self._history_root() / self._cfg.session_dir.name
+
     def _iteration_user_message(self, *, it: int) -> str:
         cfg = self._cfg
         extra = cfg.extra_instruction.strip()
         extra_block = f"\n\n## 用户附加说明\n{extra}\n" if extra else ""
         session_dir = cfg.session_dir.resolve()
-        budget_exp = self._budget_exp_name()
         return f"""## 第 {it} / {cfg.max_iterations} 轮迭代
 
 - **目标宏平均分数**：{cfg.target_mean_score}/100（若 `macro_mean_0_100 >= {cfg.target_mean_score}` 或你认为已充分达标，将 `target_met` 设为 true）。
@@ -419,13 +126,42 @@ class DevshellAgentLoop:
 
 ### 你必须完成的步骤
 1. 调用 **run_devshell_eval**，`iteration_tag` 使用新目录名（建议 `iter_{it:02d}`），勿复用旧 tag。
-2. 获取本轮判分与宏平均：**优先**在 `eval_runs/<iteration_tag>/pending_ingest/*.json` 读取已写入的 `item.score`（及低分题的 `item.score_reason`）；编排器在每次 `run_devshell_eval` 结束后会对该目录执行 `score_devshell_tasks.py --submit` 并上报，通常无需再跑脚本。仅在 pending 尚无分数或需对**改动后的**产物重新判分时，再执行 `uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir <该目录>`（可加 `--dry-run` 仅打印；**不要** `--submit`）。
-3. 若未达标：在**允许的路径**内按**优先级**调整：**先** `matmaster/skills/`（可改现有 Skill，**也可新建**；须落在本轮生效的 `skills_root` 内）、再 `matmaster/tools/`，**谨慎**改 `matmaster/exps/`（系统提示须通用，禁止把本题 `scoring_checklist` 逐条抄进 TOML 来过拟合提分）；其余如 `config/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/`；`matmaster/core/` 仅在框架缺陷明确时；**不要**改 `evaluation/question_bank/`）。`matmaster/cache/` 不作为常规手改目标；若改动影响 MCP schema / lazy tool 可见性，执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成。优化提示时**先删并合并重复/矛盾表述，再考虑增补**；完整初始系统 prompt（`system_prompt` + `developer_instructions` + tool descriptions + skill meta，即 `ContextBuilder.build()` 产出）应**优先压到 ≤ 12000**，且**不得超过 15000**（gpt-4o tiktoken）。每次改完相关 TOML 后、`git commit` 前执行：
-   `uv run python -m evaluation.devshell_agent.exp_prompt_budget {budget_exp}`
-   **exit 非 0 不得提交**。**每处修改后立刻 `git commit` 一条**；若某次 commit 后经复评宏平均相对该次修改前**没有变好**，对该 commit **回滚**。若你认为问题在 **checklist / 参考答案** 而非产品侧，调用 **escalate_checklist_revision** 并仍在第 4 步前完成主流程。
-4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（如有）；若本轮曾回滚无效改动，分数应以回滚后的最终状态为准。
+2. 检查返回结果中是否有 `p0_gate_failed: true`（P0 回归门控失败）：
+   - **若 P0 回归**：不要调用 delegate_optimization 或 escalate_checklist_revision，直接跳到步骤 4 报告本轮失败。
+   - **若 P0 通过或无 P0 题目**：继续步骤 3。
+3. 读取**脱敏摘要**（`macro_mean_0_100` 与 `task_scores`）。除 **main_read_text / main_glob_paths / main_grep_text** 允许的 ``evaluation/devshell_agent_history/`` 整目录外，不要自行读取 `evaluation/**` 其它路径或原始 `score_reason`。若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**（优先填写 **candidate_layers** 与 **failure_buckets**、**capabilities_affected**；`candidate_layers` 用 ``skill / tool / system_prompt / runtime`` 标注你判断最像哪一层；**allowed_evidence_paths** 尽量用会话级路径如 ``eval_runs/iter_XX/raw_runs.jsonl``，避免逐题 workspace）；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
+4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实宏平均与 `files_touched`（主 Agent 自身通常为空）；在 `rationale` 中总结本轮分流、子 Agent 结果与下一步。若 P0 回归，在 rationale 中说明回归详情。
 {extra_block}
 """
+
+    @staticmethod
+    def _detect_p0_regression_from_eval_dirs(
+        state: AgentLoopSharedState, loop_log: TextIO
+    ) -> bool:
+        """Detect P0 regression: p0_gate dir exists but remaining dir does not.
+
+        ``run_devshell_eval`` two-phase layout is ``<tag>/p0_gate`` and
+        ``<tag>/remaining`` as **siblings**. ``eval_output_dirs`` records those
+        paths (or a single-phase ``<tag>``). We must resolve ``remaining`` as
+        ``p0_gate.parent / "remaining"``, not ``p0_gate / "remaining"``.
+        """
+        for d in state.eval_output_dirs:
+            if d.name == "p0_gate":
+                p0_gate_dir = d
+                remaining_dir = d.parent / "remaining"
+            elif d.name == "remaining":
+                p0_gate_dir = d.parent / "p0_gate"
+                remaining_dir = d
+            else:
+                p0_gate_dir = d / "p0_gate"
+                remaining_dir = d / "remaining"
+            if p0_gate_dir.is_dir() and not remaining_dir.is_dir():
+                log_line(
+                    f"P0 gate directory found without remaining: {p0_gate_dir}",
+                    loop_log,
+                )
+                return True
+        return False
 
     def _write_session_manifest(self) -> None:
         cfg = self._cfg
@@ -434,6 +170,7 @@ class DevshellAgentLoop:
             "started_at_utc": datetime.now(timezone.utc).isoformat(),
             "repo_root": str(cfg.repo_root.resolve()),
             "session_dir": str(session_dir.resolve()),
+            "history_root": str(self._history_root()),
             "max_iterations": cfg.max_iterations,
             "target_mean_score": cfg.target_mean_score,
             "permission_mode": cfg.permission_mode,
@@ -443,10 +180,12 @@ class DevshellAgentLoop:
                 for k, v in asdict(cfg.defaults).items()
             },
             "extra_instruction": cfg.extra_instruction,
-            "git_reset_on_regression": cfg.git_reset_on_regression,
             "eval_ingest_submit_each_iteration": cfg.eval_ingest_submit_each_iteration,
             "eval_ingest_submit_timeout": cfg.eval_ingest_submit_timeout,
             "enable_checklist_agent": cfg.enable_checklist_agent,
+            "enable_optimization_agent": True,
+            "enable_optimization_auto_commit": cfg.enable_optimization_auto_commit,
+            "optimization_auto_commit_skip_budget": cfg.optimization_auto_commit_skip_budget,
             "max_checklist_sdk_turns": checklist_revision_sdk_max_turns_from_jobs(
                 cfg.defaults.jobs
             ),
@@ -460,6 +199,71 @@ class DevshellAgentLoop:
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+
+    def _write_iteration_history(
+        self,
+        *,
+        it: int,
+        state: AgentLoopSharedState,
+        outcome: dict[str, Any],
+    ) -> None:
+        history_dir = self._history_session_dir() / "iterations"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "iteration_index": it,
+            "outcome": outcome,
+            "optimization_reports": [
+                row
+                for row in state.optimization_reports
+                if int(row.get("iteration_index", -1)) == it
+            ],
+            "checklist_reports": [
+                row
+                for row in state.checklist_revision_reports
+                if int(row.get("iteration_index", -1)) == it
+            ],
+            "optimization_delegations": [
+                row
+                for row in state.optimization_delegations_pending
+                if int(row.get("iteration_index", -1)) == it
+            ],
+        }
+        (history_dir / f"iter_{it:02d}.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    def _write_session_history_summary(
+        self,
+        *,
+        state: AgentLoopSharedState,
+        exit_code: int,
+    ) -> None:
+        session_dir = self._history_session_dir()
+        session_dir.mkdir(parents=True, exist_ok=True)
+        summary = {
+            "session_dir": str(self._cfg.session_dir.resolve()),
+            "exit_code": exit_code,
+            "outcomes": state.outcomes,
+            "optimization_reports": state.optimization_reports,
+            "checklist_revision_reports": state.checklist_revision_reports,
+        }
+        (session_dir / "session_summary.json").write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        index_path = self._history_root() / "index.jsonl"
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        row = {
+            "session_name": self._cfg.session_dir.name,
+            "session_dir": str(self._cfg.session_dir.resolve()),
+            "exit_code": exit_code,
+            "history_dir": str(session_dir),
+            "outcome_count": len(state.outcomes),
+        }
+        with index_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     async def run(self) -> int:
         """Run up to ``max_iterations`` SDK rounds; return 0 on clean stop, 1 on warnings."""
@@ -490,21 +294,14 @@ class DevshellAgentLoop:
         toolkit = MatmasterEvalMcpToolkit(state)
         mcp_server = toolkit.build_mcp_server()
 
-        allowed_tools = [
-            *MatmasterEvalMcpToolkit.allowed_tool_names(),
-            "Read",
-            "Glob",
-            "Grep",
-            "Edit",
-            "Write",
-            "Bash",
-        ]
+        allowed_tools = self.main_agent_allowed_tools()
 
         options = ClaudeAgentOptions(
             system_prompt=self.SYSTEM_PROMPT_MAIN,
             cwd=str(cfg.repo_root.resolve()),
             max_turns=cfg.max_sdk_turns,
             mcp_servers={MatmasterEvalMcpToolkit.MCP_SERVER_NAME: mcp_server},
+            tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
             allowed_tools=allowed_tools,
             permission_mode=cfg.permission_mode,
         )
@@ -514,6 +311,9 @@ class DevshellAgentLoop:
         log_path = cfg.session_dir / "sdk_loop_console.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         exit_code = 0
+        #: HEAD at the **start** of the previous iteration; used as ``git revert`` base when
+        #: the current iteration's P0 gate regresses (``last_p0_scores`` matches that snapshot).
+        prev_iter_start_head: str | None = None
         with log_path.open("a", encoding="utf-8") as loop_log:
             async with ClaudeSDKClient(options=options) as client:
                 for it in range(1, cfg.max_iterations + 1):
@@ -526,7 +326,23 @@ class DevshellAgentLoop:
                         )
                     await client.query(self._iteration_user_message(it=it))
                     async for message in client.receive_response():
-                        self._log_sdk_message(message, loop_log)
+                        log_sdk_message(
+                            message,
+                            loop_log=loop_log,
+                            tool_result_max_chars=self._SDK_LOG_TOOL_RESULT_MAX_CHARS,
+                            stream_event_max_chars=self._SDK_LOG_STREAM_EVENT_MAX_CHARS,
+                            text_block_max_chars=self._SDK_LOG_TEXT_BLOCK_MAX_CHARS,
+                            system_data_max_chars=self._SDK_LOG_SYSTEM_DATA_MAX_CHARS,
+                        )
+
+                    opt_rc = await self._run_optimization_followups_if_needed(
+                        it=it,
+                        state=state,
+                        mcp_server=mcp_server,
+                        loop_log=loop_log,
+                    )
+                    if opt_rc >= 1:
+                        exit_code = 1
 
                     follow_rc = await self._run_checklist_followup_if_needed(
                         it=it,
@@ -537,7 +353,7 @@ class DevshellAgentLoop:
                     if follow_rc >= 1:
                         exit_code = 1
                     if follow_rc == 2:
-                        self._log_line(
+                        log_line(
                             "Stopping outer iterations: question_bank question id set "
                             "changed during checklist follow-up (see "
                             "question_bank_id_drift.json in session dir).",
@@ -545,61 +361,74 @@ class DevshellAgentLoop:
                         )
                         break
 
+                    # --- P0 regression handling ---
+                    p0_regressed = self._detect_p0_regression_from_eval_dirs(
+                        state, loop_log
+                    )
+
                     matching = [
                         o
                         for o in state.outcomes
                         if int(o.get("iteration_index", -1)) == it
                     ]
                     if not matching:
-                        self._log_line(
+                        log_line(
                             f"warning: no report_iteration_outcome for iteration {it}",
                             loop_log,
                         )
                         exit_code = 1
+                        if head0:
+                            prev_iter_start_head = head0
                         continue
 
                     last = matching[-1]
+                    if p0_regressed:
+                        last["p0_regression"] = True
+
+                    if p0_regressed and prev_iter_start_head:
+                        rev_rc = await self._run_p0_revert_followup_if_needed(
+                            it=it,
+                            revert_base_sha=prev_iter_start_head,
+                            state=state,
+                            mcp_server=mcp_server,
+                            loop_log=loop_log,
+                        )
+                        if rev_rc >= 1:
+                            exit_code = 1
+                    elif p0_regressed and not prev_iter_start_head:
+                        log_line(
+                            "P0 regression but prev_iter_start_head is unset "
+                            f"(iteration {it}); skipping git revert sub-round",
+                            loop_log,
+                        )
+
+                    self._write_iteration_history(it=it, state=state, outcome=last)
                     score = int(last.get("macro_mean_0_100", 0))
                     met = bool(last.get("target_met"))
 
-                    if cfg.git_reset_on_regression and it > 1:
-                        prev_rows = [
-                            o
-                            for o in state.outcomes
-                            if int(o.get("iteration_index", -1)) == it - 1
-                        ]
-                        if prev_rows:
-                            prev_score = int(prev_rows[-1].get("macro_mean_0_100", 0))
-                            if score < prev_score:
-                                saved = head_at_iteration_start(cfg.session_dir, it)
-                                if saved:
-                                    ok, msg = git_reset_hard(
-                                        repo_root=cfg.repo_root, rev=saved
-                                    )
-                                    self._log_line(
-                                        f"git regression guard: iter {it} mean {score} "
-                                        f"< iter {it - 1} mean {prev_score}; "
-                                        f"reset --hard {saved[:7]}… -> "
-                                        f"{'ok' if ok else 'failed'} {msg}",
-                                        loop_log,
-                                    )
-                                    if not ok:
-                                        exit_code = 1
-                                else:
-                                    self._log_line(
-                                        f"warning: regression at iter {it} but no "
-                                        f"head_at_start recorded; skip auto reset",
-                                        loop_log,
-                                    )
+                    if p0_regressed:
+                        tail = git_rev_parse_head(repo_root=cfg.repo_root)
+                        if tail:
+                            prev_iter_start_head = tail
+                        log_line(
+                            f"Iteration {it} marked as optimization failure "
+                            f"(P0 regression); continuing to next iteration.",
+                            loop_log,
+                        )
+                        continue
+
+                    if head0:
+                        prev_iter_start_head = head0
 
                     if met or score >= cfg.target_mean_score:
-                        self._log_line(
+                        log_line(
                             f"Stopping after iteration {it}: target_met={met} "
                             f"macro_mean={score} (target {cfg.target_mean_score})",
                             loop_log,
                         )
                         break
 
+        self._write_session_history_summary(state=state, exit_code=exit_code)
         return exit_code
 
     def _checklist_permission_mode_resolved(self) -> str:
@@ -641,10 +470,378 @@ class DevshellAgentLoop:
 {blob}
 ```
 
-- **会话目录**（只读产物）：`{session_dir}`
-- 任务：仅在 **evaluation/question_bank/** 内做必要 YAML 修订；若判分器 / validator 本身存在明确口径缺陷，可在 **evaluation/core/** 内做对应修复。遵守 `evaluation/AGENTS_evaluation.md` 的题库 `id` 规则。
+- **会话目录**（可写 proposal）：`{session_dir}`
+- 任务：**不要**直接改 ``evaluation/question_bank/`` 或 ``evaluation/core/``；将必要修订写入 **`proposed_question_bank_changes.md`**（与会话目录下 `eval_runs/` 同级），遵守 `evaluation/AGENTS_evaluation.md` 的题库 `id` 规则（在提案中写明合入时是否需 bump `id`）。
 - 结束前**必须**调用 **report_checklist_revision**（`iteration_index={it}`）。
 """
+
+    @staticmethod
+    def _optimization_delegation_slug(delegation: dict[str, Any]) -> str:
+        for key in ("notes", "problem_summary"):
+            s = str(delegation.get(key) or "").strip()
+            if s:
+                return s[:80]
+        return "optimization"
+
+    @staticmethod
+    def _candidate_layers_for_delegation(delegation: dict[str, Any]) -> list[str]:
+        seen: set[str] = set()
+        layers: list[str] = []
+        for raw in delegation.get("candidate_layers") or []:
+            layer = str(raw).strip()
+            if not layer or layer in seen:
+                continue
+            seen.add(layer)
+            layers.append(layer)
+        return layers
+
+    def _optimization_layer_guidance(self, delegation: dict[str, Any]) -> str:
+        layers = self._candidate_layers_for_delegation(delegation)
+        if not layers:
+            return (
+                "- 未显式提供 `candidate_layers`：先自行判断更像 `skill`、`tool`、"
+                "`system_prompt` 还是 `runtime`，再决定主改动面。\n"
+            )
+
+        lines = ["- `candidate_layers`: " + ", ".join(f"`{layer}`" for layer in layers)]
+        if layers == ["system_prompt"]:
+            lines.extend(
+                [
+                    "- 仅命中 `system_prompt`：默认不要修改 `matmaster/skills/`、"
+                    "`matmaster/tools/`、`src/` 等产品代码。",
+                    "- 优先读取现有 `matmaster/exps/_base.toml` / "
+                    "`matmaster/exps/direct.toml`，识别重复、冲突或可合并规则。",
+                    "- 若判断确实需要改 exp：只在 "
+                    "`proposed_matmaster_exps_changes.md` 中写 proposal，"
+                    "不要尝试绕过限制落代码改动。",
+                    "- proposal 使用固定模板并逐项填写："
+                    "`Target file`、`Existing rule(s) to replace or merge`、"
+                    "`Proposed text`、`Why not skill/tool layer`、"
+                    "`Expected cross-task benefit`、`Prompt budget impact`。",
+                ]
+            )
+            return "\n".join(lines) + "\n"
+
+        if "skill" in layers:
+            lines.append(
+                "- 命中 `skill`：优先检查 `matmaster/skills/`，并遵守 "
+                "`SKILL.md` / `references` / `scripts` 分层约束。"
+            )
+        if "tool" in layers:
+            lines.append(
+                "- 命中 `tool`：优先检查 `matmaster/tools/` 与相关 tool descriptions；"
+                "避免把工具契约问题错误堆进 Skills。"
+            )
+        if "runtime" in layers:
+            lines.append(
+                "- 命中 `runtime`：优先检查 `config/`、`matmaster/adaptors/`、"
+                "`matmaster/devshell/`、必要时 `src/` 的运行时链路。"
+            )
+        if "system_prompt" in layers:
+            lines.append(
+                "- 同时命中 `system_prompt`：只有在确认问题属于跨任务执行契约，且"
+                "不能更合理地下沉到 skill/tool/runtime 层时，才写 exp proposal。"
+            )
+        return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def _optimization_execution_track(delegation: dict[str, Any]) -> str:
+        track = str(delegation.get("execution_track") or "").strip()
+        if track:
+            return track
+        layers = DevshellAgentLoop._candidate_layers_for_delegation(delegation)
+        if layers == ["system_prompt"]:
+            return "proposal_only"
+        return "code_edit"
+
+    def _record_optimization_proposal_track(
+        self,
+        *,
+        it: int,
+        delegation: dict[str, Any],
+        state: AgentLoopSharedState,
+        loop_log: TextIO,
+    ) -> None:
+        rnd = int(delegation.get("optimization_round", -1))
+        matching_report = None
+        for row in state.optimization_reports:
+            if (
+                int(row.get("iteration_index", -1)) == it
+                and int(row.get("optimization_round", -1)) == rnd
+            ):
+                matching_report = row
+                break
+
+        payload = {
+            "iteration_index": it,
+            "optimization_round": rnd,
+            "execution_track": "proposal_only",
+            "candidate_layers": self._candidate_layers_for_delegation(delegation),
+            "problem_summary": delegation.get("problem_summary"),
+            "suggested_focus": delegation.get("suggested_focus") or [],
+            "report_summary": (
+                None if matching_report is None else matching_report.get("summary")
+            ),
+            "files_touched": (
+                []
+                if matching_report is None
+                else matching_report.get("files_touched") or []
+            ),
+        }
+        path = self._cfg.session_dir / "optimization_proposal_tracks.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        log_line(
+            "optimization proposal-only track: "
+            f"iteration {it}, round {rnd}, candidate_layers={payload['candidate_layers']!r}",
+            loop_log,
+        )
+
+    def _apply_optimization_auto_commit(
+        self,
+        *,
+        it: int,
+        delegation: dict[str, Any],
+        state: AgentLoopSharedState,
+        loop_log: TextIO,
+    ) -> None:
+        cfg = self._cfg
+        if not cfg.enable_optimization_auto_commit:
+            return
+        if self._optimization_execution_track(delegation) == "proposal_only":
+            self._record_optimization_proposal_track(
+                it=it,
+                delegation=delegation,
+                state=state,
+                loop_log=loop_log,
+            )
+            return
+        from evaluation.devshell_agent.optimization_auto_commit import (
+            commit_optimization_changes,
+        )
+
+        rnd = int(delegation.get("optimization_round", -1))
+        slug = self._optimization_delegation_slug(delegation)
+        res = commit_optimization_changes(
+            cfg.repo_root,
+            cfg.session_dir,
+            iteration_index=it,
+            optimization_round=rnd,
+            slug=slug,
+            skip_exp_budget=cfg.optimization_auto_commit_skip_budget,
+            log=loop_log,
+        )
+        if res.commit_sha:
+            for row in state.optimization_reports:
+                if (
+                    int(row.get("iteration_index", -1)) == it
+                    and int(row.get("optimization_round", -1)) == rnd
+                ):
+                    row["commit_shas"] = [res.commit_sha]
+                    break
+
+    def _optimization_user_message(self, *, it: int, delegation: dict[str, Any]) -> str:
+        session_dir = self._cfg.session_dir.resolve()
+        blob = json.dumps(delegation, ensure_ascii=False, indent=2)
+        guidance = self._optimization_layer_guidance(delegation)
+        return f"""## 产品侧优化子回合（第 {it} 轮）
+
+主 Agent 已提交以下 **delegate_optimization** 工单（JSON）：
+
+```json
+{blob}
+```
+
+- **会话目录**（仅供查看非 `evaluation/` 产物）：`{session_dir}`
+- 任务：仅在**产品侧目录**做必要优化，不得查看或编辑 `evaluation/**`。
+- 分层指导：
+{guidance}
+- 结束前**必须**调用 **report_optimization_result**（`iteration_index={it}`，`optimization_round={delegation.get("optimization_round")}`）。
+"""
+
+    @staticmethod
+    def _p0_revert_optimization_round(it: int) -> int:
+        """Synthetic ``optimization_round`` for P0 revert sub-rounds (avoid colliding with 1..n)."""
+        return 10_000 + int(it)
+
+    def _p0_revert_user_message(self, *, it: int, revert_base_sha: str) -> str:
+        session_dir = self._cfg.session_dir.resolve()
+        rnd = self._p0_revert_optimization_round(it)
+        return f"""## P0 回归 — Git revert 专责回合（第 {it} 轮迭代）
+
+本轮 P0 相对 ``last_p0_scores`` 基线**下降**；基线对应**上一轮迭代开局**（本轮优化提交之前）的仓库快照。编排器授权的 ``base_sha`` = ``{revert_base_sha}``。
+
+- **任务**：先调用 **git_revert_commits_after_base**，参数 ``base_sha`` **必须**为上述完整 SHA。该工具对 ``{revert_base_sha}..HEAD`` 上每个提交**从新到旧**执行 ``git revert --no-edit``（**不**使用 ``git reset``），用于撤销**上一轮** optimization auto-commit 等在基线之后累积的提交。
+- 若区间为空（无可 revert 的提交），工具会返回成功说明；你仍须调用 **report_optimization_result**。
+- **会话目录**（只读证据）：`{session_dir}`
+- 结束前**必须**调用 **report_optimization_result**（``iteration_index={it}``，``optimization_round={rnd}``），在摘要中说明 revert 结果。
+"""
+
+    async def _run_p0_revert_followup_if_needed(
+        self,
+        *,
+        it: int,
+        revert_base_sha: str,
+        state: AgentLoopSharedState,
+        mcp_server: Any,
+        loop_log: TextIO,
+    ) -> int:
+        """Run optimization-shaped sub-round to ``git revert`` after P0 regression.
+
+        ``revert_base_sha`` is the **start-of-(it-1)** HEAD (snapshot when the last
+        successful P0 gate updated ``last_p0_scores``), not the current iteration start.
+
+        Returns:
+            0: ok
+            1: warning (e.g. missing ``report_optimization_result``)
+        """
+        base = revert_base_sha.strip()
+        if not base:
+            return 0
+
+        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+
+        from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
+
+        rnd = self._p0_revert_optimization_round(it)
+        optimization_allowed = MatmasterEvalMcpToolkit.optimization_agent_tool_names()
+        n_reports_before = len(state.optimization_reports)
+        state.p0_revert_allowed_base_sha = base
+        try:
+            co = ClaudeAgentOptions(
+                system_prompt=self.SYSTEM_PROMPT_OPTIMIZATION_P0_REVERT,
+                cwd=str(self._cfg.repo_root.resolve()),
+                max_turns=24,
+                mcp_servers={MatmasterEvalMcpToolkit.MCP_SERVER_NAME: mcp_server},
+                tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
+                allowed_tools=optimization_allowed,
+                permission_mode=self._cfg.permission_mode,
+            )
+            log_line(
+                f"P0 revert sub-round: iteration {it}, base={base[:12]}…",
+                loop_log,
+            )
+            async with ClaudeSDKClient(options=co) as cc:
+                await cc.query(
+                    self._p0_revert_user_message(it=it, revert_base_sha=revert_base_sha)
+                )
+                async for message in cc.receive_response():
+                    log_sdk_message(
+                        message,
+                        loop_log=loop_log,
+                        tool_result_max_chars=self._SDK_LOG_TOOL_RESULT_MAX_CHARS,
+                        stream_event_max_chars=self._SDK_LOG_STREAM_EVENT_MAX_CHARS,
+                        text_block_max_chars=self._SDK_LOG_TEXT_BLOCK_MAX_CHARS,
+                        system_data_max_chars=self._SDK_LOG_SYSTEM_DATA_MAX_CHARS,
+                    )
+        finally:
+            state.p0_revert_allowed_base_sha = None
+
+        reports = [
+            row
+            for row in state.optimization_reports[n_reports_before:]
+            if int(row.get("iteration_index", -1)) == it
+            and int(row.get("optimization_round", -1)) == rnd
+        ]
+        if not reports:
+            log_line(
+                "warning: P0 revert agent did not call report_optimization_result "
+                f"for iteration {it} round {rnd}",
+                loop_log,
+            )
+            return 1
+        return 0
+
+    async def _run_optimization_followups_if_needed(
+        self,
+        *,
+        it: int,
+        state: AgentLoopSharedState,
+        mcp_server: Any,
+        loop_log: TextIO,
+    ) -> int:
+        """Run optimization agent(s) if needed.
+
+        Returns:
+            0: ok
+            1: warning (e.g. missing report_optimization_result)
+        """
+        delegations = self._optimization_escalations_for_iteration(it, state)
+        if not delegations:
+            return 0
+
+        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+
+        from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
+
+        optimization_allowed = MatmasterEvalMcpToolkit.optimization_agent_tool_names()
+        warning = 0
+        for delegation in delegations:
+            n_reports_before = len(state.optimization_reports)
+            co = ClaudeAgentOptions(
+                system_prompt=self.SYSTEM_PROMPT_OPTIMIZATION,
+                cwd=str(self._cfg.repo_root.resolve()),
+                max_turns=max(32, int(self._cfg.defaults.jobs) * 6),
+                mcp_servers={MatmasterEvalMcpToolkit.MCP_SERVER_NAME: mcp_server},
+                tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
+                allowed_tools=optimization_allowed,
+                permission_mode=self._cfg.permission_mode,
+            )
+            log_line(
+                "optimization agent: "
+                f"iteration {it}, round {delegation.get('optimization_round')}",
+                loop_log,
+            )
+            async with ClaudeSDKClient(options=co) as cc:
+                await cc.query(
+                    self._optimization_user_message(it=it, delegation=delegation)
+                )
+                async for message in cc.receive_response():
+                    log_sdk_message(
+                        message,
+                        loop_log=loop_log,
+                        tool_result_max_chars=self._SDK_LOG_TOOL_RESULT_MAX_CHARS,
+                        stream_event_max_chars=self._SDK_LOG_STREAM_EVENT_MAX_CHARS,
+                        text_block_max_chars=self._SDK_LOG_TEXT_BLOCK_MAX_CHARS,
+                        system_data_max_chars=self._SDK_LOG_SYSTEM_DATA_MAX_CHARS,
+                    )
+
+            reports = [
+                row
+                for row in state.optimization_reports[n_reports_before:]
+                if int(row.get("iteration_index", -1)) == it
+                and int(row.get("optimization_round", -1))
+                == int(delegation.get("optimization_round", -1))
+            ]
+            if not reports:
+                log_line(
+                    "warning: optimization agent did not call "
+                    f"report_optimization_result for iteration {it} round "
+                    f"{delegation.get('optimization_round')}",
+                    loop_log,
+                )
+                warning = 1
+            else:
+                self._apply_optimization_auto_commit(
+                    it=it,
+                    delegation=delegation,
+                    state=state,
+                    loop_log=loop_log,
+                )
+            notify_proposed_matmaster_exps_if_present(
+                session_dir=self._cfg.session_dir,
+                iteration_index=it,
+                delegation=delegation,
+                optimization_reports=reports,
+            )
+
+        state.optimization_delegations_pending = [
+            row
+            for row in state.optimization_delegations_pending
+            if int(row.get("iteration_index", -1)) != it
+        ]
+        return warning
 
     async def _run_checklist_followup_if_needed(
         self,
@@ -680,7 +877,7 @@ class DevshellAgentLoop:
         try:
             ids_before = collect_question_bank_question_ids(cfg.repo_root)
         except Exception as e:
-            self._log_line(
+            log_line(
                 f"warning: cannot snapshot question_bank ids before checklist "
                 f"(id-drift guard skipped): {e}",
                 loop_log,
@@ -692,31 +889,31 @@ class DevshellAgentLoop:
         from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
         n_reports_before = len(state.checklist_revision_reports)
-        checklist_allowed = [
-            *MatmasterEvalMcpToolkit.checklist_agent_mcp_tool_names(),
-            "Read",
-            "Glob",
-            "Grep",
-            "Edit",
-            "Write",
-            "Bash",
-        ]
+        checklist_allowed = MatmasterEvalMcpToolkit.checklist_agent_tool_names()
         co = ClaudeAgentOptions(
             system_prompt=self.SYSTEM_PROMPT_CHECKLIST,
             cwd=str(cfg.repo_root.resolve()),
             max_turns=checklist_max_turns_for_shared_state(state),
             mcp_servers={MatmasterEvalMcpToolkit.MCP_SERVER_NAME: mcp_server},
+            tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
             allowed_tools=checklist_allowed,
             permission_mode=self._checklist_permission_mode_resolved(),
         )
-        self._log_line(
+        log_line(
             f"checklist agent: iteration {it}, {len(escalations)} escalation(s)",
             loop_log,
         )
         async with ClaudeSDKClient(options=co) as cc:
             await cc.query(self._checklist_user_message(it=it, escalations=escalations))
             async for message in cc.receive_response():
-                self._log_sdk_message(message, loop_log)
+                log_sdk_message(
+                    message,
+                    loop_log=loop_log,
+                    tool_result_max_chars=self._SDK_LOG_TOOL_RESULT_MAX_CHARS,
+                    stream_event_max_chars=self._SDK_LOG_STREAM_EVENT_MAX_CHARS,
+                    text_block_max_chars=self._SDK_LOG_TEXT_BLOCK_MAX_CHARS,
+                    system_data_max_chars=self._SDK_LOG_SYSTEM_DATA_MAX_CHARS,
+                )
 
         state.checklist_escalations_pending = [
             e
@@ -725,8 +922,13 @@ class DevshellAgentLoop:
         ]
         new_reports = state.checklist_revision_reports[n_reports_before:]
         ok_reports = [r for r in new_reports if int(r.get("iteration_index", -1)) == it]
+        notify_proposed_question_bank_if_present(
+            session_dir=self._cfg.session_dir,
+            iteration_index=it,
+            checklist_reports=ok_reports,
+        )
         if not ok_reports:
-            self._log_line(
+            log_line(
                 f"warning: checklist agent did not call report_checklist_revision "
                 f"for iteration {it}",
                 loop_log,
@@ -737,7 +939,7 @@ class DevshellAgentLoop:
             try:
                 ids_after = collect_question_bank_question_ids(cfg.repo_root)
             except Exception as e:
-                self._log_line(
+                log_line(
                     f"error: question_bank unreadable after checklist agent: {e}",
                     loop_log,
                 )
@@ -749,7 +951,7 @@ class DevshellAgentLoop:
             if ids_before != ids_after:
                 removed = sorted(ids_before - ids_after)
                 added = sorted(ids_after - ids_before)
-                self._log_line(
+                log_line(
                     f"checklist follow-up changed question_bank id set; stopping "
                     f"outer loop (removed={removed!r} added={added!r})",
                     loop_log,

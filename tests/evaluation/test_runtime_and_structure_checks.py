@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from evaluation.core.evaluator import BinaryEvaluator
 from evaluation.core.evaluator_helpers import check_duration_budget
@@ -136,10 +137,51 @@ def test_mat_runner_includes_duration_ms(
         task_id='tid',
         run_dir=tmp_path,
         mat_config_path=Path('configs/mat_master/config.yaml'),
+        empty_completion_max_retries=0,
     )
     assert 'duration_ms' in out
     assert isinstance(out['duration_ms'], int)
     assert out['duration_ms'] >= 0
+
+
+def test_run_mat_task_empty_completion_retry_sums_duration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second attempt runs when first is completed/natural with no answer or tools."""
+    from evaluation.core import mat_runner
+
+    first = {
+        "task_id": "tid",
+        "mode": "direct",
+        "answer": "",
+        "tool_calls": [],
+        "result": {"status": "completed", "reason": "natural"},
+        "status": "completed",
+        "duration_ms": 10,
+        "trajectory_path": "",
+    }
+    second = {
+        **first,
+        "answer": "recovered",
+        "duration_ms": 20,
+    }
+    seq = iter([first, second])
+
+    def _fake_once(**kwargs: object) -> dict:
+        return next(seq)
+
+    monkeypatch.setattr(mat_runner, "_run_mat_task_once", _fake_once)
+    out = mat_runner.run_mat_task(
+        prompt="hi",
+        mode="direct",
+        task_id="tid",
+        run_dir=tmp_path,
+        mat_config_path=Path("configs/mat_master/config.yaml"),
+        empty_completion_max_retries=1,
+    )
+    assert out["answer"] == "recovered"
+    assert out["empty_completion_retry_count"] == 1
+    assert out["duration_ms"] == 30
 
 
 def test_eval_run_record_serializes_duration_ms() -> None:
@@ -148,7 +190,7 @@ def test_eval_run_record_serializes_duration_ms() -> None:
     r = EvalRunRecord(
         question_id='Q',
         capability='structure_construction',
-        domain='struct',
+        domain='battery',
         mode='direct',
         repeat_idx=0,
         prompt='p',
@@ -160,6 +202,149 @@ def test_eval_run_record_serializes_duration_ms() -> None:
     assert dumped['duration_ms'] == 1234
 
 
+def test_question_item_rejects_removed_capability_knowledge_recall() -> None:
+    from evaluation.core.schemas import QuestionItem
+
+    with pytest.raises(ValidationError, match='knowledge_recall'):
+        QuestionItem(
+            id='KR',
+            capability='knowledge_recall',
+            domain='battery',
+            intent='legacy capability should be rejected',
+            human_prompt_seed='x',
+            scoring_checklist=[
+                {
+                    'id': 'unused',
+                    'criterion': 'unused',
+                    'axis': 'correctness',
+                    'verify': 'llm_binary_judge',
+                }
+            ],
+            reference_answers=[{'key': 'unused', 'value': 'x'}],
+        )
+
+
+def test_question_item_rejects_removed_domain_optical() -> None:
+    from evaluation.core.schemas import QuestionItem
+
+    with pytest.raises(ValidationError, match='optical'):
+        QuestionItem(
+            id='OP',
+            capability='structure_construction',
+            domain='optical',
+            intent='legacy domain should be rejected',
+            human_prompt_seed='x',
+            scoring_checklist=[
+                {
+                    'id': 'unused',
+                    'criterion': 'unused',
+                    'axis': 'correctness',
+                    'verify': 'llm_binary_judge',
+                }
+            ],
+            reference_answers=[{'key': 'unused', 'value': 'x'}],
+        )
+
+
+@pytest.mark.parametrize(
+    'domain',
+    [
+        'battery',
+        'catalysis',
+        'polymer',
+        'alloy',
+        'semiconductor',
+    ],
+)
+def test_question_item_accepts_business_line_domains(domain: str) -> None:
+    from evaluation.core.schemas import QuestionItem
+
+    item = QuestionItem(
+        id=f'{domain}_ok',
+        capability='scientific_analysis',
+        domain=domain,
+        intent='new business-line domain should be accepted',
+        human_prompt_seed='x',
+        scoring_checklist=[
+            {
+                'id': 'unused',
+                'criterion': 'unused',
+                'axis': 'correctness',
+                'verify': 'llm_binary_judge',
+            }
+        ],
+        reference_answers=[{'key': 'unused', 'value': 'x'}],
+    )
+    assert item.domain == domain
+
+
+@pytest.mark.parametrize(
+    'domain',
+    [
+        'struct',
+        'elec',
+        'mech',
+        'thermo',
+        'kinetic',
+        'general',
+        'incar',
+        'scxrd',
+        'mlip',
+    ],
+)
+def test_question_item_rejects_removed_legacy_domains(domain: str) -> None:
+    from evaluation.core.schemas import QuestionItem
+
+    with pytest.raises(ValidationError, match=domain):
+        QuestionItem(
+            id='legacy_domain',
+            capability='scientific_analysis',
+            domain=domain,
+            intent='legacy domain should be rejected',
+            human_prompt_seed='x',
+            scoring_checklist=[
+                {
+                    'id': 'unused',
+                    'criterion': 'unused',
+                    'axis': 'correctness',
+                    'verify': 'llm_binary_judge',
+                }
+            ],
+            reference_answers=[{'key': 'unused', 'value': 'x'}],
+        )
+
+
+@pytest.mark.parametrize(
+    'capability',
+    [
+        'property_prediction',
+        'input_generation_vasp',
+        'input_generation_abacus',
+        'co2rr_reproduction',
+    ],
+)
+def test_question_item_rejects_removed_legacy_capabilities(capability: str) -> None:
+    from evaluation.core.schemas import QuestionItem
+
+    with pytest.raises(ValidationError, match=capability):
+        QuestionItem(
+            id='legacy_cap',
+            capability=capability,
+            domain='battery',
+            intent='legacy capability should be rejected',
+            human_prompt_seed='x',
+            scoring_checklist=[
+                {
+                    'id': 'unused',
+                    'criterion': 'unused',
+                    'axis': 'correctness',
+                    'verify': 'llm_binary_judge',
+                }
+            ],
+            reference_answers=[{'key': 'unused', 'value': 'x'}],
+        )
+
+
 def test_safety_questions_also_count_token_and_duration_efficiency() -> None:
     from evaluation.core.schemas import QuestionItem, SafetyVetoRecord, TokenUsageRecord
 
@@ -167,7 +352,7 @@ def test_safety_questions_also_count_token_and_duration_efficiency() -> None:
     q = QuestionItem(
         id='SR',
         capability='safety_refusal',
-        domain='general',
+        domain='battery',
         intent='refuse harmful request',
         human_prompt_seed='x',
         scoring_checklist=[
@@ -276,6 +461,17 @@ def test_check_layer_count_three_coarse_blocks_old_gap_method_would_be_three(
     diffs = _np.diff(coords)
     n_gap_layers = 1 + int(_np.sum(diffs > 0.8))
     assert n_gap_layers == 3
+
+
+def test_removed_slab_centered_verify_is_rejected() -> None:
+    from evaluation.core.schemas import ScoringCheckItem
+
+    with pytest.raises(ValidationError):
+        ScoringCheckItem(
+            id='legacy',
+            criterion='legacy slab-centering verifier should stay removed',
+            verify='struct_file_slab_centered',
+        )
 
 
 @pytest.mark.skipif(

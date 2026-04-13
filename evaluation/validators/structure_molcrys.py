@@ -40,7 +40,7 @@ def verify_molecular_slab_layer_scaling(
     if not root.is_dir():
         return False, f'workspace not a directory: {workspace_dir}'
 
-    cif_paths = sorted(root.glob('*.cif')) + sorted(root.glob('*.CIF'))
+    cif_paths = sorted(root.rglob('*.cif')) + sorted(root.rglob('*.CIF'))
     if not cif_paths:
         return False, 'no .cif files in workspace'
 

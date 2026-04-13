@@ -9,7 +9,7 @@ Current v5 schema changes:
 - EvalRunRecord: binary pass counts + weighted scores (axis_weights from config applied)
 - EvaluationSummary: pass-rate oriented with AxisPassRates + weighted equivalents
 - QuestionBank: no longer requires rubric field
-- EvalConfig: added axis_weights for weighted aggregation
+- EvalConfig: axis_weights; ``include_slices`` (OR-of capability + optional domains + optional tags)
 
 Scoring model:
 - LLM / deterministic verifiers produce binary (pass/fail) verdicts per checklist item
@@ -24,11 +24,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from evaluation.core.question_tags import QuestionTag
+
 # ---------------------------------------------------------------------------
 # Literal type aliases
 # ---------------------------------------------------------------------------
 
 ModeLiteral = Literal['direct', 'planner']
+WorkspaceResolveLiteral = Literal['recursive', 'root']
 
 VerifyLiteral = Literal[
     'exact_match',
@@ -68,35 +71,60 @@ VerifyLiteral = Literal[
     'struct_file_surface_termination',
     # IUCr checkCIF web service (single-crystal XRD validation)
     'checkcif_no_a_alerts',
+    # plain-text file checks
+    'text_file_contains_all',
+    'text_file_kpt_path',
+    'text_file_numeric_range',
+    'text_file_regex',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
 
 CapabilityLiteral = Literal[
-    'knowledge_recall',
     'structure_construction',
-    'property_prediction',
+    'structure_retrieval',
+    'scientific_analysis',
     'workflow_orchestration',
+    'execution_contract',
     'data_diagnosis',
     'batch_processing',
     'safety_refusal',
-    'input_generation_vasp',
-    'input_generation_abacus',
-    'co2rr_reproduction',
+    'input_generation',
 ]
 
 DomainLiteral = Literal[
-    'struct',
-    'elec',
-    'mech',
-    'thermo',
-    'kinetic',
-    'optical',
-    'general',
-    'incar',
-    'scxrd',
+    'battery',
+    'catalysis',
     'polymer',
+    'alloy',
+    'semiconductor',
+    'agnostic',
 ]
+
+GENERIC_PROCESS_TAGS = {
+    'workflow',
+    'workflow_acceleration',
+    'workflow_closure',
+    'loop_oriented',
+    'plotting',
+    'structure_build',
+}
+
+CANONICAL_TAG_ALIASES = {
+    'HEA': 'hea',
+    'SrTiO3': 'srtio3',
+    'srti03': 'srtio3',
+    'Al2O3': 'al2o3',
+    'Li2O': 'li2o',
+    'MgO': 'mgo',
+    'CeO2': 'ceo2',
+    'MoS2': 'mos2',
+    'hBN': 'hbn',
+    'DACMOR': 'dacmor',
+    'Ag111': 'ag111',
+    'Si100': 'si100',
+    'CuCrZr': 'cucrzr',
+}
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +157,14 @@ class ReferenceAnswer(BaseModel):
     unit: str = ''
     tool_name: str | None = None
     tool_arg: str | None = None
+    workspace_resolve: WorkspaceResolveLiteral | None = Field(
+        default=None,
+        description=(
+            'Where to resolve plain filenames for artifact_exists / text_file_* checks. '
+            'None or "recursive" = match under workspace by basename (legacy). '
+            '"root" = only a direct child of workspace_dir (exact path).'
+        ),
+    )
 
     @field_validator('tolerance')
     @classmethod
@@ -198,25 +234,52 @@ class QuestionItem(BaseModel):
     domain: DomainLiteral
     intent: str
     human_prompt_seed: str
-    tags: list[str] = Field(default_factory=list)
-    mode_scope: list[ModeLiteral] = Field(default_factory=lambda: ['direct', 'planner'])
+    tags: list[QuestionTag] = Field(default_factory=list)
+    priority: str | None = Field(
+        default=None,
+        description='Gate priority. "P0" = regression gate (run first, block on regression).',
+    )
     data_files: list[DataFileRef] = Field(default_factory=list)
     reference_answers: list[ReferenceAnswer] = Field(default_factory=list)
     scoring_checklist: list[ScoringCheckItem] = Field(default_factory=list)
 
-    @field_validator('mode_scope')
+    @field_validator('tags', mode='before')
     @classmethod
-    def _validate_mode_scope(cls, value: list[ModeLiteral]) -> list[ModeLiteral]:
-        if not value:
-            raise ValueError('mode_scope cannot be empty')
-        deduped: list[ModeLiteral] = []
-        for mode in value:
-            if mode not in deduped:
-                deduped.append(mode)
-        return deduped
+    def _validate_tags_before(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise TypeError('tags must be a list')
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for raw_tag in value:
+            tag = str(raw_tag).strip()
+            if not tag:
+                raise ValueError('tags must not contain empty strings')
+            canonical = CANONICAL_TAG_ALIASES.get(tag)
+            if canonical is not None:
+                raise ValueError(
+                    f'tag {tag!r} is not canonical; use canonical tag {canonical!r}'
+                )
+            if tag in GENERIC_PROCESS_TAGS:
+                raise ValueError(
+                    f'tag {tag!r} is a generic process tag; use a topic/tool/method tag instead'
+                )
+            if tag in seen:
+                raise ValueError(f'tags must be unique within a question: {tag!r}')
+            seen.add(tag)
+            cleaned.append(tag)
+        return cleaned
 
     @model_validator(mode='after')
     def _validate_scoring_contract(self) -> 'QuestionItem':
+        tag_values = {t.value for t in self.tags}
+        if self.capability in tag_values:
+            raise ValueError(
+                f'tag {self.capability!r} must not repeat question capability'
+            )
+        if self.domain in tag_values:
+            raise ValueError(f'tag {self.domain!r} must not repeat question domain')
         if not self.scoring_checklist:
             raise ValueError(
                 'question must include at least one scoring_checklist entry'
@@ -241,6 +304,10 @@ class QuestionItem(BaseModel):
             'molcrys_slab_molecular_integrity',
             'molcrys_local_env',
             'sc005_disorder_formulas',
+            'text_file_contains_all',
+            'text_file_kpt_path',
+            'text_file_numeric_range',
+            'text_file_regex',
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:
@@ -263,14 +330,34 @@ class QuestionBank(BaseModel):
     """Question bank file model (v5 format)."""
 
     version: str = 'v5'
-    capability: CapabilityLiteral | None = None  # optional top-level hint
-    domain: DomainLiteral | None = None  # optional top-level hint
+    capability: CapabilityLiteral | None = None
+    domain: DomainLiteral | None = None
     questions: list[QuestionItem]
 
     @model_validator(mode='after')
     def _validate_questions(self) -> 'QuestionBank':
         if not self.questions:
             raise ValueError('questions cannot be empty')
+        if self.capability is None:
+            raise ValueError('top-level capability is required for every bank')
+        mismatched_capabilities = sorted(
+            q.id for q in self.questions if q.capability != self.capability
+        )
+        if mismatched_capabilities:
+            raise ValueError(
+                'top-level capability must match every question capability; '
+                f'mismatched question ids: {mismatched_capabilities}'
+            )
+        if self.domain is None:
+            raise ValueError('top-level domain is required for every bank')
+        mismatched_domains = sorted(
+            q.id for q in self.questions if q.domain != self.domain
+        )
+        if mismatched_domains:
+            raise ValueError(
+                'top-level domain must match every question domain; '
+                f'mismatched question ids: {mismatched_domains}'
+            )
         return self
 
 
@@ -291,10 +378,43 @@ class LLMRuntimeConfig(BaseModel):
     timeout: int = 180
 
 
+class CapabilitySlice(BaseModel):
+    """One OR-branch in ``include_slices``: capability plus optional domain/tag filters."""
+
+    capability: str
+    domains: list[str] | None = None
+    tags: list[str] | None = None
+
+    @field_validator('capability')
+    @classmethod
+    def _capability_non_empty(cls, value: str) -> str:
+        if not str(value).strip():
+            raise ValueError('capability cannot be empty')
+        return str(value).strip()
+
+    @field_validator('domains')
+    @classmethod
+    def _domains_non_empty_when_set(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None and not value:
+            raise ValueError('domains must be omitted or a non-empty list')
+        return value
+
+    @field_validator('tags')
+    @classmethod
+    def _tags_non_empty_when_set(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        if not value:
+            raise ValueError('tags must be omitted or a non-empty list')
+        cleaned = [t.strip() for t in value]
+        if any(not t for t in cleaned):
+            raise ValueError('tag entries cannot be empty')
+        return cleaned
+
+
 class EvalConfig(BaseModel):
     """Top-level evaluation config."""
 
-    modes: list[ModeLiteral] = Field(default_factory=lambda: ['direct', 'planner'])
     k: int = 1
     question_bank_dir: str = 'evaluation/question_bank'
     output_dir: str = 'runs/mat_master_eval'
@@ -303,10 +423,19 @@ class EvalConfig(BaseModel):
     use_seed_prompt: bool = True
     max_workers: int = 1
     mat_config_path: str = 'configs/mat_master/config.yaml'
+    empty_completion_max_retries: int = Field(
+        default=1,
+        ge=0,
+        description=(
+            'Re-run a task when the kernel reports completed/natural with no tools and '
+            'an empty answer (transient empty LLM stream). Total attempts = 1 + this value.'
+        ),
+    )
     simulator_llm: LLMRuntimeConfig | None = None
     evaluator_llm: LLMRuntimeConfig | None = None
-    include_capabilities: list[str] | None = None
+    include_slices: list[CapabilitySlice] | None = None
     include_question_ids: list[str] | None = None
+    exclude_question_ids: list[str] | None = None
 
     # Axis weights for aggregation (default 1.0 each, normalized during calculation)
     axis_weights: dict[AxisLiteral, float] = Field(
@@ -324,17 +453,6 @@ class EvalConfig(BaseModel):
         if value < 1:
             raise ValueError('k must be >= 1')
         return value
-
-    @field_validator('modes')
-    @classmethod
-    def _validate_modes(cls, value: list[ModeLiteral]) -> list[ModeLiteral]:
-        if not value:
-            raise ValueError('modes cannot be empty')
-        deduped: list[ModeLiteral] = []
-        for mode in value:
-            if mode not in deduped:
-                deduped.append(mode)
-        return deduped
 
 
 # ---------------------------------------------------------------------------

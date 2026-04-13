@@ -18,11 +18,10 @@ class RunDevshellEvalParams:
     """Arguments forwarded to ``run_devshell_eval.py``."""
 
     output_dir: Path
-    modes: list[str]
     jobs: int
     limit: int | None
     questions: list[str] | None
-    capabilities: list[str] | None
+    slices: str | None
     model: str | None
     exp: str | None
     eval_ingest_pending_only: bool
@@ -30,6 +29,8 @@ class RunDevshellEvalParams:
     task_timeout_sec: float
     eval_config: Path | None
     extra_args: list[str]
+    eval_ingest_run_id: str | None = None
+    exclude_question_ids: list[str] | None = None
 
 
 class DevshellEvalSubprocess:
@@ -49,8 +50,6 @@ class DevshellEvalSubprocess:
         cmd: list[str] = [
             *self.python_prefix(),
             str(script),
-            "--modes",
-            *params.modes,
             "--jobs",
             str(params.jobs),
         ]
@@ -59,21 +58,25 @@ class DevshellEvalSubprocess:
         if params.questions:
             cmd.append("--questions")
             cmd.extend(params.questions)
-        if params.capabilities:
-            cmd.append("--capabilities")
-            cmd.extend(params.capabilities)
+        if params.slices:
+            cmd.extend(["--slices", params.slices])
         if params.model:
             cmd.extend(["--model", params.model])
         if params.exp:
             cmd.extend(["--exp", params.exp])
         if params.eval_ingest_pending_only:
             cmd.append("--eval-ingest-pending-only")
+        if params.eval_ingest_run_id:
+            cmd.extend(["--eval-ingest-run-id", params.eval_ingest_run_id])
         if params.no_export_review:
             cmd.append("--no-export-review")
         if params.task_timeout_sec > 0:
             cmd.extend(["--task-timeout", str(params.task_timeout_sec)])
         if params.eval_config is not None:
             cmd.extend(["--eval-config", str(params.eval_config)])
+        if params.exclude_question_ids:
+            cmd.append("--exclude-question-ids")
+            cmd.extend(params.exclude_question_ids)
         cmd.extend(["--output-dir", str(params.output_dir)])
         # Agent loop should not wipe unrelated results under results/
         cmd.append("--no-clean-results")
@@ -148,7 +151,7 @@ class DevshellEvalSubprocess:
             """).strip()
 
 
-def run_score_devshell_tasks_submit(
+def run_score_devshell_tasks(
     *,
     repo_root: Path,
     run_dir: Path,
@@ -156,8 +159,9 @@ def run_score_devshell_tasks_submit(
     eval_ingest_timeout: float,
     score_jobs: int,
     parallel_checklist_workers: int | None = None,
+    submit: bool,
 ) -> tuple[int, str, str]:
-    """Run ``score_devshell_tasks.py --run-dir … --submit`` (writes scores + POST ingest)."""
+    """Run ``score_devshell_tasks.py`` for ``run_dir`` (optionally ``--submit``)."""
     runner = DevshellEvalSubprocess(repo_root)
     script = (
         repo_root / "evaluation" / "scripts" / "devshell" / "score_devshell_tasks.py"
@@ -177,10 +181,71 @@ def run_score_devshell_tasks_submit(
         str(sj),
         "--parallel-checklist-workers",
         str(pc),
-        "--submit",
         "--eval-ingest-timeout",
         str(eval_ingest_timeout),
     ]
+    if submit:
+        cmd.append("--submit")
     if eval_config is not None:
         cmd.extend(["--eval-config", str(eval_config)])
     return runner.run_capture(cmd)
+
+
+def run_score_devshell_tasks_submit(
+    *,
+    repo_root: Path,
+    run_dir: Path,
+    eval_config: Path | None,
+    eval_ingest_timeout: float,
+    score_jobs: int,
+    parallel_checklist_workers: int | None = None,
+) -> tuple[int, str, str]:
+    """Run ``score_devshell_tasks.py --run-dir … --submit`` (writes scores + POST ingest)."""
+    return run_score_devshell_tasks(
+        repo_root=repo_root,
+        run_dir=run_dir,
+        eval_config=eval_config,
+        eval_ingest_timeout=eval_ingest_timeout,
+        score_jobs=score_jobs,
+        parallel_checklist_workers=parallel_checklist_workers,
+        submit=True,
+    )
+
+
+def submit_scored_pending_ingest_dir(
+    *,
+    run_dir: Path,
+    eval_ingest_timeout: float,
+) -> tuple[int, str, str]:
+    """POST each ``pending_ingest/*.json`` that already has ``item.score`` (no re-scoring)."""
+    from evaluation.scripts.devshell.score_devshell_tasks import _submit_pending
+
+    pending_dir = run_dir / "pending_ingest"
+    if not pending_dir.is_dir():
+        return 1, "", "missing pending_ingest"
+    paths = sorted(pending_dir.glob("*.json"))
+    if not paths:
+        return 1, "", "no pending json"
+    out_lines: list[str] = []
+    err_lines: list[str] = []
+    any_failed = False
+    for path in paths:
+        try:
+            envelope = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            any_failed = True
+            err_lines.append(f"{path.name}: invalid json ({exc})")
+            continue
+        item = envelope.get("item") if isinstance(envelope.get("item"), dict) else {}
+        if item.get("score") is None:
+            any_failed = True
+            err_lines.append(f"{path.name}: missing item.score (run scorer first)")
+            continue
+        ok, msg = _submit_pending(path, timeout=eval_ingest_timeout)
+        if ok:
+            out_lines.append(f"{path.name}: ok ({msg})")
+        else:
+            any_failed = True
+            err_lines.append(f"{path.name}: {msg}")
+    rc = 0 if not any_failed else 1
+    return rc, "\n".join(out_lines), "\n".join(err_lines)

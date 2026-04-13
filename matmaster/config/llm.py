@@ -81,6 +81,8 @@ class LLMProfileConfig(BaseModel):
     api_key: str = ""
     base_url: str | None = None
     api_version: str | None = None  # Azure only
+    # Bedrock (provider=bedrock): optional; defaults to AWS_REGION / AWS_DEFAULT_REGION
+    bedrock_region: str | None = None
 
     # Reasoning
     thinking_effort: str | None = None

@@ -1,6 +1,6 @@
 ---
 name: mlips
-description: "Machine-learning interatomic potentials (MLIPs): structure optimization, phonon, molecular dynamics, elastic constants, NEB. Default model is DPA; also supports MACE, SevenNet, MatterSim. Bohrium GPU submission."
+description: "Machine-learning interatomic potentials (MLIPs): structure optimization, phonon, molecular dynamics, elastic constants, NEB, adsorption energy. Default model is DPA; also supports MACE, SevenNet, MatterSim. Bohrium GPU submission."
 skill_type: operator
 ---
 
@@ -62,6 +62,7 @@ Pass `--charge` and `--spin` only when using DPA3.2-5M. Other models ignore thes
 | md | `run_molecular_dynamics.py` | Multi-stage MD (NVT/NPT/NVE) |
 | elastic | `calculate_elastic.py` | Elastic constants (needs relaxed structure) |
 | neb | `run_neb.py` | NEB transition-state search |
+| adsorption | `calculate_adsorption.py` | Adsorption energies E_ads on slab surfaces |
 
 ## Script Usage
 
@@ -124,6 +125,19 @@ python run_neb.py --initial initial.cif --final final.cif \
 
 Output: `neb_band.pdf`, `result.json` (forward/reverse barrier in eV)
 
+### Adsorption Energy (catalysis)
+
+```bash
+python calculate_adsorption.py --slabs slab_001.cif slab_011.cif \
+    --adsorbates CO H OH COOH --model DPA3.1-3M --head OC22 \
+    [--height 2.0] [--fmax 0.03] [--fix-fraction 0.3]
+```
+
+Built-in adsorbates: H, C, O, N, CO, CO2, H2, H2O, OH, OOH, COOH, HCOO, CHO.
+For custom molecules, provide a file path. Copy both `_calculator.py` and `calculate_adsorption.py` to the working directory.
+
+Output: `adsorption_results.json` (all energies + E_ads table), `{slab}_{ads}_relaxed.cif` per combination.
+
 ## Physical Checks
 
 - **Model choice**: Use DPA3.1-3M for general inorganic; DPA3.2-5M when charge/spin matters; MACE/SevenNet for cross-validation
@@ -142,7 +156,7 @@ Output: `neb_band.pdf`, `result.json` (forward/reverse barrier in eV)
     - If the package must be installed into the image's virtual environment, use `source /mcp_server/AI4S-agent-tools/.venv/bin/activate && pip install sevenn && python optimize_structure.py --structure input.cif --model SevenNet-0 > log 2>&1`
 5. Poll: `Bohrium(action="poll", job_id=<id>)`
 6. Read `result.json` and output files from `result_dir`
-7. Analyze results, iterate if needed
+7. **Chain outputs → save-early**: use `*_optimized.cif` from optimization as input to subsequent tasks (phonon, elastic, MD). Save intermediate results under task-relevant filenames before starting the next step — this secures partial credit if later steps fail or timeout.
 
 ## Output Files
 

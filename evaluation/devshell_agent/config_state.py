@@ -23,11 +23,10 @@ def checklist_revision_sdk_max_turns_from_jobs(jobs: int) -> int:
 class DevshellAgentCliDefaults:
     """CLI defaults merged into ``run_devshell_eval`` when the model omits fields."""
 
-    modes: list[str]
     jobs: int
     limit: int | None
     questions: list[str] | None
-    capabilities: list[str] | None
+    slices: str | None
     model: str | None
     exp: str | None
     eval_ingest_pending_only: bool
@@ -51,3 +50,11 @@ class AgentLoopSharedState:
     eval_output_dirs: list[Path] = field(default_factory=list)
     checklist_escalations_pending: list[dict[str, Any]] = field(default_factory=list)
     checklist_revision_reports: list[dict[str, Any]] = field(default_factory=list)
+    optimization_delegations_pending: list[dict[str, Any]] = field(default_factory=list)
+    optimization_reports: list[dict[str, Any]] = field(default_factory=list)
+    optimization_rounds_by_iteration: dict[int, int] = field(default_factory=dict)
+    #: P0 scores from the last iteration that passed the gate (question_id → score).
+    #: Updated only when P0 gate passes; used as baseline for regression detection.
+    last_p0_scores: dict[str, int] = field(default_factory=dict)
+    #: Set by loop before P0-revert optimization sub-round; must match tool arg ``base_sha``.
+    p0_revert_allowed_base_sha: str | None = None

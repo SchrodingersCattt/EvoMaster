@@ -22,19 +22,31 @@ v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵�
 ## 当前题库结构
 
 - `question_bank/manifest.yaml`: v5+ 题库注册表。
-- `question_bank/<子目录>/*.yaml`: 实际题库文件（子目录通常按题型或专题命名，例如 `workflow_orchestration/`、`co2rr_reproduction/`）。
+- `question_bank/<capability>/<xx>_<domain>.yaml`: 实际题库文件（**每个文件对应唯一的 `(capability, domain)`**；`<xx>` 为两字母 capability 简写，定义见 `evaluation/core/capability_abbrev.py`）。
 - `question_bank/data/<question_id>/`: 每道带本地输入的题目对应一个数据目录，目录名使用当前 v5 题号。
 
 当前 capability 列表：
 
 - `batch_processing`
-- `co2rr_reproduction`（CO2RR 复现文档单元操作专用，便于单独过滤测评）
 - `data_diagnosis`
-- `input_generation_abacus` / `input_generation_vasp`
-- `property_prediction`
+- `execution_contract`（执行与交付约定：spec 与正文冲突以文件为准、根目录交付、归档解压、精确文件名等，对应 `matmaster/exps/` 与 `execution_contract/ec_agnostic.yaml`）
+- `input_generation`（输入生成任务；VASP/ABACUS 等软件后端放在题目 tags 或 bank 语境中表达）
+- `scientific_analysis`
 - `structure_construction`
+- `structure_retrieval`
 - `workflow_orchestration`
 - `safety_refusal`
+
+说明：
+
+- CO₂RR 等专题题与其它同 `(capability, domain)` 题**合并为同一 YAML**（例如 `structure_construction/sc_catalysis.yaml`），专题属性由 `tags` 表达。
+- `workflow_orchestration` 现仅用于**明确多步流程组织**、工具链串联、阶段 gate 或上一步输出驱动下一步的任务；基于给定 bundle / 文献做比较、筛选、综述、推荐、机理解释的题目应优先归到 `scientific_analysis`。
+
+当前 `domain` 语义：
+
+- `domain` 仅表示业务线 / 应用场景，不再表示物理子域或方法轴。
+- `domain` 枚举含五条业务线，以及无法归入时的 `agnostic`（见 `evaluation/AGENTS_evaluation.md`）。
+- 材料对象、方法、软件、专题线统一放入 `tags`。
 
 ## 加权评分 (v5+ 新增)
 
@@ -121,16 +133,17 @@ CLI:
 ```bash
 uv run python -m evaluation.cli \
   --eval-config evaluation/config.yaml \
-  --capabilities batch_processing workflow_orchestration \
+  --slices 'batch_processing workflow_orchestration[polymer]' \
   --questions DF_mech_001 WO_mech_001
 ```
 
 常用参数：
 
-- `--capabilities`: 按 capability 过滤题目。
+- `--slices`: OR-of-slices，语法 `cap`、`cap[dom]`、`cap[d1,d2]`、`cap@tag`、`cap[dom]@t1,t2`（**每个 slice 只有一个 `@`**；**括号外**空格分隔 slice，`[]` 与 `@` 后列表内禁止空格，逗号分隔；`@` 后多 tag 为 AND；与 `evaluation/config.yaml` 中 `include_slices` 一致）。
 - `--questions`: 按 v5 question id 过滤题目。
-- `--modes`: 选择 `direct` / `planner`。
 - `--k`: 每题重复次数。
+
+评测 Runner 固定以 **direct** 任务模式执行（不再提供 `--modes` 或题内 `mode_scope`）。
 
 与 DevShell / baseline **不同**：该路径会跑 **BinaryEvaluator** 与 Playground **`run_mat_task`**（见 `core/runner.py` + `core/mat_runner.py`）。长时间或无人值守时可选用：
 
@@ -149,10 +162,8 @@ evaluation/scripts/matter_cli/run_mat_master_eval_bg.sh start
 
 ### Batch Processing 题库说明
 
-`batch_processing` capability 用于考察 **严格变量控制** 能力，而非简单的批量执行。当前共 5 道题，覆盖以下场景：
+`batch_processing` capability 用于考察 **严格变量控制** 能力，而非简单的批量执行。当前共 3 道题，覆盖以下场景：
 
-- **BP_struct_001**: 同一 MCP 工具的批量调用，仅一个几何参数（真空厚度）变化，其他参数（Miller 指标、层数等）冻结。
-- **BP_struct_002**: 多结构批量输入生成，统一 k-point 密度（50 points/Ų）和电子学参数（ISMEAR、SIGMA），尽管结构尺度不同导致 k 点网格数目不同。
 - **BP_struct_003**: 收敛测试，ENCUT 参数扫描，其他参数（k-mesh、ISMEAR、SIGMA）完全冻结，验证系统参数扫描能力。
 - **BP_struct_004**: 批量后处理一致性，3 种材料使用相同分析参数（k-path、能量窗口、费米面参考点），输出格式统一。
 - **BP_struct_005**: 批量失败恢复，5 个结构因几何问题失败后，仅修复几何参数，计算设置（k-mesh、ISMEAR、SIGMA、ENCUT）全程冻结。

@@ -1,4 +1,7 @@
-"""Devshell 评测：自动打分（``score_devshell_tasks --submit``）完成后的飞书群通知。
+"""Devshell 评测：飞书群通知。
+
+- 自动打分（``score_devshell_tasks --submit``）完成后的结果卡片。
+- Checklist / 优化子回合写出 **待人工合入** 的 ``proposed_*.md`` 时的提醒卡片。
 
 Webhook 使用仓库根 ``utils.feishu_webhook.FEISHU_WEBHOOK_URL``，与 API / Worker 一致。
 
@@ -12,7 +15,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -26,6 +29,11 @@ _SEND_RETRY_DELAYS = (1, 2, 3)
 
 _MAX_REASON_INLINE = 420
 _MAX_BODY_CHARS = 11_000
+_MAX_REPORT_INLINE = 900
+_MAX_PROPOSAL_PREVIEW = 2800
+
+
+ProposalKind = Literal["question_bank", "matmaster_exps"]
 
 
 def _post_webhook(url: str, body: dict[str, Any]) -> None:
@@ -104,6 +112,18 @@ def _macro_mean(scores: list[int | None]) -> float | None:
     return sum(vals) / len(vals)
 
 
+def _rows_sorted_by_score_desc(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Feishu「各题得分」：分数从高到低；无有效 ``item.score`` 的排在末尾。"""
+    return sorted(
+        rows,
+        key=lambda r: (
+            0 if isinstance(r.get("score"), int) else 1,
+            -(r["score"] if isinstance(r.get("score"), int) else 0),
+            r["question_id"],
+        ),
+    )
+
+
 def _build_markdown_body(
     *,
     tag: str,
@@ -126,7 +146,7 @@ def _build_markdown_body(
         "",
         "**各题得分**",
     ]
-    for r in rows:
+    for r in _rows_sorted_by_score_desc(rows):
         sid = r["question_id"]
         sc = r["score"]
         sc_s = str(sc) if isinstance(sc, int) else "未写入"
@@ -137,21 +157,6 @@ def _build_markdown_body(
         lines.extend(
             ["", f"（{missing} 题 pending 中无 `item.score`，可能判分未完成）"]
         )
-
-    lines.extend(["", "**判分说明（节选）**"])
-    shown = 0
-    for r in rows:
-        reason = (r.get("score_reason") or "").strip()
-        if not reason:
-            continue
-        lines.append(f"- `{r['question_id']}`：{reason}")
-        shown += 1
-        if shown >= 24:
-            lines.append("- …（判分说明过多已省略，见 `pending_ingest/`）")
-            break
-
-    if submit_ok and not any((r.get("score_reason") or "").strip() for r in rows):
-        lines.append("- （无 score_reason 文本）")
 
     if not submit_ok and stderr_tail.strip():
         tail = stderr_tail.strip()
@@ -250,6 +255,119 @@ def notify_after_scoring_async(
             "ingest_result": ingest_result,
         },
         name="devshell_eval_feishu",
+        daemon=True,
+    )
+    t.start()
+
+
+def _read_proposal_preview(path: Path) -> str:
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    raw = raw.strip()
+    if len(raw) > _MAX_PROPOSAL_PREVIEW:
+        raw = raw[:_MAX_PROPOSAL_PREVIEW] + "…"
+    return raw.replace("```", "'''")
+
+
+def _notify_manual_review_proposal_impl(
+    *,
+    webhook: str,
+    kind: ProposalKind,
+    session_dir: Path,
+    iteration_index: int,
+    proposal_path: Path,
+    report_text: str,
+    optimization_round: int | None,
+) -> None:
+    try:
+        if not proposal_path.is_file():
+            return
+        size = proposal_path.stat().st_size
+        if size <= 0:
+            return
+
+        env = (os.environ.get("SERVICE_ENV") or "").strip()
+        env_prefix = f"[{env}] " if env else ""
+        if kind == "question_bank":
+            title = (
+                f"{env_prefix}Devshell · 题库提案（待合入） · iter {iteration_index}"
+            )
+        else:
+            rnd_s = (
+                f" · opt_round {optimization_round}"
+                if optimization_round is not None
+                else ""
+            )
+            title = (
+                f"{env_prefix}Devshell · exp/系统提示词提案（待合入） · "
+                f"iter {iteration_index}{rnd_s}"
+            )
+
+        rt = (report_text or "").strip()
+        if len(rt) > _MAX_REPORT_INLINE:
+            rt = rt[:_MAX_REPORT_INLINE] + "…"
+
+        preview = _read_proposal_preview(proposal_path)
+        lines: list[str] = [
+            f"**类型**\n{'题库 / checklist' if kind == 'question_bank' else 'matmaster/exps（系统提示词层）'}",
+            f"**迭代**\n{iteration_index}",
+            f"**会话目录**\n`{session_dir.resolve()}`",
+            f"**提案文件**\n`{proposal_path.name}`（{size} bytes）",
+        ]
+        if optimization_round is not None and kind == "matmaster_exps":
+            lines.append(f"**optimization_round**\n{optimization_round}")
+        if rt:
+            lines.extend(["", "**子 Agent 报告摘要**", rt])
+        if preview:
+            lines.extend(["", "**正文预览**", f"```\n{preview}\n```"])
+
+        body = "\n".join(lines)
+        if len(body) > _MAX_BODY_CHARS:
+            body = body[:_MAX_BODY_CHARS] + "\n\n…（正文过长已截断）"
+
+        _send_interactive_card(
+            webhook=webhook,
+            title=title,
+            markdown=body,
+            template="orange",
+        )
+    except Exception:
+        logger.exception(
+            "Devshell manual-review proposal Feishu notify failed kind=%s path=%s",
+            kind,
+            proposal_path,
+        )
+
+
+def notify_manual_review_proposal_async(
+    *,
+    kind: ProposalKind,
+    session_dir: Path,
+    iteration_index: int,
+    proposal_path: Path,
+    report_text: str = "",
+    optimization_round: int | None = None,
+) -> None:
+    """子回合写出非空 ``proposed_question_bank_changes.md`` / ``proposed_matmaster_exps_changes.md`` 时发飞书提醒。"""
+    if not (FEISHU_WEBHOOK_URL or "").strip():
+        return
+    if not proposal_path.is_file() or proposal_path.stat().st_size <= 0:
+        return
+
+    t = threading.Thread(
+        target=_notify_manual_review_proposal_impl,
+        kwargs={
+            "webhook": FEISHU_WEBHOOK_URL,
+            "kind": kind,
+            "session_dir": session_dir,
+            "iteration_index": iteration_index,
+            "proposal_path": proposal_path,
+            "report_text": report_text,
+            "optimization_round": optimization_round,
+        },
+        name="devshell_proposal_feishu",
         daemon=True,
     )
     t.start()

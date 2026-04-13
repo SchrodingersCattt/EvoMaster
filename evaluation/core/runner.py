@@ -5,7 +5,7 @@ Current v5 runner behavior:
 - evaluate() returns EvalRunRecord directly (no raw dict intermediary)
 - load_question_banks() accepts only v5 question banks
 - _flatten_banks() no longer returns a rubric_map (Rubric class removed)
-- _apply_filters() uses capability filters and explicit question IDs
+- _apply_filters() uses slice filters (OR of capability[+domain]) and question IDs
 - expand_run_plan() no longer reads repeat_override from QuestionItem
 """
 
@@ -24,6 +24,7 @@ from .evidence import EvidenceBundle, EvidenceExtractor
 from .mat_runner import run_mat_task
 from .reporter import append_raw_run, write_reports
 from .schemas import (
+    CapabilitySlice,
     EvalConfig,
     EvalRunRecord,
     QuestionBank,
@@ -90,6 +91,7 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
             task_id=task_id,
             run_dir=mat_runs_dir,
             mat_config_path=mat_config_path,
+            empty_completion_max_retries=config.empty_completion_max_retries,
         )
         answer = str(mat_result.get('answer', '') or '')
         tool_calls: list[dict[str, Any]] = mat_result.get('tool_calls', [])
@@ -160,21 +162,45 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _question_matches_slice(question: QuestionItem, sl: CapabilitySlice) -> bool:
+    if question.capability.lower() != sl.capability.lower():
+        return False
+    if sl.domains is not None:
+        allowed = {d.lower() for d in sl.domains}
+        if question.domain.lower() not in allowed:
+            return False
+    if sl.tags is not None:
+        have = {str(t).lower() for t in question.tags}
+        if not all(req.lower() in have for req in sl.tags):
+            return False
+    return True
+
+
 def _apply_filters(
     questions: list[QuestionItem], config: EvalConfig
 ) -> list[QuestionItem]:
-    """Filter questions by capability and/or explicit IDs."""
-    if config.include_capabilities:
-        caps = {c.lower() for c in config.include_capabilities}
-        questions = [q for q in questions if q.capability.lower() in caps]
+    """Filter questions by OR-of-slices and/or explicit IDs."""
+    if config.include_slices:
+        picked: list[QuestionItem] = []
+        seen: set[str] = set()
+        for q in questions:
+            if any(_question_matches_slice(q, sl) for sl in config.include_slices):
+                if q.id not in seen:
+                    seen.add(q.id)
+                    picked.append(q)
+        questions = picked
 
     if config.include_question_ids:
         ids = set(config.include_question_ids)
         questions = [q for q in questions if q.id in ids]
 
+    if config.exclude_question_ids:
+        excluded = set(config.exclude_question_ids)
+        questions = [q for q in questions if q.id not in excluded]
+
     if not questions:
         raise ValueError(
-            'No questions remaining after applying --capabilities / --questions filters'
+            'No questions remaining after applying --slices / --questions filters'
         )
     return questions
 
@@ -182,18 +208,16 @@ def _apply_filters(
 def expand_run_plan(
     *, questions: list[QuestionItem], config: EvalConfig
 ) -> list[dict[str, Any]]:
-    """Expand mode × k repeat plan.
+    """Expand direct mode × k repeat plan.
 
-    v5: QuestionItem no longer has repeat_override — always uses config.k.
+    v5: MATTER eval runs only ``direct`` (no per-question mode scope).
     """
     plan: list[dict[str, Any]] = []
     for question in questions:
-        active_modes = [mode for mode in config.modes if mode in question.mode_scope]
-        for mode in active_modes:
-            for repeat_idx in range(config.k):
-                plan.append(
-                    {'question': question, 'mode': mode, 'repeat_idx': repeat_idx}
-                )
+        for repeat_idx in range(config.k):
+            plan.append(
+                {'question': question, 'mode': 'direct', 'repeat_idx': repeat_idx}
+            )
     return plan
 
 
