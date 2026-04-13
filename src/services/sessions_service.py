@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from src.dao.chat_sessions_table import ChatSessionsTable, get_chat_sessions_table
 from src.dao.redis_dao import get_redis_dao
+from src.services.tools_server_allowlist import is_user_in_admin_allowlist
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.constant import REDIS_URL
 from src.utils.worker_id import get_worker_id
@@ -76,12 +77,19 @@ class ChatSessionsService:
         self._sessions_run_lock = threading.Lock()
         self._redis_stop_subscriber = RedisStopSubscriber()
 
-    def can_access_session(self, session_id: str, user_id: str | None) -> bool:
+    def can_access_session(
+        self,
+        session_id: str,
+        user_id: str | None,
+        *,
+        allow_admin_read: bool = False,
+    ) -> bool:
         """
         是否可访问该会话：
         - 会话不存在：仅登录用户可访问（用于新会话，后续 ensure_session 会创建）
         - 会话已分享：任何人可访问（含未登录）
-        - 会话未分享：仅会话所有者可访问
+        - 会话未分享：仅会话所有者可访问；若 ``allow_admin_read`` 且用户在 tools-server
+          ``allowlist.admin`` 中，则允许只读场景（订阅 SSE、查看分享状态等）
         """
         row = self.table.get_session(session_id)
         if not row:
@@ -103,6 +111,13 @@ class ChatSessionsService:
             return False
         owner = row.get('user_id')
         if owner != user_id:
+            if allow_admin_read and is_user_in_admin_allowlist(user_id):
+                logger.info(
+                    'can_access_session: session_id=%s admin read access user_id=%s',
+                    session_id,
+                    user_id,
+                )
+                return True
             logger.info(
                 'can_access_session: session_id=%s denied (not owner: owner=%s user_id=%s)',
                 session_id,

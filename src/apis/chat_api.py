@@ -161,7 +161,9 @@ async def chat_stream(
         user_id,
         has_content,
     )
-    if not chat_svc.can_access_session(sid, user_id):
+    # 发消息须为所有者（或已分享）；仅订阅 SSE 时允许 tools-server admin 白名单只读
+    allow_admin_read = not has_content
+    if not chat_svc.can_access_session(sid, user_id, allow_admin_read=allow_admin_read):
         logger.warning(
             'stream 403: can_access_session denied session_id=%s user_id=%s',
             sid,
@@ -359,7 +361,9 @@ def get_share_status(
 ):
     """查看分享状态。已分享时会话任何人可查看；未分享时需为会话所有者。"""
     status = chat_svc.get_share_status(session_id)
-    if not status['enabled'] and not chat_svc.can_access_session(session_id, user_id):
+    if not status['enabled'] and not chat_svc.can_access_session(
+        session_id, user_id, allow_admin_read=True
+    ):
         raise ForbiddenErrorResponse(msg='无权限查看该会话')
     return ShareStatusApiResponse(
         data=ShareStatusData(enabled=status['enabled']),
