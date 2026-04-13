@@ -1,7 +1,33 @@
 """PaperSearchTool — literature search via mat_sn MCP (search-papers-enhanced).
 
-Returns a slimmed {data: [...]} payload (whitelist fields per item) so downstream
-scripts that expect mat_sn-style records keep working.
+Returns a slimmed ``{"data": [...]}`` payload. Each item keeps one logical title and
+one abstract (prefer English ``enName`` / ``enAbstract``, else Chinese ``zhName`` /
+``zhAbstract``) stored under ``enName`` / ``enAbstract`` for compatibility with
+``collect_evidence`` and similar scripts. Also passes through ``publicationEnName``
+(journal), ``impactFactor`` (JCR-style IF when available), and ``citationNums`` when present.
+
+``pieces``（MCP 原始字段）：服务端拼好的「英文题名 + 摘要」整段字符串，与 ``enName``/``enAbstract`` 内容重复、体积大，**slim 不返回**。
+
+Slim 输出**不**包含 ``paperUrl`` / ``paperId``：有 ``doi`` 即可用 ``https://doi.org/<doi>`` 稳定链到文献；
+``collect_evidence._build_url`` 在缺 ``paperUrl`` 时会回退到 DOI。
+
+MCP 原始 JSON 字段说明（便于维护白名单；未列出的嵌套对象默认不返回）：
+
+**响应根**
+  ``userId``, ``globalId``, ``data``, ``code``, ``message``
+
+**data[] 每条文献（顶层）**
+  ``doi``, ``paperId``, ``publicationId``, ``publicationEnName``, ``publicationCover``,
+  ``enName``, ``zhName``, ``enAbstract``, ``zhAbstract``, ``authors``,
+  ``coverDateStart``, ``languageType``, ``impactFactor``, ``impactScore``,
+  ``citationNums``, ``popularity``, ``good``, ``goodFlag``, ``readFlag``, ``addFlag``,
+  ``paperUrl``, ``graphicalAbstract``, ``openAccess``, ``pdfFlag``, ``title`` (slug),
+  ``authorDetails``, ``score``, ``pieces``, ``alltext``
+
+**authorDetails[]（作者嵌套；默认整段省略以省 token）**
+  ``scholarId``, ``avatar``, ``name``, ``originName``, ``paperNums``, ``citationNums``,
+  ``nameZh``, ``scholarOrgNameEn``, ``scholarOrgNameZh``, ``userExtId``, ``userId``,
+  ``isHighCited``, ``hIndex``
 """
 
 from __future__ import annotations
@@ -22,24 +48,24 @@ logger = logging.getLogger(__name__)
 MAT_SN_SERVER = "mat_sn"
 REMOTE_TOOL = "search-papers-enhanced"
 
-# Keep only fields used by evidence / survey scripts; drop noisy vendor fields.
-_PAPER_FIELD_WHITELIST = frozenset(
+# 输出保留的顶层键（不含 paperUrl/paperId，与 doi 重复；不含 zhName/zhAbstract/pieces）
+_SLIM_EXTRA_KEYS = frozenset(
     {
-        "enName",
-        "zhName",
-        "title",
-        "paperUrl",
         "doi",
         "authors",
         "coverDateStart",
-        "enAbstract",
-        "zhAbstract",
-        "paperId",
-        "pieces",
+        "title",
+        "publicationEnName",
+        "citationNums",
+        "impactFactor",
     }
 )
 
 _ABSTRACT_MAX = 500
+
+
+def _s(val: Any) -> str:
+    return val.strip() if isinstance(val, str) else ""
 
 
 def _truncate(text: str, max_chars: int) -> str:
@@ -75,15 +101,21 @@ def _mcp_content_to_text(result_content: list[Any]) -> str:
 
 
 def _slim_paper_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Single title + single abstract: prefer EN, else ZH; emit as enName / enAbstract."""
     out: dict[str, Any] = {}
-    for k in _PAPER_FIELD_WHITELIST:
+    title = _s(item.get("enName")) or _s(item.get("zhName"))
+    if title:
+        out["enName"] = title
+    abstract = _s(item.get("enAbstract")) or _s(item.get("zhAbstract"))
+    if abstract:
+        out["enAbstract"] = _truncate(abstract, _ABSTRACT_MAX)
+    for k in _SLIM_EXTRA_KEYS:
         if k not in item:
             continue
         v = item[k]
-        if k in ("enAbstract", "zhAbstract", "pieces") and isinstance(v, str):
-            out[k] = _truncate(v, _ABSTRACT_MAX)
-        else:
-            out[k] = v
+        if v in (None, "", []):
+            continue
+        out[k] = v
     return out
 
 
@@ -99,8 +131,11 @@ class PaperSearchTool(BuiltinTool):
     name: ClassVar[str] = "PaperSearch"
     description: ClassVar[str] = (
         "Search academic papers by keywords and a research question. "
-        "Returns a compact list (title, DOI, URL, year, authors, abstract snippet). "
-        "Uses the configured mat_sn MCP server."
+        "Returns a compact list: one title and one abstract per item (English preferred, "
+        "else Chinese), plus DOI (use https://doi.org/<doi> to open), date, authors, "
+        "journal name (publicationEnName), impact factor (impactFactor), "
+        "citation count (citationNums), optional slug title. "
+        "Omits paperUrl/paperId when DOI is enough. Uses the configured mat_sn MCP server."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
