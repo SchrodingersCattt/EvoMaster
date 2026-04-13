@@ -13,7 +13,7 @@
 
 ```
 evaluation/question_bank/
-├── manifest.yaml              # 题库注册表（path = `<capability>/<xx>_<domain>.yaml`，xx=两字母简写）
+├── manifest.yaml              # 题库注册表（path = `<capability>/<xx>_<domain>.yaml` 或 `<capability>/<xx>_<domain>_<tag>.yaml`，xx=两字母简写）
 ├── batch_processing/          # 如 bp_catalysis.yaml、bp_agnostic.yaml
 ├── data_diagnosis/
 ├── execution_contract/
@@ -30,8 +30,8 @@ evaluation/question_bank/
 
 **约定**：
 
-- **一个 bank 文件 = 唯一的 `(capability, domain)`**：路径为 ``<capability>/<xx>_<domain>.yaml``，其中 **`<xx>` 为两字母 capability 简写**（见 `evaluation/core/capability_abbrev.py` 中 `CAPABILITY_TO_TWO_LETTER`，含 `agnostic`）；同一文件内所有题目的 `domain` 与文件名中的 `domain` 一致。
-- 专题（如 CO₂RR）、工具线等用题目级 **`tags`** 或 `id` 前缀区分，不再拆成多个 bank 文件。
+- **manifest 中每条 `path` 对应一个 bank 文件**：文件名为 canonical ``<capability>/<xx>_<domain>.yaml``，或同一 `(capability, domain)` 下经批准的分裂名 ``<capability>/<xx>_<domain>_<tag>.yaml``（如按工具链拆分的 `ig_agnostic_vasp.yaml` / `ig_agnostic_abacus.yaml`）。**`<xx>` 为两字母 capability 简写**（见 `tests/evaluation/capability_abbrev.py` 中 `CAPABILITY_TO_TWO_LETTER`；canonical basename 公式见同文件 `bank_yaml_basename`）。文件名与 `(capability, domain)` 的一致性由 `tests/evaluation/test_question_bank_taxonomy.py` 中 `test_bank_yaml_filename_matches_capability_and_domain` 校验。同一文件内所有题目的 `domain` 与顶层 `domain` 一致。
+- 专题（如 CO₂RR）等优先用题目级 **`tags`** 或 `id` 前缀区分；仅在必要时（例如输入生成按不同 DFT 工具链维护）将同一 domain 拆为多文件。
 
 ### 三层评分模型
 

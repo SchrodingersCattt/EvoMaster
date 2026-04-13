@@ -1,17 +1,15 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 import yaml
 from pydantic import ValidationError
 
-from evaluation.core.capability_abbrev import (
-    CAPABILITY_TO_TWO_LETTER,
-    bank_yaml_basename,
-)
 from evaluation.core.question_tags import QuestionTag
 from evaluation.core.schemas import QuestionBank
+from tests.evaluation.capability_abbrev import CAPABILITY_TO_TWO_LETTER
 
 BUSINESS_LINE_DOMAINS = [
     'battery',
@@ -36,6 +34,25 @@ REMOVED_LEGACY_DOMAINS = [
     'mlip',
     'domain_agnostic',
 ]
+
+
+def _bank_yaml_filename_matches_capability_domain(
+    *, capability: str, domain: str, filename: str
+) -> bool:
+    """Match bank basename ``{xx}_{domain}.yaml`` or split ``{xx}_{domain}_{tag}.yaml``.
+
+    ``xx`` = two-letter capability code; ``tag`` splits one (capability, domain) across
+    files (e.g. ``vasp`` / ``abacus``). ``tag`` is one segment (``.+``), may contain ``_``.
+    """
+    try:
+        xx = CAPABILITY_TO_TWO_LETTER[capability]
+    except KeyError:
+        return False
+    if not filename.endswith('.yaml'):
+        return False
+    stem = filename[: -len('.yaml')]
+    pat = rf'^{re.escape(xx)}_{re.escape(domain)}(?:_(?P<tag>.+))?$'
+    return re.fullmatch(pat, stem) is not None
 
 
 def _minimal_question(
@@ -285,7 +302,7 @@ def test_agnostic_manifest_entries_match_bank_files() -> None:
 
 
 def test_bank_yaml_filename_matches_capability_and_domain() -> None:
-    """Each bank file is ``<capability>/<xx>_<domain>.yaml`` (``xx`` = 两字母简写)."""
+    """Bank file basename is ``{xx}_{domain}.yaml`` or ``{xx}_{domain}_{tag}.yaml``."""
     repo_root = Path(__file__).resolve().parents[2]
     bank_root = repo_root / 'evaluation' / 'question_bank'
 
@@ -295,10 +312,11 @@ def test_bank_yaml_filename_matches_capability_and_domain() -> None:
         cap_dir = bank_path.parent.name
         raw_bank = yaml.safe_load(bank_path.read_text(encoding='utf-8'))
         assert raw_bank['capability'] == cap_dir, bank_path.as_posix()
-        expected_name = bank_yaml_basename(
-            capability=raw_bank['capability'], domain=raw_bank['domain']
-        )
-        assert bank_path.name == expected_name, bank_path.as_posix()
+        assert _bank_yaml_filename_matches_capability_domain(
+            capability=raw_bank['capability'],
+            domain=raw_bank['domain'],
+            filename=bank_path.name,
+        ), bank_path.as_posix()
         assert {q['domain'] for q in raw_bank['questions']} == {raw_bank['domain']}
 
 
@@ -355,5 +373,5 @@ def test_manifest_active_totals_after_phase2_splits() -> None:
     bank_root = repo_root / 'evaluation' / 'question_bank'
     manifest = yaml.safe_load((bank_root / 'manifest.yaml').read_text(encoding='utf-8'))
 
-    assert len(manifest['banks']) == 28
+    assert len(manifest['banks']) == 29
     assert sum(int(entry['questions']) for entry in manifest['banks']) == 132
