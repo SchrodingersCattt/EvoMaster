@@ -176,7 +176,7 @@ class ContextCompactor:
 
     async def preflight_if_needed(self, messages: list[Message]) -> None:
         """Compact eagerly before the next turn when history is already too large."""
-        plan = self._plan_preflight_compaction(messages)
+        plan = self.plan_preflight_compaction(messages)
         if plan is None:
             return
 
@@ -212,6 +212,11 @@ class ContextCompactor:
             trigger_tokens=estimated_tokens,
             turn=0,
         )
+
+    def plan_preflight_compaction(
+        self, messages: list[Message]
+    ) -> CompactionPlan | None:
+        return self._plan_preflight_compaction(messages)
 
     async def plan_runtime_compaction(
         self,
