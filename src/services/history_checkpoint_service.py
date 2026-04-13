@@ -39,7 +39,7 @@ class HistoryCheckpointService:
                 spawn_id,
             )
             await asyncio.to_thread(
-                self.events_table.add_checkpoint_pair,
+                self.events_table.add_history_checkpoint,
                 session_id,
                 task_id=task_id,
                 invocation_id=invocation_id,

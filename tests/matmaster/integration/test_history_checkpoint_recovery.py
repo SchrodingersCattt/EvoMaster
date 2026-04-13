@@ -72,7 +72,7 @@ class InMemoryEventsTable:
         self._events.append(event)
         return event["id"]
 
-    def add_checkpoint_pair(
+    def add_history_checkpoint(
         self,
         session_id: str,
         *,
@@ -85,7 +85,7 @@ class InMemoryEventsTable:
     ) -> bool:
         self.calls.append(
             (
-                "add_checkpoint_pair",
+                "add_history_checkpoint",
                 session_id,
                 task_id,
                 invocation_id,
@@ -97,22 +97,11 @@ class InMemoryEventsTable:
         self.add_event(
             session_id,
             "System",
-            "compact_boundary",
-            {
-                "covered_until_event_id": covered_until_event_id,
-                "reason": reason,
-            },
-            task_id=task_id,
-            invocation_id=invocation_id,
-            spawn_id=spawn_id,
-        )
-        self.add_event(
-            session_id,
-            "System",
             "history_checkpoint",
             {
                 "covered_until_event_id": covered_until_event_id,
                 "base_messages": base_messages,
+                "reason": reason,
             },
             task_id=task_id,
             invocation_id=invocation_id,
@@ -153,7 +142,8 @@ class InMemoryEventsTable:
             if event["session_id"] == session_id
             and event.get("spawn_id") == spawn_id
             and int(event["id"]) > after_id
-            and event["type"] not in {"compact_boundary", "history_checkpoint"}
+            and event["type"]
+            not in {"history_checkpoint", "compaction", "context_compaction"}
         ]
         rows.sort(key=lambda event: int(event["id"]))
         if limit is not None:
@@ -167,7 +157,8 @@ class InMemoryEventsTable:
             for event in self._events
             if event["session_id"] == session_id
             and event.get("spawn_id") == spawn_id
-            and event["type"] not in {"compact_boundary", "history_checkpoint"}
+            and event["type"]
+            not in {"history_checkpoint", "compaction", "context_compaction"}
         ]
         return max(ids, default=0)
 
@@ -506,4 +497,5 @@ async def test_restore_after_midrun_crash_uses_written_checkpoint() -> None:
     assert events_table.history_checkpoints(spawn_id=None)[0]["content"] == {
         "covered_until_event_id": 2,
         "base_messages": checkpoint_base_messages,
+        "reason": "summary",
     }
