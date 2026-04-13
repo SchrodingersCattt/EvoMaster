@@ -46,6 +46,17 @@ def _build_access_key_failure_reason(result: BohriumAccessKeyFetchResult) -> str
         return 'Bohrium access_key 获取失败：请求 Bohrium Core 超时'
     if result.status in {'no_items', 'no_valid_ak'}:
         return 'Bohrium access_key 获取失败：当前用户在该组织下没有可用 AK'
+    if result.status == 'ak_create_timeout':
+        return 'Bohrium access_key 自动创建失败：请求 Bohrium Core（ak/add）超时'
+    if result.status in {'ak_create_http_4xx', 'ak_create_api_code_error'}:
+        return 'Bohrium access_key 自动创建失败：Bohrium Core 拒绝或返回错误'
+    if result.status == 'ak_create_empty_response':
+        return 'Bohrium access_key 自动创建失败：服务端未返回 access_key'
+    if result.status in {
+        'ak_create_request_error',
+        'ak_create_http_5xx',
+    }:
+        return 'Bohrium access_key 自动创建失败：Bohrium Core 暂不可用'
     return 'Bohrium access_key 获取失败：Bohrium Core 返回异常状态'
 
 
