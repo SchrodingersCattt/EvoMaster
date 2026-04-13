@@ -17,7 +17,6 @@ questions:
     注意：本题强调批量检索 + 统计汇总，不要求后续第一性原理计算。'
   tags:
   - wf_batch
-  - chem_battery
   - meta_userlog
   data_files: []
   reference_answers:
