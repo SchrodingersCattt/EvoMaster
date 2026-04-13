@@ -153,8 +153,12 @@ def _extract_cards_from_file(path: Path) -> list[dict]:
         return []
     if not isinstance(payload, dict):
         return []
-    tool_dir = path.parent.name  # e.g. mat_sn_search-papers-enhanced
-    if 'search-papers' in tool_dir or 'scholar' in tool_dir:
+    tool_dir = path.parent.name  # e.g. mat_sn_search-papers-enhanced or PaperSearch
+    if (
+        tool_dir == 'PaperSearch'
+        or 'search-papers' in tool_dir
+        or 'scholar' in tool_dir
+    ):
         return _extract_papers_enhanced(payload)
     if 'web-search' in tool_dir:
         return _extract_web_search(payload)
@@ -256,7 +260,11 @@ def collect_evidence(
         for subdir in sorted(tool_outputs_dir.iterdir()):
             if not subdir.is_dir():
                 continue
-            if not (subdir.name.startswith('mat_sn_') or subdir.name == 'web-search'):
+            if not (
+                subdir.name.startswith('mat_sn_')
+                or subdir.name == 'web-search'
+                or subdir.name == 'PaperSearch'
+            ):
                 continue
             for json_file in sorted(subdir.glob('*.json')):
                 for card in _extract_cards_from_file(json_file):
