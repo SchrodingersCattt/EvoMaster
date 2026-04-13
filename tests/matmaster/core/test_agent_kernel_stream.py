@@ -232,6 +232,89 @@ class _DurablePreflightCompactor:
         self.runtime_calls += 1
 
 
+class _LifecycleCompactor:
+    """Compactor test double for running -> complete lifecycle orchestration."""
+
+    def __init__(self, summary_text: str) -> None:
+        self._summary_text = summary_text
+        self.message_counts: list[int] = []
+        self.plan_calls = 0
+        self.apply_calls = 0
+
+    def update_message_count(self, count: int) -> None:
+        self.message_counts.append(count)
+
+    async def preflight_if_needed(self, messages: list[Any]) -> None:
+        return None
+
+    async def plan_runtime_compaction(
+        self,
+        messages: list[Any],
+        turn_usage: dict[str, int],
+        *,
+        turn: int,
+    ):
+        from matmaster.core.context_compactor import CompactionPlan
+
+        self.plan_calls += 1
+        return CompactionPlan(
+            compaction_id="task-1:root:1",
+            compaction_count=1,
+            phase="runtime",
+            trigger_tokens=950,
+            turn=turn,
+        )
+
+    async def apply_compaction_plan(self, plan, messages: list[Any]):
+        from matmaster.core.context_compactor import CompactionResult
+
+        self.apply_calls += 1
+        task_message = messages[-1]
+        messages[:] = [
+            messages[0],
+            SystemMessage(content=f"[Compacted Context]\n{self._summary_text}"),
+            task_message,
+        ]
+        return CompactionResult(
+            compaction_id=plan.compaction_id,
+            compaction_count=plan.compaction_count,
+            phase=plan.phase,
+            strategy="summary",
+            durability="durable",
+            trigger_tokens=plan.trigger_tokens,
+            retained_turns=1,
+            failure_reason=None,
+            base_snapshot=[
+                SystemMessage(
+                    content=f"[Compacted Context]\n{self._summary_text}"
+                ).model_dump(mode="json"),
+                task_message.model_dump(mode="json"),
+            ],
+        )
+
+
+def _build_long_history() -> list[Any]:
+    return [
+        UserMessage(content="old question 1"),
+        AssistantMessage(content="old answer 1"),
+        UserMessage(content="old question 2"),
+        AssistantMessage(content="old answer 2"),
+    ]
+
+
+def build_runtime_spec_with_compaction(*, checkpoint_sink: Any, summary_text: str):
+    spec = _make_spec(provider=ContentOnlyProvider())
+    return spec.model_copy(
+        update={
+            "compactor": _LifecycleCompactor(summary_text),
+            "meta": {
+                "task_id": "task-1",
+                "checkpoint_sink": checkpoint_sink,
+            },
+        }
+    )
+
+
 # ── _stream_llm_items() tests ─────────────────────────────
 
 
@@ -780,6 +863,59 @@ class TestCancellationTokenSupport:
 
 
 class TestCheckpointAwareCompaction:
+    @pytest.mark.asyncio
+    async def test_durable_compaction_emits_running_then_complete_after_checkpoint(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        events: list[object] = []
+        checkpoint_calls: list[tuple[dict, list[dict]]] = []
+
+        async def checkpoint_sink(*, payload: dict, base_messages: list[dict]) -> None:
+            checkpoint_calls.append((payload, base_messages))
+
+        runtime = build_runtime_spec_with_compaction(
+            checkpoint_sink=checkpoint_sink,
+            summary_text="compacted summary",
+        )
+
+        async for event in AgentKernel().run_stream(
+            runtime, "task", history=_build_long_history()
+        ):
+            events.append(event)
+
+        compaction_events = [e for e in events if getattr(e, "type", None) == "compaction"]
+        assert [e.status for e in compaction_events] == ["running", "complete"]
+        assert checkpoint_calls, "checkpoint sink should be called before complete event"
+        assert compaction_events[1].checkpoint_written is True
+
+    @pytest.mark.asyncio
+    async def test_checkpoint_failure_keeps_complete_event_but_marks_failure(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        events: list[object] = []
+
+        async def checkpoint_sink(*, payload: dict, base_messages: list[dict]) -> None:
+            raise RuntimeError("checkpoint store down")
+
+        runtime = build_runtime_spec_with_compaction(
+            checkpoint_sink=checkpoint_sink,
+            summary_text="compacted summary",
+        )
+
+        async for event in AgentKernel().run_stream(
+            runtime, "task", history=_build_long_history()
+        ):
+            events.append(event)
+
+        compaction_events = [e for e in events if getattr(e, "type", None) == "compaction"]
+        assert [e.status for e in compaction_events] == ["running", "complete"]
+        assert compaction_events[-1].checkpoint_written is False
+        assert compaction_events[-1].failure_reason == "checkpoint store down"
+
     @pytest.mark.asyncio
     async def test_kernel_preflight_calls_checkpoint_sink_for_durable_compaction(
         self,

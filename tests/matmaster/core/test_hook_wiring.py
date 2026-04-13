@@ -27,7 +27,6 @@ from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import (
-    ContextCompactionEvent,
     ResponseEvent,
     RunResultEvent,
     ToolCallEvent,
@@ -67,50 +66,102 @@ class RecordingProvider:
 
 class FakeCompactor:
     def __init__(self) -> None:
-        self._event_sink = None
         self.message_counts: list[int] = []
 
     def update_message_count(self, count: int) -> None:
         self.message_counts.append(count)
 
+    def plan_preflight_compaction(self, messages):
+        return None
+
     async def preflight_if_needed(self, messages) -> None:
         return None
 
-    async def compact_if_needed(self, messages, turn_usage, turn) -> None:
+    async def plan_runtime_compaction(self, messages, turn_usage, *, turn):
+        from matmaster.core.context_compactor import CompactionPlan
+
+        return CompactionPlan(
+            compaction_id="task-1:root:1",
+            compaction_count=1,
+            phase="runtime",
+            trigger_tokens=123,
+            turn=turn,
+        )
+
+    async def apply_compaction_plan(self, plan, messages):
+        from matmaster.core.context_compactor import CompactionResult
+
         messages[:] = messages[:1]
-        await self._event_sink(
-            ContextCompactionEvent(
-                source="context_compactor",
-                payload={"trigger_tokens": 123, "strategy": "summary"},
-            )
+        return CompactionResult(
+            compaction_id=plan.compaction_id,
+            compaction_count=plan.compaction_count,
+            phase=plan.phase,
+            strategy="summary",
+            durability="ephemeral",
+            trigger_tokens=plan.trigger_tokens,
+            retained_turns=1,
+            failure_reason=None,
+            base_snapshot=None,
         )
 
 
 class DoubleEventCompactor:
     def __init__(self) -> None:
-        self._event_sink = None
         self.message_counts: list[int] = []
+        self._preflight_planned = False
+        self._runtime_planned = False
 
     def update_message_count(self, count: int) -> None:
         self.message_counts.append(count)
 
+    def plan_preflight_compaction(self, messages):
+        from matmaster.core.context_compactor import CompactionPlan
+
+        if self._preflight_planned:
+            return None
+        self._preflight_planned = True
+        return CompactionPlan(
+            compaction_id="task-1:root:1",
+            compaction_count=1,
+            phase="preflight",
+            trigger_tokens=111,
+            turn=0,
+        )
+
     async def preflight_if_needed(self, messages) -> None:
         return None
 
-    async def compact_if_needed(self, messages, turn_usage, turn) -> None:
-        messages[:] = messages[:2]
-        await self._event_sink(
-            ContextCompactionEvent(
-                source="context_compactor",
-                payload={"trigger_tokens": 111, "strategy": "summary"},
-            )
+    async def plan_runtime_compaction(self, messages, turn_usage, *, turn):
+        from matmaster.core.context_compactor import CompactionPlan
+
+        if self._runtime_planned:
+            return None
+        self._runtime_planned = True
+        return CompactionPlan(
+            compaction_id="task-1:root:2",
+            compaction_count=2,
+            phase="runtime",
+            trigger_tokens=222,
+            turn=turn,
         )
-        messages[:] = messages[:1]
-        await self._event_sink(
-            ContextCompactionEvent(
-                source="context_compactor",
-                payload={"trigger_tokens": 222, "strategy": "summary"},
-            )
+
+    async def apply_compaction_plan(self, plan, messages):
+        from matmaster.core.context_compactor import CompactionResult
+
+        if plan.phase == "preflight":
+            messages[:] = messages[:2]
+        else:
+            messages[:] = messages[:1]
+        return CompactionResult(
+            compaction_id=plan.compaction_id,
+            compaction_count=plan.compaction_count,
+            phase=plan.phase,
+            strategy="summary",
+            durability="ephemeral",
+            trigger_tokens=plan.trigger_tokens,
+            retained_turns=1,
+            failure_reason=None,
+            base_snapshot=None,
         )
 
 

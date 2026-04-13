@@ -22,14 +22,14 @@ class HistoryCheckpointService:
         task_id: str | None,
         invocation_id: str | None,
         spawn_id: str | None,
-    ) -> Callable[..., Awaitable[None]]:
+    ) -> Callable[..., Awaitable[int | None]]:
         async def sink(
             *,
             payload: dict[str, Any],
             base_messages: list[dict[str, Any]],
-        ) -> None:
+        ) -> int | None:
             if payload.get("durability") != "durable":
-                return
+                return None
 
             validate_base_messages(deserialize_base_messages(base_messages))
             await fanout.flush_persistence_barrier()
@@ -48,5 +48,6 @@ class HistoryCheckpointService:
                 base_messages=base_messages,
                 reason=str(payload.get("strategy") or "summary"),
             )
+            return covered_until_event_id
 
         return sink

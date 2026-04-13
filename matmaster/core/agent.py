@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections import deque
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from dataclasses import field as dc_field
@@ -26,6 +25,7 @@ from matmaster.types.cancellation import CancellationToken
 from matmaster.types.errors import LLMError
 from matmaster.types.events import (
     AssistantStateEvent,
+    CompactionEvent,
     ResponseEvent,
     SkillHitEvent,
     ThoughtEvent,
@@ -109,56 +109,80 @@ class _KernelStopRequested(Exception):
 class AgentKernel:
     """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""
 
-    async def _drain_compactor_events(
+    async def _run_compaction_plan(
         self,
         *,
         spec: AgentRuntimeSpec,
-        compactor_events: deque[tuple[Any, int, int, list[dict[str, Any]] | None]],
+        state: _KernelState,
+        plan: Any,
         checkpoint_sink: Any,
     ) -> AsyncIterator[_KernelItem]:
-        while compactor_events:
-            (
-                compaction_event,
-                messages_before,
-                messages_after,
-                base_snapshot,
-            ) = compactor_events.popleft()
-            payload = getattr(compaction_event, "payload", {}) or {}
-            should_checkpoint = (
-                payload.get("durability") == "durable" and base_snapshot is not None
+        yield _KernelItem(
+            event=CompactionEvent(
+                source="context_compactor",
+                compaction_id=plan.compaction_id,
+                status="running",
+                phase=plan.phase,
+                trigger_tokens=plan.trigger_tokens,
             )
-            if should_checkpoint:
-                payload["checkpoint_attempted"] = True
-                payload["checkpoint_written"] = False
-                payload["failure_reason"] = None
-            yield _KernelItem(event=compaction_event)
-            if spec.hook_executor is not None and hasattr(compaction_event, "payload"):
-                await spec.hook_executor.emit(
-                    HookEvent.CONTEXT_COMPACTION,
-                    CompactionContext(
-                        messages_before=messages_before,
-                        messages_after=messages_after,
-                        trigger_tokens=payload.get("trigger_tokens", 0),
-                        strategy=payload.get("strategy", "unknown"),
-                    ),
+        )
+        messages_before = len(state.messages)
+        result = await spec.compactor.apply_compaction_plan(plan, state.messages)
+        messages_after = len(state.messages)
+
+        if spec.hook_executor is not None:
+            await spec.hook_executor.emit(
+                HookEvent.CONTEXT_COMPACTION,
+                CompactionContext(
+                    messages_before=messages_before,
+                    messages_after=messages_after,
+                    trigger_tokens=result.trigger_tokens,
+                    strategy=result.strategy,
+                ),
+            )
+
+        checkpoint_written = False
+        failure_reason = result.failure_reason
+        covered_until_event_id = None
+        should_checkpoint = (
+            callable(checkpoint_sink)
+            and result.durability == "durable"
+            and result.base_snapshot is not None
+        )
+        if should_checkpoint:
+            try:
+                covered_until_event_id = await checkpoint_sink(
+                    payload={
+                        "durability": result.durability,
+                        "strategy": result.strategy,
+                    },
+                    base_messages=result.base_snapshot,
                 )
-            if should_checkpoint:
-                try:
-                    await checkpoint_sink(
-                        payload=payload,
-                        base_messages=base_snapshot,
-                    )
-                except Exception as exc:
-                    payload["checkpoint_written"] = False
-                    payload["failure_reason"] = str(exc)
-                    logger.warning(
-                        "checkpoint sink failed for compaction event strategy=%s",
-                        payload.get("strategy", "unknown"),
-                        exc_info=True,
-                    )
-                else:
-                    payload["checkpoint_written"] = True
-                    payload["failure_reason"] = None
+            except Exception as exc:
+                failure_reason = str(exc)
+                logger.warning(
+                    "checkpoint sink failed for compaction result strategy=%s",
+                    result.strategy,
+                    exc_info=True,
+                )
+            else:
+                checkpoint_written = True
+
+        yield _KernelItem(
+            event=CompactionEvent(
+                source="context_compactor",
+                compaction_id=result.compaction_id,
+                status="complete",
+                phase=result.phase,
+                strategy=result.strategy,
+                durability=result.durability,
+                trigger_tokens=result.trigger_tokens,
+                retained_turns=result.retained_turns,
+                checkpoint_written=checkpoint_written,
+                failure_reason=failure_reason,
+                covered_until_event_id=covered_until_event_id,
+            )
+        )
 
     async def run_stream(
         self,
@@ -306,35 +330,22 @@ class AgentKernel:
         )
 
         checkpoint_sink = spec.meta.get("checkpoint_sink")
-        compactor_events: deque[tuple[Any, int, int, list[dict[str, Any]] | None]] = (
-            deque()
-        )
-        compaction_prev_count = len(state.messages)
-
-        async def _compactor_sink(event: Any) -> None:
-            nonlocal compaction_prev_count
-            messages_after = len(state.messages)
-            payload = getattr(event, "payload", {}) or {}
-            base_snapshot: list[dict[str, Any]] | None = None
-            if callable(checkpoint_sink) and payload.get("durability") == "durable":
-                base_snapshot = [
-                    message.model_dump(mode="json") for message in state.messages[1:]
-                ]
-            compactor_events.append(
-                (event, compaction_prev_count, messages_after, base_snapshot)
-            )
-            compaction_prev_count = messages_after
 
         if spec.compactor:
-            spec.compactor._event_sink = _compactor_sink
             spec.compactor.update_message_count(len(state.messages))
-            await spec.compactor.preflight_if_needed(state.messages)
-            async for item in self._drain_compactor_events(
-                spec=spec,
-                compactor_events=compactor_events,
-                checkpoint_sink=checkpoint_sink,
-            ):
-                yield item
+            preflight_planner = getattr(spec.compactor, "plan_preflight_compaction", None)
+            if callable(preflight_planner):
+                plan = preflight_planner(state.messages)
+                if plan is not None:
+                    async for item in self._run_compaction_plan(
+                        spec=spec,
+                        state=state,
+                        plan=plan,
+                        checkpoint_sink=checkpoint_sink,
+                    ):
+                        yield item
+            else:
+                await spec.compactor.preflight_if_needed(state.messages)
 
         turn_usage: dict[str, int] = {}
 
@@ -346,16 +357,25 @@ class AgentKernel:
             state.turn += 1
 
             if spec.compactor:
-                compaction_prev_count = len(state.messages)
-                await spec.compactor.compact_if_needed(
-                    state.messages, turn_usage, state.turn
-                )
-                async for item in self._drain_compactor_events(
-                    spec=spec,
-                    compactor_events=compactor_events,
-                    checkpoint_sink=checkpoint_sink,
-                ):
-                    yield item
+                runtime_planner = getattr(spec.compactor, "plan_runtime_compaction", None)
+                if callable(runtime_planner):
+                    plan = await runtime_planner(
+                        state.messages,
+                        turn_usage,
+                        turn=state.turn,
+                    )
+                    if plan is not None:
+                        async for item in self._run_compaction_plan(
+                            spec=spec,
+                            state=state,
+                            plan=plan,
+                            checkpoint_sink=checkpoint_sink,
+                        ):
+                            yield item
+                else:
+                    await spec.compactor.compact_if_needed(
+                        state.messages, turn_usage, state.turn
+                    )
 
             # ── Tool definitions resolution (version-aware caching) ──
             if (
