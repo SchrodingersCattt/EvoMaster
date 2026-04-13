@@ -20,19 +20,21 @@ import tempfile
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from dotenv import load_dotenv
-
 load_dotenv(PROJECT_ROOT / ".env", override=True)
 
-from matmaster.bohrium.credentials import build_bohrium_context
-from matmaster.bohrium.client import create_job, add_job, get_job_detail
-from matmaster.bohrium.upload import upload_input_archive
-from matmaster.bohrium.status import status_name
-from matmaster.tools.builtin.bohrium_tool.transfers import prepare_input_archive
-from matmaster.tools.builtin.bohrium_tool.models import BohriumInputSource
+from matmaster.bohrium.client import add_job, create_job, get_job_detail  # noqa: E402
+from matmaster.bohrium.credentials import build_bohrium_context  # noqa: E402
+from matmaster.bohrium.status import status_name  # noqa: E402
+from matmaster.bohrium.upload import upload_input_archive  # noqa: E402
+from matmaster.tools.builtin.bohrium_tool.models import BohriumInputSource  # noqa: E402
+from matmaster.tools.builtin.bohrium_tool.transfers import (  # noqa: E402
+    prepare_input_archive,
+)
 
 SMALL_SIZE_MB = 5
 LARGE_SIZE_MB = 110

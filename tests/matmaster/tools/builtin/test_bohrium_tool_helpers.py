@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import io
-import sys
-import types
 import zipfile
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -91,9 +89,7 @@ def _install_fake_tiefblue(monkeypatch, upload_calls: list[tuple[str, str, str]]
             assert progress_bar is False
             return None
 
-    monkeypatch.setattr(
-        "matmaster.bohrium.upload._tiefblue_cls", None, raising=False
-    )
+    monkeypatch.setattr("matmaster.bohrium.upload._tiefblue_cls", None, raising=False)
     monkeypatch.setattr(
         "matmaster.bohrium.upload._load_tiefblue_client",
         lambda: FakeTiefblueClient,
@@ -185,7 +181,7 @@ class FakeRemoteSession:
         downloads: dict[str, bytes] | None = None,
         is_open: bool = True,
         exec_result: dict | None = None,
-        default_download: bytes = b'zip-bytes',
+        default_download: bytes = b"zip-bytes",
     ):
         self._existing_paths = existing_paths or set()
         self._file_paths = file_paths or set()
@@ -230,7 +226,7 @@ class FakeRemoteSession:
 def _zip_bytes(files: dict[str, str]) -> bytes:
     """Build an in-memory zip for sandbox download tests."""
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         for name, content in files.items():
             zf.writestr(name, content)
     return buffer.getvalue()
@@ -248,13 +244,13 @@ class _FakeDownloadResponse:
     ) -> None:
         self.status_code = status_code
         self._json_data = json_data or {}
-        self._content = content if content is not None else b''
+        self._content = content if content is not None else b""
         self.ok = status_code < 400
-        self.text = ''
+        self.text = ""
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise requests.HTTPError(f'{self.status_code} Client Error')
+            raise requests.HTTPError(f"{self.status_code} Client Error")
 
     def json(self) -> dict[str, object]:
         return self._json_data
