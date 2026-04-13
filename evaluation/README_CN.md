@@ -22,7 +22,7 @@ v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵�
 ## 当前题库结构
 
 - `question_bank/manifest.yaml`: v5+ 题库注册表。
-- `question_bank/<capability>/<xx>_<domain>.yaml`: 实际题库文件（**每个文件对应唯一的 `(capability, domain)`**；`<xx>` 为两字母 capability 简写，定义见 `evaluation/core/capability_abbrev.py`）。
+- `question_bank/<capability>/<xx>_<domain>.yaml`: 实际题库文件（**每个文件对应唯一的 `(capability, domain)`**；`<xx>` 为两字母 capability 简写，定义见 `tests/evaluation/capability_abbrev.py`）。
 - `question_bank/data/<question_id>/`: 每道带本地输入的题目对应一个数据目录，目录名使用当前 v5 题号。
 
 当前 capability 列表：

@@ -15,7 +15,7 @@ questions:
 
     '
   tags:
-  - code_abacus
+  - abacus
   - bsse
   - phy_surface
   - log_diagnosis
@@ -94,7 +94,7 @@ questions:
   tags:
   - phy_electronic
   - phy_surface
-  - code_abacus
+  - abacus
   - meta_userlog
   data_files: []
   reference_answers:

@@ -161,7 +161,10 @@ class DevshellAgentLoopCli:
             "--modes",
             nargs="+",
             default=["direct"],
-            help="Forwarded to run_devshell_eval --modes",
+            help=(
+                "Legacy: when --exp is omitted and the first token is planner, sets --exp planner. "
+                "Prefer --exp."
+            ),
         )
         p.add_argument(
             "--jobs",
@@ -268,8 +271,13 @@ class DevshellAgentLoopCli:
                 session_dir if session_dir.is_absolute() else (repo_root / session_dir)
             ).resolve()
 
+        exp_effective = args.exp
+        if exp_effective is None and args.modes:
+            _first = str(args.modes[0]).strip()
+            if _first == "planner":
+                exp_effective = "planner"
+
         defaults = DevshellAgentCliDefaults(
-            modes=list(args.modes),
             jobs=int(args.jobs),
             limit=args.limit,
             questions=list(args.questions) if args.questions else None,
@@ -277,7 +285,7 @@ class DevshellAgentLoopCli:
                 (str(args.slices).strip() or None) if args.slices is not None else None
             ),
             model=args.model,
-            exp=args.exp,
+            exp=exp_effective,
             eval_ingest_pending_only=bool(args.eval_ingest_pending_only),
             no_export_review=bool(args.no_export_review),
             task_timeout_sec=float(args.task_timeout),

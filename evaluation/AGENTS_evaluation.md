@@ -13,7 +13,7 @@
 
 ```
 evaluation/question_bank/
-├── manifest.yaml              # 题库注册表（path = `<capability>/<xx>_<domain>.yaml`，xx=两字母简写）
+├── manifest.yaml              # 题库注册表（path = `<capability>/<xx>_<domain>.yaml` 或 `<capability>/<xx>_<domain>_<tag>.yaml`，xx=两字母简写）
 ├── batch_processing/          # 如 bp_catalysis.yaml、bp_agnostic.yaml
 ├── data_diagnosis/
 ├── execution_contract/
@@ -30,8 +30,8 @@ evaluation/question_bank/
 
 **约定**：
 
-- **一个 bank 文件 = 唯一的 `(capability, domain)`**：路径为 ``<capability>/<xx>_<domain>.yaml``，其中 **`<xx>` 为两字母 capability 简写**（见 `evaluation/core/capability_abbrev.py` 中 `CAPABILITY_TO_TWO_LETTER`，含 `agnostic`）；同一文件内所有题目的 `domain` 与文件名中的 `domain` 一致。
-- 专题（如 CO₂RR）、工具线等用题目级 **`tags`** 或 `id` 前缀区分，不再拆成多个 bank 文件。
+- **manifest 中每条 `path` 对应一个 bank 文件**：文件名为 canonical ``<capability>/<xx>_<domain>.yaml``，或同一 `(capability, domain)` 下经批准的分裂名 ``<capability>/<xx>_<domain>_<tag>.yaml``（如按工具链拆分的 `ig_agnostic_vasp.yaml` / `ig_agnostic_abacus.yaml`）。**`<xx>` 为两字母 capability 简写**（见 `tests/evaluation/capability_abbrev.py` 中 `CAPABILITY_TO_TWO_LETTER`；canonical basename 公式见同文件 `bank_yaml_basename`）。文件名与 `(capability, domain)` 的一致性由 `tests/evaluation/test_question_bank_taxonomy.py` 中 `test_bank_yaml_filename_matches_capability_and_domain` 校验。同一文件内所有题目的 `domain` 与顶层 `domain` 一致。
+- 专题（如 CO₂RR）等优先用题目级 **`tags`** 或 `id` 前缀区分；仅在必要时（例如输入生成按不同 DFT 工具链维护）将同一 domain 拆为多文件。
 
 ### 三层评分模型
 
@@ -99,7 +99,7 @@ evaluation/question_bank/
 - **不要重复当前题自己的 `capability` 或 `domain`**；同一信息不应在三条轴上重复表达。
 - **不要使用泛过程占位词**，如 `workflow`、`workflow_acceleration`、`workflow_closure`、`loop_oriented`、`plotting`、`structure_build`。这类词只说明“做事方式”或编写过程，不是稳定的主题/工具/方法 Facet。
 - 优先写**主题 / 工具链 / 方法族**；若只是想表达“这是个多步流程题”，应由 `capability=workflow_orchestration` 表达，而不是再写 `workflow` tag。
-- **受控词表 + 前缀语义**：合法 tag 为数十个粗粒度值，例如 `meta_userlog`、`wf_batch`、`code_abacus`、`phy_surface`、`chem_co2rr`、`mat_hea` 等（完整列表见 `question_tags.py`）。**不要在 tags 里堆材料实例名**（如单个化学式、Miller 指数），以免与 `capability`/`domain` 信息重复且难以维护。
+- **受控词表 + 前缀语义**：合法 tag 为数十个粗粒度值，例如 `meta_userlog`、`wf_batch`、`abacus`、`vasp`、`phy_surface`、`chem_co2rr`、`mat_hea` 等（完整列表见 `question_tags.py`）。**不要在 tags 里堆材料实例名**（如单个化学式、Miller 指数），以免与 `capability`/`domain` 信息重复且难以维护。
 - **命名风格**：仅使用词表内 `lower_snake_case` 字符串；材料名、化学式类 **legacy** 别名仍由 `schemas.CANONICAL_TAG_ALIASES` 拒绝并提示 canonical（归一化后进入上述词表）。
 
 **与 `--slices` 的关系**：Runner 当前仅按 **`capability` + `domain`** 过滤；**需要稳定用 CLI 切分的维度**应落在二者之一（或专题 capability），不要**只**写在 `tags` 里（除非已实现 tags 筛选，见下文「运行筛选」）。
