@@ -322,7 +322,9 @@ def check_text_file_numeric_range(
         details.append(reason)
         if not ok:
             return False, f'{fpath.name}: {reason}'
-    return True, f"{fpath.name}: all {len(checks)} numeric checks passed; " + '; '.join(details)
+    return True, f"{fpath.name}: all {len(checks)} numeric checks passed; " + '; '.join(
+        details
+    )
 
 
 def check_text_file_kpt_path(
@@ -409,7 +411,10 @@ def check_text_file_kpt_path(
                 found = i
                 break
         if found < 0:
-            return False, f'{fpath.name}: required point {req} not found within tol={tol}'
+            return (
+                False,
+                f'{fpath.name}: required point {req} not found within tol={tol}',
+            )
         indices.append(found)
 
     if require_order:
