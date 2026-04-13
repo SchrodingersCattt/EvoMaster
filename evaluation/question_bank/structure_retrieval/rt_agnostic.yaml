@@ -202,9 +202,9 @@ questions:
     axis: efficiency
     verify: token_budget
 - id: SR_db_003_20260411v3
-  capability: structure_retrieval
+  capability: structure_construction
   domain: agnostic
-  intent: Retrieve and rank candidate crystal structures under explicit screening constraints.
+  intent: Generate and summarize candidate crystal structures under explicit superconducting constraints.
   human_prompt_seed: '按“超导临界温度大于 40 K、空间群编号为 225”使用工具生成 10 个候选晶体结构。
 
 
