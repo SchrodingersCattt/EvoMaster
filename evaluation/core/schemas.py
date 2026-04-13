@@ -9,7 +9,7 @@ Current v5 schema changes:
 - EvalRunRecord: binary pass counts + weighted scores (axis_weights from config applied)
 - EvaluationSummary: pass-rate oriented with AxisPassRates + weighted equivalents
 - QuestionBank: no longer requires rubric field
-- EvalConfig: axis_weights; ``include_slices`` (OR-of capability + optional domains)
+- EvalConfig: axis_weights; ``include_slices`` (OR-of capability + optional domains + optional tags)
 
 Scoring model:
 - LLM / deterministic verifiers produce binary (pass/fail) verdicts per checklist item
@@ -379,10 +379,11 @@ class LLMRuntimeConfig(BaseModel):
 
 
 class CapabilitySlice(BaseModel):
-    """One OR-branch in ``include_slices``: capability plus optional domain filter."""
+    """One OR-branch in ``include_slices``: capability plus optional domain/tag filters."""
 
     capability: str
     domains: list[str] | None = None
+    tags: list[str] | None = None
 
     @field_validator('capability')
     @classmethod
@@ -397,6 +398,18 @@ class CapabilitySlice(BaseModel):
         if value is not None and not value:
             raise ValueError('domains must be omitted or a non-empty list')
         return value
+
+    @field_validator('tags')
+    @classmethod
+    def _tags_non_empty_when_set(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        if not value:
+            raise ValueError('tags must be omitted or a non-empty list')
+        cleaned = [t.strip() for t in value]
+        if any(not t for t in cleaned):
+            raise ValueError('tag entries cannot be empty')
+        return cleaned
 
 
 class EvalConfig(BaseModel):

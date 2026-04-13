@@ -139,7 +139,7 @@ uv run python -m evaluation.cli \
 
 常用参数：
 
-- `--slices`: OR-of-slices，语法 `cap cap[dom] cap[d1,d2]`（**括号外**空格分隔，`[]` 内禁止空格；与 `evaluation/config.yaml` 中 `include_slices` 一致）。
+- `--slices`: OR-of-slices，语法 `cap`、`cap[dom]`、`cap[d1,d2]`、`cap@tag`、`cap[dom]@t1,t2`（**每个 slice 只有一个 `@`**；**括号外**空格分隔 slice，`[]` 与 `@` 后列表内禁止空格，逗号分隔；`@` 后多 tag 为 AND；与 `evaluation/config.yaml` 中 `include_slices` 一致）。
 - `--questions`: 按 v5 question id 过滤题目。
 - `--k`: 每题重复次数。
 

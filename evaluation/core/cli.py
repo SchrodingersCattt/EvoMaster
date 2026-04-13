@@ -58,9 +58,9 @@ def main() -> int:
         default=None,
         metavar='EXPR',
         help=(
-            'OR-of-slices: whitespace between caps; cap[dom]; cap[d1,d2] — '
-            'no spaces inside [...] (e.g. '
-            '"workflow_orchestration[polymer] input_generation")'
+            'OR-of-slices: whitespace between slices; cap; cap[dom]; cap[d1,d2]; '
+            'cap@tag or cap[dom]@t1,t2 (one @ per slice; tags AND). No spaces in '
+            '[...] or after @ (e.g. "workflow_orchestration[polymer]@wf_batch input_gen")'
         ),
     )
     parser.add_argument(

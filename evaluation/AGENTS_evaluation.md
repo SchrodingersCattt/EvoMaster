@@ -161,30 +161,31 @@ evaluation/question_bank/
 |------|------------|----------------|--------|
 | **capability** | 这道题测**哪类任务能力**（建结构、查库、科学分析、批量、诊断、输入生成、编排、安全、执行契约等） | 与「任务形态」一致：能标 `input_generation` 或 `scientific_analysis` 就不要标成笼统的 `workflow_orchestration` | **`--slices`、聚合报告 `by_capability`**；加载时校验 |
 | **domain** | 这道题最终属于**哪条业务线 / 应用场景**（五条业务线或 `agnostic`） | 与「切片想怎么分」对齐：稳定业务线优先；无法唯一归类时用 `agnostic` | **`--slices` 的 `cap[dom1,dom2]`**、按域聚合；加载时校验 |
-| **tags** | **二级标签**：项目线、工具线、内部别名（如 `mlip`、`userlog`、`co2rr`） | 不承载「枚举完整性」；用于人读、检索、将来扩展 | **当前 runner 不参与筛选**（见下节）；可用于自建报表或外部分析 |
+| **tags** | **二级标签**：项目线、工具线、内部别名（如 `mlip`、`userlog`、`co2rr`） | 不承载「枚举完整性」；用于人读、检索、细粒度切片 | **`--slices` 中经 `@` 与 capability/domain 组合筛选**（见下节）；亦可用于自建报表 |
 
 **选用顺序（简版）**：先定 **capability**（任务形态）→ 再定 **domain**（题材/主轴，且兼顾你以后想怎么写 `--slices`）→ 需要更细、但**不值得**加新 domain 时再加 **tags**。
 
-#### 运行筛选：`--slices` / `include_slices`（与 tags 的关系）
+#### 运行筛选：`--slices` / `include_slices`（capability / domain / tags）
 
-实现见 `evaluation/core/runner.py` 的 `_question_matches_slice`：**只匹配题目的 `capability` 与 `domain`**。**`tags` 不会参与 `--slices` 过滤**。
+实现见 `evaluation/core/runner.py` 的 `_question_matches_slice` 与 `evaluation/core/slice_parser.py`：每条 slice 匹配题目的 **`capability`**，可选 **`domain`** 列表，可选 **`tags`**（**AND**：题目需包含 slice 中列出的每一个 tag）。
 
-- **CLI**：`--slices 'A B[a,b] C[d]'`。
+- **CLI**：`--slices 'A B[a,b] C[d] WO@wf_batch'`。
   - **括号外空白**分隔多条 **slice**，多条之间为 **OR**（命中任一即保留该题）。
-  - **`cap`** 单独出现：该 capability 下 **任意 domain** 均命中。
+  - **`cap`** 单独出现：该 capability 下 **任意 domain**、**任意 tags** 均命中（仍受其它筛选约束）。
   - **`cap[a]`** 或 **`cap[a,b]`**：capability 相同 **且** `question.domain` 落在列表中（列表内为 **OR**）。
+  - **`cap@t1`** 或 **`cap@t1,t2`** 或 **`cap[a,b]@t1,t2`**：每个 slice **至多一个** `@`；`@` 后为逗号分隔的 tag 列表，要求题目的 `tags` **同时包含**所列每一个（**AND**）。tag 名与题目中枚举一致（匹配时不区分大小写）；列表内禁止空白（与 `[]` 内域名相同）。
   - **`[]` 内禁止空白**，域名用逗号分隔，如 `[battery,catalysis]`，不能写成 `[battery, catalysis]`。
-- **`evaluation/config.yaml`**：`include_slices: [{ capability: "…", domains: ["…"] }, …]`；某条省略 `domains` 时表示该 capability **不限 domain**（与 CLI 中单独的 `cap` 等价）。
+- **`evaluation/config.yaml`**：`include_slices: [{ capability: "…", domains: ["…"], tags: ["…"] }, …]`；省略 `domains` 表示该 capability **不限 domain**；省略 `tags` 表示**不限 tag**。
 
-**若你希望「按 tags 跑子集」**：当前需 **`--questions` / `include_question_ids`** 显式列 ID，或把题目拆进**单独 bank 文件**后只加载该文件（取决于你们入口是否支持按文件过滤），或在未来给 runner 增加 `--tags`（需改代码）。在此之前，**需要频繁用 CLI 切分的维度应落在 `domain`（或独立 `capability`）上**，而不是只写在 `tags` 里。
+**其它按题 ID 子集**：仍可用 **`--questions` / `include_question_ids`** 或按 bank 文件加载。**需要频繁切的维度**仍建议优先落在 `domain` / `capability`；`tags` 适合二级维度或与 `@` 组合收窄。
 
 #### 基于 `--slices` 的命名与调整建议
 
 1. **先反推常用切片**：列出团队最常跑的命令，例如「只要电化学 workflow」「只要聚合物」「只要 ABACUS 输入」。把每条映射到 `capability` + `domain` 的组合是否**能一条 `--slices` 写出来**；若不能，优先考虑 **调整 domain**（或专题 capability），而不是加 tags。
 2. **`workflow_orchestration` + 多主题**：该 capability 只应用于确实考察流程组织的题；保留在该类中的题仍应**务必用 `domain` 区分**（五条业务线之一，或确实无主轴时用 `agnostic`），否则只能 `workflow_orchestration` 全选或依赖题目 ID 列表。
 3. **专题线不要直接占用 capability 或 domain**：如 `co2rr`、`userlog`、`mlip`、`scxrd`、`abacus` 等优先放入 `tags`；只有当它本身就是独立**任务形态**时，才应升级成 capability。
-4. **不要指望 tags 驱动 CLI**：tags 适合 **文档化与二次分析**；**驱动切片**请用 capability/domain，或扩展 runner（见上）。
-5. **新增枚举值**：若出现「必须同时按某维度筛，但该维度既不适合塞 domain 也不适合塞 capability」的重复需求，再评估 **新 domain** 或 **runner 支持 tags 过滤**，避免 capability 无限膨胀。
+4. **tags 与 CLI**：可用 `--slices` 的 `@tag` 做 **capability/domain 之外的收窄**；仍以 capability/domain 为主轴，避免把本应属于 domain 的维度只写在 tags 里。
+5. **新增枚举值**：若出现「必须同时按某维度筛，但该维度既不适合塞 domain 也不适合塞 capability」的重复需求，再评估 **新 domain** 或 **题库 tags 枚举扩展**，避免 capability 无限膨胀。
 
 ### `data_files` 每条（`DataFileRef`）
 
@@ -451,7 +452,7 @@ evaluation/scripts/matter_cli/run_matmaster_evaluation_bg.ps1
 |--------|----------------|------------------|
 | **任务类**（Task） | Agent 在做什么「类」的事：建结构、检索、批量扫描、诊断、写输入、多步编排、合规拒答、垂直专题等 | 对应并**收紧** `capability`；过宽的 `workflow_orchestration` 可拆成子类（如 `workflow_mcp`、`workflow_bash_pipeline`）或**强制**用第二轴表达 |
 | **题材类**（Subject） | 材料/过程属于哪条科学线：结构/电子/力学/热/动力学/聚合物等 | 对应 **`domain` 中纯「物理/材料」部分**；`incar`/`scxrd` 若保留，建议**迁出**为第三轴，避免与 Subject 混枚举 |
-| **主题/产品线**（Theme / Facet） | 项目线、工具链、内部专题：MLIP、CO₂RR、userlog、某客户包等 | 对应 **`tags` 或升级为结构化 `facets`**（如 `toolchain:mlip`）；**应能被 runner 参与过滤**（见下） |
+| **主题/产品线**（Theme / Facet） | 项目线、工具链、内部专题：MLIP、CO₂RR、userlog、某客户包等 | 对应 **`tags` 或升级为结构化 `facets`**（如 `toolchain:mlip`）；**可用 `--slices` 的 `@tag` 参与过滤**（见上） |
 
 可选 **第四类**（若 Subject 与「方法/数据形态」仍打架）：单独 **`method` 或 `artifact`**（`xrd` / `incar` / `md_trajectory`），与 Subject 正交；这样 `--slices` 可以 `task × subject × method` 组合而不膨胀单一枚举。
 
@@ -461,8 +462,8 @@ evaluation/scripts/matter_cli/run_matmaster_evaluation_bg.ps1
 
 1. **最小演进（兼容优先）**
    - 保留现有 `cap` 与 `cap[dom1,dom2]` 语义不变。
-   - **新增**可选参数，例如 `--tags-any tag1,tag2`（命中任一 tag）、`--tags-all`（全部命中），与 `include_slices` **AND** 组合（先按 slice 缩小，再按 tags 过滤）。
-   - 实现成本低，题库可逐步补全 tags，无需立刻拆 domain。
+   - **已实现**：同一 slice 内用 **`@tag1,tag2`**（**一个 `@`**）要求题目 **tags 全包含**（AND），与 capability/domain 组合；多条 slice 之间仍为 **OR**。若将来需要「全局 tags_any / tags_all 与 slices AND」可再增加独立 CLI 参数。
+   - 题库可逐步补全 tags，无需立刻拆 domain。
 
 2. **中等演进（表达式升级）**
    - 引入 **显式键名**，避免 `cap[dom]` 隐式二元：例如

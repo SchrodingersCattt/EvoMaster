@@ -165,10 +165,15 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
 def _question_matches_slice(question: QuestionItem, sl: CapabilitySlice) -> bool:
     if question.capability.lower() != sl.capability.lower():
         return False
-    if sl.domains is None:
-        return True
-    allowed = {d.lower() for d in sl.domains}
-    return question.domain.lower() in allowed
+    if sl.domains is not None:
+        allowed = {d.lower() for d in sl.domains}
+        if question.domain.lower() not in allowed:
+            return False
+    if sl.tags is not None:
+        have = {str(t).lower() for t in question.tags}
+        if not all(req.lower() in have for req in sl.tags):
+            return False
+    return True
 
 
 def _apply_filters(
