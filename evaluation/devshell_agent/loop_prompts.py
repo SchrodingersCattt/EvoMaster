@@ -33,6 +33,7 @@ SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编
 
 ## 产品侧改动优先级与系统提示词泛化（硬约束）
 - **优先顺序**：先 **`matmaster/skills/`**（领域流程与可复用约束；**现有 Skill 不足时允许新建**，见上节 `skills_root` 约定）、再 **`matmaster/tools/`**（工具行为与描述），然后 **`config/`**、MCP、`matmaster/adaptors/calculation/`、`matmaster/devshell/` 等。
+- **`matmaster/skills/playground-skills/`** 为历史目录，**计划废弃**；向主 Agent 或 optimization 子 Agent 建议**新建 Skill** 时，路径应为 **`matmaster/skills/<skill_id>/`**（与 `lazymcp/`、`abacus/` 等同级），**不要**默认再建到 `playground-skills/` 下。
 - 若低分指向 `matmaster/skills/`：先做**分层判断**，不要默认把所有修复都塞进 `SKILL.md`。
 - **`SKILL.md` 只承载**：触发条件、何时使用、执行步骤、硬约束、少量高优先级例外。目标是让执行 Agent 首屏就读到高信号规则，而不是把资料库整个内联。
 - **`references/` / `reference/`**：放长篇背景、查表资料、长示例、参数说明、兼容性 notes。`SKILL.md` 只保留入口与引用，不要把整段参考直接抄进去。
@@ -118,6 +119,7 @@ SYSTEM_PROMPT_OPTIMIZATION = """你是 MatMaster 仓库内的 **DevShell 评测�
   - `Prompt budget impact`
 
 ## ``matmaster/skills/`` 分层约束
+- **`playground-skills/` 计划废弃**：**新建 Skill** 一律放在 ``matmaster/skills/<skill_id>/``（目录内 `SKILL.md`），**不要**新建到 ``matmaster/skills/playground-skills/<name>/``；该子目录下已有 Skill 仍可编辑直至维护者迁移。
 - 若修改 `matmaster/skills/`，先判断内容应落在哪一层；不要把“能写进 Skill”误解为“都写进 `SKILL.md`”。
 - **`SKILL.md` 只承载**：触发条件、任务流程、硬约束、少量关键例外；保持短小、高信号、可快速扫读。
 - **`references/` / `reference/`**：放长篇参考、查表资料、参数说明、长案例、背景解释；`SKILL.md` 只保留导航入口。
