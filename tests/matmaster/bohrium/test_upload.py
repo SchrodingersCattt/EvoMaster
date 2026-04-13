@@ -16,7 +16,7 @@ def test_upload_input_archive_returns_oss_key_and_download_url(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    upload_calls: list[tuple[str, str, dict]] = []
+    upload_calls: list[tuple[str, str, str]] = []
     _install_fake_tiefblue(monkeypatch, upload_calls)
     zip_path = tmp_path / "input.zip"
     zip_path.write_bytes(b"zip-bytes")
@@ -32,7 +32,7 @@ def test_upload_input_archive_returns_oss_key_and_download_url(
 
     assert uploaded.oss_key == "sandbox/jobs/run-1/input.zip"
     assert uploaded.download_url.startswith("https://store.example.com/api/download/")
-    assert upload_calls[0][2]["Authorization"] == "Bearer token-123"
+    assert upload_calls[0][2] == "token-123"
 
 
 def test_upload_input_archive_surfaces_missing_sdk(
@@ -42,16 +42,18 @@ def test_upload_input_archive_surfaces_missing_sdk(
     original_import = builtins.__import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name.startswith("bohrium_open_sdk"):
-            raise ImportError("bohrium_open_sdk is unavailable")
+        if name.startswith("bohrium"):
+            raise ImportError("bohrium-sdk is unavailable")
         return original_import(name, globals, locals, fromlist, level)
 
-    monkeypatch.setattr("matmaster.bohrium.upload._oss2", None, raising=False)
+    monkeypatch.setattr(
+        "matmaster.bohrium.upload._tiefblue_cls", None, raising=False
+    )
     monkeypatch.setattr(builtins, "__import__", fake_import)
     zip_path = tmp_path / "input.zip"
     zip_path.write_bytes(b"zip-bytes")
 
-    with pytest.raises(BohriumTransferError, match="bohrium_open_sdk"):
+    with pytest.raises(BohriumTransferError, match="bohrium-sdk"):
         upload_input_archive(
             create_data={
                 "storePath": "sandbox/jobs/run-2/",
