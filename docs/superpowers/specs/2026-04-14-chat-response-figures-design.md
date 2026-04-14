@@ -233,6 +233,8 @@ wrapper 产出的 `ToolResult.payload.figures[]` 使用统一结构：
 
 - 服务层在本轮回答结束前统一收集本回答涉及的 `payload.figures`
 - 仅当最终回答文本已经确定、且相关图片均已同步上传完成时，才发出 `response_figures`
+- 聚合后的 `figures` 顺序按回答绑定层接收 `tool_result` 的时序拼接
+- 单个 `tool_result.payload.figures` 内保持 manifest 的声明顺序
 - `response_figures` 固定在对应 `run_result` 之前发出
 - 若本回答没有图片，则不发该事件
 
@@ -279,6 +281,12 @@ wrapper 产出的 `ToolResult.payload.figures[]` 使用统一结构：
 - 将其归入 `SystemEvent` / `BusEvent` 联合类型
 - 在 `matmaster/integration/event_payloads.py` 中补充公开 payload 映射
 - `PersistenceHandler` 与 `SSEHandler` 默认应接纳该事件，不做额外过滤
+
+分类说明：
+
+- `response_figures` 虽然语义上属于回答内容的一部分，但第一版仍归入 `SystemEvent`
+- 原因是该事件由服务层在回答收尾阶段汇总生成，不是 kernel 直接发出的原生事件
+- 前端与历史回放应基于 `BusEvent.type` 消费该事件，而不应假定回答重建只依赖 `AgentEvent`
 
 发射时机固定为：
 
@@ -371,8 +379,9 @@ PDF 第一版复用回答级图片绑定，但固定为附录模式：
 超过上限后：
 
 - 该图片不进入 `payload.figures`
+- 同一 tool call 中其余上传成功的图片照常进入 `payload.figures`
 - 正文仍可继续完成
-- tool result 文本可追加简短说明，便于 agent 判断是否需要重试
+- tool result 文本可追加简短说明，默认包含失败数量与失败 `figure_id` 的紧凑列表，便于 agent 判断是否需要重试
 
 ### Validation Rule
 
