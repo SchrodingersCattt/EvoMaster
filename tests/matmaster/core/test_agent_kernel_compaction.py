@@ -22,13 +22,21 @@ from .agent_kernel_test_helpers import _make_spec
 
 
 class ContentOnlyProvider:
-    async def stream(self, messages, *, tools=None, **kwargs):
-        yield StreamChunk(type="content", content="hello")
-        yield LLMResponse(
-            content="hello",
-            tool_calls=[],
-            usage={"input_tokens": 10, "output_tokens": 5},
-        )
+    """Provider that only streams content, no reasoning."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        yield StreamChunk(content="hello ")
+        yield StreamChunk(content="world")
+        yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
 
 
 # ── Compactor test doubles ───────────────────────────────────
