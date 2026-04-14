@@ -24,6 +24,38 @@ tool_include_only:
     - "xrd_phase_identification"
   mat_electron_microscope:
     - "get_electron_microscope_recognize"
+# MCP 并发策略（一期示例）
+# defaults: 按 transport 设置默认并发；servers: 对单个 server 做更细粒度覆盖。
+# mode:
+#   - serial: 串行执行，适合 stdio 或不支持多路复用的连接
+#   - multiplex: 允许有限并发，适合 http/sse 等支持并发请求的连接
+mcp_concurrency:
+  defaults:
+    http:
+      mode: "multiplex"
+      max_inflight: 4
+      max_pending_requests: 64
+    sse:
+      mode: "multiplex"
+      max_inflight: 2
+      max_pending_requests: 32
+    stdio:
+      mode: "serial"
+      max_inflight: 1
+      max_pending_requests: 16
+  servers:
+    mat_doc:
+      mode: "serial"
+      max_inflight: 1
+      max_pending_requests: 16
+    mat_struct_db:
+      mode: "serial"
+      max_inflight: 1
+      max_pending_requests: 16
+    mat_nmr:
+      mode: "multiplex"
+      max_inflight: 2
+      max_pending_requests: 16
 # Per-server executor (image/machine_type) and sync_tools. Sync tools → executor None; others → Bohrium executor with env auth.
 calculation_executors:
   mat_sg:

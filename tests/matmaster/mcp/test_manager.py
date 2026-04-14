@@ -94,6 +94,29 @@ class TestMCPToolManagerInstantiation:
         assert policy.max_inflight == 4
         assert policy.max_pending_requests == 64
 
+    def test_resolve_policy_prefers_server_override_over_transport_default(self):
+        from matmaster.mcp.manager import MCPConcurrencyPolicy, MCPToolManager
+
+        m = MCPToolManager()
+        m.concurrency_defaults_by_transport["http"] = MCPConcurrencyPolicy(
+            mode="serial",
+            max_inflight=1,
+            max_pending_requests=8,
+        )
+        m.concurrency_by_server["mat_doc"] = MCPConcurrencyPolicy(
+            mode="multiplex",
+            max_inflight=3,
+            max_pending_requests=12,
+        )
+
+        policy = m._resolve_policy("mat_doc", "HTTP")
+
+        assert policy == MCPConcurrencyPolicy(
+            mode="multiplex",
+            max_inflight=3,
+            max_pending_requests=12,
+        )
+
     def test_has_add_server_method(self):
         from matmaster.mcp.manager import MCPToolManager
 
