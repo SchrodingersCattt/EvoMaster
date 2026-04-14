@@ -425,6 +425,18 @@ class MCPToolManager:
             )
             self._startup_tasks[name] = startup
 
+            def _remove_startup_task(
+                done: asyncio.Task[None], *, server_name=name
+            ) -> None:
+                try:
+                    done.exception()
+                except asyncio.CancelledError:
+                    pass
+                if self._startup_tasks.get(server_name) is done:
+                    self._startup_tasks.pop(server_name, None)
+
+            startup.add_done_callback(_remove_startup_task)
+
         try:
             await asyncio.shield(startup)
         finally:

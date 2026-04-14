@@ -68,6 +68,23 @@ class _StartupBlockingConn:
         return [{"text": arguments.get("value", "")}]
 
 
+class _FailingStartupConn:
+    def __init__(self) -> None:
+        self.list_tools_started = asyncio.Event()
+        self.release_startup = asyncio.Event()
+
+    async def __aenter__(self) -> "_FailingStartupConn":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def list_tools(self) -> list[dict[str, Any]]:
+        self.list_tools_started.set()
+        await self.release_startup.wait()
+        raise RuntimeError("startup failed")
+
+
 async def _spin_event_loop(turns: int = 5) -> None:
     for _ in range(turns):
         await asyncio.sleep(0)
@@ -338,3 +355,44 @@ class TestManagerStartupConcurrency:
             await manager.cleanup()
 
         assert result == [{"text": "second"}]
+
+    async def test_cancelled_startup_waiter_clears_stale_failed_startup_task(self):
+        manager = MCPToolManager()
+        failing_conn = _FailingStartupConn()
+        retry_conn = _BlockingConn()
+
+        with patch(
+            "matmaster.mcp.manager.create_connection",
+            side_effect=[failing_conn, retry_conn],
+        ) as create:
+            add_task = asyncio.create_task(
+                manager.add_server("srv", transport="http", url="http://srv")
+            )
+            await asyncio.wait_for(failing_conn.list_tools_started.wait(), timeout=1.0)
+
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(add_task, timeout=0.05)
+
+            with pytest.raises(asyncio.CancelledError):
+                await add_task
+
+            failing_conn.release_startup.set()
+            await _spin_event_loop()
+
+            async def _wait_until_startup_cleared() -> None:
+                while "srv" in manager._startup_tasks:
+                    await asyncio.sleep(0)
+
+            await asyncio.wait_for(_wait_until_startup_cleared(), timeout=1.0)
+            assert "srv" not in manager._startup_tasks
+
+            await manager.add_server("srv", transport="http", url="http://srv")
+            retry_conn.release.set()
+            result = await asyncio.wait_for(
+                manager.call_tool("srv", "remote_tool", {"value": "payload"}),
+                timeout=1.0,
+            )
+            await manager.cleanup()
+
+        assert create.call_count == 2
+        assert result == [{"text": "payload"}]
