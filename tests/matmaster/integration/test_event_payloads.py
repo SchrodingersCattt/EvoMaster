@@ -145,6 +145,26 @@ class TestPublicContentForEvent:
 
         assert _public_content_for_event('response', payload) == 'hello'
 
+    def test_response_figures_payload_maps_to_public_content(self) -> None:
+        payload = {
+            'type': 'response_figures',
+            'source': 'System',
+            'figures': [
+                {
+                    'figure_id': 'band',
+                    'asset_url': 'https://oss.example/band.png',
+                    'caption': 'band',
+                    'importance': 'primary',
+                    'placement_hint': 'sidebar_only',
+                    'source_tool_call_id': 'call-band',
+                }
+            ],
+        }
+
+        assert _public_content_for_event('response_figures', payload) == {
+            'figures': payload['figures']
+        }
+
     def test_unknown_type_without_content_extracts_business_fields(self) -> None:
         payload = {
             'type': 'new_future_event',

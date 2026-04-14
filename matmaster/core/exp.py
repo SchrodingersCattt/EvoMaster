@@ -374,6 +374,9 @@ class Exp:
             (ctx.run_meta or {}).get("bohrium_rebuild_events")
         )
         runner_state.set("bohrium_job_registry", bohrium_registry)
+        figure_upload_config = run_meta.get("figure_upload_config")
+        if figure_upload_config is not None:
+            runner_state.set("figure_upload_config", figure_upload_config)
         self._register_cleanup(runner_state.clear)
 
         full_runner = FullToolRunner(

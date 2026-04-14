@@ -157,16 +157,16 @@ def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
 
     Live SSE already streamed the final `response` content. After adding
     persisted complete response segments, replaying the trailing `run_result`
-    would duplicate the final answer after reconnect. We only suppress the
-    terminal event when the previous replayable event for that task is a
-    `response`, so tool-use turns that still rely on `run_result` remain
-    visible.
+    would duplicate the final answer after reconnect. We suppress terminal
+    events once a replayable `response` has been seen for the same
+    `(task_id, spawn_id)` stream, even if replayable events like
+    `response_figures` appear between `response` and `run_result`.
 
     Dedupe is keyed by (task_id, spawn_id) so a sub-agent `response` does not
     suppress the parent stream's `run_result`.
     """
     deduped: list[dict] = []
-    last_replayed_type_by_key: dict[tuple[str, str | None], str] = {}
+    saw_response_by_key: dict[tuple[str, str | None], bool] = {}
 
     for event in events:
         dedupe_key = _replay_terminal_dedupe_key(event)
@@ -174,14 +174,17 @@ def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
         if (
             dedupe_key is not None
             and event_type in {'run_result', 'finish'}
-            and last_replayed_type_by_key.get(dedupe_key) == 'response'
+            and saw_response_by_key.get(dedupe_key, False)
         ):
             continue
 
         deduped.append(event)
 
         if dedupe_key is not None and _should_emit_event_to_sse(event):
-            last_replayed_type_by_key[dedupe_key] = event_type
+            if event_type == 'response':
+                saw_response_by_key[dedupe_key] = True
+            elif event_type in {'run_result', 'finish'}:
+                saw_response_by_key.setdefault(dedupe_key, False)
 
     return deduped
 

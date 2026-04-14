@@ -166,6 +166,11 @@ class TestToolExecutionContext:
 
         assert ctx.cancel_token is ctrl.token
 
+    def test_tool_execution_context_accepts_tool_call_id(self) -> None:
+        ctx = ToolExecutionContext(tool_call_id="call-1")
+
+        assert ctx.tool_call_id == "call-1"
+
 
 class TestToolSpecNewFields:
     def test_max_result_chars_default_zero(self) -> None:

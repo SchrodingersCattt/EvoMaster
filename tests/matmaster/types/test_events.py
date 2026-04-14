@@ -24,6 +24,7 @@ from matmaster.types.events import (
     McpConnectEvent,
     McpServerStatusEvent,
     ResponseEvent,
+    ResponseFiguresEvent,
     RunResultEvent,
     SkillHitEvent,
     StreamClosedEvent,
@@ -34,6 +35,7 @@ from matmaster.types.events import (
     ToolResultEvent,
     WorkspaceUploadErrorEvent,
 )
+from matmaster.types.figures import FigureDescriptor
 
 # ── Individual AgentEvent types ─────────────────────────
 
@@ -273,6 +275,20 @@ class TestSystemEvents:
         assert evt.elapsed_ms is None
         assert evt.error is None
 
+    def test_response_figures(self) -> None:
+        evt = ResponseFiguresEvent(
+            source="system",
+            figures=[
+                FigureDescriptor(
+                    figure_id="band_structure",
+                    asset_url="https://oss.example/band.png",
+                    caption="Si 的能带图",
+                )
+            ],
+        )
+        assert evt.type == "response_figures"
+        assert evt.figures[0].figure_id == "band_structure"
+
     def test_ask_question(self) -> None:
         evt = AskQuestionEvent(
             source="system",
@@ -449,6 +465,7 @@ class TestSystemEventDiscriminator:
             {"type": "bohrium_node", "source": "s"},
             {"type": "mcp_server_status", "source": "s", "server_name": "n"},
             {"type": "mcp_connect", "source": "s"},
+            {"type": "response_figures", "source": "s", "figures": []},
         ]
         expected_types = [
             ConfirmationRequestEvent,
@@ -464,6 +481,7 @@ class TestSystemEventDiscriminator:
             BohriumNodeEvent,
             McpServerStatusEvent,
             McpConnectEvent,
+            ResponseFiguresEvent,
         ]
         for payload, expected in zip(payloads, expected_types):
             result = _system_event_adapter.validate_python(payload)
@@ -473,8 +491,8 @@ class TestSystemEventDiscriminator:
 
 
 class TestBusEventUnion:
-    def test_validates_all_22_types(self) -> None:
-        """BusEvent union can validate all 22 event types."""
+    def test_validates_all_23_types(self) -> None:
+        """BusEvent union can validate all 23 event types."""
         payloads = [
             # 9 AgentEvent types
             {"type": "thought", "source": "a"},
@@ -503,7 +521,7 @@ class TestBusEventUnion:
                 "call_id": "c",
                 "tool_name": "t",
             },
-            # 13 SystemEvent types
+            # 14 SystemEvent types
             {
                 "type": "confirmation_request",
                 "source": "s",
@@ -543,6 +561,7 @@ class TestBusEventUnion:
             {"type": "bohrium_node", "source": "s"},
             {"type": "mcp_server_status", "source": "s", "server_name": "n"},
             {"type": "mcp_connect", "source": "s"},
+            {"type": "response_figures", "source": "s", "figures": []},
         ]
         for payload in payloads:
             result = _bus_event_adapter.validate_python(payload)
@@ -556,6 +575,28 @@ class TestBusEventUnion:
     def test_invalid_type_raises(self) -> None:
         with pytest.raises(ValidationError):
             _bus_event_adapter.validate_python({"type": "nonexistent", "source": "x"})
+
+    def test_response_figures_event_round_trips_through_bus_union(self) -> None:
+        evt = ResponseFiguresEvent(
+            source="System",
+            figures=[
+                FigureDescriptor(
+                    figure_id="band_structure",
+                    asset_url="https://oss.example/band.png",
+                    caption="Si 的能带图",
+                    alt="Si 的能带结构图",
+                    importance="primary",
+                    placement_hint="sidebar_only",
+                    source_tool_call_id="call-band",
+                )
+            ],
+        )
+
+        dumped = evt.model_dump(mode="json")
+        restored = TypeAdapter(BusEvent).validate_python(dumped)
+
+        assert isinstance(restored, ResponseFiguresEvent)
+        assert restored.figures[0].figure_id == "band_structure"
 
 
 class TestEventSerializationRoundtrip:
@@ -589,6 +630,7 @@ class TestEventSerializationRoundtrip:
             BohriumNodeEvent(source="s"),
             McpServerStatusEvent(source="s", server_name="n"),
             McpConnectEvent(source="s"),
+            ResponseFiguresEvent(source="s", figures=[]),
         ]
         for event in events:
             data = event.model_dump()
@@ -599,8 +641,8 @@ class TestEventSerializationRoundtrip:
 
 
 class TestNoTypeCollision:
-    def test_all_22_type_literals_are_unique(self) -> None:
-        """All 22 type literals must be globally unique strings."""
+    def test_all_23_type_literals_are_unique(self) -> None:
+        """All 23 type literals must be globally unique strings."""
         type_values = [
             "thought",
             "response",
@@ -624,9 +666,10 @@ class TestNoTypeCollision:
             "bohrium_node",
             "mcp_server_status",
             "mcp_connect",
+            "response_figures",
         ]
-        assert len(type_values) == 22
-        assert len(set(type_values)) == 22
+        assert len(type_values) == 23
+        assert len(set(type_values)) == 23
 
 
 # ── Edge case tests (QUAL-01) ─────────────────────────
@@ -655,6 +698,7 @@ _ALL_EVENT_CLASSES = [
     BohriumNodeEvent,
     McpServerStatusEvent,
     McpConnectEvent,
+    ResponseFiguresEvent,
 ]
 
 
@@ -681,6 +725,7 @@ def _make_event_instance(cls):
         ExpRunEvent: {"exp_name": "mat_master"},
         WorkspaceUploadErrorEvent: {"message": "upload failed"},
         McpServerStatusEvent: {"server_name": "code-server"},
+        ResponseFiguresEvent: {"figures": []},
     }
     kwargs = {"source": "test", **required_extra.get(cls, {})}
     return cls(**kwargs)
