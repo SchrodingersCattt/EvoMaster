@@ -72,6 +72,9 @@ class _CallToolRequest:
     result: asyncio.Future[Any]
 
 
+_CLOSE_REQUEST = object()
+
+
 class _ManagedConn:
     """Hold an MCPConnection context in a single long-lived Task.
 
@@ -84,14 +87,84 @@ class _ManagedConn:
     and shutdown all stay inside that same Task.
     """
 
-    def __init__(self, conn_ctx: MCPConnection) -> None:
+    def __init__(
+        self,
+        conn_ctx: MCPConnection,
+        *,
+        max_inflight: int = 1,
+        max_pending_requests: int = 0,
+    ) -> None:
         self._conn_ctx = conn_ctx
         self._ready: asyncio.Future[_StartupState] = (
             asyncio.get_running_loop().create_future()
         )
-        self._requests: asyncio.Queue[_CallToolRequest | None] = asyncio.Queue()
+        queue_size = max_pending_requests if max_pending_requests > 0 else 0
+        self._requests: asyncio.Queue[_CallToolRequest | object] = asyncio.Queue(
+            maxsize=queue_size
+        )
+        self._sem = asyncio.Semaphore(max(1, max_inflight))
+        self._active_tasks: set[asyncio.Task[None]] = set()
+        self._close_requested = False
+        self._drain_event = asyncio.Event()
+        self._drain_event.set()
+        self._closing = False
+        self._fatal_error: BaseException | None = None
         self._closed = False
         self._task = asyncio.create_task(self._run())
+
+    def _set_request_exception(
+        self, request: _CallToolRequest, exc: BaseException
+    ) -> None:
+        if not request.result.done():
+            request.result.set_exception(exc)
+
+    def _fail_queued_requests(self, exc: BaseException) -> None:
+        while True:
+            try:
+                request = self._requests.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+
+            if request is _CLOSE_REQUEST:
+                continue
+            self._set_request_exception(request, exc)
+
+    def _track_active_task(self, task: asyncio.Task[None]) -> None:
+        self._active_tasks.add(task)
+        self._drain_event.clear()
+        task.add_done_callback(self._on_request_done)
+
+    def _on_request_done(self, task: asyncio.Task[None]) -> None:
+        self._active_tasks.discard(task)
+        if not self._active_tasks:
+            self._drain_event.set()
+
+    async def _cancel_active_tasks(self) -> None:
+        if not self._active_tasks:
+            return
+
+        tasks = list(self._active_tasks)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _wait_for_drain(self) -> None:
+        if self._active_tasks:
+            await self._drain_event.wait()
+
+    async def _execute_request(
+        self, conn: MCPConnection, request: _CallToolRequest
+    ) -> None:
+        try:
+            async with self._sem:
+                result = await conn.call_tool(request.tool_name, request.arguments)
+        except BaseException as exc:
+            self._set_request_exception(request, exc)
+            if isinstance(exc, asyncio.CancelledError):
+                raise
+        else:
+            if not request.result.done():
+                request.result.set_result(result)
 
     async def _run(self) -> None:
         try:
@@ -105,27 +178,21 @@ class _ManagedConn:
 
                 while True:
                     request = await self._requests.get()
-                    if request is None:
+                    if request is _CLOSE_REQUEST:
+                        self._close_requested = True
+                        self._closing = True
+                        await self._wait_for_drain()
                         return
 
-                    try:
-                        result = await conn.call_tool(
-                            request.tool_name, request.arguments
-                        )
-                    except Exception as exc:
-                        if not request.result.done():
-                            request.result.set_exception(exc)
-                    else:
-                        if not request.result.done():
-                            request.result.set_result(result)
+                    task = asyncio.create_task(self._execute_request(conn, request))
+                    self._track_active_task(task)
         except BaseException as exc:
+            self._fatal_error = exc
             if not self._ready.done():
                 self._ready.set_exception(exc)
             else:
-                while not self._requests.empty():
-                    request = self._requests.get_nowait()
-                    if request is not None and not request.result.done():
-                        request.result.set_exception(exc)
+                self._fail_queued_requests(exc)
+            await self._cancel_active_tasks()
         finally:
             self._closed = True
 
@@ -133,6 +200,10 @@ class _ManagedConn:
         return await asyncio.wait_for(self._ready, timeout=timeout)
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        if self._fatal_error is not None:
+            raise ManagedConnDead(
+                "MCP connection is unavailable"
+            ) from self._fatal_error
         if self._closed:
             raise RuntimeError("MCP connection is closed")
 
@@ -149,7 +220,8 @@ class _ManagedConn:
 
     async def close(self, timeout: float) -> None:
         if not self._task.done():
-            await self._requests.put(None)
+            self._close_requested = True
+            await self._requests.put(_CLOSE_REQUEST)
         try:
             await asyncio.wait_for(self._task, timeout=timeout)
         except TimeoutError:
@@ -249,6 +321,20 @@ class MCPToolManager:
             if self._startup_tasks.get(name) is startup and startup.done():
                 self._startup_tasks.pop(name, None)
 
+    def _resolve_policy(self, server_name: str, transport: str) -> MCPConcurrencyPolicy:
+        policy = self.concurrency_by_server.get(server_name)
+        if policy is not None:
+            return policy
+
+        normalized_transport = transport.lower()
+        policy = self.concurrency_defaults_by_transport.get(normalized_transport)
+        if policy is not None:
+            return policy
+
+        policy = MCPConcurrencyPolicy.default_for_transport(normalized_transport)
+        self.concurrency_defaults_by_transport[normalized_transport] = policy
+        return policy
+
     async def _add_server_once(
         self, name: str, transport: str, **connection_kwargs: Any
     ) -> None:
@@ -272,6 +358,7 @@ class MCPToolManager:
             _retry_exc = (OSError, asyncio.TimeoutError)
 
         last_error: Exception | None = None
+        policy = self._resolve_policy(name, transport)
 
         for attempt in range(1, _MAX_RETRIES + 1):
             managed: _ManagedConn | None = None
@@ -280,8 +367,13 @@ class MCPToolManager:
                     raise RuntimeError("MCP manager is closing")
 
                 conn_ctx = create_connection(transport=transport, **connection_kwargs)
-                managed = _ManagedConn(conn_ctx)
+                managed = _ManagedConn(
+                    conn_ctx,
+                    max_inflight=policy.max_inflight,
+                    max_pending_requests=policy.max_pending_requests,
+                )
                 self._managed[name] = managed
+                self._server_transports[name] = transport
 
                 # 带超时的连接与 list_tools（均在 managed owner task 内执行）
                 startup = await managed.wait_ready(timeout=MCP_CONNECT_TIMEOUT)
@@ -302,12 +394,14 @@ class MCPToolManager:
                 if managed is not None:
                     await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
                     self._managed.pop(name, None)
+                    self._server_transports.pop(name, None)
                 raise
             except _retry_exc as e:
                 last_error = e
                 if managed is not None:
                     await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
                     self._managed.pop(name, None)
+                    self._server_transports.pop(name, None)
                 if attempt < _MAX_RETRIES:
                     logger.warning(
                         "MCP server '%s' connection failed (attempt %d/%d), "
@@ -330,6 +424,7 @@ class MCPToolManager:
                 if managed is not None:
                     await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
                     self._managed.pop(name, None)
+                    self._server_transports.pop(name, None)
                 raise
 
         # 所有重试失败
@@ -376,7 +471,7 @@ class MCPToolManager:
         # 1. tool_include_only 白名单过滤
         include_only = self.tool_include_only.get(name)
         if include_only is not None:
-            tools_info = [t for t in tools_info if t.get('name') in include_only]
+            tools_info = [t for t in tools_info if t.get("name") in include_only]
             logger.info(
                 "Filtered to %d tools for server '%s' (include_only: %s)",
                 len(tools_info),
@@ -392,8 +487,8 @@ class MCPToolManager:
                 t
                 for t in tools_info
                 if not (
-                    t.get('name', '').startswith('submit_')
-                    and t.get('name', '')[len('submit_') :] in sync_tools
+                    t.get("name", "").startswith("submit_")
+                    and t.get("name", "")[len("submit_") :] in sync_tools
                 )
             ]
             if len(tools_info) < before:
@@ -409,24 +504,24 @@ class MCPToolManager:
         # 构建 base 描述映射（submit_* 描述继承用）
         base_descriptions: dict[str, str] = {}
         for tool_info in tools_info:
-            tool_name = tool_info.get('name', '')
-            desc = tool_info.get('description', '')
-            if not tool_name.startswith('submit_') and desc:
+            tool_name = tool_info.get("name", "")
+            desc = tool_info.get("description", "")
+            if not tool_name.startswith("submit_") and desc:
                 base_descriptions[tool_name] = desc
 
         # 3. async 去重：当 submit_X 存在时移除 base X
         submit_names = {
-            t.get('name', '')[len('submit_') :]
+            t.get("name", "")[len("submit_") :]
             for t in tools_info
-            if t.get('name', '').startswith('submit_')
+            if t.get("name", "").startswith("submit_")
         }
         if submit_names:
             before_dedup = len(tools_info)
             tools_info = [
                 t
                 for t in tools_info
-                if t.get('name', '').startswith('submit_')
-                or t.get('name', '') not in submit_names
+                if t.get("name", "").startswith("submit_")
+                or t.get("name", "") not in submit_names
             ]
             if len(tools_info) < before_dedup:
                 logger.info(
@@ -446,7 +541,7 @@ class MCPToolManager:
         # 构建工具信息字典
         server_tools: dict[str, dict[str, Any]] = {}
         for tool_info in tools_info:
-            original_name = tool_info['name']
+            original_name = tool_info["name"]
             prefixed_name = f"{name}_{original_name}"
 
             # 全局去重
@@ -460,20 +555,20 @@ class MCPToolManager:
             self._seen_tools.add(prefixed_name)
 
             # 4. description 继承
-            description = tool_info.get('description', '')
-            if original_name.startswith('submit_'):
-                base_name = original_name[len('submit_') :]
-                base_desc = base_descriptions.get(base_name, '')
+            description = tool_info.get("description", "")
+            if original_name.startswith("submit_"):
+                base_name = original_name[len("submit_") :]
+                base_desc = base_descriptions.get(base_name, "")
                 if base_desc and len(base_desc) > len(description):
                     description = base_desc
 
             tool_dict: dict[str, Any] = {
-                'name': prefixed_name,
-                'description': description,
-                'input_schema': tool_info.get('input_schema', {}),
-                'remote_tool_name': original_name,
-                'connection': conn,
-                'has_calculation_preflight': bool(needs_calculation_preflight),
+                "name": prefixed_name,
+                "description": description,
+                "input_schema": tool_info.get("input_schema", {}),
+                "remote_tool_name": original_name,
+                "connection": conn,
+                "has_calculation_preflight": bool(needs_calculation_preflight),
             }
 
             server_tools[prefixed_name] = tool_dict
