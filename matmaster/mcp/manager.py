@@ -33,6 +33,30 @@ _PER_CONN_SHUTDOWN_TIMEOUT = 1.0
 _RETRY_DELAY = 2
 
 
+class ManagedConnClosing(RuntimeError):
+    pass
+
+
+class ManagedConnBackpressure(RuntimeError):
+    pass
+
+
+class ManagedConnDead(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class MCPConcurrencyPolicy:
+    mode: str = "serial"
+
+    @classmethod
+    def default_for_transport(cls, transport: str) -> "MCPConcurrencyPolicy":
+        transport = transport.lower()
+        if transport == "stdio":
+            return cls(mode="serial")
+        return cls(mode="serial")
+
+
 @dataclass
 class _StartupState:
     connection: MCPConnection
@@ -162,6 +186,11 @@ class MCPToolManager:
 
         # Long-lived managed connections (enter/exit in same Task)
         self._managed: dict[str, _ManagedConn] = {}
+
+        # Concurrency policy skeleton for Task 1.
+        self.concurrency_defaults_by_transport: dict[str, MCPConcurrencyPolicy] = {}
+        self.concurrency_by_server: dict[str, MCPConcurrencyPolicy] = {}
+        self._server_transports: dict[str, str] = {}
 
         # In-flight startup tasks keyed by server.
         self._startup_tasks: dict[str, asyncio.Task[None]] = {}

@@ -61,11 +61,28 @@ class TestMCPToolManagerInstantiation:
         m = MCPToolManager()
         assert isinstance(m.tool_include_only, dict)
 
+    def test_manager_has_empty_concurrency_policy_maps(self):
+        from matmaster.mcp.manager import MCPToolManager
+
+        m = MCPToolManager()
+        assert isinstance(m.concurrency_defaults_by_transport, dict)
+        assert m.concurrency_defaults_by_transport == {}
+        assert isinstance(m.concurrency_by_server, dict)
+        assert m.concurrency_by_server == {}
+        assert isinstance(m._server_transports, dict)
+        assert m._server_transports == {}
+
     def test_loop_is_none(self):
         from matmaster.mcp.manager import MCPToolManager
 
         m = MCPToolManager()
         assert m.loop is None
+
+    def test_default_stdio_policy_is_serial(self):
+        from matmaster.mcp.manager import MCPConcurrencyPolicy
+
+        policy = MCPConcurrencyPolicy.default_for_transport("stdio")
+        assert policy.mode == "serial"
 
     def test_has_add_server_method(self):
         from matmaster.mcp.manager import MCPToolManager
