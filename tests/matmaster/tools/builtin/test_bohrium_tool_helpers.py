@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import io
-import sys
-import types
 import zipfile
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -72,40 +70,30 @@ def _patch_bridge(monkeypatch, cred: FakeCredentialSpec | None = None):
     monkeypatch.setattr(tool_mod, "build_bohrium_context", build_ctx)
 
 
-def _install_fake_tiefblue(monkeypatch, upload_calls: list[tuple[str, str, dict]]):
-    """Install a fake Tiefblue SDK module into sys.modules."""
+def _install_fake_tiefblue(monkeypatch, upload_calls: list[tuple[str, str, str]]):
+    """Install a fake Tiefblue client via _load_tiefblue_client."""
 
     class FakeTiefblueClient:
-        def __init__(self, *, base_url):
+        def __init__(self, base_url=None):
             self.base_url = base_url
 
-        def upload_from_file_multi_part(
+        def upload_From_file_multi_part(
             self,
-            *,
             object_key,
             file_path,
-            custom_headers,
-            progress_bar,
+            token="",
+            progress_bar=False,
+            **kwargs,
         ):
-            upload_calls.append((object_key, file_path, custom_headers))
+            upload_calls.append((object_key, file_path, token))
             assert progress_bar is False
-            return {}
+            return None
 
-    sdk_module = types.ModuleType("bohrium_open_sdk")
-    opensdk_module = types.ModuleType("bohrium_open_sdk.opensdk")
-    tiefblue_module = types.ModuleType("bohrium_open_sdk.opensdk._tiefblue_client")
-    tiefblue_module.Tiefblue = FakeTiefblueClient
-    sdk_module.opensdk = opensdk_module
-    opensdk_module._tiefblue_client = tiefblue_module
-
-    monkeypatch.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
-    monkeypatch.setitem(sys.modules, "bohrium_open_sdk.opensdk", opensdk_module)
-    monkeypatch.setitem(
-        sys.modules,
-        "bohrium_open_sdk.opensdk._tiefblue_client",
-        tiefblue_module,
+    monkeypatch.setattr("matmaster.bohrium.upload._tiefblue_cls", None, raising=False)
+    monkeypatch.setattr(
+        "matmaster.bohrium.upload._load_tiefblue_client",
+        lambda: FakeTiefblueClient,
     )
-    monkeypatch.setattr("matmaster.bohrium.upload._oss2", None, raising=False)
 
 
 def _fake_submit_post_factory(post_calls: list[tuple[str, dict, str]]):
@@ -193,7 +181,7 @@ class FakeRemoteSession:
         downloads: dict[str, bytes] | None = None,
         is_open: bool = True,
         exec_result: dict | None = None,
-        default_download: bytes = b'zip-bytes',
+        default_download: bytes = b"zip-bytes",
     ):
         self._existing_paths = existing_paths or set()
         self._file_paths = file_paths or set()
@@ -238,7 +226,7 @@ class FakeRemoteSession:
 def _zip_bytes(files: dict[str, str]) -> bytes:
     """Build an in-memory zip for sandbox download tests."""
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         for name, content in files.items():
             zf.writestr(name, content)
     return buffer.getvalue()
@@ -256,13 +244,13 @@ class _FakeDownloadResponse:
     ) -> None:
         self.status_code = status_code
         self._json_data = json_data or {}
-        self._content = content if content is not None else b''
+        self._content = content if content is not None else b""
         self.ok = status_code < 400
-        self.text = ''
+        self.text = ""
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise requests.HTTPError(f'{self.status_code} Client Error')
+            raise requests.HTTPError(f"{self.status_code} Client Error")
 
     def json(self) -> dict[str, object]:
         return self._json_data

@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import sys
-import types
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -652,50 +650,37 @@ class TestBohriumExecution:
             raise AssertionError(f"unexpected path: {path}")
 
         class FakeTiefblueClient:
-            def __init__(self, *, base_url):
+            def __init__(self, base_url=None):
                 self.base_url = base_url
 
-            def upload_from_file_multi_part(
-                self,
-                *,
-                object_key,
-                file_path,
-                custom_headers,
-                progress_bar,
+            def upload_From_file_multi_part(
+                self, object_key, file_path, token="", progress_bar=False, **kw
             ):
-                upload_calls.append((object_key, file_path, custom_headers))
+                upload_calls.append((object_key, file_path, token))
                 assert progress_bar is False
-                return {}
-
-        sdk_module = types.ModuleType("bohrium_open_sdk")
-        opensdk_module = types.ModuleType("bohrium_open_sdk.opensdk")
-        tiefblue_module = types.ModuleType("bohrium_open_sdk.opensdk._tiefblue_client")
-        tiefblue_module.Tiefblue = FakeTiefblueClient
-        sdk_module.opensdk = opensdk_module
-        opensdk_module._tiefblue_client = tiefblue_module
+                return None
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
+        monkeypatch.setattr(
+            "matmaster.bohrium.upload._tiefblue_cls", None, raising=False
+        )
+        monkeypatch.setattr(
+            "matmaster.bohrium.upload._load_tiefblue_client",
+            lambda: FakeTiefblueClient,
+        )
 
-        with monkeypatch.context() as m:
-            m.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
-            m.setitem(sys.modules, "bohrium_open_sdk.opensdk", opensdk_module)
-            m.setitem(
-                sys.modules,
-                "bohrium_open_sdk.opensdk._tiefblue_client",
-                tiefblue_module,
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "action": "submit",
+                    "input_dir": str(input_dir),
+                    "image": "registry.dp.tech/dptech/cp2k:2024.1",
+                    "cmd": "cp2k.popt -i input.inp",
+                }
             )
-            result = asyncio.run(
-                tool.execute(
-                    {
-                        "action": "submit",
-                        "input_dir": str(input_dir),
-                        "image": "registry.dp.tech/dptech/cp2k:2024.1",
-                        "cmd": "cp2k.popt -i input.inp",
-                    }
-                )
-            )
+        )
 
         assert isinstance(result, ToolResult)
         assert result.status == "success"
@@ -714,7 +699,7 @@ class TestBohriumExecution:
         )
         assert upload_calls
         assert upload_calls[0][0].endswith("input.zip")
-        assert upload_calls[0][2]["Authorization"] == "Bearer token-123"
+        assert upload_calls[0][2] == "token-123"
 
     def test_list_images_filters_and_returns_versions(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
@@ -880,40 +865,32 @@ class TestBohriumSessionCredentials:
             return {"code": 0, "data": {"jobId": "j2", "bohrJobId": "b2"}}
 
         class FakeTiefblueClient:
-            def __init__(self, *, base_url):
+            def __init__(self, base_url=None):
                 pass
 
-            def upload_from_file_multi_part(self, **kwargs):
-                return {}
-
-        sdk_module = types.ModuleType("bohrium_open_sdk")
-        opensdk_module = types.ModuleType("bohrium_open_sdk.opensdk")
-        tiefblue_module = types.ModuleType("bohrium_open_sdk.opensdk._tiefblue_client")
-        tiefblue_module.Tiefblue = FakeTiefblueClient
-        sdk_module.opensdk = opensdk_module
-        opensdk_module._tiefblue_client = tiefblue_module
+            def upload_From_file_multi_part(self, *args, **kwargs):
+                return None
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
+        monkeypatch.setattr(
+            "matmaster.bohrium.upload._tiefblue_cls", None, raising=False
+        )
+        monkeypatch.setattr(
+            "matmaster.bohrium.upload._load_tiefblue_client",
+            lambda: FakeTiefblueClient,
+        )
 
-        with monkeypatch.context() as m:
-            m.setitem(sys.modules, "bohrium_open_sdk", sdk_module)
-            m.setitem(sys.modules, "bohrium_open_sdk.opensdk", opensdk_module)
-            m.setitem(
-                sys.modules,
-                "bohrium_open_sdk.opensdk._tiefblue_client",
-                tiefblue_module,
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "action": "submit",
+                    "input_dir": str(input_dir),
+                    "image": "registry.dp.tech/dptech/cp2k:2024.1",
+                    "cmd": "cp2k.popt -i input.inp",
+                }
             )
-            result = asyncio.run(
-                tool.execute(
-                    {
-                        "action": "submit",
-                        "input_dir": str(input_dir),
-                        "image": "registry.dp.tech/dptech/cp2k:2024.1",
-                        "cmd": "cp2k.popt -i input.inp",
-                    }
-                )
-            )
+        )
 
         assert result.status == "success"
         # Verify session credential was used in API calls

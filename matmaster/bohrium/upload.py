@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 from .errors import BohriumTransferError
 
-_oss2 = None
+_tiefblue_cls = None
 
 
 @dataclass(frozen=True)
@@ -16,17 +16,17 @@ class UploadedArchive:
 
 
 def _load_tiefblue_client():
-    global _oss2
-    if _oss2 is not None:
-        return _oss2
+    global _tiefblue_cls
+    if _tiefblue_cls is not None:
+        return _tiefblue_cls
     try:
-        from bohrium_open_sdk.opensdk._tiefblue_client import Tiefblue as TiefblueClient
+        from bohrium.resources.tiefblue import Tiefblue
     except ImportError as exc:
         raise BohriumTransferError(
-            "bohrium_open_sdk not installed. Run: pip install bohrium_open_sdk"
+            "bohrium-sdk not installed. Run: pip install bohrium-sdk"
         ) from exc
-    _oss2 = TiefblueClient
-    return _oss2
+    _tiefblue_cls = Tiefblue
+    return _tiefblue_cls
 
 
 def _build_download_url(store_host: str, oss_key: str, token: str) -> str:
@@ -48,14 +48,15 @@ def upload_input_archive(*, create_data: dict, zip_path: Path) -> UploadedArchiv
     oss_key = f"{store_path}input.zip"
 
     client = tiefblue_client(base_url=store_host)
-    response = client.upload_from_file_multi_part(
+    response = client.upload_From_file_multi_part(
         object_key=oss_key,
         file_path=str(zip_path),
-        custom_headers={"Authorization": f"Bearer {token}"},
+        token=token,
         progress_bar=False,
     )
-    if isinstance(response, dict) and response.get("code") not in (0, None):
-        raise BohriumTransferError(f"Upload failed: {response}")
+    if response is not None and hasattr(response, 'status_code'):
+        if response.status_code >= 400:
+            raise BohriumTransferError(f"Upload failed: {response.text}")
 
     return UploadedArchive(
         oss_key=oss_key,
