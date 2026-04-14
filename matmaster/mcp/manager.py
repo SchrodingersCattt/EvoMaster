@@ -92,13 +92,13 @@ class _ManagedConn:
         conn_ctx: MCPConnection,
         *,
         max_inflight: int = 1,
-        max_pending_requests: int = 0,
+        max_pending_requests: int = 16,
     ) -> None:
         self._conn_ctx = conn_ctx
         self._ready: asyncio.Future[_StartupState] = (
             asyncio.get_running_loop().create_future()
         )
-        queue_size = max_pending_requests if max_pending_requests > 0 else 0
+        queue_size = max(1, max_pending_requests)
         self._requests: asyncio.Queue[_CallToolRequest | object] = asyncio.Queue(
             maxsize=queue_size
         )

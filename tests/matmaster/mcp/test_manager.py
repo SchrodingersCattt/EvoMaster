@@ -265,6 +265,17 @@ def _make_managed(m, name, *, hang=False, fail=False):
 
 
 class TestMCPToolManagerCleanup:
+    async def test_managed_conn_default_request_queue_is_bounded(self):
+        from matmaster.mcp.manager import _ManagedConn
+
+        ctx = _FakeConnCtx()
+        managed = _ManagedConn(ctx)
+        try:
+            await managed.wait_ready(timeout=2)
+            assert managed._requests.maxsize > 0
+        finally:
+            await managed.close(timeout=2)
+
     async def test_cleanup_clears_state(self):
         from matmaster.mcp.manager import MCPToolManager
 
