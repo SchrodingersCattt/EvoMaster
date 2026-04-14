@@ -112,7 +112,6 @@ class _ManagedConn:
         self._closing = False
         self._fatal_error: BaseException | None = None
         self._closed = False
-        self._forced_close = False
         self._task = asyncio.create_task(self._run())
 
     def _set_request_exception(
@@ -128,6 +127,23 @@ class _ManagedConn:
         dead = ManagedConnDead("MCP connection is unavailable")
         dead.__cause__ = exc
         return dead
+
+    def _make_closing_error(self) -> ManagedConnClosing:
+        return ManagedConnClosing("MCP connection is closing")
+
+    def _map_cancelled_request_exception(
+        self, exc: asyncio.CancelledError
+    ) -> BaseException:
+        if self._closing or self._close_requested.is_set():
+            return self._make_closing_error()
+
+        cause = self._fatal_error if self._fatal_error is not None else exc
+        return self._make_dead_error(cause)
+
+    def _failure_for_owner_exit(self, exc: BaseException) -> BaseException:
+        if self._closing or self._close_requested.is_set():
+            return self._make_closing_error()
+        return self._make_dead_error(exc)
 
     def _fail_queued_requests(self, exc: BaseException) -> None:
         while True:
@@ -175,9 +191,12 @@ class _ManagedConn:
                     return
                 result = await conn.call_tool(request.tool_name, request.arguments)
         except BaseException as exc:
-            self._set_request_exception(request, exc)
             if isinstance(exc, asyncio.CancelledError):
+                self._set_request_exception(
+                    request, self._map_cancelled_request_exception(exc)
+                )
                 raise
+            self._set_request_exception(request, exc)
         else:
             if not request.result.done():
                 request.result.set_result(result)
@@ -239,7 +258,7 @@ class _ManagedConn:
             if not self._ready.done():
                 self._ready.set_exception(exc)
             else:
-                self._fail_queued_requests(self._make_dead_error(exc))
+                self._fail_queued_requests(self._failure_for_owner_exit(exc))
             await self._cancel_active_tasks()
         finally:
             self._closed = True
@@ -292,7 +311,6 @@ class _ManagedConn:
         try:
             await asyncio.wait_for(self._task, timeout=timeout)
         except TimeoutError:
-            self._forced_close = True
             self._task.cancel()
             try:
                 await self._task
@@ -510,7 +528,12 @@ class MCPToolManager:
 
         startup = self._startup_tasks.get(server_name)
         if startup is not None:
-            await startup
+            try:
+                await startup
+            except asyncio.CancelledError as exc:
+                if self._closing:
+                    raise ManagedConnClosing("MCP manager is closing") from exc
+                raise
 
         managed = self._managed.get(server_name)
         if managed is None:
