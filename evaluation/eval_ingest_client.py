@@ -57,6 +57,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import subprocess
 import tempfile
 import uuid
@@ -103,6 +104,36 @@ _SCORE_SUMMARY_FIELD_BY_CHANNEL: dict[str, str] = {
     "cursor": "cursor_score",
     "codex": "codex_score",
 }
+
+# Align with matmaster-tools-server ``src/utils/eval_question_priority.py`` /
+# ``EvalQuestionCatalogItemIn.priority`` (max_length=16).
+_CATALOG_PRIORITY_RE = re.compile(r"^P\d+$")
+EVAL_CATALOG_PRIORITY_MAX_LEN = 16
+
+
+def normalize_catalog_priority_for_sync(raw: Any) -> str:
+    """Normalize catalog ``priority`` for question-catalog sync (tools-server).
+
+    Empty or whitespace-only -> ``''`` (unset). Otherwise must match ``P`` + digits,
+    length <= :data:`EVAL_CATALOG_PRIORITY_MAX_LEN`. Raises ``ValueError`` on invalid
+    input (including non-string).
+    """
+    if raw is None:
+        return ""
+    if not isinstance(raw, str):
+        raise ValueError("priority must be a string")
+    t = raw.strip()
+    if not t:
+        return ""
+    if len(t) > EVAL_CATALOG_PRIORITY_MAX_LEN:
+        raise ValueError(
+            f"priority exceeds max length {EVAL_CATALOG_PRIORITY_MAX_LEN}",
+        )
+    if not _CATALOG_PRIORITY_RE.fullmatch(t):
+        raise ValueError(
+            "priority must be empty or like 'P0', 'P1' (P followed by digits)",
+        )
+    return t
 
 
 def normalize_baseline_channel(
@@ -768,21 +799,24 @@ def post_eval_ingest(
 
 def post_question_catalog_sync(
     url: str,
-    items: list[dict[str, str]],
+    items: list[dict[str, Any]],
     *,
     timeout: float = 120.0,
 ) -> tuple[bool, str]:
     """POST catalog sync payload to matmaster-tools-server.
 
     Each element must include ``question_id`` and ``question_text`` (trimmed non-empty
-    after clip), matching tools-server ``EvalQuestionCatalogItemIn``. Server marks all
-    catalog rows inactive, then upserts these rows as active. ``question_id`` length
-    1–512; ``question_text`` clipped to ``EVAL_ITEM_QUESTION_TEXT_MAX_LEN``.
+    after clip), matching tools-server ``EvalQuestionCatalogItemIn``. Optional
+    ``priority`` (``''`` or ``P0`` / ``P1`` / …) is normalized with
+    :func:`normalize_catalog_priority_for_sync`; omitted key is treated as unset
+    (``''``). Server marks all catalog rows inactive, then upserts these rows as
+    active. ``question_id`` length 1–512; ``question_text`` clipped to
+    ``EVAL_ITEM_QUESTION_TEXT_MAX_LEN``.
     """
     if not items:
         return False, "no items to sync (server requires at least one item)"
 
-    body_items: list[dict[str, str]] = []
+    body_items: list[dict[str, Any]] = []
     for raw in items:
         qid = str(raw.get("question_id", "")).strip()
         if not qid:
@@ -797,7 +831,13 @@ def post_question_catalog_sync(
         qtext = clip_ingest_text_field(qt_raw, max_len=EVAL_ITEM_QUESTION_TEXT_MAX_LEN)
         if not qtext:
             return False, f"empty question_text after trim for question_id={qid!r}"
-        body_items.append({"question_id": qid, "question_text": qtext})
+        try:
+            pri = normalize_catalog_priority_for_sync(raw.get("priority"))
+        except ValueError as e:
+            return False, f"invalid priority for question_id={qid!r}: {e}"
+        body_items.append(
+            {"question_id": qid, "question_text": qtext, "priority": pri},
+        )
 
     body = {"items": body_items}
     ok, err_msg, data = _post_matmaster_tools_json(url, body, timeout=timeout)

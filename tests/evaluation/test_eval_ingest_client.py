@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from evaluation.eval_ingest_client import (
     EVAL_INGEST_API_PATH,
     EVAL_INGEST_URL,
@@ -17,6 +19,7 @@ from evaluation.eval_ingest_client import (
     fetch_missing_baseline_question_ids,
     load_devshell_events_timeline,
     normalize_baseline_channel,
+    normalize_catalog_priority_for_sync,
     normalize_pending_item_for_submission,
     parse_score_summary_missing_question_ids,
     post_eval_ingest,
@@ -32,6 +35,20 @@ def test_normalize_baseline_channel() -> None:
     assert normalize_baseline_channel("cursor") == "cursor"
     assert normalize_baseline_channel("codex") == "codex"
     assert normalize_baseline_channel("  claude_code  ") == "claude_code"
+
+
+def test_normalize_catalog_priority_for_sync() -> None:
+    assert normalize_catalog_priority_for_sync(None) == ""
+    assert normalize_catalog_priority_for_sync("") == ""
+    assert normalize_catalog_priority_for_sync("  ") == ""
+    assert normalize_catalog_priority_for_sync("P0") == "P0"
+    assert normalize_catalog_priority_for_sync(" P12 ") == "P12"
+    with pytest.raises(ValueError, match="must be a string"):
+        normalize_catalog_priority_for_sync(1)
+    with pytest.raises(ValueError, match="P followed by digits"):
+        normalize_catalog_priority_for_sync("p0")
+    with pytest.raises(ValueError, match="P followed by digits"):
+        normalize_catalog_priority_for_sync("P")
 
 
 def test_prompt_sha256_stable() -> None:
@@ -661,7 +678,56 @@ def test_post_question_catalog_sync_success(mock_client_cls: MagicMock) -> None:
     call_kw = mock_client.post.call_args
     assert call_kw[0][0] == "http://example/qcat/sync"
     sent = call_kw[1]["json"]
-    assert sent["items"][0] == {"question_id": "Q1", "question_text": "题干一"}
+    assert sent["items"][0] == {
+        "question_id": "Q1",
+        "question_text": "题干一",
+        "priority": "",
+    }
+    assert sent["items"][1] == {
+        "question_id": "Q2",
+        "question_text": "题干二",
+        "priority": "",
+    }
+
+
+@patch("evaluation.eval_ingest_client.httpx.Client")
+def test_post_question_catalog_sync_sends_priority_p0(
+    mock_client_cls: MagicMock,
+) -> None:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "code": 0,
+        "msg": "success",
+        "data": {"active_count": 1, "inactive_count": 0},
+    }
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.__exit__.return_value = None
+    mock_client.post.return_value = mock_resp
+    mock_client_cls.return_value = mock_client
+
+    ok, msg = post_question_catalog_sync(
+        "http://example/qcat/sync",
+        [{"question_id": "Q1", "question_text": "题干", "priority": "P0"}],
+    )
+    assert ok
+    assert "active_count=1" in msg
+    sent = mock_client.post.call_args[1]["json"]
+    assert sent["items"][0]["priority"] == "P0"
+
+
+@patch("evaluation.eval_ingest_client.httpx.Client")
+def test_post_question_catalog_sync_rejects_invalid_priority(
+    mock_client_cls: MagicMock,
+) -> None:
+    ok, err = post_question_catalog_sync(
+        "http://x",
+        [{"question_id": "Q1", "question_text": "题干", "priority": "high"}],
+    )
+    assert not ok
+    assert "invalid priority" in err
+    mock_client_cls.assert_not_called()
 
 
 @patch("evaluation.eval_ingest_client.httpx.Client")

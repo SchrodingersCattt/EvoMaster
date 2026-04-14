@@ -304,6 +304,8 @@ evaluation/question_bank/
 
 新增题目或 bank 文件后，需同步更新 `evaluation/question_bank/manifest.yaml` 中对应 bank 的 `questions` 计数。
 
+推送到 matmaster-tools-server 的题库目录同步（`evaluation/scripts/sync_question_catalog_to_tools_server.py` → `POST .../question-catalog/sync`）每条目包含 `question_id`、`question_text`（来自 `human_prompt_seed`）及 `priority`（来自题目可选字段 `priority`；未设置或空串表示无优先级；合法值为 `P0`、`P1` 等形式，与 tools-server `EvalQuestionCatalogItemIn` 一致）。
+
 ### 4. data_files 放置规则
 
 `data_files[].path` 必须指向 `question_bank/data/<v5_question_id>/...`。目录名使用当前 v5 题号。
