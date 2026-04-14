@@ -35,8 +35,11 @@ from matmaster.types.events import (
     ErrorEvent,
     RunResultEvent,
     StreamClosedEvent,
+    ToolResultEvent,
 )
+from matmaster.types.figures import FigureUploadConfig
 from src.dao.chat_events_table import get_chat_events_table
+from src.dao.oss_io import upload_bytes_to_oss
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium import (
     BohriumSetupService,
@@ -45,6 +48,7 @@ from src.services.agent_run_bohrium import (
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.history_restore_service import HistoryRestoreService
 from src.services.quota_service import use_quota
+from src.services.response_figures_service import ResponseFiguresAccumulator
 from src.services.sessions_service import get_sessions_service
 from src.services.user_skills_sync import (
     materialize_user_skills_for_run,
@@ -104,6 +108,16 @@ def _build_workspace_upload_fn(
         upload_dir_to_oss(workspace_path, key_prefix)
 
     return _do_upload
+
+
+def _build_figure_upload_config(*, session_id: str, task_id: str) -> FigureUploadConfig:
+    """Build the per-run figure upload contract injected into tool runtime state."""
+    return FigureUploadConfig(
+        session_id=session_id,
+        task_id=task_id,
+        asset_key_prefix='matmaster/chat_figures',
+        upload_bytes=upload_bytes_to_oss,
+    )
 
 
 async def _emit_error_and_close_fanout(
@@ -318,6 +332,11 @@ class AgentRunService:
                 if events_table is not None
                 else None
             )
+            figure_accumulator = ResponseFiguresAccumulator()
+            figure_upload_config = _build_figure_upload_config(
+                session_id=session_id,
+                task_id=task_id,
+            )
 
             async def _child_event_sink(event: BusEvent) -> None:
                 try:
@@ -354,6 +373,7 @@ class AgentRunService:
                         **pg_ctx.run_meta,
                         'event_sink': _child_event_sink,
                         'checkpoint_sink_factory': _checkpoint_sink_factory,
+                        'figure_upload_config': figure_upload_config,
                     }
                 }
             )
@@ -429,6 +449,14 @@ class AgentRunService:
                         normalized = _normalize_public_source(event.source)
                         if event.source != normalized:
                             event = event.model_copy(update={'source': normalized})
+
+                    if isinstance(event, ToolResultEvent):
+                        figure_accumulator.add_tool_result(event)
+
+                    if isinstance(event, RunResultEvent):
+                        response_figures_event = figure_accumulator.build_event()
+                        if response_figures_event is not None:
+                            await fanout.dispatch(response_figures_event)
 
                     await fanout.dispatch(event)
 

@@ -188,6 +188,9 @@ def _public_content_for_event(
                 content[key] = payload[key]
         return content
 
+    if event_type == 'response_figures':
+        return {'figures': payload.get('figures') or []}
+
     if event_type in ('run_result', 'finish'):
         return {
             'content': payload.get('final_content') or '',
