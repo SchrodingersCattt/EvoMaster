@@ -565,9 +565,7 @@ class TestHappyPath:
         binding = ToolBinding(
             binding_key="session_fs:Bash",
             plane=ToolPlane.SESSION_FS,
-            resource_claims=(
-                ResourceClaim(resource="workspace", mode="shared_read"),
-            ),
+            resource_claims=(ResourceClaim(resource="workspace", mode="shared_read"),),
         )
         instance = ToolInstance(
             tool_spec=spec,

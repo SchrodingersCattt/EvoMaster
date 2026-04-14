@@ -12,7 +12,11 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from matmaster.types.figures import FigureDescriptor, FigureManifestEntry, FigureUploadConfig
+from matmaster.types.figures import (
+    FigureDescriptor,
+    FigureManifestEntry,
+    FigureUploadConfig,
+)
 from matmaster.types.session import Session
 
 _ALLOWED_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}

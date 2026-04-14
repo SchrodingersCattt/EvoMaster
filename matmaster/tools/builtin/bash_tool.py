@@ -22,8 +22,8 @@ from matmaster.tools.figure_artifacts import (
 )
 from matmaster.tools.filesystem_semantics.shell_planner import plan_shell_command
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.figures import FigureUploadConfig
+from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 from matmaster.types.topology import ToolPlane
 
