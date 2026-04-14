@@ -127,11 +127,11 @@ class TestBohriumToolAndRemoteShare:
         monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
 
         class FakeTiefblue:
-            def __init__(self, **kw):
+            def __init__(self, base_url=None):
                 pass
 
-            def upload_from_file_multi_part(self, **kw):
-                return {}
+            def upload_From_file_multi_part(self, *args, **kw):
+                return None
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         monkeypatch.setattr(
@@ -183,12 +183,12 @@ class TestBohriumToolAndRemoteShare:
         monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
 
         class FakeTiefblue:
-            def __init__(self, **kw):
+            def __init__(self, base_url=None):
                 pass
 
-            def upload_from_file_multi_part(self, **kw):
+            def upload_From_file_multi_part(self, *args, **kw):
                 upload_calls.append(kw)
-                return {}
+                return None
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         monkeypatch.setattr(
