@@ -8,13 +8,7 @@ from pathlib import Path
 from evaluation.devshell_agent.feishu_round_notify import (
     _build_markdown_body,
     _load_pending_rows,
-    _macro_mean,
 )
-
-
-def test_macro_mean() -> None:
-    assert _macro_mean([80, 100, None]) == 90.0
-    assert _macro_mean([]) is None
 
 
 def test_build_markdown_sorts_scores_descending(tmp_path: Path) -> None:
@@ -56,7 +50,7 @@ def test_build_markdown_success(tmp_path: Path) -> None:
     rows = [
         {
             "question_id": "Q1",
-            "score": 80,
+            "score": 100,
             "score_reason": "bad",
             "task_id": "t",
         },
@@ -69,8 +63,9 @@ def test_build_markdown_success(tmp_path: Path) -> None:
         stderr_tail="",
     )
     assert t == "green"
-    assert "80" in md
-    assert "宏平均" in md
+    assert "**通过**" in md or "：**通过**" in md
+    assert "1/1 题全项通过" in md
+    assert "全项通过情况" in md
     assert "判分说明（节选）" not in md
     assert "bad" not in md
 

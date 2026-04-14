@@ -105,15 +105,8 @@ def _load_pending_rows(pending_dir: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _macro_mean(scores: list[int | None]) -> float | None:
-    vals = [s for s in scores if isinstance(s, int)]
-    if not vals:
-        return None
-    return sum(vals) / len(vals)
-
-
 def _rows_sorted_by_score_desc(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Feishu「各题得分」：分数从高到低；无有效 ``item.score`` 的排在末尾。"""
+    """Feishu「各题判定」：优先展示「通过」；无有效 ``item.score`` 的排在末尾。"""
     return sorted(
         rows,
         key=lambda r: (
@@ -122,6 +115,49 @@ def _rows_sorted_by_score_desc(rows: list[dict[str, Any]]) -> list[dict[str, Any
             r["question_id"],
         ),
     )
+
+
+def _devshell_score_label(score: int | None) -> str:
+    """Devshell 判分为 0/100 全项通过制：展示「通过 / 不通过」，避免出现裸 ``100``。"""
+    if not isinstance(score, int):
+        return "未写入"
+    if score == 100:
+        return "通过"
+    if score == 0:
+        return "不通过"
+    return str(score)
+
+
+def _full_pass_summary_line(scores: list[int | None]) -> str:
+    """汇总行：``n/m 题全项通过``（仅 ``score==100`` 计为通过），不用 0–100 均值数字。"""
+    vals = [s for s in scores if isinstance(s, int)]
+    if not vals:
+        return "—"
+    n_pass = sum(1 for s in vals if s == 100)
+    return f"{n_pass}/{len(vals)} 题全项通过"
+
+
+def _build_scoring_notify_title(
+    *,
+    env_prefix: str,
+    tag: str,
+    rows: list[dict[str, Any]],
+    submit_ok: bool,
+) -> str:
+    """卡片标题用语义化通过情况，不写分数。"""
+    base = f"{env_prefix}Devshell 评测打分 · {tag}"
+    if not submit_ok:
+        return f"{base} · 上报失败"[:200]
+    scores = [r["score"] for r in rows]
+    if any(not isinstance(s, int) for s in scores):
+        return f"{base} · 判分未完成"[:200]
+    vals = [s for s in scores if isinstance(s, int)]
+    if not vals:
+        return f"{base} · 无有效题目"[:200]
+    n_pass = sum(1 for s in vals if s == 100)
+    if n_pass == len(vals):
+        return f"{base} · 全部通过"[:200]
+    return f"{base} · 未全部通过"[:200]
 
 
 def _build_markdown_body(
@@ -135,21 +171,20 @@ def _build_markdown_body(
     """Returns (template_color, markdown_content)."""
     n = len(rows)
     scores = [r["score"] for r in rows]
-    mm = _macro_mean(scores)
-    mm_s = f"{mm:.2f}" if mm is not None else "—"
+    summary = _full_pass_summary_line(scores)
 
     lines: list[str] = [
         f"**目录 tag**\n`{tag}`",
         f"**run_dir**\n`{run_dir}`",
         f"**题目数**\n{n}",
-        f"**宏平均 (0–100)**\n{mm_s}",
+        f"**全项通过情况**\n{summary}",
         "",
-        "**各题得分**",
+        "**各题判定**",
     ]
     for r in _rows_sorted_by_score_desc(rows):
         sid = r["question_id"]
         sc = r["score"]
-        sc_s = str(sc) if isinstance(sc, int) else "未写入"
+        sc_s = _devshell_score_label(sc)
         lines.append(f"- `{sid}`：**{sc_s}**")
 
     missing = sum(1 for s in scores if not isinstance(s, int))
@@ -220,7 +255,9 @@ def _notify_impl(
 
         env = (os.environ.get("SERVICE_ENV") or "").strip()
         env_prefix = f"[{env}] " if env else ""
-        title = f"{env_prefix}Devshell 评测打分 · {tag}" + (" ✓" if ok else " ✗")
+        title = _build_scoring_notify_title(
+            env_prefix=env_prefix, tag=tag, rows=rows, submit_ok=ok
+        )
         md_template, md = _build_markdown_body(
             tag=tag,
             run_dir=run_dir.resolve(),
