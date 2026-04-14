@@ -52,7 +52,7 @@ class MCPConcurrencyPolicy:
     max_pending_requests: int
 
     @classmethod
-    def default_for_transport(cls, transport: str) -> "MCPConcurrencyPolicy":
+    def default_for_transport(cls, transport: str) -> MCPConcurrencyPolicy:
         transport = transport.lower()
         if transport == "stdio":
             return cls(mode="serial", max_inflight=1, max_pending_requests=16)

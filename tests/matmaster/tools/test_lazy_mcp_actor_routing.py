@@ -25,7 +25,7 @@ class _CancelableBlockingConn:
         self.active_cancelled = asyncio.Event()
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
-    async def __aenter__(self) -> "_CancelableBlockingConn":
+    async def __aenter__(self) -> _CancelableBlockingConn:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
