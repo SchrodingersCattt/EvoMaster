@@ -41,7 +41,7 @@ MatMaster 当前的 assistant 输出主链路是纯文本：
 采用 回答级图片绑定层 方案：
 
 1. 工具或脚本按 manifest 契约产图
-2. 工具 wrapper 同步校验并上传图片到 OSS
+2. 工具 wrapper 同步校验并上传图片到产品侧 OSS
 3. wrapper 将标准化后的图片描述写入 `ToolResult.payload.figures`
 4. 服务层在本轮回答结束前，将多个 tool result 中的图片汇总成正式的回答级 `response_figures` 事件
 5. 前端主区显示正文，侧边栏消费 `response_figures`
@@ -74,7 +74,7 @@ wrapper 负责：
 - 读取 manifest
 - 校验图片文件
 - 本地或远端取回图片
-- 上传 OSS
+- 上传产品侧 OSS
 - 生成标准化 `payload.figures`
 
 ### Layer 3: Response Binding
@@ -83,7 +83,7 @@ wrapper 负责：
 
 - 按当前回答收集所有 `payload.figures`
 - 生成正式 `response_figures` 事件
-- 将图片绑定到当前回答的 `task_id` / `invocation_id` / `spawn_id`
+- 将图片绑定到当前父级回答的 `task_id` / `invocation_id` / `spawn_id=null`
 
 ### Layer 4: Renderers
 
@@ -91,6 +91,23 @@ wrapper 负责：
 - PDF：正文 + Figures 附录
 
 renderers 只消费回答级绑定数据，不直接读运行时文件路径。
+
+## Storage Strategy
+
+第一版图片上传统一走产品侧 Aliyun OSS 上传链路，而不是 Bohrium Tiefblue 输入工件链路。
+
+原因：
+
+- chat response 图片需要服务端历史回放与前端侧边栏长期复用
+- Bohrium Tiefblue 更适合远端任务输入输出中转，不适合作为回答级展示资源主存储
+- 现有产品侧 OSS helper 已返回稳定 HTTPS URL，更贴近 chat 展示需求
+
+URL 策略：
+
+- 第一版持久化 `asset_url` 为上传后得到的稳定 HTTPS URL
+- 不在 `response_figures` 中持久化短期签名 URL
+- 上传对象应使用可长期复用的不可变 key，避免历史回放时 URL 漂移
+- 若后续需要私有 bucket + 动态签名，应新增独立的 URL 解析层；不在第一版实现范围内
 
 ## Data Model
 
@@ -120,12 +137,18 @@ renderers 只消费回答级绑定数据，不直接读运行时文件路径。
 - `importance` 默认 `secondary`
 - `placement_hint` 默认 `sidebar_only`
 - `figure_id` 在单个 manifest 内必须唯一
+- `path` 必须是相对于 `ARTIFACT_DIR` 的相对路径，不允许绝对路径
 
 若同一回答中不同 tool call 产出重复 `figure_id`，第一版按 first-writer-wins 处理：
 
-- 保留最早进入回答绑定层的图片
+- 保留最早被回答绑定层接收的图片
 - 后续同名图片丢弃
 - 记录结构化 warning 日志
+
+并发说明：
+
+- 不保证跨 tool 的全局确定性顺序
+- first 的定义以回答绑定层接收到 `tool_result` 的时序为准
 
 ### Normalized Figure Descriptor
 
@@ -141,6 +164,11 @@ wrapper 产出的 `ToolResult.payload.figures[]` 使用统一结构：
 
 运行态细节如本地路径、远端路径、临时下载目录不进入协议层，只写日志。
 
+说明：
+
+- `source_tool_call_id` 第一版只用于诊断与追踪，renderers 不消费该字段
+- 后续若无稳定消费场景，可在下一版协议清理时移除
+
 ### Response-Level Binding
 
 新增正式事件类型 `response_figures`，内容为：
@@ -152,24 +180,37 @@ wrapper 产出的 `ToolResult.payload.figures[]` 使用统一结构：
 
 该事件是第一版唯一的回答级图片持久化载体，不新增独立表。
 
+边界约束：
+
+- 第一版仅为父级回答发射 `response_figures`
+- `spawn_id` 固定为 `null`
+- 子 agent 产出的图片可保留在各自 `tool_result.payload.figures` 中，但不进入父回答绑定层
+
 ## Runtime Flow
 
 ### Local Image Flow
 
-1. tool 或 bash 脚本在工作区生成图片与 manifest
-2. wrapper 读取 manifest
-3. wrapper 校验 manifest 中声明的每张图
-4. wrapper 上传图片到 OSS
-5. wrapper 返回带 `payload.figures` 的 `ToolResult`
+1. wrapper 为本次 tool call 创建独立 `ARTIFACT_DIR` 与 `MANIFEST_PATH`
+2. tool 或 bash 脚本在该隔离目录下生成图片与 manifest
+3. wrapper 读取 manifest
+4. wrapper 校验 manifest 中声明的每张图
+5. wrapper 上传图片到产品侧 OSS
+6. wrapper 返回带 `payload.figures` 的 `ToolResult`
+
+目录作用域：
+
+- `ARTIFACT_DIR` 以单次 tool call 为粒度隔离，不在多个 tool call 之间共享
+- 本地 `ARTIFACT_DIR` 不在上传后立刻删除，遵循现有 run/workspace 清理时机统一回收
 
 ### Bohrium Remote Image Flow
 
-1. tool 或脚本在远端 session 工作目录生成图片与 manifest
-2. wrapper 通过 session 下载 manifest
-3. wrapper 按 manifest 中的相对路径逐张下载远端图片到本地临时目录
-4. wrapper 复用统一 OSS 上传逻辑上传图片
-5. wrapper 删除本地临时文件
-6. wrapper 返回带 `payload.figures` 的 `ToolResult`
+1. wrapper 为本次 tool call 准备本地临时接收目录
+2. tool 或脚本在远端 session 工作目录生成图片与 manifest
+3. wrapper 通过 session 下载 manifest
+4. wrapper 按 manifest 中的相对路径逐张下载远端图片到本地临时目录
+5. wrapper 复用统一产品侧 OSS 上传逻辑上传图片
+6. wrapper 删除远端下载形成的本地临时文件
+7. wrapper 返回带 `payload.figures` 的 `ToolResult`
 
 ### Synchronization Rule
 
@@ -183,6 +224,17 @@ wrapper 产出的 `ToolResult.payload.figures[]` 使用统一结构：
 - 正文锚点不会引用未就绪图片
 - 前端无需额外处理图片状态流
 - 历史回放天然使用最终数据
+
+### Aggregation Rule
+
+一次 assistant 回答最多发出一次 `response_figures`。
+
+汇总规则：
+
+- 服务层在本轮回答结束前统一收集本回答涉及的 `payload.figures`
+- 仅当最终回答文本已经确定、且相关图片均已同步上传完成时，才发出 `response_figures`
+- `response_figures` 固定在对应 `run_result` 之前发出
+- 若本回答没有图片，则不发该事件
 
 ## Manifest Contract
 
@@ -199,6 +251,12 @@ wrapper 产出的 `ToolResult.payload.figures[]` 使用统一结构：
 
 第一版不支持 manifest 缺失时的目录扫描兜底。
 
+若 manifest 缺失、不可解析或字段不合法：
+
+- 该 tool call 视为无图片产出
+- 不抛出回答级异常
+- 记录 warning，便于排查脚本问题
+
 ## Protocol Changes
 
 ### Chat Protocol
@@ -213,6 +271,14 @@ wrapper 产出的 `ToolResult.payload.figures[]` 使用统一结构：
 - `response_figures`
 
 该事件与当前回答通过 `task_id` / `invocation_id` / `spawn_id` 对齐，前端将其与正文合并展示。
+对于第一版，`spawn_id` 固定为 `null`，表示父级回答作用域。
+
+代码集成点：
+
+- 在 `matmaster/types/events.py` 中新增 `ResponseFiguresEvent`
+- 将其归入 `SystemEvent` / `BusEvent` 联合类型
+- 在 `matmaster/integration/event_payloads.py` 中补充公开 payload 映射
+- `PersistenceHandler` 与 `SSEHandler` 默认应接纳该事件，不做额外过滤
 
 发射时机固定为：
 
@@ -255,6 +321,13 @@ wrapper 产出的 `ToolResult.payload.figures[]` 使用统一结构：
 - 正文允许出现轻量锚点，规范写法固定为 `[[fig:<figure_id>]]`
 - 锚点不直接转成图片
 
+锚点生成方式：
+
+- 第一版通过 prompt / tool-use 约定，引导模型在正文中自然输出 `[[fig:<figure_id>]]`
+- 不做正文后处理注入
+- 侧边栏展示不依赖锚点是否出现
+- 若正文存在悬空锚点，而 `response_figures` 中找不到对应 `figure_id`，前端保留原始文本，不做转换
+
 ### Sidebar
 
 - 按 `response_figures.figures` 的顺序展示
@@ -285,11 +358,17 @@ PDF 第一版复用回答级图片绑定，但固定为附录模式：
 
 - manifest 无效：丢弃该图片，写 warning
 - 文件校验失败：丢弃该图片，写结构化错误日志
+- Bohrium 远端下载失败：有限重试后丢弃该图片，写错误日志
 - OSS 上传失败：有限重试后丢弃该图片，写错误日志
 
 ### Retry Rule
 
-OSS 上传失败允许 2-3 次有限指数退避重试。超过上限后：
+远端下载与 OSS 上传都采用有限重试。第一版建议：
+
+- Bohrium 远端 manifest / 图片下载：1 次短重试
+- OSS 上传：2-3 次指数退避重试
+
+超过上限后：
 
 - 该图片不进入 `payload.figures`
 - 正文仍可继续完成
@@ -300,8 +379,11 @@ OSS 上传失败允许 2-3 次有限指数退避重试。超过上限后：
 第一版校验项保持克制：
 
 - 文件存在
+- 解析后的绝对路径必须位于 `ARTIFACT_DIR` 下，禁止路径穿越
 - 扩展名与基本 mime type 合法
-- 文件大小在合理区间
+- 支持格式白名单：`png`、`jpg`、`jpeg`、`webp`
+- `svg`、`tiff`、`eps` 等格式延后支持
+- 单张图片大小上限 10 MB
 
 不做复杂图像内容分析。
 
