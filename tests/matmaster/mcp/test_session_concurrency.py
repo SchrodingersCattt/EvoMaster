@@ -36,46 +36,47 @@ async def test_out_of_order_responses_are_routed_by_request_id():
     results: dict[str, str] = {}
     received_requests: list[tuple[int, str]] = []
 
-    async def server() -> None:
-        while len(received_requests) < 2:
-            message = await client_write_recv.receive()
-            if isinstance(message, Exception):
-                raise message
+    with anyio.fail_after(5):
+        async def server() -> None:
+            while len(received_requests) < 2:
+                message = await client_write_recv.receive()
+                if isinstance(message, Exception):
+                    raise message
 
-            root = message.message.root
-            assert isinstance(root, JSONRPCRequest)
-            marker = root.params["arguments"]["marker"]
-            received_requests.append((root.id, marker))
+                root = message.message.root
+                assert isinstance(root, JSONRPCRequest)
+                marker = root.params["arguments"]["marker"]
+                received_requests.append((root.id, marker))
 
-        for request_id, marker in reversed(received_requests):
-            response = JSONRPCResponse(
-                jsonrpc="2.0",
-                id=request_id,
-                result={"marker": marker},
-            )
-            await client_read_send.send(
-                SessionMessage(message=JSONRPCMessage(response))
-            )
-
-    session = ClientSession(client_read_recv, client_write_send)
-
-    async with session:
-        async with anyio.create_task_group() as task_group:
-            task_group.start_soon(server)
-
-            async def issue(marker: str) -> None:
-                response = await session.send_request(
-                    CallToolRequest(
-                        params=CallToolRequestParams(
-                            name="echo",
-                            arguments={"marker": marker},
-                        )
-                    ),
-                    _EchoResult,
+            for request_id, marker in reversed(received_requests):
+                response = JSONRPCResponse(
+                    jsonrpc="2.0",
+                    id=request_id,
+                    result={"marker": marker},
                 )
-                results[marker] = response.marker
+                await client_read_send.send(
+                    SessionMessage(message=JSONRPCMessage(response))
+                )
 
-            task_group.start_soon(issue, "alpha")
-            task_group.start_soon(issue, "beta")
+        session = ClientSession(client_read_recv, client_write_send)
+
+        async with session:
+            async with anyio.create_task_group() as task_group:
+                task_group.start_soon(server)
+
+                async def issue(marker: str) -> None:
+                    response = await session.send_request(
+                        CallToolRequest(
+                            params=CallToolRequestParams(
+                                name="echo",
+                                arguments={"marker": marker},
+                            )
+                        ),
+                        _EchoResult,
+                    )
+                    results[marker] = response.marker
+
+                task_group.start_soon(issue, "alpha")
+                task_group.start_soon(issue, "beta")
 
     assert results == {"alpha": "alpha", "beta": "beta"}

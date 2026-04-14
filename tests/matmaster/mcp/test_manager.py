@@ -272,12 +272,14 @@ class TestMCPToolManagerCleanup:
         ctx, managed = _make_managed(m, "fake_srv")
         await managed.wait_ready(timeout=2)
         m.tools_by_server["fake_srv"] = {"fake_srv_tool": {}}
+        m._server_transports["fake_srv"] = "stdio"
 
         await m.cleanup()
 
         assert len(m.connections) == 0
         assert len(m.tools_by_server) == 0
         assert len(m._managed) == 0
+        assert len(m._server_transports) == 0
         assert ctx.exited
 
     async def test_cleanup_exits_connection_context(self):

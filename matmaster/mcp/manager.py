@@ -509,5 +509,6 @@ class MCPToolManager:
         self._managed.clear()
         self._startup_tasks.clear()
         self._seen_tools.clear()
+        self._server_transports.clear()
 
         logger.info("MCP cleanup complete")
