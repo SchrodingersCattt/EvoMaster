@@ -9,11 +9,13 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `
 | SCF (pre-NSCF) | `out_chg 1` | Forgetting `out_chg` → NSCF cannot read charge |
 | Band (NSCF) | `init_chg file`, `out_band 1`, `nbands`, `symmetry 0` | Leaving `symmetry 1` → k-path folded |
 | DOS (NSCF) | `init_chg file`, `out_dos 1`, `dos_edelta_ev`, `dos_sigma`, `dos_nche`, `nbands`, `symmetry 0` | Missing `dos_nche` for LCAO |
-| Relax | `cal_force 1`, `force_thr_ev 0.01` | Missing `cal_force` → no force output |
-| Cell-relax | `cal_force 1`, `cal_stress 1`, `force_thr_ev 0.01`, `stress_thr 0.5` | Missing `cal_stress` |
+| Relax | **`cal_force 1`**, `force_thr_ev 0.01`, `relax_nmax 100` | Missing `cal_force` → no force output |
+| Cell-relax | **`cal_force 1`**, **`cal_stress 1`**, `force_thr_ev 0.01`, `stress_thr 0.5`, `relax_nmax 100` | Missing `cal_force` or `cal_stress` → relaxation silently broken |
 | Work function / dipole | `out_pot 2`, `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_amp 0.0` | Missing `efield_amp 0.0` (pure dipole correction) |
 | Spin-polarized | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` | Omitting mixing params → SCF diverges |
 | Slab KPT | Always `1` in vacuum direction (e.g. `20 20 1 0 0 0`) | Using dense mesh in vacuum direction |
+
+> **⚠ `force_thr_ev` vs `force_thr`**: Always use `force_thr_ev` (unit: eV/Å). The parameter `force_thr` uses Ry/Bohr — completely different units. `force_thr_ev 0.01` ≈ `force_thr 3.9e-4`. Mixing them up produces absurdly loose or tight thresholds.
 
 ### Relaxation INPUT Example
 ```
@@ -46,6 +48,7 @@ force_thr_ev 0.01
 stress_thr 0.5
 relax_nmax 100
 ```
+> **Critical**: `cal_force 1` and `cal_stress 1` are BOTH mandatory for cell-relax. Without `cal_force 1`, ABACUS does not compute forces and the optimizer cannot work. Without `cal_stress 1`, cell vectors are not optimized. These are NOT implied by `calculation cell-relax` — you must include them explicitly.
 
 ### Work Function / Electrostatic Potential INPUT Example
 ```
@@ -230,3 +233,29 @@ Line
 - In-plane: dense mesh. **Min `12 12` for metals**; `20 20` for accurate surface energy.
 - Vacuum direction: **always `1`**. Never more than 1 k-point.
 - `kspacing` mode: `kspacing 0.10 0.10 1.00` (slab, z=vacuum). Bulk: `kspacing 0.10`.
+
+---
+
+## Multi-File Consistency Rules
+
+When generating multiple INPUT files for a comparative study (surface energy, vacancy formation, EOS, etc.):
+
+1. **All INPUT files must share identical**: `basis_type`, `ecutwfc`, `smearing_method`, `smearing_sigma`, `scf_thr`. Use exactly the same values — do not vary these between bulk and slab.
+2. **Each INPUT must reference its STRU and KPT files** when not using default names: add `stru_file <name>` and `kpoint_file <name>`.
+3. **Task-specific mandatory params still apply**: a `cell-relax` INPUT inside a multi-file set still needs `cal_force 1`, `cal_stress 1`, `force_thr_ev`, `stress_thr`, `relax_nmax`. A `relax` INPUT still needs `cal_force 1`, `force_thr_ev`, `relax_nmax`.
+4. **Recommended standard values** for consistency: `scf_thr 1.0e-7`, `smearing_method gauss`, `smearing_sigma 0.01`.
+
+---
+
+## Common Mistakes Checklist
+
+Before finalizing any INPUT file, verify none of these apply:
+
+- ❌ `cell-relax` without `cal_force 1` → optimizer has no forces, silently broken
+- ❌ `cell-relax` without `cal_stress 1` → cell vectors not optimized
+- ❌ Using `force_thr` (Ry/Bohr) instead of `force_thr_ev` (eV/Å) → wrong units
+- ❌ SCF feeding NSCF but missing `out_chg 1` → NSCF fails to read charge
+- ❌ NSCF with `symmetry 1` → k-path folded, wrong band plot
+- ❌ Slab KPT with >1 in vacuum direction → wasted computation, wrong physics
+- ❌ Multi-file set with inconsistent `ecutwfc` or `smearing_sigma` → invalidates energy differences
+- ❌ Aligned spaces/tabs in INPUT instead of single space → cosmetically inconsistent (ABACUS accepts both but single-space is canonical)
