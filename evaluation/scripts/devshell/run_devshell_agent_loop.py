@@ -8,7 +8,7 @@
 在仓库根执行示例::
 
     uv run python evaluation/scripts/devshell/run_devshell_agent_loop.py \\
-      --max-iterations 3 --target-mean-score 80 --limit 2 --jobs 2 \\
+      --max-iterations 3 --target-pass-rate 80 --limit 2 --jobs 2 \\
       --questions SC_struct_007
 
 说明见 ``evaluation/docs/devshell/devshell_agent_sdk_loop.md``。
@@ -72,10 +72,23 @@ class DevshellAgentLoopCli:
             help="Maximum outer iterations (each is one SDK session turn).",
         )
         p.add_argument(
+            "--target-pass-rate",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Target all-criteria pass rate on the same 0–100 scale as "
+                "macro_mean_0_100 (mean of per-task 0/100 scores). Stop early when "
+                "macro_mean_0_100 reaches this or the model sets target_met. "
+                "Default: 80."
+            ),
+        )
+        p.add_argument(
             "--target-mean-score",
             type=int,
-            default=80,
-            help="Stop early when macro mean reaches this (0–100) or model sets target_met.",
+            default=None,
+            metavar="N",
+            help=argparse.SUPPRESS,
         )
         p.add_argument(
             "--permission-mode",
@@ -297,12 +310,29 @@ class DevshellAgentLoopCli:
             extra_args=list(args.eval_extra_arg),
         )
 
+        if args.target_mean_score is not None and args.target_pass_rate is not None:
+            print(
+                "error: use only one of --target-pass-rate or --target-mean-score",
+                file=sys.stderr,
+            )
+            return 2
+        if args.target_mean_score is not None:
+            print(
+                "warning: --target-mean-score is deprecated; use --target-pass-rate",
+                file=sys.stderr,
+            )
+            effective_target = int(args.target_mean_score)
+        elif args.target_pass_rate is not None:
+            effective_target = int(args.target_pass_rate)
+        else:
+            effective_target = 80
+
         cfg = AgentLoopConfig(
             repo_root=repo_root,
             session_dir=session_dir,
             defaults=defaults,
             max_iterations=max(1, int(args.max_iterations)),
-            target_mean_score=max(0, min(100, int(args.target_mean_score))),
+            target_pass_rate=max(0, min(100, effective_target)),
             permission_mode=str(args.permission_mode),
             max_sdk_turns=max(1, int(args.max_sdk_turns)),
             extra_instruction=str(args.extra_instruction or ""),

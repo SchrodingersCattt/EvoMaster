@@ -114,7 +114,7 @@ def _build_config(tmp_path: Path) -> AgentLoopConfig:
             extra_args=[],
         ),
         max_iterations=2,
-        target_mean_score=80,
+        target_pass_rate=80,
         permission_mode="acceptEdits",
         max_sdk_turns=100,
     )
