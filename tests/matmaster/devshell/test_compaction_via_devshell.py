@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import asyncio
 
 from matmaster.core.context_compactor import (
     ContextCompactor,
