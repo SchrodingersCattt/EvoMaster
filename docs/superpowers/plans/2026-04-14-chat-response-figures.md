@@ -61,7 +61,7 @@
 - `matmaster/integration/event_payloads.py`
   - 显式映射 `response_figures` 的 SSE / 持久化 `content` 形状。
 - `src/services/agent_run_service.py`
-  - 配置 figure upload callback，收集 `payload.figures`，在 `run_result` 之前发射 `response_figures`。
+  - 构造 figure upload callback 并注入 `pg_ctx.run_meta`，收集 `payload.figures`，在 `run_result` 之前发射 `response_figures`。
 - `src/models/chat.py`
   - 更新公开 `ag-ui` 协议文档，加入 `response_figures` 说明。
 - `tests/matmaster/types/test_events.py`
@@ -202,6 +202,38 @@ class ResponseFiguresEvent(EventBase):
 # matmaster/types/events.py
 SystemEvent = Annotated[
     Union[
+        ConfirmationRequestEvent,
+        ConfirmationTimeoutEvent,
+        AskQuestionEvent,
+        AskQuestionReplyEvent,
+        AskQuestionTimeoutEvent,
+        CompactionEvent,
+        ExpRunEvent,
+        CancelledEvent,
+        StreamClosedEvent,
+        WorkspaceUploadErrorEvent,
+        BohriumNodeEvent,
+        McpServerStatusEvent,
+        McpConnectEvent,
+        ResponseFiguresEvent,
+    ],
+    Field(discriminator="type"),
+]
+```
+
+```python
+# matmaster/types/events.py
+BusEvent = Annotated[
+    Union[
+        ThoughtEvent,
+        ResponseEvent,
+        ToolCallEvent,
+        ToolResultEvent,
+        RunResultEvent,
+        ErrorEvent,
+        AssistantStateEvent,
+        SkillHitEvent,
+        ToolProgressEvent,
         ConfirmationRequestEvent,
         ConfirmationTimeoutEvent,
         AskQuestionEvent,
@@ -376,26 +408,56 @@ def test_build_figure_env_uses_tool_call_scoped_paths() -> None:
     assert manifest_path == "/share/.matmaster/figures/call-1/manifest.json"
 
 
-def test_collect_figures_rejects_path_traversal() -> None:
+def _upload_cfg(upload_bytes=lambda data, key: f"https://oss.example/{key}") -> FigureUploadConfig:
+    return FigureUploadConfig(
+        session_id="sess-1",
+        task_id="task-1",
+        asset_key_prefix="matmaster/chat_figures",
+        upload_bytes=upload_bytes,
+    )
+
+
+def test_collect_figures_invalid_manifest_returns_warning_and_no_figures() -> None:
     fake_session = MagicMock()
     fake_session.path_exists.return_value = True
     fake_session.read_file.return_value = (
         '{"figures":[{"figure_id":"band","path":"../../etc/passwd","caption":"bad"}]}'
     )
 
-    with pytest.raises(ValueError, match="ARTIFACT_DIR"):
-        collect_figures_from_session(
-            session=fake_session,
-            artifact_dir="/share/.matmaster/figures/call-1/artifacts",
-            manifest_path="/share/.matmaster/figures/call-1/manifest.json",
-            tool_call_id="call-1",
-            upload_config=FigureUploadConfig(
-                session_id="sess-1",
-                task_id="task-1",
-                asset_key_prefix="matmaster/chat_figures",
-                upload_bytes=lambda data, key: f"https://oss.example/{key}",
-            ),
-        )
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    assert result.figures == []
+    assert result.failure_ids == []
+    assert result.warnings and "invalid_manifest" in result.warnings[0]
+
+
+def test_collect_figures_duplicate_ids_returns_warning_and_no_figures() -> None:
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = """
+    {"figures":[
+      {"figure_id":"band","path":"plots/band.png","caption":"band"},
+      {"figure_id":"band","path":"plots/band-2.png","caption":"band2"}
+    ]}
+    """.strip()
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    assert result.figures == []
+    assert result.failure_ids == []
+    assert result.warnings and "invalid_manifest" in result.warnings[0]
 
 
 def test_collect_figures_keeps_successful_entries_when_one_upload_fails() -> None:
@@ -422,17 +484,62 @@ def test_collect_figures_keeps_successful_entries_when_one_upload_fails() -> Non
         artifact_dir="/share/.matmaster/figures/call-1/artifacts",
         manifest_path="/share/.matmaster/figures/call-1/manifest.json",
         tool_call_id="call-1",
-        upload_config=FigureUploadConfig(
-            session_id="sess-1",
-            task_id="task-1",
-            asset_key_prefix="matmaster/chat_figures",
-            upload_bytes=upload_bytes,
-        ),
+        upload_config=_upload_cfg(upload_bytes=upload_bytes),
     )
 
     assert isinstance(result, FigureCollectionResult)
     assert [fig.figure_id for fig in result.figures] == ["band"]
     assert result.failure_ids == ["dos"]
+
+
+def test_collect_figures_retries_remote_download_once_before_failing() -> None:
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = (
+        '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
+    )
+    fake_session.download.side_effect = [TimeoutError("ssh hiccup"), TimeoutError("ssh still down")]
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    assert result.figures == []
+    assert result.failure_ids == ["band"]
+    assert fake_session.download.call_count == 2
+
+
+def test_collect_figures_retries_upload_before_success() -> None:
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = (
+        '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
+    )
+    fake_session.download.return_value = b"\\x89PNG\\r\\n\\x1a\\n" + b"x" * 64
+
+    attempts = {"count": 0}
+
+    def upload_bytes(data: bytes, key: str) -> str:
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise RuntimeError("transient oss failure")
+        return f"https://oss.example/{key}"
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(upload_bytes=upload_bytes),
+    )
+
+    assert [fig.figure_id for fig in result.figures] == ["band"]
+    assert result.failure_ids == []
+    assert attempts["count"] == 3
 ```
 
 - [ ] **Step 2: 运行测试，确认 helper 还不存在**
@@ -455,6 +562,7 @@ import hashlib
 import json
 import mimetypes
 import posixpath
+import time
 from dataclasses import dataclass, field
 
 from matmaster.types.figures import FigureDescriptor, FigureManifestEntry, FigureUploadConfig
@@ -482,19 +590,19 @@ def collect_figures_from_session(*, session, artifact_dir: str, manifest_path: s
     if not session.path_exists(manifest_path):
         return FigureCollectionResult()
 
-    payload = json.loads(session.read_file(manifest_path))
-    seen: set[str] = set()
     out = FigureCollectionResult()
+    entries = _load_manifest_entries(
+        session=session,
+        manifest_path=manifest_path,
+        artifact_dir=artifact_dir,
+        out=out,
+    )
+    if entries is None:
+        return out
 
-    for raw in payload.get("figures", []):
-        entry = FigureManifestEntry.model_validate(raw)
-        if entry.figure_id in seen:
-            raise ValueError(f"duplicate figure_id in manifest: {entry.figure_id}")
-        seen.add(entry.figure_id)
-
-        resolved = _resolve_under_artifact_dir(artifact_dir, entry.path)
+    for entry, resolved in entries:
         try:
-            blob = session.download(resolved)
+            blob = _download_with_retry(session, resolved)
             suffix = _validate_image_blob(resolved, blob)
             sha = hashlib.sha256(blob).hexdigest()
             object_key = (
@@ -502,7 +610,7 @@ def collect_figures_from_session(*, session, artifact_dir: str, manifest_path: s
                 f"{upload_config.session_id}/{upload_config.task_id}/{tool_call_id}/"
                 f"{sha}_{entry.figure_id}{suffix}"
             )
-            url = upload_config.upload_bytes(blob, object_key)
+            url = _upload_with_retry(upload_config, blob, object_key)
             out.figures.append(
                 FigureDescriptor(
                     figure_id=entry.figure_id,
@@ -518,7 +626,58 @@ def collect_figures_from_session(*, session, artifact_dir: str, manifest_path: s
             out.failure_ids.append(entry.figure_id)
 
     return out
+
+
+def _load_manifest_entries(*, session, manifest_path: str, artifact_dir: str, out: FigureCollectionResult) -> list[tuple[FigureManifestEntry, str]] | None:
+    try:
+        payload = json.loads(session.read_file(manifest_path))
+        seen: set[str] = set()
+        entries: list[tuple[FigureManifestEntry, str]] = []
+        for raw in payload.get("figures", []):
+            entry = FigureManifestEntry.model_validate(raw)
+            if entry.figure_id in seen:
+                raise ValueError(f"duplicate figure_id in manifest: {entry.figure_id}")
+            seen.add(entry.figure_id)
+            resolved = _resolve_under_artifact_dir(artifact_dir, entry.path)
+            entries.append((entry, resolved))
+        return entries
+    except Exception as exc:
+        out.warnings.append(f"invalid_manifest:{exc}")
+        return None
+
+
+def _download_with_retry(session, remote_path: str) -> bytes:
+    attempts = 2  # 首次 + 1 次短重试，对齐 spec
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return session.download(remote_path)
+        except Exception as exc:
+            last_exc = exc
+            if attempt == attempts:
+                break
+            time.sleep(0.2)
+    raise last_exc or RuntimeError("download failed")
+
+
+def _upload_with_retry(upload_config: FigureUploadConfig, blob: bytes, object_key: str) -> str:
+    delays = [0.2, 0.5]  # 共 3 次尝试，指数退避
+    last_exc: Exception | None = None
+    for idx in range(len(delays) + 1):
+        try:
+            return upload_config.upload_bytes(blob, object_key)
+        except Exception as exc:
+            last_exc = exc
+            if idx == len(delays):
+                break
+            time.sleep(delays[idx])
+    raise last_exc or RuntimeError("upload failed")
 ```
+
+实现要点：
+
+- manifest 缺失或非法时，只返回 warning，不抛回答级异常。
+- 单张图片下载或上传失败时，只把对应 `figure_id` 记入 `failure_ids`；同一 tool call 中已成功上传的图片照常保留在 `figures` 中。
 
 - [ ] **Step 4: 重新运行 helper 测试**
 
@@ -690,7 +849,11 @@ def _execute_with_figure_support(
         tool_call_id=tool_call_id,
         upload_config=figure_cfg,
     )
-    if not collection.figures and not collection.failure_ids:
+    if (
+        not collection.figures
+        and not collection.failure_ids
+        and not collection.warnings
+    ):
         return base
 
     content = obs
@@ -698,6 +861,12 @@ def _execute_with_figure_support(
         content += (
             "\\n[Figure pipeline: "
             f"{len(collection.failure_ids)} failed: {', '.join(collection.failure_ids)}]"
+        )
+    if collection.warnings:
+        content += (
+            "\\n[Figure manifest ignored: "
+            + "; ".join(collection.warnings)
+            + "]"
         )
 
     return ToolResult(
@@ -742,6 +911,33 @@ git commit -m "feat: collect bash-generated response figures"
 - Modify: `tests/matmaster/integration/test_events_to_messages.py`
 
 - [ ] **Step 1: 写失败测试，锁定顺序、payload 形状与历史回放**
+
+```python
+@pytest.mark.asyncio
+async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta() -> None:
+    run_result = RunResultEvent(
+        source="MatMaster",
+        status="completed",
+        reason="natural",
+        final_content="done",
+    )
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        controller = CancellationController()
+        await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="make a plot",
+            send_cb=lambda payload: None,
+            cancel_token=controller.token,
+            mode="direct",
+            task_id="task-1",
+        )
+
+    figure_cfg = svc._test_fake_exp.last_ctx.run_meta["figure_upload_config"]
+    assert figure_cfg.session_id == "sess-1"
+    assert figure_cfg.task_id == "task-1"
+    assert callable(figure_cfg.upload_bytes)
+```
 
 ```python
 def test_response_figures_payload_maps_to_public_content() -> None:
@@ -850,6 +1046,7 @@ uv run pytest tests/matmaster/integration/test_event_payloads.py tests/matmaster
 Expected:
 
 - `response_figures` 还没有显式 payload 映射。
+- `AgentRunService` 还没有把 `figure_upload_config` 注入 `pg_ctx.run_meta`。
 - `AgentRunService` 不会在 `run_result` 前发事件。
 - 历史回放中没有这个新事件类型的稳定测试保证。
 
@@ -872,6 +1069,7 @@ class ResponseFiguresAccumulator:
         if event.spawn_id is not None:
             return
 
+        # 保持 tool_result 到达顺序；同一个 tool_result 内再保持 payload.figures 原顺序。
         raw_items = (event.payload or {}).get("figures") or []
         for raw in raw_items:
             figure = FigureDescriptor.model_validate(raw)
@@ -888,7 +1086,36 @@ class ResponseFiguresAccumulator:
 
 ```python
 # src/services/agent_run_service.py
+from matmaster.types.figures import FigureUploadConfig
+from src.dao.oss_io import upload_bytes_to_oss
+from src.services.response_figures_service import ResponseFiguresAccumulator
+
+
+def _build_figure_upload_config(*, session_id: str, task_id: str) -> FigureUploadConfig:
+    return FigureUploadConfig(
+        session_id=session_id,
+        task_id=task_id,
+        asset_key_prefix="matmaster/chat_figures",
+        upload_bytes=upload_bytes_to_oss,
+    )
+
+
+...
+# 在 run_agent() 内、fanout 与 exp 都准备好之后创建。
 figure_accumulator = ResponseFiguresAccumulator()
+
+...
+pg_ctx = pg_ctx.model_copy(
+    update={
+        'run_meta': {
+            **pg_ctx.run_meta,
+            'figure_upload_config': _build_figure_upload_config(
+                session_id=session_id,
+                task_id=task_id,
+            ),
+        }
+    }
+)
 
 ...
 async for event in stream:
@@ -969,6 +1196,7 @@ git commit -m "feat: emit response figures for chat replies"
 5. 历史恢复：依赖 persisted `response_figures` + `stream_service` replay，不把图片写回 `AssistantMessage.content`。
 6. 子 agent 不合并：聚合器显式跳过 `spawn_id is not None` 的 tool result。
 7. 安全边界：路径穿越、格式白名单、10 MB 上限都在 collector 中锁定。
+8. 重试策略：远端下载 1 次短重试、OSS 上传 2 次指数退避重试，由 collector helper 统一实现。
 
 ## Execution Notes
 
