@@ -95,6 +95,7 @@ class _ManagedConn:
         max_pending_requests: int = 16,
     ) -> None:
         self._conn_ctx = conn_ctx
+        self._max_inflight = max(1, max_inflight)
         self._ready: asyncio.Future[_StartupState] = (
             asyncio.get_running_loop().create_future()
         )
@@ -102,14 +103,16 @@ class _ManagedConn:
         self._requests: asyncio.Queue[_CallToolRequest | object] = asyncio.Queue(
             maxsize=queue_size
         )
-        self._sem = asyncio.Semaphore(max(1, max_inflight))
+        self._sem = asyncio.Semaphore(self._max_inflight)
         self._active_tasks: set[asyncio.Task[None]] = set()
-        self._close_requested = False
+        self._owner_wakeup = asyncio.Event()
+        self._close_requested = asyncio.Event()
         self._drain_event = asyncio.Event()
         self._drain_event.set()
         self._closing = False
         self._fatal_error: BaseException | None = None
         self._closed = False
+        self._forced_close = False
         self._task = asyncio.create_task(self._run())
 
     def _set_request_exception(
@@ -117,6 +120,14 @@ class _ManagedConn:
     ) -> None:
         if not request.result.done():
             request.result.set_exception(exc)
+
+    def _wake_owner(self) -> None:
+        self._owner_wakeup.set()
+
+    def _make_dead_error(self, exc: BaseException) -> ManagedConnDead:
+        dead = ManagedConnDead("MCP connection is unavailable")
+        dead.__cause__ = exc
+        return dead
 
     def _fail_queued_requests(self, exc: BaseException) -> None:
         while True:
@@ -138,6 +149,7 @@ class _ManagedConn:
         self._active_tasks.discard(task)
         if not self._active_tasks:
             self._drain_event.set()
+        self._wake_owner()
 
     async def _cancel_active_tasks(self) -> None:
         if not self._active_tasks:
@@ -155,8 +167,12 @@ class _ManagedConn:
     async def _execute_request(
         self, conn: MCPConnection, request: _CallToolRequest
     ) -> None:
+        if request.result.done():
+            return
         try:
             async with self._sem:
+                if request.result.done():
+                    return
                 result = await conn.call_tool(request.tool_name, request.arguments)
         except BaseException as exc:
             self._set_request_exception(request, exc)
@@ -165,6 +181,13 @@ class _ManagedConn:
         else:
             if not request.result.done():
                 request.result.set_result(result)
+
+    def _should_finish_close(self) -> bool:
+        return (
+            self._close_requested.is_set()
+            and self._requests.empty()
+            and not self._active_tasks
+        )
 
     async def _run(self) -> None:
         try:
@@ -177,21 +200,46 @@ class _ManagedConn:
                 )
 
                 while True:
-                    request = await self._requests.get()
-                    if request is _CLOSE_REQUEST:
-                        self._close_requested = True
-                        self._closing = True
-                        await self._wait_for_drain()
+                    made_progress = False
+
+                    while len(self._active_tasks) < self._max_inflight:
+                        try:
+                            request = self._requests.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
+
+                        made_progress = True
+                        if request is _CLOSE_REQUEST:
+                            continue
+                        if request.result.done():
+                            continue
+
+                        task = asyncio.create_task(self._execute_request(conn, request))
+                        self._track_active_task(task)
+
+                    if self._should_finish_close():
                         return
 
-                    task = asyncio.create_task(self._execute_request(conn, request))
-                    self._track_active_task(task)
+                    if made_progress:
+                        continue
+
+                    self._owner_wakeup.clear()
+                    if self._should_finish_close():
+                        return
+                    if (
+                        len(self._active_tasks) < self._max_inflight
+                        and not self._requests.empty()
+                    ):
+                        continue
+                    if self._owner_wakeup.is_set():
+                        continue
+                    await self._owner_wakeup.wait()
         except BaseException as exc:
             self._fatal_error = exc
             if not self._ready.done():
                 self._ready.set_exception(exc)
             else:
-                self._fail_queued_requests(exc)
+                self._fail_queued_requests(self._make_dead_error(exc))
             await self._cancel_active_tasks()
         finally:
             self._closed = True
@@ -200,31 +248,51 @@ class _ManagedConn:
         return await asyncio.wait_for(self._ready, timeout=timeout)
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        if self._closing:
+            raise ManagedConnClosing("MCP connection is closing")
         if self._fatal_error is not None:
             raise ManagedConnDead(
                 "MCP connection is unavailable"
             ) from self._fatal_error
         if self._closed:
-            raise RuntimeError("MCP connection is closed")
+            raise ManagedConnClosing("MCP connection is closing")
 
         loop = asyncio.get_running_loop()
         result: asyncio.Future[Any] = loop.create_future()
-        await self._requests.put(
-            _CallToolRequest(
-                tool_name=tool_name,
-                arguments=arguments,
-                result=result,
+        try:
+            self._requests.put_nowait(
+                _CallToolRequest(
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    result=result,
+                )
             )
-        )
+        except asyncio.QueueFull as exc:
+            raise ManagedConnBackpressure("MCP pending request queue is full") from exc
+
+        self._wake_owner()
         return await result
 
     async def close(self, timeout: float) -> None:
-        if not self._task.done():
-            self._close_requested = True
-            await self._requests.put(_CLOSE_REQUEST)
+        self._closing = True
+        self._close_requested.set()
+        try:
+            self._requests.put_nowait(_CLOSE_REQUEST)
+        except asyncio.QueueFull:
+            pass
+        self._wake_owner()
+
+        if self._task.done():
+            try:
+                await self._task
+            except Exception:
+                pass
+            return
+
         try:
             await asyncio.wait_for(self._task, timeout=timeout)
         except TimeoutError:
+            self._forced_close = True
             self._task.cancel()
             try:
                 await self._task
@@ -232,6 +300,8 @@ class _ManagedConn:
                 pass
         except Exception:
             pass
+        finally:
+            self._wake_owner()
 
 
 class MCPToolManager:
@@ -435,6 +505,9 @@ class MCPToolManager:
     async def call_tool(
         self, server_name: str, remote_tool_name: str, arguments: dict[str, Any]
     ) -> Any:
+        if self._closing:
+            raise ManagedConnClosing("MCP manager is closing")
+
         startup = self._startup_tasks.get(server_name)
         if startup is not None:
             await startup
