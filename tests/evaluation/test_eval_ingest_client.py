@@ -230,6 +230,7 @@ def test_build_ingest_item_minimal() -> None:
         duration_ms=5000,
     )
     assert item["question_id"] == "Q1"
+    assert item["repeat_idx"] == 0
     assert "question_text" not in item
     assert item["duration_ms"] == 5000
     assert item["tokens"] == 100
@@ -294,6 +295,20 @@ def test_build_ingest_item_usage_vendor_by_turn_in_extra() -> None:
     assert item["extra"]["tokens_last_turn"] == 20
     assert "model" not in item["extra"]
     assert "num_turns" not in item["extra"]
+
+
+def test_build_ingest_item_repeat_idx_top_level() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r2",
+        mode="direct",
+        repeat_idx=2,
+        devshell_exit_code=0,
+        summary={"status": "done"},
+        duration_ms=1,
+    )
+    assert item["repeat_idx"] == 2
+    assert "repeat_idx" not in item["extra"]
 
 
 def test_build_ingest_item_model_top_level() -> None:
@@ -506,9 +521,31 @@ def test_normalize_pending_item_for_submission() -> None:
     assert err is None
     assert out is not None
     assert out["score"] == 80.0
+    assert out["repeat_idx"] == 0
     assert out["artifact"]["files_prefix"] == "matmaster/evaluation/run/task/files"
     assert out["score_reason"] == "依据 checklist"
     assert "suggestion" not in out
+
+
+def test_normalize_pending_repeat_idx_defaults_when_missing() -> None:
+    out, err = normalize_pending_item_for_submission(
+        {
+            "question_id": "Q1",
+            "score": 1,
+            "extra": {"task_id": "Q1_direct_r3"},
+        }
+    )
+    assert err is None
+    assert out is not None
+    assert out["repeat_idx"] == 0
+
+
+def test_normalize_pending_rejects_negative_repeat_idx() -> None:
+    out, err = normalize_pending_item_for_submission(
+        {"question_id": "Q1", "score": 1, "repeat_idx": -1}
+    )
+    assert out is None
+    assert err is not None
 
 
 def test_normalize_pending_item_requires_score() -> None:

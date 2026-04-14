@@ -11,7 +11,10 @@ ingest 不再写入。When task outputs exist, this client adds top-level ``arti
 (``bundle_object_key`` / ``manifest_object_key`` / ``files_prefix``) so tools-server
 can serve file tree / preview / bundle download from the new artifact APIs. For
 **immediate** ingest, :func:`build_ingest_item` sets ``score`` from the devshell
-summary when present, else a 100/0 pass-fail proxy. Human ``score`` /
+summary when present, else a 100/0 pass-fail proxy. Each item includes top-level
+``repeat_idx`` (``≥ 0``), matching matmaster-tools-server ``EvalItemIn`` and table
+unique key ``(run_id, question_id, repeat_idx)`` (not duplicated under ``extra``).
+Human ``score`` /
 ``score_reason`` / ``suggestion`` for **pending** ingest are passed by CLI and
 validated by :func:`normalize_pending_item_for_submission`
 （``score_reason`` / ``suggestion`` 最长 16384）. For deferred ingest,
@@ -471,6 +474,8 @@ def normalize_pending_item_for_submission(
 
     Requires ``score`` (coerced to ``float``). Optional ``score_reason`` / ``suggestion``
     must be strings if present; empty after strip are dropped.
+    Ensures top-level ``repeat_idx`` (tools-server ``EvalItemIn``); if missing,
+    defaults to ``0``.
     Returns ``(item, None)`` or ``(None, error_message)``.
     """
     out = dict(item)
@@ -497,6 +502,17 @@ def normalize_pending_item_for_submission(
             out.pop(key, None)
         else:
             out[key] = clipped
+
+    if "repeat_idx" in out:
+        try:
+            ri = int(out["repeat_idx"])
+        except (TypeError, ValueError):
+            return None, f'invalid item["repeat_idx"]: {out["repeat_idx"]!r}'
+        if ri < 0:
+            return None, 'item["repeat_idx"] must be >= 0'
+        out["repeat_idx"] = ri
+    else:
+        out["repeat_idx"] = 0
 
     return out, None
 
@@ -543,11 +559,11 @@ def build_ingest_item(
         approximate_last_turn_from_total=approximate_last_turn_from_total,
     )
 
+    rpt = max(0, int(repeat_idx))
     extra: dict[str, Any] = {
         "task_id": task_id,
         "devshell_exit_code": devshell_exit_code,
         "mode": mode,
-        "repeat_idx": repeat_idx,
     }
     extra.update(
         {
@@ -584,6 +600,7 @@ def build_ingest_item(
 
     item: dict[str, Any] = {
         "question_id": question_id,
+        "repeat_idx": rpt,
         "extra": extra,
     }
     nt = s.get("num_turns")

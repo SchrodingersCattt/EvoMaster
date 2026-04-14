@@ -198,6 +198,16 @@ class DevshellAgentLoopCli:
             help="Forwarded to run_devshell_eval --limit (default: no cap).",
         )
         p.add_argument(
+            "--k",
+            type=int,
+            default=3,
+            metavar="N",
+            help=(
+                "Forwarded to run_devshell_eval --k: repeat each question N times "
+                "(overrides evaluation/config.yaml ``k``; default: %(default)s)."
+            ),
+        )
+        p.add_argument(
             "--questions",
             nargs="+",
             default=None,
@@ -284,6 +294,10 @@ class DevshellAgentLoopCli:
                 session_dir if session_dir.is_absolute() else (repo_root / session_dir)
             ).resolve()
 
+        if args.k < 1:
+            print("error: --k must be >= 1", file=sys.stderr)
+            return 2
+
         exp_effective = args.exp
         if exp_effective is None and args.modes:
             _first = str(args.modes[0]).strip()
@@ -308,21 +322,16 @@ class DevshellAgentLoopCli:
                 else repo_root / "evaluation" / "config.yaml"
             ),
             extra_args=list(args.eval_extra_arg),
+            k=args.k,
         )
 
-        if args.target_mean_score is not None and args.target_pass_rate is not None:
+        if args.target_mean_score is not None:
             print(
-                "error: use only one of --target-pass-rate or --target-mean-score",
+                "error: --target-mean-score was removed; use --target-pass-rate",
                 file=sys.stderr,
             )
             return 2
-        if args.target_mean_score is not None:
-            print(
-                "warning: --target-mean-score is deprecated; use --target-pass-rate",
-                file=sys.stderr,
-            )
-            effective_target = int(args.target_mean_score)
-        elif args.target_pass_rate is not None:
+        if args.target_pass_rate is not None:
             effective_target = int(args.target_pass_rate)
         else:
             effective_target = 80

@@ -65,6 +65,13 @@ RUN_DEVSHELL_EVAL_SCHEMA: dict[str, Any] = {
                 "Per-task wall timeout for mm-devshell (default: CLI defaults)."
             ),
         },
+        "k": {
+            "type": "integer",
+            "description": (
+                "Repeat each question k times (repeat_idx 0..k-1); overrides eval "
+                "config (default: CLI)."
+            ),
+        },
         "extra_args": {
             "type": "array",
             "items": {"type": "string"},

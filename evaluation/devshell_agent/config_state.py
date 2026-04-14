@@ -34,6 +34,8 @@ class DevshellAgentCliDefaults:
     task_timeout_sec: float
     eval_config: Path | None
     extra_args: list[str]
+    #: Forwarded to ``run_devshell_eval --k``; ``None`` uses ``evaluation/config.yaml``.
+    k: int | None = None
 
 
 @dataclass

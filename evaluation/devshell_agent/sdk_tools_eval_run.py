@@ -105,6 +105,9 @@ class MatmasterEvalMcpEvalRunMixin:
         extra = list(d.extra_args)
         if args.get("extra_args") is not None:
             extra = list(args["extra_args"])
+        k_repeat = d.k
+        if args.get("k") is not None:
+            k_repeat = int(args["k"])
         return RunDevshellEvalParams(
             output_dir=out_dir,
             jobs=jobs,
@@ -120,6 +123,7 @@ class MatmasterEvalMcpEvalRunMixin:
             extra_args=extra,
             eval_ingest_run_id=eval_ingest_run_id,
             exclude_question_ids=exclude_question_ids,
+            k=k_repeat,
         )
 
     def _maybe_submit_run_dir_ingest(
