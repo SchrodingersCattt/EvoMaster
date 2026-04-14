@@ -247,7 +247,6 @@ class _DurablePreflightCompactor:
         return None
 
 
-
 class _LifecycleCompactor:
     """Compactor test double for running -> complete lifecycle orchestration."""
 
@@ -721,7 +720,7 @@ class TestGap2RunStreamYieldsBusEvent:
         # All events should have 'type' attribute (BusEvent signature)
         for event in events:
             assert hasattr(
-                event, 'type'
+                event, "type"
             ), f"Yielded object missing 'type' attribute: {type(event).__name__}"
 
         # Last event should be RunResultEvent
@@ -750,7 +749,7 @@ class TestGap2RunStreamYieldsBusEvent:
                 event, _KernelItem
             ), f"run_stream() yielded _KernelItem: {event!r}"
             assert hasattr(
-                event, 'type'
+                event, "type"
             ), f"Missing 'type' attribute: {type(event).__name__}"
 
         assert isinstance(
@@ -901,9 +900,13 @@ class TestCheckpointAwareCompaction:
         ):
             events.append(event)
 
-        compaction_events = [e for e in events if getattr(e, "type", None) == "compaction"]
+        compaction_events = [
+            e for e in events if getattr(e, "type", None) == "compaction"
+        ]
         assert [e.status for e in compaction_events] == ["running", "complete"]
-        assert checkpoint_calls, "checkpoint sink should be called before complete event"
+        assert (
+            checkpoint_calls
+        ), "checkpoint sink should be called before complete event"
         assert compaction_events[1].checkpoint_written is True
 
     @pytest.mark.asyncio
@@ -927,7 +930,9 @@ class TestCheckpointAwareCompaction:
         ):
             events.append(event)
 
-        compaction_events = [e for e in events if getattr(e, "type", None) == "compaction"]
+        compaction_events = [
+            e for e in events if getattr(e, "type", None) == "compaction"
+        ]
         assert [e.status for e in compaction_events] == ["running", "complete"]
         assert compaction_events[-1].checkpoint_written is False
         assert compaction_events[-1].failure_reason == "checkpoint store down"

@@ -326,6 +326,7 @@ class Exp:
 
         from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
         from matmaster.types.tool_runner_state import ToolRunnerState
+
         run_meta = getattr(ctx, "run_meta", {}) or {}
 
         # 6. Compaction: event_sink=None, _run_items() injects local sink at runtime
@@ -386,7 +387,7 @@ class Exp:
         )
 
         # 9. Assemble final spec with all v2 fields
-        checkpoint_sink_factory = run_meta.get('checkpoint_sink_factory')
+        checkpoint_sink_factory = run_meta.get("checkpoint_sink_factory")
         checkpoint_sink = None
         if callable(checkpoint_sink_factory):
             checkpoint_sink = checkpoint_sink_factory(spawn_id=spawn_id)
