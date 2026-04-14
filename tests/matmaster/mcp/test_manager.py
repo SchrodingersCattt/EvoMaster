@@ -83,6 +83,16 @@ class TestMCPToolManagerInstantiation:
 
         policy = MCPConcurrencyPolicy.default_for_transport("stdio")
         assert policy.mode == "serial"
+        assert policy.max_inflight == 1
+        assert policy.max_pending_requests == 16
+
+    def test_default_non_stdio_policy_is_multiplex(self):
+        from matmaster.mcp.manager import MCPConcurrencyPolicy
+
+        policy = MCPConcurrencyPolicy.default_for_transport("sse")
+        assert policy.mode == "multiplex"
+        assert policy.max_inflight == 4
+        assert policy.max_pending_requests == 64
 
     def test_has_add_server_method(self):
         from matmaster.mcp.manager import MCPToolManager

@@ -47,14 +47,16 @@ class ManagedConnDead(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class MCPConcurrencyPolicy:
-    mode: str = "serial"
+    mode: str
+    max_inflight: int
+    max_pending_requests: int
 
     @classmethod
     def default_for_transport(cls, transport: str) -> "MCPConcurrencyPolicy":
         transport = transport.lower()
         if transport == "stdio":
-            return cls(mode="serial")
-        return cls(mode="serial")
+            return cls(mode="serial", max_inflight=1, max_pending_requests=16)
+        return cls(mode="multiplex", max_inflight=4, max_pending_requests=64)
 
 
 @dataclass
