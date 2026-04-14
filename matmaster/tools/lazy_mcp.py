@@ -530,10 +530,16 @@ class LazyMCPConnector:
         manager = self._ensure_manager()
         fut = asyncio.run_coroutine_threadsafe(coro, manager.loop)
         wrapped = asyncio.wrap_future(fut)
-        wrapped = asyncio.shield(wrapped)
-        if timeout is not None:
-            return await asyncio.wait_for(wrapped, timeout=timeout)
-        return await wrapped
+        try:
+            if timeout is not None:
+                return await asyncio.wait_for(wrapped, timeout=timeout)
+            return await wrapped
+        except asyncio.TimeoutError:
+            fut.cancel()
+            raise
+        except asyncio.CancelledError:
+            fut.cancel()
+            raise
 
     async def ensure_actor(self, server_name: str) -> None:
         if self._closing:

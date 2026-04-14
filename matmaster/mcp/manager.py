@@ -161,6 +161,19 @@ class _ManagedConn:
         self._drain_event.clear()
         task.add_done_callback(self._on_request_done)
 
+    def _cancel_active_task_for_result(
+        self,
+        request: _CallToolRequest,
+        task: asyncio.Task[None],
+    ) -> None:
+        def _cancel_on_result_done(result: asyncio.Future[Any]) -> None:
+            if not result.cancelled() or task.done():
+                return
+            task.cancel()
+            self._wake_owner()
+
+        request.result.add_done_callback(_cancel_on_result_done)
+
     def _on_request_done(self, task: asyncio.Task[None]) -> None:
         self._active_tasks.discard(task)
         if not self._active_tasks:
@@ -192,6 +205,8 @@ class _ManagedConn:
                 result = await conn.call_tool(request.tool_name, request.arguments)
         except BaseException as exc:
             if isinstance(exc, asyncio.CancelledError):
+                if request.result.cancelled():
+                    raise
                 self._set_request_exception(
                     request, self._map_cancelled_request_exception(exc)
                 )
@@ -234,6 +249,7 @@ class _ManagedConn:
                             continue
 
                         task = asyncio.create_task(self._execute_request(conn, request))
+                        self._cancel_active_task_for_result(request, task)
                         self._track_active_task(task)
 
                     if self._should_finish_close():
@@ -290,7 +306,13 @@ class _ManagedConn:
             raise ManagedConnBackpressure("MCP pending request queue is full") from exc
 
         self._wake_owner()
-        return await result
+        try:
+            return await result
+        except asyncio.CancelledError:
+            if not result.done():
+                result.cancel()
+            self._wake_owner()
+            raise
 
     async def close(self, timeout: float) -> None:
         self._closing = True
