@@ -427,6 +427,10 @@ def configure_mcp_manager(
 
         manager.concurrency_defaults_by_transport = defaults_by_transport
         manager.concurrency_by_server = by_server
+    elif concurrency_cfg is not None:
+        logger.warning(
+            "Ignoring invalid MCP concurrency config at mcp_concurrency: expected dict"
+        )
 
 
 def resolve_lazy_mcp_tool_timeout(

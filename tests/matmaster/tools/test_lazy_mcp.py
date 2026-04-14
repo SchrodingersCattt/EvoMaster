@@ -808,6 +808,21 @@ class TestConfigureMCPManager:
         assert "mcp_concurrency.defaults.http" in caplog.text
         assert "mcp_concurrency.servers.mat_doc" in caplog.text
 
+    @pytest.mark.parametrize("bad_concurrency", ["bad", []])
+    def test_non_dict_top_level_concurrency_emits_warning_and_is_ignored(
+        self, caplog, bad_concurrency
+    ):
+        manager = FakeMCPManager()
+        config = {"mcp_concurrency": bad_concurrency}
+
+        with caplog.at_level("WARNING"):
+            configure_mcp_manager(manager, config)
+
+        assert manager.concurrency_defaults_by_transport == {}
+        assert manager.concurrency_by_server == {}
+        assert "mcp_concurrency" in caplog.text
+        assert "expected dict" in caplog.text
+
     def test_empty_config_noop(self):
         manager = FakeMCPManager()
         configure_mcp_manager(manager, {})
