@@ -426,7 +426,7 @@ class MCPToolManager:
             self._startup_tasks[name] = startup
 
         try:
-            await startup
+            await asyncio.shield(startup)
         finally:
             if self._startup_tasks.get(name) is startup and startup.done():
                 self._startup_tasks.pop(name, None)
@@ -551,7 +551,7 @@ class MCPToolManager:
         startup = self._startup_tasks.get(server_name)
         if startup is not None:
             try:
-                await startup
+                await asyncio.shield(startup)
             except asyncio.CancelledError as exc:
                 if self._closing:
                     raise ManagedConnClosing("MCP manager is closing") from exc

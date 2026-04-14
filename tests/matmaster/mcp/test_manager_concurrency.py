@@ -280,3 +280,31 @@ class TestManagerStartupConcurrency:
 
             with pytest.raises(asyncio.CancelledError):
                 await add_task
+
+    async def test_cancelled_startup_waiter_does_not_cancel_shared_startup_task(
+        self,
+    ):
+        manager = MCPToolManager()
+        conn = _StartupBlockingConn()
+
+        with patch("matmaster.mcp.manager.create_connection", return_value=conn):
+            add_task = asyncio.create_task(
+                manager.add_server("srv", transport="http", url="http://srv")
+            )
+            await asyncio.wait_for(conn.list_tools_started.wait(), timeout=1.0)
+
+            call_task = asyncio.create_task(
+                manager.call_tool("srv", "remote_tool", {"value": "payload"})
+            )
+
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(add_task, timeout=0.05)
+
+            with pytest.raises(asyncio.CancelledError):
+                await add_task
+
+            conn.release_startup.set()
+            result = await asyncio.wait_for(call_task, timeout=1.0)
+            await manager.cleanup()
+
+        assert result == [{"text": "payload"}]
