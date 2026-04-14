@@ -8,8 +8,6 @@ replies out of order.
 from __future__ import annotations
 
 import anyio
-from pydantic import BaseModel
-
 from mcp import ClientSession
 from mcp.shared.message import SessionMessage
 from mcp.types import (
@@ -19,6 +17,7 @@ from mcp.types import (
     JSONRPCRequest,
     JSONRPCResponse,
 )
+from pydantic import BaseModel
 
 
 class _EchoResult(BaseModel):
@@ -26,17 +25,14 @@ class _EchoResult(BaseModel):
 
 
 async def test_out_of_order_responses_are_routed_by_request_id():
-    client_read_send, client_read_recv = anyio.create_memory_object_stream(
-        10
-    )
-    client_write_send, client_write_recv = anyio.create_memory_object_stream(
-        10
-    )
+    client_read_send, client_read_recv = anyio.create_memory_object_stream(10)
+    client_write_send, client_write_recv = anyio.create_memory_object_stream(10)
 
     results: dict[str, str] = {}
     received_requests: list[tuple[int, str]] = []
 
     with anyio.fail_after(5):
+
         async def server() -> None:
             while len(received_requests) < 2:
                 message = await client_write_recv.receive()

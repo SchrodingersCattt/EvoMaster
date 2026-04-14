@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-
-import pytest
 from unittest.mock import patch
 
+import pytest
+
 from matmaster.mcp.manager import (
-    MCPToolManager,
     ManagedConnBackpressure,
     ManagedConnClosing,
     ManagedConnDead,
+    MCPToolManager,
     _ManagedConn,
 )
 
@@ -22,7 +22,7 @@ class _BlockingConn:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.exited = False
 
-    async def __aenter__(self) -> "_BlockingConn":
+    async def __aenter__(self) -> _BlockingConn:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
@@ -45,7 +45,7 @@ class _StartupBlockingConn:
         self.list_tools_started = asyncio.Event()
         self.release_startup = asyncio.Event()
 
-    async def __aenter__(self) -> "_StartupBlockingConn":
+    async def __aenter__(self) -> _StartupBlockingConn:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
@@ -73,7 +73,7 @@ class _FailingStartupConn:
         self.list_tools_started = asyncio.Event()
         self.release_startup = asyncio.Event()
 
-    async def __aenter__(self) -> "_FailingStartupConn":
+    async def __aenter__(self) -> _FailingStartupConn:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:

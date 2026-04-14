@@ -534,7 +534,7 @@ class LazyMCPConnector:
             if timeout is not None:
                 return await asyncio.wait_for(wrapped, timeout=timeout)
             return await wrapped
-        except asyncio.TimeoutError:
+        except TimeoutError:
             fut.cancel()
             raise
         except asyncio.CancelledError:
