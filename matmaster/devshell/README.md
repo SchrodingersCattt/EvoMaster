@@ -58,7 +58,7 @@ uv run python evaluation/scripts/devshell/run_devshell_eval.py --dry-run --limit
 uv run python evaluation/scripts/devshell/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
 ```
 
-筛选与 **`evaluation/config.yaml`** 一致（`--eval-config`、`--capabilities`、`--questions` 等）；详见脚本 **`--help`**。
+筛选与 **`evaluation/config.yaml`** 一致（`--eval-config`、`--slices`、`--questions` 等）；详见脚本 **`--help`**。
 
 **默认**在跑完后同目录生成 **`claude_review.md`**（单文件汇总，便于 **@** Claude）。不需要再跑第二个命令。
 

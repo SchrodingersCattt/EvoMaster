@@ -16,3 +16,10 @@ def collect_question_bank_question_ids(repo_root: Path) -> frozenset[str]:
         for q in bank.questions:
             ids.add(q.id)
     return frozenset(ids)
+
+
+def collect_p0_question_ids(repo_root: Path) -> list[str]:
+    """Return question IDs with ``priority == "P0"``."""
+    bank_dir = (repo_root / "evaluation" / "question_bank").resolve()
+    banks = load_question_banks(bank_dir)
+    return [q.id for bank in banks for q in bank.questions if q.priority == "P0"]

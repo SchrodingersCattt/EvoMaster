@@ -260,8 +260,9 @@ class UserService:
     @staticmethod
     def get_bohrium_access_key(user_id: str, org_id: str) -> str | None:
         """
-        调用 GET {BOHRIUM_CORE_BASE_URL}/api/v1/ak/list，
-        Header: X-User-Id, X-Org-Id，返回该用户/组织下的 access_key（取第一个可用）。
+        先 GET {BOHRIUM_CORE_BASE_URL}/api/v1/ak/list（X-User-Id, X-Org-Id），
+        取第一个可用 access_key；若列表为空或无效则 POST /api/v1/ak/add 自动创建
+        （与 scimaster-bohr-chat 前端 getAKListReq + createAK 一致）。
 
         用于节点复用场景：表里只存 user_id / org_id / project_id / node_id，
         销毁时通过本接口拿到 access_key 再调用 destroy_node。
@@ -405,6 +406,116 @@ class UserService:
         )
 
     @staticmethod
+    def _create_bohrium_access_key_once(
+        user_id: str,
+        org_id: str,
+        *,
+        timeout: float,
+    ) -> BohriumAccessKeyFetchResult:
+        """POST {BOHRIUM_CORE_BASE_URL}/api/v1/ak/add，与 bohrapi/v1/ak/add 同源能力。"""
+        url = f"{BOHRIUM_CORE_BASE_URL.rstrip('/')}/api/v1/ak/add"
+        if not (user_id or '').strip() or not (org_id or '').strip():
+            return BohriumAccessKeyFetchResult(
+                status='missing_user_or_org',
+                retryable=False,
+            )
+        headers = {
+            'X-User-Id': str(user_id),
+            'X-Org-Id': str(org_id),
+        }
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                r = client.post(url, headers=headers, json={})
+                data = r.json()
+        except httpx.ReadTimeout as e:
+            logger.warning(
+                'create_bohrium_access_key: request timeout user_id=%s org_id=%s err=%s',
+                user_id,
+                org_id,
+                e,
+            )
+            return BohriumAccessKeyFetchResult(
+                status='ak_create_timeout',
+                retryable=True,
+                error_message=str(e),
+            )
+        except Exception as e:
+            logger.warning(
+                'create_bohrium_access_key: request failed user_id=%s org_id=%s err=%s',
+                user_id,
+                org_id,
+                e,
+            )
+            return BohriumAccessKeyFetchResult(
+                status='ak_create_request_error',
+                retryable=True,
+                error_message=str(e),
+            )
+
+        if 500 <= r.status_code:
+            logger.warning(
+                'create_bohrium_access_key: http_5xx=%s user_id=%s org_id=%s',
+                r.status_code,
+                user_id,
+                org_id,
+            )
+            return BohriumAccessKeyFetchResult(
+                status='ak_create_http_5xx',
+                retryable=True,
+                http_status=r.status_code,
+            )
+        if 400 <= r.status_code:
+            logger.warning(
+                'create_bohrium_access_key: http_4xx=%s user_id=%s org_id=%s',
+                r.status_code,
+                user_id,
+                org_id,
+            )
+            return BohriumAccessKeyFetchResult(
+                status='ak_create_http_4xx',
+                retryable=False,
+                http_status=r.status_code,
+            )
+
+        code = data.get('code', 0)
+        if code != 0:
+            logger.warning(
+                'create_bohrium_access_key: api code=%s user_id=%s org_id=%s',
+                code,
+                user_id,
+                org_id,
+            )
+            return BohriumAccessKeyFetchResult(
+                status='ak_create_api_code_error',
+                retryable=False,
+                api_code=code,
+            )
+
+        raw = data.get('data')
+        payload = raw if isinstance(raw, dict) else {}
+        ak = payload.get('access_key') or payload.get('accessKey') or payload.get('ak')
+        if ak and isinstance(ak, str) and ak.strip():
+            logger.info(
+                'create_bohrium_access_key: ok user_id=%s org_id=%s',
+                user_id,
+                org_id,
+            )
+            return BohriumAccessKeyFetchResult(
+                status='success',
+                access_key=ak.strip(),
+                retryable=False,
+            )
+        logger.warning(
+            'create_bohrium_access_key: no access_key in response user_id=%s org_id=%s',
+            user_id,
+            org_id,
+        )
+        return BohriumAccessKeyFetchResult(
+            status='ak_create_empty_response',
+            retryable=False,
+        )
+
+    @staticmethod
     def fetch_bohrium_access_key_result(
         user_id: str | None,
         org_id: str | None,
@@ -424,6 +535,17 @@ class UserService:
             )
             result = replace(result, attempts=attempts)
             if not result.retryable or result.status == 'success':
+                if result.status in {'no_items', 'no_valid_ak'} and (
+                    (user_id or '').strip() and (org_id or '').strip()
+                ):
+                    create_res = UserService._create_bohrium_access_key_once(
+                        str(user_id or ''),
+                        str(org_id or ''),
+                        timeout=timeout,
+                    )
+                    attempts += 1
+                    create_res = replace(create_res, attempts=attempts)
+                    return create_res
                 return result
             if attempt_index < len(retry_delays):
                 time.sleep(retry_delays[attempt_index])

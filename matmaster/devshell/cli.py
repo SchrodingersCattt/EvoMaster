@@ -71,8 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="NAME",
         help=(
-            "matmaster/exps/{NAME}.toml. Omit or `devshell`: use the patched direct exp "
-            "for interactive devshell defaults. `direct`: use the unpatched production exp."
+            "matmaster/exps/{NAME}.toml. Omit --exp to load `direct` (same as production)."
         ),
     )
     common.add_argument(
@@ -111,7 +110,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  mm-devshell --workdir ./ws --log-dir ./logs\n"
             "  mm-devshell repl --workdir ./ws --log-dir ./logs\n"
-            "  mm-devshell run --workdir ./ws --log-dir ./logs -p \"Hello\"\n"
+            '  mm-devshell run --workdir ./ws --log-dir ./logs -p "Hello"\n'
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
@@ -162,6 +161,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     """Load LLM config, build provider, return DevRunner and related objects."""
+    import os
+
     root = _project_root()
     llm_yaml = root / "config" / "llm_config.yaml"
     main_yaml = root / "config" / "config.yaml"
@@ -196,8 +197,6 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
         sys.exit(1)
 
     # Load .env files (same as main app in src/utils/constant.py)
-    import os
-
     from dotenv import find_dotenv, load_dotenv
 
     load_dotenv()
@@ -206,18 +205,17 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
 
     from matmaster.config.loader import load_exp_config
     from matmaster.devshell.config import DevConfig, load_dev_config
-    from matmaster.devshell.exp_patch import devshell_default_exp_config
 
     exp_opt = (getattr(args, "exp", None) or "").strip() or None
     exp_override = None
     if exp_opt is not None or not args.config:
         try:
-            if not exp_opt or exp_opt == "devshell":
-                exp_override = devshell_default_exp_config()
+            if not exp_opt:
+                exp_override = load_exp_config("direct")
             else:
                 exp_override = load_exp_config(exp_opt)
         except (FileNotFoundError, ValueError) as e:
-            label = exp_opt or "devshell"
+            label = exp_opt or "direct"
             print(f"Error loading exp '{label}': {e}", file=sys.stderr)
             sys.exit(1)
 

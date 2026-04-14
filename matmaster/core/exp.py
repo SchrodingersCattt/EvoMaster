@@ -84,7 +84,7 @@ class Exp:
                         await result
             except Exception:
                 self.logger.warning(
-                    'Cleanup callback %s raised, continuing with remaining callbacks',
+                    "Cleanup callback %s raised, continuing with remaining callbacks",
                     cb,
                     exc_info=True,
                 )
@@ -115,7 +115,7 @@ class Exp:
 
             child_config = load_exp_config(exp_name)
             child_exp = Exp(child_config, allow_spawn=False)
-            child_source = f'{source_prefix}:{exp_name}'
+            child_source = f"{source_prefix}:{exp_name}"
             child_spawn_id = uuid.uuid4().hex[:16]
             parent_session_id = ctx.run_meta.get("session_id", "")
             event_sink = ctx.run_meta.get("event_sink")
@@ -214,7 +214,13 @@ class Exp:
             planes |= {ToolPlane.SESSION_SHELL, ToolPlane.SESSION_FS}
         if skills_enabled or any(
             name in builtin_cfg or "*" in builtin_cfg
-            for name in ("WebSearch", "WebFetch", "mm_web_search", "web_fetch")
+            for name in (
+                "WebSearch",
+                "WebFetch",
+                "PaperSearch",
+                "mm_web_search",
+                "web_fetch",
+            )
         ):
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
@@ -252,7 +258,7 @@ class Exp:
         from matmaster.types.topology import RuntimeTopology, SessionCapabilities
 
         session_caps = SessionCapabilities()
-        if ctx.session is not None and hasattr(ctx.session, 'capabilities'):
+        if ctx.session is not None and hasattr(ctx.session, "capabilities"):
             caps = ctx.session.capabilities
             if isinstance(caps, SessionCapabilities):
                 session_caps = caps
@@ -264,7 +270,7 @@ class Exp:
         )
 
         topology = RuntimeTopology(
-            session_kind=getattr(ctx, 'session_type', None) or 'local',
+            session_kind=getattr(ctx, "session_type", None) or "local",
             control_root=str(ctx.workdir),
             workspace_root=str(ctx.execution_workdir),
             active_planes=active_planes,
@@ -292,7 +298,7 @@ class Exp:
             if self._allow_spawn:
                 spawn_fn = self._make_spawn_fn(
                     ctx,
-                    source_prefix='MatMaster',
+                    source_prefix="MatMaster",
                     hook_executor=hook_executor,
                 )
                 available_exps = list_model_visible_exps()
@@ -306,7 +312,7 @@ class Exp:
                 spawn_fn=spawn_fn,
                 available_exps=available_exps,
             )
-            registry.register(agent_tool, source='builtin')
+            registry.register(agent_tool, source="builtin")
 
         # 5. System prompt via ContextBuilder
         builder = ContextBuilder()
@@ -329,16 +335,23 @@ class Exp:
 
             summary_provider = spec.llm_provider
             if spec.compaction.compaction_llm:
-                resolved = self._resolve_compaction_llm(
-                    spec.compaction.compaction_llm, ctx
-                )
-                if resolved:
-                    from matmaster.providers.openai_provider import OpenAIProvider
+                llm_config = getattr(ctx, "llm_config", None)
+                if llm_config is not None:
+                    from matmaster.providers.llm_factory import build_provider
 
-                    summary_provider = OpenAIProvider(**resolved)
+                    try:
+                        summary_provider = build_provider(
+                            llm_config, llm_override=spec.compaction.compaction_llm
+                        )
+                    except KeyError:
+                        self.logger.warning(
+                            "compaction_llm key=%r not found, falling back to main provider",
+                            spec.compaction.compaction_llm,
+                        )
                 else:
                     self.logger.warning(
-                        'compaction_llm key=%r not found, falling back to main provider',
+                        "compaction_llm key=%r set but no llm_config on context; "
+                        "falling back to main provider",
                         spec.compaction.compaction_llm,
                     )
 
@@ -357,9 +370,9 @@ class Exp:
         scheduler = ToolScheduler()
         runner_state = ToolRunnerState()
         bohrium_registry = JobRegistry.rebuild_from_events(
-            (ctx.run_meta or {}).get('bohrium_rebuild_events')
+            (ctx.run_meta or {}).get("bohrium_rebuild_events")
         )
-        runner_state.set('bohrium_job_registry', bohrium_registry)
+        runner_state.set("bohrium_job_registry", bohrium_registry)
         self._register_cleanup(runner_state.clear)
 
         full_runner = FullToolRunner(
@@ -379,20 +392,20 @@ class Exp:
             checkpoint_sink = checkpoint_sink_factory(spawn_id=spawn_id)
         spec = spec.model_copy(
             update={
-                'tool_catalog': catalog,
-                'tool_runner': full_runner,
-                'runtime_topology': topology,
-                'capability_policy': capability_policy,
-                'structural_validation': structural_validation,
-                'system_prompt': system_prompt,
-                'hook_executor': hook_executor,
-                'compactor': compactor,
-                'meta': {
+                "tool_catalog": catalog,
+                "tool_runner": full_runner,
+                "runtime_topology": topology,
+                "capability_policy": capability_policy,
+                "structural_validation": structural_validation,
+                "system_prompt": system_prompt,
+                "hook_executor": hook_executor,
+                "compactor": compactor,
+                "meta": {
                     **spec.meta,
-                    'task_id': run_meta.get('task_id', ''),
-                    'session_id': run_meta.get('session_id', ''),
-                    'checkpoint_sink_factory': checkpoint_sink_factory,
-                    'checkpoint_sink': checkpoint_sink,
+                    "task_id": run_meta.get("task_id", ""),
+                    "session_id": run_meta.get("session_id", ""),
+                    "checkpoint_sink_factory": checkpoint_sink_factory,
+                    "checkpoint_sink": checkpoint_sink,
                 },
             }
         )
@@ -406,26 +419,6 @@ class Exp:
             spec=spec,
             cleanup=self._run_cleanup_callbacks,
         )
-
-    def _resolve_compaction_llm(
-        self, key: str, ctx: PlaygroundContext
-    ) -> dict[str, Any] | None:
-        """Resolve compaction LLM profile from PlaygroundContext.llm_config."""
-        llm_config = getattr(ctx, 'llm_config', None)
-        if llm_config is None:
-            return None
-        try:
-            profile = llm_config.get_profile(key)
-        except KeyError:
-            return None
-        return {
-            'model': profile.model,
-            'api_key': profile.api_key,
-            'base_url': profile.base_url,
-            'temperature': profile.effective_temperature(),
-            'max_tokens': profile.max_tokens,
-            'timeout': profile.timeout,
-        }
 
     # ── Phase 3: run_stream ────────────────────────────────
 
@@ -491,7 +484,7 @@ class Exp:
 
         When ctx.session is None, only sessionless tools are registered.
         """
-        allow_all = '*' in builtin_cfg
+        allow_all = "*" in builtin_cfg
         allowed: set[str] | None = None if allow_all else set(builtin_cfg)
 
         def _want(name: str) -> bool:
@@ -529,22 +522,22 @@ class Exp:
             or allowed
             and allowed
             & {
-                'execute_bash',
-                'Bash',
-                'read_file',
-                'Read',
-                'write_file',
-                'Write',
-                'edit_file',
-                'Edit',
-                'glob',
-                'Glob',
-                'grep',
-                'Grep',
+                "execute_bash",
+                "Bash",
+                "read_file",
+                "Read",
+                "write_file",
+                "Write",
+                "edit_file",
+                "Edit",
+                "glob",
+                "Glob",
+                "grep",
+                "Grep",
             }
         ):
             self.logger.debug(
-                'No session in PlaygroundContext, skipping session-requiring tools'
+                "No session in PlaygroundContext, skipping session-requiring tools"
             )
 
         # 2. Sessionless tools (always available)
@@ -558,14 +551,14 @@ class Exp:
         registered: list[Any] = []
         for tool in session_tools + sessionless_tools:
             if _want(tool.name):
-                registry.register(tool, source='builtin')
+                registry.register(tool, source="builtin")
                 registered.append(tool)
 
         self.logger.debug(
-            'Registered %d builtin tools (cfg=%s, session=%s)',
+            "Registered %d builtin tools (cfg=%s, session=%s)",
             len(registered),
             builtin_cfg,
-            'present' if has_session else 'absent',
+            "present" if has_session else "absent",
         )
 
     def _init_skill_tools(
@@ -589,10 +582,7 @@ class Exp:
         from pathlib import Path
 
         from matmaster.skills.registry import SkillRegistry
-        from matmaster.tools.builtin.skill_tool import (
-            LegacyUseSkillTool,
-            SkillTool,
-        )
+        from matmaster.tools.builtin.skill_tool import LegacyUseSkillTool, SkillTool
         from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
         from matmaster.tools.schema_cache import ToolSchemaCache
 
@@ -601,8 +591,8 @@ class Exp:
             candidate = Path(raw_dir)
             if candidate.exists():
                 return candidate
-            if raw_dir == 'matmaster_config':
-                compat = Path('config')
+            if raw_dir == "matmaster_config":
+                compat = Path("config")
                 if compat.exists():
                     return compat
             return candidate
@@ -626,7 +616,7 @@ class Exp:
             roots = [Path(roots_raw)] if roots_raw else []
         if not roots:
             self.logger.warning(
-                'skills.enabled=true but skills_root is empty, skipping skill init'
+                "skills.enabled=true but skills_root is empty, skipping skill init"
             )
             return
 
@@ -644,23 +634,21 @@ class Exp:
             mcp_config = _load_raw(mcp_runtime_path)
         else:
             raise FileNotFoundError(
-                f'MCP runtime config not found: {mcp_runtime_path}. '
-                f'Required when skills.enabled=true.'
+                f"MCP runtime config not found: {mcp_runtime_path}. "
+                f"Required when skills.enabled=true."
             )
         runtime_patch = skills_cfg.mcp_runtime_patch or {}
         if isinstance(runtime_patch, dict) and runtime_patch:
             mcp_config = _deep_merge_dict(mcp_config, runtime_patch)
 
-        mcp_config_file = mcp_config.get('config_file', skills_cfg.mcp_config_file)
+        mcp_config_file = mcp_config.get("config_file", skills_cfg.mcp_config_file)
         config_path = Path(mcp_config_file)
         if not config_path.is_absolute():
             config_path = resolved_config_dir / config_path
 
-        if mcp_config.get('calculation_preflight') == 'calculation':
+        if mcp_config.get("calculation_preflight") == "calculation":
             try:
-                from matmaster.mcp.calculation.config_env import (
-                    resolve_mcp_config_path,
-                )
+                from matmaster.mcp.calculation.config_env import resolve_mcp_config_path
 
                 config_path = resolve_mcp_config_path(config_path)
             except ImportError:
@@ -670,10 +658,10 @@ class Exp:
         server_config: dict = {}
         if config_path.exists():
             try:
-                raw = _json.loads(config_path.read_text(encoding='utf-8'))
-                server_config = raw.get('mcpServers', {})
+                raw = _json.loads(config_path.read_text(encoding="utf-8"))
+                server_config = raw.get("mcpServers", {})
             except Exception as e:
-                self.logger.warning('Failed to load MCP server config: %s', e)
+                self.logger.warning("Failed to load MCP server config: %s", e)
 
         connector = LazyMCPConnector(
             mcp_server_config=server_config,
@@ -687,12 +675,30 @@ class Exp:
         # Sync tools are synchronous operations that should complete quickly,
         # so they get a shorter timeout than the default MCP tool timeout.
         _SYNC_TOOL_TIMEOUT = 30.0
-        executors = mcp_config.get('calculation_executors') or {}
+        executors = mcp_config.get("calculation_executors") or {}
         sync_tools_by_server: dict[str, set[str]] = {
-            name: set(cfg.get('sync_tools') or [])
+            name: set(cfg.get("sync_tools") or [])
             for name, cfg in executors.items()
-            if isinstance(cfg, dict) and cfg.get('sync_tools')
+            if isinstance(cfg, dict) and cfg.get("sync_tools")
         }
+
+        builtin_cfg = self._config.tools.builtin or []
+        allow_builtin_all = "*" in builtin_cfg
+        allowed_builtin = set(builtin_cfg) if not allow_builtin_all else None
+        if (
+            allow_builtin_all
+            or (allowed_builtin is not None and "PaperSearch" in allowed_builtin)
+        ) and "PaperSearch" not in registry:
+            from matmaster.tools.builtin.paper_search_tool import PaperSearchTool
+
+            paper_tool = PaperSearchTool(
+                connector=connector,
+                mcp_config=mcp_config,
+            )
+            if catalog is not None:
+                catalog.register_overlay(paper_tool, source="builtin")
+            else:
+                registry.register(paper_tool, source="builtin")
 
         def on_skill_hit(mcp_server: str) -> None:
             schemas = schema_cache.load(mcp_server)
@@ -704,10 +710,16 @@ class Exp:
                 return
             include_only = mcp_config.get("tool_include_only") or {}
             allowed = include_only.get(mcp_server)
-            if isinstance(allowed, (list, tuple)) and allowed:
+            if (
+                allowed is not None
+                and isinstance(allowed, (list, tuple))
+                and len(allowed) == 0
+            ):
+                schemas = []
+            elif isinstance(allowed, (list, tuple)) and allowed:
                 allow_set = set(allowed)
                 schemas = [tool for tool in schemas if tool.get("name") in allow_set]
-            tool_timeouts = mcp_config.get('tool_timeouts', {})
+            tool_timeouts = mcp_config.get("tool_timeouts", {})
             server_timeout = (
                 float(tool_timeouts.get(mcp_server))
                 if isinstance(tool_timeouts, dict)
@@ -716,8 +728,8 @@ class Exp:
             )
             sync_tools = sync_tools_by_server.get(mcp_server, set())
             for tool_schema in schemas:
-                original_name = tool_schema['name']
-                prefixed_name = f'{mcp_server}_{original_name}'
+                original_name = tool_schema["name"]
+                prefixed_name = f"{mcp_server}_{original_name}"
                 if prefixed_name in registry:
                     continue
                 is_sync = original_name in sync_tools
@@ -726,30 +738,30 @@ class Exp:
                     server_name=mcp_server,
                     tool_name=prefixed_name,
                     remote_tool_name=original_name,
-                    description=tool_schema.get('description', ''),
-                    input_schema=tool_schema.get('input_schema', {}),
+                    description=tool_schema.get("description", ""),
+                    input_schema=tool_schema.get("input_schema", {}),
                     connector=connector,
                     timeout=tool_timeout,
                 )
                 # ESIN-05: Use catalog.register_overlay() for version-bumped injection
                 if catalog is not None:
-                    catalog.register_overlay(lazy_tool, source='mcp')
+                    catalog.register_overlay(lazy_tool, source="mcp")
                 else:
-                    registry.register(lazy_tool, source='mcp')
+                    registry.register(lazy_tool, source="mcp")
 
         skill_tool = SkillTool(
             session=ctx.session,
             skill_registry=skill_registry,
             on_skill_hit=on_skill_hit,
         )
-        registry.register(skill_tool, source='skill')
+        registry.register(skill_tool, source="skill")
         registry.register(
             LegacyUseSkillTool(
                 session=ctx.session,
                 skill_registry=skill_registry,
                 on_skill_hit=on_skill_hit,
             ),
-            source='skill',
+            source="skill",
         )
 
         self._skill_registry = skill_registry

@@ -192,7 +192,7 @@ def test_build_llm_context_shows_last_turn_prompt_tokens() -> None:
     q = QuestionItem(
         id='Q',
         capability='structure_construction',
-        domain='struct',
+        domain='agnostic',
         intent='test',
         human_prompt_seed='x',
         scoring_checklist=[
@@ -219,7 +219,7 @@ def test_build_llm_context_grounding_mode_lists_files_not_tool_calls() -> None:
     q = QuestionItem(
         id='Q',
         capability='structure_construction',
-        domain='struct',
+        domain='agnostic',
         intent='intent',
         human_prompt_seed='x',
         scoring_checklist=[

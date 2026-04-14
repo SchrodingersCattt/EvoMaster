@@ -203,15 +203,23 @@ def _compute_duration_ms(workspace: Path, summary_path: Path) -> int:
 
 
 def _build_workspace_file_listing(workspace: Path) -> str:
-    """Return a newline-separated listing of non-meta files in workspace."""
-    files = []
-    for p in sorted(workspace.iterdir()):
-        if p.is_file() and p.name not in _META_FILENAMES:
-            size = p.stat().st_size
-            files.append(f"  {p.name} ({size} bytes)")
-    if not files:
+    """Return a newline-separated listing of non-meta files/dirs in workspace.
+
+    Walks the workspace **recursively** so that files inside subdirectories
+    (e.g. ``calc_001_TiO2/POSCAR``) are visible to the LLM judge.
+    """
+    entries: list[str] = []
+    for p in sorted(workspace.rglob("*")):
+        if p.name in _META_FILENAMES:
+            continue
+        rel = p.relative_to(workspace)
+        if p.is_dir():
+            entries.append(f"  {rel}/")
+        elif p.is_file():
+            entries.append(f"  {rel} ({p.stat().st_size} bytes)")
+    if not entries:
         return "(no deliverable files found in workspace)"
-    return "\n".join(files)
+    return "\n".join(entries)
 
 
 def _build_answer(workspace: Path, summary: dict[str, Any]) -> str:
@@ -269,11 +277,11 @@ def _build_evidence(
     from evaluation.core.evidence import ArtifactRecord
 
     artifacts = []
-    for p in sorted(workspace.iterdir()):
+    for p in sorted(workspace.rglob("*")):
         if p.is_file() and p.name not in _META_FILENAMES:
             artifacts.append(
                 ArtifactRecord(
-                    path=p.name,
+                    path=str(p.relative_to(workspace)),
                     artifact_type=p.suffix.lstrip(".").lower() or "unknown",
                     size_bytes=p.stat().st_size,
                 )

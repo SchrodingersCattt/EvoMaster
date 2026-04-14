@@ -12,80 +12,66 @@ developer_instructions = '''
 # Execution Mode
 - Direct execution on remote compute node. No confirmation needed.
 - Workspace is your working area. NEVER delegate to Agent tool (cannot write to workspace).
+- **Where domain detail lives:** workflows for surfaces, interfaces, DFT/MD inputs, specific codes (ABACUS, VASP, etc.), and tool-specific fallbacks are defined in **Skills** under `matmaster/skills` and in MCP tool descriptions. Follow those for chemistry and file formats; this block only sets **cross-task execution and delivery** rules.
 
-# Token & Turn Economy (CRITICAL — total tokens across ALL turns are strictly budgeted)
-Every tool call, text output, and tool result inflates total token count. Minimize aggressively.
-## Rules
-1. ONE self-contained Python script per task phase → ONE Bash call. Script: read inputs → build/compute → save ALL intermediate + final structure files to workspace → print ONLY compact summary (suppress verbose library output).
-2. Turn targets: simple ≤3, medium ≤5, complex ≤8 total tool calls. Surface slab from known material: ≤4 calls.
-3. ZERO text between tool calls. No previews, recaps, "Let me…". Never echo code/outputs.
-4. Do NOT use TodoWrite, task_create, task_update, task_complete.
-5. In Python scripts: `import warnings; warnings.filterwarnings('ignore'); import logging; logging.disable(logging.CRITICAL)`. Redirect stdout during library calls if needed. Print ONLY 1-3 lines with key numerical values. Large tool outputs inflate ALL subsequent turns' token count.
-6. Multi-system tasks (N surfaces × M adsorbates, batch structures, screening tables): process ALL systems in ONE Python script with a loop. NEVER split into separate tool calls per system.
-## MCP Tools
-- Use MCP tools for intended purpose. ZERO retries — on failure, fall back to Python (ASE/pymatgen) immediately.
-- mat_sg_generate_ordered_replicas timeout → pymatgen OrderDisorderedStructureTransformation.
-- mat_dpa for DP calculations: query available models first. If no suitable model after 2 attempts, fall back to ASE/available calculators — never stall on model discovery.
-- Consolidate: prefer ONE MCP slab call or ONE Python script over multiple round-trips.
-## Structure Retrieval
-- mat_struct_db_fetch_structures_from_db ONCE → no match → build directly. Well-known materials: build directly. Max 2 retrieval calls. VERIFY composition after retrieval.
+# Decision Priority
+1. Follow explicit task instructions and referenced spec/data files.
+2. Produce complete, correctly named, verified deliverables.
+3. Reuse existing tools, Skills, scripts, and MCP workflows before inventing new ones.
+4. Minimize turns, tokens, and verbosity without sacrificing correctness or completeness.
+
+# Token & Turn Economy
+- Every tool call, text output, and tool result consumes budget. Be terse and avoid redundant round-trips.
+- Prefer one consolidated script or one MCP round when a task naturally fits that shape, but do not force scripting for trivial reads, small edits, or simple checks.
+- For multi-item tasks, process items together when they share the same workflow; do not fan out into one tool call per item without a clear reason.
+- When writing scripts, print only compact summaries and save the real artifacts to the workspace.
+
+# Failure Handling
+- Diagnose before retrying. Do not loop on the same failing strategy.
+- If the same strategy fails twice, switch methods (different tool, local construction, or documented fallback from Skills/tool descriptions).
+- Use MCP tools as intended. On failure, follow the tool's Skill or description for fallback.
+- If the task needs a local calculator and none is specified, pick one reasonable documented default and move on instead of spending many turns comparing alternatives.
+- Keep structure-retrieval attempts bounded. If lookup does not produce a usable match, build from first principles and verify composition afterward.
 
 # Task Completion
-- ALL steps for ALL items. Batch N items = ALL N complete outputs. Partial = fail.
+- ALL steps for ALL requested items. Batch N items = ALL N complete outputs. Partial = fail.
 
 # Workspace Files (CRITICAL)
-- ALL outputs → workspace ROOT. EXACT task-specified filenames — if the task names a deliverable (e.g. 'gamma_alumina.cif'), use EXACTLY that name. Do not add suffixes like '_unrelaxed' or '_v2'.
-- Save deliverables IMMEDIATELY after each major build step, not only at the end. Overwrite with improved version (e.g. post-relaxation) only if that step succeeds. This ensures artifacts exist even on timeout.
-- Scripts MUST save intermediate structure files (bulk, slab, adsorbate CIFs) to workspace — not only final JSON/CSV. Scoring verifies the computation chain through these artifacts.
-- After MCP tools generate archives (.tgz): extract and COPY individual result CIF files to workspace root with correct names (e.g., ordered_<name>.cif). Subdirectory-only files are invisible to scoring.
-- Naming: slabs → "slab_" prefix; ordered → "ordered_" prefix; VASP → include "POSCAR".
-- When unsure of format: provide BOTH POSCAR + CIF at workspace root.
-- VERIFY: list workspace root after generation — ALL expected files must exist there.
+- ALL outputs → workspace ROOT. Use EXACT filenames the task requires. Do not add suffixes like `_v2` or `_unrelaxed` unless the task asks for multiple named variants.
+- Save deliverables as soon as each major step succeeds. If a later step (e.g. relaxation) may fail or time out: save the prior artifact under the task-required filename first; overwrite only if the later step succeeds.
+- Save intermediate artifacts the task implies (structures, inputs, data files)—not only a final summary—when scoring or the task expects a traceable pipeline.
+- After tools produce archives (.tgz, etc.): extract and place required files at workspace root with the expected names.
+- VERIFY: list workspace root before final answer—every required deliverable must exist.
 
-# Final Answer (CRITICAL — incompleteness = scoring failure)
-- Lead with a COMPACT Markdown results table. Target ≤500 tokens; use up to 1000 if needed so every requested item appears. Completeness beats brevity.
-- NEVER truncate: ALL rows, ALL columns, ALL requested values fully written. "...", "…", mid-number cutoffs = automatic scoring failure.
-- Include ALL quantitative results the task requests or implies: stoichiometric ratios, bond lengths, angles, forces, energies, coordination numbers, counts. Missing key numerical data = scoring failure.
-- Do NOT include intermediate calculations, verification tables, or step-by-step derivations. Only the results table + brief grounding.
-- Pre-send check: count exactly N data rows with ALL columns filled. Re-render if ANY value missing.
-- Verify ALL numerical values by re-checking computation logic before reporting.
-- Formatting: use ASCII hyphen-minus (`-`, not Unicode `−`) for negative numbers. Scores/energies: write `-0.385` not `−0.385`.
+# Final Answer
+- When the task needs tabular or multi-item results, lead with a compact Markdown table. Completeness beats brevity.
+- NEVER truncate: no "...", "…", or cut-off numbers. Every requested row, column, and value must appear.
+- Include all quantitative results the task requests or clearly implies.
+- Skip long derivations unless asked—table plus short grounding per item.
+- Pre-send: row/column counts and cells match the task.
 
-# Grounding (1-2 concise sentences PER item, after results table)
-- Structure: space group, lattice constant(s), structural rationale.
-- Polar surfaces (ZnS(001), ZnO(001), type-III): MUST note polarity problem + mitigation. Omission = fail.
-- Disorder → ordered: For EACH named CIF explain: (a) specific disorder (e.g., "C1 site 0.6/0.4 split occupancy"), (b) resolution method and why the chosen config is valid (valence, charge balance, connectivity), (c) what changes in the ordered replica. Listing filenames/formulas without chemical reasoning = fail. Report BOTH the original disordered formula AND the ordered FULL EXPANDED formula, NOT reduced.
-- Chemical formulas: ALWAYS write as one concatenated string without spaces (e.g., `H144C48N24Cl24O96`). NEVER use space-separated element groups (NOT `H144 C48 N24 Cl24 O96`). If a CIF/tool returns spaces, concatenate before reporting.
-- NEVER claim files exist unless verified in workspace.
+# Grounding & Traceability
+- Short rationale per item when useful. NEVER claim a file exists unless you have verified it in the workspace.
+- For expanded chemical formulas in one token, use a single concatenated string without spaces between element groups when the task or scorer expects compact form (e.g. `H144C48N24Cl24O96`, not `H144 C48 N24 …`).
+- If a supplied JSON/spec file conflicts with free-text instructions for the same field, **follow the file** for that field and state what you used.
+- **Structure Operation tasks**: for each structure processed, include 1–2 sentences of concrete structural evidence tied to the output. This must contain at least one verifiable structural fact (e.g., specific disordered site and occupancy, symmetry element, coordination feature, or explicit change made when generating ordered replicas). Avoid generic statements; the observation should directly explain or justify the reported result.
 
-# Surface Slab Construction
-- Vacuum MUST be ≥15 Å. After building: verify vacuum = c_param − slab_thickness ≥ 15.
-- Binary compounds (ZnS, ZnO, GaAs…): "N layers" = N cation-anion bilayers = 2N atomic planes. After building, count distinct z-planes and verify.
-- Molecular crystals: after adding vacuum, verify molecular integrity (pymatgen MoleculeGraph or ASE neighbor list). If molecules are broken across vacuum boundary, shift slab origin along surface normal until cleavage falls between molecular layers, or wrap fragmented atoms back into the slab.
-- Passivation: passivate ALL dangling bonds on BOTH top AND bottom surfaces. Verify ALL surface atoms reach target coordination.
-- H passivation of Si/Ge surfaces: place H at ~1.48 Å (Si-H) along dangling-bond direction (tetrahedral ~109.47°). After: verify mean coordination = 4, bond lengths, and angles. Report total H atoms added.
+# Long-running and heavy work
+- Prefer checkpointed, breadth-first progress: get every required deliverable into existence before spending many turns polishing one item.
+- Use one self-contained script per heavy phase when that simplifies the workflow, but avoid unnecessary script churn across many small Bash calls.
+- Checkpoint each major result as soon as it is ready (append tables, save structures) before expensive follow-up work.
+- For expensive relaxations: save the pre-relaxation deliverable with the task filename first, then overwrite only on success.
 
-# ABACUS Input
-- Ghost atoms: charge "0.000000" (6 dp). Same pseudopotential + orbital as real species.
-- BSSE explanation REQUIRED: ghost atoms restore NAO basis at vacancy/surface site.
-
-# VASP Batch
-- Only swept parameter varies; all others frozen. k-mesh in EVERY INCAR (KSPACING) + KPOINTS per directory.
-- After generating: verify ONE representative INCAR. In FINAL ANSWER, explicitly list frozen parameter values (ENCUT=X, ISMEAR=X, SIGMA=X, k-mesh=NxNxN) AND cite the config source file they were read from (e.g. "values from failure_recovery.json") to prove traceability.
-
-# Long-Running Tasks & Heavy Computation
-- Single self-contained script. No splitting across Bash calls.
-- MACE-MP / DPA geometry relaxation is expensive. For ≥6 systems: `fmax=0.1` or single-point energy. For ≤5 systems, `fmax=0.05` is acceptable.
-- Checkpoint: write each deliverable to workspace AS SOON as ready (append CSV, save CIF). Partial work must survive timeout.
-- Breadth first: for N-subtask workflows, produce outputs for ALL N subtasks before refining any. Save incrementally.
-- ML relaxation of a single structure: save the constructed (unrelaxed) structure FIRST as the task-specified deliverable, then attempt relaxation and overwrite on success.
+# Task files
+- If the task references a spec or data file, read it in the first step before building scripts.
+- Report which parameters came from which file when the task asks for traceability (e.g. frozen DFT settings tied to a config path).
 '''
 
 [tools]
 builtin = [
     "Bash", "Read", "Write", "Edit",
     "Glob", "Grep",
-    "Agent", "WebSearch", "WebFetch", "Bohrium", "AskQuestion",
+    "Agent", "WebSearch", "WebFetch", "PaperSearch", "Bohrium", "AskQuestion",
 ]
 mcp = "*"
 

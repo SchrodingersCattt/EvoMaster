@@ -210,11 +210,15 @@ class BohriumTool(BuiltinTool):
     exposed_to_model: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 0
 
+    # prompt() keeps workflow + cross-skill rules only. Per-software image/machine/cmd
+    # belong in matmaster/skills/<name>/SKILL.md — do not paste full default tables here
+    # (duplicates skills, drifts on tag bumps; see evaluation/AGENTS_evaluation.md DevShell).
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return (
             '## Bohrium tool usage\n'
             '- Load the corresponding software skill first (cp2k, qe, abacus, orca, '
-            'lammps, gromacs, pyscf, abinit, pyatb) to obtain image, machine, and cmd.\n'
+            'lammps, gromacs, pyscf, abinit, pyatb, mlips) to obtain image, machine, '
+            'and cmd.\n'
             '- When image or machine is unknown, call list_images / list_machines first.\n'
             '\n'
             '### Actions\n'
@@ -225,11 +229,15 @@ class BohriumTool(BuiltinTool):
             '- **download**: download artifacts for a finished or failed job into result_dir. '
             'Use only after poll reports Finished or Failed. Requires result_dir; '
             'retrieves logs and artifacts for analysis.\n'
-            '- **kill**: request termination of a previously submitted job (sandbox only). '
-            'Use only when the user explicitly wants to stop a running job. The call is '
+            '- **kill**: request termination of a previously submitted job. Use only when '
+            'the user explicitly wants to stop a running job. The call is '
             'asynchronous; follow up with poll to confirm terminal state.\n'
             '- **list_images**: query available Docker images by keyword.\n'
             '- **list_machines**: query available machine types (cpu / gpu).\n'
+            '\n'
+            'Python that imports ASE or uses DPA/MACE/deepmd calculators must use the '
+            'dpa-calculator image from the mlips skill; ABACUS/CP2K/QE images lack '
+            'ASE/deepmd.\n'
         )
 
     def _build_context(self, *, require_project: bool = False) -> BohriumContext:

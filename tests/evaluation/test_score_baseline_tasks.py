@@ -175,6 +175,25 @@ class TestBuildWorkspaceFileListing:
         result = _build_workspace_file_listing(tmp_workspace)
         assert "42 bytes" in result
 
+    def test_includes_subdirectories(self, tmp_workspace: Path) -> None:
+        sub = tmp_workspace / "calc_001_TiO2"
+        sub.mkdir()
+        (sub / "POSCAR").write_text("Ti\n1", encoding="utf-8")
+        (sub / "INCAR").write_text("ENCUT=520", encoding="utf-8")
+        result = _build_workspace_file_listing(tmp_workspace)
+        assert "calc_001_TiO2/" in result
+        # Files inside the subdirectory must appear with relative paths
+        assert "calc_001_TiO2/POSCAR" in result or "calc_001_TiO2\\POSCAR" in result
+        assert "calc_001_TiO2/INCAR" in result or "calc_001_TiO2\\INCAR" in result
+
+    def test_includes_deeply_nested_files(self, tmp_workspace: Path) -> None:
+        deep = tmp_workspace / "results" / "run1"
+        deep.mkdir(parents=True)
+        (deep / "output.csv").write_text("a,b\n1,2", encoding="utf-8")
+        result = _build_workspace_file_listing(tmp_workspace)
+        assert "results/" in result
+        assert "output.csv" in result
+
 
 # ---------------------------------------------------------------------------
 # _build_answer
@@ -478,7 +497,7 @@ class TestScoreTask:
         return QuestionItem(
             id="SC_test_001",
             capability="structure_construction",
-            domain="struct",
+            domain="agnostic",
             intent="Test question",
             human_prompt_seed="Build something.",
             reference_answers=[

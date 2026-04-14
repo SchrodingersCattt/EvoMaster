@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .llm_utils import SyncLLM
+from .question_tags import QuestionTag
 from .schemas import (
     DataFileRef,
     ExpectedResult,
@@ -395,20 +396,25 @@ class HumanSimulator:
             for e in spec.expected
         ]
 
-        tags = [f"calc_{spec.calc_type}", f"paper_{spec.paper_id}"]
-        tags.extend(spec.tags)
+        # Only tags that exist in ``QuestionTag`` (literature TaskSpec is not the v5 bank).
+        tags_list: list[QuestionTag] = [QuestionTag.meta_literature]
+        for raw in spec.tags:
+            try:
+                tags_list.append(QuestionTag(raw))
+            except ValueError:
+                continue
+        tags_list = list(dict.fromkeys(tags_list))
 
         return QuestionItem(
             id=f"LIT_{spec.id}",
             capability="workflow_orchestration",
-            domain="general",
+            domain="agnostic",
             intent=(
                 f"Reproduce {spec.calc_type} calculation for {spec.formula} "
                 f"from paper {spec.paper_id}."
             ),
             human_prompt_seed=prompt,
-            tags=tags,
-            mode_scope=["planner"],
+            tags=tags_list,
             data_files=data_files,
             reference_answers=ref_answers,
             scoring_checklist=checklist,

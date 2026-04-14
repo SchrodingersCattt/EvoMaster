@@ -12,6 +12,9 @@
       --questions SC_struct_007
 
 说明见 ``evaluation/docs/devshell/devshell_agent_sdk_loop.md``。
+
+无人值守：默认 ``--permission-mode bypassPermissions``（Claude Agent SDK），避免 Bash/git
+等工具因 “requires approval” 在无人工点击时失败；交互式可改用 ``acceptEdits``。
 """
 
 from __future__ import annotations
@@ -77,8 +80,13 @@ class DevshellAgentLoopCli:
         p.add_argument(
             "--permission-mode",
             type=str,
-            default="acceptEdits",
-            help="ClaudeAgentOptions.permission_mode (e.g. acceptEdits).",
+            default="bypassPermissions",
+            help=(
+                "ClaudeAgentOptions.permission_mode. SDK: default | acceptEdits | plan | "
+                "bypassPermissions | dontAsk. Default bypassPermissions for unattended "
+                "runs (auto-approves Bash/git). Use acceptEdits for stricter interactive "
+                "approval."
+            ),
         )
         p.add_argument(
             "--max-sdk-turns",
@@ -91,15 +99,6 @@ class DevshellAgentLoopCli:
             type=str,
             default="",
             help="Appended to each iteration user message (focus areas, constraints).",
-        )
-        p.add_argument(
-            "--git-reset-on-regression",
-            action=argparse.BooleanOptionalAction,
-            default=True,
-            help=(
-                "After each iteration, if macro mean is below the previous iteration's "
-                "and git head was recorded at iteration start, run git reset --hard."
-            ),
         )
         p.add_argument(
             "--eval-ingest-submit-each-iteration",
@@ -128,17 +127,44 @@ class DevshellAgentLoopCli:
             ),
         )
         p.add_argument(
+            "--enable-optimization-auto-commit",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help=(
+                "After each optimization sub-round that reports a result, stage "
+                "product-side paths under the repo (excluding evaluation/ and results/) "
+                "and run git commit. Messages start with chore(devshell): to satisfy "
+                "commit-msg hooks."
+            ),
+        )
+        p.add_argument(
+            "--optimization-auto-commit-skip-budget",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+            help=(
+                "Skip exp_prompt_budget checks before optimization auto-commit "
+                "(when matmaster/exps/*.toml are staged)."
+            ),
+        )
+        p.add_argument(
             "--checklist-permission-mode",
             type=str,
             default="",
-            help="ClaudeAgentOptions.permission_mode for checklist agent (default: same as --permission-mode).",
+            help=(
+                "ClaudeAgentOptions.permission_mode for checklist agent only "
+                "(default: same as --permission-mode). Set explicitly if checklist "
+                "needs a different mode than main/optimization."
+            ),
         )
 
         p.add_argument(
             "--modes",
             nargs="+",
             default=["direct"],
-            help="Forwarded to run_devshell_eval --modes",
+            help=(
+                "Legacy: when --exp is omitted and the first token is planner, sets --exp planner. "
+                "Prefer --exp."
+            ),
         )
         p.add_argument(
             "--jobs",
@@ -165,16 +191,18 @@ class DevshellAgentLoopCli:
             help="Forwarded to run_devshell_eval --questions",
         )
         p.add_argument(
-            "--capabilities",
-            nargs="+",
+            "--slices",
             default=None,
-            help="Forwarded to run_devshell_eval --capabilities",
+            help='Forwarded to run_devshell_eval --slices (e.g. "cap cap[dom]")',
         )
         p.add_argument(
             "--model",
             type=str,
-            default="claude-opus-4-6",
-            help="Forwarded to run_devshell_eval --model (inner mm-devshell route).",
+            default="bedrock-claude-opus",
+            help=(
+                "Forwarded to run_devshell_eval --model (inner mm-devshell route key; "
+                "default: bedrock-claude-opus → opus_bedrock in config/llm_config.yaml)."
+            ),
         )
         p.add_argument(
             "--exp",
@@ -243,14 +271,21 @@ class DevshellAgentLoopCli:
                 session_dir if session_dir.is_absolute() else (repo_root / session_dir)
             ).resolve()
 
+        exp_effective = args.exp
+        if exp_effective is None and args.modes:
+            _first = str(args.modes[0]).strip()
+            if _first == "planner":
+                exp_effective = "planner"
+
         defaults = DevshellAgentCliDefaults(
-            modes=list(args.modes),
             jobs=int(args.jobs),
             limit=args.limit,
             questions=list(args.questions) if args.questions else None,
-            capabilities=list(args.capabilities) if args.capabilities else None,
+            slices=(
+                (str(args.slices).strip() or None) if args.slices is not None else None
+            ),
             model=args.model,
-            exp=args.exp,
+            exp=exp_effective,
             eval_ingest_pending_only=bool(args.eval_ingest_pending_only),
             no_export_review=bool(args.no_export_review),
             task_timeout_sec=float(args.task_timeout),
@@ -271,13 +306,17 @@ class DevshellAgentLoopCli:
             permission_mode=str(args.permission_mode),
             max_sdk_turns=max(1, int(args.max_sdk_turns)),
             extra_instruction=str(args.extra_instruction or ""),
-            git_reset_on_regression=bool(args.git_reset_on_regression),
             eval_ingest_submit_each_iteration=bool(
                 args.eval_ingest_submit_each_iteration
             ),
             eval_ingest_submit_timeout=max(1.0, float(args.eval_ingest_submit_timeout)),
             enable_checklist_agent=bool(args.enable_checklist_agent),
             checklist_permission_mode=str(args.checklist_permission_mode or ""),
+            history_root=(repo_root / "evaluation" / "devshell_agent_history"),
+            enable_optimization_auto_commit=bool(args.enable_optimization_auto_commit),
+            optimization_auto_commit_skip_budget=bool(
+                args.optimization_auto_commit_skip_budget
+            ),
         )
 
         print(f"Session directory: {session_dir}", file=sys.stderr)

@@ -100,6 +100,28 @@ profiles:
     max_retries: 2
     retry_delay: 1.0
 
+  # Amazon Bedrock Converse（凭证：环境变量 AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY /
+  # AWS_REGION 等默认链；无需 LITELLM）
+  # model：填推理配置文件的 inferenceProfileId（或 ARN）。若报「invalid」：与当前 region 不符或 ID 抄错。
+  # 查本账号在 $AWS_REGION 下可用 ID：aws bedrock list-inference-profiles --region "$AWS_REGION"
+  # 在输出里找 Opus 对应条目的 inferenceProfileId，粘贴到下方（勿手猜 us....:0）。
+  opus_bedrock:
+    provider: "bedrock"
+    model: "arn:aws:bedrock:us-east-1:584751650650:inference-profile/global.anthropic.claude-opus-4-6-v1"
+    bedrock_region: "${AWS_REGION}"
+    api_key: ""
+    base_url: null
+    thinking_effort: "max"
+    reasoning_protocol: "anthropic_adaptive_thinking"
+    temperature_policy: "force_one_when_reasoning"
+    temperature: 0.7
+    model_family: "claude-4.6"
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
 # 路由表：前端 model_override 字符串 → 内部 profile
 routes:
   "claude-opus-4-6":
@@ -114,5 +136,7 @@ routes:
     profile: gemini-pro
   "cds/GPT-5.4":
     profile: gpt54
+  "bedrock-claude-opus":
+    profile: opus_bedrock
 
 default: "opus"

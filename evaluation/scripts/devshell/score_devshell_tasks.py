@@ -51,13 +51,19 @@ _META_FILENAMES = frozenset(
 
 
 def _build_workspace_file_listing(workspace: Path) -> str:
-    files = []
-    for p in sorted(workspace.iterdir()):
-        if p.is_file() and p.name not in _META_FILENAMES:
-            files.append(f"  {p.name} ({p.stat().st_size} bytes)")
-    if not files:
+    """Walk workspace **recursively** so subdirectory contents are visible."""
+    entries: list[str] = []
+    for p in sorted(workspace.rglob("*")):
+        if p.name in _META_FILENAMES:
+            continue
+        rel = p.relative_to(workspace)
+        if p.is_dir():
+            entries.append(f"  {rel}/")
+        elif p.is_file():
+            entries.append(f"  {rel} ({p.stat().st_size} bytes)")
+    if not entries:
         return "(no deliverable files found in workspace)"
-    return "\n".join(files)
+    return "\n".join(entries)
 
 
 def _build_answer(workspace: Path, summary: dict[str, Any]) -> str:
@@ -129,11 +135,11 @@ def _load_summary_from_file(workspace: Path) -> dict[str, Any]:
 
 def _build_artifacts(workspace: Path) -> list[ArtifactRecord]:
     artifacts: list[ArtifactRecord] = []
-    for p in sorted(workspace.iterdir()):
+    for p in sorted(workspace.rglob("*")):
         if p.is_file() and p.name not in _META_FILENAMES:
             artifacts.append(
                 ArtifactRecord(
-                    path=p.name,
+                    path=str(p.relative_to(workspace)),
                     artifact_type=p.suffix.lstrip(".").lower() or "unknown",
                     size_bytes=p.stat().st_size,
                 )

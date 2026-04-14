@@ -1,7 +1,7 @@
 ---
 name: tasker-polar-surface
 description: "Guides slab cutting for ionic and polar crystals using Tasker types (1/2/3). Use built-in script build_slab_tasker_fix.py as the default builder for all surface types, then validate with check_slab_tasker.py and assess_structure.py. If auto-fix fails, explicitly report to user and ask for manual adjustment or temporary acceptance."
-depends_on: mcp-mat-sg, mcp-mat-sn, mcp-mat-doc
+depends_on: mcp-mat-sg, mcp-mat-doc
 ---
 
 <!-- multi-server: mat_sg, mat_sn, mat_doc -->
@@ -48,6 +48,20 @@ When cutting a surface slab from a bulk crystal (especially ionic or oxide), app
 - 用 **mat_sn_*** 或 **web-search** 搜该 (formula, 晶面)，如 "ZnO 0001 symmetric slab layers", "<formula> <hkl> slab construction vacuum"。
 - 从论文/教程里提取：**层数**（或 repeat units）、**真空厚度**、以及是否推荐某种**终止面**（如上下都是 O 终止）。
 
+#### ⚠ Layer counting — `-L` maps to ASE `surface()` layers, not bilayers
+
+The `-L` (repeat-layers) parameter equals ASE's `layers` arg — one "layer" = **one atomic plane** (a single-species sheet). For compound crystals this is NOT one formula-unit bilayer:
+
+| Structure type | Example | Atomic planes per bilayer | `-L` for 3 bilayers |
+|----------------|---------|--------------------------|---------------------|
+| Zinc blende (001) | ZnS | 2 (Zn + S) | `-L 6` |
+| Rocksalt (001) | MgO | 2 (Mg + O) | `-L 6` |
+| Wurtzite (0001) | ZnO | 2 (Zn + O) | `-L 6` |
+| Fluorite (111) | CeO₂ | 3 (O + Ce + O) | `-L 9` |
+| Perovskite (001) | SrTiO₃ | 2 (SrO + TiO₂) | `-L 6` |
+
+**Rule**: When a task says "N-layer slab", first determine how many **atomic planes per repeat bilayer** for the given crystal and Miller index, then set `-L = N × (planes per bilayer)`. After building, **count the resulting atomic planes** in the checker output (`layer_summary`) to verify. If the count exceeds the task requirement, reduce `-L` and rebuild. For a Type 3 symmetric slab fix, the script may add ≤1 extra plane — budget for this.
+
 ### Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）
 
 - **根据用户或文献需求传参**：用户明确要求的层数、厚度、真空、扩胞、电荷等，必须通过 script_args 传给脚本，不要只用默认值。
@@ -71,43 +85,12 @@ When cutting a surface slab from a bulk crystal (especially ionic or oxide), app
 - Run **structure-manager** `assess_structure.py` on the same file for dimensionality and sanity.
 Only after both checks pass (and optionally literature/lookup consistency) proceed to finish.
 
-### 批量处理流程（当用户提供多个结构时）
+### Batch processing
 
-**何时使用批量模式：** 当用户一次给出多个体相结构文件、或明确要求"批量处理"时，使用批量模式而非逐个手动调用。
-
-**判断使用哪种批量模式：**
-- 所有结构**共享相同参数**（同一 miller、层数、真空等）→ 使用**多文件 + 共享参数模式**（`-i file1 file2 ... + --output-dir`）
-- 每个结构需要**不同参数**（不同 miller、不同层数等）→ 使用 **`--batch` JSON 配置文件模式**
-
-#### 模式 A：多文件 + 共享参数
-
-```
-script_args="-i bulk1.cif bulk2.cif bulk3.vasp -m 1 0 0 -L 8 -v 15 --output-dir ./slabs/"
-```
-
-#### 模式 B：`--batch` JSON 配置文件
-
-先用 `Bash` 或 `Write` 生成 config.json：
-```json
-[
-  {"input": "bulk1.cif", "miller": [1,0,0], "repeat_layers": 8, "vacuum": 15, "output": "slab1.vasp"},
-  {"input": "bulk2.cif", "miller": [1,1,0], "thickness": 18, "vacuum": 20, "output": "slab2.cif", "charge": "Zn:2,O:-2"}
-]
-```
-然后：`script_args="--batch config.json"`
-
-#### 批量 build + 批量 check 联动
-
-批量 build 完成后，**必须批量 check**。推荐流程：
-
-1. 运行 `build_slab_tasker_fix.py` 批量生成 → 解析输出的 `{"results": [...]}` 获取所有 `success: true` 的输出文件列表
-2. 用这些文件列表运行 `check_slab_tasker.py`：
-   - 共享参数时：`--file slab1.vasp slab2.cif ... --tasker_type <type>`
-   - 独立参数时：写 check_config.json 用 `--batch check_config.json`
-3. 解析 check 输出的 JSON 数组，对 `compliant: false` 的逐个报告或重试
-4. 对 build 阶段 `success: false` 的，也向用户汇报失败原因
-
-**退出码语义：** 0=全部成功/compliant，1=任一失败/non-compliant。批量模式下单个失败不中断其他结构的处理。
+All three scripts support batch modes. See **`reference/batch_modes.md`** for full details.
+- **Shared params**: `-i bulk1.cif bulk2.cif -m 1 0 0 -L 8 --output-dir ./slabs/`
+- **Independent params**: `--batch config.json` (each entry can override everything)
+- After batch build, **must** batch check. Pipeline: `build --batch` → parse success list → `check --batch` → `add_adsorbate --batch`.
 
 ## Checklist
 
@@ -160,140 +143,20 @@ The script prints JSON with `compliant`, `symmetric`, `reason`, `layer_summary`,
 
 - **build_slab_tasker_fix.py**: Builds slab using ASE `surface`, applies heuristic Tasker-style nonpolar fix (layer-charge + dipole check), and supports tiling. **Use the CLI parameters below to match user/literature requirements; do not rely on defaults when the user or literature specifies values.**
 
-  **CLI 参数一览（熟练使用）：**
+  **Key parameters**: `-i <bulk>`, `-m <h k l>`, `-L <layers>` or `-T <thickness>`, `-v <vacuum>`, `-o <output>`, `--charge`, `--tile-repeat`/`--tile-min-x`/`--tile-min-y`. Full CLI reference: `reference/cli_reference.md`.
+  - Quick example: `-i POSCAR -m 1 0 0 -L 8 -v 15 -o slab.vasp`
+  - Supports single-file, multi-file (`-i f1 f2 --output-dir`), and `--batch config.json` modes. See `reference/batch_modes.md` for details.
 
-  | 参数 | 含义 | 默认/必填 | 示例 |
-  |------|------|-----------|------|
-  | `-i`, `--input` | 体相结构文件路径 | 默认 POSCAR | `-i bulk.cif` |
-  | `-m`, `--miller` | Miller 指数 (h k l)，**3 个整数** | **必填** | `-m 1 0 0`；六方 (0001) 用 `-m 0 0 1` |
-  | `-o`, `--output` | 输出 slab 文件路径 | 默认 POSCAR_slab | `-o slab.vasp` |
-  | `-L`, `--repeat-layers` | 重复层数 | 与 `-T` 二选一**必填** | `-L 8` |
-  | `-T`, `--thickness` | 目标厚度（Å） | 与 `-L` 二选一**必填** | `-T 18` |
-  | `-v`, `--vacuum` | 真空层厚度（Å） | 默认 15.0 | `-v 20` |
-  | `--charge` | 电荷映射 | 默认自动（仅二元） | `--charge "Zn:2,O:-2"` 或 JSON |
-  | `--layer-tol` | 层识别容差（Å） | 默认 0.5 | `--layer-tol 0.6` |
-  | `--tile-repeat` | 扩胞重复 (NX NY NZ) | 可选 | `--tile-repeat 2 2 1` |
-  | `--tile-min-x` | x 方向最小尺寸（Å） | 可选 | `--tile-min-x 12` |
-  | `--tile-min-y` | y 方向最小尺寸（Å） | 可选 | `--tile-min-y 12` |
-  | `--quiet` | 静默，少打日志 | 可选 | `--quiet` |
-  | `--output-dir` | 批量模式输出目录（自动命名 `{stem}_slab{ext}`） | 可选（多文件时推荐） | `--output-dir ./slabs/` |
-  | `--batch` | 批量配置 JSON 文件（每条独立参数） | 可选（与 `-i` 互斥） | `--batch config.json` |
+- **check_slab_tasker.py**: Reads slab (POSCAR/CIF), infers layers, checks Tasker compliance. **Required** after every build.
+  - Usage: `--file <slab> --tasker_type 1|2|3` (add `--formula`/`--miller` for literature cross-check)
+  - Output: JSON with `compliant`, `symmetric`, `reason`, `layer_summary` (+ `literature_*` with lookup). Exit 0 = compliant.
+  - Supports batch modes: see `reference/batch_modes.md` and `reference/cli_reference.md`.
 
-  - Miller：脚本为 `nargs=3`，即 3 个整数；六方 (0001) 传 `-m 0 0 1`（3-index 等价）。
-  - 示例（按层数）：`-i POSCAR -m 1 0 0 -L 8 -v 15 -o slab.vasp`
-  - 示例（按厚度+扩胞）：`-i bulk.cif -m 1 1 0 -T 18 -v 20 -o slab.cif --tile-repeat 2 2 1`
-  - 示例（最小尺寸）：`-i POSCAR -m 1 0 0 -L 6 -v 15 -o slab.vasp --tile-min-x 10 --tile-min-y 10`
-  - Output: slab 文件（格式由 `-o` 扩展名决定）+ 终端日志。**Not universal**：部分极性面仍可能失败，需向用户汇报并请其手动调整或暂时接受。
-
-  **批量处理（Batch）：**
-
-  支持三种使用模式：
-
-  1. **单文件模式（向后兼容）：**
-     ```bash
-     python build_slab_tasker_fix.py -i bulk.cif -m 1 0 0 -L 8 -v 15 -o slab.vasp
-     ```
-
-  2. **多文件 + 共享参数：**
-     ```bash
-     python build_slab_tasker_fix.py -i bulk1.cif bulk2.cif bulk3.vasp \
-         -m 1 0 0 -L 8 -v 15 --output-dir ./slabs/
-     ```
-     所有文件共享相同的 miller、layers、vacuum 等参数。输出自动命名为 `{stem}_slab{ext}`，存入 `--output-dir`。
-
-  3. **配置文件 + 独立参数（`--batch`）：**
-     ```bash
-     python build_slab_tasker_fix.py --batch config.json
-     ```
-     config.json 格式：
-     ```json
-     [
-       {"input": "bulk1.cif", "miller": [1,0,0], "repeat_layers": 8, "vacuum": 15, "output": "slab1.vasp"},
-       {"input": "bulk2.cif", "miller": [1,1,0], "thickness": 18, "vacuum": 20, "output": "slab2.cif", "charge": "Zn:2,O:-2"}
-     ]
-     ```
-     每条可有独立的 miller、layers/thickness、vacuum、charge、tile 等参数。未指定的参数回退到 CLI 默认值。
-
-  批量模式输出汇总 JSON：`{"results": [{"input": ..., "output": ..., "success": bool, "error": ...}, ...]}`。退出码：全部成功=0，任一失败=1。每个结构独立处理，一个失败不影响其他。
-
-- **check_slab_tasker.py**: Reads the built slab file (POSCAR/CIF), infers layers along the surface normal, and checks Tasker compliance. **Required** after every slab build before finish.
-  - Usage: `python check_slab_tasker.py --file <slab_path> --tasker_type 1|2|3`
-  - Optional (recommended when material/surface known): `--formula <formula> --miller "<h k l>"`; use `--lookup <path>` to override default `reference/tasker_lookup.yaml`.
-  - Output: JSON with `compliant`, `symmetric`, `reason`, `layer_summary`; with lookup also `literature_expected_type`, `literature_note`, `literature_ref`, `literature_consistent`. Exit code 0 = compliant.
-  - Requires: pymatgen, numpy; PyYAML for lookup.
-
-  **批量处理（Batch）：**
-
-  1. **多文件 + 共享参数：**
-     ```bash
-     python check_slab_tasker.py --file slab1.vasp slab2.cif slab3.vasp --tasker_type 3
-     ```
-     所有文件共享 `--tasker_type`、`--formula`、`--miller` 参数。输出 JSON 数组。
-
-  2. **配置文件 + 独立参数（`--batch`）：**
-     ```bash
-     python check_slab_tasker.py --batch check_config.json
-     ```
-     check_config.json 格式：
-     ```json
-     [
-       {"file": "slab1.vasp", "tasker_type": 3, "formula": "ZnO", "miller": "0 0 0 1"},
-       {"file": "slab2.cif", "tasker_type": 1}
-     ]
-     ```
-     每条可有独立的 tasker_type、formula、miller 参数。
-
-  批量模式输出 JSON 数组 `[{...}, {...}]`，每个结果包含 `file` 字段。退出码：全部 compliant=0，任一非 compliant=1。
-
-- **add_adsorbate_batch.py**: 在 slab 表面添加吸附分子，本地版（替代 MCP `mat_sg_build_surface_adsorbate`），支持批量。底层用 ASE `add_adsorbate`。
-
-  **CLI 参数一览：**
-
-  | 参数 | 含义 | 默认/必填 | 示例 |
-  |------|------|-----------|------|
-  | `-s`, `--surface` | slab 结构文件（支持多个） | **必填**（非 batch） | `-s slab.vasp` 或 `-s slab1.vasp slab2.cif` |
-  | `-a`, `--adsorbate` | 吸附分子结构文件 | **必填**（非 batch） | `-a CO.xyz` |
-  | `-o`, `--output` | 输出文件名（单文件模式） | 默认 structure_adsorbate.cif | `-o slab_CO.vasp` |
-  | `--output-dir` | 批量输出目录（自动命名 `{stem}_ads.cif`） | 可选 | `--output-dir ./ads_slabs/` |
-  | `--shift` | 吸附位置：分数坐标 `"0.5,0.5"` 或 ASE 关键词 `ontop`/`fcc`/`hcp`/`bridge` | 默认 [0.5,0.5] | `--shift "0.25,0.75"` 或 `--shift ontop` |
-  | `--height` | 吸附高度（angstrom） | 默认 2.0 | `--height 1.8` |
-  | `--batch` | 批量配置 JSON 文件 | 可选 | `--batch ads_config.json` |
-  | `--quiet` | 静默模式 | 可选 | `--quiet` |
-
-  **使用模式：**
-
-  1. **单文件模式（等价于 MCP `mat_sg_build_surface_adsorbate` 单次调用）：**
-     ```bash
-     python add_adsorbate_batch.py -s slab.vasp -a CO.xyz --shift "0.5,0.5" --height 2.0 -o slab_CO.cif
-     ```
-
-  2. **多 slab + 共享吸附参数：**
-     ```bash
-     python add_adsorbate_batch.py -s slab1.vasp slab2.cif slab3.vasp \
-         -a CO.xyz --shift ontop --height 1.8 --output-dir ./ads_slabs/
-     ```
-     所有 slab 共享同一个吸附分子和位置参数。输出自动命名 `{stem}_ads.cif`。
-
-  3. **`--batch` JSON 配置（每条独立参数）：**
-     ```bash
-     python add_adsorbate_batch.py --batch ads_config.json
-     ```
-     ads_config.json 格式：
-     ```json
-     [
-       {"surface": "slab1.vasp", "adsorbate": "CO.xyz", "shift": [0.5, 0.5], "height": 2.0, "output": "slab1_CO.cif"},
-       {"surface": "slab2.vasp", "adsorbate": "OH.xyz", "shift": "ontop", "height": 1.5, "output": "slab2_OH.cif"},
-       {"surface": "slab3.vasp", "adsorbate": "CO.xyz", "shift": [0.25, 0.75], "height": 2.5}
-     ]
-     ```
-     每条可有不同的吸附分子、位置、高度。
-
-  批量模式输出汇总 JSON：`{"results": [{"surface": ..., "adsorbate": ..., "output": ..., "success": bool, "error": ...}, ...]}`。退出码：全部成功=0，任一失败=1。
-
-  **与 build/check 联动的典型批量流程：**
-  1. `build_slab_tasker_fix.py --batch` 批量生成 slab
-  2. `check_slab_tasker.py --batch` 批量校验
-  3. `add_adsorbate_batch.py --batch` 批量加吸附分子
+- **add_adsorbate_batch.py**: Place adsorbate molecules on slab surfaces (ASE-based), supports batch. Local alternative to MCP `mat_sg_build_surface_adsorbate`.
+  - Usage: `-s slab.vasp -a CO.xyz --shift "0.5,0.5" --height 2.0 -o slab_CO.cif`
+  - Shift: fractional `"x,y"` or keyword (`ontop`/`fcc`/`hcp`/`bridge`). Default height: 2.0 A.
+  - Supports single, multi-file (`-s f1 f2 --output-dir`), and `--batch config.json` modes. See `reference/batch_modes.md`.
+  - **Prefer over MCP for batch scenarios**; for single structures either works.
 
 ## Integration
 
@@ -304,7 +167,14 @@ The script prints JSON with `compliant`, `symmetric`, `reason`, `layer_summary`,
 - After a compliant slab is confirmed, use structure-manager (e.g. `assess_structure.py`) for sanity/dimensionality if needed.
 - **吸附分子**：需要在 slab 上加吸附分子时，优先使用 `add_adsorbate_batch.py`（本地脚本，支持批量），而非 MCP `mat_sg_build_surface_adsorbate`（仅支持单次调用）。尤其是批量场景下必须使用本地脚本。单个结构时两者均可。
 
+## High-Throughput Adsorption Screening
+
+For batch screening tasks (multiple surfaces x adsorbates x sites), follow the 4-step pipeline in **`reference/ht_screening_pipeline.md`**: batch slab generation → batch validation → batch adsorbate placement → calculation. Key rules: breadth-first execution, fail-forward, use `--batch` modes.
+
 ## Additional resources
 
-- **reference.md**: Tasker type examples and common materials (MgO, TiO2, ZnO, etc.).
-- **reference/tasker_lookup.yaml**: Machine-readable (formula, miller) → Tasker type, note, ref; used by the checker with `--formula` and `--miller` for literature cross-check. Extend this file for more materials/surfaces. When the table has no entry, use **mat_sn_*** retrieval to search the literature on the fly (§2.1).
+- **reference.md**: Tasker type examples and common materials.
+- **reference/tasker_lookup.yaml**: (formula, miller) → Tasker type + note + ref; used by checker with `--formula`/`--miller`. When no entry exists, search literature on the fly (§2.1).
+- **reference/ht_screening_pipeline.md**: Full HT adsorption screening pipeline.
+- **reference/batch_modes.md**: Batch processing details for all 3 scripts.
+- **reference/cli_reference.md**: Complete CLI parameter tables.

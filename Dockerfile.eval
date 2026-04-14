@@ -37,6 +37,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true && \
     sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true
 
+# 安装后固定常见路径，便于 stage-2 用 COPY --from（见下）；勿依赖 bind mount 挂载前一 stage。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
@@ -44,9 +45,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/* \
+    && if [ -x /usr/bin/nodejs ] && [ ! -e /usr/bin/node ]; then ln -sf nodejs /usr/bin/node; fi \
     && node --version \
     && npm --version \
     && npm install -g @anthropic-ai/claude-code \
+    && if [ ! -e /usr/bin/claude ] && command -v claude >/dev/null 2>&1; then \
+         ln -sf "$(command -v claude)" /usr/bin/claude; fi \
+    && test -f /usr/bin/npx \
+    && test -e /usr/bin/claude \
+    && test -d /usr/lib/node_modules \
     && claude --version || true
 
 # ── 阶段 1b：sthp（按需取消注释；需同步取消最终阶段 COPY sthp）──────────────────
@@ -72,17 +79,13 @@ FROM ${BASE_IMAGE}
 
 USER root
 
-# 从 toolchain 挂载 /usr，仅复制 Node 与全局模块（不重跑 apt/npm）
-RUN --mount=type=bind,from=eval-toolchain,source=/usr,target=/_tc/usr,readonly \
-    set -eux; \
-    cp "/_tc/usr/bin/node" /usr/bin/node; \
-    cp "/_tc/usr/bin/npm" /usr/bin/npm; \
-    if [ -f "/_tc/usr/bin/npx" ]; then cp "/_tc/usr/bin/npx" /usr/bin/npx; fi; \
-    if [ -f "/_tc/usr/bin/claude" ]; then cp -a "/_tc/usr/bin/claude" /usr/bin/claude; fi; \
-    mkdir -p /usr/lib/node_modules; \
-    cp -a "/_tc/usr/lib/node_modules/." /usr/lib/node_modules/; \
-    mkdir -p /usr/local/bin; \
-    if [ -f "/_tc/usr/local/bin/claude" ]; then cp -a "/_tc/usr/local/bin/claude" /usr/local/bin/claude; fi
+# 用 COPY --from 从 eval-toolchain 镜像层取文件。CI 上 RUN --mount=bind,from=eval-toolchain
+# 曾挂载到不完整视图（/_tc 内无 node，仅见 slim 基础层），与缓存/BuildKit 行为有关；COPY 走正常 stage 导出路径。
+COPY --from=eval-toolchain /usr/bin/node /usr/bin/node
+COPY --from=eval-toolchain /usr/bin/npm /usr/bin/npm
+COPY --from=eval-toolchain /usr/bin/npx /usr/bin/npx
+COPY --from=eval-toolchain /usr/lib/node_modules/ /usr/lib/node_modules/
+COPY --from=eval-toolchain /usr/bin/claude /usr/bin/claude
 
 # COPY --from=sthp-binary /sthp /usr/local/bin/sthp
 # RUN chmod 755 /usr/local/bin/sthp

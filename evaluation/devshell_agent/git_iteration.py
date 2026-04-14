@@ -1,4 +1,4 @@
-"""Git HEAD 快照与按轮次回滚（DevShell agent 外层循环）。"""
+"""Git HEAD 快照（DevShell agent 外层循环每轮开局记录）。"""
 
 from __future__ import annotations
 
@@ -26,23 +26,98 @@ def git_rev_parse_head(*, repo_root: Path) -> str | None:
         return None
 
 
-def git_reset_hard(*, repo_root: Path, rev: str) -> tuple[bool, str]:
-    """执行 ``git reset --hard <rev>``。返回 ``(ok, message)``。"""
-    try:
-        p = subprocess.run(
-            ["git", "reset", "--hard", rev],
+def run_git_revert_commits_after_base(
+    *, repo_root: Path, base_sha: str, timeout_sec: float = 300.0
+) -> tuple[bool, str, list[str]]:
+    """Revert every commit in ``base_sha..HEAD`` from **newest to oldest** using ``git revert``.
+
+    Uses ``git revert --no-edit`` per commit; on failure (e.g. merge), retries once with
+    ``-m 1``. Does **not** use ``git reset``.
+
+    Returns:
+        ``(ok, message, reverted_commit_shas)``.
+    """
+    base = base_sha.strip()
+    if not base:
+        return False, "empty base_sha", []
+
+    verify = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{base}^{{commit}}"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    if verify.returncode != 0:
+        return (
+            False,
+            f"base_sha not a valid commit: {verify.stderr.strip() or verify.stdout}",
+            [],
+        )
+
+    listed = subprocess.run(
+        ["git", "rev-list", f"{base}..HEAD"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=int(timeout_sec),
+    )
+    if listed.returncode != 0:
+        return False, listed.stderr.strip() or "rev-list failed", []
+
+    shas = [ln.strip() for ln in listed.stdout.splitlines() if ln.strip()]
+    if not shas:
+        return True, "no commits after base (nothing to revert)", []
+
+    reverted: list[str] = []
+    for sha in shas:
+        r = subprocess.run(
+            ["git", "revert", "--no-edit", sha],
             cwd=str(repo_root),
             capture_output=True,
             text=True,
             check=False,
-            timeout=120,
+            timeout=int(timeout_sec),
         )
-        if p.returncode != 0:
-            err = (p.stderr or p.stdout or "").strip()
-            return False, err or f"exit {p.returncode}"
-        return True, (p.stdout or "").strip()
-    except (OSError, subprocess.TimeoutExpired) as e:
-        return False, str(e)
+        if r.returncode == 0:
+            reverted.append(sha)
+            continue
+        subprocess.run(
+            ["git", "revert", "--abort"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        r2 = subprocess.run(
+            ["git", "revert", "--no-edit", "-m", "1", sha],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=int(timeout_sec),
+        )
+        if r2.returncode != 0:
+            subprocess.run(
+                ["git", "revert", "--abort"],
+                cwd=str(repo_root),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+            detail = (r2.stderr or r.stderr or "").strip()
+            return (
+                False,
+                f"revert failed for {sha}: {detail}",
+                reverted,
+            )
+        reverted.append(sha)
+
+    return True, f"reverted {len(reverted)} commit(s)", reverted
 
 
 def append_iteration_head(*, session_dir: Path, iteration: int, head: str) -> None:
@@ -51,24 +126,3 @@ def append_iteration_head(*, session_dir: Path, iteration: int, head: str) -> No
     row = {"iteration": iteration, "head_at_start": head}
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
-
-
-def head_at_iteration_start(session_dir: Path, iteration: int) -> str | None:
-    """读取某轮开始时记录的 ``head_at_start``（取该 iteration 最后一条记录）。"""
-    path = session_dir / "git_iteration_heads.jsonl"
-    if not path.is_file():
-        return None
-    last: str | None = None
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if int(obj.get("iteration", -1)) == iteration:
-            h = obj.get("head_at_start")
-            if isinstance(h, str) and h:
-                last = h
-    return last

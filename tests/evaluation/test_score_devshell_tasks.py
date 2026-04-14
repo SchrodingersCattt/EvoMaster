@@ -279,7 +279,7 @@ class TestScoreTask:
         return QuestionItem(
             id="SC_test_001",
             capability="workflow_orchestration",
-            domain="struct",
+            domain="agnostic",
             intent="Test devshell scoring",
             human_prompt_seed="Do the thing.",
             reference_answers=[

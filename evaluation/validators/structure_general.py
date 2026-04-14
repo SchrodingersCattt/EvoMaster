@@ -43,7 +43,9 @@ def _resolve_file(workspace: Path, pattern: str) -> Path | None:
 
     Resolution order:
     1. Exact filename match (case-sensitive).
-    2. ``fnmatch`` glob expansion – newest file wins.
+    2. **Recursive** ``fnmatch`` glob expansion – newest file wins.
+       The pattern is matched against the *basename* so that files inside
+       subdirectories (e.g. ``calc_001/POSCAR``) are found too.
     """
     exact = workspace / pattern
     if exact.is_file():
@@ -51,7 +53,7 @@ def _resolve_file(workspace: Path, pattern: str) -> Path | None:
 
     hits = [
         p
-        for p in workspace.iterdir()
+        for p in workspace.rglob("*")
         if p.is_file() and fnmatch.fnmatch(p.name, pattern)
     ]
     if not hits:
@@ -78,8 +80,9 @@ def check_atom_count(
     filename: str,
     expected: int,
     tolerance: float = 0,
+    element: str | None = None,
 ) -> tuple[bool, str]:
-    """Verify the total number of atoms in a structure file."""
+    """Verify total atoms, or atom count of a specific element when provided."""
     if not _PMG_AVAILABLE:
         return False, _IMPORT_MSG
     root = Path(workspace_dir)
@@ -90,9 +93,14 @@ def check_atom_count(
         struct = _load_structure(fpath)
     except Exception as exc:
         return False, f'could not parse {fpath.name}: {exc}'
-    actual = len(struct)
+    if element:
+        actual = float(struct.composition.get(str(element), 0))
+        label = f'{element}_count'
+    else:
+        actual = float(len(struct))
+        label = 'atom_count'
     hit = abs(actual - expected) <= tolerance
-    return hit, f'{fpath.name}: atom_count={actual}, expected={expected}±{tolerance}'
+    return hit, f'{fpath.name}: {label}={actual:g}, expected={expected}±{tolerance}'
 
 
 # ---------------------------------------------------------------------------
@@ -476,16 +484,20 @@ def check_coordination_number(
 
     coord_numbers: list[int] = []
     for ci in center_indices:
-        cn = 0
-        for j, sj in enumerate(sites):
-            if j == ci:
-                continue
-            if isinstance(struct, Molecule):
-                d = sites[ci].distance(sj)
-            else:
-                d = struct.get_distance(ci, j)
-            if d < cutoff_A:
-                cn += 1
+        if isinstance(struct, Molecule):
+            # Non-periodic: count direct distances (no PBC images)
+            cn = sum(
+                1
+                for j, sj in enumerate(sites)
+                if j != ci and sites[ci].distance(sj) < cutoff_A
+            )
+        else:
+            # Periodic structure: use get_neighbors which enumerates ALL
+            # periodic images within the cutoff.  The naive get_distance(ci, j)
+            # loop only returns one (MIC) distance per site-pair and therefore
+            # misses cases where the same site has two images both within the
+            # cutoff (e.g. a narrow cell where b ≈ 2 × bond_length).
+            cn = len(struct.get_neighbors(struct[ci], cutoff_A))
         coord_numbers.append(cn)
 
     mean_cn = float(np.mean(coord_numbers))
@@ -510,6 +522,7 @@ def check_layer_count(
     tolerance: float = 0,
     axis: str = 'z',
     layer_tol_A: float = 0.25,
+    element: str | None = None,
 ) -> tuple[bool, str]:
     """Count distinct atomic planes along *axis* using Cartesian coordinates.
 
@@ -536,10 +549,20 @@ def check_layer_count(
         return False, f'axis must be x/y/z, got {axis!r}'
     ax = axis_map[axis.lower()]
 
-    coords = np.array([s.coords[ax] for s in struct.sites])
+    if element:
+        coords = np.array(
+            [
+                s.coords[ax]
+                for s in struct.sites
+                if getattr(s.specie, 'symbol', str(s.specie)) == element
+            ]
+        )
+    else:
+        coords = np.array([s.coords[ax] for s in struct.sites])
     coords_sorted = np.sort(coords)
     if len(coords_sorted) < 2:
-        return False, f'{fpath.name}: fewer than 2 atoms'
+        scope = f' for element {element}' if element else ''
+        return False, f'{fpath.name}: fewer than 2 atoms{scope}'
 
     # Count distinct planes: merge atoms within layer_tol_A of the current plane anchor.
     anchor = float(coords_sorted[0])
@@ -551,9 +574,10 @@ def check_layer_count(
             anchor = z
 
     hit = abs(n_layers - expected) <= tolerance
+    scope = f' for element {element}' if element else ''
     return (
         hit,
-        f'{fpath.name}: {n_layers} layers along {axis} (layer_tol={tol} Å), '
+        f'{fpath.name}: {n_layers} layers along {axis}{scope} (layer_tol={tol} Å), '
         f'expected={expected}±{tolerance}',
     )
 
@@ -658,6 +682,7 @@ def check_file_count(
 ) -> tuple[bool, str]:
     """Count files matching *pattern* (fnmatch glob) inside *workspace_dir*.
 
+    Walks **recursively** so that files inside subdirectories are counted too.
     Useful for verifying that the agent produced the expected number of output
     structure files (e.g. 5 ordered-replica CIFs).
     """
@@ -666,7 +691,7 @@ def check_file_count(
         return False, f'workspace {root} does not exist or is not a directory'
 
     hits = [
-        p for p in root.iterdir() if p.is_file() and fnmatch.fnmatch(p.name, pattern)
+        p for p in root.rglob("*") if p.is_file() and fnmatch.fnmatch(p.name, pattern)
     ]
     n = len(hits)
     ok = abs(n - expected) <= tolerance

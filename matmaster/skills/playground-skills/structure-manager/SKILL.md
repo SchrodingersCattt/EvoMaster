@@ -1,8 +1,8 @@
 ---
 name: structure-manager
-description: "Skill for searching, obtaining, validating, and converting atomic structures. Capabilities: (1) Literature-based structure search — search papers (mat_sn_*), fetch full pages (extract_info_from_webpage), extract crystal data (space group, lattice, CCDC/ICSD ID), attempt CIF download or report identifiers. (2) Download a CIF/POSCAR from a direct file URL (fetch_web_structure.py --url). (3) Scan an HTML page for structure file links and download (fetch_web_structure.py --page). (4) Validate: dimensionality, sanity, formula (assess_structure.py). (5) Convert between formats: CIF/POSCAR/LAMMPS/XYZ/etc. (convert_format.py). For any structure retrieval beyond a trivial open-DB formula lookup, invoke Skill get_info first."
+description: "Search, download, validate (assess_structure.py), and convert (convert_format.py) crystal structure files. Supports literature-based retrieval, database lookup, and direct URL download. Load this skill for any structure task beyond a simple DB formula query."
 skill_type: operator
-depends_on: mcp-mat-struct-db, mcp-mat-sg, mcp-mat-sn, mcp-mat-doc
+depends_on: mcp-mat-struct-db, mcp-mat-sg, mcp-mat-doc
 ---
 
 <!-- multi-server: mat_struct_db, mat_sg, mat_sn, mat_doc -->
@@ -40,6 +40,20 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 
 ## Scripts
 
+### 0a. γ-Al₂O₃ Builder
+* **build_gamma_al2o3.py** — Build a γ-Al₂O₃ defect-spinel structure directly.
+    * **Usage**: `python build_gamma_al2o3.py [-o gamma_al2o3.cif]`
+    * **When to use**: Any task requesting γ-alumina construction. This script handles the defect-spinel vacancy pattern automatically. **Use this first** — do NOT write custom build scripts from scratch.
+    * After building, relax with MLIP (`optimize_structure.py` from mlips skill) — relaxation is typically required to achieve physical force convergence.
+
+### 0b. Molecular Crystal Slab Cutting
+* **build_molecular_crystal_slab.py** — Cut a surface slab from a molecular crystal (organic, MOF, co-crystal, hybrid salt, etc.) with automatic molecule integrity verification.
+    * **Usage**: `python build_molecular_crystal_slab.py --file input.cif --miller 1 1 0 --layers 4 [-o output.cif] [--vacuum 20.0] [--bond-tolerance 0.45]`
+    * **When to use**: Whenever the input structure is a molecular crystal (contains discrete molecules, not a purely covalent/ionic 3D network). The script: (a) detects molecules via covalent bond graph (PBC-aware), (b) enumerates all terminations from pymatgen SlabGenerator with `in_unit_planes=True`, (c) checks molecule integrity for each termination, (d) selects the best slab preserving intact molecules.
+    * **Output JSON**: `{"success": true, "molecules_intact": true, "atom_count_matches_expected": true, "n_atoms": 576, "expected_atoms": 576, "output_file": "output.cif", ...}`
+    * **Key checks reported**: molecule integrity (fragmented or not), atom count vs expected (layers × unit-cell atoms), number of terminations evaluated, molecule formula consistency.
+    * **Prefer this over manual pymatgen SlabGenerator scripting** for molecular crystals — it handles the tricky PBC-aware molecule detection and multi-termination evaluation in one call, saving significant time.
+
 ### 1. Download / Page Extraction
 * **fetch_web_structure.py**
     * `--url <url>` — download a direct structure file link.
@@ -60,7 +74,20 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
         * **Bulk vs Slab**: Vacuum gap > 15Å in one direction -> Slab; in 3 directions -> Molecule.
         * **Sanity**: Fails if `min_dist < 0.5 Å` (hard overlap cutoff, PBC-aware).
 
-### 3. Format Conversion
+### 3. Surface Passivation
+* **passivate_surface.py** — Add H to saturate dangling bonds on slab surfaces (both top and bottom).
+    * `python passivate_surface.py slab.cif [-o passivated.cif] [--element Si] [--bond-length 1.48] [--cutoff 2.6] [--target-coordination 4] [--surface-fraction 0.25]`
+    * Identifies under-coordinated surface atoms, places H along missing tetrahedral directions, verifies result.
+    * Default for Si (Si-H 1.48 A, Si-Si cutoff 2.6 A). Adjust `--element`, `--bond-length`, `--cutoff` for other materials (e.g. Ge-H 1.53 A).
+    * **Passivation must produce a structure file**: This script **must output a POSCAR/CIF file** (via `-o`). Do not stop after writing a specification JSON — the task is not complete until the actual passivated structure file exists in the workspace and has been validated with `assess_structure.py`.
+    * **Both surfaces**: By default the script passivates both top and bottom surfaces. If the task asks for both-surface passivation, use the default. If only one surface is needed, the script handles this internally — just run it and report which surfaces were passivated.
+    * **Typical workflow (execute, don't just plan)**:
+      1. Build or obtain the slab (e.g. Si(100) via ASE/pymatgen)
+      2. Run `passivate_surface.py` with `-o <output_file>` — **produces the passivated structure**
+      3. Run `assess_structure.py` on the output to validate
+      4. Report: number of H atoms added, representative Si-H bond length, coordination check results
+
+### 4. Format Conversion
 * **convert_format.py** (dpdata-based)
     * **Formats**: CIF, POSCAR, LAMMPS data/dump, XYZ, extXYZ, Gaussian, GROMACS, ABACUS, DeePMD, etc.
     * **Output JSON**: `{"success": true, "output": "POSCAR", "info": {"atom_names": ["O","H"], "natoms": 3, ...}}`
@@ -78,15 +105,28 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
         * **Reading**: Always specify `--atom-style` to match the source file (e.g., `full` for molecular systems). Auto-detection can fail silently.
         * **Writing**: For non-atomic styles (full, charge), the script goes through ASE's `lammps-data` writer (with `specorder=type_map` to guarantee correct type numbering). dpdata's own writer only supports atomic style. Charges default to 0.0 if not present in source.
 
+## Structure Construction for Electronic Property Calculations
+
+For band structure, DOS, work function, or defect electronic structure, consult **`references/electronic_property_construction.md`** for detailed guidance (primitive vs conventional cell, k-path tables, supercell sizing, heterostructure band alignment).
+
+Key rules:
+- **Band structure**: use **primitive cell** + pymatgen `HighSymmKpath(structure)` for k-path.
+- **DOS**: dense uniform k-mesh (not line-mode); primitive or supercell both fine.
+- **Work function**: slab with vacuum >= 20 A + dipole correction.
+- **Defects**: supercell >= 10 A between images; Gamma-only or sparse k-mesh.
+- After construction, verify with `assess_structure.py` (dimensionality, atom count, vacuum).
+
 ## When to use
 
 * "Get / search / find / retrieve the crystal structure of X" → Try MCP database tools (`mat_struct_db_*`) first for simple inorganic formulas. If not found, or if the material is complex (organic, hybrid, molecular crystal, MOF, co-crystal, energetic salt, etc.), use the literature-based search path: `mat_sn_*` → `extract_info_from_webpage` → `fetch_web_structure.py` / report identifiers.
 * "Build from SMILES or prototype" → use MCP structure generator (`mat_sg_*`).
+* "Build a structure for band structure / DOS / electronic property calculation" → see "Structure Construction for Electronic Property Calculations" above. Use primitive cell for band structure, dense k-mesh for DOS.
 * "I have a direct CIF/POSCAR URL, download it" → `fetch_web_structure.py --url`.
 * "Get the structure from a journal SI or open repository page" → `fetch_web_structure.py --page`.
 * "Get the crystal structure of X" where X is in CCDC/ICSD → report database identifier (REFCODE / collection code) + crystallographic parameters (space group, lattice constants, formula, Z) from literature; do not attempt to download or reconstruct.
 * "Check if this structure is reasonable" → `assess_structure.py`.
 * "Convert this CIF to POSCAR" / "Convert POSCAR to LAMMPS data" → `convert_format.py`.
+* **"Cut a surface slab from a molecular crystal"** → `build_molecular_crystal_slab.py`. Use this FIRST for any molecular crystal (organic, MOF, co-crystal, hybrid) slab task. Do NOT write custom SlabGenerator scripts from scratch for molecular crystals — it wastes many turns.
 
 ## Tool (via Skill)
 
@@ -95,7 +135,9 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 ## Rules
 
 * If no CIF/POSCAR file is delivered to the user, `task_completed` must be `partial`, never `true` — even if you found crystal parameters from literature.
+* **Grounding depth for structure analysis**: When reporting on structural properties (disorder, defects, coordination, composition), always provide **physical/chemical explanations**, not just labels. For disordered structures: explain which specific crystallographic sites are disordered and why (e.g., split positions for metal cations, rotational disorder of organic ligands, partial occupancy of guest molecules), how occupancy patterns relate to symmetry constraints, and what changes structurally when building the ordered replica. A table row saying "contains fractional occupancy" is insufficient — the grounding must trace the structural physics of each specific material.
 * Structure identification must include database identifiers (CCDC REFCODE / ICSD collection code) when the structure has been deposited. If the paper you fetched does not contain them, search for the original experimental paper that first reported the structure.
 * After obtaining any new structure (any method), run `assess_structure.py`. If it reports "Slab" for a Bulk task, warn the user.
 * For LAMMPS conversions, **always** provide `--type-map`. If the source .lmp uses a non-atomic atom_style, **always** provide `--atom-style`.
 * On `missing_dependency` from any script, install the package on the remote session before retrying.
+* **Deliverable-first execution**: Always prioritize producing actual structure files (CIF, POSCAR, etc.) in the workspace. Do not stop at planning or spec-generation steps — a JSON spec describing what to build is not a deliverable. If a script fails, retry with adjusted parameters or fall back to inline Python, but always aim to write the final structure file before finishing. For multi-component construction tasks (e.g., bulk + slab + adsorbate), build each component as a separate file and verify each exists.

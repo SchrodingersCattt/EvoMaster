@@ -17,6 +17,7 @@ try:
     from .reporter import generate_rating_from_raw_runs
     from .runner import run_evaluation
     from .schemas import EvalConfig
+    from .slice_parser import parse_slices_expression
 except ImportError:
     _project_root = str(Path(__file__).resolve().parents[2])
     if _project_root not in sys.path:
@@ -24,6 +25,7 @@ except ImportError:
     from evaluation.core.reporter import generate_rating_from_raw_runs
     from evaluation.core.runner import run_evaluation
     from evaluation.core.schemas import EvalConfig
+    from evaluation.core.slice_parser import parse_slices_expression
 
 
 def main() -> int:
@@ -39,13 +41,6 @@ def main() -> int:
         help='Optional override for Mat Master config.yaml path',
     )
     parser.add_argument('--k', type=int, default=None, help='Repeat count override')
-    parser.add_argument(
-        '--modes',
-        nargs='+',
-        choices=['direct', 'planner'],
-        default=None,
-        help='Modes to evaluate (default from config)',
-    )
     parser.add_argument('--output-dir', default=None, help='Output directory override')
     parser.add_argument('--run-label', default=None, help='Run label override')
     parser.add_argument(
@@ -59,10 +54,14 @@ def main() -> int:
         help='Force using seed prompts (disable rewriting)',
     )
     parser.add_argument(
-        '--capabilities',
-        nargs='+',
+        '--slices',
         default=None,
-        help='Only run questions from these capabilities (e.g. --capabilities batch_processing workflow_orchestration)',
+        metavar='EXPR',
+        help=(
+            'OR-of-slices: whitespace between slices; cap; cap[dom]; cap[d1,d2]; '
+            'cap@tag or cap[dom]@t1,t2 (one @ per slice; tags AND). No spaces in '
+            '[...] or after @ (e.g. "workflow_orchestration[polymer]@wf_batch input_gen")'
+        ),
     )
     parser.add_argument(
         '--questions',
@@ -114,8 +113,6 @@ def main() -> int:
         eval_cfg['mat_config_path'] = args.mat_config
     if args.k is not None:
         eval_cfg['k'] = args.k
-    if args.modes is not None:
-        eval_cfg['modes'] = args.modes
     if args.output_dir is not None:
         eval_cfg['output_dir'] = args.output_dir
     if args.run_label is not None:
@@ -124,8 +121,10 @@ def main() -> int:
         eval_cfg['question_bank_dir'] = args.question_bank_dir
     if args.use_seed_prompt:
         eval_cfg['use_seed_prompt'] = True
-    if args.capabilities is not None:
-        eval_cfg['include_capabilities'] = args.capabilities
+    if args.slices is not None:
+        eval_cfg['include_slices'] = [
+            s.model_dump() for s in parse_slices_expression(args.slices)
+        ]
     if args.questions is not None:
         eval_cfg['include_question_ids'] = args.questions
 

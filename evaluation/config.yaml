@@ -1,6 +1,5 @@
 # MATTER evaluation module standalone config
 
-modes: ["direct"]
 k: 1
 question_bank_dir: "evaluation/question_bank"
 output_dir: "runs/mat_master_eval"
