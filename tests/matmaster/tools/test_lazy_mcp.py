@@ -600,6 +600,8 @@ class FakeMCPManager:
         self.calculation_preflight_factory = None
         self.sync_tools_by_server: dict = {}
         self.tool_include_only: dict = {}
+        self.concurrency_defaults_by_transport: dict = {}
+        self.concurrency_by_server: dict = {}
 
 
 class TestConfigureMCPManager:
@@ -665,12 +667,170 @@ class TestConfigureMCPManager:
         ]
         assert manager.tool_include_only["bad_entry"] == []
 
+    def test_sets_transport_level_concurrency_defaults(self):
+        from matmaster.mcp.manager import MCPConcurrencyPolicy
+
+        manager = FakeMCPManager()
+        config = {
+            "mcp_concurrency": {
+                "defaults": {
+                    "HTTP": {
+                        "mode": "multiplex",
+                        "max_inflight": 6,
+                        "max_pending_requests": 24,
+                    },
+                    "sse": {
+                        "mode": "serial",
+                        "max_inflight": 1,
+                        "max_pending_requests": 8,
+                    },
+                }
+            }
+        }
+
+        configure_mcp_manager(manager, config)
+
+        assert manager.concurrency_defaults_by_transport == {
+            "http": MCPConcurrencyPolicy(
+                mode="multiplex",
+                max_inflight=6,
+                max_pending_requests=24,
+            ),
+            "sse": MCPConcurrencyPolicy(
+                mode="serial",
+                max_inflight=1,
+                max_pending_requests=8,
+            ),
+        }
+
+    def test_server_override_wins_over_transport_default(self):
+        from matmaster.mcp.manager import MCPConcurrencyPolicy
+
+        manager = FakeMCPManager()
+        config = {
+            "mcp_concurrency": {
+                "defaults": {
+                    "http": {
+                        "mode": "serial",
+                        "max_inflight": 1,
+                        "max_pending_requests": 4,
+                    }
+                },
+                "servers": {
+                    "mat_doc": {
+                        "mode": "multiplex",
+                        "max_inflight": 5,
+                        "max_pending_requests": 20,
+                    }
+                },
+            }
+        }
+
+        configure_mcp_manager(manager, config)
+
+        assert manager.concurrency_defaults_by_transport["http"] == (
+            MCPConcurrencyPolicy(
+                mode="serial",
+                max_inflight=1,
+                max_pending_requests=4,
+            )
+        )
+        assert manager.concurrency_by_server == {
+            "mat_doc": MCPConcurrencyPolicy(
+                mode="multiplex",
+                max_inflight=5,
+                max_pending_requests=20,
+            )
+        }
+
+    def test_ignores_invalid_concurrency_entries(self):
+        manager = FakeMCPManager()
+        config = {
+            "mcp_concurrency": {
+                "defaults": {
+                    "http": {
+                        "mode": "parallel",
+                        "max_inflight": 2,
+                        "max_pending_requests": 8,
+                    },
+                    "sse": {
+                        "mode": "serial",
+                        "max_inflight": 0,
+                        "max_pending_requests": 8,
+                    },
+                },
+                "servers": {
+                    "mat_doc": {
+                        "mode": "multiplex",
+                        "max_inflight": 3,
+                    },
+                    "mat_nmr": "bad",
+                },
+            },
+            "tool_include_only": {"mat_doc": ["extract_material_data_from_pdf"]},
+        }
+
+        configure_mcp_manager(manager, config)
+
+        assert manager.concurrency_defaults_by_transport == {}
+        assert manager.concurrency_by_server == {}
+        assert manager.tool_include_only == {
+            "mat_doc": ["extract_material_data_from_pdf"]
+        }
+
+    def test_invalid_concurrency_entries_emit_warnings_with_config_paths(
+        self, caplog
+    ):
+        manager = FakeMCPManager()
+        config = {
+            "mcp_concurrency": {
+                "defaults": {
+                    "http": {
+                        "mode": "parallel",
+                        "max_inflight": 2,
+                        "max_pending_requests": 8,
+                    }
+                },
+                "servers": {
+                    "mat_doc": {
+                        "mode": "multiplex",
+                        "max_inflight": 3,
+                    }
+                },
+            }
+        }
+
+        with caplog.at_level("WARNING"):
+            configure_mcp_manager(manager, config)
+
+        assert manager.concurrency_defaults_by_transport == {}
+        assert manager.concurrency_by_server == {}
+        assert "mcp_concurrency.defaults.http" in caplog.text
+        assert "mcp_concurrency.servers.mat_doc" in caplog.text
+
+    @pytest.mark.parametrize("bad_concurrency", ["bad", []])
+    def test_non_dict_top_level_concurrency_emits_warning_and_is_ignored(
+        self, caplog, bad_concurrency
+    ):
+        manager = FakeMCPManager()
+        config = {"mcp_concurrency": bad_concurrency}
+
+        with caplog.at_level("WARNING"):
+            configure_mcp_manager(manager, config)
+
+        assert manager.concurrency_defaults_by_transport == {}
+        assert manager.concurrency_by_server == {}
+        assert "mcp_concurrency" in caplog.text
+        assert "expected dict" in caplog.text
+
     def test_empty_config_noop(self):
         manager = FakeMCPManager()
         configure_mcp_manager(manager, {})
         assert manager.calculation_preflight_servers == set()
         assert manager.sync_tools_by_server == {}
         assert manager.tool_include_only == {}
+        assert manager.concurrency_defaults_by_transport == {}
+        assert manager.concurrency_by_server == {}
 
     def test_calculation_preflight_factory_uses_client_namespace(self):
         """Verify factory uses matmaster.mcp.calculation.preflight."""
