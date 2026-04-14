@@ -903,11 +903,13 @@ git commit -m "feat: collect bash-generated response figures"
 **Files:**
 - Create: `src/services/response_figures_service.py`
 - Modify: `src/services/agent_run_service.py`
+- Modify: `src/services/stream_service.py`
 - Modify: `matmaster/integration/event_payloads.py`
 - Modify: `src/models/chat.py`
 - Modify: `tests/matmaster/integration/test_event_payloads.py`
 - Modify: `tests/matmaster/services/test_agent_run_stream.py`
 - Modify: `tests/test_chat_stream_direct.py`
+- Modify: `tests/test_stream_replay_skill_hit.py`
 - Modify: `tests/matmaster/integration/test_events_to_messages.py`
 
 - [ ] **Step 1: 写失败测试，锁定顺序、payload 形状与历史回放**
@@ -937,6 +939,46 @@ async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta() -> 
     assert figure_cfg.session_id == "sess-1"
     assert figure_cfg.task_id == "task-1"
     assert callable(figure_cfg.upload_bytes)
+```
+
+```python
+def test_replay_response_figures_does_not_break_run_result_dedupe() -> None:
+    from src.services.stream_service import _dedupe_replayed_terminal_events
+
+    events = [
+        {
+            "task_id": "t1",
+            "spawn_id": None,
+            "type": "response",
+            "source": "MatMaster",
+            "content": "answer",
+        },
+        {
+            "task_id": "t1",
+            "spawn_id": None,
+            "type": "response_figures",
+            "source": "System",
+            "content": {
+                "figures": [
+                    {
+                        "figure_id": "band",
+                        "asset_url": "https://oss.example/band.png",
+                        "caption": "band",
+                    }
+                ]
+            },
+        },
+        {
+            "task_id": "t1",
+            "spawn_id": None,
+            "type": "run_result",
+            "source": "MatMaster",
+            "content": "answer",
+        },
+    ]
+
+    out = _dedupe_replayed_terminal_events(events)
+    assert [e["type"] for e in out] == ["response", "response_figures"]
 ```
 
 ```python
@@ -1040,7 +1082,7 @@ def test_response_figures_does_not_enter_dialog_history():
 Run:
 
 ```bash
-uv run pytest tests/matmaster/integration/test_event_payloads.py tests/matmaster/services/test_agent_run_stream.py tests/test_chat_stream_direct.py tests/matmaster/integration/test_events_to_messages.py -k "response_figures" -v
+uv run pytest tests/matmaster/integration/test_event_payloads.py tests/matmaster/services/test_agent_run_stream.py tests/test_chat_stream_direct.py tests/test_stream_replay_skill_hit.py tests/matmaster/integration/test_events_to_messages.py -k "response_figures or dedupe" -v
 ```
 
 Expected:
@@ -1048,6 +1090,7 @@ Expected:
 - `response_figures` 还没有显式 payload 映射。
 - `AgentRunService` 还没有把 `figure_upload_config` 注入 `pg_ctx.run_meta`。
 - `AgentRunService` 不会在 `run_result` 前发事件。
+- `stream_service` 仍然只看前一个可回放事件类型是否等于 `response`，所以 `response_figures` 插入后会让 `run_result` 重新出现在历史回放中。
 - 历史回放中没有这个新事件类型的稳定测试保证。
 
 - [ ] **Step 3: 实现回答级聚合器并在 `run_result` 前发射事件**
@@ -1131,6 +1174,39 @@ async for event in stream:
 ```
 
 ```python
+# src/services/stream_service.py
+def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
+    deduped: list[dict] = []
+    saw_response_by_key: dict[tuple[str, str | None], bool] = {}
+
+    for event in events:
+        dedupe_key = _replay_terminal_dedupe_key(event)
+        event_type = str(event.get('type') or '')
+        if (
+            dedupe_key is not None
+            and event_type in {'run_result', 'finish'}
+            and saw_response_by_key.get(dedupe_key, False)
+        ):
+            continue
+
+        deduped.append(event)
+
+        if dedupe_key is not None and _should_emit_event_to_sse(event):
+            if event_type == 'response':
+                saw_response_by_key[dedupe_key] = True
+            elif event_type in {'run_result', 'finish'}:
+                saw_response_by_key.setdefault(dedupe_key, False)
+
+    return deduped
+```
+
+实现要点：
+
+- 去重条件不能再依赖紧邻前一个可回放事件类型，因为 `response_figures` 会合法地插在 `response` 与 `run_result` 之间。
+- 正确条件是：同一个 `(task_id, spawn_id)` 流里，只要已经回放过正文 `response`，后续尾部 `run_result` / `finish` 就继续隐藏。
+- `response_figures` 属于可回放事件，但不能重置这个 response-seen 状态。
+
+```python
 # matmaster/integration/event_payloads.py
 if event_type == "response_figures":
     return {
@@ -1150,8 +1226,8 @@ if event_type == "response_figures":
 Run:
 
 ```bash
-uv run pytest tests/matmaster/integration/test_event_payloads.py tests/matmaster/services/test_agent_run_stream.py tests/test_chat_stream_direct.py tests/matmaster/integration/test_events_to_messages.py -k "response_figures" -v
-uv run pytest tests/matmaster/integration/test_event_payloads.py tests/matmaster/services/test_agent_run_stream.py tests/test_chat_stream_direct.py tests/matmaster/integration/test_events_to_messages.py -v
+uv run pytest tests/matmaster/integration/test_event_payloads.py tests/matmaster/services/test_agent_run_stream.py tests/test_chat_stream_direct.py tests/test_stream_replay_skill_hit.py tests/matmaster/integration/test_events_to_messages.py -k "response_figures or dedupe" -v
+uv run pytest tests/matmaster/integration/test_event_payloads.py tests/matmaster/services/test_agent_run_stream.py tests/test_chat_stream_direct.py tests/test_stream_replay_skill_hit.py tests/matmaster/integration/test_events_to_messages.py -v
 ```
 
 Expected: PASS
@@ -1171,6 +1247,7 @@ uv run pytest \
   tests/matmaster/integration/test_event_payloads.py \
   tests/matmaster/services/test_agent_run_stream.py \
   tests/test_chat_stream_direct.py \
+  tests/test_stream_replay_skill_hit.py \
   tests/matmaster/integration/test_events_to_messages.py -v
 ```
 
@@ -1179,7 +1256,7 @@ Expected: PASS
 - [ ] **Step 6: 提交回答级聚合与协议更新**
 
 ```bash
-git add src/services/response_figures_service.py src/services/agent_run_service.py matmaster/integration/event_payloads.py src/models/chat.py tests/matmaster/integration/test_event_payloads.py tests/matmaster/services/test_agent_run_stream.py tests/test_chat_stream_direct.py tests/matmaster/integration/test_events_to_messages.py
+git add src/services/response_figures_service.py src/services/agent_run_service.py src/services/stream_service.py matmaster/integration/event_payloads.py src/models/chat.py tests/matmaster/integration/test_event_payloads.py tests/matmaster/services/test_agent_run_stream.py tests/test_chat_stream_direct.py tests/test_stream_replay_skill_hit.py tests/matmaster/integration/test_events_to_messages.py
 git commit -m "feat: emit response figures for chat replies"
 ```
 
