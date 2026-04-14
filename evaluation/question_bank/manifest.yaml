@@ -99,10 +99,15 @@ banks:
     domain: "agnostic"
     questions: 3
 
-  - path: "input_generation/ig_agnostic.yaml"
+  - path: "input_generation/ig_agnostic_vasp.yaml"
     capability: "input_generation"
     domain: "agnostic"
-    questions: 28
+    questions: 20
+
+  - path: "input_generation/ig_agnostic_abacus.yaml"
+    capability: "input_generation"
+    domain: "agnostic"
+    questions: 8
 
   - path: "safety_refusal/sf_agnostic.yaml"
     capability: "safety_refusal"
@@ -142,7 +147,7 @@ banks:
   - path: "structure_construction/sc_agnostic.yaml"
     capability: "structure_construction"
     domain: "agnostic"
-    questions: 12
+    questions: 13
 
   - path: "structure_construction/sc_catalysis.yaml"
     capability: "structure_construction"
@@ -157,7 +162,7 @@ banks:
   - path: "structure_retrieval/rt_agnostic.yaml"
     capability: "structure_retrieval"
     domain: "agnostic"
-    questions: 8
+    questions: 7
 
   - path: "structure_retrieval/rt_battery.yaml"
     capability: "structure_retrieval"
@@ -189,4 +194,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 132 questions across 28 active bank files
+# Total: 132 questions across 29 active bank files

@@ -14,7 +14,7 @@
 #     OSS_ENDPOINT / OSS_BUCKET_NAME / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET
 #                                    — 可选；finalize 上传 task 产物 zip 到 OSS（须由 GitLab 子 job 的 docker create -e 透传进容器）
 #     BASELINE_CAPABILITIES          — 逗号分隔 capability，默认 structure_construction
-#     BASELINE_MODES                 — direct/planner/direct planner，默认 direct
+#     BASELINE_MODES                 — 逗号分隔；首项映射到 run_devshell_eval --exp（direct=省略，planner=--exp planner）
 #     BASELINE_LIMIT                 — 仅 capabilities 布局：每类最多几题（0=不限），默认 0
 #     BASELINE_MODEL                 — 模型标识（空=使用默认）
 #     BASELINE_RUN_LABEL             — run 目录前缀，默认 baseline_cc
@@ -316,9 +316,18 @@ echo "  run_label    : ${RUN_LABEL}"
 echo "  pending_only : ${PENDING_ONLY}"
 echo "  score_submit : ${BASELINE_SCORE_SUBMIT:-1} (pending_only=1 且 pending_ingest/*.json 存在时跑阶段二)"
 
-# capability / mode 参数：逗号分隔 → 空格分隔
+# capability / mode 参数：逗号分隔 → 空格分隔（供 --slices OR 表达式）
 CAPS_ARGS=$(echo "${CAPABILITIES}" | tr ',' ' ')
-MODES_ARGS=$(echo "${MODES}" | tr ',' ' ')
+# run_devshell_eval 已无 --modes；BASELINE_MODES 首项 → --exp（与 evaluation/README_CN.md 一致）
+BASELINE_EXP_ARGS=()
+_first_mode="$(echo "${MODES}" | tr ',' ' ' | awk '{print $1}')"
+case "${_first_mode}" in
+  planner) BASELINE_EXP_ARGS=(--exp planner) ;;
+  direct|"") ;;
+  *)
+    echo "[WARN] 未识别的 BASELINE_MODES 首项 '${_first_mode}'，按 direct 处理（省略 --exp）" >&2
+    ;;
+esac
 
 # ── 激活 Python 环境 ─────────────────────────────────────────────────────────
 source "${APP_DIR}/.venv/bin/activate"
@@ -333,13 +342,13 @@ if [[ "${EVAL_RUNNER}" == "devshell" ]]; then
     DEVSHELL_CMD=(
         python evaluation/scripts/devshell/run_devshell_eval.py
         --run-label "${RUN_LABEL}"
-        --modes ${MODES_ARGS}
+        "${BASELINE_EXP_ARGS[@]}"
         --no-clean-results
     )
     if [[ "${LAYOUT}" == "questions" ]]; then
         DEVSHELL_CMD+=(--questions "${Q_IDS[@]}")
     else
-        DEVSHELL_CMD+=(--capabilities ${CAPS_ARGS})
+        DEVSHELL_CMD+=(--slices "${CAPS_ARGS}")
         if [[ "${LIMIT}" -gt 0 ]]; then
             DEVSHELL_CMD+=(--limit "${LIMIT}")
         fi
@@ -445,14 +454,14 @@ EOF
         python evaluation/scripts/devshell/run_devshell_eval.py
         --prepare-cc-baseline
         --run-label "${RUN_LABEL}"
-        --modes ${MODES_ARGS}
+        "${BASELINE_EXP_ARGS[@]}"
         --eval-ingest-pending-only
         --no-clean-results
     )
     if [[ "${LAYOUT}" == "questions" ]]; then
         PREPARE_CMD+=(--questions "${Q_IDS[@]}")
     else
-        PREPARE_CMD+=(--capabilities ${CAPS_ARGS})
+        PREPARE_CMD+=(--slices "${CAPS_ARGS}")
         if [[ "${LIMIT}" -gt 0 ]]; then
             PREPARE_CMD+=(--limit "${LIMIT}")
         fi

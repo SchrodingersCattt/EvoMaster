@@ -1,4 +1,8 @@
-"""Two-letter filename prefixes for question bank YAML (per capability)."""
+"""Two-letter filename prefixes for question bank YAML (taxonomy tests only).
+
+Canonical naming for production banks is documented in ``evaluation/AGENTS_evaluation.md``;
+this module is the test-side reference for ``{xx}`` codes and ``bank_yaml_basename``.
+"""
 
 from __future__ import annotations
 

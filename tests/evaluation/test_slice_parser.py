@@ -56,11 +56,11 @@ def test_tags_single_and_and_with_domains() -> None:
     assert out[0].domains is None
     assert out[0].tags == ['wf_batch']
 
-    out2 = parse_slices_expression('A[battery,catalysis]@wf_batch,code_abacus')
+    out2 = parse_slices_expression('A[battery,catalysis]@wf_batch,abacus')
     assert len(out2) == 1
     assert out2[0].capability == 'A'
     assert out2[0].domains == ['battery', 'catalysis']
-    assert out2[0].tags == ['wf_batch', 'code_abacus']
+    assert out2[0].tags == ['wf_batch', 'abacus']
 
 
 def test_tags_or_across_space_separated_slices() -> None:
@@ -73,7 +73,7 @@ def test_tags_or_across_space_separated_slices() -> None:
 
 def test_rejects_second_at_use_commas() -> None:
     with pytest.raises(ValueError, match='at most one'):
-        parse_slices_expression('cap@wf_batch@code_abacus')
+        parse_slices_expression('cap@wf_batch@abacus')
 
 
 def test_rejects_empty_tag_after_at() -> None:
@@ -89,4 +89,4 @@ def test_rejects_whitespace_after_at() -> None:
 
 def test_rejects_whitespace_in_comma_separated_tags() -> None:
     with pytest.raises(ValueError, match='whitespace'):
-        parse_slices_expression('cap@wf_batch, code_abacus')
+        parse_slices_expression('cap@wf_batch, abacus')
