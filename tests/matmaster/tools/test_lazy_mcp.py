@@ -778,6 +778,36 @@ class TestConfigureMCPManager:
             "mat_doc": ["extract_material_data_from_pdf"]
         }
 
+    def test_invalid_concurrency_entries_emit_warnings_with_config_paths(
+        self, caplog
+    ):
+        manager = FakeMCPManager()
+        config = {
+            "mcp_concurrency": {
+                "defaults": {
+                    "http": {
+                        "mode": "parallel",
+                        "max_inflight": 2,
+                        "max_pending_requests": 8,
+                    }
+                },
+                "servers": {
+                    "mat_doc": {
+                        "mode": "multiplex",
+                        "max_inflight": 3,
+                    }
+                },
+            }
+        }
+
+        with caplog.at_level("WARNING"):
+            configure_mcp_manager(manager, config)
+
+        assert manager.concurrency_defaults_by_transport == {}
+        assert manager.concurrency_by_server == {}
+        assert "mcp_concurrency.defaults.http" in caplog.text
+        assert "mcp_concurrency.servers.mat_doc" in caplog.text
+
     def test_empty_config_noop(self):
         manager = FakeMCPManager()
         configure_mcp_manager(manager, {})
