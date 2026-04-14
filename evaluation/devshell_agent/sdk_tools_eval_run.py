@@ -38,12 +38,13 @@ class MatmasterEvalMcpEvalRunMixin:
                 item = payload.get("item") or {}
                 score = item.get("score")
                 if isinstance(score, (int, float)):
-                    rows.append(
-                        {
-                            "task_id": path.stem,
-                            "score": int(score),
-                        }
-                    )
+                    row: dict[str, Any] = {
+                        "task_id": path.stem,
+                        "score": int(score),
+                    }
+                    if "all_criteria_passed" in item:
+                        row["all_criteria_passed"] = bool(item["all_criteria_passed"])
+                    rows.append(row)
         macro_mean = 0
         if rows:
             macro_mean = round(sum(row["score"] for row in rows) / len(rows))
@@ -54,6 +55,9 @@ class MatmasterEvalMcpEvalRunMixin:
             "low_score_tasks": low_score_tasks,
             "sanitized": True,
             "notes": [
+                "Per-task score is 100 only when every scoring_checklist item passed; "
+                "otherwise 0. macro_mean_0_100 is the mean of those 0/100 values "
+                "(all-criteria pass rate × 100).",
                 "Raw score_reason is intentionally withheld from the main agent.",
                 "Use delegate_optimization or escalate_checklist_revision with sanitized summaries only.",
             ],
@@ -562,6 +566,8 @@ class MatmasterEvalMcpEvalRunMixin:
             "sanitized": True,
             "notes": [
                 "P0 gate passed — all questions completed.",
+                "Per-task score is 100 only when every scoring_checklist item passed; "
+                "macro_mean_0_100 is the mean of those 0/100 scores (pass rate × 100).",
                 "Raw score_reason is intentionally withheld from the main agent.",
                 "Use delegate_optimization or escalate_checklist_revision with sanitized summaries only.",
             ],

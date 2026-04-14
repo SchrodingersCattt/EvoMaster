@@ -84,14 +84,17 @@ REPORT_ITERATION_SCHEMA: dict[str, Any] = {
         "macro_mean_0_100": {
             "type": "integer",
             "description": (
-                "Macro-averaged 0–100 score: mean of item.score in pending_ingest/*.json "
-                "for that run_dir (same as score_devshell_tasks.py after orchestrator submit), "
-                "or from a fresh score_devshell_tasks run if re-scoring."
+                "Mean of per-task ingest scores (each 0 or 100). Devshell scoring sets "
+                "100 only when every scoring_checklist item passed, else 0 — so this "
+                "value equals (all-criteria pass rate) × 100 across tasks."
             ),
         },
         "target_met": {
             "type": "boolean",
-            "description": "True if macro_mean_0_100 >= configured target.",
+            "description": (
+                "True if macro_mean_0_100 >= configured target (same threshold as before, "
+                "now applied to pass-rate scale)."
+            ),
         },
         "rationale": {
             "type": "string",
