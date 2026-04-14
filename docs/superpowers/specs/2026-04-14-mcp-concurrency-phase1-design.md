@@ -13,7 +13,8 @@
 - `FullToolRunner.execute_batch()` 已经使用 `asyncio.gather` 并发执行已批准的 tool call
 - `LazyMCPConnector.call_tool()` 也不会主动把这些请求压回串行
 - 真正的瓶颈在 `matmaster/mcp/manager.py` 中 `_ManagedConn._run()` 对每个请求执行 `await conn.call_tool(...)`，导致一个连接同一时刻只有一个 in-flight 请求
-- 本地 `.venv` 中的 `mcp` SDK 采用 `request_id -> response_stream` 的响应路由机制，支持同一 session 上并行处理多个正在进行的请求
+- 本地 `.venv` 中的 `mcp` SDK 在 `mcp/shared/session.py` 的 `send_request()` 中采用 `request_id -> response_stream` 的响应路由机制
+- 已通过最小实验验证：单个 `ClientSession` 上并发发出两个 `send_request()`，并以乱序响应返回时，结果仍能按正确 `request_id` 回填到各自调用方
 
 因此，这次改造的核心不是给上层补并发，而是拆除客户端内部这层不必要的串行瓶颈。
 
@@ -58,6 +59,17 @@
 - 已经开始执行的请求应在关闭预算内尽量自然完成，然后 owner task 再退出连接上下文
 
 这几条约束直接对应历史 bug 的防线，不允许为追求并发而放松。
+
+### 4.3 MCP SDK 并发前提与验证结论
+
+一期方案依赖一个明确前提：底层 `mcp` SDK 允许同一 session 上存在多个并发中的请求，只要请求与响应能够通过 `request_id` 正确关联。
+
+该前提的依据有两层：
+
+- 代码层：`mcp/shared/session.py` 的 `send_request()` 为每个请求分配独立 `request_id`，并维护独立的响应流
+- 实验层：已在本地 `.venv` 中做最小实验，单个 `ClientSession` 上并发发出两个 `send_request()`，并由模拟 server 乱序返回响应，两个请求均成功完成且结果正确匹配
+
+因此，一期方案可以建立在 单连接多路请求 的前提上。但这一前提只覆盖 SDK 层，不等价于所有 MCP server 或 tool 实现都天然可重入，所以 rollout 仍需保守。
 
 ## 5. 方案对比
 
@@ -133,6 +145,12 @@
 - 可以通过配置快速回退单个 `server`
 - 既不过度设计，也不把后续第二阶段堵死
 
+| 方案 | 并发能力 | 改造成本 | 回退能力 |
+|---|---|---|---|
+| A 极简修复 | 中 | 低 | 弱 |
+| B 受控并发一期 | 高 | 中 | 强 |
+| C 连接池主导 | 更高 | 高 | 中 |
+
 ## 6. 推荐架构设计
 
 ### 6.1 核心思路
@@ -168,24 +186,44 @@
 
 ### 6.3 `_ManagedConn` 新职责
 
-建议 `_ManagedConn` 维护以下状态：
+建议 `_ManagedConn` 维护尽量少且职责不重叠的状态。推荐契约如下：
 
-- `_ready`
-  - startup 完成后对外暴露可用状态
-- `_requests`
-  - 调度队列，仍作为唯一请求入口
-- `_closing`
-  - 标记连接已进入关闭流程
-- `_close_requested`
-  - owner task 的关闭触发信号
-- `_sem`
-  - `asyncio.Semaphore(max_inflight)`，控制最大并发
-- `_inflight_count`
-  - 当前正在执行的请求数
-- `_drain_event`
-  - 用于在 cleanup 中等待 in-flight 清空
-- `_active_tasks`
-  - 当前由 owner task 派生出的执行子任务集合
+| 字段 | 唯一职责 | 写入者 | 读取者 | 不变式 |
+|---|---|---|---|---|
+| `_ready` | startup 完成通知 | owner task | `add_server()` / `call_tool()` | 只完成一次 |
+| `_requests` | 调度入口队列 | `call_tool()` | owner task | 所有请求必须先入队 |
+| `_closing` | 拒绝新请求的入口开关 | `cleanup()` | `call_tool()` | 一旦为 `True` 不再恢复 |
+| `_close_requested` | 唤醒 owner task 进入 drain 的信号 | `cleanup()` | owner task | 只表示关闭请求已发出 |
+| `_sem` | 并发额度控制 | child task | child task | 最大持有数不超过 `max_inflight` |
+| `_active_tasks` | in-flight 请求的事实集合 | owner task / child task | cleanup / 观测 | `len(_active_tasks)` 等于当前 in-flight 数量 |
+| `_drain_event` | 无排队且无 in-flight 的完成通知 | owner task / child task | cleanup | 仅在 drain 条件满足时置位 |
+| `_fatal_error` | owner task 致命失败快照 | owner task | `call_tool()` / cleanup | 仅在不可恢复故障时写入 |
+
+额外约束如下：
+
+- 不再单独维护 `_inflight_count`，以 `len(_active_tasks)` 作为唯一 in-flight 事实来源，避免双计数不同步
+- `_requests` 应为有界队列，而不是无限堆积
+- `_sem` 只负责准入控制，不承担状态观测职责
+
+### 6.4 最小可观测性
+
+一期至少暴露以下运行态信号，供 rollout 阶段观测：
+
+- 当前排队长度：`_requests.qsize()`
+- 当前 in-flight 数：`len(_active_tasks)`
+- 因 closing 被拒绝的新请求数
+- 因队列满触发 backpressure 的拒绝数
+- 请求成功数、失败数、取消数、强制关闭数
+- cleanup drain 耗时
+
+实现形式一期不强制要求完整 metrics 系统，但至少需要结构化日志或可测试的内部状态接口，能够区分以下阶段：
+
+- admission
+- spawn
+- execute
+- drain
+- cancel
+- force-close
 
 ## 7. 请求数据流
 
@@ -195,11 +233,15 @@
 
 1. `LazyMCPConnector.call_tool()` 将请求送到 manager loop
 2. `MCPToolManager.call_tool()` 根据 `server_name` 找到对应 `_ManagedConn`
-3. `_ManagedConn.call_tool()` 创建请求 `Future`，并把请求对象放入 `_requests`
+3. `_ManagedConn.call_tool()` 创建请求 `Future`，通过非阻塞入队将请求对象放入 `_requests`
 4. owner task 在 `_run()` 中消费 `_requests`
-5. owner task 为该请求创建内部执行子任务 `_execute_request(...)`
-6. `_execute_request(...)` 在并发额度允许时调用 `conn.call_tool(...)`
+5. owner task 为该请求创建内部执行子任务 `_execute_request(...)` 后立即继续循环，不在 owner task 中等待并发额度
+6. `_execute_request(...)` 在 child task 内部 `await _sem.acquire()`，拿到额度后再调用 `conn.call_tool(...)`
 7. 执行结果或异常写回该请求自己的 `Future`
+
+为了避免 owner task 被信号量阻塞，`Semaphore` 的等待必须只发生在 child task 内部，而不能发生在 `_run()` 的主调度循环中。
+
+若 `_requests` 已满，`call_tool()` 应立即以 `ManagedConnBackpressure` 失败，而不是在入口层无限等待。
 
 ### 7.2 为什么仍然满足 enter/exit 同 task
 
@@ -212,18 +254,35 @@
 
 因此，enter/exit 同 task 的历史约束被完整保留。
 
+### 7.3 取消语义
+
+一期取消语义采用保守定义，不尝试在协议层补全完整 request cancellation：
+
+- 若调用方在请求尚未被 owner task 接管前取消对应 `Future`，该请求在出队时直接丢弃，不进入执行
+- 若请求已被 owner task 接管但尚未拿到 `Semaphore`，child task 在真正执行前再次检查 `Future` 是否已取消，若已取消则直接退出
+- 若请求已开始执行底层 `conn.call_tool(...)`，一期不发送协议级 `CancelledNotification`
+- 已开始的底层调用继续执行到返回，若此时调用方的 `Future` 已取消或已完成，则执行结果只用于清理本地状态，不再回填给调用方
+
+这样定义的原因是：
+
+- 一期优先解决吞吐瓶颈与生命周期安全边界
+- 当前 `MCPConnection.call_tool()` 包装层没有直接暴露可安全复用的 request-id 级取消接口
+- 协议级取消可作为后续增强项单独设计
+
 ## 8. 并发控制与关闭语义
 
 ### 8.1 并发控制
 
-每个 `_ManagedConn` 使用 `Semaphore(max_inflight)` 做有界并发。
+每个 `_ManagedConn` 使用有界队列和 `Semaphore(max_inflight)` 共同完成准入控制。
 
 行为定义如下：
 
 - `serial` 模式下 `max_inflight=1`
 - `multiplex` 模式下 `max_inflight` 由配置决定
 - owner task 不直接串行等待每个请求完成
-- 超出上限的请求仍会在 `_ManagedConn` 内等待，但不再阻塞整个连接上的其他 in-flight 请求
+- 超出 `max_inflight` 的请求会在 child task 内等待 `Semaphore`，但不会阻塞 owner task 继续调度
+- `_requests` 必须为有界队列，建议新增 `max_pending_requests`
+- 当 `_requests` 已满时，`call_tool()` 不应无限等待，而应立即返回显式 backpressure 异常
 
 ### 8.2 关闭流程
 
@@ -236,18 +295,50 @@
    - owner task 接收到关闭哨兵后，不立即退出连接上下文
    - 先等待：
      - 已入队请求被全部接管
-     - `_inflight_count` 归零
+     - `len(_active_tasks) == 0`
    - 之后才退出 `async with`
 
 ### 8.3 强制关闭
 
-若超过 `_PER_CONN_SHUTDOWN_TIMEOUT`：
+关闭预算应拆成两个阶段：
 
-- 尚未开始执行的排队请求应收到明确异常
-- 已开始执行的请求先在预算内继续等待
-- 若仍无法结束，再进入 owner task 取消分支作为最后兜底
+- `_PER_CONN_SHUTDOWN_TIMEOUT`
+  - 单个连接的总关闭预算
+- `_HARD_CANCEL_GRACE`
+  - 进入强制取消后，为 child task 留出的最后清理窗口
+
+推荐语义如下：
+
+```text
+deadline = now + _PER_CONN_SHUTDOWN_TIMEOUT
+set _closing = True
+signal _close_requested
+await drain until deadline
+if still queued:
+    fail queued requests with ManagedConnClosing
+if still active:
+    cancel all tasks in _active_tasks
+    await them up to _HARD_CANCEL_GRACE
+    fail any remaining request futures with ManagedConnDead
+exit connection context in owner task
+```
+
+该流程的关键点是：
+
+- 先尽量自然完成
+- 再做本地 child task 取消
+- 最后仍由 owner task 退出连接上下文
 
 ### 8.4 异常隔离
+
+一期建议定义以下显式异常类型，用于区分不同失败来源：
+
+- `ManagedConnClosing`
+  - cleanup 已开始，拒绝新请求或终止尚未开始的排队请求
+- `ManagedConnBackpressure`
+  - 调度队列达到上限，请求未被受理
+- `ManagedConnDead`
+  - owner task 或连接进入不可恢复故障
 
 每个请求必须独立完成：
 
@@ -255,35 +346,56 @@
 - 不应因为某个工具调用失败就将整个 `_ManagedConn` 判死
 - 只有连接级故障或 owner task 崩溃时，才允许批量 fail 尚未完成请求
 
+### 8.5 owner task 致命失败
+
+若 owner task 顶层抛出不可恢复异常：
+
+- 应将异常快照写入 `_fatal_error`
+- 所有尚未完成的请求 `Future` 必须收到 `ManagedConnDead`
+- manager 后续不应继续把该 `_ManagedConn` 视为健康连接
+- cleanup 仍应尝试以 best-effort 方式收尾，但不得让调用方永久等待
+
 ## 9. 配置设计
 
 ### 9.1 配置结构
 
-建议在 [config/mcp.yaml](/Users/kealdoom/Developer/dp/matmaster/matmaster-evo/config/mcp.yaml) 中新增：
+建议在 [config/mcp.yaml](/Users/kealdoom/Developer/dp/matmaster/matmaster-evo/config/mcp.yaml) 中新增。下面的数值仅作为 rollout 示例，不应被视为生产默认推荐值：
 
 ```yaml
 mcp_concurrency:
   defaults:
+    # HTTP 服务默认允许单连接多路复用
     http:
       mode: multiplex
       max_inflight: 6
+      max_pending_requests: 64
+    # SSE 服务默认也可尝试多路复用
     sse:
       mode: multiplex
       max_inflight: 6
+      max_pending_requests: 64
+    # stdio 默认保守串行
     stdio:
       mode: serial
       max_inflight: 1
+      max_pending_requests: 16
 
   servers:
+    # 示例：检索型 server 可按需单独提高上限
     mat_doc:
       mode: multiplex
       max_inflight: 8
+      max_pending_requests: 96
+    # 示例：数据库检索型 server
     mat_struct_db:
       mode: multiplex
       max_inflight: 8
+      max_pending_requests: 96
+    # 示例：安全性未知或副作用较强的 server 先保持串行
     mat_nmr:
       mode: serial
       max_inflight: 1
+      max_pending_requests: 16
 ```
 
 ### 9.2 优先级
@@ -312,6 +424,22 @@ mcp_concurrency:
 - 配置解析留在 connector / 装配层
 - manager 只消费已经解析好的运行参数
 
+### 9.5 参数选择准则
+
+一期建议按以下原则选择 `max_inflight` 与 `max_pending_requests`：
+
+- `stdio`
+  - 默认 `serial`
+  - 只有在明确验证 server 可重入时才放开
+- `http/sse` 查询型、低副作用 server
+  - 可优先试 `multiplex`
+  - `max_inflight` 从 4 或 6 起步，而不是直接拉满
+- 平均执行时间长、服务端资源紧张或共享状态不明确的 server
+  - 先保守设为 `serial`
+- `max_pending_requests`
+  - 应显著大于 `max_inflight`
+  - 但必须是有限值，避免单个 server 无限制堆积 future 和请求对象
+
 ## 10. 渐进启用策略
 
 一期不建议一次性为所有 `server` 放开并发。
@@ -320,13 +448,21 @@ mcp_concurrency:
 
 - 首批开启 `multiplex` 的对象优先选择 `http/sse`、检索型、低副作用、已知无共享状态的 `server`
 - 对 calculation、文件副作用明显或安全性未知的 `server`，先保持 `serial`
-- 通过真实压测和错误率观察逐步扩大范围
+- 通过真实压测、错误率和排队长度观察逐步扩大范围
 
 出现问题时的回退方式：
 
 - 对单个 `server` 将配置切回 `serial`
 - 若出现广泛问题，再整体关闭 `http/sse` 的默认 `multiplex`
 - 回退应优先走配置变更，而非立即回滚代码
+
+rollout 期间重点观察以下信号：
+
+- 同一 `server` 的 in-flight 是否长期贴近上限
+- 队列长度是否持续增长
+- `ManagedConnBackpressure` 是否频繁出现
+- cleanup drain 耗时是否异常拉长
+- 某个 `server` 在启用 `multiplex` 后是否出现错误率突增或结果串线
 
 ## 11. 测试策略
 
@@ -338,30 +474,44 @@ mcp_concurrency:
 - cleanup 时 `__aexit__` 不会被外部 task 直接触发
 - 多个 in-flight 请求存在时，退出连接上下文的仍然是 owner task
 
-### 11.2 并发行为测试
+### 11.2 SDK 前提验证
+
+增加一个最小实验或测试，验证：
+
+- 单个 `ClientSession` 上两个 `send_request()` 可以并发发出
+- 模拟 server 乱序返回响应时，结果仍能正确路由
+- 一个请求的完成不会阻断另一个请求的响应处理
+- child task 并发执行请求时，不会重新引入 anyio cancel scope mismatch 类错误
+
+### 11.3 并发行为测试
 
 至少新增以下测试：
 
 - `serial` 模式下多个请求仍然串行
 - `multiplex` 模式下多个请求总耗时显著小于串行基线
 - 峰值并发数不超过 `max_inflight`
+- 高并发场景下 `_active_tasks` 不会无限增长
 
-### 11.3 关闭与异常隔离测试
+### 11.4 关闭、取消与异常隔离测试
 
 至少覆盖：
 
 - cleanup 开始后拒绝新请求
 - cleanup 等待已启动请求完成
 - 单个请求失败不影响其他并发请求
+- 上层 `Future` 被取消时，未开始执行的请求会被跳过
+- 异常路径下 `Semaphore` 不发生泄漏
+- cleanup 时同时存在 queued、waiting-for-semaphore、in-flight 三类请求
 - owner task 崩溃时所有未完成请求获得明确异常而非永久 pending
 
-### 11.4 装配与配置测试
+### 11.5 装配与配置测试
 
 至少覆盖：
 
 - `configure_mcp_manager()` 正确注入并发配置
 - transport 默认配置与 server 覆盖优先级正确
 - `LazyMCPConnector` 创建 manager 后能正确使用目标并发策略
+- 队列上限与 backpressure 行为正确
 
 ## 12. 验收标准
 
@@ -371,9 +521,19 @@ mcp_concurrency:
 2. `serial` 模式行为与当前实现保持兼容
 3. `MCPConnection` 的 enter/exit 生命周期仍由同一个 owner task 管理
 4. cleanup 期间不接受新请求，已启动请求可在预算内完成
-5. 至少一个真实 MCP `server` 的压测结果显示并发耗时明显优于当前串行实现
+5. 受控基准测试中，并发总耗时应接近单请求耗时，而不是接近串行总和
+6. 至少一个真实 MCP `server` 的压测结果显示并发耗时明显优于当前串行实现，且错误率不升高
 
-建议真实压测采用 4 到 8 个同 `server` 并发请求，对比改造前后总 wall-clock time。若总时长下降到串行基线的 50% 以下，可视为一期目标基本达成。
+建议验收分为两部分：
+
+- 受控基准
+  - 取 `N = max_inflight`
+  - 构造 `N` 个服务端耗时近似相同的请求，每个请求处理时间记为 `T`
+  - 改造后总 wall-clock time 应满足 `total <= 1.2 * T + client_overhead`
+- 真实 server 压测
+  - 采用 4 到 8 个同 `server` 并发请求
+  - 对比改造前后总 wall-clock time
+  - 以明显优于串行基线且错误率不升高为达标条件
 
 ## 13. 风险与后续扩展
 
@@ -389,6 +549,15 @@ mcp_concurrency:
 - 通过 transport 默认值和 server 覆盖做保守 rollout
 - 通过测试明确生命周期和关闭契约
 - 通过配置快速回退到 `serial`
+
+建议为每个风险绑定观测信号与回退动作：
+
+| 风险 | 观测信号 | 首选回退动作 |
+|---|---|---|
+| server 隐藏共享状态 | 错误率突增、结果串线、文件冲突 | 将该 `server` 切回 `serial` |
+| cleanup 路径不稳 | drain 时间异常、关闭挂住 | 降低 `max_inflight`，必要时整体回退 |
+| 队列堆积 | `qsize()` 持续增长、频繁 backpressure | 降低入口并发或提高 server 配额 |
+| 单连接收益不足 | wall-clock 改善有限 | 记录为二期连接池候选 |
 
 ### 13.3 二期扩展方向
 
