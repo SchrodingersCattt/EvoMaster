@@ -24,6 +24,7 @@ from matmaster.types.events import (
     ResponseEvent,
     RunResultEvent,
     ThoughtEvent,
+    ToolResultEvent,
 )
 
 # ---------------------------------------------------------------------------
@@ -331,6 +332,32 @@ async def test_run_agent_injects_event_sink_into_pg_ctx_run_meta():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta():
+    run_result = RunResultEvent(
+        source='MatMaster',
+        status='completed',
+        reason='natural',
+        final_content='done',
+    )
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        controller = CancellationController()
+        await svc.run_agent(
+            session_id='sess-1',
+            user_prompt='make a plot',
+            send_cb=lambda payload: None,
+            cancel_token=controller.token,
+            mode='direct',
+            task_id='task-1',
+        )
+
+    figure_cfg = svc._test_fake_exp.last_ctx.run_meta['figure_upload_config']
+    assert figure_cfg.session_id == 'sess-1'
+    assert figure_cfg.task_id == 'task-1'
+    assert callable(figure_cfg.upload_bytes)
+
+
+@pytest.mark.asyncio
 async def test_run_agent_uses_history_restore_service_and_injects_spawn_aware_checkpoint_factory():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
     restored_history = [MagicMock(name='restored_message')]
@@ -491,6 +518,153 @@ async def test_child_event_sink_reaches_sse_and_persistence():
         getattr(event, 'spawn_id', None) == 'childdeadbeef123'
         for event in persist_events
     )
+
+
+@pytest.mark.asyncio
+async def test_run_agent_emits_response_figures_before_run_result() -> None:
+    tool_result = ToolResultEvent(
+        source='MatMaster',
+        call_id='call-band',
+        tool_name='Bash',
+        result='done',
+        payload={
+            'figures': [
+                {
+                    'figure_id': 'band',
+                    'asset_url': 'https://oss.example/band.png',
+                    'caption': 'band',
+                    'importance': 'primary',
+                    'placement_hint': 'sidebar_only',
+                    'source_tool_call_id': 'call-band',
+                }
+            ]
+        },
+    )
+    run_result = RunResultEvent(
+        source='MatMaster',
+        status='completed',
+        reason='natural',
+        final_content='answer',
+    )
+
+    async with _patched_service([tool_result, run_result]) as (svc, sse_events, _):
+        controller = CancellationController()
+        await svc.run_agent(
+            session_id='sess-1',
+            user_prompt='show band structure',
+            send_cb=AsyncMock(),
+            cancel_token=controller.token,
+            mode='direct',
+            task_id='task-1',
+        )
+
+    sse_types = [getattr(evt, 'type', None) for evt in sse_events]
+    assert 'response_figures' in sse_types
+    assert sse_types.index('response_figures') < sse_types.index('run_result')
+
+
+@pytest.mark.asyncio
+async def test_run_agent_ignores_subagent_tool_result_figures_in_parent_response():
+    child_tool_result = ToolResultEvent(
+        source='MatMaster:direct',
+        spawn_id='sub-1',
+        call_id='call-band',
+        tool_name='Bash',
+        result='done',
+        payload={
+            'figures': [
+                {
+                    'figure_id': 'band',
+                    'asset_url': 'https://oss.example/band.png',
+                    'caption': 'band',
+                    'importance': 'primary',
+                    'placement_hint': 'sidebar_only',
+                    'source_tool_call_id': 'call-band',
+                }
+            ]
+        },
+    )
+    run_result = RunResultEvent(
+        source='MatMaster',
+        status='completed',
+        reason='natural',
+        final_content='answer',
+    )
+
+    async with _patched_service([child_tool_result, run_result]) as (
+        svc,
+        sse_events,
+        _,
+    ):
+        controller = CancellationController()
+        await svc.run_agent(
+            session_id='sess-1',
+            user_prompt='show band structure',
+            send_cb=AsyncMock(),
+            cancel_token=controller.token,
+            mode='direct',
+            task_id='task-1',
+        )
+
+    sse_types = [getattr(evt, 'type', None) for evt in sse_events]
+    assert 'response_figures' not in sse_types
+
+
+@pytest.mark.asyncio
+async def test_run_agent_only_emits_response_figures_on_root_run_result():
+    parent_tool_result = ToolResultEvent(
+        source='MatMaster',
+        call_id='call-band',
+        tool_name='Bash',
+        result='done',
+        payload={
+            'figures': [
+                {
+                    'figure_id': 'band',
+                    'asset_url': 'https://oss.example/band.png',
+                    'caption': 'band',
+                    'importance': 'primary',
+                    'placement_hint': 'sidebar_only',
+                    'source_tool_call_id': 'call-band',
+                }
+            ]
+        },
+    )
+    child_run_result = RunResultEvent(
+        source='MatMaster:direct',
+        spawn_id='sub-1',
+        status='completed',
+        reason='natural',
+        final_content='child answer',
+    )
+    parent_run_result = RunResultEvent(
+        source='MatMaster',
+        status='completed',
+        reason='natural',
+        final_content='parent answer',
+    )
+
+    async with _patched_service(
+        [parent_tool_result, child_run_result, parent_run_result]
+    ) as (svc, sse_events, _):
+        controller = CancellationController()
+        await svc.run_agent(
+            session_id='sess-1',
+            user_prompt='show band structure',
+            send_cb=AsyncMock(),
+            cancel_token=controller.token,
+            mode='direct',
+            task_id='task-1',
+        )
+
+    sse_types = [getattr(evt, 'type', None) for evt in sse_events]
+    run_result_indices = [
+        idx for idx, event_type in enumerate(sse_types) if event_type == 'run_result'
+    ]
+    assert sse_types.count('response_figures') == 1
+    response_figures_idx = sse_types.index('response_figures')
+    assert response_figures_idx > run_result_indices[0]
+    assert response_figures_idx < run_result_indices[-1]
 
 
 @pytest.mark.asyncio

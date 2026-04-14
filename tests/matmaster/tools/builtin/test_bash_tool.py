@@ -3,13 +3,18 @@
 import asyncio
 from unittest.mock import MagicMock
 
+import matmaster.tools.builtin.bash_tool as bash_tool_module
 from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
 from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bash_tool import BashTool
+from matmaster.tools.figure_artifacts import FigureCollectionResult, build_figure_env
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+from matmaster.types.figures import FigureUploadConfig
+from matmaster.types.tool_runner_state import ToolRunnerState
+from matmaster.types.tool_spec import ToolExecutionContext
 from matmaster.types.topology import RuntimeTopology
 
 
@@ -230,6 +235,22 @@ class TestBashErrorStatus:
 
 
 class TestBashEnvInjection:
+    def _figure_state(
+        self,
+        figure_upload_config: FigureUploadConfig | dict[str, object],
+    ) -> ToolRunnerState:
+        state = ToolRunnerState()
+        state.set("figure_upload_config", figure_upload_config)
+        return state
+
+    def _valid_figure_config(self) -> FigureUploadConfig:
+        return FigureUploadConfig(
+            session_id="sess-1",
+            task_id="task-1",
+            asset_key_prefix="matmaster/chat_figures",
+            upload_bytes=lambda data, key: f"https://oss.example/{key}",
+        )
+
     def test_bash_reads_runtime_env(self):
         session = MagicMock()
         attach_test_runtime(session)
@@ -252,3 +273,241 @@ class TestBashEnvInjection:
         assert final_call.kwargs["command"] != "echo hi"
         assert "echo hi" in final_call.kwargs["command"]
         assert session.write_file.called
+
+    def test_bash_injects_figure_env_and_returns_payload_figures(self) -> None:
+        session = MagicMock()
+        session.exec_bash.return_value = {
+            "output": "done",
+            "exit_code": 0,
+            "working_dir": "/share",
+        }
+        session.path_exists.return_value = True
+        session.read_file.return_value = (
+            '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
+        )
+        session.download.return_value = b"\x89PNG\r\n\x1a\n" + b"x" * 64
+
+        tool = BashTool(session=session, workdir="/share")
+        result = asyncio.run(
+            tool.execute_with_context(
+                {"command": "python render.py"},
+                ToolExecutionContext(
+                    runner_state=self._figure_state(self._valid_figure_config()),
+                    tool_call_id="call-band",
+                ),
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert result.payload["figures"][0]["figure_id"] == "band"
+
+        artifact_dir, _manifest_path = build_figure_env("/share", "call-band")
+        mkdir_calls = [
+            call
+            for call in session.exec_bash.call_args_list
+            if call.args and call.args[0] == f"mkdir -p {artifact_dir}"
+        ]
+        assert mkdir_calls, "expected BashTool to create ARTIFACT_DIR before execution"
+
+        final_exec_call = session.exec_bash.call_args_list[-1]
+        assert "python render.py" in final_exec_call.kwargs["command"]
+
+        write_payloads = [call.args[1] for call in session.write_file.call_args_list]
+        assert any("ARTIFACT_DIR=" in payload for payload in write_payloads)
+        assert any("MANIFEST_PATH=" in payload for payload in write_payloads)
+
+    def test_bash_without_manifest_keeps_legacy_success_string(self) -> None:
+        session = MagicMock()
+        session.exec_bash.return_value = {
+            "output": "hello",
+            "exit_code": 0,
+            "working_dir": "/share",
+        }
+        session.path_exists.return_value = False
+
+        tool = BashTool(session=session, workdir="/share")
+        result = asyncio.run(tool.execute({"command": "echo hello"}))
+
+        assert isinstance(result, str)
+        assert "hello" in result
+
+    def test_invalid_figure_upload_config_does_not_block_command_execution(self) -> None:
+        session = MagicMock()
+        session.exec_bash.return_value = {
+            "output": "hello",
+            "exit_code": 0,
+            "working_dir": "/share",
+        }
+
+        tool = BashTool(session=session, workdir="/share")
+        result = asyncio.run(
+            tool.execute_with_context(
+                {"command": "echo hello"},
+                ToolExecutionContext(
+                    runner_state=self._figure_state({"session_id": "sess-1"}),
+                    tool_call_id="call-invalid",
+                ),
+            )
+        )
+
+        assert isinstance(result, str)
+        assert "hello" in result
+        assert session.exec_bash.call_count == 1
+        final_exec_call = session.exec_bash.call_args_list[-1]
+        assert final_exec_call.kwargs["command"] == "echo hello"
+
+    def test_nonzero_exit_with_manifest_activity_returns_error_tool_result(self) -> None:
+        session = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "output": "boom",
+                    "exit_code": 2,
+                    "working_dir": "/share",
+                },
+            ]
+        )
+        session.path_exists.return_value = True
+        session.read_file.return_value = (
+            '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
+        )
+        session.download.return_value = b"\x89PNG\r\n\x1a\n" + b"x" * 64
+
+        tool = BashTool(session=session, workdir="/share")
+        result = asyncio.run(
+            tool.execute_with_context(
+                {"command": "python render.py"},
+                ToolExecutionContext(
+                    runner_state=self._figure_state(self._valid_figure_config()),
+                    tool_call_id="call-band",
+                ),
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert result.payload["figures"][0]["figure_id"] == "band"
+        assert "exit code 2" in result.content
+
+    def test_script_mode_with_figure_env_injects_exports_via_script_file(self) -> None:
+        session = MagicMock()
+        session.write_file = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "stdout": "ok",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "working_dir": "/share",
+                    "output": "ok",
+                },
+            ]
+        )
+        session.path_exists.return_value = False
+
+        tool = BashTool(session=session, workdir="/share")
+        asyncio.run(
+            tool.execute_with_context(
+                {"command": "python3 << 'PYEOF'\nprint(1)\nPYEOF"},
+                ToolExecutionContext(
+                    runner_state=self._figure_state(self._valid_figure_config()),
+                    tool_call_id="call-script",
+                ),
+            )
+        )
+
+        artifact_dir, manifest_path = build_figure_env("/share", "call-script")
+        written_script = session.write_file.call_args[0][1]
+        assert f"export ARTIFACT_DIR={artifact_dir}" in written_script
+        assert f"export MANIFEST_PATH={manifest_path}" in written_script
+        final_exec_call = session.exec_bash.call_args_list[-1]
+        assert final_exec_call.kwargs["command"].startswith("bash ")
+
+    def test_warnings_only_collection_returns_tool_result_with_empty_figures(
+        self,
+        monkeypatch,
+    ) -> None:
+        session = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "output": "done",
+                    "exit_code": 0,
+                    "working_dir": "/share",
+                },
+            ]
+        )
+        monkeypatch.setattr(
+            bash_tool_module,
+            "collect_figures_from_session",
+            lambda **kwargs: FigureCollectionResult(
+                figures=[],
+                failure_ids=[],
+                warnings=["invalid_manifest: malformed_or_missing_figures_list"],
+            ),
+        )
+
+        tool = BashTool(session=session, workdir="/share")
+        result = asyncio.run(
+            tool.execute_with_context(
+                {"command": "python render.py"},
+                ToolExecutionContext(
+                    runner_state=self._figure_state(self._valid_figure_config()),
+                    tool_call_id="call-warn",
+                ),
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert result.payload == {"figures": []}
+        assert "Figure manifest ignored" in result.content
+
+    def test_failure_only_collection_returns_tool_result_with_empty_figures(
+        self,
+        monkeypatch,
+    ) -> None:
+        session = MagicMock()
+        session.exec_bash = MagicMock(
+            side_effect=[
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {"stdout": "", "stderr": "", "exit_code": 0},
+                {
+                    "output": "done",
+                    "exit_code": 0,
+                    "working_dir": "/share",
+                },
+            ]
+        )
+        monkeypatch.setattr(
+            bash_tool_module,
+            "collect_figures_from_session",
+            lambda **kwargs: FigureCollectionResult(
+                figures=[],
+                failure_ids=["band"],
+                warnings=[],
+            ),
+        )
+
+        tool = BashTool(session=session, workdir="/share")
+        result = asyncio.run(
+            tool.execute_with_context(
+                {"command": "python render.py"},
+                ToolExecutionContext(
+                    runner_state=self._figure_state(self._valid_figure_config()),
+                    tool_call_id="call-fail",
+                ),
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert result.payload == {"figures": []}
+        assert "Figure pipeline: 1 failed: band" in result.content

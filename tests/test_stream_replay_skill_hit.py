@@ -99,6 +99,44 @@ class TestReplayDedupeSpawnId:
         out = _dedupe_replayed_terminal_events(events)
         assert [e["type"] for e in out] == ["response"]
 
+    def test_response_figures_between_response_and_run_result_keeps_dedupe(self) -> None:
+        from src.services.stream_service import _dedupe_replayed_terminal_events
+
+        events = [
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": "answer",
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response_figures",
+                "source": "System",
+                "content": {
+                    "figures": [
+                        {
+                            "figure_id": "band",
+                            "asset_url": "https://oss.example/band.png",
+                            "caption": "band",
+                        }
+                    ]
+                },
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": "answer",
+            },
+        ]
+
+        out = _dedupe_replayed_terminal_events(events)
+        assert [e["type"] for e in out] == ["response", "response_figures"]
+
 
 class TestReplayCompactionNormalization:
     def test_replay_converts_orphan_compaction_running_to_interrupted(self) -> None:
