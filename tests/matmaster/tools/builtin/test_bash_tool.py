@@ -11,8 +11,8 @@ from matmaster.tools.figure_artifacts import FigureCollectionResult, build_figur
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.figures import FigureUploadConfig
+from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import ToolExecutionContext
 from matmaster.types.topology import RuntimeTopology
@@ -282,9 +282,7 @@ class TestBashEnvInjection:
             "working_dir": "/share",
         }
         session.path_exists.return_value = True
-        session.read_file.return_value = (
-            '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
-        )
+        session.read_file.return_value = '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
         session.download.return_value = b"\x89PNG\r\n\x1a\n" + b"x" * 64
 
         tool = BashTool(session=session, workdir="/share")
@@ -332,7 +330,9 @@ class TestBashEnvInjection:
         assert isinstance(result, str)
         assert "hello" in result
 
-    def test_invalid_figure_upload_config_does_not_block_command_execution(self) -> None:
+    def test_invalid_figure_upload_config_does_not_block_command_execution(
+        self,
+    ) -> None:
         session = MagicMock()
         session.exec_bash.return_value = {
             "output": "hello",
@@ -357,7 +357,9 @@ class TestBashEnvInjection:
         final_exec_call = session.exec_bash.call_args_list[-1]
         assert final_exec_call.kwargs["command"] == "echo hello"
 
-    def test_nonzero_exit_with_manifest_activity_returns_error_tool_result(self) -> None:
+    def test_nonzero_exit_with_manifest_activity_returns_error_tool_result(
+        self,
+    ) -> None:
         session = MagicMock()
         session.exec_bash = MagicMock(
             side_effect=[
@@ -371,9 +373,7 @@ class TestBashEnvInjection:
             ]
         )
         session.path_exists.return_value = True
-        session.read_file.return_value = (
-            '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
-        )
+        session.read_file.return_value = '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
         session.download.return_value = b"\x89PNG\r\n\x1a\n" + b"x" * 64
 
         tool = BashTool(session=session, workdir="/share")

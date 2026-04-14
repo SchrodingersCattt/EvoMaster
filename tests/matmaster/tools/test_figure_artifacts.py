@@ -119,7 +119,9 @@ def test_collect_figures_rejects_oversized_image() -> None:
     fake_session.read_file.return_value = (
         '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
     )
-    fake_session.download.return_value = b"\x89PNG\r\n\x1a\n" + b"x" * (10 * 1024 * 1024)
+    fake_session.download.return_value = b"\x89PNG\r\n\x1a\n" + b"x" * (
+        10 * 1024 * 1024
+    )
 
     result = collect_figures_from_session(
         session=fake_session,
@@ -248,9 +250,7 @@ def test_collect_figures_asset_key_is_deterministic_and_preserves_basename() -> 
         captured_keys.append(key)
         return f"https://oss.example/{key}"
 
-    manifest = (
-        '{"figures":[{"figure_id":"band","path":"plots/band-plot.png","caption":"band"}]}'
-    )
+    manifest = '{"figures":[{"figure_id":"band","path":"plots/band-plot.png","caption":"band"}]}'
     artifact_dir = "/share/.matmaster/figures/call-1/artifacts"
     manifest_path = "/share/.matmaster/figures/call-1/manifest.json"
 
@@ -282,9 +282,7 @@ def test_collect_figures_asset_key_uses_stable_sanitized_segments() -> None:
 
     fake_session = MagicMock()
     fake_session.path_exists.return_value = True
-    fake_session.read_file.return_value = (
-        '{"figures":[{"figure_id":"Band Figure 01","path":"plots/final image.png","caption":"band"}]}'
-    )
+    fake_session.read_file.return_value = '{"figures":[{"figure_id":"Band Figure 01","path":"plots/final image.png","caption":"band"}]}'
     payload = b"\x89PNG\r\n\x1a\n" + b"x" * 64
     fake_session.download.return_value = payload
 

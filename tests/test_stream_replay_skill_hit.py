@@ -99,7 +99,9 @@ class TestReplayDedupeSpawnId:
         out = _dedupe_replayed_terminal_events(events)
         assert [e["type"] for e in out] == ["response"]
 
-    def test_response_figures_between_response_and_run_result_keeps_dedupe(self) -> None:
+    def test_response_figures_between_response_and_run_result_keeps_dedupe(
+        self,
+    ) -> None:
         from src.services.stream_service import _dedupe_replayed_terminal_events
 
         events = [
