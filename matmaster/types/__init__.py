@@ -20,6 +20,7 @@ from .events import (
     McpConnectEvent,
     McpServerStatusEvent,
     ResponseEvent,
+    ResponseFiguresEvent,
     RunResultEvent,
     SkillHitEvent,
     StreamClosedEvent,
@@ -30,6 +31,7 @@ from .events import (
     ToolResultEvent,
     WorkspaceUploadErrorEvent,
 )
+from .figures import FigureDescriptor, FigureManifestEntry, FigureUploadConfig
 from .llm_provider import LLMProvider
 from .messages import (
     AssistantMessage,
@@ -72,9 +74,13 @@ __all__ = [
     "ConfirmationTimeoutEvent",
     "ErrorEvent",
     "ExpRunEvent",
+    "FigureDescriptor",
+    "FigureManifestEntry",
+    "FigureUploadConfig",
     "McpConnectEvent",
     "McpServerStatusEvent",
     "ResponseEvent",
+    "ResponseFiguresEvent",
     "RunResultEvent",
     "SkillHitEvent",
     "StreamClosedEvent",

@@ -1,8 +1,8 @@
 """Event type hierarchy for the matmaster event system.
 
-Defines all 22 event types in two categories:
+Defines all 23 event types in two categories:
 - AgentEvent (9 types): emitted by the kernel during agent execution
-- SystemEvent (13 types): emitted by service-layer components
+- SystemEvent (14 types): emitted by service-layer components
 
 BusEvent = AgentEvent | SystemEvent -- the unified event union type.
 
@@ -14,6 +14,8 @@ from datetime import datetime
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
+
+from .figures import FigureDescriptor
 
 
 class EventBase(BaseModel):
@@ -257,6 +259,13 @@ class McpConnectEvent(EventBase):
     error: str | None = None
 
 
+class ResponseFiguresEvent(EventBase):
+    """Image metadata emitted alongside a chat response."""
+
+    type: Literal["response_figures"] = "response_figures"
+    figures: list[FigureDescriptor] = Field(default_factory=list)
+
+
 # ── Union definitions ───────────────────────────────────
 
 AgentEvent = Annotated[
@@ -289,6 +298,7 @@ SystemEvent = Annotated[
         BohriumNodeEvent,
         McpServerStatusEvent,
         McpConnectEvent,
+        ResponseFiguresEvent,
     ],
     Field(discriminator="type"),
 ]
@@ -319,6 +329,7 @@ BusEvent = Annotated[
         BohriumNodeEvent,
         McpServerStatusEvent,
         McpConnectEvent,
+        ResponseFiguresEvent,
     ],
     Field(discriminator="type"),
 ]
