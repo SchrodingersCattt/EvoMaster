@@ -147,7 +147,7 @@ banks:
   - path: "structure_construction/sc_agnostic.yaml"
     capability: "structure_construction"
     domain: "agnostic"
-    questions: 12
+    questions: 13
 
   - path: "structure_construction/sc_catalysis.yaml"
     capability: "structure_construction"
@@ -162,7 +162,7 @@ banks:
   - path: "structure_retrieval/rt_agnostic.yaml"
     capability: "structure_retrieval"
     domain: "agnostic"
-    questions: 8
+    questions: 7
 
   - path: "structure_retrieval/rt_battery.yaml"
     capability: "structure_retrieval"

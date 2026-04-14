@@ -169,8 +169,24 @@ def _public_content_for_event(
             'error': payload.get('error'),
         }
 
-    if event_type == 'context_compaction':
-        return payload.get('payload')
+    if event_type == 'compaction':
+        content = {
+            'compaction_id': payload.get('compaction_id'),
+            'status': payload.get('status'),
+            'phase': payload.get('phase'),
+        }
+        for key in (
+            'strategy',
+            'durability',
+            'trigger_tokens',
+            'retained_turns',
+            'checkpoint_written',
+            'failure_reason',
+            'covered_until_event_id',
+        ):
+            if key in payload and payload.get(key) is not None:
+                content[key] = payload[key]
+        return content
 
     if event_type in ('run_result', 'finish'):
         return {

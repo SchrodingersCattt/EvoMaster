@@ -179,22 +179,20 @@ class AskQuestionTimeoutEvent(EventBase):
     reason: str = "timeout"
 
 
-class ContextCompactionEvent(EventBase):
-    """Context compaction decision emitted by the history compactor.
+class CompactionEvent(EventBase):
+    """Public compaction lifecycle event."""
 
-    ``payload`` remains an open dict for forward compatibility. Current keys:
-    - ``phase``: ``preflight`` | ``runtime``
-    - ``strategy``: ``summary`` | ``sliding_window`` | ``tool_truncation``
-    - ``durability``: ``durable`` | ``ephemeral``
-    - ``trigger_tokens``: int
-    - ``retained_turns``: int
-    - ``checkpoint_attempted``: bool
-    - ``checkpoint_written``: bool
-    - ``failure_reason``: str | None
-    """
-
-    type: Literal["context_compaction"] = "context_compaction"
-    payload: dict[str, Any]
+    type: Literal["compaction"] = "compaction"
+    compaction_id: str
+    status: Literal["running", "complete", "interrupted"]
+    phase: Literal["preflight", "runtime"]
+    strategy: Literal["summary", "sliding_window", "tool_truncation"] | None = None
+    durability: Literal["durable", "ephemeral"] | None = None
+    trigger_tokens: int | None = None
+    retained_turns: int | None = None
+    checkpoint_written: bool | None = None
+    failure_reason: str | None = None
+    covered_until_event_id: int | None = None
 
 
 class ExpRunEvent(EventBase):
@@ -283,7 +281,7 @@ SystemEvent = Annotated[
         AskQuestionEvent,
         AskQuestionReplyEvent,
         AskQuestionTimeoutEvent,
-        ContextCompactionEvent,
+        CompactionEvent,
         ExpRunEvent,
         CancelledEvent,
         StreamClosedEvent,
@@ -313,7 +311,7 @@ BusEvent = Annotated[
         AskQuestionEvent,
         AskQuestionReplyEvent,
         AskQuestionTimeoutEvent,
-        ContextCompactionEvent,
+        CompactionEvent,
         ExpRunEvent,
         CancelledEvent,
         StreamClosedEvent,

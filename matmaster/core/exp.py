@@ -327,6 +327,8 @@ class Exp:
         from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
         from matmaster.types.tool_runner_state import ToolRunnerState
 
+        run_meta = getattr(ctx, "run_meta", {}) or {}
+
         # 6. Compaction: event_sink=None, _run_items() injects local sink at runtime
         compactor = None
         if spec.llm_provider is not None:
@@ -358,6 +360,9 @@ class Exp:
                 config=spec.compaction,
                 summary_provider=summary_provider,
                 event_sink=None,  # _run_items() injects a local deque-backed sink
+                compaction_scope=(
+                    f'{run_meta.get("task_id", "")}:{spawn_id or "root"}'
+                ),
             )
 
         # 7. Build FullToolRunner (ESIN-04: default execution path)
@@ -382,7 +387,6 @@ class Exp:
         )
 
         # 9. Assemble final spec with all v2 fields
-        run_meta = getattr(ctx, "run_meta", {}) or {}
         checkpoint_sink_factory = run_meta.get("checkpoint_sink_factory")
         checkpoint_sink = None
         if callable(checkpoint_sink_factory):

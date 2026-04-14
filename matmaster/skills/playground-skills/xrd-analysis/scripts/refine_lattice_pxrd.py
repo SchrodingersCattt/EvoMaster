@@ -25,6 +25,7 @@ Usage:
 
 Output: JSON with refined parameters, volume, and statistics.
 """
+
 import argparse
 import json
 import re
@@ -35,42 +36,43 @@ import numpy as np
 from scipy.optimize import least_squares
 from scipy.signal import find_peaks
 
-
 # ─── Crystal system parameter names ──────────────────────────────────
 PARAM_NAMES = {
-    "cubic":        ["a"],
-    "tetragonal":   ["a", "c"],
-    "hexagonal":    ["a", "c"],
+    "cubic": ["a"],
+    "tetragonal": ["a", "c"],
+    "hexagonal": ["a", "c"],
     "orthorhombic": ["a", "b", "c"],
-    "monoclinic":   ["a", "b", "c", "beta"],
-    "triclinic":    ["a", "b", "c", "alpha", "beta", "gamma"],
+    "monoclinic": ["a", "b", "c", "beta"],
+    "triclinic": ["a", "b", "c", "alpha", "beta", "gamma"],
 }
 
 
 # ─── d-spacing calculation ───────────────────────────────────────────
-def calc_d_inv_sq(h, k, l, params, crystal_system):
+def calc_d_inv_sq(h, k, ell, params, crystal_system):
     """Calculate 1/d² for given (h,k,l) and lattice parameters."""
     if crystal_system == "cubic":
         a = params[0]
-        return (h**2 + k**2 + l**2) / a**2
+        return (h**2 + k**2 + ell**2) / a**2
     elif crystal_system == "tetragonal":
         a, c = params[0], params[1]
-        return (h**2 + k**2) / a**2 + l**2 / c**2
+        return (h**2 + k**2) / a**2 + ell**2 / c**2
     elif crystal_system == "hexagonal":
         a, c = params[0], params[1]
-        return 4.0 / 3.0 * (h**2 + h * k + k**2) / a**2 + l**2 / c**2
+        return 4.0 / 3.0 * (h**2 + h * k + k**2) / a**2 + ell**2 / c**2
     elif crystal_system == "orthorhombic":
         a, b, c = params[0], params[1], params[2]
-        return h**2 / a**2 + k**2 / b**2 + l**2 / c**2
+        return h**2 / a**2 + k**2 / b**2 + ell**2 / c**2
     elif crystal_system == "monoclinic":
         a, b, c, beta_deg = params[0], params[1], params[2], params[3]
         beta = np.radians(beta_deg)
         sb2 = np.sin(beta) ** 2
         cb = np.cos(beta)
-        return (h**2 / (a**2 * sb2)
-                + k**2 / b**2
-                + l**2 / (c**2 * sb2)
-                - 2 * h * l * cb / (a * c * sb2))
+        return (
+            h**2 / (a**2 * sb2)
+            + k**2 / b**2
+            + ell**2 / (c**2 * sb2)
+            - 2 * h * ell * cb / (a * c * sb2)
+        )
     elif crystal_system == "triclinic":
         a, b, c = params[0], params[1], params[2]
         al, be, ga = np.radians(params[3]), np.radians(params[4]), np.radians(params[5])
@@ -83,8 +85,14 @@ def calc_d_inv_sq(h, k, l, params, crystal_system):
         s12 = a * b * c**2 * (ca * cb - cg)
         s23 = a**2 * b * c * (cb * cg - ca)
         s13 = a * b**2 * c * (cg * ca - cb)
-        return (s11 * h**2 + s22 * k**2 + s33 * l**2
-                + 2 * s12 * h * k + 2 * s23 * k * l + 2 * s13 * h * l) / V**2
+        return (
+            s11 * h**2
+            + s22 * k**2
+            + s33 * ell**2
+            + 2 * s12 * h * k
+            + 2 * s23 * k * ell
+            + 2 * s13 * h * ell
+        ) / V**2
     raise ValueError(f"Unknown crystal system: {crystal_system}")
 
 
@@ -111,9 +119,17 @@ def calc_volume(params, crystal_system):
     elif crystal_system == "triclinic":
         a, b, c = params[:3]
         al, be, ga = np.radians(params[3]), np.radians(params[4]), np.radians(params[5])
-        return a * b * c * np.sqrt(
-            1 - np.cos(al) ** 2 - np.cos(be) ** 2 - np.cos(ga) ** 2
-            + 2 * np.cos(al) * np.cos(be) * np.cos(ga)
+        return (
+            a
+            * b
+            * c
+            * np.sqrt(
+                1
+                - np.cos(al) ** 2
+                - np.cos(be) ** 2
+                - np.cos(ga) ** 2
+                + 2 * np.cos(al) * np.cos(be) * np.cos(ga)
+            )
         )
     return 0.0
 
@@ -125,10 +141,10 @@ def generate_hkl(max_index=10):
     seen = set()
     for h in range(-max_index, max_index + 1):
         for k in range(-max_index, max_index + 1):
-            for l in range(-max_index, max_index + 1):
-                if h == 0 and k == 0 and l == 0:
+            for ell in range(-max_index, max_index + 1):
+                if h == 0 and k == 0 and ell == 0:
                     continue
-                key = (h, k, l) if (h, k, l) > (-h, -k, -l) else (-h, -k, -l)
+                key = (h, k, ell) if (h, k, ell) > (-h, -k, -ell) else (-h, -k, -ell)
                 if key not in seen:
                     seen.add(key)
                     result.append(key)
@@ -177,8 +193,10 @@ def find_pxrd_peaks(two_theta, intensity, min_prominence=None, min_height=None):
             denom = 2 * (y0 - 2 * y1 + y2)
             if abs(denom) > 1e-10:
                 shift = (y0 - y2) / denom
-                dx = (two_theta[min(idx + 1, len(two_theta) - 1)]
-                      - two_theta[max(idx - 1, 0)]) / 2
+                dx = (
+                    two_theta[min(idx + 1, len(two_theta) - 1)]
+                    - two_theta[max(idx - 1, 0)]
+                ) / 2
                 positions.append(two_theta[idx] + shift * dx)
             else:
                 positions.append(two_theta[idx])
@@ -190,8 +208,9 @@ def find_pxrd_peaks(two_theta, intensity, min_prominence=None, min_height=None):
 
 
 # ─── Peak matching ───────────────────────────────────────────────────
-def match_peaks_to_hkl(obs_peaks, hkl_list, params, crystal_system, wavelength,
-                       tol=0.3, two_theta_max=160):
+def match_peaks_to_hkl(
+    obs_peaks, hkl_list, params, crystal_system, wavelength, tol=0.3, two_theta_max=160
+):
     """Match observed peaks to calculated HKL positions."""
     # Build calculated peak table
     calc_list = []
@@ -209,7 +228,7 @@ def match_peaks_to_hkl(obs_peaks, hkl_list, params, crystal_system, wavelength,
     for obs_tt in sorted(obs_peaks):
         best_diff = tol
         best_idx = None
-        for ci, (calc_tt, hkl) in enumerate(calc_list):
+        for ci, (calc_tt, _hkl) in enumerate(calc_list):
             if ci in used_calc:
                 continue
             diff = abs(obs_tt - calc_tt)
@@ -239,20 +258,23 @@ def residuals_func(params_vec, obs_peaks, hkl_assigned, crystal_system, waveleng
     return np.array(res)
 
 
-def refine_lattice(obs_peaks, hkl_assigned, initial_params, crystal_system,
-                   wavelength):
+def refine_lattice(obs_peaks, hkl_assigned, initial_params, crystal_system, wavelength):
     """Refine lattice parameters. Returns (params, sigma, cost, success)."""
     result = least_squares(
-        residuals_func, initial_params,
+        residuals_func,
+        initial_params,
         args=(obs_peaks, hkl_assigned, crystal_system, wavelength),
-        method="lm", ftol=1e-12, xtol=1e-12, max_nfev=2000,
+        method="lm",
+        ftol=1e-12,
+        xtol=1e-12,
+        max_nfev=2000,
     )
     # Estimate parameter uncertainties
     n_obs = len(obs_peaks)
     n_par = len(initial_params)
     sigmas = np.zeros(n_par)
     if n_obs > n_par and result.jac is not None:
-        s_sq = np.sum(result.fun ** 2) / (n_obs - n_par)
+        s_sq = np.sum(result.fun**2) / (n_obs - n_par)
         try:
             cov = s_sq * np.linalg.inv(result.jac.T @ result.jac)
             sigmas = np.sqrt(np.maximum(np.diag(cov), 0))
@@ -262,42 +284,53 @@ def refine_lattice(obs_peaks, hkl_assigned, initial_params, crystal_system,
 
 
 # ─── Single-pattern processing ───────────────────────────────────────
-def process_single(filepath, crystal_system, initial_params, wavelength,
-                   max_index=10, tol=0.3):
+def process_single(
+    filepath, crystal_system, initial_params, wavelength, max_index=10, tol=0.3
+):
     """Process one PXRD file and return a result dict."""
     two_theta, intensity = read_pxrd_data(filepath)
     peaks, proms = find_pxrd_peaks(two_theta, intensity)
 
     if len(peaks) < len(initial_params):
-        return {"success": False, "error": f"Too few peaks ({len(peaks)})",
-                "file": str(filepath)}
+        return {
+            "success": False,
+            "error": f"Too few peaks ({len(peaks)})",
+            "file": str(filepath),
+        }
 
     hkl_list = generate_hkl(max_index)
 
     # Match → refine → re-match → refine (two rounds)
-    matches = match_peaks_to_hkl(peaks, hkl_list, initial_params, crystal_system,
-                                 wavelength, tol)
+    matches = match_peaks_to_hkl(
+        peaks, hkl_list, initial_params, crystal_system, wavelength, tol
+    )
     if len(matches) < len(initial_params):
-        matches = match_peaks_to_hkl(peaks, hkl_list, initial_params,
-                                     crystal_system, wavelength, tol * 2)
+        matches = match_peaks_to_hkl(
+            peaks, hkl_list, initial_params, crystal_system, wavelength, tol * 2
+        )
     if len(matches) < len(initial_params):
-        return {"success": False,
-                "error": f"Too few matched peaks ({len(matches)})",
-                "file": str(filepath)}
+        return {
+            "success": False,
+            "error": f"Too few matched peaks ({len(matches)})",
+            "file": str(filepath),
+        }
 
     obs_arr = np.array([m[0] for m in matches])
     hkl_arr = [m[1] for m in matches]
-    refined, sigma, cost, ok = refine_lattice(obs_arr, hkl_arr, initial_params,
-                                              crystal_system, wavelength)
+    refined, sigma, cost, ok = refine_lattice(
+        obs_arr, hkl_arr, initial_params, crystal_system, wavelength
+    )
 
     # Second round with refined params
-    matches2 = match_peaks_to_hkl(peaks, hkl_list, refined, crystal_system,
-                                  wavelength, tol)
+    matches2 = match_peaks_to_hkl(
+        peaks, hkl_list, refined, crystal_system, wavelength, tol
+    )
     if len(matches2) >= len(matches):
         obs2 = np.array([m[0] for m in matches2])
         hkl2 = [m[1] for m in matches2]
-        ref2, sig2, cost2, ok2 = refine_lattice(obs2, hkl2, refined,
-                                                crystal_system, wavelength)
+        ref2, sig2, cost2, ok2 = refine_lattice(
+            obs2, hkl2, refined, crystal_system, wavelength
+        )
         if cost2 <= cost * 1.1:
             refined, sigma, cost = ref2, sig2, cost2
             matches = matches2
@@ -340,8 +373,9 @@ def r_squared(x, y, coeffs):
 
 def analyze_thermal_expansion(results, crystal_system):
     """Detect phase transition and fit thermal expansion per phase."""
-    good = [r for r in results
-            if r.get("success") and r.get("temperature_K") is not None]
+    good = [
+        r for r in results if r.get("success") and r.get("temperature_K") is not None
+    ]
     good.sort(key=lambda r: r["temperature_K"])
     if len(good) < 3:
         return None
@@ -351,7 +385,6 @@ def analyze_thermal_expansion(results, crystal_system):
 
     # Single-phase linear fit of V vs T
     c1_single = np.polyfit(temps, vols, 1)
-    r2_single = r_squared(temps, vols, c1_single)
 
     # Try every possible split into two phases (at least 2 points each)
     best_split = None
@@ -417,23 +450,40 @@ def main():
     ap.add_argument("--file", help="Single PXRD data file")
     ap.add_argument("--dir", help="Directory with multiple PXRD files")
     ap.add_argument(
-        "--crystal-system", required=True,
+        "--crystal-system",
+        required=True,
         choices=list(PARAM_NAMES.keys()),
     )
     ap.add_argument(
-        "--initial-params", required=True,
+        "--initial-params",
+        required=True,
         help='Initial lattice params, e.g. "a=10.8,c=6.5"',
     )
-    ap.add_argument("--wavelength", type=float, default=1.5406,
-                    help="X-ray wavelength in Å (default: Cu Kα1 = 1.5406)")
-    ap.add_argument("--max-index", type=int, default=10,
-                    help="Max Miller index for peak generation")
-    ap.add_argument("--tolerance", type=float, default=0.3,
-                    help="Peak matching tolerance in 2θ degrees")
-    ap.add_argument("--multi-temp", action="store_true",
-                    help="Process all files in --dir for thermal expansion")
-    ap.add_argument("--temp-pattern", default=None,
-                    help='Regex to extract T from filename, e.g. "(\\d+)K"')
+    ap.add_argument(
+        "--wavelength",
+        type=float,
+        default=1.5406,
+        help="X-ray wavelength in Å (default: Cu Kα1 = 1.5406)",
+    )
+    ap.add_argument(
+        "--max-index", type=int, default=10, help="Max Miller index for peak generation"
+    )
+    ap.add_argument(
+        "--tolerance",
+        type=float,
+        default=0.3,
+        help="Peak matching tolerance in 2θ degrees",
+    )
+    ap.add_argument(
+        "--multi-temp",
+        action="store_true",
+        help="Process all files in --dir for thermal expansion",
+    )
+    ap.add_argument(
+        "--temp-pattern",
+        default=None,
+        help='Regex to extract T from filename, e.g. "(\\d+)K"',
+    )
     ap.add_argument("-o", "--output", help="Save JSON to file")
     args = ap.parse_args()
 
@@ -443,13 +493,18 @@ def main():
         k, v = item.strip().split("=")
         parts[k.strip().lower()] = float(v.strip())
     names = PARAM_NAMES[args.crystal_system]
-    initial_params = [parts.get(n, 90.0 if n in ("alpha", "beta", "gamma") else 5.0)
-                      for n in names]
+    initial_params = [
+        parts.get(n, 90.0 if n in ("alpha", "beta", "gamma") else 5.0) for n in names
+    ]
 
     if args.file:
         output = process_single(
-            args.file, args.crystal_system, initial_params,
-            args.wavelength, args.max_index, args.tolerance,
+            args.file,
+            args.crystal_system,
+            initial_params,
+            args.wavelength,
+            args.max_index,
+            args.tolerance,
         )
     elif args.dir:
         data_dir = Path(args.dir)
@@ -467,8 +522,12 @@ def main():
         for f in files:
             temp = extract_temperature(f.stem, args.temp_pattern)
             r = process_single(
-                str(f), args.crystal_system, current_params,
-                args.wavelength, args.max_index, args.tolerance,
+                str(f),
+                args.crystal_system,
+                current_params,
+                args.wavelength,
+                args.max_index,
+                args.tolerance,
             )
             r["temperature_K"] = temp
             results.append(r)

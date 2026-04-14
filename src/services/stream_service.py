@@ -67,6 +67,7 @@ def _should_emit_event_to_sse(event: dict) -> bool:
     Practical consequences:
     - assistant_state is always hidden in replay
     - log_line is always hidden in replay
+    - checkpoint bookkeeping events are always hidden in replay
     - direct-mode non-streaming thoughts may still appear in replay if they
       were persisted as completed events
 
@@ -80,6 +81,8 @@ def _should_emit_event_to_sse(event: dict) -> bool:
         return False
     if t == 'skill_hit':
         return False
+    if t in {'compact_boundary', 'history_checkpoint'}:
+        return False
     return True
 
 
@@ -88,6 +91,54 @@ def _normalize_replayed_event(event: dict) -> dict:
     replay_event = dict(event)
     replay_event['source'] = normalize_event_source(replay_event.get('source'))
     return replay_event
+
+
+def _normalize_replayed_compaction_events(events: list[dict]) -> list[dict]:
+    """Normalize replayed compaction lifecycle rows for frontend consumption."""
+    terminal_ids: set[str] = set()
+    for event in events:
+        if event.get('type') != 'compaction':
+            continue
+        content = event.get('content') or {}
+        if not isinstance(content, dict):
+            continue
+        if content.get('status') in {'complete', 'interrupted'}:
+            compaction_id = str(content.get('compaction_id') or '')
+            if compaction_id:
+                terminal_ids.add(compaction_id)
+
+    normalized: list[dict] = []
+    for event in events:
+        event_type = event.get('type')
+        if event_type == 'context_compaction':
+            continue
+        if event_type != 'compaction':
+            normalized.append(event)
+            continue
+
+        content = event.get('content') or {}
+        if not isinstance(content, dict):
+            normalized.append(event)
+            continue
+
+        compaction_id = str(content.get('compaction_id') or '')
+        if content.get('status') == 'running' and compaction_id not in terminal_ids:
+            normalized.append(
+                {
+                    **event,
+                    'content': {
+                        **content,
+                        'status': 'interrupted',
+                        'failure_reason': content.get('failure_reason')
+                        or 'replay_inferred_interrupted',
+                    },
+                }
+            )
+            continue
+
+        normalized.append(event)
+
+    return normalized
 
 
 def _replay_terminal_dedupe_key(event: dict) -> tuple[str, str | None] | None:
@@ -444,6 +495,7 @@ class ChatStreamService:
                 yield self.sse_format(payload)
             events = self._events_service.get_session_events(sid, include_spawn=True)
             if events:
+                events = _normalize_replayed_compaction_events(events)
                 events = _dedupe_replayed_terminal_events(events)
                 events = self._inject_elapsed_for_history(events)
                 for event in events:
@@ -703,6 +755,7 @@ class ChatStreamService:
         yield self.sse_format(payload)
         history = self._events_service.get_session_events(sid, include_spawn=True) or []
         history = ChatHistoryConverter.exclude_task_events(history, ctx.task_id)
+        history = _normalize_replayed_compaction_events(history)
         history = _dedupe_replayed_terminal_events(history)
         history = self._inject_elapsed_for_history(history)
         for event in history:
