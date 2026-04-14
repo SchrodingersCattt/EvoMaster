@@ -453,7 +453,7 @@ class AgentRunService:
                     if isinstance(event, ToolResultEvent):
                         figure_accumulator.add_tool_result(event)
 
-                    if isinstance(event, RunResultEvent):
+                    if isinstance(event, RunResultEvent) and event.spawn_id is None:
                         response_figures_event = figure_accumulator.build_event()
                         if response_figures_event is not None:
                             await fanout.dispatch(response_figures_event)
