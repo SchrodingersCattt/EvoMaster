@@ -132,6 +132,7 @@ def test_run_devshell_eval_submits_immediately_after_run(tmp_path: Path) -> None
         json.dumps(
             {
                 "item": {
+                    "question_id": "SC_struct_001",
                     "score": 65,
                     "score_reason": "Checklist wording says too much about the task.",
                 }
@@ -159,7 +160,8 @@ def test_run_devshell_eval_submits_immediately_after_run(tmp_path: Path) -> None
         result = asyncio.run(toolkit._run_devshell_eval({"iteration_tag": "iter_01"}))
 
     assert result["is_error"] is False
-    assert '"macro_mean_0_100": 65' in result["content"][0]["text"]
+    # Per-question macro: one repeat scored != 100 → question fails → 0.
+    assert '"macro_mean_0_100": 0' in result["content"][0]["text"]
     assert (
         "Checklist wording says too much about the task."
         not in result["content"][0]["text"]
@@ -173,6 +175,40 @@ def test_run_devshell_eval_submits_immediately_after_run(tmp_path: Path) -> None
         score_jobs=2,
         parallel_checklist_workers=4,
     )
+
+
+def test_macro_mean_aggregates_repeats_per_question(tmp_path: Path) -> None:
+    from evaluation.devshell_agent.sdk_tools_eval_run import (
+        _macro_summary_from_repeat_rows,
+        _pending_repeat_rows,
+    )
+
+    pending = tmp_path / "pending_ingest"
+    pending.mkdir()
+    for fname, qid, score in (
+        ("Q1_direct_r0.json", "Q1", 100),
+        ("Q1_direct_r1.json", "Q1", 0),
+    ):
+        (pending / fname).write_text(
+            json.dumps({"item": {"question_id": qid, "score": score}}),
+            encoding="utf-8",
+        )
+    rows = _pending_repeat_rows(pending)
+    macro, task_scores, low = _macro_summary_from_repeat_rows(rows)
+    assert macro == 0
+    assert len(task_scores) == 1
+    assert task_scores[0]["score"] == 0
+    assert task_scores[0]["repeat_count"] == 2
+    assert len(low) == 1
+
+    (pending / "Q2_direct_r0.json").write_text(
+        json.dumps({"item": {"question_id": "Q2", "score": 100}}),
+        encoding="utf-8",
+    )
+    rows = _pending_repeat_rows(pending)
+    macro, task_scores, _ = _macro_summary_from_repeat_rows(rows)
+    assert macro == 50
+    assert len(task_scores) == 2
 
 
 def test_run_devshell_eval_skips_immediate_submit_when_pending_only_disabled(
