@@ -3,6 +3,10 @@
 - 自动打分（``score_devshell_tasks --submit``）完成后的结果卡片。
 - Checklist / 优化子回合写出 **待人工合入** 的 ``proposed_*.md`` 时的提醒卡片。
 
+打分卡片中，同一 ``question_id`` 的多次 repeat 会合并为 **一道题**：仅当该题
+**全部** repeat 均为 ``score==100`` 时记为「通过」，否则为「不通过」；若任一 repeat
+尚无整数 ``score``，该题记为「未写入」。
+
 Webhook 使用仓库根 ``utils.feishu_webhook.FEISHU_WEBHOOK_URL``，与 API / Worker 一致。
 
 发送在后台线程执行，失败只打 log，不抛异常。"""
@@ -14,6 +18,7 @@ import logging
 import os
 import threading
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal
 from urllib.error import HTTPError, URLError
@@ -105,6 +110,42 @@ def _load_pending_rows(pending_dir: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _aggregate_by_question_id(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """将同一题的多次 repeat 合并为一行，用于飞书卡片统计与列表。
+
+    - 通过：该 ``question_id`` 下每条 repeat 均有整数 ``score`` 且均为 ``100``。
+    - 不通过：存在整数 ``score`` 且并非全部为 ``100``（含 ``0`` 或混有非 ``100``）。
+    - 未写入：任一 repeat 缺少整数 ``score``。
+    """
+    by_q: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in rows:
+        qid = str(r.get("question_id") or r.get("task_id") or "").strip()
+        if not qid:
+            continue
+        by_q[qid].append(r)
+
+    out: list[dict[str, Any]] = []
+    for qid in sorted(by_q.keys()):
+        group = by_q[qid]
+        scores = [g.get("score") for g in group]
+        if any(not isinstance(s, int) for s in scores):
+            agg_score = None
+        elif all(s == 100 for s in scores):
+            agg_score = 100
+        else:
+            agg_score = 0
+        tid0 = group[0].get("task_id") or ""
+        out.append(
+            {
+                "task_id": str(tid0),
+                "question_id": qid,
+                "score": agg_score,
+                "score_reason": "",
+            }
+        )
+    return out
+
+
 def _rows_sorted_by_score_desc(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Feishu「各题判定」：优先展示「通过」；无有效 ``item.score`` 的排在末尾。"""
     return sorted(
@@ -145,6 +186,7 @@ def _build_scoring_notify_title(
     submit_ok: bool,
 ) -> str:
     """卡片标题用语义化通过情况，不写分数。"""
+    rows = _aggregate_by_question_id(rows)
     base = f"{env_prefix}Devshell 评测打分 · {tag}"
     if not submit_ok:
         return f"{base} · 上报失败"[:200]
@@ -169,6 +211,7 @@ def _build_markdown_body(
     stderr_tail: str,
 ) -> tuple[str, str]:
     """Returns (template_color, markdown_content)."""
+    rows = _aggregate_by_question_id(rows)
     n = len(rows)
     scores = [r["score"] for r in rows]
     summary = _full_pass_summary_line(scores)
