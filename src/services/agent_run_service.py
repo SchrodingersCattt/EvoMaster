@@ -484,6 +484,13 @@ class AgentRunService:
                 )
                 return ((False, 'cancelled'), _elapsed_ms())
             else:
+                if run_result_event.reason == 'invalid_finish':
+                    await fanout.dispatch(
+                        ErrorEvent(
+                            source='System',
+                            message='Model did not return a valid final response. Please retry.',
+                        )
+                    )
                 await fanout.dispatch(
                     StreamClosedEvent(
                         source='System',
