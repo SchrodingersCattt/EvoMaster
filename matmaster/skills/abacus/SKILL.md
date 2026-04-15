@@ -12,6 +12,26 @@ ABACUS (Atomic-orbital Based Ab-initio Computation at UStc) is an open-source DF
 
 **Efficiency rule**: Be concise — write input files directly with minimal preamble. Do NOT explain each parameter line-by-line or repeat file contents in prose. After writing all files, a brief summary (2-4 sentences) of key settings is sufficient. Lengthy explanations waste tokens without adding value.
 
+## ⛔ MANDATORY PRE-WRITE VALIDATION — check EVERY item before writing ANY INPUT file
+
+Before writing each INPUT file, verify **all** of the following. Violating any item produces wrong or unrunnable results:
+
+1. **Standard baseline present?** Every INPUT must contain: `calculation`, `basis_type`, `ecutwfc 100`, `scf_thr 1.0e-7`, `scf_nmax 100`, `smearing_method gauss`, `smearing_sigma 0.01`. Use **exactly** these values — do NOT use 60 for ecutwfc, do NOT substitute `mp`/`gaussian`/`mv` for `gauss`, do NOT raise `scf_nmax` to 200, do NOT loosen `scf_thr` to `1.0e-6`.
+2. **K-point strategy correct?**
+   - **Vacancy / defect / BSSE / adsorption / any supercell** → `kspacing` **inside INPUT** (e.g. `kspacing 0.10`). **NEVER use a separate KPT file** for these; especially **NEVER Gamma-only `1 1 1`**.
+   - **Slab with vacancy/defect** → `kspacing 0.10 0.10 1.00` **inside INPUT** (combines supercell + slab rules). No separate KPT file.
+   - **Plain slab** (no vacancy/defect) → `kspacing` recommended, or KPT file with `1` in vacuum direction (e.g. `12 12 1`).
+   - **Band structure** → separate KPT file in line-mode.
+3. **Task-specific mandatory params?**
+   - `relax` → `cal_force 1`, `force_thr_ev 0.01`, `relax_nmax 100`
+   - `cell-relax` → `cal_force 1`, `cal_stress 1`, `force_thr_ev 0.01`, `stress_thr 0.5`, `relax_nmax 100`
+   - `scf` → NSCF prep → `out_chg 1`; NSCF → `init_chg file`, `symmetry 0`, `nbands`
+   - Magnetic metal (Fe, Co, Ni, Cr, Mn, Mo, …) → `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5`
+4. **Multi-file consistency?** For comparative studies (surface energy, vacancy formation, EOS): **all** INPUT files must share identical `basis_type`, `ecutwfc`, `smearing_method`, `smearing_sigma`, `scf_thr`.
+5. **File references?** Each INPUT must include `stru_file <name>` and `kpoint_file <name>` when filenames differ from the defaults `STRU`/`KPT`.
+
+> **⛔ The #1 recurring error**: Vacancy/defect slab INPUTs that use a KPT file (especially Gamma-only `1 1 1`) instead of `kspacing` in INPUT. This is **always wrong**. A vacancy slab IS a supercell — use `kspacing 0.10 0.10 1.00` inside INPUT.
+
 ## Bohrium Submission Config
 
 | Item | Default Value |
@@ -28,12 +48,13 @@ ABACUS (Atomic-orbital Based Ab-initio Computation at UStc) is an open-source DF
 
 | Scenario | Use `kspacing` in INPUT | Use separate KPT file |
 |----------|:-----------------------:|:---------------------:|
-| Supercell (vacancy, defect, BSSE) | ✅ **mandatory** | ✗ |
+| Supercell (vacancy, defect, BSSE) | ✅ **mandatory** | ⛔ **forbidden** |
+| Vacancy/defect **slab** | ✅ **mandatory** (`0.10 0.10 1.00`) | ⛔ **forbidden** |
 | Standard bulk (small cell) | optional | ✅ |
-| Slab (surface) | ✅ recommended | ✅ |
+| Plain slab (no vacancy/defect) | ✅ recommended | ✅ (with `1` in vacuum) |
 | Band structure (k-path) | ✗ | ✅ (line-mode) |
 
-**Supercell rule**: For **any supercell calculation** (vacancy, defect, BSSE ghost atoms, adsorption, large cell), **always use `kspacing` inside the INPUT file** instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to the cell size.
+**Supercell rule**: For **any supercell calculation** — including vacancy, defect, BSSE ghost atoms, adsorption, large cell, **and any slab containing a vacancy or defect** — **always use `kspacing` inside the INPUT file** instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to the cell size. **Gamma-only (`1 1 1`) is NEVER acceptable for vacancy/defect calculations.**
 ```
 kspacing 0.10 0.10 0.10
 ```
@@ -199,13 +220,14 @@ For nanoribbons, nanotubes, or 2D materials, see KPT examples in **`references/i
 For surface energy, vacancy formation, EOS, etc.: **always create ALL requested files** with consistent settings across systems. Consult **`references/input_examples.md`** for templates (surface energy, vacancy, slab KPT with `kspacing`).
 
 **Consistency checklist** — across all INPUT files in a comparison set:
-1. **Same `basis_type`, `ecutwfc`, `smearing_method`, `smearing_sigma`, `scf_thr`** — any difference invalidates energy comparisons.
+1. **Same `basis_type`, `ecutwfc`, `smearing_method gauss`, `smearing_sigma 0.01`, `scf_thr 1.0e-7`** — any difference invalidates energy comparisons. Always use these exact standard values: **do NOT** use `mp`/`gaussian` smearing, **do NOT** use `scf_thr 1.0e-6`, **do NOT** use `scf_nmax 200` (standard is `100`).
 2. **Same `dft_functional`** (or omit entirely to use default PBE) — never mix functionals.
 3. **Task-specific mandatory params still apply**: e.g. `cal_force 1` + `cal_stress 1` for cell-relax, `cal_force 1` for relax — even inside a multi-file set.
 4. **Each INPUT must reference its STRU** via `stru_file <name>` when the filename differs from default `STRU`.
 5. **Each INPUT must reference its KPT** via `kpoint_file <name>` when the filename differs from default `KPT`.
+6. **Vacancy/defect slabs in a comparison set**: use `kspacing` in INPUT (NOT a KPT file) — see K-point Strategy section and the PRE-WRITE VALIDATION checklist above.
 
-Key slab KPT rule: **always use `1` in the vacuum direction** (e.g. `20 20 1 0 0 0`). For `kspacing` mode: `kspacing 0.10 0.10 1.00`.
+Key slab KPT rule: **always use `1` in the vacuum direction**. For surface energy: use `20 20 1 0 0 0` (or `kspacing 0.05 0.05 1.00`); `12 12` is insufficient for accurate surface energy. For `kspacing` mode: `kspacing 0.10 0.10 1.00` (general slab) or `kspacing 0.05 0.05 1.00` (surface energy).
 
 ## Output Control Parameters
 
@@ -238,7 +260,7 @@ Consult **`references/output_params.md`** for the full parameter table, output f
 ## Physical Checks
 
 - **basis_type**: `lcao` for most tasks (efficient for medium-large systems); `pw` for benchmarks or GPU acceleration
-- **ecutwfc**: for PW, typically 60-100 Ry (lower end for simple sp-elements, higher for d/f-elements); for LCAO, this controls auxiliary grid (50-100 Ry usually sufficient)
+- **ecutwfc**: Use `100` Ry as the standard default for both PW and LCAO unless the user explicitly requests a different value. Do NOT use 60 Ry "for efficiency" — 100 Ry is the production standard and all examples in this skill use it.
 - **K-points**: consistent with cell size; denser for metals. **For supercells: always use `kspacing` in INPUT, not a KPT file.**
 - **scf_nmax**: standard value is `100`. Do not increase to 200 unless you have a specific convergence problem.
 - **scf_thr**: typically 1.0e-7 or tighter for production
