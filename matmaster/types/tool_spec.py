@@ -98,6 +98,7 @@ class ToolExecutionContext:
     cancel_token: CancellationToken | None = None
     on_progress: Callable[[str], Awaitable[None]] | None = None
     runner_state: ToolRunnerState | None = None
+    tool_call_id: str | None = None
 
 
 @dataclass(frozen=True)

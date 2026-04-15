@@ -293,6 +293,28 @@ class TestBuildRuntimeFullToolRunner:
         assert rec.poll_count == 1
         assert rec.last_polled_at == 0.0
 
+    @pytest.mark.asyncio
+    async def test_build_runtime_preserves_figure_upload_config_in_runner_state(
+        self,
+    ) -> None:
+        from matmaster.core.exp import Exp
+
+        figure_upload_config = {
+            "bucket": "figures",
+            "rules": {"enabled": True, "formats": ["png", "svg"]},
+        }
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context().model_copy(
+            update={"run_meta": {"figure_upload_config": figure_upload_config}}
+        )
+
+        runtime = await exp.build_runtime(ctx)
+
+        stored = runtime.spec.tool_runner.state.get("figure_upload_config")
+        assert stored is figure_upload_config
+        assert stored == figure_upload_config
+
 
 # ── ESIN-01: run_stream() yields events and runs cleanup ─
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -544,6 +544,57 @@ class TestCancelSemantics:
 
 
 class TestHappyPath:
+    @pytest.mark.asyncio
+    async def test_full_tool_runner_passes_distinct_tool_call_ids_into_executor(
+        self,
+    ) -> None:
+        seen: list[str | None] = []
+
+        async def executor(
+            args: dict[str, Any],
+            exec_ctx: Any,
+        ) -> ToolResult:
+            seen.append(exec_ctx.tool_call_id)
+            return ToolResult(content="ok")
+
+        spec = ToolSpec(
+            tool_name="Bash",
+            effect_level="none",
+            fast_path_eligible=True,
+        )
+        binding = ToolBinding(
+            binding_key="session_fs:Bash",
+            plane=ToolPlane.SESSION_FS,
+            resource_claims=(ResourceClaim(resource="workspace", mode="shared_read"),),
+        )
+        instance = ToolInstance(
+            tool_spec=spec,
+            tool_binding=binding,
+            tool_executor=executor,
+        )
+
+        catalog = MagicMock()
+        catalog.get_tool.return_value = instance
+
+        runner = FullToolRunner(
+            catalog=catalog,
+            structural_validation=StructuralValidation(),
+            capability_policy=DefaultCapabilityPolicy(),
+            scheduler=ToolScheduler(default_timeout=1.0),
+            topology=_make_topology(),
+            state=ToolRunnerState(),
+        )
+
+        await runner.execute_batch(
+            [
+                _make_tc("Bash", call_id="call-a", command="echo a"),
+                _make_tc("Bash", call_id="call-b", command="echo b"),
+            ],
+            _make_ctx(),
+        )
+
+        assert seen == ["call-a", "call-b"]
+
     @pytest.mark.asyncio
     async def test_full_chain_success(self) -> None:
         """Full chain success: executor result returned, on_result called."""

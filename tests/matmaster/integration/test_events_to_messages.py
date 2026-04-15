@@ -252,6 +252,23 @@ class TestEventsToMessagesPreservesOrder:
         assert result[-1].content == "answer"
         assert result[-1].reasoning_content == "hidden reasoning"
 
+    def test_response_figures_does_not_enter_dialog_history(self):
+        events = [
+            _user_event("q"),
+            {
+                "source": "System",
+                "type": "response_figures",
+                "content": {"figures": []},
+            },
+            _response_event("answer"),
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assert len(result) == 2
+        assert isinstance(result[-1], AssistantMessage)
+        assert result[-1].content == "answer"
+
     def test_assistant_state_drops_trivial_tool_call_preamble_content(self):
         events = [
             _user_event("q"),

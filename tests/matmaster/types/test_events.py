@@ -16,14 +16,15 @@ from matmaster.types.events import (
     BohriumNodeEvent,
     BusEvent,
     CancelledEvent,
+    CompactionEvent,
     ConfirmationRequestEvent,
     ConfirmationTimeoutEvent,
-    ContextCompactionEvent,
     ErrorEvent,
     ExpRunEvent,
     McpConnectEvent,
     McpServerStatusEvent,
     ResponseEvent,
+    ResponseFiguresEvent,
     RunResultEvent,
     SkillHitEvent,
     StreamClosedEvent,
@@ -34,6 +35,7 @@ from matmaster.types.events import (
     ToolResultEvent,
     WorkspaceUploadErrorEvent,
 )
+from matmaster.types.figures import FigureDescriptor
 
 # ── Individual AgentEvent types ─────────────────────────
 
@@ -180,9 +182,56 @@ class TestSystemEvents:
         assert evt.type == "confirmation_timeout"
         assert evt.default_reply is None
 
-    def test_context_compaction(self) -> None:
-        evt = ContextCompactionEvent(source="system", payload={"tokens_before": 100000})
-        assert evt.type == "context_compaction"
+    def test_compaction(self) -> None:
+        evt = CompactionEvent(
+            source="context_compactor",
+            compaction_id="task-1:root:1",
+            status="running",
+            phase="runtime",
+            trigger_tokens=950,
+        )
+        assert evt.type == "compaction"
+
+    def test_compaction_event_running_round_trip(self) -> None:
+        evt = CompactionEvent(
+            source="context_compactor",
+            compaction_id="task-1:root:1",
+            status="running",
+            phase="runtime",
+            trigger_tokens=950,
+        )
+
+        dumped = evt.model_dump(mode="json")
+        restored = CompactionEvent.model_validate(dumped)
+
+        assert restored.type == "compaction"
+        assert restored.compaction_id == "task-1:root:1"
+        assert restored.status == "running"
+        assert restored.phase == "runtime"
+        assert restored.strategy is None
+
+    def test_compaction_event_complete_round_trip(self) -> None:
+        evt = CompactionEvent(
+            source="context_compactor",
+            compaction_id="task-1:root:2",
+            status="complete",
+            phase="runtime",
+            strategy="summary",
+            durability="durable",
+            trigger_tokens=1200,
+            retained_turns=3,
+            checkpoint_written=True,
+            covered_until_event_id=88,
+        )
+
+        dumped = evt.model_dump(mode="json")
+        restored = CompactionEvent.model_validate(dumped)
+
+        assert restored.type == "compaction"
+        assert restored.status == "complete"
+        assert restored.strategy == "summary"
+        assert restored.checkpoint_written is True
+        assert restored.covered_until_event_id == 88
 
     def test_exp_run(self) -> None:
         evt = ExpRunEvent(source="system", exp_name="mat_master")
@@ -225,6 +274,20 @@ class TestSystemEvents:
         assert evt.message == ""
         assert evt.elapsed_ms is None
         assert evt.error is None
+
+    def test_response_figures(self) -> None:
+        evt = ResponseFiguresEvent(
+            source="system",
+            figures=[
+                FigureDescriptor(
+                    figure_id="band_structure",
+                    asset_url="https://oss.example/band.png",
+                    caption="Si 的能带图",
+                )
+            ],
+        )
+        assert evt.type == "response_figures"
+        assert evt.figures[0].figure_id == "band_structure"
 
     def test_ask_question(self) -> None:
         evt = AskQuestionEvent(
@@ -388,7 +451,13 @@ class TestSystemEventDiscriminator:
                 "request_id": "aq_1",
                 "questions": [],
             },
-            {"type": "context_compaction", "source": "s", "payload": {}},
+            {
+                "type": "compaction",
+                "source": "context_compactor",
+                "compaction_id": "task-1:root:1",
+                "status": "running",
+                "phase": "runtime",
+            },
             {"type": "exp_run", "source": "s", "exp_name": "e"},
             {"type": "cancelled", "source": "s"},
             {"type": "stream_closed", "source": "s"},
@@ -396,6 +465,7 @@ class TestSystemEventDiscriminator:
             {"type": "bohrium_node", "source": "s"},
             {"type": "mcp_server_status", "source": "s", "server_name": "n"},
             {"type": "mcp_connect", "source": "s"},
+            {"type": "response_figures", "source": "s", "figures": []},
         ]
         expected_types = [
             ConfirmationRequestEvent,
@@ -403,7 +473,7 @@ class TestSystemEventDiscriminator:
             AskQuestionEvent,
             AskQuestionReplyEvent,
             AskQuestionTimeoutEvent,
-            ContextCompactionEvent,
+            CompactionEvent,
             ExpRunEvent,
             CancelledEvent,
             StreamClosedEvent,
@@ -411,6 +481,7 @@ class TestSystemEventDiscriminator:
             BohriumNodeEvent,
             McpServerStatusEvent,
             McpConnectEvent,
+            ResponseFiguresEvent,
         ]
         for payload, expected in zip(payloads, expected_types):
             result = _system_event_adapter.validate_python(payload)
@@ -420,8 +491,8 @@ class TestSystemEventDiscriminator:
 
 
 class TestBusEventUnion:
-    def test_validates_all_22_types(self) -> None:
-        """BusEvent union can validate all 22 event types."""
+    def test_validates_all_23_types(self) -> None:
+        """BusEvent union can validate all 23 event types."""
         payloads = [
             # 9 AgentEvent types
             {"type": "thought", "source": "a"},
@@ -450,7 +521,7 @@ class TestBusEventUnion:
                 "call_id": "c",
                 "tool_name": "t",
             },
-            # 13 SystemEvent types
+            # 14 SystemEvent types
             {
                 "type": "confirmation_request",
                 "source": "s",
@@ -476,7 +547,13 @@ class TestBusEventUnion:
                 "request_id": "aq_1",
                 "questions": [],
             },
-            {"type": "context_compaction", "source": "s", "payload": {}},
+            {
+                "type": "compaction",
+                "source": "context_compactor",
+                "compaction_id": "task-1:root:1",
+                "status": "running",
+                "phase": "runtime",
+            },
             {"type": "exp_run", "source": "s", "exp_name": "e"},
             {"type": "cancelled", "source": "s"},
             {"type": "stream_closed", "source": "s"},
@@ -484,6 +561,7 @@ class TestBusEventUnion:
             {"type": "bohrium_node", "source": "s"},
             {"type": "mcp_server_status", "source": "s", "server_name": "n"},
             {"type": "mcp_connect", "source": "s"},
+            {"type": "response_figures", "source": "s", "figures": []},
         ]
         for payload in payloads:
             result = _bus_event_adapter.validate_python(payload)
@@ -497,6 +575,28 @@ class TestBusEventUnion:
     def test_invalid_type_raises(self) -> None:
         with pytest.raises(ValidationError):
             _bus_event_adapter.validate_python({"type": "nonexistent", "source": "x"})
+
+    def test_response_figures_event_round_trips_through_bus_union(self) -> None:
+        evt = ResponseFiguresEvent(
+            source="System",
+            figures=[
+                FigureDescriptor(
+                    figure_id="band_structure",
+                    asset_url="https://oss.example/band.png",
+                    caption="Si 的能带图",
+                    alt="Si 的能带结构图",
+                    importance="primary",
+                    placement_hint="sidebar_only",
+                    source_tool_call_id="call-band",
+                )
+            ],
+        )
+
+        dumped = evt.model_dump(mode="json")
+        restored = TypeAdapter(BusEvent).validate_python(dumped)
+
+        assert isinstance(restored, ResponseFiguresEvent)
+        assert restored.figures[0].figure_id == "band_structure"
 
 
 class TestEventSerializationRoundtrip:
@@ -517,7 +617,12 @@ class TestEventSerializationRoundtrip:
             AskQuestionEvent(source="s", request_id="aq_1", questions=[]),
             AskQuestionReplyEvent(source="s", request_id="aq_1", answers={}),
             AskQuestionTimeoutEvent(source="s", request_id="aq_1", questions=[]),
-            ContextCompactionEvent(source="s", payload={}),
+            CompactionEvent(
+                source="context_compactor",
+                compaction_id="task-1:root:1",
+                status="running",
+                phase="runtime",
+            ),
             ExpRunEvent(source="s", exp_name="e"),
             CancelledEvent(source="s"),
             StreamClosedEvent(source="s"),
@@ -525,6 +630,7 @@ class TestEventSerializationRoundtrip:
             BohriumNodeEvent(source="s"),
             McpServerStatusEvent(source="s", server_name="n"),
             McpConnectEvent(source="s"),
+            ResponseFiguresEvent(source="s", figures=[]),
         ]
         for event in events:
             data = event.model_dump()
@@ -535,8 +641,8 @@ class TestEventSerializationRoundtrip:
 
 
 class TestNoTypeCollision:
-    def test_all_22_type_literals_are_unique(self) -> None:
-        """All 22 type literals must be globally unique strings."""
+    def test_all_23_type_literals_are_unique(self) -> None:
+        """All 23 type literals must be globally unique strings."""
         type_values = [
             "thought",
             "response",
@@ -552,7 +658,7 @@ class TestNoTypeCollision:
             "ask_question",
             "ask_question_reply",
             "ask_question_timeout",
-            "context_compaction",
+            "compaction",
             "exp_run",
             "cancelled",
             "stream_closed",
@@ -560,9 +666,10 @@ class TestNoTypeCollision:
             "bohrium_node",
             "mcp_server_status",
             "mcp_connect",
+            "response_figures",
         ]
-        assert len(type_values) == 22
-        assert len(set(type_values)) == 22
+        assert len(type_values) == 23
+        assert len(set(type_values)) == 23
 
 
 # ── Edge case tests (QUAL-01) ─────────────────────────
@@ -583,7 +690,7 @@ _ALL_EVENT_CLASSES = [
     AskQuestionEvent,
     AskQuestionReplyEvent,
     AskQuestionTimeoutEvent,
-    ContextCompactionEvent,
+    CompactionEvent,
     ExpRunEvent,
     CancelledEvent,
     StreamClosedEvent,
@@ -591,6 +698,7 @@ _ALL_EVENT_CLASSES = [
     BohriumNodeEvent,
     McpServerStatusEvent,
     McpConnectEvent,
+    ResponseFiguresEvent,
 ]
 
 
@@ -608,10 +716,16 @@ def _make_event_instance(cls):
         AskQuestionEvent: {"request_id": "aq_1", "questions": []},
         AskQuestionReplyEvent: {"request_id": "aq_1", "answers": {}},
         AskQuestionTimeoutEvent: {"request_id": "aq_1", "questions": []},
-        ContextCompactionEvent: {"payload": {"tokens": 100}},
+        CompactionEvent: {
+            "compaction_id": "task-1:root:1",
+            "status": "running",
+            "phase": "runtime",
+            "trigger_tokens": 950,
+        },
         ExpRunEvent: {"exp_name": "mat_master"},
         WorkspaceUploadErrorEvent: {"message": "upload failed"},
         McpServerStatusEvent: {"server_name": "code-server"},
+        ResponseFiguresEvent: {"figures": []},
     }
     kwargs = {"source": "test", **required_extra.get(cls, {})}
     return cls(**kwargs)
