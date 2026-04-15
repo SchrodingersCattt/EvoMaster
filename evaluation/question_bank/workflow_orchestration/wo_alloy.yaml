@@ -34,7 +34,6 @@ questions:
       - bulk_modulus_GPa
       - db_reference
       - comparison_summary
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: nico_cr_roomtemp_report.md
@@ -45,7 +44,6 @@ questions:
       - APEX
       - 对比
       - 不确定性
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 10
@@ -128,7 +126,6 @@ questions:
       - output_structure
       - optimization_status
       - APEX
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: alloy_opt_report.md
@@ -137,7 +134,6 @@ questions:
       - alloy
       - structure
       - 不确定性
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 14
@@ -222,7 +218,6 @@ questions:
       - Cu
       - Cr
       - Zr
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: cucrzr_convex_hull_report.md
@@ -231,7 +226,6 @@ questions:
       - stability
       - CuCrZr
       - 不确定性
-      language_agnostic: true
   - key: hull_distance_mock
     value: 0.024
     tolerance: 0.01

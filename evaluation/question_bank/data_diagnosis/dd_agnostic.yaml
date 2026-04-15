@@ -139,7 +139,6 @@ questions:
       - 风险
       - 建议
       - 立项
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 8
@@ -282,7 +281,6 @@ questions:
       - 交付格式
       - experiment_metrics.csv
       - IQR
-      language_agnostic: true
   - key: qc_report_missing_rate_regex
     value:
       filename: data_qc_report.md

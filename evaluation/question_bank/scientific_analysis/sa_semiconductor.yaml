@@ -103,7 +103,6 @@ questions:
       - predicted_effect
       - selection_reason
       - similar_formulation_hint
-      language_agnostic: true
   - key: proposal_tokens
     value:
       filename: perovskite_additive_proposal.md
@@ -113,7 +112,6 @@ questions:
       - 预期结果
       - 风险
       - 不确定性
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 10
@@ -191,7 +189,6 @@ questions:
       - 局限性
       - 误差
       - Sawyer-Tower
-      language_agnostic: true
   - key: json_tokens
     value:
       filename: double_wave_keypoints.json
@@ -200,7 +197,6 @@ questions:
       - applications
       - limitations
       - best_practices
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 8

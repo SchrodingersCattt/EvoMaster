@@ -210,7 +210,6 @@ questions:
       - 不确定性
       - 验证建议
       - MPa
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 8

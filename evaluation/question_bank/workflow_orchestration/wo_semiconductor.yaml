@@ -112,7 +112,6 @@ questions:
       - imaginary_mode_check
       - key_frequency_summary
       - supercell_or_min_length
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: si_phonon_abacus_report.md
@@ -123,7 +122,6 @@ questions:
       - 优化
       - 虚频
       - 不确定性
-      language_agnostic: true
   - key: gamma_freq_mock
     value: 15.6
     tolerance: 1.0

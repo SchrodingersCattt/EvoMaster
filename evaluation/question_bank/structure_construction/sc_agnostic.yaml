@@ -1028,7 +1028,6 @@ questions:
       - Co
       - Cr
       - V
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 18
@@ -1128,7 +1127,6 @@ questions:
       - Al2O3
       - lattice
       - coordinate
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 16
@@ -1307,7 +1305,6 @@ questions:
       - Pm-3m
       - lattice
       - uncertainty
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 14

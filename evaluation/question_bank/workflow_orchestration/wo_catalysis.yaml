@@ -111,7 +111,6 @@ questions:
       - z
       - functional
       - calculation_mode
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: pd111_work_function_report.md
@@ -121,7 +120,6 @@ questions:
       - ABACUS
       - z
       - 不确定性
-      language_agnostic: true
   - key: wf_value_mock
     value: 5.43
     tolerance: 0.3

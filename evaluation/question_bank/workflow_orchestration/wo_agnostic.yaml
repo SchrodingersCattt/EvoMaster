@@ -107,7 +107,6 @@ questions:
       - charge_transfer
       - Al
       - O
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: al2o3_bader_report.md
@@ -119,7 +118,6 @@ questions:
       - Al
       - O
       - 不确定性
-      language_agnostic: true
   - key: al_bader_charge_mock
     value: 2.31
     tolerance: 0.3
@@ -235,7 +233,6 @@ questions:
       - 异常处理
       - 缺失值
       - 单位一致性
-      language_agnostic: true
   - key: delivery_required_tokens
     value:
       filename: delivery_plan.md
@@ -243,7 +240,6 @@ questions:
       - 图
       - 表
       - 文字说明
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 8
@@ -362,7 +358,6 @@ questions:
       - 能带
       - MSD
       - 概率密度
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 8
@@ -479,7 +474,6 @@ questions:
       - 先筛选再深入计算
       - 并行
       - 报告结构
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 8
@@ -935,7 +929,6 @@ questions:
       - bulk_modulus_GPa
       - db_reference_summary
       - comparison_note
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: nico_cr_elastic_report.md
@@ -946,7 +939,6 @@ questions:
       - APEX
       - 对比
       - 不确定性
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 16
@@ -1031,7 +1023,6 @@ questions:
       - binary_formation_energy_summary
       - solid_solution_prediction
       - possible_structure
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: hea_alcr0.8cofeni_report.md
@@ -1042,7 +1033,6 @@ questions:
       - 混合熵
       - 固溶体
       - 不确定性
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 16
@@ -1124,7 +1114,6 @@ questions:
       - C44
       - bulk_modulus_GPa
       - calculation_settings
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: gaas_elastic_abacus_report.md
@@ -1134,7 +1123,6 @@ questions:
       - elastic
       - bulk modulus
       - 不确定性
-      language_agnostic: true
   - key: gaas_c11_mock
     value: 118.4
     tolerance: 12.0
@@ -1221,7 +1209,6 @@ questions:
       - C44
       - elastic_method
       - deformation_settings
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: srtio3_elastic_apex_report.md
@@ -1232,7 +1219,6 @@ questions:
       - C12
       - C44
       - 不确定性
-      language_agnostic: true
   - key: srtio3_c11_mock
     value: 316.8
     tolerance: 25.0
@@ -1325,7 +1311,6 @@ questions:
       - bulk_modulus
       - '0.8'
       - '1.2'
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: alloy_eos_report.md
@@ -1335,7 +1320,6 @@ questions:
       - 扫描
       - bulk modulus
       - 不确定性
-      language_agnostic: true
   - key: eos_bulk_modulus_mock
     value: 178.6
     tolerance: 20.0
@@ -1518,7 +1502,6 @@ questions:
       - 迭代
       - 失败点
       - 第一周
-      language_agnostic: true
   - key: checklist_required_tokens
     value:
       filename: dpgen_checklist.json
@@ -1623,7 +1606,6 @@ questions:
       - phonon_status
       - scf_status
       - band_dos_status
-      language_agnostic: true
   - key: report_tokens
     value:
       filename: srti03_nb125_workflow_report.md
@@ -1634,7 +1616,6 @@ questions:
       - 弹性
       - 声子
       - 不确定性
-      language_agnostic: true
   - key: relax_energy_drop_mock
     value: 1.84
     tolerance: 0.8
@@ -1883,7 +1864,6 @@ questions:
       - start_lr
       - stop_lr
       - valid_ratio
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: dpa3_finetune_report.md
@@ -1893,7 +1873,6 @@ questions:
       - 结果
       - 建议
       - 不确定性
-      language_agnostic: true
   - key: best_valid_loss_mock
     value: 0.021
     tolerance: 0.01
@@ -2136,7 +2115,6 @@ questions:
       - imaginary_mode_check
       - output_artifacts
       - MgB2
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: mgb2_phonon_report.md
@@ -2146,7 +2124,6 @@ questions:
       - 声子
       - 参数
       - 不确定性
-      language_agnostic: true
   - key: gamma_e2g_mock
     value: 74.8
     tolerance: 10.0
@@ -2242,7 +2219,6 @@ questions:
       - thermo_stats
       - '300'
       - '1'
-      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: li2o_md_report.md
@@ -2253,7 +2229,6 @@ questions:
       - 1 fs
       - 温度
       - 不确定性
-      language_agnostic: true
   - key: temperature_avg_mock
     value: 301.2
     tolerance: 15.0
@@ -2367,7 +2342,6 @@ questions:
       - 40
       - 225
       - 不确定性
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 18

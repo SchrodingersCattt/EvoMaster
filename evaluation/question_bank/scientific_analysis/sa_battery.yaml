@@ -31,7 +31,6 @@ questions:
       - interface_stability_note
       - ionic_conductivity_note
       - reference_hint
-      language_agnostic: true
   - key: review_required_tokens
     value:
       filename: sulfur_sse_review.md
@@ -41,7 +40,6 @@ questions:
       - 界面稳定
       - 离子电导
       - 不确定性
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 10

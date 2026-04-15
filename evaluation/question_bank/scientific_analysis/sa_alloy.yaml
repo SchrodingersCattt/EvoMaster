@@ -31,7 +31,6 @@ questions:
       - ni_content
       - predicted_uts
       - trend_label
-      language_agnostic: true
   - key: analysis_tokens
     value:
       filename: duplex_ni_tensile_analysis.md
@@ -40,7 +39,6 @@ questions:
       - 抗拉强度
       - 相比例
       - 不确定性
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 10
@@ -121,7 +119,6 @@ questions:
       - binary_energy_summary
       - solid_solution_prediction
       - possible_structure
-      language_agnostic: true
   - key: hea_report_tokens
     value:
       filename: hea_alcr0.8cofeni_kb_report.md
@@ -132,7 +129,6 @@ questions:
       - 混合熵
       - 固溶体
       - 不确定性
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 10

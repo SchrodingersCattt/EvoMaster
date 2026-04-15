@@ -42,7 +42,6 @@ questions:
       - 每条候选的体积与原子数来源说明
       - average volume per atom 的计算过程与结果
       - 样本偏差或不确定性讨论
-      language_agnostic: true
   - key: turn_budget
     value:
       max: 16
