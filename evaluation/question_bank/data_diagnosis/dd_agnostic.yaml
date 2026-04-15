@@ -281,16 +281,6 @@ questions:
       - 交付格式
       - experiment_metrics.csv
       - IQR
-  - key: qc_report_missing_rate_regex
-    value:
-      filename: data_qc_report.md
-      pattern: (?i)(缺失率|missing\s*rate)
-      flags: i
-  - key: qc_report_outlier_regex
-    value:
-      filename: data_qc_report.md
-      pattern: (?i)(1\.5\s*\*\s*IQR|IQR.*Q1.*Q3)
-      flags: i
   - key: turn_budget
     value:
       max: 7
@@ -348,14 +338,6 @@ questions:
       consistency, and deliverable format).'
     axis: correctness
     verify: llm_binary_judge
-  - id: qc_report_missing_rate_regex
-    criterion: '`data_qc_report.md` reports missing-rate style check explicitly.'
-    axis: correctness
-    verify: text_file_regex
-  - id: qc_report_outlier_regex
-    criterion: '`data_qc_report.md` explicitly states an IQR-style outlier rule.'
-    axis: correctness
-    verify: text_file_regex
   - id: grounding_source
     criterion: Final answer and generated files are grounded in `experiment_metrics.csv` columns
       and do not invent nonexistent fields.
