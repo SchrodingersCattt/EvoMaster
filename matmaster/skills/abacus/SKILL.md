@@ -24,9 +24,28 @@ ABACUS (Atomic-orbital Based Ab-initio Computation at UStc) is an open-source DF
 > For GPU-accelerated runs: `machine="c8_m60_1 * NVIDIA 4090"` with `basis_type pw`.
 > For different versions: `Bohrium(action="list_images", keyword="abacus")`.
 
+## K-point Strategy: `kspacing` (in INPUT) vs KPT file
+
+| Scenario | Use `kspacing` in INPUT | Use separate KPT file |
+|----------|:-----------------------:|:---------------------:|
+| Supercell (vacancy, defect, BSSE) | ✅ **mandatory** | ✗ |
+| Standard bulk (small cell) | optional | ✅ |
+| Slab (surface) | ✅ recommended | ✅ |
+| Band structure (k-path) | ✗ | ✅ (line-mode) |
+
+**Supercell rule**: For **any supercell calculation** (vacancy, defect, BSSE ghost atoms, adsorption, large cell), **always use `kspacing` inside the INPUT file** instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to the cell size.
+```
+kspacing 0.10 0.10 0.10
+```
+- Typical value: `0.10` (Å⁻¹) for metals, `0.12`–`0.15` for insulators.
+- For slabs in `kspacing` mode: set the vacuum direction to `1.00` (e.g., `kspacing 0.10 0.10 1.00` for z-vacuum).
+- When `kspacing` is present in INPUT, ABACUS ignores the KPT file entirely — you may omit the KPT file.
+
+> **Why**: A separate KPT file with a fixed mesh (e.g. `4 4 4`) may be too dense or too sparse for a supercell whose dimensions differ from the primitive cell. `kspacing` provides consistent k-point density per Å⁻¹ regardless of cell size.
+
 ## Input Preparation
 
-ABACUS uses **three mandatory input files**: `INPUT`, `STRU`, `KPT`.
+ABACUS uses **three mandatory input files**: `INPUT`, `STRU`, `KPT` (KPT is optional when `kspacing` is set in INPUT).
 
 ### Using render_input.py (recommended)
 
@@ -114,6 +133,7 @@ If the user provides complete INPUT + STRU + KPT files with pseudopotentials and
 | **work function / pot** | `out_pot 2` |
 | **dipole correction** | `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_pos_max`, `efield_pos_dec`, `efield_amp 0.0` |
 | **spin-polarized** | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` |
+| **supercell / vacancy / defect / BSSE** | **`kspacing 0.10`** (or `0.10 0.10 1.00` for slabs) — **inside INPUT, not a KPT file** |
 
 > **⚠ `force_thr_ev` vs `force_thr`**: Always use **`force_thr_ev`** (eV/Å). Do NOT use `force_thr` (Ry/Bohr) — they have completely different units and threshold values. `force_thr_ev 0.01` ≈ `force_thr 3.9e-4`.
 
@@ -218,8 +238,9 @@ Consult **`references/output_params.md`** for the full parameter table, output f
 ## Physical Checks
 
 - **basis_type**: `lcao` for most tasks (efficient for medium-large systems); `pw` for benchmarks or GPU acceleration
-- **ecutwfc**: for PW, typically 60-100 Ry; for LCAO, this controls auxiliary grid (50-100 Ry usually sufficient)
-- **K-points**: consistent with cell size; denser for metals
+- **ecutwfc**: for PW, typically 60-100 Ry (lower end for simple sp-elements, higher for d/f-elements); for LCAO, this controls auxiliary grid (50-100 Ry usually sufficient)
+- **K-points**: consistent with cell size; denser for metals. **For supercells: always use `kspacing` in INPUT, not a KPT file.**
+- **scf_nmax**: standard value is `100`. Do not increase to 200 unless you have a specific convergence problem.
 - **scf_thr**: typically 1.0e-7 or tighter for production
 - **Pseudopotential + orbital consistency**: PP and orbital files must match (same element, same exchange-correlation type)
 - **LCAO orbital quality**: choose orbital radius and completeness appropriate for accuracy needs (e.g. `DZP` for production, `SZV` for testing)
