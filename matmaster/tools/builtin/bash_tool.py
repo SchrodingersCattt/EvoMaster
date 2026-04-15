@@ -106,7 +106,12 @@ class BashTool(BuiltinTool):
             f"{workspace_note}"
             "Shell state does not persist between commands. "
             "Use dedicated tools instead of shell equivalents "
-            "(Glob not find, Grep not grep, Read not cat, Edit not sed, Write not echo)."
+            "(Glob not find, Grep not grep, Read not cat, Edit not sed, Write not echo). "
+            "If a Bash command generates figures for the final answer, save them under "
+            "`$ARTIFACT_DIR` and write `$MANIFEST_PATH` as JSON like "
+            '`{"figures":[{"figure_id":"...","path":"relative/path.png","caption":"..."}]}`. '
+            "`path` must be relative to `$ARTIFACT_DIR`; supported formats are png, jpg, "
+            "jpeg, and webp; files not listed in the manifest are ignored."
         )
 
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
