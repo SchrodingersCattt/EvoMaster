@@ -155,13 +155,16 @@ async def chat_stream(
     run_agent 报错；前端需消费本次 POST 的 response body（SSE）并合并到 UI，不能只依赖「订阅」连接。"""
     sid = session_id.strip()
     has_content = req is not None and bool((req.content or '').strip())
+    is_share_route = request.url.path.startswith('/share/')
+    if is_share_route and has_content:
+        raise ForbiddenErrorResponse(msg='分享页仅支持只读订阅，不允许发送消息')
     logger.info(
-        'stream request: session_id=%s user_id=%s has_content=%s',
+        'stream request: session_id=%s user_id=%s has_content=%s share_route=%s',
         sid,
         user_id,
         has_content,
+        is_share_route,
     )
-    # 发消息须为所有者（或已分享）；仅订阅 SSE 时允许 tools-server admin 白名单只读
     allow_admin_read = not has_content
     if not chat_svc.can_access_session(sid, user_id, allow_admin_read=allow_admin_read):
         logger.warning(
