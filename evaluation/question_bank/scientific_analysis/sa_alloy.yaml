@@ -2,7 +2,7 @@ version: v5
 capability: scientific_analysis
 domain: alloy
 questions:
-- id: WO_general_steel_008_20260411v1
+- id: WO_general_steel_008_20260415
   capability: scientific_analysis
   domain: alloy
   intent: Analyze Ni-content variation in duplex stainless-steel composition and summarize
@@ -26,21 +26,21 @@ questions:
   - key: tensile_tokens
     value:
       filename: duplex_ni_tensile_predictions.json
-      tokens:
+      must_cover:
       - formula
       - ni_content
       - predicted_uts
       - trend_label
-      flags: i
+      language_agnostic: true
   - key: analysis_tokens
     value:
       filename: duplex_ni_tensile_analysis.md
-      tokens:
+      must_cover:
       - Ni
       - 抗拉强度
       - 相比例
       - 不确定性
-      flags: i
+      language_agnostic: true
   - key: turn_budget
     value:
       max: 10
@@ -62,11 +62,11 @@ questions:
   - id: tensile_tokens
     criterion: Prediction JSON includes required composition-strength fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: analysis_tokens
     criterion: Analysis document explains Ni-strength trend with uncertainty caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Deliverables are grounded in generated prediction artifacts and avoid unsupported
       metallurgy claims.
@@ -89,7 +89,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_hea_005_20260411v1
+- id: WO_general_hea_005_20260415
   capability: scientific_analysis
   domain: alloy
   intent: Evaluate phase-formation tendency of AlCr0.8CoFeNi HEA using descriptor calculations,
@@ -114,25 +114,25 @@ questions:
   - key: hea_required_tokens
     value:
       filename: hea_alcr0.8cofeni_kb_summary.json
-      tokens:
+      must_cover:
       - vec
       - mixing_enthalpy
       - mixing_entropy
       - binary_energy_summary
       - solid_solution_prediction
       - possible_structure
-      flags: i
+      language_agnostic: true
   - key: hea_report_tokens
     value:
       filename: hea_alcr0.8cofeni_kb_report.md
-      tokens:
+      must_cover:
       - AlCr0.8CoFeNi
       - VEC
       - 混合焓
       - 混合熵
       - 固溶体
       - 不确定性
-      flags: i
+      language_agnostic: true
   - key: turn_budget
     value:
       max: 10
@@ -154,11 +154,11 @@ questions:
   - id: hea_required_tokens
     criterion: Summary JSON includes required HEA descriptor and prediction fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: hea_report_tokens
     criterion: Report explains rationale and uncertainty caveats for the solid-solution prediction.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Deliverables are grounded in generated HEA-analysis artifacts and avoid unsupported
       phase claims.

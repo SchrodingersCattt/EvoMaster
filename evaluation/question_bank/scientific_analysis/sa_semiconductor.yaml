@@ -74,7 +74,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_general_perov_007_20260411v1
+- id: WO_general_perov_007_20260415
   capability: scientific_analysis
   domain: semiconductor
   intent: Query high-efficiency perovskite additives and produce recommendation plus a proposal
@@ -98,22 +98,22 @@ questions:
   - key: additive_tokens
     value:
       filename: perovskite_additive_candidates.json
-      tokens:
+      must_cover:
       - smiles
       - predicted_effect
       - selection_reason
       - similar_formulation_hint
-      flags: i
+      language_agnostic: true
   - key: proposal_tokens
     value:
       filename: perovskite_additive_proposal.md
-      tokens:
+      must_cover:
       - 目标
       - 验证
       - 预期结果
       - 风险
       - 不确定性
-      flags: i
+      language_agnostic: true
   - key: turn_budget
     value:
       max: 10
@@ -135,11 +135,11 @@ questions:
   - id: additive_tokens
     criterion: Candidate JSON includes required additive-recommendation fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: proposal_tokens
     criterion: Proposal document covers objectives, validation plan, and uncertainty/risk.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Deliverables are grounded in generated candidate analysis rather than unsupported
       additive claims.
@@ -162,7 +162,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_ferro_009_20260411v1
+- id: WO_general_ferro_009_20260415
   capability: scientific_analysis
   domain: semiconductor
   intent: Explain principle, applications, and limitations of the double-wave method in Sawyer-Tower
@@ -185,22 +185,22 @@ questions:
   - key: notes_tokens
     value:
       filename: double_wave_sawyer_tower_notes.md
-      tokens:
+      must_cover:
       - 原理
       - 应用
       - 局限性
       - 误差
       - Sawyer-Tower
-      flags: i
+      language_agnostic: true
   - key: json_tokens
     value:
       filename: double_wave_keypoints.json
-      tokens:
+      must_cover:
       - principle
       - applications
       - limitations
       - best_practices
-      flags: i
+      language_agnostic: true
   - key: turn_budget
     value:
       max: 8
@@ -222,11 +222,11 @@ questions:
   - id: notes_tokens
     criterion: Notes cover principle, applications, limitations, and error sources.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: json_tokens
     criterion: Keypoint JSON includes all required structured fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Deliverables are grounded in methodological references and avoid unsupported
       claims.

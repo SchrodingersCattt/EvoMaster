@@ -81,7 +81,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_elec_009_20260411v1
+- id: WO_elec_009_20260415
   capability: workflow_orchestration
   domain: semiconductor
   intent: Compute Si phonon dispersion with ABACUS (including relaxation step) and summarize
@@ -107,23 +107,23 @@ questions:
   - key: json_required_tokens
     value:
       filename: si_phonon_abacus.json
-      tokens:
+      must_cover:
       - displacement_step
       - imaginary_mode_check
       - key_frequency_summary
       - supercell_or_min_length
-      flags: i
+      language_agnostic: true
   - key: report_required_tokens
     value:
       filename: si_phonon_abacus_report.md
-      tokens:
+      must_cover:
       - Si
       - ABACUS
       - phonon
       - 优化
       - 虚频
       - 不确定性
-      flags: i
+      language_agnostic: true
   - key: gamma_freq_mock
     value: 15.6
     tolerance: 1.0
@@ -148,11 +148,11 @@ questions:
   - id: json_required_tokens
     criterion: JSON contains key phonon workflow and imaginary-mode-check fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report explains relax→phonon workflow and uncertainty caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: gamma_freq_mock
     criterion: Final answer includes a mock gamma optical frequency value near 15.6 THz.
     axis: correctness
