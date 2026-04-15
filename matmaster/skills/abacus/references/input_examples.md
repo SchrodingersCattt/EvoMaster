@@ -2,7 +2,7 @@
 
 ## Quick Reference: Mandatory Parameters by Task Type
 
-Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc 100`, `scf_thr 1.0e-7`, `scf_nmax 100`, `smearing_method gauss`, `smearing_sigma 0.01`. Use **exactly** these standard values — do not deviate.
+Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `scf_thr`, `scf_nmax`, `smearing_method`, `smearing_sigma`.
 
 | Task | Additional mandatory parameters | Common omission |
 |------|---------------------------------|-----------------|
@@ -88,59 +88,6 @@ mixing_gg0 1.5
 kspacing 0.10 0.10 1.00
 ```
 > For slab BSSE calculations: set the vacuum direction of kspacing to `1.00`.
-
-### Vacancy Formation Energy — Multi-File Example (bulk + clean slab + vacancy slab)
-
-**All three INPUT files must share identical baseline** (`basis_type`, `ecutwfc`, `smearing_method gauss`, `smearing_sigma 0.01`, `scf_thr 1.0e-7`).
-
-**Bulk reference (cell-relax):**
-```
-INPUT_PARAMETERS
-calculation cell-relax
-basis_type pw
-ecutwfc 100
-scf_thr 1.0e-7
-scf_nmax 100
-smearing_method gauss
-smearing_sigma 0.01
-cal_force 1
-cal_stress 1
-force_thr_ev 0.01
-stress_thr 0.5
-relax_nmax 100
-stru_file bulk.stru
-kspacing 0.10
-```
-> `cal_force 1` AND `cal_stress 1` are BOTH mandatory for cell-relax. `kspacing 0.10` for bulk (adapts to cell size).
-
-**Clean slab (SCF):**
-```
-INPUT_PARAMETERS
-calculation scf
-basis_type pw
-ecutwfc 100
-scf_thr 1.0e-7
-scf_nmax 100
-smearing_method gauss
-smearing_sigma 0.01
-stru_file slab_clean.stru
-kspacing 0.10 0.10 1.00
-```
-
-**Vacancy slab (SCF):**
-```
-INPUT_PARAMETERS
-calculation scf
-basis_type pw
-ecutwfc 100
-scf_thr 1.0e-7
-scf_nmax 100
-smearing_method gauss
-smearing_sigma 0.01
-stru_file slab_vac.stru
-kspacing 0.10 0.10 1.00
-```
-> **Critical**: Both slab INPUTs use `kspacing 0.10 0.10 1.00` (NOT a separate KPT file). A vacancy slab IS a supercell — Gamma-only or sparse fixed meshes are unacceptable. For magnetic metals (Fe, Mo, Cr, Mn, Co, Ni), also add `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5`.
 
 ### Work Function / Electrostatic Potential INPUT Example
 ```
@@ -322,7 +269,7 @@ Line
 - Use consistent parameters across all.
 
 ### KPT for Slab Calculations
-- In-plane: dense mesh. **Use `20 20` for surface energy calculations** (this is the standard, not optional). `12 12` is the absolute minimum for quick tests but is insufficient for accurate surface energy. Use `kspacing 0.05 0.05 1.00` for the slab or `kspacing 0.05` for bulk when using kspacing mode.
+- In-plane: dense mesh. **Min `12 12` for metals**; `20 20` for accurate surface energy.
 - Vacuum direction: **always `1`**. Never more than 1 k-point.
 - `kspacing` mode: `kspacing 0.10 0.10 1.00` (slab, z=vacuum). Bulk: `kspacing 0.10`.
 
