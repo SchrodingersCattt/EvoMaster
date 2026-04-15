@@ -18,9 +18,9 @@ from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_OPENAPI_HOST
 
 logger = logging.getLogger(__name__)
 
-# 与 start.sh 一致：磁盘、自动关机时间等
+# 与 start.sh 一致：磁盘等；turnoffAfter=-1 表示默认不自动关机
 DEFAULT_DISK_SIZE = 40
-DEFAULT_TURNOFF_AFTER = 24
+DEFAULT_TURNOFF_AFTER = -1
 # 默认机器类型对应 SKU（与 start.sh 中 case 一致）
 DEFAULT_SKU_ID = 388  # c2_m4_cpu
 # 节点就绪状态码（与 start.sh 中 STATUS=2 一致）
