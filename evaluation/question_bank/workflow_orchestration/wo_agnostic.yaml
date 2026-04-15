@@ -76,7 +76,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_elec_008_20260411v1
+- id: WO_elec_008_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Perform ABACUS Bader charge analysis for Al2O3 and summarize per-atom charge transfer
@@ -100,18 +100,17 @@ questions:
   - key: bader_required_tokens
     value:
       filename: al2o3_bader_summary.json
-      tokens:
+      must_cover:
       - atom_index
       - element
       - bader_charge
       - charge_transfer
       - Al
       - O
-      flags: i
   - key: report_required_tokens
     value:
       filename: al2o3_bader_report.md
-      tokens:
+      must_cover:
       - Bader
       - Al2O3
       - charge
@@ -119,7 +118,6 @@ questions:
       - Al
       - O
       - 不确定性
-      flags: i
   - key: al_bader_charge_mock
     value: 2.31
     tolerance: 0.3
@@ -144,11 +142,11 @@ questions:
   - id: bader_required_tokens
     criterion: Bader summary JSON includes per-atom charge-transfer fields and element labels.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report summarizes charge-transfer trend and uncertainty caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: al_bader_charge_mock
     criterion: Final answer includes a mock Al average Bader charge near +2.31 e.
     axis: correctness
@@ -176,7 +174,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_general_intake_001_20260410v3
+- id: WO_general_intake_001_20260410v4
   capability: workflow_orchestration
   domain: agnostic
   intent: Build a structured intake-and-analysis protocol with attachment-level triage priority
@@ -229,21 +227,19 @@ questions:
   - key: protocol_required_tokens
     value:
       filename: analysis_protocol.md
-      tokens:
+      must_cover:
       - 分析流程
       - 质量检查
       - 异常处理
       - 缺失值
       - 单位一致性
-      flags: i
   - key: delivery_required_tokens
     value:
       filename: delivery_plan.md
-      tokens:
+      must_cover:
       - 图
       - 表
       - 文字说明
-      flags: i
   - key: turn_budget
     value:
       max: 8
@@ -278,11 +274,11 @@ questions:
   - id: protocol_required_tokens
     criterion: Analysis protocol includes workflow, quality checks, and abnormal-case handling.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: delivery_required_tokens
     criterion: Delivery plan explicitly includes figures, tables, and explanatory text.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The response stays grounded in `attachment_manifest.json` and does not fabricate
       unseen attachment content.
@@ -305,7 +301,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_postproc_002_20260410v3
+- id: WO_general_postproc_002_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Produce structured post-processing pipeline artifacts with per-stage validation
@@ -355,14 +351,13 @@ questions:
   - key: outline_required_tokens
     value:
       filename: report_outline.md
-      tokens:
+      must_cover:
       - 图表
       - 表格
       - 解释
       - 能带
       - MSD
       - 概率密度
-      flags: i
   - key: turn_budget
     value:
       max: 8
@@ -392,7 +387,7 @@ questions:
   - id: outline_required_tokens
     criterion: Report outline covers required outputs and three target analysis families.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Deliverables are grounded in `result_manifest.json` and avoid fabricating unavailable
       numeric results.
@@ -415,7 +410,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_planning_003_20260410v3
+- id: WO_general_planning_003_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Produce phased execution and resource-control artifacts with explicit branch conditions
@@ -475,11 +470,10 @@ questions:
   - key: stage_gate_required_tokens
     value:
       filename: stage_gate.md
-      tokens:
+      must_cover:
       - 先筛选再深入计算
       - 并行
       - 报告结构
-      flags: i
   - key: turn_budget
     value:
       max: 8
@@ -520,7 +514,7 @@ questions:
     criterion: Stage gate document explicitly states screen-before-deep rule and report-structure
       guidance.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Planning artifacts are grounded in `mission_constraints.json` and avoid fabricated
       calculation outcomes.
@@ -621,7 +615,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_001_20260411v2
+- id: WO_mech_001_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Independently locate Al FCC structure, execute 5-point volume scan, fit EOS, report
@@ -901,7 +895,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_009_20260411v1
+- id: WO_mech_009_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Combine database lookup and APEX elastic calculation to evaluate room-temperature
@@ -928,25 +922,23 @@ questions:
   - key: json_required_tokens
     value:
       filename: nico_cr_elastic_compare.json
-      tokens:
+      must_cover:
       - C11
       - C12
       - C44
       - bulk_modulus_GPa
       - db_reference_summary
       - comparison_note
-      flags: i
   - key: report_required_tokens
     value:
       filename: nico_cr_elastic_report.md
-      tokens:
+      must_cover:
       - Ni
       - Co
       - Cr
       - APEX
       - 对比
       - 不确定性
-      flags: i
   - key: turn_budget
     value:
       max: 16
@@ -969,11 +961,11 @@ questions:
     criterion: JSON contains required elastic constants, bulk modulus, and database-comparison
       fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report explains database reference, APEX setup, and uncertainty caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Final answer is grounded in generated comparison artifacts and does not fabricate
       unsupported reference or computed values.
@@ -997,7 +989,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_010_20260411v1
+- id: WO_mech_010_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Evaluate phase-forming tendencies of AlCr0.8CoFeNi HEA using descriptor calculations,
@@ -1024,25 +1016,23 @@ questions:
   - key: json_required_tokens
     value:
       filename: hea_alcr0.8cofeni_summary.json
-      tokens:
+      must_cover:
       - vec
       - mixing_enthalpy
       - mixing_entropy
       - binary_formation_energy_summary
       - solid_solution_prediction
       - possible_structure
-      flags: i
   - key: report_required_tokens
     value:
       filename: hea_alcr0.8cofeni_report.md
-      tokens:
+      must_cover:
       - AlCr0.8CoFeNi
       - VEC
       - 混合焓
       - 混合熵
       - 固溶体
       - 不确定性
-      flags: i
   - key: turn_budget
     value:
       max: 16
@@ -1065,11 +1055,11 @@ questions:
     criterion: Summary JSON contains required HEA descriptor, binary-energy summary, and solid-solution
       prediction fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report explains prediction rationale and uncertainty caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Final answer is grounded in generated HEA-analysis artifacts and does not fabricate
       unsupported phase conclusions.
@@ -1093,7 +1083,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_007_20260411v1
+- id: WO_mech_007_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Calculate GaAs elastic constants and bulk modulus with ABACUS and summarize the
@@ -1118,23 +1108,21 @@ questions:
   - key: json_required_tokens
     value:
       filename: gaas_elastic_abacus.json
-      tokens:
+      must_cover:
       - C11
       - C12
       - C44
       - bulk_modulus_GPa
       - calculation_settings
-      flags: i
   - key: report_required_tokens
     value:
       filename: gaas_elastic_abacus_report.md
-      tokens:
+      must_cover:
       - GaAs
       - ABACUS
       - elastic
       - bulk modulus
       - 不确定性
-      flags: i
   - key: gaas_c11_mock
     value: 118.4
     tolerance: 12.0
@@ -1159,11 +1147,11 @@ questions:
   - id: json_required_tokens
     criterion: JSON includes required elastic-constant and bulk-modulus fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report explains settings and uncertainty caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: gaas_c11_mock
     criterion: Final answer includes a mock C11 value near 118.4 GPa.
     axis: correctness
@@ -1191,7 +1179,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_008_20260411v1
+- id: WO_mech_008_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Calculate SrTiO3 elastic constants with APEX and report full C11/C12/C44 outputs.
@@ -1215,24 +1203,22 @@ questions:
   - key: json_required_tokens
     value:
       filename: srtio3_elastic_apex.json
-      tokens:
+      must_cover:
       - C11
       - C12
       - C44
       - elastic_method
       - deformation_settings
-      flags: i
   - key: report_required_tokens
     value:
       filename: srtio3_elastic_apex_report.md
-      tokens:
+      must_cover:
       - SrTiO3
       - APEX
       - C11
       - C12
       - C44
       - 不确定性
-      flags: i
   - key: srtio3_c11_mock
     value: 316.8
     tolerance: 25.0
@@ -1257,11 +1243,11 @@ questions:
   - id: json_required_tokens
     criterion: JSON includes required elastic tensor fields and setup metadata.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report explains workflow and uncertainty caveats for APEX elastic results.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: srtio3_c11_mock
     criterion: Final answer includes a mock C11 value near 316.8 GPa.
     axis: correctness
@@ -1289,7 +1275,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_005_20260411v1
+- id: WO_mech_005_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute an equation-of-state workflow for an alloy and summarize volume-scan settings
@@ -1316,7 +1302,7 @@ questions:
   - key: eos_required_tokens
     value:
       filename: alloy_eos_summary.json
-      tokens:
+      must_cover:
       - vol_start
       - vol_end
       - vol_step
@@ -1325,17 +1311,15 @@ questions:
       - bulk_modulus
       - '0.8'
       - '1.2'
-      flags: i
   - key: report_required_tokens
     value:
       filename: alloy_eos_report.md
-      tokens:
+      must_cover:
       - EOS
       - 体积
       - 扫描
       - bulk modulus
       - 不确定性
-      flags: i
   - key: eos_bulk_modulus_mock
     value: 178.6
     tolerance: 20.0
@@ -1360,11 +1344,11 @@ questions:
   - id: eos_required_tokens
     criterion: EOS summary JSON includes required scan-range and fitted-property fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report explains EOS workflow, scan strategy, and uncertainty caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: eos_bulk_modulus_mock
     criterion: Final answer includes a mock bulk modulus near 178.6 GPa.
     axis: correctness
@@ -1468,7 +1452,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_007_20260410v3
+- id: WO_mlip_dpa_007_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Build a machine-checkable DP-GEN onboarding package with milestone gates and fallback
@@ -1508,7 +1492,7 @@ questions:
   - key: required_sections
     value:
       filename: onboarding_tutorial.md
-      tokens:
+      must_cover:
       - 环境
       - 安装
       - 初始数据
@@ -1518,7 +1502,6 @@ questions:
       - 迭代
       - 失败点
       - 第一周
-      flags: i
   - key: checklist_required_tokens
     value:
       filename: dpgen_checklist.json
@@ -1556,7 +1539,7 @@ questions:
   - id: required_sections
     criterion: Tutorial covers core DP-GEN lifecycle sections and practical first-week guidance.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: checklist_required_tokens
     criterion: Checklist JSON includes required readiness keys.
     axis: correctness
@@ -1588,7 +1571,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_011_20260411v1
+- id: WO_mlip_dpa_011_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Build and validate Nb-doped SrTiO3 supercell workflow, including relaxation and
@@ -1618,23 +1601,21 @@ questions:
   - key: checks_tokens
     value:
       filename: srti03_nb125_checks.json
-      tokens:
+      must_cover:
       - elastic_status
       - phonon_status
       - scf_status
       - band_dos_status
-      flags: i
   - key: report_tokens
     value:
       filename: srti03_nb125_workflow_report.md
-      tokens:
+      must_cover:
       - 超胞
       - 掺杂
       - 几何优化
       - 弹性
       - 声子
       - 不确定性
-      flags: i
   - key: relax_energy_drop_mock
     value: 1.84
     tolerance: 0.8
@@ -1663,11 +1644,11 @@ questions:
   - id: checks_tokens
     criterion: Check JSON includes elastic/phonon/SCF/band-DOS status fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_tokens
     criterion: Report covers doping workflow and caveats for downstream electronic analysis.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: relax_energy_drop_mock
     criterion: Final answer includes a mock relaxation energy drop near 1.84 eV.
     axis: correctness
@@ -1853,7 +1834,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_010_20260411v1
+- id: WO_mlip_dpa_010_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Fine-tune a DPA3 potential for a fixed step budget and summarize key hyperparameters
@@ -1877,23 +1858,21 @@ questions:
   - key: config_required_tokens
     value:
       filename: dpa3_finetune_config.json
-      tokens:
+      must_cover:
       - train_steps
       - lr_type
       - start_lr
       - stop_lr
       - valid_ratio
-      flags: i
   - key: report_required_tokens
     value:
       filename: dpa3_finetune_report.md
-      tokens:
+      must_cover:
       - DPA3
       - 训练
       - 结果
       - 建议
       - 不确定性
-      flags: i
   - key: best_valid_loss_mock
     value: 0.021
     tolerance: 0.01
@@ -1918,11 +1897,11 @@ questions:
   - id: config_required_tokens
     criterion: Config JSON includes required training-control fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report summarizes training outcome with uncertainty notes.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: best_valid_loss_mock
     criterion: Final answer includes a mock best validation loss near 0.021.
     axis: correctness
@@ -2102,7 +2081,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_009_20260411v1
+- id: WO_mlip_dpa_009_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Retrieve an MgB2 structure from open databases and compute its phonon spectrum with
@@ -2129,24 +2108,22 @@ questions:
   - key: json_required_tokens
     value:
       filename: mgb2_phonon_summary.json
-      tokens:
+      must_cover:
       - retrieval_source
       - structure_identifier
       - phonon_settings
       - imaginary_mode_check
       - output_artifacts
       - MgB2
-      flags: i
   - key: report_required_tokens
     value:
       filename: mgb2_phonon_report.md
-      tokens:
+      must_cover:
       - 检索
       - MgB2
       - 声子
       - 参数
       - 不确定性
-      flags: i
   - key: gamma_e2g_mock
     value: 74.8
     tolerance: 10.0
@@ -2171,11 +2148,11 @@ questions:
   - id: json_required_tokens
     criterion: JSON includes retrieval metadata and phonon-result summary fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report explains two-stage workflow and uncertainty caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: gamma_e2g_mock
     criterion: Final answer includes a mock Gamma E2g mode near 74.8 meV.
     axis: correctness
@@ -2206,7 +2183,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_008_20260411v1
+- id: WO_mlip_dpa_008_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Run a short DPA molecular-dynamics simulation for Li2O at 300 K and summarize thermostat/time-step
@@ -2233,7 +2210,7 @@ questions:
   - key: summary_required_tokens
     value:
       filename: li2o_md_summary.json
-      tokens:
+      must_cover:
       - ensemble
       - temperature_K
       - runtime_ps
@@ -2242,18 +2219,16 @@ questions:
       - thermo_stats
       - '300'
       - '1'
-      flags: i
   - key: report_required_tokens
     value:
       filename: li2o_md_report.md
-      tokens:
+      must_cover:
       - NVT
       - 300
       - 1 ps
       - 1 fs
       - 温度
       - 不确定性
-      flags: i
   - key: temperature_avg_mock
     value: 301.2
     tolerance: 15.0
@@ -2279,11 +2254,11 @@ questions:
     criterion: MD summary JSON includes required simulation-parameter fields and basic runtime
       statistics.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report describes MD setup, observed behavior, and uncertainty caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: temperature_avg_mock
     criterion: Final answer includes a mock average temperature near 301.2 K.
     axis: correctness
@@ -2315,7 +2290,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_struct_003_20260411v1
+- id: WO_struct_003_20260415
   capability: workflow_orchestration
   domain: agnostic
   intent: Generate and summarize 10 candidate crystal structures constrained by superconducting
@@ -2360,14 +2335,13 @@ questions:
   - key: report_required_tokens
     value:
       filename: generation_report.md
-      tokens:
+      must_cover:
       - sample_num
       - 10
       - Tc
       - 40
       - 225
       - 不确定性
-      flags: i
   - key: turn_budget
     value:
       max: 18
@@ -2399,7 +2373,7 @@ questions:
     criterion: Report explains generation parameters, Tc/space-group constraints, and uncertainty
       handling.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The final answer is grounded in generated candidate artifacts and explicitly
       checks the three constraints (count, Tc threshold, and space group), rather than generic
