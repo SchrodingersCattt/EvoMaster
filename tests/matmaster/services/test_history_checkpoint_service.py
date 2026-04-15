@@ -4,12 +4,14 @@ from unittest.mock import AsyncMock, Mock, call
 
 
 class TestHistoryCheckpointService:
-    async def test_checkpoint_sink_flushes_barrier_then_writes_pair(self) -> None:
+    async def test_checkpoint_sink_flushes_barrier_then_writes_single_checkpoint(
+        self,
+    ) -> None:
         from src.services.history_checkpoint_service import HistoryCheckpointService
 
         events_table = Mock()
         events_table.get_latest_scope_event_id.return_value = 42
-        events_table.add_checkpoint_pair.return_value = True
+        events_table.add_history_checkpoint.return_value = True
 
         fanout = Mock()
         fanout.flush_persistence_barrier = AsyncMock()
@@ -17,7 +19,7 @@ class TestHistoryCheckpointService:
         tracker = Mock()
         tracker.attach_mock(fanout.flush_persistence_barrier, "flush")
         tracker.attach_mock(events_table.get_latest_scope_event_id, "latest")
-        tracker.attach_mock(events_table.add_checkpoint_pair, "add_pair")
+        tracker.attach_mock(events_table.add_history_checkpoint, "add_checkpoint")
 
         service = HistoryCheckpointService(events_table)
         sink = service.build_checkpoint_sink(
@@ -35,15 +37,16 @@ class TestHistoryCheckpointService:
             }
         ]
 
-        await sink(
+        covered_until = await sink(
             payload={"durability": "durable", "strategy": "summary"},
             base_messages=base_messages,
         )
 
+        assert covered_until == 42
         assert tracker.mock_calls == [
             call.flush(),
             call.latest("s1", None),
-            call.add_pair(
+            call.add_checkpoint(
                 "s1",
                 task_id="t1",
                 invocation_id="i1",
@@ -83,4 +86,4 @@ class TestHistoryCheckpointService:
 
         fanout.flush_persistence_barrier.assert_not_awaited()
         events_table.get_latest_scope_event_id.assert_not_called()
-        events_table.add_checkpoint_pair.assert_not_called()
+        events_table.add_history_checkpoint.assert_not_called()

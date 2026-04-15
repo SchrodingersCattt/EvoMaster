@@ -160,6 +160,31 @@ class FailingSummaryProvider:
         yield StreamChunk(content="", finish_reason="stop")
 
 
+class DummySummaryProvider:
+    """Minimal summary provider that returns text or raises a configured error."""
+
+    def __init__(self, response: str | Exception) -> None:
+        self._response = response
+        self.calls: list[list[dict]] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        self.calls.append(messages)
+        if isinstance(self._response, Exception):
+            raise self._response
+        return LLMResponse(content=self._response, finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        if isinstance(self._response, Exception):
+            raise self._response
+        yield StreamChunk(content=self._response, finish_reason="stop")
+
+
 def _build_long_conversation(n_turns: int = 10) -> list:
     """Build a conversation with SystemMessage + UserMessage + N turns."""
     msgs = [
@@ -187,6 +212,10 @@ def _build_long_conversation(n_turns: int = 10) -> list:
             )
         )
     return msgs
+
+
+def _make_multi_turn_messages() -> list:
+    return _build_long_conversation(5)
 
 
 class TestCompactorThreshold:
@@ -228,6 +257,60 @@ class TestCompactorThreshold:
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
         assert len(provider.calls) == 1
+
+
+class TestCompactorPlanApply:
+    async def test_plan_runtime_compaction_returns_running_metadata(self) -> None:
+        from matmaster.core.context_compactor import ContextCompactor
+        from matmaster.types.runtime import CompactionConfig
+
+        provider = DummySummaryProvider("summary text")
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        compactor = ContextCompactor(
+            config=config,
+            summary_provider=provider,
+            event_sink=None,
+            compaction_scope="task-1:root",
+        )
+        msgs = _make_multi_turn_messages()
+        compactor.update_message_count(len(msgs))
+
+        plan = await compactor.plan_runtime_compaction(
+            msgs,
+            {"prompt_tokens": 950},
+            turn=2,
+        )
+
+        assert plan is not None
+        assert plan.compaction_id == "task-1:root:1"
+        assert plan.phase == "runtime"
+        assert plan.trigger_tokens == 950
+        assert plan.strategy is None
+
+    async def test_apply_compaction_plan_reports_fallback_strategy(self) -> None:
+        from matmaster.core.context_compactor import ContextCompactor
+        from matmaster.types.runtime import CompactionConfig
+
+        provider = DummySummaryProvider(RuntimeError("summary down"))
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        compactor = ContextCompactor(
+            config=config,
+            summary_provider=provider,
+            event_sink=None,
+            compaction_scope="task-1:root",
+        )
+        msgs = _make_multi_turn_messages()
+        compactor.update_message_count(len(msgs))
+
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        result = await compactor.apply_compaction_plan(plan, msgs)
+
+        assert result.compaction_id == "task-1:root:1"
+        assert result.strategy == "sliding_window"
+        assert result.durability == "ephemeral"
+        assert result.failure_reason == "summary down"
 
 
 class TestCompactorOutput:
@@ -284,83 +367,57 @@ class TestCompactorMessageCount:
         assert compactor._last_llm_message_count == 8
 
 
-class TestCompactorEventEmission:
-    async def test_emits_context_compaction_event_via_sink(self) -> None:
+class TestCompactorResultMetadata:
+    async def test_apply_runtime_plan_reports_summary_result(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
-        from matmaster.types.events import ContextCompactionEvent
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
-        received: list = []
-
-        async def sink(event):
-            received.append(event)
-
         msgs = _build_long_conversation(5)
-        compactor = ContextCompactor(
-            config=config, summary_provider=provider, event_sink=sink
-        )
+        compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        result = await compactor.apply_compaction_plan(plan, msgs)
 
-        assert len(received) == 1
-        event = received[0]
-        assert isinstance(event, ContextCompactionEvent)
-        assert event.payload["compaction_count"] == 1
-        assert event.payload["strategy"] == "summary"
-        assert event.payload["trigger_tokens"] > 0
+        assert result.compaction_count == 1
+        assert result.strategy == "summary"
+        assert result.trigger_tokens > 0
 
-    async def test_preflight_summary_emits_durable_event(self) -> None:
+    async def test_preflight_summary_returns_durable_result(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
-        from matmaster.types.events import ContextCompactionEvent
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
-        received: list = []
-
-        async def sink(event):
-            received.append(event)
-
         msgs = _build_long_conversation(5)
-        compactor = ContextCompactor(
-            config=config, summary_provider=provider, event_sink=sink
-        )
+        compactor = ContextCompactor(config=config, summary_provider=provider)
 
-        await compactor.preflight_if_needed(msgs)
+        plan = compactor.plan_preflight_compaction(msgs)
+        result = await compactor.apply_compaction_plan(plan, msgs)
 
-        assert len(received) == 1
-        event = received[0]
-        assert isinstance(event, ContextCompactionEvent)
-        assert event.payload["phase"] == "preflight"
-        assert event.payload["strategy"] == "summary"
-        assert event.payload["durability"] == "durable"
+        assert result.phase == "preflight"
+        assert result.strategy == "summary"
+        assert result.durability == "durable"
 
-    async def test_runtime_sliding_window_is_ephemeral(self) -> None:
+    async def test_runtime_sliding_window_result_is_ephemeral(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
-        from matmaster.types.events import ContextCompactionEvent
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
-        received: list = []
-
-        async def sink(event):
-            received.append(event)
-
         msgs = _build_long_conversation(10)
-        compactor = ContextCompactor(
-            config=config, summary_provider=provider, event_sink=sink
-        )
+        compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        result = await compactor.apply_compaction_plan(plan, msgs)
 
-        assert len(received) == 1
-        event = received[0]
-        assert isinstance(event, ContextCompactionEvent)
-        assert event.payload["phase"] == "runtime"
-        assert event.payload["strategy"] == "sliding_window"
-        assert event.payload["durability"] == "ephemeral"
+        assert result.phase == "runtime"
+        assert result.strategy == "sliding_window"
+        assert result.durability == "ephemeral"
 
     async def test_preflight_summary_failure_raises_instead_of_silent_fallback(
         self,
@@ -391,7 +448,7 @@ class TestCompactorEventEmission:
         assert "tool_name" in prompt_text
         assert "bash" in prompt_text
 
-    async def test_no_event_when_no_sink(self) -> None:
+    async def test_compact_if_needed_succeeds_without_event_sink(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
@@ -403,6 +460,7 @@ class TestCompactorEventEmission:
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        assert compactor._compaction_count == 1
 
 
 class TestToolTruncationFallback:
@@ -448,14 +506,9 @@ class TestToolTruncationFallback:
     async def test_truncates_when_no_compressible_turns(self) -> None:
         """1 turn with huge tool results -> falls back to tool_truncation."""
         from matmaster.core.context_compactor import ContextCompactor
-        from matmaster.types.events import ContextCompactionEvent
 
         config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
         provider = MockSummaryProvider()
-        received: list = []
-
-        async def sink(event):
-            received.append(event)
 
         # 1 turn: Assistant with 3 tool calls + 3 large ToolMessages
         msgs = [
@@ -485,12 +538,13 @@ class TestToolTruncationFallback:
             ),
         ]
 
-        compactor = ContextCompactor(
-            config=config, summary_provider=provider, event_sink=sink
-        )
+        compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 600}, turn=3
+        )
+        result = await compactor.apply_compaction_plan(plan, msgs)
 
         # summary provider should NOT be called (no old messages to summarize)
         assert len(provider.calls) == 0
@@ -506,11 +560,7 @@ class TestToolTruncationFallback:
         ]
         assert len(truncated_msgs) > 0
 
-        # Event should have strategy=tool_truncation
-        assert len(received) == 1
-        event = received[0]
-        assert isinstance(event, ContextCompactionEvent)
-        assert event.payload["strategy"] == "tool_truncation"
+        assert result.strategy == "tool_truncation"
 
     async def test_no_truncation_for_small_tool_results(self) -> None:
         """Small tool results (< 500 chars) are not truncated."""
@@ -567,37 +617,11 @@ class TestToolTruncationFallback:
         assert len(result_content) < len(original_content)
 
 
-class TestCompactorEventSink:
-    """Phase 34: event_sink callback replaces bus dependency."""
-
-    async def test_event_sink_receives_compaction_event(self) -> None:
-        """Compactor with event_sink calls sink with ContextCompactionEvent."""
-        from matmaster.core.context_compactor import ContextCompactor
-        from matmaster.types.events import ContextCompactionEvent
-
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
-        provider = MockSummaryProvider()
-        received_events: list = []
-
-        async def sink(event):
-            received_events.append(event)
-
-        msgs = _build_long_conversation(5)
-        compactor = ContextCompactor(
-            config=config, summary_provider=provider, event_sink=sink
-        )
-        compactor.update_message_count(len(msgs))
-
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
-
-        assert len(received_events) == 1
-        event = received_events[0]
-        assert isinstance(event, ContextCompactionEvent)
-        assert event.payload["compaction_count"] == 1
-        assert event.payload["strategy"] == "summary"
+class TestCompactorCompatibility:
+    """Compatibility checks for the compactor surface."""
 
     async def test_no_event_when_no_sink(self) -> None:
-        """Compactor with event_sink=None does not error."""
+        """Compactor with event_sink=None still works."""
         from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
@@ -608,8 +632,8 @@ class TestCompactorEventSink:
         )
         compactor.update_message_count(len(msgs))
 
-        # Should not raise
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        assert compactor._compaction_count == 1
 
     async def test_no_bus_import_in_compactor(self) -> None:
         """ContextCompactor module should not import MessageBus."""

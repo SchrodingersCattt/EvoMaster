@@ -1,8 +1,8 @@
 """Event type hierarchy for the matmaster event system.
 
-Defines all 22 event types in two categories:
+Defines all 23 event types in two categories:
 - AgentEvent (9 types): emitted by the kernel during agent execution
-- SystemEvent (13 types): emitted by service-layer components
+- SystemEvent (14 types): emitted by service-layer components
 
 BusEvent = AgentEvent | SystemEvent -- the unified event union type.
 
@@ -14,6 +14,8 @@ from datetime import datetime
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
+
+from .figures import FigureDescriptor
 
 
 class EventBase(BaseModel):
@@ -179,22 +181,20 @@ class AskQuestionTimeoutEvent(EventBase):
     reason: str = "timeout"
 
 
-class ContextCompactionEvent(EventBase):
-    """Context compaction decision emitted by the history compactor.
+class CompactionEvent(EventBase):
+    """Public compaction lifecycle event."""
 
-    ``payload`` remains an open dict for forward compatibility. Current keys:
-    - ``phase``: ``preflight`` | ``runtime``
-    - ``strategy``: ``summary`` | ``sliding_window`` | ``tool_truncation``
-    - ``durability``: ``durable`` | ``ephemeral``
-    - ``trigger_tokens``: int
-    - ``retained_turns``: int
-    - ``checkpoint_attempted``: bool
-    - ``checkpoint_written``: bool
-    - ``failure_reason``: str | None
-    """
-
-    type: Literal["context_compaction"] = "context_compaction"
-    payload: dict[str, Any]
+    type: Literal["compaction"] = "compaction"
+    compaction_id: str
+    status: Literal["running", "complete", "interrupted"]
+    phase: Literal["preflight", "runtime"]
+    strategy: Literal["summary", "sliding_window", "tool_truncation"] | None = None
+    durability: Literal["durable", "ephemeral"] | None = None
+    trigger_tokens: int | None = None
+    retained_turns: int | None = None
+    checkpoint_written: bool | None = None
+    failure_reason: str | None = None
+    covered_until_event_id: int | None = None
 
 
 class ExpRunEvent(EventBase):
@@ -259,6 +259,13 @@ class McpConnectEvent(EventBase):
     error: str | None = None
 
 
+class ResponseFiguresEvent(EventBase):
+    """Image metadata emitted alongside a chat response."""
+
+    type: Literal["response_figures"] = "response_figures"
+    figures: list[FigureDescriptor] = Field(default_factory=list)
+
+
 # ── Union definitions ───────────────────────────────────
 
 AgentEvent = Annotated[
@@ -283,7 +290,7 @@ SystemEvent = Annotated[
         AskQuestionEvent,
         AskQuestionReplyEvent,
         AskQuestionTimeoutEvent,
-        ContextCompactionEvent,
+        CompactionEvent,
         ExpRunEvent,
         CancelledEvent,
         StreamClosedEvent,
@@ -291,6 +298,7 @@ SystemEvent = Annotated[
         BohriumNodeEvent,
         McpServerStatusEvent,
         McpConnectEvent,
+        ResponseFiguresEvent,
     ],
     Field(discriminator="type"),
 ]
@@ -313,7 +321,7 @@ BusEvent = Annotated[
         AskQuestionEvent,
         AskQuestionReplyEvent,
         AskQuestionTimeoutEvent,
-        ContextCompactionEvent,
+        CompactionEvent,
         ExpRunEvent,
         CancelledEvent,
         StreamClosedEvent,
@@ -321,6 +329,7 @@ BusEvent = Annotated[
         BohriumNodeEvent,
         McpServerStatusEvent,
         McpConnectEvent,
+        ResponseFiguresEvent,
     ],
     Field(discriminator="type"),
 ]

@@ -331,6 +331,32 @@ async def test_run_agent_injects_event_sink_into_pg_ctx_run_meta():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta():
+    run_result = RunResultEvent(
+        source='MatMaster',
+        status='completed',
+        reason='natural',
+        final_content='done',
+    )
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        controller = CancellationController()
+        await svc.run_agent(
+            session_id='sess-1',
+            user_prompt='make a plot',
+            send_cb=lambda payload: None,
+            cancel_token=controller.token,
+            mode='direct',
+            task_id='task-1',
+        )
+
+    figure_cfg = svc._test_fake_exp.last_ctx.run_meta['figure_upload_config']
+    assert figure_cfg.session_id == 'sess-1'
+    assert figure_cfg.task_id == 'task-1'
+    assert callable(figure_cfg.upload_bytes)
+
+
+@pytest.mark.asyncio
 async def test_run_agent_uses_history_restore_service_and_injects_spawn_aware_checkpoint_factory():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
     restored_history = [MagicMock(name='restored_message')]

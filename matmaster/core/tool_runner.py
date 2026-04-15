@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from matmaster.core.hooks import (
@@ -347,7 +347,8 @@ class FullToolRunner:
 
         # Execute + Release
         try:
-            tr = await instance.tool_executor(effective_args, exec_ctx)
+            call_exec_ctx = replace(exec_ctx, tool_call_id=tc.id)
+            tr = await instance.tool_executor(effective_args, call_exec_ctx)
         except Exception as e:
             tr = ToolResult.from_error(tc.name, e)
         finally:
