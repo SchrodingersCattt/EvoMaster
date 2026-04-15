@@ -989,7 +989,6 @@ class AbacusBackend(SoftwareBackend):
         items.sort(key=lambda x: (x.sort_priority, x.label))
         return items
 
-
 # ---------------------------------------------------------------------------
 # Standalone helpers (used by render scripts)
 # ---------------------------------------------------------------------------

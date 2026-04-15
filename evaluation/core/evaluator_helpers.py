@@ -190,8 +190,9 @@ def build_llm_context(
 ) -> str:
     """Build the LLM-judge context string.
 
-    When ``include_tool_calls`` is False (e.g. grounding-axis judges), tool-call lines are
-    omitted so the judge does not treat missing MCP/web_search as evidence of failure.
+    When ``include_tool_calls`` is False (e.g. grounding-axis judges), tool-call
+    lines are omitted so the judge does not treat missing MCP/web_search as
+    evidence of failure.
     Workspace output filenames are still listed when artifacts are present.
     """
     lines = [
@@ -264,15 +265,14 @@ def build_llm_context(
                         max_chars = 6000
                         excerpt = raw[:max_chars]
                         lines.append(
-                            f'Referenced file for criterion: {filename} (resolved: {resolved.name})'
+                            f'Referenced file for criterion: {filename} '
+                            f'(resolved: {resolved.name})'
                         )
                         if raw:
                             lines.append('Referenced file content excerpt:')
                             lines.append(excerpt)
                             if len(raw) > max_chars:
-                                lines.append(
-                                    f'... [truncated, total chars={len(raw)}]'
-                                )
+                                lines.append(f'... [truncated, total chars={len(raw)}]')
                         else:
                             lines.append('Referenced file is empty.')
                     except Exception as exc:
@@ -327,7 +327,9 @@ def check_turn_budget(
 
 
 def token_usage_record_from_evidence(evidence: EvidenceBundle) -> TokenUsageRecord:
-    """Snapshot **last LLM turn** (raw ``total_tokens``, no cache deduction in budgets)."""
+    """Snapshot **last LLM turn** (raw ``total_tokens``, no cache deduction in
+    budgets).
+    """
     src = evidence.token_usage_last_turn
     raw_total = src.total_tokens
     return TokenUsageRecord(
