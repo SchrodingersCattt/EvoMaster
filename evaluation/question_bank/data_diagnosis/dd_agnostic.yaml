@@ -284,12 +284,12 @@ questions:
   - key: qc_report_missing_rate_regex
     value:
       filename: data_qc_report.md
-      pattern: (?i)(缺失率|missing\\s*rate)
+      pattern: (?i)(缺失率|missing\s*rate)
       flags: i
   - key: qc_report_outlier_regex
     value:
       filename: data_qc_report.md
-      pattern: (?i)(1\\.5\\s*\\*\\s*IQR|IQR.*Q1.*Q3)
+      pattern: (?i)(1\.5\s*\*\s*IQR|IQR.*Q1.*Q3)
       flags: i
   - key: turn_budget
     value:
