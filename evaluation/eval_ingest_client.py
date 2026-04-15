@@ -85,9 +85,9 @@ _EVAL_BASELINE_CHANNELS: frozenset[str] = frozenset({"claude_code", "cursor", "c
 # Direct tools-server path (not the gateway ``/bohrapi/v1/matmaster-tools-server/...`` prefix).
 EVAL_INGEST_API_PATH = "/api/v1/evaluation/ingest"
 QUESTION_CATALOG_SYNC_API_PATH = "/api/v1/evaluation/question-catalog/sync"
-# 首页大表：每题各基线渠道最近一次得分（无则为 null）。见 matmaster-tools-server
-# ``evaluation_api.evaluation_questions_score_summary``；单题时间线用
-# ``/questions/{id}/overview``，批量筛「缺某渠道基线分」应使用本路径而非 per-question overview。
+# 首页大表：每题各基线渠道最近一次是否通过（``*_passed``，无 baseline 为 null）。见
+# matmaster-tools-server ``evaluation_api.evaluation_questions_score_summary``；单题时间线用
+# ``/questions/{id}/overview``，批量筛「缺某渠道基线」应使用本路径而非 per-question overview。
 EVAL_SCORE_SUMMARY_API_PATH = "/api/v1/evaluation/questions/score-summary"
 
 _base = (utils.env.MATMASTER_TOOLS_SERVER or "").strip().rstrip("/")
@@ -99,11 +99,19 @@ EVAL_SCORE_SUMMARY_URL: str | None = (
     f"{_base}{EVAL_SCORE_SUMMARY_API_PATH}" if _base else None
 )
 
-_SCORE_SUMMARY_FIELD_BY_CHANNEL: dict[str, str] = {
-    "claude_code": "claude_code_score",
-    "cursor": "cursor_score",
-    "codex": "codex_score",
+# score-summary 每题行：matmaster-tools-server ``*_passed``（有 baseline 时为 bool；无数据为 null）。
+_SCORE_SUMMARY_PASSED_FIELD_BY_CHANNEL: dict[str, str] = {
+    "claude_code": "claude_code_passed",
+    "cursor": "cursor_passed",
+    "codex": "codex_passed",
 }
+
+
+def _score_summary_row_missing_channel_baseline(row: dict[str, Any], ch: str) -> bool:
+    """True if this score-summary row has no baseline data for *channel*."""
+    pf = _SCORE_SUMMARY_PASSED_FIELD_BY_CHANNEL.get(ch, "claude_code_passed")
+    return row.get(pf) is None
+
 
 # Align with matmaster-tools-server ``src/utils/eval_question_priority.py`` /
 # ``EvalQuestionCatalogItemIn.priority`` (max_length=16).
@@ -703,11 +711,11 @@ def parse_score_summary_missing_question_ids(
 ) -> list[str]:
     """From score-summary response body, list ``question_id`` where baseline score is missing.
 
-    *envelope* is the full decoded JSON (with ``code`` / ``data``). Missing score means
-    the channel field (e.g. ``claude_code_score``) is ``null`` or absent.
+    *envelope* is the full decoded JSON (with ``code`` / ``data``). Missing baseline means
+    the channel ``*_passed`` field is ``null`` or absent (same as null). ``false`` means
+    baseline exists but did not pass; do not treat as missing.
     """
     ch = normalize_baseline_channel(channel)
-    field = _SCORE_SUMMARY_FIELD_BY_CHANNEL.get(ch, "claude_code_score")
     data = envelope.get("data") or {}
     if not isinstance(data, dict):
         return []
@@ -721,7 +729,7 @@ def parse_score_summary_missing_question_ids(
         qid = str(row.get("question_id", "")).strip()
         if not qid:
             continue
-        if row.get(field) is None:
+        if _score_summary_row_missing_channel_baseline(row, ch):
             out.append(qid)
     return out
 
@@ -731,8 +739,9 @@ def fetch_missing_baseline_question_ids(
     channel: EvalBaselineChannel = "claude_code",
     timeout: float = 120.0,
 ) -> tuple[bool, str, list[str]]:
-    """GET ``EVAL_SCORE_SUMMARY_URL``; return question ids with no score for *channel*.
+    """GET ``EVAL_SCORE_SUMMARY_URL``; return question ids with no baseline for *channel*.
 
+    Uses each row's ``*_passed`` column (see :func:`parse_score_summary_missing_question_ids`).
     Requires ``MATMASTER_TOOLS_SERVER`` and ``MATMASTER_TOOLS_EVALUATION_BEARER``.
     """
     url = EVAL_SCORE_SUMMARY_URL
