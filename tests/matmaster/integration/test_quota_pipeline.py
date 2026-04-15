@@ -442,8 +442,10 @@ class TestQuotaNotDeductedOnError:
         called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
         assert not called, 'use_quota should NOT be called on invalid finish'
 
-    def test_invalid_finish_emits_stream_closed_event(self, tmp_path: Path) -> None:
-        """Verify invalid finishes still close the stream."""
+    def test_invalid_finish_emits_error_and_stream_closed_event(
+        self, tmp_path: Path
+    ) -> None:
+        """Verify invalid finishes emit a visible error before closing the stream."""
         pg_ctx = _make_ctx(tmp_path)
         mock_llm = _InvalidFinishLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
@@ -467,6 +469,13 @@ class TestQuotaNotDeductedOnError:
         assert run_result_payload is not None
         assert run_result_payload['status'] == 'failed'
         assert run_result_payload['reason'] == 'invalid_finish'
+        error_payload = next(
+            (payload for payload in payloads if payload.get('type') == 'error'),
+            None,
+        )
+        assert error_payload is not None
+        assert error_payload['source'] == 'System'
+        assert error_payload['message']
         stream_closed_payload = next(
             (payload for payload in payloads if payload.get('type') == 'stream_closed'),
             None,
@@ -476,7 +485,8 @@ class TestQuotaNotDeductedOnError:
         assert stream_closed_payload['end_reason'] == 'invalid_finish'
         assert stream_closed_payload['treat_as_failure'] is True
         payload_types = [payload.get('type') for payload in payloads]
-        assert payload_types.index('run_result') < payload_types.index('stream_closed')
+        assert payload_types.index('run_result') < payload_types.index('error')
+        assert payload_types.index('error') < payload_types.index('stream_closed')
 
     def test_invalid_finish_returns_failure_result(self, tmp_path: Path) -> None:
         """Verify failed finish states return failure for Worker status updates."""
