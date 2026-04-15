@@ -36,6 +36,60 @@ def _parse_claims(raw_claims: Any) -> tuple[ResourceClaim, ...]:
     return tuple(claims)
 
 
+def _parse_concurrency_policy(raw: Any, *, config_path: str) -> Any | None:
+    if not isinstance(raw, dict):
+        logger.warning(
+            "Ignoring invalid MCP concurrency policy at %s: expected dict", config_path
+        )
+        return None
+
+    mode = raw.get("mode")
+    if not isinstance(mode, str):
+        logger.warning(
+            "Ignoring invalid MCP concurrency policy at %s: mode must be serial or multiplex",
+            config_path,
+        )
+        return None
+    normalized_mode = mode.lower()
+    if normalized_mode not in {"serial", "multiplex"}:
+        logger.warning(
+            "Ignoring invalid MCP concurrency policy at %s: mode must be serial or multiplex",
+            config_path,
+        )
+        return None
+
+    max_inflight = raw.get("max_inflight")
+    max_pending_requests = raw.get("max_pending_requests")
+    if (
+        not isinstance(max_inflight, int)
+        or isinstance(max_inflight, bool)
+        or max_inflight <= 0
+    ):
+        logger.warning(
+            "Ignoring invalid MCP concurrency policy at %s: max_inflight must be a positive integer",
+            config_path,
+        )
+        return None
+    if (
+        not isinstance(max_pending_requests, int)
+        or isinstance(max_pending_requests, bool)
+        or max_pending_requests <= 0
+    ):
+        logger.warning(
+            "Ignoring invalid MCP concurrency policy at %s: max_pending_requests must be a positive integer",
+            config_path,
+        )
+        return None
+
+    from matmaster.mcp.manager import MCPConcurrencyPolicy
+
+    return MCPConcurrencyPolicy(
+        mode=normalized_mode,
+        max_inflight=max_inflight,
+        max_pending_requests=max_pending_requests,
+    )
+
+
 class LazyMCPTool:
     """Placeholder MCP tool that delegates runtime work to LazyMCPConnector."""
 
@@ -341,6 +395,43 @@ def configure_mcp_manager(
             for k, v in include_only.items()
         }
 
+    concurrency_cfg = mcp_config.get("mcp_concurrency")
+    if isinstance(concurrency_cfg, dict):
+        defaults_by_transport: dict[str, Any] = {}
+        raw_defaults = concurrency_cfg.get("defaults")
+        if isinstance(raw_defaults, dict):
+            for transport, raw_policy in raw_defaults.items():
+                if not isinstance(transport, str):
+                    continue
+                policy = _parse_concurrency_policy(
+                    raw_policy,
+                    config_path=f"mcp_concurrency.defaults.{transport}",
+                )
+                if policy is None:
+                    continue
+                defaults_by_transport[transport.lower()] = policy
+
+        by_server: dict[str, Any] = {}
+        raw_servers = concurrency_cfg.get("servers")
+        if isinstance(raw_servers, dict):
+            for server_name, raw_policy in raw_servers.items():
+                if not isinstance(server_name, str):
+                    continue
+                policy = _parse_concurrency_policy(
+                    raw_policy,
+                    config_path=f"mcp_concurrency.servers.{server_name}",
+                )
+                if policy is None:
+                    continue
+                by_server[server_name] = policy
+
+        manager.concurrency_defaults_by_transport = defaults_by_transport
+        manager.concurrency_by_server = by_server
+    elif concurrency_cfg is not None:
+        logger.warning(
+            "Ignoring invalid MCP concurrency config at mcp_concurrency: expected dict"
+        )
+
 
 def resolve_lazy_mcp_tool_timeout(
     mcp_config: dict[str, Any],
@@ -439,10 +530,16 @@ class LazyMCPConnector:
         manager = self._ensure_manager()
         fut = asyncio.run_coroutine_threadsafe(coro, manager.loop)
         wrapped = asyncio.wrap_future(fut)
-        wrapped = asyncio.shield(wrapped)
-        if timeout is not None:
-            return await asyncio.wait_for(wrapped, timeout=timeout)
-        return await wrapped
+        try:
+            if timeout is not None:
+                return await asyncio.wait_for(wrapped, timeout=timeout)
+            return await wrapped
+        except TimeoutError:
+            fut.cancel()
+            raise
+        except asyncio.CancelledError:
+            fut.cancel()
+            raise
 
     async def ensure_actor(self, server_name: str) -> None:
         if self._closing:

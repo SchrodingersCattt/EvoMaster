@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from matmaster.mcp.manager import MCPToolManager
+from matmaster.mcp.manager import MCPConcurrencyPolicy, MCPToolManager
 
 
 @dataclass
@@ -28,6 +28,7 @@ class _TracingConn:
         list_tools_started_event: asyncio.Event | None = None,
         release_event: asyncio.Event | None = None,
         started_event: asyncio.Event | None = None,
+        overlap_event: asyncio.Event | None = None,
     ) -> None:
         self.server_name = server_name
         self.startup_delay = startup_delay
@@ -36,9 +37,12 @@ class _TracingConn:
         self.list_tools_started_event = list_tools_started_event
         self.release_event = release_event
         self.started_event = started_event
+        self.overlap_event = overlap_event
         self.events: list[_Event] = []
         self.enter_count = 0
         self.list_tools_count = 0
+        self.active_calls = 0
+        self.max_concurrent_calls = 0
 
     def _record(self, name: str) -> None:
         task = asyncio.current_task()
@@ -80,15 +84,22 @@ class _TracingConn:
         self, tool_name: str, arguments: dict[str, Any]
     ) -> list[dict[str, str]]:
         self._record(f"call_tool:{tool_name}")
+        self.active_calls += 1
+        self.max_concurrent_calls = max(self.max_concurrent_calls, self.active_calls)
         if self.started_event is not None:
             self.started_event.set()
-        if self.release_event is not None:
-            await self.release_event.wait()
-        if self.call_delay:
-            await asyncio.sleep(self.call_delay)
-        return [
-            {"text": f"{self.server_name}:{tool_name}:{arguments.get('value', '')}"}
-        ]
+        if self.overlap_event is not None and self.active_calls >= 2:
+            self.overlap_event.set()
+        try:
+            if self.release_event is not None:
+                await self.release_event.wait()
+            if self.call_delay:
+                await asyncio.sleep(self.call_delay)
+            return [
+                {"text": f"{self.server_name}:{tool_name}:{arguments.get('value', '')}"}
+            ]
+        finally:
+            self.active_calls -= 1
 
 
 class TestManagerOwnerTaskLifecycle:
@@ -104,8 +115,13 @@ class TestManagerOwnerTaskLifecycle:
         assert result == [{"text": "srv:remote_tool:payload"}]
         labels = [event.name for event in conn.events]
         assert labels == ["enter", "list_tools", "call_tool:remote_tool", "exit"]
-        task_ids = {event.task_id for event in conn.events}
-        loop_ids = {event.loop_id for event in conn.events}
+        lifecycle_events = [
+            event
+            for event in conn.events
+            if event.name in {"enter", "list_tools", "exit"}
+        ]
+        task_ids = {event.task_id for event in lifecycle_events}
+        loop_ids = {event.loop_id for event in lifecycle_events}
         assert len(task_ids) == 1
         assert len(loop_ids) == 1
 
@@ -213,3 +229,39 @@ class TestManagerOwnerTaskLifecycle:
         assert result == [{"text": "srv:remote_tool:payload"}]
         labels = [event.name for event in conn.events]
         assert labels == ["enter", "list_tools", "call_tool:remote_tool", "exit"]
+
+    async def test_same_server_overlap_under_multiplex_policy(self):
+        manager = MCPToolManager()
+        release_calls = asyncio.Event()
+        overlap_event = asyncio.Event()
+        conn = _TracingConn(
+            "srv",
+            release_event=release_calls,
+            overlap_event=overlap_event,
+        )
+        manager.concurrency_by_server["srv"] = MCPConcurrencyPolicy(
+            mode="multiplex",
+            max_inflight=2,
+            max_pending_requests=8,
+        )
+
+        with patch("matmaster.mcp.manager.create_connection", return_value=conn):
+            await manager.add_server("srv", transport="http", url="http://srv")
+            first_call = asyncio.create_task(
+                manager.call_tool("srv", "remote_tool", {"value": "first"})
+            )
+            second_call = asyncio.create_task(
+                manager.call_tool("srv", "remote_tool", {"value": "second"})
+            )
+
+            try:
+                await asyncio.wait_for(overlap_event.wait(), timeout=0.2)
+            finally:
+                release_calls.set()
+
+            first_result, second_result = await asyncio.gather(first_call, second_call)
+            await manager.cleanup()
+
+        assert first_result == [{"text": "srv:remote_tool:first"}]
+        assert second_result == [{"text": "srv:remote_tool:second"}]
+        assert conn.max_concurrent_calls == 2
