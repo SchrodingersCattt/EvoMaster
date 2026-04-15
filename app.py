@@ -115,6 +115,12 @@ app.add_middleware(
 
 app.include_router(api_router, prefix='/api/v1')
 
+# 分享态路由：仅暴露分享页需要的接口，不暴露 delete/stop/list 等
+# 网关将 /bohrapi/v1/matmaster-evo/pubapi/v1/* 免鉴权转发到此（/pubapi/ 子域）
+from src.apis.share_router import share_router  # noqa: E402
+
+app.include_router(share_router, prefix='/pubapi/v1')
+
 
 @app.get('/', tags=['系统状态'])
 async def root():
