@@ -155,7 +155,7 @@ async def chat_stream(
     run_agent 报错；前端需消费本次 POST 的 response body（SSE）并合并到 UI，不能只依赖「订阅」连接。"""
     sid = session_id.strip()
     has_content = req is not None and bool((req.content or '').strip())
-    is_share_route = request.url.path.startswith('/share/')
+    is_share_route = request.url.path.startswith('/pubapi/')
     if is_share_route and has_content:
         raise ForbiddenErrorResponse(msg='分享页仅支持只读订阅，不允许发送消息')
     logger.info(
