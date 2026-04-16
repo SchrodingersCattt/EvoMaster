@@ -115,7 +115,8 @@ def validate_openai_messages(messages: list[dict[str, Any]]) -> None:
             continue
         if not isinstance(content, str):
             raise LLMError(
-                f"Outbound {role} message content must be string at index {idx}, got {type(content).__name__}",
+                f"Outbound message content must be string for {role} message "
+                f"at index {idx}, got {type(content).__name__}",
                 retryable=False,
                 error_category="payload_validation",
             )
