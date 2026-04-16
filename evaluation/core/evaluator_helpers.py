@@ -244,9 +244,7 @@ def build_llm_context(
                     filenames_raw.append(one)
                 many = cfg.get('filenames')
                 if isinstance(many, list):
-                    filenames_raw.extend(
-                        str(x).strip() for x in many if str(x).strip()
-                    )
+                    filenames_raw.extend(str(x).strip() for x in many if str(x).strip())
             if filenames_raw:
                 seen: set[str] = set()
                 filenames = []
