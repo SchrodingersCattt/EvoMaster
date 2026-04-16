@@ -51,7 +51,7 @@ class ChatSessionsTable(BaseTable):
             with conn.cursor() as cursor:
                 cursor.execute(
                     f'''
-                    SELECT session_id, user_id, org_id, project_id,
+                    SELECT session_id, user_id, org_id, project_id, session_directory,
                            status, is_shared, last_task_id, created_at, updated_at
                     FROM {self.table_name}
                     WHERE session_id = %s
@@ -99,6 +99,38 @@ class ChatSessionsTable(BaseTable):
         except Error as e:
             logger.warning(
                 'set_session_bohrium failed session_id=%s: %s',
+                session_id,
+                e,
+            )
+            return False
+
+    def set_session_directory(
+        self,
+        session_id: str,
+        directory: str | None,
+        user_id: str,
+    ) -> bool:
+        """更新会话绑定目录。仅所有者可写；directory 为 None 或空串则置为 NULL。"""
+        norm: str | None = None
+        if directory is not None:
+            s = directory.strip()
+            norm = s if s else None
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        f'''
+                        UPDATE {self.table_name}
+                        SET session_directory = %s, updated_at = NOW()
+                        WHERE session_id = %s AND user_id = %s
+                        ''',
+                        (norm, session_id, user_id),
+                    )
+                    conn.commit()
+                    return cursor.rowcount > 0
+        except Error as e:
+            logger.warning(
+                'set_session_directory failed session_id=%s: %s',
                 session_id,
                 e,
             )
