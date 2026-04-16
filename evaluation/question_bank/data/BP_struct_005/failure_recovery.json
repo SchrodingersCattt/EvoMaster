@@ -27,17 +27,18 @@
     },
     {
       "id": "calc_002",
-      "initial_issue": "Negative lattice vector",
+      "initial_issue": "Left-handed cell caused by sign-flipped lattice vector",
       "material": "ZnO",
       "input_poscar": "calc_002_ZnO_bad.POSCAR",
       "repair_acceptance": {
         "checks": [
-          "convert to a valid right-handed lattice basis (positive cell volume)",
-          "keep fractional atomic coordinates and composition unchanged",
-          "avoid introducing additional lattice distortion"
+          "repair sign-flipped basis vector so the cell basis is right-handed",
+          "keep real-space structure equivalent (allow coordinate remapping only for basis-handness correction)",
+          "do not reconstruct into a different ZnO polymorph or motif",
+          "avoid extra optimization beyond handedness/orientation correction"
         ]
       },
-      "required_fix": "reconstruct lattice"
+      "required_fix": "repair lattice basis handedness/orientation"
     },
     {
       "id": "calc_003",

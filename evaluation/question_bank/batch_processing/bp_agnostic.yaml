@@ -49,7 +49,7 @@ questions:
   - key: calc_002_zno_bad_poscar
     path: data/BP_struct_005/calc_002_ZnO_bad.POSCAR
     oss_url: ''
-    description: Bad ZnO POSCAR with negative lattice vector issue.
+    description: Bad ZnO POSCAR with sign-flipped basis vector causing left-handed cell.
   - key: calc_003_mgo_bad_poscar
     path: data/BP_struct_005/calc_003_MgO_bad.POSCAR
     oss_url: ''
