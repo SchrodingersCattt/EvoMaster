@@ -141,6 +141,50 @@ class ShareSetRequest(BaseModel):
     )
 
 
+# ---------- 会话绑定目录 ----------
+
+
+class SessionDirectoryData(BaseModel):
+    """GET /chat/sessions/{session_id}/session-directory 的 data 字段"""
+
+    directory: str | None = Field(
+        default=None,
+        description='该会话绑定的工作区目录路径（如远端 /share/...）；未设置时为 null',
+    )
+
+
+class SessionDirectoryApiResponse(BaseResponse[SessionDirectoryData]):
+    """GET/PUT session-directory 规范响应"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'example': {
+                'code': 0,
+                'msg': 'success',
+                'data': {'directory': '/share/my_workspace/run1'},
+            }
+        }
+    )
+
+
+class SessionDirectorySetRequest(BaseModel):
+    """PUT /chat/sessions/{session_id}/session-directory 请求体"""
+
+    directory: str | None = Field(
+        default=None,
+        max_length=2048,
+        description='绑定目录路径；传 null 或空字符串表示清除',
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'example': {
+                'directory': '/share/project/foo',
+            }
+        }
+    )
+
+
 # ---------- ag-ui 协议：客户端 -> 服务端 (REST Body) ----------
 
 

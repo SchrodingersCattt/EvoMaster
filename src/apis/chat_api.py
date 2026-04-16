@@ -13,6 +13,9 @@ from src.models.chat import (
     ErrorApiResponse,
     RunStatusApiResponse,
     RunStatusData,
+    SessionDirectoryApiResponse,
+    SessionDirectoryData,
+    SessionDirectorySetRequest,
     SessionItem,
     SessionListApiResponse,
     SessionListQuery,
@@ -428,6 +431,72 @@ def set_share_status(
     return ShareStatusApiResponse(
         data=ShareStatusData(enabled=body.enabled),
     )
+
+
+@router.get(
+    '/{session_id}/session-directory',
+    response_model=SessionDirectoryApiResponse,
+    summary='查询会话绑定的工作区目录',
+    description='返回该会话绑定的目录路径（如 Bohrium 远端路径）。'
+    ' 已分享会话任何人可读；未分享时需为所有者或 admin 只读白名单。',
+    operation_id='getChatSessionDirectory',
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
+def get_session_directory(
+    session_id: str = Path(..., description='会话 ID', examples=['session-001']),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """查询会话绑定目录。"""
+    sid = session_id.strip()
+    row = chat_svc.get_session(sid)
+    if not row:
+        raise NotFoundErrorResponse(msg='Session not found')
+    if not chat_svc.can_access_session(sid, user_id, allow_admin_read=True):
+        raise ForbiddenErrorResponse(msg='无权限访问该会话')
+    raw = row.get('session_directory')
+    if raw is None:
+        directory: str | None = None
+    else:
+        s = str(raw).strip()
+        directory = s if s else None
+    return SessionDirectoryApiResponse(data=SessionDirectoryData(directory=directory))
+
+
+@router.put(
+    '/{session_id}/session-directory',
+    response_model=SessionDirectoryApiResponse,
+    summary='设置会话绑定的工作区目录',
+    description='仅会话所有者可写；可将目录置为空以清除绑定。',
+    operation_id='setChatSessionDirectory',
+    responses={
+        401: COMMON_ERROR_RESPONSES[401],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
+def set_session_directory(
+    session_id: str = Path(..., description='会话 ID', examples=['session-001']),
+    body: SessionDirectorySetRequest = Body(...),
+    user_id: str = Depends(UserService.require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """设置或清除会话绑定目录。"""
+    sid = session_id.strip()
+    if not chat_svc.set_session_directory(sid, body.directory, user_id):
+        raise NotFoundErrorResponse(
+            msg='Session not found or you are not the owner',
+        )
+    row = chat_svc.get_session(sid)
+    raw = row.get('session_directory') if row else None
+    if raw is None:
+        directory: str | None = None
+    else:
+        s = str(raw).strip()
+        directory = s if s else None
+    return SessionDirectoryApiResponse(data=SessionDirectoryData(directory=directory))
 
 
 @router.delete(
