@@ -227,16 +227,9 @@ wrapper 产出的 `ToolResult.payload.figures[]` 使用统一结构：
 
 ### Aggregation Rule
 
-一次 assistant 回答最多发出一次 `response_figures`。
+本设计的第一版实现曾约定一次 assistant 回答最多发出一次 `response_figures`，并固定在 `run_result` 之前发出。
 
-汇总规则：
-
-- 服务层在本轮回答结束前统一收集本回答涉及的 `payload.figures`
-- 仅当最终回答文本已经确定、且相关图片均已同步上传完成时，才发出 `response_figures`
-- 聚合后的 `figures` 顺序按回答绑定层接收 `tool_result` 的时序拼接
-- 单个 `tool_result.payload.figures` 内保持 manifest 的声明顺序
-- `response_figures` 固定在对应 `run_result` 之前发出
-- 若本回答没有图片，则不发该事件
+后续增量渲染设计已 supersede 该限制：同一 `invocation_id` 下允许发出多次完整 `response_figures` 快照。每次快照包含当前已知的完整图片组，前端按 `invocation_id` upsert，最终状态由最后一次快照收敛。`response_figures` 仍应早于对应最终 `run_result`，但可以早于第一段 `response` 或位于多个 `response` chunk 之间。
 
 ## Manifest Contract
 

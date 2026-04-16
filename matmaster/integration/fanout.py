@@ -61,8 +61,8 @@ class RunEventFanout:
         self._dispatch_state_lock = threading.Lock()
         self._dispatch_seq = 0
         self._pre_persistence_dispatches: set[int] = set()
-        self._pending_persistence: set[asyncio.Task[None]] = set()
-        self._pending_persistence_by_seq: dict[int, asyncio.Task[None]] = {}
+        self._pending_persistence: set[asyncio.Task[bool]] = set()
+        self._pending_persistence_by_seq: dict[int, asyncio.Task[bool]] = {}
 
     def add_handler(self, handler: Any) -> None:
         """Register a new extra handler for future dispatches.
@@ -76,6 +76,19 @@ class RunEventFanout:
         """Dispatch an event from the event-loop thread."""
         seq = self._reserve_dispatch_seq()
         await self._dispatch_with_seq(seq, event)
+
+    async def dispatch_and_wait_persistence(self, event: BusEvent) -> bool:
+        """Dispatch an event and report whether every handler accepted it.
+
+        Normal dispatch intentionally isolates handler failures and keeps
+        persistence in the background. Some derived events, such as
+        `response_figures` snapshots, need to know whether SSE/extra handlers
+        and persistence all completed before committing local state. This
+        variant preserves exception isolation but waits for persistence and
+        returns False if any handler raised.
+        """
+        seq = self._reserve_dispatch_seq()
+        return await self._dispatch_with_seq(seq, event, wait_persistence=True)
 
     def dispatch_from_thread(self, loop: Any, event: BusEvent) -> None:
         """Reserve dispatch ordering before scheduling from another thread."""
@@ -113,7 +126,13 @@ class RunEventFanout:
             pending = tuple(self._pre_persistence_dispatches)
         return any(seq <= fence_seq for seq in pending)
 
-    async def _dispatch_with_seq(self, seq: int, event: BusEvent) -> None:
+    async def _dispatch_with_seq(
+        self,
+        seq: int,
+        event: BusEvent,
+        *,
+        wait_persistence: bool = False,
+    ) -> bool:
         """Dispatch event to all handlers.
 
         Order:
@@ -124,19 +143,23 @@ class RunEventFanout:
         Per-handler exceptions are caught and logged. One failing
         handler does not prevent others from receiving the event.
         """
+        ok = True
         try:
             # 1. SSE first -- latency-sensitive
-            await self._safe_handle(self._sse, event)
+            ok = await self._safe_handle(self._sse, event) and ok
 
             # 2. Extra handlers in registration order
             # Snapshot to ensure add_handler() during dispatch does not
             # affect the current event (same semantics as EventRouter).
             extra = self._extra_handlers
             for handler in extra:
-                await self._safe_handle(handler, event)
+                ok = await self._safe_handle(handler, event) and ok
 
             # 3. Persistence as background task
-            self._spawn_persistence(seq, event)
+            persistence_task = self._spawn_persistence(seq, event)
+            if wait_persistence:
+                ok = await persistence_task and ok
+            return ok
         finally:
             self._discard_pre_persistence_dispatch(seq)
 
@@ -144,7 +167,7 @@ class RunEventFanout:
         self._dispatch_seq += 1
         return self._dispatch_seq
 
-    def _spawn_persistence(self, seq: int, event: BusEvent) -> None:
+    def _spawn_persistence(self, seq: int, event: BusEvent) -> asyncio.Task[bool]:
         """Schedule persistence as a background task with strong reference."""
         task = asyncio.create_task(
             self._safe_handle(self._persistence, event),
@@ -160,6 +183,7 @@ class RunEventFanout:
                 self._pending_persistence_by_seq.pop(seq, None)
 
         task.add_done_callback(_cleanup)
+        return task
 
     async def flush_persistence_barrier(self) -> None:
         """Wait for dispatches started before the barrier to reach persistence."""
@@ -206,10 +230,11 @@ class RunEventFanout:
                     exc_info=True,
                 )
 
-    async def _safe_handle(self, handler: Any, event: BusEvent) -> None:
+    async def _safe_handle(self, handler: Any, event: BusEvent) -> bool:
         """Dispatch to a single handler with exception isolation."""
         try:
             await handler.handle(event)
+            return True
         except Exception:
             logger.warning(
                 "Handler %s raised for event type=%s",
@@ -217,3 +242,4 @@ class RunEventFanout:
                 getattr(event, "type", "?"),
                 exc_info=True,
             )
+            return False
