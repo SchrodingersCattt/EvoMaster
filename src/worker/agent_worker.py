@@ -195,6 +195,12 @@ def _run_worker_loop() -> None:
         mode = (payload.get('mode') or 'direct').strip().lower() or 'direct'
         llm_override = (payload.get('llm') or '').strip() or None
         model_override = (payload.get('model') or '').strip() or None
+        raw_images = payload.get('images') or []
+        images = (
+            [url for url in raw_images if isinstance(url, str)]
+            if isinstance(raw_images, list)
+            else []
+        )
         bohrium_required = bool(payload.get('bohrium_required'))
 
         if not session_id:
@@ -291,6 +297,7 @@ def _run_worker_loop() -> None:
                         invocation_id=invocation_id,
                         llm_override=llm_override,
                         model_override=model_override,
+                        images=images,
                         bohrium_required=bohrium_required,
                     )
                 )

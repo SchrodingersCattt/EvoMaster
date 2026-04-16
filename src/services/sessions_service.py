@@ -254,6 +254,15 @@ class ChatSessionsService:
             session_id, org_id=org_id, project_id=project_id
         )
 
+    def set_session_directory(
+        self,
+        session_id: str,
+        directory: str | None,
+        user_id: str,
+    ) -> bool:
+        """设置会话绑定的工作区目录。仅所有者可写。"""
+        return self.table.set_session_directory(session_id, directory, user_id)
+
     def get_share_status(self, session_id: str) -> dict:
         """获取会话分享状态。返回 { \"enabled\": bool }，会话不存在返回 None。"""
         row = self.table.get_session(session_id)

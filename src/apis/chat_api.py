@@ -1,9 +1,11 @@
 import logging
+from pathlib import Path as FsPath
 from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from fastapi import APIRouter, Body, Depends, Path, Request
 from fastapi.responses import StreamingResponse
 
+from matmaster.config.loader import load_llm_config
 from src.base.base_res import BaseResponse
 from src.models.chat import (
     ChatPlannerReplyRequest,
@@ -11,6 +13,9 @@ from src.models.chat import (
     ErrorApiResponse,
     RunStatusApiResponse,
     RunStatusData,
+    SessionDirectoryApiResponse,
+    SessionDirectoryData,
+    SessionDirectorySetRequest,
     SessionItem,
     SessionListApiResponse,
     SessionListQuery,
@@ -19,7 +24,9 @@ from src.models.chat import (
     ShareStatusApiResponse,
     ShareStatusData,
 )
+from src.services.agent_run_service import _get_agent_default_llm
 from src.services.events_service import ChatEventsService, get_events_service
+from src.services.image_input_service import ImageInputError, get_image_input_service
 from src.services.quota_service import check_quota
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.stream_service import (
@@ -55,6 +62,8 @@ SSE_HEADERS = {
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+_PROJECT_ROOT = FsPath(__file__).resolve().parent.parent.parent
 
 
 @router.get(
@@ -113,7 +122,8 @@ def get_run_status():
     summary='发送消息或订阅会话流',
     description='统一 SSE 流接口。'
     ' `content` 为空或不传 body 时，仅订阅该会话的历史和心跳；'
-    ' `content` 非空时，发送消息并返回本次运行的 SSE 流。',
+    ' `content` 非空时，发送消息并返回本次运行的 SSE 流。'
+    ' 可选 `directory`：随用户 query 写入历史事件；会话目录持久化请使用 PUT …/session-directory。',
     operation_id='streamChatSession',
     responses={
         401: COMMON_ERROR_RESPONSES[401],
@@ -140,6 +150,7 @@ async def chat_stream(
                     'content': '请总结项目 42 下最近一次实验结果',
                     'mode': 'direct',
                     'bohrium_project_id': 42,
+                    'directory': '/share/workspace/run1',
                 },
             },
         },
@@ -155,13 +166,16 @@ async def chat_stream(
     run_agent 报错；前端需消费本次 POST 的 response body（SSE）并合并到 UI，不能只依赖「订阅」连接。"""
     sid = session_id.strip()
     has_content = req is not None and bool((req.content or '').strip())
+    is_share_route = request.url.path.startswith('/pubapi/')
+    if is_share_route and has_content:
+        raise ForbiddenErrorResponse(msg='分享页仅支持只读订阅，不允许发送消息')
     logger.info(
-        'stream request: session_id=%s user_id=%s has_content=%s',
+        'stream request: session_id=%s user_id=%s has_content=%s share_route=%s',
         sid,
         user_id,
         has_content,
+        is_share_route,
     )
-    # 发消息须为所有者（或已分享）；仅订阅 SSE 时允许 tools-server admin 白名单只读
     allow_admin_read = not has_content
     if not chat_svc.can_access_session(sid, user_id, allow_admin_read=allow_admin_read):
         logger.warning(
@@ -239,6 +253,30 @@ async def chat_stream(
         user_id,
         bool(org_id),
     )
+    if req.images:
+        image_service = get_image_input_service()
+        try:
+            validated_images = image_service.validate_current_images(
+                files=req.files or [],
+                images=req.images,
+            )
+            llm_config = load_llm_config(_PROJECT_ROOT / 'config' / 'llm_config.yaml')
+            image_service.ensure_vision_supported(
+                llm_config=llm_config,
+                llm_override=(req.llm or '').strip() or None,
+                model_override=(req.model or '').strip() or None,
+                default_profile_key=_get_agent_default_llm(),
+            )
+        except ImageInputError as exc:
+            raise BaseErrorResponse(
+                http_status=exc.http_status,
+                code=exc.http_status,
+                msg=exc.message,
+                data={'error_code': exc.error_code},
+            ) from exc
+        req = req.model_copy(
+            update={'images': [image.url for image in validated_images]}
+        )
     ctx = stream_svc.prepare_send_message(sid, req, user_id, org_id=org_id)
     if ctx is None:
         logger.warning(
@@ -395,6 +433,72 @@ def set_share_status(
     return ShareStatusApiResponse(
         data=ShareStatusData(enabled=body.enabled),
     )
+
+
+@router.get(
+    '/{session_id}/session-directory',
+    response_model=SessionDirectoryApiResponse,
+    summary='查询会话绑定的工作区目录',
+    description='返回该会话绑定的目录路径（如 Bohrium 远端路径）。'
+    ' 已分享会话任何人可读；未分享时需为所有者或 admin 只读白名单。',
+    operation_id='getChatSessionDirectory',
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
+def get_session_directory(
+    session_id: str = Path(..., description='会话 ID', examples=['session-001']),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """查询会话绑定目录。"""
+    sid = session_id.strip()
+    row = chat_svc.get_session(sid)
+    if not row:
+        raise NotFoundErrorResponse(msg='Session not found')
+    if not chat_svc.can_access_session(sid, user_id, allow_admin_read=True):
+        raise ForbiddenErrorResponse(msg='无权限访问该会话')
+    raw = row.get('session_directory')
+    if raw is None:
+        directory: str | None = None
+    else:
+        s = str(raw).strip()
+        directory = s if s else None
+    return SessionDirectoryApiResponse(data=SessionDirectoryData(directory=directory))
+
+
+@router.put(
+    '/{session_id}/session-directory',
+    response_model=SessionDirectoryApiResponse,
+    summary='设置会话绑定的工作区目录',
+    description='仅会话所有者可写；可将目录置为空以清除绑定。',
+    operation_id='setChatSessionDirectory',
+    responses={
+        401: COMMON_ERROR_RESPONSES[401],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
+def set_session_directory(
+    session_id: str = Path(..., description='会话 ID', examples=['session-001']),
+    body: SessionDirectorySetRequest = Body(...),
+    user_id: str = Depends(UserService.require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """设置或清除会话绑定目录。"""
+    sid = session_id.strip()
+    if not chat_svc.set_session_directory(sid, body.directory, user_id):
+        raise NotFoundErrorResponse(
+            msg='Session not found or you are not the owner',
+        )
+    row = chat_svc.get_session(sid)
+    raw = row.get('session_directory') if row else None
+    if raw is None:
+        directory: str | None = None
+    else:
+        s = str(raw).strip()
+        directory = s if s else None
+    return SessionDirectoryApiResponse(data=SessionDirectoryData(directory=directory))
 
 
 @router.delete(

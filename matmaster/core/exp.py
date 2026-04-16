@@ -450,16 +450,27 @@ class Exp:
                 source_override=source_override,
                 spawn_id=spawn_id,
             )
+            spec = runtime.spec
+            current_user_images = ctx.run_meta.get("current_user_images")
+            if current_user_images:
+                spec = spec.model_copy(
+                    update={
+                        "meta": {
+                            **spec.meta,
+                            "current_user_images": current_user_images,
+                        }
+                    }
+                )
             if ctx.session is not None:
                 ctx.session._cancel_token = cancel_token
 
             # Inject cancel_token into tools for cancel propagation.
-            catalog = getattr(runtime.spec, "tool_catalog", None)
+            catalog = getattr(spec, "tool_catalog", None)
             if cancel_token is not None and catalog is not None:
                 catalog.inject_cancel_token(cancel_token)
 
             async for event in runtime.kernel.run_stream(
-                runtime.spec, task, history=history, cancel_token=cancel_token
+                spec, task, history=history, cancel_token=cancel_token
             ):
                 yield event
         finally:

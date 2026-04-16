@@ -31,14 +31,22 @@ def _invalid_checkpoint(*, checkpoint_id: int, covered_until_event_id: int) -> d
     }
 
 
-def _user_event(content: str, *, task_id: str | None = None) -> dict:
-    return {
+def _user_event(
+    content: str,
+    *,
+    task_id: str | None = None,
+    images: list[str] | None = None,
+) -> dict:
+    event = {
         "source": "User",
         "type": "query",
         "content": content,
         "task_id": task_id,
         "spawn_id": None,
     }
+    if images is not None:
+        event["images"] = images
+    return event
 
 
 def _response_event(content: str, *, task_id: str | None = None) -> dict:
@@ -198,3 +206,26 @@ def test_restore_without_checkpoint_uses_raw_event_history() -> None:
     assert [message.role for message in history] == ["user", "assistant"]
     assert isinstance(history[0], UserMessage)
     assert isinstance(history[1], AssistantMessage)
+
+
+def test_restore_trims_history_images_by_image_turns() -> None:
+    events_table = FakeEventsTable(
+        session_events=[
+            _user_event("img 1", images=["https://oss.example.com/chat/1.png"]),
+            _user_event("text only"),
+            _user_event("img 2", images=["https://oss.example.com/chat/2.png"]),
+            _user_event("img 3", images=["https://oss.example.com/chat/3.png"]),
+            _user_event("img 4", images=["https://oss.example.com/chat/4.png"]),
+        ]
+    )
+    service = HistoryRestoreService(events_table)
+
+    history = service.restore_history(
+        session_id="sess-raw",
+        spawn_id=None,
+        task_id=None,
+    )
+
+    image_counts = [len(getattr(message, "images", [])) for message in history]
+    assert image_counts == [0, 0, 1, 1, 1]
+    assert "[历史图片已裁剪: 1.png]" in history[0].content

@@ -41,6 +41,7 @@ class ChatEventsTable(BaseTable):
         ):
             ev['content'] = content.get('content', '')
             ev['files'] = content.get('files', [])
+            ev['images'] = content.get('images', [])
             ev['workspace_paths'] = content.get('workspace_paths', [])
 
         return ev
@@ -201,6 +202,7 @@ class ChatEventsTable(BaseTable):
                     ):
                         ev['content'] = content.get('content', '')
                         ev['files'] = content.get('files', [])
+                        ev['images'] = content.get('images', [])
                         ev['workspace_paths'] = content.get('workspace_paths', [])
                     events.append(ev)
                 return events
@@ -237,6 +239,7 @@ class ChatEventsTable(BaseTable):
                     return {
                         'content': (content.get('content') or ''),
                         'files': content.get('files') or [],
+                        'images': content.get('images') or [],
                         'workspace_paths': content.get('workspace_paths') or [],
                         'mode': content.get('mode') or 'direct',
                         **base,
@@ -244,6 +247,7 @@ class ChatEventsTable(BaseTable):
                 return {
                     'content': content if isinstance(content, str) else '',
                     'files': [],
+                    'images': [],
                     'workspace_paths': [],
                     'mode': 'direct',
                     **base,

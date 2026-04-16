@@ -9,7 +9,7 @@ import threading
 import time
 import uuid
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Protocol, runtime_checkable
@@ -155,12 +155,15 @@ def _replay_terminal_dedupe_key(event: dict) -> tuple[str, str | None] | None:
 def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
     """Hide replayed run_result when the same task already has a replayable response.
 
-    Live SSE already streamed the final `response` content. After adding
-    persisted complete response segments, replaying the trailing `run_result`
+    Live SSE already streamed the final `response` content. After persisted
+    complete response segments were added, replaying the trailing `run_result`
     would duplicate the final answer after reconnect. We suppress terminal
     events once a replayable `response` has been seen for the same
-    `(task_id, spawn_id)` stream, even if replayable events like
-    `response_figures` appear between `response` and `run_result`.
+    `(task_id, spawn_id)` stream.
+
+    `response_figures` is replayable answer metadata. It may appear before the
+    first response, between response chunks, or after a response. It is kept in
+    replay output and does not reset or suppress the response-seen state.
 
     Dedupe is keyed by (task_id, spawn_id) so a sub-agent `response` does not
     suppress the parent stream's `run_result`.
@@ -265,6 +268,7 @@ class SendStreamContext:
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
     bohrium_required: bool = False  # 本轮是否显式依赖 Bohrium access_key / project
+    images: list[str] = field(default_factory=list)
 
 
 class ChatStreamService:
@@ -664,8 +668,12 @@ class ChatStreamService:
         }
         if req.files:
             user_msg['files'] = list(req.files)
+        if req.images:
+            user_msg['images'] = list(req.images)
         if req.workspace_paths:
             user_msg['workspace_paths'] = list(req.workspace_paths)
+        if 'directory' in req.model_dump(exclude_unset=True):
+            user_msg['session_directory'] = req.directory
         self._events_service.add_history_event(sid, user_msg, user_id=user_id)
 
         dao = get_redis_dao()
@@ -683,6 +691,7 @@ class ChatStreamService:
             llm=llm,
             model=model,
             bohrium_required=bohrium_required,
+            images=list(req.images or []),
         )
 
     def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
@@ -827,6 +836,7 @@ class ChatStreamService:
                 'mode': mode,
                 'llm': ctx.llm,
                 'model': ctx.model,
+                'images': list(ctx.images),
                 'bohrium_required': ctx.bohrium_required,
                 'submitted_at': datetime.now(timezone.utc).isoformat(),
             }
