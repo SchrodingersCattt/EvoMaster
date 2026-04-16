@@ -640,7 +640,9 @@ class ChatHistoryConverter:
                     ImageContentPart.model_validate(image)
                     for image in d.get("images", [])
                 ]
-                messages.append(UserMessage(content=d.get("content", ""), images=images))
+                messages.append(
+                    UserMessage(content=d.get("content", ""), images=images)
+                )
             elif role == "assistant":
                 msg_kwargs: dict = {"content": d.get("content")}
                 reasoning_content = d.get("reasoning_content")
