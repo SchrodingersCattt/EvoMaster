@@ -120,9 +120,6 @@ Key rules:
 
 * "Get / search / find / retrieve the crystal structure of X" → Try MCP database tools (`mat_struct_db_*`) first for simple inorganic formulas. If not found, or if the material is complex (organic, hybrid, molecular crystal, MOF, co-crystal, energetic salt, etc.), use the literature-based search path: `mat_sn_*` → `extract_info_from_webpage` → `fetch_web_structure.py` / report identifiers.
 * "Build from SMILES or prototype" → use MCP structure generator (`mat_sg_*`).
-* "Build a crystal structure from space group + lattice + Wyckoff positions" → use `mat_sg_build_bulk_structure_by_wyckoff` (see mcp-mat-sg skill). Fallback: pymatgen `Structure.from_spacegroup()`.
-* "Build a heterostructure / interface" → use `mat_sg_build_surface_interface` (see mcp-mat-sg skill). Build each slab separately first, save each file, then stack. Fallback: ASE/pymatgen.
-* "Build a structure for band structure / DOS / electronic property calculation" → see "Structure Construction for Electronic Property Calculations" above. Use primitive cell for band structure, dense k-mesh for DOS.
 * "I have a direct CIF/POSCAR URL, download it" → `fetch_web_structure.py --url`.
 * "Get the structure from a journal SI or open repository page" → `fetch_web_structure.py --page`.
 * "Get the crystal structure of X" where X is in CCDC/ICSD → report database identifier (REFCODE / collection code) + crystallographic parameters (space group, lattice constants, formula, Z) from literature; do not attempt to download or reconstruct.

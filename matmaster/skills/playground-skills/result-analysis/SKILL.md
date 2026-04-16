@@ -63,7 +63,6 @@ When a task requires **extracting and aggregating features from a completed mult
    - **Surface energy**: E(slab) + E(bulk) → surface energy = (E_slab − n × E_bulk) / (2 × A)
    - **Formation energy**: E(compound) − Σ(E_element × count)
    - **Adsorption energy**: E(slab+ads) − E(slab) − E(gas)
-   - **Adhesion energy (work of adhesion)**: W_adh = (E_slab_A + E_slab_B − E_interface) / A, where A = in-plane cell area. Requires three separate calculations: isolated slab A, isolated slab B, and the stacked interface.
    - **Convergence test**: energies at different ecutwfc/kpoints → convergence curves
 4. **Report**: Present aggregated features as a structured table or JSON.
 

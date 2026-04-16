@@ -28,47 +28,6 @@ Place adsorbate molecules on slab surfaces. Essential for catalysis workflows (C
 
 Inspect a structure file for lattice parameters, composition, atom count, volume, etc. Use `level="basic"` for quick scan or `level="detailed"` for full analysis. **Always inspect structures after building to verify correctness.**
 
-## build_bulk_structure_by_wyckoff
-
-Build crystal structures from space group + lattice parameters + Wyckoff sites. **Primary tool for constructing structures from crystallographic data or known prototypes.**
-
-- **Key inputs**: `space_group` (H-M symbol or number), lattice constants (`a`, `b`, `c`, `alpha`, `beta`, `gamma`), Wyckoff site list (element, fractional coordinates for each site).
-- **When to use**: task gives space group + lattice + atom positions; building a known prototype (perovskite ABO₃, spinel AB₂O₄, fluorite AO₂, wurtzite, zincblende, rocksalt, etc.); constructing a parent structure before defects/substitutions/surfaces.
-- **Common prototypes quick-ref**:
-  - Perovskite ABO₃ (Pm-3m #221): A at (0,0,0), B at (0.5,0.5,0.5), O at (0.5,0.5,0), (0.5,0,0.5), (0,0.5,0.5)
-  - Rocksalt AB (Fm-3m #225): A at (0,0,0), B at (0.5,0.5,0.5)
-  - Fluorite AO₂ (Fm-3m #225): A at (0,0,0), O at (0.25,0.25,0.25)
-  - Wurtzite AB (P6₃mc #186): A at (1/3,2/3,0), B at (1/3,2/3,u) with u≈0.375
-  - Zincblende AB (F-43m #216): A at (0,0,0), B at (0.25,0.25,0.25)
-- **Post-build**: `get_structure_info` → verify composition matches expected formula, atom count = Σ(site multiplicity × Z), lattice parameters match input.
-- **Fallback** (MCP tool fails or times out): build with pymatgen inline:
-  ```python
-  from pymatgen.core import Structure, Lattice
-  lattice = Lattice.from_parameters(a, b, c, alpha, beta, gamma)
-  struct = Structure.from_spacegroup(sg_number, lattice, species, coords)
-  struct.to(filename="output.cif")
-  ```
-  Then verify with `get_structure_info` or `assess_structure.py`.
-
-## make_supercell_structure
-
-Create supercells by repeating the unit cell along crystallographic directions.
-
-- **Input**: structure file path, scaling vector `[nx, ny, nz]` or 3×3 matrix.
-- **When to use**: defect calculations, lattice matching for heterostructures, thermal property simulations, or any task requiring a larger simulation cell.
-- **Post-build**: atom_count = original × (nx × ny × nz); composition preserved; verify with `get_structure_info`.
-- **Fallback**: pymatgen `structure.make_supercell([nx, ny, nz])` + `.to("output.cif")`.
-
-## build_surface_interface (Heterostructures)
-
-Stack two slab structures to form a heterostructure or interface. **Execute ALL steps — partial completion is the #1 failure mode.**
-
-1. **Build each slab separately** (`build_surface_slab` or `build_slab_tasker_fix.py`). **Save each as a separate file immediately.**
-2. **Lattice matching**: compare in-plane lattice parameters. If mismatch > 5%, create commensurate supercells (use the simplest ratio that brings mismatch below 5%).
-3. **Stack**: `build_surface_interface` with `interface_distance` 2.0–3.0 Å (vdW) or 1.5–2.5 Å (covalent), `max_strain` 0.05–0.2. If MCP fails, use ASE/pymatgen: read both slabs, extend c-axis, combine atoms, add vacuum.
-4. **Verify** with `get_structure_info`: atom count = sum of both slabs, no overlaps (min dist > 0.5 Å), vacuum ≥ 15 Å.
-5. **Save-early rule**: save each intermediate file (slab A, slab B, interface) before the next step. If timeout threatens, delivered files get partial credit.
-
 ## generate_ordered_replicas
 
 - Report **both** the original disordered formula **and** the ordered replica expanded formula (integer stoichiometry). Write formulas as concatenated strings without spaces: `H144C48N24Cl24O96` (NOT `H144 C48 N24 Cl24 O96`). If CIF returns space-separated elements, concatenate them.
