@@ -161,6 +161,14 @@ Key reminders:
 - Multiple species: repeat label/moment/count/coords block, **same order as ATOMIC_SPECIES**
 - **BSSE ghost atoms** (LCAO vacancies/surfaces): same `.upf`/`.orb`, zero moment, frozen. Set `ntype` = real + ghost count.
 
+**STRU pre-flight checklist** (verify before finalizing any STRU file):
+1. `ATOMIC_SPECIES` PP filenames must match actual downloaded files — use `ls *.upf` to confirm; never invent filenames
+2. `NUMERICAL_ORBITAL` (LCAO only): one `.orb` per species in ATOMIC_SPECIES order — use `ls *.orb` to get exact filenames from AIS Square bundle
+3. `LATTICE_CONSTANT` = `1.8897259886` when vectors are in Å
+4. `LATTICE_VECTORS`: 3 lines × 3 floats — must match the target crystal geometry
+5. `ATOMIC_POSITIONS` species blocks appear in **identical order** to `ATOMIC_SPECIES`; each block: label, magnetic moment, atom count, then coordinates with mobility flags
+6. **Total atom count** = sum of all species' counts in STRU; cross-check against expected composition × Z
+
 ## Electric Field, Dipole Correction, and Electrostatic Potential
 
 Consult **`references/electric_field.md`** for complete INPUT examples (dipole correction, finite field, gate field, electrostatic potential).
