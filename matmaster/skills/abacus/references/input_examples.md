@@ -14,8 +14,11 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `
 | Work function / dipole | `out_pot 2`, `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_amp 0.0` | Missing `efield_amp 0.0` (pure dipole correction) |
 | Spin-polarized | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` | Omitting mixing params → SCF diverges |
 | Slab KPT | Always `1` in vacuum direction (e.g. `20 20 1 0 0 0`) | Using dense mesh in vacuum direction |
+| Supercell / vacancy / defect / BSSE | **`kspacing` in INPUT** (e.g. `kspacing 0.10`) | Using fixed KPT mesh for variable-size supercells |
 
 > **⚠ `force_thr_ev` vs `force_thr`**: Always use `force_thr_ev` (unit: eV/Å). The parameter `force_thr` uses Ry/Bohr — completely different units. `force_thr_ev 0.01` ≈ `force_thr 3.9e-4`. Mixing them up produces absurdly loose or tight thresholds.
+
+> **⚠ Supercell k-points**: For **any supercell** (vacancy, defect, BSSE ghost atoms, adsorption), always use `kspacing` inside INPUT instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to cell size. Value: `0.10` Å⁻¹ for metals, `0.12`–`0.15` for insulators. For slab supercells: `kspacing 0.10 0.10 1.00` (z=vacuum).
 
 ### Relaxation INPUT Example
 ```
@@ -49,6 +52,42 @@ stress_thr 0.5
 relax_nmax 100
 ```
 > **Critical**: `cal_force 1` and `cal_stress 1` are BOTH mandatory for cell-relax. Without `cal_force 1`, ABACUS does not compute forces and the optimizer cannot work. Without `cal_stress 1`, cell vectors are not optimized. These are NOT implied by `calculation cell-relax` — you must include them explicitly.
+
+### Vacancy / BSSE Ghost Atom INPUT Example
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 100
+smearing_method gauss
+smearing_sigma 0.01
+nspin 2
+mixing_beta 0.1
+mixing_ndim 20
+mixing_gg0 1.5
+kspacing 0.10
+```
+> **Critical**: Use `kspacing` (not a KPT file) for supercell/vacancy/BSSE calculations. For magnetic systems (Fe vacancy), include `nspin 2` and mixing parameters. `scf_nmax 100` is the standard value — do not increase to 200 unless the system is known to have convergence difficulties.
+
+### Slab BSSE Ghost Atom INPUT Example
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 100
+smearing_method gauss
+smearing_sigma 0.01
+nspin 2
+mixing_beta 0.1
+mixing_ndim 20
+mixing_gg0 1.5
+kspacing 0.10 0.10 1.00
+```
+> For slab BSSE calculations: set the vacuum direction of kspacing to `1.00`.
 
 ### Work Function / Electrostatic Potential INPUT Example
 ```
