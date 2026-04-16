@@ -7,7 +7,7 @@ from matmaster.config.llm import LLMConfig, LLMProfileConfig
 from src.services.image_input_service import (
     IMAGE_INPUT_DOMAIN_BLOCKED,
     IMAGE_INPUT_DUPLICATE_ATTACHMENT,
-    IMAGE_INPUT_PATH_BLOCKED,
+    IMAGE_INPUT_INVALID_SCHEME,
     IMAGE_INPUT_SIZE_UNKNOWN,
     IMAGE_INPUT_UNSUPPORTED_MIME,
     VISION_MODEL_NOT_SUPPORTED,
@@ -18,13 +18,8 @@ from src.services.image_input_service import (
 
 
 def _service() -> ImageInputService:
-    return ImageInputService(
-        ImageInputSettings(
-            allowed_hosts=frozenset({"oss.example.com"}),
-            allowed_path_prefixes=("/chat/",),
-            allow_insecure_hosts=frozenset(),
-        )
-    )
+    # Host/path allowlist removed; default settings only retain HTTPS + private-IP guard.
+    return ImageInputService(ImageInputSettings())
 
 
 def _response(
@@ -55,14 +50,14 @@ def test_rejects_duplicate_file_and_image_url() -> None:
     assert exc.value.error_code == IMAGE_INPUT_DUPLICATE_ATTACHMENT
 
 
-def test_rejects_blocked_domain() -> None:
+def test_rejects_non_https_scheme() -> None:
     with pytest.raises(ImageInputError) as exc:
         _service().validate_current_images(
             files=[],
-            images=["https://evil.example.com/chat/a.png"],
+            images=["http://oss.example.com/chat/a.png"],
         )
 
-    assert exc.value.error_code == IMAGE_INPUT_DOMAIN_BLOCKED
+    assert exc.value.error_code == IMAGE_INPUT_INVALID_SCHEME
 
 
 def test_head_success_accepts_png() -> None:
@@ -107,28 +102,7 @@ def test_probe_rejects_redirect_final_url_to_private_ip() -> None:
     client.get.assert_not_called()
 
 
-def test_probe_rejects_redirect_final_url_outside_allowed_path() -> None:
-    client = MagicMock()
-    client.head.return_value = _response(
-        200,
-        method="HEAD",
-        url="https://oss.example.com/private/a.png",
-        headers={"content-type": "image/png", "content-length": "100"},
-    )
-
-    with patch("src.services.image_input_service.httpx.Client") as client_cls:
-        client_cls.return_value.__enter__.return_value = client
-        with pytest.raises(ImageInputError) as exc:
-            _service().validate_current_images(
-                files=[],
-                images=["https://oss.example.com/chat/a.png"],
-            )
-
-    assert exc.value.error_code == IMAGE_INPUT_PATH_BLOCKED
-    client.get.assert_not_called()
-
-
-def test_probe_rejects_manual_redirect_before_following_to_blocked_host() -> None:
+def test_probe_rejects_manual_redirect_before_following_to_private_ip() -> None:
     client = MagicMock()
     client.head.return_value = _response(
         302,
@@ -172,19 +146,17 @@ def test_validate_current_images_disables_httpx_auto_redirects() -> None:
     assert client_cls.call_args.kwargs["follow_redirects"] is False
 
 
-def test_history_image_url_rejected_when_required_policy_is_missing() -> None:
-    service = ImageInputService(
-        ImageInputSettings(
-            allowed_hosts=frozenset(),
-            allowed_path_prefixes=(),
-            allow_insecure_hosts=frozenset(),
-            require_policy=True,
-        )
+def test_history_image_url_accepts_any_https_external_host() -> None:
+    # Host allowlist removed: any well-formed https URL on a public host is accepted.
+    assert (
+        _service().validate_history_image_url("https://oss.example.com/chat/a.png")
+        is True
     )
 
+
+def test_history_image_url_still_rejects_private_ip() -> None:
     assert (
-        service.validate_history_image_url("https://oss.example.com/chat/a.png")
-        is False
+        _service().validate_history_image_url("https://127.0.0.1/admin/a.png") is False
     )
 
 
