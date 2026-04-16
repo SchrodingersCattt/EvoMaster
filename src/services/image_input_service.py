@@ -17,9 +17,12 @@ from matmaster.types.messages import ImageContentPart, Message, UserMessage
 IMAGE_INPUT_TOO_MANY = "IMAGE_INPUT_TOO_MANY"
 IMAGE_INPUT_URL_TOO_LONG = "IMAGE_INPUT_URL_TOO_LONG"
 IMAGE_INPUT_INVALID_SCHEME = "IMAGE_INPUT_INVALID_SCHEME"
+# Host allowlist removed; constant kept because the private/loopback IP block
+# (the remaining SSRF guard) still raises it.
 IMAGE_INPUT_DOMAIN_BLOCKED = "IMAGE_INPUT_DOMAIN_BLOCKED"
-IMAGE_INPUT_PATH_BLOCKED = "IMAGE_INPUT_PATH_BLOCKED"
 IMAGE_INPUT_DUPLICATE_ATTACHMENT = "IMAGE_INPUT_DUPLICATE_ATTACHMENT"
+# Path allowlist removed; constant kept only for backward-compat imports.
+IMAGE_INPUT_PATH_BLOCKED = "IMAGE_INPUT_PATH_BLOCKED"
 IMAGE_INPUT_UNREACHABLE = "IMAGE_INPUT_UNREACHABLE"
 IMAGE_INPUT_UNSUPPORTED_MIME = "IMAGE_INPUT_UNSUPPORTED_MIME"
 IMAGE_INPUT_SIZE_UNKNOWN = "IMAGE_INPUT_SIZE_UNKNOWN"
@@ -47,10 +50,15 @@ class ImageInputError(Exception):
 
 @dataclass(frozen=True)
 class ImageInputSettings:
-    allowed_hosts: frozenset[str]
-    allowed_path_prefixes: tuple[str, ...]
-    allow_insecure_hosts: frozenset[str]
-    require_policy: bool = False
+    """Image input runtime knobs.
+
+    Host/path allowlists were removed. The only remaining URL gate is HTTPS
+    plus the private/loopback IP block (see `_is_ip_address_blocked`). Dev
+    environments may opt in to HTTP for specific hosts via
+    `IMAGE_INPUT_ALLOW_INSECURE_HOSTS`; this is force-cleared in production.
+    """
+
+    allow_insecure_hosts: frozenset[str] = frozenset()
     max_images: int = 5
     max_url_length: int = 4096
     max_bytes: int = 10 * 1024 * 1024
@@ -83,14 +91,7 @@ def _settings_from_env() -> ImageInputSettings:
     )
     if _is_production_env():
         allow_insecure_hosts = frozenset()
-    return ImageInputSettings(
-        allowed_hosts=frozenset(
-            host.lower() for host in _split_env_csv("IMAGE_INPUT_ALLOWED_HOSTS")
-        ),
-        allowed_path_prefixes=_split_env_csv("IMAGE_INPUT_ALLOWED_PATH_PREFIXES"),
-        allow_insecure_hosts=allow_insecure_hosts,
-        require_policy=_is_production_env(),
-    )
+    return ImageInputSettings(allow_insecure_hosts=allow_insecure_hosts)
 
 
 def _header_mime(headers: httpx.Headers) -> str | None:
@@ -171,12 +172,6 @@ class ImageInputService:
             return [self._probe_image(client, url) for url in deduped_images]
 
     def validate_history_image_url(self, url: str) -> bool:
-        if (
-            not self.settings.require_policy
-            and not self.settings.allowed_hosts
-            and not self.settings.allowed_path_prefixes
-        ):
-            return True
         try:
             self._validate_url(url)
         except ImageInputError:
@@ -221,7 +216,6 @@ class ImageInputService:
         host = (parsed.hostname or "").lower()
         if not parsed.scheme or not host:
             raise ImageInputError(IMAGE_INPUT_INVALID_SCHEME, "图片 URL 不合法")
-        self._validate_policy_configured()
         if parsed.scheme == "http":
             if host not in self.settings.allow_insecure_hosts:
                 raise ImageInputError(
@@ -234,40 +228,12 @@ class ImageInputService:
                 "图片 URL 必须使用 HTTPS",
             )
         if (
-            host not in self.settings.allowed_hosts
-            and host not in self.settings.allow_insecure_hosts
-        ):
-            raise ImageInputError(
-                IMAGE_INPUT_DOMAIN_BLOCKED,
-                "图片 URL 域名不在允许列表中",
-            )
-        if (
             _is_ip_address_blocked(host)
             and host not in self.settings.allow_insecure_hosts
         ):
             raise ImageInputError(
                 IMAGE_INPUT_DOMAIN_BLOCKED,
                 "图片 URL 不允许指向内网地址",
-            )
-        if not self.settings.allowed_path_prefixes or not any(
-            parsed.path.startswith(prefix)
-            for prefix in self.settings.allowed_path_prefixes
-        ):
-            raise ImageInputError(
-                IMAGE_INPUT_PATH_BLOCKED,
-                "图片 URL 路径不在允许范围内",
-            )
-
-    def _validate_policy_configured(self) -> None:
-        if not self.settings.allowed_hosts and not self.settings.allow_insecure_hosts:
-            raise ImageInputError(
-                IMAGE_INPUT_DOMAIN_BLOCKED,
-                "图片 URL 域名允许列表未配置",
-            )
-        if not self.settings.allowed_path_prefixes:
-            raise ImageInputError(
-                IMAGE_INPUT_PATH_BLOCKED,
-                "图片 URL 路径允许范围未配置",
             )
 
     def _send_probe_request(
