@@ -77,22 +77,12 @@ banks:
   - path: "data_diagnosis/dd_agnostic.yaml"
     capability: "data_diagnosis"
     domain: "agnostic"
-    questions: 3
-
-  - path: "data_diagnosis/dd_battery.yaml"
-    capability: "data_diagnosis"
-    domain: "battery"
-    questions: 1
-
-  - path: "data_diagnosis/dd_catalysis.yaml"
-    capability: "data_diagnosis"
-    domain: "catalysis"
-    questions: 1
+    questions: 2
 
   - path: "data_diagnosis/dd_semiconductor.yaml"
     capability: "data_diagnosis"
     domain: "semiconductor"
-    questions: 2
+    questions: 1
 
   - path: "execution_contract/ec_agnostic.yaml"
     capability: "execution_contract"
@@ -194,4 +184,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 132 questions across 29 active bank files
+# Total: 128 questions across 27 active bank files

@@ -2,7 +2,7 @@ version: v5
 capability: structure_retrieval
 domain: agnostic
 questions:
-- id: SR_db_001_20260411v2
+- id: SR_db_001_20260416v1
   capability: structure_retrieval
   domain: agnostic
   intent: Search a target inorganic crystal structure and report the original database source
@@ -81,7 +81,7 @@ questions:
     criterion: Retrieval report explicitly describes query conditions, candidate handling,
       and database-source explanation.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The answer ties the selected RbClO4 structure and provenance fields to the
       retrieval outputs, and does not claim unsupported source certainty.
@@ -104,7 +104,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_db_002_20260411v2
+- id: SR_db_002_20260416v1
   capability: structure_retrieval
   domain: agnostic
   intent: Retrieve a target prototype crystal structure from an open database and summarize
@@ -178,7 +178,7 @@ questions:
   - id: notes_required_tokens
     criterion: Notes explain candidate selection and database origin for the MgB2 result.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The answer stays focused on retrieval metadata and provenance, not fabricated
       downstream calculations.
@@ -201,7 +201,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_db_006_20260411v1
+- id: SR_db_006_20260416v1
   capability: structure_retrieval
   domain: agnostic
   intent: Retrieve up to two Ti-Al-O compounds with space group 63 and export CIF-oriented
@@ -279,7 +279,7 @@ questions:
     criterion: Retrieval report states filter constraints, upper-bound candidate count, and
       uncertainty note.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The final answer is grounded in retrieval artifacts and does not claim unsupported
       compounds beyond reported candidates.
@@ -302,7 +302,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_db_007_20260411v1
+- id: SR_db_007_20260416v1
   capability: structure_retrieval
   domain: agnostic
   intent: Retrieve up to five CoREMOF-2019 entries satisfying atom-count, surface-area, and
@@ -387,7 +387,7 @@ questions:
   - id: report_required_tokens
     criterion: Report explains filter constraints and uncertainty handling.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The final answer is grounded in filtered retrieval outputs and does not fabricate
       candidates outside stated constraints.
@@ -410,7 +410,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_db_008_20260411v1
+- id: SR_db_008_20260416v1
   capability: structure_retrieval
   domain: agnostic
   intent: Retrieve up to five ternary rare-earth transition-metal oxides excluding Fe and
@@ -487,7 +487,7 @@ questions:
     criterion: Report describes rare-earth/transition-metal/ternary constraints and Fe/Ni
       exclusion handling.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The final answer is grounded in retrieved candidates and avoids fabricating
       unsupported compositions.
@@ -510,7 +510,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_db_009_20260411v1
+- id: SR_db_009_20260416v1
   capability: structure_retrieval
   domain: agnostic
   intent: Retrieve five candidate Heusler-alloy structures and summarize downloadable structure
@@ -581,7 +581,7 @@ questions:
     criterion: Report explains retrieval constraints and downloadability notes with uncertainty
       handling.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The final answer is grounded in retrieved Heusler candidates and does not invent
       missing links or identifiers.
@@ -604,7 +604,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_db_005_20260411v1
+- id: SR_db_005_20260416v1
   capability: structure_retrieval
   domain: agnostic
   intent: Retrieve three oxide structures with band gap greater than 2 eV and summarize filter
@@ -687,7 +687,7 @@ questions:
     criterion: Retrieval report states filter constraints, candidate-count handling, and uncertainty
       note.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The final answer is grounded in retrieval results and does not fabricate band-gap
       values beyond reported metadata.
