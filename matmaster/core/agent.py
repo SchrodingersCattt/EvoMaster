@@ -48,6 +48,7 @@ from matmaster.types.message_normalization import (
 )
 from matmaster.types.messages import (
     AssistantMessage,
+    ImageContentPart,
     LLMResponse,
     Message,
     SystemMessage,
@@ -321,11 +322,15 @@ class AgentKernel:
                 UserPromptContext(prompt=task, session_id=session_id),
             )
 
+        current_user_images = [
+            ImageContentPart.model_validate(image)
+            for image in spec.meta.get("current_user_images", [])
+        ]
         state = _KernelState(
             messages=[
                 SystemMessage(content=spec.system_prompt),
                 *(history or []),
-                UserMessage(content=task),
+                UserMessage(content=task, images=current_user_images),
             ]
         )
 
@@ -560,14 +565,15 @@ class AgentKernel:
                     if item.event is not None:
                         yield item
 
-                # Check for incomplete response
+                # Check for incomplete responses that should be retried before
+                # the turn is allowed to terminate as invalid_finish.
                 final_items = [i for i in items if i.llm_response is not None]
                 if final_items:
                     resp = final_items[0].llm_response
                     elapsed = time.monotonic() - t0
                     if self._is_incomplete_response(resp) and attempt < max_retries - 1:
                         logger.warning(
-                            "LLM returned reasoning without content "
+                            "LLM returned no visible final output "
                             "(attempt %d/%d, elapsed=%.1fs), retrying.",
                             attempt + 1,
                             max_retries,
@@ -580,10 +586,9 @@ class AgentKernel:
                     if self._is_incomplete_response(resp):
                         logger.warning(
                             "LLM returned incomplete response after %d attempts, "
-                            "returning degraded result.",
+                            "letting finish validation fail the turn.",
                             max_retries,
                         )
-                        resp.degraded = True
 
                     yield _KernelItem(llm_response=resp)
                     return
@@ -854,21 +859,29 @@ class AgentKernel:
 
     @staticmethod
     def _is_valid_natural_finish(response: LLMResponse) -> bool:
-        """Only commit a natural finish when the stream terminates cleanly."""
-        return not response.tool_calls and response.finish_reason == "stop"
+        """Only commit a natural finish when there is visible final content."""
+        return (
+            not response.tool_calls
+            and response.finish_reason == "stop"
+            and AgentKernel._has_visible_content(response)
+        )
 
     @staticmethod
     def _is_incomplete_response(response: LLMResponse) -> bool:
-        """Detect reasoning-only response with no visible content.
+        """Detect responses with no visible final output.
 
         This can happen when an LLM proxy (e.g. LiteLLM) intermittently
-        drops the content block after streaming the thinking block.
+        returns only a finish marker or drops the content block after streaming
+        the thinking block.
         """
-        return (
-            response.content is None
-            and response.reasoning_content is not None
-            and not response.tool_calls
+        return not response.tool_calls and not AgentKernel._has_visible_content(
+            response
         )
+
+    @staticmethod
+    def _has_visible_content(response: LLMResponse) -> bool:
+        content = response.content
+        return isinstance(content, str) and bool(content.strip())
 
     @staticmethod
     def _validate_tool_call_ids(tool_calls: list[ToolCallData]) -> None:

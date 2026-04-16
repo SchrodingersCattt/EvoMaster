@@ -47,6 +47,7 @@ from src.services.agent_run_bohrium import (
 )
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.history_restore_service import HistoryRestoreService
+from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
 from src.services.response_figures_service import ResponseFiguresAccumulator
 from src.services.sessions_service import get_sessions_service
@@ -157,6 +158,7 @@ class AgentRunService:
         invocation_id: str | None = None,
         llm_override: str | None = None,
         model_override: str | None = None,
+        images: list[str] | None = None,
         bohrium_required: bool = False,
     ) -> tuple[bool | tuple[bool, str], int]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
@@ -309,6 +311,34 @@ class AgentRunService:
             llm_config = load_llm_config(_project_root / 'config' / 'llm_config.yaml')
 
             agent_default_llm = _get_agent_default_llm()
+            resolved_llm = llm_config.resolve_route(
+                model_override=model_override,
+                llm_override=llm_override,
+                default_key=agent_default_llm,
+            )
+            selected_profile = llm_config.get_profile(resolved_llm.profile_key)
+            current_images = list(images or [])
+            if current_images:
+                selected_profile = get_image_input_service().ensure_vision_supported(
+                    llm_config=llm_config,
+                    llm_override=llm_override,
+                    model_override=model_override,
+                    default_profile_key=agent_default_llm,
+                )
+                image_parts: list[dict[str, Any]] = []
+                for image_url in current_images:
+                    image_part: dict[str, Any] = {'url': image_url}
+                    if selected_profile.vision_detail is not None:
+                        image_part['detail'] = selected_profile.vision_detail
+                    image_parts.append(image_part)
+                pg_ctx = pg_ctx.model_copy(
+                    update={
+                        'run_meta': {
+                            **pg_ctx.run_meta,
+                            'current_user_images': image_parts,
+                        }
+                    }
+                )
 
             pg_ctx = pg_ctx.model_copy(
                 update={
@@ -337,6 +367,34 @@ class AgentRunService:
                 session_id=session_id,
                 task_id=task_id,
             )
+
+            async def _dispatch_response_figures_if_dirty(reason: str) -> None:
+                response_figures_event = (
+                    figure_accumulator.build_snapshot_event_if_dirty()
+                )
+                if response_figures_event is None:
+                    return
+                try:
+                    await fanout.flush_persistence_barrier()
+                    dispatched = await fanout.dispatch_and_wait_persistence(
+                        response_figures_event
+                    )
+                except Exception:
+                    logger.warning(
+                        'response_figures dispatch failed reason=%s',
+                        reason,
+                        exc_info=True,
+                    )
+                    return
+
+                if dispatched:
+                    figure_accumulator.mark_snapshot_emitted()
+                else:
+                    logger.warning(
+                        'response_figures dispatch reported handler failure '
+                        'reason=%s',
+                        reason,
+                    )
 
             async def _child_event_sink(event: BusEvent) -> None:
                 try:
@@ -454,11 +512,12 @@ class AgentRunService:
                         figure_accumulator.add_tool_result(event)
 
                     if isinstance(event, RunResultEvent) and event.spawn_id is None:
-                        response_figures_event = figure_accumulator.build_event()
-                        if response_figures_event is not None:
-                            await fanout.dispatch(response_figures_event)
+                        await _dispatch_response_figures_if_dirty('final_flush')
 
                     await fanout.dispatch(event)
+
+                    if isinstance(event, ToolResultEvent):
+                        await _dispatch_response_figures_if_dirty('tool_result')
 
                     # Detect terminal event
                     if isinstance(event, RunResultEvent):
@@ -484,6 +543,13 @@ class AgentRunService:
                 )
                 return ((False, 'cancelled'), _elapsed_ms())
             else:
+                if run_result_event.reason == 'invalid_finish':
+                    await fanout.dispatch(
+                        ErrorEvent(
+                            source='System',
+                            message='Model did not return a valid final response. Please retry.',
+                        )
+                    )
                 await fanout.dispatch(
                     StreamClosedEvent(
                         source='System',
