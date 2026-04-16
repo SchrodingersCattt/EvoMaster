@@ -52,6 +52,17 @@ MatMaster 当前对用户上传文件的处理以普通附件为主。前端上�
 - 继续扩展 `files` 并由后端自动识别图片。成本最低，但语义隐式，用户无法判断图片是否真正进入 vision。
 - 引入结构化 `attachments`。长期更规范，但第一版改动面过大，会牵动当前前端大量 `files` 逻辑。
 
+## 代码现状与本次改动边界
+
+当前代码已经支持把 User/query 的 `files` 和 `workspace_paths` 保存在 `chat_events.content` JSON 中，并在 SSE 历史回放时拆到事件顶层。但这些附件还没有恢复成 agent 内部 `UserMessage` 的结构化输入：
+
+- `ChatHistoryConverter` 当前只从 User/query 事件恢复文本内容。
+- `get_last_user_query()` 当前返回 `files`、`workspace_paths`、`mode`，但不返回 `images`。
+- 当前 `files` 只会被拼入 prompt 的 `[Attached files]` 文本段。
+- 当前 `UserMessage.content` 和出站校验仍是纯文本设计。
+
+因此，本次实现不是只给现有历史恢复逻辑加一个 `images` 字段，而是要补齐 User/query 元数据在 API、历史回放、agent 内部消息和出站 normalization 之间的结构化路径。普通 `files` 仍不进入 vision，但需要继续随 User/query 历史事件回放给前端展示。
+
 ## 前端现状判断
 
 只读查看 `../scimaster-bohr-chat` 后，前端新增 `images` 的成本可控：
@@ -99,6 +110,26 @@ class ChatSendRequest(BaseModel):
 
 `images` 只接受 HTTPS URL。请求体中不接受图片二进制，不接受 data URL。
 
+## 可访问性假设
+
+第一版要求 `images` 中的 URL 对 LiteLLM proxy 和最终模型提供商的图片 fetch worker 可访问。当前前端上传链路在上传完成后调用文件服务 `setacl public-read`，因此第一版按长期可访问的 public-read URL 设计。
+
+上线前必须确认：
+
+- 产品文件服务返回的图片 URL 至少在会话生命周期内稳定可访问。
+- LiteLLM proxy 所在网络和模型提供商 fetch worker 能访问该 URL。
+- OSS bucket、CDN 或网关不会阻止模型侧 egress。
+- 如果部署改为私有 bucket 或短期预签名 URL，必须先实现 URL 重签或刷新机制，再打开历史图片进入 LLM 上下文。
+
+历史图片 URL 失效时采用降级策略：
+
+- 历史回放 UI 不失败，仍显示历史事件中的附件 URL。
+- 构造下一轮 LLM 上下文时，失效的历史图片不进入 `image_url` content part。
+- 对被丢弃的历史图片，在对应 user message 中追加轻量文本占位，例如 `[历史图片不可访问: micrograph.png]`。
+- 当前轮新上传图片校验失败时仍直接拒绝本轮请求，不降级为普通附件。
+
+第一版不依赖预签名 URL 作为长期历史数据。若后续必须使用预签名 URL，应把持久化内容改为 OSS object key 或资产 ID，并在每次历史恢复时生成新 URL；这属于后续独立设计。
+
 ## 持久化合同
 
 不修改 SQL table。继续使用现有 `chat_events.content` JSON 字符串保存 User/query 的扩展字段。
@@ -120,6 +151,7 @@ User/query 的 `content` payload 从现有结构扩展为：
 - 新历史有 `images` 时，历史 SSE 顶层返回 `images`，供前端合并展示。
 - `get_last_user_query()` 返回 `images`，用于中断提示和后续重跑信息保留。
 - 不新增 migration，不新增索引，不调整 `chat_events` 表结构。
+- 若未来需要按图片做管理端统计、检索或资产治理，再考虑抽独立图片表；第一版不把 `images` 变成查询热路径。
 
 ## 数据流
 
@@ -148,7 +180,31 @@ User/query 的 `content` payload 从现有结构扩展为：
 4. 下一轮上下文中保留历史图片输入。
 5. normalization 层再次转成 content parts。
 
-第一版保留历史图片的语义完整性。后续若图片上下文成本过高，可单独设计历史图片保留策略。
+历史图片按策略保留，避免长会话中图片数量无限累积。
+
+默认策略：
+
+- 当前轮图片总是进入本轮 LLM 请求。
+- 历史图片只保留最近 3 个用户图片轮次。
+- 历史图片总数最多 10 张。
+- 超出策略的历史图片不进入 `image_url` content part，并在对应用户消息中保留轻量文本占位。
+
+该策略应做成配置项：
+
+```yaml
+image_input:
+  history_policy: "last_k_turns"
+  history_last_k_turns: 3
+  history_max_images: 10
+```
+
+可选策略包括：
+
+- `only_last_turn`
+- `last_k_turns`
+- `all`
+
+生产默认不得使用 `all`，除非另有成本和上下文窗口评估。
 
 ## 内部消息模型
 
@@ -158,6 +214,7 @@ User/query 的 `content` payload 从现有结构扩展为：
 class ImageContentPart(BaseModel):
     url: str
     mime_type: str | None = None
+    detail: Literal["low", "high", "auto"] | None = None
 ```
 
 扩展 `UserMessage`：
@@ -175,9 +232,14 @@ class UserMessage(Message):
         if self.content:
             parts.append({"type": "text", "text": self.content})
         for image in self.images:
-            parts.append({"type": "image_url", "image_url": {"url": image.url}})
+            image_url = {"url": image.url}
+            if image.detail is not None:
+                image_url["detail"] = image.detail
+            parts.append({"type": "image_url", "image_url": image_url})
         return {"role": "user", "content": parts}
 ```
+
+`mime_type` 第一版用于校验记录、日志和后续 provider adapter 分流，不默认写入 OpenAI-compatible payload。`detail` 预留给支持 OpenAI-compatible `image_url.detail` 的模型；第一版默认不设置，除非配置显式指定。
 
 出站校验调整：
 
@@ -192,17 +254,27 @@ class UserMessage(Message):
 
 第一版采用强校验、原图 URL 透传策略。
 
-请求级规则：
+### 请求级规则
 
 - 单轮最多 5 张图片。
 - 单个 URL 长度最多 4096 字符。
 - 只允许 `https://`。
 - 域名必须在白名单内，白名单来自配置或环境变量。
-- 拒绝 `data:`、`file:`、`http:`、相对路径和内网地址。
+- URL path 必须匹配配置的允许前缀，不能只靠域名白名单放行整个 bucket。
+- 生产环境拒绝 `data:`、`file:`、`http:`、相对路径和内网地址。
+- 开发环境可通过 `IMAGE_INPUT_ALLOW_INSECURE_HOSTS=localhost,127.0.0.1` 放行指定 HTTP host，但生产环境必须忽略该放行配置或启动时报错。
 - URL 去重并保持原顺序。
-- 如果同一个 URL 同时出现在 `files` 和 `images`，后端从 `files` 中移除该 URL，图片语义优先。
+- `files` 和 `images` 必须互斥；同一个 URL 同时出现在两者中时，后端返回 422。前端发送前也要保证请求 body 中二者 disjoint。
+- 前端本地展示仍可把所有上传项放进用户消息 `meta.files`，但请求 body 的 `files` 与 `images` 必须分离。
 
-资源探测规则：
+安全边界：
+
+- 第一版不能只接受任意白名单 OSS 域名下的任意路径。
+- 允许前缀应尽量绑定产品上传服务的对象路径，例如反馈附件、会话上传或用户上传前缀。
+- 如果当前上传服务无法提供 session/user-scoped 前缀，图片输入功能应先使用更窄的产品上传前缀白名单，并在 rollout 记录剩余跨租户 URL 引用风险。
+- 若后续需要强所有权校验，应升级为结构化 attachment 或资产 ID，由后端向文件服务校验 object owner。
+
+### 资源探测规则
 
 - 优先 HEAD 请求检查 `Content-Type` 和 `Content-Length`。
 - 允许 MIME：
@@ -210,11 +282,31 @@ class UserMessage(Message):
   - `image/jpeg`
   - `image/webp`
 - 单张图片大小上限 10 MB。
-- HEAD 缺少关键 header 时，可做小范围 GET 读取前 512 到 4096 字节，用 magic bytes 判断 PNG、JPEG、WebP。
+- HEAD 失败、超时、返回 401/403/405，或缺少关键 header 时，fallback 到 Range GET。
+- Range GET 使用 `Range: bytes=0-4095`，读取前 4096 字节做 magic bytes 判断 PNG、JPEG、WebP。
+- 当前轮图片必须能得到可信大小。大小可来自 HEAD 的 `Content-Length`，或 Range GET 的 `Content-Range` / `Content-Length`。当前轮图片大小未知时拒绝。
+- 历史图片探测失败、大小未知或 URL 失效时，不阻断会话恢复；该历史图片不进入 LLM image part，并保留文本占位。
 - 不下载完整图片。
 - 不做压缩、缩放、重编码、EXIF 清理或格式转换。
+- 探测并发执行，最多 5 张图片并发探测。
+- 单张图片探测超时 3 秒。
+- 单轮图片探测总超时 5 秒。
+- 如果实现能从本会话刚上传的可信上传元数据中获得 MIME 和大小，可跳过网络探测；但这些元数据不能由前端裸传后直接信任，必须来自服务端可信缓存或文件服务查询。
 
 科研图像默认保真。超过限制或格式不支持时直接拒绝，不做无声变换。
+
+### 探测判定树
+
+1. URL 基础校验失败：拒绝当前请求。
+2. HEAD 成功且 MIME、大小合法：接受。
+3. HEAD 不可用或信息不完整：尝试 Range GET。
+4. Range GET 能确认 magic bytes 和大小合法：接受。
+5. Range GET 能确认 magic bytes 但无法确认大小：
+   - 当前轮图片：拒绝。
+   - 历史图片：丢弃该 image part，保留文本占位。
+6. HEAD 与 Range GET 都失败：
+   - 当前轮图片：拒绝。
+   - 历史图片：丢弃该 image part，保留文本占位。
 
 ## 模型能力检查
 
@@ -265,6 +357,24 @@ supports_vision: bool = False
 
 错误不应被吞掉。全局 error handler 负责将异常返回给调用方，各层不要在 DAO 中捕获并返回假成功。
 
+错误码建议：
+
+| Code | 含义 |
+| --- | --- |
+| `IMAGE_INPUT_TOO_MANY` | 图片数量超过上限 |
+| `IMAGE_INPUT_URL_TOO_LONG` | 单个 URL 过长 |
+| `IMAGE_INPUT_INVALID_SCHEME` | scheme 不允许 |
+| `IMAGE_INPUT_DOMAIN_BLOCKED` | host 不在白名单 |
+| `IMAGE_INPUT_PATH_BLOCKED` | path 不在允许前缀内 |
+| `IMAGE_INPUT_DUPLICATE_ATTACHMENT` | 同一 URL 同时出现在 `files` 和 `images` |
+| `IMAGE_INPUT_UNREACHABLE` | 图片 URL 不可访问 |
+| `IMAGE_INPUT_UNSUPPORTED_MIME` | MIME 或 magic bytes 不支持 |
+| `IMAGE_INPUT_SIZE_UNKNOWN` | 当前轮图片无法确认大小 |
+| `IMAGE_INPUT_TOO_LARGE` | 图片超过大小上限 |
+| `VISION_MODEL_NOT_SUPPORTED` | 当前模型不支持图片输入 |
+
+`VISION_MODEL_NOT_SUPPORTED` 的用户可见文案应明确下一步，例如：当前模型不支持图片输入，请切换到支持图片的模型后重试。
+
 ## 前端配套要求
 
 前端第一版只做发送层和历史展示层的小改动：
@@ -280,7 +390,8 @@ supports_vision: bool = False
    - 图片数量不超过后端上限
    - 格式为 PNG、JPEG、WebP
    - 若上传项有 size，则检查大小
-7. 不修改共享 `UploadFile` 的全局限制，避免影响普通附件和其它业务。
+7. 发送前保证请求 body 中 `files` 与 `images` disjoint。
+8. 不修改共享 `UploadFile` 的全局限制，避免影响普通附件和其它业务。
 
 ## 兼容策略
 
@@ -291,6 +402,7 @@ supports_vision: bool = False
 - 分享页只读，不允许发送消息，现状不变。
 - `files` 普通附件行为保持：继续拼入 `[Attached files]`。
 - `workspace_paths` 行为保持。
+- 历史图片是否进入下一轮 LLM 请求由 `image_input.history_policy` 控制，不保证所有历史图片永久进入上下文。
 
 ## 测试范围
 
@@ -304,7 +416,15 @@ supports_vision: bool = False
 - `normalize_and_validate_openai_messages()` 允许 user content parts。
 - `normalize_and_validate_openai_messages()` 仍拒绝 assistant/tool 的非字符串 content。
 - images 非空且模型不支持 vision 时失败。
+- 配置声称 `supports_vision: true` 但模型实际拒绝多模态请求时，错误应按 LLM 调用错误暴露，不得静默降级。
 - URL scheme、域名、MIME、大小、数量校验失败时返回清晰错误。
+- URL path prefix 不在允许范围内时失败。
+- `files` 与 `images` 重复 URL 时失败。
+- HEAD 成功路径。
+- HEAD 失败但 Range GET 成功路径。
+- HEAD / Range GET 都失败时，当前轮图片失败。
+- 历史图片 URL 失效时，历史恢复不失败，LLM image part 被丢弃并保留文本占位。
+- 历史图片超过 `last_k_turns` 或 `history_max_images` 时被裁剪。
 - 无图片的纯文本对话不受影响。
 - 只有普通附件的对话仍按旧逻辑拼 `[Attached files]`。
 
@@ -314,15 +434,22 @@ supports_vision: bool = False
 - 本地用户消息仍展示全部附件，包括图片。
 - 历史 query 同时包含 `files` 和 `images` 时，UI 合并展示。
 - 图片格式或数量不符合要求时，前端在发送前提示。
+- 请求 body 中 `files` 和 `images` 不重复。
+
+E2E 建议：
+
+- 上传图片 -> 发送 -> 模型回答 -> 刷新历史 -> 下一轮在历史策略允许范围内仍能使用最近图片。
+- 使用不支持 vision 的模型发送图片，前端展示可理解的错误。
 
 ## 上线顺序
 
 1. 后端先合入兼容性改动：支持 `images` 字段、历史回放字段、无图片路径不变。
-2. 后端开启图片校验和 vision payload 构造，仅在请求显式带 `images` 时触发。
-3. 前端合入发送分流，把图片 URL 放入 `images`。
-4. 先给一个确认支持 vision 的 profile 标记 `supports_vision: true`。
-5. 确认 LiteLLM proxy 和模型提供商能访问 OSS URL 后，再给其它 vision 模型打开。
-6. 补充用户可见错误文案。
+2. 对齐 OSS URL 可访问性、允许 host/path prefix、LiteLLM egress 和历史 URL 生命周期。
+3. 后端开启图片校验和 vision payload 构造，仅在请求显式带 `images` 时触发。
+4. 前端合入发送分流，把图片 URL 放入 `images`。
+5. 先给一个确认支持 vision 的 profile 标记 `supports_vision: true`。
+6. 确认 LiteLLM proxy 和模型提供商能访问 OSS URL 后，再给其它 vision 模型打开。
+7. 补充用户可见错误文案。
 
 ## 成功标准
 
@@ -334,4 +461,11 @@ supports_vision: bool = False
 - 模型确实能基于图片回答，而不是只看到 URL。
 - 不支持 vision 的模型明确失败。
 - 刷新历史后，用户消息仍显示图片附件。
-- 下一轮模型上下文能包含历史图片。
+- 下一轮模型上下文能按 `history_policy` 包含最近历史图片。
+
+## 后续扩展
+
+- 若需要彻底解决跨租户 URL 引用风险，应从裸 URL 升级为结构化 attachment 或资产 ID，并由后端向文件服务校验 owner。
+- 若需要支持私有 bucket，应持久化 object key 或 asset id，并在每次发送前重签可访问 URL。
+- 若长对话成本仍偏高，应增加图片摘要、人工 pin 图片或 per-turn 图片引用机制。
+- 用户重复点击发送的幂等性可通过 client-generated `request_id` 解决。这是通用发送链路问题，不是图片输入第一版的阻塞项；当前仍依赖既有 session run lock 和前端 loading 禁用机制。
