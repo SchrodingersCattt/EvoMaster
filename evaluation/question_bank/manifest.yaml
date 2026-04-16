@@ -87,7 +87,7 @@ banks:
   - path: "data_diagnosis/dd_semiconductor.yaml"
     capability: "data_diagnosis"
     domain: "semiconductor"
-    questions: 2
+    questions: 1
 
   - path: "execution_contract/ec_agnostic.yaml"
     capability: "execution_contract"
@@ -189,4 +189,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 131 questions across 28 active bank files
+# Total: 130 questions across 28 active bank files
