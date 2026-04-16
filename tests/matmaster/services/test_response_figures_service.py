@@ -83,7 +83,9 @@ def test_duplicate_figure_id_keeps_first_and_logs_warning(caplog) -> None:
     caplog.set_level(logging.WARNING)
 
     assert acc.add_tool_result(_tool_result('call-band', [_figure('band')])) is True
-    assert acc.add_tool_result(_tool_result('call-band-new', [_figure('band')])) is False
+    assert (
+        acc.add_tool_result(_tool_result('call-band-new', [_figure('band')])) is False
+    )
 
     snapshot = acc.build_snapshot_event_if_dirty()
     assert snapshot is not None
@@ -106,7 +108,12 @@ def test_ignores_child_spawn_invalid_payload_and_non_list_figures() -> None:
         acc.add_tool_result(
             _tool_result(
                 'call-invalid',
-                [{'figure_id': 'broken', 'asset_url': 'https://oss.example/broken.png'}],
+                [
+                    {
+                        'figure_id': 'broken',
+                        'asset_url': 'https://oss.example/broken.png',
+                    }
+                ],
             )
         )
         is False

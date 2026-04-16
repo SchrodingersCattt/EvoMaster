@@ -266,7 +266,7 @@ async def test_run_agent_emits_complete_response_figure_snapshots_after_each_too
             mode='direct',
             task_id='task-1',
             invocation_id='inv-1',
-    )
+        )
 
     figure_events = [
         event
