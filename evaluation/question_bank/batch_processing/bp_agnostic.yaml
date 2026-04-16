@@ -5,33 +5,31 @@ questions:
 - id: BP_struct_005_20260406
   capability: batch_processing
   domain: agnostic
-  intent: Generate corrected VASP input files for 5 structures whose initial geometry caused
-    calculation failures. For each structure, fix only the geometry (atomic positions, cell,
-    symmetry) while keeping all calculation parameters (k-points, ISMEAR, SIGMA, ENCUT) strictly
-    frozen. Focus is on correct input-file preparation and parameter isolation, not on submitting
-    or running calculations.
-  human_prompt_seed: '从 `failure_recovery.json` 读取 5 个结构（TiO2, ZnO, MgO, Al2O3, SiO2）的失败恢复场景。每个结构的初始计算因几何问题失败（如原子重叠、晶胞畸变、对称性错误等）。
+  intent: Repair 5 problematic POSCAR structures by fixing geometry issues only. Focus the
+    evaluation entirely on POSCAR repair correctness and cause-aligned fixes.
+  human_prompt_seed: '从 `failure_recovery.json` 读取 5 个结构（TiO2, ZnO, MgO, Al2O3, SiO2）的失败恢复场景。每个条目里都有待修复的 `input_poscar` 路径。每个结构的初始计算因几何问题失败（如原子重叠、晶胞畸变、对称性错误等）。
 
-    请为每个结构生成修正后的 VASP 输入文件（POSCAR + INCAR），修复策略：
+    请为每个结构生成修正后的 POSCAR，修复策略：
 
     1. 仅修复结构文件（POSCAR）中的几何问题（原子位置、晶胞参数、对称性）
 
-    2. 严格冻结所有计算参数（INCAR + KPOINTS）： - k-point 网格: 6x6x6（不变，通过 KPOINTS 文件或 INCAR 均可） - ISMEAR=1,
-    SIGMA=0.1（不变） - ENCUT=520 eV（不变） - 其他求解器参数（ALGO, NSW 等）不变
-
-    3. 对每个结构说明修复了什么几何问题
+    3. 对每个结构说明修复了什么几何问题，以及修复后为何更合理（按 `failure_recovery.json`
+       中每个条目的 `repair_acceptance` 约束来做）
 
     输出要求：
 
-    1. 5 组修正后的输入文件（POSCAR + INCAR）
+    1. 5 个修正后的 POSCAR 文件
 
-    2. 所有 INCAR 使用相同的冻结参数集
+    2. 修复后 POSCAR 文件名固定为：
+       - `calc_001_TiO2_fixed.POSCAR`
+       - `calc_002_ZnO_fixed.POSCAR`
+       - `calc_003_MgO_fixed.POSCAR`
+       - `calc_004_Al2O3_fixed.POSCAR`
+       - `calc_005_SiO2_fixed.POSCAR`
 
-    3. 明确标记每个结构的几何修复内容
+    不需要提交计算，只需生成正确的修正结构。
 
-    不需要提交计算，只需生成正确的修正输入文件。
-
-    关键考察点： 1. 只修改了几何/结构文件 2. 没有不必要地调整计算参数 3. 修复内容与失败原因对应
+    关键考察点： 1. POSCAR 结构是否修对 2. 修复内容是否与失败原因对应
 
     '
   tags:
@@ -44,82 +42,123 @@ questions:
     path: data/BP_struct_005/failure_recovery.json
     oss_url: ''
     description: Batch failure recovery scenarios with frozen calculation parameters.
+  - key: calc_001_tio2_bad_poscar
+    path: data/BP_struct_005/calc_001_TiO2_bad.POSCAR
+    oss_url: ''
+    description: Bad TiO2 POSCAR with atoms too close.
+  - key: calc_002_zno_bad_poscar
+    path: data/BP_struct_005/calc_002_ZnO_bad.POSCAR
+    oss_url: ''
+    description: Bad ZnO POSCAR with negative lattice vector issue.
+  - key: calc_003_mgo_bad_poscar
+    path: data/BP_struct_005/calc_003_MgO_bad.POSCAR
+    oss_url: ''
+    description: Bad MgO POSCAR with broken symmetry.
+  - key: calc_004_al2o3_bad_poscar
+    path: data/BP_struct_005/calc_004_Al2O3_bad.POSCAR
+    oss_url: ''
+    description: Bad Al2O3 POSCAR with duplicate atoms.
+  - key: calc_005_sio2_bad_poscar
+    path: data/BP_struct_005/calc_005_SiO2_bad.POSCAR
+    oss_url: ''
+    description: Bad SiO2 POSCAR with distorted cell.
   reference_answers:
   - key: input_file_sets_count
     value: 5
     tolerance: 0.0
-  - key: kpoint_mesh_frozen
-    value: 6 6 6
-  - key: electronic_params_frozen
+  - key: calc_001_tio2_fixed_artifact
+    value: calc_001_TiO2_fixed.POSCAR
+  - key: calc_002_zno_fixed_artifact
+    value: calc_002_ZnO_fixed.POSCAR
+  - key: calc_003_mgo_fixed_artifact
+    value: calc_003_MgO_fixed.POSCAR
+  - key: calc_004_al2o3_fixed_artifact
+    value: calc_004_Al2O3_fixed.POSCAR
+  - key: calc_005_sio2_fixed_artifact
+    value: calc_005_SiO2_fixed.POSCAR
+  - key: poscar_repair_triplet_match
     value:
-      ISMEAR: 1
-      SIGMA: 0.1
-      ENCUT: 520
-  - key: geometry_repairs_isolated
-    value: Only POSCAR/structure files modified, INCAR unchanged
-  - key: no_parameter_thrashing
-    value: No re-tuning of electronic settings in any INCAR
-  - key: grounding_frozen_params
-    value: Frozen parameters from failure_recovery.json
+      filenames:
+      - failure_recovery.json
+      - calc_001_TiO2_bad.POSCAR
+      - calc_001_TiO2_fixed.POSCAR
+      - calc_002_ZnO_bad.POSCAR
+      - calc_002_ZnO_fixed.POSCAR
+      - calc_003_MgO_bad.POSCAR
+      - calc_003_MgO_fixed.POSCAR
+      - calc_004_Al2O3_bad.POSCAR
+      - calc_004_Al2O3_fixed.POSCAR
+      - calc_005_SiO2_bad.POSCAR
+      - calc_005_SiO2_fixed.POSCAR
   - key: grounding_repair_causes
     value: Each geometry fix addresses the specific failure cause
   - key: turn_budget
-    value: &id001
+    value:
       max: 20
   - key: duration_budget
-    value: &id002
+    value:
       max: 7200000
   - key: token_budget_total
-    value: &id003
+    value:
       max: 35000
   scoring_checklist:
   - id: input_file_sets_count
-    criterion: Exactly 5 sets of corrected input files are generated (one POSCAR + INCAR per
-      material).
+    criterion: '[Must] Exactly 5 corrected POSCAR files are generated.'
     axis: correctness
     verify: numerical_range
-  - id: kpoint_mesh_frozen
-    criterion: All 5 calculations use identical k-point mesh (6×6×6), unchanged from the original
-      configuration—whether specified via a KPOINTS file or via KSPACING in INCAR.
+    weight: 0.8
+  - id: calc_001_tio2_fixed_artifact
+    criterion: Agent writes `calc_001_TiO2_fixed.POSCAR` to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.4
+  - id: calc_002_zno_fixed_artifact
+    criterion: Agent writes `calc_002_ZnO_fixed.POSCAR` to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.4
+  - id: calc_003_mgo_fixed_artifact
+    criterion: Agent writes `calc_003_MgO_fixed.POSCAR` to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.4
+  - id: calc_004_al2o3_fixed_artifact
+    criterion: Agent writes `calc_004_Al2O3_fixed.POSCAR` to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.4
+  - id: calc_005_sio2_fixed_artifact
+    criterion: Agent writes `calc_005_SiO2_fixed.POSCAR` to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.4
+  - id: poscar_repair_triplet_match
+    criterion: '[Must] For each material, judge repair correctness using only the bad/fixed
+      POSCAR pair and the `repair_acceptance` rules in `failure_recovery.json`. Do not enforce
+      a single coordinate-level canonical answer when multiple valid repairs satisfy the acceptance
+      constraints.'
     axis: correctness
     verify: llm_binary_judge
-  - id: electronic_params_frozen
-    criterion: ISMEAR=1, SIGMA=0.1, ENCUT=520 are identical across all 5 INCAR files and match
-      the original frozen values.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: geometry_repairs_isolated
-    criterion: Only the POSCAR / structure files were modified to fix geometry issues; all
-      INCAR calculation settings remain unchanged from the originals.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: no_parameter_thrashing
-    criterion: No unnecessary re-tuning of k-points, smearing, cutoff, or solver algorithm
-      in any of the 5 INCAR files.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_frozen_params
-    criterion: Frozen parameters (k-mesh, ISMEAR, SIGMA, ENCUT) match the failure_recovery.json
-      configuration exactly.
-    axis: grounding
-    verify: llm_binary_judge
+    weight: 1.8
   - id: grounding_repair_causes
-    criterion: Each geometry fix correctly addresses the specific failure cause described
-      in the configuration (e.g., fixing overlapping atoms, correcting cell distortion, resolving
-      symmetry errors).
+    criterion: '[Must] Each POSCAR repair addresses the specific failure cause in configuration
+      (overlap, cell distortion, symmetry issues, etc.).'
     axis: grounding
     verify: llm_binary_judge
+    weight: 1.5
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
+    weight: 0.4
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
+      benchmark ceiling.
     axis: efficiency
     verify: duration_budget
+    weight: 0.3
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling
-      (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+    weight: 0.3

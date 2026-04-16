@@ -232,36 +232,59 @@ def build_llm_context(
                 if obs_excerpt:
                     lines.append(f'      observation: {obs_excerpt}')
 
-        # For llm_binary_judge criteria with a referenced file artifact,
+        # For llm_binary_judge criteria with referenced file artifacts,
         # inject file content excerpt so judge decisions are based on output content.
         if ref is not None and evidence.workspace_dir:
             cfg = ref.value if isinstance(ref.value, dict) else {}
-            filename = str(cfg.get('filename', '')).strip() if cfg else ''
-            if filename:
+            filenames_raw = []
+            if cfg:
+                one = str(cfg.get('filename', '')).strip()
+                if one:
+                    filenames_raw.append(one)
+                many = cfg.get('filenames')
+                if isinstance(many, list):
+                    filenames_raw.extend(
+                        str(x).strip() for x in many if str(x).strip()
+                    )
+            if filenames_raw:
+                seen: set[str] = set()
+                filenames = []
+                for name in filenames_raw:
+                    if name not in seen:
+                        seen.add(name)
+                        filenames.append(name)
                 workspace_resolve = ref.workspace_resolve or 'recursive'
                 root = Path(evidence.workspace_dir)
-                resolved: Path | None = None
-                if workspace_resolve == 'root':
-                    if len(Path(filename).parts) == 1:
-                        cand = root / filename
-                        if cand.is_file():
-                            resolved = cand
-                else:
+                max_chars = 6000
+
+                def _resolve_target(filename: str) -> Path | None:
+                    if workspace_resolve == 'root':
+                        if len(Path(filename).parts) == 1:
+                            cand = root / filename
+                            if cand.is_file():
+                                return cand
+                        return None
                     exact = root / filename
                     if exact.is_file():
-                        resolved = exact
-                    else:
-                        hits = [
-                            p
-                            for p in root.rglob("*")
-                            if p.is_file() and fnmatch.fnmatch(p.name, filename)
-                        ]
-                        if hits:
-                            resolved = max(hits, key=lambda p: p.stat().st_mtime)
-                if resolved is not None:
+                        return exact
+                    hits = [
+                        p
+                        for p in root.rglob("*")
+                        if p.is_file() and fnmatch.fnmatch(p.name, filename)
+                    ]
+                    if not hits:
+                        return None
+                    return max(hits, key=lambda p: p.stat().st_mtime)
+
+                for filename in filenames:
+                    resolved = _resolve_target(filename)
+                    if resolved is None:
+                        lines.append(
+                            f'Referenced file for criterion not found: {filename}'
+                        )
+                        continue
                     try:
                         raw = resolved.read_text(encoding='utf-8')
-                        max_chars = 6000
                         excerpt = raw[:max_chars]
                         lines.append(
                             f'Referenced file for criterion: {filename} (resolved: {resolved.name})'
