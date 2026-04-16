@@ -106,12 +106,7 @@ questions:
 
     4. 说明如果进一步做实验或更高精度模拟，应优先验证什么。
 
-    额外要求（必须满足）：
-    - 先给出“数据摘录”小节，逐项列出来自 `free_energy_hopping_bundle.json` 的原始字段与数值（至少包含
-    `condition`、`main_barrier_eV`、`minimum_position`、`secondary_metastable_well_eV`、`transition_state_position`、
-    `coordination_number`、`li_diffusion_cm2_s`、`site_residence_time_ns`）；
-    - 每条结论后写明“依据字段：<字段名>=<数值>”，禁止给出文件中不存在的数值；
-    - 若信息不足，必须明确写“数据未提供”，不得臆测补充。'
+    '
   tags:
   - chem_her
   - phy_elastic
@@ -137,6 +132,9 @@ questions:
     - reaction_coordinate_note
     - hopping_mechanism
     - validation_suggestion
+  - key: grounding_source
+    value:
+      filename: free_energy_hopping_bundle.json
   - key: turn_budget
     value:
       max: 24
