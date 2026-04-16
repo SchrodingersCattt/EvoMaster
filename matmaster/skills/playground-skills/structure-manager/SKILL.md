@@ -13,8 +13,6 @@ Handles downloading structure files (from direct URLs or HTML pages), validating
 
 Requires: pymatgen, numpy (assess_structure.py); dpdata (convert_format.py); requests (fetch_web_structure.py); beautifulsoup4 (optional, --page only: pip install beautifulsoup4).
 
-**Turn efficiency**: Prefer MCP database tools (`mat_struct_db_*`) and MCP structure generators (`mat_sg_*`) over web search for structure acquisition and construction. A typical structure task should complete in 3–5 agent turns: (1) query/build structure via MCP, (2) validate with `assess_structure.py`, (3) convert format if needed, (4) deliver. Do NOT spend multiple turns web-searching for crystal structures when MCP tools or inline pymatgen can produce them. Web search is appropriate only for literature-based retrieval when MCP tools return no results, or when the task explicitly requests a literature search.
-
 ## Acquisition Capabilities
 
 The following are available for obtaining structures. Choose based on what identifier or context you have; if one path fails or returns no results, try another.

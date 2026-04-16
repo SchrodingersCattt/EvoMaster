@@ -8,8 +8,6 @@ skill_type: operator
 
 CP2K is a quantum chemistry and solid-state physics package for atomistic simulations of solid-state, liquid, molecular, periodic, material, crystal, and biological systems. It provides a general framework for DFT using mixed Gaussian and plane waves (GPW/GAPW) methods.
 
-**Skill-first rule**: This skill contains all CP2K input templates, parameter guidance, and Bohrium submission config. **Do NOT web search for CP2K documentation or input syntax.** Use `render_input.py` for input generation and the method templates below for functional setup. Combine file preparation into ONE Bash call.
-
 ## Bohrium Submission Config
 
 These parameters are passed directly to the `Bohrium` tool's `submit` action.

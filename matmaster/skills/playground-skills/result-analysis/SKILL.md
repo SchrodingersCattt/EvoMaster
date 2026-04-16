@@ -8,8 +8,6 @@ skill_type: operator
 
 Extracts data from open-source simulation logs, parses DFT output files, aggregates features from multi-step workflows, and produces publication-ready figures.
 
-**Efficiency rule**: Use `parse_abacus.py --type all` as the first step for ABACUS results — it extracts energy, band gap, Fermi energy, forces, stress, and DOS in one call. Do NOT manually grep log files for values that the parser already extracts. Do NOT web search for output file formats — parsing patterns are documented in the table below.
-
 ## Workflow
 
 1. **Parse**: Run `parse_results.py` for LAMMPS, or `parse_abacus.py` for ABACUS outputs.

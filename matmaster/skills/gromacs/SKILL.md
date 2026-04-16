@@ -8,8 +8,6 @@ skill_type: operator
 
 GROMACS is a high-performance molecular dynamics package primarily designed for simulations of proteins, lipids, and nucleic acids, but widely used for any system with classical force fields.
 
-**Skill-first rule**: All GROMACS submission parameters, images, and MDP settings are documented below. **Do NOT web search for GROMACS documentation, tutorials, or force field info** — use this skill and the gromacs-system-prep skill. For system building (solvation, ions, topology), load the `gromacs-system-prep` skill directly instead of web-searching for `gmx` commands.
-
 ## Bohrium Submission Config
 
 | Item | Default Value (CPU) |
