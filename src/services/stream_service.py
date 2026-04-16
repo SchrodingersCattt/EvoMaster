@@ -666,6 +666,8 @@ class ChatStreamService:
             user_msg['files'] = list(req.files)
         if req.workspace_paths:
             user_msg['workspace_paths'] = list(req.workspace_paths)
+        if 'directory' in req.model_dump(exclude_unset=True):
+            user_msg['session_directory'] = req.directory
         self._events_service.add_history_event(sid, user_msg, user_id=user_id)
 
         dao = get_redis_dao()

@@ -209,6 +209,11 @@ class ChatSendRequest(BaseModel):
     bohrium_user_id: int | str | None = (
         None  # 可选的 Bohrium user id（MCP 计算类工具需要）
     )
+    directory: str | None = Field(
+        default=None,
+        max_length=2048,
+        description='可选，前端传入的本轮工作区目录，随 query 写入历史事件；持久化请用 PUT …/session-directory',
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -221,6 +226,11 @@ class ChatSendRequest(BaseModel):
                 {
                     'content': '',
                     'mode': 'direct',
+                },
+                {
+                    'content': '列出该目录下的文件',
+                    'mode': 'direct',
+                    'directory': '/share/my_run',
                 },
             ]
         }

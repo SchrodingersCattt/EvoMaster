@@ -116,7 +116,8 @@ def get_run_status():
     summary='发送消息或订阅会话流',
     description='统一 SSE 流接口。'
     ' `content` 为空或不传 body 时，仅订阅该会话的历史和心跳；'
-    ' `content` 非空时，发送消息并返回本次运行的 SSE 流。',
+    ' `content` 非空时，发送消息并返回本次运行的 SSE 流。'
+    ' 可选 `directory`：随用户 query 写入历史事件；会话目录持久化请使用 PUT …/session-directory。',
     operation_id='streamChatSession',
     responses={
         401: COMMON_ERROR_RESPONSES[401],
@@ -143,6 +144,7 @@ async def chat_stream(
                     'content': '请总结项目 42 下最近一次实验结果',
                     'mode': 'direct',
                     'bohrium_project_id': 42,
+                    'directory': '/share/workspace/run1',
                 },
             },
         },
