@@ -84,11 +84,6 @@ banks:
     domain: "battery"
     questions: 1
 
-  - path: "data_diagnosis/dd_catalysis.yaml"
-    capability: "data_diagnosis"
-    domain: "catalysis"
-    questions: 1
-
   - path: "data_diagnosis/dd_semiconductor.yaml"
     capability: "data_diagnosis"
     domain: "semiconductor"
