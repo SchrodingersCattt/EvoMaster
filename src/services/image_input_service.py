@@ -6,7 +6,8 @@ import posixpath
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from urllib.parse import unquote, urlparse
+from typing import Any
+from urllib.parse import unquote, urljoin, urlparse
 
 import httpx
 
@@ -28,6 +29,7 @@ VISION_MODEL_NOT_SUPPORTED = "VISION_MODEL_NOT_SUPPORTED"
 _ALLOWED_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
 _RANGE_HEADER = {"Range": "bytes=0-4095"}
 _CONTENT_RANGE_SIZE_RE = re.compile(r"/(\d+|\*)\s*$")
+_REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 
 
 class ImageInputError(Exception):
@@ -48,10 +50,12 @@ class ImageInputSettings:
     allowed_hosts: frozenset[str]
     allowed_path_prefixes: tuple[str, ...]
     allow_insecure_hosts: frozenset[str]
+    require_policy: bool = False
     max_images: int = 5
     max_url_length: int = 4096
     max_bytes: int = 10 * 1024 * 1024
     per_image_timeout_seconds: float = 3.0
+    max_redirects: int = 3
 
 
 @dataclass(frozen=True)
@@ -66,15 +70,26 @@ def _split_env_csv(name: str) -> tuple[str, ...]:
     return tuple(item.strip() for item in raw.split(",") if item.strip())
 
 
+def _is_production_env() -> bool:
+    return (os.environ.get("SERVICE_ENV", "test") or "").strip().lower() in {
+        "prod",
+        "production",
+    }
+
+
 def _settings_from_env() -> ImageInputSettings:
+    allow_insecure_hosts = frozenset(
+        host.lower() for host in _split_env_csv("IMAGE_INPUT_ALLOW_INSECURE_HOSTS")
+    )
+    if _is_production_env():
+        allow_insecure_hosts = frozenset()
     return ImageInputSettings(
         allowed_hosts=frozenset(
             host.lower() for host in _split_env_csv("IMAGE_INPUT_ALLOWED_HOSTS")
         ),
         allowed_path_prefixes=_split_env_csv("IMAGE_INPUT_ALLOWED_PATH_PREFIXES"),
-        allow_insecure_hosts=frozenset(
-            host.lower() for host in _split_env_csv("IMAGE_INPUT_ALLOW_INSECURE_HOSTS")
-        ),
+        allow_insecure_hosts=allow_insecure_hosts,
+        require_policy=_is_production_env(),
     )
 
 
@@ -151,12 +166,16 @@ class ImageInputService:
                 self.settings.per_image_timeout_seconds,
                 connect=self.settings.per_image_timeout_seconds,
             ),
-            follow_redirects=True,
+            follow_redirects=False,
         ) as client:
             return [self._probe_image(client, url) for url in deduped_images]
 
     def validate_history_image_url(self, url: str) -> bool:
-        if not self.settings.allowed_hosts and not self.settings.allowed_path_prefixes:
+        if (
+            not self.settings.require_policy
+            and not self.settings.allowed_hosts
+            and not self.settings.allowed_path_prefixes
+        ):
             return True
         try:
             self._validate_url(url)
@@ -202,6 +221,7 @@ class ImageInputService:
         host = (parsed.hostname or "").lower()
         if not parsed.scheme or not host:
             raise ImageInputError(IMAGE_INPUT_INVALID_SCHEME, "图片 URL 不合法")
+        self._validate_policy_configured()
         if parsed.scheme == "http":
             if host not in self.settings.allow_insecure_hosts:
                 raise ImageInputError(
@@ -238,9 +258,72 @@ class ImageInputService:
                 "图片 URL 路径不在允许范围内",
             )
 
+    def _validate_policy_configured(self) -> None:
+        if not self.settings.allowed_hosts and not self.settings.allow_insecure_hosts:
+            raise ImageInputError(
+                IMAGE_INPUT_DOMAIN_BLOCKED,
+                "图片 URL 域名允许列表未配置",
+            )
+        if not self.settings.allowed_path_prefixes:
+            raise ImageInputError(
+                IMAGE_INPUT_PATH_BLOCKED,
+                "图片 URL 路径允许范围未配置",
+            )
+
+    def _send_probe_request(
+        self,
+        client: httpx.Client,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        kwargs: dict[str, Any] = {}
+        if headers is not None:
+            kwargs["headers"] = headers
+        if method == "HEAD":
+            return client.head(url, **kwargs)
+        return client.get(url, **kwargs)
+
+    def _request_with_validated_redirects(
+        self,
+        client: httpx.Client,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        current_url = url
+        for _ in range(self.settings.max_redirects + 1):
+            self._validate_url(current_url)
+            response = self._send_probe_request(
+                client,
+                method,
+                current_url,
+                headers=headers,
+            )
+            final_url = str(response.url)
+            self._validate_url(final_url)
+            if response.status_code not in _REDIRECT_STATUS_CODES:
+                return response
+
+            location = response.headers.get("location")
+            if not location:
+                return response
+            current_url = urljoin(final_url, location)
+
+        raise ImageInputError(
+            IMAGE_INPUT_UNREACHABLE,
+            "图片 URL 重定向次数过多",
+        )
+
     def _probe_image(self, client: httpx.Client, url: str) -> ValidatedImageInput:
         try:
-            head_response = client.head(url)
+            head_response = self._request_with_validated_redirects(
+                client,
+                "HEAD",
+                url,
+            )
         except (httpx.HTTPError, OSError):
             head_response = None
         if head_response is not None and head_response.is_success:
@@ -250,7 +333,12 @@ class ImageInputService:
                 return self._validated(url, mime_type, size)
 
         try:
-            range_response = client.get(url, headers=_RANGE_HEADER)
+            range_response = self._request_with_validated_redirects(
+                client,
+                "GET",
+                url,
+                headers=_RANGE_HEADER,
+            )
         except (httpx.HTTPError, OSError) as exc:
             raise ImageInputError(
                 IMAGE_INPUT_UNREACHABLE,

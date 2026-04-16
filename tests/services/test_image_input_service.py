@@ -7,6 +7,7 @@ from matmaster.config.llm import LLMConfig, LLMProfileConfig
 from src.services.image_input_service import (
     IMAGE_INPUT_DOMAIN_BLOCKED,
     IMAGE_INPUT_DUPLICATE_ATTACHMENT,
+    IMAGE_INPUT_PATH_BLOCKED,
     IMAGE_INPUT_SIZE_UNKNOWN,
     IMAGE_INPUT_UNSUPPORTED_MIME,
     VISION_MODEL_NOT_SUPPORTED,
@@ -83,6 +84,108 @@ def test_head_success_accepts_png() -> None:
     assert images[0].mime_type == "image/png"
     assert images[0].size_bytes == 100
     client.get.assert_not_called()
+
+
+def test_probe_rejects_redirect_final_url_to_private_ip() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(
+        200,
+        method="HEAD",
+        url="https://127.0.0.1/admin/a.png",
+        headers={"content-type": "image/png", "content-length": "100"},
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        with pytest.raises(ImageInputError) as exc:
+            _service().validate_current_images(
+                files=[],
+                images=["https://oss.example.com/chat/a.png"],
+            )
+
+    assert exc.value.error_code == IMAGE_INPUT_DOMAIN_BLOCKED
+    client.get.assert_not_called()
+
+
+def test_probe_rejects_redirect_final_url_outside_allowed_path() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(
+        200,
+        method="HEAD",
+        url="https://oss.example.com/private/a.png",
+        headers={"content-type": "image/png", "content-length": "100"},
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        with pytest.raises(ImageInputError) as exc:
+            _service().validate_current_images(
+                files=[],
+                images=["https://oss.example.com/chat/a.png"],
+            )
+
+    assert exc.value.error_code == IMAGE_INPUT_PATH_BLOCKED
+    client.get.assert_not_called()
+
+
+def test_probe_rejects_manual_redirect_before_following_to_blocked_host() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(
+        302,
+        method="HEAD",
+        headers={"location": "https://127.0.0.1/admin/a.png"},
+    )
+    client.get.return_value = _response(
+        206,
+        method="GET",
+        headers={"content-range": "bytes 0-4095/4096"},
+        content=b"\x89PNG\r\n\x1a\npayload",
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        with pytest.raises(ImageInputError) as exc:
+            _service().validate_current_images(
+                files=[],
+                images=["https://oss.example.com/chat/a.png"],
+            )
+
+    assert exc.value.error_code == IMAGE_INPUT_DOMAIN_BLOCKED
+    client.get.assert_not_called()
+
+
+def test_validate_current_images_disables_httpx_auto_redirects() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(
+        200,
+        method="HEAD",
+        headers={"content-type": "image/png", "content-length": "100"},
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        _service().validate_current_images(
+            files=[],
+            images=["https://oss.example.com/chat/a.png"],
+        )
+
+    assert client_cls.call_args.kwargs["follow_redirects"] is False
+
+
+def test_history_image_url_rejected_when_required_policy_is_missing() -> None:
+    service = ImageInputService(
+        ImageInputSettings(
+            allowed_hosts=frozenset(),
+            allowed_path_prefixes=(),
+            allow_insecure_hosts=frozenset(),
+            require_policy=True,
+        )
+    )
+
+    assert (
+        service.validate_history_image_url("https://oss.example.com/chat/a.png")
+        is False
+    )
 
 
 def test_head_failure_falls_back_to_range_get_magic_bytes() -> None:
