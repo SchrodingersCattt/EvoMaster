@@ -88,7 +88,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: pl_hopping
+- id: pl_hopping_20260416
   capability: scientific_analysis
   domain: battery
   intent: Analyze Li+ hopping in PEO-LiTFSI by comparing PMF barriers and diffusion evidence

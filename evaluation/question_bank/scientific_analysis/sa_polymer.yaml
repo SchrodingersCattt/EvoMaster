@@ -2,7 +2,7 @@ version: v5
 capability: scientific_analysis
 domain: polymer
 questions:
-- id: pl_adhesion
+- id: pl_adhesion_20260416
   capability: scientific_analysis
   domain: polymer
   intent: Compare polyimide adhesion on hydroxyl-rich, epoxy-rich, and carboxyl-rich graphene-oxide
