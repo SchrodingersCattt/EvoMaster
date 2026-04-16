@@ -178,6 +178,64 @@ class TrivialToolPreambleProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
+class EmptyStopProvider:
+    """Provider that ends cleanly without content or tool calls."""
+
+    stream_timeout = 10.0
+    max_retries = 1
+    retry_delay = 0.0
+
+    def __init__(self, content: str | None = None, reasoning: str | None = None):
+        self.content = content
+        self.reasoning = reasoning
+        self.call_count = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.call_count += 1
+        if self.reasoning is not None:
+            yield StreamChunk(reasoning_content=self.reasoning)
+        if self.content is not None:
+            yield StreamChunk(content=self.content)
+        yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+
+
+class EmptyThenContentProvider:
+    """Provider that returns an empty stop once, then a valid answer."""
+
+    stream_timeout = 10.0
+    max_retries = 2
+    retry_delay = 0.0
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.call_count += 1
+        if self.call_count == 1:
+            yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+        else:
+            yield StreamChunk(content="recovered")
+            yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+
+
 # ── _stream_llm_items() tests ─────────────────────────────
 
 
@@ -603,6 +661,137 @@ class TestGap2RunStreamYieldsBusEvent:
         assert isinstance(
             events[-1], RunResultEvent
         ), f"Last event should be RunResultEvent, got {type(events[-1]).__name__}"
+
+
+class TestEmptyFinalResponseInvalidFinish:
+    """Empty final LLM outputs should not be committed as natural answers."""
+
+    @pytest.mark.asyncio
+    async def test_empty_stop_finishes_as_invalid_finish(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = EmptyStopProvider()
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "failed"
+        assert events[-1].reason == "invalid_finish"
+        assert events[-1].final_content is None
+
+    @pytest.mark.asyncio
+    async def test_whitespace_only_stop_finishes_as_invalid_finish(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = EmptyStopProvider(content="   ")
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "failed"
+        assert events[-1].reason == "invalid_finish"
+        assert events[-1].final_content is None
+
+    @pytest.mark.asyncio
+    async def test_normal_content_stop_still_finishes_naturally(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = ContentOnlyProvider()
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "completed"
+        assert events[-1].reason == "natural"
+        assert events[-1].final_content == "hello world"
+
+    @pytest.mark.asyncio
+    async def test_tool_call_without_content_still_executes_tools(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = SkillStreamProvider()
+        registry, _ = _make_tool_registry(tool_names=["Skill", "test_tool"])
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert any(isinstance(event, SkillHitEvent) for event in events)
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "completed"
+        assert events[-1].reason == "natural"
+
+    @pytest.mark.asyncio
+    async def test_empty_stop_retries_and_can_recover(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = EmptyThenContentProvider()
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert provider.call_count == 2
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "completed"
+        assert events[-1].reason == "natural"
+        assert events[-1].final_content == "recovered"
+
+    @pytest.mark.asyncio
+    async def test_empty_stop_retries_exhausted_finishes_as_invalid_finish(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = EmptyStopProvider()
+        provider.max_retries = 2
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert provider.call_count == 2
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "failed"
+        assert events[-1].reason == "invalid_finish"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_only_retries_exhausted_finishes_as_invalid_finish(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = EmptyStopProvider(reasoning="thinking only")
+        provider.max_retries = 2
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert provider.call_count == 2
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "failed"
+        assert events[-1].reason == "invalid_finish"
 
 
 class TestGap3CatalogVersionInvalidation:
