@@ -34,3 +34,16 @@ def test_chat_stream_openapi_contains_org_header():
     assert org_header['required'] is False
     assert session_param is not None
     assert session_param['required'] is True
+
+
+def test_session_directory_openapi_paths():
+    schema = app.openapi()
+    path = '/api/v1/chat/sessions/{session_id}/session-directory'
+    assert path in schema['paths']
+    get_op = schema['paths'][path]['get']
+    put_op = schema['paths'][path]['put']
+    assert get_op['summary'] == '查询会话绑定的工作区目录'
+    assert put_op['summary'] == '设置会话绑定的工作区目录'
+    user_header = _get_parameter(put_op, 'X-User-Id', 'header')
+    assert user_header is not None
+    assert user_header['required'] is True
