@@ -2,7 +2,7 @@ version: v5
 capability: structure_retrieval
 domain: battery
 questions:
-- id: SR_db_004_20260411v1
+- id: SR_db_004_20260416v1
   capability: structure_retrieval
   domain: battery
   intent: Retrieve five Li-Mn-O materials from Alexandria and summarize machine-checkable
@@ -81,7 +81,7 @@ questions:
     criterion: Retrieval report states Alexandria source, filter constraints, candidate count,
       and uncertainty note.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: The final answer is grounded in retrieval outputs and accurately reflects whether
       all constraints (elements + count) are met.
