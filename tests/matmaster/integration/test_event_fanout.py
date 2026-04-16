@@ -235,6 +235,29 @@ class TestRunEventFanoutDispatch:
         # After drain, persistence must have completed
         assert len(slow_persistence.completed) == 1
 
+    async def test_dispatch_and_wait_persistence_reports_success_after_persistence(
+        self,
+    ) -> None:
+        """Checked dispatch waits for persistence before reporting success."""
+        from matmaster.integration.fanout import RunEventFanout
+
+        slow_persistence = _SlowPersistence()
+        sse = _CollectorHandler()
+
+        fanout = RunEventFanout(
+            sse_handler=sse,
+            persistence_handler=slow_persistence,
+        )
+
+        event = ThoughtEvent(source="Agent", content="hi")
+        ok = await fanout.dispatch_and_wait_persistence(event)
+
+        assert ok is True
+        assert sse.received == [event]
+        assert slow_persistence.completed == [event]
+
+        await fanout.drain_and_close()
+
 
 class TestRunEventFanoutAddHandler:
     """add_handler() only affects future dispatches."""
@@ -321,6 +344,27 @@ class TestRunEventFanoutErrorIsolation:
         await fanout.drain_and_close()
 
         assert len(sse.received) == 1
+
+    async def test_dispatch_and_wait_persistence_reports_handler_failure(
+        self,
+    ) -> None:
+        """Checked dispatch still isolates exceptions but returns failure."""
+        from matmaster.integration.fanout import RunEventFanout
+
+        persistence = _CollectorHandler()
+        fanout = RunEventFanout(
+            sse_handler=_FailingHandler(),
+            persistence_handler=persistence,
+        )
+
+        ok = await fanout.dispatch_and_wait_persistence(
+            ThoughtEvent(source="Agent", content="hi")
+        )
+
+        assert ok is False
+        assert len(persistence.received) == 1
+
+        await fanout.drain_and_close()
 
 
 class TestRunEventFanoutDrainAndClose:

@@ -345,15 +345,26 @@ class AgentRunService:
                 if response_figures_event is None:
                     return
                 try:
-                    await fanout.dispatch(response_figures_event)
+                    await fanout.flush_persistence_barrier()
+                    dispatched = await fanout.dispatch_and_wait_persistence(
+                        response_figures_event
+                    )
                 except Exception:
                     logger.warning(
                         'response_figures dispatch failed reason=%s',
                         reason,
                         exc_info=True,
                     )
-                else:
+                    return
+
+                if dispatched:
                     figure_accumulator.mark_snapshot_emitted()
+                else:
+                    logger.warning(
+                        'response_figures dispatch reported handler failure '
+                        'reason=%s',
+                        reason,
+                    )
 
             async def _child_event_sink(event: BusEvent) -> None:
                 try:
