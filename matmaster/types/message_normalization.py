@@ -58,6 +58,47 @@ def normalize_and_validate_openai_messages(
     return normalized
 
 
+def _validate_user_content(content: Any, idx: int) -> None:
+    if isinstance(content, str):
+        return
+    if not isinstance(content, list):
+        raise LLMError(
+            f"Outbound user message content must be string or content parts at index {idx}, got {type(content).__name__}",
+            retryable=False,
+            error_category="payload_validation",
+        )
+    for part_idx, part in enumerate(content):
+        if not isinstance(part, dict):
+            raise LLMError(
+                f"Outbound user content part must be dict at index {idx}.{part_idx}, got {type(part).__name__}",
+                retryable=False,
+                error_category="payload_validation",
+            )
+        part_type = part.get("type")
+        if part_type == "text":
+            if isinstance(part.get("text"), str):
+                continue
+            raise LLMError(
+                f"Outbound user text content part must include string text at index {idx}.{part_idx}",
+                retryable=False,
+                error_category="payload_validation",
+            )
+        if part_type == "image_url":
+            image_url = part.get("image_url")
+            if isinstance(image_url, dict) and isinstance(image_url.get("url"), str):
+                continue
+            raise LLMError(
+                f"Outbound user image content part must include image_url.url at index {idx}.{part_idx}",
+                retryable=False,
+                error_category="payload_validation",
+            )
+        raise LLMError(
+            f"Unsupported outbound user content part type at index {idx}.{part_idx}: {part_type!r}",
+            retryable=False,
+            error_category="payload_validation",
+        )
+
+
 def validate_openai_messages(messages: list[dict[str, Any]]) -> None:
     for idx, message in enumerate(messages):
         role = message.get("role")
@@ -69,9 +110,12 @@ def validate_openai_messages(messages: list[dict[str, Any]]) -> None:
             )
 
         content = message.get("content")
+        if role == "user":
+            _validate_user_content(content, idx)
+            continue
         if not isinstance(content, str):
             raise LLMError(
-                f"Outbound message content must be string at index {idx}, got {type(content).__name__}",
+                f"Outbound {role} message content must be string at index {idx}, got {type(content).__name__}",
                 retryable=False,
                 error_category="payload_validation",
             )

@@ -34,15 +34,22 @@ class ChatEventsService:
         source = normalize_event_source(payload.get('source', 'System'))
         event_type = payload.get('type', 'unknown')
         content = payload.get('content', '')
-        # User/query 带 files 或 workspace_paths 时存成 { content, files?, workspace_paths? } 以便读回时前端分开展示
+        # User/query 带附件元数据时存成 { content, files?, images?, workspace_paths? }，
+        # 以便读回时前端分开展示，agent 历史恢复也能拿到结构化图片输入。
         if (
             source == 'User'
             and event_type == 'query'
-            and (payload.get('files') or payload.get('workspace_paths'))
+            and (
+                payload.get('files')
+                or payload.get('images')
+                or payload.get('workspace_paths')
+            )
         ):
             content = {'content': content}
             if payload.get('files'):
                 content['files'] = list(payload['files'])
+            if payload.get('images'):
+                content['images'] = list(payload['images'])
             if payload.get('workspace_paths'):
                 content['workspace_paths'] = list(payload['workspace_paths'])
         task_id = payload.get('task_id')

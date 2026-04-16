@@ -1,9 +1,11 @@
 import logging
+from pathlib import Path as FsPath
 from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from fastapi import APIRouter, Body, Depends, Path, Request
 from fastapi.responses import StreamingResponse
 
+from matmaster.config.loader import load_llm_config
 from src.base.base_res import BaseResponse
 from src.models.chat import (
     ChatPlannerReplyRequest,
@@ -19,7 +21,9 @@ from src.models.chat import (
     ShareStatusApiResponse,
     ShareStatusData,
 )
+from src.services.agent_run_service import _get_agent_default_llm
 from src.services.events_service import ChatEventsService, get_events_service
+from src.services.image_input_service import ImageInputError, get_image_input_service
 from src.services.quota_service import check_quota
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.stream_service import (
@@ -55,6 +59,8 @@ SSE_HEADERS = {
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+_PROJECT_ROOT = FsPath(__file__).resolve().parent.parent.parent
 
 
 @router.get(
@@ -242,6 +248,30 @@ async def chat_stream(
         user_id,
         bool(org_id),
     )
+    if req.images:
+        image_service = get_image_input_service()
+        try:
+            validated_images = image_service.validate_current_images(
+                files=req.files or [],
+                images=req.images,
+            )
+            llm_config = load_llm_config(_PROJECT_ROOT / 'config' / 'llm_config.yaml')
+            image_service.ensure_vision_supported(
+                llm_config=llm_config,
+                llm_override=(req.llm or '').strip() or None,
+                model_override=(req.model or '').strip() or None,
+                default_profile_key=_get_agent_default_llm(),
+            )
+        except ImageInputError as exc:
+            raise BaseErrorResponse(
+                http_status=exc.http_status,
+                code=exc.http_status,
+                msg=exc.message,
+                data={'error_code': exc.error_code},
+            ) from exc
+        req = req.model_copy(
+            update={'images': [image.url for image in validated_images]}
+        )
     ctx = stream_svc.prepare_send_message(sid, req, user_id, org_id=org_id)
     if ctx is None:
         logger.warning(

@@ -20,7 +20,7 @@ YAML example::
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -97,6 +97,10 @@ class LLMProfileConfig(BaseModel):
 
     # Limits
     max_tokens: int | None = None
+
+    # Vision
+    supports_vision: bool = False
+    vision_detail: Literal["low", "high", "auto"] | None = "high"
 
     # Timeout (seconds)
     timeout: float = 300

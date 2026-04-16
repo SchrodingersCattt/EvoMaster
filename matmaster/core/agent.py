@@ -48,6 +48,7 @@ from matmaster.types.message_normalization import (
 )
 from matmaster.types.messages import (
     AssistantMessage,
+    ImageContentPart,
     LLMResponse,
     Message,
     SystemMessage,
@@ -321,11 +322,15 @@ class AgentKernel:
                 UserPromptContext(prompt=task, session_id=session_id),
             )
 
+        current_user_images = [
+            ImageContentPart.model_validate(image)
+            for image in spec.meta.get("current_user_images", [])
+        ]
         state = _KernelState(
             messages=[
                 SystemMessage(content=spec.system_prompt),
                 *(history or []),
-                UserMessage(content=task),
+                UserMessage(content=task, images=current_user_images),
             ]
         )
 

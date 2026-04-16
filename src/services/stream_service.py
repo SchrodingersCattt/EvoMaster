@@ -9,7 +9,7 @@ import threading
 import time
 import uuid
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Protocol, runtime_checkable
@@ -268,6 +268,7 @@ class SendStreamContext:
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
     bohrium_required: bool = False  # 本轮是否显式依赖 Bohrium access_key / project
+    images: list[str] = field(default_factory=list)
 
 
 class ChatStreamService:
@@ -667,6 +668,8 @@ class ChatStreamService:
         }
         if req.files:
             user_msg['files'] = list(req.files)
+        if req.images:
+            user_msg['images'] = list(req.images)
         if req.workspace_paths:
             user_msg['workspace_paths'] = list(req.workspace_paths)
         self._events_service.add_history_event(sid, user_msg, user_id=user_id)
@@ -686,6 +689,7 @@ class ChatStreamService:
             llm=llm,
             model=model,
             bohrium_required=bohrium_required,
+            images=list(req.images or []),
         )
 
     def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
@@ -830,6 +834,7 @@ class ChatStreamService:
                 'mode': mode,
                 'llm': ctx.llm,
                 'model': ctx.model,
+                'images': list(ctx.images),
                 'bohrium_required': ctx.bohrium_required,
                 'submitted_at': datetime.now(timezone.utc).isoformat(),
             }
