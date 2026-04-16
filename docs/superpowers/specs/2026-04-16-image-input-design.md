@@ -124,7 +124,7 @@ class ChatSendRequest(BaseModel):
 历史图片 URL 失效时采用降级策略：
 
 - 历史回放 UI 不失败，仍显示历史事件中的附件 URL。
-- 构造下一轮 LLM 上下文时，失效的历史图片不进入 `image_url` content part。
+- 构造下一轮 LLM 上下文时，不主动探测历史图片 URL 是否仍可访问；只有静态校验失败或被动 fetch 错误能明确归因到某张历史图片时，该历史图片才不进入后续 `image_url` content part。
 - 对被丢弃的历史图片，在对应 user message 中追加轻量文本占位，例如 `[历史图片不可访问: micrograph.png]`。
 - 当前轮新上传图片校验失败时仍直接拒绝本轮请求，不降级为普通附件。
 
@@ -168,25 +168,29 @@ User/query 的 `content` payload 从现有结构扩展为：
 7. `images` 不追加成普通 URL 文本。
 8. Redis job 带 `images` URL 列表。
 9. Worker 读取 job，将 `images` 传给 `AgentRunService.run_agent()`。
-10. `AgentKernel` 为当前轮构造 `UserMessage(content=task, images=validated_images)`。
+10. `AgentKernel` 为当前轮构造 `UserMessage(content=base_prompt, images=validated_images)`。
 11. normalization 层将 user message 转成 OpenAI-compatible content parts。
 12. LiteLLM 收到多模态 user message。
+
+当前轮 `UserMessage.content` 的 text 部分保持现有 prompt 语义，即继续使用已经拼接 `[Attached files]` 和 workspace paths 的 `base_prompt`。`images` 只作为额外 content parts 进入同一个 user message，不替换或清空现有文本上下文。
 
 ### 历史恢复
 
 1. DB events 读取 User/query。
 2. `ChatHistoryConverter` 从 `content` JSON 中取出文本和 `images`。
 3. 恢复为 `UserMessage(content=text, images=...)`。
-4. 下一轮上下文中保留历史图片输入。
-5. normalization 层再次转成 content parts。
+4. 按 `history_policy` 裁剪历史图片。
+5. 对裁剪后仍会进入 LLM 的历史图片，只做 URL 格式、scheme、host 和 path prefix 静态校验，不做主动 HEAD / Range GET 网络探测。
+6. 下一轮上下文中保留策略允许的历史图片输入。
+7. normalization 层再次转成 content parts。
 
 历史图片按策略保留，避免长会话中图片数量无限累积。
 
 默认策略：
 
 - 当前轮图片总是进入本轮 LLM 请求。
-- 历史图片只保留最近 3 个用户图片轮次。
-- 历史图片总数最多 10 张。
+- 历史图片只保留最近 3 个带 `images` 非空的 user turn。
+- 历史图片总数最多 10 张，只统计实际进入 LLM 的 `image_url` content part，不统计文本占位。
 - 超出策略的历史图片不进入 `image_url` content part，并在对应用户消息中保留轻量文本占位。
 
 该策略应做成配置项：
@@ -205,6 +209,16 @@ image_input:
 - `all`
 
 生产默认不得使用 `all`，除非另有成本和上下文窗口评估。
+
+`last_k_turns` 中的 turn 指带图片的用户轮次，不是所有用户轮次。例如：
+
+| 对话轮次 | 输入 | `last_k_turns=3` 是否保留图片 |
+| --- | --- | --- |
+| 第 1 轮 | 文本 + 图片 A | 保留，直到出现超过 3 个更新的带图用户轮次 |
+| 第 2-5 轮 | 纯文本 | 不影响图片 A 的保留计数 |
+| 第 6 轮 | 文本 + 图片 B | 保留图片 A 和图片 B |
+
+历史图片不主动网络探测的原因是：这些 URL 在首次发送时已经经过当前轮强校验，反复刷新、多 tab 或 SSE 重连时再次探测会放大 OSS 请求量。若 LiteLLM 或模型 provider 在被动 fetch 历史图片时返回可明确归因到历史图片 URL 的 4xx/5xx 错误，运行层可以将该历史图片替换为文本占位并重试一次；如果错误无法归因，则按普通 LLM 调用错误暴露，不做静默降级。
 
 ## 内部消息模型
 
@@ -239,7 +253,7 @@ class UserMessage(Message):
         return {"role": "user", "content": parts}
 ```
 
-`mime_type` 第一版用于校验记录、日志和后续 provider adapter 分流，不默认写入 OpenAI-compatible payload。`detail` 预留给支持 OpenAI-compatible `image_url.detail` 的模型；第一版默认不设置，除非配置显式指定。
+`mime_type` 第一版用于校验记录、日志和后续 provider adapter 分流，不默认写入 OpenAI-compatible payload。`detail` 用于支持 OpenAI-compatible `image_url.detail` 的模型；科研图像保真优先，支持该字段的 vision profile 第一版默认使用 `high`，若 provider 不支持或验证后兼容性有问题，可在 profile 中显式设为 `null` 以省略该字段。
 
 出站校验调整：
 
@@ -285,28 +299,27 @@ class UserMessage(Message):
 - HEAD 失败、超时、返回 401/403/405，或缺少关键 header 时，fallback 到 Range GET。
 - Range GET 使用 `Range: bytes=0-4095`，读取前 4096 字节做 magic bytes 判断 PNG、JPEG、WebP。
 - 当前轮图片必须能得到可信大小。大小可来自 HEAD 的 `Content-Length`，或 Range GET 的 `Content-Range` / `Content-Length`。当前轮图片大小未知时拒绝。
-- 历史图片探测失败、大小未知或 URL 失效时，不阻断会话恢复；该历史图片不进入 LLM image part，并保留文本占位。
+- 历史图片不做主动网络探测，只在裁剪后做 URL 静态校验；被动 fetch 失败的处理见历史恢复策略。
 - 不下载完整图片。
 - 不做压缩、缩放、重编码、EXIF 清理或格式转换。
-- 探测并发执行，最多 5 张图片并发探测。
+- 当前轮探测并发执行，单请求最多 5 张图片并发探测。
 - 单张图片探测超时 3 秒。
 - 单轮图片探测总超时 5 秒。
+- 若生产中 OSS 出现速率限制或突发压力，应在请求级并发之外增加进程级或 Redis 协调的全局 semaphore。
 - 如果实现能从本会话刚上传的可信上传元数据中获得 MIME 和大小，可跳过网络探测；但这些元数据不能由前端裸传后直接信任，必须来自服务端可信缓存或文件服务查询。
 
 科研图像默认保真。超过限制或格式不支持时直接拒绝，不做无声变换。
 
 ### 探测判定树
 
+以下判定树只适用于当前轮新上传图片的主动探测。
+
 1. URL 基础校验失败：拒绝当前请求。
 2. HEAD 成功且 MIME、大小合法：接受。
 3. HEAD 不可用或信息不完整：尝试 Range GET。
 4. Range GET 能确认 magic bytes 和大小合法：接受。
-5. Range GET 能确认 magic bytes 但无法确认大小：
-   - 当前轮图片：拒绝。
-   - 历史图片：丢弃该 image part，保留文本占位。
-6. HEAD 与 Range GET 都失败：
-   - 当前轮图片：拒绝。
-   - 历史图片：丢弃该 image part，保留文本占位。
+5. Range GET 能确认 magic bytes 但无法确认大小：拒绝。
+6. HEAD 与 Range GET 都失败：拒绝。
 
 ## 模型能力检查
 
@@ -328,11 +341,14 @@ profiles:
 
 ```python
 supports_vision: bool = False
+vision_detail: Literal["low", "high", "auto"] | None = "high"
 ```
 
 规则：
 
 - 配置缺失时默认不支持 vision。
+- 支持 vision 的 profile 默认使用 `vision_detail="high"`，以避免 provider 默认 `auto` 策略对显微图、谱图等大图做过强降采样。
+- 对不支持 `image_url.detail` 的 provider，profile 应显式配置 `vision_detail: null`，adapter 在构造 payload 时省略该字段。
 - `images` 非空且 profile 不支持 vision 时，请求失败。
 - 不自动切换模型。
 - 不把图片 URL 静默降级成普通文件附件。
@@ -393,6 +409,8 @@ supports_vision: bool = False
 7. 发送前保证请求 body 中 `files` 与 `images` disjoint。
 8. 不修改共享 `UploadFile` 的全局限制，避免影响普通附件和其它业务。
 
+前端校验只用于提前反馈和减少无效请求，后端校验是权威来源。当前后端判断与前端判断不一致时，以后端错误码为准，前端只负责把错误码映射成用户可理解的文案。
+
 ## 兼容策略
 
 - 老前端只传 `files`：后端按旧逻辑处理，不自动 vision。
@@ -413,6 +431,7 @@ supports_vision: bool = False
 - `get_session_events()` 能把 `images` 拆到顶层。
 - `get_last_user_query()` 返回 `images`。
 - `ChatHistoryConverter` 能把历史图片恢复为 `UserMessage(images=...)`。
+- 当前轮 `UserMessage.content` 的文本部分保持既有 `[Attached files]` / workspace paths 拼接行为。
 - `normalize_and_validate_openai_messages()` 允许 user content parts。
 - `normalize_and_validate_openai_messages()` 仍拒绝 assistant/tool 的非字符串 content。
 - images 非空且模型不支持 vision 时失败。
@@ -423,8 +442,10 @@ supports_vision: bool = False
 - HEAD 成功路径。
 - HEAD 失败但 Range GET 成功路径。
 - HEAD / Range GET 都失败时，当前轮图片失败。
-- 历史图片 URL 失效时，历史恢复不失败，LLM image part 被丢弃并保留文本占位。
-- 历史图片超过 `last_k_turns` 或 `history_max_images` 时被裁剪。
+- 历史恢复不对历史图片发起 HEAD / Range GET 主动探测。
+- 历史图片超过 `last_k_turns` 或 `history_max_images` 时被裁剪，裁剪发生在历史图片静态校验之前。
+- `last_k_turns` 按带图片的 user turn 计数，纯文本 user turn 不消耗计数。
+- 历史图片被 provider 被动 fetch 失败且错误可归因时，可替换为文本占位并重试；无法归因时暴露 LLM 调用错误。
 - 无图片的纯文本对话不受影响。
 - 只有普通附件的对话仍按旧逻辑拼 `[Attached files]`。
 
@@ -440,6 +461,7 @@ E2E 建议：
 
 - 上传图片 -> 发送 -> 模型回答 -> 刷新历史 -> 下一轮在历史策略允许范围内仍能使用最近图片。
 - 使用不支持 vision 的模型发送图片，前端展示可理解的错误。
+- 用 2K 以上显微图或谱图对主力 vision profile 做 sanity check，确认 `vision_detail="high"` 或 provider 默认策略不会丢失关键视觉特征；若 provider 不支持 `detail`，需记录该 profile 的实际行为。
 
 ## 上线顺序
 
@@ -448,8 +470,9 @@ E2E 建议：
 3. 后端开启图片校验和 vision payload 构造，仅在请求显式带 `images` 时触发。
 4. 前端合入发送分流，把图片 URL 放入 `images`。
 5. 先给一个确认支持 vision 的 profile 标记 `supports_vision: true`。
-6. 确认 LiteLLM proxy 和模型提供商能访问 OSS URL 后，再给其它 vision 模型打开。
-7. 补充用户可见错误文案。
+6. 对该 profile 的 `vision_detail` 行为做科研图像 sanity check。
+7. 确认 LiteLLM proxy 和模型提供商能访问 OSS URL 后，再给其它 vision 模型打开。
+8. 补充用户可见错误文案。
 
 ## 成功标准
 
