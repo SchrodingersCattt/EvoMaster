@@ -139,6 +139,110 @@ class TestReplayDedupeSpawnId:
         out = _dedupe_replayed_terminal_events(events)
         assert [e["type"] for e in out] == ["response", "response_figures"]
 
+    def test_response_figures_before_response_still_dedupes_later_run_result(
+        self,
+    ) -> None:
+        from src.services.stream_service import _dedupe_replayed_terminal_events
+
+        events = [
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response_figures",
+                "source": "System",
+                "content": {
+                    "figures": [
+                        {
+                            "figure_id": "band",
+                            "asset_url": "https://oss.example/band.png",
+                            "caption": "band",
+                        }
+                    ]
+                },
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": "answer with [[fig:band]]",
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": "answer with [[fig:band]]",
+            },
+        ]
+
+        out = _dedupe_replayed_terminal_events(events)
+        assert [e["type"] for e in out] == ["response_figures", "response"]
+
+    def test_interleaved_response_and_multiple_response_figures_keep_order(
+        self,
+    ) -> None:
+        from src.services.stream_service import _dedupe_replayed_terminal_events
+
+        events = [
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response_figures",
+                "source": "System",
+                "content": {
+                    "figures": [
+                        {
+                            "figure_id": "band",
+                            "asset_url": "https://oss.example/band.png",
+                            "caption": "band",
+                        }
+                    ]
+                },
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": "first answer chunk",
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response_figures",
+                "source": "System",
+                "content": {
+                    "figures": [
+                        {
+                            "figure_id": "band",
+                            "asset_url": "https://oss.example/band.png",
+                            "caption": "band",
+                        },
+                        {
+                            "figure_id": "dos",
+                            "asset_url": "https://oss.example/dos.png",
+                            "caption": "dos",
+                        },
+                    ]
+                },
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": "duplicate final answer",
+            },
+        ]
+
+        out = _dedupe_replayed_terminal_events(events)
+        assert [e["type"] for e in out] == [
+            "response_figures",
+            "response",
+            "response_figures",
+        ]
+
 
 class TestReplayCompactionNormalization:
     def test_replay_converts_orphan_compaction_running_to_interrupted(self) -> None:
