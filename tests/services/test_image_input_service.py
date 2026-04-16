@@ -1,0 +1,291 @@
+from unittest.mock import MagicMock, patch
+
+import httpx
+import pytest
+
+from matmaster.config.llm import LLMConfig, LLMProfileConfig
+from src.services.image_input_service import (
+    IMAGE_INPUT_DOMAIN_BLOCKED,
+    IMAGE_INPUT_DUPLICATE_ATTACHMENT,
+    IMAGE_INPUT_PATH_BLOCKED,
+    IMAGE_INPUT_SIZE_UNKNOWN,
+    IMAGE_INPUT_UNSUPPORTED_MIME,
+    VISION_MODEL_NOT_SUPPORTED,
+    ImageInputError,
+    ImageInputService,
+    ImageInputSettings,
+)
+
+
+def _service() -> ImageInputService:
+    return ImageInputService(
+        ImageInputSettings(
+            allowed_hosts=frozenset({"oss.example.com"}),
+            allowed_path_prefixes=("/chat/",),
+            allow_insecure_hosts=frozenset(),
+        )
+    )
+
+
+def _response(
+    status_code: int,
+    *,
+    method: str,
+    url: str = "https://oss.example.com/chat/a.png",
+    headers: dict[str, str] | None = None,
+    content: bytes = b"",
+) -> httpx.Response:
+    return httpx.Response(
+        status_code,
+        headers=headers or {},
+        content=content,
+        request=httpx.Request(method, url),
+    )
+
+
+def test_rejects_duplicate_file_and_image_url() -> None:
+    service = _service()
+
+    with pytest.raises(ImageInputError) as exc:
+        service.validate_current_images(
+            files=["https://oss.example.com/chat/a.png"],
+            images=["https://oss.example.com/chat/a.png"],
+        )
+
+    assert exc.value.error_code == IMAGE_INPUT_DUPLICATE_ATTACHMENT
+
+
+def test_rejects_blocked_domain() -> None:
+    with pytest.raises(ImageInputError) as exc:
+        _service().validate_current_images(
+            files=[],
+            images=["https://evil.example.com/chat/a.png"],
+        )
+
+    assert exc.value.error_code == IMAGE_INPUT_DOMAIN_BLOCKED
+
+
+def test_head_success_accepts_png() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(
+        200,
+        method="HEAD",
+        headers={"content-type": "image/png", "content-length": "100"},
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        images = _service().validate_current_images(
+            files=[],
+            images=["https://oss.example.com/chat/a.png"],
+        )
+
+    assert images[0].url == "https://oss.example.com/chat/a.png"
+    assert images[0].mime_type == "image/png"
+    assert images[0].size_bytes == 100
+    client.get.assert_not_called()
+
+
+def test_probe_rejects_redirect_final_url_to_private_ip() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(
+        200,
+        method="HEAD",
+        url="https://127.0.0.1/admin/a.png",
+        headers={"content-type": "image/png", "content-length": "100"},
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        with pytest.raises(ImageInputError) as exc:
+            _service().validate_current_images(
+                files=[],
+                images=["https://oss.example.com/chat/a.png"],
+            )
+
+    assert exc.value.error_code == IMAGE_INPUT_DOMAIN_BLOCKED
+    client.get.assert_not_called()
+
+
+def test_probe_rejects_redirect_final_url_outside_allowed_path() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(
+        200,
+        method="HEAD",
+        url="https://oss.example.com/private/a.png",
+        headers={"content-type": "image/png", "content-length": "100"},
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        with pytest.raises(ImageInputError) as exc:
+            _service().validate_current_images(
+                files=[],
+                images=["https://oss.example.com/chat/a.png"],
+            )
+
+    assert exc.value.error_code == IMAGE_INPUT_PATH_BLOCKED
+    client.get.assert_not_called()
+
+
+def test_probe_rejects_manual_redirect_before_following_to_blocked_host() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(
+        302,
+        method="HEAD",
+        headers={"location": "https://127.0.0.1/admin/a.png"},
+    )
+    client.get.return_value = _response(
+        206,
+        method="GET",
+        headers={"content-range": "bytes 0-4095/4096"},
+        content=b"\x89PNG\r\n\x1a\npayload",
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        with pytest.raises(ImageInputError) as exc:
+            _service().validate_current_images(
+                files=[],
+                images=["https://oss.example.com/chat/a.png"],
+            )
+
+    assert exc.value.error_code == IMAGE_INPUT_DOMAIN_BLOCKED
+    client.get.assert_not_called()
+
+
+def test_validate_current_images_disables_httpx_auto_redirects() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(
+        200,
+        method="HEAD",
+        headers={"content-type": "image/png", "content-length": "100"},
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        _service().validate_current_images(
+            files=[],
+            images=["https://oss.example.com/chat/a.png"],
+        )
+
+    assert client_cls.call_args.kwargs["follow_redirects"] is False
+
+
+def test_history_image_url_rejected_when_required_policy_is_missing() -> None:
+    service = ImageInputService(
+        ImageInputSettings(
+            allowed_hosts=frozenset(),
+            allowed_path_prefixes=(),
+            allow_insecure_hosts=frozenset(),
+            require_policy=True,
+        )
+    )
+
+    assert (
+        service.validate_history_image_url("https://oss.example.com/chat/a.png")
+        is False
+    )
+
+
+def test_head_failure_falls_back_to_range_get_magic_bytes() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(405, method="HEAD")
+    client.get.return_value = _response(
+        206,
+        method="GET",
+        headers={"content-range": "bytes 0-4095/4096"},
+        content=b"RIFF\x10\x00\x00\x00WEBPVP8 ",
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        images = _service().validate_current_images(
+            files=[],
+            images=["https://oss.example.com/chat/a.webp"],
+        )
+
+    assert images[0].mime_type == "image/webp"
+    assert images[0].size_bytes == 4096
+    client.get.assert_called_once()
+    assert client.get.call_args.kwargs["headers"] == {"Range": "bytes=0-4095"}
+
+
+def test_range_get_without_size_rejects_current_image() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(403, method="HEAD")
+    client.get.return_value = _response(
+        200,
+        method="GET",
+        content=b"\x89PNG\r\n\x1a\npayload",
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        with pytest.raises(ImageInputError) as exc:
+            _service().validate_current_images(
+                files=[],
+                images=["https://oss.example.com/chat/a.png"],
+            )
+
+    assert exc.value.error_code == IMAGE_INPUT_SIZE_UNKNOWN
+
+
+def test_range_get_rejects_unsupported_magic_bytes() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(403, method="HEAD")
+    client.get.return_value = _response(
+        206,
+        method="GET",
+        headers={"content-range": "bytes 0-4095/128"},
+        content=b"not-an-image",
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        with pytest.raises(ImageInputError) as exc:
+            _service().validate_current_images(
+                files=[],
+                images=["https://oss.example.com/chat/a.bin"],
+            )
+
+    assert exc.value.error_code == IMAGE_INPUT_UNSUPPORTED_MIME
+
+
+def test_ensure_vision_supported_rejects_text_only_profile() -> None:
+    config = LLMConfig(
+        profiles={"plain": LLMProfileConfig(model="plain")},
+        default="plain",
+    )
+
+    with pytest.raises(ImageInputError) as exc:
+        _service().ensure_vision_supported(
+            llm_config=config,
+            llm_override=None,
+            model_override=None,
+            default_profile_key=None,
+        )
+
+    assert exc.value.error_code == VISION_MODEL_NOT_SUPPORTED
+
+
+def test_ensure_vision_supported_returns_profile_for_vision_profile() -> None:
+    config = LLMConfig(
+        profiles={
+            "vision": LLMProfileConfig(
+                model="vision",
+                supports_vision=True,
+                vision_detail="high",
+            )
+        },
+        default="vision",
+    )
+
+    profile = _service().ensure_vision_supported(
+        llm_config=config,
+        llm_override=None,
+        model_override=None,
+        default_profile_key=None,
+    )
+
+    assert profile.supports_vision is True

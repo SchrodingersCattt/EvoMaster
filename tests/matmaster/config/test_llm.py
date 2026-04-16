@@ -29,6 +29,20 @@ class TestLLMProfileConfig:
         assert p.model == "gpt-5"
         assert p.temperature == 0.3
 
+    def test_defaults_to_no_vision_with_high_detail(self) -> None:
+        p = LLMProfileConfig()
+        assert p.supports_vision is False
+        assert p.vision_detail == "high"
+
+    def test_accepts_vision_detail_none_for_unsupported_provider_field(self) -> None:
+        p = LLMProfileConfig(
+            model="vision-model",
+            supports_vision=True,
+            vision_detail=None,
+        )
+        assert p.supports_vision is True
+        assert p.vision_detail is None
+
 
 class TestLLMProfileConfigMethods:
     """Task 1: effective_family, effective_temperature, build_extra_kwargs."""

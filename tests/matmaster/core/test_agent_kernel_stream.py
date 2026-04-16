@@ -74,6 +74,18 @@ class ContentOnlyProvider:
         yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
 
 
+class RecordingContentProvider(ContentOnlyProvider):
+    """Provider that records outbound messages before returning content."""
+
+    def __init__(self) -> None:
+        self.seen_messages: list[list[dict[str, Any]]] = []
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.seen_messages.append(messages)
+        yield StreamChunk(content="done")
+        yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
+
+
 class ToolCallStreamProvider:
     """Provider that streams content then tool_calls, then finishes naturally."""
 
@@ -439,6 +451,43 @@ class TestStreamLlmItems:
 
 class TestRunItemsAssistantState:
     """_run_items() yields AssistantStateEvent on tool_calls turns."""
+
+    @pytest.mark.asyncio
+    async def test_current_user_images_are_sent_as_content_parts(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = RecordingContentProvider()
+        spec = _make_spec(provider=provider).model_copy(
+            update={
+                "meta": {
+                    "current_user_images": [
+                        {
+                            "url": "https://oss.example.com/chat/a.png",
+                            "mime_type": "image/png",
+                            "detail": "high",
+                        }
+                    ]
+                }
+            }
+        )
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "看图"):
+            events.append(event)
+
+        user_message = provider.seen_messages[0][-1]
+        assert user_message["role"] == "user"
+        assert user_message["content"] == [
+            {"type": "text", "text": "看图"},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "https://oss.example.com/chat/a.png",
+                    "detail": "high",
+                },
+            },
+        ]
 
     @pytest.mark.asyncio
     async def test_yields_assistant_state_event(self) -> None:

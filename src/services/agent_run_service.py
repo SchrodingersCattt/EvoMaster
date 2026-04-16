@@ -47,6 +47,7 @@ from src.services.agent_run_bohrium import (
 )
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.history_restore_service import HistoryRestoreService
+from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
 from src.services.response_figures_service import ResponseFiguresAccumulator
 from src.services.sessions_service import get_sessions_service
@@ -157,6 +158,7 @@ class AgentRunService:
         invocation_id: str | None = None,
         llm_override: str | None = None,
         model_override: str | None = None,
+        images: list[str] | None = None,
         bohrium_required: bool = False,
     ) -> tuple[bool | tuple[bool, str], int]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
@@ -309,6 +311,34 @@ class AgentRunService:
             llm_config = load_llm_config(_project_root / 'config' / 'llm_config.yaml')
 
             agent_default_llm = _get_agent_default_llm()
+            resolved_llm = llm_config.resolve_route(
+                model_override=model_override,
+                llm_override=llm_override,
+                default_key=agent_default_llm,
+            )
+            selected_profile = llm_config.get_profile(resolved_llm.profile_key)
+            current_images = list(images or [])
+            if current_images:
+                selected_profile = get_image_input_service().ensure_vision_supported(
+                    llm_config=llm_config,
+                    llm_override=llm_override,
+                    model_override=model_override,
+                    default_profile_key=agent_default_llm,
+                )
+                image_parts: list[dict[str, Any]] = []
+                for image_url in current_images:
+                    image_part: dict[str, Any] = {'url': image_url}
+                    if selected_profile.vision_detail is not None:
+                        image_part['detail'] = selected_profile.vision_detail
+                    image_parts.append(image_part)
+                pg_ctx = pg_ctx.model_copy(
+                    update={
+                        'run_meta': {
+                            **pg_ctx.run_meta,
+                            'current_user_images': image_parts,
+                        }
+                    }
+                )
 
             pg_ctx = pg_ctx.model_copy(
                 update={

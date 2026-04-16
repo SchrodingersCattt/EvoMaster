@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -175,6 +175,12 @@ class Message(BaseModel):
         return {"role": self.role.value, "content": self.content}
 
 
+class ImageContentPart(BaseModel):
+    url: str
+    mime_type: str | None = None
+    detail: Literal["low", "high", "auto"] | None = None
+
+
 class SystemMessage(Message):
     """System instruction message."""
 
@@ -185,6 +191,22 @@ class UserMessage(Message):
     """User input message."""
 
     role: Role = Role.USER
+    images: list[ImageContentPart] = Field(default_factory=list)
+
+    def to_api_dict(self) -> dict[str, Any]:
+        """Convert to OpenAI API-compatible dict."""
+        if not self.images:
+            return {"role": self.role.value, "content": self.content}
+
+        parts: list[dict[str, Any]] = []
+        if self.content:
+            parts.append({"type": "text", "text": self.content})
+        for image in self.images:
+            image_url: dict[str, Any] = {"url": image.url}
+            if image.detail is not None:
+                image_url["detail"] = image.detail
+            parts.append({"type": "image_url", "image_url": image_url})
+        return {"role": self.role.value, "content": parts}
 
 
 class AssistantMessage(Message):

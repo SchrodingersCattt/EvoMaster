@@ -9,6 +9,7 @@ from src.services.history_checkpoint_codec import (
     deserialize_base_messages,
     validate_base_messages,
 )
+from src.services.image_input_service import trim_history_images
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class HistoryRestoreService:
                 tail_messages = ChatHistoryConverter.events_to_messages(scope_events)
                 history = [*base_messages, *tail_messages]
                 validate_base_messages(history)
-                return history
+                return trim_history_images(history)
             except Exception as exc:
                 logger.warning(
                     'history_restore: checkpoint restore failed, trying older checkpoint '
@@ -75,4 +76,4 @@ class HistoryRestoreService:
                 event for event in raw_events if event.get('spawn_id') == spawn_id
             ]
         raw_events = ChatHistoryConverter.exclude_task_events(raw_events, task_id)
-        return ChatHistoryConverter.events_to_messages(raw_events)
+        return trim_history_images(ChatHistoryConverter.events_to_messages(raw_events))

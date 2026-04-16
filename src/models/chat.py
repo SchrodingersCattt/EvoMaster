@@ -151,6 +151,9 @@ class ChatSendRequest(BaseModel):
     files: list[str] | None = (
         None  # 可选，OSS 链接列表，前端展示与 content 分开，传给 agent 时拼成 content + URLs
     )
+    images: list[str] | None = (
+        None  # 可选，OSS 图片链接列表；进入模型 vision content parts，不作为普通附件 URL 拼入正文
+    )
     workspace_paths: list[str] | None = (
         None  # 可选，工作区/个人路径列表，如 /personal/1.cif，与 files(OSS) 区分
     )
