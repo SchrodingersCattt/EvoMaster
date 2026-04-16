@@ -252,6 +252,41 @@ def test_prepare_send_message_marks_explicit_bohrium_requirement():
     assert ctx.bohrium_required is True
 
 
+def test_prepare_send_message_persists_images_in_user_message():
+    from src.models.chat import ChatSendRequest
+    from src.services.stream_service import ChatStreamService
+
+    sessions_service = MagicMock()
+    sessions_service.try_acquire_session_run.return_value = (True, None)
+    events_service = MagicMock()
+    deploy_state_service = MagicMock()
+    fake_redis = MagicMock()
+
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        agent_run_service=MagicMock(),
+        deploy_state_service=deploy_state_service,
+    )
+
+    req = ChatSendRequest(
+        content='看图',
+        images=['https://oss.example.com/chat/a.png'],
+    )
+
+    with (
+        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
+        patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
+    ):
+        ctx = service.prepare_send_message('sess-1', req, user_id='user-1')
+
+    assert ctx is not None
+    assert ctx.user_msg['images'] == ['https://oss.example.com/chat/a.png']
+    assert events_service.add_history_event.call_args.args[1]['images'] == [
+        'https://oss.example.com/chat/a.png'
+    ]
+
+
 @pytest.mark.asyncio
 async def test_generate_send_stream_enqueues_bohrium_required_flag():
     from src.services.stream_service import ChatStreamService, SendStreamContext
@@ -315,6 +350,71 @@ async def test_generate_send_stream_enqueues_bohrium_required_flag():
 
     pushed_job = fake_redis.lpush_agent_run_job.call_args.args[0]
     assert pushed_job['bohrium_required'] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_send_stream_enqueues_images():
+    from src.services.stream_service import ChatStreamService, SendStreamContext
+
+    service = ChatStreamService(
+        sessions_service=MagicMock(
+            get_session_status_payload=MagicMock(
+                return_value={
+                    'source': 'System',
+                    'type': 'status',
+                    'content': '',
+                    'session_id': 'sess-1',
+                }
+            )
+        ),
+        events_service=MagicMock(get_session_events=MagicMock(return_value=[])),
+        agent_run_service=MagicMock(),
+        deploy_state_service=MagicMock(),
+    )
+
+    ctx = SendStreamContext(
+        task_id='task-1',
+        invocation_id='inv-1',
+        mode='direct',
+        user_msg={'source': 'User', 'type': 'query', 'content': 'run'},
+        request_event_queue=asyncio.Queue(),
+        reply_queue=MagicMock(),
+        images=['https://oss.example.com/chat/a.png'],
+    )
+
+    fake_redis = MagicMock()
+    fake_redis.create_client.return_value = None
+    fake_redis.set_session_run_queued.return_value = True
+    fake_redis.llen_agent_run_queue.return_value = 0
+    fake_redis.lpush_agent_run_job.side_effect = lambda job: True
+
+    async def _stream_closed_immediately(awaitable, timeout):
+        close = getattr(awaitable, 'close', None)
+        if callable(close):
+            close()
+        return {
+            'source': 'System',
+            'type': 'stream_closed',
+            'content': '',
+            'session_id': 'sess-1',
+        }
+
+    with (
+        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
+        patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
+        patch(
+            'src.services.stream_service.asyncio.wait_for',
+            side_effect=_stream_closed_immediately,
+        ),
+    ):
+        gen = service.generate_send_stream('sess-1', 'run', ctx)
+        await gen.__anext__()
+        await gen.__anext__()
+        await gen.__anext__()
+        await gen.aclose()
+
+    pushed_job = fake_redis.lpush_agent_run_job.call_args.args[0]
+    assert pushed_job['images'] == ['https://oss.example.com/chat/a.png']
 
 
 async def test_sse_frames_match_frontend_contract_without_mysql():

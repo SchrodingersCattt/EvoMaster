@@ -8,6 +8,7 @@ from matmaster.response_text import is_trivial_response_text
 from matmaster.types.message_normalization import restore_persisted_assistant_state
 from matmaster.types.messages import (
     AssistantMessage,
+    ImageContentPart,
     ToolCallData,
     ToolMessage,
     UserMessage,
@@ -256,6 +257,21 @@ class ChatHistoryConverter:
         return str(c) if c is not None else ''
 
     @staticmethod
+    def _user_images(ev: dict) -> list[ImageContentPart]:
+        """从 User/query 事件中取出图片 URL 列表。"""
+        raw_images = ev.get('images')
+        content = ev.get('content')
+        if raw_images is None and isinstance(content, dict):
+            raw_images = content.get('images')
+        if not isinstance(raw_images, list):
+            return []
+        images: list[ImageContentPart] = []
+        for raw_url in raw_images:
+            if isinstance(raw_url, str) and raw_url:
+                images.append(ImageContentPart(url=raw_url))
+        return images
+
+    @staticmethod
     def _assistant_content(ev: dict) -> str:
         """从 thought/response/run_result 等事件中取出文本。"""
         c = ev.get('content')
@@ -438,7 +454,9 @@ class ChatHistoryConverter:
                 active_tool_turn_ids.clear()
                 response_seen_in_turn = False
                 text = cls._user_content(ev)
-                out.append(UserMessage(content=text).model_dump())
+                out.append(
+                    UserMessage(content=text, images=cls._user_images(ev)).model_dump()
+                )
                 continue
 
             if _is_matmaster_source(source) and typ in ('thought', 'planner_reply'):
@@ -618,7 +636,13 @@ class ChatHistoryConverter:
         for d in dialog_dicts:
             role = d.get("role")
             if role == "user":
-                messages.append(UserMessage(content=d.get("content", "")))
+                images = [
+                    ImageContentPart.model_validate(image)
+                    for image in d.get("images", [])
+                ]
+                messages.append(
+                    UserMessage(content=d.get("content", ""), images=images)
+                )
             elif role == "assistant":
                 msg_kwargs: dict = {"content": d.get("content")}
                 reasoning_content = d.get("reasoning_content")
