@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: agnostic
 questions:
-- id: BP_struct_005_20260406
+- id: BP_struct_005_20260406v2
   capability: batch_processing
   domain: agnostic
   intent: Repair 5 problematic POSCAR structures by fixing geometry issues only. Focus the
