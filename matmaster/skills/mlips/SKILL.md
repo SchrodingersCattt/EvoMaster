@@ -8,6 +8,8 @@ skill_type: operator
 
 Universal machine-learning interatomic potentials for atomistic simulations. All tasks run via ASE calculators on Bohrium GPU nodes.
 
+**Efficiency rule**: All model parameters, script interfaces, and Bohrium submission configs are documented below. **Do NOT web search for MLIP, ASE, DPA, or deepmd documentation** — this skill is the single source of truth. Write a single self-contained submission (copy script + submit) per task. Combine file preparation into ONE Bash call.
+
 ## Bohrium Submission Config
 
 | Item | Default Value |

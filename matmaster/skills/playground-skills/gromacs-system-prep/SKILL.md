@@ -8,6 +8,8 @@ skill_type: operator
 
 Use the local wrapper under `matmaster/skills/playground-skills/gromacs-system-prep/scripts/prepare_gmx.py`.
 
+**Skill-first rule**: All system preparation commands (editconf, solvate, genion, make_ndx) and MDP templates are available through this skill's script. **Do NOT web search for GROMACS system building procedures.** Follow the subcommand interface below and the gromacs skill for Bohrium submission.
+
 ## When to use
 
 - Build or resize a simulation box with `editconf`.

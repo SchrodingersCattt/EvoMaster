@@ -12,6 +12,15 @@ ABACUS (Atomic-orbital Based Ab-initio Computation at UStc) is an open-source DF
 
 **Efficiency rule**: Be concise — write input files directly with minimal preamble. Do NOT explain each parameter line-by-line or repeat file contents in prose. After writing all files, a brief summary (2-4 sentences) of key settings is sufficient. Lengthy explanations waste tokens without adding value.
 
+**Skill-first rule**: This skill and its `references/` directory contain ALL information for ABACUS calculations — INPUT templates, STRU format, KPT strategies, pseudopotential/orbital download URLs, output parsing patterns, and Bohrium submission config. **Do NOT use WebSearch or WebFetch for ABACUS documentation, parameters, pseudopotential sources, or tutorials.** Consult `references/input_examples.md`, `references/stru_format.md`, `references/output_params.md`, and `references/electric_field.md` directly instead.
+
+**Minimal-turn workflow**: Complete standard ABACUS tasks in ≤4 agent turns:
+1. **Turn 1 (single Bash)**: Write ALL input files (INPUT, STRU, KPT), download pseudopotentials+orbitals (`wget` the AIS Square zip + `cp` needed files), and prepare the working directory — everything in ONE Bash call using heredocs or `cat <<'EOF'`.
+2. **Turn 2**: Submit to Bohrium.
+3. **Turn 3**: Poll status; continue other work while waiting.
+4. **Turn 4**: Download results and report answers.
+For two-step workflows (SCF→NSCF), write `INPUT_scf`, `INPUT_nscf`, `KPT_scf`, `KPT_nscf`, `STRU`, and `run.sh` all in Turn 1. Do NOT create files one at a time in separate Bash calls.
+
 ## Bohrium Submission Config
 
 | Item | Default Value |
