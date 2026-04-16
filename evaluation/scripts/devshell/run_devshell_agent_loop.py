@@ -77,10 +77,10 @@ class DevshellAgentLoopCli:
             default=None,
             metavar="N",
             help=(
-                "Target all-criteria pass rate on the same 0–100 scale as "
-                "macro_mean_0_100 (mean of per-task 0/100 scores). Stop early when "
-                "macro_mean_0_100 reaches this or the model sets target_met. "
-                "Default: 80."
+                "Target pass rate on the same 0–100 scale as macro_mean_0_100: "
+                "(questions where every repeat scored 100) ÷ (question count) × 100. "
+                "Stop early when macro_mean_0_100 reaches this or the model sets "
+                "target_met. Default: 80."
             ),
         )
         p.add_argument(

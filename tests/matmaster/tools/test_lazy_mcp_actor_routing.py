@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
 
@@ -14,6 +17,41 @@ class _ActorConnector:
         self.calculation_preflight = calculation_preflight
         self.call_tool = AsyncMock(return_value=[{"text": "actor_result"}])
         self.get_calculation_preflight = AsyncMock(return_value=calculation_preflight)
+
+
+class _CancelableBlockingConn:
+    def __init__(self) -> None:
+        self.active_started = asyncio.Event()
+        self.active_cancelled = asyncio.Event()
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def __aenter__(self) -> _CancelableBlockingConn:
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def list_tools(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": "remote_tool",
+                "description": "Remote tool",
+                "input_schema": {"type": "object"},
+            }
+        ]
+
+    async def call_tool(
+        self, tool_name: str, arguments: dict[str, Any]
+    ) -> list[dict[str, str]]:
+        self.calls.append((tool_name, dict(arguments)))
+        if arguments.get("value") == "first":
+            self.active_started.set()
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                self.active_cancelled.set()
+                raise
+        return [{"text": arguments.get("value", "")}]
 
 
 class TestLazyMCPToolActorRouting:
@@ -163,3 +201,47 @@ class TestLazyMCPConnectorActorRouting:
         await connector.cleanup()
 
         fake_manager.cleanup.assert_awaited_once()
+
+    async def test_outer_timeout_cancels_active_request_and_releases_serial_slot(self):
+        connector = LazyMCPConnector(
+            mcp_server_config={"srv": {"transport": "http", "url": "http://srv"}},
+            mcp_config={
+                "mcp_concurrency": {
+                    "servers": {
+                        "srv": {
+                            "mode": "serial",
+                            "max_inflight": 1,
+                            "max_pending_requests": 4,
+                        }
+                    }
+                }
+            },
+        )
+        conn = _CancelableBlockingConn()
+
+        with patch("matmaster.mcp.manager.create_connection", return_value=conn):
+            await connector.ensure_actor("srv")
+            first_call = asyncio.create_task(
+                connector.call_tool("srv", "remote_tool", {"value": "first"})
+            )
+
+            try:
+                await asyncio.wait_for(conn.active_started.wait(), timeout=1.0)
+
+                with pytest.raises(asyncio.TimeoutError):
+                    await asyncio.wait_for(first_call, timeout=0.05)
+
+                await asyncio.wait_for(conn.active_cancelled.wait(), timeout=1.0)
+
+                second_result = await asyncio.wait_for(
+                    connector.call_tool("srv", "remote_tool", {"value": "second"}),
+                    timeout=1.0,
+                )
+            finally:
+                await connector.cleanup()
+
+        assert second_result == [{"text": "second"}]
+        assert [arguments["value"] for _, arguments in conn.calls] == [
+            "first",
+            "second",
+        ]

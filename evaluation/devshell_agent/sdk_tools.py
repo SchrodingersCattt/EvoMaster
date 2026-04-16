@@ -564,8 +564,8 @@ class MatmasterEvalMcpToolkit(MatmasterEvalMcpEvalRunMixin):
             "report_iteration_outcome",
             (
                 "Call exactly once at the end of each iteration after grading "
-                "(and after any edits). Records macro_mean_0_100 and whether the "
-                "configured target score was met."
+                "(and after any edits). Records macro_mean_0_100 (per-question pass "
+                "rate after k repeats) and whether target_pass_rate was met."
             ),
             _mts.REPORT_ITERATION_SCHEMA,
         )

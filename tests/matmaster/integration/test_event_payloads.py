@@ -98,10 +98,72 @@ class TestPublicContentForEvent:
             'exp_name': 'vasp-relax'
         }
 
+    def test_compaction_running_payload_maps_public_fields(self) -> None:
+        payload = {
+            'type': 'compaction',
+            'source': 'context_compactor',
+            'compaction_id': 'task-1:root:1',
+            'status': 'running',
+            'phase': 'runtime',
+            'trigger_tokens': 950,
+        }
+
+        assert _public_content_for_event('compaction', payload) == {
+            'compaction_id': 'task-1:root:1',
+            'status': 'running',
+            'phase': 'runtime',
+            'trigger_tokens': 950,
+        }
+
+    def test_compaction_complete_payload_maps_checkpoint_fields(self) -> None:
+        payload = {
+            'type': 'compaction',
+            'source': 'context_compactor',
+            'compaction_id': 'task-1:root:2',
+            'status': 'complete',
+            'phase': 'runtime',
+            'strategy': 'summary',
+            'durability': 'durable',
+            'checkpoint_written': True,
+            'covered_until_event_id': 88,
+            'retained_turns': 3,
+        }
+
+        assert _public_content_for_event('compaction', payload) == {
+            'compaction_id': 'task-1:root:2',
+            'status': 'complete',
+            'phase': 'runtime',
+            'strategy': 'summary',
+            'durability': 'durable',
+            'checkpoint_written': True,
+            'covered_until_event_id': 88,
+            'retained_turns': 3,
+        }
+
     def test_response_uses_content_field(self) -> None:
         payload = {'type': 'response', 'source': 'Agent', 'content': 'hello'}
 
         assert _public_content_for_event('response', payload) == 'hello'
+
+    def test_response_figures_payload_maps_to_public_content(self) -> None:
+        payload = {
+            'type': 'response_figures',
+            'source': 'System',
+            'figures': [
+                {
+                    'figure_id': 'band',
+                    'asset_url': 'https://oss.example/band.png',
+                    'caption': 'band',
+                    'importance': 'primary',
+                    'placement_hint': 'sidebar_only',
+                    'source_tool_call_id': 'call-band',
+                }
+            ],
+        }
+
+        assert _public_content_for_event('response_figures', payload) == {
+            'figures': payload['figures']
+        }
 
     def test_unknown_type_without_content_extracts_business_fields(self) -> None:
         payload = {

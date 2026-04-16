@@ -91,9 +91,9 @@ REPORT_ITERATION_SCHEMA: dict[str, Any] = {
         "macro_mean_0_100": {
             "type": "integer",
             "description": (
-                "Mean of per-task ingest scores (each 0 or 100). Devshell scoring sets "
-                "100 only when every scoring_checklist item passed, else 0 — so this "
-                "value equals (all-criteria pass rate) × 100 across tasks."
+                "Per-question 0/100: 100 only when every repeat run for that question "
+                "scored 100 (full checklist each time). Mean over questions = "
+                "(questions fully passed ÷ question count) × 100; matches target_pass_rate."
             ),
         },
         "target_met": {

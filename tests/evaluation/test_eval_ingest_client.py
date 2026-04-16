@@ -172,19 +172,20 @@ def test_eval_score_summary_url_matches_tools_server() -> None:
 
 
 def test_parse_score_summary_missing_question_ids_claude_code() -> None:
+    # tools-server：每题用 *_passed（有 baseline 为 bool，无数据为 null）
     envelope = {
         "code": 0,
         "data": {
             "questions": [
                 {
                     "question_id": "q_has",
-                    "claude_code_score": 0.5,
-                    "cursor_score": None,
+                    "claude_code_passed": True,
+                    "cursor_passed": None,
                 },
                 {
                     "question_id": "q_miss",
-                    "claude_code_score": None,
-                    "cursor_score": 0.9,
+                    "claude_code_passed": None,
+                    "cursor_passed": False,
                 },
             ]
         },
@@ -194,6 +195,35 @@ def test_parse_score_summary_missing_question_ids_claude_code() -> None:
     assert parse_score_summary_missing_question_ids(envelope, channel="cursor") == [
         "q_has"
     ]
+
+
+def test_parse_score_summary_missing_question_ids_false_passed_not_missing() -> None:
+    """有 baseline 但未满分时 claude_code_passed=false，不应再当作缺基线。"""
+    envelope = {
+        "code": 0,
+        "data": {
+            "questions": [{"question_id": "q_fail", "claude_code_passed": False}],
+        },
+        "msg": "success",
+    }
+    assert parse_score_summary_missing_question_ids(envelope) == []
+
+
+def test_parse_score_summary_missing_question_ids_legacy_score_only_treated_as_missing() -> (
+    None
+):
+    """不读取 ``*_score``：仅含旧列时 ``claude_code_passed`` 均缺失，一律视为缺基线。"""
+    envelope = {
+        "code": 0,
+        "data": {
+            "questions": [
+                {"question_id": "q_has", "claude_code_score": 0.5},
+                {"question_id": "q_miss", "claude_code_score": None},
+            ]
+        },
+        "msg": "success",
+    }
+    assert parse_score_summary_missing_question_ids(envelope) == ["q_has", "q_miss"]
 
 
 def test_parse_score_summary_missing_question_ids_absent_field() -> None:
@@ -218,8 +248,8 @@ def test_fetch_missing_baseline_question_ids_uses_get(mock_get: MagicMock) -> No
             "code": 0,
             "data": {
                 "questions": [
-                    {"question_id": "has_cc", "claude_code_score": 1.0},
-                    {"question_id": "no_cc", "claude_code_score": None},
+                    {"question_id": "has_cc", "claude_code_passed": True},
+                    {"question_id": "no_cc", "claude_code_passed": None},
                 ]
             },
         },
