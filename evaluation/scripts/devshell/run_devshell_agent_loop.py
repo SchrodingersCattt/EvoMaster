@@ -8,7 +8,7 @@
 在仓库根执行示例::
 
     uv run python evaluation/scripts/devshell/run_devshell_agent_loop.py \\
-      --max-iterations 3 --target-mean-score 80 --limit 2 --jobs 2 \\
+      --max-iterations 3 --target-pass-rate 80 --limit 2 --jobs 2 \\
       --questions SC_struct_007
 
 说明见 ``evaluation/docs/devshell/devshell_agent_sdk_loop.md``。
@@ -72,10 +72,23 @@ class DevshellAgentLoopCli:
             help="Maximum outer iterations (each is one SDK session turn).",
         )
         p.add_argument(
+            "--target-pass-rate",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Target pass rate on the same 0–100 scale as macro_mean_0_100: "
+                "(questions where every repeat scored 100) ÷ (question count) × 100. "
+                "Stop early when macro_mean_0_100 reaches this or the model sets "
+                "target_met. Default: 80."
+            ),
+        )
+        p.add_argument(
             "--target-mean-score",
             type=int,
-            default=80,
-            help="Stop early when macro mean reaches this (0–100) or model sets target_met.",
+            default=None,
+            metavar="N",
+            help=argparse.SUPPRESS,
         )
         p.add_argument(
             "--permission-mode",
@@ -185,6 +198,16 @@ class DevshellAgentLoopCli:
             help="Forwarded to run_devshell_eval --limit (default: no cap).",
         )
         p.add_argument(
+            "--k",
+            type=int,
+            default=3,
+            metavar="N",
+            help=(
+                "Forwarded to run_devshell_eval --k: repeat each question N times "
+                "(overrides evaluation/config.yaml ``k``; default: %(default)s)."
+            ),
+        )
+        p.add_argument(
             "--questions",
             nargs="+",
             default=None,
@@ -271,6 +294,10 @@ class DevshellAgentLoopCli:
                 session_dir if session_dir.is_absolute() else (repo_root / session_dir)
             ).resolve()
 
+        if args.k < 1:
+            print("error: --k must be >= 1", file=sys.stderr)
+            return 2
+
         exp_effective = args.exp
         if exp_effective is None and args.modes:
             _first = str(args.modes[0]).strip()
@@ -295,14 +322,26 @@ class DevshellAgentLoopCli:
                 else repo_root / "evaluation" / "config.yaml"
             ),
             extra_args=list(args.eval_extra_arg),
+            k=args.k,
         )
+
+        if args.target_mean_score is not None:
+            print(
+                "error: --target-mean-score was removed; use --target-pass-rate",
+                file=sys.stderr,
+            )
+            return 2
+        if args.target_pass_rate is not None:
+            effective_target = int(args.target_pass_rate)
+        else:
+            effective_target = 80
 
         cfg = AgentLoopConfig(
             repo_root=repo_root,
             session_dir=session_dir,
             defaults=defaults,
             max_iterations=max(1, int(args.max_iterations)),
-            target_mean_score=max(0, min(100, int(args.target_mean_score))),
+            target_pass_rate=max(0, min(100, effective_target)),
             permission_mode=str(args.permission_mode),
             max_sdk_turns=max(1, int(args.max_sdk_turns)),
             extra_instruction=str(args.extra_instruction or ""),

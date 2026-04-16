@@ -30,7 +30,7 @@ mixing_ndim             8
 # Ionic relaxation
 cal_force               1
 cal_stress              0
-force_thr               1e-3
+force_thr_ev            0.01
 relax_nmax              100
 relax_method            bfgs
 out_stru                1

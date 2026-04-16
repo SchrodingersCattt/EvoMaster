@@ -8,7 +8,7 @@ skill_type: operator
 
 ABACUS (Atomic-orbital Based Ab-initio Computation at UStc) is an open-source DFT code supporting both plane-wave (PW) and numerical atomic orbital (LCAO) basis sets. LCAO mode enables linear-scaling DFT for large systems.
 
-**Action rule**: when the user asks you to generate ABACUS input files (INPUT, STRU, KPT), **always use the Write tool** to create the files in the working directory. Read any provided STRU files first, then Write all requested output files. Do not stop after only reading files.
+**Action rule**: when the user asks you to generate ABACUS input files (INPUT, STRU, KPT), **always use the Write tool** to create the files in the working directory. **Read any provided STRU files first** and extract: (1) pseudopotential/orbital filenames — reuse them exactly in any new STRU, never invent names; (2) number of species → set `ntype` accordingly; (3) whether `NUMERICAL_ORBITAL` is present → if yes use `basis_type lcao`, otherwise use `basis_type pw`; (4) coordinate type and cell geometry (detect slab vs bulk by vacuum gap). Then Write all requested output files. Do not stop after only reading files.
 
 **Efficiency rule**: Be concise — write input files directly with minimal preamble. Do NOT explain each parameter line-by-line or repeat file contents in prose. After writing all files, a brief summary (2-4 sentences) of key settings is sufficient. Lengthy explanations waste tokens without adding value.
 
@@ -24,9 +24,28 @@ ABACUS (Atomic-orbital Based Ab-initio Computation at UStc) is an open-source DF
 > For GPU-accelerated runs: `machine="c8_m60_1 * NVIDIA 4090"` with `basis_type pw`.
 > For different versions: `Bohrium(action="list_images", keyword="abacus")`.
 
+## K-point Strategy: `kspacing` (in INPUT) vs KPT file
+
+| Scenario | Use `kspacing` in INPUT | Use separate KPT file |
+|----------|:-----------------------:|:---------------------:|
+| Supercell (vacancy, defect, BSSE) | ✅ **mandatory** | ✗ |
+| Standard bulk (small cell) | optional | ✅ |
+| Slab (surface) | ✅ recommended | ✅ |
+| Band structure (k-path) | ✗ | ✅ (line-mode) |
+
+**Supercell rule**: For **any supercell calculation** (vacancy, defect, BSSE ghost atoms, adsorption, large cell), **always use `kspacing` inside the INPUT file** instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to the cell size.
+```
+kspacing 0.10 0.10 0.10
+```
+- Typical value: `0.10` (Å⁻¹) for metals, `0.12`–`0.15` for insulators.
+- For slabs in `kspacing` mode: set the vacuum direction to `1.00` (e.g., `kspacing 0.10 0.10 1.00` for z-vacuum).
+- When `kspacing` is present in INPUT, ABACUS ignores the KPT file entirely — you may omit the KPT file.
+
+> **Why**: A separate KPT file with a fixed mesh (e.g. `4 4 4`) may be too dense or too sparse for a supercell whose dimensions differ from the primitive cell. `kspacing` provides consistent k-point density per Å⁻¹ regardless of cell size.
+
 ## Input Preparation
 
-ABACUS uses **three mandatory input files**: `INPUT`, `STRU`, `KPT`.
+ABACUS uses **three mandatory input files**: `INPUT`, `STRU`, `KPT` (KPT is optional when `kspacing` is set in INPUT).
 
 ### Using render_input.py (recommended)
 
@@ -103,7 +122,22 @@ If the user provides complete INPUT + STRU + KPT files with pseudopotentials and
 | md | `calculation md` | `task_md_nvt.INPUT` | NVT molecular dynamics |
 
 > When generating INPUT files, write the calculation keyword exactly as shown: `calculation scf`, `calculation cell-relax`, etc. with single space. Include `efield_flag 1` and `dip_cor_flag 1` when dipole correction is needed.
-> **Before writing any INPUT**: consult **`references/input_examples.md`** § Quick Reference for the mandatory parameters per task type — missing even one (e.g. `cal_force` for relax, `out_chg` for SCF→NSCF) will produce incomplete results.
+
+**⚠ Mandatory extras per task** — omitting ANY of these is a blocking error (in addition to universal baseline `calculation`, `basis_type`, `ecutwfc`, `scf_thr`, `scf_nmax`, `smearing_method`, `smearing_sigma`):
+
+| Task | MUST-ADD parameters |
+|------|---------------------|
+| **relax** | `cal_force 1`, `force_thr_ev 0.01`, `relax_nmax 100` |
+| **cell-relax** | **`cal_force 1`**, **`cal_stress 1`**, `force_thr_ev 0.01`, `stress_thr 0.5`, `relax_nmax 100` |
+| **SCF → NSCF** | SCF: `out_chg 1`; NSCF: `init_chg file`, `symmetry 0`, `nbands <N>`, plus `out_band 1` or `out_dos 1` |
+| **work function / pot** | `out_pot 2` |
+| **dipole correction** | `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_pos_max`, `efield_pos_dec`, `efield_amp 0.0` |
+| **spin-polarized** | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` |
+| **supercell / vacancy / defect / BSSE** | **`kspacing 0.10`** (or `0.10 0.10 1.00` for slabs) — **inside INPUT, not a KPT file** |
+
+> **⚠ `force_thr_ev` vs `force_thr`**: Always use **`force_thr_ev`** (eV/Å). Do NOT use `force_thr` (Ry/Bohr) — they have completely different units and threshold values. `force_thr_ev 0.01` ≈ `force_thr 3.9e-4`.
+
+> **Before writing any INPUT**: consult **`references/input_examples.md`** § Quick Reference — then verify every parameter from the table above is present. Missing even one (e.g. `cal_force` for relax, `cal_stress` for cell-relax) will produce incomplete or wrong results.
 
 ### Electronic Property Calculations (Band Structure / DOS)
 
@@ -164,6 +198,13 @@ For nanoribbons, nanotubes, or 2D materials, see KPT examples in **`references/i
 
 For surface energy, vacancy formation, EOS, etc.: **always create ALL requested files** with consistent settings across systems. Consult **`references/input_examples.md`** for templates (surface energy, vacancy, slab KPT with `kspacing`).
 
+**Consistency checklist** — across all INPUT files in a comparison set:
+1. **Same `basis_type`, `ecutwfc`, `smearing_method`, `smearing_sigma`, `scf_thr`** — any difference invalidates energy comparisons.
+2. **Same `dft_functional`** (or omit entirely to use default PBE) — never mix functionals.
+3. **Task-specific mandatory params still apply**: e.g. `cal_force 1` + `cal_stress 1` for cell-relax, `cal_force 1` for relax — even inside a multi-file set.
+4. **Each INPUT must reference its STRU** via `stru_file <name>` when the filename differs from default `STRU`.
+5. **Each INPUT must reference its KPT** via `kpoint_file <name>` when the filename differs from default `KPT`.
+
 Key slab KPT rule: **always use `1` in the vacuum direction** (e.g. `20 20 1 0 0 0`). For `kspacing` mode: `kspacing 0.10 0.10 1.00`.
 
 ## Output Control Parameters
@@ -172,7 +213,7 @@ Consult **`references/output_params.md`** for the full parameter table, output f
 - **SCF→NSCF**: SCF must have `out_chg 1`; NSCF must have `init_chg file`, `symmetry 0`, explicit `nbands`
 - **Band structure**: `out_band 1` in NSCF; **DOS**: `out_dos 1` in NSCF
 - **Work function**: `out_pot 2` for electrostatic potential
-- **Relax/cell-relax**: `cal_force 1`, `cal_stress 1`
+- **Relax**: `cal_force 1`; **Cell-relax**: `cal_force 1` AND `cal_stress 1` (both mandatory)
 
 ## Required Files
 
@@ -197,8 +238,9 @@ Consult **`references/output_params.md`** for the full parameter table, output f
 ## Physical Checks
 
 - **basis_type**: `lcao` for most tasks (efficient for medium-large systems); `pw` for benchmarks or GPU acceleration
-- **ecutwfc**: for PW, typically 60-100 Ry; for LCAO, this controls auxiliary grid (50-100 Ry usually sufficient)
-- **K-points**: consistent with cell size; denser for metals
+- **ecutwfc**: for PW, typically 60-100 Ry (lower end for simple sp-elements, higher for d/f-elements); for LCAO, this controls auxiliary grid (50-100 Ry usually sufficient)
+- **K-points**: consistent with cell size; denser for metals. **For supercells: always use `kspacing` in INPUT, not a KPT file.**
+- **scf_nmax**: standard value is `100`. Do not increase to 200 unless you have a specific convergence problem.
 - **scf_thr**: typically 1.0e-7 or tighter for production
 - **Pseudopotential + orbital consistency**: PP and orbital files must match (same element, same exchange-correlation type)
 - **LCAO orbital quality**: choose orbital radius and completeness appropriate for accuracy needs (e.g. `DZP` for production, `SZV` for testing)

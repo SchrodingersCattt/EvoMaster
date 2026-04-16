@@ -172,6 +172,16 @@ def main() -> int:
         help="Max number of plan items to run (after expand); for smoke tests",
     )
     parser.add_argument(
+        "--k",
+        type=int,
+        default=3,
+        metavar="N",
+        help=(
+            "Repeat each question N times (repeat_idx 0..N-1); overrides ``k`` in "
+            "--eval-config (default: %(default)s)."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print plan only, do not invoke devshell",
@@ -301,6 +311,9 @@ def main() -> int:
     if args.jobs < 1:
         print("error: --jobs must be >= 1", file=sys.stderr)
         return 2
+    if args.k < 1:
+        print("error: --k must be >= 1", file=sys.stderr)
+        return 2
     py = args.python or Path(sys.executable)
 
     sys.path.insert(0, str(REPO_ROOT))
@@ -318,16 +331,19 @@ def main() -> int:
     if args.slices is not None:
         slices_override = [s.model_dump() for s in parse_slices_expression(args.slices)]
 
+    merge_overrides: dict = {
+        "question_bank_dir": (
+            str(args.question_bank_dir) if args.question_bank_dir else None
+        ),
+        "include_slices": slices_override,
+        "include_question_ids": args.questions,
+        "exclude_question_ids": args.exclude_question_ids,
+    }
+    merge_overrides["k"] = int(args.k)
+
     cfg_dict = _merge_eval_config(
         args.eval_config if args.eval_config.is_file() else None,
-        {
-            "question_bank_dir": (
-                str(args.question_bank_dir) if args.question_bank_dir else None
-            ),
-            "include_slices": slices_override,
-            "include_question_ids": args.questions,
-            "exclude_question_ids": args.exclude_question_ids,
-        },
+        merge_overrides,
     )
 
     # Lazy imports after potential chdir

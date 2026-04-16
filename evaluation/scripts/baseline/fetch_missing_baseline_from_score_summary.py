@@ -36,15 +36,15 @@ def _read_id_whitelist(path: Path) -> frozenset[str]:
 def main() -> int:
     p = argparse.ArgumentParser(
         description=(
-            "List active catalog question_ids where baseline score for --channel is null "
-            "(from tools-server score-summary)."
+            "List active catalog question_ids where the channel has no baseline row "
+            "(score-summary: ``*_passed`` is null or absent)."
         )
     )
     p.add_argument(
         "--channel",
         choices=["claude_code", "cursor", "codex"],
         default="claude_code",
-        help="Baseline channel column to check (default: claude_code).",
+        help="Baseline channel to check (default: claude_code; matches score-summary columns).",
     )
     p.add_argument(
         "--intersect-file",
