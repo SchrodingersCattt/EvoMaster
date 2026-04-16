@@ -155,12 +155,15 @@ def _replay_terminal_dedupe_key(event: dict) -> tuple[str, str | None] | None:
 def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
     """Hide replayed run_result when the same task already has a replayable response.
 
-    Live SSE already streamed the final `response` content. After adding
-    persisted complete response segments, replaying the trailing `run_result`
+    Live SSE already streamed the final `response` content. After persisted
+    complete response segments were added, replaying the trailing `run_result`
     would duplicate the final answer after reconnect. We suppress terminal
     events once a replayable `response` has been seen for the same
-    `(task_id, spawn_id)` stream, even if replayable events like
-    `response_figures` appear between `response` and `run_result`.
+    `(task_id, spawn_id)` stream.
+
+    `response_figures` is replayable answer metadata. It may appear before the
+    first response, between response chunks, or after a response. It is kept in
+    replay output and does not reset or suppress the response-seen state.
 
     Dedupe is keyed by (task_id, spawn_id) so a sub-agent `response` does not
     suppress the parent stream's `run_result`.

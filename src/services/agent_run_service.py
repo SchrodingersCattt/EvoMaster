@@ -338,6 +338,34 @@ class AgentRunService:
                 task_id=task_id,
             )
 
+            async def _dispatch_response_figures_if_dirty(reason: str) -> None:
+                response_figures_event = (
+                    figure_accumulator.build_snapshot_event_if_dirty()
+                )
+                if response_figures_event is None:
+                    return
+                try:
+                    await fanout.flush_persistence_barrier()
+                    dispatched = await fanout.dispatch_and_wait_persistence(
+                        response_figures_event
+                    )
+                except Exception:
+                    logger.warning(
+                        'response_figures dispatch failed reason=%s',
+                        reason,
+                        exc_info=True,
+                    )
+                    return
+
+                if dispatched:
+                    figure_accumulator.mark_snapshot_emitted()
+                else:
+                    logger.warning(
+                        'response_figures dispatch reported handler failure '
+                        'reason=%s',
+                        reason,
+                    )
+
             async def _child_event_sink(event: BusEvent) -> None:
                 try:
                     await fanout.dispatch(event)
@@ -454,11 +482,12 @@ class AgentRunService:
                         figure_accumulator.add_tool_result(event)
 
                     if isinstance(event, RunResultEvent) and event.spawn_id is None:
-                        response_figures_event = figure_accumulator.build_event()
-                        if response_figures_event is not None:
-                            await fanout.dispatch(response_figures_event)
+                        await _dispatch_response_figures_if_dirty('final_flush')
 
                     await fanout.dispatch(event)
+
+                    if isinstance(event, ToolResultEvent):
+                        await _dispatch_response_figures_if_dirty('tool_result')
 
                     # Detect terminal event
                     if isinstance(event, RunResultEvent):

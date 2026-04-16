@@ -6,6 +6,8 @@
 
 **Architecture:** 本仓库只实现后端与协议层。Bash 工具在 session 可见目录中产出 `ARTIFACT_DIR` 与 `MANIFEST_PATH`，工具侧 collector 负责校验、上传并把标准化图片描述写入 `ToolResult.payload.figures`，`AgentRunService` 再在 `run_result` 之前汇总出一次性的 `response_figures` 事件。下游 Web 侧边栏与 PDF 渲染器消费这个正式事件，不在本仓库实现 UI。
 
+**Superseded behavior note:** This original plan implemented a one-shot `response_figures` event before `run_result`. The approved 2026-04-16 early-render design changes that behavior to incremental complete snapshots: the backend may emit `response_figures` immediately after parent tool results produce uploaded figures, and may emit multiple snapshots for the same `invocation_id`.
+
 **Tech Stack:** Python 3.13（`uv run`）, Pydantic, MatMaster session abstraction（local/SSH）, Aliyun OSS helper, SSE `ag-ui`, pytest
 
 ---
