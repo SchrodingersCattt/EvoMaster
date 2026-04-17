@@ -25,14 +25,18 @@ from src.base.base_res import BaseResponse
 
 
 class SessionListQuery(BaseModel):
-    """GET /chat/sessions/list 查询参数（分页）"""
+    """GET /chat/sessions/list 查询参数：按 session_directory 聚合"""
 
-    limit: int = Field(default=20, ge=1, le=100, description='每页条数')
-    offset: int = Field(default=0, ge=0, description='偏移量')
-    project_id: int | None = Field(
-        default=None,
-        description='项目 ID；传入后只返回该项目下的会话，不传则返回当前用户全部会话。',
+    project_id: int = Field(
+        ...,
+        description='项目 ID；只返回该项目下的会话。',
         examples=[42],
+    )
+    max_sessions: int = Field(
+        default=500,
+        ge=1,
+        le=2000,
+        description='按创建时间倒序最多加载多少条会话再分组',
     )
 
 
@@ -48,16 +52,33 @@ class SessionItem(BaseModel):
     first_user_message: str | None = None  # 第一条用户消息
 
 
-class SessionListResponse(BaseModel):
-    """GET /chat/sessions/list 列表数据（放在 data 字段内）；分页时含 total、has_more。"""
+class SessionDirectoryGroup(BaseModel):
+    """按 session_directory 聚合的一组会话"""
 
+    session_directory: str | None = Field(
+        default=None,
+        description='该组绑定的工作区目录；未设置目录的会话归在 session_directory=null',
+    )
     sessions: list[SessionItem]
-    total: int | None = None  # 总分页条数，仅分页时返回
-    has_more: bool | None = None  # 是否有更多，仅分页时返回
+
+
+class SessionListResponse(BaseModel):
+    """GET /chat/sessions/list 的 data：按 session_directory 分组"""
+
+    groups: list[SessionDirectoryGroup]
+    total_sessions: int = Field(
+        description='该项目下当前用户的会话总数（不受 max_sessions 截断影响）',
+    )
+    loaded_sessions: int = Field(
+        description='本次实际加载并参与分组的会话条数',
+    )
+    truncated: bool = Field(
+        description='为 true 表示因 max_sessions 上限未加载全部会话',
+    )
 
 
 class SessionListApiResponse(BaseResponse[SessionListResponse]):
-    """GET /api/sessions 规范响应：code, msg, data"""
+    """GET /chat/sessions/list 规范响应"""
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -65,17 +86,23 @@ class SessionListApiResponse(BaseResponse[SessionListResponse]):
                 'code': 0,
                 'msg': 'success',
                 'data': {
-                    'sessions': [
+                    'groups': [
                         {
-                            'id': 'session-001',
-                            'project_id': 42,
-                            'status': 'idle',
-                            'history_length': 6,
-                            'first_user_message': '帮我分析这个材料结构',
+                            'session_directory': '/share/run1',
+                            'sessions': [
+                                {
+                                    'id': 'session-001',
+                                    'project_id': 42,
+                                    'status': 'idle',
+                                    'history_length': 4,
+                                    'first_user_message': '分析结构',
+                                }
+                            ],
                         }
                     ],
-                    'total': 1,
-                    'has_more': False,
+                    'total_sessions': 10,
+                    'loaded_sessions': 10,
+                    'truncated': False,
                 },
             }
         }

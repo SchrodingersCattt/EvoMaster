@@ -1,5 +1,6 @@
 import logging
 import threading
+from collections import defaultdict
 from functools import lru_cache
 
 from src.dao.chat_sessions_table import (
@@ -162,6 +163,70 @@ class ChatSessionsService:
         )
         total = self.table.count_sessions_by_user(user_id, project_id=project_id)
         return sessions, total
+
+    def list_sessions_grouped_by_directory(
+        self,
+        user_id: str,
+        project_id: int,
+        max_sessions: int,
+    ) -> dict:
+        """
+        按 session_directory 聚合某项目下的会话（单接口返回）。
+        先按 created_at 倒序最多取 max_sessions 条，再分组；组内按 updated_at 倒序。
+        未设置目录的会话归为一组 session_directory=null，且排在最后。
+        """
+        cap = max(1, min(2000, max_sessions))
+        total = self.table.count_sessions_by_user(user_id, project_id=project_id)
+        rows = self.table.list_sessions_for_project_with_workspace(
+            user_id, project_id, cap
+        )
+        loaded = len(rows)
+        truncated = total > loaded
+
+        def norm_dir(v: object) -> str | None:
+            if v is None:
+                return None
+            s = str(v).strip()
+            return s if s else None
+
+        def row_ts(row: dict) -> float:
+            u = row.get('updated_at')
+            if u is None:
+                return 0.0
+            if hasattr(u, 'timestamp'):
+                return float(u.timestamp())
+            return 0.0
+
+        buckets: dict[str | None, list[dict]] = defaultdict(list)
+        for r in rows:
+            buckets[norm_dir(r.get('session_directory'))].append(r)
+
+        unset = None in buckets
+        dir_keys = [k for k in buckets if k is not None]
+        dir_keys.sort(key=lambda k: -max(row_ts(s) for s in buckets[k]))
+        ordered = dir_keys + ([None] if unset else [])
+
+        groups: list[dict] = []
+        for dk in ordered:
+            items = sorted(buckets[dk], key=row_ts, reverse=True)
+            sessions = [
+                {
+                    'id': x['id'],
+                    'project_id': x.get('project_id'),
+                    'status': x.get('status', 'idle'),
+                    'history_length': x['history_length'],
+                    'first_user_message': x.get('first_user_message'),
+                }
+                for x in items
+            ]
+            groups.append({'session_directory': dk, 'sessions': sessions})
+
+        return {
+            'groups': groups,
+            'total_sessions': total,
+            'loaded_sessions': loaded,
+            'truncated': truncated,
+        }
 
     def get_active_sessions_count(self) -> int:
         """返回所有用户的活跃会话数量（status='active'），不限于当前用户。"""
