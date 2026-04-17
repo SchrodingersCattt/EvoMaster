@@ -320,12 +320,37 @@ def list_images(
     else:
         filtered = all_images
 
+    # Split into private (has direct url) and public (needs version lookup).
+    # Private images from /openapi/v2/image/private carry a ready-to-use `url`
+    # field; querying the public version endpoint with a private image id returns
+    # nothing, so we short-circuit and build the version entry inline.
+    private_results: list[dict[str, Any]] = []
     to_fetch: list[tuple[Any, str, str]] = []
     for record in filtered[:max_results]:
         img_id = record.get("id") or record.get("imageId")
-        if img_id is not None:
-            name = record.get("name") or record.get("imageName") or ""
-            description = record.get("description") or ""
+        if img_id is None:
+            continue
+        name = record.get("name") or record.get("imageName") or ""
+        description = record.get("description") or ""
+        direct_url = record.get("url") or ""
+        if direct_url:
+            entry: dict[str, Any] = {"url": direct_url}
+            ver_str = name.split(":")[-1] if ":" in name else ""
+            if ver_str:
+                entry["version"] = ver_str
+            size = record.get("size") or ""
+            if size:
+                entry["size"] = size
+            result: dict[str, Any] = {
+                "id": img_id,
+                "name": name,
+                "versions": [entry],
+                "private": True,
+            }
+            if description:
+                result["description"] = description
+            private_results.append(result)
+        else:
             to_fetch.append((img_id, name, description))
 
     def _fetch_versions(item: tuple[Any, str, str]) -> dict[str, Any]:
@@ -367,7 +392,9 @@ def list_images(
         return result
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(_fetch_versions, to_fetch))
+        public_results = list(pool.map(_fetch_versions, to_fetch))
+
+    results = public_results + private_results
 
     return {
         "success": True,
