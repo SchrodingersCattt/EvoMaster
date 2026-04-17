@@ -7,7 +7,6 @@ post-processing.
 
 import asyncio
 import gc
-import inspect
 import logging
 import os
 import time

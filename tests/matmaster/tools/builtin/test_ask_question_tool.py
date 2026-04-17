@@ -318,9 +318,7 @@ class TestAskQuestionBridge:
         )
 
         try:
-            asyncio.run(
-                bridge.ask(request_id="aq_cancel", questions=[], metadata=None)
-            )
+            asyncio.run(bridge.ask(request_id="aq_cancel", questions=[], metadata=None))
         except asyncio.CancelledError:
             pass
         else:

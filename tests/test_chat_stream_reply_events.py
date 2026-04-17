@@ -1,0 +1,32 @@
+from unittest.mock import MagicMock, patch
+
+
+def test_publish_reply_event_broadcasts_locally_and_publishes_redis() -> None:
+    from src.services.stream_service import ChatStreamService, StreamQueueManager
+
+    queue_manager = StreamQueueManager()
+    service = ChatStreamService(
+        sessions_service=MagicMock(),
+        events_service=MagicMock(),
+        agent_run_service=MagicMock(),
+        deploy_state_service=MagicMock(),
+        queue_manager=queue_manager,
+    )
+    subscriber = queue_manager.register_subscriber("sess-1")
+    fake_redis = MagicMock()
+
+    payload = {
+        "source": "User",
+        "type": "ask_question_reply",
+        "content": {"request_id": "aq_1", "answers": {}, "annotations": {}},
+        "session_id": "sess-1",
+    }
+
+    with (
+        patch("src.services.stream_service.REDIS_URL", "redis://test"),
+        patch("src.services.stream_service.get_redis_dao", return_value=fake_redis),
+    ):
+        service.publish_reply_event("sess-1", payload)
+
+    assert subscriber.get_nowait() == payload
+    fake_redis.publish_stream_event.assert_called_once_with("sess-1", payload)

@@ -629,9 +629,7 @@ class ChatStreamService:
         req_fields = req.model_dump(exclude_unset=True)
         self._sessions_service.ensure_session(sid, user_id=user_id)
 
-        resolved_directory = SessionDirectoryResolver(
-            self._sessions_service
-        ).resolve(
+        resolved_directory = SessionDirectoryResolver(self._sessions_service).resolve(
             session_id=sid,
             request_directory=req.directory,
             request_directory_provided="directory" in req_fields,
