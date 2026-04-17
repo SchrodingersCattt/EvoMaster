@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
+from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
+
 from src.dao.redis_dao import (
     INTERACTION_CANCEL_VALUE,
     STREAM_CHANNEL_PREFIX,
@@ -624,9 +626,9 @@ class ChatStreamService:
         if not acquired_ok:
             return None
 
-        mode = (req.mode or 'direct').strip().lower() or 'direct'
-        if mode not in ('direct', 'planner'):
-            mode = 'direct'
+        mode = (req.mode or DEFAULT_MODE).strip().lower() or DEFAULT_MODE
+        if mode not in SUPPORTED_MODES:
+            mode = DEFAULT_MODE
 
         llm = (req.llm or '').strip() or None
         model = (
