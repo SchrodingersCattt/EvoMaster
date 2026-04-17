@@ -13,11 +13,14 @@ def test_chat_session_list_openapi_contains_project_filter_and_user_header():
     operation = schema['paths']['/api/v1/chat/sessions/list']['get']
 
     project_param = _get_parameter(operation, 'project_id', 'query')
+    max_sessions_param = _get_parameter(operation, 'max_sessions', 'query')
     user_header = _get_parameter(operation, 'X-User-Id', 'header')
 
     assert operation['summary'] == '查询会话列表'
     assert project_param is not None
-    assert project_param['required'] is False
+    assert project_param['required'] is True
+    assert max_sessions_param is not None
+    assert max_sessions_param['required'] is False
     assert user_header is not None
     assert user_header['required'] is True
 

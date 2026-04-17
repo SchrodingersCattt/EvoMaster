@@ -313,11 +313,14 @@ class ChatSessionsTable(BaseTable):
                 if project_id is not None:
                     where_clause += ' AND s.project_id = %s'
                     params.append(int(project_id))
+                # 不要用 LEFT JOIN 全表事件再 COUNT：事件多时中间结果爆炸。history_length 用标量子查询按 session_id 计数。
                 sql = f'''
                     SELECT s.session_id,
                            s.project_id,
                            s.status,
-                           COUNT(e.id) as history_length,
+                           (SELECT COUNT(*)
+                            FROM evo_chat_events e_cnt
+                            WHERE e_cnt.session_id = s.session_id) as history_length,
                            (SELECT e2.content
                             FROM evo_chat_events e2
                             WHERE e2.session_id = s.session_id
@@ -326,9 +329,7 @@ class ChatSessionsTable(BaseTable):
                             ORDER BY e2.created_at ASC
                             LIMIT 1) as first_message
                     FROM {self.table_name} s
-                    LEFT JOIN evo_chat_events e ON s.session_id = e.session_id
                     {where_clause}
-                    GROUP BY s.session_id, s.project_id, s.status
                     ORDER BY s.created_at DESC
                     LIMIT %s OFFSET %s
                 '''
@@ -363,6 +364,75 @@ class ChatSessionsTable(BaseTable):
                             'status': row.get('status', 'idle'),
                             'history_length': row['history_length'],
                             'first_user_message': first_user_message,
+                        }
+                    )
+                return sessions
+
+    def list_sessions_for_project_with_workspace(
+        self,
+        user_id: str,
+        project_id: int,
+        limit: int,
+    ) -> list[dict]:
+        """
+        列出某项目下当前用户的会话，含 session_directory、updated_at，用于按目录聚合。
+        按 created_at 倒序，最多返回 limit 条。
+        """
+        limit = max(1, min(2000, limit))
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                where_clause = 'WHERE s.user_id = %s AND s.project_id = %s'
+                params: list[object] = [user_id, int(project_id)]
+                sql = f'''
+                    SELECT s.session_id,
+                           s.project_id,
+                           s.status,
+                           s.session_directory,
+                           s.updated_at,
+                           (SELECT COUNT(*)
+                            FROM evo_chat_events e_cnt
+                            WHERE e_cnt.session_id = s.session_id) as history_length,
+                           (SELECT e2.content
+                            FROM evo_chat_events e2
+                            WHERE e2.session_id = s.session_id
+                              AND e2.source = 'User'
+                              AND e2.type = 'query'
+                            ORDER BY e2.created_at ASC
+                            LIMIT 1) as first_message
+                    FROM {self.table_name} s
+                    {where_clause}
+                    ORDER BY s.created_at DESC
+                    LIMIT %s
+                '''
+                params.append(limit)
+                cursor.execute(sql, tuple(params))
+                results = cursor.fetchall()
+                sessions = []
+                for row in results:
+                    first_user_message = None
+                    if row.get('first_message'):
+                        try:
+                            content = json.loads(row['first_message'])
+                            if isinstance(content, str):
+                                first_user_message = content
+                            else:
+                                first_user_message = str(content)
+                        except (json.JSONDecodeError, TypeError):
+                            first_user_message = (
+                                str(row['first_message'])
+                                if row['first_message']
+                                else None
+                            )
+
+                    sessions.append(
+                        {
+                            'id': row['session_id'],
+                            'project_id': row.get('project_id'),
+                            'status': row.get('status', 'idle'),
+                            'history_length': row['history_length'],
+                            'first_user_message': first_user_message,
+                            'session_directory': row.get('session_directory'),
+                            'updated_at': row.get('updated_at'),
                         }
                     )
                 return sessions

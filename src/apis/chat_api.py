@@ -16,7 +16,6 @@ from src.models.chat import (
     SessionDirectoryApiResponse,
     SessionDirectoryData,
     SessionDirectorySetRequest,
-    SessionItem,
     SessionListApiResponse,
     SessionListQuery,
     SessionListResponse,
@@ -87,8 +86,9 @@ def _session_workspace_data_from_row(row: dict) -> SessionDirectoryData:
     '/list',
     response_model=SessionListApiResponse,
     summary='查询会话列表',
-    description='按当前登录用户查询会话列表，支持分页和按 `project_id` 过滤。'
-    ' 当传入 `project_id` 时，仅返回该项目下的会话。',
+    description='按当前登录用户查询会话列表，必须传 `project_id`。'
+    ' 返回结果按 `session_directory` 分组；未设置目录的会话在 `session_directory=null` 组，且该组在最后。'
+    ' `max_sessions` 控制按创建时间倒序最多加载多少条再分组。',
     operation_id='listChatSessions',
     responses={
         401: COMMON_ERROR_RESPONSES[401],
@@ -99,20 +99,14 @@ def list_sessions(
     user_id: str = Depends(UserService.require_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
 ):
-    """会话列表，分页：首屏传 limit=20&offset=0，「加载更多」时增大 offset。"""
-    sessions, total = chat_svc.list_sessions(
+    """按工作区目录聚合的会话列表。"""
+    raw = chat_svc.list_sessions_grouped_by_directory(
         user_id=user_id,
-        limit=query.limit,
-        offset=query.offset,
         project_id=query.project_id,
+        max_sessions=query.max_sessions,
     )
-    has_more = query.offset + len(sessions) < total
     return SessionListApiResponse(
-        data=SessionListResponse(
-            sessions=[SessionItem.model_validate(s) for s in sessions],
-            total=total,
-            has_more=has_more,
-        ),
+        data=SessionListResponse.model_validate(raw),
     )
 
 
