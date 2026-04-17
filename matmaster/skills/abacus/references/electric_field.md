@@ -9,13 +9,10 @@ efield_dir 2
 efield_pos_max 0.0
 efield_pos_dec 0.1
 efield_amp 0.0
-symmetry 0
 ```
 - `efield_flag 1` + `dip_cor_flag 1` + `efield_amp 0.0` = pure dipole correction.
-- **`symmetry 0`**: mandatory for dipole correction — symmetry operations conflict with the sawtooth potential.
 - `efield_dir`: 0=x, 1=y, 2=z. Set to vacuum direction.
 - `efield_pos_max`, `efield_pos_dec`: position and decay (fractional coords) of sawtooth correction in vacuum.
-- When STRU/KPT files have non-default names (e.g. `base_h2o.stru`, `KPT_dipole`), INPUT **must** include `stru_file <name>` and `kpoint_file <name>`.
 
 ## Finite External Electric Field
 ```

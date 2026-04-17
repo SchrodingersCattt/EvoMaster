@@ -66,7 +66,7 @@ uv run python scripts/diagnose_input.py --software abacus --input INPUT
 | **cell-relax** | `cal_force 1`, `cal_stress 1`, `force_thr_ev 0.01`, `stress_thr 0.5`, `relax_nmax 100` |
 | **SCF → NSCF** | SCF: `out_chg 1`; NSCF: `init_chg file`, `symmetry 0`, `nbands <N>`, `out_band 1` or `out_dos 1` |
 | **work function** | `out_pot 2` |
-| **dipole correction** | `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_pos_max`, `efield_pos_dec`, `efield_amp 0.0`, **`symmetry 0`** |
+| **dipole correction** | `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_pos_max`, `efield_pos_dec`, `efield_amp 0.0` |
 | **spin-polarized** | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` |
 | **supercell/vacancy/BSSE** | `kspacing 0.10` inside INPUT |
 
@@ -86,7 +86,7 @@ For Bohrium: write `run.sh` that runs both steps sequentially. Details in `refer
 
 ## Electric Field & Dipole Correction
 
-See `references/electric_field.md`. Key: dipole correction = `efield_flag 1` + `dip_cor_flag 1` + `efield_amp 0.0` + **`symmetry 0`**. Work function: `out_pot 2`. For isolated molecules or slabs with large vacuum, use Gamma-only KPT (`1 1 1 0 0 0`).
+See `references/electric_field.md`. Key: dipole correction = `efield_flag 1` + `dip_cor_flag 1` + `efield_amp 0.0`. Work function: `out_pot 2`.
 
 ## STRU Pre-flight Checklist
 
