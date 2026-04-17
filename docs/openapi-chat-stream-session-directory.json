@@ -1,0 +1,494 @@
+{
+  "components": {
+    "schemas": {
+      "ChatSendRequest": {
+        "description": "不传或 `content` 为空 → 仅订阅；有 `content` → 发送。",
+        "properties": {
+          "bohrium_project_id": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "bohrium_user_id": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "content": {
+            "default": "",
+            "description": "用户消息；空为仅订阅",
+            "type": "string"
+          },
+          "directory": {
+            "description": "本轮工作区目录（写入历史）；持久化请用 PUT session-directory",
+            "maxLength": 2048,
+            "nullable": true,
+            "type": "string"
+          },
+          "files": {
+            "description": "附件 URL 列表（如 OSS）",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "images": {
+            "description": "图片 URL（vision）",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "llm": {
+            "nullable": true,
+            "type": "string"
+          },
+          "mode": {
+            "default": "direct",
+            "description": "任务模式",
+            "enum": [
+              "direct",
+              "planner"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "nullable": true,
+            "type": "string"
+          },
+          "workspace_paths": {
+            "description": "工作区路径列表",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ErrorApiResponse": {
+        "properties": {
+          "code": {
+            "example": 403,
+            "type": "integer"
+          },
+          "data": {
+            "nullable": true
+          },
+          "msg": {
+            "example": "无权限访问该会话",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "msg"
+        ],
+        "type": "object"
+      },
+      "SessionDirectoryApiResponse": {
+        "properties": {
+          "code": {
+            "example": 0,
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SessionDirectoryData"
+          },
+          "msg": {
+            "example": "success",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "msg"
+        ],
+        "type": "object"
+      },
+      "SessionDirectoryData": {
+        "properties": {
+          "directory": {
+            "description": "绑定目录（如远端 /share/...）；未设置为 null",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SessionDirectorySetRequest": {
+        "properties": {
+          "directory": {
+            "description": "绑定路径；null 或空字符串清除",
+            "maxLength": 2048,
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "可导入 Apifox 的子集：统一 SSE 流（stream）与会话工作区目录（session-directory）。完整 Schema 以运行中服务的 /openapi.json 为准。\n\n**SSE**：`POST .../stream` 成功时 `Content-Type: text/event-stream`，事件名为 `ag-ui`，`data` 为 JSON 字符串。详见仓库 `src/models/chat.py` 顶部 ag-ui 说明。",
+    "title": "MatMaster-Evo — Chat Stream & Session Directory",
+    "version": "1.0.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/api/v1/chat/sessions/{session_id}/session-directory": {
+      "get": {
+        "description": "返回持久化字段 `session_directory`。已分享可读；未分享需所有者或 admin 只读白名单。",
+        "operationId": "getChatSessionDirectory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-User-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDirectoryApiResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiResponse"
+                }
+              }
+            },
+            "description": "无权限"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiResponse"
+                }
+              }
+            },
+            "description": "会话不存在"
+          }
+        },
+        "summary": "查询会话绑定的工作区目录",
+        "tags": [
+          "Chat Sessions"
+        ]
+      },
+      "put": {
+        "description": "仅所有者可写；`directory` 为 null 或空字符串表示清除。",
+        "operationId": "setChatSessionDirectory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "必填：会话所有者",
+            "in": "header",
+            "name": "X-User-Id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionDirectorySetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDirectoryApiResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiResponse"
+                }
+              }
+            },
+            "description": "缺少 X-User-Id"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiResponse"
+                }
+              }
+            },
+            "description": "会话不存在或非所有者"
+          }
+        },
+        "summary": "设置会话绑定的工作区目录",
+        "tags": [
+          "Chat Sessions"
+        ]
+      }
+    },
+    "/api/v1/chat/sessions/{session_id}/stream": {
+      "post": {
+        "description": "统一 SSE。`content` 为空或不传 body → 仅订阅（历史 + 心跳等）；`content` 非空 → 发送并入队 Worker，返回本轮 SSE。\n\n可选 Header：`X-User-Id`（可选）、`X-Org-Id`（可选）。\n\n发送消息需配置服务端 `REDIS_URL`，否则 503。",
+        "operationId": "streamChatSession",
+        "parameters": [
+          {
+            "description": "会话 ID",
+            "example": "session-001",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "用户 ID；未分享会话通常需要",
+            "in": "header",
+            "name": "X-User-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "组织 ID",
+            "in": "header",
+            "name": "X-Org-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "examples": {
+                "send": {
+                  "summary": "发送消息",
+                  "value": {
+                    "bohrium_project_id": 42,
+                    "content": "请总结项目 42 下最近一次实验结果",
+                    "directory": "/share/workspace/run1",
+                    "mode": "direct"
+                  }
+                },
+                "subscribe_only": {
+                  "summary": "仅订阅",
+                  "value": {
+                    "content": "",
+                    "mode": "direct"
+                  }
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ChatSendRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "SSE 文本帧序列",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "SSE 流（text/event-stream）。每条：`event: ag-ui` + `data: {JSON}`。"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiResponse"
+                }
+              }
+            },
+            "description": "缺少或无效的 X-User-Id（部分场景）"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiResponse"
+                }
+              }
+            },
+            "description": "无权限、分享页禁止发送、或当日额度用尽"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiResponse"
+                }
+              }
+            },
+            "description": "会话已有任务在运行"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiResponse"
+                }
+              }
+            },
+            "description": "未配置 REDIS_URL 时无法发送消息（仅订阅不受影响）"
+          }
+        },
+        "summary": "发送消息或订阅会话流",
+        "tags": [
+          "Chat Sessions"
+        ]
+      }
+    },
+    "/pubapi/v1/chat/sessions/{session_id}/stream": {
+      "post": {
+        "description": "与 `POST /api/v1/.../stream` 相同，但**禁止**请求体中带非空 `content`（否则 403）。用于网关免鉴权分享页。",
+        "operationId": "shareStreamChatSession",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-User-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Org-Id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatSendRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "SSE 流"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiResponse"
+                }
+              }
+            },
+            "description": "尝试发送消息或无权访问"
+          }
+        },
+        "summary": "[分享页] 订阅会话流（只读）",
+        "tags": [
+          "Share (public)"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "https://{host}",
+      "variables": {
+        "host": {
+          "default": "api.example.com",
+          "description": "替换为实际网关或直连主机"
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "description": "需鉴权或会话分享态下的对话接口",
+      "name": "Chat Sessions"
+    },
+    {
+      "description": "分享页只读：仅订阅流，禁止发送 content",
+      "name": "Share (public)"
+    }
+  ]
+}
