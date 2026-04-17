@@ -4,7 +4,7 @@
 
 **Goal:** Connect `ChatSendRequest.directory` and `evo_chat_sessions.session_directory` to the Bohrium SSH execution working directory for each run.
 
-**Architecture:** Add a single resolver that owns request-versus-session priority and `/share` POSIX path validation. Stream preparation resolves the effective remote workdir before acquiring a run, persists the resolved metadata with the user query, and passes the validated value through Redis, Worker, `AgentRunService`, and `BohriumSetupService`. SSH uses the resolved workdir as `SSHSessionConfig.working_dir`; local `Playground.prepare()` workspaces, workspace upload rules, and skill sync remote root remain unchanged.
+**Architecture:** Add a single resolver that owns request-versus-session priority and `/share` POSIX path validation. Stream preparation resolves the effective remote workdir before acquiring a run, persists the resolved metadata with the user query, and passes the validated value through Redis, Worker, `AgentRunService`, and `BohriumSetupService`. SSH uses the resolved workdir as `SSHSessionConfig.working_dir` and `SSHSessionConfig.workspace_path`; local `Playground.prepare()` workspaces, `WorkspaceHandler` skip-on-SSH behavior, and skill sync remote root remain unchanged.
 
 **Tech Stack:** FastAPI, Pydantic v2 models, Redis-backed worker queue, pytest, unittest.mock, Bohrium SSH runtime, `uv run` for all Python commands.
 
@@ -25,9 +25,12 @@ The implementation must preserve these decisions:
 - Invalid persistent session directory fails when selected.
 - If an effective directory exists, Bohrium is required and local fallback is forbidden.
 - Missing remote directories are created through SSH setup.
-- Workspace upload stays unchanged: `WorkspaceHandler` uses local `pg_ctx.workdir` and skips upload when SSH is attached.
+- `WorkspaceHandler` stays unchanged: it uses local `pg_ctx.workdir` for snapshots and skips upload when SSH is attached.
+- The SSH session config `workspace_path` follows the selected execution directory. With a selected directory it is `remote_workdir`; without one it remains the default `/share`.
+- `workspace_paths` remain prompt/history metadata. Absolute remote paths such as `/share/project/a.cif` and `/personal/1.cif` keep their original meaning and are not re-rooted under `remote_workdir`.
 - Skill sync stays unchanged: remote skill root remains `remote_project_root`, currently `/share/.matmaster`.
 - No new `session_directory` SSE system event is added in this version.
+- Restart/retry consumers are not implemented in this plan. This plan only preserves `session_directory` metadata in `get_last_user_query()` so a later restart PR can feed it back into `ChatSendRequest.directory`.
 
 ## File Structure
 
@@ -56,6 +59,7 @@ Line-count guard:
 
 - Do not add new tests to `tests/test_chat_stream_direct.py`; it is already 975 lines.
 - Keep changes to `src/services/agent_run_bohrium.py` concise; it is already 989 lines. After Task 6 run `wc -l src/services/agent_run_bohrium.py` and keep the result at 1000 or below.
+- If `src/services/agent_run_bohrium.py` exceeds 1000 lines, move the workdir derivation helper to `src/services/bohrium_run_support.py` as `derive_ssh_working_dir(remote_workdir: str | None, default_root: str) -> str`.
 
 ## Runtime Contract
 
@@ -91,6 +95,16 @@ user_msg["session_directory_source"] = resolved.source
 ```
 
 When `resolved.source == "none"`, do not write either field into `user_msg`.
+
+SSH config fields after setup:
+
+```python
+ssh_working_dir = (remote_workdir or remote_workspace_root).rstrip("/") or "/"
+SSHSessionConfig(
+    working_dir=ssh_working_dir,
+    workspace_path=ssh_working_dir,
+)
+```
 
 ## Task 1: Resolver And `/share` Path Normalization
 
@@ -553,7 +567,7 @@ from src.services.session_directory_service import (
 Add this helper near the chat API route helpers:
 
 ```python
-def _session_directory_error_response(exc: SessionDirectoryError) -> BaseErrorResponse:
+def _session_directory_error(exc: SessionDirectoryError) -> BaseErrorResponse:
     return BaseErrorResponse(
         http_status=exc.http_status,
         code=exc.http_status,
@@ -568,13 +582,15 @@ Change `set_session_directory()` to normalize before calling the service:
     try:
         normalized_directory = normalize_session_directory_for_storage(body.directory)
     except SessionDirectoryError as exc:
-        raise _session_directory_error_response(exc) from exc
+        raise _session_directory_error(exc) from exc
 
     if not chat_svc.set_session_directory(sid, normalized_directory, user_id):
         raise NotFoundErrorResponse(
             msg="Session not found or you are not the owner",
         )
 ```
+
+Use `code=exc.http_status` to match nearby generic `BaseErrorResponse` usage in this API. Directory-specific branching belongs in `data.error_code`.
 
 - [ ] **Step 4: Update public request descriptions**
 
@@ -588,6 +604,13 @@ and:
 
 ```python
 description="可选，本轮 Bohrium 远端 /share 工作目录；不会更新会话持久化目录",
+```
+
+In `src/apis/chat_api.py`, update the stream and session-directory route descriptions to list the public directory error codes:
+
+```python
+directory_invalid_type, directory_invalid_chars, directory_must_be_absolute,
+directory_outside_share, session_directory_invalid
 ```
 
 - [ ] **Step 5: Run focused API and OpenAPI tests, then commit**
@@ -718,6 +741,22 @@ def test_prepare_send_message_invalid_request_directory_does_not_acquire_run():
     assert getattr(exc.value, "error_code") == "directory_outside_share"
     sessions_service.try_acquire_session_run.assert_not_called()
     events_service.add_history_event.assert_not_called()
+
+
+def test_prepare_send_message_invalid_session_directory_does_not_acquire_run():
+    service, sessions_service, events_service = _service("/tmp/bad-default")
+    req = ChatSendRequest(content="run")
+
+    with (
+        patch("src.services.stream_service.REDIS_URL", "redis://test"),
+        patch("src.services.stream_service.get_redis_dao", return_value=MagicMock()),
+    ):
+        with pytest.raises(Exception) as exc:
+            service.prepare_send_message("sess-1", req, user_id="user-1")
+
+    assert getattr(exc.value, "error_code") == "session_directory_invalid"
+    sessions_service.try_acquire_session_run.assert_not_called()
+    events_service.add_history_event.assert_not_called()
 ```
 
 - [ ] **Step 2: Run stream preparation tests and confirm fields are missing**
@@ -731,7 +770,7 @@ uv run pytest tests/test_chat_stream_session_directory.py -q
 Expected:
 
 ```text
-4 failed
+5 failed
 ```
 
 At least one failure mentions that `SendStreamContext` has no `remote_workdir`.
@@ -808,10 +847,10 @@ In the stream endpoint, wrap `prepare_send_message()`:
     try:
         ctx = stream_svc.prepare_send_message(sid, req, user_id, org_id=org_id)
     except SessionDirectoryError as exc:
-        raise _session_directory_error_response(exc) from exc
+        raise _session_directory_error(exc) from exc
 ```
 
-This keeps invalid request directories as normal `BaseErrorResponse` JSON with `data.error_code`.
+This keeps invalid request directories and invalid selected session defaults as normal `BaseErrorResponse` JSON with `data.error_code`.
 
 - [ ] **Step 6: Write failing Redis job payload test**
 
@@ -905,7 +944,7 @@ git commit -m "feat: resolve session directory during stream enqueue"
 Expected:
 
 ```text
-6 passed
+7 passed
 ```
 
 ## Task 4: Persist Directory Metadata In User Query History
@@ -951,7 +990,6 @@ def test_add_history_event_persists_session_directory_metadata_without_files():
     stored_content = table.add_event.call_args.args[3]
     assert stored_content == {
         "content": "run",
-        "mode": "direct",
         "session_directory": "/share/case",
         "session_directory_source": "request",
     }
@@ -1015,8 +1053,6 @@ In `src/services/events_service.py`, replace the existing user-query metadata co
             and any(payload.get(key) for key in query_metadata_keys)
         ):
             content = {"content": content}
-            if payload.get("mode"):
-                content["mode"] = payload["mode"]
             if payload.get("files"):
                 content["files"] = list(payload["files"])
             if payload.get("images"):
@@ -1093,7 +1129,6 @@ def test_get_last_user_query_returns_session_directory_metadata():
             "content": json.dumps(
                 {
                     "content": "run",
-                    "mode": "direct",
                     "session_directory": "/share/case",
                     "session_directory_source": "request",
                 }
@@ -1131,6 +1166,8 @@ In the string-content branch, include:
 ```
 
 Update the docstrings in `src/services/events_service.py` and `src/dao/chat_events_table.py` to mention `images`, `session_directory`, and `session_directory_source`.
+
+Do not add new `mode` persistence in this task. `get_last_user_query()` already reads `mode` when old rows contain it and defaults to `"direct"` when they do not; changing mode persistence should stay in a separate PR.
 
 - [ ] **Step 7: Run history tests and commit**
 
@@ -1433,22 +1470,46 @@ TypeError
 
 - [ ] **Step 6: Add `remote_workdir` through `BohriumSetupService`**
 
-In `src/services/agent_run_bohrium.py`, add `remote_workdir: str | None = None` to:
+In `src/services/agent_run_bohrium.py`, add `remote_workdir: str | None = None` to all four call sites:
 
 - `BohriumSetupService.run_setup()`
 - `BohriumSetupService._run_setup_sync()`
-- `BohriumSetupService._setup_bohrium_for_run()`
+- `BohriumSetupService._setup_bohrium_for_run()` instance wrapper
+- module-level `_setup_bohrium_for_run()`
 
 Pass it through each call.
 
-Inside `_setup_bohrium_for_run()`, replace the workdir derivation with:
+In the `BohriumSetupService._setup_bohrium_for_run()` instance wrapper, forward the value to the module function:
+
+```python
+            remote_workdir=remote_workdir,
+```
+
+Inside the module-level `_setup_bohrium_for_run()`, replace the workdir derivation with:
 
 ```python
             remote_workspace_root = _remote_session_workspace_root()
-            ssh_working_dir = (remote_workdir or remote_workspace_root).rstrip() or "/"
+            ssh_working_dir = (remote_workdir or remote_workspace_root).rstrip("/") or "/"
 ```
 
 Keep `remote_workspace_root` as `_remote_session_workspace_root()` so runtime metadata still records the project-scoped root separately from the selected execution directory.
+
+If adding signatures pushes `src/services/agent_run_bohrium.py` over 1000 lines, move this exact helper to `src/services/bohrium_run_support.py` and import it:
+
+```python
+def derive_ssh_working_dir(remote_workdir: str | None, default_root: str) -> str:
+    selected = remote_workdir or default_root
+    return selected.rstrip("/") or "/"
+```
+
+Then use:
+
+```python
+            ssh_working_dir = derive_ssh_working_dir(
+                remote_workdir,
+                remote_workspace_root,
+            )
+```
 
 Keep skill sync target unchanged:
 
@@ -1467,6 +1528,17 @@ In `matmaster/sessions/ssh.py`, replace the current `mkdir -p` call in `open()`:
         )
         if init_result.get("exit_code") != 0:
             detail = init_result.get("stderr") or init_result.get("stdout") or ""
+            try:
+                if self._sftp_pool is not None:
+                    self._sftp_pool.close_all()
+            finally:
+                self._sftp_pool = None
+                if self._client is not None:
+                    try:
+                        self._client.close()
+                    except Exception:
+                        pass
+                self._client = None
             raise RuntimeError(
                 f"Failed to initialize SSH working directory {self._workdir}: {detail}"
             )
@@ -1492,25 +1564,36 @@ def test_open_creates_and_verifies_configured_workdir(mock_paramiko):
     )
     session = SSHSession(config)
 
-    session.open()
+    with patch.object(
+        session,
+        "_ssh_exec",
+        return_value={"exit_code": 0, "stdout": "", "stderr": ""},
+    ) as ssh_exec:
+        session.open()
 
-    mock_paramiko["client"].exec_command.assert_called_with(
-        "mkdir -p /share/case && test -d /share/case",
-        timeout=config.timeout,
-    )
+    ssh_exec.assert_called_once_with("mkdir -p /share/case && test -d /share/case")
 
 
 def test_open_raises_when_workdir_initialization_fails(ssh_config, mock_paramiko):
     from matmaster.sessions.ssh import SSHSession
 
-    mock_paramiko["channel"].recv_exit_status.return_value = 1
-    mock_paramiko["stderr"].read.return_value = b"not a directory"
     session = SSHSession(ssh_config)
 
-    with pytest.raises(RuntimeError, match="Failed to initialize SSH working directory"):
-        session.open()
+    with patch.object(
+        session,
+        "_ssh_exec",
+        return_value={"exit_code": 1, "stdout": "", "stderr": "not a directory"},
+    ):
+        with pytest.raises(
+            RuntimeError,
+            match="Failed to initialize SSH working directory",
+        ):
+            session.open()
 
     assert session.is_open is False
+    assert session._sftp_pool is None
+    assert session._client is None
+    mock_paramiko["client"].close.assert_called_once()
 ```
 
 - [ ] **Step 9: Run focused runtime tests and line-count check**
@@ -1632,10 +1715,12 @@ git diff HEAD~6..HEAD -- src/services/stream_service.py src/worker/agent_worker.
 Confirm these facts in the diff:
 
 - `remote_workdir` appears in stream context, Redis job, worker payload parsing, `run_agent()`, `run_setup()`, and SSH config.
-- `WorkspaceHandler(workspace_path=pg_ctx.workdir)` is unchanged.
+- `WorkspaceHandler(workspace_path=pg_ctx.workdir)` is unchanged and still skips upload when `ssh_attached=True`.
+- `SSHSessionConfig.workspace_path` follows the selected SSH execution directory; this is session config, not a `WorkspaceHandler` local snapshot path.
 - `_sync_skills_to_ssh_session()` still receives `remote_project_root`, not `remote_workdir`.
 - No new `session_directory` SSE event type exists.
 - `POST /stream.directory` is not written to `evo_chat_sessions.session_directory`.
+- No restart/retry caller consumes `session_directory` in this plan; the metadata is only returned by `get_last_user_query()` for a follow-up PR.
 
 - [ ] **Step 5: Commit verification fixes if hooks changed files**
 
@@ -1659,17 +1744,19 @@ Implementation is complete only when all of these are true:
 
 - Invalid request directory returns HTTP 400 with `data.error_code` and does not acquire a run.
 - Invalid persistent session directory returns HTTP 400 when selected by a run.
+- Public directory error codes include `directory_invalid_type`, `directory_invalid_chars`, `directory_must_be_absolute`, `directory_outside_share`, and `session_directory_invalid`.
 - `PUT /session-directory` rejects non-empty paths outside `/share` and does not write them.
 - Blank `POST /stream.directory` falls through to the persistent session default.
 - Selected request/session directory is written to query history as `session_directory` plus `session_directory_source`.
 - `get_session_events()` and `get_last_user_query()` return directory metadata.
+- `get_last_user_query()` metadata is restart-ready, but no restart/retry re-enqueue consumer is implemented in this plan.
 - Redis job carries `remote_workdir`.
 - Worker passes `remote_workdir` to `AgentRunService`.
 - `AgentRunService` forces Bohrium setup when `remote_workdir` is present.
-- `BohriumSetupService` constructs `SSHSessionConfig(working_dir=remote_workdir, workspace_path=remote_workdir)`.
+- When `remote_workdir` is selected, `BohriumSetupService` constructs `SSHSessionConfig(working_dir=remote_workdir, workspace_path=remote_workdir)`.
 - `SSHSession.open()` creates and verifies the configured workdir before marking the session open.
 - `BohriumExecutionContext.execution_workdir` equals the selected remote directory.
 - `BohriumExecutionContext.remote_workspace_root` remains `/share`.
 - Skill sync target remains `remote_project_root`.
-- Local `Playground.prepare()` and `WorkspaceHandler` semantics stay unchanged.
+- Local `Playground.prepare()` and `WorkspaceHandler` semantics stay unchanged: local `pg_ctx.workdir` remains the snapshot path, and `WorkspaceHandler` does not upload when SSH is attached.
 - Focused pytest commands and touched-file pre-commit pass.
