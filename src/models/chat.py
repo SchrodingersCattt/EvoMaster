@@ -17,7 +17,7 @@ ag-ui 协议（前后端约定）：
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.base.base_res import BaseResponse
 
@@ -252,6 +252,23 @@ class ChatPlannerReplyRequest(BaseModel):
             }
         }
     )
+
+
+class ChatAskQuestionReplyRequest(BaseModel):
+    """POST /chat/sessions/{session_id}/ask_question_reply 结构化用户回答。"""
+
+    request_id: str
+    answers: dict[str, str] = Field(default_factory=dict)
+    annotations: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_reply(self) -> "ChatAskQuestionReplyRequest":
+        self.request_id = self.request_id.strip()
+        if not self.request_id:
+            raise ValueError("request_id must not be empty")
+        if not self.answers and not self.annotations:
+            raise ValueError("answers or annotations must be provided")
+        return self
 
 
 class ErrorApiResponse(BaseResponse[None]):

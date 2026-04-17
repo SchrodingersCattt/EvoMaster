@@ -12,6 +12,24 @@ from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
 from matmaster.types.session import Session
 
 
+def test_interaction_bridge_is_accessible_but_excluded_from_dump() -> None:
+    class _Bridge:
+        def __repr__(self) -> str:
+            return "<bridge-with-callbacks>"
+
+    bridge = _Bridge()
+    ctx = PlaygroundContext(
+        workdir=Path("/tmp/work"),
+        session_type="local",
+        cache_area=Path("/tmp/cache"),
+        interaction_bridge=bridge,
+    )
+
+    assert ctx.interaction_bridge is bridge
+    assert "interaction_bridge" not in ctx.model_dump()
+    assert "interaction_bridge" not in ctx.model_dump(mode="json")
+
+
 class TestWorkspaceArchivalConfig:
     def test_frozen(self) -> None:
         cfg = WorkspaceArchivalConfig()
