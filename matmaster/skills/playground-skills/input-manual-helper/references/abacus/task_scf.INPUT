@@ -6,7 +6,7 @@ INPUT_PARAMETERS
 # ============================================================
 
 suffix                  ABACUS
-ntype                   1          # MUST match species count in STRU ATOMIC_SPECIES
+ntype                   1
 calculation             scf
 
 # Pseudopotential and orbital directories

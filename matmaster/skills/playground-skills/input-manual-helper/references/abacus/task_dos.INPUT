@@ -29,9 +29,9 @@ init_chg                file
 smearing_method         gauss
 smearing_sigma          0.015
 
-# SCF settings for NSCF (read fixed charge from SCF)
-scf_thr                 1e-7
-scf_nmax                300
+# SCF (one-shot)
+scf_thr                 1e-9
+scf_nmax                1
 
 # DOS output settings
 out_dos                 1

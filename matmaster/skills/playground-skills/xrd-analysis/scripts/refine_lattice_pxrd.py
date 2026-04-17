@@ -175,11 +175,7 @@ def read_pxrd_data(filepath):
 
 
 def find_pxrd_peaks(two_theta, intensity, min_prominence=None, min_height=None):
-    """Find peaks in PXRD pattern. Returns (peak_positions, prominences).
-
-    Uses adaptive thresholds: if the first attempt finds too few peaks (<5),
-    retries with progressively looser thresholds.
-    """
+    """Find peaks in PXRD pattern. Returns (peak_positions, prominences)."""
     if min_prominence is None:
         min_prominence = max(np.std(intensity) * 1.5, np.median(intensity) * 0.05)
     if min_height is None:
@@ -188,17 +184,6 @@ def find_pxrd_peaks(two_theta, intensity, min_prominence=None, min_height=None):
     indices, props = find_peaks(
         intensity, prominence=min_prominence, height=min_height, distance=3
     )
-
-    # Adaptive retry: loosen thresholds when too few peaks found
-    for factor in (0.5, 0.25, 0.1):
-        if len(indices) >= 5:
-            break
-        indices, props = find_peaks(
-            intensity,
-            prominence=min_prominence * factor,
-            height=min_height * factor,
-            distance=3,
-        )
 
     # Refine positions with parabolic interpolation
     positions = []
