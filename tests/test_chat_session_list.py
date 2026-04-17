@@ -30,7 +30,7 @@ def test_list_sessions_returns_grouped_by_project():
 
     app.dependency_overrides[get_sessions_service] = lambda: mock_chat_svc
     try:
-        client = TestClient(app)
+        client = TestClient(app, lifespan='off')
         response = client.get(
             '/api/v1/chat/sessions/list',
             params={'project_id': 42},
@@ -55,7 +55,7 @@ def test_list_sessions_returns_grouped_by_project():
 
 
 def test_list_sessions_requires_project_id():
-    client = TestClient(app)
+    client = TestClient(app, lifespan='off')
     response = client.get(
         '/api/v1/chat/sessions/list',
         params={'max_sessions': 100},
