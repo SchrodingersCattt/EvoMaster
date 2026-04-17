@@ -360,9 +360,7 @@ class BedrockProvider:
         except ClientError as exc:
             raise self._map_client_error(exc) from exc
         except _BOTOCORE_TRANSIENT_ERRORS as exc:
-            raise LLMError(
-                str(exc), retryable=True, error_category="server"
-            ) from exc
+            raise LLMError(str(exc), retryable=True, error_category="server") from exc
 
         out = raw.get("output") or raw.get("Output") or {}
         msg = out.get("message") or out.get("Message") or {}
@@ -478,11 +476,7 @@ class BedrockProvider:
             except _BOTOCORE_TRANSIENT_ERRORS as exc:
                 # ReadTimeoutError / ConnectTimeoutError / etc. are NOT ClientError;
                 # convert to retryable LLMError so the kernel retry loop can handle them.
-                put_item(
-                    LLMError(
-                        str(exc), retryable=True, error_category="server"
-                    )
-                )
+                put_item(LLMError(str(exc), retryable=True, error_category="server"))
                 put_item(sentinel)
             except Exception as exc:
                 put_item(exc)
