@@ -77,7 +77,7 @@ def _write_events(
                         "type": "tool_call",
                         "tool": "bash",
                         "call_id": "tc-1",
-                        "args": {"command": "python submit_job.py --foo"},
+                        "args": {"command": "python run_calc.py --foo"},
                     },
                     ensure_ascii=False,
                 ),

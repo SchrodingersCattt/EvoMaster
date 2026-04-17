@@ -13,7 +13,7 @@ class TestReplayFilterSkillHit:
         event = {
             "type": "skill_hit",
             "source": "MatMaster",
-            "content": {"skill_name": "bohrium-job"},
+            "content": {"skill_name": "bohrium"},
         }
         assert _should_emit_event_to_sse(event) is False
 

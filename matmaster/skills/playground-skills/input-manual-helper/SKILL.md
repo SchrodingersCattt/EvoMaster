@@ -6,13 +6,13 @@ skill_type: operator
 
 # Input Manual Helper Skill
 
-> **Skip condition**: If the user has already provided a complete, ready-to-run input file for the target software (and it needs no further modification), **skip this skill entirely** and submit: for all supported software, go to **`bohrium-job`** skill and submit via `submit_job.py --input-dir <dir> --cmd "<command>"`.
+> **Skip condition**: If the user has already provided a complete, ready-to-run input file for the target software (and it needs no further modification), **skip this skill entirely** and submit using the built-in **`Bohrium`** tool (`action="submit"`, `input_dir`, `image`, `cmd`, …).
 
 Generate or adapt input files for computational software using **local script generation** (no MCP submit tools exist for this class of workload):
 - **ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS**: Use `render_input.py` and `diagnose_input.py` scripts (within this skill) to generate input files.
 - **PySCF**: Write Python script directly; no input file generation needed — see PySCF section below.
 
-All software route through local generation → `bohrium-job` for remote submission.
+All software route through local generation → built-in **`Bohrium`** tool for remote submission.
 
 ## Routing by engine
 
@@ -25,7 +25,7 @@ All software route through local generation → `bohrium-job` for remote submiss
 | ORCA | Local scripts | `render_input.py` + `diagnose_input.py` |
 | LAMMPS | Local scripts | `render_input.py` + `diagnose_input.py` |
 | GROMACS | Local scripts | `render_input.py` + `diagnose_input.py` |
-| PySCF | Direct run (no prepare) | Write Python script; submit via `bohrium-job` |
+| PySCF | Direct run (no prepare) | Write Python script; submit via **`Bohrium`** (`action="submit"`) |
 
 Use script help and official software documentation as the source of truth; the table above is context only.
 
@@ -59,7 +59,7 @@ uv run python scripts/diagnose_input.py --software abacus --input INPUT
 
 **After generation and diagnosis:**
 - Place INPUT, STRU, KPT, pseudopotentials, and orbital files in one directory.
-- Submit via `bohrium-job` skill with `submit_job.py --input-dir <dir> --image registry.dp.tech/dptech/abacus:LTSv3.10.1 --cmd "OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1"`.
+- Submit with **`Bohrium`**: `action="submit"`, `input_dir="<dir>"`, `image="registry.dp.tech/dptech/abacus:LTSv3.10.1"`, `cmd="OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1"`, `machine="c32_m128_cpu"`.
   (Use half the CPU core count for `-np`; e.g. 32-core machine → `mpirun -np 16`.)
 
 ### CP2K, QE, ABINIT, LAMMPS, ORCA input generation (render_input.py + diagnose_input.py)
@@ -82,7 +82,7 @@ uv run python scripts/diagnose_input.py --software <software_name> --input <inpu
 
 **After generation and diagnosis:**
 - Place all input files (generated + auxiliary files like pseudopotentials, basis sets) in one directory.
-- Submit via `bohrium-job` skill with appropriate image and command for the software.
+- Submit with **`Bohrium`**: `action="submit"`, `input_dir`, `image`, and `cmd` appropriate for the software.
 
 ### GROMACS input generation (render_input.py + diagnose_input.py)
 
@@ -102,11 +102,11 @@ uv run python scripts/render_input.py --software gromacs --task md --output md.m
 **Submit:**
 - Place files in one directory.
 - Run `gmx grompp` locally or remotely to generate `.tpr`.
-- Submit `mdrun` via `bohrium-job` with image `registry.dp.tech/dptech/gromacs:2022.2`.
+- Submit `mdrun` via **`Bohrium`** (`action="submit"`) with `image="registry.dp.tech/dptech/gromacs:2022.2"`.
 
 ### PySCF (direct Python script)
 
-PySCF jobs are Python scripts; no input-file generation is needed. Write the calculation script directly and submit via `bohrium-job`.
+PySCF jobs are Python scripts; no input-file generation is needed. Write the calculation script directly and submit with **`Bohrium`** (`action="submit"`).
 
 **Example PySCF workflow:**
 1. Write Python script (e.g. `run_pyscf.py`) that imports PySCF, loads structure, and runs the calculation.
@@ -117,7 +117,7 @@ PySCF jobs are Python scripts; no input-file generation is needed. Write the cal
    - `method`: `"DFT"` | `"HF"` | `"MP2"` | `"TDHF"`. For DFT, set `functional` (e.g. `"B3LYP"`), `basis` (e.g. `"def2-SVP"`).
    - `properties` (optional): Subset of `["energy","dipole","mo_energies","homo_energy","lumo_energy","gap","density_matrix","mulliken_population"]`.
 3. Place script and structure file in one directory.
-4. Submit via `bohrium-job` skill with `submit_job.py --input-dir <dir> --image <pyscf_image> --cmd "python run_pyscf.py > log 2>&1"`.
+4. Submit with **`Bohrium`**: `action="submit"`, `input_dir="<dir>"`, `image="<pyscf_image>"`, `cmd="python run_pyscf.py > log 2>&1"`.
 
 ## Structure file format
 
@@ -126,18 +126,18 @@ PySCF jobs are Python scripts; no input-file generation is needed. Write the cal
 ## Workflow for DFT/MD codes (ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS)
 
 1. **Choose software and task type** — Determine which local script to use (all route through `render_input.py` + `diagnose_input.py`).
-2. **User-provided ready file check (exit early)** — Before doing anything else, check whether the user has already provided a complete, ready-to-run input file. If yes (file exists in the workspace, no structural changes or parameter overrides are required), **stop here**: do NOT call render_input.py, do NOT run diagnose_input.py. For all software, go to **`bohrium-job`** skill and pass the directory as `--input-dir`.
+2. **User-provided ready file check (exit early)** — Before doing anything else, check whether the user has already provided a complete, ready-to-run input file. If yes (file exists in the workspace, no structural changes or parameter overrides are required), **stop here**: do NOT call render_input.py, do NOT run diagnose_input.py. For all software, call **`Bohrium`** with `action="submit"` and `input_dir` set to that directory.
 3. **Prepare structure_file** — Ensure the structure path exists and is pymatgen-instanceable; do not assume formats the engine cannot read.
 4. **Call render_input.py** — Run the script to generate the input file with appropriate parameters and software name.
 5. **Call diagnose_input.py** — Run to validate parameter ranges and consistency. Validation is **physical-sense review**: check that key parameters are in a reasonable range, software-specific requirements are met, and required sections are present. If something looks wrong, use ask_human; on timeout, treat as pass and proceed. The script exits 0 so submit is allowed.
 6. **Gather auxiliary files** — Collect all required auxiliary files (pseudopotentials, basis sets, orbital files, topology files, etc.) into one directory.
-7. **Submit via bohrium-job** — Use `submit_job.py --input-dir <dir> --image <image> --cmd "<command>"` to submit the job remotely.
+7. **Submit via `Bohrium`** — `action="submit"`, `input_dir="<dir>"`, `image="<image>"`, `cmd="<command>"` (stdout/stderr should land in `log`; the tool appends `> log 2>&1` if missing).
 
 ## Workflow for PySCF
 
 1. **Write Python script** — Create `run_pyscf.py` (or similar) that imports PySCF, loads the structure, sets parameters (charge, spin, method, basis, etc.), and runs the calculation.
 2. **Prepare structure** — Place structure file (XYZ or other pymatgen-readable format) in the same directory.
-3. **Submit** — Use `bohrium-job` skill (`submit_job.py --input-dir <dir> --image <pyscf_image> --cmd "python run_pyscf.py > log 2>&1"`).
+3. **Submit** — **`Bohrium`** with `action="submit"`, `input_dir`, `image=<pyscf_image>`, `cmd="python run_pyscf.py > log 2>&1"`.
 4. **No validation step** — PySCF scripts are Python code, not static input files; validation is implicit in the script logic.
 
 ## Scripts
@@ -185,4 +185,4 @@ Do not re-query the same path that already returned no useful result.
 - **Local scripts are canonical**: `render_input.py` and `diagnose_input.py` handle all code-specific logic; do not bypass them.
 - **Gaussian / PSI4**: No local script support yet; use reference templates as the final input (no input-manual-helper workflow).
 - **PySCF**: Write Python scripts directly; no local input generation needed. Pass structure_file (XYZ or pymatgen-readable) and parameters directly to the script.
-- All software (ABACUS / CP2K / QE / ABINIT / LAMMPS / ORCA / GROMACS / PySCF / PyATB) submit via **`bohrium-job`** skill when ready; there are no MCP submit tools for this class of workload.
+- All software (ABACUS / CP2K / QE / ABINIT / LAMMPS / ORCA / GROMACS / PySCF / PyATB) submit via the built-in **`Bohrium`** tool when ready; there are no MCP submit tools for this class of workload. Use the same built-in tool for `poll` / `download` / `list_images` / `list_machines`.
