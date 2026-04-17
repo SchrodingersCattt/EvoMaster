@@ -1,9 +1,28 @@
+from contextlib import asynccontextmanager, contextmanager
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
 from app import app
 from src.services.sessions_service import get_sessions_service
+
+
+@asynccontextmanager
+async def _noop_lifespan(_app):
+    """避免 TestClient 触发真实 lifespan（连 DB / Redis）。"""
+    yield
+
+
+@contextmanager
+def _test_client_without_real_lifespan():
+    """Starlette TestClient 会跑 ASGI lifespan；无本机 MySQL 时需跳过真实启动逻辑。"""
+    router = app.router
+    saved = router.lifespan_context
+    router.lifespan_context = _noop_lifespan
+    try:
+        yield TestClient(app)
+    finally:
+        router.lifespan_context = saved
 
 
 def test_list_sessions_returns_grouped_by_project():
@@ -30,37 +49,37 @@ def test_list_sessions_returns_grouped_by_project():
 
     app.dependency_overrides[get_sessions_service] = lambda: mock_chat_svc
     try:
-        client = TestClient(app, lifespan='off')
-        response = client.get(
-            '/api/v1/chat/sessions/list',
-            params={'project_id': 42},
-            headers={'X-User-Id': 'test-user-1'},
-        )
+        with _test_client_without_real_lifespan() as client:
+            response = client.get(
+                '/api/v1/chat/sessions/list',
+                params={'project_id': 42},
+                headers={'X-User-Id': 'test-user-1'},
+            )
 
-        assert response.status_code == 200, response.text
-        data = response.json()
-        assert data['data']['total_sessions'] == 1
-        assert data['data']['loaded_sessions'] == 1
-        assert data['data']['truncated'] is False
-        assert data['data']['groups'][0]['session_directory'] == '/share/a'
-        assert data['data']['groups'][0]['sessions'][0]['id'] == 'session-project-1'
-        assert data['data']['groups'][0]['sessions'][0]['project_id'] == 42
-        mock_chat_svc.list_sessions_grouped_by_directory.assert_called_once_with(
-            user_id='test-user-1',
-            project_id=42,
-            max_sessions=500,
-        )
+            assert response.status_code == 200, response.text
+            data = response.json()
+            assert data['data']['total_sessions'] == 1
+            assert data['data']['loaded_sessions'] == 1
+            assert data['data']['truncated'] is False
+            assert data['data']['groups'][0]['session_directory'] == '/share/a'
+            assert data['data']['groups'][0]['sessions'][0]['id'] == 'session-project-1'
+            assert data['data']['groups'][0]['sessions'][0]['project_id'] == 42
+            mock_chat_svc.list_sessions_grouped_by_directory.assert_called_once_with(
+                user_id='test-user-1',
+                project_id=42,
+                max_sessions=500,
+            )
     finally:
         app.dependency_overrides.pop(get_sessions_service, None)
 
 
 def test_list_sessions_requires_project_id():
-    client = TestClient(app, lifespan='off')
-    response = client.get(
-        '/api/v1/chat/sessions/list',
-        params={'max_sessions': 100},
-        headers={'X-User-Id': 'test-user-1'},
-    )
+    with _test_client_without_real_lifespan() as client:
+        response = client.get(
+            '/api/v1/chat/sessions/list',
+            params={'max_sessions': 100},
+            headers={'X-User-Id': 'test-user-1'},
+        )
     assert response.status_code == 422
 
 
