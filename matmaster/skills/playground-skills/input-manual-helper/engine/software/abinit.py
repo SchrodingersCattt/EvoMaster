@@ -406,7 +406,7 @@ class ABINITBackend(SoftwareBackend):
         - 默认生成 Si 金刚石 SCF 计算（primitive FCC cell，2 原子）
         - intent.task_type 决定离子运动方案
         - intent.params 可覆盖任意默认值
-        - 输出文件名为 run.abi（与 bohrium-job SKILL.md 命令一致）
+        - 输出文件名为 run.abi（与内置 Bohrium 提交约定一致：cmd 重定向到 log）
         """
         p = dict(intent.params) if intent.params else {}
 
