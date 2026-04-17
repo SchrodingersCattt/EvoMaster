@@ -404,8 +404,9 @@ class TestSSHSessionExecBash:
 
 
 def test_open_creates_and_verifies_configured_workdir(mock_paramiko):
-    from matmaster.sessions.ssh import SSHSession
     from unittest.mock import patch
+
+    from matmaster.sessions.ssh import SSHSession
 
     config = SSHSessionConfig(
         host="test-host",
@@ -429,9 +430,11 @@ def test_open_creates_and_verifies_configured_workdir(mock_paramiko):
 
 
 def test_open_raises_when_workdir_initialization_fails(ssh_config, mock_paramiko):
-    import pytest
-    from matmaster.sessions.ssh import SSHSession
     from unittest.mock import patch
+
+    import pytest
+
+    from matmaster.sessions.ssh import SSHSession
 
     session = SSHSession(ssh_config)
 

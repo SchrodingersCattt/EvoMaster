@@ -51,7 +51,9 @@ def test_normalize_session_directory_for_storage_returns_none_for_blank():
 
 
 def test_normalize_session_directory_for_storage_normalizes_and_rejects():
-    assert normalize_session_directory_for_storage(" /share/foo/../bar/ ") == "/share/bar"
+    assert (
+        normalize_session_directory_for_storage(" /share/foo/../bar/ ") == "/share/bar"
+    )
 
     with pytest.raises(SessionDirectoryError) as exc:
         normalize_session_directory_for_storage("/tmp/bad")

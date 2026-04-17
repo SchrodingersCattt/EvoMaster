@@ -15,11 +15,10 @@ class SessionDirectoryError(Exception):
     def __init__(
         self,
         message: str,
-        *,
         error_code: str,
         http_status: int = 400,
     ) -> None:
-        super().__init__(message)
+        super().__init__(message, error_code, http_status)
         self.message = message
         self.error_code = error_code
         self.http_status = http_status

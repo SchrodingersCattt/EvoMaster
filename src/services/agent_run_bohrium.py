@@ -796,7 +796,9 @@ def _setup_bohrium_for_run(
                 'Bohrium 节点已就绪',
                 ip=node_ip,
             )
-            ssh_working_dir = (remote_workdir or remote_workspace_root).rstrip('/') or '/'
+            ssh_working_dir = (remote_workdir or remote_workspace_root).rstrip(
+                '/'
+            ) or '/'
             original_session = pg.session
             original_owns_session = pg._owns_session
             ssh_config = SSHSessionConfig(

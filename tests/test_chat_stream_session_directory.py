@@ -1,5 +1,4 @@
 import asyncio
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,12 +15,16 @@ def _service(session_directory=None):
     sessions_service.try_acquire_session_run.return_value = (True, None)
     events_service = MagicMock()
     deploy_state_service = MagicMock()
-    return ChatStreamService(
-        sessions_service=sessions_service,
-        events_service=events_service,
-        agent_run_service=MagicMock(),
-        deploy_state_service=deploy_state_service,
-    ), sessions_service, events_service
+    return (
+        ChatStreamService(
+            sessions_service=sessions_service,
+            events_service=events_service,
+            agent_run_service=MagicMock(),
+            deploy_state_service=deploy_state_service,
+        ),
+        sessions_service,
+        events_service,
+    )
 
 
 def test_prepare_send_message_uses_request_directory_and_marks_bohrium_required():
@@ -94,7 +97,7 @@ def test_prepare_send_message_invalid_request_directory_does_not_acquire_run():
         with pytest.raises(Exception) as exc:
             service.prepare_send_message("sess-1", req, user_id="user-1")
 
-    assert getattr(exc.value, "error_code") == "directory_outside_share"
+    assert exc.value.error_code == "directory_outside_share"
     sessions_service.try_acquire_session_run.assert_not_called()
     events_service.add_history_event.assert_not_called()
 
@@ -110,7 +113,7 @@ def test_prepare_send_message_invalid_session_directory_does_not_acquire_run():
         with pytest.raises(Exception) as exc:
             service.prepare_send_message("sess-1", req, user_id="user-1")
 
-    assert getattr(exc.value, "error_code") == "session_directory_invalid"
+    assert exc.value.error_code == "session_directory_invalid"
     sessions_service.try_acquire_session_run.assert_not_called()
     events_service.add_history_event.assert_not_called()
 

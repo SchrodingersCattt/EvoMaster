@@ -46,9 +46,7 @@ class ChatEventsTable(BaseTable):
             if content.get('session_directory'):
                 ev['session_directory'] = content.get('session_directory')
             if content.get('session_directory_source'):
-                ev['session_directory_source'] = content.get(
-                    'session_directory_source'
-                )
+                ev['session_directory_source'] = content.get('session_directory_source')
 
         return ev
 
