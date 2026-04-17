@@ -1,7 +1,7 @@
 # AskQuestion 完整闭环修复设计
 
 - 日期: 2026-04-17
-- 状态: Draft v0.2 (待评审)
+- 状态: Draft v0.3 (待评审)
 - 相关仓库:
   - 后端: `matmaster-evo`
   - 前端: `../scimaster-bohr-chat`
@@ -199,7 +199,7 @@ model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 本设计选择显式字段方案，而不是把 bridge 放进 `run_meta`：
 
 ```python
-interaction_bridge: Any = Field(default=None, repr=False)
+interaction_bridge: Any = Field(default=None, repr=False, exclude=True)
 ```
 
 选择理由：
@@ -207,6 +207,7 @@ interaction_bridge: Any = Field(default=None, repr=False)
 - bridge 是运行时对象，不是可序列化 metadata，不适合放入 `run_meta`
 - 显式字段可被 IDE、类型检查、测试和代码搜索发现
 - `repr=False` 避免日志或调试输出里打印包含闭包的 bridge 对象
+- `exclude=True` 避免 `model_dump()` / `model_dump(mode="json")` 输出不可序列化的 runtime callback 和 queue
 - `Exp._init_builtin_tools()` 可以直接读取 `ctx.interaction_bridge`，不再依赖 `getattr`
 
 `AgentRunService` 仍用 `pg_ctx.model_copy(update={"interaction_bridge": bridge})` 注入，但该
@@ -215,6 +216,8 @@ update 现在针对声明字段，语义稳定。
 测试要求：
 
 - `PlaygroundContext(..., interaction_bridge=bridge)` 能构造
+- `ctx.interaction_bridge` 可访问，但 `interaction_bridge` 不出现在 `ctx.model_dump()` 中
+- `ctx.model_dump(mode="json")` 不会因为 bridge 对象不可 JSON 序列化而失败
 - `AgentRunService` 注入 bridge 后，传入 `Exp.build_runtime()` 的 ctx 上
   `ctx.interaction_bridge` 非空
 - 无 bridge 时默认值为 `None`
@@ -229,16 +232,42 @@ update 现在针对声明字段，语义稳定。
 - `matmaster/tools/builtin/__init__.py` 导出 `AskQuestionTool`
 - `matmaster/core/exp.py::_init_builtin_tools()` 实例化并按 builtin config 过滤注册
 - `AskQuestionTool` 归类为 control-plane / interaction tool，而不是 session filesystem tool
+- `AskQuestionTool` 声明交互独占 resource claim，避免同一 tool batch 中多个 AskQuestion 并发等待同一个 reply list
 
 建议构造方式：
 
 ```python
+bridge = ctx.interaction_bridge
+if bridge is not None:
+    bridge = bridge.with_scope(
+        source=source_override or "System",
+        spawn_id=spawn_id,
+    )
+
 AskQuestionTool(
     session=ctx.session,
     workdir=Path(ctx.execution_workdir) if ctx.session is not None else ctx.workdir,
-    bridge=ctx.interaction_bridge,
+    bridge=bridge,
 )
 ```
+
+`_init_builtin_tools()` 当前没有 `source_override` / `spawn_id` 参数。实现时需要把
+`Exp.build_runtime(..., source_override=..., spawn_id=...)` 的当前 scope 传给
+AskQuestion 注册逻辑，或者在调用 `_init_builtin_tools()` 前构造 scoped bridge。不能把
+root bridge 原样传入子 agent，否则子 agent 内部 AskQuestion 发出的事件会丢失
+`spawn_id`，并绕过现有 `_make_spawn_fn()` 对 child event 的 source/spawn 标记语义。
+
+工具类应增加：
+
+```python
+resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+    ResourceClaim(resource="interaction", mode="exclusive"),
+)
+```
+
+这能覆盖同一个 `FullToolRunner` 同一批 tool calls 的并发执行。由于子 agent 会创建自己的
+`ToolScheduler`，这个 resource claim 还不够覆盖 parent/child 共享 bridge 的场景，因此
+bridge 内部仍必须有串行锁，见 §6.5。
 
 行为规则：
 
@@ -246,6 +275,7 @@ AskQuestionTool(
 - `builtin=["*"]` 时应注册 AskQuestion
 - bridge 存在时 model-visible
 - bridge 不存在时工具可在 catalog 中存在，但不出现在 model tool definitions 中
+- parent/child/subagent scope 中的 AskQuestion event 必须携带正确的 `source` 与 `spawn_id`
 
 ### 6.2 ask_question_reply request model
 
@@ -279,7 +309,9 @@ active run、broadcast、queue、history 逻辑。
 
 推荐去掉默认值，因为两种 reply 事件都很重要，隐式默认容易再次引入错发类型。
 
-建议 helper 放在 `src/apis/chat_api.py` 本文件内，先保持局部私有，避免过早抽象到 service：
+建议 API helper 放在 `src/apis/chat_api.py` 本文件内，先保持局部私有，避免过早抽象到
+service；但 reply event 的 live 发布必须收敛到 `ChatStreamService` 的一个真实 helper，
+不能只做本进程 local broadcast。
 
 ```python
 def _submit_interaction_reply(
@@ -299,10 +331,24 @@ def _submit_interaction_reply(
 
 - 通过 `stream_svc.get_reply_queue(sid)` 获取当前 run 的 reply queue
 - 无 active run 时抛 409，与现有 confirmation 行为一致
-- 先 `stream_svc.broadcast_reply(sid, content, event_type=event_type)`
+- 构造完整 public payload，补 `task_id` / `invocation_id`
+- 先通过 `stream_svc.publish_reply_event(sid, payload)` 进行 live 发布
 - 再 `reply_queue.put_content(queue_value)`
-- 构造 history payload，补 `task_id` / `invocation_id`
-- `events_svc.add_history_event(...)`
+- 最后 `events_svc.add_history_event(sid, payload, user_id=user_id)`
+
+`publish_reply_event()` 或重构后的 `broadcast_reply()` 必须同时做两件事：
+
+- `self._queues.broadcast(session_id, payload)`，覆盖本进程订阅者
+- `get_redis_dao().publish_stream_event(session_id, payload)`，覆盖 API/Worker 分离、多 API pod、POST reply 落到另一个 pod 的场景
+
+这条 Redis pub/sub 发布不是可选优化。当前 `generate_send_stream()` 在 queue worker 模式下先订阅
+`STREAM_CHANNEL_PREFIX + session_id`，再把 job 入队；worker event 通过
+`agent_worker.send_cb -> publish_stream_event()` 回到 SSE 流。用户提交
+`ask_question_reply` / `confirmation_reply` 的 POST 请求可能落在任意 API pod，因此 reply event
+也必须进入同一个 stream channel，否则原 SSE 连接看不到 live reply。
+
+事件顺序保持现有语义：先发布 reply event，再写 reply queue 唤醒 agent，避免前端看到
+`tool_result` 早于用户 reply。
 
 `confirmation_reply` 使用：
 
@@ -335,10 +381,11 @@ _submit_interaction_reply(
 
 这样 `AskQuestionBridge._wait_for_reply()` 现有的 JSON envelope 解析逻辑可以直接复用。
 
-### 6.4 broadcast_reply 支持结构化 content
+### 6.4 reply event 支持结构化 content 和跨 pod 发布
 
 `ChatStreamService.broadcast_reply()` 当前类型标注是 `content: str`，实际 payload 构造可以接受
-dict。需要把类型放宽为 `str | dict` 或 `object`，并保持公开 SSE payload 为：
+dict。需要把类型放宽为 `str | dict` 或 `object`，或者改成直接接收完整 payload，并保持公开
+SSE payload 为：
 
 ```json
 {
@@ -376,7 +423,10 @@ confirmation 的 live payload 不变：
 - 前端 `ask_question_reply` handler 已按 object content 解析；`confirmation_reply` handler 仍按 string content 解析
 - History persistence：API 手动写 `ask_question_reply` 时 content 是 dict，`ChatEventsService.add_history_event()` 与 table 层应保持 JSON content 能往返
 
-### 6.5 AskQuestion request 事件走 fanout
+测试必须覆盖跨 pod 语义：当 reply POST 所在 service 实例和正在 `generate_send_stream()` 的实例不是同一个
+`ChatStreamService` 对象时，reply event 仍通过 Redis stream channel 到达订阅流。
+
+### 6.5 AskQuestion request 事件走 fanout，并串行化等待
 
 当前 `AskQuestionBridge` 直接调用 `send_cb`，绕过 persistence。应改为事件级 emit，生产路径走
 `RunEventFanout`。
@@ -387,6 +437,12 @@ confirmation 的 live payload 不变：
 - `ask()` 中构造 `AskQuestionEvent` 后调用 event sink
 - timeout 时构造 `AskQuestionTimeoutEvent` 后也调用 event sink
 - `AgentRunService` 注入 sink 时使用当前 run 的 `fanout.dispatch`
+- bridge 支持 `with_scope(source: str, spawn_id: str | None)`，让 root/child runtime 创建
+  scoped bridge；scoped bridge 发出的 `AskQuestionEvent` / `AskQuestionTimeoutEvent` 必须保留
+  当前 runtime 的 source/spawn_id
+- `with_scope()` 返回的 scoped bridge 必须共享同一个底层 reply queue、async lock 和
+  `_waiting_request_id` 状态，只覆盖事件 source/spawn_id；不能为每个 scope 新建独立锁，否则
+  parent/child 并发 AskQuestion 仍会交叉消费同一 Redis reply list
 
 这是一次明确的 bridge API breaking change：
 
@@ -425,12 +481,33 @@ def _wait_for_reply_sync(self, request_id: str) -> dict[str, Any]:
 `asyncio.CancelledError` 仍用于取消哨兵，但取消事件不在 bridge 内新增自定义
 `ask_question_cancelled`。第一版复用现有 run terminal events 清理前端 pending 状态。
 
-为未来并发问题留观测点：
+并发控制不能只做日志观测，第一版要硬化两层：
+
+- 工具层：`AskQuestionTool.resource_claims = (ResourceClaim(resource="interaction", mode="exclusive"),)`，
+  串行化同一个 `FullToolRunner` 同一批 tool calls 中的多个 AskQuestion
+- bridge 层：`AskQuestionBridge.ask()` 内部使用 `asyncio.Lock` 或等价机制，把
+  emit request event、等待 reply、处理 timeout/cancel 作为一个互斥区，覆盖 parent/child/subagent
+  共享同一个 bridge 但各自拥有独立 `ToolScheduler` 的场景
+
+因此 `_waiting_request_id` 不只是 warning 字段，而是测试可见的状态：
 
 - `AskQuestionBridge` 可维护进程内 `_waiting_request_id: str | None`
-- 进入 `ask()` 时如果已有等待中的 request，写 warning 日志
+- 进入 `ask()` 时如果已有等待中的 request，第二个调用必须等待锁释放，而不是发出第二个
+  `ask_question` 覆盖前端 `activeInteraction`
 - 正常 reply、timeout、cancel 后清空该字段
 - 第一版不把该状态写入 Redis，也不做跨 worker pending request 校验
+
+`_wait_for_reply_sync()` 还必须校验 reply envelope 中的 `request_id`：
+
+```python
+payload = envelope.get("payload", envelope)
+if payload.get("request_id") != request_id:
+    raise RuntimeError(...)
+```
+
+因为 reply list 是按 session 维度复用的，不能把第一条 JSON 盲目当成当前问题的答案。由于工具层和
+bridge 层已经串行化，正常路径不会出现 mismatch；一旦出现，说明前端 stale reply、旧消息重放或协议
+bug，应作为硬错误返回工具错误结果，而不是静默唤醒错误请求。
 
 ### 6.6 persistence 与历史恢复
 
@@ -468,11 +545,23 @@ cancelled / run_result(cancelled) / stream_closed(cancelled)
 - 后续看到同一 run 的 terminal failure/cancel 事件，也应清掉 pending
 - 历史加载结束仍有 pending，则恢复 AskQuestion 卡片
 
-因此只要后端正确持久化事件，刷新恢复逻辑可以复用。
+当前前端只有 `cancelled`、`ask_question_reply`、`ask_question_timeout` 分支会清
+`pendingAskQuestionFromHistoryRef`；`run_result`、`stream_closed` 和 `error` 分支不会清。因此
+刷新恢复不能只依赖现有逻辑，需要把 terminal 清理列为实际前端改动。
+
+建议实现方式：
+
+- 历史 replay 暂存 AskQuestion 时同时记录 `task_id` / `invocation_id`，可用 sidecar ref 或扩展内部
+  pending wrapper，不一定要改 `ActiveInteraction` 对外类型
+- 在 `run_result(status="failed" | "cancelled")`、`stream_closed` / `end`、`error` 分支中，若事件与
+  pending AskQuestion 属于同一 `task_id` / `invocation_id`，清掉 pending
+- 如果暂时拿不到 pending 的 scope，历史 replay 阶段可以保守地在 terminal event 后清掉当前 pending；
+  但实现计划里要优先做 scope-aware 清理，避免未来多轮历史混在一起时误清
+- live active interaction 也应在同 scope terminal event 后关闭，避免 stop/error 后卡片停留
 
 ## 7. 前端设计
 
-前端主体逻辑保持不变。
+前端 UI 组件主体可复用，但 handler 需要补终态清理。
 
 现有可复用部分：
 
@@ -491,6 +580,8 @@ cancelled / run_result(cancelled) / stream_closed(cancelled)
 - `ask_question_reply.content` 是对象时 handler 正常解析
 - 历史中 `ask_question` 后无 reply 且无 terminal cancel/failure 时恢复卡片
 - 历史中有 reply/timeout/cancel/error/terminal failure 时不恢复卡片
+- `run_result failed/cancelled`、`stream_closed/end`、`error` 分支会按 `task_id` / `invocation_id`
+  清理 pending AskQuestion，而不是只 finalize round state
 
 若后端修复后发现 optimistic insert 与 SSE insert 重复，优先调整前端去重逻辑，不改变后端事件语义。
 
@@ -508,7 +599,7 @@ LLM tool call: AskQuestion
   -> frontend renders AskQuestionWizard
   -> user submits /ask_question_reply
   -> API validates active run
-  -> API broadcasts ask_question_reply
+  -> API publishes ask_question_reply to local SSE queues and Redis stream channel
   -> API pushes JSON envelope into RedisReplyQueue
   -> API stores ask_question_reply
   -> AskQuestionBridge receives envelope
@@ -555,7 +646,10 @@ AskQuestionBridge emits ask_question
 - `test_build_runtime_hides_ask_question_when_bridge_missing`
 - `test_build_runtime_includes_ask_question_for_builtin_star`
 - `test_playground_context_declares_interaction_bridge_field`
+- `test_playground_context_excludes_interaction_bridge_from_model_dump_and_json_dump`
 - `test_agent_run_service_injected_bridge_reaches_exp_runtime`
+- `test_ask_question_tool_declares_interaction_exclusive_resource_claim`
+- `test_child_runtime_scopes_ask_question_bridge_with_spawn_id`
 
 扩展 `tests/matmaster/tools/builtin/test_ask_question_tool.py`：
 
@@ -564,6 +658,9 @@ AskQuestionBridge emits ask_question
 - timeout 事件不在线程函数中直接发送
 - `queue.Empty` 在线程函数中转换为 `TimeoutError`
 - cancel sentinel 抛出 `asyncio.CancelledError` 且不 emit timeout
+- 两个并发 `bridge.ask()` 调用必须串行，第二个 request event 不会在第一个 reply 前发出
+- reply envelope 的 `request_id` 不匹配当前 request 时返回硬错误，不渲染成成功答案
+- scoped bridge 发出的 ask/timeout event 携带指定 `source` / `spawn_id`
 
 ### 9.2 后端 API 测试
 
@@ -575,13 +672,17 @@ AskQuestionBridge emits ask_question
 - `answers` 与 `annotations` 同时为空返回 422 或 400
 - 正常请求会：
   - broadcast `ask_question_reply`
+  - publish `ask_question_reply` 到 Redis stream channel
   - queue 写入 JSON envelope
   - history 写入 `ask_question_reply`
   - 补齐 `task_id` / `invocation_id`
+- reply POST 发生在另一个 `ChatStreamService` 实例时，订阅 stream channel 的 SSE 仍能收到
+  `ask_question_reply`
 
 回归 `confirmation_reply`：
 
 - 仍然广播 `confirmation_reply`
+- 仍然 publish `confirmation_reply` 到 Redis stream channel
 - live SSE payload 的 `type` 必须是 `"confirmation_reply"`，覆盖当前默认参数 bug
 - 仍然向 queue 写纯文本
 - 仍然写历史文本 content
@@ -594,6 +695,7 @@ AskQuestionBridge emits ask_question
 - persisted content 应与 `_public_content_for_event("ask_question", ...)` 一致
 - `ask_question_timeout` 应进入 SSE 和 persistence
 - stop/cancel 期间如果已发出 `ask_question`，历史中后续 terminal event 足以让前端清 pending
+- 子 agent 内部触发 AskQuestion 时，持久化和 SSE payload 保留子 agent `spawn_id/source`
 
 ### 9.4 前端测试
 
@@ -604,6 +706,8 @@ AskQuestionBridge emits ask_question
 - 同 request_id 的 optimistic message 与 SSE reply 不重复
 - 历史加载时 `ask_question` 后无 reply/timeout/terminal 时恢复 pending
 - 历史加载时 `ask_question` 后有 reply/timeout/cancel/error/terminal failure 时清理 pending
+- `run_result failed/cancelled`、`stream_closed/end`、`error` 分支都覆盖 pending 清理
+- pending 清理优先按 `task_id` / `invocation_id` 匹配，避免误清其他轮次
 
 ### 9.5 手动验证
 
@@ -622,12 +726,15 @@ AskQuestionBridge emits ask_question
 | `AskQuestionTool` 注册后在无 bridge 环境暴露给模型 | 保留并测试 `exposed_to_model=False` 保护 |
 | `confirmation_reply` 被重构时行为回归 | 抽 helper 后必须保留 confirmation API 回归测试 |
 | live optimistic message 与 SSE reply 重复 | 先依赖现有前端 dedupe，必要时修前端 dedupe，不改后端协议 |
-| request_id 不匹配当前等待问题 | 第一版不加 pending key，依赖单 active run 和前端状态；后续如有乱序再加 Redis pending request |
+| 多个 AskQuestion 并发消费同一 reply list | `ResourceClaim(resource="interaction", mode="exclusive")` + bridge 内部 async lock 双层串行化 |
+| request_id 不匹配当前等待问题 | bridge 校验 reply envelope 的 request_id，mismatch 作为硬错误，不返回错误答案 |
+| reply POST 落到非 SSE 所在 API pod | reply event helper 必须 local broadcast + Redis `publish_stream_event` |
 | bridge 改 fanout 后 async/sync 测试适配复杂 | 一次性切换到 async `event_sink(BusEvent)`，不保留 dict shim |
 | 历史里出现旧 confirmation 和新 ask_question 两套交互事件 | 前端已有分支处理，保持事件类型清晰即可 |
-| stop 时没有 ask_question_reply/timeout | 前端在同 run terminal cancel/failure/error 后清 pending，不新增 ask_question_cancelled 事件 |
-| PlaygroundContext bridge 再次退化成隐式动态属性 | 显式声明 `interaction_bridge: Any = Field(default=None, repr=False)` 并加测试 |
+| stop 时没有 ask_question_reply/timeout | 前端新增 run_result/stream_closed/error 终态清理，不新增 ask_question_cancelled 事件 |
+| PlaygroundContext bridge 再次退化成隐式动态属性 | 显式声明 `interaction_bridge: Any = Field(default=None, repr=False, exclude=True)` 并加 dump 测试 |
 | confirmation live SSE 继续错发 ask_question_reply | 去掉或修正 `broadcast_reply` 默认值，endpoint 显式传事件类型并加红测 |
+| 子 agent AskQuestion 丢失 spawn_id/source | scoped bridge 使用当前 runtime 的 `source_override/spawn_id`，并补 child Agent 场景测试 |
 
 ## 11. 交付定义
 
@@ -640,21 +747,28 @@ AskQuestionBridge emits ask_question
 - `AskQuestionTool` 返回的 `ToolResult.payload` 包含 `request_id`、`questions`、`answers`、`annotations`
 - `ask_question` 和 `ask_question_reply` 均写入历史
 - 刷新恢复符合等待中和已回答两种状态
+- 并发 AskQuestion 不会交叉消费 reply；request_id mismatch 不会被当成成功回复
+- API/Worker 分离或多 API pod 下，reply event 仍能通过 Redis stream 到达原 SSE 流
+- 子 agent 中的 AskQuestion event 保留 `spawn_id/source`
 - 现有 `/confirmation_reply` 行为不变
 - `/confirmation_reply` live SSE type 为 `confirmation_reply`
-- `PlaygroundContext` 显式声明 `interaction_bridge`
+- `PlaygroundContext` 显式声明 `interaction_bridge`，且该字段不进入 `model_dump()` / JSON dump
 - 后端 focused pytest 与前端 chat-evo tests 通过
 
 ## 12. 实施顺序建议
 
 0. 在 `PlaygroundContext` 显式声明 `interaction_bridge` 字段，并验证
-   `AgentRunService -> Exp.build_runtime` 能读到同一个 bridge
+   `AgentRunService -> Exp.build_runtime` 能读到同一个 bridge，同时确认字段被
+   `model_dump()` / JSON dump 排除
 1. 调整 `AskQuestionBridge` 为 async `event_sink(BusEvent)` API，并让生产路径走
-   `fanout.dispatch`
-2. 补 `AskQuestionTool` runtime 注册和 model-visible 测试
-3. 抽通用 interaction reply helper，修复 `broadcast_reply` 默认事件类型问题，并确保
-   `confirmation_reply` 回归不变
+   `fanout.dispatch`；同时加入 bridge 内部 async lock、request_id mismatch 校验和 scoped bridge
+   source/spawn_id 语义
+2. 补 `AskQuestionTool` runtime 注册、`interaction` exclusive resource claim、model-visible
+   测试和子 agent scope 测试
+3. 抽通用 interaction reply helper，修复 `broadcast_reply` 默认事件类型问题，并确保 helper
+   同时 local broadcast + Redis `publish_stream_event` + history append，`confirmation_reply` 回归不变
 4. 新增 `ChatAskQuestionReplyRequest` 和 `/ask_question_reply`
-5. 补后端 fanout/persistence/cancel 测试
-6. 补前端 handler / dedupe / history terminal 清理测试
+5. 补后端 fanout / persistence / cancel / concurrency / cross-pod reply 测试
+6. 补前端 handler / dedupe / history terminal 清理测试，覆盖
+   `run_result`、`stream_closed`、`error`
 7. 做一次真实端到端手动验证
