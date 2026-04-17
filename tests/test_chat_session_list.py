@@ -74,13 +74,20 @@ def test_list_sessions_returns_grouped_by_project():
 
 
 def test_list_sessions_requires_project_id():
-    with _test_client_without_real_lifespan() as client:
-        response = client.get(
-            '/api/v1/chat/sessions/list',
-            params={'max_sessions': 100},
-            headers={'X-User-Id': 'test-user-1'},
-        )
-    assert response.status_code == 422
+    """缺少 project_id 时应 422；须 mock 会话服务，避免部分环境下依赖解析顺序触发真实 DB。"""
+    mock_chat_svc = MagicMock()
+    app.dependency_overrides[get_sessions_service] = lambda: mock_chat_svc
+    try:
+        with _test_client_without_real_lifespan() as client:
+            response = client.get(
+                '/api/v1/chat/sessions/list',
+                params={'max_sessions': 100},
+                headers={'X-User-Id': 'test-user-1'},
+            )
+        assert response.status_code == 422
+        mock_chat_svc.list_sessions_grouped_by_directory.assert_not_called()
+    finally:
+        app.dependency_overrides.pop(get_sessions_service, None)
 
 
 def test_sessions_service_passes_project_id_to_table():
