@@ -74,7 +74,15 @@ uv run python scripts/diagnose_input.py --software abacus --input INPUT
 
 ## Band/DOS Two-Step Workflow
 
-SCF (`out_chg 1`) → NSCF (`init_chg file`, `symmetry 0`, `nbands`, `out_band 1` or `out_dos 1`). For Bohrium: write `run.sh` that runs both steps sequentially. Details in `references/input_examples.md`.
+SCF (`out_chg 1`) → NSCF (`init_chg file`, `symmetry 0`, `nbands`, `out_band 1` or `out_dos 1`).
+
+**You must create TWO separate KPT files**:
+- `KPT_scf` (or similar): uniform Gamma mesh (e.g. `8 8 8 0 0 0`)
+- `KPT_band` (for band) or `KPT_dos` (for DOS): line-mode k-path or denser uniform mesh
+
+Each INPUT must reference its own KPT: `kpoint_file KPT_scf` in SCF INPUT, `kpoint_file KPT_band` in NSCF INPUT. **Forgetting to create the SCF KPT file is a common error.**
+
+For Bohrium: write `run.sh` that runs both steps sequentially. Details in `references/input_examples.md`.
 
 ## Electric Field & Dipole Correction
 
@@ -89,6 +97,31 @@ See `references/electric_field.md`. Key: dipole correction = `efield_flag 1` + `
 5. Total atom count matches expected composition
 
 Full STRU format details: `references/stru_format.md`.
+
+## INPUT Pre-delivery Checklist — MANDATORY
+
+**Before finishing any ABACUS task, verify EVERY item below. Violations cause silent failures.**
+
+### File Reference Consistency
+- When the STRU file is NOT named `STRU`, the INPUT **must** include `stru_file <actual_name>`.
+- When the KPT file is NOT named `KPT`, the INPUT **must** include `kpoint_file <actual_name>`.
+- **Every file referenced by `stru_file` / `kpoint_file` must exist in the workspace.** List workspace files and cross-check.
+- For two-step workflows (SCF → NSCF): you need **two separate KPT files** (e.g. `KPT_scf` for uniform mesh, `KPT_band` for line-mode). Both INPUTs must reference their respective KPT file. Forgetting the SCF KPT file is a common error.
+
+### Relaxation Parameter Guard
+- `calculation relax` → INPUT **must** contain `cal_force 1` and `force_thr_ev`. Missing `cal_force 1` = optimizer has no forces = silently broken.
+- `calculation cell-relax` → INPUT **must** contain **both** `cal_force 1` **and** `cal_stress 1`, plus `force_thr_ev` and `stress_thr`. Missing either = cell vectors not optimized.
+- These parameters are **never** implied by the `calculation` keyword — you must always write them explicitly.
+
+### Two-Step Workflow Guard (Band / DOS)
+- SCF INPUT must have `out_chg 1`.
+- NSCF INPUT must have `init_chg file`, `symmetry 0`, `nbands <N>`, and the correct output flag (`out_band 1` or `out_dos 1`).
+- Both INPUTs must reference their own KPT file. The SCF uses a uniform Gamma mesh; the NSCF uses line-mode (band) or denser uniform mesh (DOS).
+- For Bohrium submission: write a `run.sh` that chains both steps. See `references/input_examples.md`.
+
+### Multi-File Consistency Guard
+- When generating multiple INPUT files (surface energy, vacancy, EOS): all files must share identical `basis_type`, `ecutwfc`, `smearing_method`, `smearing_sigma`, `scf_thr`.
+- Each INPUT must have its own `stru_file` and `kpoint_file` directives pointing to the correct files.
 
 ## Required Files
 

@@ -19,9 +19,11 @@ Handles powder XRD (PXRD) lattice parameter refinement and single-crystal XRD (S
 
 ## PXRD Analysis Workflow
 
+> **MANDATORY**: Use `refine_lattice_pxrd.py` for ALL Pawley refinement. Do NOT write custom refinement code.
+
 1. **Load data**: Read PXRD file(s) — supported formats: XY, CSV, DAT (two-column: 2θ, intensity).
 2. **Phase identification** (optional): Use `mat_xrd_xrd_phase_identification` from mcp-mat-xrd skill to identify the phase and get approximate cell parameters.
-3. **Pawley refinement**: Run `refine_lattice_pxrd.py` with crystal system and initial lattice parameters.
+3. **Pawley refinement**: Run `refine_lattice_pxrd.py` with crystal system and initial lattice parameters. **Always use this script** — it handles peak search, background subtraction, and fitting internally.
 4. **Multi-temperature analysis**: For T-dependent data, use `--multi-temp` mode — the script automatically fits thermal expansion, detects phase transitions, and reports linear fit parameters (slope, intercept, R²) per phase.
 5. **Report**: Lattice parameters (a, b, c, α, β, γ), unit cell volume V, fit statistics at each temperature, and thermal expansion analysis.
 
@@ -49,11 +51,14 @@ python ${SKILL_DIR}/scripts/refine_lattice_pxrd.py \
 
 ## SCXRD Workflow
 
+> **MANDATORY**: Use `solve_refine_scxrd.py` for ALL SCXRD tasks. Do NOT write custom charge-flipping or refinement code.
+
 1. **Parse data**: Provide HKL file (SHELX HKLF4 format) and P4P or INS file (cell parameters, space group).
-2. **Structure solution + refinement**: Run `solve_refine_scxrd.py` — it tries SHELX first (if installed), then falls back to Python charge-flipping + least-squares refinement.
+2. **Structure solution + refinement**: Run `solve_refine_scxrd.py` — it tries SHELX first (if installed), then falls back to Python charge-flipping + least-squares refinement. **Always pass `--elements` with the expected element list** (critical for correct atom-type assignment).
 3. **CIF generation**: The script writes a CIF file with cell parameters, space group, atom positions, R-factors, and GOOF.
-4. **Validation**: Run `checkcif-validator` skill on the generated CIF. Fix any A-level alerts.
-5. **Disorder modeling** (if needed): See `references/scxrd_solution_refinement.md`.
+4. **Quality check**: If R1 > 0.15, try: `--trials 5`, `--grid 128`, verify `--sg` and `--elements`. See `references/scxrd_solution_refinement.md`.
+5. **Validation**: Run `checkcif-validator` skill on the generated CIF. Fix any A-level alerts.
+6. **Disorder modeling** (if needed): See `references/scxrd_solution_refinement.md`.
 
 ### Script: solve_refine_scxrd.py
 
@@ -80,12 +85,13 @@ python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
 
 ## Hard Constraints
 
+- **USE PROVIDED SCRIPTS — MANDATORY**: You **must** use `refine_lattice_pxrd.py` for PXRD and `solve_refine_scxrd.py` for SCXRD. **Do NOT write custom Pawley refinement, charge-flipping, or least-squares code from scratch.** The provided scripts are tested and validated; hand-written replacements produce poor results (high R-factors, wrong atom assignments, fractional coordinates outside [0,1]). If a script fails, debug its inputs (file format, parameters) — do not replace it.
 - **Deliverables first**: For SCXRD tasks, ALWAYS produce a CIF file. An imperfect CIF is infinitely better than no CIF.
 - **No fabrication**: If refinement fails, report the failure honestly. Do NOT invent lattice parameters or R-factors.
 - **Validate**: ALWAYS run checkCIF on any generated CIF before finishing.
 - **Uncertainties**: For PXRD, always report lattice parameters with estimated standard deviations.
 - **Phase-separate fits**: For thermal expansion with phase transitions, fit EACH phase separately. Report slope, intercept, R² for each.
-- **Efficiency**: Use the provided scripts. Do NOT write Pawley refinement or charge-flipping code from scratch.
+- **Script-first debugging**: If `solve_refine_scxrd.py` gives poor R-factors: (1) check `--elements` flag — always pass expected elements; (2) try `--trials 5`; (3) try `--grid 128` for large cells; (4) verify space group is correct. Do NOT fall back to writing your own refinement code.
 
 ## When to Use
 
