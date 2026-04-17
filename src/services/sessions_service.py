@@ -2,7 +2,11 @@ import logging
 import threading
 from functools import lru_cache
 
-from src.dao.chat_sessions_table import ChatSessionsTable, get_chat_sessions_table
+from src.dao.chat_sessions_table import (
+    WORKSPACE_PREF_UNSET,
+    ChatSessionsTable,
+    get_chat_sessions_table,
+)
 from src.dao.redis_dao import get_redis_dao
 from src.services.tools_server_allowlist import is_user_in_admin_allowlist
 from src.services.worker_registry_service import get_worker_registry_service
@@ -262,6 +266,33 @@ class ChatSessionsService:
     ) -> bool:
         """设置会话绑定的工作区目录。仅所有者可写。"""
         return self.table.set_session_directory(session_id, directory, user_id)
+
+    def update_session_workspace_prefs(
+        self,
+        session_id: str,
+        user_id: str,
+        *,
+        directory: object = WORKSPACE_PREF_UNSET,
+        chat_mode: object = WORKSPACE_PREF_UNSET,
+    ) -> bool:
+        """更新会话工作区目录与/或 chat_mode；未传入的字段不更新。仅所有者可写。"""
+        return self.table.update_session_workspace_prefs(
+            session_id,
+            user_id,
+            directory=directory,
+            chat_mode=chat_mode,
+        )
+
+    def set_session_chat_mode(
+        self, session_id: str, chat_mode: str, user_id: str
+    ) -> bool:
+        """持久化会话偏好模式（direct|planner）。仅所有者可写。"""
+        return self.table.update_session_workspace_prefs(
+            session_id,
+            user_id,
+            directory=WORKSPACE_PREF_UNSET,
+            chat_mode=chat_mode,
+        )
 
     def get_share_status(self, session_id: str) -> dict:
         """获取会话分享状态。返回 { \"enabled\": bool }，会话不存在返回 None。"""
