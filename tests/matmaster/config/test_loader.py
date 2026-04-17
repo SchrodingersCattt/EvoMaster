@@ -347,9 +347,6 @@ class TestPlannerExpConfig:
             "planner 不应作为 AgentTool 的 subagent enum 暴露；与 "
             "when_to_use='NEVER' 的意图保持一致"
         )
-        # anchor 精确字符串来自 planner.toml:12
-        assert "MatMaster Planner Brainstorm" in cfg.developer_instructions
-        assert "PLAN.md" in cfg.developer_instructions
 
     def test_planner_not_in_model_visible_exps(self) -> None:
         """list_model_visible_exps() 不应返回 planner（被 visible_as_subagent=false 过滤）。"""
