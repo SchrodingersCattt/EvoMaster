@@ -18,6 +18,7 @@ import logging
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+from matmaster.config.exp import SUPPORTED_MODES
 from matmaster.integration.event_payloads import build_public_sse_payload_from_bus_dump
 from matmaster.response_text import is_trivial_response_text
 from matmaster.types.events import BusEvent, ResponseEvent, ThoughtEvent
@@ -136,8 +137,10 @@ class SSEHandler:
             if event.source == 'Planner' and is_streaming:
                 return True
 
-            # Direct mode: non-streaming complete thoughts are persist-only
-            if self._mode == 'direct' and not is_streaming:
+            # UI mode (direct / planner): non-streaming complete thoughts are
+            # persist-only (aggregated version is redundant with the streaming
+            # chunks that already reached the client).
+            if self._mode in SUPPORTED_MODES and not is_streaming:
                 return True
 
         return False
