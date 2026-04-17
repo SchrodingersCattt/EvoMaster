@@ -45,6 +45,14 @@ RUN_DEVSHELL_EVAL_SCHEMA: dict[str, Any] = {
                 "LLM route for inner mm-devshell --model (default: bedrock-claude-opus)."
             ),
         },
+        "fallback_model": {
+            "type": "string",
+            "description": (
+                "run_devshell_eval --fallback-model (default: claude-opus-4-6): retry a "
+                "failed task once when devshell logs indicate Bedrock transport errors; "
+                "omit or match model to skip fallback."
+            ),
+        },
         "exp": {
             "type": "string",
             "description": "Optional mm-devshell --exp (default: CLI defaults).",

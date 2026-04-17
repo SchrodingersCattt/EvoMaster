@@ -33,6 +33,8 @@ class RunDevshellEvalParams:
     exclude_question_ids: list[str] | None = None
     #: ``None``: omit ``--k`` (use eval YAML ``k``).
     k: int | None = None
+    #: Forwarded to ``run_devshell_eval --fallback-model`` when set.
+    fallback_model: str | None = None
 
 
 class DevshellEvalSubprocess:
@@ -78,6 +80,8 @@ class DevshellEvalSubprocess:
             cmd.extend(["--eval-config", str(params.eval_config)])
         if params.k is not None:
             cmd.extend(["--k", str(params.k)])
+        if params.fallback_model:
+            cmd.extend(["--fallback-model", params.fallback_model])
         if params.exclude_question_ids:
             cmd.append("--exclude-question-ids")
             cmd.extend(params.exclude_question_ids)
