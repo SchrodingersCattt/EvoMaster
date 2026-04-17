@@ -10,6 +10,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+class _WorkspacePrefUnset:
+    """update_session_workspace_prefs 未传入的字段不更新。"""
+
+
+WORKSPACE_PREF_UNSET = _WorkspacePrefUnset()
+
+
 class ChatSessionsTable(BaseTable):
     """聊天会话表"""
 
@@ -52,7 +59,7 @@ class ChatSessionsTable(BaseTable):
                 cursor.execute(
                     f'''
                     SELECT session_id, user_id, org_id, project_id, session_directory,
-                           status, is_shared, last_task_id, created_at, updated_at
+                           chat_mode, status, is_shared, last_task_id, created_at, updated_at
                     FROM {self.table_name}
                     WHERE session_id = %s
                     ''',
@@ -104,6 +111,62 @@ class ChatSessionsTable(BaseTable):
             )
             return False
 
+    def update_session_workspace_prefs(
+        self,
+        session_id: str,
+        user_id: str,
+        *,
+        directory: str | None | _WorkspacePrefUnset = WORKSPACE_PREF_UNSET,
+        chat_mode: str | None | _WorkspacePrefUnset = WORKSPACE_PREF_UNSET,
+    ) -> bool:
+        """更新会话工作区目录与/或 chat_mode。未传入的字段不更新。仅所有者可写。"""
+        sets: list[str] = []
+        params: list[object] = []
+        if not isinstance(directory, _WorkspacePrefUnset):
+            norm_d: str | None = None
+            if directory is not None:
+                s = str(directory).strip()
+                norm_d = s if s else None
+            sets.append('session_directory = %s')
+            params.append(norm_d)
+        if not isinstance(chat_mode, _WorkspacePrefUnset):
+            norm_m: str | None = None
+            if chat_mode is not None:
+                m = str(chat_mode).strip().lower()
+                if m not in ('direct', 'planner'):
+                    logger.warning(
+                        'update_session_workspace_prefs invalid chat_mode=%r session_id=%s',
+                        chat_mode,
+                        session_id,
+                    )
+                    return False
+                norm_m = m
+            sets.append('chat_mode = %s')
+            params.append(norm_m)
+        if not sets:
+            return True
+        params.extend([session_id, user_id])
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        f'''
+                        UPDATE {self.table_name}
+                        SET {', '.join(sets)}, updated_at = NOW()
+                        WHERE session_id = %s AND user_id = %s
+                        ''',
+                        tuple(params),
+                    )
+                    conn.commit()
+                    return cursor.rowcount > 0
+        except Error as e:
+            logger.warning(
+                'update_session_workspace_prefs failed session_id=%s: %s',
+                session_id,
+                e,
+            )
+            return False
+
     def set_session_directory(
         self,
         session_id: str,
@@ -111,30 +174,12 @@ class ChatSessionsTable(BaseTable):
         user_id: str,
     ) -> bool:
         """更新会话绑定目录。仅所有者可写；directory 为 None 或空串则置为 NULL。"""
-        norm: str | None = None
-        if directory is not None:
-            s = directory.strip()
-            norm = s if s else None
-        try:
-            with self.get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        f'''
-                        UPDATE {self.table_name}
-                        SET session_directory = %s, updated_at = NOW()
-                        WHERE session_id = %s AND user_id = %s
-                        ''',
-                        (norm, session_id, user_id),
-                    )
-                    conn.commit()
-                    return cursor.rowcount > 0
-        except Error as e:
-            logger.warning(
-                'set_session_directory failed session_id=%s: %s',
-                session_id,
-                e,
-            )
-            return False
+        return self.update_session_workspace_prefs(
+            session_id,
+            user_id,
+            directory=directory,
+            chat_mode=WORKSPACE_PREF_UNSET,
+        )
 
     def set_session_status(self, session_id: str, status: str) -> bool:
         """设置会话状态：idle=空闲/已结束，active=运行中，waiting=已入队等待 worker 接手"""

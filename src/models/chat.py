@@ -17,7 +17,9 @@ ag-ui 协议（前后端约定）：
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.base.base_res import BaseResponse
 
@@ -151,6 +153,10 @@ class SessionDirectoryData(BaseModel):
         default=None,
         description='该会话绑定的工作区目录路径（如远端 /share/...）；未设置时为 null',
     )
+    mode: Literal['direct', 'planner'] | None = Field(
+        default=None,
+        description='本会话偏好模式 direct|planner；未设置时为 null，前端可默认 direct',
+    )
 
 
 class SessionDirectoryApiResponse(BaseResponse[SessionDirectoryData]):
@@ -161,7 +167,10 @@ class SessionDirectoryApiResponse(BaseResponse[SessionDirectoryData]):
             'example': {
                 'code': 0,
                 'msg': 'success',
-                'data': {'directory': '/share/my_workspace/run1'},
+                'data': {
+                    'directory': '/share/my_workspace/run1',
+                    'mode': 'direct',
+                },
             }
         }
     )
@@ -175,11 +184,27 @@ class SessionDirectorySetRequest(BaseModel):
         max_length=2048,
         description='绑定目录路径；传 null 或空字符串表示清除',
     )
+    mode: Literal['direct', 'planner'] | None = Field(
+        default=None,
+        description='偏好模式；传 null 清除持久化；可仅更新 mode 或仅更新 directory',
+    )
+
+    @field_validator('mode', mode='before')
+    @classmethod
+    def normalize_mode(cls, v: object) -> str | None:
+        if v is None or v == '':
+            return None
+        if isinstance(v, str):
+            m = v.strip().lower()
+            if m in ('direct', 'planner'):
+                return m
+        raise ValueError('mode must be direct or planner')
 
     model_config = ConfigDict(
         json_schema_extra={
             'example': {
                 'directory': '/share/project/foo',
+                'mode': 'planner',
             }
         }
     )

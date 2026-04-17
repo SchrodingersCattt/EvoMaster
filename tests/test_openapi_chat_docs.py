@@ -42,8 +42,8 @@ def test_session_directory_openapi_paths():
     assert path in schema['paths']
     get_op = schema['paths'][path]['get']
     put_op = schema['paths'][path]['put']
-    assert get_op['summary'] == '查询会话绑定的工作区目录'
-    assert put_op['summary'] == '设置会话绑定的工作区目录'
+    assert get_op['summary'] == '查询会话工作区目录与模式偏好'
+    assert put_op['summary'] == '设置会话工作区目录与模式偏好'
     user_header = _get_parameter(put_op, 'X-User-Id', 'header')
     assert user_header is not None
     assert user_header['required'] is True
