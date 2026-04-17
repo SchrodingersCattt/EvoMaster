@@ -54,6 +54,13 @@ def _exec_ctx() -> ToolExecutionContext:
     return ToolExecutionContext(cancel_token=CancellationToken())
 
 
+def test_ask_question_declares_interaction_exclusive_resource_claim() -> None:
+    claims = AskQuestionTool.resource_claims
+    assert len(claims) == 1
+    assert claims[0].resource == "interaction"
+    assert claims[0].mode == "exclusive"
+
+
 class TestAskQuestionToolValidation:
     def test_validate_rejects_duplicate_question_texts(self) -> None:
         tool = AskQuestionTool(bridge=_FakeBridge())
