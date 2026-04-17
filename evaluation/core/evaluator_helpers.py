@@ -6,7 +6,9 @@ the repository's single-file size limit.
 
 from __future__ import annotations
 
+import fnmatch
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from evaluation.validators.structure_general import (
@@ -183,12 +185,14 @@ def build_llm_context(
     question: QuestionItem,
     answer: str,
     evidence: EvidenceBundle | None,
+    ref: ReferenceAnswer | None = None,
     include_tool_calls: bool = True,
 ) -> str:
     """Build the LLM-judge context string.
 
-    When ``include_tool_calls`` is False (e.g. grounding-axis judges), tool-call lines are
-    omitted so the judge does not treat missing MCP/web_search as evidence of failure.
+    When ``include_tool_calls`` is False (e.g. grounding-axis judges), tool-call
+    lines are omitted so the judge does not treat missing MCP/web_search as
+    evidence of failure.
     Workspace output filenames are still listed when artifacts are present.
     """
     lines = [
@@ -228,6 +232,74 @@ def build_llm_context(
                     lines.append(f'      args: {args_str}')
                 if obs_excerpt:
                     lines.append(f'      observation: {obs_excerpt}')
+
+        # For llm_binary_judge criteria with referenced file artifacts,
+        # inject file content excerpt so judge decisions are based on output content.
+        if ref is not None and evidence.workspace_dir:
+            cfg = ref.value if isinstance(ref.value, dict) else {}
+            filenames_raw = []
+            if cfg:
+                one = str(cfg.get('filename', '')).strip()
+                if one:
+                    filenames_raw.append(one)
+                many = cfg.get('filenames')
+                if isinstance(many, list):
+                    filenames_raw.extend(str(x).strip() for x in many if str(x).strip())
+            if filenames_raw:
+                seen: set[str] = set()
+                filenames = []
+                for name in filenames_raw:
+                    if name not in seen:
+                        seen.add(name)
+                        filenames.append(name)
+                workspace_resolve = ref.workspace_resolve or 'recursive'
+                root = Path(evidence.workspace_dir)
+                max_chars = 6000
+
+                def _resolve_target(filename: str) -> Path | None:
+                    if workspace_resolve == 'root':
+                        if len(Path(filename).parts) == 1:
+                            cand = root / filename
+                            if cand.is_file():
+                                return cand
+                        return None
+                    exact = root / filename
+                    if exact.is_file():
+                        return exact
+                    hits = [
+                        p
+                        for p in root.rglob("*")
+                        if p.is_file() and fnmatch.fnmatch(p.name, filename)
+                    ]
+                    if not hits:
+                        return None
+                    return max(hits, key=lambda p: p.stat().st_mtime)
+
+                for filename in filenames:
+                    resolved = _resolve_target(filename)
+                    if resolved is None:
+                        lines.append(
+                            f'Referenced file for criterion not found: {filename}'
+                        )
+                        continue
+                    try:
+                        raw = resolved.read_text(encoding='utf-8')
+                        excerpt = raw[:max_chars]
+                        lines.append(
+                            f'Referenced file for criterion: {filename} '
+                            f'(resolved: {resolved.name})'
+                        )
+                        if raw:
+                            lines.append('Referenced file content excerpt:')
+                            lines.append(excerpt)
+                            if len(raw) > max_chars:
+                                lines.append(f'... [truncated, total chars={len(raw)}]')
+                        else:
+                            lines.append('Referenced file is empty.')
+                    except Exception as exc:
+                        lines.append(
+                            f'Failed to read referenced file {filename}: {exc}'
+                        )
 
     return '\n'.join(lines)
 
@@ -276,7 +348,9 @@ def check_turn_budget(
 
 
 def token_usage_record_from_evidence(evidence: EvidenceBundle) -> TokenUsageRecord:
-    """Snapshot **last LLM turn** (raw ``total_tokens``, no cache deduction in budgets)."""
+    """Snapshot **last LLM turn** (raw ``total_tokens``, no cache deduction in
+    budgets).
+    """
     src = evidence.token_usage_last_turn
     raw_total = src.total_tokens
     return TokenUsageRecord(

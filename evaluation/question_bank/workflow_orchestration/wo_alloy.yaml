@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: alloy
 questions:
-- id: WO_general_mechmix_004_20260411v1
+- id: WO_general_mechmix_004_20260415
   capability: workflow_orchestration
   domain: alloy
   intent: Compare database-retrieved alloy references with APEX elastic predictions for a
@@ -27,25 +27,23 @@ questions:
   - key: elastic_required_tokens
     value:
       filename: nico_cr_roomtemp_elastic.json
-      tokens:
+      must_cover:
       - C11
       - C12
       - C44
       - bulk_modulus_GPa
       - db_reference
       - comparison_summary
-      flags: i
   - key: report_required_tokens
     value:
       filename: nico_cr_roomtemp_report.md
-      tokens:
+      must_cover:
       - Ni
       - Co
       - Cr
       - APEX
       - 对比
       - 不确定性
-      flags: i
   - key: turn_budget
     value:
       max: 10
@@ -68,11 +66,11 @@ questions:
     criterion: JSON includes required elastic constants, bulk modulus, and database-comparison
       fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report clearly explains retrieval + APEX workflow and uncertainty caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Deliverables are grounded in generated artifacts and do not fabricate unsupported
       reference or computed values.
@@ -95,7 +93,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_004_20260411v1
+- id: WO_mech_004_20260415
   capability: workflow_orchestration
   domain: alloy
   intent: Optimize an alloy structure with APEX and summarize geometry-change evidence with
@@ -122,22 +120,20 @@ questions:
   - key: summary_required_tokens
     value:
       filename: alloy_opt_summary.json
-      tokens:
+      must_cover:
       - method
       - input_structure
       - output_structure
       - optimization_status
       - APEX
-      flags: i
   - key: report_required_tokens
     value:
       filename: alloy_opt_report.md
-      tokens:
+      must_cover:
       - optimization
       - alloy
       - structure
       - 不确定性
-      flags: i
   - key: turn_budget
     value:
       max: 14
@@ -163,11 +159,11 @@ questions:
   - id: summary_required_tokens
     criterion: Summary JSON includes optimization metadata and APEX method context.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report explains optimization setup and uncertainty notes.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Final answer is grounded in generated optimization artifacts and does not invent
       unsupported structural changes.
@@ -191,7 +187,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_006_20260411v1
+- id: WO_mech_006_20260415
   capability: workflow_orchestration
   domain: alloy
   intent: Build the convex hull for a CuCrZr alloy and summarize stability interpretation
@@ -215,23 +211,21 @@ questions:
   - key: hull_required_tokens
     value:
       filename: cucrzr_convex_hull_summary.json
-      tokens:
+      must_cover:
       - hull_distance
       - stability_label
       - reference_phases
       - Cu
       - Cr
       - Zr
-      flags: i
   - key: report_required_tokens
     value:
       filename: cucrzr_convex_hull_report.md
-      tokens:
+      must_cover:
       - convex hull
       - stability
       - CuCrZr
       - 不确定性
-      flags: i
   - key: hull_distance_mock
     value: 0.024
     tolerance: 0.01
@@ -256,11 +250,11 @@ questions:
   - id: hull_required_tokens
     criterion: Hull summary JSON includes distance/stability fields and phase-reference metadata.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report explains convex-hull interpretation and uncertainty caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: hull_distance_mock
     criterion: Final answer includes a mock hull distance near 0.024 eV/atom.
     axis: correctness

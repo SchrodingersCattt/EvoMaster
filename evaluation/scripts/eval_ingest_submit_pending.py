@@ -17,7 +17,8 @@ For ``run_kind`` ``baseline``, the server requires ``baseline_channel`` (``claud
 CLI score fields are the only source of ``score`` / ``score_reason`` / ``suggestion``.
 Field names match ``matmaster-tools-server`` ``EvalItemIn``: optional ``question_text``
 (stem; long text truncated client-side to server max), ``score_reason`` / ``suggestion``
-``maxLength`` 16384.
+``maxLength`` 16384, top-level ``repeat_idx`` (default ``0`` when missing
+after ``normalize_pending_item_for_submission``).
 """
 
 from __future__ import annotations

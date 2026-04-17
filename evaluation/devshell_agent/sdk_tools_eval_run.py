@@ -6,6 +6,7 @@ import json
 import shutil
 import sys
 import uuid
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -23,37 +24,89 @@ from evaluation.devshell_agent.subprocess_runner import (
 )
 
 
+def _pending_repeat_rows(pending_dir: Path) -> list[dict[str, Any]]:
+    """One row per ``pending_ingest/*.json`` (each repeat run)."""
+    rows: list[dict[str, Any]] = []
+    if not pending_dir.is_dir():
+        return rows
+    for path in sorted(pending_dir.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        item = payload.get("item") or {}
+        score = item.get("score")
+        if not isinstance(score, (int, float)):
+            continue
+        task_id = path.stem
+        qid = (item.get("question_id") or "").strip()
+        row: dict[str, Any] = {
+            "task_id": task_id,
+            "question_id": qid or None,
+            "score": int(score),
+        }
+        if "all_criteria_passed" in item:
+            row["all_criteria_passed"] = bool(item["all_criteria_passed"])
+        rows.append(row)
+    return rows
+
+
+def _group_key_for_pending_row(row: dict[str, Any]) -> str:
+    return row["question_id"] if row.get("question_id") else row["task_id"]
+
+
+def _macro_summary_from_repeat_rows(
+    rows: list[dict[str, Any]],
+) -> tuple[int, list[dict[str, Any]], list[dict[str, Any]]]:
+    """Aggregate repeats per ``question_id`` → one 0/100 per question (all repeats must be 100)."""
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        groups[_group_key_for_pending_row(row)].append(row)
+
+    task_scores: list[dict[str, Any]] = []
+    for key in sorted(groups.keys()):
+        grp = groups[key]
+        all_pass = all(r["score"] == 100 for r in grp)
+        agg = 100 if all_pass else 0
+        first = grp[0]
+        task_scores.append(
+            {
+                "task_id": first["task_id"],
+                "question_id": first.get("question_id"),
+                "score": agg,
+                "repeat_count": len(grp),
+                "all_repeats_passed": all_pass,
+                "all_criteria_passed": all_pass,
+            }
+        )
+
+    macro_mean = 0
+    if task_scores:
+        macro_mean = round(sum(t["score"] for t in task_scores) / len(task_scores))
+    low_score_tasks = [t for t in task_scores if t["score"] < 100]
+    return macro_mean, task_scores, low_score_tasks
+
+
 class MatmasterEvalMcpEvalRunMixin:
     """供 :class:`MatmasterEvalMcpToolkit` 混入：评测子进程与 P0 门控。"""
 
     def _build_sanitized_run_summary(self, run_dir: Path) -> dict[str, Any]:
         pending_dir = run_dir / "pending_ingest"
-        rows: list[dict[str, Any]] = []
-        if pending_dir.is_dir():
-            for path in sorted(pending_dir.glob("*.json")):
-                try:
-                    payload = json.loads(path.read_text(encoding="utf-8"))
-                except json.JSONDecodeError:
-                    continue
-                item = payload.get("item") or {}
-                score = item.get("score")
-                if isinstance(score, (int, float)):
-                    rows.append(
-                        {
-                            "task_id": path.stem,
-                            "score": int(score),
-                        }
-                    )
-        macro_mean = 0
-        if rows:
-            macro_mean = round(sum(row["score"] for row in rows) / len(rows))
-        low_score_tasks = [row for row in rows if row["score"] < 100]
+        repeat_rows = _pending_repeat_rows(pending_dir)
+        macro_mean, task_scores, low_score_tasks = _macro_summary_from_repeat_rows(
+            repeat_rows
+        )
         return {
             "macro_mean_0_100": macro_mean,
-            "task_scores": rows,
+            "task_scores": task_scores,
             "low_score_tasks": low_score_tasks,
             "sanitized": True,
             "notes": [
+                "Per-repeat ingest score is 0 or 100 (all scoring_checklist items passed). "
+                "Per-question score is 100 only when every repeat for that question scored "
+                "100; otherwise 0. macro_mean_0_100 is the mean of those per-question "
+                "0/100 values (questions fully passed ÷ question count × 100), matching "
+                "target_pass_rate.",
                 "Raw score_reason is intentionally withheld from the main agent.",
                 "Use delegate_optimization or escalate_checklist_revision with sanitized summaries only.",
             ],
@@ -101,6 +154,9 @@ class MatmasterEvalMcpEvalRunMixin:
         extra = list(d.extra_args)
         if args.get("extra_args") is not None:
             extra = list(args["extra_args"])
+        k_repeat = d.k
+        if args.get("k") is not None:
+            k_repeat = int(args["k"])
         return RunDevshellEvalParams(
             output_dir=out_dir,
             jobs=jobs,
@@ -116,6 +172,7 @@ class MatmasterEvalMcpEvalRunMixin:
             extra_args=extra,
             eval_ingest_run_id=eval_ingest_run_id,
             exclude_question_ids=exclude_question_ids,
+            k=k_repeat,
         )
 
     def _maybe_submit_run_dir_ingest(
@@ -235,22 +292,13 @@ class MatmasterEvalMcpEvalRunMixin:
         return result
 
     def _read_scores_from_pending(self, run_dir: Path) -> dict[str, int]:
-        """Read scored ``pending_ingest/*.json`` → ``{question_id: score}``."""
+        """Per-question 0/100: 100 only if every repeat for that question scored 100."""
         pending_dir = run_dir / "pending_ingest"
-        scores: dict[str, int] = {}
-        if not pending_dir.is_dir():
-            return scores
-        for path in sorted(pending_dir.glob("*.json")):
-            try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                continue
-            item = payload.get("item") or {}
-            score = item.get("score")
-            q_id = item.get("question_id") or ""
-            if isinstance(score, (int, float)) and q_id:
-                scores[q_id] = int(score)
-        return scores
+        repeat_rows = _pending_repeat_rows(pending_dir)
+        _, task_scores, _ = _macro_summary_from_repeat_rows(repeat_rows)
+        return {
+            (t.get("question_id") or t["task_id"]): int(t["score"]) for t in task_scores
+        }
 
     @staticmethod
     def _merge_p0_and_rest_into_base_run_dir(
@@ -498,12 +546,25 @@ class MatmasterEvalMcpEvalRunMixin:
         self._state.eval_output_dirs.append(p0_dir)
         self._state.eval_output_dirs.append(rest_dir)
 
-        combined_summary = self._build_combined_sanitized_summary(
-            p0_scores=p0_scores,
-            rest_scores=rest_scores,
-            p0_dir=p0_dir,
-            rest_dir=rest_dir,
+        combined_summary = self._build_sanitized_run_summary(base_dir)
+        p0_id_set = set(p0_ids)
+        for row in combined_summary["task_scores"]:
+            qk = row.get("question_id") or row["task_id"]
+            row["p0"] = qk in p0_id_set
+        p0_rows = [r for r in combined_summary["task_scores"] if r.get("p0")]
+        rest_rows = [r for r in combined_summary["task_scores"] if not r.get("p0")]
+        combined_summary["p0_mean_0_100"] = (
+            round(sum(r["score"] for r in p0_rows) / len(p0_rows)) if p0_rows else 0
         )
+        combined_summary["p0_gate_passed"] = True
+        combined_summary["p0_task_count"] = len(p0_rows)
+        combined_summary["rest_task_count"] = len(rest_rows)
+        notes = list(combined_summary["notes"])
+        notes.insert(
+            0,
+            "P0 gate passed — merged p0_gate + remaining into one pending_ingest.",
+        )
+        combined_summary["notes"] = notes
 
         payload = DevshellEvalSubprocess.summarize_run_dir(base_dir)
         payload.update(
@@ -526,43 +587,4 @@ class MatmasterEvalMcpEvalRunMixin:
                 }
             ],
             "is_error": max(p0_rc, p0_score_rc, rest_rc, rest_score_rc) != 0,
-        }
-
-    def _build_combined_sanitized_summary(
-        self,
-        *,
-        p0_scores: dict[str, int],
-        rest_scores: dict[str, int],
-        p0_dir: Path,
-        rest_dir: Path,
-    ) -> dict[str, Any]:
-        """Merge P0 and remaining scores into a single sanitized summary."""
-        all_rows: list[dict[str, Any]] = []
-        for qid, score in p0_scores.items():
-            all_rows.append({"task_id": qid, "score": score, "p0": True})
-        for qid, score in rest_scores.items():
-            all_rows.append({"task_id": qid, "score": score, "p0": False})
-
-        macro_mean = 0
-        if all_rows:
-            macro_mean = round(sum(r["score"] for r in all_rows) / len(all_rows))
-        p0_mean = 0
-        if p0_scores:
-            p0_mean = round(sum(p0_scores.values()) / len(p0_scores))
-        low_score_tasks = [r for r in all_rows if r["score"] < 100]
-
-        return {
-            "macro_mean_0_100": macro_mean,
-            "p0_mean_0_100": p0_mean,
-            "p0_gate_passed": True,
-            "task_scores": all_rows,
-            "low_score_tasks": low_score_tasks,
-            "p0_task_count": len(p0_scores),
-            "rest_task_count": len(rest_scores),
-            "sanitized": True,
-            "notes": [
-                "P0 gate passed — all questions completed.",
-                "Raw score_reason is intentionally withheld from the main agent.",
-                "Use delegate_optimization or escalate_checklist_revision with sanitized summaries only.",
-            ],
         }

@@ -65,6 +65,13 @@ RUN_DEVSHELL_EVAL_SCHEMA: dict[str, Any] = {
                 "Per-task wall timeout for mm-devshell (default: CLI defaults)."
             ),
         },
+        "k": {
+            "type": "integer",
+            "description": (
+                "Repeat each question k times (repeat_idx 0..k-1); overrides eval "
+                "config (default: CLI)."
+            ),
+        },
         "extra_args": {
             "type": "array",
             "items": {"type": "string"},
@@ -84,14 +91,17 @@ REPORT_ITERATION_SCHEMA: dict[str, Any] = {
         "macro_mean_0_100": {
             "type": "integer",
             "description": (
-                "Macro-averaged 0–100 score: mean of item.score in pending_ingest/*.json "
-                "for that run_dir (same as score_devshell_tasks.py after orchestrator submit), "
-                "or from a fresh score_devshell_tasks run if re-scoring."
+                "Per-question 0/100: 100 only when every repeat run for that question "
+                "scored 100 (full checklist each time). Mean over questions = "
+                "(questions fully passed ÷ question count) × 100; matches target_pass_rate."
             ),
         },
         "target_met": {
             "type": "boolean",
-            "description": "True if macro_mean_0_100 >= configured target.",
+            "description": (
+                "True if macro_mean_0_100 >= configured target (same threshold as before, "
+                "now applied to pass-rate scale)."
+            ),
         },
         "rationale": {
             "type": "string",

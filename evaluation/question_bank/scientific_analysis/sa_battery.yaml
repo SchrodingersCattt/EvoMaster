@@ -2,7 +2,7 @@ version: v5
 capability: scientific_analysis
 domain: battery
 questions:
-- id: WO_general_sse_006_20260411v1
+- id: WO_general_sse_006_20260415
   capability: scientific_analysis
   domain: battery
   intent: Summarize sulfur-containing solid-electrolyte candidates for Li-metal interfaces
@@ -25,23 +25,21 @@ questions:
   - key: candidates_required_tokens
     value:
       filename: sulfur_sse_candidates.json
-      tokens:
+      must_cover:
       - material
       - key_property
       - interface_stability_note
       - ionic_conductivity_note
       - reference_hint
-      flags: i
   - key: review_required_tokens
     value:
       filename: sulfur_sse_review.md
-      tokens:
+      must_cover:
       - 含硫
       - 固态电解质
       - 界面稳定
       - 离子电导
       - 不确定性
-      flags: i
   - key: turn_budget
     value:
       max: 10
@@ -63,11 +61,11 @@ questions:
   - id: candidates_required_tokens
     criterion: Candidate JSON includes required per-material fields.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: review_required_tokens
     criterion: Review explains the conductivity-stability tradeoff with uncertainty notes.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Deliverables are grounded in literature-oriented evidence and avoid unsupported
       performance claims.
@@ -90,7 +88,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: pl_hopping
+- id: pl_hopping_20260416
   capability: scientific_analysis
   domain: battery
   intent: Analyze Li+ hopping in PEO-LiTFSI by comparing PMF barriers and diffusion evidence
@@ -134,6 +132,9 @@ questions:
     - reaction_coordinate_note
     - hopping_mechanism
     - validation_suggestion
+  - key: grounding_source
+    value:
+      filename: free_energy_hopping_bundle.json
   - key: turn_budget
     value:
       max: 24

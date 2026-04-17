@@ -46,13 +46,13 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
     * **When to use**: Any task requesting γ-alumina construction. This script handles the defect-spinel vacancy pattern automatically. **Use this first** — do NOT write custom build scripts from scratch.
     * After building, relax with MLIP (`optimize_structure.py` from mlips skill) — relaxation is typically required to achieve physical force convergence.
 
-### 0b. Molecular Crystal Slab Cutting
+### 0b. Molecular Crystal Slab Cutting — **MANDATORY for molecular crystals**
 * **build_molecular_crystal_slab.py** — Cut a surface slab from a molecular crystal (organic, MOF, co-crystal, hybrid salt, etc.) with automatic molecule integrity verification.
     * **Usage**: `python build_molecular_crystal_slab.py --file input.cif --miller 1 1 0 --layers 4 [-o output.cif] [--vacuum 20.0] [--bond-tolerance 0.45]`
     * **When to use**: Whenever the input structure is a molecular crystal (contains discrete molecules, not a purely covalent/ionic 3D network). The script: (a) detects molecules via covalent bond graph (PBC-aware), (b) enumerates all terminations from pymatgen SlabGenerator with `in_unit_planes=True`, (c) checks molecule integrity for each termination, (d) selects the best slab preserving intact molecules.
     * **Output JSON**: `{"success": true, "molecules_intact": true, "atom_count_matches_expected": true, "n_atoms": 576, "expected_atoms": 576, "output_file": "output.cif", ...}`
     * **Key checks reported**: molecule integrity (fragmented or not), atom count vs expected (layers × unit-cell atoms), number of terminations evaluated, molecule formula consistency.
-    * **Prefer this over manual pymatgen SlabGenerator scripting** for molecular crystals — it handles the tricky PBC-aware molecule detection and multi-termination evaluation in one call, saving significant time.
+    * **⚠ HARD RULE**: For **any** molecular crystal slab task, you **MUST** use this script as your FIRST approach. Do NOT write custom SlabGenerator or manual slab-cutting code — custom code almost always produces fragmented molecules because standard pymatgen `SlabGenerator` does not perform molecule-integrity checks. This script is the **only reliable method** for molecular crystal slabs. If the script fails, debug its parameters (--bond-tolerance, --layers) before resorting to custom code.
 
 ### 1. Download / Page Extraction
 * **fetch_web_structure.py**
@@ -120,13 +120,12 @@ Key rules:
 
 * "Get / search / find / retrieve the crystal structure of X" → Try MCP database tools (`mat_struct_db_*`) first for simple inorganic formulas. If not found, or if the material is complex (organic, hybrid, molecular crystal, MOF, co-crystal, energetic salt, etc.), use the literature-based search path: `mat_sn_*` → `extract_info_from_webpage` → `fetch_web_structure.py` / report identifiers.
 * "Build from SMILES or prototype" → use MCP structure generator (`mat_sg_*`).
-* "Build a structure for band structure / DOS / electronic property calculation" → see "Structure Construction for Electronic Property Calculations" above. Use primitive cell for band structure, dense k-mesh for DOS.
 * "I have a direct CIF/POSCAR URL, download it" → `fetch_web_structure.py --url`.
 * "Get the structure from a journal SI or open repository page" → `fetch_web_structure.py --page`.
 * "Get the crystal structure of X" where X is in CCDC/ICSD → report database identifier (REFCODE / collection code) + crystallographic parameters (space group, lattice constants, formula, Z) from literature; do not attempt to download or reconstruct.
 * "Check if this structure is reasonable" → `assess_structure.py`.
 * "Convert this CIF to POSCAR" / "Convert POSCAR to LAMMPS data" → `convert_format.py`.
-* **"Cut a surface slab from a molecular crystal"** → `build_molecular_crystal_slab.py`. Use this FIRST for any molecular crystal (organic, MOF, co-crystal, hybrid) slab task. Do NOT write custom SlabGenerator scripts from scratch for molecular crystals — it wastes many turns.
+* **"Cut a surface slab from a molecular crystal"** → `build_molecular_crystal_slab.py`. **MANDATORY** for any molecular crystal (organic, MOF, co-crystal, hybrid, energetic) slab task. Do NOT write custom SlabGenerator or inline Python slab-cutting code for molecular crystals — custom code fragments molecules and wastes turns. The script handles PBC-aware molecule detection and multi-termination evaluation automatically.
 
 ## Tool (via Skill)
 

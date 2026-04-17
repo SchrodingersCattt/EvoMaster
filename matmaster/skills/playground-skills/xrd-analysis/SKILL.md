@@ -73,6 +73,11 @@ python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
 
 **Output**: CIF file + JSON summary printed to stdout with R1, wR2, GOOF, cell volume, atom count.
 
+**Best-practice flags** (always use when information is available):
+- `--elements "C H N O S"` — **strongly recommended**; provide expected element list for accurate atom-type assignment. Without it, defaults to common organic elements and heavy atoms may be misassigned.
+- `--sg <space_group>` — always pass the space group if known (from P4P/INS or literature). The script uses symmetry operations to constrain the solution; P1 default wastes parameters.
+- `--grid 128` for large unit cells (V > 2000 ų). `--trials 5` if R1 > 0.15 on first attempt.
+
 ## Hard Constraints
 
 - **Deliverables first**: For SCXRD tasks, ALWAYS produce a CIF file. An imperfect CIF is infinitely better than no CIF.

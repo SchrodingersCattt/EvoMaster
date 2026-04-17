@@ -1,0 +1,29 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 1,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [
+        "8c1e5da8441b793365d98e3c9c1ee31686a21e94"
+      ],
+      "files_touched": [
+        "matmaster/skills/abacus/SKILL.md",
+        "matmaster/skills/abacus/references/input_examples.md",
+        "matmaster/skills/playground-skills/structure-manager/SKILL.md"
+      ],
+      "followup_suggestion": "Re-run evaluation on the intermittent failure questions (IG_abacus_001, IG_abacus_002, SC_struct_002) to verify stabilization. If those pass consistently but score is still below 60%, consider a second round targeting turn-budget efficiency issues (BP_struct_005/006, DD_proposal_review_001) which may require system_prompt-layer proposals.",
+      "iteration_index": 1,
+      "needs_more_work": false,
+      "optimization_round": 1,
+      "summary": "## Targeted Skill-Layer Changes for Intermittent Failure Stabilization\n\n### 1. ABACUS Skill: `kspacing` Mandate for Supercell Calculations\n**Files**: `matmaster/skills/abacus/SKILL.md`, `matmaster/skills/abacus/references/input_examples.md`\n\n**Problem**: IG_abacus_001 (consistent) and IG_abacus_002 (intermittent, 1/3 fails) both failed because the agent used a separate KPT file instead of embedding `kspacing` in the INPUT file for supercell/vacancy/BSSE calculations. The scoring checks for `kspacing` as a key in the INPUT file.\n\n**Changes**:\n- Added new **\"K-point Strategy\"** section with decision table (supercell=mandatory kspacing, bulk=KPT file OK, band structure=KPT line-mode)\n- Added `kspacing` row to the mandatory-extras-per-task table\n- Added two new INPUT examples in `references/input_examples.md`: vacancy/BSSE and slab BSSE, both with `kspacing`\n- Added kspacing warning callout in the Quick Reference table\n- Updated Physical Checks to explicitly note kspacing for supercells and scf_nmax=100 as standard\n\n### 2. Structure Manager Skill: Mandatory `build_molecular_crystal_slab.py` for Molecular Crystals\n**File**: `matmaster/skills/playground-skills/structure-manager/SKILL.md`\n\n**Problem**: SC_struct_002 (intermittent, 1/3 fails) failed when the agent wrote custom slab-cutting code instead of using the specialized script. Custom code produced fragmented molecules (14-atom fragments vs 36-atom intact molecules).\n\n**Changes**:\n- Upgraded heading from \"Prefer this\" to **\"MANDATORY for molecular crystals\"** with ⚠ HARD RULE\n- Updated \"When to use\" section to mark the script as **MANDATORY** with explicit prohibition against custom SlabGenerator code\n- Clarified that debugging script parameters is the correct response to failure, not falling back to custom code\n\n### Expected Impact\nThese changes target 2 of the 7 intermittent failures (questions failing 1/3 repeats). Per the delegate notes, stabilizing any 2 of these would cross the 60% threshold. The kspacing change also addresses 1 consistent failure (IG_abacus_001) and may help other ABACUS questions."
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 1,
+    "macro_mean_0_100": 58,
+    "rationale": "## Iteration 1 Summary\n\n### Score\n- **macro_mean_0_100**: 58 (target: 60) — **not met**\n- P0 gate: **passed** (56%, 5/9 P0 questions fully passed)\n- Overall: 36/62 questions fully passed across all k=3 repeats\n\n### Failure Analysis (26 failing questions)\n| Failure Bucket | Count | Severity |\n|---|---|---|\n| ABACUS input generation | 5 | Mostly consistent (4/5 all repeats fail) |\n| Structure construction | 6 | Mixed (2 consistent, 4 intermittent) |\n| Workflow orchestration general | 4 | Mostly intermittent (3/4) |\n| Batch processing structure | 3 | Mixed (1 consistent, 2 intermittent) |\n| XRD/SCXRD data formatting | 3 | All consistent |\n| Cross-reference surface construction | 2 | All consistent |\n| Data diagnosis | 2 | Intermittent |\n| Structure retrieval | 1 | Consistent |\n\n### Key Insight\n7 questions fail in **only 1 of 3 repeats** — stabilizing any 2 would cross the 60% threshold. These are primarily in structure construction (SC_struct_002), batch processing (BP_struct_005/006), workflow orchestration (WO_general_hea_005), and data diagnosis (DD_general_004, DD_proposal_review_001).\n\n### Delegation\n- **Optimization sub-agent** queued (round 1): Focus on skill-layer improvements for ABACUS input generation and structure construction reliability; tool-layer inspection for data formatting.\n- **No checklist escalation**: Intermittent passes confirm the checklist is fair; failures are product-side reliability issues.\n\n### Next Step\nAwait optimization sub-agent results, then re-evaluate in iteration 2.",
+    "target_met": false
+  }
+}

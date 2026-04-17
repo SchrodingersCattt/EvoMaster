@@ -13,7 +13,7 @@
 # questions_mode（仅 child_pipeline: questions 时由 run_baseline_eval.sh 使用）:
 #   preset — 使用下方 question_ids / 或 CI 变量 BASELINE_QUESTIONS（默认）
 #   score_summary_missing_cc — 从 matmaster-tools-server GET .../questions/score-summary
-#     选取 claude_code_score 为 null 的题；若 question_ids / BASELINE_QUESTIONS 非空则与其求交集
+#     选取 claude_code_passed 为 null（无该渠道 baseline）的题；若 question_ids / BASELINE_QUESTIONS 非空则与其求交集
 # 由本字段 questions_mode 决定（无效值回退 preset）
 
 child_pipeline: questions
@@ -22,7 +22,7 @@ child_pipeline: questions
 eval_runner: claude_cli
 
 # preset — 只跑下方 question_ids（或 CI 变量 BASELINE_QUESTIONS 覆盖）
-# score_summary_missing_cc — 缺分模式：score-summary 取 claude_code_score 为 null 的全集（可与 question_ids / BASELINE_QUESTIONS 求交）
+# score_summary_missing_cc — 缺分模式：score-summary 取 claude_code_passed 为 null 的全集（可与 question_ids / BASELINE_QUESTIONS 求交）
 questions_mode: score_summary_missing_cc
 
 # score_summary_missing_cc 下留空＝跑 API 返回的全部缺分题；非空则与缺分列表求交集。
