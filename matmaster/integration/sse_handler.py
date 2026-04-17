@@ -4,7 +4,7 @@ Filter rules:
 - Skip: assistant_state (internal-only)
 - Skip: skill_hit (persist-only)
 - Skip: Planner source streaming thought (ephemeral JSON)
-- Skip: direct mode non-streaming complete thought (persist-only)
+- Skip: UI mode (direct/planner) non-streaming complete thought (persist-only)
 - Skip: ThoughtEvent/ResponseEvent with stream_state='complete' (aggregated)
 - Push: everything else
 
