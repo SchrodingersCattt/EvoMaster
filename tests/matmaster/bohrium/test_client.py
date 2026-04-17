@@ -226,6 +226,8 @@ def test_list_images_sandbox_falls_back_when_catalog_empty(
                     ]
                 }
             }
+        if path == "/openapi/v2/image/private":
+            return {"data": {"items": []}}
         if path == "/openapi/v2/image/public/1/version":
             return {
                 "data": {
@@ -254,7 +256,8 @@ def test_list_images_sandbox_falls_back_when_catalog_empty(
     assert result["images"][0]["name"] == "CP2K"
     assert "source" not in result or result["source"] != "sandbox_catalog"
     assert get_calls[0][0] == "/openapi/v2/image/public"
-    assert get_calls[1][0] == "/openapi/v2/image/public/1/version"
+    assert get_calls[1][0] == "/openapi/v2/image/private"
+    assert get_calls[2][0] == "/openapi/v2/image/public/1/version"
 
 
 def test_list_machines_non_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
