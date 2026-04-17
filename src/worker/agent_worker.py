@@ -19,6 +19,7 @@ from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
+from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from src.utils.build_info import get_build_version
 from src.utils.constant import SERVICE_ENV
 from src.utils.feishu_notifier import (
@@ -192,7 +193,14 @@ def _run_worker_loop() -> None:
         task_id = payload.get('task_id') or ''
         invocation_id = payload.get('invocation_id')
         user_prompt = payload.get('user_prompt') or ''
-        mode = (payload.get('mode') or 'direct').strip().lower() or 'direct'
+        mode = (payload.get('mode') or DEFAULT_MODE).strip().lower() or DEFAULT_MODE
+        if mode not in SUPPORTED_MODES:
+            logger.warning(
+                'Agent worker: unknown mode %r in payload, fallback to %s',
+                mode,
+                DEFAULT_MODE,
+            )
+            mode = DEFAULT_MODE
         llm_override = (payload.get('llm') or '').strip() or None
         model_override = (payload.get('model') or '').strip() or None
         raw_images = payload.get('images') or []
@@ -275,6 +283,7 @@ def _run_worker_loop() -> None:
                     ('会话地址', session_url),
                     ('用户', user_info_display),
                     ('模型', format_llm_model_for_notify(llm_override, model_override)),
+                    ('模式', mode),
                     ('用户问题', user_question or '-'),
                     ('执行节点', get_worker_id()),
                     ('执行中', str(active_count)),
