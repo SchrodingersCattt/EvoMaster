@@ -173,7 +173,7 @@ class SessionDirectorySetRequest(BaseModel):
     directory: str | None = Field(
         default=None,
         max_length=2048,
-        description='绑定目录路径；传 null 或空字符串表示清除',
+        description='绑定 Bohrium 远端 /share 工作目录；传 null 或空字符串表示清除',
     )
 
     model_config = ConfigDict(
@@ -215,7 +215,7 @@ class ChatSendRequest(BaseModel):
     directory: str | None = Field(
         default=None,
         max_length=2048,
-        description='可选，前端传入的本轮工作区目录，随 query 写入历史事件；持久化请用 PUT …/session-directory',
+        description='可选，本轮 Bohrium 远端 /share 工作目录；不会更新会话持久化目录',
     )
 
     model_config = ConfigDict(

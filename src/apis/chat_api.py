@@ -28,6 +28,10 @@ from src.services.agent_run_service import _get_agent_default_llm
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.image_input_service import ImageInputError, get_image_input_service
 from src.services.quota_service import check_quota
+from src.services.session_directory_service import (
+    SessionDirectoryError,
+    normalize_session_directory_for_storage,
+)
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.stream_service import (
     ChatStreamService,
@@ -64,6 +68,15 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 _PROJECT_ROOT = FsPath(__file__).resolve().parent.parent.parent
+
+
+def _session_directory_error(exc: SessionDirectoryError) -> BaseErrorResponse:
+    return BaseErrorResponse(
+        http_status=exc.http_status,
+        code=exc.http_status,
+        msg=exc.message,
+        data={'error_code': exc.error_code},
+    )
 
 
 @router.get(
@@ -123,7 +136,9 @@ def get_run_status():
     description='统一 SSE 流接口。'
     ' `content` 为空或不传 body 时，仅订阅该会话的历史和心跳；'
     ' `content` 非空时，发送消息并返回本次运行的 SSE 流。'
-    ' 可选 `directory`：随用户 query 写入历史事件；会话目录持久化请使用 PUT …/session-directory。',
+    ' 可选 `directory`：随用户 query 写入历史事件；会话目录持久化请使用 PUT …/session-directory。'
+    '\n\n目录相关错误码：directory_invalid_type, directory_invalid_chars, directory_must_be_absolute,'
+    ' directory_outside_share, session_directory_invalid',
     operation_id='streamChatSession',
     responses={
         401: COMMON_ERROR_RESPONSES[401],
@@ -472,7 +487,9 @@ def get_session_directory(
     '/{session_id}/session-directory',
     response_model=SessionDirectoryApiResponse,
     summary='设置会话绑定的工作区目录',
-    description='仅会话所有者可写；可将目录置为空以清除绑定。',
+    description='仅会话所有者可写；可将目录置为空以清除绑定。'
+    '\n\n目录相关错误码：directory_invalid_type, directory_invalid_chars, directory_must_be_absolute,'
+    ' directory_outside_share, session_directory_invalid',
     operation_id='setChatSessionDirectory',
     responses={
         401: COMMON_ERROR_RESPONSES[401],
@@ -487,7 +504,11 @@ def set_session_directory(
 ):
     """设置或清除会话绑定目录。"""
     sid = session_id.strip()
-    if not chat_svc.set_session_directory(sid, body.directory, user_id):
+    try:
+        normalized_directory = normalize_session_directory_for_storage(body.directory)
+    except SessionDirectoryError as exc:
+        raise _session_directory_error(exc) from exc
+    if not chat_svc.set_session_directory(sid, normalized_directory, user_id):
         raise NotFoundErrorResponse(
             msg='Session not found or you are not the owner',
         )
