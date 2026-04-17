@@ -210,6 +210,12 @@ def _run_worker_loop() -> None:
             else []
         )
         bohrium_required = bool(payload.get('bohrium_required'))
+        raw_remote_workdir = payload.get('remote_workdir')
+        remote_workdir = (
+            raw_remote_workdir.strip() or None
+            if isinstance(raw_remote_workdir, str)
+            else None
+        )
 
         if not session_id:
             logger.warning('Agent worker: skip job with empty session_id')
@@ -307,6 +313,7 @@ def _run_worker_loop() -> None:
                         llm_override=llm_override,
                         model_override=model_override,
                         images=images,
+                        remote_workdir=remote_workdir,
                         bohrium_required=bohrium_required,
                     )
                 )
