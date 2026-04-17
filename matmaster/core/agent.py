@@ -527,6 +527,12 @@ class AgentKernel:
                             )
                         )
 
+            # ── Turn budget awareness ──────────────────────────
+            # Inject a turn-count hint into the last ToolMessage so the
+            # LLM sees how many turns it has consumed.  Escalating urgency
+            # when max_turns represents a realistic budget (≤ 50).
+            self._inject_turn_budget_nudge(state, spec.max_turns)
+
         yield self._terminal(state, "max_turns")
 
     async def _call_llm_streaming(
@@ -898,6 +904,68 @@ class AgentKernel:
                 retryable=False,
                 error_category="bad_request",
             )
+
+    @staticmethod
+    def _inject_turn_budget_nudge(
+        state: _KernelState,
+        max_turns: int,
+    ) -> None:
+        """Append turn-count awareness to the last ToolMessage.
+
+        Provides the LLM with real-time feedback on turn consumption so it
+        can self-regulate and avoid exceeding task budgets:
+
+        - **Constrained budget** (``max_turns ≤ 50``): always show
+          ``[Turn X/Y]``, with escalating urgency at 60 %/75 %/90 %
+          thresholds.
+        - **Unconstrained budget** (``max_turns > 50``): periodic
+          ``[Turn N]`` marker every 5 turns starting from turn 5 for
+          soft awareness.
+        """
+        if max_turns <= 0 or not state.messages:
+            return
+
+        remaining = max_turns - state.turn
+        nudge: str | None = None
+
+        if max_turns <= 50 and remaining >= 0:
+            pct = state.turn / max_turns
+            if pct >= 0.90:
+                nudge = (
+                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} — "
+                    f"only {remaining} left. Deliver final answer NOW. "
+                    "Do not start new operations.]"
+                )
+            elif pct >= 0.75:
+                nudge = (
+                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} — "
+                    f"{remaining} left. Wrap up: essential steps only, "
+                    "batch remaining work.]"
+                )
+            elif pct >= 0.60:
+                nudge = (
+                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} — "
+                    f"{remaining} left. Plan efficiently.]"
+                )
+            else:
+                nudge = f"\n\n[Turn {state.turn}/{max_turns}]"
+        elif state.turn >= 5 and state.turn % 5 == 0:
+            # Unconstrained budget: soft periodic awareness
+            nudge = f"\n\n[Turn {state.turn}]"
+
+        if nudge is None:
+            return
+
+        # Append to the last ToolMessage in the message list
+        for i in range(len(state.messages) - 1, -1, -1):
+            if isinstance(state.messages[i], ToolMessage):
+                msg = state.messages[i]
+                state.messages[i] = ToolMessage(
+                    tool_call_id=msg.tool_call_id,
+                    tool_name=msg.tool_name,
+                    content=(msg.content or "") + nudge,
+                )
+                return
 
     @staticmethod
     def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:

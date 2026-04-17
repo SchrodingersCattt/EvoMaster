@@ -1,0 +1,34 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 1,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [
+        "7dd2ad8fdc3d43d8cd5940deca146ef7a81a8d54"
+      ],
+      "files_touched": [
+        "matmaster/skills/abacus/SKILL.md",
+        "matmaster/skills/mlips/SKILL.md",
+        "matmaster/skills/cp2k/SKILL.md",
+        "matmaster/skills/gromacs/SKILL.md",
+        "matmaster/skills/playground-skills/structure-manager/SKILL.md",
+        "matmaster/skills/playground-skills/result-analysis/SKILL.md",
+        "matmaster/skills/playground-skills/gromacs-system-prep/SKILL.md",
+        "results/devshell_agent_loop_20260416_172955/proposed_matmaster_exps_changes.md"
+      ],
+      "followup_suggestion": "Re-run eval to measure turn reduction impact. If turn_budget_exceeded persists: (1) Apply the proposed `direct.toml` changes from `proposed_matmaster_exps_changes.md`; (2) Investigate polymer runtime crashes with actual error logs from the devshell process; (3) Consider adding more task-specific consolidated scripts to skills to further reduce turns. The exp-level anti-web-search policy is critical — skill-level rules help but may not be seen if the agent doesn't load the skill before deciding to web search.",
+      "iteration_index": 1,
+      "needs_more_work": true,
+      "optimization_round": 1,
+      "summary": "## Optimization Summary — Iteration 1, Round 1\n\n### Problem Addressed\n**Dominant failure: turn_budget_exceeded** — Agent achieves 85-95% checklist items but exceeds turn budgets (8-24) by 1.5-3x (using 15-35 turns), causing binary score=0. Root causes: (a) unnecessary web searches when skills already contain all needed info, (b) sequential single-file Bash calls instead of batching, (c) verbose planning.\n\n### Changes Made\n\n#### 1. Skill-level anti-web-search directives (7 skills)\nAdded **\"Skill-first rule\"** or **\"Efficiency rule\"** directives to key skills, each explicitly stating:\n- The skill contains ALL needed information — do NOT web search\n- Specific references to consult instead of web searching\n- Batch file operations into single Bash calls\n\n**Modified skills:**\n- `matmaster/skills/abacus/SKILL.md` — Added \"Skill-first rule\" + \"Minimal-turn workflow\" (4-turn target with concrete per-turn instructions)\n- `matmaster/skills/mlips/SKILL.md` — Added \"Efficiency rule\" with anti-web-search directive\n- `matmaster/skills/cp2k/SKILL.md` — Added \"Skill-first rule\"\n- `matmaster/skills/gromacs/SKILL.md` — Added \"Skill-first rule\"\n- `matmaster/skills/playground-skills/structure-manager/SKILL.md` — Added \"Turn efficiency\" with 3-5 turn target\n- `matmaster/skills/playground-skills/result-analysis/SKILL.md` — Added \"Efficiency rule\" directing use of `parse_abacus.py --type all`\n- `matmaster/skills/playground-skills/gromacs-system-prep/SKILL.md` — Added \"Skill-first rule\"\n\n#### 2. ABACUS Minimal-Turn Workflow\nAdded a concrete 4-turn workflow to ABACUS skill:\n- Turn 1: Write ALL files + download assets in ONE Bash call\n- Turn 2: Submit to Bohrium\n- Turn 3: Poll status\n- Turn 4: Download results and report\nThis targets the widest failure bucket (IG_abacus, BP_struct).\n\n#### 3. Exp Proposal (`proposed_matmaster_exps_changes.md`)\nWrote proposal for `direct.toml` developer_instructions additions:\n- **Web Search Policy**: Cross-task rule to use skills before web search\n- **Bash Efficiency**: Cross-task rule to batch file operations\nJustification: These are cross-task execution contract principles that apply to all capabilities.\n\n### NOT Addressed (requires further investigation)\n- **Polymer runtime crashes**: `build_polymer.py` delegates via `runpy` to a sibling `poly-master/` directory; crash occurs at devshell initialization before agent executes. Cannot diagnose without actual error logs. Likely a missing dependency or `poly-master` not present at expected path.\n- **Band gap correctness**: Minor issue; existing skill guidance is already comprehensive."
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 1,
+    "macro_mean_0_100": 23,
+    "rationale": "## Iteration 1 — Baseline Evaluation\n\n### Score: 23/100 (target: 60)\n\n**P0 gate**: Passed (56/100 — 5/9 P0 questions fully passed all 3 repeats)\n\n### Failure Analysis (57 total questions, ~13 fully passed)\n\n| Failure Bucket | Impact | Description |\n|---|---|---|\n| **turn_budget_exceeded** | ~70% of failures | Agent achieves correct answers but uses 1.5–3× the allowed turns. Dominant across IG_abacus (budget 8, uses 15), WO_general (budget 8, uses 17), BP_struct (budget 20, uses 28), CR_SC (budget 22, uses 35). Root cause: agent resorts to unnecessary web searches, sequential single-operation Bash calls, multiple script rewrites. |\n| **runtime_crash_polymer** | ~5 questions | pl_donor, pl_membrane crash with exit_code=1, no _devshell_summary.json. 0 steps, 0 tokens — agent never starts. |\n| **efficiency_judge** | ~3–5 questions | Agent produces multiple script versions (v1/v2/v3) instead of direct approach. |\n| **correctness** | ~2–3 questions | Band gap calculations wrong (Si 0.93 eV expected 1.0–1.2, Ge 1.17 eV expected 0.6–0.8). |\n\n### Delegation\n- **delegate_optimization** queued (round 1): Focus on skill layer (more comprehensive procedures to reduce turns), system_prompt (encourage batching/skill-first approach), and runtime (fix polymer crashes). Key directories: `matmaster/skills/`, `matmaster/tools/`, `matmaster/devshell/`.\n\n### Next Steps\n- Optimization agent to improve skill completeness (especially abacus, structure-manager) and system prompt turn-efficiency guidance.\n- Investigate polymer runtime crash root cause.\n- Re-evaluate in iteration 2 after product-side changes.",
+    "target_met": false
+  }
+}
