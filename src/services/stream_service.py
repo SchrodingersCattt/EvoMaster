@@ -731,12 +731,21 @@ class ChatStreamService:
             return None
         return get_redis_dao().get_interaction_run_context(session_id)
 
+    def publish_reply_event(self, session_id: str, payload: dict) -> None:
+        """Publish a user interaction reply to local subscribers and Redis stream."""
+        sid = session_id.strip()
+        self._queues.broadcast(sid, payload)
+        if REDIS_URL:
+            get_redis_dao().publish_stream_event(sid, payload)
+
     def broadcast_reply(
-        self, session_id: str, content: str, *, event_type: str = "ask_question_reply"
+        self,
+        session_id: str,
+        content: str | dict,
+        *,
+        event_type: str,
     ) -> None:
-        """将用户回复广播到该会话所有 SSE 订阅。
-        payload 带上 task_id/invocation_id（从 Redis 取），便于前端去重或排序。
-        """
+        """Backward-compatible helper for publishing interaction reply events."""
         sid = session_id.strip()
         payload = {
             'source': 'User',
@@ -745,11 +754,11 @@ class ChatStreamService:
             'session_id': sid,
         }
         if REDIS_URL:
-            ctx = get_redis_dao().get_interaction_run_context(session_id)
+            ctx = get_redis_dao().get_interaction_run_context(sid)
             if ctx:
                 payload['task_id'] = ctx.get('task_id')
                 payload['invocation_id'] = ctx.get('invocation_id')
-        self._queues.broadcast(session_id, payload)
+        self.publish_reply_event(sid, payload)
 
     def _send_cb(
         self,

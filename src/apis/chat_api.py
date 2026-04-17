@@ -1,3 +1,4 @@
+import json
 import logging
 from pathlib import Path as FsPath
 from urllib.parse import quote, unquote, urlparse, urlunparse
@@ -8,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from matmaster.config.loader import load_llm_config
 from src.base.base_res import BaseResponse
 from src.models.chat import (
+    ChatAskQuestionReplyRequest,
     ChatPlannerReplyRequest,
     ChatSendRequest,
     ErrorApiResponse,
@@ -354,6 +356,38 @@ def stop_session(
     return BaseResponse(msg='ok')
 
 
+def _submit_interaction_reply(
+    *,
+    sid: str,
+    event_type: str,
+    content: str | dict,
+    queue_value: str,
+    stream_svc: ChatStreamService,
+    events_svc: ChatEventsService,
+    user_id: str | None,
+) -> None:
+    reply_queue = stream_svc.get_reply_queue(sid)
+    if reply_queue is None:
+        raise ConflictErrorResponse(
+            msg='当前无活跃任务，或任务已结束',
+        )
+
+    payload = {
+        'source': 'User',
+        'type': event_type,
+        'content': content,
+        'session_id': sid,
+    }
+    run_ctx = stream_svc.get_run_context(sid)
+    if run_ctx:
+        payload['task_id'] = run_ctx.get('task_id')
+        payload['invocation_id'] = run_ctx.get('invocation_id')
+
+    stream_svc.publish_reply_event(sid, payload)
+    reply_queue.put_content(queue_value)
+    events_svc.add_history_event(sid, payload, user_id=user_id)
+
+
 @router.post(
     '/{session_id}/confirmation_reply',
     response_model=BaseResponse,
@@ -377,26 +411,55 @@ async def confirmation_reply(
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg='无权限访问该会话')
-    reply_queue = stream_svc.get_reply_queue(sid)
-    if reply_queue is None:
-        raise ConflictErrorResponse(
-            msg='当前无活跃任务，或任务已结束',
-        )
     content = (req.content or '').strip()
-    # 先广播 confirmation_reply，再 put_content 唤醒 agent，保证订阅流上顺序为 confirmation_request -> confirmation_reply -> tool_result
-    stream_svc.broadcast_reply(sid, content)
-    reply_queue.put_content(content)
-    payload = {
-        'source': 'User',
-        'type': 'confirmation_reply',
-        'content': content,
-        'session_id': sid,
+    _submit_interaction_reply(
+        sid=sid,
+        event_type='confirmation_reply',
+        content=content,
+        queue_value=content,
+        stream_svc=stream_svc,
+        events_svc=events_svc,
+        user_id=user_id,
+    )
+    return BaseResponse(msg='ok')
+
+
+@router.post(
+    '/{session_id}/ask_question_reply',
+    response_model=BaseResponse,
+    summary='提交结构化问答回复',
+    description='当会话流返回 ask_question 时，调用本接口提交结构化答案，Agent 会继续执行。',
+    operation_id='replyChatSessionAskQuestion',
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+        409: COMMON_ERROR_RESPONSES[409],
+    },
+)
+async def ask_question_reply(
+    session_id: str = Path(..., description='会话 ID', examples=['session-001']),
+    req: ChatAskQuestionReplyRequest = Body(...),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+    stream_svc: ChatStreamService = Depends(get_stream_service),
+    events_svc: ChatEventsService = Depends(get_events_service),
+):
+    sid = session_id.strip()
+    if not chat_svc.can_access_session(sid, user_id):
+        raise ForbiddenErrorResponse(msg='无权限访问该会话')
+    content = {
+        'request_id': req.request_id,
+        'answers': req.answers,
+        'annotations': req.annotations,
     }
-    run_ctx = stream_svc.get_run_context(sid)
-    if run_ctx:
-        payload['task_id'] = run_ctx.get('task_id')
-        payload['invocation_id'] = run_ctx.get('invocation_id')
-    events_svc.add_history_event(sid, payload, user_id=user_id)
+    _submit_interaction_reply(
+        sid=sid,
+        event_type='ask_question_reply',
+        content=content,
+        queue_value=json.dumps({'payload': content}, ensure_ascii=False),
+        stream_svc=stream_svc,
+        events_svc=events_svc,
+        user_id=user_id,
+    )
     return BaseResponse(msg='ok')
 
 
