@@ -34,16 +34,19 @@ class ChatEventsService:
         source = normalize_event_source(payload.get('source', 'System'))
         event_type = payload.get('type', 'unknown')
         content = payload.get('content', '')
-        # User/query 带附件元数据时存成 { content, files?, images?, workspace_paths? }，
-        # 以便读回时前端分开展示，agent 历史恢复也能拿到结构化图片输入。
+        # User/query 带附件元数据时存成 { content, files?, images?, workspace_paths?, session_directory?, session_directory_source? }，
+        # 以便读回时前端分开展示，agent 历史恢复也能拿到结构化图片输入和目录信息。
+        query_metadata_keys = (
+            'files',
+            'images',
+            'workspace_paths',
+            'session_directory',
+            'session_directory_source',
+        )
         if (
             source == 'User'
             and event_type == 'query'
-            and (
-                payload.get('files')
-                or payload.get('images')
-                or payload.get('workspace_paths')
-            )
+            and any(payload.get(key) for key in query_metadata_keys)
         ):
             content = {'content': content}
             if payload.get('files'):
@@ -52,6 +55,12 @@ class ChatEventsService:
                 content['images'] = list(payload['images'])
             if payload.get('workspace_paths'):
                 content['workspace_paths'] = list(payload['workspace_paths'])
+            if payload.get('session_directory'):
+                content['session_directory'] = payload['session_directory']
+            if payload.get('session_directory_source'):
+                content['session_directory_source'] = payload[
+                    'session_directory_source'
+                ]
         task_id = payload.get('task_id')
         invocation_id = payload.get('invocation_id')
         self.table.add_event(
@@ -70,7 +79,7 @@ class ChatEventsService:
     def get_last_user_query(self, session_id: str):
         """
         获取该会话最后一次用户输入（User/query），用于部署中断后提示重跑。
-        返回 None 或 dict：content, files, workspace_paths, mode, task_id。
+        返回 None 或 dict：content, files, images, workspace_paths, mode, session_directory, session_directory_source, task_id。
         """
         return self.table.get_last_user_query(session_id)
 
