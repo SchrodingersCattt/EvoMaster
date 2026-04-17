@@ -255,6 +255,7 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
             svc._test_fake_exp = fake_exp
             svc._test_pg_ctx = pg_ctx
             svc._test_events_table = events_table_fn.return_value
+            svc._test_bohrium_svc = bohrium_inst
 
             yield svc, sse_received, persist_received
 
@@ -857,3 +858,25 @@ async def test_ask_question_bridge_send_cb_receives_public_sse_payload():
         'origin': 'tool:AskQuestion',
         'preview_format': 'markdown',
     }
+
+
+@pytest.mark.asyncio
+async def test_run_agent_passes_remote_workdir_to_bohrium_setup():
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="hello",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            remote_workdir="/share/case",
+        )
+
+        bohrium_svc = svc._test_bohrium_svc
+        call_kwargs = bohrium_svc.run_setup.call_args.kwargs
+
+    assert call_kwargs["remote_workdir"] == "/share/case"
+    assert call_kwargs["bohrium_required"] is True

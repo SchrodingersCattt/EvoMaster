@@ -160,6 +160,7 @@ class AgentRunService:
         model_override: str | None = None,
         images: list[str] | None = None,
         bohrium_required: bool = False,
+        remote_workdir: str | None = None,
     ) -> tuple[bool | tuple[bool, str], int]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -268,12 +269,14 @@ class AgentRunService:
                 self._sessions_service,
                 event_sink=_dispatch_from_thread,
             )
+            effective_bohrium_required = bool(bohrium_required or remote_workdir)
             bohrium_result = await bohrium_svc.run_setup(
                 session_id=session_id,
                 playground=playground,
                 skill_sync_spec=skill_sync_spec,
                 run_started_at=run_started_at,
-                bohrium_required=bohrium_required,
+                bohrium_required=effective_bohrium_required,
+                remote_workdir=remote_workdir,
             )
             ssh_attached = bohrium_result.ssh_attached
             if bohrium_result.abort_result is not None:
