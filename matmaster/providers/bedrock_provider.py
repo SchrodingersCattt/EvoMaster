@@ -25,6 +25,25 @@ from matmaster.types.messages import (
     parse_tool_arguments,
 )
 
+# botocore timeout / connection errors are NOT ClientError subclasses,
+# so they need explicit handling to enable the kernel's retry loop.
+try:
+    from botocore.exceptions import (
+        ConnectionClosedError,
+        ConnectTimeoutError,
+        EndpointConnectionError,
+        ReadTimeoutError,
+    )
+
+    _BOTOCORE_TRANSIENT_ERRORS: tuple[type[BaseException], ...] = (
+        ReadTimeoutError,
+        ConnectTimeoutError,
+        EndpointConnectionError,
+        ConnectionClosedError,
+    )
+except ImportError:  # botocore not installed; let tuple be empty
+    _BOTOCORE_TRANSIENT_ERRORS = ()
+
 logger = logging.getLogger(__name__)
 
 
@@ -328,6 +347,8 @@ class BedrockProvider:
     ) -> LLMResponse:
         from botocore.exceptions import ClientError
 
+        from matmaster.types.errors import LLMError
+
         client = self._ensure_client()
         kwargs = self._converse_kwargs(messages, tools)
 
@@ -338,6 +359,10 @@ class BedrockProvider:
             raw = await asyncio.to_thread(_call)
         except ClientError as exc:
             raise self._map_client_error(exc) from exc
+        except _BOTOCORE_TRANSIENT_ERRORS as exc:
+            raise LLMError(
+                str(exc), retryable=True, error_category="server"
+            ) from exc
 
         out = raw.get("output") or raw.get("Output") or {}
         msg = out.get("message") or out.get("Message") or {}
@@ -449,6 +474,15 @@ class BedrockProvider:
                 put_item(sentinel)
             except ClientError as exc:
                 put_item(exc)
+                put_item(sentinel)
+            except _BOTOCORE_TRANSIENT_ERRORS as exc:
+                # ReadTimeoutError / ConnectTimeoutError / etc. are NOT ClientError;
+                # convert to retryable LLMError so the kernel retry loop can handle them.
+                put_item(
+                    LLMError(
+                        str(exc), retryable=True, error_category="server"
+                    )
+                )
                 put_item(sentinel)
             except Exception as exc:
                 put_item(exc)
