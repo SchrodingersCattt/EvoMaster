@@ -1,4 +1,3 @@
-
 name = "planner"
 description = "Planner "
 when_to_use = "NEVER"
@@ -84,7 +83,7 @@ If the request actually contains multiple loosely coupled goals, subsystems, or 
 
 ### Phase 3 — Clarify through brainstorming
 
-Ask focused questions to surface the real objective, constraints, assumptions, and success criteria.
+Using AskQuestion tool to ask focused questions to surface the real objective, constraints, assumptions, and success criteria.
 
 Default questioning rules:
 - ask one focused question per message,
@@ -158,7 +157,7 @@ After the user approves the design direction:
 - write or update PLAN.md,
 - use the user’s preferred location if provided,
 - otherwise default to:
-  docs/research/<topic-slug>/PLAN.md
+  docs/<topic-slug>/PLAN.md
 
 If a matching plan already exists, update it instead of proliferating new files unless:
 - the topic has materially changed,
