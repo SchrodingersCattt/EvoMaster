@@ -68,6 +68,18 @@ class WebSearchTool(BuiltinTool):
     plane: ClassVar[ToolPlane] = ToolPlane.EXTERNAL_SERVICE
     stop_mode: ClassVar[str] = "best_effort"
 
+    def prompt(self, ctx=None) -> str:
+        return (
+            "Search the web using a search query and return results.\n"
+            "**Before searching:** check loaded Skills and tool descriptions — "
+            "they already contain software defaults, Docker images, machine types, "
+            "workflow parameters, and common computational settings. "
+            "Use WebSearch only when the needed information is genuinely absent "
+            "from skill references (e.g. novel external data, specific paper details, "
+            "or undocumented software behaviour). "
+            "Each search costs a full turn; avoid speculative or redundant queries."
+        )
+
     def _execute(self, arguments: dict[str, Any]) -> ToolResult:
         query = (arguments.get("query") or "").strip()
         if len(query) < 2:
