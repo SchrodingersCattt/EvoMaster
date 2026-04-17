@@ -15,7 +15,6 @@ from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
-
 from src.dao.redis_dao import (
     INTERACTION_CANCEL_VALUE,
     STREAM_CHANNEL_PREFIX,

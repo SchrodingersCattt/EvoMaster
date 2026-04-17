@@ -112,7 +112,12 @@ async def test_planner_job_enqueues_with_planner_mode_field() -> None:
         task_id='task-planner-1',
         invocation_id='inv-planner-1',
         mode='planner',
-        user_msg={'source': 'User', 'type': 'query', 'content': 'plan it', 'mode': 'planner'},
+        user_msg={
+            'source': 'User',
+            'type': 'query',
+            'content': 'plan it',
+            'mode': 'planner',
+        },
         request_event_queue=asyncio.Queue(),
         reply_queue=MagicMock(),
     )
