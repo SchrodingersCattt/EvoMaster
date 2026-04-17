@@ -352,8 +352,8 @@ class TestPlannerExpConfig:
         """list_model_visible_exps() 不应返回 planner（被 visible_as_subagent=false 过滤）。"""
         metas = list_model_visible_exps()
         names = {m.name for m in metas}
-        assert "planner" not in names, (
-            f"planner 意外出现在 model-visible exp 列表中；当前 names={names}"
-        )
+        assert (
+            "planner" not in names
+        ), f"planner 意外出现在 model-visible exp 列表中；当前 names={names}"
         # direct 仍应可见——保留正回归断言
         assert "direct" in names
