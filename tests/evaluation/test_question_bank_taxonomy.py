@@ -330,8 +330,8 @@ def test_sa_general_phase2_split_banks_have_expected_question_ids() -> None:
         )
     )
     semi_ids = [q['id'] for q in sa_semiconductor['questions']]
-    assert 'WO_general_perov_007_20260415' in semi_ids
-    assert 'WO_general_ferro_009_20260415' in semi_ids
+    assert 'WO_general_perov_007_20260417' in semi_ids
+    assert 'WO_general_ferro_009_20260417' in semi_ids
 
     sa_alloy = yaml.safe_load(
         (bank_root / 'scientific_analysis' / 'sa_alloy.yaml').read_text(
@@ -339,8 +339,8 @@ def test_sa_general_phase2_split_banks_have_expected_question_ids() -> None:
         )
     )
     alloy_ids = [q['id'] for q in sa_alloy['questions']]
-    assert 'WO_general_steel_008_20260415' in alloy_ids
-    assert 'WO_general_hea_005_20260415' in alloy_ids
+    assert 'WO_general_steel_008_20260417' in alloy_ids
+    assert 'WO_general_hea_005_20260417' in alloy_ids
 
 
 def test_phase2_split_banks_have_expected_question_ids() -> None:
