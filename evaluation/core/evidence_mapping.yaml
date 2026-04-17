@@ -52,7 +52,7 @@ mappings:
     detail: "MCP space-group structure builder operation"
 
   # -------------------------------------------------------------------------
-  # MLIPs calculations (operator skill via Bohrium submit_job.py)
+  # MLIPs calculations (execute_bash + scripts; or built-in Bohrium tool)
   # -------------------------------------------------------------------------
   - pattern: "execute_bash"
     when_args_contains:
@@ -90,24 +90,24 @@ mappings:
     detail: "Submitted MLIPs NEB transition-state calculation via Bohrium job"
 
   # -------------------------------------------------------------------------
-  # ABACUS DFT calculations (via bohrium-job skill + input-manual-helper)
+  # DFT / MD via built-in Bohrium tool (e.g. ABACUS after input-manual-helper)
   # -------------------------------------------------------------------------
-  - pattern: "execute_bash"
+  - pattern: "Bohrium"
     when_args_contains:
-      command: "submit_job.py"
+      action: "submit"
     event_type: "calculation_execution"
-    source_type: "bash_script"
-    detail: "Submitted Bohrium job (ABACUS or other DFT via bohrium-job skill)"
+    source_type: "unknown"
+    detail: "Submitted Bohrium job (built-in Bohrium tool, e.g. ABACUS/DFT)"
 
   # -------------------------------------------------------------------------
-  # GROMACS MD simulations (via bohrium-job skill)
+  # GROMACS MD simulations (bash / remote gmx)
   # -------------------------------------------------------------------------
   - pattern: "execute_bash"
     when_args_contains:
       command: "gromacs"
     event_type: "calculation_execution"
     source_type: "bash_script"
-    detail: "GROMACS MD operation via bohrium-job skill"
+    detail: "GROMACS MD operation (bash or remote)"
 
   # -------------------------------------------------------------------------
   # XRD / diffraction analysis (MCP mat_xrd)
