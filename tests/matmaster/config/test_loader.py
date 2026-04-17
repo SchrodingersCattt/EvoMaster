@@ -318,3 +318,22 @@ class TestLoadBaseSystemPrompt:
             result = load_base_system_prompt(exps_dir=exps_dir)
         assert result == ""
         assert "_base.toml" in caplog.text
+
+
+class TestModeConstants:
+    """UI mode whitelist constants exposed by matmaster.config.exp."""
+
+    def test_supported_modes_exact_set(self) -> None:
+        from matmaster.config.exp import SUPPORTED_MODES
+
+        assert SUPPORTED_MODES == frozenset({"direct", "planner"})
+
+    def test_default_mode_is_direct(self) -> None:
+        from matmaster.config.exp import DEFAULT_MODE
+
+        assert DEFAULT_MODE == "direct"
+
+    def test_default_mode_is_in_supported(self) -> None:
+        from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
+
+        assert DEFAULT_MODE in SUPPORTED_MODES
