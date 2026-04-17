@@ -1,7 +1,7 @@
 # AskQuestion 完整闭环修复设计
 
 - 日期: 2026-04-17
-- 状态: Draft v0.3 (待评审)
+- 状态: Draft v0.4 (待评审)
 - 相关仓库:
   - 后端: `matmaster-evo`
   - 前端: `../scimaster-bohr-chat`
@@ -60,6 +60,9 @@
 - 不在第一版加入独立 pending request Redis key 来校验 `request_id`
 - 不修改历史中已有 `confirmation_reply` 事件的兼容行为
 - 不改变前端 `confirmation_reply` API 形状，仍然使用 `{ content: string }`
+- 不支持子 agent 内部调用 AskQuestion。AskQuestion 第一版只在 root run 暴露；
+  `Exp.build_runtime(..., spawn_id is not None)` 的 child runtime 必须隐藏 AskQuestion，即使
+  `PlaygroundContext.interaction_bridge` 存在
 
 ## 4. 现有 confirmation_reply 链路
 
@@ -237,12 +240,7 @@ update 现在针对声明字段，语义稳定。
 建议构造方式：
 
 ```python
-bridge = ctx.interaction_bridge
-if bridge is not None:
-    bridge = bridge.with_scope(
-        source=source_override or "System",
-        spawn_id=spawn_id,
-    )
+bridge = ctx.interaction_bridge if spawn_id is None else None
 
 AskQuestionTool(
     session=ctx.session,
@@ -251,11 +249,10 @@ AskQuestionTool(
 )
 ```
 
-`_init_builtin_tools()` 当前没有 `source_override` / `spawn_id` 参数。实现时需要把
-`Exp.build_runtime(..., source_override=..., spawn_id=...)` 的当前 scope 传给
-AskQuestion 注册逻辑，或者在调用 `_init_builtin_tools()` 前构造 scoped bridge。不能把
-root bridge 原样传入子 agent，否则子 agent 内部 AskQuestion 发出的事件会丢失
-`spawn_id`，并绕过现有 `_make_spawn_fn()` 对 child event 的 source/spawn 标记语义。
+`_init_builtin_tools()` 当前没有 `spawn_id` 参数。实现时需要让 `Exp.build_runtime(..., spawn_id=...)`
+把 root/child 信息传给 AskQuestion 注册逻辑，或者在调用 `_init_builtin_tools()` 前决定
+effective bridge。规则是：root run 使用 `ctx.interaction_bridge`；child/subagent run 使用
+`bridge=None`，从而复用 `AskQuestionTool` 现有 `exposed_to_model=False` 保护。
 
 工具类应增加：
 
@@ -265,9 +262,8 @@ resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
 )
 ```
 
-这能覆盖同一个 `FullToolRunner` 同一批 tool calls 的并发执行。由于子 agent 会创建自己的
-`ToolScheduler`，这个 resource claim 还不够覆盖 parent/child 共享 bridge 的场景，因此
-bridge 内部仍必须有串行锁，见 §6.5。
+这能覆盖 root `FullToolRunner` 同一批 tool calls 的并发执行。bridge 内部仍建议保留串行锁，
+见 §6.5，作为 tool runner 之外的防线。
 
 行为规则：
 
@@ -275,7 +271,7 @@ bridge 内部仍必须有串行锁，见 §6.5。
 - `builtin=["*"]` 时应注册 AskQuestion
 - bridge 存在时 model-visible
 - bridge 不存在时工具可在 catalog 中存在，但不出现在 model tool definitions 中
-- parent/child/subagent scope 中的 AskQuestion event 必须携带正确的 `source` 与 `spawn_id`
+- `spawn_id is not None` 的 child runtime 中 AskQuestion 必须 hidden / not model-visible
 
 ### 6.2 ask_question_reply request model
 
@@ -437,12 +433,7 @@ confirmation 的 live payload 不变：
 - `ask()` 中构造 `AskQuestionEvent` 后调用 event sink
 - timeout 时构造 `AskQuestionTimeoutEvent` 后也调用 event sink
 - `AgentRunService` 注入 sink 时使用当前 run 的 `fanout.dispatch`
-- bridge 支持 `with_scope(source: str, spawn_id: str | None)`，让 root/child runtime 创建
-  scoped bridge；scoped bridge 发出的 `AskQuestionEvent` / `AskQuestionTimeoutEvent` 必须保留
-  当前 runtime 的 source/spawn_id
-- `with_scope()` 返回的 scoped bridge 必须共享同一个底层 reply queue、async lock 和
-  `_waiting_request_id` 状态，只覆盖事件 source/spawn_id；不能为每个 scope 新建独立锁，否则
-  parent/child 并发 AskQuestion 仍会交叉消费同一 Redis reply list
+- AskQuestion 第一版只从 root run 发出事件；事件 `spawn_id` 保持 `None`
 
 这是一次明确的 bridge API breaking change：
 
@@ -486,8 +477,8 @@ def _wait_for_reply_sync(self, request_id: str) -> dict[str, Any]:
 - 工具层：`AskQuestionTool.resource_claims = (ResourceClaim(resource="interaction", mode="exclusive"),)`，
   串行化同一个 `FullToolRunner` 同一批 tool calls 中的多个 AskQuestion
 - bridge 层：`AskQuestionBridge.ask()` 内部使用 `asyncio.Lock` 或等价机制，把
-  emit request event、等待 reply、处理 timeout/cancel 作为一个互斥区，覆盖 parent/child/subagent
-  共享同一个 bridge 但各自拥有独立 `ToolScheduler` 的场景
+  emit request event、等待 reply、处理 timeout/cancel 作为一个互斥区，避免绕过
+  `FullToolRunner` 的调用路径同时等待同一个 reply list
 
 因此 `_waiting_request_id` 不只是 warning 字段，而是测试可见的状态：
 
@@ -649,7 +640,7 @@ AskQuestionBridge emits ask_question
 - `test_playground_context_excludes_interaction_bridge_from_model_dump_and_json_dump`
 - `test_agent_run_service_injected_bridge_reaches_exp_runtime`
 - `test_ask_question_tool_declares_interaction_exclusive_resource_claim`
-- `test_child_runtime_scopes_ask_question_bridge_with_spawn_id`
+- `test_child_runtime_hides_ask_question_even_when_bridge_exists`
 
 扩展 `tests/matmaster/tools/builtin/test_ask_question_tool.py`：
 
@@ -660,7 +651,6 @@ AskQuestionBridge emits ask_question
 - cancel sentinel 抛出 `asyncio.CancelledError` 且不 emit timeout
 - 两个并发 `bridge.ask()` 调用必须串行，第二个 request event 不会在第一个 reply 前发出
 - reply envelope 的 `request_id` 不匹配当前 request 时返回硬错误，不渲染成成功答案
-- scoped bridge 发出的 ask/timeout event 携带指定 `source` / `spawn_id`
 
 ### 9.2 后端 API 测试
 
@@ -695,7 +685,7 @@ AskQuestionBridge emits ask_question
 - persisted content 应与 `_public_content_for_event("ask_question", ...)` 一致
 - `ask_question_timeout` 应进入 SSE 和 persistence
 - stop/cancel 期间如果已发出 `ask_question`，历史中后续 terminal event 足以让前端清 pending
-- 子 agent 内部触发 AskQuestion 时，持久化和 SSE payload 保留子 agent `spawn_id/source`
+- 子 agent runtime 不暴露 AskQuestion tool definition
 
 ### 9.4 前端测试
 
@@ -734,7 +724,7 @@ AskQuestionBridge emits ask_question
 | stop 时没有 ask_question_reply/timeout | 前端新增 run_result/stream_closed/error 终态清理，不新增 ask_question_cancelled 事件 |
 | PlaygroundContext bridge 再次退化成隐式动态属性 | 显式声明 `interaction_bridge: Any = Field(default=None, repr=False, exclude=True)` 并加 dump 测试 |
 | confirmation live SSE 继续错发 ask_question_reply | 去掉或修正 `broadcast_reply` 默认值，endpoint 显式传事件类型并加红测 |
-| 子 agent AskQuestion 丢失 spawn_id/source | scoped bridge 使用当前 runtime 的 `source_override/spawn_id`，并补 child Agent 场景测试 |
+| 子 agent 意外暴露 AskQuestion | root-only 规则：`spawn_id is not None` 时传 `bridge=None` 或跳过注册，补 hidden 测试 |
 
 ## 11. 交付定义
 
@@ -749,7 +739,7 @@ AskQuestionBridge emits ask_question
 - 刷新恢复符合等待中和已回答两种状态
 - 并发 AskQuestion 不会交叉消费 reply；request_id mismatch 不会被当成成功回复
 - API/Worker 分离或多 API pod 下，reply event 仍能通过 Redis stream 到达原 SSE 流
-- 子 agent 中的 AskQuestion event 保留 `spawn_id/source`
+- 子 agent runtime 不暴露 AskQuestion tool definition
 - 现有 `/confirmation_reply` 行为不变
 - `/confirmation_reply` live SSE type 为 `confirmation_reply`
 - `PlaygroundContext` 显式声明 `interaction_bridge`，且该字段不进入 `model_dump()` / JSON dump
@@ -761,10 +751,9 @@ AskQuestionBridge emits ask_question
    `AgentRunService -> Exp.build_runtime` 能读到同一个 bridge，同时确认字段被
    `model_dump()` / JSON dump 排除
 1. 调整 `AskQuestionBridge` 为 async `event_sink(BusEvent)` API，并让生产路径走
-   `fanout.dispatch`；同时加入 bridge 内部 async lock、request_id mismatch 校验和 scoped bridge
-   source/spawn_id 语义
+   `fanout.dispatch`；同时加入 bridge 内部 async lock 和 request_id mismatch 校验
 2. 补 `AskQuestionTool` runtime 注册、`interaction` exclusive resource claim、model-visible
-   测试和子 agent scope 测试
+   测试和子 agent hidden 测试
 3. 抽通用 interaction reply helper，修复 `broadcast_reply` 默认事件类型问题，并确保 helper
    同时 local broadcast + Redis `publish_stream_event` + history append，`confirmation_reply` 回归不变
 4. 新增 `ChatAskQuestionReplyRequest` 和 `/ask_question_reply`
