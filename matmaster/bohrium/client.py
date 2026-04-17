@@ -288,13 +288,26 @@ def list_images(
                 "source": "sandbox_catalog",
             }
 
+    # Fetch public images
     data = _get(
         ctx.credentials.base_url,
         "/openapi/v2/image/public",
         ctx.credentials.access_key,
         params={"page": 1, "pageSize": 1000},
     )
-    all_images = (data.get("data") or {}).get("items") or []
+    public_images = (data.get("data") or {}).get("items") or []
+
+    # Fetch private images
+    private_data = _get(
+        ctx.credentials.base_url,
+        "/openapi/v2/image/private",
+        ctx.credentials.access_key,
+        params={"device": "container", "type": "image"},
+    )
+    private_images = (private_data.get("data") or {}).get("items") or []
+
+    # Combine public and private images
+    all_images = public_images + private_images
 
     if lowered_keyword:
         filtered = [
