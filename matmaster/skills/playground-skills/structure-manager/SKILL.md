@@ -51,6 +51,7 @@ For band structure, DOS, work function, or defect calculations, see `references/
 ## Rules
 
 * If no CIF/POSCAR delivered, `task_completed=partial`.
+* **Disordered/random alloy structures**: When writing CIF files for structures with random site occupancy (e.g., HEA supercells), pymatgen's `SpacegroupAnalyzer` may fail with `SymmetryUndeterminedError`. Use `Structure.to(filename="out.cif")` directly (writes P1). If CIF verification fails, re-read with `CifParser` to confirm atom counts and species match, rather than relying on symmetry analysis.
 * For LAMMPS conversions, always provide `--type-map` and `--atom-style` when non-atomic.
 * **Deliverable-first**: Prioritize producing actual structure files. Do not stop at planning/spec-generation.
 * Structure identification must include database identifiers (CCDC REFCODE / ICSD code) when deposited.

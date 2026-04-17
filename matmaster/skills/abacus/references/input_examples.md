@@ -99,6 +99,7 @@ scf_thr 1.0e-7
 scf_nmax 100
 smearing_method gauss
 smearing_sigma 0.01
+symmetry 0
 out_pot 2
 efield_flag 1
 dip_cor_flag 1
@@ -107,6 +108,7 @@ efield_pos_max 0.0
 efield_pos_dec 0.1
 efield_amp 0.0
 ```
+> **Critical**: `symmetry 0` is mandatory for dipole correction — symmetry operations conflict with the sawtooth potential.
 Slab KPT for work function (z = vacuum): `20 20 1 0 0 0`
 
 ---

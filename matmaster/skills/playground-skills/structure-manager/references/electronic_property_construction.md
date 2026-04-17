@@ -22,6 +22,8 @@ Auto-generate with pymatgen `HighSymmKpath(structure)`.
 
 > **Post-processing without DFT data**: Use literature band parameters (gaps, effective masses) with numpy to generate synthetic dispersion. Tight-binding models (sp³s*, ETB) are acceptable when the task specifies them or provides parameters; do not implement a full DFT pipeline from scratch when only post-processing is asked for.
 
+> **Batch parameter sweep (convergence tests)**: When generating multiple input files that sweep a single parameter (e.g., ENCUT, k-points), ensure ALL other parameters are **byte-identical** across files. Verify with `diff` or `grep` after generation. Always produce a shared KPOINTS/KPT file when k-mesh is a locked parameter. Include a POSCAR/structure file in the deliverables.
+
 ## Supercell for Defect Electronic Structure
 - Point defects: supercell >= 10 A between defect and nearest image. Typical: 3x3x3 bulk, 2x2 or 3x3 in-plane for slabs.
 - Use G-point or sparse k-mesh for large supercells.

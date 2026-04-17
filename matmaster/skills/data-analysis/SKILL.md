@@ -31,6 +31,7 @@ Covers data quality control (QC), exploratory data analysis (EDA), and visualiza
 
 * If the task lists top-level key names for a JSON file, every listed name **must** appear as a top-level key. Do not bury a listed name inside a nested object only.
 * Use exactly the value types implied by the prompt: if a key is described as a list of numbers, store `[95.7]`, not `[{"value": 95.7}]`.
+* **Output filename**: When the task specifies or implies a JSON output filename, use that exact name. When unspecified, prefer descriptive names that include the analysis type (e.g., `eos_fit_result.json`, not just `result.json`).
 
 ## Rules
 
