@@ -76,7 +76,7 @@ def _write_events(
                         "type": "tool_call",
                         "tool": "bash",
                         "call_id": "tc-1",
-                        "args": {"command": "python run_calc.py --foo"},
+                        "args": {"command": "python optimize_structure.py --foo"},
                     },
                     ensure_ascii=False,
                 ),
