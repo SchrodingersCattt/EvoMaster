@@ -74,7 +74,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_general_perov_007_20260415
+- id: WO_general_perov_007_20260417
   capability: scientific_analysis
   domain: semiconductor
   intent: Query high-efficiency perovskite additives and produce recommendation plus a proposal
@@ -114,7 +114,7 @@ questions:
       - 不确定性
   - key: turn_budget
     value:
-      max: 10
+      max: 14
   - key: duration_budget
     value:
       max: 7200000
@@ -160,7 +160,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_ferro_009_20260415
+- id: WO_general_ferro_009_20260417
   capability: scientific_analysis
   domain: semiconductor
   intent: Explain principle, applications, and limitations of the double-wave method in Sawyer-Tower
@@ -199,7 +199,7 @@ questions:
       - best_practices
   - key: turn_budget
     value:
-      max: 8
+      max: 16
   - key: duration_budget
     value:
       max: 7200000

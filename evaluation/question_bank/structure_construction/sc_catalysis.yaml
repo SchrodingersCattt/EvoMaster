@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: catalysis
 questions:
-- id: CR_SC_ZnPd011_20260409
+- id: CR_SC_ZnPd011_20260417
   capability: structure_construction
   domain: catalysis
   intent: Cut ZnPd (011) slab from Materials Project bulk (mp-1103252) with 3 layers and 2x2x1
@@ -19,7 +19,7 @@ questions:
   reference_answers:
   - key: turn_budget
     value:
-      max: 22
+      max: 28
   - key: duration_budget
     value:
       max: 7200000

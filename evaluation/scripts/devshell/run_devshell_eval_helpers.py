@@ -78,6 +78,86 @@ def _mm_devshell_exp_cmd_suffix(exp_cli: str | None) -> list[str]:
     return ["--exp", exp_cli]
 
 
+def build_mm_devshell_run_cmd(
+    *,
+    py: str | Path,
+    workspace_path: Path,
+    log_dir: Path,
+    prompt_file: Path,
+    summary_file: Path,
+    model: str | None,
+    exp_cli: str | None,
+    verbose: bool,
+) -> list[str | Path]:
+    """Build ``python -m matmaster.devshell run ...`` argv (single task)."""
+    cmd: list[str | Path] = [
+        py,
+        "-u",
+        "-m",
+        "matmaster.devshell",
+        "run",
+        "--workdir",
+        workspace_path,
+        "--log-dir",
+        log_dir,
+        "--prompt-file",
+        prompt_file,
+        "--json-out",
+        summary_file,
+    ]
+    if model:
+        cmd.extend(["--model", model])
+    cmd.extend(_mm_devshell_exp_cmd_suffix(exp_cli))
+    if verbose:
+        cmd.append("--verbose")
+    return cmd
+
+
+def text_indicates_devshell_provider_transport_failure(text: str) -> bool:
+    """Heuristic: Bedrock/botocore transport errors worth retrying with a fallback route.
+
+    Matches console output from boto3/botocore (e.g. ReadTimeoutError on bedrock-runtime)
+    and similar lines copied into ``devshell_console.log``.
+    """
+    t = text.lower()
+    compact = t.replace("_", "")
+    if "readtimeouterror" in compact:
+        return True
+    if "connecttimeouterror" in compact and "bedrock" in t:
+        return True
+    if "endpointconnectionerror" in compact and "bedrock" in t:
+        return True
+    if "connectionclosederror" in compact and "bedrock" in t:
+        return True
+    if "readtimeout" in compact and "bedrock-runtime" in t:
+        return True
+    if "read timeout" in t and (
+        "bedrock-runtime" in t or "converse-stream" in t or "/converse" in t
+    ):
+        return True
+    if "llm stream failed" in t and (
+        "readtimeout" in compact or "read timeout" in t or "timeout" in t
+    ):
+        return True
+    return False
+
+
+def devshell_console_indicates_provider_fallback(
+    log_path: Path, *, max_bytes: int = 4_194_304
+) -> bool:
+    """Return True if ``devshell_console.log`` suggests a transient provider transport failure."""
+    if not log_path.is_file():
+        return False
+    try:
+        data = log_path.read_bytes()
+        if len(data) > max_bytes:
+            data = data[-max_bytes:]
+        text = data.decode("utf-8", errors="replace")
+    except OSError:
+        return False
+    return text_indicates_devshell_provider_transport_failure(text)
+
+
 def _eval_tooling_snapshot_for_exp_cli(
     *, repo_root: Path, exp_cli: str | None
 ) -> dict[str, Any]:
@@ -129,14 +209,16 @@ def _run_devshell_task(
     console_log_file: Path | None,
     timeout_sec: float | None,
     tee_stderr: bool = False,
+    console_log_append: bool = False,
 ) -> tuple[int, int, dict[str, Any]]:
     t0 = time.monotonic()
     timeout = None if timeout_sec is None or timeout_sec <= 0 else float(timeout_sec)
+    log_mode = "a" if console_log_append else "w"
     try:
         if console_log_file is None:
             proc = subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout)
         else:
-            with console_log_file.open("w", encoding="utf-8") as f:
+            with console_log_file.open(log_mode, encoding="utf-8") as f:
                 out = _TeeTextIO(f, sys.stderr) if tee_stderr else f
                 proc = subprocess.run(
                     cmd,
