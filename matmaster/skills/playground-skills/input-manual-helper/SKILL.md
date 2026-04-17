@@ -6,13 +6,13 @@ skill_type: operator
 
 # Input Manual Helper Skill
 
-> **Skip condition**: If the user has already provided a complete, ready-to-run input file for the target software (and it needs no further modification), **skip this skill entirely** and submit using the built-in **`Bohrium`** tool (`action="submit"`, `input_dir`, `image`, `cmd`, …) after loading the **`bohrium`** platform skill (`matmaster/skills/bohrium/SKILL.md`).
+> **Skip condition**: If the user has already provided a complete, ready-to-run input file for the target software (and it needs no further modification), **skip this skill entirely** and submit using the built-in **`Bohrium`** tool (`action="submit"`, `input_dir`, `image`, `cmd`, …).
 
 Generate or adapt input files for computational software using **local script generation** (no MCP submit tools exist for this class of workload):
 - **ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS**: Use `render_input.py` and `diagnose_input.py` scripts (within this skill) to generate input files.
 - **PySCF**: Write Python script directly; no input file generation needed — see PySCF section below.
 
-All software route through local generation → built-in **`Bohrium`** tool for remote submission (load **`bohrium`** skill first).
+All software route through local generation → built-in **`Bohrium`** tool for remote submission.
 
 ## Routing by engine
 
@@ -185,4 +185,4 @@ Do not re-query the same path that already returned no useful result.
 - **Local scripts are canonical**: `render_input.py` and `diagnose_input.py` handle all code-specific logic; do not bypass them.
 - **Gaussian / PSI4**: No local script support yet; use reference templates as the final input (no input-manual-helper workflow).
 - **PySCF**: Write Python scripts directly; no local input generation needed. Pass structure_file (XYZ or pymatgen-readable) and parameters directly to the script.
-- All software (ABACUS / CP2K / QE / ABINIT / LAMMPS / ORCA / GROMACS / PySCF / PyATB) submit via the built-in **`Bohrium`** tool when ready; there are no MCP submit tools for this class of workload. Load the **`bohrium`** skill (`matmaster/skills/bohrium/SKILL.md`) for `poll` / `download` / `list_images` / `list_machines`.
+- All software (ABACUS / CP2K / QE / ABINIT / LAMMPS / ORCA / GROMACS / PySCF / PyATB) submit via the built-in **`Bohrium`** tool when ready; there are no MCP submit tools for this class of workload. Use the same built-in tool for `poll` / `download` / `list_images` / `list_machines`.

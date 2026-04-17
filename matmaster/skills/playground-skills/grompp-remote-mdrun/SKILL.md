@@ -19,7 +19,7 @@ Use the local script under `matmaster/skills/playground-skills/grompp-remote-mdr
 1. Confirm the required local files already exist in the current workspace.
 2. Run `prepare_remote_mdrun.py` to execute local `grompp` and generate the `.tpr`.
 3. Read the returned `submit_tool` and `submit_args`.
-4. Use the returned information to submit with the built-in **`Bohrium`** tool: `action="submit"`, `input_dir="<dir>"`, `image="registry.dp.tech/dptech/gromacs:2022.2"`, `cmd="gmx mdrun -deffnm md > log 2>&1"` (load **`bohrium`** skill / `matmaster/skills/bohrium/SKILL.md` for follow-up `poll` / `download`).
+4. Use the returned information to submit with the built-in **`Bohrium`** tool: `action="submit"`, `input_dir="<dir>"`, `image="registry.dp.tech/dptech/gromacs:2022.2"`, `cmd="gmx mdrun -deffnm md > log 2>&1"`. Use the same built-in tool for follow-up `poll` / `download`.
 
 ## Script
 
