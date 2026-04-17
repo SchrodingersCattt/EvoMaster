@@ -20,8 +20,10 @@ class _FakeBridge:
 
     def __init__(self, response: AskQuestionResponse | None = None) -> None:
         self._response = response
+        self.last_kwargs: dict[str, Any] | None = None
 
     async def ask(self, **kwargs: Any) -> AskQuestionResponse:
+        self.last_kwargs = kwargs
         if self._response is None:
             return {"request_id": "fake", "answers": {}, "annotations": {}}
         return self._response
@@ -156,8 +158,52 @@ class TestAskQuestionToolExecution:
         assert result.status == "error"
         assert "no interaction bridge" in result.content
 
+    def test_execute_accepts_prompt_multi_select_alias(self) -> None:
+        bridge = _FakeBridge()
+        tool = AskQuestionTool(bridge=bridge)
+
+        asyncio.run(
+            tool.execute_with_context(
+                {
+                    "questions": [
+                        {
+                            "question": "Q",
+                            "header": "H",
+                            "options": [
+                                {"label": "A", "description": "a"},
+                                {"label": "B", "description": "b"},
+                            ],
+                            "multiSelect": True,
+                        }
+                    ]
+                },
+                _exec_ctx(),
+            )
+        )
+
+        assert (
+            "multiSelect"
+            in AskQuestionTool.json_schema["properties"]["questions"]["items"][
+                "properties"
+            ]
+        )
+        assert bridge.last_kwargs is not None
+        assert bridge.last_kwargs["questions"][0]["multi_select"] is True
+
 
 class TestAskQuestionToolVisibility:
+    def test_prompt_contains_key_usage_guidance(self) -> None:
+        tool = AskQuestionTool(bridge=_FakeBridge())
+        prompt = tool.prompt()
+
+        assert prompt
+        assert "ask the user questions during execution" in prompt
+        assert '"Other"' in prompt
+        assert "multiSelect: true" in prompt
+        assert "(Recommended)" in prompt
+        assert "Planner mode note" in prompt
+        assert "Do NOT use this tool" in prompt
+
     def test_hidden_without_bridge(self) -> None:
         tool = AskQuestionTool(bridge=None)
         assert tool.exposed_to_model is False
