@@ -86,3 +86,14 @@ class ExpConfig(BaseModel):
     developer_instructions: str = ""
 
     model_config = ConfigDict(extra="ignore")
+
+
+# UI-level mode whitelist. `POST /chat/.../stream` 的 ChatSendRequest.mode 必须
+# 落在这个集合里；超出时 stream_service / worker 会归一化为 DEFAULT_MODE。
+#
+# 与 `visible_as_subagent`（由 AgentTool 决定哪个 exp 可作为 subagent enum 暴露
+# 给 LLM）正交：explore.toml 是 subagent-only（不作为 UI mode），planner.toml 是
+# UI-only（visible_as_subagent=false，不作为 subagent），direct.toml 同时出现
+# 在两个集合里。
+SUPPORTED_MODES: frozenset[str] = frozenset({"direct", "planner"})
+DEFAULT_MODE: str = "direct"
