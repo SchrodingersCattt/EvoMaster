@@ -246,8 +246,9 @@ class BedrockProvider:
             "bedrock-runtime",
             region_name=self._region,
             config=Config(
-                read_timeout=self._timeout + 30,
-                connect_timeout=15,
+                read_timeout=self._timeout + 60,
+                connect_timeout=20,
+                retries={"max_attempts": 0},  # kernel handles retries
             ),
         )
         return self

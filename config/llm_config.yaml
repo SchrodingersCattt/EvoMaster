@@ -125,8 +125,8 @@ profiles:
     timeout: 1200
     stream_timeout: 120
     stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
+    max_retries: 4
+    retry_delay: 2.0
 
 # 路由表：前端 model_override 字符串 → 内部 profile
 routes:

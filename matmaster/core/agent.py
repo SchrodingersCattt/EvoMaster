@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -605,9 +606,14 @@ class AgentKernel:
                     raise
                 last_error = e
                 current_timeout = current_timeout * 2
-                backoff = (
-                    retry_delay * (2**attempt) if attempt < max_retries - 1 else 0.0
-                )
+                if attempt < max_retries - 1:
+                    base_backoff = retry_delay * (2**attempt)
+                    # Add jitter (±50%) to reduce correlated retries when
+                    # multiple parallel tasks hit transient errors together.
+                    jitter = 0.5 + random.random()  # [0.5, 1.5)
+                    backoff = base_backoff * jitter
+                else:
+                    backoff = 0.0
                 logger.warning(
                     "LLM call failed (attempt %d/%d): %s (backoff=%.1fs)",
                     attempt + 1,
@@ -918,9 +924,10 @@ class AgentKernel:
         - **Constrained budget** (``max_turns ≤ 50``): always show
           ``[Turn X/Y]``, with escalating urgency at 60 %/75 %/90 %
           thresholds.
-        - **Unconstrained budget** (``max_turns > 50``): periodic
-          ``[Turn N]`` marker every 5 turns starting from turn 5 for
-          soft awareness.
+        - **Unconstrained budget** (``max_turns > 50``): escalating
+          awareness based on absolute turn counts. Most tasks should
+          complete within 15–25 turns; nudge progressively harder at
+          turn 15 / 22 / 30 to prevent runaway loops.
         """
         if max_turns <= 0 or not state.messages:
             return
@@ -949,9 +956,30 @@ class AgentKernel:
                 )
             else:
                 nudge = f"\n\n[Turn {state.turn}/{max_turns}]"
-        elif state.turn >= 5 and state.turn % 5 == 0:
-            # Unconstrained budget: soft periodic awareness
-            nudge = f"\n\n[Turn {state.turn}]"
+        else:
+            # Unconstrained budget (max_turns > 50): escalating awareness
+            # based on absolute turn counts.
+            if state.turn >= 30:
+                nudge = (
+                    f"\n\n[SYSTEM: Turn {state.turn} — you have used many turns. "
+                    "Deliver final answer NOW. Do not start new operations.]"
+                )
+            elif state.turn >= 22:
+                nudge = (
+                    f"\n\n[SYSTEM: Turn {state.turn} — wrap up: essential steps "
+                    "only, batch remaining work, deliver final answer soon.]"
+                )
+            elif state.turn >= 15:
+                nudge = (
+                    f"\n\n[SYSTEM: Turn {state.turn} — plan efficiently, "
+                    "minimize remaining steps.]"
+                )
+            elif state.turn >= 8 and state.turn % 3 == 0:
+                # Moderate awareness every 3 turns
+                nudge = f"\n\n[Turn {state.turn}]"
+            elif state.turn >= 5 and state.turn % 5 == 0:
+                # Light awareness every 5 turns
+                nudge = f"\n\n[Turn {state.turn}]"
 
         if nudge is None:
             return
