@@ -288,13 +288,49 @@ def list_images(
                 "source": "sandbox_catalog",
             }
 
+    # Fetch public images
     data = _get(
         ctx.credentials.base_url,
         "/openapi/v2/image/public",
         ctx.credentials.access_key,
         params={"page": 1, "pageSize": 1000},
     )
-    all_images = (data.get("data") or {}).get("items") or []
+    public_images = (data.get("data") or {}).get("items") or []
+
+    # Fetch private images (paginated).
+    # Server defaults to pageSize=10, so we page through until we've collected
+    # every item the caller can see. Safety cap prevents runaway loops if the
+    # server ever returns a bad `total`.
+    private_images: list[dict[str, Any]] = []
+    page = 1
+    page_size = 200
+    max_pages = 50  # hard ceiling: 10k images — way beyond any real account
+    while page <= max_pages:
+        private_data = _get(
+            ctx.credentials.base_url,
+            "/openapi/v2/image/private",
+            ctx.credentials.access_key,
+            params={
+                "page": page,
+                "pageSize": page_size,
+                "device": "container",
+                "type": "image",
+            },
+        )
+        data_block = private_data.get("data") or {}
+        batch = data_block.get("items") or []
+        if not batch:
+            break
+        private_images.extend(batch)
+        total = data_block.get("total")
+        if isinstance(total, int) and len(private_images) >= total:
+            break
+        if len(batch) < page_size:
+            break
+        page += 1
+
+    # Combine public and private images
+    all_images = public_images + private_images
 
     if lowered_keyword:
         filtered = [
@@ -307,12 +343,37 @@ def list_images(
     else:
         filtered = all_images
 
+    # Split into private (has direct url) and public (needs version lookup).
+    # Private images from /openapi/v2/image/private carry a ready-to-use `url`
+    # field; querying the public version endpoint with a private image id returns
+    # nothing, so we short-circuit and build the version entry inline.
+    private_results: list[dict[str, Any]] = []
     to_fetch: list[tuple[Any, str, str]] = []
     for record in filtered[:max_results]:
         img_id = record.get("id") or record.get("imageId")
-        if img_id is not None:
-            name = record.get("name") or record.get("imageName") or ""
-            description = record.get("description") or ""
+        if img_id is None:
+            continue
+        name = record.get("name") or record.get("imageName") or ""
+        description = record.get("description") or ""
+        direct_url = record.get("url") or ""
+        if direct_url:
+            entry: dict[str, Any] = {"url": direct_url}
+            ver_str = name.split(":")[-1] if ":" in name else ""
+            if ver_str:
+                entry["version"] = ver_str
+            size = record.get("size") or ""
+            if size:
+                entry["size"] = size
+            result: dict[str, Any] = {
+                "id": img_id,
+                "name": name,
+                "versions": [entry],
+                "private": True,
+            }
+            if description:
+                result["description"] = description
+            private_results.append(result)
+        else:
             to_fetch.append((img_id, name, description))
 
     def _fetch_versions(item: tuple[Any, str, str]) -> dict[str, Any]:
@@ -354,7 +415,9 @@ def list_images(
         return result
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(_fetch_versions, to_fetch))
+        public_results = list(pool.map(_fetch_versions, to_fetch))
+
+    results = public_results + private_results
 
     return {
         "success": True,
