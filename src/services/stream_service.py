@@ -31,6 +31,10 @@ from src.services.deploy_state_service import (
     get_deploy_state_service,
 )
 from src.services.events_service import ChatEventsService, get_events_service
+from src.services.session_directory_service import (
+    SessionDirectoryResolver,
+    SessionDirectorySource,
+)
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
@@ -270,6 +274,8 @@ class SendStreamContext:
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
     bohrium_required: bool = False  # 本轮是否显式依赖 Bohrium access_key / project
     images: list[str] = field(default_factory=list)
+    remote_workdir: str | None = None
+    session_directory_source: SessionDirectorySource = "none"
 
 
 class ChatStreamService:
@@ -620,7 +626,17 @@ class ChatStreamService:
         # 仅 Worker 队列模式：无 Redis 时无法发送
         if not REDIS_URL:
             return None
+        req_fields = req.model_dump(exclude_unset=True)
         self._sessions_service.ensure_session(sid, user_id=user_id)
+
+        resolved_directory = SessionDirectoryResolver(
+            self._sessions_service
+        ).resolve(
+            session_id=sid,
+            request_directory=req.directory,
+            request_directory_provided="directory" in req_fields,
+        )
+
         acquired_ok, _ = self._sessions_service.try_acquire_session_run(sid)
         if not acquired_ok:
             return None
@@ -643,7 +659,10 @@ class ChatStreamService:
             )
         except (TypeError, ValueError):
             project_id_val = None
-        bohrium_required = bool(org_id_val and project_id_val is not None)
+        bohrium_required = bool(
+            (org_id_val and project_id_val is not None)
+            or resolved_directory.bohrium_required
+        )
 
         # Bohrium：org_id / project_id 直接入库，需要时从库读，不常驻内存
         if req.bohrium_project_id is not None or org_id is not None:
@@ -673,8 +692,9 @@ class ChatStreamService:
             user_msg['images'] = list(req.images)
         if req.workspace_paths:
             user_msg['workspace_paths'] = list(req.workspace_paths)
-        if 'directory' in req.model_dump(exclude_unset=True):
-            user_msg['session_directory'] = req.directory
+        if resolved_directory.source != "none":
+            user_msg["session_directory"] = resolved_directory.remote_workdir
+            user_msg["session_directory_source"] = resolved_directory.source
         self._events_service.add_history_event(sid, user_msg, user_id=user_id)
 
         dao = get_redis_dao()
@@ -693,6 +713,8 @@ class ChatStreamService:
             model=model,
             bohrium_required=bohrium_required,
             images=list(req.images or []),
+            remote_workdir=resolved_directory.remote_workdir,
+            session_directory_source=resolved_directory.source,
         )
 
     def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
@@ -839,6 +861,8 @@ class ChatStreamService:
                 'model': ctx.model,
                 'images': list(ctx.images),
                 'bohrium_required': ctx.bohrium_required,
+                'remote_workdir': ctx.remote_workdir,
+                'session_directory_source': ctx.session_directory_source,
                 'submitted_at': datetime.now(timezone.utc).isoformat(),
             }
             # 先设为 waiting 再入队，避免 Worker 接手后 set active 被此处覆盖（竞态）

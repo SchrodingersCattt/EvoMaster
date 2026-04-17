@@ -292,7 +292,10 @@ async def chat_stream(
         req = req.model_copy(
             update={'images': [image.url for image in validated_images]}
         )
-    ctx = stream_svc.prepare_send_message(sid, req, user_id, org_id=org_id)
+    try:
+        ctx = stream_svc.prepare_send_message(sid, req, user_id, org_id=org_id)
+    except SessionDirectoryError as exc:
+        raise _session_directory_error(exc) from exc
     if ctx is None:
         logger.warning(
             'stream 409: session already running session_id=%s (wait for current run or call stop)',
