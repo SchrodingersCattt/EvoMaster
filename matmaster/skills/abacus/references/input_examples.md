@@ -2,7 +2,7 @@
 
 ## Quick Reference: Mandatory Parameters by Task Type
 
-Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `scf_thr`, `scf_nmax`, `smearing_method`, `smearing_sigma`.
+Always include **universal baseline**: `ntype`, `calculation`, `basis_type`, `ecutwfc`, `scf_thr`, `scf_nmax`, `smearing_method`, `smearing_sigma`. (`ntype` = number of distinct species in STRU's ATOMIC_SPECIES; count ghost species separately.)
 
 | Task | Additional mandatory parameters | Common omission |
 |------|---------------------------------|-----------------|
@@ -23,6 +23,7 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `
 ### Relaxation INPUT Example
 ```
 INPUT_PARAMETERS
+ntype 1
 calculation relax
 basis_type lcao
 ecutwfc 100
@@ -34,10 +35,12 @@ cal_force 1
 force_thr_ev 0.01
 relax_nmax 100
 ```
+> Set `ntype` to the number of ATOMIC_SPECIES in STRU (e.g. MoS2 → `ntype 2`).
 
 ### Cell Relaxation INPUT Example
 ```
 INPUT_PARAMETERS
+ntype 1
 calculation cell-relax
 basis_type lcao
 ecutwfc 100
@@ -56,6 +59,7 @@ relax_nmax 100
 ### Vacancy / BSSE Ghost Atom INPUT Example
 ```
 INPUT_PARAMETERS
+ntype 2
 calculation scf
 basis_type lcao
 ecutwfc 100
@@ -69,11 +73,12 @@ mixing_ndim 20
 mixing_gg0 1.5
 kspacing 0.10
 ```
-> **Critical**: Use `kspacing` (not a KPT file) for supercell/vacancy/BSSE calculations. For magnetic systems (Fe vacancy), include `nspin 2` and mixing parameters. `scf_nmax 100` is the standard value — do not increase to 200 unless the system is known to have convergence difficulties.
+> **Critical**: `ntype 2` because STRU has Fe + Fe_empty (real + ghost species). Use `kspacing` (not a KPT file) for supercell/vacancy/BSSE calculations. For magnetic systems (Fe vacancy), include `nspin 2` and mixing parameters. `scf_nmax 100` is the standard value — do not increase to 200 unless the system is known to have convergence difficulties.
 
 ### Slab BSSE Ghost Atom INPUT Example
 ```
 INPUT_PARAMETERS
+ntype 2
 calculation scf
 basis_type lcao
 ecutwfc 100
@@ -92,6 +97,7 @@ kspacing 0.10 0.10 1.00
 ### Work Function / Electrostatic Potential INPUT Example
 ```
 INPUT_PARAMETERS
+ntype 1
 calculation scf
 basis_type lcao
 ecutwfc 100
@@ -118,6 +124,7 @@ Electronic property calculations (band structure, DOS) require: SCF → NSCF.
 ### Step 1: SCF INPUT (charge density output)
 ```
 INPUT_PARAMETERS
+ntype 1
 calculation scf
 basis_type lcao
 ecutwfc 100
@@ -140,6 +147,7 @@ Gamma
 ### Step 2a: NSCF Band Structure INPUT
 ```
 INPUT_PARAMETERS
+ntype 1
 calculation nscf
 basis_type lcao
 ecutwfc 100
@@ -176,6 +184,7 @@ Line
 ### Step 2b: NSCF DOS INPUT
 ```
 INPUT_PARAMETERS
+ntype 1
 calculation nscf
 basis_type lcao
 ecutwfc 100

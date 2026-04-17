@@ -102,6 +102,9 @@ Full STRU format details: `references/stru_format.md`.
 
 **Before finishing any ABACUS task, verify EVERY item below. Violations cause silent failures.**
 
+### Species Count (ntype)
+- INPUT **must** contain `ntype <N>` where N = number of distinct species in STRU's ATOMIC_SPECIES block. Count ghost/empty species separately. `ntype 1` is ONLY correct for single-element systems; multi-species (e.g. MoS2 → `ntype 2`, vacancy with ghost → `ntype 2`) require updating. Mismatched ntype silently causes wrong results.
+
 ### File Reference Consistency
 - When the STRU file is NOT named `STRU`, the INPUT **must** include `stru_file <actual_name>`.
 - When the KPT file is NOT named `KPT`, the INPUT **must** include `kpoint_file <actual_name>`.
