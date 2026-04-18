@@ -280,7 +280,7 @@ Do not stall waiting for certainty if the correct answer is to plan the research
 ## PLAN.md requirements
 
 Default path:
-docs/research/<topic-slug>/PLAN.md
+docs/<topic-slug>/PLAN.md
 
 Topic slug rules:
 - lowercase
