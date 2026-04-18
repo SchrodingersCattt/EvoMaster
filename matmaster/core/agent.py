@@ -721,9 +721,7 @@ class AgentKernel:
 
                 if chunk.content:
                     if response_stream_released:
-                        yield self._response_item(
-                            chunk.content, stream_id, "streaming"
-                        )
+                        yield self._response_item(chunk.content, stream_id, "streaming")
                     else:
                         pending_response_parts.append(chunk.content)
                         pending_content = "".join(pending_response_parts)
@@ -910,8 +908,10 @@ class AgentKernel:
     ) -> _KernelItem:
         return _KernelItem(
             event=ResponseEvent(
-                source="agent", content=content, stream_state=stream_state,
-                stream_id=stream_id
+                source="agent",
+                content=content,
+                stream_state=stream_state,
+                stream_id=stream_id,
             )
         )
 
