@@ -2,7 +2,7 @@ version: v5
 capability: scientific_analysis
 domain: alloy
 questions:
-- id: WO_general_steel_008_20260415
+- id: WO_general_steel_008_20260417
   capability: scientific_analysis
   domain: alloy
   intent: Analyze Ni-content variation in duplex stainless-steel composition and summarize
@@ -41,7 +41,7 @@ questions:
       - 不确定性
   - key: turn_budget
     value:
-      max: 10
+      max: 14
   - key: duration_budget
     value:
       max: 7200000
@@ -87,7 +87,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_hea_005_20260415
+- id: WO_general_hea_005_20260417
   capability: scientific_analysis
   domain: alloy
   intent: Evaluate phase-formation tendency of AlCr0.8CoFeNi HEA using descriptor calculations,
@@ -131,7 +131,7 @@ questions:
       - 不确定性
   - key: turn_budget
     value:
-      max: 10
+      max: 14
   - key: duration_budget
     value:
       max: 7200000

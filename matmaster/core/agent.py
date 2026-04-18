@@ -531,6 +531,12 @@ class AgentKernel:
                             )
                         )
 
+            # ── Turn budget awareness ──────────────────────────
+            # Inject a turn-count hint into the last ToolMessage so the
+            # LLM sees how many turns it has consumed.  Escalating urgency
+            # when max_turns represents a realistic budget (≤ 50).
+            self._inject_turn_budget_nudge(state, spec.max_turns)
+
         yield self._terminal(state, "max_turns")
 
     async def _call_llm_streaming(
@@ -715,27 +721,15 @@ class AgentKernel:
 
                 if chunk.content:
                     if response_stream_released:
-                        yield _KernelItem(
-                            event=ResponseEvent(
-                                source="agent",
-                                content=chunk.content,
-                                stream_state="streaming",
-                                stream_id=stream_id,
-                            )
-                        )
+                        yield self._response_item(chunk.content, stream_id, "streaming")
                     else:
                         pending_response_parts.append(chunk.content)
                         pending_content = "".join(pending_response_parts)
                         if not is_empty_response_sentinel_prefix(pending_content):
                             response_stream_released = True
                             pending_response_parts.clear()
-                            yield _KernelItem(
-                                event=ResponseEvent(
-                                    source="agent",
-                                    content=pending_content,
-                                    stream_state="streaming",
-                                    stream_id=stream_id,
-                                )
+                            yield self._response_item(
+                                pending_content, stream_id, "streaming"
                             )
 
                 # Accumulate parts (standard streaming accumulation)
@@ -788,22 +782,12 @@ class AgentKernel:
                             if pending_response_parts and not response_stream_released:
                                 response_stream_released = True
                                 pending_response_parts.clear()
-                                yield _KernelItem(
-                                    event=ResponseEvent(
-                                        source="agent",
-                                        content=visible_snapshot,
-                                        stream_state="streaming",
-                                        stream_id=stream_id,
-                                    )
+                                yield self._response_item(
+                                    visible_snapshot, stream_id, "streaming"
                                 )
                             if not is_trivial_response_text(visible_snapshot):
-                                yield _KernelItem(
-                                    event=ResponseEvent(
-                                        source="agent",
-                                        content=visible_snapshot,
-                                        stream_state="complete",
-                                        stream_id=stream_id,
-                                    )
+                                yield self._response_item(
+                                    visible_snapshot, stream_id, "complete"
                                 )
                         else:
                             pending_response_parts.clear()
@@ -841,33 +825,14 @@ class AgentKernel:
                     if pending_response_parts and not response_stream_released:
                         response_stream_released = True
                         pending_response_parts.clear()
-                        yield _KernelItem(
-                            event=ResponseEvent(
-                                source="agent",
-                                content=visible_snapshot,
-                                stream_state="streaming",
-                                stream_id=stream_id,
-                            )
+                        yield self._response_item(
+                            visible_snapshot, stream_id, "streaming"
                         )
-                    yield _KernelItem(
-                        event=ResponseEvent(
-                            source="agent",
-                            content=visible_snapshot,
-                            stream_state="complete",
-                            stream_id=stream_id,
-                        )
-                    )
+                    yield self._response_item(visible_snapshot, stream_id, "complete")
                 else:
                     pending_response_parts.clear()
             # End marker
-            yield _KernelItem(
-                event=ResponseEvent(
-                    source="agent",
-                    content="",
-                    stream_state="end",
-                    stream_id=stream_id,
-                )
-            )
+            yield self._response_item("", stream_id, "end")
 
         if stream_cancelled:
             raise _KernelStopRequested()
@@ -938,6 +903,19 @@ class AgentKernel:
         return normalize_visible_response_text(response.content) is not None
 
     @staticmethod
+    def _response_item(
+        content: str, stream_id: str, stream_state: str | None
+    ) -> _KernelItem:
+        return _KernelItem(
+            event=ResponseEvent(
+                source="agent",
+                content=content,
+                stream_state=stream_state,
+                stream_id=stream_id,
+            )
+        )
+
+    @staticmethod
     def _validate_tool_call_ids(tool_calls: list[ToolCallData]) -> None:
         seen: set[str] = set()
         duplicates: list[str] = []
@@ -952,6 +930,68 @@ class AgentKernel:
                 retryable=False,
                 error_category="bad_request",
             )
+
+    @staticmethod
+    def _inject_turn_budget_nudge(
+        state: _KernelState,
+        max_turns: int,
+    ) -> None:
+        """Append turn-count awareness to the last ToolMessage.
+
+        Provides the LLM with real-time feedback on turn consumption so it
+        can self-regulate and avoid exceeding task budgets:
+
+        - **Constrained budget** (``max_turns ≤ 50``): always show
+          ``[Turn X/Y]``, with escalating urgency at 60 %/75 %/90 %
+          thresholds.
+        - **Unconstrained budget** (``max_turns > 50``): periodic
+          ``[Turn N]`` marker every 5 turns starting from turn 5 for
+          soft awareness.
+        """
+        if max_turns <= 0 or not state.messages:
+            return
+
+        remaining = max_turns - state.turn
+        nudge: str | None = None
+
+        if max_turns <= 50 and remaining >= 0:
+            pct = state.turn / max_turns
+            if pct >= 0.90:
+                nudge = (
+                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} — "
+                    f"only {remaining} left. Deliver final answer NOW. "
+                    "Do not start new operations.]"
+                )
+            elif pct >= 0.75:
+                nudge = (
+                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} — "
+                    f"{remaining} left. Wrap up: essential steps only, "
+                    "batch remaining work.]"
+                )
+            elif pct >= 0.60:
+                nudge = (
+                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} — "
+                    f"{remaining} left. Plan efficiently.]"
+                )
+            else:
+                nudge = f"\n\n[Turn {state.turn}/{max_turns}]"
+        elif state.turn >= 5 and state.turn % 5 == 0:
+            # Unconstrained budget: soft periodic awareness
+            nudge = f"\n\n[Turn {state.turn}]"
+
+        if nudge is None:
+            return
+
+        # Append to the last ToolMessage in the message list
+        for i in range(len(state.messages) - 1, -1, -1):
+            if isinstance(state.messages[i], ToolMessage):
+                msg = state.messages[i]
+                state.messages[i] = ToolMessage(
+                    tool_call_id=msg.tool_call_id,
+                    tool_name=msg.tool_name,
+                    content=(msg.content or "") + nudge,
+                )
+                return
 
     @staticmethod
     def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:

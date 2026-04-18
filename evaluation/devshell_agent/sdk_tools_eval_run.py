@@ -135,6 +135,10 @@ class MatmasterEvalMcpEvalRunMixin:
         if args.get("slices") is not None:
             slices = str(args["slices"]).strip() or None
         model = d.model if args.get("model") is None else str(args["model"])
+        fallback_model = d.fallback_model
+        if args.get("fallback_model") is not None:
+            fs = str(args["fallback_model"]).strip()
+            fallback_model = fs or None
         exp = d.exp if args.get("exp") is None else str(args["exp"])
         pending = (
             d.eval_ingest_pending_only
@@ -173,6 +177,7 @@ class MatmasterEvalMcpEvalRunMixin:
             eval_ingest_run_id=eval_ingest_run_id,
             exclude_question_ids=exclude_question_ids,
             k=k_repeat,
+            fallback_model=fallback_model,
         )
 
     def _maybe_submit_run_dir_ingest(

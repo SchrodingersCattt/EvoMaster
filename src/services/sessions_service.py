@@ -1,18 +1,59 @@
+import base64
+import json
 import logging
 import threading
+from collections import defaultdict
+from datetime import datetime
 from functools import lru_cache
 
-from src.dao.chat_sessions_table import ChatSessionsTable, get_chat_sessions_table
+from src.dao.chat_sessions_table import (
+    WORKSPACE_PREF_UNSET,
+    ChatSessionsTable,
+    _parse_first_message_cell,
+    get_chat_sessions_table,
+)
 from src.dao.redis_dao import get_redis_dao
 from src.services.tools_server_allowlist import is_user_in_admin_allowlist
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.constant import REDIS_URL
+from src.utils.exceptions import BadRequestErrorResponse
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
 
 # Redis 跨 worker 停止：channel 名，消息体为 session_id
-REDIS_STOP_CHANNEL = 'matmaster_chat:stop'
+REDIS_STOP_CHANNEL = "matmaster_chat:stop"
+
+
+def _encode_session_list_cursor(updated_at: datetime, session_id: str) -> str:
+    u = updated_at.isoformat() if updated_at is not None else ""
+    raw = json.dumps({"u": u, "i": session_id}, separators=(",", ":"))
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+def _decode_session_list_cursor(token: str) -> tuple[datetime, str] | None:
+    try:
+        pad = "=" * (-len(token) % 4)
+        raw = base64.urlsafe_b64decode(token + pad)
+        d = json.loads(raw.decode())
+        u = d.get("u")
+        i = d.get("i")
+        if not isinstance(u, str) or not isinstance(i, str):
+            return None
+        cur_dt = datetime.fromisoformat(u)
+        return cur_dt, i
+    except Exception:
+        return None
+
+
+def _session_row_to_item(row: dict) -> dict:
+    return {
+        "id": row["session_id"],
+        "project_id": row.get("project_id"),
+        "status": row.get("status", "idle"),
+        "history_length": int(row.get("history_length") or 0),
+        "first_user_message": _parse_first_message_cell(row.get("first_message")),
+    }
 
 
 class RedisStopSubscriber:
@@ -31,13 +72,13 @@ class RedisStopSubscriber:
         try:
             pubsub = client.pubsub()
             pubsub.subscribe(REDIS_STOP_CHANNEL)
-            logger.info('Redis stop subscriber started, channel=%s', REDIS_STOP_CHANNEL)
+            logger.info("Redis stop subscriber started, channel=%s", REDIS_STOP_CHANNEL)
             for message in pubsub.listen():
-                if message.get('type') != 'message':
+                if message.get("type") != "message":
                     continue
                 # run 仅在 Worker 上，停止由 Worker 轮询 Redis stop key 处理；API 无需 set 本地 event，保留订阅线程即可
         except Exception as e:
-            logger.warning('Redis stop subscriber exited: %s', e)
+            logger.warning("Redis stop subscriber exited: %s", e)
         finally:
             if pubsub is not None:
                 try:
@@ -51,13 +92,13 @@ class RedisStopSubscriber:
             if self._started:
                 return True
             if not REDIS_URL:
-                logger.debug('Redis not configured, stop subscriber not started')
+                logger.debug("Redis not configured, stop subscriber not started")
                 return False
             if get_redis_dao().get_publish_client() is None:
                 return False
             self._thread = threading.Thread(
                 target=self._run,
-                name='redis-stop-subscriber',
+                name="redis-stop-subscriber",
                 daemon=True,
             )
             self._thread.start()
@@ -97,29 +138,29 @@ class ChatSessionsService:
             allowed = user_id is not None
             if not allowed:
                 logger.info(
-                    'can_access_session: session_id=%s denied (session not in DB, user_id missing)',
+                    "can_access_session: session_id=%s denied (session not in DB, user_id missing)",
                     session_id,
                 )
             return allowed
-        if row.get('is_shared'):
+        if row.get("is_shared"):
             return True
         if user_id is None:
             logger.info(
-                'can_access_session: session_id=%s denied (not shared, no user_id)',
+                "can_access_session: session_id=%s denied (not shared, no user_id)",
                 session_id,
             )
             return False
-        owner = row.get('user_id')
+        owner = row.get("user_id")
         if owner != user_id:
             if allow_admin_read and is_user_in_admin_allowlist(user_id):
                 logger.info(
-                    'can_access_session: session_id=%s admin read access user_id=%s',
+                    "can_access_session: session_id=%s admin read access user_id=%s",
                     session_id,
                     user_id,
                 )
                 return True
             logger.info(
-                'can_access_session: session_id=%s denied (not owner: owner=%s user_id=%s)',
+                "can_access_session: session_id=%s denied (not owner: owner=%s user_id=%s)",
                 session_id,
                 owner,
                 user_id,
@@ -159,6 +200,116 @@ class ChatSessionsService:
         total = self.table.count_sessions_by_user(user_id, project_id=project_id)
         return sessions, total
 
+    def list_sessions_grouped_by_directory(
+        self,
+        user_id: str,
+        project_id: int,
+        per_group_limit: int,
+    ) -> dict:
+        """
+        按 session_directory 聚合某项目下的会话。
+        每个目录组内按 updated_at 倒序取首屏 per_group_limit 条（窗口函数）；
+        未设置目录的会话归为一组 session_directory=null，且排在最后。
+        """
+        cap = max(1, min(50, per_group_limit))
+        total = self.table.count_sessions_by_user(user_id, project_id=project_id)
+        stats = self.table.aggregate_session_directory_stats(user_id, project_id)
+
+        def sort_key(r: dict) -> tuple[int, float]:
+            dk = r["dk"]
+            is_unset = dk == "__UNSET__"
+            ts = r.get("max_upd")
+            if ts is not None and hasattr(ts, "timestamp"):
+                tsv = -float(ts.timestamp())
+            else:
+                tsv = 0.0
+            return (1 if is_unset else 0, tsv)
+
+        stats_sorted = sorted(stats, key=sort_key)
+        window_rows = self.table.list_sessions_windowed_first_per_directory(
+            user_id, project_id, cap
+        )
+        by_dk: dict[str, list[dict]] = defaultdict(list)
+        for row in window_rows:
+            by_dk[row["dk"]].append(row)
+
+        groups: list[dict] = []
+        for agg in stats_sorted:
+            dk = agg["dk"]
+            session_count = int(agg["session_count"])
+            raw_list = by_dk.get(dk, [])
+            raw_list.sort(
+                key=lambda r: (
+                    r.get("updated_at") or datetime.min,
+                    r.get("session_id") or "",
+                ),
+                reverse=True,
+            )
+            sessions = [_session_row_to_item(r) for r in raw_list]
+            has_more = session_count > len(sessions)
+            next_cursor = None
+            if has_more and raw_list:
+                last = raw_list[-1]
+                next_cursor = _encode_session_list_cursor(
+                    last["updated_at"],
+                    last["session_id"],
+                )
+            session_directory = None if dk == "__UNSET__" else dk
+            groups.append(
+                {
+                    "session_directory": session_directory,
+                    "session_count": session_count,
+                    "sessions": sessions,
+                    "has_more": has_more,
+                    "next_cursor": next_cursor,
+                }
+            )
+
+        return {
+            "groups": groups,
+            "total_sessions": total,
+        }
+
+    def list_sessions_more_in_directory(
+        self,
+        user_id: str,
+        project_id: int,
+        *,
+        directory: str | None,
+        limit: int,
+        cursor_token: str,
+    ) -> dict:
+        """单目录组分页（加载更多）。cursor 指向上一页最后一条会话。"""
+        cap = max(1, min(50, limit))
+        decoded = _decode_session_list_cursor(cursor_token)
+        if not decoded:
+            raise BadRequestErrorResponse(msg="无效的分页游标")
+        cur_ua, cur_sid = decoded
+        rows = self.table.list_sessions_in_directory_paged(
+            user_id,
+            project_id,
+            directory=directory,
+            limit=cap,
+            cursor_updated_at=cur_ua,
+            cursor_session_id=cur_sid,
+        )
+        has_more = len(rows) > cap
+        if has_more:
+            rows = rows[:cap]
+        sessions = [_session_row_to_item(r) for r in rows]
+        next_cursor = None
+        if has_more and rows:
+            last = rows[-1]
+            next_cursor = _encode_session_list_cursor(
+                last["updated_at"],
+                last["session_id"],
+            )
+        return {
+            "sessions": sessions,
+            "has_more": has_more,
+            "next_cursor": next_cursor,
+        }
+
     def get_active_sessions_count(self) -> int:
         """返回所有用户的活跃会话数量（status='active'），不限于当前用户。"""
         return self.table.count_active_sessions()
@@ -179,19 +330,19 @@ class ChatSessionsService:
         """
         row = self.table.get_session(session_id)
         if not row:
-            return 'idle'
-        status = str(row.get('status') or 'idle').strip() or 'idle'
+            return "idle"
+        status = str(row.get("status") or "idle").strip() or "idle"
         if (
-            status == 'waiting'
+            status == "waiting"
             and REDIS_URL
             and not get_redis_dao().is_session_run_queued(session_id)
         ):
             registry = get_worker_registry_service()
             owner = registry.get_session_run_owner(session_id)
             if owner and registry.is_worker_alive(owner):
-                return 'active'
+                return "active"
             self.reset_session_status_to_idle_in_db(session_id)
-            return 'idle'
+            return "idle"
         return status
 
     def get_session_status_payload(self, session_id: str) -> dict:
@@ -202,33 +353,33 @@ class ChatSessionsService:
         若 DB 为 waiting 但 Redis 已无 queued 标记：若有 run_owner 且存活则视为 active 不重置，否则重置为 idle。
         """
         row = self.table.get_session(session_id)
-        status = 'idle'
+        status = "idle"
         last_task_id = None
         if row:
-            status = str(row.get('status') or 'idle').strip() or 'idle'
+            status = str(row.get("status") or "idle").strip() or "idle"
             if (
-                status == 'waiting'
+                status == "waiting"
                 and REDIS_URL
                 and not get_redis_dao().is_session_run_queued(session_id)
             ):
                 registry = get_worker_registry_service()
                 owner = registry.get_session_run_owner(session_id)
                 if owner and registry.is_worker_alive(owner):
-                    status = 'active'
+                    status = "active"
                 else:
                     self.reset_session_status_to_idle_in_db(session_id)
-                    status = 'idle'
-            lt = row.get('last_task_id')
+                    status = "idle"
+            lt = row.get("last_task_id")
             if lt is not None and str(lt).strip():
                 last_task_id = str(lt).strip()
         out = {
-            'source': 'System',
-            'type': 'session_status',
-            'status': status,
-            'session_id': session_id.strip(),
+            "source": "System",
+            "type": "session_status",
+            "status": status,
+            "session_id": session_id.strip(),
         }
         if last_task_id is not None:
-            out['last_task_id'] = last_task_id
+            out["last_task_id"] = last_task_id
         return out
 
     def get_session(self, session_id: str) -> dict | None:
@@ -240,7 +391,7 @@ class ChatSessionsService:
         row = self.table.get_session(session_id)
         if not row:
             return None
-        uid = row.get('user_id')
+        uid = row.get("user_id")
         return str(uid) if uid is not None else None
 
     def set_session_bohrium(
@@ -263,10 +414,37 @@ class ChatSessionsService:
         """设置会话绑定的工作区目录。仅所有者可写。"""
         return self.table.set_session_directory(session_id, directory, user_id)
 
+    def update_session_workspace_prefs(
+        self,
+        session_id: str,
+        user_id: str,
+        *,
+        directory: object = WORKSPACE_PREF_UNSET,
+        chat_mode: object = WORKSPACE_PREF_UNSET,
+    ) -> bool:
+        """更新会话工作区目录与/或 chat_mode；未传入的字段不更新。仅所有者可写。"""
+        return self.table.update_session_workspace_prefs(
+            session_id,
+            user_id,
+            directory=directory,
+            chat_mode=chat_mode,
+        )
+
+    def set_session_chat_mode(
+        self, session_id: str, chat_mode: str, user_id: str
+    ) -> bool:
+        """持久化会话偏好模式（direct|planner）。仅所有者可写。"""
+        return self.table.update_session_workspace_prefs(
+            session_id,
+            user_id,
+            directory=WORKSPACE_PREF_UNSET,
+            chat_mode=chat_mode,
+        )
+
     def get_share_status(self, session_id: str) -> dict:
         """获取会话分享状态。返回 { \"enabled\": bool }，会话不存在返回 None。"""
         row = self.table.get_session(session_id)
-        return {'enabled': bool(row.get('is_shared'))}
+        return {"enabled": bool(row.get("is_shared"))}
 
     def set_share_status(self, session_id: str, enabled: bool, user_id: str) -> bool:
         """设置会话分享状态。仅会话所有者可设置。"""
@@ -279,7 +457,7 @@ class ChatSessionsService:
         row = self.table.get_session(session_id)
         if not row:
             return False
-        if row.get('user_id') != user_id:
+        if row.get("user_id") != user_id:
             return False
         SESSIONS.pop(session_id, None)
         with self._sessions_run_lock:
@@ -294,23 +472,23 @@ class ChatSessionsService:
         """
         with self._sessions_run_lock:
             if session_id in self._sessions_in_run:
-                return False, 'already_in_run'
+                return False, "already_in_run"
             self._sessions_in_run.add(session_id)
-        if not self.table.set_session_status(session_id, 'active'):
+        if not self.table.set_session_status(session_id, "active"):
             with self._sessions_run_lock:
                 self._sessions_in_run.discard(session_id)
             logger.warning(
-                'try_acquire_session_run: set_session_status(active) failed session_id=%s '
-                '(session row may not exist: ensure API and Worker use same DB)',
+                "try_acquire_session_run: set_session_status(active) failed session_id=%s "
+                "(session row may not exist: ensure API and Worker use same DB)",
                 session_id,
             )
-            return False, 'db_update_failed'
+            return False, "db_update_failed"
         worker_id = get_worker_id()
         get_worker_registry_service().set_session_run_owner(session_id, worker_id)
         if REDIS_URL:
             get_redis_dao().delete_session_run_queued(session_id)
         logger.info(
-            'try_acquire_session_run: acquired session_id=%s worker_id=%s',
+            "try_acquire_session_run: acquired session_id=%s worker_id=%s",
             session_id,
             worker_id,
         )
@@ -320,9 +498,9 @@ class ChatSessionsService:
         """释放该 session 的“正在运行”占用（在 run 结束时调用）。
         run_success=False 时会话状态置为 failed，否则置为 idle。"""
         worker_id = get_worker_id()
-        target_status = 'idle' if run_success else 'failed'
+        target_status = "idle" if run_success else "failed"
         logger.info(
-            'release_session_run: session_id=%s worker_id=%s status=%s',
+            "release_session_run: session_id=%s worker_id=%s status=%s",
             session_id,
             worker_id,
             target_status,
@@ -343,7 +521,7 @@ class ChatSessionsService:
         with self._sessions_run_lock:
             self._sessions_in_run.discard(sid)
         logger.info(
-            'discard_session_run_from_this_pod: session_id=%s worker_id=%s',
+            "discard_session_run_from_this_pod: session_id=%s worker_id=%s",
             sid,
             get_worker_id(),
         )
@@ -370,7 +548,7 @@ class ChatSessionsService:
         仅将 DB 中该会话状态置为 idle，不碰内存。用于：部署/重启后，另一 pod 上的 run 已死，
         本 pod 在 subscribe 时发现 DB 仍为 active 则视为 stale，先重置 DB 再推送 run_interrupted。
         """
-        self.table.set_session_status(session_id.strip(), 'idle')
+        self.table.set_session_status(session_id.strip(), "idle")
 
     def set_session_last_task(
         self, session_id: str, task_id: str, user_id: str | None = None
@@ -388,12 +566,12 @@ class ChatSessionsService:
         redis_dao = get_redis_dao()
         redis_dao.publish(REDIS_STOP_CHANNEL, sid)
         ctx = redis_dao.get_interaction_run_context(sid)
-        task_id = (ctx.get('task_id', '') or '').strip() if ctx else ''
+        task_id = (ctx.get("task_id", "") or "").strip() if ctx else ""
         if redis_dao.set_stop_requested(sid, task_id):
             logger.debug(
-                'stop_session_run: set_stop_requested session_id=%s task_id=%s',
+                "stop_session_run: set_stop_requested session_id=%s task_id=%s",
                 sid,
-                task_id or '(session-only)',
+                task_id or "(session-only)",
             )
         return True
 

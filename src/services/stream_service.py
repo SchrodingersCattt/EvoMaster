@@ -675,6 +675,8 @@ class ChatStreamService:
         self._sessions_service.set_session_last_task(sid, task_id, user_id=user_id)
         self._deploy_state_service.record_session_version(sid)
         user_content = (req.content or '').strip()
+        if user_content and user_id:
+            self._sessions_service.set_session_chat_mode(sid, mode, user_id)
         user_msg = {
             'source': 'User',
             'type': 'query',

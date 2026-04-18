@@ -228,6 +228,17 @@ class DevshellAgentLoopCli:
             ),
         )
         p.add_argument(
+            "--fallback-model",
+            type=str,
+            default="claude-opus-4-6",
+            metavar="ROUTE_KEY",
+            help=(
+                "Forwarded to run_devshell_eval --fallback-model (default: claude-opus-4-6). "
+                "Per-task retry once when logs indicate Bedrock/botocore transport failures; "
+                "set to the same value as --model to disable."
+            ),
+        )
+        p.add_argument(
             "--exp",
             type=str,
             default=None,
@@ -304,6 +315,7 @@ class DevshellAgentLoopCli:
             if _first == "planner":
                 exp_effective = "planner"
 
+        fb_loop = (args.fallback_model or "").strip() or None
         defaults = DevshellAgentCliDefaults(
             jobs=int(args.jobs),
             limit=args.limit,
@@ -323,6 +335,7 @@ class DevshellAgentLoopCli:
             ),
             extra_args=list(args.eval_extra_arg),
             k=args.k,
+            fallback_model=fb_loop,
         )
 
         if args.target_mean_score is not None:

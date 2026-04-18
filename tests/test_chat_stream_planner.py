@@ -19,7 +19,7 @@ def test_prepare_send_message_accepts_planner_mode() -> None:
     from src.services.stream_service import ChatStreamService
 
     sessions_service = MagicMock()
-    sessions_service.get_session.return_value = {"session_directory": None}
+    sessions_service.get_session.return_value = {'session_directory': None}
     sessions_service.try_acquire_session_run.return_value = (True, None)
     events_service = MagicMock()
     deploy_state_service = MagicMock()
@@ -58,7 +58,7 @@ def test_prepare_send_message_falls_back_unknown_mode_to_default() -> None:
     from src.services.stream_service import ChatStreamService
 
     sessions_service = MagicMock()
-    sessions_service.get_session.return_value = {"session_directory": None}
+    sessions_service.get_session.return_value = {'session_directory': None}
     sessions_service.try_acquire_session_run.return_value = (True, None)
     events_service = MagicMock()
     deploy_state_service = MagicMock()

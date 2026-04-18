@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "evaluation" / "scripts" / "devshell" / "run_devshell_eval.py"
@@ -96,6 +97,8 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
         console_log_file,
         timeout_sec=None,
         tee_stderr=False,
+        console_log_append=False,
+        **kwargs: Any,
     ):
         captured.append(list(cmd))
         summary_file.write_text(
@@ -138,9 +141,13 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
     cmd0 = [str(x) for x in captured[0]]
     assert "--verbose" in cmd0
     assert "--exp" not in cmd0
+    assert "--model" in cmd0
+    assert cmd0[cmd0.index("--model") + 1] == "bedrock-claude-opus"
     man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     assert man["eval_tooling"]["exp_config_name"] == "direct"
     assert "matmaster_exp" not in man
+    assert man.get("model") == "bedrock-claude-opus"
+    assert man.get("fallback_model") == "claude-opus-4-6"
 
 
 def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> None:
@@ -157,6 +164,8 @@ def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> 
         console_log_file,
         timeout_sec=None,
         tee_stderr=False,
+        console_log_append=False,
+        **kwargs: Any,
     ):
         captured.append(list(cmd))
         summary_file.write_text(
@@ -200,6 +209,7 @@ def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> 
     cmd0 = [str(x) for x in captured[0]]
     assert "--verbose" not in cmd0
     assert "--exp" not in cmd0
+    assert cmd0[cmd0.index("--model") + 1] == "bedrock-claude-opus"
     man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     assert man["eval_tooling"]["exp_config_name"] == "direct"
     assert "matmaster_exp" not in man
@@ -219,6 +229,8 @@ def test_devshell_eval_exp_direct_forwards_flag(tmp_path, monkeypatch) -> None:
         console_log_file,
         timeout_sec=None,
         tee_stderr=False,
+        console_log_append=False,
+        **kwargs: Any,
     ):
         captured.append(list(cmd))
         summary_file.write_text(
@@ -266,3 +278,82 @@ def test_devshell_eval_exp_direct_forwards_flag(tmp_path, monkeypatch) -> None:
     man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     assert man["eval_tooling"]["exp_config_name"] == "direct"
     assert "matmaster_exp" not in man
+
+
+def test_devshell_eval_provider_fallback_retries_once(tmp_path, monkeypatch) -> None:
+    mod = importlib.import_module("evaluation.scripts.devshell.run_devshell_eval")
+    out = (tmp_path / "provider_fb").resolve()
+    calls: list[str] = []
+
+    def fake_run_devshell_task(
+        *,
+        cmd,
+        cwd,
+        env,
+        summary_file,
+        console_log_file,
+        timeout_sec=None,
+        tee_stderr=False,
+        console_log_append=False,
+        **kwargs: Any,
+    ) -> tuple[int, int, dict[str, Any]]:
+        if not console_log_append:
+            calls.append("primary")
+            console_log_file.write_text(
+                "botocore.exceptions.ReadTimeoutError: Read timeout on endpoint URL: "
+                '"https://bedrock-runtime.us-east-1.amazonaws.com/x/converse-stream"\n',
+                encoding="utf-8",
+            )
+            summary_file.write_text('{"parse_error":true}\n', encoding="utf-8")
+            return (1, 50, {"parse_error": True})
+        calls.append("fallback")
+        cmd_s = [str(x) for x in cmd]
+        assert "--model" in cmd_s
+        assert cmd_s[cmd_s.index("--model") + 1] == "claude-opus-4-6"
+        summary_file.write_text(
+            '{"status":"completed","reason":"natural","final_content":"ok",'
+            '"num_turns":1,"usage":{"total_tokens":1}}\n',
+            encoding="utf-8",
+        )
+        return (
+            0,
+            80,
+            {
+                "status": "completed",
+                "reason": "natural",
+                "final_content": "ok",
+                "num_turns": 1,
+                "usage": {"total_tokens": 1},
+            },
+        )
+
+    monkeypatch.setattr(mod, "_run_devshell_task", fake_run_devshell_task)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(SCRIPT),
+            "--limit",
+            "1",
+            "--output-dir",
+            str(out),
+            "--no-clean-results",
+            "--no-eval-ingest",
+            "--no-export-review",
+            "--model",
+            "bedrock-claude-opus",
+            "--fallback-model",
+            "claude-opus-4-6",
+        ],
+    )
+
+    rc = mod.main()
+    assert rc == 0
+    assert calls == ["primary", "fallback"]
+    raw_lines = (
+        (out / "raw_runs.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    )
+    row = json.loads(raw_lines[-1])
+    assert row.get("llm_provider_fallback_used") is True
+    assert row.get("llm_model_route_used") == "claude-opus-4-6"

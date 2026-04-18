@@ -57,8 +57,9 @@ uv run python evaluation/scripts/devshell/run_devshell_agent_loop.py \
 | `--checklist-permission-mode` | 专责会话的 `permission_mode`（默认与 `--permission-mode` 相同） |
 | `--extra-instruction` | 附加到每轮 user 消息的约束/重点 |
 | `--eval-ingest-pending-only` / `--no-eval-ingest-pending-only` | 与 `run_devshell_eval.py` 一致 |
+| `--model` / `--fallback-model` | 默认 **`bedrock-claude-opus`** / **`claude-opus-4-6`**（内层先 Bedrock，单题遇传输类失败再试 LiteLLM）；两参数设为同一路由则不做 fallback 重试 |
 
-其余 `--modes`、`--jobs`、`--limit`、`--questions`、`--capabilities`、`--model`、`--exp`、`--eval-config`、`--task-timeout` 等均转发给内层 `run_devshell_eval.py`。
+其余 `--modes`、`--jobs`、`--limit`、`--questions`、`--capabilities`、`--model`、`--fallback-model`、`--exp`、`--eval-config`、`--task-timeout` 等均转发给内层 `run_devshell_eval.py`。
 
 ## 实现位置
 
