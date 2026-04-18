@@ -93,19 +93,6 @@ python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
 - **Phase-separate fits**: For thermal expansion with phase transitions, fit EACH phase separately. Report slope, intercept, R² for each.
 - **Script-first debugging**: If `solve_refine_scxrd.py` gives poor R-factors: (1) check `--elements` flag — always pass expected elements; (2) try `--trials 5`; (3) try `--grid 128` for large cells; (4) verify space group is correct. Do NOT fall back to writing your own refinement code.
 
-## SCXRD Output Checklist — MANDATORY
-
-Before finishing any SCXRD task, verify ALL of these deliverables exist:
-1. **CIF file** — must be written to workspace even if R-factors are high
-2. **R-factors reported** — R1, wR2, GOOF from the script's JSON output
-3. **Cell parameters reported** — a, b, c, α, β, γ, V from the CIF or P4P
-4. **Space group stated** — symbol and number
-5. **Atom list** — from the CIF's `_atom_site_*` loop
-6. **Chemical formula** — from `_chemical_formula_sum` in CIF
-7. **checkCIF run** — validate the CIF and report alert counts
-
-If the task asks for specific data formatting (e.g., table of atom positions, bond lengths, angles), extract from the CIF and format as requested. Always include uncertainties where available.
-
 ## When to Use
 
 - "Refine lattice parameters from this PXRD data" → `refine_lattice_pxrd.py`

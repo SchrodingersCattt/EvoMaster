@@ -48,15 +48,6 @@ For band structure, DOS, work function, or defect calculations, see `references/
 - DOS: dense uniform k-mesh. Work function: slab ≥ 20 Å vacuum + dipole correction.
 - Defects: supercell ≥ 10 Å between images.
 
-## Multi-Step DFT Workflow Patterns
-
-For complex multi-step calculations (surface energy, vacancy formation, EOS, adsorption, ferroelectric, HEA, etc.), see `references/multi_step_dft_workflow.md`. Key patterns:
-- Surface energy: bulk cell-relax + slab relax with consistent parameters.
-- Vacancy/defect: pristine vs defected supercell with BSSE correction.
-- EOS: multiple volume SCF + Birch-Murnaghan fit.
-- Adsorption: clean slab + adsorbate+slab + isolated adsorbate.
-- **Save-early rule**: Write each intermediate file immediately — partial deliverables have value.
-
 ## Rules
 
 * If no CIF/POSCAR delivered, `task_completed=partial`.

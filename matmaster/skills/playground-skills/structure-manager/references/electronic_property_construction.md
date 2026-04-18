@@ -41,34 +41,6 @@ Auto-generate with pymatgen `HighSymmKpath(structure)`.
 - Not saving intermediate files — if the interface build fails, at least the individual slabs exist as deliverables.
 - Forgetting to verify atom count after stacking (most common error).
 
-## Band Structure Analysis & Reporting
-
-After obtaining NSCF band structure results, follow these steps:
-
-### Extracting band data
-1. **ABACUS**: Parse `OUT.ABACUS/BANDS_1.dat` — columnar format with k-index and eigenvalues.
-2. **Use `parse_abacus.py --type band`** to automatically extract band gap, VBM, CBM.
-3. **Manual extraction**: Read BANDS_1.dat, identify the Fermi level from SCF log (`EFERMI = <eV>`), classify occupied (below Ef) vs unoccupied (above Ef) bands.
-
-### Band gap classification
-- **Direct gap**: VBM and CBM at same k-point.
-- **Indirect gap**: VBM and CBM at different k-points.
-- **Metal**: No gap (bands cross Fermi level).
-- Always report: gap value (eV), gap type (direct/indirect), VBM k-point, CBM k-point.
-
-### Band structure deliverables
-1. **Band gap value** with classification (direct/indirect)
-2. **VBM and CBM positions** (energy in eV, k-point label)
-3. **Fermi energy** from SCF
-4. **k-path specification** used (label each high-symmetry point)
-5. **Band structure plot** if visualization is requested (use `plot_publication.py` or matplotlib)
-
-### Common pitfalls
-- Forgetting to subtract/align to Fermi level when reporting band edges
-- Using conventional cell k-path labels on primitive cell (or vice versa)
-- Not reporting whether gap is direct or indirect
-- Missing `symmetry 0` in NSCF → folded k-path, wrong band plot
-
 ## Verification Checklist
 1. `assess_structure.py` — dimensionality matches intent (bulk=3D, slab=2D)
 2. Atom count = formula x supercell size
