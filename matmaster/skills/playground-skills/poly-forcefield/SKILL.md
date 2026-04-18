@@ -13,15 +13,18 @@ which delegates to the current `polyFF` implementation.
 
 ## Current scope
 
-- The currently documented runnable scope is linear alkane SMILES such as `CCCCCCCCCCC`.
+- **Best supported**: linear alkane SMILES (e.g., `CCCCCCCCCCC`) and simple organic molecules with GAFF-compatible atom types.
+- The script uses GAFF (General Amber Force Field) atom typing, which covers a wide range of organic functional groups: alkyl, ether, ester, amide, aromatic, hydroxyl, carboxyl, amine, etc.
 - The main output is a GROMACS topology file (`.top`) for a single molecule.
+- **Always try the script first** for any organic polymer or small molecule. If typing fails, the error will indicate which atom types are unsupported.
 
 ## Workflow
 
-1. Check whether the input is inside the current supported scope.
-2. If it is out of scope, state the limitation clearly instead of pretending full force-field coverage exists.
+1. **Always attempt topology generation first** — do not pre-judge scope from SMILES alone. The GAFF typing engine handles many common organic chemistries beyond simple alkanes.
+2. If typing or parameter assignment fails, surface the failure message and the unsupported chemistry clearly.
 3. For supported inputs, run the topology generator script and write outputs into the workspace.
 4. Report the generated `.top` path and any obvious limitations in the result.
+5. For the full polymer simulation pipeline (topology → box → MD), see `gromacs-system-prep` skill and its `references/polymer_simulation_workflow.md`.
 
 ## Script path
 
