@@ -26,6 +26,21 @@ class TestPublicContentForEvent:
             'reason': 'natural',
         }
 
+    def test_run_result_none_final_content_stays_empty_public_content(self) -> None:
+        payload = {
+            'type': 'run_result',
+            'source': 'Agent',
+            'status': 'failed',
+            'reason': 'invalid_finish',
+            'final_content': None,
+        }
+
+        assert _public_content_for_event('run_result', payload) == {
+            'content': '',
+            'status': 'failed',
+            'reason': 'invalid_finish',
+        }
+
     def test_finish_alias_uses_same_shape(self) -> None:
         payload = {
             'type': 'finish',
