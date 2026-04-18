@@ -615,3 +615,102 @@ def test_skill_sync_upload_exclude_set_does_not_exclude_skill_md(
 
     assert excludes
     assert all('SKILL.md' not in ex for ex in excludes)
+
+
+@patch.object(arb, "_sync_skills_to_ssh_session", MagicMock())
+@patch.object(arb, "_run_clear_remote_proxy", MagicMock())
+@patch.object(arb, "_remote_session_workspace_root", return_value="/share")
+@patch("src.services.agent_run_bohrium.get_bohrium_nodes_table")
+@patch("src.services.agent_run_bohrium.get_bohrium_node_service")
+def test_setup_uses_remote_workdir_for_ssh_and_execution_context(
+    mock_node_svc_factory: MagicMock,
+    mock_nodes_table_factory: MagicMock,
+    mock_remote_workspace_root: MagicMock,
+) -> None:
+    node_svc = MagicMock()
+    mock_node_svc_factory.return_value = node_svc
+    nodes_table = MagicMock()
+    mock_nodes_table_factory.return_value = nodes_table
+    nodes_table.find_one_for_reuse.return_value = None
+    nodes_table.list_node_ids_for_user_org.return_value = []
+    node_svc.create_node.return_value = {"node_id": 42}
+    node_svc.wait_until_ready.return_value = {
+        "ip": "10.0.0.1",
+        "password": "secret",
+    }
+
+    original_session = MagicMock()
+    original_session.is_open = True
+    pg = _make_pg(original_session)
+    mock_ssh = MagicMock()
+    mock_ssh.is_open = True
+    mock_ssh.remote_project_root = "/remote/proj"
+
+    with patch.object(arb, "SSHSession", return_value=mock_ssh) as mock_ssh_cls:
+        svc = _make_bohrium_service()
+        result = svc._setup_bohrium_for_run(
+            session_id="sess-dir",
+            pg=pg,
+            skill_sync_spec=SkillSyncSpec(
+                project_skill_roots=["/tmp/proj_skills"],
+                remote_project_root="/remote/proj",
+            ),
+            run_creds={"access_key": "ak", "project_id": 99},
+            user_id_for_ak="u1",
+            org_id="o1",
+            event_callback=MagicMock(),
+            run_started_at=0.0,
+            remote_workdir="/share/case",
+        )
+
+    cfg = mock_ssh_cls.call_args.args[0]
+    assert cfg.working_dir == "/share/case"
+    assert cfg.workspace_path == "/share/case"
+    assert result.execution_workdir == "/share/case"
+    assert result.runtime_snapshot is not None
+    assert result.runtime_snapshot.execution_workdir == "/share/case"
+    assert result.runtime_snapshot.remote_workspace_root == "/share"
+    assert result.runtime_snapshot.remote_project_root == "/remote/proj"
+    mock_ssh.open.assert_called_once()
+
+
+def test_run_setup_forwards_remote_workdir_to_setup() -> None:
+    from src.services.user_service import BohriumAccessKeyFetchResult
+
+    svc = _make_bohrium_service()
+    expected = BohriumSetupResult(True, None, MagicMock(), "/share/case", "ssh", None)
+    access_key_result = BohriumAccessKeyFetchResult(
+        status="success",
+        access_key="ak",
+        retryable=False,
+        attempts=1,
+    )
+
+    with (
+        patch.object(
+            svc,
+            "_load_run_credentials",
+            return_value=({"project_id": 99}, "u1", "o1"),
+        ),
+        patch.object(svc, "_make_event_bridge", return_value=MagicMock()),
+        patch.object(
+            svc, "_setup_bohrium_for_run", return_value=expected
+        ) as mock_setup,
+        patch(
+            "src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result",
+            return_value=access_key_result,
+        ),
+    ):
+        result = asyncio.run(
+            svc.run_setup(
+                session_id="sess-dir",
+                playground=MagicMock(),
+                skill_sync_spec=None,
+                run_started_at=1.0,
+                bohrium_required=True,
+                remote_workdir="/share/case",
+            )
+        )
+
+    assert result is expected
+    assert mock_setup.call_args.kwargs["remote_workdir"] == "/share/case"

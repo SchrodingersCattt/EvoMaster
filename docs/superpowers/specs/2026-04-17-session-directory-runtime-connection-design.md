@@ -2,7 +2,8 @@
 
 ## Context
 
-Recent remote commits introduced the beginning of a session directory feature:
+The current `dev/agent` branch already contains the beginning of a session
+directory feature:
 
 - `evo_chat_sessions.session_directory` stores a persistent session-level
   directory.
@@ -27,10 +28,9 @@ This design connects `directory` and `session_directory` to the Bohrium
 execution working directory while preserving the existing local workspace
 semantics.
 
-Implementation should account for the current branch state. If the working
-branch does not yet contain the `feat/session-dir` commits from `origin/main`,
-those schema and API changes must be merged or ported before this runtime
-connection is implemented.
+The remaining work is the runtime connection: resolver, `/share` validation,
+history persistence, Redis job propagation, worker pass-through, Bohrium setup
+integration, and `PlaygroundContext.execution_workdir` wiring.
 
 ## Goals
 
@@ -48,6 +48,24 @@ POST /stream.directory > evo_chat_sessions.session_directory > no specified dire
   archival, and workspace upload.
 - Persist directory metadata in user query history so replay and restart flows
   do not lose the chosen directory.
+
+## Terminology
+
+The same user-facing concept appears under several existing names. This design
+keeps those names at their existing layer boundaries:
+
+- `ChatSendRequest.directory`: one-run request override from `POST /stream`.
+- `evo_chat_sessions.session_directory`: persistent session default stored in
+  DB.
+- `remote_workdir`: resolved remote Bohrium directory carried through stream,
+  Redis, worker, and service layers before SSH setup completes.
+- `execution_workdir`: existing runtime field on `PlaygroundContext` and
+  `BohriumExecutionContext`; when `remote_workdir` is selected, the final
+  `execution_workdir` must equal it.
+
+Only the resolver should understand request-versus-session priority. Downstream
+layers should treat `remote_workdir` as an already validated remote execution
+directory.
 
 ## Non-Goals
 
@@ -114,6 +132,8 @@ The selected behavior is:
 
 This means an explicitly blank per-run `directory` is not a command to clear or
 bypass the session default. It simply means this request has no per-run override.
+Whitespace-only strings must be stripped before this decision, so `"   "` is
+equivalent to a blank value and falls through to the persistent session default.
 
 ## Path Validation
 
@@ -184,10 +204,23 @@ Suggested error codes:
 - `directory_invalid_chars`
 - `directory_must_be_absolute`
 - `directory_outside_share`
+- `session_directory_invalid`
 
 `chat_api.py` or `ChatStreamService.prepare_send_message()` should translate
 this exception into the existing `BaseErrorResponse` shape. Invalid directory
 input should not acquire a run, enqueue a Redis job, or write partial run state.
+
+The same validation helper should be used by
+`PUT /api/v1/chat/sessions/{session_id}/session-directory`. Persistent defaults
+must be executable `/share` paths, not free text. A PUT with a non-empty invalid
+directory should return 400 and should not write `evo_chat_sessions`. A PUT with
+`null` or an empty string should still clear the persistent value.
+
+The PUT endpoint should validate directory syntax and ownership. It should not
+require a Bohrium project binding in the first version. A session default can be
+configured before credentials or project metadata are present; if a later run
+selects that directory without Bohrium credentials, the run fails through the
+existing `bohrium_required` path.
 
 If an effective directory exists, `bohrium_required` must be true. Missing
 Bohrium credentials, missing project information, access key failure, node
@@ -231,13 +264,16 @@ The final `bohrium_required` should be:
 bohrium_required = explicit_bohrium_required_from_org_project or remote_workdir is not None
 ```
 
-The user query payload should include directory metadata when a directory is
-selected:
+The user query payload should include directory metadata only when a directory
+is selected, meaning `session_directory_source != "none"`:
 
 ```python
 user_msg["session_directory"] = remote_workdir
 user_msg["session_directory_source"] = source
 ```
+
+When source is `"none"`, neither field should be written. This preserves the
+existing event shape for sessions without a selected directory.
 
 No new system event is required in this version.
 
@@ -307,6 +343,14 @@ pg_ctx = pg_ctx.with_execution(
 This keeps `pg_ctx.workdir` as the local service workspace and makes
 `pg_ctx.execution_workdir` the remote Bohrium working directory used by tools.
 
+`WorkspaceHandler` behavior remains unchanged in the first version. It receives
+the local `pg_ctx.workdir` and already skips uploads when `ssh_attached=True`.
+There is no automatic copy of the local service workspace into `/share` or into
+`remote_workdir`. Existing `workspace_paths` request fields remain prompt and
+history metadata; absolute remote paths such as `/share/...` or `/personal/...`
+continue to mean exactly those remote paths. Future support for uploading local
+workspace contents into `remote_workdir` should be a separate design.
+
 ### Bohrium Setup
 
 `BohriumSetupService.run_setup()` should accept `remote_workdir`.
@@ -317,23 +361,31 @@ Behavior:
   preserve existing behavior.
 - If `remote_workdir` is not `None`, setup must complete Bohrium credential
   resolution, node creation or reuse, and SSH attach.
-- After SSH attach, create the directory safely:
+- Select `ssh_working_dir = remote_workdir` when present; otherwise keep the
+  existing default from `_remote_session_workspace_root()`.
+- Construct `SSHSessionConfig(working_dir=ssh_working_dir,
+  workspace_path=ssh_working_dir)` with that selected directory.
+- `SSHSession.open()` currently creates its configured `_workdir` before marking
+  the session open. The implementation should preserve that behavior and update
+  or cover it so the command is safely quoted:
 
 ```python
 mkdir -p -- <shlex.quote(remote_workdir)>
 ```
 
-- Verify that it exists and is a directory:
+- After `open()`, verify that the selected directory exists and is a directory:
 
 ```python
 test -d <shlex.quote(remote_workdir)>
 ```
 
-- Use `remote_workdir` for `SSHSessionConfig.working_dir` and
-  `SSHSessionConfig.workspace_path`.
 - Return `execution_workdir=remote_workdir` in `BohriumSetupResult`.
 
 Even though paths are restricted to `/share`, shell quoting is still required.
+
+Skill sync is intentionally independent of `remote_workdir`. Project skills
+continue to upload under `remote_project_root`, currently `/share/.matmaster`.
+Changing the agent working directory must not move skill installation paths.
 
 ## History Persistence
 
@@ -361,6 +413,12 @@ ev["session_directory_source"] = content.get("session_directory_source")
 
 `get_last_user_query()` should also return them so deploy or restart recovery
 does not lose the directory context.
+
+Current stale-run handling does not automatically restart a run; it only uses
+`get_last_user_query()` to build interruption payloads. Any future endpoint or
+frontend retry flow that reconstructs a request from `get_last_user_query()`
+must feed the returned `session_directory` back as the per-run directory
+override, otherwise request-only directory choices would be lost on retry.
 
 ## Testing Strategy
 
@@ -407,6 +465,10 @@ Verify:
 - Invalid directory produces a 400 path and does not enqueue a run.
 - `POST /stream.directory` does not update
   `evo_chat_sessions.session_directory`.
+- `PUT /session-directory` validates non-empty values with the same `/share`
+  rules and rejects invalid paths before writing DB state.
+- `PUT /session-directory` with `null` or an empty string clears the persistent
+  value.
 
 ### History Tests
 
@@ -414,6 +476,7 @@ Verify:
 
 - `session_directory` and `session_directory_source` persist into
   `evo_chat_events.content` for user query events.
+- Source `none` does not persist either directory field.
 - `get_session_events()` replays them as top-level event fields.
 - `get_last_user_query()` returns them.
 - Existing `files`, `images`, and `workspace_paths` behavior is unchanged.
@@ -434,9 +497,12 @@ Verify:
   `BohriumSetupService.run_setup(remote_workdir="/share/foo",
   bohrium_required=True)`.
 - Bohrium setup creates and verifies the remote directory after SSH attach.
+- `SSHSession.open()` or the setup wrapper uses the selected `remote_workdir`
+  without requiring a second SSHSession mutation step.
 - Returned `execution_workdir` is `/share/foo`.
 - `pg_ctx.with_execution()` receives `execution_workdir="/share/foo"`.
 - Tool construction continues to rely on `ctx.execution_workdir`.
+- Skill sync still targets `remote_project_root`, not `remote_workdir`.
 
 ### Regression Tests
 
@@ -446,6 +512,7 @@ Verify:
 - Bohrium without `remote_workdir` still uses existing default `/share`.
 - Existing attachments, image inputs, and workspace path history replay are not
   regressed.
+- `WorkspaceHandler` still skips upload when SSH is attached.
 
 ## Rollout Notes
 
@@ -454,8 +521,3 @@ persistence, Redis job payloads, worker dispatch, Bohrium setup, and runtime
 context construction. The implementation should keep changes small and
 explicit, with the resolver as the only place that understands request versus
 session priority and `/share` path validation.
-
-Because the local branch may not include the remote session-directory commits,
-implementation should first reconcile the base branch or port those commits.
-After that, implement the resolver and then wire the result through the runtime
-chain.

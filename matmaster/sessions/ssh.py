@@ -104,7 +104,26 @@ class SSHSession:
 
         self._connect()
         self._sftp_pool = SFTPPool(self._client.get_transport())
-        self._ssh_exec(f"mkdir -p {shlex.quote(self._workdir)}")
+        quoted_workdir = shlex.quote(self._workdir)
+        init_result = self._ssh_exec(
+            f"mkdir -p {quoted_workdir} && test -d {quoted_workdir}"
+        )
+        if init_result.get("exit_code") != 0:
+            detail = init_result.get("stderr") or init_result.get("stdout") or ""
+            try:
+                if self._sftp_pool is not None:
+                    self._sftp_pool.close_all()
+            finally:
+                self._sftp_pool = None
+                if self._client is not None:
+                    try:
+                        self._client.close()
+                    except Exception:
+                        pass
+                self._client = None
+            raise RuntimeError(
+                f"Failed to initialize SSH working directory {self._workdir}: {detail}"
+            )
         self._is_open = True
         self.logger.info(
             "SSH session opened (%s:%s)", self.config.host, self.config.port

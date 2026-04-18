@@ -12,7 +12,7 @@ from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_runner_state import ToolRunnerState
-from matmaster.types.tool_spec import ToolExecutionContext
+from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 
 ASK_QUESTION_USAGE_PROMPT = '''Use this tool when you need to ask the user questions during execution. This allows you to:
 1. Gather user preferences or requirements
@@ -81,6 +81,9 @@ class AskQuestionTool(BuiltinTool):
         "additionalProperties": False,
     }
     effect_level: ClassVar[str] = "none"
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="interaction", mode="exclusive"),
+    )
 
     def __init__(
         self,
