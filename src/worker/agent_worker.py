@@ -13,6 +13,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.types.cancellation import CancellationController
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
@@ -192,7 +193,14 @@ def _run_worker_loop() -> None:
         task_id = payload.get('task_id') or ''
         invocation_id = payload.get('invocation_id')
         user_prompt = payload.get('user_prompt') or ''
-        mode = (payload.get('mode') or 'direct').strip().lower() or 'direct'
+        mode = (payload.get('mode') or DEFAULT_MODE).strip().lower() or DEFAULT_MODE
+        if mode not in SUPPORTED_MODES:
+            logger.warning(
+                'Agent worker: unknown mode %r in payload, fallback to %s',
+                mode,
+                DEFAULT_MODE,
+            )
+            mode = DEFAULT_MODE
         llm_override = (payload.get('llm') or '').strip() or None
         model_override = (payload.get('model') or '').strip() or None
         raw_images = payload.get('images') or []
@@ -202,6 +210,12 @@ def _run_worker_loop() -> None:
             else []
         )
         bohrium_required = bool(payload.get('bohrium_required'))
+        raw_remote_workdir = payload.get('remote_workdir')
+        remote_workdir = (
+            raw_remote_workdir.strip() or None
+            if isinstance(raw_remote_workdir, str)
+            else None
+        )
 
         if not session_id:
             logger.warning('Agent worker: skip job with empty session_id')
@@ -275,6 +289,7 @@ def _run_worker_loop() -> None:
                     ('会话地址', session_url),
                     ('用户', user_info_display),
                     ('模型', format_llm_model_for_notify(llm_override, model_override)),
+                    ('模式', mode),
                     ('用户问题', user_question or '-'),
                     ('执行节点', get_worker_id()),
                     ('执行中', str(active_count)),
@@ -298,6 +313,7 @@ def _run_worker_loop() -> None:
                         llm_override=llm_override,
                         model_override=model_override,
                         images=images,
+                        remote_workdir=remote_workdir,
                         bohrium_required=bohrium_required,
                     )
                 )

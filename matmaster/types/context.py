@@ -56,6 +56,7 @@ class PlaygroundContext(BaseModel):
     env_vars: dict[str, str] = Field(default_factory=dict)
     archival: WorkspaceArchivalConfig | None = None
     run_meta: dict[str, Any] = Field(default_factory=dict)
+    interaction_bridge: Any = Field(default=None, repr=False, exclude=True)
     session: Session | None = None
     config_dir: Path | None = None  # Playground config directory (per D-10)
     # llm_provider is intentionally ``Any`` so duck-typed mocks and partially-

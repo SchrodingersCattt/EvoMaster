@@ -246,7 +246,7 @@ class Exp:
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
         if builtin_cfg:
-            self._init_builtin_tools(ctx, registry, builtin_cfg)
+            self._init_builtin_tools(ctx, registry, builtin_cfg, spawn_id=spawn_id)
 
         # 2. Build ToolCatalog wrapping registry (before skill init for overlay)
         from matmaster.core.capability_policy import DefaultCapabilityPolicy
@@ -483,6 +483,8 @@ class Exp:
         ctx: PlaygroundContext,
         registry: ToolRegistry,
         builtin_cfg: list[str],
+        *,
+        spawn_id: str | None = None,
     ) -> None:
         """Register builtin tools filtered by *builtin_cfg*.
 
@@ -506,6 +508,7 @@ class Exp:
             return allowed is None or name in allowed
 
         from matmaster.tools.builtin import (
+            AskQuestionTool,
             BashTool,
             BohriumTool,
             EditTool,
@@ -563,8 +566,17 @@ class Exp:
             BohriumTool(session=ctx.session, workdir=ctx.workdir),
         ]
 
+        interaction_bridge = ctx.interaction_bridge if spawn_id is None else None
+        control_tools: list[Any] = [
+            AskQuestionTool(
+                session=ctx.session,
+                workdir=exec_wd if ctx.session is not None else ctx.workdir,
+                bridge=interaction_bridge,
+            ),
+        ]
+
         registered: list[Any] = []
-        for tool in session_tools + sessionless_tools:
+        for tool in session_tools + sessionless_tools + control_tools:
             if _want(tool.name):
                 registry.register(tool, source="builtin")
                 registered.append(tool)

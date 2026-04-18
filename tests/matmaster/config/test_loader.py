@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from matmaster.config.exp import ExpConfig
+from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES, ExpConfig
 from matmaster.config.llm import LLMConfig
 from matmaster.config.loader import (
     list_available_exps,
@@ -318,3 +318,42 @@ class TestLoadBaseSystemPrompt:
             result = load_base_system_prompt(exps_dir=exps_dir)
         assert result == ""
         assert "_base.toml" in caplog.text
+
+
+class TestModeConstants:
+    """UI mode whitelist constants exposed by matmaster.config.exp."""
+
+    def test_supported_modes_exact_set(self) -> None:
+        assert SUPPORTED_MODES == frozenset({"direct", "planner"})
+
+    def test_default_mode_is_direct(self) -> None:
+        assert DEFAULT_MODE == "direct"
+
+    def test_default_mode_is_in_supported(self) -> None:
+        assert DEFAULT_MODE in SUPPORTED_MODES
+
+
+class TestPlannerExpConfig:
+    """planner.toml 的加载与 subagent 可见性——依赖真实文件 matmaster/exps/planner.toml。"""
+
+    def test_load_exp_config_planner(self) -> None:
+        cfg = load_exp_config("planner")
+        assert isinstance(cfg, ExpConfig)
+        assert cfg.name == "planner"
+        assert cfg.read_only is False
+        assert cfg.max_turns == 700
+        assert cfg.skills.enabled is True
+        assert cfg.visible_as_subagent is False, (
+            "planner 不应作为 AgentTool 的 subagent enum 暴露；与 "
+            "when_to_use='NEVER' 的意图保持一致"
+        )
+
+    def test_planner_not_in_model_visible_exps(self) -> None:
+        """list_model_visible_exps() 不应返回 planner（被 visible_as_subagent=false 过滤）。"""
+        metas = list_model_visible_exps()
+        names = {m.name for m in metas}
+        assert (
+            "planner" not in names
+        ), f"planner 意外出现在 model-visible exp 列表中；当前 names={names}"
+        # direct 仍应可见——保留正回归断言
+        assert "direct" in names

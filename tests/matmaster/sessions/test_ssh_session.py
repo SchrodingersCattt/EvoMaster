@@ -401,3 +401,55 @@ class TestSSHSessionExecBash:
             r1, r2 = f1.result(timeout=5), f2.result(timeout=5)
         assert r1["exit_code"] == 0
         assert r2["exit_code"] == 0
+
+
+def test_open_creates_and_verifies_configured_workdir(mock_paramiko):
+    from unittest.mock import patch
+
+    from matmaster.sessions.ssh import SSHSession
+
+    config = SSHSessionConfig(
+        host="test-host",
+        port=22,
+        username="root",
+        password="test-pass",
+        workspace_path="/share/case",
+        working_dir="/share/case",
+    )
+    session = SSHSession(config)
+
+    with patch.object(
+        session,
+        "_ssh_exec",
+        return_value={"exit_code": 0, "stdout": "", "stderr": ""},
+    ) as ssh_exec:
+        session.open()
+
+    ssh_exec.assert_called_once_with("mkdir -p /share/case && test -d /share/case")
+    assert session.is_open is True
+
+
+def test_open_raises_when_workdir_initialization_fails(ssh_config, mock_paramiko):
+    from unittest.mock import patch
+
+    import pytest
+
+    from matmaster.sessions.ssh import SSHSession
+
+    session = SSHSession(ssh_config)
+
+    with patch.object(
+        session,
+        "_ssh_exec",
+        return_value={"exit_code": 1, "stdout": "", "stderr": "not a directory"},
+    ):
+        with pytest.raises(
+            RuntimeError,
+            match="Failed to initialize SSH working directory",
+        ):
+            session.open()
+
+    assert session.is_open is False
+    assert session._sftp_pool is None
+    assert session._client is None
+    mock_paramiko["client"].close.assert_called_once()

@@ -42,7 +42,11 @@ from matmaster.core.hooks import (
     RunContext,
     UserPromptContext,
 )
-from matmaster.response_text import is_trivial_response_text
+from matmaster.response_text import (
+    is_empty_response_sentinel_prefix,
+    is_trivial_response_text,
+    normalize_visible_response_text,
+)
 from matmaster.types.message_normalization import (
     normalize_and_validate_openai_messages,
 )
@@ -669,6 +673,8 @@ class AgentKernel:
         usage_vendor: dict[str, Any] | None = None
         producing_reasoning = False
         producing_content = False
+        pending_response_parts: list[str] = []
+        response_stream_released = False
 
         # Start marker
         yield _KernelItem(
@@ -714,14 +720,17 @@ class AgentKernel:
                     )
 
                 if chunk.content:
-                    yield _KernelItem(
-                        event=ResponseEvent(
-                            source="agent",
-                            content=chunk.content,
-                            stream_state="streaming",
-                            stream_id=stream_id,
-                        )
-                    )
+                    if response_stream_released:
+                        yield self._response_item(chunk.content, stream_id, "streaming")
+                    else:
+                        pending_response_parts.append(chunk.content)
+                        pending_content = "".join(pending_response_parts)
+                        if not is_empty_response_sentinel_prefix(pending_content):
+                            response_stream_released = True
+                            pending_response_parts.clear()
+                            yield self._response_item(
+                                pending_content, stream_id, "streaming"
+                            )
 
                 # Accumulate parts (standard streaming accumulation)
                 if chunk.reasoning_content:
@@ -766,15 +775,22 @@ class AgentKernel:
                     # Segment transition: content -> tool_calls
                     if producing_content:
                         content_snapshot = "".join(content_parts)
-                        if not is_trivial_response_text(content_snapshot):
-                            yield _KernelItem(
-                                event=ResponseEvent(
-                                    source="agent",
-                                    content=content_snapshot,
-                                    stream_state="complete",
-                                    stream_id=stream_id,
+                        visible_snapshot = normalize_visible_response_text(
+                            content_snapshot
+                        )
+                        if visible_snapshot is not None:
+                            if pending_response_parts and not response_stream_released:
+                                response_stream_released = True
+                                pending_response_parts.clear()
+                                yield self._response_item(
+                                    visible_snapshot, stream_id, "streaming"
                                 )
-                            )
+                            if not is_trivial_response_text(visible_snapshot):
+                                yield self._response_item(
+                                    visible_snapshot, stream_id, "complete"
+                                )
+                        else:
+                            pending_response_parts.clear()
                         producing_content = False
                     for delta in chunk.tool_call_deltas:
                         idx = delta.get("index", 0)
@@ -803,23 +819,20 @@ class AgentKernel:
                     )
                 )
             if producing_content:
-                yield _KernelItem(
-                    event=ResponseEvent(
-                        source="agent",
-                        content="".join(content_parts),
-                        stream_state="complete",
-                        stream_id=stream_id,
-                    )
-                )
+                content_snapshot = "".join(content_parts)
+                visible_snapshot = normalize_visible_response_text(content_snapshot)
+                if visible_snapshot is not None:
+                    if pending_response_parts and not response_stream_released:
+                        response_stream_released = True
+                        pending_response_parts.clear()
+                        yield self._response_item(
+                            visible_snapshot, stream_id, "streaming"
+                        )
+                    yield self._response_item(visible_snapshot, stream_id, "complete")
+                else:
+                    pending_response_parts.clear()
             # End marker
-            yield _KernelItem(
-                event=ResponseEvent(
-                    source="agent",
-                    content="",
-                    stream_state="end",
-                    stream_id=stream_id,
-                )
-            )
+            yield self._response_item("", stream_id, "end")
 
         if stream_cancelled:
             raise _KernelStopRequested()
@@ -851,10 +864,11 @@ class AgentKernel:
                 )
             if is_trivial_response_text(joined_content):
                 joined_content = ""
+        visible_content = normalize_visible_response_text(joined_content)
 
         yield _KernelItem(
             llm_response=LLMResponse(
-                content=joined_content or None,
+                content=visible_content,
                 reasoning_content=joined_reasoning or None,
                 tool_calls=tool_calls,
                 finish_reason=finish_reason,
@@ -886,8 +900,20 @@ class AgentKernel:
 
     @staticmethod
     def _has_visible_content(response: LLMResponse) -> bool:
-        content = response.content
-        return isinstance(content, str) and bool(content.strip())
+        return normalize_visible_response_text(response.content) is not None
+
+    @staticmethod
+    def _response_item(
+        content: str, stream_id: str, stream_state: str | None
+    ) -> _KernelItem:
+        return _KernelItem(
+            event=ResponseEvent(
+                source="agent",
+                content=content,
+                stream_state=stream_state,
+                stream_id=stream_id,
+            )
+        )
 
     @staticmethod
     def _validate_tool_call_ids(tool_calls: list[ToolCallData]) -> None:

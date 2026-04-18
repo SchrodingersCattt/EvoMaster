@@ -19,20 +19,24 @@ ag-ui 协议（前后端约定）：
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.base.base_res import BaseResponse
 
 
 class SessionListQuery(BaseModel):
-    """GET /chat/sessions/list 查询参数（分页）"""
+    """GET /chat/sessions/list 查询参数：按 session_directory 聚合"""
 
-    limit: int = Field(default=20, ge=1, le=100, description='每页条数')
-    offset: int = Field(default=0, ge=0, description='偏移量')
-    project_id: int | None = Field(
-        default=None,
-        description='项目 ID；传入后只返回该项目下的会话，不传则返回当前用户全部会话。',
+    project_id: int = Field(
+        ...,
+        description="项目 ID；只返回该项目下的会话。",
         examples=[42],
+    )
+    per_group_limit: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="每个目录组首屏返回的会话条数（组内按 updated_at 倒序）",
     )
 
 
@@ -42,40 +46,125 @@ class SessionItem(BaseModel):
     id: str
     project_id: int | None = None  # 归属项目 ID；历史数据或未归属项目时可为 None
     status: str = (
-        'idle'  # idle=空闲/已结束，active=运行中，waiting=已入队等待 worker（用于限流与前端展示）
+        "idle"  # idle=空闲/已结束，active=运行中，waiting=已入队等待 worker（用于限流与前端展示）
     )
     history_length: int
     first_user_message: str | None = None  # 第一条用户消息
 
 
+class SessionDirectoryGroup(BaseModel):
+    """按 session_directory 聚合的一组会话"""
+
+    session_directory: str | None = Field(
+        default=None,
+        description="该组绑定的工作区目录；未设置目录的会话归在 session_directory=null",
+    )
+    session_count: int = Field(
+        description="该目录组下的会话总数（可能大于本组 sessions 长度）",
+    )
+    sessions: list[SessionItem]
+    has_more: bool = Field(description="该组是否还有未返回的会话")
+    next_cursor: str | None = Field(
+        default=None,
+        description="加载该组下一页时传入 /list/more 的 cursor；仅 has_more 时有值",
+    )
+
+
 class SessionListResponse(BaseModel):
-    """GET /chat/sessions/list 列表数据（放在 data 字段内）；分页时含 total、has_more。"""
+    """GET /chat/sessions/list 的 data：按 session_directory 分组"""
+
+    groups: list[SessionDirectoryGroup]
+    total_sessions: int = Field(
+        description="该项目下当前用户的会话总数",
+    )
+
+
+class SessionListMoreQuery(BaseModel):
+    """GET /chat/sessions/list/more 查询参数：单目录组分页"""
+
+    project_id: int = Field(..., description="项目 ID", examples=[42])
+    limit: int = Field(default=10, ge=1, le=50, description="本页条数")
+    cursor: str = Field(
+        ...,
+        min_length=1,
+        description="同组上一页返回的 next_cursor（首屏来自 GET /chat/sessions/list）",
+    )
+    directory: str | None = Field(
+        default=None,
+        description="工作区目录；与 unset_directory 二选一",
+    )
+    unset_directory: bool = Field(
+        default=False,
+        description="为 true 表示「未设置目录」分组（session_directory 为空）",
+    )
+
+    @model_validator(mode="after")
+    def directory_xor_unset(self) -> "SessionListMoreQuery":
+        if self.unset_directory:
+            return self
+        d = (self.directory or "").strip()
+        if not d:
+            raise ValueError("请指定 unset_directory=true 或非空 directory")
+        self.directory = d
+        return self
+
+
+class SessionListMoreResponse(BaseModel):
+    """GET /chat/sessions/list/more 的 data"""
 
     sessions: list[SessionItem]
-    total: int | None = None  # 总分页条数，仅分页时返回
-    has_more: bool | None = None  # 是否有更多，仅分页时返回
+    has_more: bool
+    next_cursor: str | None = Field(
+        default=None,
+        description="下一页游标，仅 has_more 时有值",
+    )
 
 
-class SessionListApiResponse(BaseResponse[SessionListResponse]):
-    """GET /api/sessions 规范响应：code, msg, data"""
+class SessionListMoreApiResponse(BaseResponse[SessionListMoreResponse]):
+    """GET /chat/sessions/list/more 规范响应"""
 
     model_config = ConfigDict(
         json_schema_extra={
-            'example': {
-                'code': 0,
-                'msg': 'success',
-                'data': {
-                    'sessions': [
+            "example": {
+                "code": 0,
+                "msg": "success",
+                "data": {
+                    "sessions": [],
+                    "has_more": False,
+                    "next_cursor": None,
+                },
+            }
+        }
+    )
+
+
+class SessionListApiResponse(BaseResponse[SessionListResponse]):
+    """GET /chat/sessions/list 规范响应"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "code": 0,
+                "msg": "success",
+                "data": {
+                    "groups": [
                         {
-                            'id': 'session-001',
-                            'project_id': 42,
-                            'status': 'idle',
-                            'history_length': 6,
-                            'first_user_message': '帮我分析这个材料结构',
+                            "session_directory": "/share/run1",
+                            "session_count": 3,
+                            "sessions": [
+                                {
+                                    "id": "session-001",
+                                    "project_id": 42,
+                                    "status": "idle",
+                                    "history_length": 4,
+                                    "first_user_message": "分析结构",
+                                }
+                            ],
+                            "has_more": False,
+                            "next_cursor": None,
                         }
                     ],
-                    'total': 1,
-                    'has_more': False,
+                    "total_sessions": 10,
                 },
             }
         }
@@ -94,12 +183,12 @@ class RunStatusApiResponse(BaseResponse[RunStatusData]):
 
     model_config = ConfigDict(
         json_schema_extra={
-            'example': {
-                'code': 0,
-                'msg': 'success',
-                'data': {
-                    'active_count': 2,
-                    'queued_count': 5,
+            "example": {
+                "code": 0,
+                "msg": "success",
+                "data": {
+                    "active_count": 2,
+                    "queued_count": 5,
                 },
             }
         }
@@ -120,10 +209,10 @@ class ShareStatusApiResponse(BaseResponse[ShareStatusData]):
 
     model_config = ConfigDict(
         json_schema_extra={
-            'example': {
-                'code': 0,
-                'msg': 'success',
-                'data': {'enabled': True},
+            "example": {
+                "code": 0,
+                "msg": "success",
+                "data": {"enabled": True},
             }
         }
     )
@@ -136,8 +225,8 @@ class ShareSetRequest(BaseModel):
 
     model_config = ConfigDict(
         json_schema_extra={
-            'example': {
-                'enabled': True,
+            "example": {
+                "enabled": True,
             }
         }
     )
@@ -151,11 +240,11 @@ class SessionDirectoryData(BaseModel):
 
     directory: str | None = Field(
         default=None,
-        description='该会话绑定的工作区目录路径（如远端 /share/...）；未设置时为 null',
+        description="该会话绑定的工作区目录路径（如远端 /share/...）；未设置时为 null",
     )
-    mode: Literal['direct', 'planner'] | None = Field(
+    mode: Literal["direct", "planner"] | None = Field(
         default=None,
-        description='本会话偏好模式 direct|planner；未设置时为 null，前端可默认 direct',
+        description="本会话偏好模式 direct|planner；未设置时为 null，前端可默认 direct",
     )
 
 
@@ -164,12 +253,12 @@ class SessionDirectoryApiResponse(BaseResponse[SessionDirectoryData]):
 
     model_config = ConfigDict(
         json_schema_extra={
-            'example': {
-                'code': 0,
-                'msg': 'success',
-                'data': {
-                    'directory': '/share/my_workspace/run1',
-                    'mode': 'direct',
+            "example": {
+                "code": 0,
+                "msg": "success",
+                "data": {
+                    "directory": "/share/my_workspace/run1",
+                    "mode": "direct",
                 },
             }
         }
@@ -182,29 +271,29 @@ class SessionDirectorySetRequest(BaseModel):
     directory: str | None = Field(
         default=None,
         max_length=2048,
-        description='绑定目录路径；传 null 或空字符串表示清除',
+        description="绑定 Bohrium 远端 /share 工作目录；传 null 或空字符串表示清除",
     )
-    mode: Literal['direct', 'planner'] | None = Field(
+    mode: Literal["direct", "planner"] | None = Field(
         default=None,
-        description='偏好模式；传 null 清除持久化；可仅更新 mode 或仅更新 directory',
+        description="偏好模式；传 null 清除持久化；可仅更新 mode 或仅更新 directory",
     )
 
-    @field_validator('mode', mode='before')
+    @field_validator("mode", mode="before")
     @classmethod
     def normalize_mode(cls, v: object) -> str | None:
-        if v is None or v == '':
+        if v is None or v == "":
             return None
         if isinstance(v, str):
             m = v.strip().lower()
-            if m in ('direct', 'planner'):
+            if m in ("direct", "planner"):
                 return m
-        raise ValueError('mode must be direct or planner')
+        raise ValueError("mode must be direct or planner")
 
     model_config = ConfigDict(
         json_schema_extra={
-            'example': {
-                'directory': '/share/project/foo',
-                'mode': 'planner',
+            "example": {
+                "directory": "/share/project/foo",
+                "mode": "planner",
             }
         }
     )
@@ -216,7 +305,7 @@ class SessionDirectorySetRequest(BaseModel):
 class ChatSendRequest(BaseModel):
     """POST /chat/sessions/{session_id}/stream 请求体：不传或 content 为空则仅拉历史+ping；有 content 则发送消息并返回本次运行的 SSE 流"""
 
-    content: str = ''  # 为空或不传 body 时为「仅订阅」模式
+    content: str = ""  # 为空或不传 body 时为「仅订阅」模式
     files: list[str] | None = (
         None  # 可选，OSS 链接列表，前端展示与 content 分开，传给 agent 时拼成 content + URLs
     )
@@ -226,7 +315,7 @@ class ChatSendRequest(BaseModel):
     workspace_paths: list[str] | None = (
         None  # 可选，工作区/个人路径列表，如 /personal/1.cif，与 files(OSS) 区分
     )
-    mode: str = 'direct'  # "direct" | "planner"
+    mode: str = "direct"  # "direct" | "planner"
     llm: str | None = (
         None  # 可选，本轮使用的 LLM 配置块（如 opus/sonnet/haiku），不传则用 agent 默认
     )
@@ -240,25 +329,25 @@ class ChatSendRequest(BaseModel):
     directory: str | None = Field(
         default=None,
         max_length=2048,
-        description='可选，前端传入的本轮工作区目录，随 query 写入历史事件；持久化请用 PUT …/session-directory',
+        description="可选，前端传入的本轮 Bohrium 远端 /share 工作目录，随 query 写入历史事件；持久化请用 PUT …/session-directory",
     )
 
     model_config = ConfigDict(
         json_schema_extra={
-            'examples': [
+            "examples": [
                 {
-                    'content': '帮我总结这个项目下最近三轮会话的结论',
-                    'mode': 'direct',
-                    'bohrium_project_id': 42,
+                    "content": "帮我总结这个项目下最近三轮会话的结论",
+                    "mode": "direct",
+                    "bohrium_project_id": 42,
                 },
                 {
-                    'content': '',
-                    'mode': 'direct',
+                    "content": "",
+                    "mode": "direct",
                 },
                 {
-                    'content': '列出该目录下的文件',
-                    'mode': 'direct',
-                    'directory': '/share/my_run',
+                    "content": "列出该目录下的文件",
+                    "mode": "direct",
+                    "directory": "/share/my_run",
                 },
             ]
         }
@@ -272,11 +361,28 @@ class ChatPlannerReplyRequest(BaseModel):
 
     model_config = ConfigDict(
         json_schema_extra={
-            'example': {
-                'content': '确认，继续执行',
+            "example": {
+                "content": "确认，继续执行",
             }
         }
     )
+
+
+class ChatAskQuestionReplyRequest(BaseModel):
+    """POST /chat/sessions/{session_id}/ask_question_reply 结构化用户回答。"""
+
+    request_id: str
+    answers: dict[str, str] = Field(default_factory=dict)
+    annotations: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_reply(self) -> "ChatAskQuestionReplyRequest":
+        self.request_id = self.request_id.strip()
+        if not self.request_id:
+            raise ValueError("request_id must not be empty")
+        if not self.answers and not self.annotations:
+            raise ValueError("answers or annotations must be provided")
+        return self
 
 
 class ErrorApiResponse(BaseResponse[None]):
@@ -284,10 +390,10 @@ class ErrorApiResponse(BaseResponse[None]):
 
     model_config = ConfigDict(
         json_schema_extra={
-            'example': {
-                'code': 403,
-                'msg': '无权限访问该会话',
-                'data': None,
+            "example": {
+                "code": 403,
+                "msg": "无权限访问该会话",
+                "data": None,
             }
         }
     )
