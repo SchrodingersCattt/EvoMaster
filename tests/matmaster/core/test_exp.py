@@ -34,6 +34,18 @@ def _make_ctx(*, with_llm: bool = False) -> PlaygroundContext:
     return PlaygroundContext(**kwargs)
 
 
+class _Bridge:
+    async def ask(self, **kwargs):
+        return {"request_id": kwargs["request_id"], "answers": {}, "annotations": {}}
+
+
+def _tool_names(runtime) -> set[str]:
+    return {
+        item["function"]["name"]
+        for item in runtime.spec.tool_catalog.build_definitions()
+    }
+
+
 # ── TestExpConstruction ──────────────────────────────────
 
 
@@ -423,7 +435,7 @@ class TestSystemPromptOverride:
 
 
 class TestExpBuiltinTools:
-    """_init_builtin_tools CC-name registration: 9 builtin tools."""
+    """_init_builtin_tools CC-name registration: native builtin tools."""
 
     def _make_ctx_with_session(self, tmp_path: Path) -> PlaygroundContext:
         """Create PlaygroundContext with a mock session for builtin tool tests."""
@@ -444,14 +456,15 @@ class TestExpBuiltinTools:
         return exp, registry
 
     def test_native_tools_count(self, tmp_path: Path) -> None:
-        """10 native tools registered with source='builtin' (CC names)."""
+        """11 native tools registered with source='builtin' (CC names)."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 10
+        assert len(registry) == 11
 
     def test_native_tool_names(self, tmp_path: Path) -> None:
-        """All 10 expected CC-name tools are present in registry."""
+        """All 11 expected CC-name tools are present in registry."""
         _, registry = self._build_registry(tmp_path)
         expected_native = {
+            'AskQuestion',
             'Bash',
             'Read',
             'Write',
@@ -479,9 +492,9 @@ class TestExpBuiltinTools:
         assert 'str_replace_editor' not in registry
 
     def test_total_count(self, tmp_path: Path) -> None:
-        """Total tools = 10 native builtin (CC names, no legacy tools)."""
+        """Total tools = 11 native builtin (CC names, no legacy tools)."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 10
+        assert len(registry) == 11
 
     def test_web_search_is_native_builtin(self, tmp_path: Path) -> None:
         """WebSearchTool is registered as native builtin with CC name."""
@@ -502,7 +515,8 @@ class TestExpBuiltinTools:
         )
         registry = ToolRegistry()
         exp._init_builtin_tools(ctx, registry, ['*'])
-        assert len(registry) == 4
+        assert len(registry) == 5
+        assert "AskQuestion" in registry
         assert "TodoWrite" in registry
         assert "WebSearch" in registry
         assert "WebFetch" in registry
@@ -688,6 +702,108 @@ async def test_build_runtime_registers_bohrium_without_session(tmp_path: Path) -
         runtime = await exp.build_runtime(ctx)
 
     assert runtime.spec.tool_catalog.get_tool("Bohrium") is not None
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_registers_ask_question_when_bridge_available(
+    tmp_path: Path,
+) -> None:
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["AskQuestion"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        interaction_bridge=_Bridge(),
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    assert "AskQuestion" in _tool_names(runtime)
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_hides_ask_question_when_bridge_missing(
+    tmp_path: Path,
+) -> None:
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["AskQuestion"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        interaction_bridge=None,
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    assert runtime.spec.tool_catalog.get_tool("AskQuestion") is not None
+    assert "AskQuestion" not in _tool_names(runtime)
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_includes_ask_question_for_builtin_star(
+    tmp_path: Path,
+) -> None:
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["*"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        interaction_bridge=_Bridge(),
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx)
+
+    assert "AskQuestion" in _tool_names(runtime)
+
+
+@pytest.mark.asyncio
+async def test_child_runtime_hides_ask_question_even_when_bridge_exists(
+    tmp_path: Path,
+) -> None:
+    exp = Exp(
+        ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["AskQuestion"]),
+        )
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path / "exec"),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        interaction_bridge=_Bridge(),
+        llm_provider=MockLLMProvider(),
+    )
+
+    with patch("matmaster.core.agent.AgentKernel"):
+        runtime = await exp.build_runtime(ctx, spawn_id="child-1")
+
+    assert runtime.spec.tool_catalog.get_tool("AskQuestion") is not None
+    assert "AskQuestion" not in _tool_names(runtime)
 
 
 @pytest.mark.asyncio

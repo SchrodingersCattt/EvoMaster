@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from evaluation.eval_ingest_client import (
     EVAL_INGEST_API_PATH,
     EVAL_INGEST_URL,
@@ -17,6 +19,7 @@ from evaluation.eval_ingest_client import (
     fetch_missing_baseline_question_ids,
     load_devshell_events_timeline,
     normalize_baseline_channel,
+    normalize_catalog_priority_for_sync,
     normalize_pending_item_for_submission,
     parse_score_summary_missing_question_ids,
     post_eval_ingest,
@@ -32,6 +35,20 @@ def test_normalize_baseline_channel() -> None:
     assert normalize_baseline_channel("cursor") == "cursor"
     assert normalize_baseline_channel("codex") == "codex"
     assert normalize_baseline_channel("  claude_code  ") == "claude_code"
+
+
+def test_normalize_catalog_priority_for_sync() -> None:
+    assert normalize_catalog_priority_for_sync(None) == ""
+    assert normalize_catalog_priority_for_sync("") == ""
+    assert normalize_catalog_priority_for_sync("  ") == ""
+    assert normalize_catalog_priority_for_sync("P0") == "P0"
+    assert normalize_catalog_priority_for_sync(" P12 ") == "P12"
+    with pytest.raises(ValueError, match="must be a string"):
+        normalize_catalog_priority_for_sync(1)
+    with pytest.raises(ValueError, match="P followed by digits"):
+        normalize_catalog_priority_for_sync("p0")
+    with pytest.raises(ValueError, match="P followed by digits"):
+        normalize_catalog_priority_for_sync("P")
 
 
 def test_prompt_sha256_stable() -> None:
@@ -155,19 +172,20 @@ def test_eval_score_summary_url_matches_tools_server() -> None:
 
 
 def test_parse_score_summary_missing_question_ids_claude_code() -> None:
+    # tools-server：每题用 *_passed（有 baseline 为 bool，无数据为 null）
     envelope = {
         "code": 0,
         "data": {
             "questions": [
                 {
                     "question_id": "q_has",
-                    "claude_code_score": 0.5,
-                    "cursor_score": None,
+                    "claude_code_passed": True,
+                    "cursor_passed": None,
                 },
                 {
                     "question_id": "q_miss",
-                    "claude_code_score": None,
-                    "cursor_score": 0.9,
+                    "claude_code_passed": None,
+                    "cursor_passed": False,
                 },
             ]
         },
@@ -177,6 +195,35 @@ def test_parse_score_summary_missing_question_ids_claude_code() -> None:
     assert parse_score_summary_missing_question_ids(envelope, channel="cursor") == [
         "q_has"
     ]
+
+
+def test_parse_score_summary_missing_question_ids_false_passed_not_missing() -> None:
+    """有 baseline 但未满分时 claude_code_passed=false，不应再当作缺基线。"""
+    envelope = {
+        "code": 0,
+        "data": {
+            "questions": [{"question_id": "q_fail", "claude_code_passed": False}],
+        },
+        "msg": "success",
+    }
+    assert parse_score_summary_missing_question_ids(envelope) == []
+
+
+def test_parse_score_summary_missing_question_ids_legacy_score_only_treated_as_missing() -> (
+    None
+):
+    """不读取 ``*_score``：仅含旧列时 ``claude_code_passed`` 均缺失，一律视为缺基线。"""
+    envelope = {
+        "code": 0,
+        "data": {
+            "questions": [
+                {"question_id": "q_has", "claude_code_score": 0.5},
+                {"question_id": "q_miss", "claude_code_score": None},
+            ]
+        },
+        "msg": "success",
+    }
+    assert parse_score_summary_missing_question_ids(envelope) == ["q_has", "q_miss"]
 
 
 def test_parse_score_summary_missing_question_ids_absent_field() -> None:
@@ -201,8 +248,8 @@ def test_fetch_missing_baseline_question_ids_uses_get(mock_get: MagicMock) -> No
             "code": 0,
             "data": {
                 "questions": [
-                    {"question_id": "has_cc", "claude_code_score": 1.0},
-                    {"question_id": "no_cc", "claude_code_score": None},
+                    {"question_id": "has_cc", "claude_code_passed": True},
+                    {"question_id": "no_cc", "claude_code_passed": None},
                 ]
             },
         },
@@ -230,6 +277,7 @@ def test_build_ingest_item_minimal() -> None:
         duration_ms=5000,
     )
     assert item["question_id"] == "Q1"
+    assert item["repeat_idx"] == 0
     assert "question_text" not in item
     assert item["duration_ms"] == 5000
     assert item["tokens"] == 100
@@ -294,6 +342,20 @@ def test_build_ingest_item_usage_vendor_by_turn_in_extra() -> None:
     assert item["extra"]["tokens_last_turn"] == 20
     assert "model" not in item["extra"]
     assert "num_turns" not in item["extra"]
+
+
+def test_build_ingest_item_repeat_idx_top_level() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r2",
+        mode="direct",
+        repeat_idx=2,
+        devshell_exit_code=0,
+        summary={"status": "done"},
+        duration_ms=1,
+    )
+    assert item["repeat_idx"] == 2
+    assert "repeat_idx" not in item["extra"]
 
 
 def test_build_ingest_item_model_top_level() -> None:
@@ -506,9 +568,31 @@ def test_normalize_pending_item_for_submission() -> None:
     assert err is None
     assert out is not None
     assert out["score"] == 80.0
+    assert out["repeat_idx"] == 0
     assert out["artifact"]["files_prefix"] == "matmaster/evaluation/run/task/files"
     assert out["score_reason"] == "依据 checklist"
     assert "suggestion" not in out
+
+
+def test_normalize_pending_repeat_idx_defaults_when_missing() -> None:
+    out, err = normalize_pending_item_for_submission(
+        {
+            "question_id": "Q1",
+            "score": 1,
+            "extra": {"task_id": "Q1_direct_r3"},
+        }
+    )
+    assert err is None
+    assert out is not None
+    assert out["repeat_idx"] == 0
+
+
+def test_normalize_pending_rejects_negative_repeat_idx() -> None:
+    out, err = normalize_pending_item_for_submission(
+        {"question_id": "Q1", "score": 1, "repeat_idx": -1}
+    )
+    assert out is None
+    assert err is not None
 
 
 def test_normalize_pending_item_requires_score() -> None:
@@ -624,7 +708,56 @@ def test_post_question_catalog_sync_success(mock_client_cls: MagicMock) -> None:
     call_kw = mock_client.post.call_args
     assert call_kw[0][0] == "http://example/qcat/sync"
     sent = call_kw[1]["json"]
-    assert sent["items"][0] == {"question_id": "Q1", "question_text": "题干一"}
+    assert sent["items"][0] == {
+        "question_id": "Q1",
+        "question_text": "题干一",
+        "priority": "",
+    }
+    assert sent["items"][1] == {
+        "question_id": "Q2",
+        "question_text": "题干二",
+        "priority": "",
+    }
+
+
+@patch("evaluation.eval_ingest_client.httpx.Client")
+def test_post_question_catalog_sync_sends_priority_p0(
+    mock_client_cls: MagicMock,
+) -> None:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "code": 0,
+        "msg": "success",
+        "data": {"active_count": 1, "inactive_count": 0},
+    }
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.__exit__.return_value = None
+    mock_client.post.return_value = mock_resp
+    mock_client_cls.return_value = mock_client
+
+    ok, msg = post_question_catalog_sync(
+        "http://example/qcat/sync",
+        [{"question_id": "Q1", "question_text": "题干", "priority": "P0"}],
+    )
+    assert ok
+    assert "active_count=1" in msg
+    sent = mock_client.post.call_args[1]["json"]
+    assert sent["items"][0]["priority"] == "P0"
+
+
+@patch("evaluation.eval_ingest_client.httpx.Client")
+def test_post_question_catalog_sync_rejects_invalid_priority(
+    mock_client_cls: MagicMock,
+) -> None:
+    ok, err = post_question_catalog_sync(
+        "http://x",
+        [{"question_id": "Q1", "question_text": "题干", "priority": "high"}],
+    )
+    assert not ok
+    assert "invalid priority" in err
+    mock_client_cls.assert_not_called()
 
 
 @patch("evaluation.eval_ingest_client.httpx.Client")

@@ -40,8 +40,8 @@ See matmaster-tools-server ``docs/apifox-evaluation-openapi.json`` for the schem
 
 Usage (from repository root)::
 
-    uv run python evaluation/scripts/devshell/run_devshell_eval.py --model claude-opus-4-6 --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --limit 3
+    # Defaults: --model bedrock-claude-opus, --fallback-model claude-opus-4-6
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --slices structure_construction --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-export-review --limit 3   # skip Markdown bundle
@@ -126,10 +126,22 @@ def main() -> int:
     parser.add_argument(
         "--model",
         type=str,
-        default="claude-opus-4-6",
+        default="bedrock-claude-opus",
         help=(
             "LLM route key passed to ``mm-devshell run --model`` (see llm_config.yaml routes; "
-            "default: claude-opus-4-6)"
+            "default: bedrock-claude-opus)"
+        ),
+    )
+    parser.add_argument(
+        "--fallback-model",
+        type=str,
+        default="claude-opus-4-6",
+        metavar="ROUTE_KEY",
+        help=(
+            "Second LLM route for one retry per task when logs look like a Bedrock/botocore "
+            "transport error (read timeout, etc.). Default: claude-opus-4-6 (LiteLLM). "
+            "Use the same value as --model to disable fallback retries. "
+            "Each new task still starts with --model."
         ),
     )
     parser.add_argument(
@@ -170,6 +182,16 @@ def main() -> int:
         type=int,
         default=None,
         help="Max number of plan items to run (after expand); for smoke tests",
+    )
+    parser.add_argument(
+        "--k",
+        type=int,
+        default=3,
+        metavar="N",
+        help=(
+            "Repeat each question N times (repeat_idx 0..N-1); overrides ``k`` in "
+            "--eval-config (default: %(default)s)."
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -301,6 +323,9 @@ def main() -> int:
     if args.jobs < 1:
         print("error: --jobs must be >= 1", file=sys.stderr)
         return 2
+    if args.k < 1:
+        print("error: --k must be >= 1", file=sys.stderr)
+        return 2
     py = args.python or Path(sys.executable)
 
     sys.path.insert(0, str(REPO_ROOT))
@@ -310,24 +335,28 @@ def main() -> int:
         _clean_results_directory,
         _eval_tooling_snapshot_for_exp_cli,
         _merge_eval_config,
-        _mm_devshell_exp_cmd_suffix,
         _normalize_mm_devshell_exp_cli,
+        build_mm_devshell_run_cmd,
+        devshell_console_indicates_provider_fallback,
     )
 
     slices_override = None
     if args.slices is not None:
         slices_override = [s.model_dump() for s in parse_slices_expression(args.slices)]
 
+    merge_overrides: dict = {
+        "question_bank_dir": (
+            str(args.question_bank_dir) if args.question_bank_dir else None
+        ),
+        "include_slices": slices_override,
+        "include_question_ids": args.questions,
+        "exclude_question_ids": args.exclude_question_ids,
+    }
+    merge_overrides["k"] = int(args.k)
+
     cfg_dict = _merge_eval_config(
         args.eval_config if args.eval_config.is_file() else None,
-        {
-            "question_bank_dir": (
-                str(args.question_bank_dir) if args.question_bank_dir else None
-            ),
-            "include_slices": slices_override,
-            "include_question_ids": args.questions,
-            "exclude_question_ids": args.exclude_question_ids,
-        },
+        merge_overrides,
     )
 
     # Lazy imports after potential chdir
@@ -432,6 +461,9 @@ def main() -> int:
         "dry_run": False,
         "eval_tooling": eval_tooling_snapshot,
     }
+    fb = (args.fallback_model or "").strip()
+    if fb:
+        manifest["fallback_model"] = fb
     if ingest_url:
         manifest["eval_ingest_url"] = ingest_url
         manifest["eval_ingest_run_id"] = eval_ingest_run_id
@@ -457,6 +489,12 @@ def main() -> int:
     print(f"Run directory: {run_dir}", file=sys.stderr)
     print(f"Planned tasks: {len(run_plan)}", file=sys.stderr)
     print(f"Parallel jobs: {args.jobs}", file=sys.stderr)
+    if fb:
+        print(
+            "Provider fallback: tasks whose logs look like Bedrock/botocore transport "
+            f"errors will retry once with --model {fb}",
+            file=sys.stderr,
+        )
     if args.task_timeout and args.task_timeout > 0:
         print(
             f"Per-task timeout: {args.task_timeout:g}s ({args.task_timeout / 60:g} min)",
@@ -494,26 +532,17 @@ def main() -> int:
         summary_file = workspace_path / "_devshell_summary.json"
         console_log_file = log_dir / "devshell_console.log"
 
-        cmd: list[str | Path] = [
-            py,
-            "-u",
-            "-m",
-            "matmaster.devshell",
-            "run",
-            "--workdir",
-            workspace_path,
-            "--log-dir",
-            log_dir,
-            "--prompt-file",
-            prompt_file,
-            "--json-out",
-            summary_file,
-        ]
-        if args.model:
-            cmd.extend(["--model", args.model])
-        cmd.extend(_mm_devshell_exp_cmd_suffix(exp_cli))
-        if args.verbose:
-            cmd.append("--verbose")
+        primary_route = (args.model or "").strip() or None
+        cmd = build_mm_devshell_run_cmd(
+            py=py,
+            workspace_path=workspace_path,
+            log_dir=log_dir,
+            prompt_file=prompt_file,
+            summary_file=summary_file,
+            model=primary_route,
+            exp_cli=exp_cli,
+            verbose=bool(args.verbose),
+        )
 
         prepared_tasks.append(
             {
@@ -524,9 +553,15 @@ def main() -> int:
                 "prompt": prompt,
                 "workspace_path": workspace_path,
                 "log_dir": log_dir,
+                "prompt_file": prompt_file,
                 "summary_file": summary_file,
                 "console_log_file": console_log_file,
                 "cmd": cmd,
+                "primary_model": primary_route,
+                "fallback_model": fb or None,
+                "mm_py": py,
+                "exp_cli": exp_cli,
+                "verbose": bool(args.verbose),
             }
         )
 
@@ -565,7 +600,10 @@ def main() -> int:
         question = prepared["question"]
         task_id = str(prepared["task_id"])
         summary_file = Path(prepared["summary_file"])
-        console_log_file = prepared["console_log_file"]
+        console_log_file = Path(prepared["console_log_file"])
+        primary_model = prepared.get("primary_model")
+        fallback_model = prepared.get("fallback_model")
+
         rc, duration_ms, summary = _run_devshell_task(
             cmd=prepared["cmd"],
             cwd=cwd,
@@ -574,7 +612,72 @@ def main() -> int:
             console_log_file=console_log_file,
             timeout_sec=args.task_timeout,
             tee_stderr=args.jobs <= 1,
+            console_log_append=False,
         )
+
+        attempts: list[dict[str, Any]] = [
+            {
+                "model_route": primary_model,
+                "devshell_exit_code": rc,
+                "duration_ms": duration_ms,
+            }
+        ]
+        used_fallback = False
+
+        if (
+            rc != 0
+            and fallback_model
+            and primary_model != fallback_model
+            and devshell_console_indicates_provider_fallback(console_log_file)
+        ):
+            print(
+                f"  [provider-fallback] {task_id} retry once with --model {fallback_model}",
+                file=sys.stderr,
+                flush=True,
+            )
+            try:
+                if summary_file.is_file():
+                    summary_file.unlink()
+            except OSError:
+                pass
+            console_log_file.parent.mkdir(parents=True, exist_ok=True)
+            with console_log_file.open("a", encoding="utf-8") as bf:
+                bf.write(
+                    "\n\n===== mm-devshell retry (provider transport fallback) "
+                    f"model={fallback_model} =====\n\n"
+                )
+
+            cmd_fb = build_mm_devshell_run_cmd(
+                py=prepared["mm_py"],
+                workspace_path=Path(prepared["workspace_path"]),
+                log_dir=Path(prepared["log_dir"]),
+                prompt_file=Path(prepared["prompt_file"]),
+                summary_file=summary_file,
+                model=fallback_model,
+                exp_cli=prepared["exp_cli"],
+                verbose=bool(prepared["verbose"]),
+            )
+            rc2, d2, summary2 = _run_devshell_task(
+                cmd=cmd_fb,
+                cwd=cwd,
+                env=env,
+                summary_file=summary_file,
+                console_log_file=console_log_file,
+                timeout_sec=args.task_timeout,
+                tee_stderr=args.jobs <= 1,
+                console_log_append=True,
+            )
+            used_fallback = True
+            duration_ms = duration_ms + d2
+            rc = rc2
+            summary = summary2
+            attempts.append(
+                {
+                    "model_route": fallback_model,
+                    "devshell_exit_code": rc2,
+                    "duration_ms": d2,
+                }
+            )
 
         row: dict[str, Any] = {
             "task_id": task_id,
@@ -588,6 +691,9 @@ def main() -> int:
             "devshell_summary": summary,
             "duration_ms": duration_ms,
             "devshell_console_log_path": str(console_log_file),
+            "llm_route_attempts": attempts,
+            "llm_model_route_used": attempts[-1]["model_route"],
+            "llm_provider_fallback_used": used_fallback,
         }
 
         ingest_status: dict[str, Any] | None = None

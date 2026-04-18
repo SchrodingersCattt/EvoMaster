@@ -10,11 +10,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from evaluation.scripts.devshell.score_devshell_tasks import (
+    _all_criteria_passed,
     _build_evidence,
     _format_score_reason,
+    _ingest_score_from_record,
     _load_latest_events_log,
     _load_raw_run_rows,
-    _score_to_int,
     _update_pending_with_score,
     score_task,
 )
@@ -232,11 +233,25 @@ class TestFormatters:
         assert "### Efficiency" in reason
         assert "✓ pass" in reason
         assert "✗ fail" in reason
+        assert "Task pass (all checklist items)" in reason
 
-    def test_score_to_int_rounds(self) -> None:
+    def test_ingest_score_binary_all_must_pass(self) -> None:
         record = MagicMock()
-        record.overall_weighted_score = 0.755
-        assert _score_to_int(record) == 76
+        record.passed_count = 2
+        record.total_count = 2
+        record.overall_weighted_score = 0.5
+        assert _all_criteria_passed(record) is True
+        assert _ingest_score_from_record(record) == 100
+
+        record.passed_count = 1
+        record.total_count = 2
+        assert _all_criteria_passed(record) is False
+        assert _ingest_score_from_record(record) == 0
+
+        record.passed_count = 0
+        record.total_count = 0
+        assert _all_criteria_passed(record) is False
+        assert _ingest_score_from_record(record) == 0
 
 
 class TestUpdatePendingWithScore:
@@ -258,11 +273,14 @@ class TestUpdatePendingWithScore:
             encoding="utf-8",
         )
 
-        ok = _update_pending_with_score(pending, score=88, score_reason="ok")
+        ok = _update_pending_with_score(
+            pending, score=100, score_reason="ok", all_criteria_passed=True
+        )
         assert ok is True
 
         updated = json.loads(pending.read_text(encoding="utf-8"))
-        assert updated["item"]["score"] == 88
+        assert updated["item"]["score"] == 100
+        assert updated["item"]["all_criteria_passed"] is True
         assert updated["item"]["auto_scored"] is True
         assert updated["item"]["auto_scorer"] == "BinaryEvaluator"
         assert "instructions_zh" not in updated
@@ -329,5 +347,66 @@ class TestScoreTask:
 
         assert result["error"] is None
         assert result["score"] == 100
+        assert result["all_criteria_passed"] is True
         assert "used_calc" in result["score_reason"]
         assert "✓ pass" in result["score_reason"]
+
+    def test_score_task_zero_when_any_criterion_fails(self, tmp_run_dir: Path) -> None:
+        from evaluation.core.evaluator import BinaryEvaluator
+
+        ws = _workspace(tmp_run_dir)
+        _write_summary(ws, final_content="Used calculation tool")
+        _write_events(_log_dir(tmp_run_dir))
+
+        row = {
+            "task_id": "SC_struct_001_direct_r0",
+            "question_id": "SC_test_001",
+            "mode": "direct",
+            "repeat_idx": 0,
+            "duration_ms": 1234,
+            "devshell_summary": {"status": "completed"},
+        }
+        from evaluation.core.schemas import (
+            QuestionItem,
+            ReferenceAnswer,
+            ScoringCheckItem,
+        )
+
+        question = QuestionItem(
+            id="SC_test_001",
+            capability="workflow_orchestration",
+            domain="agnostic",
+            intent="Test devshell scoring",
+            human_prompt_seed="Do the thing.",
+            reference_answers=[
+                ReferenceAnswer(key="used_calc", value="execute_bash"),
+                ReferenceAnswer(key="wall_ms", value={"max": 100}),
+            ],
+            scoring_checklist=[
+                ScoringCheckItem(
+                    id="used_calc",
+                    criterion="Uses bash-backed calc call.",
+                    axis="grounding",
+                    verify="tool_called",
+                ),
+                ScoringCheckItem(
+                    id="wall_ms",
+                    criterion="Wall time within budget.",
+                    axis="efficiency",
+                    verify="duration_budget",
+                ),
+            ],
+        )
+        evaluator = BinaryEvaluator(llm_cfg=None)
+
+        result = score_task(
+            row=row,
+            run_dir=tmp_run_dir,
+            question=question,
+            evaluator=evaluator,
+        )
+
+        assert result["error"] is None
+        assert result["score"] == 0
+        assert result["all_criteria_passed"] is False
+        assert "✗ fail" in result["score_reason"]

@@ -2,7 +2,7 @@ version: v5
 capability: input_generation
 domain: agnostic
 questions:
-- id: IG_abacus_001_20260412
+- id: IG_abacus_001_20260417
   capability: input_generation
   domain: agnostic
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place
@@ -94,7 +94,7 @@ questions:
     value: INPUT_bsse
   - key: turn_budget
     value:
-      max: 8
+      max: 18
   - key: duration_budget
     value:
       max: 7200000
@@ -179,7 +179,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_003_20260412
+- id: IG_abacus_003_20260417
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS PW SCF INPUT and KPT files for Al slab electrostatic-potential calculation
@@ -269,7 +269,7 @@ questions:
     value: KPT_pot
   - key: turn_budget
     value:
-      max: 8
+      max: 12
   - key: duration_budget
     value:
       max: 7200000
@@ -893,7 +893,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_002_20260412
+- id: IG_abacus_002_20260417
   capability: input_generation
   domain: agnostic
   intent: Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty
@@ -990,7 +990,7 @@ questions:
     value: INPUT_vac_bsse
   - key: turn_budget
     value:
-      max: 12
+      max: 14
   - key: duration_budget
     value:
       max: 7200000

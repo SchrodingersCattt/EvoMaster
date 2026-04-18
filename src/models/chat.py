@@ -271,7 +271,7 @@ class SessionDirectorySetRequest(BaseModel):
     directory: str | None = Field(
         default=None,
         max_length=2048,
-        description="绑定目录路径；传 null 或空字符串表示清除",
+        description="绑定 Bohrium 远端 /share 工作目录；传 null 或空字符串表示清除",
     )
     mode: Literal["direct", "planner"] | None = Field(
         default=None,
@@ -329,7 +329,7 @@ class ChatSendRequest(BaseModel):
     directory: str | None = Field(
         default=None,
         max_length=2048,
-        description="可选，前端传入的本轮工作区目录，随 query 写入历史事件；持久化请用 PUT …/session-directory",
+        description="可选，前端传入的本轮 Bohrium 远端 /share 工作目录，随 query 写入历史事件；持久化请用 PUT …/session-directory",
     )
 
     model_config = ConfigDict(
@@ -366,6 +366,23 @@ class ChatPlannerReplyRequest(BaseModel):
             }
         }
     )
+
+
+class ChatAskQuestionReplyRequest(BaseModel):
+    """POST /chat/sessions/{session_id}/ask_question_reply 结构化用户回答。"""
+
+    request_id: str
+    answers: dict[str, str] = Field(default_factory=dict)
+    annotations: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_reply(self) -> "ChatAskQuestionReplyRequest":
+        self.request_id = self.request_id.strip()
+        if not self.request_id:
+            raise ValueError("request_id must not be empty")
+        if not self.answers and not self.annotations:
+            raise ValueError("answers or annotations must be provided")
+        return self
 
 
 class ErrorApiResponse(BaseResponse[None]):

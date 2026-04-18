@@ -11,7 +11,10 @@ ingest 不再写入。When task outputs exist, this client adds top-level ``arti
 (``bundle_object_key`` / ``manifest_object_key`` / ``files_prefix``) so tools-server
 can serve file tree / preview / bundle download from the new artifact APIs. For
 **immediate** ingest, :func:`build_ingest_item` sets ``score`` from the devshell
-summary when present, else a 100/0 pass-fail proxy. Human ``score`` /
+summary when present, else a 100/0 pass-fail proxy. Each item includes top-level
+``repeat_idx`` (``≥ 0``), matching matmaster-tools-server ``EvalItemIn`` and table
+unique key ``(run_id, question_id, repeat_idx)`` (not duplicated under ``extra``).
+Human ``score`` /
 ``score_reason`` / ``suggestion`` for **pending** ingest are passed by CLI and
 validated by :func:`normalize_pending_item_for_submission`
 （``score_reason`` / ``suggestion`` 最长 16384）. For deferred ingest,
@@ -54,6 +57,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import subprocess
 import tempfile
 import uuid
@@ -81,9 +85,9 @@ _EVAL_BASELINE_CHANNELS: frozenset[str] = frozenset({"claude_code", "cursor", "c
 # Direct tools-server path (not the gateway ``/bohrapi/v1/matmaster-tools-server/...`` prefix).
 EVAL_INGEST_API_PATH = "/api/v1/evaluation/ingest"
 QUESTION_CATALOG_SYNC_API_PATH = "/api/v1/evaluation/question-catalog/sync"
-# 首页大表：每题各基线渠道最近一次得分（无则为 null）。见 matmaster-tools-server
-# ``evaluation_api.evaluation_questions_score_summary``；单题时间线用
-# ``/questions/{id}/overview``，批量筛「缺某渠道基线分」应使用本路径而非 per-question overview。
+# 首页大表：每题各基线渠道最近一次是否通过（``*_passed``，无 baseline 为 null）。见
+# matmaster-tools-server ``evaluation_api.evaluation_questions_score_summary``；单题时间线用
+# ``/questions/{id}/overview``，批量筛「缺某渠道基线」应使用本路径而非 per-question overview。
 EVAL_SCORE_SUMMARY_API_PATH = "/api/v1/evaluation/questions/score-summary"
 
 _base = (utils.env.MATMASTER_TOOLS_SERVER or "").strip().rstrip("/")
@@ -95,11 +99,49 @@ EVAL_SCORE_SUMMARY_URL: str | None = (
     f"{_base}{EVAL_SCORE_SUMMARY_API_PATH}" if _base else None
 )
 
-_SCORE_SUMMARY_FIELD_BY_CHANNEL: dict[str, str] = {
-    "claude_code": "claude_code_score",
-    "cursor": "cursor_score",
-    "codex": "codex_score",
+# score-summary 每题行：matmaster-tools-server ``*_passed``（有 baseline 时为 bool；无数据为 null）。
+_SCORE_SUMMARY_PASSED_FIELD_BY_CHANNEL: dict[str, str] = {
+    "claude_code": "claude_code_passed",
+    "cursor": "cursor_passed",
+    "codex": "codex_passed",
 }
+
+
+def _score_summary_row_missing_channel_baseline(row: dict[str, Any], ch: str) -> bool:
+    """True if this score-summary row has no baseline data for *channel*."""
+    pf = _SCORE_SUMMARY_PASSED_FIELD_BY_CHANNEL.get(ch, "claude_code_passed")
+    return row.get(pf) is None
+
+
+# Align with matmaster-tools-server ``src/utils/eval_question_priority.py`` /
+# ``EvalQuestionCatalogItemIn.priority`` (max_length=16).
+_CATALOG_PRIORITY_RE = re.compile(r"^P\d+$")
+EVAL_CATALOG_PRIORITY_MAX_LEN = 16
+
+
+def normalize_catalog_priority_for_sync(raw: Any) -> str:
+    """Normalize catalog ``priority`` for question-catalog sync (tools-server).
+
+    Empty or whitespace-only -> ``''`` (unset). Otherwise must match ``P`` + digits,
+    length <= :data:`EVAL_CATALOG_PRIORITY_MAX_LEN`. Raises ``ValueError`` on invalid
+    input (including non-string).
+    """
+    if raw is None:
+        return ""
+    if not isinstance(raw, str):
+        raise ValueError("priority must be a string")
+    t = raw.strip()
+    if not t:
+        return ""
+    if len(t) > EVAL_CATALOG_PRIORITY_MAX_LEN:
+        raise ValueError(
+            f"priority exceeds max length {EVAL_CATALOG_PRIORITY_MAX_LEN}",
+        )
+    if not _CATALOG_PRIORITY_RE.fullmatch(t):
+        raise ValueError(
+            "priority must be empty or like 'P0', 'P1' (P followed by digits)",
+        )
+    return t
 
 
 def normalize_baseline_channel(
@@ -471,6 +513,8 @@ def normalize_pending_item_for_submission(
 
     Requires ``score`` (coerced to ``float``). Optional ``score_reason`` / ``suggestion``
     must be strings if present; empty after strip are dropped.
+    Ensures top-level ``repeat_idx`` (tools-server ``EvalItemIn``); if missing,
+    defaults to ``0``.
     Returns ``(item, None)`` or ``(None, error_message)``.
     """
     out = dict(item)
@@ -497,6 +541,17 @@ def normalize_pending_item_for_submission(
             out.pop(key, None)
         else:
             out[key] = clipped
+
+    if "repeat_idx" in out:
+        try:
+            ri = int(out["repeat_idx"])
+        except (TypeError, ValueError):
+            return None, f'invalid item["repeat_idx"]: {out["repeat_idx"]!r}'
+        if ri < 0:
+            return None, 'item["repeat_idx"] must be >= 0'
+        out["repeat_idx"] = ri
+    else:
+        out["repeat_idx"] = 0
 
     return out, None
 
@@ -543,11 +598,11 @@ def build_ingest_item(
         approximate_last_turn_from_total=approximate_last_turn_from_total,
     )
 
+    rpt = max(0, int(repeat_idx))
     extra: dict[str, Any] = {
         "task_id": task_id,
         "devshell_exit_code": devshell_exit_code,
         "mode": mode,
-        "repeat_idx": repeat_idx,
     }
     extra.update(
         {
@@ -584,6 +639,7 @@ def build_ingest_item(
 
     item: dict[str, Any] = {
         "question_id": question_id,
+        "repeat_idx": rpt,
         "extra": extra,
     }
     nt = s.get("num_turns")
@@ -655,11 +711,11 @@ def parse_score_summary_missing_question_ids(
 ) -> list[str]:
     """From score-summary response body, list ``question_id`` where baseline score is missing.
 
-    *envelope* is the full decoded JSON (with ``code`` / ``data``). Missing score means
-    the channel field (e.g. ``claude_code_score``) is ``null`` or absent.
+    *envelope* is the full decoded JSON (with ``code`` / ``data``). Missing baseline means
+    the channel ``*_passed`` field is ``null`` or absent (same as null). ``false`` means
+    baseline exists but did not pass; do not treat as missing.
     """
     ch = normalize_baseline_channel(channel)
-    field = _SCORE_SUMMARY_FIELD_BY_CHANNEL.get(ch, "claude_code_score")
     data = envelope.get("data") or {}
     if not isinstance(data, dict):
         return []
@@ -673,7 +729,7 @@ def parse_score_summary_missing_question_ids(
         qid = str(row.get("question_id", "")).strip()
         if not qid:
             continue
-        if row.get(field) is None:
+        if _score_summary_row_missing_channel_baseline(row, ch):
             out.append(qid)
     return out
 
@@ -683,8 +739,9 @@ def fetch_missing_baseline_question_ids(
     channel: EvalBaselineChannel = "claude_code",
     timeout: float = 120.0,
 ) -> tuple[bool, str, list[str]]:
-    """GET ``EVAL_SCORE_SUMMARY_URL``; return question ids with no score for *channel*.
+    """GET ``EVAL_SCORE_SUMMARY_URL``; return question ids with no baseline for *channel*.
 
+    Uses each row's ``*_passed`` column (see :func:`parse_score_summary_missing_question_ids`).
     Requires ``MATMASTER_TOOLS_SERVER`` and ``MATMASTER_TOOLS_EVALUATION_BEARER``.
     """
     url = EVAL_SCORE_SUMMARY_URL
@@ -751,21 +808,24 @@ def post_eval_ingest(
 
 def post_question_catalog_sync(
     url: str,
-    items: list[dict[str, str]],
+    items: list[dict[str, Any]],
     *,
     timeout: float = 120.0,
 ) -> tuple[bool, str]:
     """POST catalog sync payload to matmaster-tools-server.
 
     Each element must include ``question_id`` and ``question_text`` (trimmed non-empty
-    after clip), matching tools-server ``EvalQuestionCatalogItemIn``. Server marks all
-    catalog rows inactive, then upserts these rows as active. ``question_id`` length
-    1–512; ``question_text`` clipped to ``EVAL_ITEM_QUESTION_TEXT_MAX_LEN``.
+    after clip), matching tools-server ``EvalQuestionCatalogItemIn``. Optional
+    ``priority`` (``''`` or ``P0`` / ``P1`` / …) is normalized with
+    :func:`normalize_catalog_priority_for_sync`; omitted key is treated as unset
+    (``''``). Server marks all catalog rows inactive, then upserts these rows as
+    active. ``question_id`` length 1–512; ``question_text`` clipped to
+    ``EVAL_ITEM_QUESTION_TEXT_MAX_LEN``.
     """
     if not items:
         return False, "no items to sync (server requires at least one item)"
 
-    body_items: list[dict[str, str]] = []
+    body_items: list[dict[str, Any]] = []
     for raw in items:
         qid = str(raw.get("question_id", "")).strip()
         if not qid:
@@ -780,7 +840,13 @@ def post_question_catalog_sync(
         qtext = clip_ingest_text_field(qt_raw, max_len=EVAL_ITEM_QUESTION_TEXT_MAX_LEN)
         if not qtext:
             return False, f"empty question_text after trim for question_id={qid!r}"
-        body_items.append({"question_id": qid, "question_text": qtext})
+        try:
+            pri = normalize_catalog_priority_for_sync(raw.get("priority"))
+        except ValueError as e:
+            return False, f"invalid priority for question_id={qid!r}: {e}"
+        body_items.append(
+            {"question_id": qid, "question_text": qtext, "priority": pri},
+        )
 
     body = {"items": body_items}
     ok, err_msg, data = _post_matmaster_tools_json(url, body, timeout=timeout)

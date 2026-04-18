@@ -107,6 +107,10 @@ class BashTool(BuiltinTool):
             "Shell state does not persist between commands. "
             "Use dedicated tools instead of shell equivalents "
             "(Glob not find, Grep not grep, Read not cat, Edit not sed, Write not echo). "
+            "**Turn economy:** each Bash call costs one turn. Combine related "
+            "operations into a single command with `&&` or `;`, or write a "
+            "self-contained script (heredoc or file) for multi-step workflows "
+            "instead of issuing many small sequential calls. "
             "If a Bash command generates figures for the final answer, save them under "
             "`$ARTIFACT_DIR` and write `$MANIFEST_PATH` as JSON like "
             '`{"figures":[{"figure_id":"...","path":"relative/path.png","caption":"..."}]}`. '

@@ -7,7 +7,6 @@ post-processing.
 
 import asyncio
 import gc
-import inspect
 import logging
 import os
 import time
@@ -19,10 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.core.playground import PlaygroundManager
-from matmaster.integration.event_payloads import (
-    _normalize_public_source,
-    build_public_sse_payload_from_bus_dump,
-)
+from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
@@ -160,6 +156,7 @@ class AgentRunService:
         model_override: str | None = None,
         images: list[str] | None = None,
         bohrium_required: bool = False,
+        remote_workdir: str | None = None,
     ) -> tuple[bool | tuple[bool, str], int]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -268,12 +265,14 @@ class AgentRunService:
                 self._sessions_service,
                 event_sink=_dispatch_from_thread,
             )
+            effective_bohrium_required = bool(bohrium_required or remote_workdir)
             bohrium_result = await bohrium_svc.run_setup(
                 session_id=session_id,
                 playground=playground,
                 skill_sync_spec=skill_sync_spec,
                 run_started_at=run_started_at,
-                bohrium_required=bohrium_required,
+                bohrium_required=effective_bohrium_required,
+                remote_workdir=remote_workdir,
             )
             ssh_attached = bohrium_result.ssh_attached
             if bohrium_result.abort_result is not None:
@@ -440,21 +439,12 @@ class AgentRunService:
             from matmaster.integration.interaction_bridge import AskQuestionBridge
             from src.services.stream_service import RedisReplyQueue
 
-            def _send_interaction_event(raw_event: dict[str, Any]) -> None:
-                payload = build_public_sse_payload_from_bus_dump(
-                    raw_event,
-                    session_id=session_id,
-                    task_id=task_id,
-                    invocation_id=invocation_id,
-                    spawn_id=raw_event.get('spawn_id'),
-                )
-                result = send_cb(payload)
-                if inspect.isawaitable(result):
-                    asyncio.get_running_loop().create_task(result)
+            async def _interaction_event_sink(event: BusEvent) -> None:
+                await fanout.dispatch(event)
 
             bridge = AskQuestionBridge(
                 session_id=session_id,
-                send_cb=_send_interaction_event,
+                event_sink=_interaction_event_sink,
                 reply_queue=RedisReplyQueue(session_id),
                 timeout_seconds=1800,
             )

@@ -12,7 +12,21 @@ from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_runner_state import ToolRunnerState
-from matmaster.types.tool_spec import ToolExecutionContext
+from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
+
+ASK_QUESTION_USAGE_PROMPT = '''Use this tool when you need to ask the user questions during execution. This allows you to:
+1. Gather user preferences or requirements
+2. Clarify ambiguous instructions
+3. Get decisions on implementation choices as you work
+4. Offer choices to the user about what direction to take.
+
+Usage notes:
+- Users will always be able to select "Other" to provide custom text input
+- Use multiSelect: true to allow multiple answers to be selected for a question
+- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label
+
+Planner mode note: In planner mode, use this tool to clarify requirements or choose between approaches BEFORE finalizing your plan. Do NOT use this tool to ask "Is my plan ready?" or "Should I proceed?"
+'''
 
 
 class AskQuestionTool(BuiltinTool):
@@ -21,6 +35,7 @@ class AskQuestionTool(BuiltinTool):
         "Asks the user structured multiple-choice questions to clarify ambiguity, "
         "gather preferences, make decisions, or collect missing requirements during execution."
     )
+    usage_prompt: ClassVar[str] = ASK_QUESTION_USAGE_PROMPT
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
@@ -49,6 +64,7 @@ class AskQuestionTool(BuiltinTool):
                             },
                         },
                         "multi_select": {"type": "boolean"},
+                        "multiSelect": {"type": "boolean"},
                         "allow_freeform": {"type": "boolean"},
                     },
                     "required": ["question", "header", "options"],
@@ -65,6 +81,9 @@ class AskQuestionTool(BuiltinTool):
         "additionalProperties": False,
     }
     effect_level: ClassVar[str] = "none"
+    resource_claims: ClassVar[tuple[ResourceClaim, ...]] = (
+        ResourceClaim(resource="interaction", mode="exclusive"),
+    )
 
     def __init__(
         self,
@@ -80,6 +99,9 @@ class AskQuestionTool(BuiltinTool):
         # tool_compiler 读 tool.exposed_to_model 时优先命中实例属性
         if bridge is None:
             self.exposed_to_model = False
+
+    def prompt(self, ctx: Any | None = None) -> str:
+        return self.usage_prompt
 
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
         """AskQuestion 走 execute_with_context；不支持 sync 调用路径。"""
@@ -146,7 +168,8 @@ class AskQuestionTool(BuiltinTool):
                     "question": q["question"],
                     "header": q.get("header", q["question"]),
                     "options": q.get("options", []),
-                    "multi_select": q.get("multi_select", False),
+                    # Prompt uses Claude-style camelCase; SSE payload keeps snake_case.
+                    "multi_select": q.get("multi_select", q.get("multiSelect", False)),
                     "allow_freeform": q.get("allow_freeform", False),
                 }
             )

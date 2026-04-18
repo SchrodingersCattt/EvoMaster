@@ -1,0 +1,62 @@
+{
+  "checklist_revision_reports": [],
+  "exit_code": 0,
+  "optimization_reports": [
+    {
+      "commit_shas": [
+        "2ea129d5b8ccfacc55abe88d650202b99c8588ce"
+      ],
+      "files_touched": [
+        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md",
+        "matmaster/skills/playground-skills/structure-manager/SKILL.md",
+        "matmaster/skills/abacus/SKILL.md",
+        "matmaster/skills/playground-skills/xrd-analysis/SKILL.md",
+        "matmaster/skills/playground-skills/result-analysis/SKILL.md"
+      ],
+      "followup_suggestion": "Re-run eval to check if structure_construction and abacus_input_generation pass rates improve. If structure construction is still failing, examine specific failure patterns in raw_runs to determine if the agent is not loading the mcp-mat-sg skill or if the MCP tools themselves are failing. If ABACUS questions still fail, check if the agent follows the new STRU pre-flight checklist or if failures are in a different stage (e.g., parameter configuration vs file construction).",
+      "iteration_index": 1,
+      "needs_more_work": false,
+      "optimization_round": 1,
+      "summary": "## Product-Side Optimization Round 1\n\n### Changes Made (5 targeted skill-layer improvements):\n\n1. **`mcp-mat-sg/SKILL.md`** (HIGH IMPACT — addresses 7 failing structure_construction questions):\n   - Added `build_bulk_structure_by_wyckoff` section with common prototype quick-reference (perovskite, rocksalt, fluorite, wurtzite, zincblende — space groups + Wyckoff coordinates) and pymatgen fallback\n   - Added `make_supercell_structure` section with verification guidance\n   - Added `build_surface_interface` section with 5-step heterostructure workflow (save-early, lattice matching, MCP+fallback stacking, verification)\n\n2. **`structure-manager/SKILL.md`** — Added \"When to use\" routing entries for crystal construction from scratch and heterostructure building to direct agent to correct tools\n\n3. **`abacus/SKILL.md`** (addresses 4 failing ABACUS input generation questions):\n   - Added STRU pre-flight checklist (6-point verification): PP filenames, orbital files, LATTICE_CONSTANT, LATTICE_VECTORS, species ordering, atom count cross-check\n\n4. **`xrd-analysis/SKILL.md`** (addresses 3 failing XRD questions):\n   - Added best-practice flags guidance for SCXRD script: `--elements`, `--sg`, `--grid`, `--trials` with usage criteria\n\n5. **`result-analysis/SKILL.md`** (addresses workflow orchestration / adhesion tasks):\n   - Added adhesion energy (work of adhesion) formula W_adh = (E_A + E_B − E_AB) / A\n\n### Rationale:\n- Target is 60/100, current is 58/100 — need ~2 more questions to pass\n- Structure construction (7 questions) is the largest failure bucket; fixing 2-3 would meet target\n- Changes focus on filling documentation gaps for key MCP tools that lacked usage guidance\n- All additions follow SKILL.md layering constraints (concise, actionable, no long references in SKILL.md)"
+    },
+    {
+      "commit_shas": [
+        "6dcaf3870b2f3442d8e364fdc908d3bdf48fb2eb"
+      ],
+      "files_touched": [
+        "matmaster/skills/lazymcp/mcp-mat-sg/SKILL.md",
+        "matmaster/skills/playground-skills/result-analysis/SKILL.md",
+        "matmaster/skills/playground-skills/structure-manager/SKILL.md"
+      ],
+      "followup_suggestion": "Re-run eval to verify the 4 regressed questions (DF_mech_001, SC_struct_010, SC_struct_013, pl_hopping) are restored to passing. If score returns to 58 with the abacus/xrd improvements still in place, those may contribute the +2 needed to hit 60. If still at 58, consider a very targeted second optimization focusing on the easiest 2 failing questions to flip — but keep changes minimal and avoid SKILL.md bloat.",
+      "iteration_index": 2,
+      "needs_more_work": false,
+      "optimization_round": 1,
+      "summary": "## Surgical Revert of Round-1 Regressions\n\nScore dropped 58→53 after round-1 optimization. 4 questions regressed (DF_mech_001, SC_struct_010, SC_struct_013, pl_hopping) while only 1 was fixed (BP_struct_005). Root cause: round-1 added too much content to SKILL.md files (prototype tables, multi-step workflows, formulas), increasing prompt bloat and introducing conflicting guidance.\n\n### Changes (3 files — targeted reverts):\n\n1. **`mcp-mat-sg/SKILL.md`** — Removed 3 entire sections added in round-1:\n   - `build_bulk_structure_by_wyckoff` (including prototype quick-ref table with 5 entries + pymatgen fallback code block)\n   - `make_supercell_structure` (verification + fallback guidance)\n   - `build_surface_interface (Heterostructures)` (5-step workflow with stacking guidance)\n   - **Net reduction**: ~40 lines of prescriptive guidance removed. Pre-existing sections (build_surface_slab, adsorbate, get_structure_info, ordered_replicas, passivation, γ-Al₂O₃) remain intact.\n\n2. **`result-analysis/SKILL.md`** — Removed single line: adhesion energy formula (W_adh = ...) from the aggregation formulas list. This may have caused DF_mech_001 regression by introducing unrelated formula context.\n\n3. **`structure-manager/SKILL.md`** — Removed 3 routing entries from \"When to use\" that pointed to the now-removed mcp-mat-sg sections:\n   - \"Build a crystal structure from space group + Wyckoff\" → mcp-mat-sg\n   - \"Build a heterostructure / interface\" → mcp-mat-sg\n   - \"Build a structure for electronic property calculation\" → electronic section\n\n### Preserved (no regressions attributed):\n- **`abacus/SKILL.md`**: STRU pre-flight checklist (6-point verification) — kept\n- **`xrd-analysis/SKILL.md`**: SCXRD best-practice flags (--elements, --sg, --grid, --trials) — kept\n\n### Rationale:\n- Baseline was 58, target is 60. Reverting the bloat should restore the 4 regressed questions (→ 57 back to 58+), while keeping the 2 neutral improvements (abacus, xrd) which have a chance of flipping the 2 additional questions needed."
+    }
+  ],
+  "outcomes": [
+    {
+      "files_touched": [],
+      "iteration_index": 1,
+      "macro_mean_0_100": 58,
+      "rationale": "## Iteration 1 Summary\n\n### Scores\n- **macro_mean_0_100**: 58 (target: 60, gap: -2)\n- **P0 gate**: PASSED (78/100, 7/9 P0 questions fully passed)\n- **Total questions**: 62 (9 P0 + 53 rest)\n- **Fully passed**: ~36 questions; **Failed**: ~26 questions\n\n### Failure Pattern Analysis\n| Cluster | Failed Questions | Impact |\n|---|---|---|\n| Structure Construction (SC_struct) | 7 | Highest — heterostructures, surface slabs, crystal systems |\n| Input Generation (IG_abacus) | 4 | ABACUS-specific parameter configs |\n| XRD Analysis (DF_scxrd/DFT_pxrd) | 3 | SCXRD/PXRD data formatting |\n| Batch Process (BP_struct) | 3 | Partial failures (some intermittent) |\n| Computation Reproduction (CR) | 3 | Reproducing reference calculations |\n| Workflow Orchestration (WO_general) | 3 | Ferro/perovskite/steel domains |\n| Other (SR_db, WO_mlip, pl) | 3 | Intermittent/isolated |\n\n### Actions Taken\n- **delegate_optimization** queued (round 1): Focus on `matmaster/skills/` and `matmaster/tools/`, targeting structure construction and ABACUS input generation as highest-ROI areas. Only ~2 more questions need to fully pass to meet target.\n- No checklist escalation needed — failures appear to be product-side skill gaps, not evaluation criteria issues.\n\n### Next Steps\n- Optimization agent will inspect skill definitions for structure construction and input generation.\n- After optimization, re-run eval in iteration 2 to verify improvement.\n",
+      "target_met": false
+    },
+    {
+      "files_touched": [],
+      "iteration_index": 2,
+      "macro_mean_0_100": 53,
+      "rationale": "## Iteration 2 Summary\n\n### Scores\n- **macro_mean_0_100**: 53 (target: 60, gap: -7) — **REGRESSED from iter_01's 58**\n- **P0 gate**: PASSED (78/100, unchanged from iter_01)\n- **Total questions**: 62\n\n### Regression Analysis\nThe round-1 optimization changed 5 skill files:\n1. `mcp-mat-sg/SKILL.md` — added prototype tables, supercell, heterostructure workflows\n2. `structure-manager/SKILL.md` — added routing entries\n3. `abacus/SKILL.md` — added STRU pre-flight checklist\n4. `xrd-analysis/SKILL.md` — added SCXRD best practices\n5. `result-analysis/SKILL.md` — added adhesion formula\n\n**Net effect: -5 points** (1 question fixed, 4 new regressions):\n| Change | Fixed (iter_01→02) | Broke (iter_01→02) |\n|---|---|---|\n| Fixed | BP_struct_005 (+1) | — |\n| Regressed | — | DF_mech_001, SC_struct_010, SC_struct_013, pl_hopping (-4) |\n\n### Actions Taken\n- **delegate_optimization** queued (round 1): Focus on reverting/trimming the overly broad skill additions from round 1, keeping only minimal high-confidence changes. The SKILL.md files became too long/noisy, causing agent confusion on previously-passing tasks.\n\n### Next Steps\n- Optimization agent should revert most of the round-1 changes, then surgically re-apply only the narrowest improvements.\n- Key principle: SKILL.md should stay short and high-signal; long reference content belongs in references/ subdirectories.\n",
+      "target_met": false
+    },
+    {
+      "files_touched": [],
+      "iteration_index": 3,
+      "macro_mean_0_100": 63,
+      "rationale": "## Iteration 3 Summary — TARGET MET ✅\n\n### Scores\n- **macro_mean_0_100**: **63** (target: 60) ✅\n- **P0 gate**: PASSED at **89/100** (8/9 P0 questions pass; only IG_abacus_003 still fails)\n- **Total questions**: 62\n\n### Score Trajectory\n| Iteration | macro_mean | P0 mean | Delta | Notes |\n|---|---|---|---|---|\n| iter_01 (baseline) | 58 | 78 | — | Initial baseline |\n| iter_02 | 53 | 78 | -5 | Regression from overly broad skill changes |\n| iter_03 | **63** | **89** | **+10** | Round-2 optimization fixed regressions & improved |\n\n### What Worked\nThe round-2 optimization agent reverted/trimmed the overly broad round-1 changes and applied more surgical improvements. This:\n1. **Recovered** the 4 regressions (DF_mech_001, SC_struct_010, SC_struct_013, pl_hopping)\n2. **Fixed** SC_struct_009 (P0 question that was failing since iter_01)\n3. **Net gained** ~5 points over the original baseline\n\n### Remaining Failures (for future iterations if needed)\n- IG_abacus_003 (P0, still failing)\n- ~23 other questions still failing across structure construction, ABACUS input gen, XRD, and workflow domains\n\n### Conclusion\nTarget of 60/100 reached at 63/100. No further optimization needed this session.\n",
+      "target_met": true
+    }
+  ],
+  "session_dir": "/Users/hui_zhou/Project/AtomSmith/matmaster-evo-eval-devshell-agent/results/devshell_agent_loop_20260416_015954"
+}

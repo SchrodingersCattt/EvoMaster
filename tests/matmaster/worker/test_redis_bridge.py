@@ -79,8 +79,12 @@ class TestAgentWorkerCancellationIntegration:
         payload = {
             "session_id": "sid-1",
             "task_id": "task-1",
+            "invocation_id": "inv-1",
             "user_prompt": "hello",
             "mode": "direct",
+            "remote_workdir": "/share/case",
+            "session_directory_source": "request",
+            "bohrium_required": True,
         }
         redis_dao = MagicMock()
         redis_dao.create_client.return_value = True
@@ -150,6 +154,8 @@ class TestAgentWorkerCancellationIntegration:
         assert bridge_events["stopped"] is True
         assert mod._active_controller is None
         log_context.clear.assert_called()
+        assert observed["remote_workdir"] == "/share/case"
+        assert observed["bohrium_required"] is True
 
     def test_main_sigterm_handler_drains_without_cancelling_active_controller(
         self,

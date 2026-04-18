@@ -223,6 +223,7 @@ def test_prepare_send_message_marks_explicit_bohrium_requirement():
     from src.services.stream_service import ChatStreamService
 
     sessions_service = MagicMock()
+    sessions_service.get_session.return_value = {"session_directory": None}
     sessions_service.try_acquire_session_run.return_value = (True, None)
     events_service = MagicMock()
     deploy_state_service = MagicMock()
@@ -257,6 +258,7 @@ def test_prepare_send_message_persists_images_in_user_message():
     from src.services.stream_service import ChatStreamService
 
     sessions_service = MagicMock()
+    sessions_service.get_session.return_value = {"session_directory": None}
     sessions_service.try_acquire_session_run.return_value = (True, None)
     events_service = MagicMock()
     deploy_state_service = MagicMock()

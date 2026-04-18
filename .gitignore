@@ -181,9 +181,8 @@ logs/
 .agent/
 .agents/
 
-# Planning & docs (local only)
+# Planning (local only)
 .planning/
-docs/
 
 # Skill tool schema cache
 !matmaster/cache/

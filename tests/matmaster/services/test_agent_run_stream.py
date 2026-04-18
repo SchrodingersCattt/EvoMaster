@@ -24,6 +24,7 @@ from matmaster.types.events import (
     ResponseEvent,
     RunResultEvent,
     ThoughtEvent,
+    ToolResultEvent,
 )
 
 # ---------------------------------------------------------------------------
@@ -187,11 +188,39 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
 
         # SSEHandler mock -- records events it receives
         sse_received: list[Any] = []
-        sse_inst = MagicMock()
-        sse_inst.handle = AsyncMock(
-            side_effect=lambda event: sse_received.append(event)
-        )
-        sse_handler_cls.return_value = sse_inst
+
+        class _RecordingSSEHandler:
+            def __init__(
+                self,
+                send_cb_arg: Any,
+                session_id_arg: str,
+                task_id_arg: str,
+                invocation_id_arg: str | None,
+                mode_arg: str,
+            ) -> None:
+                self._send_cb = send_cb_arg
+                self._session_id = session_id_arg
+                self._task_id = task_id_arg
+                self._invocation_id = invocation_id_arg
+
+            async def handle(self, event: Any) -> None:
+                from matmaster.integration.event_payloads import (
+                    build_public_sse_payload_from_bus_dump,
+                )
+
+                sse_received.append(event)
+                payload = build_public_sse_payload_from_bus_dump(
+                    event.model_dump(mode="json"),
+                    session_id=self._session_id,
+                    task_id=self._task_id,
+                    invocation_id=self._invocation_id,
+                    spawn_id=getattr(event, "spawn_id", None),
+                )
+                result = self._send_cb(payload)
+                if inspect.isawaitable(result):
+                    await result
+
+        sse_handler_cls.side_effect = _RecordingSSEHandler
 
         # PersistenceHandler mock
         persist_received: list[Any] = []
@@ -255,6 +284,7 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
             svc._test_fake_exp = fake_exp
             svc._test_pg_ctx = pg_ctx
             svc._test_events_table = events_table_fn.return_value
+            svc._test_bohrium_svc = bohrium_inst
 
             yield svc, sse_received, persist_received
 
@@ -785,75 +815,163 @@ async def test_persistence_receives_events():
 
 
 @pytest.mark.asyncio
-async def test_ask_question_bridge_send_cb_receives_public_sse_payload():
-    """AskQuestionBridge 发给 send_cb 的必须是前端可消费的公开 SSE payload。"""
-
+async def test_ask_question_bridge_events_go_through_fanout_and_persistence():
     async def ask_then_finish(ctx):
         await ctx.interaction_bridge.ask(
-            request_id='aq_1',
+            request_id="aq_1",
             questions=[
                 {
-                    'question': 'Q1',
-                    'header': 'H1',
-                    'options': [
-                        {'label': 'A1', 'description': 'desc'},
-                        {'label': 'A2', 'description': 'desc'},
+                    "question": "Q1",
+                    "header": "H1",
+                    "options": [
+                        {"label": "A1", "description": "desc"},
+                        {"label": "A2", "description": "desc"},
                     ],
-                    'allow_freeform': True,
-                    'multi_select': False,
+                    "allow_freeform": True,
+                    "multi_select": False,
                 }
             ],
-            metadata={'scene': 'test'},
+            metadata={"scene": "test"},
         )
-        yield RunResultEvent(source='agent', status='completed', reason='natural')
+        yield RunResultEvent(source="agent", status="completed", reason="natural")
 
     send_cb = MagicMock()
     reply_queue = _ImmediateReplyQueue(
         json.dumps(
             {
-                'payload': {
-                    'answers': {'Q1': 'A1'},
-                    'annotations': {},
+                "payload": {
+                    "request_id": "aq_1",
+                    "answers": {"Q1": "A1"},
+                    "annotations": {},
                 }
             }
         )
     )
 
-    async with _patched_service(ask_then_finish) as (svc, _, __):
+    async with _patched_service(ask_then_finish) as (svc, _, persist_events):
         with patch(
-            'src.services.stream_service.RedisReplyQueue',
+            "src.services.stream_service.RedisReplyQueue",
             return_value=reply_queue,
         ):
             await svc.run_agent(
-                session_id='s1',
-                user_prompt='hi',
+                session_id="s1",
+                user_prompt="hi",
                 send_cb=send_cb,
                 cancel_token=_make_cancel_token(),
-                mode='direct',
-                task_id='t1',
-                invocation_id='inv-1',
+                mode="direct",
+                task_id="t1",
+                invocation_id="inv-1",
             )
 
     payload = send_cb.call_args_list[0].args[0]
-    assert payload['type'] == 'ask_question'
-    assert payload['session_id'] == 's1'
-    assert payload['task_id'] == 't1'
-    assert payload['invocation_id'] == 'inv-1'
-    assert payload['content'] == {
-        'request_id': 'aq_1',
-        'questions': [
+    assert payload["type"] == "ask_question"
+    assert payload["session_id"] == "s1"
+    assert payload["task_id"] == "t1"
+    assert payload["invocation_id"] == "inv-1"
+    assert payload["content"]["request_id"] == "aq_1"
+    assert payload["content"]["metadata"] == {"scene": "test"}
+
+    persisted = [
+        event
+        for event in persist_events
+        if getattr(event, "type", None) == "ask_question"
+    ]
+    assert len(persisted) == 1
+    assert persisted[0].request_id == "aq_1"
+
+
+@pytest.mark.asyncio
+async def test_ask_question_tool_result_reaches_sse_before_run_result():
+    async def ask_then_emit_tool_result(ctx):
+        await ctx.interaction_bridge.ask(
+            request_id="aq_1",
+            questions=[
+                {
+                    "question": "Q1",
+                    "header": "H1",
+                    "options": [
+                        {"label": "A1", "description": "desc"},
+                        {"label": "A2", "description": "desc"},
+                    ],
+                    "allow_freeform": True,
+                    "multi_select": False,
+                }
+            ],
+            metadata={"scene": "stream-order"},
+        )
+        yield ToolResultEvent(
+            source="agent",
+            call_id="call_aq_1",
+            tool_name="AskQuestion",
+            result='"Q1"="A1"',
+            status="success",
+            payload={
+                "request_id": "aq_1",
+                "answers": {"Q1": "A1"},
+                "annotations": {},
+            },
+        )
+        yield RunResultEvent(source="agent", status="completed", reason="natural")
+
+    send_cb = MagicMock()
+    reply_queue = _ImmediateReplyQueue(
+        json.dumps(
             {
-                'question': 'Q1',
-                'header': 'H1',
-                'options': [
-                    {'label': 'A1', 'description': 'desc'},
-                    {'label': 'A2', 'description': 'desc'},
-                ],
-                'allow_freeform': True,
-                'multi_select': False,
+                "payload": {
+                    "request_id": "aq_1",
+                    "answers": {"Q1": "A1"},
+                    "annotations": {},
+                }
             }
-        ],
-        'metadata': {'scene': 'test'},
-        'origin': 'tool:AskQuestion',
-        'preview_format': 'markdown',
-    }
+        )
+    )
+
+    async with _patched_service(ask_then_emit_tool_result) as (svc, _, __):
+        with patch(
+            "src.services.stream_service.RedisReplyQueue",
+            return_value=reply_queue,
+        ):
+            await svc.run_agent(
+                session_id="s1",
+                user_prompt="hi",
+                send_cb=send_cb,
+                cancel_token=_make_cancel_token(),
+                mode="direct",
+                task_id="t1",
+                invocation_id="inv-1",
+            )
+
+    payloads = [call.args[0] for call in send_cb.call_args_list]
+    payload_types = [payload["type"] for payload in payloads]
+
+    ask_idx = payload_types.index("ask_question")
+    tool_result_idx = payload_types.index("tool_result")
+    run_result_idx = payload_types.index("run_result")
+    stream_closed_idx = payload_types.index("stream_closed")
+
+    assert ask_idx < tool_result_idx < run_result_idx < stream_closed_idx
+    assert payloads[tool_result_idx]["content"]["id"] == "call_aq_1"
+    assert payloads[tool_result_idx]["content"]["name"] == "AskQuestion"
+    assert payloads[tool_result_idx]["content"]["result"] == '"Q1"="A1"'
+
+
+@pytest.mark.asyncio
+async def test_run_agent_passes_remote_workdir_to_bohrium_setup():
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="hello",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            remote_workdir="/share/case",
+        )
+
+        bohrium_svc = svc._test_bohrium_svc
+        call_kwargs = bohrium_svc.run_setup.call_args.kwargs
+
+    assert call_kwargs["remote_workdir"] == "/share/case"
+    assert call_kwargs["bohrium_required"] is True

@@ -304,6 +304,8 @@ evaluation/question_bank/
 
 新增题目或 bank 文件后，需同步更新 `evaluation/question_bank/manifest.yaml` 中对应 bank 的 `questions` 计数。
 
+推送到 matmaster-tools-server 的题库目录同步（`evaluation/scripts/sync_question_catalog_to_tools_server.py` → `POST .../question-catalog/sync`）每条目包含 `question_id`、`question_text`（来自 `human_prompt_seed`）及 `priority`（来自题目可选字段 `priority`；未设置或空串表示无优先级；合法值为 `P0`、`P1` 等形式，与 tools-server `EvalQuestionCatalogItemIn` 一致）。
+
 ### 4. data_files 放置规则
 
 `data_files[].path` 必须指向 `question_bank/data/<v5_question_id>/...`。目录名使用当前 v5 题号。
@@ -358,8 +360,8 @@ scoring_checklist:
 
 - 自迭代时「产品侧」可写资产以 `config/`、`matmaster/exps/`、`matmaster/skills/`、`matmaster/tools/`、`matmaster/adaptors/calculation/`、`matmaster/devshell/` 等为准；`matmaster/core/` 仅在框架层缺陷明确时再动。`matmaster/cache/` 下 JSON 视为生成物，若改动影响 MCP schema / lazy tool 可见性，应执行 `uv run python -m matmaster.tools.cache_mcp_schemas --config-dir config` 再生成，而不是长期手改。默认不优先修改 `src/`、`app.py` 等 API / Worker 路径，除非失败与该链路明确相关。本仓库已移除历史 `playground/mat_master/` 目录树（与 EvoMaster 上游示例 `playground/` 不是同一概念）。
 - **内置工具 `prompt()`（Claude Agent SDK 编排）**：DevShell **optimization 子 Agent** 的系统提示在 `evaluation/devshell_agent/loop_prompts.py`（`SYSTEM_PROMPT_OPTIMIZATION` 中 ``matmaster/tools/`` 小节）；主 Agent 在同文件 `SYSTEM_PROMPT_MAIN` 中亦有委派约束。原则：`matmaster/tools/builtin/.../tool.py` 的 `prompt()` 只保留流程说明与跨技能硬约束；各软件镜像/命令以 `matmaster/skills/<name>/SKILL.md` 为准，**禁止**为提分在工具 `prompt()` 贴与技能重复的默认表。引导行为优先改技能、题目 seed 或评测 fixture。
-- DevShell / IDE 流程：`evaluation/docs/devshell/devshell_claude_code_eval.md`（`run_devshell_eval.py` + `score_devshell_tasks.py` 自动评分）。
-- **程序化**多轮「跑题 → 判分 → 分流优化」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。该入口默认 **`--model bedrock-claude-opus`**（内层 `mm-devshell` 对应 `config/llm_config.yaml` 路由 `bedrock-claude-opus` → `opus_bedrock`）；若需走 LiteLLM 的 Opus，显式传 **`--model claude-opus-4-6`**。默认在 **`--eval-ingest-pending-only`** 下每轮结束后自动 `score_devshell_tasks.py --submit` 上报 ingest（见该文档）；`--no-eval-ingest-submit-each-iteration` 可关。**三 Agent**：主 Agent 只负责 Drive、读取脱敏摘要并显式委派，禁止编辑文件；**仅允许**通过 MCP `main_read_text` / `main_glob_paths` / `main_grep_text` 只读整棵 ``evaluation/devshell_agent_history/``（含各次 run 子目录与 ``index.jsonl``），**禁止**读取 `evaluation/**` 其余路径；Checklist Agent 可只读 `evaluation/question_bank/`、`evaluation/core/` 等，由 `escalate_checklist_revision` 触发，**写入仅限**会话目录下 `proposed_question_bank_changes.md`（proposal，不自动 git commit）；优化 Agent 仅处理产品侧目录，由 `delegate_optimization` 触发，禁止读取 `evaluation/**`（会话目录除外）。Checklist Agent 与优化 Agent 均应通过编排器提供的**受限 MCP 文件工具**读写，不再依赖内建 `Read/Edit/Write/Bash`。若 checklist follow-up 造成题目 `id` 集合变化，应立即停止外层循环。跨轮摘要持久化到 `evaluation/devshell_agent_history/`，不受 `results/` 清理影响。无人值守运行时默认 **`--permission-mode bypassPermissions`**（Claude Agent SDK），避免子会话中 Bash（如 `git`）因需人工批准而失败；交互式可改用 `acceptEdits`。
+- DevShell / IDE 流程：`evaluation/docs/devshell/devshell_claude_code_eval.md`（`run_devshell_eval.py` + `score_devshell_tasks.py` 自动评分）。**`score_devshell_tasks.py` 写入 ingest 的 `item.score` 为 0 或 100**：仅当**该次 repeat** 的 `scoring_checklist` **全部通过**时为 100。脱敏字段 **`macro_mean_0_100`**：按 `question_id` 聚合，**该题 k 次 repeat 的 score 均为 100** 时该题计 100，否则 0；再对题目取算术平均，即 **（完全通过的题目数 ÷ 题目数）× 100**，与外层 **`--target-pass-rate`** 同口径。Baseline 流水线 `score_baseline_tasks.py` 仍为加权分×100，二者口径不同。
+- **程序化**多轮「跑题 → 判分 → 分流优化」：`evaluation/docs/devshell/devshell_agent_sdk_loop.md`；入口 `evaluation/scripts/devshell/run_devshell_agent_loop.py`，可选依赖 `uv sync --extra eval-agent`（`pyproject.toml` 中 `[project.optional-dependencies] eval-agent`）。早停阈值请用 **`--target-pass-rate`**（0–100，与 `macro_mean_0_100` / 全项通过率同刻度；默认 80）；**`--target-mean-score`** 已移除（传入即报错）。**`--k`** 默认为 **3**（每题重复次数，同 `run_devshell_eval --k`）。该入口默认 **`--model bedrock-claude-opus`**、**`--fallback-model claude-opus-4-6`**（内层先 Bedrock，单题遇传输类失败时再试 LiteLLM 路由）；若只要 LiteLLM、不要 Bedrock，显式传 **`--model claude-opus-4-6 --fallback-model claude-opus-4-6`**（与主 route 相同则不做 fallback 重试）。默认在 **`--eval-ingest-pending-only`** 下每轮结束后自动 `score_devshell_tasks.py --submit` 上报 ingest（见该文档）；`--no-eval-ingest-submit-each-iteration` 可关。**三 Agent**：主 Agent 只负责 Drive、读取脱敏摘要并显式委派，禁止编辑文件；**仅允许**通过 MCP `main_read_text` / `main_glob_paths` / `main_grep_text` 只读整棵 ``evaluation/devshell_agent_history/``（含各次 run 子目录与 ``index.jsonl``），**禁止**读取 `evaluation/**` 其余路径；Checklist Agent 可只读 `evaluation/question_bank/`、`evaluation/core/` 等，由 `escalate_checklist_revision` 触发，**写入仅限**会话目录下 `proposed_question_bank_changes.md`（proposal，不自动 git commit）；优化 Agent 仅处理产品侧目录，由 `delegate_optimization` 触发，禁止读取 `evaluation/**`（会话目录除外）。Checklist Agent 与优化 Agent 均应通过编排器提供的**受限 MCP 文件工具**读写，不再依赖内建 `Read/Edit/Write/Bash`。若 checklist follow-up 造成题目 `id` 集合变化，应立即停止外层循环。跨轮摘要持久化到 `evaluation/devshell_agent_history/`，不受 `results/` 清理影响。无人值守运行时默认 **`--permission-mode bypassPermissions`**（Claude Agent SDK），避免子会话中 Bash（如 `git`）因需人工批准而失败；交互式可改用 `acceptEdits`。
 
 ---
 
@@ -399,11 +401,14 @@ P0 题目是被标记为最高优先级的评测题。在 DevShell Agent 多轮�
 2. 合并两阶段结果，返回包含 `p0_gate_passed` / `p0_gate_failed` 的摘要
 3. `AgentLoopSharedState.last_p0_scores` 仅在 P0 gate 通过时更新
 4. 两阶段共用同一 ingest `run_id`：编排器为整轮生成一个 UUID，经 `--eval-ingest-run-id` 传给 Phase 1 与 Phase 2 的两次 `run_devshell_eval.py`，使 `pending_ingest` 与 manifest 在写入时即一致，tools-server 按 `run_id` 聚合为**一轮**评测（不再出现「P0 一拨、remaining 一拨」两个 `run_id`）。
+5. **ingest `repeat_idx`**：matmaster-tools-server 对 `eval_results` 的唯一键为 `(run_id, question_id, repeat_idx)`（同批同题多次重复各占一行）。客户端在 `build_ingest_item` 产出的 **item 顶层** 上报 `repeat_idx`（与 `expand_run_plan` / `task_id` 后缀 `_r{n}` 一致），**不**写入 `extra`。`normalize_pending_item_for_submission` 仅在缺省时将顶层 `repeat_idx` 设为 `0`。
 
 ### CLI 新增参数
 
+- `run_devshell_eval.py --k N` / `run_devshell_agent_loop.py --k N` — 覆盖 `evaluation/config.yaml` 的 `k`（每题 `repeat_idx` 0..N-1）；**默认 N=3**（未传时使用）
 - `run_devshell_eval.py --exclude-question-ids ID1 ID2 ...` — 从 run plan 中排除指定题目
 - `run_devshell_eval.py --eval-ingest-run-id <UUID>` — 固定本次 run 的 ingest `run_id`（默认每进程随机 UUID）；P0 gate 编排器自动注入，一般无需手写
+- `run_devshell_eval.py --model <ROUTE>` / `--fallback-model <ROUTE>` — 默认分别为 **`bedrock-claude-opus`**、**`claude-opus-4-6`**；`run_devshell_agent_loop.py` 同步。某 task 非零退出且 `logs/<task_id>/devshell_console.log` 符合 Bedrock/botocore 传输类错误启发式（如 `ReadTimeoutError`、`read timeout` + `bedrock-runtime` / `converse-stream`）时，**仅该 task** 删除未完成的 `_devshell_summary.json` 后以 fallback route **再跑一遍** `mm-devshell`（**`--model` 与 `--fallback-model` 相同则跳过该重试**）；**下一 task 仍从 `--model` 开始**。`raw_runs.jsonl` 中可含 `llm_route_attempts`、`llm_provider_fallback_used`、`llm_model_route_used`。
 
 ### 与现有流程的兼容
 
