@@ -82,6 +82,29 @@ class _EmptyStopLLM:
         yield StreamChunk(finish_reason='stop')
 
 
+class _SentinelStopLLM:
+    """Mock LLM: returns an empty-value sentinel as the whole answer."""
+
+    stream_timeout = 10.0
+    max_retries = 1
+    retry_delay = 0.0
+
+    async def __aenter__(self) -> _SentinelStopLLM:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
+        return LLMResponse(content='none', finish_reason='stop')
+
+    async def chat_stream(
+        self, messages, tools=None, *, timeout=None
+    ) -> AsyncIterator[StreamChunk]:
+        yield StreamChunk(content='none')
+        yield StreamChunk(finish_reason='stop')
+
+
 class _ErrorLLM:
     """Mock LLM: raises exception."""
 
@@ -617,6 +640,68 @@ class TestQuotaNotDeductedOnError:
         assert result[0] == (False, 'invalid_finish')
         assert isinstance(result[1], int)
         assert result[1] >= 0
+
+    def test_quota_not_deducted_on_sentinel_stop_invalid_finish(
+        self, tmp_path: Path
+    ) -> None:
+        """Verify empty-value sentinel finish validation skips quota deduction."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _SentinelStopLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
+        assert not called, 'use_quota should NOT be called on sentinel stop'
+
+    def test_sentinel_stop_invalid_finish_emits_error_and_stream_closed_event(
+        self, tmp_path: Path
+    ) -> None:
+        """Verify sentinel answers use the public invalid_finish stream shape."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _SentinelStopLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        payloads: list[dict[str, Any]] = []
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        _run_with_quota_mock(
+            svc,
+            mock_pg,
+            use_quota_mock,
+            send_cb=_async_collect(payloads),
+        )
+
+        run_result_payload = next(
+            (payload for payload in payloads if payload.get('type') == 'run_result'),
+            None,
+        )
+        assert run_result_payload is not None
+        assert run_result_payload['status'] == 'failed'
+        assert run_result_payload['reason'] == 'invalid_finish'
+        assert run_result_payload.get('final_content') is None
+        error_payload = next(
+            (payload for payload in payloads if payload.get('type') == 'error'),
+            None,
+        )
+        assert error_payload is not None
+        assert error_payload['source'] == 'System'
+        assert error_payload['message']
+        stream_closed_payload = next(
+            (payload for payload in payloads if payload.get('type') == 'stream_closed'),
+            None,
+        )
+        assert stream_closed_payload is not None
+        assert stream_closed_payload['task_completed'] is False
+        assert stream_closed_payload['end_reason'] == 'invalid_finish'
+        assert stream_closed_payload['treat_as_failure'] is True
+        payload_types = [payload.get('type') for payload in payloads]
+        assert payload_types.index('run_result') < payload_types.index('error')
+        assert payload_types.index('error') < payload_types.index('stream_closed')
 
 
 class TestQuotaDeduction:
