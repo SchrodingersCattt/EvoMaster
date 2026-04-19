@@ -97,6 +97,33 @@ python matmaster/skills/playground-skills/checkcif-validator/scripts/run_checkci
 
 Address ALL A-level alerts before delivery. B-level alerts should be explained.
 
+## Post-Generation CIF Fix-Up Checklist
+
+After `solve_refine_scxrd.py` produces a CIF, verify ALL of these fields exist. If any are missing, **add them manually before delivery**:
+
+| Field | Required | How to get value |
+|-------|----------|------------------|
+| `_cell_length_a/b/c` | ✅ | From P4P/INS |
+| `_cell_angle_alpha/beta/gamma` | ✅ | From P4P/INS |
+| `_cell_volume` | ✅ | Calculated |
+| `_cell_formula_units_Z` | ✅ | SG multiplicity |
+| `_space_group_name_H-M_alt` | ✅ | From P4P/INS |
+| `_space_group_IT_number` | ✅ | From SG name |
+| `_symmetry_cell_setting` | ✅ | From SG number |
+| `_chemical_formula_sum` | ✅ | From known composition (Hill order: C, H, then alphabetical) |
+| `_chemical_formula_moiety` | ✅ | Same as sum for single-component |
+| `_chemical_formula_weight` | ✅ | Sum of atomic weights |
+| `_exptl_crystal_density_diffrn` | ✅ | Z × MW / (N_A × V × 1e-24) |
+| `_diffrn_radiation_wavelength` | ✅ | From P4P/INS |
+| `_diffrn_radiation_type` | ✅ | 'MoK\\a' (0.71073) / 'CuK\\a' (1.54178) |
+| `_refine_ls_R_factor_gt` | ✅ | From refinement |
+| `_refine_ls_wR_factor_ref` | ✅ | From refinement |
+| `_refine_ls_goodness_of_fit_ref` | ✅ | From refinement |
+| `_atom_site_*` loop | ✅ | From refinement |
+| `_atom_site_occupancy` | ✅ | 1.0000 for fully occupied |
+| `_symmetry_equiv_pos_as_xyz` loop | ✅ | From space group |
+| `_audit_creation_method` | Recommended | 'solve_refine_scxrd.py' |
+
 ## Emergency Fallback
 
 If `solve_refine_scxrd.py` fails completely:

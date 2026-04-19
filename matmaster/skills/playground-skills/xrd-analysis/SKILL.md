@@ -55,7 +55,7 @@ python ${SKILL_DIR}/scripts/refine_lattice_pxrd.py \
 
 1. **Parse data**: Provide HKL file (SHELX HKLF4 format) and P4P or INS file (cell parameters, space group).
 2. **Structure solution + refinement**: Run `solve_refine_scxrd.py` — it tries SHELX first (if installed), then falls back to Python charge-flipping + least-squares refinement. **Always pass `--elements` with the expected element list** (critical for correct atom-type assignment).
-3. **CIF generation**: The script writes a CIF file with cell parameters, space group, atom positions, R-factors, and GOOF. See `references/scxrd_cif_formatting.md` for required fields and formatting rules.
+3. **CIF generation**: The script writes a CIF file with all required fields: cell parameters, space group (H-M symbol + IT number + crystal system), chemical formula (Hill order) + molecular weight + density, radiation info, R-factors + GOOF, atom positions with occupancies, and symmetry operations. After generation, verify the CIF contains ALL fields listed in `references/scxrd_cif_formatting.md` — any missing field must be added manually before delivery.
 4. **Quality check**: If R1 > 0.15, try: `--trials 5`, `--grid 128`, verify `--sg` and `--elements`. See `references/scxrd_solution_refinement.md`.
 5. **Validation**: Run `checkcif-validator` skill on the generated CIF. Fix any A-level alerts.
 6. **Disorder modeling** (if needed): See `references/scxrd_solution_refinement.md`.
