@@ -132,6 +132,10 @@ Full STRU format details: `references/stru_format.md`.
   cp apns-orbitals-efficiency-v1/Si_gga_7au_100Ry_2s2p1d.orb .
   ```
 
+## Troubleshooting
+
+See `references/troubleshooting.md` for top 10 silent failures, decision tree, and pre-flight checklists.
+
 ## Output Files
 
 See `references/output_params.md` for output file list and grep patterns.
