@@ -88,6 +88,10 @@ For Bohrium: write `run.sh` that runs both steps sequentially. Details in `refer
 
 See `references/electric_field.md`. Key: dipole correction = `efield_flag 1` + `dip_cor_flag 1` + `efield_amp 0.0`. Work function: `out_pot 2`.
 
+## ntype — MUST Match STRU Species Count
+
+The `ntype` parameter in INPUT **must** equal the number of distinct species in the STRU file's ATOMIC_SPECIES section. This includes ghost/empty species. Count every species line in ATOMIC_SPECIES and set `ntype` to that number. Mismatch causes ABACUS to crash or silently misparse the STRU.
+
 ## STRU Pre-flight Checklist
 
 1. PP filenames match actual files (`ls *.upf`)
@@ -95,12 +99,19 @@ See `references/electric_field.md`. Key: dipole correction = `efield_flag 1` + `
 3. `LATTICE_CONSTANT 1.8897259886`
 4. ATOMIC_POSITIONS species order = ATOMIC_SPECIES order
 5. Total atom count matches expected composition
+6. **Count species in ATOMIC_SPECIES → set `ntype` in INPUT to that number**
 
 Full STRU format details: `references/stru_format.md`.
 
 ## INPUT Pre-delivery Checklist — MANDATORY
 
 **Before finishing any ABACUS task, verify EVERY item below. Violations cause silent failures.**
+
+### Parameter Baseline Standards
+- **`ecutwfc 100`** — use 100 Ry as the standard for both LCAO and PW. Lower values (e.g. 50) risk accuracy loss.
+- **`smearing_sigma 0.01`** with `smearing_method gauss`.
+- **`scf_thr 1.0e-7`**, `scf_nmax 100` (SCF) or `300` (NSCF).
+- **`ntype`** — must match the exact number of distinct species in STRU ATOMIC_SPECIES. Count and verify.
 
 ### File Reference Consistency
 - When the STRU file is NOT named `STRU`, the INPUT **must** include `stru_file <actual_name>`.

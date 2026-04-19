@@ -234,27 +234,51 @@ class ABACUSValidator(BaseValidator):
             return diags
 
         cal_force = _parse_int(text, "cal_force")
-        if cal_force is not None and cal_force == 0:
-            line_num = find_line(text, "cal_force")
+        # ABACUS defaults cal_force=0; missing or explicit 0 both break relax
+        if cal_force is None or cal_force == 0:
+            line_num = find_line(text, "cal_force") or 1
             diags.append(
                 Diagnostic(
                     severity=SEVERITY_ERROR,
-                    message=f"cal_force=0 but calculation='{calc}' requires forces. Set cal_force=1.",
+                    message=(
+                        f"calculation='{calc}' requires forces but cal_force is "
+                        f"{'missing (default 0)' if cal_force is None else '0'}. "
+                        "Set cal_force=1. ABACUS never implies cal_force from "
+                        "the calculation keyword."
+                    ),
                     line=line_num,
                     param="cal_force",
+                    suggestion="Add: cal_force  1",
+                )
+            )
+
+        # force_thr_ev should be present for relax/cell-relax
+        if _parse_float(text, "force_thr_ev") is None:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=f"calculation='{calc}' but force_thr_ev is not set. Default may be too loose or tight. Recommended: force_thr_ev 0.01 (eV/Å). Do NOT use force_thr (Ry/Bohr) — different units!",
+                    param="force_thr_ev",
+                    suggestion="Add: force_thr_ev  0.01",
                 )
             )
 
         if calc == "cell-relax":
             cal_stress = _parse_int(text, "cal_stress")
-            if cal_stress is not None and cal_stress == 0:
-                line_num = find_line(text, "cal_stress")
+            # ABACUS defaults cal_stress=0; missing or explicit 0 breaks cell-relax
+            if cal_stress is None or cal_stress == 0:
+                line_num = find_line(text, "cal_stress") or 1
                 diags.append(
                     Diagnostic(
                         severity=SEVERITY_ERROR,
-                        message="cal_stress=0 but calculation='cell-relax' requires stress tensor. Set cal_stress=1.",
+                        message=(
+                            "calculation='cell-relax' requires stress tensor but "
+                            f"cal_stress is {'missing (default 0)' if cal_stress is None else '0'}. "
+                            "Set cal_stress=1. Without it cell vectors are NOT optimized."
+                        ),
                         line=line_num,
                         param="cal_stress",
+                        suggestion="Add: cal_stress  1",
                     )
                 )
 
@@ -278,14 +302,20 @@ class ABACUSValidator(BaseValidator):
             return diags
 
         cal_force = _parse_int(text, "cal_force")
-        if cal_force is not None and cal_force == 0:
-            line_num = find_line(text, "cal_force")
+        # ABACUS defaults cal_force=0; missing or explicit 0 both break MD
+        if cal_force is None or cal_force == 0:
+            line_num = find_line(text, "cal_force") or 1
             diags.append(
                 Diagnostic(
                     severity=SEVERITY_ERROR,
-                    message="cal_force=0 but calculation='md' requires forces. Set cal_force=1.",
+                    message=(
+                        "calculation='md' requires forces but cal_force is "
+                        f"{'missing (default 0)' if cal_force is None else '0'}. "
+                        "Set cal_force=1."
+                    ),
                     line=line_num,
                     param="cal_force",
+                    suggestion="Add: cal_force  1",
                 )
             )
 
@@ -490,6 +520,39 @@ class ABACUSValidator(BaseValidator):
                     message="nscf with out_band/out_dos: set 'nbands' explicitly to include empty states above Fermi level.",
                     param="nbands",
                     suggestion="Add: nbands  <number>  # typically nelec/2 + 10..30",
+                )
+            )
+        # symmetry must be 0 for NSCF band/DOS — symmetry=1 folds k-path
+        sym = _parse_int(text, "symmetry")
+        if out_band or out_dos:
+            if sym is None or sym != 0:
+                line_num = find_line(text, "symmetry") or 1
+                diags.append(
+                    Diagnostic(
+                        severity=SEVERITY_ERROR,
+                        message=(
+                            "NSCF with out_band/out_dos requires symmetry=0. "
+                            f"{'symmetry is not set (default 1)' if sym is None else f'symmetry={sym}'} — "
+                            "line-mode k-paths will be folded/reordered, producing wrong band plots."
+                        ),
+                        line=line_num,
+                        param="symmetry",
+                        suggestion="Add: symmetry  0",
+                    )
+                )
+        # init_chg must be 'file' for NSCF
+        init_chg = _parse_value(text, "init_chg")
+        if init_chg is None or init_chg.lower() != "file":
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_ERROR,
+                    message=(
+                        "NSCF calculation requires init_chg=file to read converged "
+                        "charge density from a prior SCF step. Without it, NSCF "
+                        "re-runs SCF from scratch with atomic charge."
+                    ),
+                    param="init_chg",
+                    suggestion="Add: init_chg  file",
                 )
             )
         return diags

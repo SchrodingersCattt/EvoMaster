@@ -58,12 +58,12 @@ Si                  // element type
 1.358  4.073  4.073  m 1 1 1
 """.format(a=_SI_ALAT_ANG)
 
-# KPT 模板（Monkhorst-Pack）
+# KPT 模板（Monkhorst-Pack）— 8×8×8 is safe for both metals and insulators
 _SCF_KPT = """\
 K_POINTS
 0
 Gamma
-4 4 4 0 0 0
+8 8 8 0 0 0
 """
 
 # KPT 模板（高对称 k 路径，用于 band 计算）
@@ -170,6 +170,7 @@ _KNOWN_PARAMS: frozenset[str] = frozenset(
         "dos_emin_ev",
         "dos_emax_ev",
         "dos_edelta_ev",
+        "dos_nche",
         "printe",
         "berry_phase",
         "gdir",

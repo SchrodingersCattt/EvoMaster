@@ -152,19 +152,19 @@ class AbacusBackend(SoftwareBackend):
         task = (intent.task_type or "scf").lower().strip()
         overrides = dict(intent.params or {})
 
-        # 基础参数
+        # 基础参数 — ecutwfc=100 and smearing_sigma=0.01 match SKILL.md standards
         params: dict[str, Any] = {
             "suffix": "ABACUS",
             "ntype": 1,
             "calculation": "scf",
-            "ecutwfc": 50,
+            "ecutwfc": 100,
             "basis_type": "lcao",
             "pseudo_dir": "./",
             "orbital_dir": "./",
             "scf_thr": "1e-7",
             "scf_nmax": 100,
             "smearing_method": "gauss",
-            "smearing_sigma": 0.015,
+            "smearing_sigma": 0.01,
             "cal_force": 0,
             "cal_stress": 0,
             "out_chg": 0,
@@ -205,6 +205,8 @@ class AbacusBackend(SoftwareBackend):
                     "nbands": 20,
                     "init_chg": "file",
                     "out_band": 1,
+                    "symmetry": 0,
+                    "scf_nmax": 300,
                 }
             )
         elif task == "dos":
@@ -216,6 +218,9 @@ class AbacusBackend(SoftwareBackend):
                     "out_dos": 1,
                     "dos_sigma": 0.07,
                     "dos_edelta_ev": 0.01,
+                    "dos_nche": 100,
+                    "symmetry": 0,
+                    "scf_nmax": 300,
                 }
             )
         elif task in ("md", "nvt", "npt"):
@@ -364,6 +369,7 @@ class AbacusBackend(SoftwareBackend):
                 "dos_emin_ev",
                 "dos_emax_ev",
                 "dos_edelta_ev",
+                "dos_nche",
                 "berry_phase",
                 "gdir",
                 "towannier90",

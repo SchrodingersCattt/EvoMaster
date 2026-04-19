@@ -525,13 +525,54 @@ def _refine(atoms, hkl_data, cell, wavelength, sg_ops, max_iter=5):
 # ═══════════════════════════════════════════════════════════════════════
 # CIF writer
 # ═══════════════════════════════════════════════════════════════════════
+def _crystal_system(sg_number: int) -> str:
+    """Return the crystal system string from space group number."""
+    if sg_number <= 2:
+        return "triclinic"
+    elif sg_number <= 15:
+        return "monoclinic"
+    elif sg_number <= 74:
+        return "orthorhombic"
+    elif sg_number <= 142:
+        return "tetragonal"
+    elif sg_number <= 167:
+        return "trigonal"
+    elif sg_number <= 194:
+        return "hexagonal"
+    else:
+        return "cubic"
+
+
+def _molecular_weight(formula_str: str) -> float:
+    """Estimate molecular weight from formula string like 'C10 H12 N2 O3'."""
+    _AW = {
+        "H": 1.008, "C": 12.011, "N": 14.007, "O": 15.999, "F": 18.998,
+        "Si": 28.086, "P": 30.974, "S": 32.065, "Cl": 35.453, "Br": 79.904,
+        "I": 126.904, "Fe": 55.845, "Cu": 63.546, "Zn": 65.38,
+    }
+    import re as _re
+    mw = 0.0
+    for match in _re.finditer(r"([A-Z][a-z]?)(\d*)", formula_str):
+        el = match.group(1)
+        n = int(match.group(2)) if match.group(2) else 1
+        mw += _AW.get(el, 12.0) * n
+    return round(mw, 2)
+
+
 def _write_cif(
     path, cell, sg_symbol, sg_number, atoms, rfactors, wavelength, formula_str="?"
 ):
     V = round(_cell_volume(cell), 2)
     a, b, c, al, be, ga = cell
+    Z = len(_SG_OPS.get(sg_number, [(None, None)]))  # multiplicity estimate
+    if Z < 1:
+        Z = 1
+    cryst_sys = _crystal_system(sg_number)
+    mw = _molecular_weight(formula_str) if formula_str != "?" else 0.0
     lines = [
         "data_structure",
+        "",
+        "# Crystal data",
         f"_cell_length_a                    {a:.4f}",
         f"_cell_length_b                    {b:.4f}",
         f"_cell_length_c                    {c:.4f}",
@@ -539,10 +580,25 @@ def _write_cif(
         f"_cell_angle_beta                  {be:.2f}",
         f"_cell_angle_gamma                 {ga:.2f}",
         f"_cell_volume                      {V}",
+        f"_cell_formula_units_Z             {Z}",
+        "",
+        "# Space group",
         f"_space_group_name_H-M_alt         '{sg_symbol}'",
         f"_space_group_IT_number            {sg_number}",
+        f"_symmetry_cell_setting            {cryst_sys}",
+        "",
+        "# Chemical information",
         f"_chemical_formula_sum             '{formula_str}'",
+        f"_chemical_formula_moiety          '{formula_str}'",
+    ]
+    if mw > 0:
+        lines.append(f"_chemical_formula_weight           {mw}")
+    lines += [
+        "",
+        "# Data collection",
         f"_diffrn_radiation_wavelength      {wavelength:.5f}",
+        "",
+        "# Refinement statistics",
         f"_refine_ls_R_factor_gt            {rfactors['R1']:.4f}",
         f"_refine_ls_wR_factor_ref          {rfactors['wR2']:.4f}",
         f"_refine_ls_goodness_of_fit_ref    {rfactors['GOOF']:.3f}",
@@ -564,6 +620,8 @@ def _write_cif(
         elem_count[el] = elem_count.get(el, 0) + 1
         label = f"{el}{elem_count[el]}"
         x, y, z = at["frac"]
+        # Wrap fractional coordinates into [0, 1)
+        x, y, z = x % 1.0, y % 1.0, z % 1.0
         U = at.get("B", 2.0) / (8 * np.pi**2)
         lines.append(
             f" {label:6s} {el:2s}  {x:10.5f} {y:10.5f} {z:10.5f}  {U:8.5f} Uiso"
