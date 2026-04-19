@@ -546,11 +546,23 @@ def _crystal_system(sg_number: int) -> str:
 def _molecular_weight(formula_str: str) -> float:
     """Estimate molecular weight from formula string like 'C10 H12 N2 O3'."""
     _AW = {
-        "H": 1.008, "C": 12.011, "N": 14.007, "O": 15.999, "F": 18.998,
-        "Si": 28.086, "P": 30.974, "S": 32.065, "Cl": 35.453, "Br": 79.904,
-        "I": 126.904, "Fe": 55.845, "Cu": 63.546, "Zn": 65.38,
+        "H": 1.008,
+        "C": 12.011,
+        "N": 14.007,
+        "O": 15.999,
+        "F": 18.998,
+        "Si": 28.086,
+        "P": 30.974,
+        "S": 32.065,
+        "Cl": 35.453,
+        "Br": 79.904,
+        "I": 126.904,
+        "Fe": 55.845,
+        "Cu": 63.546,
+        "Zn": 65.38,
     }
     import re as _re
+
     mw = 0.0
     for match in _re.finditer(r"([A-Z][a-z]?)(\d*)", formula_str):
         el = match.group(1)
@@ -560,15 +572,24 @@ def _molecular_weight(formula_str: str) -> float:
 
 
 def _write_cif(
-    path, cell, sg_symbol, sg_number, atoms, rfactors, wavelength, formula_str="?",
+    path,
+    cell,
+    sg_symbol,
+    sg_number,
+    atoms,
+    rfactors,
+    wavelength,
+    formula_str="?",
     z_formula=None,
 ):
     V = round(_cell_volume(cell), 2)
     a, b, c, al, be, ga = cell
     # Use caller-supplied Z (= len(sg_ops)) when available; fall back to
     # the small built-in table only as a last resort.
-    Z = z_formula if z_formula is not None else len(
-        _SG_OPS.get(sg_number, [(None, None)])
+    Z = (
+        z_formula
+        if z_formula is not None
+        else len(_SG_OPS.get(sg_number, [(None, None)]))
     )
     if Z < 1:
         Z = 1
@@ -873,7 +894,14 @@ def main():
     # ── Write CIF ──
     formula = _formula_from_atoms(atoms_ref, sg_ops)
     vol = _write_cif(
-        args.output, cell, sg_symbol, sg_number, atoms_ref, rfactors, wl, formula,
+        args.output,
+        cell,
+        sg_symbol,
+        sg_number,
+        atoms_ref,
+        rfactors,
+        wl,
+        formula,
         z_formula=len(sg_ops),
     )
 
