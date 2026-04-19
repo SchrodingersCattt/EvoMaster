@@ -4,7 +4,7 @@
 
 **Goal:** Preserve the existing `invalid_finish` terminal contract while adding structured diagnostics that distinguish output-token truncation, content filtering, empty responses, reasoning-only responses, missing final response objects, and other non-stop provider finish reasons.
 
-**Architecture:** Add a Pydantic `FinishDetail` event type and keep it flowing through the same terminal path as `RunResultEvent`: kernel classification creates the detail, `_TerminalItem` carries it, `RunResultEvent` exposes it, public payload mapping preserves it in `content`, `AgentRunService` uses it for the user-visible `ErrorEvent`, and devshell drain/runner/CLI copies it for scripts and evaluation. Tool-call responses with `finish_reason == "length"` remain executable but get a `FinishDetail` on `AssistantStateEvent` plus structured warning logs.
+**Architecture:** Add a Pydantic `FinishDetail` event type and a focused `matmaster/core/finish_diagnostics.py` classifier so `agent.py` stays within the project line-count limit. The kernel imports that pure classifier, stores the detail on `_TerminalItem`, exposes it through `RunResultEvent`, preserves it in public `content`, lets `AgentRunService` choose the user-visible `ErrorEvent`, and copies it through devshell drain/runner/CLI for scripts and evaluation. Tool-call responses with `finish_reason == "length"` remain executable but get a `FinishDetail` on `AssistantStateEvent` plus structured warning logs.
 
 **Tech Stack:** Python 3.11+, Pydantic v2, async generator kernel, existing MatMaster event bus, Redis/SSE fanout service tests, pytest, uv-managed environment.
 
@@ -22,6 +22,7 @@ The implementation must preserve these decisions:
 - Treat `run_result.content.finish_detail` as the public frontend/history contract.
 - Treat top-level `run_result.finish_detail` as the Pydantic/SSE mirror of the event field.
 - Use a structured Pydantic `FinishDetail`, not `dict[str, Any]`.
+- Lock `FinishDetail` with `ConfigDict(extra="forbid")`; callers use `model_dump(mode="json")` without `exclude_none` or `exclude_defaults` when they need the full diagnostic contract.
 - Prefer `last_turn_usage.completion_tokens` and provider-native `last_turn_usage_vendor` over character counts when diagnosing token-limit truncation.
 - Classify by `finish_reason` first; `length` takes priority over empty/reasoning-only shape.
 - Preserve tool execution semantics for tool calls with `finish_reason == "length"`, but record truncation risk on `AssistantStateEvent.finish_detail` and in logs.
@@ -41,6 +42,10 @@ Modify:
 - `matmaster/devshell/cli.py`
 - `matmaster/devshell/event_logger.py`
 
+Create:
+
+- `matmaster/core/finish_diagnostics.py`
+
 Modify tests:
 
 - `tests/matmaster/types/test_events.py`
@@ -55,8 +60,10 @@ Modify tests:
 
 Line-count guard:
 
-- After edits, run `wc -l matmaster/core/agent.py src/services/agent_run_service.py matmaster/types/events.py`.
-- If any touched source file exceeds 1000 lines, extract only the new helper logic into a focused module in the same package. For this plan, the likely extraction target would be `matmaster/core/finish_diagnostics.py`, but keep the classifier in `AgentKernel` if line counts remain below the project limit.
+- `matmaster/core/agent.py` is already exactly 1000 lines before this feature.
+- The classifier must be created in `matmaster/core/finish_diagnostics.py` in Task 2. Do not add classifier helper methods to `AgentKernel`.
+- After edits, run `wc -l matmaster/core/agent.py src/services/agent_run_service.py matmaster/types/events.py matmaster/core/finish_diagnostics.py`.
+- Expected: `matmaster/core/agent.py` remains at or below 1000 lines. If wiring still pushes it over the limit, extract another small kernel-adjacent helper instead of leaving the file above the guard.
 
 ## Runtime Contract
 
@@ -64,6 +71,8 @@ New event model in `matmaster/types/events.py`:
 
 ```python
 class FinishDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     kind: Literal[
         "output_length_exceeded",
         "content_filtered",
@@ -185,8 +194,10 @@ class TestFinishDetail:
         assert dumped["truncation_risk"] is True
 
     def test_finish_detail_rejects_unknown_kind(self) -> None:
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError) as exc_info:
             FinishDetail(kind="typo", message="bad")
+
+        assert any(err["loc"] == ("kind",) for err in exc_info.value.errors())
 ```
 
 
@@ -257,7 +268,38 @@ Expected: tests fail because `FinishDetail` does not exist and event classes hav
 
 - [ ] **Step 3: Implement `FinishDetail` and event fields**
 
-In `matmaster/types/events.py`, add `FinishDetail` before `RunResultEvent`. Keep the field order from the Runtime Contract above.
+In `matmaster/types/events.py`, import `ConfigDict` and add `FinishDetail` before `RunResultEvent`. Keep the field order from the Runtime Contract above and do not use `exclude_none` or `exclude_defaults` in this model; downstream JSON summaries intentionally include default and `None` fields unless an individual caller explicitly chooses otherwise.
+
+```python
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class FinishDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal[
+        "output_length_exceeded",
+        "content_filtered",
+        "empty_response",
+        "reasoning_only",
+        "missing_llm_response",
+        "non_stop_finish",
+        "unknown",
+    ]
+    provider_finish_reason: str | None = None
+    message: str
+    content_chars: int = 0
+    reasoning_chars: int = 0
+    has_visible_content: bool = False
+    has_reasoning: bool = False
+    has_tool_calls: bool = False
+    tool_call_count: int = 0
+    last_turn_usage: dict[str, int] = Field(default_factory=dict)
+    last_turn_usage_vendor: dict[str, Any] = Field(default_factory=dict)
+    attempts: int | None = None
+    last_error_kind: str | None = None
+    truncation_risk: bool = False
+```
 
 Update `RunResultEvent`:
 
@@ -299,11 +341,11 @@ git add matmaster/types/events.py matmaster/types/__init__.py tests/matmaster/ty
 git commit -m "feat: add finish detail event contract"
 ```
 
-## Task 2: Kernel Classifier
+## Task 2: Finish Diagnostics Classifier
 
 **Files:**
 
-- Modify: `matmaster/core/agent.py`
+- Create: `matmaster/core/finish_diagnostics.py`
 - Test: `tests/matmaster/core/test_agent_kernel_stream.py`
 
 - [ ] **Step 1: Write failing pure classifier tests**
@@ -313,7 +355,7 @@ Add a new test class near `TestEmptyFinalResponseInvalidFinish`:
 ```python
 class TestInvalidFinishDetailClassifier:
     def test_length_takes_priority_over_response_shape(self) -> None:
-        from matmaster.core.agent import AgentKernel
+        from matmaster.core.finish_diagnostics import build_finish_detail
 
         response = LLMResponse(
             content="partial",
@@ -323,7 +365,7 @@ class TestInvalidFinishDetailClassifier:
             usage_vendor={"outputTokens": 4096},
         )
 
-        detail = AgentKernel._build_finish_detail(response)
+        detail = build_finish_detail(response)
 
         assert detail.kind == "output_length_exceeded"
         assert detail.provider_finish_reason == "length"
@@ -361,18 +403,18 @@ class TestInvalidFinishDetailClassifier:
     def test_classifies_invalid_finish_matrix(
         self, response: LLMResponse, expected_kind: str
     ) -> None:
-        from matmaster.core.agent import AgentKernel
+        from matmaster.core.finish_diagnostics import build_finish_detail
 
-        detail = AgentKernel._build_finish_detail(response)
+        detail = build_finish_detail(response)
 
         assert detail.kind == expected_kind
         assert detail.provider_finish_reason == response.finish_reason
 
-    def test_missing_llm_response_records_attempts_and_last_error_kind(self) -> None:
-        from matmaster.core.agent import AgentKernel
+    def test_missing_llm_response_api_shape_accepts_retry_metadata(self) -> None:
+        from matmaster.core.finish_diagnostics import build_finish_detail
         from matmaster.types.errors import LLMError
 
-        detail = AgentKernel._build_finish_detail(
+        detail = build_finish_detail(
             None,
             attempts=3,
             last_error=LLMError(
@@ -387,24 +429,28 @@ class TestInvalidFinishDetailClassifier:
         assert detail.last_error_kind == "incomplete_response"
 
     def test_classifier_fallback_returns_unknown(self, monkeypatch, caplog) -> None:
-        from matmaster.core.agent import AgentKernel
+        import logging
+
+        from matmaster.core import finish_diagnostics
+        from matmaster.core.finish_diagnostics import build_finish_detail
 
         def raise_visible(_response: LLMResponse) -> bool:
             raise RuntimeError("boom")
 
         monkeypatch.setattr(
-            AgentKernel,
+            finish_diagnostics,
             "_has_visible_content",
-            staticmethod(raise_visible),
+            raise_visible,
         )
+        caplog.set_level(logging.WARNING, logger="matmaster.core.finish_diagnostics")
 
-        detail = AgentKernel._build_finish_detail(
-            LLMResponse(content="x", finish_reason="stop")
-        )
+        detail = build_finish_detail(LLMResponse(content="x", finish_reason="stop"))
 
         assert detail.kind == "unknown"
         assert "finish detail classification failed" in caplog.text
 ```
+
+This `missing_llm_response` test is an API-shape test for future retry-state wiring. The current production path calls `build_finish_detail(None)` without `attempts` or `last_error` because `_call_llm_streaming()` does not expose retry state to `_run_items()` in this version.
 
 - [ ] **Step 2: Run classifier tests and verify RED**
 
@@ -414,104 +460,118 @@ Run:
 uv run pytest tests/matmaster/core/test_agent_kernel_stream.py::TestInvalidFinishDetailClassifier -q
 ```
 
-Expected: fail because `AgentKernel._build_finish_detail()` does not exist.
+Expected: fail because `matmaster.core.finish_diagnostics` does not exist.
 
 - [ ] **Step 3: Implement classifier with explicit fallback**
 
-In `matmaster/core/agent.py`, import `FinishDetail`:
+Create `matmaster/core/finish_diagnostics.py`:
 
 ```python
+"""Classify non-natural LLM finish states into structured diagnostics."""
+
+from __future__ import annotations
+
+import logging
+
+from matmaster.response_text import normalize_visible_response_text
+from matmaster.types.errors import LLMError
 from matmaster.types.events import FinishDetail
-```
+from matmaster.types.messages import LLMResponse
 
-Add a public-enough private staticmethod after `_is_incomplete_response()`:
+logger = logging.getLogger(__name__)
 
-```python
-    @staticmethod
-    def _build_finish_detail(
-        response: LLMResponse | None,
-        *,
-        attempts: int | None = None,
-        last_error: LLMError | None = None,
-    ) -> FinishDetail:
-        try:
-            return AgentKernel._build_finish_detail_inner(
-                response,
-                attempts=attempts,
-                last_error=last_error,
-            )
-        except Exception:
-            logger.warning("finish detail classification failed", exc_info=True)
-            return FinishDetail(
-                kind="unknown",
-                message="Model finish state could not be classified.",
-            )
-```
 
-Add the inner classifier immediately below it:
+def build_finish_detail(
+    response: LLMResponse | None,
+    *,
+    attempts: int | None = None,
+    last_error: LLMError | None = None,
+) -> FinishDetail:
+    """Classify invalid LLM finish state.
 
-```python
-    @staticmethod
-    def _build_finish_detail_inner(
-        response: LLMResponse | None,
-        *,
-        attempts: int | None = None,
-        last_error: LLMError | None = None,
-    ) -> FinishDetail:
-        if response is None:
-            return FinishDetail(
-                kind="missing_llm_response",
-                message="LLM stream ended without a final response object.",
-                attempts=attempts,
-                last_error_kind=getattr(last_error, "error_category", None),
-            )
-
-        finish_reason = response.finish_reason
-        has_visible = AgentKernel._has_visible_content(response)
-        has_reasoning = bool(response.reasoning_content)
-        tool_calls = response.tool_calls or []
-        base = {
-            "provider_finish_reason": finish_reason,
-            "content_chars": len(response.content or ""),
-            "reasoning_chars": len(response.reasoning_content or ""),
-            "has_visible_content": has_visible,
-            "has_reasoning": has_reasoning,
-            "has_tool_calls": bool(tool_calls),
-            "tool_call_count": len(tool_calls),
-            "last_turn_usage": dict(response.usage or {}),
-            "last_turn_usage_vendor": dict(response.usage_vendor or {}),
-        }
-
-        if finish_reason == "length":
-            return FinishDetail(
-                kind="output_length_exceeded",
-                message="Model output was truncated by the provider output-token limit.",
-                truncation_risk=True,
-                **base,
-            )
-        if finish_reason == "content_filter":
-            return FinishDetail(
-                kind="content_filtered",
-                message="Model output was blocked or truncated by provider content policy.",
-                **base,
-            )
-        if finish_reason == "stop" and not has_visible and has_reasoning:
-            return FinishDetail(
-                kind="reasoning_only",
-                message="Model returned reasoning content without a visible final answer.",
-                **base,
-            )
-        if finish_reason == "stop" and not has_visible:
-            return FinishDetail(
-                kind="empty_response",
-                message="Model stopped without a visible final answer.",
-                **base,
-            )
+    The input finish reason is already normalized by provider adapters where
+    possible. OpenAI-style ``content_filter`` maps to ``content_filtered``;
+    Bedrock-specific stop reasons such as ``guardrail_intervened`` remain
+    provider finish reasons and fall through to ``non_stop_finish``.
+    """
+    try:
+        return _build_finish_detail_inner(
+            response,
+            attempts=attempts,
+            last_error=last_error,
+        )
+    except Exception:
+        logger.warning("finish detail classification failed", exc_info=True)
         return FinishDetail(
-            kind="non_stop_finish",
-            message="Model returned a finish reason that cannot be committed as natural.",
+            kind="unknown",
+            message="Model finish state could not be classified.",
+        )
+
+
+def _build_finish_detail_inner(
+    response: LLMResponse | None,
+    *,
+    attempts: int | None = None,
+    last_error: LLMError | None = None,
+) -> FinishDetail:
+    if response is None:
+        return FinishDetail(
+            kind="missing_llm_response",
+            message="LLM stream ended without a final response object.",
+            attempts=attempts,
+            last_error_kind=getattr(last_error, "error_category", None),
+        )
+
+    finish_reason = response.finish_reason
+    has_visible = _has_visible_content(response)
+    has_reasoning = bool(response.reasoning_content)
+    tool_calls = response.tool_calls or []
+    base = {
+        "provider_finish_reason": finish_reason,
+        "content_chars": len(response.content or ""),
+        "reasoning_chars": len(response.reasoning_content or ""),
+        "has_visible_content": has_visible,
+        "has_reasoning": has_reasoning,
+        "has_tool_calls": bool(tool_calls),
+        "tool_call_count": len(tool_calls),
+        "last_turn_usage": dict(response.usage or {}),
+        "last_turn_usage_vendor": dict(response.usage_vendor or {}),
+    }
+
+    if finish_reason == "length":
+        return FinishDetail(
+            kind="output_length_exceeded",
+            message="Model output was truncated by the provider output-token limit.",
+            truncation_risk=True,
             **base,
         )
+    if finish_reason == "content_filter":
+        return FinishDetail(
+            kind="content_filtered",
+            message="Model output was blocked or truncated by provider content policy.",
+            **base,
+        )
+    if finish_reason == "stop" and not has_visible and has_reasoning:
+        return FinishDetail(
+            kind="reasoning_only",
+            message="Model returned reasoning content without a visible final answer.",
+            **base,
+        )
+    if finish_reason == "stop" and not has_visible:
+        return FinishDetail(
+            kind="empty_response",
+            message="Model stopped without a visible final answer.",
+            **base,
+        )
+    return FinishDetail(
+        kind="non_stop_finish",
+        message="Model returned a finish reason that cannot be committed as natural.",
+        **base,
+    )
+
+
+def _has_visible_content(response: LLMResponse) -> bool:
+    return normalize_visible_response_text(response.content) is not None
 ```
 
 - [ ] **Step 4: Run classifier tests and verify GREEN**
@@ -529,7 +589,7 @@ Expected: all classifier matrix tests pass.
 Run:
 
 ```bash
-git add matmaster/core/agent.py tests/matmaster/core/test_agent_kernel_stream.py
+git add matmaster/core/finish_diagnostics.py tests/matmaster/core/test_agent_kernel_stream.py
 git commit -m "feat: classify invalid finish details"
 ```
 
@@ -648,7 +708,7 @@ Add tests to `TestEmptyFinalResponseInvalidFinish`:
         assert events[-1].finish_detail.provider_finish_reason == "guardrail_intervened"
 ```
 
-In `tests/matmaster/core/test_agent_kernel_empty_response_sentinels.py`, extend `test_empty_sentinel_stop_finishes_as_invalid_finish`:
+In `tests/matmaster/core/test_agent_kernel_empty_response_sentinels.py`, extend `test_empty_sentinel_stop_finishes_as_invalid_finish`. This assertion assumes the existing sentinel provider returns sentinel-only content with no reasoning chunks, so the normalized response has neither visible content nor reasoning:
 
 ```python
     assert events[-1].finish_detail is not None
@@ -670,9 +730,9 @@ async def test_missing_llm_response_terminal_sets_detail(monkeypatch) -> None:
 
     kernel = AgentKernel()
     monkeypatch.setattr(
-        kernel,
+        AgentKernel,
         "_call_llm_streaming",
-        no_final_response.__get__(kernel, AgentKernel),
+        no_final_response,
     )
 
     events = [
@@ -724,6 +784,18 @@ def _terminal(
 
 Pass `finish_detail` into `_TerminalItem`.
 
+Import the classifier near other kernel imports:
+
+```python
+from matmaster.core.finish_diagnostics import build_finish_detail
+```
+
+Also import `FinishDetail` from `matmaster.types.events` in the existing event import block so `_TerminalItem` can use the annotation:
+
+```python
+from matmaster.types.events import FinishDetail
+```
+
 Update `run_stream()` where it constructs `RunResultEvent`:
 
 ```python
@@ -737,7 +809,10 @@ if llm_response is None:
     yield self._terminal(
         state,
         "invalid_finish",
-        finish_detail=self._build_finish_detail(None),
+        # attempts and last_error_kind are classifier-level fields. Wiring
+        # retry state out of _call_llm_streaming() is intentionally out of
+        # scope for this version.
+        finish_detail=build_finish_detail(None),
     )
     return
 ```
@@ -747,7 +822,7 @@ if not self._is_valid_natural_finish(response):
     yield self._terminal(
         state,
         "invalid_finish",
-        finish_detail=self._build_finish_detail(response),
+        finish_detail=build_finish_detail(response),
     )
     return
 ```
@@ -833,8 +908,11 @@ Add test:
 ```python
 @pytest.mark.asyncio
 async def test_tool_call_length_finish_adds_assistant_state_detail(caplog) -> None:
+    import logging
+
     from matmaster.core.agent import AgentKernel
 
+    caplog.set_level(logging.WARNING, logger="matmaster.core.agent")
     registry, tools = _make_tool_registry(tool_names=["test_tool"])
     events = [
         event
@@ -857,7 +935,18 @@ async def test_tool_call_length_finish_adds_assistant_state_detail(caplog) -> No
     assert assistant_state.finish_detail.truncation_risk is True
     assert tools[0].calls == [("test_tool", {"x": 1})]
     assert events[-1].reason == "natural"
-    assert "tool call response ended with length finish reason" in caplog.text
+    warning_records = [
+        record
+        for record in caplog.records
+        if record.name == "matmaster.core.agent"
+        and record.levelno == logging.WARNING
+    ]
+    assert any(
+        record.getMessage().startswith("tool call response ended")
+        and record.tool_names == ["test_tool"]
+        and record.finish_detail["kind"] == "output_length_exceeded"
+        for record in warning_records
+    )
 ```
 
 - [ ] **Step 2: Run the test and verify RED**
@@ -879,7 +968,7 @@ In `_run_items()`, place this computation immediately after the multi-line
 ```python
 assistant_finish_detail = None
 if response.finish_reason == "length":
-    assistant_finish_detail = self._build_finish_detail(response)
+    assistant_finish_detail = build_finish_detail(response)
     logger.warning(
         "tool call response ended with length finish reason",
         extra={
@@ -897,6 +986,8 @@ finish_detail=assistant_finish_detail,
 ```
 
 Do not change `_validate_tool_call_ids()`, `ToolCallEvent`, `ToolResultEvent`, or tool execution order.
+
+Scope: only `finish_reason == "length"` is recorded on tool-call assistant state in this version. Other non-stop finish reasons co-occurring with tool calls are rarer and deferred so this change stays observability-only.
 
 - [ ] **Step 4: Run the tool-call risk test and verify GREEN**
 
@@ -1229,35 +1320,57 @@ In `tests/matmaster/devshell/test_runner.py`, add:
 
 - [ ] **Step 3: Write failing CLI summary test**
 
-In `tests/matmaster/devshell/test_repl.py`, update `test_run_single_uses_drain_result_fields` so the `DrainResult` includes:
+In `tests/matmaster/devshell/test_repl.py`, keep the existing `test_run_single_uses_drain_result_fields` unchanged. Add a separate invalid-finish test:
 
 ```python
-finish_detail=FinishDetail(
-    kind="output_length_exceeded",
-    provider_finish_reason="length",
-    message="Model output was truncated by the provider output-token limit.",
-),
-```
+    def test_run_single_serializes_finish_detail_on_invalid_finish(
+        self, capsys, tmp_path: Path
+    ) -> None:
+        from matmaster.core.stream_drain import DrainResult
+        from matmaster.devshell.cli import _run_single, parse_args
+        from matmaster.types.events import FinishDetail
 
-Update expected JSON:
+        args = parse_args(
+            [
+                "run",
+                "--workdir",
+                str(tmp_path / "ws"),
+                "--log-dir",
+                str(tmp_path / "logs"),
+                "-p",
+                "hello",
+            ]
+        )
+        drain_result = DrainResult(
+            status="failed",
+            reason="invalid_finish",
+            final_content=None,
+            num_turns=1,
+            usage={},
+            messages=[],
+            finish_detail=FinishDetail(
+                kind="output_length_exceeded",
+                provider_finish_reason="length",
+                message="Model output was truncated by the provider output-token limit.",
+            ),
+        )
+        resolved = SimpleNamespace(model="m", profile_key="p", route_key="r")
 
-```python
-"finish_detail": {
-    "kind": "output_length_exceeded",
-    "provider_finish_reason": "length",
-    "message": "Model output was truncated by the provider output-token limit.",
-    "content_chars": 0,
-    "reasoning_chars": 0,
-    "has_visible_content": False,
-    "has_reasoning": False,
-    "has_tool_calls": False,
-    "tool_call_count": 0,
-    "last_turn_usage": {},
-    "last_turn_usage_vendor": {},
-    "attempts": None,
-    "last_error_kind": None,
-    "truncation_risk": False,
-},
+        with patch(
+            "matmaster.devshell.cli._run_with_event_log",
+            return_value=(drain_result, tmp_path / "logs" / "events.jsonl"),
+        ):
+            rc = _run_single(args, runner=object(), resolved=resolved)
+
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+        assert rc == 1
+        assert output["reason"] == "invalid_finish"
+        assert output["finish_detail"]["kind"] == "output_length_exceeded"
+        assert output["finish_detail"]["provider_finish_reason"] == "length"
+        assert output["finish_detail"]["message"] == (
+            "Model output was truncated by the provider output-token limit."
+        )
 ```
 
 - [ ] **Step 4: Write failing event logger test**
@@ -1298,7 +1411,7 @@ Run:
 uv run pytest \
   tests/matmaster/core/test_stream_drain.py \
   tests/matmaster/devshell/test_runner.py \
-  tests/matmaster/devshell/test_repl.py::TestCliRunMode::test_run_single_uses_drain_result_fields \
+  tests/matmaster/devshell/test_repl.py::TestCliRunMode::test_run_single_serializes_finish_detail_on_invalid_finish \
   tests/matmaster/devshell/test_event_logger.py::TestEventLogger::test_run_result_event_includes_finish_detail \
   -q
 ```
@@ -1361,7 +1474,7 @@ Run:
 uv run pytest \
   tests/matmaster/core/test_stream_drain.py \
   tests/matmaster/devshell/test_runner.py \
-  tests/matmaster/devshell/test_repl.py::TestCliRunMode::test_run_single_uses_drain_result_fields \
+  tests/matmaster/devshell/test_repl.py::TestCliRunMode::test_run_single_serializes_finish_detail_on_invalid_finish \
   tests/matmaster/devshell/test_event_logger.py::TestEventLogger::test_run_result_event_includes_finish_detail \
   -q
 ```
@@ -1412,7 +1525,56 @@ uv run pytest \
 
 Expected: all targeted tests pass.
 
-- [ ] **Step 2: Run protocol guardrail tests because assistant state and tool-call behavior changed**
+- [ ] **Step 2: Add assistant-state history replay regression**
+
+In `tests/matmaster/integration/test_events_to_messages.py`, add this test near the existing wrapped assistant-state tests:
+
+```python
+    def test_wrapped_assistant_state_finish_detail_does_not_enter_message(self):
+        events = [
+            _user_event("q"),
+            {
+                "source": "MatMaster",
+                "type": "assistant_state",
+                "content": {
+                    "state": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call-1",
+                                "name": "bash",
+                                "arguments": {"cmd": "pwd"},
+                            }
+                        ],
+                    },
+                    "finish_detail": {
+                        "kind": "output_length_exceeded",
+                        "provider_finish_reason": "length",
+                        "message": (
+                            "Model output was truncated by the provider "
+                            "output-token limit."
+                        ),
+                        "has_tool_calls": True,
+                        "truncation_risk": True,
+                    },
+                },
+            },
+            _tool_result_event("call-1", "bash", "/tmp"),
+            _response_event("done"),
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assistant_with_tools = [
+            m for m in result if isinstance(m, AssistantMessage) and m.tool_calls
+        ]
+        assert len(assistant_with_tools) == 1
+        assert assistant_with_tools[0].tool_calls[0].id == "call-1"
+        assert not hasattr(assistant_with_tools[0], "finish_detail")
+```
+
+- [ ] **Step 3: Run protocol guardrail tests because assistant state and tool-call behavior changed**
 
 Run:
 
@@ -1426,7 +1588,7 @@ uv run pytest \
 
 Expected: all tests pass. These verify that adding `AssistantStateEvent.finish_detail` does not break persisted assistant message restoration or tool-call protocol constraints.
 
-- [ ] **Step 3: Run service stream tests for terminal ordering**
+- [ ] **Step 4: Run service stream tests for terminal ordering**
 
 Run:
 
@@ -1439,20 +1601,20 @@ uv run pytest \
 
 Expected: all tests pass. `run_result -> error -> stream_closed` ordering for invalid finish remains unchanged where covered by quota tests, and normal terminal stream ordering remains unchanged here.
 
-- [ ] **Step 4: Check line counts and formatting hygiene**
+- [ ] **Step 5: Check line counts and formatting hygiene**
 
 Run:
 
 ```bash
-wc -l matmaster/core/agent.py src/services/agent_run_service.py matmaster/types/events.py
+wc -l matmaster/core/agent.py src/services/agent_run_service.py matmaster/types/events.py matmaster/core/finish_diagnostics.py
 git diff --check
 ```
 
 Expected: no touched source file exceeds 1000 lines and `git diff --check` reports no whitespace errors.
 
-- [ ] **Step 5: Commit remaining test alignment**
+- [ ] **Step 6: Commit remaining test alignment**
 
-If Step 1-4 required any additional test-only fixes, commit them:
+If Step 1-5 required any additional test-only fixes, commit them:
 
 ```bash
 git add tests matmaster src
