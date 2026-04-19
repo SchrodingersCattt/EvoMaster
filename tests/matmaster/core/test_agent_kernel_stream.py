@@ -843,6 +843,107 @@ class TestEmptyFinalResponseInvalidFinish:
         assert events[-1].reason == "invalid_finish"
 
 
+class TestInvalidFinishDetailClassifier:
+    def test_length_takes_priority_over_response_shape(self) -> None:
+        from matmaster.core.finish_diagnostics import build_finish_detail
+
+        response = LLMResponse(
+            content="partial",
+            reasoning_content="thinking",
+            finish_reason="length",
+            usage={"completion_tokens": 4096},
+            usage_vendor={"outputTokens": 4096},
+        )
+
+        detail = build_finish_detail(response)
+
+        assert detail.kind == "output_length_exceeded"
+        assert detail.provider_finish_reason == "length"
+        assert detail.has_visible_content is True
+        assert detail.has_reasoning is True
+        assert detail.last_turn_usage["completion_tokens"] == 4096
+        assert detail.last_turn_usage_vendor["outputTokens"] == 4096
+        assert detail.truncation_risk is True
+
+    @pytest.mark.parametrize(
+        ("response", "expected_kind"),
+        [
+            (
+                LLMResponse(content=None, finish_reason="content_filter"),
+                "content_filtered",
+            ),
+            (
+                LLMResponse(
+                    content=None,
+                    reasoning_content="thinking",
+                    finish_reason="stop",
+                ),
+                "reasoning_only",
+            ),
+            (
+                LLMResponse(content=None, finish_reason="stop"),
+                "empty_response",
+            ),
+            (
+                LLMResponse(content="visible", finish_reason="guardrail_intervened"),
+                "non_stop_finish",
+            ),
+            (
+                LLMResponse(content="visible", finish_reason=None),
+                "non_stop_finish",
+            ),
+        ],
+    )
+    def test_classifies_invalid_finish_matrix(
+        self, response: LLMResponse, expected_kind: str
+    ) -> None:
+        from matmaster.core.finish_diagnostics import build_finish_detail
+
+        detail = build_finish_detail(response)
+
+        assert detail.kind == expected_kind
+        assert detail.provider_finish_reason == response.finish_reason
+
+    def test_missing_llm_response_api_shape_accepts_retry_metadata(self) -> None:
+        from matmaster.core.finish_diagnostics import build_finish_detail
+        from matmaster.types.errors import LLMError
+
+        detail = build_finish_detail(
+            None,
+            attempts=3,
+            last_error=LLMError(
+                "stream failed",
+                retryable=True,
+                error_category="incomplete_response",
+            ),
+        )
+
+        assert detail.kind == "missing_llm_response"
+        assert detail.attempts == 3
+        assert detail.last_error_kind == "incomplete_response"
+
+    def test_classifier_fallback_returns_unknown(self, monkeypatch, caplog) -> None:
+        import logging
+
+        from matmaster.core import finish_diagnostics
+        from matmaster.core.finish_diagnostics import build_finish_detail
+
+        def raise_visible(_response: LLMResponse) -> bool:
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(
+            finish_diagnostics,
+            "_has_visible_content",
+            raise_visible,
+        )
+        caplog.set_level(logging.WARNING, logger="matmaster.core.finish_diagnostics")
+
+        detail = build_finish_detail(LLMResponse(content="x", finish_reason="stop"))
+
+        assert detail.kind == "unknown"
+        assert "finish detail classification failed" in caplog.text
+
+
 class TestGap3CatalogVersionInvalidation:
     """Gap 3: catalog.version change invalidates cached tool_definitions."""
 
