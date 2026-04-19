@@ -619,10 +619,23 @@ def _write_cif(
     ]
     if mw > 0:
         lines.append(f"_chemical_formula_weight           {mw}")
+    # Calculated crystal density: ρ = Z·MW / (V·Nₐ) with V in ų
+    if mw > 0 and Z > 0 and V > 0:
+        density = (Z * mw) / (V * 0.6022140857)  # g/cm³
+        lines.append(f"_exptl_crystal_density_diffrn      {density:.3f}")
     lines += [
         "",
         "# Data collection",
         f"_diffrn_radiation_wavelength      {wavelength:.5f}",
+    ]
+    # Add radiation type based on wavelength
+    if abs(wavelength - 0.71073) < 0.005:
+        lines.append("_diffrn_radiation_type             'Mo K\\a'")
+    elif abs(wavelength - 1.54178) < 0.005:
+        lines.append("_diffrn_radiation_type             'Cu K\\a'")
+    elif abs(wavelength - 0.56086) < 0.005:
+        lines.append("_diffrn_radiation_type             'Ag K\\a'")
+    lines += [
         "",
         "# Refinement statistics",
         f"_refine_ls_R_factor_gt            {rfactors['R1']:.4f}",

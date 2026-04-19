@@ -32,7 +32,9 @@ _symmetry_cell_setting       monoclinic
 _chemical_formula_sum         'C10 H12 N2 O3'
 _chemical_formula_moiety      'C10 H12 N2 O3'
 _chemical_formula_weight      208.22
+_exptl_crystal_density_diffrn 1.350
 ```
+> Density is auto-calculated by `solve_refine_scxrd.py`: ρ = Z·MW / (V·Nₐ). If missing, compute manually: `density = Z * formula_weight / (cell_volume * 0.6022)`.
 
 ### Refinement Statistics
 ```
@@ -82,10 +84,13 @@ C1 C 0.1234 0.4567 0.7890 0.0234
 | Error | Cause | Fix |
 |-------|-------|-----|
 | Missing `_chemical_formula_sum` | Script didn't auto-generate | Add manually from known composition |
+| Missing `_exptl_crystal_density_diffrn` | Old script version | Update script or add: ρ = Z·MW/(V·0.6022) |
+| Missing `_cell_formula_units_Z` | Z not computed | Set Z = number of symmetry operations in space group |
 | Fractional coords > 1.0 | Coordinate wrapping error | Apply modulo 1.0 to all fract_xyz |
 | Wrong space group | Auto-detection failed | Pass `--sg` explicitly from P4P/INS |
 | Missing hydrogen atoms | H not included in element list | Add `H` to `--elements` flag |
 | R1 > 0.15 | Poor solution | Try `--trials 5 --grid 128`; verify space group |
+| Missing `_diffrn_radiation_type` | Wavelength not mapped | Auto-added by script; Mo Kα=0.71073, Cu Kα=1.54178 |
 
 ## checkCIF Validation
 
@@ -96,6 +101,28 @@ python matmaster/skills/playground-skills/checkcif-validator/scripts/run_checkci
 ```
 
 Address ALL A-level alerts before delivery. B-level alerts should be explained.
+
+## MANDATORY Pre-Delivery CIF Checklist
+
+**Before reporting ANY SCXRD task as complete, verify ALL items:**
+
+- [ ] CIF file exists and is non-empty
+- [ ] `_cell_length_a/b/c` and `_cell_angle_alpha/beta/gamma` are present
+- [ ] `_cell_volume` is present and reasonable (matches a×b×c×angular_factor)
+- [ ] `_cell_formula_units_Z` is present and > 0 (= number of symmetry operations)
+- [ ] `_space_group_name_H-M_alt` is present (not just number)
+- [ ] `_space_group_IT_number` is present
+- [ ] `_chemical_formula_sum` is present with elements in Hill order (C, H, then alphabetical)
+- [ ] `_chemical_formula_weight` is present and > 0
+- [ ] `_exptl_crystal_density_diffrn` is present (auto-calculated or manual: Z·MW/(V·0.6022))
+- [ ] `_refine_ls_R_factor_gt` (R1) is present and < 0.15
+- [ ] `_refine_ls_wR_factor_ref` (wR2) is present
+- [ ] `_refine_ls_goodness_of_fit_ref` (GOOF) is present
+- [ ] Atom site loop contains labels, type_symbols, fract_x/y/z, U_iso_or_equiv
+- [ ] ALL fractional coordinates are in [0, 1) range
+- [ ] checkCIF has been run and A-level alerts addressed
+
+**If ANY item is missing, fix it before delivering the CIF.**
 
 ## Emergency Fallback
 
