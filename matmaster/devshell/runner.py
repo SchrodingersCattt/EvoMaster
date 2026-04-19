@@ -191,6 +191,7 @@ class DevRunner:
                         dict(item)
                         for item in getattr(result, "usage_vendor_by_turn", ())
                     ],
+                    finish_detail=getattr(result, "finish_detail", None),
                 )
             )
 

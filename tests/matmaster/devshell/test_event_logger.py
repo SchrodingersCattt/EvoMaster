@@ -121,6 +121,33 @@ class TestEventLogger:
         assert rec["status"] == "completed"
         assert rec["run_id"] == "run-002"
 
+    def test_run_result_event_includes_finish_detail(self, tmp_path: Path) -> None:
+        from matmaster.devshell.event_logger import EventLogger
+        from matmaster.types.events import FinishDetail
+
+        log_file = tmp_path / "events.jsonl"
+        logger = EventLogger(log_file, run_id="run-002")
+
+        logger.log_event(
+            RunResultEvent(
+                source="test",
+                status="failed",
+                reason="invalid_finish",
+                finish_detail=FinishDetail(
+                    kind="output_length_exceeded",
+                    provider_finish_reason="length",
+                    message=(
+                        "Model output was truncated by the provider output-token "
+                        "limit."
+                    ),
+                ),
+            )
+        )
+        logger.close()
+
+        rec = json.loads(log_file.read_text().strip())
+        assert rec["finish_detail"]["kind"] == "output_length_exceeded"
+
     def test_non_streaming_thought(self, tmp_path: Path) -> None:
         from matmaster.devshell.event_logger import EventLogger
 

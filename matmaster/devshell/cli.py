@@ -354,6 +354,12 @@ def _run_single(
     vendor_turns = getattr(result, "usage_vendor_by_turn", ())
     if vendor_turns:
         summary["usage_vendor_by_turn"] = [dict(item) for item in vendor_turns]
+    finish_detail = getattr(result, "finish_detail", None)
+    if finish_detail is not None:
+        if hasattr(finish_detail, "model_dump"):
+            summary["finish_detail"] = finish_detail.model_dump(mode="json")
+        else:
+            summary["finish_detail"] = dict(finish_detail)
     line = json.dumps(summary, ensure_ascii=False)
     print(line)
     if args.json_out is not None:
