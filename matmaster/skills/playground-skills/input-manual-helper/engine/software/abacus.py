@@ -216,6 +216,7 @@ class AbacusBackend(SoftwareBackend):
                     "relax_nmax": 100,
                     "relax_method": "bfgs",
                     "out_stru": 1,
+                    "out_chg": 1,
                 }
             )
         elif task == "cell_relax" or task == "cell-relax":
@@ -229,6 +230,7 @@ class AbacusBackend(SoftwareBackend):
                     "relax_nmax": 100,
                     "relax_method": "bfgs",
                     "out_stru": 1,
+                    "out_chg": 1,
                 }
             )
         elif task == "band":
@@ -292,6 +294,10 @@ class AbacusBackend(SoftwareBackend):
                     "out_pot": 2,
                 }
             )
+        elif task == "scf":
+            # Default SCF already set; ensure out_chg for followup nscf
+            params["out_chg"] = 1
+
         # 覆盖用户指定参数
         for k, v in overrides.items():
             params[k.lower()] = v

@@ -131,6 +131,8 @@ class ABACUSValidator(BaseValidator):
         diags.extend(self._check_smearing(text))
         diags.extend(self._check_nscf_bands(text))
         diags.extend(self._check_efield(text))
+        diags.extend(self._check_relax_output(text))
+        diags.extend(self._check_scf_for_nscf(text))
         return diags
 
     # -----------------------------------------------------------------------
@@ -504,6 +506,52 @@ class ABACUSValidator(BaseValidator):
                         suggestion="Add: dip_cor_flag  1",
                     )
                 )
+        return diags
+
+    def _check_relax_output(self, text: str) -> list[Diagnostic]:
+        """Check that relaxation produces output structure."""
+        diags: list[Diagnostic] = []
+        calc = (_parse_value(text, "calculation") or "scf").lower()
+        if calc not in ("relax", "cell-relax"):
+            return diags
+        out_stru = _parse_int(text, "out_stru")
+        if out_stru is None or out_stru == 0:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        f"calculation='{calc}' but out_stru is not set to 1. "
+                        "Without it the optimized structure (STRU_NOW) is not written."
+                    ),
+                    param="out_stru",
+                    suggestion="Add: out_stru  1",
+                )
+            )
+        return diags
+
+    def _check_scf_for_nscf(self, text: str) -> list[Diagnostic]:
+        """Check SCF + out_chg for NSCF workflow readiness."""
+        diags: list[Diagnostic] = []
+        calc = (_parse_value(text, "calculation") or "scf").lower()
+        if calc != "scf":
+            return diags
+        # If this is a plain SCF with out_chg=0, warn that it won't support followup nscf
+        out_chg = _parse_int(text, "out_chg")
+        # Only warn if there are signs this might be prep for nscf (e.g. mentions in comments)
+        # Actually, always recommend out_chg=1 for SCF as it's cheap and enables restart
+        if out_chg is None or out_chg == 0:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "SCF calculation without out_chg=1. Setting out_chg=1 is recommended: "
+                        "it enables restart from converged charge and is required for any "
+                        "follow-up NSCF (band structure / DOS) calculation."
+                    ),
+                    param="out_chg",
+                    suggestion="Add: out_chg  1",
+                )
+            )
         return diags
 
     def _check_nscf_bands(self, text: str) -> list[Diagnostic]:

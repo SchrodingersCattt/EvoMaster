@@ -203,11 +203,27 @@ _SG_OPS: dict[int, list[tuple[np.ndarray, np.ndarray]]] = {
         (np.eye(3), np.zeros(3)),
         (np.diag([-1.0, 1.0, -1.0]), np.array([0, 0.5, 0])),
     ],
+    5: [  # C 2
+        (np.eye(3), np.zeros(3)),
+        (np.diag([-1.0, 1.0, -1.0]), np.zeros(3)),
+        (np.eye(3), np.array([0.5, 0.5, 0])),
+        (np.diag([-1.0, 1.0, -1.0]), np.array([0.5, 0.5, 0])),
+    ],
     14: [  # P 2₁/c
         (np.eye(3), np.zeros(3)),
         (np.diag([-1.0, 1.0, -1.0]), np.array([0, 0.5, 0.5])),
         (-np.eye(3), np.zeros(3)),
         (np.diag([1.0, -1.0, 1.0]), np.array([0, 0.5, 0.5])),
+    ],
+    15: [  # C 2/c
+        (np.eye(3), np.zeros(3)),
+        (np.diag([-1.0, 1.0, -1.0]), np.array([0, 0, 0.5])),
+        (-np.eye(3), np.zeros(3)),
+        (np.diag([1.0, -1.0, 1.0]), np.array([0, 0, 0.5])),
+        (np.eye(3), np.array([0.5, 0.5, 0])),
+        (np.diag([-1.0, 1.0, -1.0]), np.array([0.5, 0.5, 0.5])),
+        (-np.eye(3), np.array([0.5, 0.5, 0])),
+        (np.diag([1.0, -1.0, 1.0]), np.array([0.5, 0.5, 0.5])),
     ],
     19: [  # P 2₁ 2₁ 2₁
         (np.eye(3), np.zeros(3)),
@@ -215,20 +231,63 @@ _SG_OPS: dict[int, list[tuple[np.ndarray, np.ndarray]]] = {
         (np.diag([1.0, -1.0, -1.0]), np.array([0.5, 0.5, 0])),
         (np.diag([-1.0, 1.0, -1.0]), np.array([0, 0.5, 0.5])),
     ],
+    33: [  # P n a 2₁
+        (np.eye(3), np.zeros(3)),
+        (np.diag([-1.0, -1.0, 1.0]), np.array([0, 0, 0.5])),
+        (np.diag([1.0, -1.0, -1.0]), np.array([0.5, 0.5, 0.5])),
+        (np.diag([-1.0, 1.0, -1.0]), np.array([0.5, 0.5, 0])),
+    ],
+    61: [  # P b c a
+        (np.eye(3), np.zeros(3)),
+        (np.diag([-1.0, -1.0, 1.0]), np.array([0.5, 0, 0.5])),
+        (np.diag([1.0, -1.0, -1.0]), np.array([0, 0.5, 0.5])),
+        (np.diag([-1.0, 1.0, -1.0]), np.array([0.5, 0.5, 0])),
+        (-np.eye(3), np.zeros(3)),
+        (np.diag([1.0, 1.0, -1.0]), np.array([0.5, 0, 0.5])),
+        (np.diag([-1.0, 1.0, 1.0]), np.array([0, 0.5, 0.5])),
+        (np.diag([1.0, -1.0, 1.0]), np.array([0.5, 0.5, 0])),
+    ],
+    62: [  # P n m a
+        (np.eye(3), np.zeros(3)),
+        (np.diag([-1.0, -1.0, 1.0]), np.array([0.5, 0, 0.5])),
+        (np.diag([1.0, -1.0, -1.0]), np.array([0, 0.5, 0])),
+        (np.diag([-1.0, 1.0, -1.0]), np.array([0.5, 0.5, 0.5])),
+        (-np.eye(3), np.zeros(3)),
+        (np.diag([1.0, 1.0, -1.0]), np.array([0.5, 0, 0.5])),
+        (np.diag([-1.0, 1.0, 1.0]), np.array([0, 0.5, 0])),
+        (np.diag([1.0, -1.0, 1.0]), np.array([0.5, 0.5, 0.5])),
+    ],
 }
 _SG_NAME_MAP = {
     "P1": 1,
+    "P 1": 1,
     "P-1": 2,
+    "P -1": 2,
     "P21": 4,
     "P 21": 4,
     "P 2_1": 4,
     "P2₁": 4,
+    "C2": 5,
+    "C 2": 5,
     "P21/c": 14,
     "P 21/c": 14,
     "P2₁/c": 14,
     "P 2_1/c": 14,
+    "P21/n": 14,
+    "P 21/n": 14,
+    "P2₁/n": 14,
+    "C2/c": 15,
+    "C 2/c": 15,
     "P212121": 19,
     "P 21 21 21": 19,
+    "Pna21": 33,
+    "P n a 21": 33,
+    "Pna2₁": 33,
+    "P 21/a": 14,
+    "Pbca": 61,
+    "P b c a": 61,
+    "Pnma": 62,
+    "P n m a": 62,
 }
 
 
@@ -571,6 +630,50 @@ def _molecular_weight(formula_str: str) -> float:
     return round(mw, 2)
 
 
+def _symop_xyz(R, t):
+    """Convert rotation matrix R and translation t to x,y,z string notation."""
+    axes = ['x', 'y', 'z']
+    parts = []
+    for i in range(3):
+        terms = []
+        for j in range(3):
+            coeff = R[i, j]
+            if abs(coeff) < 1e-8:
+                continue
+            sign = '+' if coeff > 0 else '-'
+            ac = abs(coeff)
+            if abs(ac - 1.0) < 1e-8:
+                terms.append(f"{sign}{axes[j]}")
+            elif abs(ac - 0.5) < 1e-8:
+                terms.append(f"{sign}1/2*{axes[j]}")
+            else:
+                terms.append(f"{sign}{ac:.0f}*{axes[j]}")
+        # Translation component
+        ti = t[i] % 1.0
+        if ti > 0.999:
+            ti = 0.0
+        if ti > 1e-4:
+            # Express as fraction
+            frac_map = {0.5: '1/2', 0.25: '1/4', 0.75: '3/4',
+                        1/3: '1/3', 2/3: '2/3', 1/6: '1/6', 5/6: '5/6'}
+            found = False
+            for fv, fs in frac_map.items():
+                if abs(ti - fv) < 1e-4:
+                    terms.append(f"+{fs}")
+                    found = True
+                    break
+            if not found:
+                terms.append(f"+{ti:.4f}")
+        comp = ''.join(terms)
+        # Clean up leading +
+        if comp.startswith('+'):
+            comp = comp[1:]
+        if not comp:
+            comp = '0'
+        parts.append(comp)
+    return ','.join(parts)
+
+
 def _write_cif(
     path,
     cell,
@@ -581,6 +684,7 @@ def _write_cif(
     wavelength,
     formula_str="?",
     z_formula=None,
+    sg_ops=None,
 ):
     V = round(_cell_volume(cell), 2)
     a, b, c, al, be, ga = cell
@@ -624,7 +728,20 @@ def _write_cif(
         f"_space_group_IT_number            {sg_number}",
         f"_space_group_crystal_system       {cryst_sys}",
         f"_symmetry_cell_setting            {cryst_sys}",
+        f"_symmetry_space_group_name_H-M    '{sg_symbol}'",
+        f"_symmetry_Int_Tables_number       {sg_number}",
         "",
+    ]
+    # Symmetry operations loop (required for CIF compliance)
+    ops_to_write = sg_ops if sg_ops is not None else _SG_OPS.get(sg_number, [(np.eye(3), np.zeros(3))])
+    lines.append("loop_")
+    lines.append(" _symmetry_equiv_pos_site_id")
+    lines.append(" _symmetry_equiv_pos_as_xyz")
+    for idx, (R, t) in enumerate(ops_to_write, start=1):
+        xyz_str = _symop_xyz(R, t)
+        lines.append(f" {idx} '{xyz_str}'")
+    lines.append("")
+    lines += [
         "# Chemical information",
         f"_chemical_formula_sum             '{formula_str}'",
         f"_chemical_formula_moiety          '{formula_str}'",
@@ -924,6 +1041,7 @@ def main():
         wl,
         formula,
         z_formula=len(sg_ops),
+        sg_ops=sg_ops,
     )
 
     summary = {
