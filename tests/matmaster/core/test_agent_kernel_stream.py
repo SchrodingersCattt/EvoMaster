@@ -155,6 +155,42 @@ class SkillStreamProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
+class ToolCallLengthProvider:
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.call_count += 1
+        if self.call_count == 1:
+            yield StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "tc-length",
+                        "name": "test_tool",
+                        "arguments": '{"x": 1}',
+                    }
+                ]
+            )
+            yield StreamChunk(
+                finish_reason="length",
+                usage={"completion_tokens": 4096},
+                usage_vendor={"outputTokens": 4096},
+            )
+        else:
+            yield StreamChunk(content="done")
+            yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+
+
 class TrivialToolPreambleProvider:
     """Provider that emits punctuation-only content before switching to tools."""
 
@@ -555,6 +591,49 @@ class TestRunItemsAssistantState:
         state = assistant_state_events[0].state
         assert state.get("tool_calls") is not None
         assert state.get("content") is None
+
+
+@pytest.mark.asyncio
+async def test_tool_call_length_finish_adds_assistant_state_detail(caplog) -> None:
+    import logging
+
+    from matmaster.core.agent import AgentKernel
+
+    caplog.set_level(logging.WARNING, logger="matmaster.core.agent")
+    registry, tools = _make_tool_registry(tool_names=["test_tool"])
+    events = [
+        event
+        async for event in AgentKernel().run_stream(
+            _make_spec(
+                provider=ToolCallLengthProvider(),
+                tool_registry=registry,
+            ),
+            "test task",
+        )
+    ]
+
+    assistant_state = next(
+        event for event in events if isinstance(event, AssistantStateEvent)
+    )
+    assert assistant_state.finish_detail is not None
+    assert assistant_state.finish_detail.kind == "output_length_exceeded"
+    assert assistant_state.finish_detail.has_tool_calls is True
+    assert assistant_state.finish_detail.tool_call_count == 1
+    assert assistant_state.finish_detail.truncation_risk is True
+    assert tools[0].calls == [("test_tool", {"x": 1})]
+    assert events[-1].reason == "natural"
+    warning_records = [
+        record
+        for record in caplog.records
+        if record.name == "matmaster.core.agent"
+        and record.levelno == logging.WARNING
+    ]
+    assert any(
+        record.getMessage().startswith("tool call response ended")
+        and record.tool_names == ["test_tool"]
+        and record.finish_detail["kind"] == "output_length_exceeded"
+        for record in warning_records
+    )
 
 
 class TestRunItemsSkillHit:

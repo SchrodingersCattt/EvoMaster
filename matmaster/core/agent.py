@@ -78,8 +78,6 @@ _STOP_RETRY_SLEEP_SLICE_SEC = 0.25
 
 @dataclass
 class _TerminalItem:
-    """Signals that the kernel loop reached a terminal state."""
-
     reason: str
     final_content: str | None = None
     num_turns: int = 0
@@ -91,11 +89,6 @@ class _TerminalItem:
 
 @dataclass
 class _KernelItem:
-    """Single yield from _run_items() / _stream_llm_items().
-
-    Exactly one of event, llm_response, messages_delta, or terminal is set.
-    """
-
     event: Any = None  # BusEvent | None
     llm_response: LLMResponse | None = None
     messages_delta: list[Any] | None = None
@@ -104,8 +97,6 @@ class _KernelItem:
 
 @dataclass
 class _KernelState:
-    """Mutable state for _run_items(). Preserves Kernel statelessness."""
-
     messages: list[Any]
     turn: int = 0
     total_usage: dict[str, int] = dc_field(default_factory=dict)
@@ -115,7 +106,7 @@ class _KernelState:
 
 
 class _KernelStopRequested(Exception):
-    """Internal: cancel_token became set during LLM stream or retry backoff."""
+    pass
 
 
 class AgentKernel:
@@ -485,6 +476,19 @@ class AgentKernel:
                 tool_calls=response.tool_calls,
                 reasoning_content=response.reasoning_content,
             )
+            assistant_finish_detail = None
+            if response.finish_reason == "length":
+                assistant_finish_detail = build_finish_detail(response)
+                logger.warning(
+                    "tool call response ended with length finish reason",
+                    extra={
+                        "turn": state.turn,
+                        "tool_names": [tc.name for tc in response.tool_calls or []],
+                        "finish_detail": assistant_finish_detail.model_dump(
+                            mode="json"
+                        ),
+                    },
+                )
             state.messages.append(assistant_msg)
 
             if assistant_msg.tool_calls:
@@ -494,6 +498,7 @@ class AgentKernel:
                         state=assistant_msg.model_dump(mode="json"),
                         turn_usage=dict(turn_usage),
                         total_usage=dict(state.total_usage),
+                        finish_detail=assistant_finish_detail,
                     )
                 )
 
