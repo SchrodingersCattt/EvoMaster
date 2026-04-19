@@ -559,45 +559,18 @@ def _molecular_weight(formula_str: str) -> float:
     return round(mw, 2)
 
 
-def _radiation_type(wavelength: float) -> str:
-    """Return radiation type string from wavelength."""
-    if abs(wavelength - 0.71073) < 0.005:
-        return "MoK\\a"
-    elif abs(wavelength - 1.54178) < 0.005:
-        return "CuK\\a"
-    elif abs(wavelength - 0.56086) < 0.005:
-        return "AgK\\a"
-    else:
-        return "?"
-
-
-def _calc_density(mw: float, V: float, Z: int) -> float:
-    """Calculate crystal density in g/cm³.  V in ų, mw in g/mol."""
-    if V <= 0 or Z <= 0 or mw <= 0:
-        return 0.0
-    # density = Z * mw / (N_A * V * 1e-24)
-    return round(Z * mw / (6.02214076e23 * V * 1e-24), 3)
-
-
 def _write_cif(
-    path, cell, sg_symbol, sg_number, atoms, rfactors, wavelength, formula_str="?",
-    sg_ops=None,
+    path, cell, sg_symbol, sg_number, atoms, rfactors, wavelength, formula_str="?"
 ):
     V = round(_cell_volume(cell), 2)
     a, b, c, al, be, ga = cell
-    # Use provided sg_ops for Z and symmetry loop; fall back to built-in table
-    _ops = sg_ops or _SG_OPS.get(sg_number, [(np.eye(3), np.zeros(3))])
-    Z = len(_ops)
+    Z = len(_SG_OPS.get(sg_number, [(None, None)]))  # multiplicity estimate
     if Z < 1:
         Z = 1
     cryst_sys = _crystal_system(sg_number)
     mw = _molecular_weight(formula_str) if formula_str != "?" else 0.0
-    rad_type = _radiation_type(wavelength)
-    density = _calc_density(mw, V, Z)
     lines = [
         "data_structure",
-        "",
-        f"_audit_creation_method            'solve_refine_scxrd.py'",
         "",
         "# Crystal data",
         f"_cell_length_a                    {a:.4f}",
@@ -620,13 +593,10 @@ def _write_cif(
     ]
     if mw > 0:
         lines.append(f"_chemical_formula_weight           {mw}")
-    if density > 0:
-        lines.append(f"_exptl_crystal_density_diffrn      {density}")
     lines += [
         "",
         "# Data collection",
         f"_diffrn_radiation_wavelength      {wavelength:.5f}",
-        f"_diffrn_radiation_type            '{rad_type}'",
         "",
         "# Refinement statistics",
         f"_refine_ls_R_factor_gt            {rfactors['R1']:.4f}",
@@ -635,7 +605,6 @@ def _write_cif(
         f"_refine_ls_number_reflns          {rfactors['n_obs']}",
         f"_refine_ls_number_parameters      {rfactors['n_params']}",
         "",
-        "# Atom sites",
         "loop_",
         " _atom_site_label",
         " _atom_site_type_symbol",
@@ -644,7 +613,6 @@ def _write_cif(
         " _atom_site_fract_z",
         " _atom_site_U_iso_or_equiv",
         " _atom_site_adp_type",
-        " _atom_site_occupancy",
     ]
     elem_count: dict[str, int] = {}
     for at in atoms:
@@ -656,44 +624,11 @@ def _write_cif(
         x, y, z = x % 1.0, y % 1.0, z % 1.0
         U = at.get("B", 2.0) / (8 * np.pi**2)
         lines.append(
-            f" {label:6s} {el:2s}  {x:10.5f} {y:10.5f} {z:10.5f}  {U:8.5f} Uiso 1.0000"
+            f" {label:6s} {el:2s}  {x:10.5f} {y:10.5f} {z:10.5f}  {U:8.5f} Uiso"
         )
-
-    # Symmetry operations loop (required by many CIF validators)
-    lines.append("")
-    lines.append("loop_")
-    lines.append(" _symmetry_equiv_pos_as_xyz")
-    for R, t in _ops:
-        labels = ["x", "y", "z"]
-        parts = []
-        for row_idx in range(3):
-            terms = []
-            for col_idx in range(3):
-                coeff = R[row_idx, col_idx]
-                if abs(coeff) > 0.5:
-                    sign = "+" if coeff > 0 else "-"
-                    terms.append(f"{sign}{labels[col_idx]}")
-            tr = t[row_idx]
-            if abs(tr) > 0.01:
-                frac = _float_to_frac(tr)
-                terms.append(f"+{frac}" if tr > 0 else frac)
-            part = "".join(terms).lstrip("+")
-            if not part:
-                part = "0"
-            parts.append(part)
-        lines.append(f" '{parts[0]},{parts[1]},{parts[2]}'")
 
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
     return V
-
-
-def _float_to_frac(val: float) -> str:
-    """Convert a common fractional translation to string."""
-    for num, den in [(1, 2), (1, 3), (2, 3), (1, 4), (3, 4), (1, 6), (5, 6)]:
-        if abs(abs(val) - num / den) < 0.01:
-            sign = "" if val > 0 else "-"
-            return f"{sign}{num}/{den}"
-    return f"{val:.4f}"
 
 
 def _formula_from_atoms(atoms, sg_ops):
@@ -926,8 +861,7 @@ def main():
     # ── Write CIF ──
     formula = _formula_from_atoms(atoms_ref, sg_ops)
     vol = _write_cif(
-        args.output, cell, sg_symbol, sg_number, atoms_ref, rfactors, wl, formula,
-        sg_ops=sg_ops,
+        args.output, cell, sg_symbol, sg_number, atoms_ref, rfactors, wl, formula
     )
 
     summary = {

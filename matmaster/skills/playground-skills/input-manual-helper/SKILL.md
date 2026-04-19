@@ -181,8 +181,8 @@ Do not re-query the same path that already returned no useful result.
 
 ## Principles
 
-- **Do not** directly edit `.inp`, `.in`, `.abi`, `.lammps`, `.mdp`, or other input file text for software with local script generation support; use `render_input.py` + parameter templates instead. **This includes ABACUS INPUT files** — never use the Write tool to create INPUT content from scratch; always generate via `render_input.py --software abacus --task <type>` and customize with `--param` or `--overrides`.
-- **Local scripts are canonical**: `render_input.py` and `diagnose_input.py` handle all code-specific logic; do not bypass them. Hand-written input files bypass critical safety checks (missing cal_force, wrong units, missing init_chg, etc.) and are the #1 cause of silent ABACUS failures.
+- **Do not** directly edit `.inp`, `.in`, `.abi`, `.lammps`, `.mdp`, or other input file text for software with local script generation support; use `render_input.py` + parameter templates instead.
+- **Local scripts are canonical**: `render_input.py` and `diagnose_input.py` handle all code-specific logic; do not bypass them.
 - **Gaussian / PSI4**: No local script support yet; use reference templates as the final input (no input-manual-helper workflow).
 - **PySCF**: Write Python scripts directly; no local input generation needed. Pass structure_file (XYZ or pymatgen-readable) and parameters directly to the script.
 - All software (ABACUS / CP2K / QE / ABINIT / LAMMPS / ORCA / GROMACS / PySCF / PyATB) submit via the built-in **`Bohrium`** tool when ready; there are no MCP submit tools for this class of workload. Use the same built-in tool for `poll` / `download` / `list_images` / `list_machines`.

@@ -8,16 +8,7 @@ skill_type: operator
 
 ABACUS supports plane-wave (PW) and numerical atomic orbital (LCAO) basis sets.
 
-**Action rule — Mandatory Script-First Workflow**:
-1. **Read** any provided STRU first to extract: PP/orbital filenames (reuse exactly, never invent), ntype (species count), basis_type (LCAO if NUMERICAL_ORBITAL present), coordinate type, geometry (detect slab vs bulk by vacuum gap).
-2. **Generate INPUT via `render_input.py`** — this sets ALL mandatory baseline parameters (ecutwfc 100, cal_force, cal_stress, scf_thr 1e-7, smearing_sigma 0.01, etc.) correctly for each task type. Customize with `--task` and `--param KEY=VALUE` or `--overrides '{...}'`. **Do NOT hand-write INPUT content from scratch** — the engine prevents the most common silent failures (missing cal_force in relax, wrong units, missing init_chg in nscf, etc.).
-   ```bash
-   uv run python scripts/render_input.py --software abacus --task <task> --output INPUT \
-     --param ntype=<N> --param stru_file=<name> --param kpoint_file=<name> [--param ...]
-   ```
-3. **Diagnose** via `diagnose_input.py` to catch remaining issues before submission.
-4. **Write** STRU and KPT files using the Write tool (render_input.py does not generate these).
-5. **Verify** all file cross-references: every `stru_file` / `kpoint_file` in INPUT must match actual filenames in the workspace. List files and cross-check.
+**Action rule**: When generating ABACUS input files, **always use Write tool**. **Read any provided STRU first** to extract: (1) PP/orbital filenames — reuse exactly, never invent; (2) ntype from species count; (3) basis_type from NUMERICAL_ORBITAL presence; (4) coordinate type and geometry (detect slab vs bulk by vacuum gap). Then Write all output files.
 
 ## Bohrium Submission
 
@@ -50,16 +41,11 @@ Three files: **INPUT** (parameters), **STRU** (structure), **KPT** (k-points; op
 
 **KPT**: Must start with `K_POINTS`. Use `Gamma` mesh for uniform sampling, line-mode for bands.
 
-### Mandatory generation — ALWAYS use these scripts
+### Recommended generation
 ```bash
-# Step 1: Generate INPUT (sets correct mandatory params for the task)
-uv run python scripts/render_input.py --software abacus --task <scf|relax|cell_relax|band|dos|md> \
-  --output INPUT --param ntype=<N> [--param stru_file=<name>] [--param kpoint_file=<name>]
-
-# Step 2: Diagnose (catches missing cal_force, wrong symmetry, etc.)
+uv run python scripts/render_input.py --software abacus --task scf --output INPUT
 uv run python scripts/diagnose_input.py --software abacus --input INPUT
 ```
-> **⚠ NEVER bypass render_input.py by writing INPUT content directly with the Write tool.** The most common ABACUS failures (missing cal_force, wrong ecutwfc, missing init_chg) are all caught by the script-first workflow. Hand-written INPUT files bypass all these safety checks.
 
 ## Task Types
 
@@ -167,13 +153,10 @@ See `references/output_params.md` for output file list and grep patterns.
 
 ## Submission Workflow
 
-1. Prepare STRU (or convert from CIF/POSCAR) — use Write tool for STRU content
+1. Prepare STRU (or convert from CIF/POSCAR)
 2. Download PP + orbital files from AIS Square
-3. **Generate INPUT via `render_input.py`** — **NEVER write INPUT by hand**
-   - Use `--task` to set correct calculation type and mandatory params
-   - Use `--param` for task-specific overrides (ntype, stru_file, kpoint_file, kspacing, nspin, etc.)
-4. Prepare KPT (or use `kspacing` in INPUT via `--param kspacing=0.10`) — use Write tool for KPT content
-5. **Diagnose via `diagnose_input.py`** — fix any errors before submission
-6. **Verify file cross-references**: list workspace files, confirm every file referenced by INPUT exists
-7. Submit via Bohrium tool
-8. Poll and read results
+3. Generate INPUT via `render_input.py`
+4. Prepare KPT (or use `kspacing`)
+5. Diagnose via `diagnose_input.py`
+6. Submit via Bohrium tool
+7. Poll and read results
