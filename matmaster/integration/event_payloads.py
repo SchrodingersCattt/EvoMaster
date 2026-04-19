@@ -192,14 +192,19 @@ def _public_content_for_event(
         return {'figures': payload.get('figures') or []}
 
     if event_type in ('run_result', 'finish'):
-        return {
+        content = {
             'content': payload.get('final_content') or '',
             'status': payload.get('status'),
             'reason': payload.get('reason'),
         }
+        if payload.get('finish_detail') is not None:
+            content['finish_detail'] = payload['finish_detail']
+        return content
 
     if event_type == 'assistant_state':
         content: dict[str, Any] = {'state': payload.get('state')}
+        if payload.get('finish_detail') is not None:
+            content['finish_detail'] = payload['finish_detail']
         if payload.get('turn_usage'):
             content['turn_usage'] = payload['turn_usage']
             content['total_usage'] = payload.get('total_usage', {})

@@ -41,6 +41,30 @@ class TestPublicContentForEvent:
             'reason': 'invalid_finish',
         }
 
+    def test_run_result_preserves_finish_detail_in_public_content(self) -> None:
+        detail = {
+            'kind': 'output_length_exceeded',
+            'provider_finish_reason': 'length',
+            'message': 'Model output was truncated by the provider output-token limit.',
+        }
+        payload = {
+            'type': 'run_result',
+            'source': 'Agent',
+            'status': 'failed',
+            'reason': 'invalid_finish',
+            'final_content': None,
+            'finish_detail': detail,
+        }
+
+        content = _public_content_for_event('run_result', payload)
+
+        assert content == {
+            'content': '',
+            'status': 'failed',
+            'reason': 'invalid_finish',
+            'finish_detail': detail,
+        }
+
     def test_finish_alias_uses_same_shape(self) -> None:
         payload = {
             'type': 'finish',
@@ -61,6 +85,27 @@ class TestPublicContentForEvent:
         payload = {'type': 'assistant_state', 'source': 'Agent', 'state': state}
 
         assert _public_content_for_event('assistant_state', payload) == {'state': state}
+
+    def test_assistant_state_preserves_finish_detail_in_public_content(self) -> None:
+        state = {'role': 'assistant', 'content': None, 'tool_calls': []}
+        detail = {
+            'kind': 'output_length_exceeded',
+            'provider_finish_reason': 'length',
+            'message': 'Model output was truncated by the provider output-token limit.',
+            'has_tool_calls': True,
+            'truncation_risk': True,
+        }
+        payload = {
+            'type': 'assistant_state',
+            'source': 'Agent',
+            'state': state,
+            'finish_detail': detail,
+        }
+
+        assert _public_content_for_event('assistant_state', payload) == {
+            'state': state,
+            'finish_detail': detail,
+        }
 
     def test_skill_hit_returns_skill_name(self) -> None:
         payload = {'type': 'skill_hit', 'source': 'Agent', 'skill_name': 'search'}
