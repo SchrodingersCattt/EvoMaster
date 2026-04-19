@@ -99,6 +99,8 @@ async def test_empty_sentinel_stop_finishes_as_invalid_finish(
     assert events[-1].status == "failed"
     assert events[-1].reason == "invalid_finish"
     assert events[-1].final_content is None
+    assert events[-1].finish_detail is not None
+    assert events[-1].finish_detail.kind == "empty_response"
     assert sentinel.strip() not in response_texts
 
 

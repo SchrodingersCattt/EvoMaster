@@ -39,6 +39,20 @@ def build_finish_detail(
         )
 
 
+def is_valid_natural_finish(response: LLMResponse) -> bool:
+    """Return True when the response can be committed as natural output."""
+    return (
+        not response.tool_calls
+        and response.finish_reason == "stop"
+        and _has_visible_content(response)
+    )
+
+
+def is_incomplete_response(response: LLMResponse) -> bool:
+    """Return True for non-tool responses with no visible final output."""
+    return not response.tool_calls and not _has_visible_content(response)
+
+
 def _build_finish_detail_inner(
     response: LLMResponse | None,
     *,

@@ -248,6 +248,27 @@ class EmptyThenContentProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
+class LengthFinishProvider(ContentOnlyProvider):
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        yield StreamChunk(content="partial")
+        yield StreamChunk(
+            finish_reason="length",
+            usage={"prompt_tokens": 10, "completion_tokens": 4096},
+            usage_vendor={"outputTokens": 4096},
+        )
+
+
+class ContentFilterProvider(ContentOnlyProvider):
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        yield StreamChunk(finish_reason="content_filter")
+
+
+class NonStopFinishProvider(ContentOnlyProvider):
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        yield StreamChunk(content="blocked by guardrail")
+        yield StreamChunk(finish_reason="guardrail_intervened")
+
+
 # ── _stream_llm_items() tests ─────────────────────────────
 
 
@@ -716,6 +737,85 @@ class TestEmptyFinalResponseInvalidFinish:
     """Empty final LLM outputs should not be committed as natural answers."""
 
     @pytest.mark.asyncio
+    async def test_length_finish_sets_output_length_detail(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        events = [
+            event
+            async for event in AgentKernel().run_stream(
+                _make_spec(provider=LengthFinishProvider()),
+                "test task",
+            )
+        ]
+
+        result = events[-1]
+        assert isinstance(result, RunResultEvent)
+        assert result.status == "failed"
+        assert result.reason == "invalid_finish"
+        assert result.finish_detail is not None
+        assert result.finish_detail.kind == "output_length_exceeded"
+        assert result.finish_detail.last_turn_usage["completion_tokens"] == 4096
+
+    @pytest.mark.asyncio
+    async def test_content_filter_finish_sets_content_filtered_detail(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        events = [
+            event
+            async for event in AgentKernel().run_stream(
+                _make_spec(provider=ContentFilterProvider()),
+                "test task",
+            )
+        ]
+
+        assert events[-1].finish_detail.kind == "content_filtered"
+
+    @pytest.mark.asyncio
+    async def test_empty_stop_sets_empty_response_detail(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        events = [
+            event
+            async for event in AgentKernel().run_stream(
+                _make_spec(provider=EmptyStopProvider()),
+                "test task",
+            )
+        ]
+
+        assert events[-1].finish_detail.kind == "empty_response"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_only_sets_reasoning_only_detail(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        events = [
+            event
+            async for event in AgentKernel().run_stream(
+                _make_spec(provider=EmptyStopProvider(reasoning="thinking only")),
+                "test task",
+            )
+        ]
+
+        assert events[-1].finish_detail.kind == "reasoning_only"
+
+    @pytest.mark.asyncio
+    async def test_unknown_provider_finish_sets_non_stop_finish_detail(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        events = [
+            event
+            async for event in AgentKernel().run_stream(
+                _make_spec(provider=NonStopFinishProvider()),
+                "test task",
+            )
+        ]
+
+        assert events[-1].finish_detail.kind == "non_stop_finish"
+        assert events[-1].finish_detail.provider_finish_reason == (
+            "guardrail_intervened"
+        )
+
+    @pytest.mark.asyncio
     async def test_empty_stop_finishes_as_invalid_finish(self) -> None:
         from matmaster.core.agent import AgentKernel
 
@@ -841,6 +941,35 @@ class TestEmptyFinalResponseInvalidFinish:
         assert isinstance(events[-1], RunResultEvent)
         assert events[-1].status == "failed"
         assert events[-1].reason == "invalid_finish"
+
+
+@pytest.mark.asyncio
+async def test_missing_llm_response_terminal_sets_detail(monkeypatch) -> None:
+    from matmaster.core.agent import AgentKernel, _KernelItem
+
+    async def no_final_response(
+        self, spec, api_messages, tool_defs, *, cancel_token=None
+    ):
+        if False:
+            yield _KernelItem()
+
+    kernel = AgentKernel()
+    monkeypatch.setattr(
+        AgentKernel,
+        "_call_llm_streaming",
+        no_final_response,
+    )
+
+    events = [
+        event
+        async for event in kernel.run_stream(
+            _make_spec(provider=ContentOnlyProvider()),
+            "test task",
+        )
+    ]
+
+    assert events[-1].reason == "invalid_finish"
+    assert events[-1].finish_detail.kind == "missing_llm_response"
 
 
 class TestInvalidFinishDetailClassifier:
