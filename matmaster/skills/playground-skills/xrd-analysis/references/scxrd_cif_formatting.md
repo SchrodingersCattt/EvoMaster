@@ -77,11 +77,22 @@ C1 C 0.1234 0.4567 0.7890 0.0234
 5. Run checkCIF validation
 6. Fix A-level alerts before delivery
 
+## Z Value (`_cell_formula_units_Z`) — MANDATORY
+
+The Z value (number of formula units per unit cell) is **required** in every CIF. The script calculates it automatically, but if you edit the CIF manually, Z must be consistent:
+
+- **Z = (total atoms in cell) ÷ (atoms per formula unit)**
+- **Cross-check**: Z × formula_weight × 1.6605 / cell_volume ≈ density (g/cm³). If density is unreasonable (< 0.5 or > 25), Z is likely wrong.
+- Common Z values: P1 → Z=1–2; P21 → Z=2; P21/c → Z=4; C2/c → Z=8; P212121 → Z=4.
+
+When the script outputs Z, **always verify** it matches the space group multiplicity and the number of independent atoms found.
+
 ## Common CIF Formatting Errors
 
 | Error | Cause | Fix |
 |-------|-------|-----|
 | Missing `_chemical_formula_sum` | Script didn't auto-generate | Add manually from known composition |
+| Missing or wrong `_cell_formula_units_Z` | Z not calculated or wrong formula | Verify: Z × atoms_per_formula = total atoms in cell |
 | Fractional coords > 1.0 | Coordinate wrapping error | Apply modulo 1.0 to all fract_xyz |
 | Wrong space group | Auto-detection failed | Pass `--sg` explicitly from P4P/INS |
 | Missing hydrogen atoms | H not included in element list | Add `H` to `--elements` flag |
