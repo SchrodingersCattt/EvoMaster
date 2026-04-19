@@ -41,7 +41,12 @@ class ChatEventsTable(BaseTable):
         ):
             ev['content'] = content.get('content', '')
             ev['files'] = content.get('files', [])
+            ev['images'] = content.get('images', [])
             ev['workspace_paths'] = content.get('workspace_paths', [])
+            if content.get('session_directory'):
+                ev['session_directory'] = content.get('session_directory')
+            if content.get('session_directory_source'):
+                ev['session_directory_source'] = content.get('session_directory_source')
 
         return ev
 
@@ -96,7 +101,7 @@ class ChatEventsTable(BaseTable):
                     WHERE session_id = %s
                       {spawn_filter}
                       AND id > %s
-                      AND type NOT IN ('compact_boundary', 'history_checkpoint')
+                      AND type NOT IN ('history_checkpoint', 'compaction', 'context_compaction')
                     ORDER BY created_at ASC, id ASC
                 '''
                 if limit:
@@ -121,7 +126,7 @@ class ChatEventsTable(BaseTable):
                     FROM {self.table_name}
                     WHERE session_id = %s
                       {spawn_filter}
-                      AND type NOT IN ('compact_boundary', 'history_checkpoint')
+                      AND type NOT IN ('history_checkpoint', 'compaction', 'context_compaction')
                     ''',
                     params,
                 )
@@ -201,14 +206,21 @@ class ChatEventsTable(BaseTable):
                     ):
                         ev['content'] = content.get('content', '')
                         ev['files'] = content.get('files', [])
+                        ev['images'] = content.get('images', [])
                         ev['workspace_paths'] = content.get('workspace_paths', [])
+                        if content.get('session_directory'):
+                            ev['session_directory'] = content.get('session_directory')
+                        if content.get('session_directory_source'):
+                            ev['session_directory_source'] = content.get(
+                                'session_directory_source'
+                            )
                     events.append(ev)
                 return events
 
     def get_last_user_query(self, session_id: str) -> dict | None:
         """
         获取该会话最后一次用户输入（source=User, type=query），用于部署中断后重跑。
-        返回 dict：content(str), files(list 可选), workspace_paths(list 可选), mode(str 可选), task_id 可选。
+        返回 dict：content(str), files(list 可选), images(list 可选), workspace_paths(list 可选), mode(str 可选), session_directory(str|None), session_directory_source(str), task_id 可选。
         """
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -237,15 +249,24 @@ class ChatEventsTable(BaseTable):
                     return {
                         'content': (content.get('content') or ''),
                         'files': content.get('files') or [],
+                        'images': content.get('images') or [],
                         'workspace_paths': content.get('workspace_paths') or [],
                         'mode': content.get('mode') or 'direct',
+                        'session_directory': content.get('session_directory'),
+                        'session_directory_source': content.get(
+                            'session_directory_source'
+                        )
+                        or 'none',
                         **base,
                     }
                 return {
                     'content': content if isinstance(content, str) else '',
                     'files': [],
+                    'images': [],
                     'workspace_paths': [],
                     'mode': 'direct',
+                    'session_directory': None,
+                    'session_directory_source': 'none',
                     **base,
                 }
 
@@ -285,7 +306,7 @@ class ChatEventsTable(BaseTable):
                 conn.commit()
                 return cursor.rowcount > 0
 
-    def add_checkpoint_pair(
+    def add_history_checkpoint(
         self,
         session_id: str,
         *,
@@ -296,13 +317,10 @@ class ChatEventsTable(BaseTable):
         base_messages: list[dict],
         reason: str = 'summary',
     ) -> bool:
-        boundary_content = {
-            'covered_until_event_id': covered_until_event_id,
-            'reason': reason,
-        }
         checkpoint_content = {
             'covered_until_event_id': covered_until_event_id,
             'base_messages': base_messages,
+            'reason': reason,
         }
 
         with self.get_connection() as conn:
@@ -315,23 +333,6 @@ class ChatEventsTable(BaseTable):
                     ''',
                     (
                         session_id,
-                        'System',
-                        'compact_boundary',
-                        json.dumps(boundary_content, ensure_ascii=False),
-                        task_id,
-                        invocation_id,
-                        spawn_id,
-                    ),
-                )
-                boundary_inserted = cursor.rowcount > 0
-
-                cursor.execute(
-                    f'''
-                    INSERT INTO {self.table_name}
-                    (session_id, source, type, content, task_id, invocation_id, spawn_id, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                    ''',
-                    (
                         session_id,
                         'System',
                         'history_checkpoint',
@@ -341,10 +342,29 @@ class ChatEventsTable(BaseTable):
                         spawn_id,
                     ),
                 )
-                checkpoint_inserted = cursor.rowcount > 0
-
                 conn.commit()
-                return boundary_inserted and checkpoint_inserted
+                return cursor.rowcount > 0
+
+    def add_checkpoint_pair(
+        self,
+        session_id: str,
+        *,
+        task_id: str | None,
+        invocation_id: str | None,
+        spawn_id: str | None,
+        covered_until_event_id: int,
+        base_messages: list[dict],
+        reason: str = 'summary',
+    ) -> bool:
+        return self.add_history_checkpoint(
+            session_id,
+            task_id=task_id,
+            invocation_id=invocation_id,
+            spawn_id=spawn_id,
+            covered_until_event_id=covered_until_event_id,
+            base_messages=base_messages,
+            reason=reason,
+        )
 
     def get_bohrium_events(self, session_id: str) -> list[dict]:
         """Return paired Bohrium tool call/result events for registry rebuild.

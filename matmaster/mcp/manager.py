@@ -33,6 +33,32 @@ _PER_CONN_SHUTDOWN_TIMEOUT = 1.0
 _RETRY_DELAY = 2
 
 
+class ManagedConnClosing(RuntimeError):
+    pass
+
+
+class ManagedConnBackpressure(RuntimeError):
+    pass
+
+
+class ManagedConnDead(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class MCPConcurrencyPolicy:
+    mode: str
+    max_inflight: int
+    max_pending_requests: int
+
+    @classmethod
+    def default_for_transport(cls, transport: str) -> MCPConcurrencyPolicy:
+        transport = transport.lower()
+        if transport == "stdio":
+            return cls(mode="serial", max_inflight=1, max_pending_requests=16)
+        return cls(mode="multiplex", max_inflight=4, max_pending_requests=64)
+
+
 @dataclass
 class _StartupState:
     connection: MCPConnection
@@ -44,6 +70,9 @@ class _CallToolRequest:
     tool_name: str
     arguments: dict[str, Any]
     result: asyncio.Future[Any]
+
+
+_CLOSE_REQUEST = object()
 
 
 class _ManagedConn:
@@ -58,14 +87,141 @@ class _ManagedConn:
     and shutdown all stay inside that same Task.
     """
 
-    def __init__(self, conn_ctx: MCPConnection) -> None:
+    def __init__(
+        self,
+        conn_ctx: MCPConnection,
+        *,
+        max_inflight: int = 1,
+        max_pending_requests: int = 16,
+    ) -> None:
         self._conn_ctx = conn_ctx
+        self._max_inflight = max(1, max_inflight)
         self._ready: asyncio.Future[_StartupState] = (
             asyncio.get_running_loop().create_future()
         )
-        self._requests: asyncio.Queue[_CallToolRequest | None] = asyncio.Queue()
+        queue_size = max(1, max_pending_requests)
+        self._requests: asyncio.Queue[_CallToolRequest | object] = asyncio.Queue(
+            maxsize=queue_size
+        )
+        self._sem = asyncio.Semaphore(self._max_inflight)
+        self._active_tasks: set[asyncio.Task[None]] = set()
+        self._owner_wakeup = asyncio.Event()
+        self._close_requested = asyncio.Event()
+        self._drain_event = asyncio.Event()
+        self._drain_event.set()
+        self._closing = False
+        self._fatal_error: BaseException | None = None
         self._closed = False
         self._task = asyncio.create_task(self._run())
+
+    def _set_request_exception(
+        self, request: _CallToolRequest, exc: BaseException
+    ) -> None:
+        if not request.result.done():
+            request.result.set_exception(exc)
+
+    def _wake_owner(self) -> None:
+        self._owner_wakeup.set()
+
+    def _make_dead_error(self, exc: BaseException) -> ManagedConnDead:
+        dead = ManagedConnDead("MCP connection is unavailable")
+        dead.__cause__ = exc
+        return dead
+
+    def _make_closing_error(self) -> ManagedConnClosing:
+        return ManagedConnClosing("MCP connection is closing")
+
+    def _map_cancelled_request_exception(
+        self, exc: asyncio.CancelledError
+    ) -> BaseException:
+        if self._closing or self._close_requested.is_set():
+            return self._make_closing_error()
+
+        cause = self._fatal_error if self._fatal_error is not None else exc
+        return self._make_dead_error(cause)
+
+    def _failure_for_owner_exit(self, exc: BaseException) -> BaseException:
+        if self._closing or self._close_requested.is_set():
+            return self._make_closing_error()
+        return self._make_dead_error(exc)
+
+    def _fail_queued_requests(self, exc: BaseException) -> None:
+        while True:
+            try:
+                request = self._requests.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+
+            if request is _CLOSE_REQUEST:
+                continue
+            self._set_request_exception(request, exc)
+
+    def _track_active_task(self, task: asyncio.Task[None]) -> None:
+        self._active_tasks.add(task)
+        self._drain_event.clear()
+        task.add_done_callback(self._on_request_done)
+
+    def _cancel_active_task_for_result(
+        self,
+        request: _CallToolRequest,
+        task: asyncio.Task[None],
+    ) -> None:
+        def _cancel_on_result_done(result: asyncio.Future[Any]) -> None:
+            if not result.cancelled() or task.done():
+                return
+            task.cancel()
+            self._wake_owner()
+
+        request.result.add_done_callback(_cancel_on_result_done)
+
+    def _on_request_done(self, task: asyncio.Task[None]) -> None:
+        self._active_tasks.discard(task)
+        if not self._active_tasks:
+            self._drain_event.set()
+        self._wake_owner()
+
+    async def _cancel_active_tasks(self) -> None:
+        if not self._active_tasks:
+            return
+
+        tasks = list(self._active_tasks)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _wait_for_drain(self) -> None:
+        if self._active_tasks:
+            await self._drain_event.wait()
+
+    async def _execute_request(
+        self, conn: MCPConnection, request: _CallToolRequest
+    ) -> None:
+        if request.result.done():
+            return
+        try:
+            async with self._sem:
+                if request.result.done():
+                    return
+                result = await conn.call_tool(request.tool_name, request.arguments)
+        except BaseException as exc:
+            if isinstance(exc, asyncio.CancelledError):
+                if request.result.cancelled():
+                    raise
+                self._set_request_exception(
+                    request, self._map_cancelled_request_exception(exc)
+                )
+                raise
+            self._set_request_exception(request, exc)
+        else:
+            if not request.result.done():
+                request.result.set_result(result)
+
+    def _should_finish_close(self) -> bool:
+        return (
+            self._close_requested.is_set()
+            and self._requests.empty()
+            and not self._active_tasks
+        )
 
     async def _run(self) -> None:
         try:
@@ -78,28 +234,48 @@ class _ManagedConn:
                 )
 
                 while True:
-                    request = await self._requests.get()
-                    if request is None:
+                    made_progress = False
+
+                    while len(self._active_tasks) < self._max_inflight:
+                        try:
+                            request = self._requests.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
+
+                        made_progress = True
+                        if request is _CLOSE_REQUEST:
+                            continue
+                        if request.result.done():
+                            continue
+
+                        task = asyncio.create_task(self._execute_request(conn, request))
+                        self._cancel_active_task_for_result(request, task)
+                        self._track_active_task(task)
+
+                    if self._should_finish_close():
                         return
 
-                    try:
-                        result = await conn.call_tool(
-                            request.tool_name, request.arguments
-                        )
-                    except Exception as exc:
-                        if not request.result.done():
-                            request.result.set_exception(exc)
-                    else:
-                        if not request.result.done():
-                            request.result.set_result(result)
+                    if made_progress:
+                        continue
+
+                    self._owner_wakeup.clear()
+                    if self._should_finish_close():
+                        return
+                    if (
+                        len(self._active_tasks) < self._max_inflight
+                        and not self._requests.empty()
+                    ):
+                        continue
+                    if self._owner_wakeup.is_set():
+                        continue
+                    await self._owner_wakeup.wait()
         except BaseException as exc:
+            self._fatal_error = exc
             if not self._ready.done():
                 self._ready.set_exception(exc)
             else:
-                while not self._requests.empty():
-                    request = self._requests.get_nowait()
-                    if request is not None and not request.result.done():
-                        request.result.set_exception(exc)
+                self._fail_queued_requests(self._failure_for_owner_exit(exc))
+            await self._cancel_active_tasks()
         finally:
             self._closed = True
 
@@ -107,23 +283,53 @@ class _ManagedConn:
         return await asyncio.wait_for(self._ready, timeout=timeout)
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        if self._closing:
+            raise ManagedConnClosing("MCP connection is closing")
+        if self._fatal_error is not None:
+            raise ManagedConnDead(
+                "MCP connection is unavailable"
+            ) from self._fatal_error
         if self._closed:
-            raise RuntimeError("MCP connection is closed")
+            raise ManagedConnClosing("MCP connection is closing")
 
         loop = asyncio.get_running_loop()
         result: asyncio.Future[Any] = loop.create_future()
-        await self._requests.put(
-            _CallToolRequest(
-                tool_name=tool_name,
-                arguments=arguments,
-                result=result,
+        try:
+            self._requests.put_nowait(
+                _CallToolRequest(
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    result=result,
+                )
             )
-        )
-        return await result
+        except asyncio.QueueFull as exc:
+            raise ManagedConnBackpressure("MCP pending request queue is full") from exc
+
+        self._wake_owner()
+        try:
+            return await result
+        except asyncio.CancelledError:
+            if not result.done():
+                result.cancel()
+            self._wake_owner()
+            raise
 
     async def close(self, timeout: float) -> None:
-        if not self._task.done():
-            await self._requests.put(None)
+        self._closing = True
+        self._close_requested.set()
+        try:
+            self._requests.put_nowait(_CLOSE_REQUEST)
+        except asyncio.QueueFull:
+            pass
+        self._wake_owner()
+
+        if self._task.done():
+            try:
+                await self._task
+            except Exception:
+                pass
+            return
+
         try:
             await asyncio.wait_for(self._task, timeout=timeout)
         except TimeoutError:
@@ -134,6 +340,8 @@ class _ManagedConn:
                 pass
         except Exception:
             pass
+        finally:
+            self._wake_owner()
 
 
 class MCPToolManager:
@@ -162,6 +370,11 @@ class MCPToolManager:
 
         # Long-lived managed connections (enter/exit in same Task)
         self._managed: dict[str, _ManagedConn] = {}
+
+        # Concurrency policy skeleton for Task 1.
+        self.concurrency_defaults_by_transport: dict[str, MCPConcurrencyPolicy] = {}
+        self.concurrency_by_server: dict[str, MCPConcurrencyPolicy] = {}
+        self._server_transports: dict[str, str] = {}
 
         # In-flight startup tasks keyed by server.
         self._startup_tasks: dict[str, asyncio.Task[None]] = {}
@@ -212,11 +425,37 @@ class MCPToolManager:
             )
             self._startup_tasks[name] = startup
 
+            def _remove_startup_task(
+                done: asyncio.Task[None], *, server_name=name
+            ) -> None:
+                try:
+                    done.exception()
+                except asyncio.CancelledError:
+                    pass
+                if self._startup_tasks.get(server_name) is done:
+                    self._startup_tasks.pop(server_name, None)
+
+            startup.add_done_callback(_remove_startup_task)
+
         try:
-            await startup
+            await asyncio.shield(startup)
         finally:
             if self._startup_tasks.get(name) is startup and startup.done():
                 self._startup_tasks.pop(name, None)
+
+    def _resolve_policy(self, server_name: str, transport: str) -> MCPConcurrencyPolicy:
+        policy = self.concurrency_by_server.get(server_name)
+        if policy is not None:
+            return policy
+
+        normalized_transport = transport.lower()
+        policy = self.concurrency_defaults_by_transport.get(normalized_transport)
+        if policy is not None:
+            return policy
+
+        policy = MCPConcurrencyPolicy.default_for_transport(normalized_transport)
+        self.concurrency_defaults_by_transport[normalized_transport] = policy
+        return policy
 
     async def _add_server_once(
         self, name: str, transport: str, **connection_kwargs: Any
@@ -241,6 +480,7 @@ class MCPToolManager:
             _retry_exc = (OSError, asyncio.TimeoutError)
 
         last_error: Exception | None = None
+        policy = self._resolve_policy(name, transport)
 
         for attempt in range(1, _MAX_RETRIES + 1):
             managed: _ManagedConn | None = None
@@ -249,8 +489,13 @@ class MCPToolManager:
                     raise RuntimeError("MCP manager is closing")
 
                 conn_ctx = create_connection(transport=transport, **connection_kwargs)
-                managed = _ManagedConn(conn_ctx)
+                managed = _ManagedConn(
+                    conn_ctx,
+                    max_inflight=policy.max_inflight,
+                    max_pending_requests=policy.max_pending_requests,
+                )
                 self._managed[name] = managed
+                self._server_transports[name] = transport
 
                 # 带超时的连接与 list_tools（均在 managed owner task 内执行）
                 startup = await managed.wait_ready(timeout=MCP_CONNECT_TIMEOUT)
@@ -271,12 +516,14 @@ class MCPToolManager:
                 if managed is not None:
                     await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
                     self._managed.pop(name, None)
+                    self._server_transports.pop(name, None)
                 raise
             except _retry_exc as e:
                 last_error = e
                 if managed is not None:
                     await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
                     self._managed.pop(name, None)
+                    self._server_transports.pop(name, None)
                 if attempt < _MAX_RETRIES:
                     logger.warning(
                         "MCP server '%s' connection failed (attempt %d/%d), "
@@ -299,6 +546,7 @@ class MCPToolManager:
                 if managed is not None:
                     await managed.close(timeout=_PER_CONN_SHUTDOWN_TIMEOUT)
                     self._managed.pop(name, None)
+                    self._server_transports.pop(name, None)
                 raise
 
         # 所有重试失败
@@ -309,9 +557,17 @@ class MCPToolManager:
     async def call_tool(
         self, server_name: str, remote_tool_name: str, arguments: dict[str, Any]
     ) -> Any:
+        if self._closing:
+            raise ManagedConnClosing("MCP manager is closing")
+
         startup = self._startup_tasks.get(server_name)
         if startup is not None:
-            await startup
+            try:
+                await asyncio.shield(startup)
+            except asyncio.CancelledError as exc:
+                if self._closing:
+                    raise ManagedConnClosing("MCP manager is closing") from exc
+                raise
 
         managed = self._managed.get(server_name)
         if managed is None:
@@ -345,7 +601,7 @@ class MCPToolManager:
         # 1. tool_include_only 白名单过滤
         include_only = self.tool_include_only.get(name)
         if include_only is not None:
-            tools_info = [t for t in tools_info if t.get('name') in include_only]
+            tools_info = [t for t in tools_info if t.get("name") in include_only]
             logger.info(
                 "Filtered to %d tools for server '%s' (include_only: %s)",
                 len(tools_info),
@@ -361,8 +617,8 @@ class MCPToolManager:
                 t
                 for t in tools_info
                 if not (
-                    t.get('name', '').startswith('submit_')
-                    and t.get('name', '')[len('submit_') :] in sync_tools
+                    t.get("name", "").startswith("submit_")
+                    and t.get("name", "")[len("submit_") :] in sync_tools
                 )
             ]
             if len(tools_info) < before:
@@ -378,24 +634,24 @@ class MCPToolManager:
         # 构建 base 描述映射（submit_* 描述继承用）
         base_descriptions: dict[str, str] = {}
         for tool_info in tools_info:
-            tool_name = tool_info.get('name', '')
-            desc = tool_info.get('description', '')
-            if not tool_name.startswith('submit_') and desc:
+            tool_name = tool_info.get("name", "")
+            desc = tool_info.get("description", "")
+            if not tool_name.startswith("submit_") and desc:
                 base_descriptions[tool_name] = desc
 
         # 3. async 去重：当 submit_X 存在时移除 base X
         submit_names = {
-            t.get('name', '')[len('submit_') :]
+            t.get("name", "")[len("submit_") :]
             for t in tools_info
-            if t.get('name', '').startswith('submit_')
+            if t.get("name", "").startswith("submit_")
         }
         if submit_names:
             before_dedup = len(tools_info)
             tools_info = [
                 t
                 for t in tools_info
-                if t.get('name', '').startswith('submit_')
-                or t.get('name', '') not in submit_names
+                if t.get("name", "").startswith("submit_")
+                or t.get("name", "") not in submit_names
             ]
             if len(tools_info) < before_dedup:
                 logger.info(
@@ -415,7 +671,7 @@ class MCPToolManager:
         # 构建工具信息字典
         server_tools: dict[str, dict[str, Any]] = {}
         for tool_info in tools_info:
-            original_name = tool_info['name']
+            original_name = tool_info["name"]
             prefixed_name = f"{name}_{original_name}"
 
             # 全局去重
@@ -429,20 +685,20 @@ class MCPToolManager:
             self._seen_tools.add(prefixed_name)
 
             # 4. description 继承
-            description = tool_info.get('description', '')
-            if original_name.startswith('submit_'):
-                base_name = original_name[len('submit_') :]
-                base_desc = base_descriptions.get(base_name, '')
+            description = tool_info.get("description", "")
+            if original_name.startswith("submit_"):
+                base_name = original_name[len("submit_") :]
+                base_desc = base_descriptions.get(base_name, "")
                 if base_desc and len(base_desc) > len(description):
                     description = base_desc
 
             tool_dict: dict[str, Any] = {
-                'name': prefixed_name,
-                'description': description,
-                'input_schema': tool_info.get('input_schema', {}),
-                'remote_tool_name': original_name,
-                'connection': conn,
-                'has_calculation_preflight': bool(needs_calculation_preflight),
+                "name": prefixed_name,
+                "description": description,
+                "input_schema": tool_info.get("input_schema", {}),
+                "remote_tool_name": original_name,
+                "connection": conn,
+                "has_calculation_preflight": bool(needs_calculation_preflight),
             }
 
             server_tools[prefixed_name] = tool_dict
@@ -478,5 +734,6 @@ class MCPToolManager:
         self._managed.clear()
         self._startup_tasks.clear()
         self._seen_tools.clear()
+        self._server_transports.clear()
 
         logger.info("MCP cleanup complete")

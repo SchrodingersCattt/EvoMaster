@@ -1,6 +1,8 @@
 import json
 import logging
+from datetime import datetime
 from functools import lru_cache
+from typing import Any
 
 from pymysql import Error
 
@@ -10,10 +12,34 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+def _parse_first_message_cell(raw: object) -> str | None:
+    if raw is None:
+        return None
+    try:
+        content = json.loads(raw)
+        if isinstance(content, str):
+            return content
+        return str(content)
+    except (json.JSONDecodeError, TypeError):
+        return str(raw) if raw else None
+
+
+def _dir_key_expr(alias: str = "s") -> str:
+    """SQL 表达式：与业务层 norm_dir 一致，空/NULL → __UNSET__。"""
+    return f"COALESCE(NULLIF(TRIM({alias}.session_directory), ''), '__UNSET__')"
+
+
+class _WorkspacePrefUnset:
+    """update_session_workspace_prefs 未传入的字段不更新。"""
+
+
+WORKSPACE_PREF_UNSET = _WorkspacePrefUnset()
+
+
 class ChatSessionsTable(BaseTable):
     """聊天会话表"""
 
-    table_name = 'evo_chat_sessions'
+    table_name = "evo_chat_sessions"
 
     def create_session(
         self,
@@ -25,24 +51,24 @@ class ChatSessionsTable(BaseTable):
             with conn.cursor() as cursor:
                 # 检查会话是否已存在
                 cursor.execute(
-                    f'SELECT id FROM {self.table_name} WHERE session_id = %s',
+                    f"SELECT id FROM {self.table_name} WHERE session_id = %s",
                     (session_id,),
                 )
                 if cursor.fetchone():
-                    logger.debug(f'会话 {session_id} 已存在')
+                    logger.debug(f"会话 {session_id} 已存在")
                     return True
 
                 # 创建新会话（默认 status=idle, is_shared=0）
                 cursor.execute(
-                    f'''
+                    f"""
                     INSERT INTO {self.table_name}
                     (session_id, user_id, status, is_shared, created_at, updated_at)
                     VALUES (%s, %s, 'idle', 0, NOW(), NOW())
-                    ''',
+                    """,
                     (session_id, user_id),
                 )
                 conn.commit()
-                logger.info(f'创建会话成功: {session_id}')
+                logger.info(f"创建会话成功: {session_id}")
                 return cursor.rowcount > 0
 
     def get_session(self, session_id: str) -> dict | None:
@@ -50,12 +76,12 @@ class ChatSessionsTable(BaseTable):
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f'''
-                    SELECT session_id, user_id, org_id, project_id,
-                           status, is_shared, last_task_id, created_at, updated_at
+                    f"""
+                    SELECT session_id, user_id, org_id, project_id, session_directory,
+                           chat_mode, status, is_shared, last_task_id, created_at, updated_at
                     FROM {self.table_name}
                     WHERE session_id = %s
-                    ''',
+                    """,
                     (session_id,),
                 )
                 result = cursor.fetchone()
@@ -76,33 +102,103 @@ class ChatSessionsTable(BaseTable):
                     updates = []
                     params = []
                     if org_id is not None:
-                        updates.append('org_id = %s')
+                        updates.append("org_id = %s")
                         params.append(
                             org_id.strip() if isinstance(org_id, str) else org_id
                         )
                     if project_id is not None:
-                        updates.append('project_id = %s')
+                        updates.append("project_id = %s")
                         params.append(int(project_id))
                     if not updates:
                         return True
                     params.append(session_id)
                     cursor.execute(
-                        f'''
+                        f"""
                         UPDATE {self.table_name}
                         SET {', '.join(updates)}, updated_at = NOW()
                         WHERE session_id = %s
-                        ''',
+                        """,
                         tuple(params),
                     )
                     conn.commit()
                     return True
         except Error as e:
             logger.warning(
-                'set_session_bohrium failed session_id=%s: %s',
+                "set_session_bohrium failed session_id=%s: %s",
                 session_id,
                 e,
             )
             return False
+
+    def update_session_workspace_prefs(
+        self,
+        session_id: str,
+        user_id: str,
+        *,
+        directory: str | None | _WorkspacePrefUnset = WORKSPACE_PREF_UNSET,
+        chat_mode: str | None | _WorkspacePrefUnset = WORKSPACE_PREF_UNSET,
+    ) -> bool:
+        """更新会话工作区目录与/或 chat_mode。未传入的字段不更新。仅所有者可写。"""
+        sets: list[str] = []
+        params: list[object] = []
+        if not isinstance(directory, _WorkspacePrefUnset):
+            norm_d: str | None = None
+            if directory is not None:
+                s = str(directory).strip()
+                norm_d = s if s else None
+            sets.append("session_directory = %s")
+            params.append(norm_d)
+        if not isinstance(chat_mode, _WorkspacePrefUnset):
+            norm_m: str | None = None
+            if chat_mode is not None:
+                m = str(chat_mode).strip().lower()
+                if m not in ("direct", "planner"):
+                    logger.warning(
+                        "update_session_workspace_prefs invalid chat_mode=%r session_id=%s",
+                        chat_mode,
+                        session_id,
+                    )
+                    return False
+                norm_m = m
+            sets.append("chat_mode = %s")
+            params.append(norm_m)
+        if not sets:
+            return True
+        params.extend([session_id, user_id])
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        f"""
+                        UPDATE {self.table_name}
+                        SET {', '.join(sets)}, updated_at = NOW()
+                        WHERE session_id = %s AND user_id = %s
+                        """,
+                        tuple(params),
+                    )
+                    conn.commit()
+                    return cursor.rowcount > 0
+        except Error as e:
+            logger.warning(
+                "update_session_workspace_prefs failed session_id=%s: %s",
+                session_id,
+                e,
+            )
+            return False
+
+    def set_session_directory(
+        self,
+        session_id: str,
+        directory: str | None,
+        user_id: str,
+    ) -> bool:
+        """更新会话绑定目录。仅所有者可写；directory 为 None 或空串则置为 NULL。"""
+        return self.update_session_workspace_prefs(
+            session_id,
+            user_id,
+            directory=directory,
+            chat_mode=WORKSPACE_PREF_UNSET,
+        )
 
     def set_session_status(self, session_id: str, status: str) -> bool:
         """设置会话状态：idle=空闲/已结束，active=运行中，waiting=已入队等待 worker 接手"""
@@ -110,11 +206,11 @@ class ChatSessionsTable(BaseTable):
             with self.get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(
-                        f'''
+                        f"""
                         UPDATE {self.table_name}
                         SET status = %s, updated_at = NOW()
                         WHERE session_id = %s
-                        ''',
+                        """,
                         (status, session_id),
                     )
                     conn.commit()
@@ -129,11 +225,11 @@ class ChatSessionsTable(BaseTable):
             with conn.cursor() as cursor:
                 # 更新会话的 last_task_id（不再使用 chat_session_tasks 表）
                 cursor.execute(
-                    f'''
+                    f"""
                     UPDATE {self.table_name}
                     SET last_task_id = %s, updated_at = NOW()
                     WHERE session_id = %s
-                    ''',
+                    """,
                     (task_id, session_id),
                 )
                 conn.commit()
@@ -144,11 +240,11 @@ class ChatSessionsTable(BaseTable):
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f'''
+                    f"""
                     UPDATE {self.table_name}
                     SET is_shared = %s, updated_at = NOW()
                     WHERE session_id = %s AND user_id = %s
-                    ''',
+                    """,
                     (1 if is_shared else 0, session_id, user_id),
                 )
                 conn.commit()
@@ -159,7 +255,7 @@ class ChatSessionsTable(BaseTable):
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f'DELETE FROM {self.table_name} WHERE session_id = %s AND user_id = %s',
+                    f"DELETE FROM {self.table_name} WHERE session_id = %s AND user_id = %s",
                     (session_id, user_id),
                 )
                 conn.commit()
@@ -170,15 +266,15 @@ class ChatSessionsTable(BaseTable):
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f'''
+                    f"""
                     SELECT COUNT(*) as cnt
                     FROM {self.table_name}
                     WHERE status = %s
-                    ''',
-                    ('active',),
+                    """,
+                    ("active",),
                 )
                 row = cursor.fetchone()
-                return int(row['cnt']) if row and row.get('cnt') is not None else 0
+                return int(row["cnt"]) if row and row.get("cnt") is not None else 0
 
     def reset_all_active_to_idle(self) -> int:
         """
@@ -188,12 +284,12 @@ class ChatSessionsTable(BaseTable):
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    f'''
+                    f"""
                     UPDATE {self.table_name}
                     SET status = 'idle', updated_at = NOW()
                     WHERE status = %s
-                    ''',
-                    ('active',),
+                    """,
+                    ("active",),
                 )
                 conn.commit()
                 return cursor.rowcount or 0
@@ -206,17 +302,17 @@ class ChatSessionsTable(BaseTable):
         """获取该用户的会话总数（用于分页，可按 project_id 过滤）。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
-                sql = f'SELECT COUNT(*) as n FROM {self.table_name} WHERE user_id = %s'
+                sql = f"SELECT COUNT(*) as n FROM {self.table_name} WHERE user_id = %s"
                 params: list[object] = [user_id]
                 if project_id is not None:
-                    sql += ' AND project_id = %s'
+                    sql += " AND project_id = %s"
                     params.append(int(project_id))
                 cursor.execute(
                     sql,
                     tuple(params),
                 )
                 row = cursor.fetchone()
-                return int(row['n']) if row else 0
+                return int(row["n"]) if row else 0
 
     def list_sessions(
         self,
@@ -231,16 +327,19 @@ class ChatSessionsTable(BaseTable):
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 # 使用子查询获取第一条用户消息，并带上会话 status；分页在应用层排序后做会破坏顺序，故在 SQL 中用子查询分页
-                where_clause = 'WHERE s.user_id = %s'
+                where_clause = "WHERE s.user_id = %s"
                 params: list[object] = [user_id]
                 if project_id is not None:
-                    where_clause += ' AND s.project_id = %s'
+                    where_clause += " AND s.project_id = %s"
                     params.append(int(project_id))
-                sql = f'''
+                # 不要用 LEFT JOIN 全表事件再 COUNT：事件多时中间结果爆炸。history_length 用标量子查询按 session_id 计数。
+                sql = f"""
                     SELECT s.session_id,
                            s.project_id,
                            s.status,
-                           COUNT(e.id) as history_length,
+                           (SELECT COUNT(*)
+                            FROM evo_chat_events e_cnt
+                            WHERE e_cnt.session_id = s.session_id) as history_length,
                            (SELECT e2.content
                             FROM evo_chat_events e2
                             WHERE e2.session_id = s.session_id
@@ -249,46 +348,170 @@ class ChatSessionsTable(BaseTable):
                             ORDER BY e2.created_at ASC
                             LIMIT 1) as first_message
                     FROM {self.table_name} s
-                    LEFT JOIN evo_chat_events e ON s.session_id = e.session_id
                     {where_clause}
-                    GROUP BY s.session_id, s.project_id, s.status
                     ORDER BY s.created_at DESC
                     LIMIT %s OFFSET %s
-                '''
+                """
                 params.extend([limit, offset])
                 cursor.execute(sql, tuple(params))
                 results = cursor.fetchall()
                 sessions = []
                 for row in results:
-                    first_user_message = None
-                    if row.get('first_message'):
-                        try:
-                            # first_message 是 JSON 字符串（content 字段存储时会被 json.dumps）
-                            content = json.loads(row['first_message'])
-                            # content 通常是字符串，直接使用
-                            if isinstance(content, str):
-                                first_user_message = content
-                            else:
-                                # 如果不是字符串，转换为字符串
-                                first_user_message = str(content)
-                        except (json.JSONDecodeError, TypeError):
-                            # 如果解析失败，直接使用原始字符串
-                            first_user_message = (
-                                str(row['first_message'])
-                                if row['first_message']
-                                else None
-                            )
+                    first_user_message = _parse_first_message_cell(
+                        row.get("first_message")
+                    )
 
                     sessions.append(
                         {
-                            'id': row['session_id'],
-                            'project_id': row.get('project_id'),
-                            'status': row.get('status', 'idle'),
-                            'history_length': row['history_length'],
-                            'first_user_message': first_user_message,
+                            "id": row["session_id"],
+                            "project_id": row.get("project_id"),
+                            "status": row.get("status", "idle"),
+                            "history_length": row["history_length"],
+                            "first_user_message": first_user_message,
                         }
                     )
                 return sessions
+
+    def aggregate_session_directory_stats(
+        self,
+        user_id: str,
+        project_id: int,
+    ) -> list[dict[str, Any]]:
+        """按目录桶统计会话数与组内最新 updated_at（用于排序与 has_more）。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                dk = _dir_key_expr("s")
+                sql = f"""
+                    SELECT {dk} AS dk,
+                           COUNT(*) AS session_count,
+                           MAX(s.updated_at) AS max_upd
+                    FROM {self.table_name} s
+                    WHERE s.user_id = %s AND s.project_id = %s
+                    GROUP BY dk
+                """
+                cursor.execute(sql, (user_id, int(project_id)))
+                rows = cursor.fetchall() or []
+                out: list[dict[str, Any]] = []
+                for row in rows:
+                    out.append(
+                        {
+                            "dk": row["dk"],
+                            "session_count": int(row["session_count"] or 0),
+                            "max_upd": row.get("max_upd"),
+                        }
+                    )
+                return out
+
+    def list_sessions_windowed_first_per_directory(
+        self,
+        user_id: str,
+        project_id: int,
+        per_group_limit: int,
+    ) -> list[dict[str, Any]]:
+        """
+        每个 session_directory 桶内按 updated_at DESC 取前 per_group_limit 条（窗口函数）。
+        返回行含 dk、history_length、first_message 解析前原始列等。
+        """
+        cap = max(1, min(50, per_group_limit))
+        dk_sql = _dir_key_expr("s")
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                sql = f"""
+                    SELECT t.session_id,
+                           t.project_id,
+                           t.status,
+                           t.session_directory,
+                           t.updated_at,
+                           t.history_length,
+                           t.first_message,
+                           t.dk,
+                           t.rn
+                    FROM (
+                        SELECT s.session_id,
+                               s.project_id,
+                               s.status,
+                               s.session_directory,
+                               s.updated_at,
+                               (SELECT COUNT(*)
+                                FROM evo_chat_events e_cnt
+                                WHERE e_cnt.session_id = s.session_id) AS history_length,
+                               (SELECT e2.content
+                                FROM evo_chat_events e2
+                                WHERE e2.session_id = s.session_id
+                                  AND e2.source = 'User'
+                                  AND e2.type = 'query'
+                                ORDER BY e2.created_at ASC
+                                LIMIT 1) AS first_message,
+                               {dk_sql} AS dk,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY {dk_sql}
+                                   ORDER BY s.updated_at DESC, s.session_id DESC
+                               ) AS rn
+                        FROM {self.table_name} s
+                        WHERE s.user_id = %s AND s.project_id = %s
+                    ) t
+                    WHERE t.rn <= %s
+                """
+                cursor.execute(sql, (user_id, int(project_id), cap))
+                return list(cursor.fetchall() or [])
+
+    def list_sessions_in_directory_paged(
+        self,
+        user_id: str,
+        project_id: int,
+        *,
+        directory: str | None,
+        limit: int,
+        cursor_updated_at: datetime | None,
+        cursor_session_id: str | None,
+    ) -> list[dict[str, Any]]:
+        """
+        单目录桶内分页。directory is None 表示未设置目录组。
+        按 updated_at DESC, session_id DESC；游标为上一页最后一条。
+        """
+        cap = max(1, min(50, limit))
+        fetch_n = cap + 1
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                where_clause = "WHERE s.user_id = %s AND s.project_id = %s"
+                params: list[object] = [user_id, int(project_id)]
+                if directory is None:
+                    where_clause += " AND (s.session_directory IS NULL OR TRIM(s.session_directory) = '')"
+                else:
+                    where_clause += " AND s.session_directory = %s"
+                    params.append(directory)
+                if cursor_updated_at is not None and cursor_session_id is not None:
+                    where_clause += (
+                        " AND (s.updated_at < %s OR "
+                        "(s.updated_at = %s AND s.session_id < %s))"
+                    )
+                    params.extend(
+                        [cursor_updated_at, cursor_updated_at, cursor_session_id]
+                    )
+                sql = f"""
+                    SELECT s.session_id,
+                           s.project_id,
+                           s.status,
+                           s.session_directory,
+                           s.updated_at,
+                           (SELECT COUNT(*)
+                            FROM evo_chat_events e_cnt
+                            WHERE e_cnt.session_id = s.session_id) AS history_length,
+                           (SELECT e2.content
+                            FROM evo_chat_events e2
+                            WHERE e2.session_id = s.session_id
+                              AND e2.source = 'User'
+                              AND e2.type = 'query'
+                            ORDER BY e2.created_at ASC
+                            LIMIT 1) AS first_message
+                    FROM {self.table_name} s
+                    {where_clause}
+                    ORDER BY s.updated_at DESC, s.session_id DESC
+                    LIMIT %s
+                """
+                params.append(fetch_n)
+                cursor.execute(sql, tuple(params))
+                return list(cursor.fetchall() or [])
 
 
 @lru_cache

@@ -1,0 +1,36 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 3,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [
+        "05b5a8ed974c7168fee003773005e9572be1b817"
+      ],
+      "files_touched": [
+        "matmaster/skills/playground-skills/manuscript-scribe/SKILL.md",
+        "matmaster/skills/playground-skills/manuscript-scribe/references/typographic_and_writing_rules.md",
+        "matmaster/skills/playground-skills/bohrium-job/SKILL.md",
+        "matmaster/skills/playground-skills/bohrium-job/references/software_reference.md",
+        "matmaster/skills/abacus/SKILL.md",
+        "matmaster/skills/mlips/SKILL.md",
+        "matmaster/skills/playground-skills/deep-survey/SKILL.md",
+        "matmaster/skills/playground-skills/structure-manager/SKILL.md",
+        "matmaster/skills/playground-skills/result-analysis/SKILL.md",
+        "matmaster/skills/playground-skills/lit-data-organizer/SKILL.md"
+      ],
+      "followup_suggestion": "Run eval to measure impact. If turn budget still a major issue, consider: (1) trimming input-manual-helper SKILL.md (~200 lines, redundant with per-software skills), (2) trimming composition-optimization and tasker-polar-surface (~200 lines each), (3) investigating runtime crashes (devshell_exit_code=1, 0 steps) which are pre-existing baseline issues affecting ~13-17 tasks — likely MCP config or initialization timeout, not addressable via skill edits.",
+      "iteration_index": 3,
+      "needs_more_work": true,
+      "optimization_round": 1,
+      "summary": "## Skill SKILL.md Trimming for Turn Budget Reduction\n\n**Root cause analysis**: The agent exceeds turn budgets by 1.5-3x because each Skill tool invocation returns the full SKILL.md body into the conversation context. Verbose skills consume more context, slowing agent processing and reducing room for actual task work.\n\n**Strategy**: Trimmed 8 of the most verbose SKILL.md files, moving detailed reference material to `references/` files (lazy-loaded on-demand). All essential workflow information, trigger conditions, mandatory parameters, and key constraints preserved.\n\n### Changes (8 SKILL.md trimmed + 2 reference files created):\n\n| Skill | Before (approx lines) | After (approx lines) | Savings |\n|-------|----------------------|---------------------|---------|\n| **manuscript-scribe** | ~500 | ~80 | ~420 lines (~3000 tokens) |\n| **bohrium-job** | ~300 | ~60 | ~240 lines (~2000 tokens) |\n| **abacus** | ~250 | ~90 | ~160 lines (~1200 tokens) |\n| **mlips** | ~200 | ~60 | ~140 lines (~1000 tokens) |\n| **deep-survey** | ~200 | ~50 | ~150 lines (~1000 tokens) |\n| **structure-manager** | ~200 | ~60 | ~140 lines (~1000 tokens) |\n| **result-analysis** | ~150 | ~45 | ~105 lines (~800 tokens) |\n| **lit-data-organizer** | ~150 | ~30 | ~120 lines (~800 tokens) |\n\n**New reference files** (for moved content):\n- `manuscript-scribe/references/typographic_and_writing_rules.md` — typographic style, De-AIGC rules, planner mode guidelines, word count targets\n- `bohrium-job/references/software_reference.md` — full software image/machine/command defaults table\n\n**Expected impact**: ~2000-3000 fewer tokens per skill invocation. Tasks typically invoke 2-4 skills, saving ~4000-12000 tokens in conversation context per task. This should help the agent complete tasks in fewer turns by providing cleaner signal and more context headroom.\n\n**Safety**: Only content was REMOVED or MOVED (no additions to SKILL.md). Frontmatter descriptions unchanged. Critical workflow info, mandatory parameters, and key constraints all preserved in SKILL.md. Detailed info accessible via `get_reference()` when needed."
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 3,
+    "macro_mean_0_100": 21,
+    "rationale": "## Iteration 3 — Post-Revert Recovery\n\n### Score: 21/100 (target: 60) — recovered from 11, near baseline 23\n\n**P0 gate**: Passed (56/100; DD_general_004 dropped 100→0, DF_mech_002 gained 0→100 — net unchanged)\n\n### Crash Analysis Correction\n\nBaseline (iter_01) actually had **13 parse_error crashes** (not 5 as initially estimated):\n- 5 polymer: pl_adhesion, pl_donor, pl_hopping, pl_membrane (pl_rheology was completing)\n- 3 WO_general: hea_005, sse_006, steel_008  \n- 2 CR_WO: feature_extract_43d, limiting_potential\n- 2 DF_scxrd: scxrd_001, scxrd_002\n- 1 each: DFT_pxrd_001, BP_struct_005\n\niter_03 has 17 crashes (+4 net new, -1 recovered). The revert mostly restored baseline behavior.\n\n### Remaining Gap to Target\n\n| Category | Count | Impact |\n|----------|-------|--------|\n| Questions passing | ~12 | 21% |\n| Runtime crashes (pre-existing) | ~13-17 | Can't score, ~23-30% of all questions |\n| Turn budget exceeded | ~28 | Biggest opportunity for improvement |\n| Target needed | 34 | 60% = 34/57 passing |\n\n### Delegation\n- **delegate_optimization** queued: Focus on TRIMMING skill content (reduce system prompt size), investigating runtime crashes, and reducing turn count. Explicit instruction: DO NOT add content to SKILL.md — only remove/consolidate.\n\n### Next Steps\n- Optimization agent to trim verbose skill content and investigate crash root cause.\n- Re-evaluate in iteration 4.",
+    "target_met": false
+  }
+}

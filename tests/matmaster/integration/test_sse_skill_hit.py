@@ -19,5 +19,5 @@ class TestSSEHandlerSkillHit:
             invocation_id=None,
             mode="direct",
         )
-        event = SkillHitEvent(source="MatMaster", skill_name="bohrium-job")
+        event = SkillHitEvent(source="MatMaster", skill_name="bohrium")
         assert handler._should_skip(event) is True

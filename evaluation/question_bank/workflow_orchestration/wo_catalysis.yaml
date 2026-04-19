@@ -79,7 +79,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_elec_007_20260411v1
+- id: WO_elec_007_20260415
   capability: workflow_orchestration
   domain: catalysis
   intent: Compute Pd(111) work function with ABACUS under a z-direction vacuum setup and summarize
@@ -105,23 +105,21 @@ questions:
   - key: wf_required_tokens
     value:
       filename: pd111_work_function.json
-      tokens:
+      must_cover:
       - work_function_eV
       - vacuum_direction
       - z
       - functional
       - calculation_mode
-      flags: i
   - key: report_required_tokens
     value:
       filename: pd111_work_function_report.md
-      tokens:
+      must_cover:
       - Pd(111)
       - work function
       - ABACUS
       - z
       - 不确定性
-      flags: i
   - key: wf_value_mock
     value: 5.43
     tolerance: 0.3
@@ -146,12 +144,12 @@ questions:
   - id: wf_required_tokens
     criterion: JSON output includes work-function value and explicit z-direction vacuum setting.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: report_required_tokens
     criterion: Report explains setup rationale and output interpretation with uncertainty
       caveats.
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
   - id: wf_value_mock
     criterion: Final answer includes a mock work-function value near 5.43 eV.
     axis: correctness

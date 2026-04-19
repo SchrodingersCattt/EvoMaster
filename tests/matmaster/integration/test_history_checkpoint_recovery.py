@@ -72,7 +72,7 @@ class InMemoryEventsTable:
         self._events.append(event)
         return event["id"]
 
-    def add_checkpoint_pair(
+    def add_history_checkpoint(
         self,
         session_id: str,
         *,
@@ -85,7 +85,7 @@ class InMemoryEventsTable:
     ) -> bool:
         self.calls.append(
             (
-                "add_checkpoint_pair",
+                "add_history_checkpoint",
                 session_id,
                 task_id,
                 invocation_id,
@@ -97,22 +97,11 @@ class InMemoryEventsTable:
         self.add_event(
             session_id,
             "System",
-            "compact_boundary",
-            {
-                "covered_until_event_id": covered_until_event_id,
-                "reason": reason,
-            },
-            task_id=task_id,
-            invocation_id=invocation_id,
-            spawn_id=spawn_id,
-        )
-        self.add_event(
-            session_id,
-            "System",
             "history_checkpoint",
             {
                 "covered_until_event_id": covered_until_event_id,
                 "base_messages": base_messages,
+                "reason": reason,
             },
             task_id=task_id,
             invocation_id=invocation_id,
@@ -153,7 +142,8 @@ class InMemoryEventsTable:
             if event["session_id"] == session_id
             and event.get("spawn_id") == spawn_id
             and int(event["id"]) > after_id
-            and event["type"] not in {"compact_boundary", "history_checkpoint"}
+            and event["type"]
+            not in {"history_checkpoint", "compaction", "context_compaction"}
         ]
         rows.sort(key=lambda event: int(event["id"]))
         if limit is not None:
@@ -167,7 +157,8 @@ class InMemoryEventsTable:
             for event in self._events
             if event["session_id"] == session_id
             and event.get("spawn_id") == spawn_id
-            and event["type"] not in {"compact_boundary", "history_checkpoint"}
+            and event["type"]
+            not in {"history_checkpoint", "compaction", "context_compaction"}
         ]
         return max(ids, default=0)
 
@@ -506,4 +497,65 @@ async def test_restore_after_midrun_crash_uses_written_checkpoint() -> None:
     assert events_table.history_checkpoints(spawn_id=None)[0]["content"] == {
         "covered_until_event_id": 2,
         "base_messages": checkpoint_base_messages,
+        "reason": "summary",
     }
+
+
+@pytest.mark.asyncio
+async def test_compaction_events_replay_but_do_not_enter_restore_tail() -> None:
+    session_id = "sess-compaction"
+    events_table = InMemoryEventsTable()
+    fanout = Mock()
+    fanout.flush_persistence_barrier = AsyncMock()
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        user_content="question before compaction",
+        response_content="answer before compaction",
+    )
+
+    checkpoint_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
+        fanout=fanout,
+        session_id=session_id,
+        task_id="task-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+    )
+
+    covered_until = await checkpoint_sink(
+        payload={"durability": "durable", "strategy": "summary"},
+        base_messages=serialize_base_messages(
+            [
+                SystemMessage(content="[Compacted Context]\nsummary"),
+                UserMessage(content="task"),
+            ]
+        ),
+    )
+
+    events_table.add_event(
+        session_id,
+        "MatMaster",
+        "compaction",
+        {
+            "compaction_id": "task-1:root:1",
+            "status": "complete",
+            "phase": "runtime",
+            "strategy": "summary",
+            "durability": "durable",
+            "checkpoint_written": True,
+            "covered_until_event_id": covered_until,
+        },
+        task_id="task-1",
+    )
+
+    restored = HistoryRestoreService(events_table).restore_history(
+        session_id=session_id,
+        spawn_id=None,
+        task_id="task-2",
+    )
+
+    assert [type(msg).__name__ for msg in restored] == [
+        "SystemMessage",
+        "UserMessage",
+    ]

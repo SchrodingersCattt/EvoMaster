@@ -6,9 +6,7 @@ yields, and compactor deque integration. Phase 34 Plan 1 Task 1.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 
@@ -20,14 +18,7 @@ from matmaster.types.events import (
     SkillHitEvent,
     ThoughtEvent,
 )
-from matmaster.types.messages import (
-    AssistantMessage,
-    LLMResponse,
-    StreamChunk,
-    SystemMessage,
-    ToolCallData,
-    UserMessage,
-)
+from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
 from matmaster.types.runtime import AgentRuntimeSpec
 
 from .agent_kernel_test_helpers import (
@@ -80,6 +71,18 @@ class ContentOnlyProvider:
     async def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(content="hello ")
         yield StreamChunk(content="world")
+        yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
+
+
+class RecordingContentProvider(ContentOnlyProvider):
+    """Provider that records outbound messages before returning content."""
+
+    def __init__(self) -> None:
+        self.seen_messages: list[list[dict[str, Any]]] = []
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.seen_messages.append(messages)
+        yield StreamChunk(content="done")
         yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
 
 
@@ -187,49 +190,62 @@ class TrivialToolPreambleProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class _DurablePreflightCompactor:
-    """Compactor test double that emits one durable preflight event."""
+class EmptyStopProvider:
+    """Provider that ends cleanly without content or tool calls."""
+
+    stream_timeout = 10.0
+    max_retries = 1
+    retry_delay = 0.0
+
+    def __init__(self, content: str | None = None, reasoning: str | None = None):
+        self.content = content
+        self.reasoning = reasoning
+        self.call_count = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.call_count += 1
+        if self.reasoning is not None:
+            yield StreamChunk(reasoning_content=self.reasoning)
+        if self.content is not None:
+            yield StreamChunk(content=self.content)
+        yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+
+
+class EmptyThenContentProvider:
+    """Provider that returns an empty stop once, then a valid answer."""
+
+    stream_timeout = 10.0
+    max_retries = 2
+    retry_delay = 0.0
 
     def __init__(self) -> None:
-        self._event_sink = None
-        self.preflight_calls = 0
-        self.runtime_calls = 0
-        self.message_counts: list[int] = []
+        self.call_count = 0
 
-    def update_message_count(self, count: int) -> None:
-        self.message_counts.append(count)
+    async def __aenter__(self):
+        return self
 
-    async def preflight_if_needed(self, messages: list[Any]) -> None:
-        from matmaster.types.events import ContextCompactionEvent
+    async def __aexit__(self, *args):
+        pass
 
-        self.preflight_calls += 1
-        task_message = messages[-1]
-        messages[:] = [
-            messages[0],
-            SystemMessage(content="[Compacted Context]\nsummary"),
-            task_message,
-        ]
-        if self._event_sink is not None:
-            await self._event_sink(
-                ContextCompactionEvent(
-                    source="context_compactor",
-                    payload={
-                        "phase": "preflight",
-                        "strategy": "summary",
-                        "durability": "durable",
-                        "trigger_tokens": 1234,
-                        "retained_turns": 1,
-                        "checkpoint_attempted": False,
-                        "checkpoint_written": False,
-                        "failure_reason": None,
-                    },
-                )
-            )
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
 
-    async def compact_if_needed(
-        self, messages: list[Any], last_usage: dict[str, int], turn: int
-    ) -> None:
-        self.runtime_calls += 1
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.call_count += 1
+        if self.call_count == 1:
+            yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
+        else:
+            yield StreamChunk(content="recovered")
+            yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
 # ── _stream_llm_items() tests ─────────────────────────────
@@ -437,6 +453,43 @@ class TestRunItemsAssistantState:
     """_run_items() yields AssistantStateEvent on tool_calls turns."""
 
     @pytest.mark.asyncio
+    async def test_current_user_images_are_sent_as_content_parts(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = RecordingContentProvider()
+        spec = _make_spec(provider=provider).model_copy(
+            update={
+                "meta": {
+                    "current_user_images": [
+                        {
+                            "url": "https://oss.example.com/chat/a.png",
+                            "mime_type": "image/png",
+                            "detail": "high",
+                        }
+                    ]
+                }
+            }
+        )
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "看图"):
+            events.append(event)
+
+        user_message = provider.seen_messages[0][-1]
+        assert user_message["role"] == "user"
+        assert user_message["content"] == [
+            {"type": "text", "text": "看图"},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "https://oss.example.com/chat/a.png",
+                    "detail": "high",
+                },
+            },
+        ]
+
+    @pytest.mark.asyncio
     async def test_yields_assistant_state_event(self) -> None:
         """AssistantStateEvent emitted when LLM returns tool_calls."""
         from matmaster.core.agent import AgentKernel
@@ -622,7 +675,7 @@ class TestGap2RunStreamYieldsBusEvent:
         # All events should have 'type' attribute (BusEvent signature)
         for event in events:
             assert hasattr(
-                event, 'type'
+                event, "type"
             ), f"Yielded object missing 'type' attribute: {type(event).__name__}"
 
         # Last event should be RunResultEvent
@@ -651,12 +704,143 @@ class TestGap2RunStreamYieldsBusEvent:
                 event, _KernelItem
             ), f"run_stream() yielded _KernelItem: {event!r}"
             assert hasattr(
-                event, 'type'
+                event, "type"
             ), f"Missing 'type' attribute: {type(event).__name__}"
 
         assert isinstance(
             events[-1], RunResultEvent
         ), f"Last event should be RunResultEvent, got {type(events[-1]).__name__}"
+
+
+class TestEmptyFinalResponseInvalidFinish:
+    """Empty final LLM outputs should not be committed as natural answers."""
+
+    @pytest.mark.asyncio
+    async def test_empty_stop_finishes_as_invalid_finish(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = EmptyStopProvider()
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "failed"
+        assert events[-1].reason == "invalid_finish"
+        assert events[-1].final_content is None
+
+    @pytest.mark.asyncio
+    async def test_whitespace_only_stop_finishes_as_invalid_finish(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = EmptyStopProvider(content="   ")
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "failed"
+        assert events[-1].reason == "invalid_finish"
+        assert events[-1].final_content is None
+
+    @pytest.mark.asyncio
+    async def test_normal_content_stop_still_finishes_naturally(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = ContentOnlyProvider()
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "completed"
+        assert events[-1].reason == "natural"
+        assert events[-1].final_content == "hello world"
+
+    @pytest.mark.asyncio
+    async def test_tool_call_without_content_still_executes_tools(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = SkillStreamProvider()
+        registry, _ = _make_tool_registry(tool_names=["Skill", "test_tool"])
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert any(isinstance(event, SkillHitEvent) for event in events)
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "completed"
+        assert events[-1].reason == "natural"
+
+    @pytest.mark.asyncio
+    async def test_empty_stop_retries_and_can_recover(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = EmptyThenContentProvider()
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert provider.call_count == 2
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "completed"
+        assert events[-1].reason == "natural"
+        assert events[-1].final_content == "recovered"
+
+    @pytest.mark.asyncio
+    async def test_empty_stop_retries_exhausted_finishes_as_invalid_finish(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = EmptyStopProvider()
+        provider.max_retries = 2
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert provider.call_count == 2
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "failed"
+        assert events[-1].reason == "invalid_finish"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_only_retries_exhausted_finishes_as_invalid_finish(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = EmptyStopProvider(reasoning="thinking only")
+        provider.max_retries = 2
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(spec, "test task"):
+            events.append(event)
+
+        assert provider.call_count == 2
+        assert isinstance(events[-1], RunResultEvent)
+        assert events[-1].status == "failed"
+        assert events[-1].reason == "invalid_finish"
 
 
 class TestGap3CatalogVersionInvalidation:
@@ -777,196 +961,3 @@ class TestCancellationTokenSupport:
 
         with pytest.raises(_KernelStopRequested):
             await task
-
-
-class TestCheckpointAwareCompaction:
-    @pytest.mark.asyncio
-    async def test_kernel_preflight_calls_checkpoint_sink_for_durable_compaction(
-        self,
-    ) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        provider = ContentOnlyProvider()
-        compactor = _DurablePreflightCompactor()
-        checkpoint_calls: list[dict[str, Any]] = []
-
-        async def checkpoint_sink(
-            *, payload: dict[str, Any], base_messages: list[dict[str, Any]]
-        ) -> None:
-            checkpoint_calls.append(
-                {
-                    "payload": payload,
-                    "base_messages": base_messages,
-                }
-            )
-
-        spec = _make_spec(provider=provider).model_copy(
-            update={
-                "compactor": compactor,
-                "meta": {
-                    "checkpoint_sink": checkpoint_sink,
-                },
-            }
-        )
-
-        kernel = AgentKernel()
-        events: list[Any] = []
-        async for event in kernel.run_stream(
-            spec,
-            "test task",
-            history=[
-                UserMessage(content="old question"),
-                AssistantMessage(content="old answer"),
-            ],
-        ):
-            events.append(event)
-
-        assert compactor.preflight_calls == 1
-        assert checkpoint_calls == [
-            {
-                "payload": {
-                    "phase": "preflight",
-                    "strategy": "summary",
-                    "durability": "durable",
-                    "trigger_tokens": 1234,
-                    "retained_turns": 1,
-                    "checkpoint_attempted": True,
-                    "checkpoint_written": True,
-                    "failure_reason": None,
-                },
-                "base_messages": [
-                    SystemMessage(content="[Compacted Context]\nsummary").model_dump(
-                        mode="json"
-                    ),
-                    UserMessage(content="test task").model_dump(mode="json"),
-                ],
-            }
-        ]
-        assert any(
-            getattr(event, "type", None) == "context_compaction" for event in events
-        )
-
-    @pytest.mark.asyncio
-    async def test_kernel_yields_compaction_event_before_checkpoint_sink(self) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        provider = ContentOnlyProvider()
-        compactor = _DurablePreflightCompactor()
-        sequence: list[str] = []
-
-        async def checkpoint_sink(
-            *, payload: dict[str, Any], base_messages: list[dict[str, Any]]
-        ) -> None:
-            sequence.append("sink")
-
-        spec = _make_spec(provider=provider).model_copy(
-            update={
-                "compactor": compactor,
-                "meta": {
-                    "checkpoint_sink": checkpoint_sink,
-                },
-            }
-        )
-
-        kernel = AgentKernel()
-        async for event in kernel.run_stream(
-            spec,
-            "test task",
-            history=[
-                UserMessage(content="old question"),
-                AssistantMessage(content="old answer"),
-            ],
-        ):
-            if getattr(event, "type", None) == "context_compaction":
-                sequence.append("event")
-
-        assert sequence == ["event", "sink"]
-
-    @pytest.mark.asyncio
-    async def test_kernel_updates_compaction_payload_when_checkpoint_sink_fails(
-        self,
-    ) -> None:
-        from matmaster.core.agent import AgentKernel
-
-        provider = ContentOnlyProvider()
-        compactor = _DurablePreflightCompactor()
-        sequence: list[str] = []
-        compaction_event = None
-
-        async def checkpoint_sink(
-            *, payload: dict[str, Any], base_messages: list[dict[str, Any]]
-        ) -> None:
-            sequence.append("sink")
-            raise RuntimeError("checkpoint unavailable")
-
-        spec = _make_spec(provider=provider).model_copy(
-            update={
-                "compactor": compactor,
-                "meta": {
-                    "checkpoint_sink": checkpoint_sink,
-                },
-            }
-        )
-
-        kernel = AgentKernel()
-        async for event in kernel.run_stream(
-            spec,
-            "test task",
-            history=[
-                UserMessage(content="old question"),
-                AssistantMessage(content="old answer"),
-            ],
-        ):
-            if getattr(event, "type", None) == "context_compaction":
-                sequence.append("event")
-                compaction_event = event
-
-        assert sequence == ["event", "sink"]
-        assert compaction_event is not None
-        assert compaction_event.payload["checkpoint_attempted"] is True
-        assert compaction_event.payload["checkpoint_written"] is False
-        assert compaction_event.payload["failure_reason"] == "checkpoint unavailable"
-
-
-class TestExpCheckpointSinkScopeResolution:
-    @pytest.mark.asyncio
-    async def test_build_runtime_resolves_checkpoint_sink_by_spawn_scope(self) -> None:
-        from matmaster.config.exp import ExpConfig
-        from matmaster.core.exp import Exp
-        from matmaster.types.context import PlaygroundContext
-
-        parent_sink = object()
-        child_sink = object()
-        seen_spawn_ids: list[str | None] = []
-
-        def checkpoint_sink_factory(*, spawn_id: str | None = None):
-            seen_spawn_ids.append(spawn_id)
-            if spawn_id == "child-1":
-                return child_sink
-            return parent_sink
-
-        ctx = PlaygroundContext(
-            workdir=Path("/tmp/test-exp"),
-            session_type="local",
-            cache_area=Path("/tmp/test-exp-cache"),
-            execution_workdir="/tmp/test-exp",
-            llm_provider=ContentOnlyProvider(),
-            run_meta={"checkpoint_sink_factory": checkpoint_sink_factory},
-        )
-        exp = Exp(ExpConfig(name="test"))
-
-        with patch("matmaster.core.agent.AgentKernel"):
-            parent_runtime = await exp.build_runtime(ctx, spawn_id=None)
-            child_runtime = await exp.build_runtime(ctx, spawn_id="child-1")
-
-        assert seen_spawn_ids == [None, "child-1"]
-        assert (
-            parent_runtime.spec.meta["checkpoint_sink_factory"]
-            is checkpoint_sink_factory
-        )
-        assert (
-            child_runtime.spec.meta["checkpoint_sink_factory"]
-            is checkpoint_sink_factory
-        )
-        assert parent_runtime.spec.meta["checkpoint_sink"] is parent_sink
-        assert child_runtime.spec.meta["checkpoint_sink"] is child_sink

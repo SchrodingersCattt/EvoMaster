@@ -246,7 +246,7 @@ class Exp:
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
         if builtin_cfg:
-            self._init_builtin_tools(ctx, registry, builtin_cfg)
+            self._init_builtin_tools(ctx, registry, builtin_cfg, spawn_id=spawn_id)
 
         # 2. Build ToolCatalog wrapping registry (before skill init for overlay)
         from matmaster.core.capability_policy import DefaultCapabilityPolicy
@@ -327,6 +327,8 @@ class Exp:
         from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
         from matmaster.types.tool_runner_state import ToolRunnerState
 
+        run_meta = getattr(ctx, "run_meta", {}) or {}
+
         # 6. Compaction: event_sink=None, _run_items() injects local sink at runtime
         compactor = None
         if spec.llm_provider is not None:
@@ -358,6 +360,9 @@ class Exp:
                 config=spec.compaction,
                 summary_provider=summary_provider,
                 event_sink=None,  # _run_items() injects a local deque-backed sink
+                compaction_scope=(
+                    f'{run_meta.get("task_id", "")}:{spawn_id or "root"}'
+                ),
             )
 
         # 7. Build FullToolRunner (ESIN-04: default execution path)
@@ -369,6 +374,9 @@ class Exp:
             (ctx.run_meta or {}).get("bohrium_rebuild_events")
         )
         runner_state.set("bohrium_job_registry", bohrium_registry)
+        figure_upload_config = run_meta.get("figure_upload_config")
+        if figure_upload_config is not None:
+            runner_state.set("figure_upload_config", figure_upload_config)
         self._register_cleanup(runner_state.clear)
 
         full_runner = FullToolRunner(
@@ -382,7 +390,6 @@ class Exp:
         )
 
         # 9. Assemble final spec with all v2 fields
-        run_meta = getattr(ctx, "run_meta", {}) or {}
         checkpoint_sink_factory = run_meta.get("checkpoint_sink_factory")
         checkpoint_sink = None
         if callable(checkpoint_sink_factory):
@@ -443,16 +450,27 @@ class Exp:
                 source_override=source_override,
                 spawn_id=spawn_id,
             )
+            spec = runtime.spec
+            current_user_images = ctx.run_meta.get("current_user_images")
+            if current_user_images:
+                spec = spec.model_copy(
+                    update={
+                        "meta": {
+                            **spec.meta,
+                            "current_user_images": current_user_images,
+                        }
+                    }
+                )
             if ctx.session is not None:
                 ctx.session._cancel_token = cancel_token
 
             # Inject cancel_token into tools for cancel propagation.
-            catalog = getattr(runtime.spec, "tool_catalog", None)
+            catalog = getattr(spec, "tool_catalog", None)
             if cancel_token is not None and catalog is not None:
                 catalog.inject_cancel_token(cancel_token)
 
             async for event in runtime.kernel.run_stream(
-                runtime.spec, task, history=history, cancel_token=cancel_token
+                spec, task, history=history, cancel_token=cancel_token
             ):
                 yield event
         finally:
@@ -465,6 +483,8 @@ class Exp:
         ctx: PlaygroundContext,
         registry: ToolRegistry,
         builtin_cfg: list[str],
+        *,
+        spawn_id: str | None = None,
     ) -> None:
         """Register builtin tools filtered by *builtin_cfg*.
 
@@ -488,6 +508,7 @@ class Exp:
             return allowed is None or name in allowed
 
         from matmaster.tools.builtin import (
+            AskQuestionTool,
             BashTool,
             BohriumTool,
             EditTool,
@@ -545,8 +566,17 @@ class Exp:
             BohriumTool(session=ctx.session, workdir=ctx.workdir),
         ]
 
+        interaction_bridge = ctx.interaction_bridge if spawn_id is None else None
+        control_tools: list[Any] = [
+            AskQuestionTool(
+                session=ctx.session,
+                workdir=exec_wd if ctx.session is not None else ctx.workdir,
+                bridge=interaction_bridge,
+            ),
+        ]
+
         registered: list[Any] = []
-        for tool in session_tools + sessionless_tools:
+        for tool in session_tools + sessionless_tools + control_tools:
             if _want(tool.name):
                 registry.register(tool, source="builtin")
                 registered.append(tool)

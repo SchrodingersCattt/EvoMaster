@@ -30,8 +30,8 @@ mixing_ndim             8
 # Cell + ionic relaxation
 cal_force               1
 cal_stress              1
-force_thr               1e-3
-stress_thr              10.0
+force_thr_ev            0.01
+stress_thr              0.5
 relax_nmax              200
 relax_method            bfgs
 out_stru                1

@@ -61,11 +61,61 @@ class TestMCPToolManagerInstantiation:
         m = MCPToolManager()
         assert isinstance(m.tool_include_only, dict)
 
+    def test_manager_has_empty_concurrency_policy_maps(self):
+        from matmaster.mcp.manager import MCPToolManager
+
+        m = MCPToolManager()
+        assert isinstance(m.concurrency_defaults_by_transport, dict)
+        assert m.concurrency_defaults_by_transport == {}
+        assert isinstance(m.concurrency_by_server, dict)
+        assert m.concurrency_by_server == {}
+        assert isinstance(m._server_transports, dict)
+        assert m._server_transports == {}
+
     def test_loop_is_none(self):
         from matmaster.mcp.manager import MCPToolManager
 
         m = MCPToolManager()
         assert m.loop is None
+
+    def test_default_stdio_policy_is_serial(self):
+        from matmaster.mcp.manager import MCPConcurrencyPolicy
+
+        policy = MCPConcurrencyPolicy.default_for_transport("stdio")
+        assert policy.mode == "serial"
+        assert policy.max_inflight == 1
+        assert policy.max_pending_requests == 16
+
+    def test_default_non_stdio_policy_is_multiplex(self):
+        from matmaster.mcp.manager import MCPConcurrencyPolicy
+
+        policy = MCPConcurrencyPolicy.default_for_transport("sse")
+        assert policy.mode == "multiplex"
+        assert policy.max_inflight == 4
+        assert policy.max_pending_requests == 64
+
+    def test_resolve_policy_prefers_server_override_over_transport_default(self):
+        from matmaster.mcp.manager import MCPConcurrencyPolicy, MCPToolManager
+
+        m = MCPToolManager()
+        m.concurrency_defaults_by_transport["http"] = MCPConcurrencyPolicy(
+            mode="serial",
+            max_inflight=1,
+            max_pending_requests=8,
+        )
+        m.concurrency_by_server["mat_doc"] = MCPConcurrencyPolicy(
+            mode="multiplex",
+            max_inflight=3,
+            max_pending_requests=12,
+        )
+
+        policy = m._resolve_policy("mat_doc", "HTTP")
+
+        assert policy == MCPConcurrencyPolicy(
+            mode="multiplex",
+            max_inflight=3,
+            max_pending_requests=12,
+        )
 
     def test_has_add_server_method(self):
         from matmaster.mcp.manager import MCPToolManager
@@ -238,6 +288,17 @@ def _make_managed(m, name, *, hang=False, fail=False):
 
 
 class TestMCPToolManagerCleanup:
+    async def test_managed_conn_default_request_queue_is_bounded(self):
+        from matmaster.mcp.manager import _ManagedConn
+
+        ctx = _FakeConnCtx()
+        managed = _ManagedConn(ctx)
+        try:
+            await managed.wait_ready(timeout=2)
+            assert managed._requests.maxsize > 0
+        finally:
+            await managed.close(timeout=2)
+
     async def test_cleanup_clears_state(self):
         from matmaster.mcp.manager import MCPToolManager
 
@@ -245,12 +306,14 @@ class TestMCPToolManagerCleanup:
         ctx, managed = _make_managed(m, "fake_srv")
         await managed.wait_ready(timeout=2)
         m.tools_by_server["fake_srv"] = {"fake_srv_tool": {}}
+        m._server_transports["fake_srv"] = "stdio"
 
         await m.cleanup()
 
         assert len(m.connections) == 0
         assert len(m.tools_by_server) == 0
         assert len(m._managed) == 0
+        assert len(m._server_transports) == 0
         assert ctx.exited
 
     async def test_cleanup_exits_connection_context(self):

@@ -40,6 +40,32 @@ def test_build_run_devshell_eval_argv_minimal() -> None:
     assert "--no-clean-results" in argv
     assert "--eval-config" in argv
     assert "--eval-ingest-run-id" not in argv
+    assert "--k" not in argv
+
+
+def test_build_run_devshell_eval_argv_k() -> None:
+    repo = Path("/repo")
+    script = repo / "evaluation/scripts/devshell/run_devshell_eval.py"
+    out = repo / "results/run1"
+    params = RunDevshellEvalParams(
+        output_dir=out,
+        jobs=1,
+        limit=None,
+        questions=None,
+        slices=None,
+        model=None,
+        exp=None,
+        eval_ingest_pending_only=True,
+        no_export_review=False,
+        task_timeout_sec=0.0,
+        eval_config=None,
+        extra_args=[],
+        k=3,
+    )
+    invoker = DevshellEvalSubprocess(repo)
+    argv = invoker.build_argv(script, params)
+    i = argv.index("--k")
+    assert argv[i + 1] == "3"
 
 
 def test_build_run_devshell_eval_argv_eval_ingest_run_id() -> None:
@@ -65,3 +91,28 @@ def test_build_run_devshell_eval_argv_eval_ingest_run_id() -> None:
     argv = invoker.build_argv(script, params)
     i = argv.index("--eval-ingest-run-id")
     assert argv[i + 1] == "11111111-1111-1111-1111-111111111111"
+
+
+def test_build_run_devshell_eval_argv_fallback_model() -> None:
+    repo = Path("/repo")
+    script = repo / "evaluation/scripts/devshell/run_devshell_eval.py"
+    out = repo / "results/run1"
+    params = RunDevshellEvalParams(
+        output_dir=out,
+        jobs=1,
+        limit=None,
+        questions=None,
+        slices=None,
+        model="bedrock-claude-opus",
+        exp=None,
+        eval_ingest_pending_only=True,
+        no_export_review=False,
+        task_timeout_sec=600.0,
+        eval_config=None,
+        extra_args=[],
+        fallback_model="claude-opus-4-6",
+    )
+    invoker = DevshellEvalSubprocess(repo)
+    argv = invoker.build_argv(script, params)
+    i = argv.index("--fallback-model")
+    assert argv[i + 1] == "claude-opus-4-6"

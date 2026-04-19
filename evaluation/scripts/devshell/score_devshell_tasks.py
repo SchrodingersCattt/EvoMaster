@@ -9,6 +9,10 @@ This is the devshell counterpart of
    ``logs/<task_id>/events_*.jsonl``.
 3. Run ``BinaryEvaluator`` with the same validator stack used by MATTER.
 4. Write score / score_reason back to ``pending_ingest/*.json`` or submit them.
+
+**Ingest score (0/100):** a task passes (100) only when **every** scoring_checklist
+item passes; otherwise 0. Per-axis weighted ratios are still recorded in
+``score_reason`` for debugging; they do not affect the numeric ingest score.
 """
 
 from __future__ import annotations
@@ -299,17 +303,35 @@ def _format_score_reason(record: Any) -> str:
         f"**Overall weighted score:** {record.overall_weighted_score:.3f} "
         f"({record.passed_count}/{record.total_count} criteria passed)"
     )
+    lines.append("")
+    ap = _all_criteria_passed(record)
+    lines.append(
+        f"**Task pass (all checklist items):** {'yes' if ap else 'no'} "
+        f"(ingest score {'100' if ap else '0'})"
+    )
     return "\n".join(lines)
 
 
-def _score_to_int(record: Any) -> int:
-    return round(record.overall_weighted_score * 100)
+def _all_criteria_passed(record: Any) -> bool:
+    """True iff every scoring criterion passed (same as ``passed_count == total_count``)."""
+    total = int(getattr(record, "total_count", 0) or 0)
+    if total <= 0:
+        return False
+    passed = int(getattr(record, "passed_count", 0) or 0)
+    return passed == total
+
+
+def _ingest_score_from_record(record: Any) -> int:
+    """Binary 0/100 for ingest: 100 only when all checklist items pass."""
+    return 100 if _all_criteria_passed(record) else 0
 
 
 def _update_pending_with_score(
     pending_path: Path,
     score: int,
     score_reason: str,
+    *,
+    all_criteria_passed: bool,
 ) -> bool:
     try:
         envelope = json.loads(pending_path.read_text(encoding="utf-8"))
@@ -324,6 +346,7 @@ def _update_pending_with_score(
 
     item["score"] = score
     item["score_reason"] = score_reason[:16384]
+    item["all_criteria_passed"] = bool(all_criteria_passed)
     item["auto_scored"] = True
     item["auto_scorer"] = "BinaryEvaluator"
     envelope.pop("instructions_zh", None)
@@ -400,15 +423,18 @@ def score_task(
             "task_id": task_id,
             "question_id": question.id,
             "score": 0,
+            "all_criteria_passed": False,
             "score_reason": f"BinaryEvaluator raised an exception: {exc}",
             "record": None,
             "error": str(exc),
         }
 
+    all_pass = _all_criteria_passed(record)
     return {
         "task_id": task_id,
         "question_id": question.id,
-        "score": _score_to_int(record),
+        "score": _ingest_score_from_record(record),
+        "all_criteria_passed": all_pass,
         "score_reason": _format_score_reason(record),
         "record": record,
         "error": None,
@@ -595,8 +621,9 @@ def main() -> int:
             print(f"  [error] {task_id}: {result['error']}", file=sys.stderr)
             n_err += 1
         else:
+            label = "pass" if result.get("all_criteria_passed") else "fail"
             print(
-                f"  [scored] {task_id}: {result['score']}/100 (q={question_id})",
+                f"  [scored] {task_id}: {result['score']}/100 ({label}, q={question_id})",
                 file=sys.stderr,
             )
             n_ok += 1
@@ -613,6 +640,7 @@ def main() -> int:
                 pending_path,
                 score=result["score"],
                 score_reason=result["score_reason"],
+                all_criteria_passed=bool(result.get("all_criteria_passed")),
             )
             if ok:
                 print(f"  [pending] updated {pending_path.name}", file=sys.stderr)
@@ -648,7 +676,8 @@ def main() -> int:
         if scores_valid:
             avg = round(sum(scores_valid) / len(scores_valid))
             print(
-                f"\n  Average score: {avg}/100 ({len(scores_valid)} task(s))",
+                f"\n  All-criteria pass rate (mean of 0/100 scores): {avg}/100 "
+                f"({len(scores_valid)} task(s))",
                 file=sys.stderr,
             )
         print(f"\nDone: {n_ok} scored, {n_err} errors", file=sys.stderr)

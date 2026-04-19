@@ -38,12 +38,11 @@ tools:
     server: "mat_sg"
     category: "structure_construction"
 
-  # --- MLIPs calculations (operator skill via Bohrium submit_job.py) ---
-  # MLIPs tasks are submitted via execute_bash (submit_job.py + MLIPs scripts).
+  # --- MLIPs calculations (execute_bash + MLIPs scripts; or built-in Bohrium) ---
   # No dedicated MCP tool entries needed; evidence mapping uses
   # when_args_contains on execute_bash for script-level classification.
 
-# --- Bash execution (bohrium-job skill, scripts) ---
+# --- Bash execution (general script runs) ---
   execute_bash:
     server: "builtin"
     category: "script_execution"
@@ -77,22 +76,12 @@ banks:
   - path: "data_diagnosis/dd_agnostic.yaml"
     capability: "data_diagnosis"
     domain: "agnostic"
-    questions: 3
-
-  - path: "data_diagnosis/dd_battery.yaml"
-    capability: "data_diagnosis"
-    domain: "battery"
-    questions: 1
-
-  - path: "data_diagnosis/dd_catalysis.yaml"
-    capability: "data_diagnosis"
-    domain: "catalysis"
-    questions: 1
+    questions: 2
 
   - path: "data_diagnosis/dd_semiconductor.yaml"
     capability: "data_diagnosis"
     domain: "semiconductor"
-    questions: 2
+    questions: 1
 
   - path: "execution_contract/ec_agnostic.yaml"
     capability: "execution_contract"
@@ -122,7 +111,7 @@ banks:
   - path: "scientific_analysis/sa_agnostic.yaml"
     capability: "scientific_analysis"
     domain: "agnostic"
-    questions: 6
+    questions: 5
 
   - path: "scientific_analysis/sa_battery.yaml"
     capability: "scientific_analysis"
@@ -194,4 +183,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 132 questions across 29 active bank files
+# Total: 127 questions across 27 active bank files

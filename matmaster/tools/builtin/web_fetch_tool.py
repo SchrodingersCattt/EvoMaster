@@ -252,12 +252,12 @@ class WebFetchTool(BuiltinTool):
 
     def prompt(self, ctx=None) -> str:
         return (
-            "- Fetches content from a specified URL and processes it\n"
-            "- Takes a URL and an optional prompt as input\n"
-            "- Fetches the URL content, converts HTML to markdown\n"
-            "- Returns the extracted content\n"
-            "- Use this tool when you need to retrieve and analyze web content\n"
-            "- Includes a 15-minute cache for repeated accesses"
+            "Fetch a URL and return extracted content (HTML→markdown, 15-min cache).\n"
+            "**Turn economy:** each fetch costs a full turn. Before fetching, "
+            "verify the information is not already in loaded Skills or tool "
+            "references — software docs, default parameters, images, and workflows "
+            "are covered there. Reserve WebFetch for genuinely external resources "
+            "(specific web pages, documentation not in skills, data downloads)."
         )
 
     def __init__(self, *, workdir: Path | None = None, **kwargs) -> None:

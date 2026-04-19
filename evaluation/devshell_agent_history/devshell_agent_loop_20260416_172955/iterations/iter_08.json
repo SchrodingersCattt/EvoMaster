@@ -1,0 +1,24 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 8,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [],
+      "files_touched": [],
+      "followup_suggestion": "基线已恢复，编排器可重新运行评测以确认 P0 分数回到基线水平，然后再决定是否启动新一轮优化。",
+      "iteration_index": 8,
+      "needs_more_work": false,
+      "optimization_round": 10008,
+      "summary": "**P0 回归 revert 完成。** 通过 `git revert --no-edit` 撤销了 base_sha `723312795aab…` 之后的 **1 个提交**（`1fd65b3`）。仓库已恢复到第 8 轮迭代开局基线状态。"
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 8,
+    "macro_mean_0_100": 67,
+    "p0_regression": true,
+    "rationale": "## Iteration 8 — P0 REGRESSION: SC_struct_009\n\n### P0 Gate: **FAILED** (67/100, down from 78)\n\n**Regressed question**: SC_struct_009_20260404 — was 100 in all previous iterations, now 0.\n\nNon-P0 questions were **skipped** due to P0 gate failure. The `macro_mean_0_100 = 67` reflects P0 scores only (6/9 passing).\n\n### Likely Cause\nThe optimization from iter_07 added a turn budget nudge mechanism to `matmaster/core/agent.py`. This runtime change may have interfered with SC_struct_009 task execution (e.g., the nudge may have caused the agent to terminate prematurely or alter its behavior on this previously-stable task).\n\n### Action Required\nPer P0 regression protocol:\n- **No** delegate_optimization or escalate_checklist_revision called\n- Orchestrator should trigger optimization sub-round to **revert** commits after the iter_07 base SHA\n- After revert, re-evaluate in iter_09 to confirm P0 recovery\n\n### P0 Score Breakdown\n| Question | iter_07 | iter_08 |\n|----------|---------|---------|\n| BP_struct_003 | 100 ✅ | 100 ✅ |\n| DD_general_004 | 100 ✅ | 100 ✅ |\n| DF_mech_002 | 100 ✅ | 100 ✅ |\n| IG_abacus_002 | 0 | 0 |\n| IG_abacus_003 | 0 | 0 |\n| **SC_struct_009** | **100 ✅** | **0 ⚠️** |\n| WO_direct_archive_extract | 100 ✅ | 100 ✅ |\n| WO_direct_exact_filename | 100 ✅ | 100 ✅ |\n| WO_direct_spec_priority | 100 ✅ | 100 ✅ |",
+    "target_met": false
+  }
+}

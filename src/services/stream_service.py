@@ -9,11 +9,12 @@ import threading
 import time
 import uuid
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
+from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from src.dao.redis_dao import (
     INTERACTION_CANCEL_VALUE,
     STREAM_CHANNEL_PREFIX,
@@ -30,6 +31,10 @@ from src.services.deploy_state_service import (
     get_deploy_state_service,
 )
 from src.services.events_service import ChatEventsService, get_events_service
+from src.services.session_directory_service import (
+    SessionDirectoryResolver,
+    SessionDirectorySource,
+)
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
@@ -67,6 +72,7 @@ def _should_emit_event_to_sse(event: dict) -> bool:
     Practical consequences:
     - assistant_state is always hidden in replay
     - log_line is always hidden in replay
+    - checkpoint bookkeeping events are always hidden in replay
     - direct-mode non-streaming thoughts may still appear in replay if they
       were persisted as completed events
 
@@ -80,6 +86,8 @@ def _should_emit_event_to_sse(event: dict) -> bool:
         return False
     if t == 'skill_hit':
         return False
+    if t in {'compact_boundary', 'history_checkpoint'}:
+        return False
     return True
 
 
@@ -88,6 +96,54 @@ def _normalize_replayed_event(event: dict) -> dict:
     replay_event = dict(event)
     replay_event['source'] = normalize_event_source(replay_event.get('source'))
     return replay_event
+
+
+def _normalize_replayed_compaction_events(events: list[dict]) -> list[dict]:
+    """Normalize replayed compaction lifecycle rows for frontend consumption."""
+    terminal_ids: set[str] = set()
+    for event in events:
+        if event.get('type') != 'compaction':
+            continue
+        content = event.get('content') or {}
+        if not isinstance(content, dict):
+            continue
+        if content.get('status') in {'complete', 'interrupted'}:
+            compaction_id = str(content.get('compaction_id') or '')
+            if compaction_id:
+                terminal_ids.add(compaction_id)
+
+    normalized: list[dict] = []
+    for event in events:
+        event_type = event.get('type')
+        if event_type == 'context_compaction':
+            continue
+        if event_type != 'compaction':
+            normalized.append(event)
+            continue
+
+        content = event.get('content') or {}
+        if not isinstance(content, dict):
+            normalized.append(event)
+            continue
+
+        compaction_id = str(content.get('compaction_id') or '')
+        if content.get('status') == 'running' and compaction_id not in terminal_ids:
+            normalized.append(
+                {
+                    **event,
+                    'content': {
+                        **content,
+                        'status': 'interrupted',
+                        'failure_reason': content.get('failure_reason')
+                        or 'replay_inferred_interrupted',
+                    },
+                }
+            )
+            continue
+
+        normalized.append(event)
+
+    return normalized
 
 
 def _replay_terminal_dedupe_key(event: dict) -> tuple[str, str | None] | None:
@@ -104,18 +160,21 @@ def _replay_terminal_dedupe_key(event: dict) -> tuple[str, str | None] | None:
 def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
     """Hide replayed run_result when the same task already has a replayable response.
 
-    Live SSE already streamed the final `response` content. After adding
-    persisted complete response segments, replaying the trailing `run_result`
-    would duplicate the final answer after reconnect. We only suppress the
-    terminal event when the previous replayable event for that task is a
-    `response`, so tool-use turns that still rely on `run_result` remain
-    visible.
+    Live SSE already streamed the final `response` content. After persisted
+    complete response segments were added, replaying the trailing `run_result`
+    would duplicate the final answer after reconnect. We suppress terminal
+    events once a replayable `response` has been seen for the same
+    `(task_id, spawn_id)` stream.
+
+    `response_figures` is replayable answer metadata. It may appear before the
+    first response, between response chunks, or after a response. It is kept in
+    replay output and does not reset or suppress the response-seen state.
 
     Dedupe is keyed by (task_id, spawn_id) so a sub-agent `response` does not
     suppress the parent stream's `run_result`.
     """
     deduped: list[dict] = []
-    last_replayed_type_by_key: dict[tuple[str, str | None], str] = {}
+    saw_response_by_key: dict[tuple[str, str | None], bool] = {}
 
     for event in events:
         dedupe_key = _replay_terminal_dedupe_key(event)
@@ -123,14 +182,17 @@ def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
         if (
             dedupe_key is not None
             and event_type in {'run_result', 'finish'}
-            and last_replayed_type_by_key.get(dedupe_key) == 'response'
+            and saw_response_by_key.get(dedupe_key, False)
         ):
             continue
 
         deduped.append(event)
 
         if dedupe_key is not None and _should_emit_event_to_sse(event):
-            last_replayed_type_by_key[dedupe_key] = event_type
+            if event_type == 'response':
+                saw_response_by_key[dedupe_key] = True
+            elif event_type in {'run_result', 'finish'}:
+                saw_response_by_key.setdefault(dedupe_key, False)
 
     return deduped
 
@@ -211,6 +273,9 @@ class SendStreamContext:
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
     bohrium_required: bool = False  # 本轮是否显式依赖 Bohrium access_key / project
+    images: list[str] = field(default_factory=list)
+    remote_workdir: str | None = None
+    session_directory_source: SessionDirectorySource = "none"
 
 
 class ChatStreamService:
@@ -444,6 +509,7 @@ class ChatStreamService:
                 yield self.sse_format(payload)
             events = self._events_service.get_session_events(sid, include_spawn=True)
             if events:
+                events = _normalize_replayed_compaction_events(events)
                 events = _dedupe_replayed_terminal_events(events)
                 events = self._inject_elapsed_for_history(events)
                 for event in events:
@@ -560,14 +626,22 @@ class ChatStreamService:
         # 仅 Worker 队列模式：无 Redis 时无法发送
         if not REDIS_URL:
             return None
+        req_fields = req.model_dump(exclude_unset=True)
         self._sessions_service.ensure_session(sid, user_id=user_id)
+
+        resolved_directory = SessionDirectoryResolver(self._sessions_service).resolve(
+            session_id=sid,
+            request_directory=req.directory,
+            request_directory_provided="directory" in req_fields,
+        )
+
         acquired_ok, _ = self._sessions_service.try_acquire_session_run(sid)
         if not acquired_ok:
             return None
 
-        mode = (req.mode or 'direct').strip().lower() or 'direct'
-        if mode not in ('direct', 'planner'):
-            mode = 'direct'
+        mode = (req.mode or DEFAULT_MODE).strip().lower() or DEFAULT_MODE
+        if mode not in SUPPORTED_MODES:
+            mode = DEFAULT_MODE
 
         llm = (req.llm or '').strip() or None
         model = (
@@ -583,7 +657,10 @@ class ChatStreamService:
             )
         except (TypeError, ValueError):
             project_id_val = None
-        bohrium_required = bool(org_id_val and project_id_val is not None)
+        bohrium_required = bool(
+            (org_id_val and project_id_val is not None)
+            or resolved_directory.bohrium_required
+        )
 
         # Bohrium：org_id / project_id 直接入库，需要时从库读，不常驻内存
         if req.bohrium_project_id is not None or org_id is not None:
@@ -598,6 +675,8 @@ class ChatStreamService:
         self._sessions_service.set_session_last_task(sid, task_id, user_id=user_id)
         self._deploy_state_service.record_session_version(sid)
         user_content = (req.content or '').strip()
+        if user_content and user_id:
+            self._sessions_service.set_session_chat_mode(sid, mode, user_id)
         user_msg = {
             'source': 'User',
             'type': 'query',
@@ -609,8 +688,13 @@ class ChatStreamService:
         }
         if req.files:
             user_msg['files'] = list(req.files)
+        if req.images:
+            user_msg['images'] = list(req.images)
         if req.workspace_paths:
             user_msg['workspace_paths'] = list(req.workspace_paths)
+        if resolved_directory.source != "none":
+            user_msg["session_directory"] = resolved_directory.remote_workdir
+            user_msg["session_directory_source"] = resolved_directory.source
         self._events_service.add_history_event(sid, user_msg, user_id=user_id)
 
         dao = get_redis_dao()
@@ -628,6 +712,9 @@ class ChatStreamService:
             llm=llm,
             model=model,
             bohrium_required=bohrium_required,
+            images=list(req.images or []),
+            remote_workdir=resolved_directory.remote_workdir,
+            session_directory_source=resolved_directory.source,
         )
 
     def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
@@ -644,12 +731,21 @@ class ChatStreamService:
             return None
         return get_redis_dao().get_interaction_run_context(session_id)
 
+    def publish_reply_event(self, session_id: str, payload: dict) -> None:
+        """Publish a user interaction reply to local subscribers and Redis stream."""
+        sid = session_id.strip()
+        self._queues.broadcast(sid, payload)
+        if REDIS_URL:
+            get_redis_dao().publish_stream_event(sid, payload)
+
     def broadcast_reply(
-        self, session_id: str, content: str, *, event_type: str = "ask_question_reply"
+        self,
+        session_id: str,
+        content: str | dict,
+        *,
+        event_type: str,
     ) -> None:
-        """将用户回复广播到该会话所有 SSE 订阅。
-        payload 带上 task_id/invocation_id（从 Redis 取），便于前端去重或排序。
-        """
+        """Backward-compatible helper for publishing interaction reply events."""
         sid = session_id.strip()
         payload = {
             'source': 'User',
@@ -658,11 +754,11 @@ class ChatStreamService:
             'session_id': sid,
         }
         if REDIS_URL:
-            ctx = get_redis_dao().get_interaction_run_context(session_id)
+            ctx = get_redis_dao().get_interaction_run_context(sid)
             if ctx:
                 payload['task_id'] = ctx.get('task_id')
                 payload['invocation_id'] = ctx.get('invocation_id')
-        self._queues.broadcast(session_id, payload)
+        self.publish_reply_event(sid, payload)
 
     def _send_cb(
         self,
@@ -703,6 +799,7 @@ class ChatStreamService:
         yield self.sse_format(payload)
         history = self._events_service.get_session_events(sid, include_spawn=True) or []
         history = ChatHistoryConverter.exclude_task_events(history, ctx.task_id)
+        history = _normalize_replayed_compaction_events(history)
         history = _dedupe_replayed_terminal_events(history)
         history = self._inject_elapsed_for_history(history)
         for event in history:
@@ -771,7 +868,10 @@ class ChatStreamService:
                 'mode': mode,
                 'llm': ctx.llm,
                 'model': ctx.model,
+                'images': list(ctx.images),
                 'bohrium_required': ctx.bohrium_required,
+                'remote_workdir': ctx.remote_workdir,
+                'session_directory_source': ctx.session_directory_source,
                 'submitted_at': datetime.now(timezone.utc).isoformat(),
             }
             # 先设为 waiting 再入队，避免 Worker 接手后 set active 被此处覆盖（竞态）

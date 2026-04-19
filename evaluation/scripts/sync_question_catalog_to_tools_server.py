@@ -4,9 +4,11 @@
 对应 tools-server 接口（见 sibling 仓库 ``eval_question_catalog_api``）::
 
     POST {MATMASTER_TOOLS_SERVER}/api/v1/evaluation/question-catalog/sync
-    Body: { \"items\": [ {\"question_id\": \"...\", \"question_text\": \"...\"}, ... ] }
+    Body: { \"items\": [ {\"question_id\": \"...\", \"question_text\": \"...\", \"priority\": \"\"}, ... ] }
 
 ``question_text`` 取自题库条目的 ``human_prompt_seed``（与 ingest 的题干字段一致）。
+``priority`` 取自条目的 ``priority``（``P0`` / ``P1`` / … 或空；与 tools-server
+``EvalQuestionCatalogItemIn`` 一致）。
 
 同步语义：服务端先将目录表内全部题目标为非活跃，再将 payload 中的题目 upsert 为活跃；
 与 ``eval_results`` 仅通过 ``question_id`` 对齐。
@@ -42,6 +44,7 @@ def _stable_unique_catalog_items(
     from evaluation.eval_ingest_client import (
         EVAL_ITEM_QUESTION_TEXT_MAX_LEN,
         clip_ingest_text_field,
+        normalize_catalog_priority_for_sync,
     )
 
     seen: set[str] = set()
@@ -56,7 +59,11 @@ def _stable_unique_catalog_items(
         )
         if not qtext:
             return [], f"empty human_prompt_seed after trim for question_id={qid!r}"
-        out.append({"question_id": qid, "question_text": qtext})
+        try:
+            pri = normalize_catalog_priority_for_sync(q.priority)
+        except ValueError as e:
+            return [], f"invalid priority for question_id={qid!r}: {e}"
+        out.append({"question_id": qid, "question_text": qtext, "priority": pri})
     return out, None
 
 

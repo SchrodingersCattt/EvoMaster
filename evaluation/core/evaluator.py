@@ -523,6 +523,7 @@ class BinaryEvaluator:
                         question=question,
                         answer=answer,
                         evidence=evidence,
+                        ref=ref,
                         include_tool_calls=False,
                     ),
                     system_prompt=_GROUNDING_JUDGE_SYSTEM_PROMPT,
@@ -530,7 +531,10 @@ class BinaryEvaluator:
             return self.judge_binary(
                 criterion=item.criterion,
                 context=build_llm_context(
-                    question=question, answer=answer, evidence=evidence
+                    question=question,
+                    answer=answer,
+                    evidence=evidence,
+                    ref=ref,
                 ),
             )
 
