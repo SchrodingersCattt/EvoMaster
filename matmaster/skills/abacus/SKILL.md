@@ -88,8 +88,6 @@ For Bohrium: write `run.sh` that runs both steps sequentially. Details in `refer
 
 See `references/electric_field.md`. Key: dipole correction = `efield_flag 1` + `dip_cor_flag 1` + `efield_amp 0.0`. Work function: `out_pot 2`.
 
-**Slab electrostatic potential (`out_pot 2`) ALWAYS requires dipole correction** — see `references/slab_workflows.md` for complete work function, surface energy, and vacancy workflows. Never reduce `ecutwfc`/`scf_thr`/`smearing_sigma` for "benchmark" or "low-cost" tasks.
-
 ## ntype — MUST Match STRU Species Count
 
 The `ntype` parameter in INPUT **must** equal the number of distinct species in the STRU file's ATOMIC_SPECIES section. This includes ghost/empty species. Count every species line in ATOMIC_SPECIES and set `ntype` to that number. Mismatch causes ABACUS to crash or silently misparse the STRU.
@@ -109,10 +107,10 @@ Full STRU format details: `references/stru_format.md`. Multi-species examples (b
 
 **Before finishing any ABACUS task, verify EVERY item below. Violations cause silent failures.**
 
-### Parameter Baseline Standards — NEVER REDUCE
-- **`ecutwfc 100`** — ALWAYS 100 Ry for both LCAO and PW. Even when a task says "low-cost", "benchmark", or "quick test" — do NOT use 50 or any value below 100.
-- **`smearing_sigma 0.01`** with `smearing_method gauss` — do NOT increase for "benchmark" tasks.
-- **`scf_thr 1.0e-7`**, `scf_nmax 100` (SCF) or `300` (NSCF) — do NOT loosen to 1.0e-6.
+### Parameter Baseline Standards
+- **`ecutwfc 100`** — use 100 Ry as the standard for both LCAO and PW. Lower values (e.g. 50) risk accuracy loss.
+- **`smearing_sigma 0.01`** with `smearing_method gauss`.
+- **`scf_thr 1.0e-7`**, `scf_nmax 100` (SCF) or `300` (NSCF).
 - **`ntype`** — must match the exact number of distinct species in STRU ATOMIC_SPECIES. Count and verify.
 
 ### File Reference Consistency

@@ -273,8 +273,6 @@ Line
 - Vacuum direction: **always `1`**. Never more than 1 k-point.
 - `kspacing` mode: `kspacing 0.10 0.10 1.00` (slab, z=vacuum). Bulk: `kspacing 0.10`.
 
-For complete slab workflow guidance (work function, surface energy, vacancy), see `references/slab_workflows.md`.
-
 ---
 
 ## Multi-File Consistency Rules
