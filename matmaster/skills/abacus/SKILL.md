@@ -101,7 +101,7 @@ The `ntype` parameter in INPUT **must** equal the number of distinct species in 
 5. Total atom count matches expected composition
 6. **Count species in ATOMIC_SPECIES → set `ntype` in INPUT to that number**
 
-Full STRU format details: `references/stru_format.md`.
+Full STRU format details: `references/stru_format.md`. Multi-species examples (binary, ternary, slab, magnetic): `references/stru_multispecies.md`.
 
 ## INPUT Pre-delivery Checklist — MANDATORY
 

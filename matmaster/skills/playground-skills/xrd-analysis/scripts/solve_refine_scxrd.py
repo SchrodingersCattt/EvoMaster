@@ -560,11 +560,16 @@ def _molecular_weight(formula_str: str) -> float:
 
 
 def _write_cif(
-    path, cell, sg_symbol, sg_number, atoms, rfactors, wavelength, formula_str="?"
+    path, cell, sg_symbol, sg_number, atoms, rfactors, wavelength, formula_str="?",
+    z_formula=None,
 ):
     V = round(_cell_volume(cell), 2)
     a, b, c, al, be, ga = cell
-    Z = len(_SG_OPS.get(sg_number, [(None, None)]))  # multiplicity estimate
+    # Use caller-supplied Z (= len(sg_ops)) when available; fall back to
+    # the small built-in table only as a last resort.
+    Z = z_formula if z_formula is not None else len(
+        _SG_OPS.get(sg_number, [(None, None)])
+    )
     if Z < 1:
         Z = 1
     cryst_sys = _crystal_system(sg_number)
@@ -632,19 +637,26 @@ def _write_cif(
 
 
 def _formula_from_atoms(atoms, sg_ops):
-    """Build approximate formula string."""
+    """Build approximate formula string (per-formula-unit = asymmetric unit).
+
+    CIF convention: ``_chemical_formula_sum`` is per formula unit;
+    ``_cell_formula_units_Z`` tells how many formula units fill the cell.
+    Since the *atoms* list is the asymmetric unit (independent atoms before
+    symmetry expansion), we report those counts directly — do NOT multiply
+    by Z (the space-group multiplicity).
+    """
     counts: dict[str, int] = {}
-    Z = len(sg_ops)  # multiplicity
     for at in atoms:
         el = at["elem"]
         counts[el] = counts.get(el, 0) + 1
+    # Hill order: C first, H second, then alphabetical
     parts = []
     for el in ("C", "H", "N", "O"):
         if el in counts:
-            n = counts.pop(el) * Z
+            n = counts.pop(el)
             parts.append(f"{el}{n}" if n > 1 else el)
     for el in sorted(counts):
-        n = counts[el] * Z
+        n = counts[el]
         parts.append(f"{el}{n}" if n > 1 else el)
     return " ".join(parts)
 
@@ -861,7 +873,8 @@ def main():
     # ── Write CIF ──
     formula = _formula_from_atoms(atoms_ref, sg_ops)
     vol = _write_cif(
-        args.output, cell, sg_symbol, sg_number, atoms_ref, rfactors, wl, formula
+        args.output, cell, sg_symbol, sg_number, atoms_ref, rfactors, wl, formula,
+        z_formula=len(sg_ops),
     )
 
     summary = {
