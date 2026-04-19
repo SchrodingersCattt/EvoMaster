@@ -517,9 +517,10 @@ class TestQuotaNotDeductedOnError:
         assert run_result_payload['content']['finish_detail']['kind'] == (
             'output_length_exceeded'
         )
-        assert run_result_payload['content']['finish_detail'][
-            'provider_finish_reason'
-        ] == 'length'
+        assert (
+            run_result_payload['content']['finish_detail']['provider_finish_reason']
+            == 'length'
+        )
         error_payload = next(
             (payload for payload in payloads if payload.get('type') == 'error'),
             None,

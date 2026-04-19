@@ -625,8 +625,7 @@ async def test_tool_call_length_finish_adds_assistant_state_detail(caplog) -> No
     warning_records = [
         record
         for record in caplog.records
-        if record.name == "matmaster.core.agent"
-        and record.levelno == logging.WARNING
+        if record.name == "matmaster.core.agent" and record.levelno == logging.WARNING
     ]
     assert any(
         record.getMessage().startswith("tool call response ended")
