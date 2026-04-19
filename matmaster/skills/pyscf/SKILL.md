@@ -1,6 +1,6 @@
 ---
 name: pyscf
-description: "PySCF quantum chemistry calculation via Python scripting: supports DFT, HF, MP2, CCSD(T), TDDFT, geometry optimization (with geomeTRIC), and property calculations. No input-file generation needed; write Python scripts directly and submit to Bohrium."
+description: "MUST use this skill for ANY task involving PySCF (DFT, HF, MP2, CCSD(T), TDDFT, geometry optimization with geomeTRIC, property calculations, and other Python-scripted quantum chemistry workflows)."
 skill_type: operator
 ---
 

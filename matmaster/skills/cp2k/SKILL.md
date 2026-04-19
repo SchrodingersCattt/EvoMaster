@@ -1,6 +1,6 @@
 ---
 name: cp2k
-description: "CP2K first-principles calculation: input preparation, parameter configuration, and Bohrium HPC submission. Supports SCF, geometry optimization, band structure, molecular dynamics, cell optimization, DFT+U, ADMM hybrid functionals, and r2SCAN meta-GGA."
+description: "MUST use this skill for ANY task involving CP2K (SCF, geometry/cell optimization, band structure, molecular dynamics, DFT+U, ADMM hybrid functionals, r2SCAN meta-GGA, etc.)."
 skill_type: operator
 ---
 

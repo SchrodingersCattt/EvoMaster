@@ -1,6 +1,6 @@
 ---
 name: lammps
-description: "LAMMPS molecular dynamics simulation: input preparation, forcefield configuration, and Bohrium HPC submission. Supports classical MD, Monte Carlo (GCMC), shock (MSST), and machine-learning potentials (DeePMD)."
+description: "MUST use this skill for ANY task involving LAMMPS (classical MD, Monte Carlo/GCMC, shock MSST, DeePMD and other machine-learning potentials, etc.)."
 skill_type: operator
 ---
 
