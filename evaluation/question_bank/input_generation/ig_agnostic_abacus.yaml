@@ -893,7 +893,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_002_20260417
+- id: IG_abacus_002_20260419
   capability: input_generation
   domain: agnostic
   intent: Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty
@@ -990,7 +990,7 @@ questions:
     value: INPUT_vac_bsse
   - key: turn_budget
     value:
-      max: 14
+      max: 20
   - key: duration_budget
     value:
       max: 7200000

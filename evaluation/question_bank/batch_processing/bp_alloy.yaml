@@ -24,7 +24,6 @@ questions:
   - wf_batch
   - wf_sweep
   - wf_inputs
-  priority: P0
   data_files:
   - key: convergence_encut
     path: data/BP_struct_003/convergence_encut.json
