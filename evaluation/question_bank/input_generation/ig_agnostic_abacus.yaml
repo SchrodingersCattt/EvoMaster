@@ -179,7 +179,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_003_20260417
+- id: IG_abacus_003_20260419
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS PW SCF INPUT and KPT files for Al slab electrostatic-potential calculation
@@ -235,9 +235,6 @@ questions:
       - key: ecutwfc
         min: 55
         max: 65
-      - key: nbands
-        expected: 40
-        tolerance: 0
   - key: variable_input_smearing
     value:
       filename: INPUT_pot
@@ -294,8 +291,7 @@ questions:
     verify: text_file_regex
     weight: 1.0
   - id: suggested_input_numerics
-    criterion: '[Suggested] INPUT_pot uses the benchmark numeric setup (`ecutwfc 60`, `nbands
-      40`).'
+    criterion: '[Suggested] INPUT_pot uses the benchmark numeric setup (`ecutwfc 60`).'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
@@ -515,7 +511,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_007_20260414
+- id: IG_abacus_007_20260419
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS LCAO spin-polarized electric-field SCF and NSCF band inputs for
@@ -594,14 +590,6 @@ questions:
       - key: smearing_sigma
         min: 0.001
         max: 0.02
-  - key: suggested_input_spin_mixing
-    value:
-      filename: INPUT_spin_elec_scf
-      tokens:
-      - mixing_beta 0.1
-      - mixing_ndim 20
-      - mixing_gg0 1.5
-      flags: i
   - key: variable_efield_amp_small
     value:
       filename: INPUT_spin_elec_scf
@@ -652,11 +640,6 @@ questions:
     criterion: '[Suggested] SCF input follows benchmark numeric setup with tolerance (`ecutwfc/scf_thr/smearing`).'
     axis: correctness
     verify: text_file_numeric_range
-    weight: 0.6
-  - id: suggested_input_spin_mixing
-    criterion: '[Suggested] SCF input includes benchmark mixing controls.'
-    axis: correctness
-    verify: text_file_contains_all
     weight: 0.6
   - id: variable_efield_amp_small
     criterion: '[Variable] External-field amplitude is in a small finite-field range (around
@@ -1076,7 +1059,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_005_20260412
+- id: IG_abacus_005_20260419
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence
@@ -1155,11 +1138,11 @@ questions:
         min: 55
         max: 65
       - key: scf_nmax
-        expected: 100
-        tolerance: 0
+        min: 50
+        max: 1000
       - key: relax_nmax
-        expected: 100
-        tolerance: 0
+        min: 50
+        max: 1000
   - key: suggested_kpt_bulk_three_dimensional
     value:
       filename: KPT_bulk
@@ -1236,7 +1219,8 @@ questions:
     verify: text_file_regex
     weight: 1.0
   - id: suggested_input_bulk_relax_numerics
-    criterion: '[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc/scf_nmax/relax_nmax`).'
+    criterion: '[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc`,
+      `scf_nmax`/`relax_nmax` within 50~1000).'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
