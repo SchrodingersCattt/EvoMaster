@@ -86,6 +86,29 @@ def _get_agent_default_llm() -> str | None:
     return None
 
 
+def _invalid_finish_error_message(finish_detail: Any) -> str:
+    kind = None
+    if finish_detail is not None:
+        kind = getattr(finish_detail, 'kind', None)
+        if kind is None and isinstance(finish_detail, dict):
+            kind = finish_detail.get('kind')
+
+    if kind == 'output_length_exceeded':
+        return (
+            '模型输出被 provider 的输出 token 上限截断，'
+            '未形成可提交的最终回答。请缩短上下文或提高输出上限后重试。'
+        )
+    if kind == 'content_filtered':
+        return '模型输出被 provider 内容策略截断或拦截，未形成可提交的最终回答。'
+    if kind == 'reasoning_only':
+        return '模型只返回了思考内容，没有生成可见最终回答。请重试。'
+    if kind == 'empty_response':
+        return '模型本轮没有返回可见最终回答。请重试。'
+    if kind == 'missing_llm_response':
+        return '模型流结束但没有返回可验证的响应对象。请重试。'
+    return '模型没有返回有效最终回答。请重试。'
+
+
 def _build_workspace_upload_fn(
     archival_config: WorkspaceArchivalConfig | None,
 ) -> Callable[..., Any] | None:
@@ -537,7 +560,9 @@ class AgentRunService:
                     await fanout.dispatch(
                         ErrorEvent(
                             source='System',
-                            message='Model did not return a valid final response. Please retry.',
+                            message=_invalid_finish_error_message(
+                                run_result_event.finish_detail
+                            ),
                         )
                     )
                 await fanout.dispatch(
