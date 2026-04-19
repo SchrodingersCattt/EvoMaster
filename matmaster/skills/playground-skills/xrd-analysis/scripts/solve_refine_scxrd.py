@@ -595,8 +595,19 @@ def _write_cif(
         Z = 1
     cryst_sys = _crystal_system(sg_number)
     mw = _molecular_weight(formula_str) if formula_str != "?" else 0.0
+
+    # Calculate crystal density (g/cm³)
+    # density = Z * M / (V * N_A) where V in ų = 1e-24 cm³
+    density_str = "?"
+    if mw > 0 and V > 0:
+        density = (Z * mw) / (V * 0.6022)  # 0.6022 = N_A * 1e-24
+        density_str = f"{density:.3f}"
+
     lines = [
         "data_structure",
+        "",
+        "# Audit",
+        "_audit_creation_method            'solve_refine_scxrd.py (charge-flipping + LS)'",
         "",
         "# Crystal data",
         f"_cell_length_a                    {a:.4f}",
@@ -611,6 +622,7 @@ def _write_cif(
         "# Space group",
         f"_space_group_name_H-M_alt         '{sg_symbol}'",
         f"_space_group_IT_number            {sg_number}",
+        f"_space_group_crystal_system       {cryst_sys}",
         f"_symmetry_cell_setting            {cryst_sys}",
         "",
         "# Chemical information",
@@ -619,6 +631,8 @@ def _write_cif(
     ]
     if mw > 0:
         lines.append(f"_chemical_formula_weight           {mw}")
+    if density_str != "?":
+        lines.append(f"_exptl_crystal_density_diffrn      {density_str}")
     lines += [
         "",
         "# Data collection",
@@ -639,6 +653,7 @@ def _write_cif(
         " _atom_site_fract_z",
         " _atom_site_U_iso_or_equiv",
         " _atom_site_adp_type",
+        " _atom_site_occupancy",
     ]
     elem_count: dict[str, int] = {}
     for at in atoms:
@@ -649,8 +664,9 @@ def _write_cif(
         # Wrap fractional coordinates into [0, 1)
         x, y, z = x % 1.0, y % 1.0, z % 1.0
         U = at.get("B", 2.0) / (8 * np.pi**2)
+        occ = at.get("occ", 1.0)
         lines.append(
-            f" {label:6s} {el:2s}  {x:10.5f} {y:10.5f} {z:10.5f}  {U:8.5f} Uiso"
+            f" {label:6s} {el:2s}  {x:10.5f} {y:10.5f} {z:10.5f}  {U:8.5f} Uiso  {occ:.4f}"
         )
 
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -665,17 +681,22 @@ def _formula_from_atoms(atoms, sg_ops):
     Since the *atoms* list is the asymmetric unit (independent atoms before
     symmetry expansion), we report those counts directly — do NOT multiply
     by Z (the space-group multiplicity).
+
+    Hill order: C first, H second, then all remaining elements alphabetically.
     """
     counts: dict[str, int] = {}
     for at in atoms:
         el = at["elem"]
         counts[el] = counts.get(el, 0) + 1
-    # Hill order: C first, H second, then alphabetical
+    # Hill order: C first, H second, then ALL others alphabetically
     parts = []
-    for el in ("C", "H", "N", "O"):
-        if el in counts:
-            n = counts.pop(el)
-            parts.append(f"{el}{n}" if n > 1 else el)
+    if "C" in counts:
+        n = counts.pop("C")
+        parts.append(f"C{n}" if n > 1 else "C")
+    if "H" in counts:
+        n = counts.pop("H")
+        parts.append(f"H{n}" if n > 1 else "H")
+    # Remaining elements in strict alphabetical order
     for el in sorted(counts):
         n = counts[el]
         parts.append(f"{el}{n}" if n > 1 else el)

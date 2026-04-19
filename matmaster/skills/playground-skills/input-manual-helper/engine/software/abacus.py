@@ -143,13 +143,46 @@ class AbacusBackend(SoftwareBackend):
     # render
     # ------------------------------------------------------------------
 
+    # Task type alias map: normalize common RenderIntent task_type values
+    # to the canonical ABACUS task names used internally by this renderer.
+    _TASK_ALIASES: dict[str, str] = {
+        # relaxation aliases
+        "opt": "relax",
+        "optimization": "relax",
+        "geometry_optimization": "relax",
+        "geo_opt": "relax",
+        "ion_relax": "relax",
+        "ionic_relax": "relax",
+        # cell-relax aliases
+        "vc-relax": "cell-relax",
+        "vc_relax": "cell-relax",
+        "variable_cell_relax": "cell-relax",
+        "cell_opt": "cell-relax",
+        "cell_optimization": "cell-relax",
+        "full_relax": "cell-relax",
+        "cell_relax": "cell-relax",
+        # band aliases
+        "bands": "band",
+        "band_structure": "band",
+        "bandstructure": "band",
+        # md aliases
+        "molecular_dynamics": "md",
+        # dos aliases
+        "density_of_states": "dos",
+        "pdos": "dos",
+        # nscf aliases
+        "non_scf": "nscf",
+        "non-scf": "nscf",
+    }
+
     def render(self, intent: RenderIntent) -> str:
         """生成 ABACUS INPUT 文件内容。
 
         对于 ABACUS，返回的字符串是 INPUT 文件的内容。
         调用方可通过 render_abacus_all() 同时获得 STRU 和 KPT。
         """
-        task = (intent.task_type or "scf").lower().strip()
+        raw_task = (intent.task_type or "scf").lower().strip()
+        task = self._TASK_ALIASES.get(raw_task, raw_task)
         overrides = dict(intent.params or {})
 
         # 基础参数 — ecutwfc=100 and smearing_sigma=0.01 match SKILL.md standards
@@ -223,11 +256,14 @@ class AbacusBackend(SoftwareBackend):
                     "scf_nmax": 300,
                 }
             )
-        elif task in ("md", "nvt", "npt"):
+        elif task in ("md", "nvt", "npt", "nve"):
+            # Determine the correct md_type from the resolved task name
+            md_type_map = {"nvt": "nvt", "npt": "npt", "nve": "nve"}
+            md_type = md_type_map.get(task, "nvt")
             params.update(
                 {
                     "calculation": "md",
-                    "md_type": "nvt",
+                    "md_type": md_type,
                     "md_nstep": 1000,
                     "md_dt": 1.0,
                     "md_tfirst": 300,
@@ -412,7 +448,8 @@ class AbacusBackend(SoftwareBackend):
         如果 intent.structure_file 已提供则 STRU 包含提示注释；
         否则使用内建 Si 金刚石结构作为占位符。
         """
-        task = (intent.task_type or "scf").lower().strip()
+        raw_task = (intent.task_type or "scf").lower().strip()
+        task = self._TASK_ALIASES.get(raw_task, raw_task)
         input_text = self.render(intent)
 
         # STRU 占位符
