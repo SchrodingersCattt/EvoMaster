@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import shlex
 from unittest.mock import MagicMock
 
 import pytest
@@ -626,3 +627,91 @@ def test_flat_view_symlink_first_writer_wins_via_stdout_marker(
         f"should classify as exists, not failed; "
         f"exists={exists_msgs} failed={failed_msgs}"
     )
+
+
+def test_flat_view_symlink_generic_failure_does_not_fail_figure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="matmaster.tools.figure_artifacts")
+
+    result, _session = _run_with_exec_bash_returns(
+        [
+            {
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": "ln: cannot create symbolic link 'x.png': Permission denied\n",
+            }
+        ],
+        figure_id="band",
+    )
+
+    assert len(result.figures) == 1
+    assert result.warnings == []
+    failed = [
+        r.getMessage()
+        for r in caplog.records
+        if "figure_symlink_failed:'band'" in r.getMessage()
+    ]
+    assert failed and "Permission denied" in failed[0]
+    assert not any(
+        "figure_symlink_exists" in r.getMessage() for r in caplog.records
+    )
+
+
+def test_flat_view_symlink_exec_bash_raises_does_not_fail_figure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="matmaster.tools.figure_artifacts")
+
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = (
+        '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
+    )
+    fake_session.download.return_value = b"\x89PNG\r\n\x1a\n" + b"x" * 32
+    fake_session.exec_bash.side_effect = RuntimeError("session closed")
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    assert len(result.figures) == 1
+    assert result.warnings == []
+    assert any(
+        "figure_symlink_failed:'band'" in r.getMessage()
+        and "session closed" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_flat_view_symlink_shell_quoting() -> None:
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = (
+        '{"figures":[{"figure_id":"band-alpha","path":"plots/band.png","caption":"x"}]}'
+    )
+    fake_session.download.return_value = b"\x89PNG\r\n\x1a\n" + b"x" * 32
+    fake_session.exec_bash.return_value = {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+    }
+
+    collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/foo bar/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/foo bar/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    cmd = _get_exec_bash_command(fake_session.exec_bash.call_args)
+    tokens = shlex.split(cmd)
+    assert "/share/foo bar/.matmaster/figures" in tokens
+    assert "/share/foo bar/.matmaster/figures/band-alpha.png" in tokens
+    assert "call-1/artifacts/plots/band.png" in tokens
+    assert "FIGURE_SYMLINK_EXISTS" in tokens
