@@ -12,7 +12,7 @@
 
 **Existing code anchors（实施前必知）:**
 
-- 主体文件 `matmaster/tools/figure_artifacts.py`——`collect_figures_from_session` 主循环有一个 `try/except Exception` 包裹 download + validate + upload。`_link_figure_into_flat_view` 的调用必须在**该 try 块内**，位置是 `asset_url = _upload_with_retry(...)` 赋值之后、`result.figures.append(FigureDescriptor(...))` 之前。不要放到 try 外——放外面会 (a) 在异常时绕过 `failure_ids` 记录、(b) 改变现有 except 分支语义
+- 主体文件 `matmaster/tools/figure_artifacts.py`——`collect_figures_from_session` 主循环有一个 `try/except Exception: result.failure_ids.append(...); continue` 包裹 download + validate + upload。`_link_figure_into_flat_view` 的调用必须放在 **try/except 块之外、`result.figures.append(FigureDescriptor(...))` 之前**——即只在"download + validate + upload 全部成功、控制流通过 except 的 `continue` 筛选后到达 append 行"的那一刻调用。放进 try 块内会让 `_link_figure_into_flat_view` 自身的 `exec_bash` 异常被 except 错误捕获并污染 `failure_ids`。放太后（append 之后）无实质差别，但语义应是"append 之前"。完整代码片段见 Task 3 的 "Critical insertion point"
 - 既有 bash_tool figure 集成测试**真实名字**是 `test_bash_injects_figure_env_and_returns_payload_figures`（`tests/matmaster/tools/builtin/test_bash_tool.py:277`），作为新增集成测试的模板
 - 既有 unit test fixture 模式：`MagicMock()` 充当 session，`_upload_cfg()` helper 构造 `FigureUploadConfig`，参见 `tests/matmaster/tools/test_figure_artifacts.py:21-29` 头部
 
