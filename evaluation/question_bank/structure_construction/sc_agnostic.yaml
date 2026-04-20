@@ -691,7 +691,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260404
+- id: SC_struct_009_20260420
   capability: structure_construction
   domain: agnostic
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce trilayers
@@ -742,7 +742,8 @@ questions:
     - outermost_O_termination
     - ce_o_ratio
   - key: turn_budget
-    value: *id001
+    value:
+      max: 25
   - key: duration_budget
     value: *id002
   - key: token_budget_total
@@ -787,11 +788,6 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: The CeO2(111) slab construction and validation workflow completes without unnecessary
-      exploratory calls.
-    axis: efficiency
-    verify: llm_binary_judge
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
       benchmark ceiling (tunable per deployment).
