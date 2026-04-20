@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from unittest.mock import MagicMock
+
+import pytest
 
 from matmaster.tools.figure_artifacts import (
     FigureCollectionResult,
@@ -537,3 +540,89 @@ def test_flat_view_symlink_not_attempted_on_download_failure() -> None:
     assert result.figures == []
     assert result.failure_ids == ["band"]
     fake_session.exec_bash.assert_not_called()
+
+
+def _run_with_exec_bash_returns(
+    exec_bash_returns: list[dict],
+    figure_id: str = "band",
+) -> tuple[FigureCollectionResult, MagicMock]:
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = (
+        '{"figures":[{"figure_id":"'
+        + figure_id
+        + '","path":"plots/'
+        + figure_id
+        + '.png","caption":"x"}]}'
+    )
+    fake_session.download.return_value = b"\x89PNG\r\n\x1a\n" + b"x" * 32
+    fake_session.exec_bash.side_effect = exec_bash_returns
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+    return result, fake_session
+
+
+def test_flat_view_symlink_first_writer_wins_via_exit_code(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="matmaster.tools.figure_artifacts")
+
+    result, _session = _run_with_exec_bash_returns(
+        [
+            {
+                "exit_code": 73,
+                "stdout": "FIGURE_SYMLINK_EXISTS\n",
+                "stderr": "",
+            }
+        ],
+        figure_id="band",
+    )
+
+    assert len(result.figures) == 1
+    assert result.warnings == []
+    assert any(
+        "figure_symlink_exists:'band'" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_flat_view_symlink_first_writer_wins_via_stdout_marker(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="matmaster.tools.figure_artifacts")
+
+    # exit code 被 remap 为 1（模拟某些 wrapper 把 73 替换成别的值），
+    # 但 stdout marker 仍作为识别凭证
+    result, _session = _run_with_exec_bash_returns(
+        [
+            {
+                "exit_code": 1,
+                "stdout": "FIGURE_SYMLINK_EXISTS\n",
+                "stderr": "",
+            }
+        ],
+        figure_id="band",
+    )
+
+    assert len(result.figures) == 1
+    assert result.warnings == []
+    exists_msgs = [
+        r.getMessage()
+        for r in caplog.records
+        if "figure_symlink_exists" in r.getMessage()
+    ]
+    failed_msgs = [
+        r.getMessage()
+        for r in caplog.records
+        if "figure_symlink_failed" in r.getMessage()
+    ]
+    assert exists_msgs and not failed_msgs, (
+        f"should classify as exists, not failed; "
+        f"exists={exists_msgs} failed={failed_msgs}"
+    )
