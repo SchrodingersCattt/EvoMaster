@@ -232,6 +232,55 @@ class TestCliRunMode:
             "usage": {"total_tokens": 3},
         }
 
+    def test_run_single_serializes_finish_detail_on_invalid_finish(
+        self, capsys, tmp_path: Path
+    ) -> None:
+        from matmaster.core.stream_drain import DrainResult
+        from matmaster.devshell.cli import _run_single, parse_args
+        from matmaster.types.events import FinishDetail
+
+        args = parse_args(
+            [
+                "run",
+                "--workdir",
+                str(tmp_path / "ws"),
+                "--log-dir",
+                str(tmp_path / "logs"),
+                "-p",
+                "hello",
+            ]
+        )
+        drain_result = DrainResult(
+            status="failed",
+            reason="invalid_finish",
+            final_content=None,
+            num_turns=1,
+            usage={},
+            messages=[],
+            finish_detail=FinishDetail(
+                kind="output_length_exceeded",
+                provider_finish_reason="length",
+                message="Model output was truncated by the provider output-token limit.",
+            ),
+        )
+        resolved = SimpleNamespace(model="m", profile_key="p", route_key="r")
+
+        with patch(
+            "matmaster.devshell.cli._run_with_event_log",
+            return_value=(drain_result, tmp_path / "logs" / "events.jsonl"),
+        ):
+            rc = _run_single(args, runner=object(), resolved=resolved)
+
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+        assert rc == 1
+        assert output["reason"] == "invalid_finish"
+        assert output["finish_detail"]["kind"] == "output_length_exceeded"
+        assert output["finish_detail"]["provider_finish_reason"] == "length"
+        assert output["finish_detail"]["message"] == (
+            "Model output was truncated by the provider output-token limit."
+        )
+
     def test_bootstrap_runner_silences_run_mode_stream_output(
         self, tmp_path: Path
     ) -> None:

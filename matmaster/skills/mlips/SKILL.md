@@ -1,6 +1,6 @@
 ---
 name: mlips
-description: "Machine-learning interatomic potentials (MLIPs): structure optimization, phonon, molecular dynamics, elastic constants, NEB, adsorption energy. Default model is DPA; also supports MACE, SevenNet, MatterSim. Bohrium GPU submission."
+description: "MUST use this skill for ANY task involving MLIPs (machine-learning interatomic potentials such as DPA, MACE, SevenNet, MatterSim) — structure optimization, phonon, molecular dynamics, elastic constants, NEB, adsorption energy, etc."
 skill_type: operator
 ---
 

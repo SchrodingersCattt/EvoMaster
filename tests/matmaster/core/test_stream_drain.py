@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from matmaster.core.stream_drain import drain_run_stream
-from matmaster.types.events import ResponseEvent, RunResultEvent
+from matmaster.types.events import FinishDetail, ResponseEvent, RunResultEvent
 
 
 @pytest.mark.asyncio
@@ -62,3 +62,24 @@ async def test_drain_run_stream_does_not_forward_terminal_run_result() -> None:
 
     assert seen == ["ResponseEvent"]
     assert result.final_content == "done"
+
+
+@pytest.mark.asyncio
+async def test_drain_run_stream_copies_finish_detail() -> None:
+    detail = FinishDetail(
+        kind="output_length_exceeded",
+        provider_finish_reason="length",
+        message="Model output was truncated by the provider output-token limit.",
+    )
+
+    async def stream():
+        yield RunResultEvent(
+            source="agent",
+            status="failed",
+            reason="invalid_finish",
+            finish_detail=detail,
+        )
+
+    result = await drain_run_stream(stream())
+
+    assert result.finish_detail is detail

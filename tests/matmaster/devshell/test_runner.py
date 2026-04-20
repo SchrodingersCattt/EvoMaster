@@ -159,3 +159,45 @@ class TestDevRunner:
         catalog.inject_cancel_token.assert_called_once_with(controller.token)
         assert observed["task"] == "test"
         assert observed["cancel_token"] is controller.token
+
+    def test_observer_run_result_preserves_finish_detail(self, tmp_path: Path) -> None:
+        from matmaster.core.stream_drain import DrainResult
+        from matmaster.devshell.event_observer import DevEventObserver
+        from matmaster.types.events import FinishDetail, RunResultEvent
+
+        runner = self._make_runner(tmp_path)
+        detail = FinishDetail(
+            kind="output_length_exceeded",
+            provider_finish_reason="length",
+            message="Model output was truncated by the provider output-token limit.",
+        )
+        fake_result = DrainResult(
+            status="failed",
+            reason="invalid_finish",
+            final_content=None,
+            num_turns=1,
+            usage={},
+            messages=[],
+            finish_detail=detail,
+        )
+        runtime = MagicMock()
+        runtime.spec = MagicMock(tool_catalog=None)
+        runtime.kernel = MagicMock()
+        runtime.kernel.run_stream.return_value = object()
+        fake_exp = MagicMock()
+        fake_exp.build_runtime = AsyncMock(return_value=runtime)
+        fake_exp._run_cleanup_callbacks = AsyncMock()
+        observer = DevEventObserver()
+
+        with (
+            patch("matmaster.devshell.runner.Exp", return_value=fake_exp),
+            patch(
+                "matmaster.core.stream_drain.drain_run_stream",
+                new=AsyncMock(return_value=fake_result),
+            ),
+        ):
+            runner.run("test", event_observer=observer)
+
+        emitted = observer.drain()
+        terminal = next(event for event in emitted if isinstance(event, RunResultEvent))
+        assert terminal.finish_detail is detail

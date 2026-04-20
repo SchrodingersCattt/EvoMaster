@@ -187,11 +187,14 @@ class EventLogger:
                 "content": event.result,
             }
         if isinstance(event, RunResultEvent):
-            return {
+            record = {
                 "type": "run_result",
                 "status": event.status,
                 "reason": event.reason,
             }
+            if event.finish_detail is not None:
+                record["finish_detail"] = event.finish_detail.model_dump(mode="json")
+            return record
         return None
 
     def _write_record(self, record: dict[str, Any]) -> None:

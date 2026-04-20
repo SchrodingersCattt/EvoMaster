@@ -327,6 +327,49 @@ class TestEventsToMessagesPreservesOrder:
         assert assistant_with_tools[0].content is None
         assert assistant_with_tools[0].tool_calls[0].id == "call-1"
 
+    def test_wrapped_assistant_state_finish_detail_does_not_enter_message(self):
+        events = [
+            _user_event("q"),
+            {
+                "source": "MatMaster",
+                "type": "assistant_state",
+                "content": {
+                    "state": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call-1",
+                                "name": "bash",
+                                "arguments": {"cmd": "pwd"},
+                            }
+                        ],
+                    },
+                    "finish_detail": {
+                        "kind": "output_length_exceeded",
+                        "provider_finish_reason": "length",
+                        "message": (
+                            "Model output was truncated by the provider "
+                            "output-token limit."
+                        ),
+                        "has_tool_calls": True,
+                        "truncation_risk": True,
+                    },
+                },
+            },
+            _tool_result_event("call-1", "bash", "/tmp"),
+            _response_event("done"),
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assistant_with_tools = [
+            m for m in result if isinstance(m, AssistantMessage) and m.tool_calls
+        ]
+        assert len(assistant_with_tools) == 1
+        assert assistant_with_tools[0].tool_calls[0].id == "call-1"
+        assert not hasattr(assistant_with_tools[0], "finish_detail")
+
     def test_wrapped_assistant_state_preserves_reasoning_content(self):
         events = [
             _user_event("q"),
