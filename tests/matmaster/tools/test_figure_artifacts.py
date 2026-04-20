@@ -493,9 +493,9 @@ def test_flat_view_symlink_relative_target() -> None:
     ln_idx = cmd.index("ln -s --")
     ln_tail = cmd[ln_idx + len("ln -s --") :].strip()
     first_token = ln_tail.split()[0]
-    assert not first_token.startswith("/"), (
-        f"ln target must be relative, got {first_token!r}"
-    )
+    assert not first_token.startswith(
+        "/"
+    ), f"ln target must be relative, got {first_token!r}"
 
 
 def test_flat_view_symlink_not_attempted_on_upload_failure() -> None:
@@ -653,9 +653,7 @@ def test_flat_view_symlink_generic_failure_does_not_fail_figure(
         if "figure_symlink_failed:'band'" in r.getMessage()
     ]
     assert failed and "Permission denied" in failed[0]
-    assert not any(
-        "figure_symlink_exists" in r.getMessage() for r in caplog.records
-    )
+    assert not any("figure_symlink_exists" in r.getMessage() for r in caplog.records)
 
 
 def test_flat_view_symlink_exec_bash_raises_does_not_fail_figure(

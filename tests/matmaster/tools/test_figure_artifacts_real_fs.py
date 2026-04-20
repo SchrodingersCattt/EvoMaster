@@ -73,9 +73,7 @@ def local_session(tmp_path: Path):
         session.close()
 
 
-def test_real_fs_creates_symlink(
-    local_session: LocalSession, tmp_path: Path
-) -> None:
+def test_real_fs_creates_symlink(local_session: LocalSession, tmp_path: Path) -> None:
     workdir = tmp_path
     artifact_dir, manifest_path = _setup_artifact(workdir, "call-1", "band")
 
@@ -122,9 +120,7 @@ def test_real_fs_rejects_existing_regular_file(
     assert len(result.figures) == 1
     assert squatter.read_bytes() == b"SQUATTER"
     assert not squatter.is_symlink()
-    assert any(
-        "figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records
-    )
+    assert any("figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records)
 
 
 def test_real_fs_rejects_existing_directory(
@@ -156,12 +152,10 @@ def test_real_fs_rejects_existing_directory(
     assert not squatter_dir.is_symlink()
     assert (squatter_dir / "untouched").read_text() == "keep me"
     entries = sorted(p.name for p in squatter_dir.iterdir())
-    assert entries == ["untouched"], (
-        f"guard should reject directory; found extra entries: {entries}"
-    )
-    assert any(
-        "figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records
-    )
+    assert entries == [
+        "untouched"
+    ], f"guard should reject directory; found extra entries: {entries}"
+    assert any("figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records)
 
 
 def test_real_fs_rejects_existing_dangling_symlink(
@@ -191,9 +185,7 @@ def test_real_fs_rejects_existing_dangling_symlink(
 
     assert len(result.figures) == 1
     assert os.readlink(dangling) == "nowhere-to-be-seen"
-    assert any(
-        "figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records
-    )
+    assert any("figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records)
 
 
 def test_real_fs_success_then_collision_same_workdir(
@@ -230,6 +222,4 @@ def test_real_fs_success_then_collision_same_workdir(
     assert len(result_2.figures) == 1
 
     assert os.readlink(link_path) == "call-1/artifacts/band.png"
-    assert any(
-        "figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records
-    )
+    assert any("figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records)
