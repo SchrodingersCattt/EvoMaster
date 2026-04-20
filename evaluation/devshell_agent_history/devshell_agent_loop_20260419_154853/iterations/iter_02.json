@@ -1,0 +1,24 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 2,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [],
+      "files_touched": [],
+      "followup_suggestion": "仓库已恢复至基线快照，可重新运行评测以确认 P0 分数回到基线水平，然后再考虑更保守的优化方案。",
+      "iteration_index": 2,
+      "needs_more_work": false,
+      "optimization_round": 10002,
+      "summary": "**P0 回归 revert 完成。**\\n\\n- `base_sha`: `5df66f9753a872128b3e64f5426280140ed575e2`\\n- 已 revert 1 个提交：`7b025e9cab43778497ff9799e851d86a359e5bda`（使用 `git revert --no-edit`，未使用 `git reset`）。\\n- 仓库现回到上一轮迭代开局基线状态，P0 回归提交已被安全撤销。"
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 2,
+    "macro_mean_0_100": 71,
+    "p0_regression": true,
+    "rationale": "## Iteration 2 — ⛔ P0 REGRESSION GATE FAILURE\n\n**P0 gate failed.** Non-P0 questions were **skipped**. This iteration is an optimization failure.\n\n### P0 Gate Details\n- **Baseline P0 mean** (iter_01): 86 (6/7)\n- **Current P0 mean** (iter_02): 71 (5/7)\n- **Delta**: −15\n\n### Regressed P0 Question\n| Question | iter_01 | iter_02 | History |\n|----------|---------|---------|---------|\n| **SC_struct_009_20260404** | 100 ✅ | **0 ⚠️** | Also regressed in iter_06/07 of session 20260417 due to optimization changes |\n\n### Full P0 Scores\n| Question | iter_01 | iter_02 | Pattern |\n|----------|---------|---------|---------|\n| DD_general_004 | 100 | 100 | Stable ✅ |\n| IG_abacus_002 | 100 | 100 | Stable ✅ |\n| IG_abacus_003 | 0 | 0 | Always fail (unchanged) |\n| **SC_struct_009** | **100** | **0** | **REGRESSED** |\n| WO_direct_archive_extract_002 | 100 | 100 | Stable ✅ |\n| WO_direct_exact_filename_002 | 100 | 100 | Stable ✅ |\n| WO_direct_spec_priority_002 | 100 | 100 | Stable ✅ |\n\n### Analysis\nThe iter_01 optimization agent made changes to multiple skill files including `structure-manager/SKILL.md`, `abacus/SKILL.md`, and input-manual-helper code. SC_struct_009 is a structure construction P0 question — the changes to structure-manager SKILL.md (deterministic workflow rules, save-early rules, verify-after-transformation rules) likely destabilized it.\n\nThis mirrors the pattern from session 20260417 where SC_struct_009 regressed in iter_06 and iter_07 after optimization changes to the structure-manager skill. SC_struct_009 appears sensitive to any modifications in the structure-manager domain.\n\n### Expected Next Steps\n- Orchestrator triggers **revert** of commits made after iter_01 baseline.\n- After revert, repo returns to iter_01 state (42% overall, 86% P0).\n- Next optimization round must be more surgical — specifically:\n  - Do NOT modify `structure-manager/SKILL.md` to protect SC_struct_009\n  - Do NOT modify `data-analysis/` to protect DD_general_004\n  - Focus additive changes on NEW reference files only\n  - Keep SKILL.md edits to the absolute minimum (1-2 lines at most)",
+    "target_met": false
+  }
+}

@@ -175,15 +175,52 @@ def read_pxrd_data(filepath):
 
 
 def find_pxrd_peaks(two_theta, intensity, min_prominence=None, min_height=None):
-    """Find peaks in PXRD pattern. Returns (peak_positions, prominences)."""
+    """Find peaks in PXRD pattern. Returns (peak_positions, prominences).
+
+    Uses adaptive thresholding to handle varying signal-to-noise ratios.
+    Falls back to progressively looser criteria to ensure sufficient peaks
+    are found for lattice refinement.
+    """
+    # Estimate noise floor from the lower quartile of intensity
+    sorted_int = np.sort(intensity)
+    noise_floor = np.median(sorted_int[: max(len(sorted_int) // 4, 10)])
+    signal_range = np.max(intensity) - noise_floor
+
     if min_prominence is None:
-        min_prominence = max(np.std(intensity) * 1.5, np.median(intensity) * 0.05)
+        # Use signal-range based prominence: 3% of dynamic range or 1.5*std
+        min_prominence = max(
+            np.std(intensity) * 1.5,
+            signal_range * 0.03,
+            np.median(intensity) * 0.03,
+        )
     if min_height is None:
-        min_height = np.mean(intensity) + np.std(intensity) * 2
+        # Adaptive height: noise_floor + 5% of signal range
+        min_height = noise_floor + signal_range * 0.05
+
+    # Estimate step size for distance parameter
+    if len(two_theta) > 1:
+        step = np.median(np.diff(two_theta))
+        # Minimum peak separation: ~0.1 degrees in 2theta
+        min_distance = max(int(0.1 / step), 2) if step > 0 else 3
+    else:
+        min_distance = 3
 
     indices, props = find_peaks(
-        intensity, prominence=min_prominence, height=min_height, distance=3
+        intensity, prominence=min_prominence, height=min_height, distance=min_distance
     )
+
+    # If too few peaks found, retry with looser criteria
+    if len(indices) < 5:
+        looser_prom = min_prominence * 0.5
+        looser_height = noise_floor + signal_range * 0.02
+        indices2, props2 = find_peaks(
+            intensity,
+            prominence=looser_prom,
+            height=looser_height,
+            distance=min_distance,
+        )
+        if len(indices2) > len(indices):
+            indices, props = indices2, props2
 
     # Refine positions with parabolic interpolation
     positions = []
@@ -193,6 +230,8 @@ def find_pxrd_peaks(two_theta, intensity, min_prominence=None, min_height=None):
             denom = 2 * (y0 - 2 * y1 + y2)
             if abs(denom) > 1e-10:
                 shift = (y0 - y2) / denom
+                # Clamp shift to ±0.5 to avoid overshoot
+                shift = max(-0.5, min(0.5, shift))
                 dx = (
                     two_theta[min(idx + 1, len(two_theta) - 1)]
                     - two_theta[max(idx - 1, 0)]
@@ -300,13 +339,18 @@ def process_single(
 
     hkl_list = generate_hkl(max_index)
 
-    # Match → refine → re-match → refine (two rounds)
+    # Match → refine → re-match → refine (multiple rounds with widening tolerance)
     matches = match_peaks_to_hkl(
         peaks, hkl_list, initial_params, crystal_system, wavelength, tol
     )
     if len(matches) < len(initial_params):
         matches = match_peaks_to_hkl(
             peaks, hkl_list, initial_params, crystal_system, wavelength, tol * 2
+        )
+    if len(matches) < len(initial_params):
+        # Try even wider tolerance as last resort
+        matches = match_peaks_to_hkl(
+            peaks, hkl_list, initial_params, crystal_system, wavelength, tol * 4
         )
     if len(matches) < len(initial_params):
         return {
@@ -321,7 +365,7 @@ def process_single(
         obs_arr, hkl_arr, initial_params, crystal_system, wavelength
     )
 
-    # Second round with refined params
+    # Second round with refined params — use tighter tolerance since params are better
     matches2 = match_peaks_to_hkl(
         peaks, hkl_list, refined, crystal_system, wavelength, tol
     )
@@ -334,6 +378,20 @@ def process_single(
         if cost2 <= cost * 1.1:
             refined, sigma, cost = ref2, sig2, cost2
             matches = matches2
+
+    # Third round: try to pick up more peaks at tighter tolerance
+    matches3 = match_peaks_to_hkl(
+        peaks, hkl_list, refined, crystal_system, wavelength, tol * 0.7
+    )
+    if len(matches3) > len(matches):
+        obs3 = np.array([m[0] for m in matches3])
+        hkl3 = [m[1] for m in matches3]
+        ref3, sig3, cost3, ok3 = refine_lattice(
+            obs3, hkl3, refined, crystal_system, wavelength
+        )
+        if cost3 <= cost * 1.2:
+            refined, sigma, cost = ref3, sig3, cost3
+            matches = matches3
 
     # Build result
     names = PARAM_NAMES[crystal_system]
