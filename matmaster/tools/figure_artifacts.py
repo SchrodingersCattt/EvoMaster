@@ -33,6 +33,14 @@ _SYMLINK_EXISTS_EXIT_CODE = 73
 _FIGURE_ID_MAX_DISPLAY_CHARS = 64
 
 
+def _format_figure_id_for_diagnostic(figure_id: str) -> str:
+    return repr(figure_id[:_FIGURE_ID_MAX_DISPLAY_CHARS])
+
+
+def _figure_id_has_control_chars(value: str) -> bool:
+    return any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
+
+
 @dataclass(slots=True)
 class FigureCollectionResult:
     figures: list[FigureDescriptor] = field(default_factory=list)
@@ -143,6 +151,15 @@ def _load_manifest(
             return _ManifestLoadResult(
                 entries=None,
                 warning="invalid_manifest: invalid_figure_entry",
+            )
+
+        if "/" in entry.figure_id or _figure_id_has_control_chars(entry.figure_id):
+            return _ManifestLoadResult(
+                entries=None,
+                warning=(
+                    "invalid_manifest: invalid_figure_id:"
+                    f"{_format_figure_id_for_diagnostic(entry.figure_id)}"
+                ),
             )
 
         if entry.figure_id in seen_ids:

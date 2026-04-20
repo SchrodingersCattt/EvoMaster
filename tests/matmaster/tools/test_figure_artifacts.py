@@ -304,3 +304,104 @@ def test_collect_figures_asset_key_uses_stable_sanitized_segments() -> None:
         "matmaster/chat_figures/sess-1-main/task-1/call-1-alpha/Band-Figure-01/"
         f"{expected_digest}/final image.png"
     ]
+
+
+def test_manifest_rejects_figure_id_with_slash() -> None:
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = (
+        '{"figures":[{"figure_id":"a/b","path":"plots/x.png","caption":"x"}]}'
+    )
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    assert result.figures == []
+    assert result.warnings == ["invalid_manifest: invalid_figure_id:'a/b'"]
+
+
+def test_manifest_rejects_figure_id_with_nul_sanitizes_warning() -> None:
+    # JSON `\u0000` 经 json.loads 解析回 Python `\x00` 单字节 NUL
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = (
+        '{"figures":[{"figure_id":"a\\u0000b","path":"plots/x.png","caption":"x"}]}'
+    )
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    assert result.figures == []
+    assert len(result.warnings) == 1
+    warning = result.warnings[0]
+    # 核心安全断言：真实 NUL 字节绝不进入 warning 字符串（repr 转义为 \x00 可见文本）
+    assert "\x00" not in warning
+    assert warning == "invalid_manifest: invalid_figure_id:'a\\x00b'"
+
+
+def test_manifest_rejects_figure_id_with_control_char_sanitizes_warning() -> None:
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = (
+        '{"figures":[{"figure_id":"line\\nbreak","path":"plots/x.png","caption":"x"}]}'
+    )
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    assert result.figures == []
+    assert len(result.warnings) == 1
+    warning = result.warnings[0]
+    assert "\n" not in warning
+    assert warning == "invalid_manifest: invalid_figure_id:'line\\nbreak'"
+
+
+def test_manifest_rejects_figure_id_truncates_long_input() -> None:
+    # 构造：长度 500、`/` 在位置 31（在前 64 字符截断窗口内）——确保截断后仍含 `/`
+    # 触发 invalid_figure_id 校验；同时验证 repr 后的 warning 长度有界
+    long_id = "x" * 31 + "/" + "y" * 500
+    manifest_json = (
+        '{"figures":[{"figure_id":"'
+        + long_id
+        + '","path":"plots/x.png","caption":"x"}]}'
+    )
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = manifest_json
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    assert result.figures == []
+    assert len(result.warnings) == 1
+    # repr('x'*31 + '/' + 'y'*32) 纯 ASCII、repr 后 = 2 引号 + 64 内容 = 66 字符
+    # 前缀 "invalid_manifest: invalid_figure_id:" = 36 字符
+    # 总长 <= 36 + 66 + 小余量
+    warning = result.warnings[0]
+    prefix = "invalid_manifest: invalid_figure_id:"
+    payload = warning.removeprefix(prefix)
+    assert len(payload) <= 68, f"payload too long: {len(payload)} chars: {payload!r}"
+    # 截断发生：原 id 长度 500+，warning 远短于原始
+    assert len(warning) < 200
+    # 语义覆盖：截断后的前 64 字符仍包含 `/`，用以触发校验
+    assert "/" in payload
