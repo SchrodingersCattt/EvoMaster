@@ -13,7 +13,7 @@ as the discriminator, enabling type-safe deserialization from dicts/JSON.
 from datetime import datetime
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .figures import FigureDescriptor
 
@@ -76,6 +76,33 @@ class ToolResultEvent(EventBase):
     total_usage: dict[str, int] = Field(default_factory=dict)
 
 
+class FinishDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal[
+        "output_length_exceeded",
+        "content_filtered",
+        "empty_response",
+        "reasoning_only",
+        "missing_llm_response",
+        "non_stop_finish",
+        "unknown",
+    ]
+    provider_finish_reason: str | None = None
+    message: str
+    content_chars: int = 0
+    reasoning_chars: int = 0
+    has_visible_content: bool = False
+    has_reasoning: bool = False
+    has_tool_calls: bool = False
+    tool_call_count: int = 0
+    last_turn_usage: dict[str, int] = Field(default_factory=dict)
+    last_turn_usage_vendor: dict[str, Any] = Field(default_factory=dict)
+    attempts: int | None = None
+    last_error_kind: str | None = None
+    truncation_risk: bool = False
+
+
 class RunResultEvent(EventBase):
     """Business terminal event for a run outcome.
 
@@ -90,6 +117,7 @@ class RunResultEvent(EventBase):
     num_turns: int = 0
     usage: dict[str, int] = Field(default_factory=dict)
     usage_vendor_by_turn: list[dict[str, Any]] = Field(default_factory=list)
+    finish_detail: FinishDetail | None = None
     # exclude=True: messages carries the full conversation transcript
     # (including system prompt) for internal drain consumers only.
     # model_dump() excludes it, so SSE/frontend never sees it.
@@ -111,6 +139,7 @@ class AssistantStateEvent(EventBase):
     state: dict[str, Any]  # AssistantMessage.model_dump() content
     turn_usage: dict[str, int] = Field(default_factory=dict)
     total_usage: dict[str, int] = Field(default_factory=dict)
+    finish_detail: FinishDetail | None = None
 
 
 class SkillHitEvent(EventBase):

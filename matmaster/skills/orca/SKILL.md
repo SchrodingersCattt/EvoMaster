@@ -1,6 +1,6 @@
 ---
 name: orca
-description: "ORCA quantum chemistry calculation: input preparation, parameter configuration, and Bohrium HPC submission. Supports DFT, HF, MP2, CCSD(T), DLPNO-CCSD(T), TD-DFT, sTD-DFT, geometry optimization, and frequency analysis for molecular systems."
+description: "MUST use this skill for ANY task involving ORCA (DFT, HF, MP2, CCSD(T), DLPNO-CCSD(T), TD-DFT, sTD-DFT, geometry optimization, frequency analysis, and other molecular quantum chemistry calculations)."
 skill_type: operator
 ---
 

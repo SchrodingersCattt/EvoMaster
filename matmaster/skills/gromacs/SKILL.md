@@ -1,6 +1,6 @@
 ---
 name: gromacs
-description: "GROMACS molecular dynamics simulation: input preparation, system building, and Bohrium HPC submission. Supports classical MD (NVT/NPT), energy minimization, free energy perturbation, and enhanced sampling. For system building (solvation, ions), see gromacs-system-prep skill."
+description: "MUST use this skill for ANY task involving GROMACS (classical MD NVT/NPT, energy minimization, free energy perturbation, enhanced sampling, etc.). For system building (solvation, ions), see gromacs-system-prep."
 skill_type: operator
 ---
 

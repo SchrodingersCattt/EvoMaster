@@ -1,6 +1,6 @@
 ---
 name: quantum_espresso
-description: "Quantum ESPRESSO (pw.x) first-principles calculation: input preparation, parameter configuration, and Bohrium HPC submission. Supports SCF, relax, vc-relax, band structure, DOS, and phonon calculations."
+description: "MUST use this skill for ANY task involving Quantum ESPRESSO (pw.x and related executables: SCF, relax, vc-relax, band structure, DOS, phonon calculations, etc.)."
 skill_type: operator
 ---
 

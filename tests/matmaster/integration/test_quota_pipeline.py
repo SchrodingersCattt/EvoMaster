@@ -514,13 +514,20 @@ class TestQuotaNotDeductedOnError:
         assert run_result_payload is not None
         assert run_result_payload['status'] == 'failed'
         assert run_result_payload['reason'] == 'invalid_finish'
+        assert run_result_payload['content']['finish_detail']['kind'] == (
+            'output_length_exceeded'
+        )
+        assert (
+            run_result_payload['content']['finish_detail']['provider_finish_reason']
+            == 'length'
+        )
         error_payload = next(
             (payload for payload in payloads if payload.get('type') == 'error'),
             None,
         )
         assert error_payload is not None
         assert error_payload['source'] == 'System'
-        assert error_payload['message']
+        assert '输出 token 上限截断' in error_payload['message']
         stream_closed_payload = next(
             (payload for payload in payloads if payload.get('type') == 'stream_closed'),
             None,
@@ -598,13 +605,16 @@ class TestQuotaNotDeductedOnError:
         assert run_result_payload['status'] == 'failed'
         assert run_result_payload['reason'] == 'invalid_finish'
         assert run_result_payload.get('final_content') is None
+        assert run_result_payload['content']['finish_detail']['kind'] == (
+            'empty_response'
+        )
         error_payload = next(
             (payload for payload in payloads if payload.get('type') == 'error'),
             None,
         )
         assert error_payload is not None
         assert error_payload['source'] == 'System'
-        assert error_payload['message']
+        assert '没有返回可见最终回答' in error_payload['message']
         stream_closed_payload = next(
             (payload for payload in payloads if payload.get('type') == 'stream_closed'),
             None,

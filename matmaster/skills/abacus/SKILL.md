@@ -1,6 +1,6 @@
 ---
 name: abacus
-description: "ABACUS first-principles calculation: input preparation, parameter configuration, and Bohrium HPC submission. Supports both PW (plane wave) and LCAO (linear combination of atomic orbitals) basis types. Tasks include SCF, band structure, DOS, geometry relaxation, cell relaxation, MD, electric field, dipole correction, BSSE ghost-atom correction, and electrostatic potential analysis."
+description: "MUST use this skill for ANY task involving ABACUS (input preparation, parameter configuration, SCF, band structure, DOS, geometry/cell relaxation, MD, electric field, dipole correction, BSSE, electrostatic potential, etc.)."
 skill_type: operator
 ---
 

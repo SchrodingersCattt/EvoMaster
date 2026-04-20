@@ -1,6 +1,6 @@
 ---
 name: pyatb
-description: "PyATB (Python Ab initio Tight-Binding) post-processing: band structure unfolding, Berry phase, topological invariants, and transport properties from ABACUS LCAO output (HR.dat, SR.dat). Write Python scripts directly and submit to Bohrium."
+description: "MUST use this skill for ANY task involving PyATB (band structure unfolding, Berry phase, topological invariants, transport properties, and other tight-binding post-processing of ABACUS LCAO output HR.dat/SR.dat)."
 skill_type: operator
 ---
 

@@ -7,6 +7,8 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from matmaster.types.events import FinishDetail
+
 
 @dataclass
 class DrainResult:
@@ -19,6 +21,7 @@ class DrainResult:
     usage: dict[str, int]
     messages: list[Any]
     usage_vendor_by_turn: tuple[dict[str, Any], ...] = ()
+    finish_detail: FinishDetail | None = None
     events: list[Any] = field(default_factory=list)
 
 
@@ -52,6 +55,7 @@ async def drain_run_stream(
                     dict(item) for item in (event.usage_vendor_by_turn or [])
                 ),
                 messages=event.messages,
+                finish_detail=event.finish_detail,
                 events=events,
             )
         events.append(event)

@@ -1,6 +1,6 @@
 ---
 name: abinit
-description: "ABINIT first-principles calculation: input preparation, parameter configuration, and Bohrium HPC submission. Supports ground-state SCF, structural relaxation, response functions (DFPT), and NLO/SHG workflows."
+description: "MUST use this skill for ANY task involving ABINIT (ground-state SCF, structural relaxation, DFPT response functions, NLO/SHG workflows, etc.)."
 skill_type: operator
 ---
 

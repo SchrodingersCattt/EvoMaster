@@ -21,6 +21,7 @@ from matmaster.types.events import (
     ConfirmationTimeoutEvent,
     ErrorEvent,
     ExpRunEvent,
+    FinishDetail,
     McpConnectEvent,
     McpServerStatusEvent,
     ResponseEvent,
@@ -116,6 +117,34 @@ class TestToolResultEvent:
         assert evt.payload == {}
 
 
+class TestFinishDetail:
+    def test_finish_detail_serializes_structured_fields(self) -> None:
+        detail = FinishDetail(
+            kind="output_length_exceeded",
+            provider_finish_reason="length",
+            message="Model output was truncated by the provider output-token limit.",
+            content_chars=12,
+            reasoning_chars=34,
+            has_visible_content=True,
+            has_reasoning=True,
+            last_turn_usage={"completion_tokens": 4096},
+            last_turn_usage_vendor={"outputTokens": 4096},
+            truncation_risk=True,
+        )
+
+        dumped = detail.model_dump(mode="json")
+        assert dumped["kind"] == "output_length_exceeded"
+        assert dumped["last_turn_usage"]["completion_tokens"] == 4096
+        assert dumped["last_turn_usage_vendor"]["outputTokens"] == 4096
+        assert dumped["truncation_risk"] is True
+
+    def test_finish_detail_rejects_unknown_kind(self) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            FinishDetail(kind="typo", message="bad")
+
+        assert any(err["loc"] == ("kind",) for err in exc_info.value.errors())
+
+
 class TestRunResultEvent:
     def test_defaults(self) -> None:
         evt = RunResultEvent(source="agent")
@@ -123,6 +152,24 @@ class TestRunResultEvent:
         assert evt.status == "completed"
         assert evt.reason == ""
         assert evt.final_content is None
+
+    def test_finish_detail_round_trips(self) -> None:
+        evt = RunResultEvent(
+            source="agent",
+            status="failed",
+            reason="invalid_finish",
+            finish_detail=FinishDetail(
+                kind="empty_response",
+                message="Model stopped without a visible final answer.",
+            ),
+        )
+
+        dumped = evt.model_dump(mode="json")
+        assert dumped["finish_detail"]["kind"] == "empty_response"
+        restored = _bus_event_adapter.validate_python(dumped)
+        assert isinstance(restored, RunResultEvent)
+        assert restored.finish_detail is not None
+        assert restored.finish_detail.kind == "empty_response"
 
 
 class TestErrorEvent:
@@ -138,6 +185,26 @@ class TestAssistantStateEvent:
         evt = AssistantStateEvent(source="agent", state={"content": "hi"})
         assert evt.type == "assistant_state"
         assert evt.state == {"content": "hi"}
+
+    def test_finish_detail_round_trips(self) -> None:
+        evt = AssistantStateEvent(
+            source="agent",
+            state={"role": "assistant", "tool_calls": []},
+            finish_detail=FinishDetail(
+                kind="output_length_exceeded",
+                provider_finish_reason="length",
+                message="Model output was truncated by the provider output-token limit.",
+                has_tool_calls=True,
+                truncation_risk=True,
+            ),
+        )
+
+        dumped = evt.model_dump(mode="json")
+        assert dumped["finish_detail"]["has_tool_calls"] is True
+        restored = _bus_event_adapter.validate_python(dumped)
+        assert isinstance(restored, AssistantStateEvent)
+        assert restored.finish_detail is not None
+        assert restored.finish_detail.truncation_risk is True
 
 
 class TestSkillHitEvent:
@@ -339,6 +406,12 @@ class TestSystemEvents:
 _agent_event_adapter = TypeAdapter(AgentEvent)
 _system_event_adapter = TypeAdapter(SystemEvent)
 _bus_event_adapter = TypeAdapter(BusEvent)
+
+
+def test_finish_detail_exported_from_types_package() -> None:
+    import matmaster.types as types_pkg
+
+    assert types_pkg.FinishDetail is FinishDetail
 
 
 class TestAgentEventDiscriminator:

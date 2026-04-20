@@ -21,11 +21,17 @@ from dataclasses import dataclass
 from dataclasses import field as dc_field
 from typing import TYPE_CHECKING, Any
 
+from matmaster.core.finish_diagnostics import (
+    build_finish_detail,
+    is_incomplete_response,
+    is_valid_natural_finish,
+)
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.errors import LLMError
 from matmaster.types.events import (
     AssistantStateEvent,
     CompactionEvent,
+    FinishDetail,
     ResponseEvent,
     SkillHitEvent,
     ThoughtEvent,
@@ -72,23 +78,17 @@ _STOP_RETRY_SLEEP_SLICE_SEC = 0.25
 
 @dataclass
 class _TerminalItem:
-    """Signals that the kernel loop reached a terminal state."""
-
     reason: str
     final_content: str | None = None
     num_turns: int = 0
     usage: dict[str, int] = dc_field(default_factory=dict)
     usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
     messages: list[Any] = dc_field(default_factory=list)
+    finish_detail: FinishDetail | None = None
 
 
 @dataclass
 class _KernelItem:
-    """Single yield from _run_items() / _stream_llm_items().
-
-    Exactly one of event, llm_response, messages_delta, or terminal is set.
-    """
-
     event: Any = None  # BusEvent | None
     llm_response: LLMResponse | None = None
     messages_delta: list[Any] | None = None
@@ -97,8 +97,6 @@ class _KernelItem:
 
 @dataclass
 class _KernelState:
-    """Mutable state for _run_items(). Preserves Kernel statelessness."""
-
     messages: list[Any]
     turn: int = 0
     total_usage: dict[str, int] = dc_field(default_factory=dict)
@@ -108,7 +106,7 @@ class _KernelState:
 
 
 class _KernelStopRequested(Exception):
-    """Internal: cancel_token became set during LLM stream or retry backoff."""
+    pass
 
 
 class AgentKernel:
@@ -238,6 +236,7 @@ class AgentKernel:
                                 for item in item.terminal.usage_vendor_by_turn
                             ],
                             messages=item.terminal.messages,
+                            finish_detail=item.terminal.finish_detail,
                         )
                         return
                     if item.event is not None:
@@ -286,6 +285,7 @@ class AgentKernel:
         *,
         final_content: str | None = None,
         turn_offset: int = 0,
+        finish_detail: FinishDetail | None = None,
     ) -> _KernelItem:
         return _KernelItem(
             terminal=_TerminalItem(
@@ -297,6 +297,7 @@ class AgentKernel:
                     dict(item) for item in state.usage_vendor_by_turn
                 ],
                 messages=list(state.messages),
+                finish_detail=finish_detail,
             )
         )
 
@@ -434,7 +435,11 @@ class AgentKernel:
                 return
 
             if llm_response is None:
-                yield self._terminal(state, "invalid_finish")
+                yield self._terminal(
+                    state,
+                    "invalid_finish",
+                    finish_detail=build_finish_detail(None),
+                )
                 return
 
             response = llm_response
@@ -450,8 +455,12 @@ class AgentKernel:
                 self._validate_tool_call_ids(response.tool_calls)
 
             if not response.tool_calls:
-                if not self._is_valid_natural_finish(response):
-                    yield self._terminal(state, "invalid_finish")
+                if not is_valid_natural_finish(response):
+                    yield self._terminal(
+                        state,
+                        "invalid_finish",
+                        finish_detail=build_finish_detail(response),
+                    )
                     return
                 state.messages.append(
                     AssistantMessage(
@@ -467,6 +476,19 @@ class AgentKernel:
                 tool_calls=response.tool_calls,
                 reasoning_content=response.reasoning_content,
             )
+            assistant_finish_detail = None
+            if response.finish_reason == "length":
+                assistant_finish_detail = build_finish_detail(response)
+                logger.warning(
+                    "tool call response ended with length finish reason",
+                    extra={
+                        "turn": state.turn,
+                        "tool_names": [tc.name for tc in response.tool_calls or []],
+                        "finish_detail": assistant_finish_detail.model_dump(
+                            mode="json"
+                        ),
+                    },
+                )
             state.messages.append(assistant_msg)
 
             if assistant_msg.tool_calls:
@@ -476,6 +498,7 @@ class AgentKernel:
                         state=assistant_msg.model_dump(mode="json"),
                         turn_usage=dict(turn_usage),
                         total_usage=dict(state.total_usage),
+                        finish_detail=assistant_finish_detail,
                     )
                 )
 
@@ -581,7 +604,7 @@ class AgentKernel:
                 if final_items:
                     resp = final_items[0].llm_response
                     elapsed = time.monotonic() - t0
-                    if self._is_incomplete_response(resp) and attempt < max_retries - 1:
+                    if is_incomplete_response(resp) and attempt < max_retries - 1:
                         logger.warning(
                             "LLM returned no visible final output "
                             "(attempt %d/%d, elapsed=%.1fs), retrying.",
@@ -593,7 +616,7 @@ class AgentKernel:
                         await self._sleep_backoff_with_cancel(backoff, cancel_token)
                         continue
 
-                    if self._is_incomplete_response(resp):
+                    if is_incomplete_response(resp):
                         logger.warning(
                             "LLM returned incomplete response after %d attempts, "
                             "letting finish validation fail the turn.",
@@ -876,31 +899,6 @@ class AgentKernel:
                 usage_vendor=usage_vendor,
             )
         )
-
-    @staticmethod
-    def _is_valid_natural_finish(response: LLMResponse) -> bool:
-        """Only commit a natural finish when there is visible final content."""
-        return (
-            not response.tool_calls
-            and response.finish_reason == "stop"
-            and AgentKernel._has_visible_content(response)
-        )
-
-    @staticmethod
-    def _is_incomplete_response(response: LLMResponse) -> bool:
-        """Detect responses with no visible final output.
-
-        This can happen when an LLM proxy (e.g. LiteLLM) intermittently
-        returns only a finish marker or drops the content block after streaming
-        the thinking block.
-        """
-        return not response.tool_calls and not AgentKernel._has_visible_content(
-            response
-        )
-
-    @staticmethod
-    def _has_visible_content(response: LLMResponse) -> bool:
-        return normalize_visible_response_text(response.content) is not None
 
     @staticmethod
     def _response_item(
