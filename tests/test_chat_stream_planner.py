@@ -121,7 +121,6 @@ async def test_planner_job_enqueues_with_planner_mode_field() -> None:
             'mode': 'planner',
         },
         request_event_queue=asyncio.Queue(),
-        reply_queue=MagicMock(),
     )
 
     fake_redis = MagicMock()

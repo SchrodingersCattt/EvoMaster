@@ -10,7 +10,6 @@ from matmaster.config.loader import load_llm_config
 from src.base.base_res import BaseResponse
 from src.models.chat import (
     ChatAskQuestionReplyRequest,
-    ChatPlannerReplyRequest,
     ChatSendRequest,
     ErrorApiResponse,
     RunStatusApiResponse,
@@ -375,7 +374,7 @@ async def chat_stream(
     "/{session_id}/stop",
     response_model=BaseResponse,
     summary="停止会话运行",
-    description="终止该会话当前正在运行的任务。若会话正在等待用户确认，也会同时唤醒并取消阻塞线程。",
+    description="终止该会话当前正在运行的任务。若会话正在等待用户交互回复，也会同时唤醒并取消阻塞线程。",
     operation_id="stopChatSession",
     responses={
         403: COMMON_ERROR_RESPONSES[403],
@@ -388,7 +387,7 @@ def stop_session(
     stream_svc: ChatStreamService = Depends(get_stream_service),
 ):
     """终止该会话当前正在运行的任务。有权限访问即可调用；多 worker 时通过 Redis 广播，始终返回 200。
-    若当前正在等待用户确认（confirmation_request），会向回复队列投递取消哨兵以立即唤醒阻塞线程。"""
+    若当前正在等待用户交互回复，会向回复队列投递取消哨兵以立即唤醒阻塞线程。"""
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg="无权限访问该会话")
@@ -432,42 +431,6 @@ def _submit_interaction_reply(
     stream_svc.publish_reply_event(sid, payload)
     reply_queue.put_content(queue_value)
     events_svc.add_history_event(sid, payload, user_id=user_id)
-
-
-@router.post(
-    "/{session_id}/confirmation_reply",
-    response_model=BaseResponse,
-    summary="提交确认回复",
-    description="当会话流返回 `confirmation_request` 时，调用本接口提交用户回复，Agent 会继续执行。",
-    operation_id="replyChatSessionConfirmation",
-    responses={
-        403: COMMON_ERROR_RESPONSES[403],
-        409: COMMON_ERROR_RESPONSES[409],
-    },
-)
-async def confirmation_reply(
-    session_id: str = Path(..., description="会话 ID", examples=["session-001"]),
-    req: ChatPlannerReplyRequest = Body(...),
-    user_id: str | None = Depends(UserService.optional_user_id),
-    chat_svc: ChatSessionsService = Depends(get_sessions_service),
-    stream_svc: ChatStreamService = Depends(get_stream_service),
-    events_svc: ChatEventsService = Depends(get_events_service),
-):
-    """统一确认回复：收到 confirmation_request（planner / ask_human）时，调用本接口传入用户回复，agent 会继续执行。"""
-    sid = session_id.strip()
-    if not chat_svc.can_access_session(sid, user_id):
-        raise ForbiddenErrorResponse(msg="无权限访问该会话")
-    content = (req.content or "").strip()
-    _submit_interaction_reply(
-        sid=sid,
-        event_type="confirmation_reply",
-        content=content,
-        queue_value=content,
-        stream_svc=stream_svc,
-        events_svc=events_svc,
-        user_id=user_id,
-    )
-    return BaseResponse(msg="ok")
 
 
 @router.post(

@@ -119,25 +119,6 @@ def _public_content_for_event(
             out['total_usage'] = payload.get('total_usage', {})
         return out
 
-    if event_type == 'confirmation_request':
-        # 向后兼容：旧的 confirmation_request 事件按 ask_question 格式输出
-        return {
-            'request_id': payload.get('origin', ''),
-            'questions': [
-                {
-                    'question': payload.get('question', ''),
-                    'header': 'Confirmation',
-                    'options': [
-                        {'label': a, 'description': ''}
-                        for a in (payload.get('actions') or ['confirm', 'cancel'])
-                    ],
-                }
-            ],
-            'metadata': {},
-            'origin': payload.get('origin'),
-            'preview_format': 'markdown',
-        }
-
     if event_type == 'error':
         return {
             'message': payload.get('message'),
@@ -215,12 +196,6 @@ def _public_content_for_event(
 
     if event_type == 'cancelled':
         return {'reason': payload.get('reason', '')}
-
-    if event_type == 'confirmation_timeout':
-        return {
-            'question': payload.get('question'),
-            'default_reply': payload.get('default_reply'),
-        }
 
     if event_type == 'ask_question':
         return {

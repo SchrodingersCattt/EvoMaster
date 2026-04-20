@@ -75,7 +75,6 @@ def test_generate_send_stream_replay_keeps_response_figures_but_dedupes_run_resu
                 'invocation_id': 'inv-1',
             },
             request_event_queue=asyncio.Queue(),
-            reply_queue=MagicMock(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:
