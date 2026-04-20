@@ -492,3 +492,48 @@ def test_flat_view_symlink_relative_target() -> None:
     assert not first_token.startswith("/"), (
         f"ln target must be relative, got {first_token!r}"
     )
+
+
+def test_flat_view_symlink_not_attempted_on_upload_failure() -> None:
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = (
+        '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
+    )
+    fake_session.download.return_value = b"\x89PNG\r\n\x1a\n" + b"x" * 32
+
+    def always_fail(data: bytes, key: str) -> str:
+        raise RuntimeError("upload dead")
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(upload_bytes=always_fail),
+    )
+
+    assert result.figures == []
+    assert result.failure_ids == ["band"]
+    fake_session.exec_bash.assert_not_called()
+
+
+def test_flat_view_symlink_not_attempted_on_download_failure() -> None:
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = (
+        '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
+    )
+    fake_session.download.side_effect = TimeoutError("ssh dead")
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    assert result.figures == []
+    assert result.failure_ids == ["band"]
+    fake_session.exec_bash.assert_not_called()
