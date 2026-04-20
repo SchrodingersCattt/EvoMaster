@@ -64,6 +64,60 @@ def build_figure_env(workdir: str, tool_call_id: str) -> tuple[str, str]:
     )
 
 
+def _link_figure_into_flat_view(
+    *,
+    session: Session,
+    artifact_dir: str,
+    resolved_path: str,
+    figure_id: str,
+) -> None:
+    """Create a flat-view symlink for a successfully uploaded figure.
+
+    Uses explicit [ -e ]/[ -L ] guard before ln -s to reject every form of
+    link_path preoccupation, including dangling symlinks. Diagnostics are
+    logged only; symlink failures never affect figure collection.
+    """
+
+    flat_dir = posixpath.dirname(posixpath.dirname(posixpath.normpath(artifact_dir)))
+    suffix = posixpath.splitext(resolved_path)[1].lower()
+    link_path = posixpath.join(flat_dir, f"{figure_id}{suffix}")
+    rel_target = posixpath.relpath(resolved_path, start=flat_dir)
+    safe_figure_id = _format_figure_id_for_diagnostic(figure_id)
+
+    q_flat = shlex.quote(flat_dir)
+    q_link = shlex.quote(link_path)
+    q_target = shlex.quote(rel_target)
+    q_marker = shlex.quote(_SYMLINK_EXISTS_MARKER)
+
+    cmd = (
+        f"mkdir -p -- {q_flat} && "
+        f"if [ -e {q_link} ] || [ -L {q_link} ]; then "
+        f"printf '%s\\n' {q_marker} && "
+        f"exit {_SYMLINK_EXISTS_EXIT_CODE}; "
+        f"fi && "
+        f"ln -s -- {q_target} {q_link}"
+    )
+
+    try:
+        exec_result = session.exec_bash(command=cmd)
+    except Exception as exc:
+        logger.warning("figure_symlink_failed:%s:%s", safe_figure_id, exc)
+        return
+
+    exit_code = exec_result.get("exit_code", 0)
+    if exit_code == 0:
+        return
+
+    stdout = exec_result.get("stdout", "")
+    if exit_code == _SYMLINK_EXISTS_EXIT_CODE or _SYMLINK_EXISTS_MARKER in stdout:
+        logger.warning("figure_symlink_exists:%s", safe_figure_id)
+        return
+
+    err = exec_result.get("stderr", "") or stdout
+    snippet = err[:200].strip()
+    logger.warning("figure_symlink_failed:%s:%s", safe_figure_id, snippet)
+
+
 def collect_figures_from_session(
     *,
     session: Session,
@@ -108,6 +162,12 @@ def collect_figures_from_session(
             result.failure_ids.append(entry.figure_id)
             continue
 
+        _link_figure_into_flat_view(
+            session=session,
+            artifact_dir=artifact_dir,
+            resolved_path=resolved_path,
+            figure_id=entry.figure_id,
+        )
         result.figures.append(
             FigureDescriptor(
                 figure_id=entry.figure_id,

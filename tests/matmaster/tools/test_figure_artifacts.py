@@ -405,3 +405,90 @@ def test_manifest_rejects_figure_id_truncates_long_input() -> None:
     assert len(warning) < 200
     # 语义覆盖：截断后的前 64 字符仍包含 `/`，用以触发校验
     assert "/" in payload
+
+
+def _make_session_for_single_figure(
+    *,
+    png_bytes: bytes = b"\x89PNG\r\n\x1a\n" + b"x" * 32,
+    exec_bash_return: dict | None = None,
+) -> MagicMock:
+    fake_session = MagicMock()
+    fake_session.path_exists.return_value = True
+    fake_session.read_file.return_value = (
+        '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
+    )
+    fake_session.download.return_value = png_bytes
+    fake_session.exec_bash.return_value = exec_bash_return or {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+    }
+    return fake_session
+
+
+def _get_exec_bash_command(call_args) -> str:
+    """session.exec_bash is always called with command=... kwarg per our impl."""
+    return call_args.kwargs.get("command") or call_args.args[0]
+
+
+def test_flat_view_symlink_created_on_success() -> None:
+    fake_session = _make_session_for_single_figure()
+
+    result = collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    assert len(result.figures) == 1
+    assert result.warnings == []
+    fake_session.exec_bash.assert_called_once()
+    cmd = _get_exec_bash_command(fake_session.exec_bash.call_args)
+    # guard 关键元素都出现（substring 匹配，"exit 73" 后实际带 ";"）
+    assert "mkdir -p --" in cmd
+    assert "[ -e " in cmd
+    assert "[ -L " in cmd
+    assert "ln -s --" in cmd
+    assert "FIGURE_SYMLINK_EXISTS" in cmd
+    assert "exit 73" in cmd
+
+
+def test_flat_view_symlink_path_uses_figure_id_and_ext() -> None:
+    fake_session = _make_session_for_single_figure()
+
+    collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    cmd = _get_exec_bash_command(fake_session.exec_bash.call_args)
+    # link_path 形态 <workdir>/.matmaster/figures/<figure_id>.<ext>
+    assert "/share/.matmaster/figures/band.png" in cmd
+
+
+def test_flat_view_symlink_relative_target() -> None:
+    fake_session = _make_session_for_single_figure()
+
+    collect_figures_from_session(
+        session=fake_session,
+        artifact_dir="/share/.matmaster/figures/call-1/artifacts",
+        manifest_path="/share/.matmaster/figures/call-1/manifest.json",
+        tool_call_id="call-1",
+        upload_config=_upload_cfg(),
+    )
+
+    cmd = _get_exec_bash_command(fake_session.exec_bash.call_args)
+    # rel_target 为从 flat_dir 到 resolved_path 的相对路径，保留 manifest 子目录
+    assert "call-1/artifacts/plots/band.png" in cmd
+    # 严格断言：ln -s -- 紧随其后的第一个参数是相对路径
+    ln_idx = cmd.index("ln -s --")
+    ln_tail = cmd[ln_idx + len("ln -s --") :].strip()
+    first_token = ln_tail.split()[0]
+    assert not first_token.startswith("/"), (
+        f"ln target must be relative, got {first_token!r}"
+    )
