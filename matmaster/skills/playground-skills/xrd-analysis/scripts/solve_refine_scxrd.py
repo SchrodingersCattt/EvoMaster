@@ -26,7 +26,6 @@ import shutil
 import sys
 
 import numpy as np
-
 from solve_refine_scxrd_lib import (
     _assign_types,
     _cell_volume,

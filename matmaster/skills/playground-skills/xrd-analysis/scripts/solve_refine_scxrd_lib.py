@@ -612,7 +612,7 @@ def _molecular_weight(formula_str: str) -> float:
 
 def _symop_xyz(R, t):
     """Convert rotation matrix R and translation t to x,y,z string notation."""
-    axes = ['x', 'y', 'z']
+    axes = ["x", "y", "z"]
     parts = []
     for i in range(3):
         terms = []
@@ -620,7 +620,7 @@ def _symop_xyz(R, t):
             coeff = R[i, j]
             if abs(coeff) < 1e-8:
                 continue
-            sign = '+' if coeff > 0 else '-'
+            sign = "+" if coeff > 0 else "-"
             ac = abs(coeff)
             if abs(ac - 1.0) < 1e-8:
                 terms.append(f"{sign}{axes[j]}")
@@ -634,8 +634,15 @@ def _symop_xyz(R, t):
             ti = 0.0
         if ti > 1e-4:
             # Express as fraction
-            frac_map = {0.5: '1/2', 0.25: '1/4', 0.75: '3/4',
-                        1/3: '1/3', 2/3: '2/3', 1/6: '1/6', 5/6: '5/6'}
+            frac_map = {
+                0.5: "1/2",
+                0.25: "1/4",
+                0.75: "3/4",
+                1 / 3: "1/3",
+                2 / 3: "2/3",
+                1 / 6: "1/6",
+                5 / 6: "5/6",
+            }
             found = False
             for fv, fs in frac_map.items():
                 if abs(ti - fv) < 1e-4:
@@ -644,14 +651,14 @@ def _symop_xyz(R, t):
                     break
             if not found:
                 terms.append(f"+{ti:.4f}")
-        comp = ''.join(terms)
+        comp = "".join(terms)
         # Clean up leading +
-        if comp.startswith('+'):
+        if comp.startswith("+"):
             comp = comp[1:]
         if not comp:
-            comp = '0'
+            comp = "0"
         parts.append(comp)
-    return ','.join(parts)
+    return ",".join(parts)
 
 
 def _write_cif(
@@ -713,7 +720,11 @@ def _write_cif(
         "",
     ]
     # Symmetry operations loop (required for CIF compliance)
-    ops_to_write = sg_ops if sg_ops is not None else _SG_OPS.get(sg_number, [(np.eye(3), np.zeros(3))])
+    ops_to_write = (
+        sg_ops
+        if sg_ops is not None
+        else _SG_OPS.get(sg_number, [(np.eye(3), np.zeros(3))])
+    )
     lines.append("loop_")
     lines.append(" _symmetry_equiv_pos_site_id")
     lines.append(" _symmetry_equiv_pos_as_xyz")
@@ -869,4 +880,3 @@ def _try_shelx(hkl_path, cell, wavelength, sg_number, elements, prefix="struct")
 
     cif_path = Path(f"{prefix}.cif")
     return str(cif_path) if cif_path.exists() else None
-
