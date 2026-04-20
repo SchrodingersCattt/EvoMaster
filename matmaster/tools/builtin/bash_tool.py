@@ -65,7 +65,7 @@ class BashTool(BuiltinTool):
                     "Max 600000ms (10 min) for general commands. "
                     "Exception: pure `sleep N` commands "
                     "may set timeout up to 3600000ms (1 hour), for use as "
-                    "polling intervals between HPC job status checks. "
+                    "polling intervals between long-time HPC job status checks. "
                     "Compound commands like `sleep 3600 && ...` are NOT "
                     "eligible for the higher cap. "
                 ),
