@@ -141,7 +141,6 @@ async def test_generate_send_stream_enqueues_remote_workdir_and_source():
         mode="direct",
         user_msg={"source": "User", "type": "query", "content": "run"},
         request_event_queue=asyncio.Queue(),
-        reply_queue=MagicMock(),
         remote_workdir="/share/case",
         session_directory_source="request",
         bohrium_required=True,

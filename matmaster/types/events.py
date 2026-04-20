@@ -1,8 +1,8 @@
 """Event type hierarchy for the matmaster event system.
 
-Defines all 23 event types in two categories:
+Defines all 21 event types in two categories:
 - AgentEvent (9 types): emitted by the kernel during agent execution
-- SystemEvent (14 types): emitted by service-layer components
+- SystemEvent (12 types): emitted by service-layer components
 
 BusEvent = AgentEvent | SystemEvent -- the unified event union type.
 
@@ -161,26 +161,6 @@ class ToolProgressEvent(EventBase):
 # ── SystemEvent: service-layer events ───────────────────
 
 
-class ConfirmationRequestEvent(EventBase):
-    """User confirmation request event."""
-
-    type: Literal["confirmation_request"] = "confirmation_request"
-    question: str
-    mode: str  # 'timeout' | 'block'
-    timeout_seconds: int | None = None
-    context: str | None = None
-    actions: list[str] = Field(default_factory=list)
-    origin: str | None = None
-
-
-class ConfirmationTimeoutEvent(EventBase):
-    """Confirmation timeout event."""
-
-    type: Literal["confirmation_timeout"] = "confirmation_timeout"
-    question: str
-    default_reply: str | None = None
-
-
 class AskQuestionEvent(EventBase):
     """Structured multi-choice question event sent to user."""
 
@@ -314,8 +294,6 @@ AgentEvent = Annotated[
 
 SystemEvent = Annotated[
     Union[
-        ConfirmationRequestEvent,
-        ConfirmationTimeoutEvent,
         AskQuestionEvent,
         AskQuestionReplyEvent,
         AskQuestionTimeoutEvent,
@@ -345,8 +323,6 @@ BusEvent = Annotated[
         SkillHitEvent,
         ToolProgressEvent,
         # SystemEvent types
-        ConfirmationRequestEvent,
-        ConfirmationTimeoutEvent,
         AskQuestionEvent,
         AskQuestionReplyEvent,
         AskQuestionTimeoutEvent,

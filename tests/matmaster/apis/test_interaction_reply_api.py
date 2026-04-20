@@ -6,8 +6,8 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from src.apis.chat_api import ask_question_reply, confirmation_reply
-from src.models.chat import ChatAskQuestionReplyRequest, ChatPlannerReplyRequest
+from src.apis.chat_api import ask_question_reply, router
+from src.models.chat import ChatAskQuestionReplyRequest
 from src.utils.exceptions import ConflictErrorResponse, ForbiddenErrorResponse
 
 
@@ -56,29 +56,12 @@ class _EventsSvc:
         self.history.append((session_id, payload, user_id))
 
 
-def test_confirmation_reply_publishes_confirmation_type_and_writes_plain_text() -> None:
-    queue = _ReplyQueue()
-    stream = _StreamSvc(queue)
-    events = _EventsSvc()
-
-    asyncio.run(
-        confirmation_reply(
-            session_id=" sess-1 ",
-            req=ChatPlannerReplyRequest(content="确认，继续执行"),
-            user_id="user-1",
-            chat_svc=_ChatSvc(),
-            stream_svc=stream,
-            events_svc=events,
-        )
+def _ask_question_req() -> ChatAskQuestionReplyRequest:
+    return ChatAskQuestionReplyRequest(
+        request_id="aq_1",
+        answers={"Q1": "A1"},
+        annotations={"Q1": {"freeform": "notes"}},
     )
-
-    assert queue.values == ["确认，继续执行"]
-    payload = stream.published[0][1]
-    assert payload["type"] == "confirmation_reply"
-    assert payload["content"] == "确认，继续执行"
-    assert payload["task_id"] == "task-1"
-    assert payload["invocation_id"] == "inv-1"
-    assert events.history == [("sess-1", payload, "user-1")]
 
 
 def test_ask_question_reply_publishes_structured_content_and_json_queue_value() -> None:
@@ -89,11 +72,7 @@ def test_ask_question_reply_publishes_structured_content_and_json_queue_value() 
     asyncio.run(
         ask_question_reply(
             session_id="sess-1",
-            req=ChatAskQuestionReplyRequest(
-                request_id=" aq_1 ",
-                answers={"Q1": "A1"},
-                annotations={"Q1": {"freeform": "notes"}},
-            ),
+            req=_ask_question_req(),
             user_id="user-1",
             chat_svc=_ChatSvc(),
             stream_svc=stream,
@@ -125,9 +104,9 @@ def test_ask_question_reply_requires_answers_or_annotations() -> None:
 def test_reply_endpoint_rejects_inaccessible_session() -> None:
     with pytest.raises(ForbiddenErrorResponse):
         asyncio.run(
-            confirmation_reply(
+            ask_question_reply(
                 session_id="sess-1",
-                req=ChatPlannerReplyRequest(content="ok"),
+                req=_ask_question_req(),
                 user_id="user-1",
                 chat_svc=_ChatSvc(allowed=False),
                 stream_svc=_StreamSvc(_ReplyQueue()),
@@ -139,12 +118,20 @@ def test_reply_endpoint_rejects_inaccessible_session() -> None:
 def test_reply_endpoint_rejects_missing_active_run() -> None:
     with pytest.raises(ConflictErrorResponse):
         asyncio.run(
-            confirmation_reply(
+            ask_question_reply(
                 session_id="sess-1",
-                req=ChatPlannerReplyRequest(content="ok"),
+                req=_ask_question_req(),
                 user_id="user-1",
                 chat_svc=_ChatSvc(),
                 stream_svc=_StreamSvc(queue=None),
                 events_svc=_EventsSvc(),
             )
         )
+
+
+def test_legacy_reply_route_is_removed() -> None:
+    paths = {getattr(route, "path", "") for route in router.routes}
+    removed_path = "/{session_id}/" + "confirmation" + "_reply"
+
+    assert removed_path not in paths
+    assert "/{session_id}/ask_question_reply" in paths

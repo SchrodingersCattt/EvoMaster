@@ -184,7 +184,6 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
                 'invocation_id': 'inv-1',
             },
             request_event_queue=asyncio.Queue(),
-            reply_queue=MagicMock(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:
@@ -315,7 +314,6 @@ async def test_generate_send_stream_enqueues_bohrium_required_flag():
         mode='direct',
         user_msg={'source': 'User', 'type': 'query', 'content': 'run'},
         request_event_queue=asyncio.Queue(),
-        reply_queue=MagicMock(),
         bohrium_required=True,
     )
 
@@ -380,7 +378,6 @@ async def test_generate_send_stream_enqueues_images():
         mode='direct',
         user_msg={'source': 'User', 'type': 'query', 'content': 'run'},
         request_event_queue=asyncio.Queue(),
-        reply_queue=MagicMock(),
         images=['https://oss.example.com/chat/a.png'],
     )
 
@@ -424,7 +421,6 @@ async def test_sse_frames_match_frontend_contract_without_mysql():
     from matmaster.integration.sse_handler import SSEHandler
     from matmaster.types.events import (
         BohriumNodeEvent,
-        ConfirmationRequestEvent,
         ErrorEvent,
         McpConnectEvent,
         McpServerStatusEvent,
@@ -462,15 +458,6 @@ async def test_sse_frames_match_frontend_contract_without_mysql():
             tool_name='bash',
             result={'status': 'success', 'stdout': 'ok'},
             payload={'auto_save': True},
-        ),
-        ConfirmationRequestEvent(
-            source='MatMaster',
-            question='Proceed?',
-            mode='timeout',
-            timeout_seconds=20,
-            actions=['yes', 'no'],
-            context='ctx',
-            origin='planner',
         ),
         ErrorEvent(source='System', message='boom', traceback='tb'),
         BohriumNodeEvent(
@@ -520,7 +507,6 @@ async def test_sse_frames_match_frontend_contract_without_mysql():
     assert [frame['type'] for frame in frames] == [
         'tool_call',
         'tool_result',
-        'confirmation_request',
         'error',
         'bohrium_node',
         'mcp_server_status',
@@ -545,32 +531,15 @@ async def test_sse_frames_match_frontend_contract_without_mysql():
         'status': 'success',
         'info': {'auto_save': True},
     }
-    # confirmation_request backward-compat: mapped to ask_question format
-    assert frames[2]['content'] == {
-        'request_id': 'planner',
-        'questions': [
-            {
-                'question': 'Proceed?',
-                'header': 'Confirmation',
-                'options': [
-                    {'label': 'yes', 'description': ''},
-                    {'label': 'no', 'description': ''},
-                ],
-            }
-        ],
-        'metadata': {},
-        'origin': 'planner',
-        'preview_format': 'markdown',
-    }
-    assert frames[3]['content'] == {'message': 'boom', 'traceback': 'tb'}
-    assert frames[4]['content'] == {
+    assert frames[2]['content'] == {'message': 'boom', 'traceback': 'tb'}
+    assert frames[3]['content'] == {
         'status': 'ready',
         'message': 'Node ready',
         'node_id': 1,
         'phase': 'ssh',
         'event_type': 'setup_ready',
     }
-    assert frames[5]['content'] == {
+    assert frames[4]['content'] == {
         'server_name': 'code-server',
         'transport': 'sse',
         'phase': 'retrying',
@@ -579,16 +548,16 @@ async def test_sse_frames_match_frontend_contract_without_mysql():
         'max_attempts': 3,
         'error': 'timeout',
     }
-    assert frames[6]['content'] == {
+    assert frames[5]['content'] == {
         'phase': 'ready',
         'message': 'connected',
         'elapsed_ms': 123,
         'error': None,
     }
-    assert frames[7]['content'] == 'done'
-    assert frames[8]['final_content'] == 'done'
-    assert frames[9]['task_completed'] is True
-    assert frames[9]['end_reason'] == 'natural'
+    assert frames[6]['content'] == 'done'
+    assert frames[7]['final_content'] == 'done'
+    assert frames[8]['task_completed'] is True
+    assert frames[8]['end_reason'] == 'natural'
 
 
 def test_generate_send_stream_normalizes_replayed_history_source():
@@ -633,7 +602,6 @@ def test_generate_send_stream_normalizes_replayed_history_source():
                 'invocation_id': 'inv-1',
             },
             request_event_queue=asyncio.Queue(),
-            reply_queue=MagicMock(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:
@@ -714,7 +682,6 @@ def test_generate_send_stream_replay_prefers_response_over_run_result():
                 'invocation_id': 'inv-1',
             },
             request_event_queue=asyncio.Queue(),
-            reply_queue=MagicMock(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:
@@ -829,7 +796,6 @@ def test_generate_send_stream_subscribes_before_enqueue():
                 'invocation_id': 'inv-1',
             },
             request_event_queue=asyncio.Queue(),
-            reply_queue=MagicMock(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:
