@@ -21,9 +21,14 @@ class ResponseFiguresAccumulator:
         self._ordered: list[FigureDescriptor] = []
         self._last_emitted_count = 0
 
-    def add_tool_result(self, event: ToolResultEvent) -> bool:
-        """吸收父级 tool result 中的图片，保持到达顺序与 first-writer-wins。"""
-        if event.spawn_id is not None:
+    def add_tool_result(
+        self,
+        event: ToolResultEvent,
+        *,
+        include_spawned: bool = False,
+    ) -> bool:
+        """吸收 tool result 中的图片，保持到达顺序与 first-writer-wins。"""
+        if event.spawn_id is not None and not include_spawned:
             return False
 
         raw_items = (event.payload or {}).get('figures') or []

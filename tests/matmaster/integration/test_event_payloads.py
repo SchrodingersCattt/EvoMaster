@@ -121,36 +121,6 @@ class TestPublicContentForEvent:
             'reason': 'user stop'
         }
 
-    def test_confirmation_request_backward_compat_maps_to_ask_question_format(
-        self,
-    ) -> None:
-        payload = {
-            'type': 'confirmation_request',
-            'source': 'System',
-            'question': 'Proceed?',
-            'mode': 'timeout',
-            'actions': ['confirm', 'cancel'],
-            'origin': 'tool:X',
-        }
-        result = _public_content_for_event('confirmation_request', payload)
-        assert result['request_id'] == 'tool:X'
-        assert len(result['questions']) == 1
-        assert result['questions'][0]['question'] == 'Proceed?'
-        assert result['questions'][0]['header'] == 'Confirmation'
-
-    def test_confirmation_timeout_returns_question_and_default(self) -> None:
-        payload = {
-            'type': 'confirmation_timeout',
-            'source': 'System',
-            'question': 'Proceed?',
-            'default_reply': 'yes',
-        }
-
-        assert _public_content_for_event('confirmation_timeout', payload) == {
-            'question': 'Proceed?',
-            'default_reply': 'yes',
-        }
-
     def test_exp_run_returns_exp_name(self) -> None:
         payload = {'type': 'exp_run', 'source': 'System', 'exp_name': 'vasp-relax'}
 
