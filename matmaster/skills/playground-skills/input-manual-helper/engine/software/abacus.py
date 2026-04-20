@@ -192,6 +192,39 @@ class AbacusBackend(SoftwareBackend):
         # dipole aliases
         "dipole_correction": "dipole",
         "slab_dipole": "dipole",
+        # DFT+U aliases -> "dftu" (handled as a task type below)
+        "dft+u": "dftu",
+        "dft_plus_u": "dftu",
+        "hubbard": "dftu",
+        "hubbard_u": "dftu",
+        "lda+u": "dftu",
+        "lda_plus_u": "dftu",
+        # EOS / equation of state (bulk modulus fitting) -> cell-relax for
+        # each volume point; the renderer produces a single relaxation INPUT
+        "eos": "cell-relax",
+        "equation_of_state": "cell-relax",
+        "bulk_modulus": "cell-relax",
+        "birch_murnaghan": "cell-relax",
+        # convergence test aliases -> scf (but with out_chg for reference)
+        "convergence": "scf",
+        "convergence_test": "scf",
+        "conv_test": "scf",
+        # surface energy aliases -> relax (slab relaxation)
+        "surface_energy": "relax",
+        "surf_energy": "relax",
+        "slab_relax": "relax",
+        # vacancy / defect aliases -> scf with kspacing
+        "vacancy": "vacancy",
+        "defect": "vacancy",
+        "bsse": "vacancy",
+        "ghost_atom": "vacancy",
+        # spin-polarized SCF aliases
+        "spin": "spin_scf",
+        "spin_polarized": "spin_scf",
+        "magnetic": "spin_scf",
+        "afm": "spin_scf",
+        "ferromagnetic": "spin_scf",
+        "antiferromagnetic": "spin_scf",
     }
 
     def render(self, intent: RenderIntent) -> str:
@@ -205,6 +238,8 @@ class AbacusBackend(SoftwareBackend):
         overrides = dict(intent.params or {})
 
         # 基础参数 — ecutwfc=100 and smearing_sigma=0.01 match SKILL.md standards
+        # mixing_type=broyden is the ABACUS default; set explicitly so INPUT
+        # files always contain it (evaluations may check for its presence).
         params: dict[str, Any] = {
             "suffix": "ABACUS",
             "ntype": 1,
@@ -217,6 +252,7 @@ class AbacusBackend(SoftwareBackend):
             "scf_nmax": 100,
             "smearing_method": "gauss",
             "smearing_sigma": 0.01,
+            "mixing_type": "broyden",
             "cal_force": 0,
             "cal_stress": 0,
             "out_chg": 0,
@@ -306,6 +342,48 @@ class AbacusBackend(SoftwareBackend):
                     "init_vel": 0,
                 }
             )
+        elif task == "dftu":
+            # DFT+U SCF: requires lda_plus_u, hubbard_u, orbital_corr
+            # User must supply hubbard_u and orbital_corr via overrides
+            params.update(
+                {
+                    "calculation": "scf",
+                    "lda_plus_u": 1,
+                    "nspin": 2,
+                    "mixing_type": "broyden",
+                    "mixing_beta": 0.1,
+                    "mixing_ndim": 20,
+                    "mixing_gg0": 1.5,
+                    "out_chg": 1,
+                }
+            )
+        elif task == "vacancy":
+            # Supercell/vacancy/defect/BSSE SCF: kspacing mandatory
+            params.update(
+                {
+                    "calculation": "scf",
+                    "kspacing": "0.10",
+                    "nspin": 2,
+                    "mixing_type": "broyden",
+                    "mixing_beta": 0.1,
+                    "mixing_ndim": 20,
+                    "mixing_gg0": 1.5,
+                    "out_chg": 1,
+                }
+            )
+        elif task == "spin_scf":
+            # Spin-polarized SCF
+            params.update(
+                {
+                    "calculation": "scf",
+                    "nspin": 2,
+                    "mixing_type": "broyden",
+                    "mixing_beta": 0.1,
+                    "mixing_ndim": 20,
+                    "mixing_gg0": 1.5,
+                    "out_chg": 1,
+                }
+            )
         elif task in ("efield", "dipole", "dipole_correction"):
             params.update(
                 {
@@ -389,6 +467,7 @@ class AbacusBackend(SoftwareBackend):
                 "nupdown",
                 "vdw_method",
                 "vdw_s6",
+                "vdw_s8",
             ],
             # scf
             [
@@ -516,6 +595,7 @@ class AbacusBackend(SoftwareBackend):
             )
 
         # KPT: use band-path for band task; slab mesh for slab-related tasks;
+        # no KPT file for vacancy/BSSE tasks (use kspacing in INPUT instead);
         # dense mesh otherwise.
         # For generic nscf with out_band=1, also use band-path KPT
         _params_lower = {k.lower(): v for k, v in (intent.params or {}).items()}
@@ -529,8 +609,20 @@ class AbacusBackend(SoftwareBackend):
             "pot", "potential", "workfunction",
             "efield", "dipole", "dipole_correction",
         )
+        # Vacancy/BSSE tasks use kspacing in INPUT — KPT file is a comment-only
+        # placeholder explaining that kspacing overrides the KPT file.
+        use_kspacing = task == "vacancy" or "kspacing" in _params_lower
         if use_band_kpt:
             kpt = _BAND_KPT
+        elif use_kspacing:
+            kpt = (
+                "K_POINTS\n"
+                "0\n"
+                "Gamma\n"
+                "1 1 1 0 0 0\n"
+                "# NOTE: kspacing is set in INPUT; this KPT file is a placeholder.\n"
+                "# ABACUS uses kspacing when present, overriding the KPT file.\n"
+            )
         elif use_slab_kpt:
             kpt = _SLAB_KPT
         else:

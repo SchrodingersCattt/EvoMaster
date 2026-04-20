@@ -126,6 +126,7 @@ class ABACUSValidator(BaseValidator):
         diags.extend(self._check_md(text))
         diags.extend(self._check_spin(text))
         diags.extend(self._check_dft_plus_u(text))
+        diags.extend(self._check_dftu(text))
         diags.extend(self._check_mixing(text))
         diags.extend(self._check_scf_nmax(text))
         diags.extend(self._check_smearing(text))
@@ -594,6 +595,54 @@ class ABACUSValidator(BaseValidator):
                     suggestion="Add: out_chg  1",
                 )
             )
+        return diags
+
+    def _check_dftu(self, text: str) -> list[Diagnostic]:
+        """Additional DFT+U checks (nspin requirement).
+
+        Note: hubbard_u and orbital_corr presence are already checked by
+        _check_dft_plus_u. This method adds the nspin=2 recommendation.
+        """
+        diags: list[Diagnostic] = []
+        lda_plus_u = _parse_int(text, "lda_plus_u")
+        if lda_plus_u != 1:
+            return diags
+
+        # DFT+U usually requires nspin=2 for proper treatment of
+        # localized d/f electrons (magnetic ground states, orbital ordering)
+        nspin = _parse_int(text, "nspin")
+        if nspin is None or nspin < 2:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "lda_plus_u=1 typically requires nspin=2 for proper "
+                        "treatment of localized d/f electrons. "
+                        f"{'nspin not set (default 1)' if nspin is None else f'nspin={nspin}'}. "
+                        "Without nspin=2, the magnetic ground state is not explored."
+                    ),
+                    param="nspin",
+                    suggestion="Add: nspin  2",
+                )
+            )
+
+        # When nspin=2 is set, recommend mixing parameters for convergence
+        nspin_val = _parse_int(text, "nspin")
+        if nspin_val == 2:
+            mixing_beta = _parse_float(text, "mixing_beta")
+            if mixing_beta is None or mixing_beta > 0.5:
+                diags.append(
+                    Diagnostic(
+                        severity=SEVERITY_WARNING,
+                        message=(
+                            "DFT+U with nspin=2: recommend mixing_beta=0.1 and "
+                            "mixing_ndim=20 for stable SCF convergence. "
+                            f"{'mixing_beta not set' if mixing_beta is None else f'mixing_beta={mixing_beta} (too high)'}."
+                        ),
+                        param="mixing_beta",
+                        suggestion="Add: mixing_beta  0.1\n     mixing_ndim  20\n     mixing_gg0  1.5",
+                    )
+                )
         return diags
 
     def _check_nscf_bands(self, text: str) -> list[Diagnostic]:

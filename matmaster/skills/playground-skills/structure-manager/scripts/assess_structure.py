@@ -187,16 +187,30 @@ def main() -> None:
         dim, dim_warns = _dimensionality(obj)
         sane, sane_warns = _sanity_periodic(obj)
 
-    print(
-        json.dumps(
-            {
-                "is_valid": sane,
-                "dimensionality": dim,
-                "formula": formula,
-                "warnings": dim_warns + sane_warns,
-            }
-        )
-    )
+    # Additional structural metadata for downstream tasks
+    result = {
+        "is_valid": sane,
+        "dimensionality": dim,
+        "formula": formula,
+        "warnings": dim_warns + sane_warns,
+    }
+
+    # Add lattice parameters and atom count for deterministic reporting
+    if kind == "periodic":
+        try:
+            abc = obj.lattice.abc
+            angles = obj.lattice.angles
+            result["lattice_abc"] = [round(x, 4) for x in abc]
+            result["lattice_angles"] = [round(x, 2) for x in angles]
+            result["n_atoms"] = len(obj)
+            result["n_species"] = len(set(str(s) for s in obj.species))
+            result["volume"] = round(float(obj.volume), 4)
+        except Exception:
+            pass
+    elif kind == "molecule":
+        result["n_atoms"] = len(obj)
+
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":
