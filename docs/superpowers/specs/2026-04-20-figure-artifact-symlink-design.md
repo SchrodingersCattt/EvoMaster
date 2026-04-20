@@ -85,20 +85,25 @@ def _link_figure_into_flat_view(
     artifact_dir: str,
     resolved_path: str,
     figure_id: str,
-    warnings: list[str],
 ) -> None:
     """Symlink an uploaded artifact into the flat view directory.
 
-    flat_dir = dirname(dirname(artifact_dir)) =
+    flat_dir = dirname(dirname(normpath(artifact_dir))) =
         <workdir>/.matmaster/figures/
     link_path = <flat_dir>/<figure_id><suffix>
     rel_target = relpath(resolved_path, start=flat_dir)
 
-    On success: no warning.
-    On "File exists" (first-writer-wins): warning figure_symlink_exists:<id>.
-    On other errors: warning figure_symlink_failed:<id>:<stderr_snippet>.
+    On success: silent.
+    On "File exists" (first-writer-wins): logger.warning with figure_symlink_exists:<id>.
+    On other non-zero exit: logger.warning with figure_symlink_failed:<id>:<snippet>.
+    On exception from session.exec_bash: logger.warning with figure_symlink_failed:<id>:<exc>.
     In all cases: the figure still enters payload.figures. This function
     never raises and never affects upload success accounting.
+
+    Warnings are emitted via module logger rather than FigureCollectionResult.warnings
+    because symlink outcomes are internal diagnostics, not manifest failures; writing
+    them to result.warnings would cause bash_tool.py's "[Figure manifest ignored: ...]"
+    text to misrepresent symlink issues as manifest problems.
     """
 ```
 
@@ -111,18 +116,17 @@ _link_figure_into_flat_view(
     artifact_dir=artifact_dir,
     resolved_path=resolved_path,
     figure_id=entry.figure_id,
-    warnings=result.warnings,
 )
 result.figures.append(FigureDescriptor(...))
 ```
 
-放在 `try/except Exception` 捕获之外的成功分支。链接建立失败不再次抛出——完全在函数内部处理，warning 追加到 `result.warnings`。
+放在 `try/except Exception` 捕获之外的成功分支。链接建立失败不再次抛出——完全在函数内部吞掉。
 
 **命令构造**：
 
 ```python
 flat_dir = posixpath.dirname(
-    posixpath.dirname(posixpath.normpath(artifact_dir).rstrip("/"))
+    posixpath.dirname(posixpath.normpath(artifact_dir))
 )
 suffix = posixpath.splitext(resolved_path)[1].lower()
 link_path = posixpath.join(flat_dir, f"{figure_id}{suffix}")
@@ -131,21 +135,31 @@ cmd = (
     f"mkdir -p -- {shlex.quote(flat_dir)} && "
     f"ln -s -- {shlex.quote(rel_target)} {shlex.quote(link_path)}"
 )
-result = session.exec_bash(cmd)
 ```
 
-**返回值约定**：`Session.exec_bash` 返回 `dict[str, Any]`，包含 `exit_code`、`stdout`、`stderr`、`output`、`working_dir`（见 `matmaster/sessions/ssh.py:197-202` 的参考实现）。判断方式：
+`posixpath.normpath` 自身已经规范化尾部斜杠，无需额外 `.rstrip("/")`。
+
+**执行与判断**：`Session.exec_bash` 返回 `dict[str, Any]`，包含 `exit_code`、`stdout`、`stderr`、`output`、`working_dir`（见 `matmaster/sessions/ssh.py:197-202` 的参考实现）。实现必须用 `try/except Exception` 包裹 `session.exec_bash`，以覆盖 session 被关闭、底层 SSH 断连等实现特定异常：
 
 ```python
-if result.get("exit_code", 0) == 0:
+try:
+    exec_result = session.exec_bash(cmd)
+except Exception as exc:
+    logger.warning("figure_symlink_failed:%s:%s", figure_id, exc)
     return
-stderr = result.get("stderr", "") or result.get("output", "")
-if "File exists" in stderr:
-    warnings.append(f"figure_symlink_exists:{figure_id}")
+
+if exec_result.get("exit_code", 0) == 0:
+    return
+
+err = exec_result.get("stderr", "") or exec_result.get("stdout", "")
+if "File exists" in err:
+    logger.warning("figure_symlink_exists:%s", figure_id)
 else:
-    snippet = stderr[:200].strip()
-    warnings.append(f"figure_symlink_failed:{figure_id}:{snippet}")
+    snippet = err[:200].strip()
+    logger.warning("figure_symlink_failed:%s:%s", figure_id, snippet)
 ```
+
+fallback 用 `stdout` 而不是 `output`，因为 `output` 是 `stdout + stderr` 拼接，可能带无关 stdout 噪声；`ln -s` 几乎不输出 stdout，`stdout` fallback 足够干净。
 
 ### Manifest Schema 补充校验
 
@@ -157,6 +171,8 @@ else:
 加入 `_load_manifest`：对每个 `FigureManifestEntry`，若 `figure_id` 违反字符约束，返回 `invalid_manifest: invalid_figure_id:<id>` warning，整个 manifest 被拒（与现有 `invalid_figure_entry` 路径一致的失败策略）。
 
 该校验对正常 figure_id（如 `band_structure`、`phonon-dispersion`）无影响。
+
+**不过滤 `.` / `..` 的理由**：`figure_id = "."` 得到 `link_path = <flat_dir>/..png`，`figure_id = ".."` 得到 `link_path = <flat_dir>/...png`——这些都是 `<flat_dir>` 内的合法叶节点文件名（字面两点/三点加后缀），`ln -s` 不会把它们解释为目录引用；同时 `shlex.quote` 已阻止 shell 注入。路径穿越的真正风险载体是 `/`（分隔符）和 NUL（C 字符串终止符），已在上表列入。故不额外禁止点字符。
 
 ### 不改动的文件
 
@@ -171,14 +187,21 @@ else:
 
 **核心不变量**：扁平视图 symlink 的成败不影响 figure 是否进入 `payload.figures`，也不影响回答主体。
 
-| 场景 | symlink 行为 | `payload.figures` | Warning |
+| 场景 | symlink 行为 | `payload.figures` | Diagnostic |
 |---|---|---|---|
 | 下载失败 | 不尝试 | 不进入（记入 `failure_ids`） | 无 |
 | 校验失败 | 不尝试 | 不进入（记入 `failure_ids`） | 无 |
 | OSS 上传失败 | 不尝试 | 不进入（记入 `failure_ids`） | 无 |
 | OSS 上传成功 + symlink 首建成功 | 创建 | 进入 | 无 |
-| OSS 上传成功 + symlink 撞名 | 拒绝覆盖 | 进入 | `figure_symlink_exists:<id>` |
-| OSS 上传成功 + symlink 其他错误（权限/FS 不支持） | 失败 | 进入 | `figure_symlink_failed:<id>:<stderr>` |
+| OSS 上传成功 + symlink 撞名 | 拒绝覆盖 | 进入 | `logger.warning("figure_symlink_exists:<id>")` |
+| OSS 上传成功 + symlink 其他非零退出（权限/FS 不支持） | 失败 | 进入 | `logger.warning("figure_symlink_failed:<id>:<stderr_snippet>")` |
+| OSS 上传成功 + `session.exec_bash` 抛异常（session 断连等） | 失败 | 进入 | `logger.warning("figure_symlink_failed:<id>:<exc>")` |
+
+**Diagnostic 走向**：所有 symlink 诊断信息仅通过 `matmaster.tools.figure_artifacts` 模块 logger 输出，**不进入** `FigureCollectionResult.warnings`。这样做的原因：
+
+- `bash_tool.py:250-254` 会把 `collection.warnings` 拼成 `[Figure manifest ignored: ...]` 追加到 tool_result 文本。若 symlink 的 warning 混入该字段，agent 会看到"manifest ignored"的误导性措辞——而实际上 manifest 正确、figure 已成功上传、只是便利视图未建成
+- symlink 是 post-upload 便利视图，诊断信息对 agent 没有决策价值（first-writer-wins 的撞名图仍在 `payload.figures` 中），对运维有价值 → logger 是正确的归宿
+- 保持 `collection.warnings` 的语义纯净：只承载"manifest 被拒"的真正降级信息
 
 ## Concurrency
 
@@ -186,7 +209,7 @@ else:
 
 - 各 tool call 的 sandbox `<workdir>/.matmaster/figures/<call_id>/` 独立，互不干扰
 - 扁平视图 `<workdir>/.matmaster/figures/` 是所有 tool call 共享目录
-- 跨 tool call 的 `figure_id` 冲突由 `ln -s` 原子性托底：先完成的 tool call 占位，后到者的 `ln` 返回非零（`File exists`），wrapper 记 warning 并跳过。first-writer-wins 自然成立，无需额外同步原语
+- 跨 tool call 的 `figure_id` 冲突由 `ln -s` 原子性托底：先完成的 tool call 占位，后到者的 `ln` 返回非零（`File exists`），wrapper 记 logger.warning 并跳过。first-writer-wins 自然成立，无需额外同步原语
 
 manifest 内部（单 tool call 内）的 `figure_id` 唯一性仍由 `_load_manifest` 里现有的 `seen_ids` 逻辑保证。
 
@@ -201,20 +224,23 @@ manifest 内部（单 tool call 内）的 `figure_id` 唯一性仍由 `_load_man
 
 ### Unit (tests/matmaster/tools/test_figure_artifacts.py)
 
-1. `test_flat_view_symlink_created_on_success` — 单 figure 成功上传后，`exec_bash` 被调用一次，命令含 `ln -s` 和正确 rel_target
+所有 symlink 诊断断言通过 pytest `caplog` fixture 捕获模块 logger 输出（logger 名 `matmaster.tools.figure_artifacts`），而非检查 `result.warnings`。
+
+1. `test_flat_view_symlink_created_on_success` — 单 figure 成功上传后，`session.exec_bash` 被调用一次，命令含 `ln -s` 和正确 rel_target；`result.warnings` 为空
 2. `test_flat_view_symlink_path_uses_figure_id_and_ext` — link_path 形态 `<workdir>/.matmaster/figures/<figure_id>.<ext>`，扩展名小写
 3. `test_flat_view_symlink_relative_target` — rel_target 为相对路径 `<call_id>/artifacts/<basename>`
-4. `test_flat_view_symlink_first_writer_wins` — 连续两次 `collect_figures_from_session`（不同 tool_call_id、相同 figure_id）：第二次 `exec_bash` 返回 `exit_code != 0` 且 stderr 含 `File exists`，warning 含 `figure_symlink_exists:<id>`，第二张 figure 仍进入 `result.figures`
-5. `test_flat_view_symlink_generic_failure_does_not_fail_figure` — `exec_bash` 返回 `Permission denied`，figure 仍进入 `result.figures`，warning 含 `figure_symlink_failed:<id>:...`
-6. `test_flat_view_symlink_not_attempted_on_upload_failure` — mock 上传抛异常，`exec_bash` 未被调用（除已有的 `mkdir -p` 等无关调用外）
+4. `test_flat_view_symlink_first_writer_wins` — Setup：连续两次调用 `collect_figures_from_session`，两次使用**相同 workdir**（因此 derive 出同一 `<workdir>/.matmaster/figures/` 扁平目录），但 **不同 `tool_call_id`** 构造的 `artifact_dir`，两份 manifest 使用**相同 `figure_id`**。Mock 的 `session.exec_bash` 在第一次 `ln -s` 调用返回 `exit_code=0`，第二次返回 `exit_code=1` 且 `stderr` 含 `File exists`。断言：第二次调用的 caplog 含 `figure_symlink_exists:<id>`，两张 figure 都进入各自调用的 `result.figures`，两次 `result.warnings` 均为空
+5. `test_flat_view_symlink_generic_failure_does_not_fail_figure` — `exec_bash` 返回 `exit_code=1`、stderr=`Permission denied`，figure 仍进入 `result.figures`，caplog 含 `figure_symlink_failed:<id>:...Permission denied...`，`result.warnings` 为空
+6. `test_flat_view_symlink_not_attempted_on_upload_failure` — mock `upload_bytes` 抛异常重试耗尽；验证 `session.exec_bash` 未被调用用于 `ln -s`（允许 mkdir/其他无关调用存在，用 command 内容过滤断言）
 7. `test_flat_view_symlink_not_attempted_on_download_failure` — 同上，`session.download` 抛异常
-8. `test_flat_view_symlink_shell_quoting` — workdir 含空格（如 `/share/foo bar`）、figure_id 含连字符等边界字符，`exec_bash` 收到的命令通过 `shlex.split` 还原后路径正确
-9. `test_manifest_rejects_figure_id_with_slash` — manifest 含 `figure_id: "a/b"` → `invalid_manifest` warning 且无图片返回
-10. `test_manifest_rejects_figure_id_with_nul` — manifest 含 `figure_id: "a\x00b"` → `invalid_manifest` warning
+8. `test_flat_view_symlink_shell_quoting` — workdir 含空格（如 `/share/foo bar`）、figure_id 含连字符等边界字符，`exec_bash` 收到的命令通过 `shlex.split` 还原后 link_path 和 rel_target 各段与预期一致
+9. `test_flat_view_symlink_exec_bash_raises_does_not_fail_figure` — mock `session.exec_bash` 在 `ln -s` 调用时抛 `RuntimeError("session closed")`；figure 仍进入 `result.figures`，caplog 含 `figure_symlink_failed:<id>:session closed`，`result.warnings` 为空
+10. `test_manifest_rejects_figure_id_with_slash` — manifest 含 `figure_id: "a/b"` → `result.warnings` 含 `invalid_manifest: invalid_figure_id:a/b` 且 `result.figures` 为空
+11. `test_manifest_rejects_figure_id_with_nul` — manifest 含 `figure_id: "a\x00b"` → `result.warnings` 含 `invalid_manifest: invalid_figure_id:...`
 
 ### Integration (tests/matmaster/tools/builtin/test_bash_tool.py)
 
-11. `test_bash_tool_figure_flow_creates_flat_view_symlink` — BashTool 走完 figure 流程后，FakeSession 观察到 `exec_bash` 调用含扁平视图的 `ln -s` 命令；已有 `test_bash_tool_collects_figures_from_manifest` 类型用例基础上扩展
+12. `test_bash_tool_figure_flow_creates_flat_view_symlink` — BashTool 走完 figure 流程后，FakeSession 观察到 `exec_bash` 调用含扁平视图的 `ln -s` 命令；已有 `test_bash_tool_collects_figures_from_manifest` 类型用例基础上扩展。额外断言：tool result 文本里 `[Figure manifest ignored: ...]` 行**不出现**（因为 symlink 成功且无 manifest 问题），确保 bash_tool 文本行为无回归
 
 ### Regression
 
@@ -233,10 +259,13 @@ manifest 内部（单 tool call 内）的 `figure_id` 唯一性仍由 `_load_man
 
 本 spec 覆盖：
 
-- `collect_figures_from_session` 内新增 `_link_figure_into_flat_view`
-- `_load_manifest` 补充 `figure_id` 字符校验
+- `matmaster/tools/figure_artifacts.py` 顶部新增 `import shlex`
+- `collect_figures_from_session` 内新增 `_link_figure_into_flat_view` 函数及其调用
+- `_load_manifest` 补充 `figure_id` 字符校验（禁 `/` 与 NUL），违反时返回新的 `invalid_manifest: invalid_figure_id:<id>` warning（进 `result.warnings`）
+- symlink 类诊断信息走模块 logger（`matmaster.tools.figure_artifacts`），**不进** `result.warnings`
 - 对应单元与集成测试
-- 前后端协议、response_figures 事件、manifest 契约、上传链路、session protocol 全部零改动
+- 前后端协议、`response_figures` 事件、manifest schema 公开字段、上传链路、session protocol、`FigureCollectionResult` / `FigureDescriptor` 的 dataclass/pydantic 形状全部零改动
+- `bash_tool.py` 拼到 tool result 文本里的 `[Figure manifest ignored: ...]` 行为零改动（因 symlink warning 不流入 `collection.warnings`）
 
 不在本次范围内（明确延后）：
 
