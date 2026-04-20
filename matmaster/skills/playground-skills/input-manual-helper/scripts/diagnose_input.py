@@ -315,7 +315,32 @@ def main() -> None:
     if args.format == "json":
         print(json.dumps(result_dict, ensure_ascii=False, indent=2))
 
+    # Cross-reference related tools (aid discovery)
+    _print_related_tools(args.software, has_error, diagnostics, args.format)
+
     sys.exit(1 if has_error else 0)
+
+
+def _print_related_tools(software: str, has_error: bool, diagnostics: list, fmt: str) -> None:
+    """Print cross-references to related scripts for tool discovery."""
+    if fmt == "json":
+        return  # don't pollute JSON output
+    sw = software.lower().strip()
+    scripts_dir = Path(__file__).resolve().parent
+    print(f"\n{'─'*50}", file=sys.stderr)
+    print("📋 Related tools in this skill:", file=sys.stderr)
+    if sw == "abacus":
+        print("  • preflight_abacus.py --dir .        → Full workspace validation (INPUT + STRU + KPT cross-check)", file=sys.stderr)
+        print("  • evaluate_dft_setup.py --software abacus --dir .  → Best-practice grade (12 categories)", file=sys.stderr)
+        print("  • render_abacus_workflow.py --workflow <type> --output-dir ./  → One-shot workflow generation", file=sys.stderr)
+        if has_error:
+            print("  • diagnose_input.py --software abacus --input INPUT --fix  → Auto-fix mode", file=sys.stderr)
+    elif sw == "vasp":
+        print("  • evaluate_dft_setup.py --software vasp --dir .  → Best-practice evaluation", file=sys.stderr)
+        print("  • generate_kpoints.py --structure POSCAR --mode auto  → KPOINTS generation", file=sys.stderr)
+    else:
+        print(f"  • evaluate_dft_setup.py --software {sw} --dir .  → Best-practice check (if supported)", file=sys.stderr)
+    print(f"{'─'*50}", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -225,6 +225,22 @@ def main() -> None:
             file=sys.stderr,
         )
 
+    # Suggest next steps for validation
+    sw = args.software.lower().strip()
+    print(f"\n{'─'*50}", file=sys.stderr)
+    print("Next steps:", file=sys.stderr)
+    if sw == "abacus":
+        out_dir_str = args.output_dir or "."
+        print(f"  1. python diagnose_input.py --software abacus --input INPUT --fix", file=sys.stderr)
+        print(f"  2. python preflight_abacus.py --dir {out_dir_str}  → Cross-check INPUT+STRU+KPT", file=sys.stderr)
+        print(f"  3. python evaluate_dft_setup.py --software abacus --dir {out_dir_str}  → Best-practice grade", file=sys.stderr)
+    elif sw == "vasp":
+        print(f"  1. python evaluate_dft_setup.py --software vasp --dir .  → Best-practice evaluation", file=sys.stderr)
+        print(f"  2. python generate_kpoints.py --structure POSCAR --mode auto  → KPOINTS", file=sys.stderr)
+    else:
+        print(f"  1. python diagnose_input.py --software {sw} --input <output>  → Validate", file=sys.stderr)
+    print(f"{'─'*50}", file=sys.stderr)
+
 
 if __name__ == "__main__":
     main()

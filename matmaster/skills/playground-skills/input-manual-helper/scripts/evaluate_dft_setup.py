@@ -577,6 +577,19 @@ def main() -> None:
             print(f"\n{'─'*60}")
             print("  ✅ Setup looks good for submission.")
 
+    # Cross-reference related tools
+    if args.format == "human":
+        print(f"\n{'─'*50}", file=sys.stderr)
+        print("📋 Related tools:", file=sys.stderr)
+        if args.software == "abacus":
+            print("  • workspace_review.py --dir . --software abacus  → Combined review (files+params+grade)", file=sys.stderr)
+            print("  • format_bp_report.py --dir . --software abacus  → Markdown evaluation report", file=sys.stderr)
+            print("  • preflight_abacus.py --dir . --fix  → Auto-fix INPUT errors", file=sys.stderr)
+        else:
+            print("  • workspace_review.py --dir . --software vasp  → Combined review", file=sys.stderr)
+            print("  • generate_kpoints.py --structure POSCAR --mode auto  → KPOINTS generation", file=sys.stderr)
+        print(f"{'─'*50}", file=sys.stderr)
+
     sys.exit(1 if n_fail > 0 else 0)
 
 

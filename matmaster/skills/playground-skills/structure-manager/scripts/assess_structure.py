@@ -212,6 +212,17 @@ def main() -> None:
 
     print(json.dumps(result))
 
+    # Cross-reference related tools (stderr, doesn't break JSON)
+    print(f"\n{'─'*50}", file=sys.stderr)
+    print("📋 Related tools for next steps:", file=sys.stderr)
+    if kind == "periodic":
+        print(f"  • generate_kpoints.py --structure {args.file} --mode auto  → Generate KPOINTS for VASP", file=sys.stderr)
+        print(f"  • generate_kpoints.py --structure {args.file} --mode line  → Band structure k-path", file=sys.stderr)
+        if dim == "2D-Slab":
+            print(f"  • generate_kpoints.py --structure {args.file} --mode slab  → Slab-aware mesh (vacuum=1)", file=sys.stderr)
+    print(f"  • convert_format.py --input {args.file} --output POSCAR --output-fmt vasp/poscar", file=sys.stderr)
+    print(f"{'─'*50}", file=sys.stderr)
+
 
 if __name__ == "__main__":
     main()

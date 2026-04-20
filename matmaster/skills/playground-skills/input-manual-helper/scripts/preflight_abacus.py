@@ -655,6 +655,16 @@ def main() -> None:
             else:
                 result["fixed_file"] = str(fixed_path)
 
+    # Cross-reference related tools
+    if args.format == "human":
+        print(f"\n{'─'*50}", file=sys.stderr)
+        print("📋 Related tools:", file=sys.stderr)
+        print("  • workspace_review.py --dir . --software abacus  → Full review + grade in one call", file=sys.stderr)
+        print("  • evaluate_dft_setup.py --software abacus --dir .  → Best-practice grade (12 categories)", file=sys.stderr)
+        print("  • format_bp_report.py --dir . --software abacus  → Generate structured evaluation report", file=sys.stderr)
+        print("  • diagnose_input.py --software abacus --input INPUT --fix  → Auto-fix INPUT errors", file=sys.stderr)
+        print(f"{'─'*50}", file=sys.stderr)
+
     sys.exit(0 if result["passed"] else 1)
 
 

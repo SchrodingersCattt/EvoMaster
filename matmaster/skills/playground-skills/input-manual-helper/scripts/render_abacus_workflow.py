@@ -320,6 +320,15 @@ def main() -> None:
         print(f"[render_abacus_workflow] Copied STRU from {stru_path}", file=sys.stderr)
 
     print(json.dumps(result, indent=2))
+
+    if result.get("success"):
+        print(f"\n{'─'*50}", file=sys.stderr)
+        print("Next steps:", file=sys.stderr)
+        print(f"  1. python preflight_abacus.py --dir {args.output_dir}  → Validate workspace", file=sys.stderr)
+        print(f"  2. python workspace_review.py --dir {args.output_dir} --software abacus  → Full review + grade", file=sys.stderr)
+        print(f"  3. Submit via Bohrium: action='submit', input_dir='{args.output_dir}'", file=sys.stderr)
+        print(f"{'─'*50}", file=sys.stderr)
+
     if not result.get("success"):
         sys.exit(1)
 
