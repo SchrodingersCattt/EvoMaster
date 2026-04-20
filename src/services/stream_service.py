@@ -1,5 +1,5 @@
 """Chat 流式接口业务逻辑：SSE 队列管理、仅订阅流、发送消息流。
-确认回复队列：无 Redis 用进程内 queue；有 Redis 用 redis_dao 的 run_active + reply list，多 worker 可写。"""
+交互回复队列：无 Redis 用进程内 queue；有 Redis 用 redis_dao 的 run_active + reply list，多 worker 可写。"""
 
 import asyncio
 import json
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class ReplyQueueLike(Protocol):
-    """Confirmation reply queue abstraction used by stream/chat endpoints."""
+    """Interaction reply queue abstraction used by stream/chat endpoints."""
 
     def put_content(self, content: str) -> None: ...
 
@@ -269,7 +269,6 @@ class SendStreamContext:
     mode: str
     user_msg: dict
     request_event_queue: asyncio.Queue
-    reply_queue: ReplyQueueLike  # ask_question 共用，POST /ask_question_reply 写入
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
     bohrium_required: bool = False  # 本轮是否显式依赖 Bohrium access_key / project
@@ -699,7 +698,6 @@ class ChatStreamService:
 
         dao = get_redis_dao()
         dao.delete_interaction_reply_list(sid)
-        reply_queue: ReplyQueueLike = RedisReplyQueue(sid)
         request_event_queue: asyncio.Queue = asyncio.Queue()
 
         return SendStreamContext(
@@ -708,7 +706,6 @@ class ChatStreamService:
             mode=mode,
             user_msg=user_msg,
             request_event_queue=request_event_queue,
-            reply_queue=reply_queue,
             llm=llm,
             model=model,
             bohrium_required=bohrium_required,
@@ -737,28 +734,6 @@ class ChatStreamService:
         self._queues.broadcast(sid, payload)
         if REDIS_URL:
             get_redis_dao().publish_stream_event(sid, payload)
-
-    def broadcast_reply(
-        self,
-        session_id: str,
-        content: str | dict,
-        *,
-        event_type: str,
-    ) -> None:
-        """Backward-compatible helper for publishing interaction reply events."""
-        sid = session_id.strip()
-        payload = {
-            'source': 'User',
-            'type': event_type,
-            'content': content,
-            'session_id': sid,
-        }
-        if REDIS_URL:
-            ctx = get_redis_dao().get_interaction_run_context(sid)
-            if ctx:
-                payload['task_id'] = ctx.get('task_id')
-                payload['invocation_id'] = ctx.get('invocation_id')
-        self.publish_reply_event(sid, payload)
 
     def _send_cb(
         self,

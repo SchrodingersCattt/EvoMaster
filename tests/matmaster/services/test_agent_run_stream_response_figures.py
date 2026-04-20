@@ -54,7 +54,69 @@ async def test_run_agent_emits_response_figures_before_run_result() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_agent_ignores_subagent_tool_result_figures_in_parent_response():
+async def test_planner_child_tool_result_figures_promote_to_parent_response_figures():
+    child_tool_result = ToolResultEvent(
+        source='MatMaster:direct',
+        spawn_id='child-1',
+        call_id='call-band',
+        tool_name='Bash',
+        result='done',
+        payload={
+            'figures': [
+                {
+                    'figure_id': 'band',
+                    'asset_url': 'https://oss.example/band.png',
+                    'caption': 'band',
+                    'importance': 'primary',
+                    'placement_hint': 'sidebar_only',
+                }
+            ]
+        },
+    )
+    child_response = ResponseEvent(
+        source='MatMaster:direct',
+        spawn_id='child-1',
+        content='见 [[fig:band]]',
+        stream_state='streaming',
+        stream_id='child-response',
+    )
+    root_run_result = RunResultEvent(
+        source='MatMaster',
+        status='completed',
+        reason='natural',
+        final_content='done',
+    )
+
+    async def events(ctx):
+        await ctx.run_meta['event_sink'](child_tool_result)
+        await ctx.run_meta['event_sink'](child_response)
+        yield root_run_result
+
+    async with _patched_service(events) as (svc, sse_events, _):
+        controller = CancellationController()
+        await svc.run_agent(
+            session_id='sess-1',
+            user_prompt='planner delegates figure task',
+            send_cb=AsyncMock(),
+            cancel_token=controller.token,
+            mode='planner',
+            task_id='task-1',
+            invocation_id='inv-1',
+        )
+
+    sse_types = [getattr(evt, 'type', None) for evt in sse_events]
+    assert sse_types.index('tool_result') < sse_types.index('response_figures')
+    assert sse_types.index('response_figures') < sse_types.index('response')
+
+    response_figures = next(
+        evt for evt in sse_events if getattr(evt, 'type', None) == 'response_figures'
+    )
+    assert response_figures.spawn_id is None
+    assert [fig.figure_id for fig in response_figures.figures] == ['band']
+
+
+@pytest.mark.asyncio
+async def test_run_agent_ignores_spawned_tool_result_figures_yielded_on_parent_stream():
     child_tool_result = ToolResultEvent(
         source='MatMaster:direct',
         spawn_id='sub-1',

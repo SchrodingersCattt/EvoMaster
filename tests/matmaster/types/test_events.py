@@ -17,8 +17,6 @@ from matmaster.types.events import (
     BusEvent,
     CancelledEvent,
     CompactionEvent,
-    ConfirmationRequestEvent,
-    ConfirmationTimeoutEvent,
     ErrorEvent,
     ExpRunEvent,
     FinishDetail,
@@ -232,23 +230,6 @@ class TestToolProgressEvent:
 
 
 class TestSystemEvents:
-    def test_confirmation_request(self) -> None:
-        evt = ConfirmationRequestEvent(
-            source="system", question="proceed?", mode="timeout"
-        )
-        assert evt.type == "confirmation_request"
-        assert evt.question == "proceed?"
-        assert evt.mode == "timeout"
-        assert evt.timeout_seconds is None
-        assert evt.context is None
-        assert evt.actions == []
-        assert evt.origin is None
-
-    def test_confirmation_timeout(self) -> None:
-        evt = ConfirmationTimeoutEvent(source="system", question="proceed?")
-        assert evt.type == "confirmation_timeout"
-        assert evt.default_reply is None
-
     def test_compaction(self) -> None:
         evt = CompactionEvent(
             source="context_compactor",
@@ -486,26 +467,8 @@ class TestSharedSpawnIdField:
 
 
 class TestSystemEventDiscriminator:
-    def test_confirmation_request(self) -> None:
-        result = _system_event_adapter.validate_python(
-            {
-                "type": "confirmation_request",
-                "source": "s",
-                "question": "q",
-                "mode": "m",
-            }
-        )
-        assert isinstance(result, ConfirmationRequestEvent)
-
     def test_all_system_types(self) -> None:
         payloads = [
-            {
-                "type": "confirmation_request",
-                "source": "s",
-                "question": "q",
-                "mode": "m",
-            },
-            {"type": "confirmation_timeout", "source": "s", "question": "q"},
             {
                 "type": "ask_question",
                 "source": "s",
@@ -541,8 +504,6 @@ class TestSystemEventDiscriminator:
             {"type": "response_figures", "source": "s", "figures": []},
         ]
         expected_types = [
-            ConfirmationRequestEvent,
-            ConfirmationTimeoutEvent,
             AskQuestionEvent,
             AskQuestionReplyEvent,
             AskQuestionTimeoutEvent,
@@ -564,8 +525,8 @@ class TestSystemEventDiscriminator:
 
 
 class TestBusEventUnion:
-    def test_validates_all_23_types(self) -> None:
-        """BusEvent union can validate all 23 event types."""
+    def test_validates_all_21_types(self) -> None:
+        """BusEvent union can validate all 21 event types."""
         payloads = [
             # 9 AgentEvent types
             {"type": "thought", "source": "a"},
@@ -594,14 +555,7 @@ class TestBusEventUnion:
                 "call_id": "c",
                 "tool_name": "t",
             },
-            # 14 SystemEvent types
-            {
-                "type": "confirmation_request",
-                "source": "s",
-                "question": "q",
-                "mode": "m",
-            },
-            {"type": "confirmation_timeout", "source": "s", "question": "q"},
+            # 12 SystemEvent types
             {
                 "type": "ask_question",
                 "source": "s",
@@ -685,8 +639,6 @@ class TestEventSerializationRoundtrip:
             AssistantStateEvent(source="a", state={"k": "v"}),
             SkillHitEvent(source="a", skill_name="s"),
             ToolProgressEvent(source="a", call_id="c1", tool_name="t1"),
-            ConfirmationRequestEvent(source="s", question="q", mode="m"),
-            ConfirmationTimeoutEvent(source="s", question="q"),
             AskQuestionEvent(source="s", request_id="aq_1", questions=[]),
             AskQuestionReplyEvent(source="s", request_id="aq_1", answers={}),
             AskQuestionTimeoutEvent(source="s", request_id="aq_1", questions=[]),
@@ -714,8 +666,8 @@ class TestEventSerializationRoundtrip:
 
 
 class TestNoTypeCollision:
-    def test_all_23_type_literals_are_unique(self) -> None:
-        """All 23 type literals must be globally unique strings."""
+    def test_all_21_type_literals_are_unique(self) -> None:
+        """All 21 type literals must be globally unique strings."""
         type_values = [
             "thought",
             "response",
@@ -726,8 +678,6 @@ class TestNoTypeCollision:
             "assistant_state",
             "skill_hit",
             "tool_progress",
-            "confirmation_request",
-            "confirmation_timeout",
             "ask_question",
             "ask_question_reply",
             "ask_question_timeout",
@@ -741,8 +691,8 @@ class TestNoTypeCollision:
             "mcp_connect",
             "response_figures",
         ]
-        assert len(type_values) == 23
-        assert len(set(type_values)) == 23
+        assert len(type_values) == 21
+        assert len(set(type_values)) == 21
 
 
 # ── Edge case tests (QUAL-01) ─────────────────────────
@@ -758,8 +708,6 @@ _ALL_EVENT_CLASSES = [
     AssistantStateEvent,
     SkillHitEvent,
     ToolProgressEvent,
-    ConfirmationRequestEvent,
-    ConfirmationTimeoutEvent,
     AskQuestionEvent,
     AskQuestionReplyEvent,
     AskQuestionTimeoutEvent,
@@ -784,8 +732,6 @@ def _make_event_instance(cls):
         ErrorEvent: {"message": "err"},
         AssistantStateEvent: {"state": {"content": "hi"}},
         SkillHitEvent: {"skill_name": "research"},
-        ConfirmationRequestEvent: {"question": "proceed?", "mode": "timeout"},
-        ConfirmationTimeoutEvent: {"question": "proceed?"},
         AskQuestionEvent: {"request_id": "aq_1", "questions": []},
         AskQuestionReplyEvent: {"request_id": "aq_1", "answers": {}},
         AskQuestionTimeoutEvent: {"request_id": "aq_1", "questions": []},

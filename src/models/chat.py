@@ -3,7 +3,7 @@
 ag-ui 协议（前后端约定）：
 - 服务端 -> 客户端：SSE，event 固定为 "ag-ui"，data 为 JSON 字符串，字段：
   source: "System"|"User"|"MatMaster", type: 事件类型, content: 内容, session_id: 会话 id
-  事件类型示例: session_status, status, query, thought, response, response_figures, tool_call, tool_result, run_result, error, cancelled, run_interrupted, confirmation_request, confirmation_reply, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等。
+  事件类型示例: session_status, status, query, thought, response, response_figures, tool_call, tool_result, run_result, error, cancelled, run_interrupted, ask_question, ask_question_reply, ask_question_timeout, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等。
   thought：仅表示 reasoning / thinking 内容；若为流式思考分片，则仍使用 type='thought'，并在 payload 顶层附带 stream_state='start'|'streaming'|'end'，以及可选 stream_id/context/token_count。
   response：assistant 对用户可见的正文内容；流式分片同样在 payload 顶层附带 stream_state / stream_id，非流式 response 用于持久化与历史回放。
   response_figures：回答级图片绑定事件；content.figures 为已上传图片列表，顶层仍带 session_id、task_id、invocation_id、spawn_id。该事件用于侧边栏等图像展示，不会把图片写回正文文本。该事件可以在同一 invocation_id 下出现多次，每次都是当前已知完整图片组快照；合法顺序包括早于第一段 response、位于多个 response chunk 之间、或位于 run_result 之前的 final flush。前端应按 invocation_id eager upsert，且不从 tool_result.payload.figures 反推正式回答级图片。
@@ -13,7 +13,7 @@ ag-ui 协议（前后端约定）：
 - 客户端 -> 服务端：REST
   POST /chat/sessions/{session_id}/stream  Body 可选：不传或 content 为空→仅历史+ping；有 content→发送并返回本次 SSE 流
   POST /chat/sessions/{session_id}/stop  终止当前运行
-  POST /chat/sessions/{session_id}/confirmation_reply Body: ChatPlannerReplyRequest（confirmation_request 统一回复）
+  POST /chat/sessions/{session_id}/ask_question_reply Body: ChatAskQuestionReplyRequest（结构化问答回复）
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
@@ -350,20 +350,6 @@ class ChatSendRequest(BaseModel):
                     "directory": "/share/my_run",
                 },
             ]
-        }
-    )
-
-
-class ChatPlannerReplyRequest(BaseModel):
-    """POST /chat/sessions/{session_id}/confirmation_reply 用户确认回复（planner / ask_human 统一）"""
-
-    content: str
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "content": "确认，继续执行",
-            }
         }
     )
 

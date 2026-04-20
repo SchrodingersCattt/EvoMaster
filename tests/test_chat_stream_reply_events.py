@@ -30,3 +30,19 @@ def test_publish_reply_event_broadcasts_locally_and_publishes_redis() -> None:
 
     assert subscriber.get_nowait() == payload
     fake_redis.publish_stream_event.assert_called_once_with("sess-1", payload)
+
+
+def test_send_stream_context_does_not_carry_unused_reply_queue() -> None:
+    from dataclasses import fields
+
+    from src.services.stream_service import SendStreamContext
+
+    field_names = {field.name for field in fields(SendStreamContext)}
+
+    assert "reply_queue" not in field_names
+
+
+def test_stream_service_does_not_expose_legacy_broadcast_reply_helper() -> None:
+    from src.services.stream_service import ChatStreamService
+
+    assert not hasattr(ChatStreamService, "broadcast_reply")
