@@ -101,6 +101,8 @@ Use the artifacts incrementally.
 - Create or update PLAN.md once the work can be decomposed into phases, tasks, dependencies, or blockers.
 - Create subplans when a workstream is too large, too independent, or too stateful for the master plan alone.
 
+After any artifact is created or materially updated, run the per-artifact human checkpoint (see section below) before touching the next artifact. This is a hard gate, not a suggestion.
+
 Do not delay artifact creation merely because some items remain unknown.
 Record uncertainty explicitly.
 
@@ -210,7 +212,7 @@ Maintain these relationships whenever applicable:
 Approval has separate layers:
 
 1. conceptual direction approval
-2. written artifact review approval
+2. written artifact review approval — realized via the per-artifact human checkpoints described above; every artifact must pass its own checkpoint before the next artifact is touched
 3. execution handoff approval
 
 Execution handoff is not allowed until the written artifacts have been reviewed and approved sufficiently for handoff.
@@ -219,7 +221,7 @@ Execution handoff is not allowed until the written artifacts have been reviewed 
 
 End only in one of:
 - needs-user-input
-- draft-artifacts-presented
+- draft-artifacts-presented — the current artifact's checkpoint questions have been issued via AskQuestion and the user has not yet answered
 - written-artifacts-awaiting-review
 - approved-for-handoff
 - blocked
