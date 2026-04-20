@@ -153,6 +153,8 @@ class AbacusBackend(SoftwareBackend):
         "geo_opt": "relax",
         "ion_relax": "relax",
         "ionic_relax": "relax",
+        "relax_ions": "relax",
+        "atomic_relax": "relax",
         # cell-relax aliases
         "vc-relax": "cell-relax",
         "vc_relax": "cell-relax",
@@ -161,6 +163,9 @@ class AbacusBackend(SoftwareBackend):
         "cell_optimization": "cell-relax",
         "full_relax": "cell-relax",
         "cell_relax": "cell-relax",
+        "vc_opt": "cell-relax",
+        "full_opt": "cell-relax",
+        "full_optimization": "cell-relax",
         # band aliases
         "bands": "band",
         "band_structure": "band",
@@ -173,6 +178,13 @@ class AbacusBackend(SoftwareBackend):
         # nscf aliases
         "non_scf": "nscf",
         "non-scf": "nscf",
+        "nonscf": "nscf",
+        "non_self_consistent": "nscf",
+        # workfunction/potential aliases
+        "work_function": "workfunction",
+        "electrostatic_potential": "pot",
+        # dipole aliases
+        "dipole_correction": "dipole",
     }
 
     def render(self, intent: RenderIntent) -> str:
@@ -258,6 +270,18 @@ class AbacusBackend(SoftwareBackend):
                     "scf_nmax": 300,
                 }
             )
+        elif task == "nscf":
+            # Generic NSCF: read converged charge density, disable symmetry
+            # Caller should also set out_band=1 or out_dos=1 via overrides
+            params.update(
+                {
+                    "calculation": "nscf",
+                    "init_chg": "file",
+                    "symmetry": 0,
+                    "scf_nmax": 300,
+                    "out_chg": 0,
+                }
+            )
         elif task in ("md", "nvt", "npt", "nve"):
             # Determine the correct md_type from the resolved task name
             md_type_map = {"nvt": "nvt", "npt": "npt", "nve": "nve"}
@@ -297,6 +321,10 @@ class AbacusBackend(SoftwareBackend):
         elif task == "scf":
             # Default SCF already set; ensure out_chg for followup nscf
             params["out_chg"] = 1
+
+        # Map RenderIntent.spin_multiplicity → nspin (like QE/CP2K renderers)
+        if intent.spin_multiplicity != 1 and "nspin" not in overrides:
+            params["nspin"] = 2
 
         # 覆盖用户指定参数
         for k, v in overrides.items():
@@ -470,8 +498,14 @@ class AbacusBackend(SoftwareBackend):
                 "# Replace with your actual structure.\n" + _SI_STRU
             )
 
-        # KPT 占位符
-        if task in ("band",):
+        # KPT: use band-path for band task; dense mesh otherwise
+        # For generic nscf with out_band=1, also use band-path KPT
+        _params_lower = {k.lower(): v for k, v in (intent.params or {}).items()}
+        use_band_kpt = task == "band" or (
+            task == "nscf"
+            and str(_params_lower.get("out_band", "0")) == "1"
+        )
+        if use_band_kpt:
             kpt = _BAND_KPT
         else:
             kpt = _SCF_KPT
