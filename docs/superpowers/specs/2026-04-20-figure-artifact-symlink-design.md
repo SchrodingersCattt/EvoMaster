@@ -74,7 +74,13 @@ collect_figures_from_session:
 
 ### `matmaster/tools/figure_artifacts.py`
 
-**Imports**：新增 `import shlex`。
+**Imports 与模块 logger**：
+
+- 新增 `import logging`
+- 新增 `import shlex`
+- 新增 module 顶层 `logger = logging.getLogger(__name__)`
+
+该 logger 的 name 固定为 `matmaster.tools.figure_artifacts`，后续测试 caplog 断言依赖此 name。
 
 **新增私有函数**：
 
@@ -163,7 +169,7 @@ fallback 用 `stdout` 而不是 `output`，因为 `output` 是 `stdout + stderr`
 
 ### Manifest Schema 补充校验
 
-新增对 `figure_id` 的字符校验，防止扁平化后 `link_path` 跨目录或含 NUL：
+新增对 `figure_id` 的字符校验，防止扁平化后 `link_path` 跨目录或含 NUL。**该校验作为 `_load_manifest` 内部的字符串检查，不修改 `FigureManifestEntry` 的 pydantic 字段或 validator**——pydantic model 定义与现有 `matmaster/types/figures.py` 完全一致。
 
 - `figure_id` 不得包含 `/`
 - `figure_id` 不得包含 `\x00` (NUL)
@@ -172,7 +178,9 @@ fallback 用 `stdout` 而不是 `output`，因为 `output` 是 `stdout + stderr`
 
 该校验对正常 figure_id（如 `band_structure`、`phonon-dispersion`）无影响。
 
-**不过滤 `.` / `..` 的理由**：`figure_id = "."` 得到 `link_path = <flat_dir>/..png`，`figure_id = ".."` 得到 `link_path = <flat_dir>/...png`——这些都是 `<flat_dir>` 内的合法叶节点文件名（字面两点/三点加后缀），`ln -s` 不会把它们解释为目录引用；同时 `shlex.quote` 已阻止 shell 注入。路径穿越的真正风险载体是 `/`（分隔符）和 NUL（C 字符串终止符），已在上表列入。故不额外禁止点字符。
+**不过滤 `.` / `..` 的理由**：`figure_id = "."` + `suffix=".png"` 得到 `link_path = <flat_dir>/..png`，`figure_id = ".."` + `suffix=".png"` 得到 `link_path = <flat_dir>/...png`——这些都是 `<flat_dir>` 内的合法叶节点文件名（字面两点/三点加后缀），`ln -s` 不会把它们解释为目录引用；同时 `shlex.quote` 已阻止 shell 注入。路径穿越的真正风险载体是 `/`（分隔符）和 NUL（C 字符串终止符），已在上表列入。故不额外禁止点字符。
+
+**推理依赖 `suffix` 非空**：`_link_figure_into_flat_view` 的调用点在 `_validate_image_bytes` 之后（上传成功路径），而 `_validate_image_bytes` 强制 `suffix in _ALLOWED_SUFFIXES = {.png, .jpg, .jpeg, .webp}`，所以运行时 `suffix` 必非空且以 `.` 开头。若未来 `_ALLOWED_SUFFIXES` 改为允许空扩展名，上述点字符安全性论证需要重做（`figure_id = "."` + 空 suffix 会得到 `<flat_dir>/.` 指向 flat_dir 自身的软链接）。
 
 ### 不改动的文件
 
@@ -193,7 +201,7 @@ fallback 用 `stdout` 而不是 `output`，因为 `output` 是 `stdout + stderr`
 | 校验失败 | 不尝试 | 不进入（记入 `failure_ids`） | 无 |
 | OSS 上传失败 | 不尝试 | 不进入（记入 `failure_ids`） | 无 |
 | OSS 上传成功 + symlink 首建成功 | 创建 | 进入 | 无 |
-| OSS 上传成功 + symlink 撞名 | 拒绝覆盖 | 进入 | `logger.warning("figure_symlink_exists:<id>")` |
+| OSS 上传成功 + link_path 已存在（同名先占位 symlink 或用户手动放的同名 regular file） | 拒绝覆盖 | 进入 | `logger.warning("figure_symlink_exists:<id>")` |
 | OSS 上传成功 + symlink 其他非零退出（权限/FS 不支持） | 失败 | 进入 | `logger.warning("figure_symlink_failed:<id>:<stderr_snippet>")` |
 | OSS 上传成功 + `session.exec_bash` 抛异常（session 断连等） | 失败 | 进入 | `logger.warning("figure_symlink_failed:<id>:<exc>")` |
 
@@ -226,13 +234,15 @@ manifest 内部（单 tool call 内）的 `figure_id` 唯一性仍由 `_load_man
 
 所有 symlink 诊断断言通过 pytest `caplog` fixture 捕获模块 logger 输出（logger 名 `matmaster.tools.figure_artifacts`），而非检查 `result.warnings`。
 
+**caplog fixture 约定**：在每个依赖 caplog 的测试（test 4/5/9）里，显式调用 `caplog.set_level(logging.WARNING, logger="matmaster.tools.figure_artifacts")`，并在断言前要求 `logger.propagate` 保持默认 `True`。这避免项目未来若引入 `logging.conf` 改变 propagate 行为时导致测试静默失败。
+
 1. `test_flat_view_symlink_created_on_success` — 单 figure 成功上传后，`session.exec_bash` 被调用一次，命令含 `ln -s` 和正确 rel_target；`result.warnings` 为空
 2. `test_flat_view_symlink_path_uses_figure_id_and_ext` — link_path 形态 `<workdir>/.matmaster/figures/<figure_id>.<ext>`，扩展名小写
 3. `test_flat_view_symlink_relative_target` — rel_target 为相对路径 `<call_id>/artifacts/<basename>`
 4. `test_flat_view_symlink_first_writer_wins` — Setup：连续两次调用 `collect_figures_from_session`，两次使用**相同 workdir**（因此 derive 出同一 `<workdir>/.matmaster/figures/` 扁平目录），但 **不同 `tool_call_id`** 构造的 `artifact_dir`，两份 manifest 使用**相同 `figure_id`**。Mock 的 `session.exec_bash` 在第一次 `ln -s` 调用返回 `exit_code=0`，第二次返回 `exit_code=1` 且 `stderr` 含 `File exists`。断言：第二次调用的 caplog 含 `figure_symlink_exists:<id>`，两张 figure 都进入各自调用的 `result.figures`，两次 `result.warnings` 均为空
 5. `test_flat_view_symlink_generic_failure_does_not_fail_figure` — `exec_bash` 返回 `exit_code=1`、stderr=`Permission denied`，figure 仍进入 `result.figures`，caplog 含 `figure_symlink_failed:<id>:...Permission denied...`，`result.warnings` 为空
-6. `test_flat_view_symlink_not_attempted_on_upload_failure` — mock `upload_bytes` 抛异常重试耗尽；验证 `session.exec_bash` 未被调用用于 `ln -s`（允许 mkdir/其他无关调用存在，用 command 内容过滤断言）
-7. `test_flat_view_symlink_not_attempted_on_download_failure` — 同上，`session.download` 抛异常
+6. `test_flat_view_symlink_not_attempted_on_upload_failure` — mock `upload_bytes` 抛异常重试耗尽；验证 `session.exec_bash` **完全未被调用**（`collect_figures_from_session` 自身不调用 `exec_bash` 做任何 mkdir，`ln -s` 只在上传成功后才触发，所以零调用断言精确可行）
+7. `test_flat_view_symlink_not_attempted_on_download_failure` — 同上，`session.download` 抛异常，`session.exec_bash` 完全未被调用
 8. `test_flat_view_symlink_shell_quoting` — workdir 含空格（如 `/share/foo bar`）、figure_id 含连字符等边界字符，`exec_bash` 收到的命令通过 `shlex.split` 还原后 link_path 和 rel_target 各段与预期一致
 9. `test_flat_view_symlink_exec_bash_raises_does_not_fail_figure` — mock `session.exec_bash` 在 `ln -s` 调用时抛 `RuntimeError("session closed")`；figure 仍进入 `result.figures`，caplog 含 `figure_symlink_failed:<id>:session closed`，`result.warnings` 为空
 10. `test_manifest_rejects_figure_id_with_slash` — manifest 含 `figure_id: "a/b"` → `result.warnings` 含 `invalid_manifest: invalid_figure_id:a/b` 且 `result.figures` 为空
