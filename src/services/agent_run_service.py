@@ -385,12 +385,15 @@ class AgentRunService:
                 else None
             )
             figure_accumulator = ResponseFiguresAccumulator()
+            figure_dispatch_lock = asyncio.Lock()
             figure_upload_config = _build_figure_upload_config(
                 session_id=session_id,
                 task_id=task_id,
             )
 
-            async def _dispatch_response_figures_if_dirty(reason: str) -> None:
+            async def _dispatch_response_figures_if_dirty_unlocked(
+                reason: str,
+            ) -> None:
                 response_figures_event = (
                     figure_accumulator.build_snapshot_event_if_dirty()
                 )
@@ -418,9 +421,32 @@ class AgentRunService:
                         reason,
                     )
 
+            async def _dispatch_response_figures_if_dirty(reason: str) -> None:
+                async with figure_dispatch_lock:
+                    await _dispatch_response_figures_if_dirty_unlocked(reason)
+
+            async def _record_tool_result_figures_and_dispatch_if_dirty(
+                event: ToolResultEvent,
+                *,
+                include_spawned: bool,
+                reason: str,
+            ) -> None:
+                async with figure_dispatch_lock:
+                    figure_accumulator.add_tool_result(
+                        event,
+                        include_spawned=include_spawned,
+                    )
+                    await _dispatch_response_figures_if_dirty_unlocked(reason)
+
             async def _child_event_sink(event: BusEvent) -> None:
                 try:
                     await fanout.dispatch(event)
+                    if isinstance(event, ToolResultEvent):
+                        await _record_tool_result_figures_and_dispatch_if_dirty(
+                            event,
+                            include_spawned=True,
+                            reason='child_tool_result',
+                        )
                 except Exception:
                     logger.warning(
                         'child event sink failed for event type=%s',
@@ -521,16 +547,17 @@ class AgentRunService:
                         if event.source != normalized:
                             event = event.model_copy(update={'source': normalized})
 
-                    if isinstance(event, ToolResultEvent):
-                        figure_accumulator.add_tool_result(event)
-
                     if isinstance(event, RunResultEvent) and event.spawn_id is None:
                         await _dispatch_response_figures_if_dirty('final_flush')
 
                     await fanout.dispatch(event)
 
                     if isinstance(event, ToolResultEvent):
-                        await _dispatch_response_figures_if_dirty('tool_result')
+                        await _record_tool_result_figures_and_dispatch_if_dirty(
+                            event,
+                            include_spawned=False,
+                            reason='tool_result',
+                        )
 
                     # Detect terminal event
                     if isinstance(event, RunResultEvent):
