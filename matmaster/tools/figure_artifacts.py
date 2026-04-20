@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import posixpath
 import re
+import shlex
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -19,11 +21,16 @@ from matmaster.types.figures import (
 )
 from matmaster.types.session import Session
 
+logger = logging.getLogger(__name__)
+
 _ALLOWED_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 _MAX_FIGURE_BYTES = 10 * 1024 * 1024
 _DOWNLOAD_ATTEMPTS = 2
 _UPLOAD_ATTEMPTS = 3
 _UPLOAD_RETRY_BACKOFF_SECONDS = 0.01
+_SYMLINK_EXISTS_MARKER = "FIGURE_SYMLINK_EXISTS"
+_SYMLINK_EXISTS_EXIT_CODE = 73
+_FIGURE_ID_MAX_DISPLAY_CHARS = 64
 
 
 @dataclass(slots=True)
