@@ -308,12 +308,57 @@ class TestBashEnvInjection:
         ]
         assert mkdir_calls, "expected BashTool to create ARTIFACT_DIR before execution"
 
-        final_exec_call = session.exec_bash.call_args_list[-1]
-        assert "python render.py" in final_exec_call.kwargs["command"]
+        command_calls = [
+            call.kwargs.get("command") or (call.args[0] if call.args else "")
+            for call in session.exec_bash.call_args_list
+        ]
+        assert any("python render.py" in command for command in command_calls)
 
         write_payloads = [call.args[1] for call in session.write_file.call_args_list]
         assert any("ARTIFACT_DIR=" in payload for payload in write_payloads)
         assert any("MANIFEST_PATH=" in payload for payload in write_payloads)
+
+    def test_bash_tool_figure_flow_creates_flat_view_symlink(self) -> None:
+        session = MagicMock()
+        session.exec_bash.return_value = {
+            "output": "done",
+            "stdout": "",
+            "stderr": "",
+            "exit_code": 0,
+            "working_dir": "/share",
+        }
+        session.path_exists.return_value = True
+        session.read_file.return_value = '{"figures":[{"figure_id":"band","path":"plots/band.png","caption":"band"}]}'
+        session.download.return_value = b"\x89PNG\r\n\x1a\n" + b"x" * 64
+
+        tool = BashTool(session=session, workdir="/share")
+
+        result = asyncio.run(
+            tool.execute_with_context(
+                {"command": "python render.py"},
+                ToolExecutionContext(
+                    runner_state=self._figure_state(self._valid_figure_config()),
+                    tool_call_id="call-band",
+                ),
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+
+        ln_calls = [
+            call
+            for call in session.exec_bash.call_args_list
+            if "ln -s --"
+            in (call.kwargs.get("command") or (call.args[0] if call.args else ""))
+        ]
+        assert len(ln_calls) == 1
+        ln_cmd = ln_calls[0].kwargs.get("command") or ln_calls[0].args[0]
+        assert "FIGURE_SYMLINK_EXISTS" in ln_cmd
+        assert "/share/.matmaster/figures/band.png" in ln_cmd
+
+        assert "[Figure manifest ignored:" not in result.content
+        assert len(result.payload["figures"]) == 1
 
     def test_bash_without_manifest_keeps_legacy_success_string(self) -> None:
         session = MagicMock()
