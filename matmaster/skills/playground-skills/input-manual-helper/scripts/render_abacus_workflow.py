@@ -222,6 +222,12 @@ def main() -> None:
         help="Directory to write all workflow files.",
     )
     ap.add_argument(
+        "--stru",
+        default=None,
+        help="Path to existing STRU file. If provided, copies it into --output-dir "
+        "and auto-detects ntype from ATOMIC_SPECIES. Without this, a Si placeholder is used.",
+    )
+    ap.add_argument(
         "--param",
         action="append",
         default=[],
@@ -242,6 +248,40 @@ def main() -> None:
         except json.JSONDecodeError as e:
             print(f"Error: invalid --overrides JSON: {e}", file=sys.stderr)
             sys.exit(1)
+
+    # Auto-detect ntype from --stru if provided
+    stru_path = None
+    if args.stru:
+        stru_path = Path(args.stru)
+        if not stru_path.exists():
+            print(f"Error: STRU file not found: {stru_path}", file=sys.stderr)
+            sys.exit(1)
+        # Count species in ATOMIC_SPECIES section
+        stru_text = stru_path.read_text(encoding="utf-8", errors="replace")
+        import re as _re
+        species = []
+        in_species = False
+        for line in stru_text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if "//" in stripped:
+                stripped = stripped[:stripped.index("//")].strip()
+            if _re.match(r"^ATOMIC_SPECIES\s*$", stripped, _re.IGNORECASE):
+                in_species = True
+                continue
+            if in_species:
+                if _re.match(
+                    r"^(NUMERICAL_ORBITAL|LATTICE_CONSTANT|LATTICE_VECTORS|ATOMIC_POSITIONS|ABF_ORBITAL)\s*$",
+                    stripped, _re.IGNORECASE,
+                ):
+                    break
+                parts = stripped.split()
+                if len(parts) >= 2:
+                    species.append(parts[0])
+        if species and "ntype" not in params:
+            params["ntype"] = str(len(species))
+            print(f"[render_abacus_workflow] Auto-detected ntype={len(species)} from STRU ({species})", file=sys.stderr)
 
     output_dir = Path(args.output_dir)
     workflow = args.workflow.lower().replace("-", "_")
@@ -268,6 +308,16 @@ def main() -> None:
         result = generate_single_task("spin_scf", params, output_dir)
     else:
         result = {"success": False, "error": f"Unknown workflow: {workflow}"}
+
+    # Copy user-provided STRU into output directory (overwrite placeholder)
+    if stru_path and result.get("success"):
+        import shutil
+        dest_stru = output_dir / "STRU"
+        shutil.copy2(stru_path, dest_stru)
+        if "STRU" not in result.get("files", []):
+            result.setdefault("files", []).append("STRU")
+        result["stru_source"] = str(stru_path)
+        print(f"[render_abacus_workflow] Copied STRU from {stru_path}", file=sys.stderr)
 
     print(json.dumps(result, indent=2))
     if not result.get("success"):
