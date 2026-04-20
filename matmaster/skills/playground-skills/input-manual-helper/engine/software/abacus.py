@@ -50,6 +50,7 @@ from engine.software.abacus_support import (
     _KNOWN_PARAMS,
     _SCF_KPT,
     _SI_STRU,
+    _SLAB_KPT,
     _is_blank_or_comment,
     _line,
     _make_range,
@@ -183,8 +184,14 @@ class AbacusBackend(SoftwareBackend):
         # workfunction/potential aliases
         "work_function": "workfunction",
         "electrostatic_potential": "pot",
+        "potential": "pot",
+        "slab_potential": "pot",
+        "slab_scf": "pot",
+        "surface_potential": "pot",
+        "surface_scf": "pot",
         # dipole aliases
         "dipole_correction": "dipole",
+        "slab_dipole": "dipole",
     }
 
     def render(self, intent: RenderIntent) -> str:
@@ -312,10 +319,20 @@ class AbacusBackend(SoftwareBackend):
                 }
             )
         elif task in ("pot", "potential", "workfunction"):
+            # Electrostatic potential / work function: typically for slab models.
+            # Include dipole correction by default — essential for slab systems
+            # to cancel the artificial field from periodic boundary conditions.
             params.update(
                 {
                     "calculation": "scf",
                     "out_pot": 2,
+                    "out_chg": 1,
+                    "efield_flag": 1,
+                    "dip_cor_flag": 1,
+                    "efield_dir": 2,
+                    "efield_pos_max": 0.0,
+                    "efield_pos_dec": 0.1,
+                    "efield_amp": 0.0,
                 }
             )
         elif task == "scf":
@@ -498,15 +515,24 @@ class AbacusBackend(SoftwareBackend):
                 "# Replace with your actual structure.\n" + _SI_STRU
             )
 
-        # KPT: use band-path for band task; dense mesh otherwise
+        # KPT: use band-path for band task; slab mesh for slab-related tasks;
+        # dense mesh otherwise.
         # For generic nscf with out_band=1, also use band-path KPT
         _params_lower = {k.lower(): v for k, v in (intent.params or {}).items()}
         use_band_kpt = task == "band" or (
             task == "nscf"
             and str(_params_lower.get("out_band", "0")) == "1"
         )
+        # Slab-related tasks: electrostatic potential, work function, efield,
+        # dipole correction — all typically involve slab geometry with vacuum.
+        use_slab_kpt = task in (
+            "pot", "potential", "workfunction",
+            "efield", "dipole", "dipole_correction",
+        )
         if use_band_kpt:
             kpt = _BAND_KPT
+        elif use_slab_kpt:
+            kpt = _SLAB_KPT
         else:
             kpt = _SCF_KPT
 

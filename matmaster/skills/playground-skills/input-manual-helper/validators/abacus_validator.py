@@ -479,7 +479,35 @@ class ABACUSValidator(BaseValidator):
     def _check_efield(self, text: str) -> list[Diagnostic]:
         """Check electric field / dipole correction parameter consistency."""
         diags: list[Diagnostic] = []
+
+        # Check: out_pot=2 (electrostatic potential output) without dipole
+        # correction is suspect for slab calculations — the periodic boundary
+        # condition introduces an artificial field across the vacuum.
+        out_pot = _parse_int(text, "out_pot")
         efield_flag = _parse_int(text, "efield_flag")
+        if out_pot == 2 and efield_flag != 1:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "out_pot=2 (electrostatic potential output) is set but "
+                        "efield_flag/dip_cor_flag are not enabled. For slab "
+                        "calculations, dipole correction is essential to remove "
+                        "the artificial electric field from periodic images. "
+                        "Add: efield_flag 1, dip_cor_flag 1, efield_dir 2."
+                    ),
+                    param="efield_flag",
+                    suggestion=(
+                        "Add: efield_flag  1\n"
+                        "     dip_cor_flag  1\n"
+                        "     efield_dir  2\n"
+                        "     efield_pos_max  0.0\n"
+                        "     efield_pos_dec  0.1\n"
+                        "     efield_amp  0.0"
+                    ),
+                )
+            )
+
         if efield_flag != 1:
             return diags
         # efield_dir should be set
@@ -493,10 +521,24 @@ class ABACUSValidator(BaseValidator):
                     suggestion="Add: efield_dir  2",
                 )
             )
+        # dip_cor_flag should be set when efield_flag=1
+        dip_cor = _parse_int(text, "dip_cor_flag")
+        if dip_cor is None or dip_cor != 1:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "efield_flag=1 but dip_cor_flag is not set to 1. "
+                        "Dipole correction (dip_cor_flag=1) is needed for "
+                        "proper slab electrostatic potential treatment."
+                    ),
+                    param="dip_cor_flag",
+                    suggestion="Add: dip_cor_flag  1",
+                )
+            )
         # gate_flag checks
         gate_flag = _parse_int(text, "gate_flag")
         if gate_flag == 1:
-            dip_cor = _parse_int(text, "dip_cor_flag")
             if dip_cor != 1:
                 diags.append(
                     Diagnostic(

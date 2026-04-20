@@ -66,6 +66,15 @@ Gamma
 8 8 8 0 0 0
 """
 
+# KPT 模板（Slab geometry）— 12×12×1 for surface/slab calculations
+# z-direction has only 1 k-point since the vacuum breaks periodicity.
+_SLAB_KPT = """\
+K_POINTS
+0
+Gamma
+12 12 1 0 0 0
+"""
+
 # KPT 模板（高对称 k 路径，用于 band 计算）
 # 官方格式: 每行仅有坐标和点数，标签用 // 注释
 _BAND_KPT = """\
