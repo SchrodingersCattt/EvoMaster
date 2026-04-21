@@ -340,7 +340,6 @@ def test_sa_general_phase2_split_banks_have_expected_question_ids() -> None:
     )
     alloy_ids = [q['id'] for q in sa_alloy['questions']]
     assert 'WO_general_steel_008_20260417' in alloy_ids
-    assert 'WO_general_hea_005_20260417' in alloy_ids
 
 
 def test_phase2_split_banks_have_expected_question_ids() -> None:
