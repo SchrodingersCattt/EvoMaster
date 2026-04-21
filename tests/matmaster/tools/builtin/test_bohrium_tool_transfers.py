@@ -60,7 +60,7 @@ def test_upload_input_source_uses_remote_helper_without_session_download(
         }
 
     monkeypatch.setattr(
-        "matmaster.tools.builtin.bohrium_tool.transfers.run_remote_helper",
+        "matmaster.tools.builtin.bohrium_tool.transfers.run_remote_transfer",
         fake_remote_helper,
     )
     source = BohriumInputSource(

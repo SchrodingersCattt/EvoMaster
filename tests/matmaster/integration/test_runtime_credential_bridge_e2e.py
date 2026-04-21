@@ -9,11 +9,11 @@ from types import SimpleNamespace
 import matmaster.bohrium.client as bohrium_client_module
 import matmaster.bohrium.upload as bohrium_upload_module
 from matmaster.bohrium.credentials import build_bohrium_context
-from matmaster.bohrium.remote_transfer_helper import SCHEMA_VERSION
 from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime, get_runtime
 from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.tool_result import ToolResult
+from matmaster_bohrium_transfer.version import SCHEMA_VERSION
 
 
 def _attach_runtime(
@@ -100,11 +100,26 @@ class _RemoteShareSession(SimpleNamespace):
                 "working_dir": "/share",
                 "output": "/tmp/matmaster_bohrium_transfer.ABCD12\n",
             }
-        if "remote_transfer_helper.py" in command and "--payload-file" in command:
+        if "matmaster_bohrium_transfer.remote version --json" in command:
             return {
                 "stdout": json.dumps(
                     {
                         "schema_version": SCHEMA_VERSION,
+                        "protocol_version": "1.0",
+                        "ok": True,
+                    }
+                ),
+                "stderr": "",
+                "exit_code": 0,
+                "working_dir": "/share",
+                "output": "",
+            }
+        if "-m matmaster_bohrium_transfer.remote" in command:
+            return {
+                "stdout": json.dumps(
+                    {
+                        "schema_version": SCHEMA_VERSION,
+                        "protocol_version": "1.0",
                         "ok": True,
                         "oss_key": "p/input.zip",
                     }
@@ -235,7 +250,8 @@ class TestBohriumToolAndRemoteShare:
         assert session.exec_calls
         assert not session.download_calls
         assert any(
-            "remote_transfer_helper.py" in call and "--payload-file" in call
+            "-m matmaster_bohrium_transfer.remote upload-submit" in call
+            and "--payload-file" in call
             for call in session.exec_calls
         )
         payload_writes = [

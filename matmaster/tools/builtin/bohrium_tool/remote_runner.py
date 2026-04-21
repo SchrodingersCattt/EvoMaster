@@ -109,7 +109,7 @@ def _parse_helper_output(stdout: str) -> dict[str, Any]:
     return parsed
 
 
-def run_remote_helper(
+def _run_legacy_remote_helper(
     session,
     *,
     subcommand: str,
@@ -211,3 +211,116 @@ def run_remote_helper(
                     temp_dir,
                     cleanup.get("stderr") or cleanup.get("output"),
                 )
+
+
+def _parse_remote_transfer_result(result: dict, *, purpose: str) -> dict[str, Any]:
+    stdout = str(result.get("stdout") or "").strip()
+    exit_code = int(result.get("exit_code") or 0)
+    if stdout:
+        try:
+            parsed = _parse_json_stdout(stdout, purpose=purpose)
+        except BohriumTransferError:
+            if exit_code == 0:
+                raise
+            detail = result.get("stderr") or result.get("output") or stdout
+            raise BohriumTransferError(
+                f"{purpose} failed without JSON: {redact_secrets(detail)}"
+            )
+        if exit_code != 0 or parsed.get("ok") is False:
+            safe = parsed.get("safe_message") or parsed.get("error") or "unknown error"
+            raise BohriumTransferError(f"{purpose} failed: {redact_secrets(safe)}")
+        return parsed
+    if exit_code != 0:
+        detail = result.get("stderr") or result.get("output") or "empty stdout"
+        raise BohriumTransferError(
+            f"{purpose} failed without JSON: {redact_secrets(detail)}"
+        )
+    raise BohriumTransferError(f"{purpose} produced empty stdout")
+
+
+def run_remote_transfer(
+    session,
+    *,
+    subcommand: str,
+    payload: dict[str, Any],
+    timeout: int = 3600,
+) -> dict[str, Any]:
+    if session is None or not getattr(session, "is_open", False):
+        raise BohriumTransferError("remote transfer requires an open remote session")
+
+    probe_remote_transfer(session)
+    python_binary = _remote_transfer_python_binary()
+    quoted_python = shlex.quote(python_binary)
+    temp_dir = ""
+    try:
+        mktemp = _run_checked(
+            session,
+            "mktemp -d /tmp/matmaster_bohrium_transfer.XXXXXX",
+            purpose="remote temp directory creation",
+            timeout=15,
+        )
+        temp_dir = str(mktemp.get("stdout") or "").strip().splitlines()[-1]
+        q_temp_dir = shlex.quote(temp_dir)
+        _run_checked(
+            session,
+            f"chmod 700 {q_temp_dir}",
+            purpose="remote temp directory permission setup",
+            timeout=15,
+        )
+        payload_path = f"{temp_dir}/payload.json"
+        q_payload_path = shlex.quote(payload_path)
+        payload_with_schema = dict(payload)
+        payload_with_schema.setdefault("schema_version", SCHEMA_VERSION)
+        payload_with_schema.setdefault("protocol_version", "1.0")
+        _run_checked(
+            session,
+            f"umask 077; : > {q_payload_path}",
+            purpose="remote payload secure create",
+            timeout=15,
+        )
+        session.write_file(
+            payload_path,
+            json.dumps(payload_with_schema, ensure_ascii=False),
+        )
+        _run_checked(
+            session,
+            f"chmod 600 {q_payload_path}",
+            purpose="remote payload permission verification",
+            timeout=15,
+        )
+        command = (
+            f"{quoted_python} -m matmaster_bohrium_transfer.remote "
+            f"{shlex.quote(subcommand)} --payload-file {q_payload_path}"
+        )
+        result = session.exec_bash(command, timeout=timeout)
+        parsed = _parse_remote_transfer_result(
+            result,
+            purpose=f"remote transfer {subcommand}",
+        )
+        parsed.setdefault("remote_helper_temp_dir", temp_dir)
+        return parsed
+    finally:
+        if temp_dir:
+            session.exec_bash(f"rm -rf {shlex.quote(temp_dir)}", timeout=30)
+
+
+def run_remote_helper(
+    session,
+    *,
+    subcommand: str,
+    payload: dict[str, Any],
+    timeout: int = 3600,
+) -> dict[str, Any]:
+    if os.environ.get("BOHRIUM_TRANSFER_USE_LEGACY") == "1":
+        return _run_legacy_remote_helper(
+            session,
+            subcommand=subcommand,
+            payload=payload,
+            timeout=timeout,
+        )
+    return run_remote_transfer(
+        session,
+        subcommand=subcommand,
+        payload=payload,
+        timeout=timeout,
+    )

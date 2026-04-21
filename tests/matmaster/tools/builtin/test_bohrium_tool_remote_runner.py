@@ -92,6 +92,7 @@ def test_run_remote_helper_writes_payload_file_and_cleans_up() -> None:
         helper_stdout=json.dumps(
             {
                 "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.0",
                 "ok": True,
                 "oss_key": "prefix/input.zip",
             }
@@ -125,17 +126,26 @@ def test_run_remote_helper_writes_payload_file_and_cleans_up() -> None:
     helper_commands = [
         cmd
         for cmd in session.exec_calls
-        if "remote_transfer_helper.py" in cmd and "--payload-file" in cmd
+        if "-m matmaster_bohrium_transfer.remote upload-submit" in cmd
+        and "--payload-file" in cmd
     ]
     assert len(helper_commands) == 1
     assert "secret-token" not in helper_commands[0]
+    assert not any(path.endswith("remote_transfer_helper.py") for path, _ in session.writes)
 
 
 def test_run_remote_helper_rejects_schema_mismatch_and_cleans_up() -> None:
     session = RunnerSession(
-        helper_stdout=json.dumps(
-            {"schema_version": "v0", "ok": True, "oss_key": "prefix/input.zip"}
-        )
+        version_stdout=json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.0",
+                "ok": True,
+            }
+        ),
+        command_stdout=json.dumps(
+            {"schema_version": "v0", "protocol_version": "1.0", "ok": True}
+        ),
     )
 
     with pytest.raises(BohriumTransferError, match="schema_version"):
@@ -152,7 +162,17 @@ def test_run_remote_helper_rejects_schema_mismatch_and_cleans_up() -> None:
 
 
 def test_run_remote_helper_rejects_non_json_stdout() -> None:
-    session = RunnerSession(helper_stdout="not json")
+    session = RunnerSession(
+        version_stdout=json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.0",
+                "ok": True,
+            }
+        ),
+        command_stdout="not json",
+        command_exit_code=1,
+    )
 
     with pytest.raises(BohriumTransferError, match="JSON"):
         run_remote_helper(
@@ -164,13 +184,22 @@ def test_run_remote_helper_rejects_non_json_stdout() -> None:
 
 def test_run_remote_helper_rejects_ok_false_with_redacted_error() -> None:
     session = RunnerSession(
-        helper_stdout=json.dumps(
+        version_stdout=json.dumps(
             {
                 "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.0",
+                "ok": True,
+            }
+        ),
+        command_stdout=json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.0",
                 "ok": False,
                 "error": "failed https://store/api/download/x?token=secret-token",
             }
-        )
+        ),
+        command_exit_code=1,
     )
 
     with pytest.raises(BohriumTransferError) as exc_info:
@@ -220,3 +249,32 @@ def test_remote_version_probe_rejects_non_json() -> None:
 
     with pytest.raises(BohriumTransferError, match="remote transfer version probe"):
         probe_remote_transfer(session)
+
+
+def test_run_remote_transfer_uses_package_cli_not_source_copy() -> None:
+    session = RunnerSession(
+        helper_stdout=json.dumps(
+            {
+                "schema_version": "v1",
+                "protocol_version": "1.0",
+                "ok": True,
+                "oss_key": "prefix/input.zip",
+            }
+        )
+    )
+
+    from matmaster.tools.builtin.bohrium_tool.remote_runner import run_remote_transfer
+
+    result = run_remote_transfer(
+        session,
+        subcommand="upload-submit",
+        payload={"input_dir": "/share/input", "token": "secret-token"},
+    )
+
+    assert result["oss_key"] == "prefix/input.zip"
+    assert not any(path.endswith("remote_transfer_helper.py") for path, _ in session.writes)
+    assert any(
+        "-m matmaster_bohrium_transfer.remote upload-submit --payload-file" in cmd
+        for cmd in session.exec_calls
+    )
+    assert not any("secret-token" in cmd for cmd in session.exec_calls)

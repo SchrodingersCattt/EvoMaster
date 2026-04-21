@@ -17,7 +17,7 @@ from matmaster.bohrium.upload import (
 
 from .errors import BohriumTransferError
 from .models import BohriumDownloadTarget, BohriumInputSource
-from .remote_runner import run_remote_helper
+from .remote_runner import run_remote_transfer
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def upload_input_source(
             "token": token,
             "object_name": "input.zip",
         }
-        result = run_remote_helper(
+        result = run_remote_transfer(
             session,
             subcommand="upload-submit",
             payload=payload,
@@ -125,7 +125,7 @@ def download_remote_results(
         except Exception:
             logger.debug("sandbox log token prefetch failed", exc_info=True)
 
-    result = run_remote_helper(
+    result = run_remote_transfer(
         session,
         subcommand="download-results",
         payload=payload,
