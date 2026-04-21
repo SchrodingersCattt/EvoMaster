@@ -5,9 +5,10 @@ import os
 import shlex
 from typing import Any
 
-from matmaster.bohrium.errors import BohriumTransferError
 from matmaster_bohrium_transfer.security import redact_secrets
 from matmaster_bohrium_transfer.version import SCHEMA_VERSION
+
+from matmaster.bohrium.errors import BohriumTransferError
 
 REMOTE_PROTOCOL_MAJOR = "1"
 
@@ -59,8 +60,7 @@ def probe_remote_transfer(session) -> dict[str, Any]:
     if result.get("exit_code") != 0:
         detail = stdout or result.get("stderr") or result.get("output") or ""
         raise BohriumTransferError(
-            "remote transfer version probe failed: "
-            f"{redact_secrets(detail)}"
+            "remote transfer version probe failed: " f"{redact_secrets(detail)}"
         )
     payload = _parse_json_stdout(stdout, purpose="remote transfer version probe")
     protocol = str(payload.get("protocol_version") or "")

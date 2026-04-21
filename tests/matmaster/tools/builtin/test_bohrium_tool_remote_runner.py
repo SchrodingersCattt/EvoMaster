@@ -26,8 +26,12 @@ class RunnerSession:
         self.is_open = True
         self.helper_stdout = helper_stdout
         self.helper_exit_code = helper_exit_code
-        self.version_stdout = helper_stdout if version_stdout is None else version_stdout
-        self.command_stdout = helper_stdout if command_stdout is None else command_stdout
+        self.version_stdout = (
+            helper_stdout if version_stdout is None else version_stdout
+        )
+        self.command_stdout = (
+            helper_stdout if command_stdout is None else command_stdout
+        )
         self.version_exit_code = (
             helper_exit_code if version_exit_code is None else version_exit_code
         )
@@ -131,7 +135,9 @@ def test_run_remote_helper_writes_payload_file_and_cleans_up() -> None:
     ]
     assert len(helper_commands) == 1
     assert "secret-token" not in helper_commands[0]
-    assert not any(path.endswith("remote_transfer_helper.py") for path, _ in session.writes)
+    assert not any(
+        path.endswith("remote_transfer_helper.py") for path, _ in session.writes
+    )
 
 
 def test_run_remote_helper_rejects_schema_mismatch_and_cleans_up() -> None:
@@ -272,7 +278,9 @@ def test_run_remote_transfer_uses_package_cli_not_source_copy() -> None:
     )
 
     assert result["oss_key"] == "prefix/input.zip"
-    assert not any(path.endswith("remote_transfer_helper.py") for path, _ in session.writes)
+    assert not any(
+        path.endswith("remote_transfer_helper.py") for path, _ in session.writes
+    )
     assert any(
         "-m matmaster_bohrium_transfer.remote upload-submit --payload-file" in cmd
         for cmd in session.exec_calls

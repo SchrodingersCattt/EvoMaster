@@ -35,7 +35,9 @@ def _upload_submit(payload: dict[str, object]) -> dict[str, object]:
     store_path = str(payload["store_path"]).strip().rstrip("/") + "/"
     token = str(payload["token"])
     object_name = str(payload.get("object_name") or "input.zip")
-    transfer_root = Path(str(payload.get("transfer_root") or "/share/.matmaster/transfers"))
+    transfer_root = Path(
+        str(payload.get("transfer_root") or "/share/.matmaster/transfers")
+    )
     archive_path = transfer_root / "archives" / object_name
     archive = create_zip_store(input_dir, archive_path)
     object_key = f"{store_path}{object_name}"
@@ -45,7 +47,9 @@ def _upload_submit(payload: dict[str, object]) -> dict[str, object]:
         file_path=archive.archive_path,
         object_key=object_key,
         manifest_store=ManifestStore(transfer_root),
-        transfer_id=str(payload.get("transfer_id") or f"submit-input-{abs(hash(object_key))}"),
+        transfer_id=str(
+            payload.get("transfer_id") or f"submit-input-{abs(hash(object_key))}"
+        ),
     )
     return {
         "schema_version": SCHEMA_VERSION,

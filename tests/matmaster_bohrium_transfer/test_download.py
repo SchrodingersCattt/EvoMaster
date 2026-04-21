@@ -14,7 +14,9 @@ from matmaster_bohrium_transfer.download import (
 
 
 class FakeResponse:
-    def __init__(self, content: bytes = b"", headers: dict[str, str] | None = None) -> None:
+    def __init__(
+        self, content: bytes = b"", headers: dict[str, str] | None = None
+    ) -> None:
         self.content = content
         self.headers = headers or {}
         self.status_code = 200
@@ -123,9 +125,7 @@ def test_download_file_uses_concurrent_range_requests(tmp_path: Path) -> None:
 
     assert dest.read_bytes() == b"0123456789"
     ranges = sorted(
-        headers.get("Range")
-        for headers in session.get_headers
-        if headers.get("Range")
+        headers.get("Range") for headers in session.get_headers if headers.get("Range")
     )
     assert ranges == ["bytes=0-3", "bytes=4-7", "bytes=8-9"]
     assert summary.bytes_total == 10

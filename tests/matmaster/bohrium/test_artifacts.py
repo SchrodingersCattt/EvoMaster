@@ -111,7 +111,9 @@ def test_download_job_artifacts_delegates_to_transfer_package(tmp_path, monkeypa
             "result_dir": str(tmp_path / "results"),
         }
 
-    monkeypatch.setattr("matmaster.bohrium.artifacts.get_file_token", fake_get_file_token)
+    monkeypatch.setattr(
+        "matmaster.bohrium.artifacts.get_file_token", fake_get_file_token
+    )
     monkeypatch.setattr(
         "matmaster.bohrium.artifacts.run_download_results_payload",
         fake_run_download_results_payload,

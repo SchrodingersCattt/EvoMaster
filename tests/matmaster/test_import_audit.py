@@ -171,9 +171,7 @@ def test_runtime_code_does_not_import_bohrium_sdk() -> None:
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for alias in node.names:
-                        if alias.name == "bohrium" or alias.name.startswith(
-                            "bohrium."
-                        ):
+                        if alias.name == "bohrium" or alias.name.startswith("bohrium."):
                             offenders.append(f"{path}:{node.lineno}")
                 if isinstance(node, ast.ImportFrom):
                     module = node.module or ""

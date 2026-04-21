@@ -6,7 +6,6 @@ from urllib.parse import quote
 from uuid import uuid4
 
 import pytest
-
 from matmaster_bohrium_transfer.client import StoreHostClient
 from matmaster_bohrium_transfer.download import download_file
 from matmaster_bohrium_transfer.manifest import ManifestStore

@@ -44,9 +44,8 @@ def test_manifest_store_round_trip_with_permissions(tmp_path: Path) -> None:
     loaded = store.read("t1")
     assert loaded == manifest
     assert (
-        (tmp_path / "transfers" / "t1" / "manifest.json").stat().st_mode & 0o777
-        == 0o600
-    )
+        tmp_path / "transfers" / "t1" / "manifest.json"
+    ).stat().st_mode & 0o777 == 0o600
 
 
 def test_logging_progress_sink_limits_chunk_events(caplog) -> None:

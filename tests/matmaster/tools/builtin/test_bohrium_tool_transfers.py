@@ -173,6 +173,7 @@ def test_download_job_artifacts_returns_bad_zip_marker_without_crashing(
         credential_source="env",
         sandbox=False,
     )
+
     def fake_run_download_results_payload(payload):
         return {
             "files": ["(bad zip: out.zip)"],

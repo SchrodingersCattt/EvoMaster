@@ -156,7 +156,9 @@ def test_upload_file_multipart_resumes_completed_manifest_parts(
         if url.endswith("/api/upload/multipart/upload")
     ]
     complete_call = [
-        call for call in session.calls if call[0].endswith("/api/upload/multipart/complete")
+        call
+        for call in session.calls
+        if call[0].endswith("/api/upload/multipart/complete")
     ][0]
     assert sorted(uploaded_part_numbers) == [2, 3]
     assert complete_call[2]["json"]["initialKey"] == "init-resume"

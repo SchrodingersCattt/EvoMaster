@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import shutil
 import os
+import shutil
 import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -284,7 +284,9 @@ def download_file(
     )
 
 
-def choose_sandbox_zip_object(job_id: int | str, objects: list[dict[str, Any]]) -> str | None:
+def choose_sandbox_zip_object(
+    job_id: int | str, objects: list[dict[str, Any]]
+) -> str | None:
     preferred_name = f"{job_id}.zip"
     for obj in objects:
         object_path = str(obj.get("path") or obj.get("key") or "").strip()
@@ -314,7 +316,9 @@ def extract_zip_safe(archive: str | Path, extract_dir: str | Path) -> list[str]:
             resolved_root = root.resolve()
             resolved_target = target.resolve()
             if resolved_root not in (resolved_target, *resolved_target.parents):
-                raise ExtractError("extract", f"unsafe zip member path: {member.filename}")
+                raise ExtractError(
+                    "extract", f"unsafe zip member path: {member.filename}"
+                )
             target.parent.mkdir(parents=True, exist_ok=True)
             with zf.open(member, "r") as src, open(target, "wb") as dst:
                 shutil.copyfileobj(src, dst)
@@ -474,7 +478,9 @@ def _download_sandbox_log(
         token = str(log_file.get("token") or "").strip()
         if host and path and token:
             try:
-                summary = _download_object(host, token, path, staging / "log", session=session)
+                summary = _download_object(
+                    host, token, path, staging / "log", session=session
+                )
                 return True, summary.bytes_done
             except Exception:
                 pass
@@ -515,7 +521,9 @@ def _download_sandbox_results(
             root_host, root_token, _object_path, root_prefix = (
                 _parse_sandbox_result_url(result_url)
             )
-            objects = _iterate_objects(root_host, root_token, root_prefix, session=session)
+            objects = _iterate_objects(
+                root_host, root_token, root_prefix, session=session
+            )
         except Exception:
             objects = []
 
@@ -533,10 +541,16 @@ def _download_sandbox_results(
     if zip_key and root_host and root_token:
         try:
             zip_path = staging / Path(zip_key).name
-            summary = _download_object(root_host, root_token, zip_key, zip_path, session=session)
+            summary = _download_object(
+                root_host, root_token, zip_key, zip_path, session=session
+            )
             bytes_transferred += summary.bytes_done
             files = _extract_result_zip(zip_path, staging)
-            return _merge_log_file(files, log_downloaded), read_log(staging), bytes_transferred
+            return (
+                _merge_log_file(files, log_downloaded),
+                read_log(staging),
+                bytes_transferred,
+            )
         except Exception:
             pass
 
@@ -546,7 +560,11 @@ def _download_sandbox_results(
             summary = download_file(result_url, zip_path, session=session)
             bytes_transferred += summary.bytes_done
             files = _extract_result_zip(zip_path, staging)
-            return _merge_log_file(files, log_downloaded), read_log(staging), bytes_transferred
+            return (
+                _merge_log_file(files, log_downloaded),
+                read_log(staging),
+                bytes_transferred,
+            )
         except Exception:
             pass
 

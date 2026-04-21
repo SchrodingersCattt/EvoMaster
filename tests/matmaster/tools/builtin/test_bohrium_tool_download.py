@@ -6,10 +6,11 @@ import asyncio
 import json
 from pathlib import Path
 
+import matmaster_bohrium_transfer.download as transfer_download_module
+
 import matmaster.bohrium.client as bohrium_client_module
 import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
 import matmaster.tools.builtin.bohrium_tool.transfers as bohrium_transfers_module
-import matmaster_bohrium_transfer.download as transfer_download_module
 from matmaster.bohrium.errors import BohriumTransferError
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.tool_result import ToolResult

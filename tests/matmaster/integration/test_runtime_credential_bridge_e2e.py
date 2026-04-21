@@ -6,6 +6,8 @@ import asyncio
 import json
 from types import SimpleNamespace
 
+from matmaster_bohrium_transfer.version import SCHEMA_VERSION
+
 import matmaster.bohrium.client as bohrium_client_module
 import matmaster.bohrium.upload as bohrium_upload_module
 from matmaster.bohrium.credentials import build_bohrium_context
@@ -13,7 +15,6 @@ from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime, get_
 from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.tool_result import ToolResult
-from matmaster_bohrium_transfer.version import SCHEMA_VERSION
 
 
 def _attach_runtime(
