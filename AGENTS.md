@@ -95,6 +95,43 @@ MatMaster 的对话与任务执行以 **根目录 `app.py` + `src/`（API）** �
 
 ---
 
+## 分支与 MR 流程（test → main）
+
+本仓库默认以 **`gitlab/test`** 作为集成/冒烟分支，以 **`gitlab/main`** 作为发布分支。日常开发流程：
+
+1. **从 `gitlab/test` 切分支**开发，例如 `refactor/mlip-skill`；改动直接 MR 到 `test` 跑流水线与联调。
+2. **待该 MR 在 `test` 上验证通过后**，再将同一组改动以 **基于 `gitlab/main`** 的新分支向 `main` 提 MR。不要把 test 分支直接改 target 为 main——test 上累积了尚未入 main 的其他改动，会污染 diff。
+
+### test-verified 改动上 main 的标准操作
+
+假设 `gitlab/test` 上的 commit `<SHA>` 已验证通过，要把它搬到 `main`：
+
+```bash
+git fetch gitlab main
+git checkout -b <name>-main gitlab/main
+git cherry-pick --no-commit <SHA>   # 或 cherry-pick 一组 commit
+git commit --author="<你的名字> <你的邮箱>" -m "..."   # 按需 reword
+git push -u gitlab <name>-main
+# 然后到 GitLab UI 新建 MR：source=<name>-main, target=main
+```
+
+### 流水线硬约束：commit / MR 不得带「其它作者」
+
+`main` 的流水线会拒绝出现额外作者署名的提交与 MR，因此：
+
+- **commit 消息中不得出现** `Co-Authored-By: ...` 之类的 trailer，也不要保留 `Made-with: ...` 这种 IDE/agent 自动塞进去的 trailer。用 `git log -1 --format='%(trailers)'` 核一下。
+- **MR 描述里不要写** `Co-Authored-By`/联合作者之类的字段；只写改动摘要、测试说明、关联 issue 即可。
+- 如果历史 commit 里有 `Co-Authored-By`，在 cherry-pick 到 main 分支时用 `git commit --amend -m "..."` 重写消息把 trailer 去掉（cherry-pick 会保留原作者，author 字段不用动）。
+- `gitlab/main` 历史里**确实**残留过一些带 `Co-Authored-By: Claude ...` 的老 commit，那是流水线规则更严之前的遗留；新 MR 不要再带。
+
+### 约定
+
+- test 分支是"随时可 rebase/force-push 的临时集成"；main 分支历史保持线性、commit 消息规范、无额外作者。
+- 以 AI/助手辅助编写的 commit：署名仍为真人开发者（`Author` 与 `Committer` 都是自己），不加 Co-Authored-By。
+- 把测试通过的改动搬到 main 时保留**原作者**；若需要合并多条 commit 也按本节流程。
+
+---
+
 ## 代码风格（pre-commit 强制）
 
 以下规则由 `.pre-commit-config.yaml` 定义，本地 commit 与 CI 合入 main 时均强制执行。
