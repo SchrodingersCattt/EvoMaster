@@ -197,7 +197,8 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
         finally:
             await gen.aclose()
 
-    frames = asyncio.run(_collect_first_five_frames())
+    with patch('src.services.stream_service.notify_post_async'):
+        frames = asyncio.run(_collect_first_five_frames())
 
     assert [frame['type'] for frame in frames] == [
         'status',
@@ -337,6 +338,7 @@ async def test_generate_send_stream_enqueues_bohrium_required_flag():
     with (
         patch('src.services.stream_service.REDIS_URL', 'redis://test'),
         patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
+        patch('src.services.stream_service.notify_post_async'),
         patch(
             'src.services.stream_service.asyncio.wait_for',
             side_effect=_stream_closed_immediately,
@@ -401,6 +403,7 @@ async def test_generate_send_stream_enqueues_images():
     with (
         patch('src.services.stream_service.REDIS_URL', 'redis://test'),
         patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
+        patch('src.services.stream_service.notify_post_async'),
         patch(
             'src.services.stream_service.asyncio.wait_for',
             side_effect=_stream_closed_immediately,
@@ -613,7 +616,8 @@ def test_generate_send_stream_normalizes_replayed_history_source():
         finally:
             await gen.aclose()
 
-    frames = asyncio.run(_collect_frames())
+    with patch('src.services.stream_service.notify_post_async'):
+        frames = asyncio.run(_collect_frames())
 
     history_frames = [frame for frame in frames if frame['type'] == 'run_result']
     assert len(history_frames) == 1
@@ -694,7 +698,8 @@ def test_generate_send_stream_replay_prefers_response_over_run_result():
         finally:
             await gen.aclose()
 
-    frames = asyncio.run(_collect_first_four_frames())
+    with patch('src.services.stream_service.notify_post_async'):
+        frames = asyncio.run(_collect_first_four_frames())
 
     assert [frame['type'] for frame in frames] == [
         'status',
