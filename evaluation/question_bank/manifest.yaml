@@ -106,7 +106,7 @@ banks:
   - path: "scientific_analysis/sa_alloy.yaml"
     capability: "scientific_analysis"
     domain: "alloy"
-    questions: 2
+    questions: 1
 
   - path: "scientific_analysis/sa_agnostic.yaml"
     capability: "scientific_analysis"
@@ -126,17 +126,17 @@ banks:
   - path: "scientific_analysis/sa_polymer.yaml"
     capability: "scientific_analysis"
     domain: "polymer"
-    questions: 4
+    questions: 2
 
   - path: "scientific_analysis/sa_semiconductor.yaml"
     capability: "scientific_analysis"
     domain: "semiconductor"
-    questions: 3
+    questions: 2
 
   - path: "structure_construction/sc_agnostic.yaml"
     capability: "structure_construction"
     domain: "agnostic"
-    questions: 13
+    questions: 9
 
   - path: "structure_construction/sc_catalysis.yaml"
     capability: "structure_construction"
@@ -183,4 +183,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 127 questions across 27 active bank files
+# Total: 124 questions across 27 active bank files

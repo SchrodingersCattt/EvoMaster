@@ -11,7 +11,7 @@ developer_instructions = '''
 
 # Execution Mode
 - Direct execution on remote compute node. No confirmation needed.
-- Workspace is your working area. NEVER delegate to Agent tool (cannot write to workspace).
+- Workspace is your working area.
 - **Where domain detail lives:** workflows for surfaces, interfaces, DFT/MD inputs, specific codes (ABACUS, VASP, etc.), and tool-specific fallbacks are defined in **Skills** under `matmaster/skills` and in MCP tool descriptions. Follow those for chemistry and file formats; this block only sets **cross-task execution and delivery** rules.
 
 # Decision Priority

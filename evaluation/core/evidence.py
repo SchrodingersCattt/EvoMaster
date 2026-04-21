@@ -171,6 +171,22 @@ class TokenUsage(BaseModel):
         pt = int(raw.get('prompt_tokens') or 0)
         ct = int(raw.get('completion_tokens') or 0)
         tt = int(raw.get('total_tokens') or 0)
+        # AWS Bedrock Converse / other vendors: camelCase when snake_case absent
+        if pt == 0 and raw.get('inputTokens') is not None:
+            try:
+                pt = int(raw['inputTokens'])
+            except (TypeError, ValueError):
+                pass
+        if ct == 0 and raw.get('outputTokens') is not None:
+            try:
+                ct = int(raw['outputTokens'])
+            except (TypeError, ValueError):
+                pass
+        if tt == 0 and raw.get('totalTokens') is not None:
+            try:
+                tt = int(raw['totalTokens'])
+            except (TypeError, ValueError):
+                pass
         cr = int(raw.get('cache_read_tokens') or 0)
         if not cr and raw.get('cache_read_input_tokens') is not None:
             try:

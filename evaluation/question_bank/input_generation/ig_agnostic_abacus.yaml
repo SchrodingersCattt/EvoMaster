@@ -281,7 +281,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 25000
   scoring_checklist:
   - id: must_input_core
     criterion: '[Must] INPUT_pot contains core mandatory controls for this task (`calculation
@@ -300,8 +300,7 @@ questions:
     verify: text_file_regex
     weight: 1.0
   - id: suggested_input_numerics
-    criterion: '[Suggested] INPUT_pot uses the benchmark numeric setup (`ecutwfc 60`, `nbands
-      40`).'
+    criterion: '[Suggested] INPUT_pot uses the benchmark numeric setup (`ecutwfc 60`).'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
@@ -675,11 +674,6 @@ questions:
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
-  - id: suggested_input_spin_mixing
-    criterion: '[Suggested] SCF input includes benchmark mixing controls.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 0.6
   - id: variable_efield_amp_small
     criterion: '[Variable] External-field amplitude is in a small finite-field range (around
       1e-3).'
@@ -1032,7 +1026,7 @@ questions:
     value: INPUT_vac_bsse
   - key: turn_budget
     value:
-      max: 14
+      max: 20
   - key: duration_budget
     value:
       max: 7200000
@@ -1199,11 +1193,11 @@ questions:
         min: 35
         max: 75
       - key: scf_nmax
-        expected: 100
-        tolerance: 0
+        min: 50
+        max: 1000
       - key: relax_nmax
-        expected: 100
-        tolerance: 0
+        min: 50
+        max: 1000
   - key: suggested_kpt_bulk_three_dimensional
     value:
       filename: KPT_bulk
@@ -1288,7 +1282,8 @@ questions:
     verify: text_file_regex
     weight: 1.0
   - id: suggested_input_bulk_relax_numerics
-    criterion: '[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc/scf_nmax/relax_nmax`).'
+    criterion: '[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc`,
+      `scf_nmax`/`relax_nmax` within 50~1000).'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6

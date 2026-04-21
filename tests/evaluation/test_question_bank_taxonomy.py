@@ -340,7 +340,6 @@ def test_sa_general_phase2_split_banks_have_expected_question_ids() -> None:
     )
     alloy_ids = [q['id'] for q in sa_alloy['questions']]
     assert 'WO_general_steel_008_20260417' in alloy_ids
-    assert 'WO_general_hea_005_20260417' in alloy_ids
 
 
 def test_phase2_split_banks_have_expected_question_ids() -> None:
@@ -374,4 +373,4 @@ def test_manifest_active_totals_after_phase2_splits() -> None:
     manifest = yaml.safe_load((bank_root / 'manifest.yaml').read_text(encoding='utf-8'))
 
     assert len(manifest['banks']) == 27
-    assert sum(int(entry['questions']) for entry in manifest['banks']) == 127
+    assert sum(int(entry['questions']) for entry in manifest['banks']) == 119

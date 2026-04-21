@@ -67,18 +67,30 @@ uv run python scripts/diagnose_input.py --software abacus --input INPUT
 | **SCF → NSCF** | SCF: `out_chg 1`; NSCF: `init_chg file`, `symmetry 0`, `nbands <N>`, `out_band 1` or `out_dos 1` |
 | **work function** | `out_pot 2` |
 | **dipole correction** | `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_pos_max`, `efield_pos_dec`, `efield_amp 0.0` |
-| **spin-polarized** | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` |
+| **spin-polarized** | `nspin 2`, `mixing_type broyden`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` |
 | **supercell/vacancy/BSSE** | `kspacing 0.10` inside INPUT |
 
 > Use **`force_thr_ev`** (eV/Å), not `force_thr` (Ry/Bohr). Before writing INPUT, consult `references/input_examples.md`.
 
 ## Band/DOS Two-Step Workflow
 
-SCF (`out_chg 1`) → NSCF (`init_chg file`, `symmetry 0`, `nbands`, `out_band 1` or `out_dos 1`). For Bohrium: write `run.sh` that runs both steps sequentially. Details in `references/input_examples.md`.
+SCF (`out_chg 1`) → NSCF (`init_chg file`, `symmetry 0`, `nbands`, `out_band 1` or `out_dos 1`).
+
+**You must create TWO separate KPT files**:
+- `KPT_scf` (or similar): uniform Gamma mesh (e.g. `8 8 8 0 0 0`)
+- `KPT_band` (for band) or `KPT_dos` (for DOS): line-mode k-path or denser uniform mesh
+
+Each INPUT must reference its own KPT: `kpoint_file KPT_scf` in SCF INPUT, `kpoint_file KPT_band` in NSCF INPUT. **Forgetting to create the SCF KPT file is a common error.**
+
+For Bohrium: write `run.sh` that runs both steps sequentially. Details in `references/input_examples.md`.
 
 ## Electric Field & Dipole Correction
 
 See `references/electric_field.md`. Key: dipole correction = `efield_flag 1` + `dip_cor_flag 1` + `efield_amp 0.0`. Work function: `out_pot 2`.
+
+## ntype — MUST Match STRU Species Count
+
+The `ntype` parameter in INPUT **must** equal the number of distinct species in the STRU file's ATOMIC_SPECIES section. This includes ghost/empty species. Count every species line in ATOMIC_SPECIES and set `ntype` to that number. Mismatch causes ABACUS to crash or silently misparse the STRU.
 
 ## STRU Pre-flight Checklist
 
@@ -87,8 +99,41 @@ See `references/electric_field.md`. Key: dipole correction = `efield_flag 1` + `
 3. `LATTICE_CONSTANT 1.8897259886`
 4. ATOMIC_POSITIONS species order = ATOMIC_SPECIES order
 5. Total atom count matches expected composition
+6. **Count species in ATOMIC_SPECIES → set `ntype` in INPUT to that number**
 
-Full STRU format details: `references/stru_format.md`.
+Full STRU format details: `references/stru_format.md`. Multi-species examples (binary, ternary, slab, magnetic): `references/stru_multispecies.md`.
+
+## INPUT Pre-delivery Checklist — MANDATORY
+
+**Before finishing any ABACUS task, verify EVERY item below. Violations cause silent failures.**
+
+### Parameter Baseline Standards
+- **`ecutwfc 100`** — use 100 Ry as the standard for both LCAO and PW. Lower values (e.g. 50) risk accuracy loss. **Exception**: if the task explicitly specifies a different cutoff (e.g. low-cost screening), follow the task requirement.
+- **`smearing_sigma 0.01`** with `smearing_method gauss`.
+- **`mixing_type broyden`** — always include explicitly. Broyden mixing is the ABACUS default and the standard for all calculations.
+- **`scf_thr 1.0e-7`**, `scf_nmax 100` (SCF) or `300` (NSCF).
+- **`ntype`** — must match the exact number of distinct species in STRU ATOMIC_SPECIES. Count and verify.
+
+### File Reference Consistency
+- When the STRU file is NOT named `STRU`, the INPUT **must** include `stru_file <actual_name>`.
+- When the KPT file is NOT named `KPT`, the INPUT **must** include `kpoint_file <actual_name>`.
+- **Every file referenced by `stru_file` / `kpoint_file` must exist in the workspace.** List workspace files and cross-check.
+- For two-step workflows (SCF → NSCF): you need **two separate KPT files** (e.g. `KPT_scf` for uniform mesh, `KPT_band` for line-mode). Both INPUTs must reference their respective KPT file. Forgetting the SCF KPT file is a common error.
+
+### Relaxation Parameter Guard
+- `calculation relax` → INPUT **must** contain `cal_force 1` and `force_thr_ev`. Missing `cal_force 1` = optimizer has no forces = silently broken.
+- `calculation cell-relax` → INPUT **must** contain **both** `cal_force 1` **and** `cal_stress 1`, plus `force_thr_ev` and `stress_thr`. Missing either = cell vectors not optimized.
+- These parameters are **never** implied by the `calculation` keyword — you must always write them explicitly.
+
+### Two-Step Workflow Guard (Band / DOS)
+- SCF INPUT must have `out_chg 1`.
+- NSCF INPUT must have `init_chg file`, `symmetry 0`, `nbands <N>`, and the correct output flag (`out_band 1` or `out_dos 1`).
+- Both INPUTs must reference their own KPT file. The SCF uses a uniform Gamma mesh; the NSCF uses line-mode (band) or denser uniform mesh (DOS).
+- For Bohrium submission: write a `run.sh` that chains both steps. See `references/input_examples.md`.
+
+### Multi-File Consistency Guard
+- When generating multiple INPUT files (surface energy, vacancy, EOS): all files must share identical `basis_type`, `ecutwfc`, `smearing_method`, `smearing_sigma`, `scf_thr`.
+- Each INPUT must have its own `stru_file` and `kpoint_file` directives pointing to the correct files.
 
 ## Required Files
 
@@ -98,6 +143,10 @@ Full STRU format details: `references/stru_format.md`.
   cp apns-pseudopotentials-v1/Si.upf .
   cp apns-orbitals-efficiency-v1/Si_gga_7au_100Ry_2s2p1d.orb .
   ```
+
+## Troubleshooting
+
+See `references/troubleshooting.md` for top 10 silent failures, decision tree, and pre-flight checklists.
 
 ## Output Files
 

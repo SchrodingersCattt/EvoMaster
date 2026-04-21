@@ -6,27 +6,32 @@ skill_type: operator
 
 # MLIPs Skill — Machine Learning Interatomic Potentials
 
-Universal MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
+MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
+
+> **Scope: DPA-first.** The default image ships DPA only. Other families (MACE, SevenNet, MatterSim) are supported **via the same unified ASE calculator interface** in `_calculator.py`, but their Python packages are **not preinstalled** — you must install them yourself (see table below) or switch to the multi-family LAMBench image. Treat anything non-DPA as opt-in.
 
 ## Bohrium Submission
 
 | Item | Default |
 |------|---------|
-| image | `registry.dp.tech/dptech/dpa-calculator:e13a296f` |
+| image | `registry.dp.tech/dptech/dpa-calculator:e13a296f` (DPA only) |
 | machine | `c16_m64_1 * NVIDIA 4090` |
 | cmd | `python {script} {args} > log 2>&1` |
 
-> Image has DPA, ASE, phonopy, pymatgen pre-installed. Prepend `pip install ... &&` for missing packages. For MACE/SevenNet/MatterSim, check `Bohrium(action="list_images", keyword="lambench")`.
+> Default image has DPA, ASE, phonopy, pymatgen preinstalled.
+> For missing packages, prepend `pip install ... &&`, or activate the bundled env first: `source /mcp_server/AI4S-agent-tools/.venv/bin/activate && pip install <pkg> && python ...`.
+> For multi-family work, use the LAMBench image (see `Bohrium(action="list_images", keyword="lambench")`, e.g. `registry.dp.tech/dptech/dp/native/prod-375/lambench:v2.9`).
 
 ## Models
 
-| Model | Domain | Notes |
-|-------|--------|-------|
-| **DPA3.1-3M** | General inorganic | Default. 3M params |
-| **DPA3.2-5M** | General + charge/spin | Supports `--charge` and `--spin` |
-| MACE-MP-0 / MACE-MPA-0 | General inorganic | Foundation models |
-| SevenNet-0 / 7net-mf-ompa | General inorganic | Graph NN |
-| MatterSim-v1-5M | General inorganic | 5M params |
+| Model | Family | Domain | Install (if not in image) |
+|-------|--------|--------|---------------------------|
+| **DPA3.1-3M** | DP | General inorganic — **default**, 3M params | preinstalled |
+| **DPA3.2-5M** | DP | General + charge/spin, supports `--charge`/`--spin` | preinstalled |
+| DPA2.4-7M | DP | Legacy multi-head | preinstalled |
+| MACE-MP-0 / MACE-MPA-0 | MACE | General inorganic foundation | `pip install mace-torch` — [ACEsuit/mace](https://github.com/ACEsuit/mace) |
+| SevenNet-0 / 7net-mf-ompa | SevenNet | Graph NN | `pip install sevenn` — [MDIL-SNU/SevenNet](https://github.com/MDIL-SNU/SevenNet) |
+| MatterSim-v1-5M | MatterSim | General inorganic, 5M params | `pip install mattersim` — [microsoft/mattersim](https://github.com/microsoft/mattersim) |
 
 **DPA heads**: `Omat24` (default, inorganic), `OMol25` (organic), `OC22` (catalysis), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
 
@@ -59,3 +64,36 @@ Universal MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nod
 2. Copy script(s) + `_calculator.py` to working directory
 3. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dpa-calculator:e13a296f", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
 4. Poll and read `result.json`
+
+## DPA + LAMMPS (requires freeze)
+
+DPA3 checkpoints (`DPA3.1-3M.pt`, `DPA3.2-5M.pt`) are **multi-task / multi-head** models and **cannot be loaded directly by LAMMPS**. You must first freeze a single head/branch into a `.pth` file. This is DPA-specific (MACE/SevenNet/MatterSim do not need this step).
+
+> Requires `deepmd-kit >= 3.1.0` (check with `dp --version`).
+
+**Step 1 — list available branches (heads):**
+
+```bash
+dp --pt show DPA-3.2-5M.pt model-branch
+```
+
+Typical DPA3 branches: `Omat24` (default inorganic), `OMol25`, `OC22`, `Organic_Reactions`, `ODAC23`, plus `RANDOM` (randomly initialized fitting net). Pick the branch whose training data best matches your system.
+
+**Step 2 — freeze the chosen branch:**
+
+```bash
+# --model-branch (preferred) or --head both work
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch Omat24
+```
+
+**Step 3 — use the frozen `.pth` in LAMMPS** (via the `deepmd` pair style):
+
+```
+pair_style  deepmd frozen_model.pth
+pair_coeff  * *
+```
+
+Notes:
+- The frozen `.pth` is also directly usable by ASE: `from deepmd.calculator import DP; atoms.calc = DP("frozen_model.pth")`.
+- The ASE workflows provided by this skill (optimize/phonon/MD/elastic/NEB/adsorption) load the **multi-head `.pt`** directly and select the head via `--head`, so freezing is only required when you actually need LAMMPS.
+- For a new downstream system, optionally run `dp --pt change-bias <model.pt> -s <system> --model-branch <Branch>` before freezing to better align the per-element energy bias.

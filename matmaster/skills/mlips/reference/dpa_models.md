@@ -38,3 +38,62 @@ Other DPA versions (2.4, 3.1) do **not** use fparam — passing charge/spin has 
 | Cross-validation | Compare DPA with MACE-MP-0 or SevenNet-0 |
 | Organic molecules | DPA3.1-3M with `--head OMol25`, or DPA3.2-5M |
 | Catalysis surfaces | DPA with `--head OC22` |
+
+## Freezing DPA for LAMMPS
+
+The ASE workflows in this skill load the multi-task `.pt` file directly and pick a head via `--head`. **LAMMPS cannot consume the raw multi-task `.pt`** — you must first freeze a single branch into a `.pth`. The procedure is identical for DPA2.4-7M, DPA3.1-3M, and DPA3.2-5M.
+
+Requirements: `deepmd-kit >= 3.1.0` (verify with `dp --version`).
+
+### 1. Show available branches
+
+```bash
+dp --pt show DPA-3.2-5M.pt model-branch
+```
+
+Expected output (DPA3-style):
+
+```
+Available model branches are ['Omat24', 'OMol25', 'OC22', 'Organic_Reactions',
+'ODAC23', ..., 'RANDOM'], where 'RANDOM' means using a randomly initialized
+fitting net.
+```
+
+DPA2.4-7M exposes many more branches (e.g. `Domains_Alloy`, `H2O_H2O_PD`, `Metals_Cu`, ...). Pick the branch whose training data best matches your system's chemistry.
+
+### 2. Freeze the chosen branch
+
+```bash
+# both flags accepted; --model-branch is canonical in v3.1+
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch Omat24
+
+# equivalent
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --head Omat24
+```
+
+Output `frozen_model.pth` is a **single-head** model usable in both LAMMPS and ASE.
+
+### 3. Use in LAMMPS
+
+```
+pair_style  deepmd frozen_model.pth
+pair_coeff  * *
+```
+
+Run via `$PREFIX/bin/lmp -in in.lmp` (use the `lmp` binary shipped with the deepmd environment, not a system LAMMPS).
+
+### 4. Optional: zero-shot bias adjustment
+
+Before freezing, you can re-align the per-element energy bias of the pretrained model to your downstream system without retraining:
+
+```bash
+dp --pt change-bias DPA-3.2-5M.pt -s <your_system> --model-branch Omat24
+```
+
+Then freeze the resulting checkpoint as in step 2.
+
+### Common pitfalls
+
+- **Missing `--model-branch` / `--head`**: freezing DPA3 without it fails (multi-task model needs a branch selection).
+- **Using `dp < 3.1.0`**: older versions cannot freeze DPA3 checkpoints. Upgrade first.
+- **Loading unfrozen `.pt` in LAMMPS**: not supported; always freeze to `.pth` first.

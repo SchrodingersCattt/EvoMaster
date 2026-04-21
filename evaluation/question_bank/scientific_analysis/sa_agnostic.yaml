@@ -73,7 +73,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: DF_mech_002_20260404
+- id: DF_mech_002_20260419
   capability: scientific_analysis
   domain: agnostic
   intent: From MSST Hugoniot simulation data, fit the P-V Hugoniot curve and determine C-J
@@ -84,7 +84,6 @@ questions:
     '
   tags:
   - phy_eos
-  priority: P0
   data_files:
   - key: msst_data
     path: data/DF_mech_002/msst_hugoniot.json
@@ -104,7 +103,8 @@ questions:
     - hugoniot_fit
     - rayleigh_line
   - key: turn_budget
-    value: *id001
+    value:
+      max: 12
   - key: duration_budget
     value: *id002
   - key: token_budget_total

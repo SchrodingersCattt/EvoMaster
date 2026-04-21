@@ -1,12 +1,11 @@
 K_POINTS
 0
 Gamma
-4 4 4 0 0 0
+8 8 8 0 0 0
 // Format: Nx Ny Nz  shift_x shift_y shift_z
 // shift 0 0 0 = Gamma-centered Monkhorst-Pack grid
 // shift 1 1 1 = offset grid (may avoid Gamma point)
 //
-// Convergence notes:
-//   - Insulators/semiconductors: 4x4x4 usually sufficient
-//   - Metals: 8x8x8 or finer recommended
-//   - Large supercells: 1x1x1 (Gamma-only) often adequate
+// 8x8x8 is safe for most systems (metals and insulators).
+// Large supercells: reduce to 2x2x2 or 1x1x1 (Gamma-only).
+// Slabs: use 1 in vacuum direction (e.g. 8 8 1 0 0 0).
