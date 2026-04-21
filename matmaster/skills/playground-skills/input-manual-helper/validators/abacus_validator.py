@@ -126,6 +126,7 @@ class ABACUSValidator(BaseValidator):
         diags.extend(self._check_md(text))
         diags.extend(self._check_spin(text))
         diags.extend(self._check_dft_plus_u(text))
+        diags.extend(self._check_dftu(text))
         diags.extend(self._check_mixing(text))
         diags.extend(self._check_scf_nmax(text))
         diags.extend(self._check_smearing(text))
@@ -479,7 +480,35 @@ class ABACUSValidator(BaseValidator):
     def _check_efield(self, text: str) -> list[Diagnostic]:
         """Check electric field / dipole correction parameter consistency."""
         diags: list[Diagnostic] = []
+
+        # Check: out_pot=2 (electrostatic potential output) without dipole
+        # correction is suspect for slab calculations — the periodic boundary
+        # condition introduces an artificial field across the vacuum.
+        out_pot = _parse_int(text, "out_pot")
         efield_flag = _parse_int(text, "efield_flag")
+        if out_pot == 2 and efield_flag != 1:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "out_pot=2 (electrostatic potential output) is set but "
+                        "efield_flag/dip_cor_flag are not enabled. For slab "
+                        "calculations, dipole correction is essential to remove "
+                        "the artificial electric field from periodic images. "
+                        "Add: efield_flag 1, dip_cor_flag 1, efield_dir 2."
+                    ),
+                    param="efield_flag",
+                    suggestion=(
+                        "Add: efield_flag  1\n"
+                        "     dip_cor_flag  1\n"
+                        "     efield_dir  2\n"
+                        "     efield_pos_max  0.0\n"
+                        "     efield_pos_dec  0.1\n"
+                        "     efield_amp  0.0"
+                    ),
+                )
+            )
+
         if efield_flag != 1:
             return diags
         # efield_dir should be set
@@ -493,10 +522,24 @@ class ABACUSValidator(BaseValidator):
                     suggestion="Add: efield_dir  2",
                 )
             )
+        # dip_cor_flag should be set when efield_flag=1
+        dip_cor = _parse_int(text, "dip_cor_flag")
+        if dip_cor is None or dip_cor != 1:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "efield_flag=1 but dip_cor_flag is not set to 1. "
+                        "Dipole correction (dip_cor_flag=1) is needed for "
+                        "proper slab electrostatic potential treatment."
+                    ),
+                    param="dip_cor_flag",
+                    suggestion="Add: dip_cor_flag  1",
+                )
+            )
         # gate_flag checks
         gate_flag = _parse_int(text, "gate_flag")
         if gate_flag == 1:
-            dip_cor = _parse_int(text, "dip_cor_flag")
             if dip_cor != 1:
                 diags.append(
                     Diagnostic(
@@ -552,6 +595,54 @@ class ABACUSValidator(BaseValidator):
                     suggestion="Add: out_chg  1",
                 )
             )
+        return diags
+
+    def _check_dftu(self, text: str) -> list[Diagnostic]:
+        """Additional DFT+U checks (nspin requirement).
+
+        Note: hubbard_u and orbital_corr presence are already checked by
+        _check_dft_plus_u. This method adds the nspin=2 recommendation.
+        """
+        diags: list[Diagnostic] = []
+        lda_plus_u = _parse_int(text, "lda_plus_u")
+        if lda_plus_u != 1:
+            return diags
+
+        # DFT+U usually requires nspin=2 for proper treatment of
+        # localized d/f electrons (magnetic ground states, orbital ordering)
+        nspin = _parse_int(text, "nspin")
+        if nspin is None or nspin < 2:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "lda_plus_u=1 typically requires nspin=2 for proper "
+                        "treatment of localized d/f electrons. "
+                        f"{'nspin not set (default 1)' if nspin is None else f'nspin={nspin}'}. "
+                        "Without nspin=2, the magnetic ground state is not explored."
+                    ),
+                    param="nspin",
+                    suggestion="Add: nspin  2",
+                )
+            )
+
+        # When nspin=2 is set, recommend mixing parameters for convergence
+        nspin_val = _parse_int(text, "nspin")
+        if nspin_val == 2:
+            mixing_beta = _parse_float(text, "mixing_beta")
+            if mixing_beta is None or mixing_beta > 0.5:
+                diags.append(
+                    Diagnostic(
+                        severity=SEVERITY_WARNING,
+                        message=(
+                            "DFT+U with nspin=2: recommend mixing_beta=0.1 and "
+                            "mixing_ndim=20 for stable SCF convergence. "
+                            f"{'mixing_beta not set' if mixing_beta is None else f'mixing_beta={mixing_beta} (too high)'}."
+                        ),
+                        param="mixing_beta",
+                        suggestion="Add: mixing_beta  0.1\n     mixing_ndim  20\n     mixing_gg0  1.5",
+                    )
+                )
         return diags
 
     def _check_nscf_bands(self, text: str) -> list[Diagnostic]:

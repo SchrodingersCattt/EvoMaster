@@ -67,7 +67,7 @@ uv run python scripts/diagnose_input.py --software abacus --input INPUT
 | **SCF → NSCF** | SCF: `out_chg 1`; NSCF: `init_chg file`, `symmetry 0`, `nbands <N>`, `out_band 1` or `out_dos 1` |
 | **work function** | `out_pot 2` |
 | **dipole correction** | `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_pos_max`, `efield_pos_dec`, `efield_amp 0.0` |
-| **spin-polarized** | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` |
+| **spin-polarized** | `nspin 2`, `mixing_type broyden`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` |
 | **supercell/vacancy/BSSE** | `kspacing 0.10` inside INPUT |
 
 > Use **`force_thr_ev`** (eV/Å), not `force_thr` (Ry/Bohr). Before writing INPUT, consult `references/input_examples.md`.
@@ -108,8 +108,9 @@ Full STRU format details: `references/stru_format.md`. Multi-species examples (b
 **Before finishing any ABACUS task, verify EVERY item below. Violations cause silent failures.**
 
 ### Parameter Baseline Standards
-- **`ecutwfc 100`** — use 100 Ry as the standard for both LCAO and PW. Lower values (e.g. 50) risk accuracy loss.
+- **`ecutwfc 100`** — use 100 Ry as the standard for both LCAO and PW. Lower values (e.g. 50) risk accuracy loss. **Exception**: if the task explicitly specifies a different cutoff (e.g. low-cost screening), follow the task requirement.
 - **`smearing_sigma 0.01`** with `smearing_method gauss`.
+- **`mixing_type broyden`** — always include explicitly. Broyden mixing is the ABACUS default and the standard for all calculations.
 - **`scf_thr 1.0e-7`**, `scf_nmax 100` (SCF) or `300` (NSCF).
 - **`ntype`** — must match the exact number of distinct species in STRU ATOMIC_SPECIES. Count and verify.
 

@@ -340,8 +340,13 @@ def _charge_flipping(
     best_rho = None
     best_r = float("inf")
 
+    # Use deterministic seed for reproducibility across evaluation runs.
+    # The seed incorporates the number of reflections and grid size to
+    # still produce different starting phases for different datasets.
+    rng = np.random.default_rng(seed=42 + len(f_obs) + N)
+
     for _ in range(n_trials):
-        phases = np.random.uniform(0, 2 * np.pi, len(f_obs))
+        phases = rng.uniform(0, 2 * np.pi, len(f_obs))
         for _ in range(cycles):
             F_grid = np.zeros((N, N, N), dtype=complex)
             F = f_obs * np.exp(1j * phases)

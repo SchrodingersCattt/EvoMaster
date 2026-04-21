@@ -192,6 +192,19 @@ def _output(result: dict, json_out: str | None) -> None:
     else:
         print(text)
 
+    # Cross-reference related tools (stderr)
+    sw = result.get("software", "").lower()
+    print(f"\n{'─'*50}", file=sys.stderr)
+    print("📋 Related tools:", file=sys.stderr)
+    if sw == "abacus":
+        print("  • preflight_abacus.py --dir .  → Full workspace validation (INPUT+STRU+KPT)", file=sys.stderr)
+        print("  • workspace_review.py --dir . --software abacus  → Comprehensive review + grade", file=sys.stderr)
+        print("  • diagnose_input.py --software abacus --input INPUT --fix  → Auto-fix mode", file=sys.stderr)
+    else:
+        print(f"  • diagnose_input.py --software {sw} --input <file>  → Detailed diagnostics", file=sys.stderr)
+        print(f"  • workspace_review.py --dir . --software {sw}  → Comprehensive review", file=sys.stderr)
+    print(f"{'─'*50}", file=sys.stderr)
+
 
 if __name__ == '__main__':
     main()

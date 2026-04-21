@@ -95,13 +95,14 @@ def main() -> None:
     parser.add_argument(
         "--software",
         required=True,
-        help="Software name: cp2k, orca, qe, abinit, lammps",
+        help="Software name: cp2k, orca, qe, abinit, lammps, abacus",
     )
     parser.add_argument(
         "--task",
         default="scf",
         help=(
-            "Task type (default: scf). Examples: scf, opt, md, sp, " "relax, minimize"
+            "Task type (default: scf). Examples: scf, opt, md, sp, " "relax, minimize, "
+            "band, dos, cell-relax, workfunction, dftu, eos"
         ),
     )
     parser.add_argument(
@@ -135,6 +136,25 @@ def main() -> None:
         default=None,
         help="Output file path. If omitted, writes to stdout.",
     )
+    parser.add_argument(
+        "--output-dir",
+        default=None,
+        metavar="DIR",
+        help=(
+            "Output directory for multi-file generation (ABACUS: INPUT, STRU, KPT). "
+            "If omitted for ABACUS, writes all files to current directory when "
+            "--output is also omitted, or only INPUT when --output is given."
+        ),
+    )
+    parser.add_argument(
+        "--all-files",
+        action="store_true",
+        help=(
+            "Generate all required input files (ABACUS: INPUT + STRU + KPT). "
+            "Implied when --output-dir is given. For ABACUS without this flag, "
+            "only INPUT is produced."
+        ),
+    )
     args = parser.parse_args()
 
     backend = _get_backend(args.software)
@@ -147,13 +167,43 @@ def main() -> None:
         structure_file=args.structure,
         params=params,
     )
-    text = backend.render(intent)
 
-    if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
-        print(f"Written to {args.output}", file=sys.stderr)
+    # ABACUS multi-file mode: generate INPUT + STRU + KPT
+    is_abacus = args.software.lower().strip() == "abacus"
+    do_all_files = args.all_files or args.output_dir is not None
+
+    if is_abacus and do_all_files:
+        files = backend.render_all(intent)
+        out_dir = Path(args.output_dir) if args.output_dir else Path(".")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        written = []
+        for fname, content in sorted(files.items()):
+            fpath = out_dir / fname
+            fpath.write_text(content, encoding="utf-8")
+            written.append(str(fpath))
+        print(
+            f"ABACUS multi-file output: {', '.join(written)}",
+            file=sys.stderr,
+        )
+        # Print INPUT to stdout as well for convenience
+        print(files.get("INPUT", ""), end="")
+        text = files.get("INPUT", "")
     else:
-        print(text, end="")
+        text = backend.render(intent)
+
+        if args.output:
+            Path(args.output).write_text(text, encoding="utf-8")
+            print(f"Written to {args.output}", file=sys.stderr)
+        else:
+            print(text, end="")
+
+        # For ABACUS without --all-files, still hint about companion files
+        if is_abacus and not args.output_dir:
+            print(
+                "\nNote: ABACUS requires STRU and KPT files too. "
+                "Use --all-files or --output-dir to generate all three.",
+                file=sys.stderr,
+            )
 
     # 诊断生成的内容，若有 error 则在 stderr 输出警告
     try:
@@ -174,6 +224,22 @@ def main() -> None:
             f"Warning: post-generation diagnostics failed: {exc}",
             file=sys.stderr,
         )
+
+    # Suggest next steps for validation
+    sw = args.software.lower().strip()
+    print(f"\n{'─'*50}", file=sys.stderr)
+    print("Next steps:", file=sys.stderr)
+    if sw == "abacus":
+        out_dir_str = args.output_dir or "."
+        print(f"  1. python diagnose_input.py --software abacus --input INPUT --fix", file=sys.stderr)
+        print(f"  2. python preflight_abacus.py --dir {out_dir_str}  → Cross-check INPUT+STRU+KPT", file=sys.stderr)
+        print(f"  3. python evaluate_dft_setup.py --software abacus --dir {out_dir_str}  → Best-practice grade", file=sys.stderr)
+    elif sw == "vasp":
+        print(f"  1. python evaluate_dft_setup.py --software vasp --dir .  → Best-practice evaluation", file=sys.stderr)
+        print(f"  2. python generate_kpoints.py --structure POSCAR --mode auto  → KPOINTS", file=sys.stderr)
+    else:
+        print(f"  1. python diagnose_input.py --software {sw} --input <output>  → Validate", file=sys.stderr)
+    print(f"{'─'*50}", file=sys.stderr)
 
 
 if __name__ == "__main__":
