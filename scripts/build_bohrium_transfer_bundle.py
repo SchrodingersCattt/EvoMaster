@@ -15,7 +15,7 @@ from matmaster_bohrium_transfer.version import (
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = ROOT / "packages" / "bohrium-transfer"
-DIST_DIR = PACKAGE_DIR / "dist"
+DIST_DIR = ROOT / "dist"
 
 
 def _sha256(path: Path) -> str:
