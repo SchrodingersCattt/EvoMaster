@@ -154,8 +154,6 @@ def _check_one_numeric_rule(raw: str, rule: dict[str, Any]) -> tuple[bool, str]:
 
     values = _collect_key_values(raw, key)
     if not values:
-        if bool(rule.get('allow_missing_key', False)):
-            return True, f'key {key!r}: skipped (missing key allowed)'
         return False, f'key {key!r} not found'
 
     occurrence = str(rule.get('occurrence', 'last')).lower()
@@ -296,7 +294,6 @@ def check_text_file_numeric_range(
 
     Each ``checks`` item supports:
     - ``key`` (required): parameter key at line start
-    - ``allow_missing_key``: when true, missing key is treated as skipped/pass
     - ``min`` / ``max`` (inclusive numeric range), or ``expected`` + ``tolerance``
     - ``allowed_values`` (non-numeric enum check, e.g. ["gauss", "gaussian"])
     - ``occurrence``: ``first`` or ``last`` (default ``last``)
