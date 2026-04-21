@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +31,8 @@ def _require_open_session(session: Any | None, raw_path: str) -> Any:
         )
     if not getattr(session, "is_open", False):
         raise BohriumPathError(
-            f"path '{raw_path}' requires an open remote session but the current session is not open"
+            f"path '{raw_path}' requires an open remote session but the current "
+            "session is not open"
         )
     return session
 
@@ -75,8 +75,8 @@ def resolve_download_target(
             kind="remote_share_dir",
             raw_path=raw_path,
             resolved_path=stripped,
-            staging_dir=Path(tempfile.mkdtemp(prefix="bohrium-download-")),
-            publish_mode="staged_upload",
+            staging_dir=Path(stripped),
+            publish_mode="remote_direct",
         )
 
     local_path = Path(_normalize_local_path(stripped, workdir))

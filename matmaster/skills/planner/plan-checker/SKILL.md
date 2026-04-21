@@ -14,6 +14,24 @@ See `reference/mandatory-artifact-read.md` for required prior reads, and `refere
 
 Use **goal-backward verification**. Start from the intended deliverables, then from each critical `S#` item and each critical `A#` criterion, and ask: which concrete tasks, with which dependencies and which exit gates, actually deliver this? Do not start from the task list and ask whether it looks good — that direction misses absent tasks.
 
+## Artifact gate checks
+
+In addition to task-level plan quality, verify the artifact gate pipeline:
+
+| Gate | Plan-checker question |
+|------|-----------------------|
+| Discuss Gate | Did the plan consume the user's captured intent, defaults, deferred ideas, and canonical references where relevant? |
+| SPEC Gate | Are the research objective, system, scope, non-scope, assumptions, and open questions clear enough to support tasks? |
+| ACCEPTANCE Gate | Does every blocking acceptance criterion have concrete task support and evidence collection? |
+| PLAN Gate | Are phases, dependencies, Active Queue, resume-from, and blockers coherent? |
+| Handoff Gate | Can direct mode execute from `PLAN.md` without inventing missing scientific decisions? |
+
+Status checks:
+
+- `approved-for-handoff` is valid only if no blocking coverage, dependency, or resumability issues remain.
+- `needs-replan` is appropriate when the correct fix would require changing phases, dependencies, task IDs, exit criteria, or acceptance logic.
+- If the plan cannot support direct mode and plan-executor execution, return `REVISE` or `BLOCKED`.
+
 ## Audit dimensions
 
 | Dimension | Question | Typical failure in materials-computation |
@@ -45,9 +63,9 @@ Use **goal-backward verification**. Start from the intended deliverables, then f
 
 ## Verdict options
 
-- `PASS` — plan is ready for user review or handoff.
-- `REVISE` — issues present; planner must revise before review.
-- `BLOCKED` — upstream artifact (`SPEC.md` or `ACCEPTANCE.md`) is itself insufficient; escalate up-stack rather than patch the plan.
+- `PASS` — plan is ready for user review or handoff; `approved-for-handoff` is allowed if stack review also passes.
+- `REVISE` — issues present; planner must revise before review or handoff.
+- `BLOCKED` — upstream artifact (`SPEC.md` or `ACCEPTANCE.md`) is itself insufficient, or the plan needs structural rework that should be marked `needs-replan`.
 
 ## Output contract
 

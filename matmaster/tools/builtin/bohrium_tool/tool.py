@@ -33,7 +33,7 @@ from matmaster.bohrium.client import (
 )
 from matmaster.bohrium.credentials import build_bohrium_context
 from matmaster.bohrium.endpoints import get_bohrium_service_env
-from matmaster.bohrium.errors import BohriumError
+from matmaster.bohrium.errors import BohriumError, BohriumTransferError
 from matmaster.bohrium.status import (
     FAILURE_CODES,
     RUNNING_CODES,
@@ -55,9 +55,22 @@ from matmaster.types.topology import ToolPlane
 
 from .errors import BohriumJobStateError
 from .paths import resolve_download_target, resolve_input_source
-from .transfers import prepare_input_archive, publish_download_target
+from .transfers import (
+    download_remote_results,
+    prepare_input_archive,
+    publish_download_target,
+    upload_input_source,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _created_job_ref(create_data: dict[str, Any]) -> str:
+    for key in ("jobId", "bohrJobId", "id"):
+        value = create_data.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return "(unknown)"
 
 
 def submit_job_via_runtime(
@@ -82,9 +95,21 @@ def submit_job_via_runtime(
     if not cmd_stripped.endswith("> log 2>&1"):
         cmd = cmd_stripped + " > log 2>&1"
 
-    with prepare_input_archive(source, session=session) as zip_path:
+    if source.kind == "remote_share_dir":
         create_data = create_job(ctx, job_name=job_name)
-        upload = upload_input_archive(create_data=create_data, zip_path=zip_path)
+        try:
+            upload = upload_input_source(
+                source,
+                create_data=create_data,
+                session=session,
+            )
+        except Exception as exc:
+            created_ref = _created_job_ref(create_data)
+            raise BohriumTransferError(
+                "Remote input upload failed after job/create; "
+                "compute job was not submitted; "
+                f"created_job_ref={created_ref}: {exc}"
+            ) from exc
         add_data = add_job(
             ctx,
             create_data=create_data,
@@ -95,6 +120,20 @@ def submit_job_via_runtime(
             job_name=job_name,
             disk_size=disk_size,
         )
+    else:
+        with prepare_input_archive(source, session=session) as zip_path:
+            create_data = create_job(ctx, job_name=job_name)
+            upload = upload_input_archive(create_data=create_data, zip_path=zip_path)
+            add_data = add_job(
+                ctx,
+                create_data=create_data,
+                upload=upload,
+                image=image,
+                cmd=cmd,
+                machine=machine,
+                job_name=job_name,
+                disk_size=disk_size,
+            )
 
     if ctx.sandbox:
         raw_jid = add_data.get("jobId")
@@ -598,13 +637,22 @@ class BohriumTool(BuiltinTool):
                     f'Unexpected job status: {status_label} (code={code})'
                 )
 
-            files, log_tail = download_job_artifacts(
-                job_id=job_id,
-                detail_data=detail_data,
-                result_dir=target.staging_dir,
-                ctx=ctx,
-            )
-            report_dir = publish_download_target(target, session=self._session)
+            if target.kind == "remote_share_dir":
+                files, log_tail, report_dir = download_remote_results(
+                    target,
+                    job_id=job_id,
+                    detail_data=detail_data,
+                    ctx=ctx,
+                    session=self._session,
+                )
+            else:
+                files, log_tail = download_job_artifacts(
+                    job_id=job_id,
+                    detail_data=detail_data,
+                    result_dir=target.staging_dir,
+                    ctx=ctx,
+                )
+                report_dir = publish_download_target(target, session=self._session)
 
             if code == SUCCESS_CODE:
                 return ToolResult(
