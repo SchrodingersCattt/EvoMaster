@@ -98,8 +98,10 @@ def main() -> int:
     )
     short_sha = (os.getenv("CI_COMMIT_SHORT_SHA") or "local").strip()
     pipe_id = (os.getenv("CI_PIPELINE_ID") or "0").strip()
+    # URL 最后一截必须是合法 PEP 427 wheel 名（distribution-version-tags.whl），不能把
+    # commit/pipeline 前缀拼进文件名，否则远端 pip install 会报 invalid wheel filename。
     object_key = (
-        f"{prefix}/matmaster_bohrium_transfer/{short_sha}-{pipe_id}-{wheel_path.name}"
+        f"{prefix}/matmaster_bohrium_transfer/{short_sha}-{pipe_id}/{wheel_path.name}"
     )
 
     public_url = _upload_wheel(wheel_path, object_key)
