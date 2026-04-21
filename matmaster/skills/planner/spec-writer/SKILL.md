@@ -21,6 +21,37 @@ Produce or revise `SPEC.md` so a later planning or execution agent can continue 
 
 See `reference/mandatory-artifact-read.md` for required prior reads, and `reference/traceability-contract.md` for `S#` conventions and status markers.
 
+## Artifact-level adaptation
+
+`SPEC.md` is the research design contract for a planning unit.
+
+It borrows from Superpowers by behaving like a reviewed design spec:
+
+- state the problem and intended deliverables;
+- record scope and explicit non-scope;
+- compare meaningful alternatives when choices matter;
+- store rationale for selected defaults;
+- support user review before downstream execution.
+
+It borrows from GSD by acting as locked downstream context:
+
+- carry stable `S#` items;
+- mark decisions as `[specified]`, `[defaulted]`, `[to-research]`, or `[blocked]`;
+- record prior decisions reused from other planning units;
+- preserve Canonical references;
+- capture Deferred Ideas without expanding current scope.
+
+Every `SPEC.md` should include:
+
+```markdown
+## Artifact Status
+
+- Status: draft | review | locked | superseded
+- Planning unit: docs/{topic-slug}
+- Source: discuss | user-provided brief | replan
+- Last updated: YYYY-MM-DD
+```
+
 ## Materials-computation content checklist
 
 Cover each item when it applies. If it does not apply, say so explicitly and why.
@@ -67,20 +98,27 @@ docs/<topic-slug>/SPEC.md
 
 ## Preferred structure
 
-1. Problem Statement
-2. Objective and Intended Deliverables
-3. Scope
-4. Explicit Non-Scope
-5. Research System / Model Definition
-6. Constraints and Assumptions
-7. Evidence Anchors
-8. Major Decisions and Rationale
-9. Open Questions and Research Gaps
-10. Interfaces to `ACCEPTANCE.md` and `PLAN.md`
+1. Artifact Status
+2. Problem Statement
+3. Objective and Intended Deliverables
+4. Scope
+5. Explicit Non-Scope
+6. Research System / Model Definition
+7. Constraints and Assumptions
+8. Evidence Anchors
+9. Major Decisions and Rationale
+10. Open Questions and Research Gaps
+11. Canonical References
+12. Deferred Ideas
+13. Interfaces to `ACCEPTANCE.md` and `PLAN.md`
 
 ## Output contract
 
 - Create or update `SPEC.md` at the recommended path.
+- Include an `Artifact Status` section with planning unit, source, status, and update date.
+- Treat `SPEC.md` as the locked downstream context once reviewed; do not rely on chat history.
+- Preserve canonical references to user-mentioned papers, files, prior runs, structures, docs, and constraints.
+- Record branch ideas under Deferred Ideas instead of expanding scope silently.
 - Keep existing `S#` IDs stable where meaning is unchanged; mark retired IDs explicitly and do not reuse their numbers.
 - Return a short summary that names:
   - which `S#` items were added, updated, or retired;

@@ -1,16 +1,23 @@
 from __future__ import annotations
 
-import json
 import logging
 import shutil
 import tempfile
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
-from uuid import uuid4
+
+from matmaster.bohrium.client import get_file_token
+from matmaster.bohrium.types import BohriumContext
+from matmaster.bohrium.upload import (
+    UploadedArchive,
+    _build_download_url,
+    upload_input_archive,
+)
 
 from .errors import BohriumTransferError
 from .models import BohriumDownloadTarget, BohriumInputSource
+from .remote_runner import run_remote_helper
 
 logger = logging.getLogger(__name__)
 
@@ -22,65 +29,58 @@ def _zip_local_dir(input_dir: Path, zip_path: Path) -> None:
                 zf.write(file_path, file_path.relative_to(input_dir))
 
 
-def _prepare_remote_input_zip(
-    *, source: BohriumInputSource, session, zip_path: Path
-) -> None:
-    remote_zip_path = f"/tmp/bohrium_input_{uuid4().hex}.zip"
-    script = (
-        "python3 - <<'PY'\n"
-        "import pathlib, zipfile\n"
-        f"source = pathlib.Path({json.dumps(source.resolved_path)})\n"
-        f"archive = pathlib.Path({json.dumps(remote_zip_path)})\n"
-        "with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as zf:\n"
-        "    for path in source.rglob('*'):\n"
-        "        if path.is_file():\n"
-        "            zf.write(path, path.relative_to(source))\n"
-        "PY"
-    )
-    cleanup_cmd = f"rm -f {remote_zip_path}"
-    try:
-        result = session.exec_bash(script)
-        if result.get("exit_code") != 0:
-            detail = str(
-                result.get("stderr")
-                or result.get("output")
-                or result.get("stdout")
-                or "unknown error"
-            ).strip()
-            raise BohriumTransferError(
-                f"Failed to package remote input_dir '{source.resolved_path}': {detail}"
-            )
-        try:
-            zip_path.write_bytes(session.download(remote_zip_path))
-        except Exception as exc:
-            raise BohriumTransferError(
-                f"Failed to download remote input_dir '{source.resolved_path}': {exc}"
-            ) from exc
-    finally:
-        try:
-            session.exec_bash(cleanup_cmd)
-        except Exception:
-            logger.warning(
-                "Failed to clean up temporary remote input zip %s",
-                remote_zip_path,
-                exc_info=True,
-            )
-
-
 @contextmanager
 def prepare_input_archive(source: BohriumInputSource, *, session):
     with tempfile.TemporaryDirectory(prefix="bohrium_submit_") as tmp_dir:
         zip_path = Path(tmp_dir) / "input.zip"
         if source.kind == "remote_share_dir":
-            _prepare_remote_input_zip(source=source, session=session, zip_path=zip_path)
+            raise BohriumTransferError("remote input_dir must use direct remote upload")
         else:
             _zip_local_dir(Path(source.resolved_path), zip_path)
         yield zip_path
 
 
+def upload_input_source(
+    source: BohriumInputSource,
+    *,
+    create_data: dict,
+    session,
+) -> UploadedArchive:
+    if source.kind == "remote_share_dir":
+        store_path = str(create_data["storePath"]).strip()
+        if not store_path.endswith("/"):
+            store_path += "/"
+        store_host = str(create_data["storeHost"]).rstrip("/")
+        token = str(create_data["token"]).strip()
+        payload = {
+            "input_dir": source.resolved_path,
+            "store_host": store_host,
+            "store_path": store_path,
+            "token": token,
+            "object_name": "input.zip",
+        }
+        result = run_remote_helper(
+            session,
+            subcommand="upload-submit",
+            payload=payload,
+        )
+        oss_key = str(result.get("oss_key") or "").strip()
+        if not oss_key:
+            raise BohriumTransferError("remote helper did not return oss_key")
+        return UploadedArchive(
+            oss_key=oss_key,
+            download_url=_build_download_url(store_host, oss_key, token),
+        )
+
+    with prepare_input_archive(source, session=session) as zip_path:
+        return upload_input_archive(create_data=create_data, zip_path=zip_path)
+
+
 def publish_download_target(target: BohriumDownloadTarget, *, session) -> str:
     if target.publish_mode == "direct":
         target.staging_dir.mkdir(parents=True, exist_ok=True)
+        return target.resolved_path
+    if target.publish_mode == "remote_direct":
         return target.resolved_path
     try:
         session.upload_directory(str(target.staging_dir), target.resolved_path)
@@ -93,3 +93,46 @@ def publish_download_target(target: BohriumDownloadTarget, *, session) -> str:
             exc_info=True,
         )
         return str(target.staging_dir)
+
+
+def download_remote_results(
+    target: BohriumDownloadTarget,
+    *,
+    job_id: int | str,
+    detail_data: dict,
+    ctx: BohriumContext,
+    session,
+) -> tuple[list[str], str, str]:
+    payload: dict = {
+        "job_id": str(job_id),
+        "result_dir": target.resolved_path,
+        "sandbox": ctx.sandbox,
+        "detail_data": detail_data,
+    }
+    if ctx.sandbox:
+        try:
+            host, path, token = get_file_token(
+                ctx,
+                file_path="log",
+                bohr_job_id=str(job_id),
+            )
+            if host and path and token:
+                payload["sandbox_log_file"] = {
+                    "host": host,
+                    "path": path,
+                    "token": token,
+                }
+        except Exception:
+            logger.debug("sandbox log token prefetch failed", exc_info=True)
+
+    result = run_remote_helper(
+        session,
+        subcommand="download-results",
+        payload=payload,
+    )
+    files = result.get("files") or []
+    if not isinstance(files, list):
+        files = []
+    log_tail = str(result.get("log_tail") or "")
+    result_dir = str(result.get("result_dir") or target.resolved_path)
+    return [str(item) for item in files], log_tail, result_dir

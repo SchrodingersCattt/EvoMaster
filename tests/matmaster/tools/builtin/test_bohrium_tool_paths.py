@@ -35,7 +35,7 @@ def test_resolve_input_source_rejects_missing_remote_session() -> None:
         )
 
 
-def test_resolve_download_target_uses_staged_upload_for_remote_share(
+def test_resolve_download_target_uses_remote_direct_for_remote_share(
     tmp_path: Path,
 ) -> None:
     session = FakeRemoteSession(existing_paths={"/share/results"}, is_open=True)
@@ -48,5 +48,5 @@ def test_resolve_download_target_uses_staged_upload_for_remote_share(
 
     assert target.kind == "remote_share_dir"
     assert target.resolved_path == "/share/results"
-    assert target.publish_mode == "staged_upload"
-    assert target.staging_dir != Path("/share/results")
+    assert target.publish_mode == "remote_direct"
+    assert target.staging_dir == Path("/share/results")
