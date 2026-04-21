@@ -30,6 +30,15 @@ def test_token_usage_from_usage_dict_openai_shape() -> None:
     assert u.total_tokens == 120
 
 
+def test_token_usage_from_usage_dict_bedrock_camelcase() -> None:
+    u = TokenUsage.from_usage_dict(
+        {'inputTokens': 11854, 'outputTokens': 1200, 'totalTokens': 13054}
+    )
+    assert u.prompt_tokens == 11854
+    assert u.completion_tokens == 1200
+    assert u.total_tokens == 13054
+
+
 def test_extractor_uses_last_step_by_step_id(tmp_path: Path) -> None:
     traj = [
         {

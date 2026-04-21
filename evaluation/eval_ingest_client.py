@@ -264,6 +264,8 @@ def extract_ingest_tokens(
         last = turns[-1]
         if isinstance(last, dict):
             tt = last.get("total_tokens")
+            if tt is None:
+                tt = last.get("totalTokens")
             if tt is not None:
                 try:
                     v = int(tt)
@@ -281,6 +283,8 @@ def extract_ingest_tokens(
             if approx_last_turn is not None and approx_last_turn.total_tokens >= 0:
                 return approx_last_turn.total_tokens
         raw_tt = usage.get("total_tokens")
+        if raw_tt is None:
+            raw_tt = usage.get("totalTokens")
         if raw_tt is not None:
             try:
                 v = int(raw_tt)

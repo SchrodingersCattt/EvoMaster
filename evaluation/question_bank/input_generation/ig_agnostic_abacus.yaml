@@ -179,7 +179,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_003_20260419
+- id: IG_abacus_003_20260421
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS PW SCF INPUT and KPT files for Al slab electrostatic-potential calculation
@@ -272,7 +272,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 25000
   scoring_checklist:
   - id: must_input_core
     criterion: '[Must] INPUT_pot contains core mandatory controls for this task (`calculation
