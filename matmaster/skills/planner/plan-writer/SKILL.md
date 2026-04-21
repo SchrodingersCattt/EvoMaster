@@ -20,6 +20,35 @@ Produce or revise the master `PLAN.md` and, when needed, workstream subplans und
 
 See `reference/mandatory-artifact-read.md` for required prior reads, and `reference/traceability-contract.md` for `P#` / `T#` conventions and cross-file linking.
 
+## Artifact-level adaptation
+
+`PLAN.md` is the executable research work plan consumed by direct mode and plan-executor.
+
+It borrows from GSD by providing:
+
+- phase or stream decomposition with `P#`;
+- task graph with `T#`;
+- explicit dependencies;
+- Active Queue and ready-now state;
+- resume-from anchors;
+- blocker escalation;
+- Handoff Notes.
+
+It borrows from Superpowers by requiring:
+
+- concrete implementation tasks;
+- review before execution;
+- small bounded work units;
+- self-review through plan and stack checkers;
+- no vague task names that force the executor to infer missing scientific decisions.
+
+`PLAN.md` must separate document approval from work progress:
+
+- Artifact status: `draft` / `review` / `locked` / `approved-for-handoff` / `needs-replan` / `superseded`
+- Work status: `not-started` / `in-progress` / `blocked` / `completed`
+
+When `PLAN.md` reaches `approved-for-handoff`, direct mode and plan-executor should be able to start from the State Snapshot and Active Queue without inventing missing decisions.
+
 ## Typical materials-computation stream layout
 
 Most projects break into some of these streams. Use them as a starting shape — merge or split based on the actual work.
@@ -37,14 +66,16 @@ Use **rolling-horizon detail**: current and next phases decomposed to task level
 
 ## Master PLAN.md minimum structure
 
-1. State Snapshot — document status, work status, current stream / phase / task, ready-now, blocked-now, resume-from
+1. State Snapshot — artifact status, work status, current stream / phase / task, ready-now, blocked-now, resume-from
 2. Plan Topology — stream list, phase breakdown, dependency sketch
-3. Active Streams
-4. Cross-Stream Dependencies
-5. Active Queue — next 1–3 concrete actions
-6. Global Blockers and Escalation
-7. Session Log
-8. Approval and Handoff State
+3. Phase Graph
+4. Active Streams
+5. Cross-Stream Dependencies
+6. Active Queue — next 1-3 concrete actions
+7. Global Blockers and Escalation
+8. Handoff Notes
+9. Session Log
+10. Approval and Handoff State
 
 ## Subplan minimum structure
 
@@ -100,6 +131,10 @@ Minimum columns per task row:
 
 - Create or update the master `PLAN.md`.
 - Create or update any required subplans under `plans/<stream-slug>.md`.
+- Include artifact status and work status in the State Snapshot.
+- Include Handoff Notes that name what direct mode and plan-executor should read first.
+- Use `approved-for-handoff` only when `SPEC.md`, `ACCEPTANCE.md`, and `PLAN.md` are coherent and review-ready.
+- Use `needs-replan` when execution or checking finds a structural issue that requires forbidden structural edits.
 - Keep existing `P#` / `T#` IDs stable where meaning is unchanged.
 - Return a short summary that names:
   - which streams exist and which are currently active;

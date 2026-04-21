@@ -20,6 +20,44 @@ Produce or revise `ACCEPTANCE.md` so a reviewer can decide whether the work is d
 
 See `reference/mandatory-artifact-read.md` for required prior reads, and `reference/traceability-contract.md` for `A#` / `S#` linking conventions.
 
+## Artifact-level adaptation
+
+`ACCEPTANCE.md` is the scientific gate contract for a planning unit.
+
+It borrows from GSD by making completion gate-oriented:
+
+- criteria have pass/fail semantics;
+- blocking, major, and minor severity are explicit;
+- verification methods and evidence requirements are attached to each `A#`;
+- waiver rules are visible;
+- plan checking can verify that every blocking `A#` has task support.
+
+It borrows from Superpowers by making done concrete before implementation:
+
+- write success criteria before execution handoff;
+- convert vague language into measurable checks;
+- require review before implementation;
+- self-review for placeholders, ambiguity, and unverifiable standards.
+
+Every `ACCEPTANCE.md` should include:
+
+```markdown
+## Artifact Status
+
+- Status: draft | review | locked | superseded
+- Related SPEC: SPEC.md
+- Last updated: YYYY-MM-DD
+```
+
+Use gate verdict language consistently:
+
+- `PASS`
+- `FAIL`
+- `PARTIAL`
+- `WAIVED`
+
+If a blocking criterion is unmet and not waived, handoff must not proceed.
+
 ## Criterion families for materials-computation projects
 
 Use these families as a checklist. Omit ones that do not apply and say so.
@@ -68,19 +106,24 @@ Prefer concrete, domain-defensible thresholds. State the source of every thresho
 
 ## Preferred structure
 
-1. Acceptance Scope
-2. Acceptance Philosophy / Gate Model
-3. Global Completion Gates
-4. Scientific Acceptance Criteria
-5. Engineering / Reproducibility Acceptance Criteria
-6. Deliverable Acceptance Criteria
-7. Waivers and Exceptions
-8. Evidence Requirements
-9. Approval Record
+1. Artifact Status
+2. Acceptance Scope
+3. Gate Model
+4. Global Completion Gates
+5. Scientific Acceptance Criteria
+6. Engineering / Reproducibility Acceptance Criteria
+7. Deliverable Acceptance Criteria
+8. Waivers and Exceptions
+9. Evidence Requirements
+10. Review Record
 
 ## Output contract
 
 - Create or update `ACCEPTANCE.md` at `docs/<topic-slug>/ACCEPTANCE.md`.
+- Include an `Artifact Status` section with status, related SPEC, and update date.
+- Include a `Gate Model` section that explains blocking, major, minor, waiver, and handoff behavior.
+- Use `PASS / FAIL / PARTIAL / WAIVED` language where criteria or gates need verdicts.
+- Make blocking criteria impossible to bypass silently; handoff must not proceed while unresolved blocking criteria remain.
 - Keep existing `A#` IDs stable where meaning is unchanged.
 - Return a short summary that names:
   - new or changed criteria;
