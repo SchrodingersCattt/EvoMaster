@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 
 import matmaster.bohrium.client as bohrium_client_module
 import matmaster.bohrium.upload as bohrium_upload_module
 from matmaster.bohrium.credentials import build_bohrium_context
+from matmaster.bohrium.remote_transfer_helper import SCHEMA_VERSION
 from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime, get_runtime
 from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
@@ -71,6 +73,7 @@ class _RemoteShareSession(SimpleNamespace):
         super().__init__(is_open=True)
         self.exec_calls: list[str] = []
         self.download_calls: list[str] = []
+        self.write_calls: list[tuple[str, str]] = []
         _attach_runtime(self)
 
     def path_exists(self, path: str) -> bool:
@@ -81,6 +84,36 @@ class _RemoteShareSession(SimpleNamespace):
 
     def exec_bash(self, command: str, timeout=None, cancel_token=None) -> dict:
         self.exec_calls.append(command)
+        if command.startswith("command -v "):
+            return {
+                "stdout": "/usr/bin/python3\nPython 3.12.3\n",
+                "stderr": "",
+                "exit_code": 0,
+                "working_dir": "/share",
+                "output": "/usr/bin/python3\nPython 3.12.3\n",
+            }
+        if command.startswith("mktemp -d "):
+            return {
+                "stdout": "/tmp/matmaster_bohrium_transfer.ABCD12\n",
+                "stderr": "",
+                "exit_code": 0,
+                "working_dir": "/share",
+                "output": "/tmp/matmaster_bohrium_transfer.ABCD12\n",
+            }
+        if "remote_transfer_helper.py" in command and "--payload-file" in command:
+            return {
+                "stdout": json.dumps(
+                    {
+                        "schema_version": SCHEMA_VERSION,
+                        "ok": True,
+                        "oss_key": "p/input.zip",
+                    }
+                ),
+                "stderr": "",
+                "exit_code": 0,
+                "working_dir": "/share",
+                "output": "",
+            }
         return {
             "stdout": "",
             "stderr": "",
@@ -88,6 +121,10 @@ class _RemoteShareSession(SimpleNamespace):
             "working_dir": "/share",
             "output": "",
         }
+
+    def write_file(self, path: str, content: str, encoding: str = "utf-8") -> None:
+        del encoding
+        self.write_calls.append((path, content))
 
     def download(self, path: str, timeout=None) -> bytes:
         self.download_calls.append(path)
@@ -162,7 +199,6 @@ class TestBohriumToolAndRemoteShare:
         tool = BohriumTool(session=session, workdir=tmp_path)
 
         post_calls = []
-        upload_calls = []
 
         def fake_post(base_url, path, access_key, payload, timeout=30):
             post_calls.append(
@@ -182,18 +218,7 @@ class TestBohriumToolAndRemoteShare:
 
         monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
 
-        class FakeTiefblue:
-            def __init__(self, base_url=None):
-                pass
-
-            def upload_From_file_multi_part(self, *args, **kw):
-                upload_calls.append(kw)
-                return None
-
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-        monkeypatch.setattr(
-            bohrium_upload_module, "_load_tiefblue_client", lambda: FakeTiefblue
-        )
         result = asyncio.run(
             tool.execute(
                 {
@@ -208,8 +233,21 @@ class TestBohriumToolAndRemoteShare:
         assert isinstance(result, ToolResult)
         assert result.status == "success"
         assert session.exec_calls
-        assert session.download_calls
-        assert upload_calls
+        assert not session.download_calls
+        assert any(
+            "remote_transfer_helper.py" in call and "--payload-file" in call
+            for call in session.exec_calls
+        )
+        payload_writes = [
+            content
+            for path, content in session.write_calls
+            if path.endswith("payload.json")
+        ]
+        assert len(payload_writes) == 1
+        helper_payload = json.loads(payload_writes[0])
+        assert helper_payload["schema_version"] == SCHEMA_VERSION
+        assert helper_payload["input_dir"] == "/share/inputs"
+        assert helper_payload["token"] == "t"
         assert post_calls[1]["payload"]["cmd"].endswith("> log 2>&1")
 
     def test_bohrium_tool_poll_with_remote_share_and_no_session_errors(
