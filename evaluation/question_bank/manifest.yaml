@@ -131,12 +131,12 @@ banks:
   - path: "scientific_analysis/sa_semiconductor.yaml"
     capability: "scientific_analysis"
     domain: "semiconductor"
-    questions: 3
+    questions: 2
 
   - path: "structure_construction/sc_agnostic.yaml"
     capability: "structure_construction"
     domain: "agnostic"
-    questions: 13
+    questions: 9
 
   - path: "structure_construction/sc_catalysis.yaml"
     capability: "structure_construction"

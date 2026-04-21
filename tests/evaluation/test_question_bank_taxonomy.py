@@ -373,4 +373,4 @@ def test_manifest_active_totals_after_phase2_splits() -> None:
     manifest = yaml.safe_load((bank_root / 'manifest.yaml').read_text(encoding='utf-8'))
 
     assert len(manifest['banks']) == 27
-    assert sum(int(entry['questions']) for entry in manifest['banks']) == 124
+    assert sum(int(entry['questions']) for entry in manifest['banks']) == 119
