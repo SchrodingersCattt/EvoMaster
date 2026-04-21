@@ -34,9 +34,7 @@ def prepare_input_archive(source: BohriumInputSource, *, session):
     with tempfile.TemporaryDirectory(prefix="bohrium_submit_") as tmp_dir:
         zip_path = Path(tmp_dir) / "input.zip"
         if source.kind == "remote_share_dir":
-            raise BohriumTransferError(
-                "remote input_dir must use direct remote upload"
-            )
+            raise BohriumTransferError("remote input_dir must use direct remote upload")
         else:
             _zip_local_dir(Path(source.resolved_path), zip_path)
         yield zip_path

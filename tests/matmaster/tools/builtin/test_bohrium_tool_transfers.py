@@ -16,9 +16,9 @@ from matmaster.tools.builtin.bohrium_tool.models import (
     BohriumInputSource,
 )
 from matmaster.tools.builtin.bohrium_tool.transfers import (
-    upload_input_source,
     prepare_input_archive,
     publish_download_target,
+    upload_input_source,
 )
 from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
     FakeRemoteSession,

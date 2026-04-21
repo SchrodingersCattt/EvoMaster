@@ -501,9 +501,7 @@ class TestBohriumExecution:
         assert "compute job was not submitted" in result.content
         assert "created_job_ref=create-job-id" in result.content
         assert "python3 not found" in result.content
-        assert [path for path, _, _ in post_calls] == [
-            "/openapi/v1/sandbox/job/create"
-        ]
+        assert [path for path, _, _ in post_calls] == ["/openapi/v1/sandbox/job/create"]
 
     def test_submit_file_path_instead_of_directory_errors(self, tmp_path, monkeypatch):
         file_path = tmp_path / "INPUT"

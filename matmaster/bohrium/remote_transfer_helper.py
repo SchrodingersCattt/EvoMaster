@@ -16,9 +16,7 @@ from uuid import uuid4
 
 SCHEMA_VERSION = "v1"
 _SANDBOX_OBJECT_DOWNLOAD_LIMIT = 128
-_SECRET_RE = re.compile(
-    r"(?i)\b(token|access_key|accessKey|authorization)=([^&\s]+)"
-)
+_SECRET_RE = re.compile(r"(?i)\b(token|access_key|accessKey|authorization)=([^&\s]+)")
 _requests_module = None
 
 
