@@ -17,9 +17,39 @@ See `reference/mandatory-artifact-read.md` for required prior reads, and `refere
 | Boundary | SPEC owns problem semantics, ACCEPTANCE owns completion logic, PLAN owns work state. Each file stays in its lane. |
 | Traceability | `S#` / `A#` / `P#` / `T#` links are present where needed, and none are dangling. |
 | Duplication | bulky tables, parameter catalogs, or literature lists are not repeated across files. |
-| State consistency | document-status and work-status agree across artifacts and between master and subplans. |
+| State consistency | Artifact status and work status agree across `SPEC.md`, `ACCEPTANCE.md`, `PLAN.md`, and subplans. |
 | Stale text | obsolete assumptions, retired IDs, dead paths, or superseded decisions are not left hanging. |
 | Handoff readiness | review / approval / handoff status is explicit and mutually consistent. |
+
+## Artifact status consistency
+
+Audit artifact status separately from work status.
+
+Artifact status describes document readiness:
+
+- `draft`
+- `review`
+- `locked`
+- `approved-for-handoff`
+- `needs-replan`
+- `superseded`
+
+Work status describes execution progress:
+
+- `not-started`
+- `in-progress`
+- `blocked`
+- `completed`
+
+Common status failures:
+
+- `SPEC.md` locked while `ACCEPTANCE.md` is draft and still lacks blocking criteria.
+- `PLAN.md` approved-for-handoff while blocking criteria remain in `ACCEPTANCE.md`.
+- `PLAN.md` approved-for-handoff while `ready-now` is empty and no blocker is named.
+- `PLAN.md` work status completed while deliverable evidence paths are missing.
+- `needs-replan` appears in `PLAN.md` without a `REPLAN-REQUEST.md` or clear structural issue.
+
+Treat these as boundary drift or state consistency issues, depending on cause.
 
 ## Typical materials-computation drift cases
 
