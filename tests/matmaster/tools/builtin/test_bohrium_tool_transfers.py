@@ -16,6 +16,7 @@ from matmaster.tools.builtin.bohrium_tool.models import (
     BohriumInputSource,
 )
 from matmaster.tools.builtin.bohrium_tool.transfers import (
+    upload_input_source,
     prepare_input_archive,
     publish_download_target,
 )
@@ -25,48 +26,82 @@ from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
 )
 
 
-def test_prepare_input_archive_downloads_remote_share_zip(
+def test_prepare_input_archive_rejects_remote_share_zip_download(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     del tmp_path, monkeypatch
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("INPUT", "data")
-
-    session = FakeRemoteSession(downloads={"/tmp/remote.zip": buffer.getvalue()})
+    session = FakeRemoteSession()
     source = BohriumInputSource(
         kind="remote_share_dir",
         raw_path="/share/input",
         resolved_path="/share/input",
     )
 
-    with prepare_input_archive(source, session=session) as zip_path:
-        assert zip_path.name == "input.zip"
-        assert session.exec_calls
-        assert len(session.download_calls) == 1
-        assert session.download_calls[0].startswith("/tmp/bohrium_input_")
+    with pytest.raises(Exception, match="direct remote upload"):
+        with prepare_input_archive(source, session=session):
+            pass
 
 
-def test_publish_download_target_uploads_remote_share_and_returns_remote_dir(
+def test_upload_input_source_uses_remote_helper_without_session_download(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = FakeRemoteSession()
+    helper_calls: list[tuple[str, dict]] = []
+
+    def fake_remote_helper(session_arg, *, subcommand, payload, timeout=3600):
+        del timeout
+        assert session_arg is session
+        helper_calls.append((subcommand, payload))
+        return {
+            "schema_version": "v1",
+            "ok": True,
+            "oss_key": "sandbox/jobs/run-1/input.zip",
+        }
+
+    monkeypatch.setattr(
+        "matmaster.tools.builtin.bohrium_tool.transfers.run_remote_helper",
+        fake_remote_helper,
+    )
+    source = BohriumInputSource(
+        kind="remote_share_dir",
+        raw_path="/share/input",
+        resolved_path="/share/input",
+    )
+
+    upload = upload_input_source(
+        source,
+        create_data={
+            "storePath": "sandbox/jobs/run-1/",
+            "storeHost": "https://store.example.com",
+            "token": "token-123",
+        },
+        session=session,
+    )
+
+    assert upload.oss_key == "sandbox/jobs/run-1/input.zip"
+    assert upload.download_url.startswith("https://store.example.com/api/download/")
+    assert session.download_calls == []
+    assert helper_calls[0][0] == "upload-submit"
+    assert helper_calls[0][1]["input_dir"] == "/share/input"
+
+
+def test_publish_download_target_remote_direct_does_not_upload(
     tmp_path: Path,
 ) -> None:
     session = FakeRemoteSession(is_open=True)
-    staging_dir = tmp_path / "download-stage"
-    staging_dir.mkdir()
-    (staging_dir / "log").write_text("done\n", encoding="utf-8")
     target = BohriumDownloadTarget(
         kind="remote_share_dir",
         raw_path="/share/results",
         resolved_path="/share/results",
-        staging_dir=staging_dir,
-        publish_mode="staged_upload",
+        staging_dir=Path("/share/results"),
+        publish_mode="remote_direct",
     )
 
     result_dir = publish_download_target(target, session=session)
 
     assert result_dir == "/share/results"
-    assert session.upload_calls[0][1] == "/share/results"
+    assert session.upload_calls == []
 
 
 def test_download_job_artifacts_preserves_sandbox_zip_object_fallback(
@@ -119,7 +154,10 @@ def test_download_job_artifacts_preserves_sandbox_zip_object_fallback(
     files, log_tail = download_job_artifacts(
         job_id="job-1",
         detail_data={
-            "resultUrl": "https://store.example/api/download/prefix/job-1.zip?token=root-token"
+            "resultUrl": (
+                "https://store.example/api/download/"
+                "prefix/job-1.zip?token=root-token"
+            )
         },
         result_dir=target.staging_dir,
         ctx=ctx,
