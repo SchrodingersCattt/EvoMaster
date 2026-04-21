@@ -18,11 +18,8 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 
 1. Read provided `STRU` first and reuse filenames exactly (PP/orbital/structure).
 2. Generate `INPUT` (and `KPT` when needed).
-3. For uncertain params/workflows, check official ABACUS docs on web first.
-4. Use local `references/*` as fallback when web docs are unavailable.
-5. Run single-file diagnosis with `diagnose_input.py` (`--software abacus`).
-6. Run workspace preflight with `preflight_abacus.py` (`INPUT` + `STRU` + `KPT` cross-check).
-7. If needed, use `diagnose_input.py --fix`, then re-check.
+3. For uncertain params/workflows, check local `references/*` first.
+4. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
 
 ## Hard Guards (Must Pass)
 
@@ -44,6 +41,8 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 ## Parameter Baseline (Use Judgment, Not Blind Fixed Values)
 
 - Use physically reasonable `ecutwfc`, `smearing`, and SCF thresholds for system and PP quality.
+- Distinguish `LCAO` vs `PW` parameter semantics and sensitivity; do not directly copy basis-specific settings across modes.
+- For critical parameters, verify intent and physical meaning before finalizing.
 - Typical production defaults are acceptable, but task requirements override defaults.
 - If the task specifies cutoffs or convergence policy, follow the task first.
 - Keep multi-file studies (EOS/surface/vacancy comparisons) consistent on core numerics.
@@ -71,9 +70,9 @@ Notes:
 
 ## References
 
-Web-first policy:
-- Prefer official ABACUS/Bohrium web documentation for up-to-date behavior.
-- Use local references below for fallback and quick lookup.
+Reference-first policy:
+- Prefer local references below for stable and task-aligned guidance.
+- Use official ABACUS/Bohrium web documentation as fallback when local references are insufficient.
 
 - Input templates and multi-step examples: `references/input_examples.md`
 - STRU format basics: `references/stru_format.md`
