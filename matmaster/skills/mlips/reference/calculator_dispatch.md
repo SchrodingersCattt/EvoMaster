@@ -2,24 +2,20 @@
 
 ## Scope
 
-This skill is **DPA-first**. The reason the same scripts work across four MLIP families is that every family exposes an ASE `Calculator`, and `_calculator.py` hides the family-specific construction behind a single `build_calculator()` call. **The unified ASE interface is what is portable — not the runtime environment.**
-
-The default submission image (`registry.dp.tech/dptech/dpa-calculator:...`) ships **only DeePMD-kit / DPA**. MACE, SevenNet and MatterSim Python packages are **not** installed there; treat them as opt-in and either (a) `pip install` them on top, or (b) switch to the multi-family LAMBench image.
+This skill is **DPA-first**. The reason the same scripts work across four MLIP families is that every family exposes an ASE `Calculator`, and `_calculator.py` hides the family-specific construction behind a single `build_calculator()` call. **The unified ASE interface is what is portable.** Default to DPA for all tasks; switch to another family only when explicitly requested or when a specific model is better suited.
 
 ## Supported Families
 
-The `_calculator.py` module supports four MLIP families via a unified `build_calculator()` interface:
+The `_calculator.py` module supports four MLIP families via a unified `build_calculator()` interface. The **multi-family image** (`mlips:dev-0421`) ships all four preinstalled:
 
-| Family | Package | Calculator Class | In default image? | Install if missing |
-|--------|---------|------------------|-------------------|--------------------|
-| **DP** (DPA) | `deepmd-kit` | `deepmd.calculator.DP` | Yes | [deepmodeling/deepmd-kit](https://github.com/deepmodeling/deepmd-kit) |
-| **MACE** | `mace-torch` | `mace.calculators.mace_mp` | **No** | `pip install mace-torch` — [ACEsuit/mace](https://github.com/ACEsuit/mace) |
-| **SevenNet** | `sevenn` | `sevenn.SevenNetCalculator` | **No** | `pip install sevenn` — [MDIL-SNU/SevenNet](https://github.com/MDIL-SNU/SevenNet) |
-| **MatterSim** | `mattersim` | `mattersim.forcefield.MatterSimCalculator` | **No** | `pip install mattersim` — [microsoft/mattersim](https://github.com/microsoft/mattersim) |
+| Family | Package | Version (in image) | Calculator Class |
+|--------|---------|---------------------|-----------------|
+| **DP** (DPA) | `deepmd-kit` | 1.3.3.dev2445 | `deepmd.calculator.DP` |
+| **MACE** | `mace-torch` | 0.3.12 | `mace.calculators.mace_mp` |
+| **SevenNet** | `sevenn` | 0.11.0 | `sevenn.calculator.SevenNetCalculator` |
+| **MatterSim** | `mattersim` | 1.1.2 | `mattersim.forcefield.MatterSimCalculator` |
 
-> When submitting with a non-DPA family, prepend the install into `cmd`, e.g.:
-> `cmd="source /mcp_server/AI4S-agent-tools/.venv/bin/activate && pip install mace-torch && python optimize_structure.py --model MACE-MP-0 ... > log 2>&1"`
-> Or use `Bohrium(action="list_images", keyword="lambench")` to pick a prebuilt multi-family image.
+> If using the DPA-only image (`dpa-calculator:e13a296f`) and you need MACE/SevenNet/MatterSim, either switch to the multi-family image or prepend `pip install <pkg> &&` in `cmd`.
 
 ## How `build_calculator()` resolves models
 
@@ -70,14 +66,11 @@ model_name_or_path
 3. Register it in `_FAMILY_INIT`
 4. Update this reference document
 
-## Docker images by family
+## Docker images
 
-| Family | Known working image |
-|--------|-------------------|
-| DP (DPA) | `registry.dp.tech/dptech/dpa-calculator:e13a296f` |
-| All families | `registry.dp.tech/dptech/dp/native/prod-375/lambench:v2.9` (LAMBench image) |
+| Image | Families | Notes |
+|-------|----------|-------|
+| `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421` | **All four** (DP, MACE, SevenNet, MatterSim) + lammps | Python 3.12, torch 2.4+cu121, ASE 3.23, phonopy, pymatgen |
+| `registry.dp.tech/dptech/dpa-calculator:e13a296f` | DP only | Smaller, faster to pull when only DPA is needed |
 
-> Use `Bohrium(action="list_images", keyword="lambench")` to find the latest multi-MLIP image.
-> The DPA-specific image is smaller and faster to pull when only DPA is needed.
-> If a package is missing in the selected image, the submitted `cmd` / `command` may prepend `pip install <pkg> &&` before running the script.
-> If you want the installation to land in the bundled environment, activate `/mcp_server/AI4S-agent-tools/.venv` first, e.g. `source /mcp_server/AI4S-agent-tools/.venv/bin/activate && pip install <pkg> && python ...`.
+> If a package is missing, prepend `pip install <pkg> &&` before the script in `cmd`.
