@@ -38,11 +38,14 @@ RUN pip install --no-cache-dir \
 ARG MATMASTER_BOHRIUM_TRANSFER_URL=""
 ARG MATMASTER_BOHRIUM_TRANSFER_SHA256=""
 
+# pip 校验 wheel 文件名须符合 PEP 427（须含版本与 tag），不能用固定名 matmaster_bohrium_transfer.whl
 RUN if [ -n "$MATMASTER_BOHRIUM_TRANSFER_URL" ]; then \
-      wget -O /tmp/matmaster_bohrium_transfer.whl "$MATMASTER_BOHRIUM_TRANSFER_URL" && \
-      echo "$MATMASTER_BOHRIUM_TRANSFER_SHA256  /tmp/matmaster_bohrium_transfer.whl" | sha256sum -c - && \
-      pip install --no-cache-dir /tmp/matmaster_bohrium_transfer.whl && \
-      rm -f /tmp/matmaster_bohrium_transfer.whl ; \
+      _u="${MATMASTER_BOHRIUM_TRANSFER_URL%%\?*}" && \
+      _w="/tmp/${_u##*/}" && \
+      wget -O "$_w" "$MATMASTER_BOHRIUM_TRANSFER_URL" && \
+      echo "$MATMASTER_BOHRIUM_TRANSFER_SHA256  $_w" | sha256sum -c - && \
+      pip install --no-cache-dir "$_w" && \
+      rm -f "$_w" ; \
     fi
 
 RUN pip install --no-cache-dir --no-deps "cp2k-input-tools>=0.9.0"
