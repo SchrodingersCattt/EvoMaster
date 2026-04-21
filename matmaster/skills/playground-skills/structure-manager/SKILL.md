@@ -59,12 +59,3 @@ For band structure, DOS, work function, or defect calculations, see `references/
 * **Deterministic workflow**: When multiple equivalent approaches exist (e.g. database search vs generation), pick the most reliable one consistently. For known materials: database first → generation fallback. For novel structures: generation directly.
 * **Save early, save often**: Write intermediate structure files to disk before attempting further operations. If a downstream step fails, the intermediate is still deliverable.
 * **Verify after every transformation**: After any operation that changes a structure (supercell, slab, defect, conversion), re-run `assess_structure.py` and verify: (1) formula matches expectations, (2) atom count is correct, (3) dimensionality is right (3D for bulk, 2D for slab).
-
-## Batch Processing (≥3 structures)
-
-For tasks requiring multiple structures, see `references/batch_structure_processing.md`. Key rules:
-- **Breadth-first**: Process all structures through one stage before moving to the next.
-- **Save early**: Write each structure to disk immediately after creation.
-- **Fail-forward**: If one structure fails, skip it and continue. Report all failures at the end.
-- **Budget turns**: ~2–3 tool calls per structure max. If one is stuck, move on.
-- For slab batch processing, use **tasker-polar-surface** `--batch` modes.
