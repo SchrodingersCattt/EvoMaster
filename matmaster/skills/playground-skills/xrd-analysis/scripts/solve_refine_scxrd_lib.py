@@ -391,7 +391,7 @@ def _charge_flipping(
 # ═══════════════════════════════════════════════════════════════════════
 # Atom finding
 # ═══════════════════════════════════════════════════════════════════════
-def _find_atoms(rho, cell, sg_ops, sigma_thresh=4.5, min_dist_A=0.8):
+def _find_atoms(rho, cell, sg_ops, sigma_thresh=3.5, min_dist_A=0.8):
     """Locate atoms as peaks in the electron density."""
     from scipy.ndimage import maximum_filter
 

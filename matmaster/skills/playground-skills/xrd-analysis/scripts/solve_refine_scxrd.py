@@ -54,11 +54,11 @@ def main():
     ap.add_argument("--wavelength", type=float, help="Wavelength in Å")
     ap.add_argument("--elements", help='Expected elements, e.g. "C H N O S"')
     ap.add_argument(
-        "--grid", type=int, default=96, help="Charge-flipping grid (default 96)"
+        "--grid", type=int, default=128, help="Charge-flipping grid (default 128)"
     )
-    ap.add_argument("--cycles", type=int, default=800, help="CF cycles (default 800)")
+    ap.add_argument("--cycles", type=int, default=1000, help="CF cycles (default 1000)")
     ap.add_argument(
-        "--trials", type=int, default=3, help="CF random trials (default 3)"
+        "--trials", type=int, default=5, help="CF random trials (default 5)"
     )
     ap.add_argument("-o", "--output", default="refined.cif", help="Output CIF path")
     args = ap.parse_args()
@@ -164,7 +164,7 @@ def main():
 
     # ── Refine ──
     try:
-        atoms_ref, rfactors = _refine(atoms, hkl_data, cell, wl, sg_ops, max_iter=8)
+        atoms_ref, rfactors = _refine(atoms, hkl_data, cell, wl, sg_ops, max_iter=15)
     except Exception as e:
         print(f"Refinement error: {e}; writing unrefined CIF", file=sys.stderr)
         atoms_ref = atoms

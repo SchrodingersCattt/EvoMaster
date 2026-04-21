@@ -12,7 +12,9 @@ correct, runnable files and avoiding silent-failure configurations.
 ## When to Use
 
 Use this skill for any ABACUS task: SCF, band/DOS, relax/cell-relax, MD,
-electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
+electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE,
+**hybrid DFT (HSE06/PBE0), DFT+U, EOS, phonon, SOC/noncollinear, Berry phase,
+projected band structure, vdW-corrected, and multi-step complex workflows.**
 
 ## Minimum Workflow
 
@@ -53,6 +55,14 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 - `cell-relax`: include `force_thr_ev`, `stress_thr`, and `relax_nmax`.
 - Work function / slab potential: `out_pot 2`; add dipole correction when needed.
 - Spin/noncollinear/SOC: keep `nspin`, `noncolin`, and `lspinorb` consistent.
+- **Hybrid functionals (HSE06/PBE0)**: MUST use `basis_type pw` (not LCAO); set `dft_functional hse` or `pbe0`; no `.orb` files or `NUMERICAL_ORBITAL` in STRU. See `references/advanced_tasks.md`.
+- **DFT+U**: set `lda_plus_u 1`, `hubbard_u`, `orbital_corr` (one value per species in ATOMIC_SPECIES order); requires `nspin 2`.
+- **Phonon (finite displacement)**: use Phonopy to generate displaced supercells, run SCF with `cal_force 1` + `scf_thr 1e-8` on each. See `references/advanced_tasks.md`.
+- **EOS / bulk modulus**: generate multiple STRU files at different volumes; keep all INPUT parameters identical except `stru_file`. See `references/advanced_tasks.md`.
+- **Projected band structure**: add `out_proj_band 1` alongside `out_band 1` in NSCF step.
+- **vdW correction**: add `vdw_method d3_bj` (recommended for PBE) or `d2`.
+- **Berry phase (polarization)**: add `berry_phase 1`, `gdir <1|2|3>`.
+- **Multi-step run.sh**: for workflows with 3+ steps (relax→SCF→NSCF), write a `run.sh` script and submit with `cmd "bash run.sh > log 2>&1"`. See `references/advanced_tasks.md` for patterns.
 
 ## Bohrium Submission Defaults
 
@@ -77,6 +87,7 @@ Reference-first policy:
 - Use official ABACUS/Bohrium web documentation as fallback when local references are insufficient.
 
 - Input templates and multi-step examples: `references/input_examples.md`
+- **Advanced tasks (hybrid DFT, DFT+U, EOS, phonon, SOC, Berry phase, vdW, projected band, multi-step run.sh)**: `references/advanced_tasks.md`
 - STRU format basics: `references/stru_format.md`
 - Multi-species STRU examples: `references/stru_multispecies.md`
 - Electric field and dipole notes: `references/electric_field.md`

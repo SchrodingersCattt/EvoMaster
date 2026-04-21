@@ -294,6 +294,23 @@ When generating multiple INPUT files for a comparative study (surface energy, va
 
 ---
 
+---
+
+## Advanced Task Types
+
+For hybrid DFT (HSE06/PBE0), DFT+U, EOS, phonon, SOC, projected band, vdW,
+Berry phase, and multi-step complex workflows, see **`references/advanced_tasks.md`**.
+
+Key routing rules:
+- **Hybrid DFT** → MUST use `basis_type pw`, NO `.orb` files → `references/advanced_tasks.md`
+- **DFT+U** → `lda_plus_u 1` + `hubbard_u` + `orbital_corr`, MUST `nspin 2` → `references/advanced_tasks.md`
+- **EOS** → multiple STRU files at different volumes, consistent INPUT → `references/advanced_tasks.md`
+- **Phonon** → Phonopy + finite displacement, `cal_force 1`, `scf_thr 1e-8` → `references/advanced_tasks.md`
+- **SOC** → `nspin 4` + `noncolin 1` + `lspinorb 1` → `references/advanced_tasks.md`
+- **Multi-step run.sh** → 3+ steps chained in bash → `references/advanced_tasks.md`
+
+---
+
 ## Common Mistakes Checklist
 
 Before finalizing any INPUT file, verify none of these apply:
