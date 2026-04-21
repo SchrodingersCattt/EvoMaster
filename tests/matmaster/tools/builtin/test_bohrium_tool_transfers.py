@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import io
-import zipfile
 from pathlib import Path
 
 import pytest
@@ -20,10 +18,7 @@ from matmaster.tools.builtin.bohrium_tool.transfers import (
     publish_download_target,
     upload_input_source,
 )
-from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
-    FakeRemoteSession,
-    _FakeDownloadResponse,
-)
+from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import FakeRemoteSession
 
 
 def test_prepare_input_archive_rejects_remote_share_zip_download(
@@ -60,7 +55,7 @@ def test_upload_input_source_uses_remote_helper_without_session_download(
         }
 
     monkeypatch.setattr(
-        "matmaster.tools.builtin.bohrium_tool.transfers.run_remote_helper",
+        "matmaster.tools.builtin.bohrium_tool.transfers.run_remote_transfer",
         fake_remote_helper,
     )
     source = BohriumInputSource(
@@ -127,28 +122,15 @@ def test_download_job_artifacts_preserves_sandbox_zip_object_fallback(
         sandbox=True,
     )
 
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("log", "done\n")
+    captured: dict = {}
+
+    def fake_run_download_results_payload(payload):
+        captured.update(payload)
+        return {"files": ["log"], "log_tail": "done\n"}
 
     monkeypatch.setattr(
-        "matmaster.bohrium.artifacts.requests.get",
-        lambda url, timeout=300, stream=True: _FakeDownloadResponse(
-            content=buffer.getvalue()
-        ),
-    )
-    monkeypatch.setattr(
-        "matmaster.bohrium.artifacts.requests.post",
-        lambda *args, **kwargs: _FakeDownloadResponse(
-            json_data={
-                "code": 0,
-                "data": {
-                    "objects": [{"path": "prefix/job-1.zip", "isDir": False}],
-                    "hasNext": False,
-                    "nextToken": "",
-                },
-            }
-        ),
+        "matmaster.bohrium.artifacts.run_download_results_payload",
+        fake_run_download_results_payload,
     )
 
     files, log_tail = download_job_artifacts(
@@ -165,6 +147,8 @@ def test_download_job_artifacts_preserves_sandbox_zip_object_fallback(
 
     assert "log" in files
     assert "done" in log_tail
+    assert captured["sandbox"] is True
+    assert captured["detail_data"]["resultUrl"].endswith("token=root-token")
 
 
 def test_download_job_artifacts_returns_bad_zip_marker_without_crashing(
@@ -189,11 +173,16 @@ def test_download_job_artifacts_returns_bad_zip_marker_without_crashing(
         credential_source="env",
         sandbox=False,
     )
+
+    def fake_run_download_results_payload(payload):
+        return {
+            "files": ["(bad zip: out.zip)"],
+            "log_tail": "(no log file found in result directory)",
+        }
+
     monkeypatch.setattr(
-        "matmaster.bohrium.artifacts.requests.get",
-        lambda url, timeout=300, stream=True: _FakeDownloadResponse(
-            content=b"not-a-zip"
-        ),
+        "matmaster.bohrium.artifacts.run_download_results_payload",
+        fake_run_download_results_payload,
     )
 
     files, log_tail = download_job_artifacts(

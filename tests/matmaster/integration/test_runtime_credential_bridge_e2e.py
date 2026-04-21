@@ -6,10 +6,11 @@ import asyncio
 import json
 from types import SimpleNamespace
 
+from matmaster_bohrium_transfer.version import SCHEMA_VERSION
+
 import matmaster.bohrium.client as bohrium_client_module
 import matmaster.bohrium.upload as bohrium_upload_module
 from matmaster.bohrium.credentials import build_bohrium_context
-from matmaster.bohrium.remote_transfer_helper import SCHEMA_VERSION
 from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime, get_runtime
 from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
@@ -100,11 +101,26 @@ class _RemoteShareSession(SimpleNamespace):
                 "working_dir": "/share",
                 "output": "/tmp/matmaster_bohrium_transfer.ABCD12\n",
             }
-        if "remote_transfer_helper.py" in command and "--payload-file" in command:
+        if "matmaster_bohrium_transfer.remote version --json" in command:
             return {
                 "stdout": json.dumps(
                     {
                         "schema_version": SCHEMA_VERSION,
+                        "protocol_version": "1.0",
+                        "ok": True,
+                    }
+                ),
+                "stderr": "",
+                "exit_code": 0,
+                "working_dir": "/share",
+                "output": "",
+            }
+        if "-m matmaster_bohrium_transfer.remote" in command:
+            return {
+                "stdout": json.dumps(
+                    {
+                        "schema_version": SCHEMA_VERSION,
+                        "protocol_version": "1.0",
                         "ok": True,
                         "oss_key": "p/input.zip",
                     }
@@ -163,16 +179,21 @@ class TestBohriumToolAndRemoteShare:
 
         monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
 
-        class FakeTiefblue:
-            def __init__(self, base_url=None):
-                pass
-
-            def upload_From_file_multi_part(self, *args, **kw):
-                return None
+        def fake_upload(*, create_data, zip_path, manifest_root=None):
+            del manifest_root
+            store_path = str(create_data["storePath"]).strip()
+            if not store_path.endswith("/"):
+                store_path += "/"
+            return bohrium_upload_module.UploadedArchive(
+                oss_key=f"{store_path}input.zip",
+                download_url="https://store.example/api/download/input.zip?token=t",
+            )
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         monkeypatch.setattr(
-            bohrium_upload_module, "_load_tiefblue_client", lambda: FakeTiefblue
+            bohrium_upload_module,
+            "_upload_input_archive_sdk_free",
+            fake_upload,
         )
         result = asyncio.run(
             tool.execute(
@@ -235,7 +256,8 @@ class TestBohriumToolAndRemoteShare:
         assert session.exec_calls
         assert not session.download_calls
         assert any(
-            "remote_transfer_helper.py" in call and "--payload-file" in call
+            "-m matmaster_bohrium_transfer.remote upload-submit" in call
+            and "--payload-file" in call
             for call in session.exec_calls
         )
         payload_writes = [

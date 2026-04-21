@@ -31,8 +31,17 @@ RUN pip install --no-cache-dir \
     "lightgbm==4.6.0" \
     "mendeleev==1.1.0" \
     "matminer==0.10.0" \
-    "bohrium-sdk>=0.15.0" \
     "pint>=0.24"
+
+ARG MATMASTER_BOHRIUM_TRANSFER_URL=""
+ARG MATMASTER_BOHRIUM_TRANSFER_SHA256=""
+
+RUN if [ -n "$MATMASTER_BOHRIUM_TRANSFER_URL" ]; then \
+      wget -O /tmp/matmaster_bohrium_transfer.whl "$MATMASTER_BOHRIUM_TRANSFER_URL" && \
+      echo "$MATMASTER_BOHRIUM_TRANSFER_SHA256  /tmp/matmaster_bohrium_transfer.whl" | sha256sum -c - && \
+      pip install --no-cache-dir /tmp/matmaster_bohrium_transfer.whl && \
+      rm -f /tmp/matmaster_bohrium_transfer.whl ; \
+    fi
 
 RUN pip install --no-cache-dir --no-deps "cp2k-input-tools>=0.9.0"
 
