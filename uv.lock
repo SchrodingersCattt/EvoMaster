@@ -352,24 +352,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/44/1c/577d3ce406e88f370e80a6ebf76ae52a2866521e0b585e8ec612759894f1/bibtexparser-1.4.4.tar.gz", hash = "sha256:093b6c824f7a71d3a748867c4057b71f77c55b8dbc07efc993b781771520d8fb", size = 55594 }
 
 [[package]]
-name = "bohrium-sdk"
-version = "0.15.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "distro" },
-    { name = "httpx" },
-    { name = "pyhumps" },
-    { name = "requests" },
-    { name = "tqdm" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/03/fd/afb637412703728d0470dccbf3beff0815fc33c8e50a325b1e2548f74412/bohrium_sdk-0.15.0.tar.gz", hash = "sha256:0704d1992ce0c4616003e5719fab5e7927b62c5980f4b6ea42d1d34abef60d6e", size = 24600 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/63/df/08f39fcb8b34c5239c0844ed8750a29e4dfb33dfae84f67868623fe524fa/bohrium_sdk-0.15.0-py3-none-any.whl", hash = "sha256:fe02ae355f836e4518a597d2f057d3fbfcaa9661ee276590be3d3f2d26cf9870", size = 33164 },
-]
-
-[[package]]
 name = "boto3"
 version = "1.42.88"
 source = { registry = "https://pypi.org/simple" }
@@ -1967,7 +1949,6 @@ dependencies = [
     { name = "aiohttp" },
     { name = "anthropic" },
     { name = "beautifulsoup4" },
-    { name = "bohrium-sdk" },
     { name = "boto3" },
     { name = "fastapi" },
     { name = "google-genai" },
@@ -2036,7 +2017,6 @@ requires-dist = [
     { name = "array-api-compat", marker = "extra == 'calculation'", specifier = "==1.14.0" },
     { name = "ase", marker = "extra == 'calculation'", specifier = ">=3.22" },
     { name = "beautifulsoup4" },
-    { name = "bohrium-sdk", specifier = ">=0.15.0" },
     { name = "boto3", specifier = ">=1.34.0" },
     { name = "claude-agent-sdk", marker = "extra == 'eval-agent'", specifier = ">=0.1.0" },
     { name = "colorama", marker = "extra == 'calculation'", specifier = "==0.4.6" },
@@ -3463,15 +3443,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b0/77/a5b8c569bf593b0140bde72ea885a803b82086995367bf2037de0159d924/pygments-2.19.2.tar.gz", hash = "sha256:636cb2477cec7f8952536970bc533bc43743542f70392ae026374600add5b887", size = 4968631 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl", hash = "sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b", size = 1225217 },
-]
-
-[[package]]
-name = "pyhumps"
-version = "3.8.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c4/83/fa6f8fb7accb21f39e8f2b6a18f76f6d90626bdb0a5e5448e5cc9b8ab014/pyhumps-3.8.0.tar.gz", hash = "sha256:498026258f7ee1a8e447c2e28526c0bea9407f9a59c03260aee4bd6c04d681a3", size = 9018 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/11/a1938340ecb32d71e47ad4914843775011e6e9da59ba1229f181fef3119e/pyhumps-3.8.0-py3-none-any.whl", hash = "sha256:060e1954d9069f428232a1adda165db0b9d8dfdce1d265d36df7fbff540acfd6", size = 6095 },
 ]
 
 [[package]]

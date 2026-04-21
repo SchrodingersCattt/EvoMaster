@@ -118,6 +118,18 @@ MatMaster 的对话与任务执行以 **根目录 `app.py` + `src/`（API）** �
 - **仅 Worker 队列模式**：run 只在 Worker 上执行，不再支持「在 API 进程内执行 run」。请求中的 `mode: 'direct' | 'planner'` 仅表示任务类型，与执行位置无关。发送消息（POST /stream）必须配置 `REDIS_URL`，否则返回 503。
 - **Bohrium 远端共享目录**：Bohrium SSH / skill / bash 的远端工作目录默认直接使用项目级共享目录 `/share`；同一 Bohrium `project_id` 下的不同 session 共用该目录，不再默认创建 `/share/workspace/{session_id}`。修改远端 cwd、prompt 提示、文件浏览或下载落盘逻辑时，应遵守这一 project-scoped 语义。
 - **Runtime Credential Bridge**：Bohrium 鉴权已统一走 `matmaster/integration/runtime_bridge/` 的凭证桥。所有消费 Bohrium 凭证的模块（`BohriumTool`、`CalculationPathAdaptor`、`job_service`、`bohrium_env`）通过桥解析凭证，优先级为：显式参数 > session/runtime > 环境变量回退。生产环境中凭证由 session 自动注入，`.env` 中设置 `BOHRIUM_ACCESS_KEY` 仅用于本地开发回退。`/share/...` 等远端路径输出需要活跃的远程 session 以执行 upload_directory 同步逻辑；无 session 时 poll 会拒绝远端路径。
+- **Bohrium 大文件传输**：builtin `Bohrium(action="submit"|"download")`
+  的数据面走独立包 `matmaster_bohrium_transfer`，不再依赖
+  `bohrium-sdk`。主项目只保留 path resolution、Bohrium 控制面 API、
+  tool result 组装等控制面逻辑。
+- **远端 transfer runtime**：Bohrium 远端镜像必须预装
+  `matmaster_bohrium_transfer`，Worker 调用
+  `python -m matmaster_bohrium_transfer.remote upload-submit --payload-file <payload>` 或
+  `python -m matmaster_bohrium_transfer.remote download-results --payload-file <payload>`。
+  远端版本不兼容时失败并提示更新镜像，不运行时复制 helper 源码。
+- **传输状态**：同会话 resume 状态保存在 `.matmaster/transfers/` 或
+  `/share/.matmaster/transfers/`，manifest/payload 必须按 0600 权限写入并
+  对 token/access key 做日志脱敏。
 - **单文件行数**：若某源文件行数超过 1000 行，应进行重构（拆分为多个模块/子模块、抽取类或函数等），以利于维护与协作。
 - **评测模块约定**：`evaluation/` 目录的详细约定（题库格式、字段规则、verify 类型、数据流、编写指南等）统一维护在 [`evaluation/AGENTS_evaluation.md`](evaluation/AGENTS_evaluation.md)。修改评测相关规则时，**必须同步更新该文件**；若通用约定有变更，**必须同步更新本文件**。
 - （可在此补充项目的其他通用约定，如测试、提交信息、目录结构等。）

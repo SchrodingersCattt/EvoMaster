@@ -154,3 +154,29 @@ class TestPhase30FullIsolation:
             f"Expected 2 known violations, got {len(self.KNOWN_VIOLATIONS)}. "
             "Update this count as violations are resolved."
         )
+
+
+def test_runtime_code_does_not_import_bohrium_sdk() -> None:
+    roots = [
+        Path("matmaster/bohrium"),
+        Path("matmaster/tools/builtin/bohrium_tool"),
+        Path("packages/bohrium-transfer/src/matmaster_bohrium_transfer"),
+        Path("src"),
+        Path("scripts"),
+    ]
+    offenders: list[str] = []
+    for root in roots:
+        for path in root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name == "bohrium" or alias.name.startswith(
+                            "bohrium."
+                        ):
+                            offenders.append(f"{path}:{node.lineno}")
+                if isinstance(node, ast.ImportFrom):
+                    module = node.module or ""
+                    if module == "bohrium" or module.startswith("bohrium."):
+                        offenders.append(f"{path}:{node.lineno}")
+    assert offenders == []

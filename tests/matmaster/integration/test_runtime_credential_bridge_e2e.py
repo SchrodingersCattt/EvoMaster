@@ -178,16 +178,21 @@ class TestBohriumToolAndRemoteShare:
 
         monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
 
-        class FakeTiefblue:
-            def __init__(self, base_url=None):
-                pass
-
-            def upload_From_file_multi_part(self, *args, **kw):
-                return None
+        def fake_upload(*, create_data, zip_path, manifest_root=None):
+            del manifest_root
+            store_path = str(create_data["storePath"]).strip()
+            if not store_path.endswith("/"):
+                store_path += "/"
+            return bohrium_upload_module.UploadedArchive(
+                oss_key=f"{store_path}input.zip",
+                download_url="https://store.example/api/download/input.zip?token=t",
+            )
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         monkeypatch.setattr(
-            bohrium_upload_module, "_load_tiefblue_client", lambda: FakeTiefblue
+            bohrium_upload_module,
+            "_upload_input_archive_sdk_free",
+            fake_upload,
         )
         result = asyncio.run(
             tool.execute(

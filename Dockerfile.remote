@@ -31,7 +31,6 @@ RUN pip install --no-cache-dir \
     "lightgbm==4.6.0" \
     "mendeleev==1.1.0" \
     "matminer==0.10.0" \
-    "bohrium-sdk>=0.15.0" \
     "pint>=0.24"
 
 ARG MATMASTER_BOHRIUM_TRANSFER_URL=""
