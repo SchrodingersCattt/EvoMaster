@@ -32,7 +32,6 @@ RUN pip install --no-cache-dir \
     "mendeleev==1.1.0" \
     "matminer==0.10.0" \
     "bohrium-sdk>=0.15.0" \
-    "bohrium-open-sdk==1.0.5" \
     "pint>=0.24"
 
 RUN pip install --no-cache-dir --no-deps "cp2k-input-tools>=0.9.0"
