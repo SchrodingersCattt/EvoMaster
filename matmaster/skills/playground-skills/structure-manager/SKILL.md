@@ -56,40 +56,6 @@ For band structure, DOS, work function, or defect calculations, see `references/
 * Structure identification must include database identifiers (CCDC REFCODE / ICSD code) when deposited.
 * After obtaining any new structure, run `assess_structure.py`. **This is mandatory, not optional.**
 * **Grounding depth**: For structural analysis, provide physical/chemical explanations, not just labels. Trace structural physics of each specific material.
+* **Deterministic workflow**: When multiple equivalent approaches exist (e.g. database search vs generation), pick the most reliable one consistently. For known materials: database first → generation fallback. For novel structures: generation directly.
 * **Save early, save often**: Write intermediate structure files to disk before attempting further operations. If a downstream step fails, the intermediate is still deliverable.
 * **Verify after every transformation**: After any operation that changes a structure (supercell, slab, defect, conversion), re-run `assess_structure.py` and verify: (1) formula matches expectations, (2) atom count is correct, (3) dimensionality is right (3D for bulk, 2D for slab).
-
-## Deterministic Workflow Selection
-
-When multiple equivalent approaches exist, **always** follow this fixed priority to ensure consistent results across runs:
-
-### Bulk structures (known materials)
-1. **MCP database lookup** (`mat_struct_db_search_by_formula` or `_by_composition`) → pick the first hit with matching space group.
-2. **MCP structure generation** (`mat_sg_create_structure_from_wyckoff`) → if database has no match.
-3. **pymatgen inline** (`Structure.from_spacegroup(...)`) → last resort.
-
-### Surface slabs
-1. **MCP `mat_sg_build_surface_slab`** — always try first with explicit `miller_index`, `slab_thickness`, `vacuum_thickness`.
-2. **`build_molecular_crystal_slab.py`** — ONLY for molecular crystals (use when MCP slab builder fragments molecules).
-3. **pymatgen SlabGenerator** — fallback if MCP fails for non-molecular systems.
-4. **After slab creation**: always verify with `assess_structure.py`, check vacuum ≥ 15 Å, check atom count.
-
-### Supercells
-1. **MCP `mat_sg_make_supercell_structure`** — always try first.
-2. **pymatgen `Structure.make_supercell()`** — fallback.
-
-### Defects (vacancy, substitution, interstitial)
-1. **MCP `mat_sg_create_point_defect`** — always try first.
-2. **pymatgen manual** (remove/replace atom by index) → fallback.
-3. **After defect creation**: verify formula (one atom fewer for vacancy), verify supercell dimensions.
-
-### Format conversions
-- **Always use `convert_format.py`** — do NOT write conversion code manually.
-- For CIF → ABACUS STRU: `convert_format.py --input in.cif --output STRU --output-fmt abacus/stru`
-- For CIF → POSCAR: `convert_format.py --input in.cif --output POSCAR --output-fmt vasp/poscar`
-
-### Key anti-patterns (avoid)
-- ❌ Writing custom `SlabGenerator` code when MCP tool exists and works.
-- ❌ Trying multiple approaches in sequence without committing to one.
-- ❌ Building a structure inline with pymatgen when `mat_sg_create_structure_from_wyckoff` could be used.
-- ❌ Not saving the intermediate CIF before attempting further transformations.
