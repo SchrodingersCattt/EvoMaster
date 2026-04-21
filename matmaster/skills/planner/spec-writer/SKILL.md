@@ -1,6 +1,6 @@
 ---
 name: spec-writer
-description: "Writes or updates <planning-unit>/SPEC.md — the stable problem contract that fixes objective, scope, system definition, assumptions, defaults, and evidence anchors for a materials-computation planning unit so later planning does not drift."
+description: "Use when writes or updates <planning-unit>/SPEC.md — the stable problem contract that fixes objective, scope, system definition, assumptions, defaults, and evidence anchors for a materials-computation planning unit so later planning does not drift."
 skill_type: operator
 ---
 
@@ -29,10 +29,6 @@ Before writing:
 2. read the existing `<planning-unit>/SPEC.md` if present;
 3. read `<planning-unit>/ACCEPTANCE.md` and `<planning-unit>/PLAN.md` if present, only to preserve interface consistency and stable traceability;
 4. read the user-provided brief, files, papers, prior runs, notes, or structures explicitly in scope.
-
-Use `reference/mandatory-artifact-read.md` and `reference/traceability-contract.md` when available.
-If they are unavailable, follow the read order and `S#` rules in this skill.
-Never block solely because a named helper reference is unavailable.
 
 Write only `<planning-unit>/SPEC.md`.
 Do not create parallel copies such as `SPEC-v2.md`, `SPEC-new.md`, or `SPEC-copy.md`.

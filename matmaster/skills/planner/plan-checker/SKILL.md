@@ -1,6 +1,6 @@
 ---
 name: plan-checker
-description: "Checks <planning-unit>/PLAN.md and any relevant subplans under <planning-unit>/plans/ will actually satisfy <planning-unit>/SPEC.md and <planning-unit>/ACCEPTANCE.md before review or execution handoff — a goal-backward audit of coverage, dependencies, granularity, resumability, state coherence, and boundary drift for materials-computation plans."
+description: "Use when checks <planning-unit>/PLAN.md and any relevant subplans under <planning-unit>/plans/ will actually satisfy <planning-unit>/SPEC.md and <planning-unit>/ACCEPTANCE.md before review or execution handoff."
 skill_type: operator
 ---
 
@@ -32,10 +32,6 @@ Before checking:
 4. read `<planning-unit>/PLAN.md`;
 5. read any active or referenced subplans under `<planning-unit>/plans/`;
 6. read `<planning-unit>/REPLAN-REQUEST.md` or `<planning-unit>/BLOCKER-NOTE.md` if present and relevant.
-
-Use `reference/mandatory-artifact-read.md` and `reference/traceability-contract.md` when available.
-If they are unavailable, follow the read order and traceability rules in this skill.
-Never fail solely because a named helper reference is unavailable.
 
 ## Checking method
 

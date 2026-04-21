@@ -1,6 +1,6 @@
 ---
 name: plan-writer
-description: "Writes or updates <planning-unit>/PLAN.md and any subplans under <planning-unit>/plans/ as resumable execution trackers — decomposes a materials-computation planning unit into phases and tasks with explicit dependencies, blockers, resume points, exit gates, and links to SPEC / ACCEPTANCE."
+description: "Use when writes or updates <planning-unit>/PLAN.md and any subplans under <planning-unit>/plans/ as resumable execution trackers — decomposes a materials-computation planning unit into phases and tasks with explicit dependencies, blockers, resume points, exit gates, and links to SPEC / ACCEPTANCE."
 skill_type: operator
 ---
 
@@ -31,10 +31,6 @@ Before writing:
 5. read any active or relevant subplans under `<planning-unit>/plans/` if present;
 6. read `<planning-unit>/REPLAN-REQUEST.md` or `<planning-unit>/BLOCKER-NOTE.md` if present and relevant to the revision;
 7. read any user-provided files, prior runs, structures, notes, or handoff instructions explicitly in scope.
-
-Use `reference/mandatory-artifact-read.md` and `reference/traceability-contract.md` when available.
-If they are unavailable, follow the read order and traceability rules in this skill.
-Never block solely because a named helper reference is unavailable.
 
 Write only:
 

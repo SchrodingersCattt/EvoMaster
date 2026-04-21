@@ -1,6 +1,6 @@
 ---
 name: stack-checker
-description: "Audits the full artifact stack under <planning-unit> (SPEC.md, ACCEPTANCE.md, PLAN.md, and relevant subplans) for boundary drift, cross-file consistency, stale text, traceability integrity, and review readiness before user review or execution handoff."
+description: "Use when audits the full artifact stack under <planning-unit> (SPEC.md, ACCEPTANCE.md, PLAN.md, and relevant subplans) for boundary drift, cross-file consistency, stale text, traceability integrity, and review readiness before user review or execution handoff."
 skill_type: operator
 ---
 
@@ -36,11 +36,6 @@ Before checking:
 3. read `<planning-unit>/ACCEPTANCE.md`;
 4. read `<planning-unit>/PLAN.md`;
 5. read any active or referenced subplans under `<planning-unit>/plans/`;
-6. read `<planning-unit>/REPLAN-REQUEST.md` or `<planning-unit>/BLOCKER-NOTE.md` if present and relevant.
-
-Use `reference/mandatory-artifact-read.md` and `reference/traceability-contract.md` when available.
-If they are unavailable, follow the read order and consistency rules in this skill.
-Never fail solely because a named helper reference is unavailable.
 
 A full stack audit requires the core stack:
 

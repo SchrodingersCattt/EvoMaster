@@ -1,6 +1,6 @@
 ---
 name: acceptance-writer
-description: "Writes or updates <planning-unit>/ACCEPTANCE.md — the measurable completion contract that turns vague success language into checkable criteria with verification methods, thresholds, evidence requirements, severity, and waiver rules for a materials-computation planning unit."
+description: "Use when writes or updates <planning-unit>/ACCEPTANCE.md — the measurable completion contract that turns vague success language into checkable criteria with verification methods, thresholds, evidence requirements, severity, and waiver rules for a materials-computation planning unit."
 skill_type: operator
 ---
 
@@ -30,10 +30,6 @@ Before writing:
 3. read the existing `<planning-unit>/ACCEPTANCE.md` if present;
 4. read `<planning-unit>/PLAN.md` if present, only to preserve interface consistency and stable traceability;
 5. read user-provided briefs, papers, prior runs, reference values, standards, or notes explicitly in scope.
-
-Use `reference/mandatory-artifact-read.md` and `reference/traceability-contract.md` when available.
-If they are unavailable, follow the read order and `A#` / `S#` rules in this skill.
-Never block solely because a named helper reference is unavailable.
 
 Write only `<planning-unit>/ACCEPTANCE.md`.
 Do not create parallel copies such as `ACCEPTANCE-v2.md`, `ACCEPTANCE-new.md`, or `ACCEPTANCE-copy.md`.
