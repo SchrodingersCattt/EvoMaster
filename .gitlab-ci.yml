@@ -168,10 +168,15 @@ pytest-mr-main:
 build-remote-image:all:
   stage: build-remote-image
   image: $REGISTRY/public/ubuntu:gitlab-0.0.2
+  variables:
+    # 避免默认 pypi.org（境外）拉包过慢；可在项目 CI/CD Variables 覆盖为阿里云内网等源
+    PIP_INDEX_URL: "https://pypi.tuna.tsinghua.edu.cn/simple"
+    PIP_TRUSTED_HOST: "mirrors.tuna.tsinghua.edu.cn"
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
   before_script:
     - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh" "${CI_PROJECT_DIR}/ci/build_remote_image_all.sh"
     - apt-get update -qq && apt-get install -y --no-install-recommends python3-pip python3
-    - pip3 install -q uv oss2
+    - pip3 install --no-cache-dir -q uv oss2
   script:
     - "${CI_PROJECT_DIR}/ci/build_remote_image_all.sh"
   rules:
