@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import zipfile
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from matmaster_bohrium_transfer.download import (
     download_file,
     extract_zip_safe,
     probe_range,
+    run_download_results_payload,
 )
 
 
@@ -132,3 +134,105 @@ def test_download_file_uses_concurrent_range_requests(tmp_path: Path) -> None:
     assert "download_started" in event_types
     assert "download_part_completed" in event_types
     assert "download_completed" in event_types
+
+
+def test_run_download_results_payload_preserves_sandbox_fallback_order(
+    tmp_path: Path,
+) -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as zf:
+        zf.writestr("log", "done")
+    zip_bytes = buffer.getvalue()
+    calls: list[str] = []
+
+    class Response:
+        def __init__(self, content=b"", json_data=None, headers=None):
+            self.content = content
+            self._json = json_data or {}
+            self.ok = True
+            self.status_code = 200
+            self.headers = headers or {"Content-Length": str(len(content))}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._json
+
+        def iter_content(self, chunk_size=65536):
+            yield self.content
+
+    class FakeSession:
+        def post(self, url, **kwargs):
+            calls.append(url)
+            return Response(
+                json_data={
+                    "code": 0,
+                    "data": {
+                        "objects": [
+                            {"path": "prefix/task.zip", "isDir": False},
+                            {"path": "prefix/job-55.zip", "isDir": False},
+                        ],
+                        "hasNext": False,
+                    },
+                }
+            )
+
+        def head(self, url, **kwargs):
+            calls.append(f"HEAD {url}")
+            return Response(headers={"Content-Length": str(len(zip_bytes))})
+
+        def get(self, url, **kwargs):
+            calls.append(url)
+            return Response(content=zip_bytes)
+
+    result = run_download_results_payload(
+        {
+            "job_id": "job-55",
+            "detail_data": {
+                "resultUrl": "https://store.example/api/download/prefix/job-55.zip?token=t"
+            },
+            "result_dir": str(tmp_path / "results"),
+            "sandbox": True,
+        },
+        session=FakeSession(),
+    )
+
+    assert "log" in result["files"]
+    assert "done" in result["log_tail"]
+    assert any("iterate" in call for call in calls)
+    assert any("job-55.zip" in call for call in calls)
+
+
+def test_run_download_results_payload_returns_bad_zip_marker(tmp_path: Path) -> None:
+    class Response:
+        content = b"not-a-zip"
+        ok = True
+        status_code = 200
+        headers = {"Content-Length": str(len(content))}
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size=65536):
+            yield self.content
+
+    class FakeSession:
+        def head(self, url, **kwargs):
+            return Response()
+
+        def get(self, url, **kwargs):
+            return Response()
+
+    result = run_download_results_payload(
+        {
+            "job_id": "job-1",
+            "detail_data": {"resultUrl": "https://store.example/out.zip"},
+            "result_dir": str(tmp_path / "results"),
+            "sandbox": False,
+        },
+        session=FakeSession(),
+    )
+
+    assert result["files"] == ["(bad zip: out.zip)"]
+    assert result["log_tail"] == "(no log file found in result directory)"

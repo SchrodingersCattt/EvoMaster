@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import shutil
+import os
+import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, quote, unquote, urlparse
+from uuid import uuid4
 
 import requests
 
 from .errors import ExtractError
 from .progress import NoopProgressSink, ProgressSink, TransferProgressEvent
+from .version import PROTOCOL_VERSION, SCHEMA_VERSION
 
 
 @dataclass(frozen=True)
@@ -315,3 +320,328 @@ def extract_zip_safe(archive: str | Path, extract_dir: str | Path) -> list[str]:
                 shutil.copyfileobj(src, dst)
             files.append(member.filename)
     return files
+
+
+_SANDBOX_OBJECT_DOWNLOAD_LIMIT = 128
+
+
+def _required_str(payload: dict[str, Any], key: str) -> str:
+    value = str(payload.get(key) or "").strip()
+    if not value:
+        raise ValueError(f"missing required payload field: {key}")
+    return value
+
+
+def read_log(result_dir: str | Path, *, max_chars: int = 4000) -> str:
+    root = Path(result_dir)
+    for name in ("log", "STDOUTERR"):
+        file_path = root / name
+        if file_path.exists():
+            size = file_path.stat().st_size
+            with open(file_path, "rb") as fh:
+                if size > max_chars * 4:
+                    fh.seek(-(max_chars * 4), os.SEEK_END)
+                raw = fh.read()
+            return raw.decode("utf-8", errors="replace")[-max_chars:]
+    return "(no log file found in result directory)"
+
+
+def publish_result_dir(staging: str | Path, result_dir: str | Path) -> None:
+    staging_path = Path(staging)
+    result_path = Path(result_dir)
+    lockdir = result_path.with_name(result_path.name + ".lock")
+    backup = result_path.with_name(result_path.name + f".bak.{uuid4().hex}")
+    lock_acquired = False
+    try:
+        lockdir.mkdir()
+        lock_acquired = True
+        if result_path.exists():
+            result_path.rename(backup)
+        staging_path.replace(result_path)
+        if backup.exists():
+            shutil.rmtree(backup, ignore_errors=True)
+    except Exception:
+        if backup.exists() and not result_path.exists():
+            backup.rename(result_path)
+        raise
+    finally:
+        if lock_acquired:
+            shutil.rmtree(lockdir, ignore_errors=True)
+
+
+def _parse_sandbox_result_url(result_url: str) -> tuple[str, str, str, str]:
+    parsed = urlparse(result_url)
+    host = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+    token = parse_qs(parsed.query).get("token", [""])[0].strip()
+    object_path = unquote(parsed.path.removeprefix("/api/download/")).strip("/")
+    if not host or not token or not object_path:
+        raise ValueError("invalid sandbox resultUrl")
+    prefix = object_path.rsplit("/", 1)[0] + "/" if "/" in object_path else ""
+    return host, token, object_path, prefix
+
+
+def _iterate_objects(
+    host: str,
+    token: str,
+    prefix: str,
+    *,
+    session=None,
+) -> list[dict[str, Any]]:
+    http = session or requests.Session()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    objects: list[dict[str, Any]] = []
+    next_token = ""
+    while True:
+        payload: dict[str, Any] = {"prefix": prefix}
+        if next_token:
+            payload["nextToken"] = next_token
+        response = http.post(
+            f"{host.rstrip('/')}/api/iterate",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+        body = response.json() or {}
+        if body.get("code") not in (None, 0):
+            raise ValueError(f"sandbox iterate failed: {body}")
+        data = body.get("data") or {}
+        objects.extend(data.get("objects") or [])
+        if not data.get("hasNext"):
+            break
+        next_token = str(data.get("nextToken") or "").strip()
+        if not next_token:
+            break
+    return objects
+
+
+def _download_object_url(host: str, token: str, object_path: str) -> str:
+    encoded_path = quote(object_path, safe="/")
+    return (
+        f"{host.rstrip('/')}/api/download/{encoded_path}?token={token}"
+        "&Response-Content-Type=application/octet-stream"
+    )
+
+
+def _download_object(
+    host: str,
+    token: str,
+    object_path: str,
+    dest_path: Path,
+    *,
+    session=None,
+) -> DownloadSummary:
+    return download_file(
+        _download_object_url(host, token, object_path),
+        dest_path,
+        session=session,
+    )
+
+
+def _merge_log_file(files: list[str], log_downloaded: bool) -> list[str]:
+    if not log_downloaded or "log" in files:
+        return files
+    return ["log", *files]
+
+
+def _sandbox_relative_object_path(object_path: str, root_prefix: str) -> str:
+    path = object_path.strip()
+    if root_prefix and path.startswith(root_prefix):
+        path = path[len(root_prefix) :]
+    return path.lstrip("/")
+
+
+def _extract_result_zip(zip_path: Path, staging: Path) -> list[str]:
+    try:
+        return extract_zip_safe(zip_path, staging)
+    except zipfile.BadZipFile:
+        return [f"(bad zip: {zip_path.name})"]
+
+
+def _download_sandbox_log(
+    *,
+    payload: dict[str, Any],
+    staging: Path,
+    root_host: str,
+    root_token: str,
+    objects: list[dict[str, Any]],
+    session=None,
+) -> tuple[bool, int]:
+    log_file = payload.get("sandbox_log_file")
+    if isinstance(log_file, dict):
+        host = str(log_file.get("host") or "").strip()
+        path = str(log_file.get("path") or "").strip()
+        token = str(log_file.get("token") or "").strip()
+        if host and path and token:
+            try:
+                summary = _download_object(host, token, path, staging / "log", session=session)
+                return True, summary.bytes_done
+            except Exception:
+                pass
+    if root_host and root_token:
+        for obj in objects:
+            object_path = str(obj.get("path") or obj.get("key") or "").strip()
+            if object_path and Path(object_path).name == "log":
+                summary = _download_object(
+                    root_host,
+                    root_token,
+                    object_path,
+                    staging / "log",
+                    session=session,
+                )
+                return True, summary.bytes_done
+    return False, 0
+
+
+def _download_sandbox_results(
+    *,
+    payload: dict[str, Any],
+    staging: Path,
+    session=None,
+) -> tuple[list[str], str, int]:
+    job_id = _required_str(payload, "job_id")
+    detail_data = payload.get("detail_data") or {}
+    if not isinstance(detail_data, dict):
+        raise ValueError("detail_data must be a JSON object")
+    result_url = str(detail_data.get("resultUrl") or detail_data.get("result") or "")
+    objects: list[dict[str, Any]] = []
+    root_host = ""
+    root_token = ""
+    root_prefix = ""
+    bytes_transferred = 0
+
+    if result_url:
+        try:
+            root_host, root_token, _object_path, root_prefix = (
+                _parse_sandbox_result_url(result_url)
+            )
+            objects = _iterate_objects(root_host, root_token, root_prefix, session=session)
+        except Exception:
+            objects = []
+
+    log_downloaded, log_bytes = _download_sandbox_log(
+        payload=payload,
+        staging=staging,
+        root_host=root_host,
+        root_token=root_token,
+        objects=objects,
+        session=session,
+    )
+    bytes_transferred += log_bytes
+
+    zip_key = choose_sandbox_zip_object(job_id, objects)
+    if zip_key and root_host and root_token:
+        try:
+            zip_path = staging / Path(zip_key).name
+            summary = _download_object(root_host, root_token, zip_key, zip_path, session=session)
+            bytes_transferred += summary.bytes_done
+            files = _extract_result_zip(zip_path, staging)
+            return _merge_log_file(files, log_downloaded), read_log(staging), bytes_transferred
+        except Exception:
+            pass
+
+    if result_url:
+        try:
+            zip_path = staging / "out.zip"
+            summary = download_file(result_url, zip_path, session=session)
+            bytes_transferred += summary.bytes_done
+            files = _extract_result_zip(zip_path, staging)
+            return _merge_log_file(files, log_downloaded), read_log(staging), bytes_transferred
+        except Exception:
+            pass
+
+    if objects and root_host and root_token:
+        downloaded: list[str] = []
+        count = 0
+        for obj in objects:
+            if count >= _SANDBOX_OBJECT_DOWNLOAD_LIMIT:
+                break
+            if not isinstance(obj, dict) or obj.get("isDir"):
+                continue
+            object_path = str(obj.get("path") or obj.get("key") or "").strip()
+            if not object_path:
+                continue
+            relative_path = _sandbox_relative_object_path(object_path, root_prefix)
+            if not relative_path or relative_path.endswith(".zip"):
+                continue
+            summary = _download_object(
+                root_host,
+                root_token,
+                object_path,
+                staging / relative_path,
+                session=session,
+            )
+            bytes_transferred += summary.bytes_done
+            downloaded.append(relative_path)
+            count += 1
+        downloaded = _merge_log_file(downloaded, log_downloaded)
+        if downloaded:
+            return downloaded, read_log(staging), bytes_transferred
+
+    if log_downloaded:
+        return ["log"], read_log(staging), bytes_transferred
+    if result_url:
+        return [], "(sandbox resultUrl download failed)", bytes_transferred
+    return [], "(no resultUrl in job detail)", bytes_transferred
+
+
+def _download_standard_results(
+    *,
+    detail_data: dict[str, Any],
+    staging: Path,
+    session=None,
+) -> tuple[list[str], str, int]:
+    result_url = str(detail_data.get("resultUrl") or detail_data.get("result") or "")
+    if not result_url:
+        out_files = (detail_data.get("jobFiles") or {}).get("outFiles") or []
+        if out_files and isinstance(out_files[0], dict):
+            result_url = str(out_files[0].get("url") or "")
+    if not result_url:
+        return [], "(no resultUrl in job detail)", 0
+    zip_path = staging / "out.zip"
+    summary = download_file(result_url, zip_path, session=session)
+    files = _extract_result_zip(zip_path, staging)
+    return files, read_log(staging), summary.bytes_done
+
+
+def run_download_results_payload(
+    payload: dict[str, Any],
+    *,
+    session=None,
+) -> dict[str, Any]:
+    started = time.monotonic()
+    result_dir = Path(_required_str(payload, "result_dir"))
+    staging = result_dir.with_name(result_dir.name + f".tmp.{uuid4().hex}")
+    detail_data = payload.get("detail_data") or {}
+    if not isinstance(detail_data, dict):
+        raise ValueError("detail_data must be a JSON object")
+    try:
+        staging.mkdir(parents=True, exist_ok=False)
+        if bool(payload.get("sandbox")):
+            files, log_tail, bytes_transferred = _download_sandbox_results(
+                payload=payload,
+                staging=staging,
+                session=session,
+            )
+        else:
+            files, log_tail, bytes_transferred = _download_standard_results(
+                detail_data=detail_data,
+                staging=staging,
+                session=session,
+            )
+        publish_result_dir(staging, result_dir)
+    except Exception:
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
+        raise
+    elapsed = max(time.monotonic() - started, 0.001)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "protocol_version": PROTOCOL_VERSION,
+        "ok": True,
+        "result_dir": str(result_dir),
+        "files": files,
+        "log_tail": log_tail,
+        "bytes_transferred": bytes_transferred,
+        "transfer_rate_mbps": round(bytes_transferred * 8 / elapsed / 1_000_000, 3),
+    }

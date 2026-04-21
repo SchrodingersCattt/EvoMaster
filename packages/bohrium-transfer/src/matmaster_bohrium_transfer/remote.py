@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .archive import create_zip_store
 from .client import StoreHostClient
+from .download import run_download_results_payload
 from .manifest import ManifestStore
 from .multipart import upload_file_multipart
 from .security import redact_secrets
@@ -56,6 +57,10 @@ def _upload_submit(payload: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _download_results(payload: dict[str, object]) -> dict[str, object]:
+    return run_download_results_payload(payload)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="matmaster-bohrium-transfer")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -64,6 +69,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     version_parser.add_argument("--json", action="store_true", dest="as_json")
     upload_parser = subparsers.add_parser("upload-submit")
     upload_parser.add_argument("--payload-file", required=True)
+    download_parser = subparsers.add_parser("download-results")
+    download_parser.add_argument("--payload-file", required=True)
 
     args = parser.parse_args(list(argv) if argv is not None else None)
     if args.command == "version":
@@ -87,6 +94,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "protocol_version": PROTOCOL_VERSION,
                     "ok": False,
                     "stage": "upload_submit",
+                    "retryable": False,
+                    "safe_message": redact_secrets(str(exc)),
+                    "resume_available": False,
+                }
+            )
+            return 1
+    if args.command == "download-results":
+        try:
+            _print_json(_download_results(_load_payload(args.payload_file)))
+            return 0
+        except Exception as exc:
+            _print_json(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "protocol_version": PROTOCOL_VERSION,
+                    "ok": False,
+                    "stage": "download_results",
                     "retryable": False,
                     "safe_message": redact_secrets(str(exc)),
                     "resume_available": False,
