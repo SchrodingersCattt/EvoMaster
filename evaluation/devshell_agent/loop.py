@@ -121,7 +121,7 @@ class DevshellAgentLoop:
         session_dir = cfg.session_dir.resolve()
         return f"""## 第 {it} / {cfg.max_iterations} 轮迭代
 
-- **目标全项通过率**：{cfg.target_pass_rate}/100（与 `macro_mean_0_100` 同刻度）。`macro_mean_0_100` 为：每道题在 **k 次 repeat 的 checklist 均全过** 才算该题通过（该题计 100），否则该题计 0；再对所有题取算术平均，即 **（完全通过的题目数 ÷ 题目数）× 100**。编排器在 `macro_mean_0_100 >= {cfg.target_pass_rate}` 时结束迭代。若你认为已充分达标，也可将 `target_met` 设为 true。
+- **目标全项通过率**：{cfg.target_pass_rate}/100（与 `macro_mean_0_100` 同刻度）。`macro_mean_0_100` 为：每道题在 **k 次 repeat** 下，除可选项 **`token_budget_total`** 外 checklist **均全过** 才算该题通过（该题计 100），否则该题计 0；再对所有题取算术平均，即 **（完全通过的题目数 ÷ 题目数）× 100**。编排器在 `macro_mean_0_100 >= {cfg.target_pass_rate}` 时结束迭代。若你认为已充分达标，也可将 `target_met` 设为 true。
 - **会话目录**（本机路径，用于阅读产物）：`{session_dir}`
 
 ### 你必须完成的步骤
@@ -129,7 +129,7 @@ class DevshellAgentLoop:
 2. 检查返回结果中是否有 `p0_gate_failed: true`（P0 回归门控失败）：
    - **若 P0 回归**：不要调用 delegate_optimization 或 escalate_checklist_revision，直接跳到步骤 4 报告本轮失败。
    - **若 P0 通过或无 P0 题目**：继续步骤 3。
-3. 读取**脱敏摘要**（`macro_mean_0_100`、`task_scores`；单题 `score` 为 0/100：**该题 k 次 repeat 全部 checklist 全过** 才为 100）。除 **main_read_text / main_glob_paths / main_grep_text** 允许的 ``evaluation/devshell_agent_history/`` 整目录外，不要自行读取 `evaluation/**` 其它路径或原始 `score_reason`。若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**（优先填写 **candidate_layers** 与 **failure_buckets**、**capabilities_affected**；`candidate_layers` 用 ``skill / tool / system_prompt / runtime`` 标注你判断最像哪一层；**allowed_evidence_paths** 尽量用会话级路径如 ``eval_runs/iter_XX/raw_runs.jsonl``，避免逐题 workspace）；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
+3. 读取**脱敏摘要**（`macro_mean_0_100`、`task_scores`；单题 `score` 为 0/100：**该题 k 次 repeat 在「除 `token_budget_total` 外 checklist 全过」口径下** 才为 100）。除 **main_read_text / main_glob_paths / main_grep_text** 允许的 ``evaluation/devshell_agent_history/`` 整目录外，不要自行读取 `evaluation/**` 其它路径或原始 `score_reason`。若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**（优先填写 **candidate_layers** 与 **failure_buckets**、**capabilities_affected**；`candidate_layers` 用 ``skill / tool / system_prompt / runtime`` 标注你判断最像哪一层；**allowed_evidence_paths** 尽量用会话级路径如 ``eval_runs/iter_XX/raw_runs.jsonl``，避免逐题 workspace）；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
 4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实 `macro_mean_0_100`（完全通过题占比×100，与 `target_pass_rate` 同口径）与 `files_touched`（主 Agent 自身通常为空）；在 `rationale` 中总结本轮分流、子 Agent 结果与下一步。若 P0 回归，在 rationale 中说明回归详情。
 {extra_block}
 """

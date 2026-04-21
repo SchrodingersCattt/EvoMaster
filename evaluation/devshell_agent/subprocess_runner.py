@@ -169,34 +169,27 @@ def run_score_devshell_tasks(
     parallel_checklist_workers: int | None = None,
     submit: bool,
 ) -> tuple[int, str, str]:
-    """Run ``score_devshell_tasks.py`` for ``run_dir`` (optionally ``--submit``)."""
-    runner = DevshellEvalSubprocess(repo_root)
-    script = (
-        repo_root / "evaluation" / "scripts" / "devshell" / "score_devshell_tasks.py"
+    """Run devshell scoring in-process (agent loop: ``token_budget_total`` optional)."""
+    from evaluation.scripts.devshell.score_devshell_tasks import (
+        score_devshell_tasks_for_agent_loop,
     )
+
+    _ = repo_root  # retained for callers; scoring uses repo layout via imports
     sj = max(1, int(score_jobs))
     pc = (
         max(1, int(parallel_checklist_workers))
         if parallel_checklist_workers is not None
         else max(1, sj * 2)
     )
-    cmd: list[str] = [
-        *DevshellEvalSubprocess.python_prefix(),
-        str(script),
-        "--run-dir",
-        str(run_dir),
-        "--score-jobs",
-        str(sj),
-        "--parallel-checklist-workers",
-        str(pc),
-        "--eval-ingest-timeout",
-        str(eval_ingest_timeout),
-    ]
-    if submit:
-        cmd.append("--submit")
-    if eval_config is not None:
-        cmd.extend(["--eval-config", str(eval_config)])
-    return runner.run_capture(cmd)
+    rc = score_devshell_tasks_for_agent_loop(
+        run_dir=run_dir,
+        eval_config=eval_config,
+        eval_ingest_timeout=eval_ingest_timeout,
+        score_jobs=sj,
+        parallel_checklist_workers=pc,
+        submit=submit,
+    )
+    return rc, "", ""
 
 
 def run_score_devshell_tasks_submit(
