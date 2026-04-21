@@ -13,10 +13,27 @@ from matmaster.tools.builtin.bohrium_tool.remote_runner import (
 
 
 class RunnerSession:
-    def __init__(self, *, helper_stdout: str, helper_exit_code: int = 0) -> None:
+    def __init__(
+        self,
+        *,
+        helper_stdout: str = "",
+        helper_exit_code: int = 0,
+        version_stdout: str | None = None,
+        command_stdout: str | None = None,
+        version_exit_code: int | None = None,
+        command_exit_code: int | None = None,
+    ) -> None:
         self.is_open = True
         self.helper_stdout = helper_stdout
         self.helper_exit_code = helper_exit_code
+        self.version_stdout = helper_stdout if version_stdout is None else version_stdout
+        self.command_stdout = helper_stdout if command_stdout is None else command_stdout
+        self.version_exit_code = (
+            helper_exit_code if version_exit_code is None else version_exit_code
+        )
+        self.command_exit_code = (
+            helper_exit_code if command_exit_code is None else command_exit_code
+        )
         self.exec_calls: list[str] = []
         self.writes: list[tuple[str, str]] = []
 
@@ -41,6 +58,20 @@ class RunnerSession:
                 "stderr": "",
                 "exit_code": 0,
                 "output": "/tmp/matmaster_bohrium_transfer.ABCD12\n",
+            }
+        if "matmaster_bohrium_transfer.remote version --json" in command:
+            return {
+                "stdout": self.version_stdout,
+                "stderr": "",
+                "exit_code": self.version_exit_code,
+                "output": self.version_stdout,
+            }
+        if "-m matmaster_bohrium_transfer.remote" in command:
+            return {
+                "stdout": self.command_stdout,
+                "stderr": "",
+                "exit_code": self.command_exit_code,
+                "output": self.command_stdout,
             }
         if "remote_transfer_helper.py" in command:
             return {
@@ -152,3 +183,40 @@ def test_run_remote_helper_rejects_ok_false_with_redacted_error() -> None:
     message = str(exc_info.value)
     assert "secret-token" not in message
     assert "token=<redacted>" in message
+
+
+def test_remote_version_probe_uses_preinstalled_package() -> None:
+    session = RunnerSession(
+        helper_stdout=json.dumps(
+            {
+                "schema_version": "v1",
+                "protocol_version": "1.0",
+                "ok": True,
+                "package": "matmaster-bohrium-transfer",
+                "capabilities": ["multipart_upload", "zip_stored"],
+            }
+        )
+    )
+
+    from matmaster.tools.builtin.bohrium_tool.remote_runner import (
+        probe_remote_transfer,
+    )
+
+    payload = probe_remote_transfer(session)
+
+    assert payload["ok"] is True
+    assert any(
+        "python3 -m matmaster_bohrium_transfer.remote version --json" in cmd
+        for cmd in session.exec_calls
+    )
+
+
+def test_remote_version_probe_rejects_non_json() -> None:
+    session = RunnerSession(helper_stdout="not json", helper_exit_code=1)
+
+    from matmaster.tools.builtin.bohrium_tool.remote_runner import (
+        probe_remote_transfer,
+    )
+
+    with pytest.raises(BohriumTransferError, match="remote transfer version probe"):
+        probe_remote_transfer(session)
