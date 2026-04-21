@@ -64,6 +64,10 @@ BohriumTool
       -> RemoteResultDownloader
 ```
 
+`Transfer Orchestrator` names the strategy branch inside
+`BohriumTool._submit()` and `BohriumTool._download()`. It does not require a
+separate orchestration class unless the implementation becomes clearer that way.
+
 The local implementations wrap the current Worker-side behavior. The remote
 implementations call a Python helper on the active Bohrium SSH session.
 
@@ -87,7 +91,7 @@ the remote helper version matches the Worker code version for that run.
 
 ## Submit Flow
 
-The new submit flow should be:
+The new submit flow is:
 
 ```text
 BohriumTool._submit
@@ -131,13 +135,14 @@ remote /share input_dir
   -> Worker calls job/add
 ```
 
-The helper payload should be written to a remote JSON file, not embedded in the
+The helper payload must be written to a remote JSON file, not embedded in the
 shell command line.
 
 Example payload:
 
 ```json
 {
+  "schema_version": "v1",
   "input_dir": "/share/case/input",
   "store_host": "https://store.example.com",
   "store_path": "sandbox/jobs/run-1/",
@@ -150,6 +155,7 @@ Example success output:
 
 ```json
 {
+  "schema_version": "v1",
   "ok": true,
   "oss_key": "sandbox/jobs/run-1/input.zip"
 }
@@ -157,14 +163,38 @@ Example success output:
 
 The helper must not print the upload token or a token-bearing `download_url`.
 For sandbox mode, the Worker already has `store_host`, `store_path`, and
-`token` from `job/create`, so it should construct `UploadedArchive.download_url`
-locally after the remote helper reports the uploaded `oss_key`.
+`token` from `job/create`, so it constructs `UploadedArchive.download_url`
+locally after the remote helper reports the uploaded `oss_key`. The URL format
+must match `matmaster.bohrium.upload._build_download_url()` so the sandbox
+`job/add` payload is unchanged from the local upload path.
 
 The Worker must not call `job/add` if the remote upload fails.
 
+### Created-But-Not-Added Jobs
+
+Remote direct upload requires `job/create` before upload. If the upload fails,
+the Worker must not call `job/add`, so Bohrium may retain a created-but-not-added
+record.
+
+The initial implementation accepts this as a known residual control-plane
+record, because the current codebase does not expose a generic API for deleting
+or cancelling a create-only job record. `terminate_job()` is sandbox-only and is
+documented as a kill request for submitted jobs; this design does not assume it
+is safe for create-only cleanup.
+
+Required behavior on remote upload failure:
+
+- Do not call `job/add`.
+- Include a non-sensitive `created_job_ref` in logs and, when useful, the tool
+  error payload. For sandbox this is `create_data.jobId`; for non-sandbox use
+  any create response identifier present in `create_data`.
+- Make the user-visible error clear that the compute job was not submitted.
+- If a verified create-cleanup endpoint is added later, the Worker may attempt
+  best-effort cleanup, but cleanup failure must not mask the upload failure.
+
 ## Download Flow
 
-The new download flow should be:
+The new download flow is:
 
 ```text
 BohriumTool._download
@@ -200,36 +230,44 @@ Bohrium result storage
   -> remote helper downloads to remote staging directory
   -> remote helper extracts results
   -> remote helper reads files and log_tail
-  -> remote helper atomically publishes staging to result_dir
+  -> remote helper publishes staging to result_dir under a per-target lock
   -> Worker returns remote result_dir, files, and log_tail
 ```
 
-The final remote `result_dir` should contain the extracted files directly, not
+The final remote `result_dir` must contain the extracted files directly, not
 only a zip archive.
 
 Example payload:
 
 ```json
 {
+  "schema_version": "v1",
   "job_id": "job-123",
   "result_dir": "/share/case/results/job-123",
+  "sandbox": true,
   "detail_data": {
     "status": 2,
     "resultUrl": "https://store.example.com/api/download/prefix/job-123.zip?token=result-token"
   },
-  "ctx": {
-    "sandbox": true,
-    "base_url": "https://openapi.test.dp.tech",
-    "access_key": "ak",
-    "project_id": 42
+  "sandbox_log_file": {
+    "host": "https://store.example.com",
+    "path": "prefix/log",
+    "token": "short-lived-log-token"
   }
 }
 ```
+
+`sandbox_log_file` is optional. When sandbox log download needs
+`get_file_token()`, the Worker must call that OpenAPI endpoint locally and pass
+only the resulting short-lived storage token data to the helper. The remote
+helper must not receive the long-lived Bohrium `access_key` and must not call
+Bohrium OpenAPI endpoints that require `accessKey`.
 
 Example success output:
 
 ```json
 {
+  "schema_version": "v1",
   "ok": true,
   "result_dir": "/share/case/results/job-123",
   "files": ["log", "OUT.ABACUS/running_scf.log"],
@@ -239,45 +277,62 @@ Example success output:
 
 ## Remote Helper Deployment
 
-For every remote submit or download operation, the Worker should:
+For every remote submit or download operation, the Worker must:
 
-1. Create a remote temp directory such as
-   `/tmp/matmaster_bohrium_transfer_<uuid>`.
-2. Write `helper.py` to that directory.
-3. Write `payload.json` to that directory.
-4. Execute:
+1. Probe the remote Python binary. The default is `python3`; deployments may
+   override it with `BOHRIUM_REMOTE_HELPER_PYTHON` if a module/conda environment
+   requires another executable.
+2. Create a remote temp directory with `mktemp -d`, using a template such as
+   `/tmp/matmaster_bohrium_transfer.XXXXXX`, then `chmod 700` that directory.
+3. Pre-create `payload.json` with mode `600`, then write the JSON payload.
+4. Write `helper.py` to that directory.
+5. Execute:
 
 ```text
-python3 /tmp/matmaster_bohrium_transfer_<uuid>/helper.py <subcommand> --payload-file /tmp/matmaster_bohrium_transfer_<uuid>/payload.json
+<python-binary> /tmp/matmaster_bohrium_transfer.<suffix>/helper.py <subcommand> --payload-file /tmp/matmaster_bohrium_transfer.<suffix>/payload.json
 ```
 
-5. Parse the helper's JSON output.
-6. Remove the remote temp directory in a cleanup step.
+6. Parse the helper's JSON output.
+7. Remove the remote temp directory in a cleanup step.
 
 This avoids putting tokens in the command line and avoids relying on persistent
 helper files under `/share`.
 
+The helper must best-effort unlink `payload.json` immediately after reading the
+file contents, before schema validation or transfer work. This gives a second
+cleanup path if the Worker process crashes before the remote runner cleanup
+step.
+
+After loading the payload, the helper must validate `schema_version` before any
+filesystem, network, or Bohrium SDK transfer action.
+
 ## Remote Result Publishing
 
-Remote download should use staging and replacement to avoid publishing partial
-results.
+Remote download uses a per-target lock plus staging and replacement to
+avoid concurrent writers and reduce partial-result visibility. This is not a
+true atomic directory replacement for concurrent readers; callers must not
+read the same `result_dir` while a download to that directory is in progress.
 
 Suggested directory strategy:
 
 ```text
 staging = result_dir + ".tmp.<uuid>"
 backup  = result_dir + ".bak.<uuid>"
+lockdir = result_dir + ".lock"
 ```
 
 Algorithm:
 
-1. Download and extract into `staging`.
-2. If `result_dir` does not exist, move `staging` to `result_dir`.
-3. If `result_dir` exists, move `result_dir` to `backup`, then move `staging` to
+1. Acquire `lockdir` using atomic `mkdir`. If it already exists, fail with a
+   clear concurrent-download error.
+2. Download and extract into `staging`.
+3. If `result_dir` does not exist, move `staging` to `result_dir`.
+4. If `result_dir` exists, move `result_dir` to `backup`, then move `staging` to
    `result_dir`, then remove `backup`.
-4. If replacement fails after `backup` was created, best-effort restore
+5. If replacement fails after `backup` was created, best-effort restore
    `backup` to `result_dir`.
-5. On failure, best-effort remove `staging`.
+6. On failure, best-effort remove `staging`.
+7. Always best-effort remove `lockdir` in a finally block.
 
 After a successful remote download, `result_dir` must contain the new extracted
 result files.
@@ -296,9 +351,10 @@ Rules:
 - A helper nonzero exit code is an error.
 - A helper `ok=false` JSON result is an error.
 - A helper stdout that cannot be parsed as JSON is an error.
+- A helper payload or output `schema_version` mismatch is an error.
 - Cleanup failure is logged as a warning and must not hide the original failure.
 
-The helper should emit structured failures with enough context to distinguish:
+The helper must emit structured failures with enough context to distinguish:
 
 - missing remote `bohrium-sdk`
 - `storeHost` network failure
@@ -306,6 +362,8 @@ The helper should emit structured failures with enough context to distinguish:
 - result URL download failure
 - zip extraction failure
 - result directory publish failure
+- concurrent result directory download
+- disk full or insufficient remote temp space
 
 ## Security
 
@@ -316,9 +374,15 @@ Required behavior:
 - Do not pass access keys or transfer tokens as command-line arguments.
 - Do not print access keys or transfer tokens to helper stdout/stderr.
 - Do not log raw access keys or tokens in Worker logs.
-- Store remote payload files under a temp directory with restrictive
-  permissions where practical.
+- Do not write long-lived Bohrium `access_key` into remote payloads. The Worker
+  performs OpenAPI calls that require `accessKey` locally and passes only
+  short-lived storage URLs or storage tokens to the remote helper.
+- Create the remote temp directory with mode `700`.
+- Create the remote `payload.json` with mode `600` before writing sensitive
+  content to it, and re-apply `chmod 600` after writing.
 - Delete remote temp payloads in cleanup.
+- Have the helper best-effort unlink `payload.json` after loading it into
+  memory, before schema validation or transfer work.
 - Redact token-like query parameters in error messages.
 
 The remote node is already part of the user's execution environment, so the
@@ -331,17 +395,32 @@ stderr, and leftover temp files.
 Update `Dockerfile.remote` to install `bohrium-sdk>=0.15.0`, matching the Worker
 dependency in `pyproject.toml`.
 
-The remote helper should check for:
+The remote helper must check for:
 
 - `bohrium.resources.tiefblue.Tiefblue`
 - `requests`
 
-If either dependency is missing, the helper should fail with a clear diagnostic.
+If either dependency is missing, the helper must fail with a clear diagnostic.
+The remote runner must record the resolved Python binary and
+`python --version` output as non-sensitive diagnostics.
+
+## Large Transfers
+
+The first implementation does not require resumable remote uploads or resumable
+remote downloads. If a multi-GB transfer is interrupted, the operation fails and
+the next attempt restarts from the beginning. Any multipart behavior provided by
+the Bohrium SDK may be used internally, but the MatMaster helper does not add a
+separate resume layer.
+
+The remote helper must perform best-effort disk-space checks before creating
+large zip files or extracting large downloads. These checks are advisory:
+`ENOSPC` and related filesystem errors must still be caught and classified as
+disk-space failures.
 
 ## Testing And Verification
 
 There is no stable real Bohrium environment available for normal CI. Testing
-should therefore focus on local unit tests that verify orchestration decisions,
+therefore focuses on local unit tests that verify orchestration decisions,
 failure semantics, and the helper protocol.
 
 Required local tests:
@@ -369,23 +448,28 @@ Required local tests:
 4. Remote runner protocol:
    - helper and payload are written to a remote temp directory
    - payload is passed through `payload.json`, not command-line JSON
+   - `payload.json` is created with mode `600`
+   - remote temp directory is created with mode `700`
    - JSON output is parsed
    - non-JSON output, `ok=false`, and nonzero exit code become clear errors
+   - `schema_version` mismatch becomes a clear error
    - cleanup is attempted
 
 5. Helper file-system behavior:
    - directory zip preserves relative paths
+   - non-ASCII file names survive zip/extract round trips
    - zip extraction works into staging
    - `log_tail` reading and truncation work
    - result directory replacement uses staging and backup
+   - concurrent same-`result_dir` lock contention fails clearly
    - token redaction works
 
 Non-required tests:
 
-- No CI test should create a real Bohrium node.
-- No CI test should upload to a real `storeHost`.
-- No CI test should download real Bohrium job artifacts.
-- Real network smoke tests should be manual or optional scripts only.
+- CI tests must not create a real Bohrium node.
+- CI tests must not upload to a real `storeHost`.
+- CI tests must not download real Bohrium job artifacts.
+- Real network smoke tests remain manual or optional scripts only.
 
 Suggested manual smoke after deployment:
 
@@ -399,17 +483,21 @@ Suggested manual smoke after deployment:
 
 ## Observability
 
-Worker logs and tool metadata should include non-sensitive transfer diagnostics:
+Worker logs and tool metadata must include non-sensitive transfer diagnostics:
 
 - `submit_transfer_mode=local|remote`
 - `download_transfer_mode=local|remote`
 - `remote_helper_elapsed_seconds`
 - `remote_helper_exit_code`
+- `remote_python_version`
+- `bytes_transferred` when available
+- `transfer_rate_mbps` when available
+- `remote_helper_temp_dir` for failure diagnostics only
 - `job_id`
 - `store_host` without token
 
 These diagnostics replace the old silent fallback behavior. If the remote
-environment cannot reach `storeHost`, or lacks `bohrium-sdk`, the user should
+environment cannot reach `storeHost`, or lacks `bohrium-sdk`, the user must
 see an explicit failure instead of a hidden Worker-mediated transfer.
 
 ## Risks
@@ -421,7 +509,7 @@ see an explicit failure instead of a hidden Worker-mediated transfer.
    - The helper fails with a clear dependency diagnostic.
 
 3. Sandbox result download logic is complex.
-   - The helper should preserve current behavior as closely as practical:
+   - The helper must preserve current behavior as closely as practical:
      result URL zip, object iteration, log token download, zip fallback, and
      individual object fallback.
 
@@ -437,17 +525,29 @@ see an explicit failure instead of a hidden Worker-mediated transfer.
    - This design does not change relative path handling. Remote direct transfer
      requires explicit `/share/...` or `/personal/...` paths.
 
+7. Created-but-not-added Bohrium records after upload failure.
+   - The compute job is not submitted because `job/add` is not called. The
+     create response identifier must be surfaced for operator debugging.
+
+8. Concurrent download to the same `result_dir`.
+   - A per-target lock prevents concurrent writers. Concurrent readers of the
+     same target during replacement are not supported.
+
 ## Acceptance Criteria
 
 - Remote submit no longer downloads input zips from the remote node to the
   Worker.
 - Remote submit uploads `input.zip` from the remote node to Bohrium `storeHost`.
 - Remote submit failure does not call `job/add`.
+- Remote submit failure after `job/create` reports the create response
+  identifier without claiming a compute job was submitted.
 - Remote download no longer downloads artifacts to the Worker before publishing
   to `/share`.
 - Remote download writes extracted result files directly under the requested
   remote `result_dir`.
 - Remote download failure does not return a Worker-local staging path.
+- Remote download payloads do not contain long-lived Bohrium `access_key`.
+- Remote helper payloads and outputs include and validate `schema_version`.
 - Local submit/download behavior remains equivalent to current behavior.
 - Public tool response fields remain compatible for successful submit/download
   and failed job artifact retrieval.
