@@ -33,6 +33,8 @@ RUN pip install --no-cache-dir \
     "matminer==0.10.0" \
     "pint>=0.24"
 
+# 默认留空：本地可用 docker build --build-arg 传入。remote-image 流水线由 ci/remote_transfer_prepare.py
+# 构建 wheel 上传 OSS 后，生成 Dockerfile.remote.ci 并替换下面两行中的 URL/SHA 再提交 Bohrium API。
 ARG MATMASTER_BOHRIUM_TRANSFER_URL=""
 ARG MATMASTER_BOHRIUM_TRANSFER_SHA256=""
 
