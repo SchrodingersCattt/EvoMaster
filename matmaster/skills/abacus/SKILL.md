@@ -56,6 +56,8 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 
 ## Bohrium Submission Defaults
 
+This section is the **single source of truth** for ABACUS `image` / `machine` / `cmd` on Bohrium. Other skills (for example `matmaster/skills/playground-skills/input-manual-helper`) refer here instead of copying the values.
+
 Keep the previous default profile unless task/environment explicitly overrides it.
 
 | Item | Default |
@@ -79,4 +81,5 @@ Reference-first policy:
 - Multi-species STRU examples: `references/stru_multispecies.md`
 - Electric field and dipole notes: `references/electric_field.md`
 - Troubleshooting: `references/troubleshooting.md`
-- Output parameter guide: `references/output_params.md`
+- Output parameter guide (files, grep patterns): `references/output_params.md`
+- Parsed results and plots after the run: `matmaster/skills/playground-skills/result-analysis` (`parse_abacus.py`, etc.)
