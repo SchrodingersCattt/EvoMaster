@@ -36,12 +36,14 @@
 
 ## 目标
 
-- 去掉 builtin Bohrium submit/download 数据面对 `bohrium-sdk` 的依赖。
+- 最终状态去掉 builtin Bohrium submit/download 数据面对 `bohrium-sdk` 的依赖。
+  分阶段交付期间允许 legacy path 暂时保留，直到 Phase D 移除。
 - 支持 5GB 到 100GB 级别的材料计算输入和结果传输。
 - 上传和下载都必须流式处理，内存占用不能随文件大小线性增长。
 - 上传支持可配置并发 multipart，默认保守参数：
   - `part_size = 64MB`
   - `upload_concurrency = 4`
+  - `download_concurrency = 4` when HTTP Range is supported
   - `part_retries = 3`
 - 支持同一会话内的 manifest 恢复。Worker 重启后，只要 session
   workspace 或远端 manifest 仍存在，就可尽量继续传输。
@@ -69,6 +71,9 @@
 不覆盖 MCP calculation path adaptor、产品侧 OSS 上传、workspace 归档或
 response figures。
 
+`matmaster/tools/builtin/bohrium_tool/paths.py` 与 `models.py` 保留在主项目。
+它们属于控制面的路径解析与 tool 参数建模，不进入独立 transfer package。
+
 ### 协议层
 
 第一版直接按当前 `Tiefblue` 行为重写 storeHost HTTP 客户端，不等待正式
@@ -95,6 +100,39 @@ submit 默认仍生成 `input.zip`，以保持当前 Bohrium 自动解包路径�
 - 避免对 5GB 到 100GB 的大文件目录做高 CPU 成本 deflate 压缩。
 - 单一稳定归档文件适合 multipart checkpoint，part offset 稳定。
 - `tar` / `tar.gz` 支持情况需要真实 Bohrium 环境验证后再考虑切换默认值。
+
+空 `input_dir` 语义保持现状：允许生成合法的空 `input.zip` 并提交。该行为
+用于兼容已有测试与调用方，不在第一版中改为 reject。
+
+### Archive Fingerprint
+
+目录 fingerprint 不对整个 `input.zip` 做全量 SHA-256。100GB 级归档每次
+resume 都全量读 archive 会把恢复成本推高到不可接受。
+
+submit 输入目录 fingerprint 使用便宜的结构摘要：
+
+```text
+sha256(
+  json.dumps(
+    sorted([
+      {
+        "rel_path": rel_path_posix,
+        "size": file_size,
+        "mtime_ns": file_mtime_ns,
+        "mode": file_mode & 0o777,
+        "kind": "file" | "symlink"
+      },
+      ...
+    ]),
+    separators=(",", ":")
+  )
+)
+```
+
+该 fingerprint 用于识别输入目录是否被替换、增删或修改。archive 文件本身
+仅校验 `archive_size`、`archive_mtime_ns`、`archive_format`、
+`archive_compression` 与 `source_fingerprint`。严格内容 SHA-256 可作为
+以后可选的慢校验模式，但不是 v1 默认行为。
 
 ### 远端安装与调用
 
@@ -195,6 +233,63 @@ matmaster_bohrium_transfer
     capabilities
 ```
 
+## Version 与 Capability 契约
+
+独立包暴露四类版本或能力信息，它们各自负责不同边界：
+
+- `package_version`：Python package 版本，用于发布追踪和日志排查。
+- `protocol_version`：Worker 与远端 CLI 的交互协议版本，使用
+  `major.minor`。相同 major 下 minor 只能做向后兼容的字段新增；major
+  变化视为不兼容。
+- `schema_version`：manifest 与 payload 的数据结构版本。读取旧 schema
+  时必须显式迁移或拒绝，不能静默忽略未知关键字段。
+- `capabilities`：远端实际支持的能力列表。Worker 不只看版本号，还必须检查
+  当前操作需要的 capability。
+
+v1 capabilities 至少包括：
+
+```text
+multipart_upload
+upload_concurrency
+manifest_resume
+range_resume
+range_download_concurrency
+sandbox_iterate
+zip_stored
+secure_payload_file
+redacted_errors
+```
+
+Worker 远端执行前必须检查：
+
+- `protocol_version` major 与 Worker 兼容。
+- 所需 capabilities 均存在。
+- `package_version` 与 `git_commit` 进入日志和错误上下文，但默认不要求与
+  Worker commit 完全相同。
+
+## 远端运行环境契约
+
+远端镜像必须提供可执行 Python runtime 与已安装的
+`matmaster_bohrium_transfer` package。
+
+Python binary discovery：
+
+- 优先读取 Worker 配置或环境变量 `BOHRIUM_TRANSFER_REMOTE_PYTHON`。
+- 未配置时默认使用 `python3`。
+- 远端 Python 版本要求 `>=3.11`。
+
+远端 verify 命令：
+
+```bash
+<python> -m matmaster_bohrium_transfer.remote version --json
+```
+
+该命令必须返回 JSON，包含 `ok`、`package_version`、`protocol_version`、
+`schema_version`、`git_commit`、`capabilities`、`python_version`。
+
+远端 entrypoint 使用 `python -m matmaster_bohrium_transfer.remote`，不依赖
+console_scripts 是否进入 PATH。
+
 ## Submit 数据流
 
 ### 本地输入目录
@@ -220,6 +315,34 @@ BohriumTool._submit
 
 `job/add` 只在上传成功后调用。
 
+### 上传 retry 与退避
+
+`part_retries = 3` 是每个 part 的最大尝试次数，不是整个 upload 的总次数。
+
+可重试错误：
+
+- HTTP 429。
+- HTTP 5xx。
+- connection reset、timeout、temporary DNS failure 等网络瞬断。
+
+不可重试错误：
+
+- HTTP 400、401、403、404，除非明确被分类为 token refresh 可恢复。
+- manifest schema 不兼容。
+- source fingerprint 不匹配。
+
+退避策略：
+
+```text
+sleep = min(base_delay * 2 ** (attempt - 1), max_delay) + jitter
+base_delay = 1s
+max_delay = 30s
+jitter = random 0-1s
+```
+
+当同一时间多个 part 失败且状态码为 429 或 5xx 时，上传器需要做全局退避，
+避免 `upload_concurrency * part_retries` 同时压向 storeHost。
+
 ### 远端输入目录
 
 ```text
@@ -228,7 +351,7 @@ BohriumTool._submit
   -> resolve_input_source(remote /share/... or /personal/...)
   -> create_job(ctx, job_name)
   -> remote version probe
-  -> write payload.json to remote temp path with chmod 600
+  -> secure-write payload.json to remote temp path with mode 0600
   -> ssh/session exec:
        python -m matmaster_bohrium_transfer.remote upload-submit --payload-file ...
   -> remote package creates ZIP_STORED input.zip in session transfer workspace
@@ -250,6 +373,33 @@ CLI 的非敏感 JSON stdout。
 - 不暴露 token、access key、带 token 的 download URL。
 - create-only job 记录可能留在 Bohrium 侧，这是第一版接受的控制面残留。
 
+### Token TTL 与 create-only job 风险
+
+manifest 允许保存 token 是为了支持同会话恢复，但 v1 不假设 storeHost 一定
+支持在同一个 multipart `initial_key` 上无损切换新 token。
+
+manifest 必须记录：
+
+- `token_obtained_at`
+- `token_expires_at` when known
+- `token_ttl_seconds` when known
+- `estimated_upload_seconds` when available
+
+实现需要通过真实 storeHost contract test 或配置确认 token TTL。若 token TTL
+已知且预计上传时间超过 TTL，默认应在上传前失败并给出可操作错误，而不是开始
+一个大概率会过期的 100GB 上传。若 token TTL 未知，summary 与日志中必须标记
+`token_ttl_unknown=true`，并且只承诺 token 有效期内的 manifest resume。
+
+token 过期后的恢复策略：
+
+- 如果 storeHost 允许同一 `initial_key` 使用新 token 继续上传，传输组件可以
+  保留 part 状态并刷新 token。
+- 如果不允许，manifest 必须标记为不可恢复，Worker 重新 `job/create` 并从头
+  上传。
+
+该限制必须写入 user-visible safe error，避免让用户误以为所有跨小时失败都能
+无损续传。
+
 ## Download 数据流
 
 ```text
@@ -266,8 +416,9 @@ BohriumTool._download
 ```text
 detail_data / resultUrl / sandbox objects
   -> transfer.download.probe_range()
-  -> stream to out.zip.part
-  -> resume from byte offset when Range is supported
+  -> split into byte ranges when Range is supported
+  -> download ranges concurrently into .part file
+  -> resume completed ranges from manifest
   -> atomic rename to complete archive
   -> extract to staging dir
   -> atomic publish to result_dir
@@ -279,11 +430,11 @@ detail_data / resultUrl / sandbox objects
 ```text
 Worker fetches job detail and sandbox log token when needed
   -> remote version probe
-  -> write payload.json to remote temp path with chmod 600
+  -> secure-write payload.json to remote temp path with mode 0600
   -> ssh/session exec:
        python -m matmaster_bohrium_transfer.remote download-results --payload-file ...
   -> remote package downloads directly from resultUrl/storeHost
-  -> Range resume when supported
+  -> Range resume and concurrent range download when supported
   -> extract to remote staging dir
   -> atomic publish to /share/... result_dir
   -> remote CLI returns non-sensitive JSON summary
@@ -300,15 +451,46 @@ Worker fetches job detail and sandbox log token when needed
 支持 Range 时：
 
 - 写入 `.part` 文件。
+- 将目标对象拆为 range parts，默认 `download_concurrency = 4`。
+- manifest 复用 `parts` 结构记录 download part 的 offset、size、状态。
 - manifest 记录 URL 指纹、目标路径、已下载字节数、总大小、ETag、
   Last-Modified 等可用信息。
-- 重试时从已下载 byte offset 继续。
+- 重试时跳过已完成 range parts，继续未完成 range parts。
+- part 写入必须使用 offset-aware writes，避免多个线程互相覆盖。
 
 不支持 Range 时：
 
 - 仍然流式下载，不整体进内存。
 - manifest 记录 `resume_supported=false`。
 - 失败后只能从头下载。
+
+如果响应缺少 `Content-Length`，或使用 chunked encoding 导致总大小未知：
+
+- `resume_supported=false`。
+- 进度事件中的 `bytes_total=null`。
+- 下载仍然流式执行，但不能宣称支持 resume。
+
+### Sandbox 下载 fallback 链
+
+新的 transfer package 必须保留当前 `matmaster/bohrium/artifacts.py` 的 sandbox
+下载语义，不能退化为只下载单一 `resultUrl`。
+
+sandbox result download 顺序：
+
+1. 解析 `resultUrl`，通过 `/api/iterate` 列出 root prefix 下对象。
+2. 独立尝试 sandbox log token：
+   - Worker 调 `/openapi/v1/sandbox/job/file/token` 获取 `log` token。
+   - 远端 download payload 只携带该文件的临时 token，不携带长期 access key。
+3. 优先选择文件名为 `{job_id}.zip` 的 zip 对象。
+4. 若不存在 `{job_id}.zip`，选择任意非 `task.zip` 的 zip 对象。
+5. 若仍不存在，选择任意 zip 对象。
+6. 若可用 zip 下载或解压失败，尝试直接把 `resultUrl` 当 zip 下载。
+7. 若 zip 路径都失败，退化为 iterate + 单对象下载，保留当前
+   `_SANDBOX_OBJECT_DOWNLOAD_LIMIT = 128` 语义，跳过目录对象和 zip 对象。
+8. 如果只成功拿到 log，也返回 `files=["log"]` 与 log tail。
+
+该 fallback 链是兼容性要求。任何重构都必须有主项目集成测试覆盖这些分支，
+防止 sandbox 任务结果下载回归。
 
 ## Manifest 与恢复
 
@@ -338,10 +520,16 @@ manifest 记录：
 - `object_key`
 - `token`
 - `initial_key`
+- `token_obtained_at`
+- `token_expires_at`
+- `token_ttl_seconds`
 - `part_size`
 - `concurrency`
 - `file_size`
 - `file_mtime_ns`
+- `source_fingerprint`
+- `archive_size`
+- `archive_mtime_ns`
 - `archive_format`
 - `archive_compression`
 - `parts`
@@ -371,12 +559,30 @@ Worker 需要重新 `job/create` 并从头上传。
 下载恢复时，如果 URL 指纹、`Content-Length`、ETag 或 Last-Modified
 不匹配，废弃 `.part` 与 manifest，从头下载。
 
+### Manifest 清理与 GC
+
+manifest 与 `.part` 文件不能无限期留在 `/share/.matmaster/transfers`。
+
+清理规则：
+
+- 传输成功后，删除 payload 文件、临时 lock、无用 `.part` 文件。
+- 成功的 upload manifest 可保留一个短窗口用于审计和 retry summary，默认
+  不超过 24 小时；若实现不需要保留，应成功后立即删除。
+- 失败的 manifest 默认保留 7 天，用于同会话恢复和排查。
+- 每次启动 transfer 操作前，transfer package 对当前 manifest root 执行轻量
+  GC，删除 mtime 超过 7 天且没有 lock 的失败或临时目录。
+- GC 不删除正在持有 lock 的目录。
+- GC 行为必须记录脱敏日志。
+
 ## 安全
 
 - manifest 目录尽量使用 `0700`。
 - manifest 文件必须使用 `0600`。
 - payload 文件必须使用 `0600`。
 - payload 文件读取后尽量删除。
+- payload 与 manifest 写入必须原子创建。实现应使用
+  `os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)` 或等价机制，
+  不能依赖先写入再 `chmod 600` 的事后修正。
 - token、access key、带 token 的 URL 可存在于 manifest 和 payload，但不能进入：
   - 普通日志
   - tool result
@@ -386,6 +592,17 @@ Worker 需要重新 `job/create` 并从头上传。
 - 远端 CLI stdout 只输出非敏感 JSON summary。
 - 若 remote CLI 返回失败，返回 `safe_message`、`stage`、`retryable`、
   `resume_available` 等字段，不返回敏感 payload。
+
+`redact_secrets()` 的契约：
+
+- redact query string 中的 `token`、`access_key`、`accessKey`。
+- redact `Authorization` header 与 `Bearer ...`。
+- redact JSON object 中 key 名匹配 `token`、`access_key`、`accessKey`、
+  `authorization` 的 value。
+- redact URL path segment 中明显的 token-like 长随机串，至少覆盖长度超过
+  24 且只包含 URL-safe token 字符的 segment。
+- redaction 应用于 exception message、HTTP response body、remote stdout/stderr
+  解析失败文本、manifest validation error。
 
 ## 错误处理
 
@@ -423,6 +640,8 @@ RemoteVersionError
 
 ```json
 {
+  "schema_version": "v1",
+  "protocol_version": "1.0",
   "ok": false,
   "stage": "part_upload",
   "retryable": true,
@@ -431,6 +650,19 @@ RemoteVersionError
   "resume_available": true
 }
 ```
+
+### Remote CLI exit code 协议
+
+Worker 必须区分远端进程的三种结果，不能只按 exit code 简化处理：
+
+| exit code | stdout | 含义 | Worker 行为 |
+|-----------|--------|------|-------------|
+| `0` | JSON `ok=true` | 操作成功 | 解析 summary，继续控制面流程 |
+| non-zero | JSON `ok=false` | 业务失败或可分类传输失败 | 使用 `stage`、`retryable`、`safe_message` 生成 tool error |
+| non-zero | 非 JSON 或空 | 进程崩溃、OOM、Python import error、被 kill | 生成 `RemoteExecutionError`，附脱敏 stdout/stderr 摘要 |
+
+如果 exit code 为 `0` 但 JSON 缺失、不是 object、`schema_version` 或
+`protocol_version` 不兼容，Worker 必须按协议错误处理，不能视为成功。
 
 ## 进度扩展
 
@@ -472,6 +704,18 @@ transfer_failed
 - `location`
 - `package_version`
 - `protocol_version`
+
+事件发射必须限频：
+
+- `upload_part_completed` 按 part 完成发射；默认 part size 为 64MB。
+- `download_chunk_completed` 不能按底层 `iter_content()` 的小 chunk 逐个发射。
+- 下载进度事件默认按以下任一条件聚合：
+  - 累计字节变化达到 32MB。
+  - 距离上次发射至少 1 秒且有进度变化。
+  - 一个 range part 完成。
+- 当未来实现并发 Range 下载时，推荐将用户可见事件命名为
+  `download_part_completed`，`download_chunk_completed` 仅作为内部事件或
+  聚合后事件。
 
 后续接入 SSE/Redis 进度基础设施时，只需新增对应 `ProgressSink` 实现，
 不改变传输核心。
@@ -522,6 +766,114 @@ editable install 安装。
 `Dockerfile.remote` 移除 `bohrium-sdk>=0.15.0`。远端运行时只需要 Python
 标准库与 `requests`。
 
+### 发布自动化与 rollback
+
+bundle 发布不能依赖手工复制 wheel URL。实施计划需要包含 CI 或脚本化步骤：
+
+```text
+build wheel
+  -> calculate sha256
+  -> upload to OSS
+  -> emit build args:
+       MATMASTER_BOHRIUM_TRANSFER_URL
+       MATMASTER_BOHRIUM_TRANSFER_SHA256
+  -> Dockerfile.remote consumes build args
+```
+
+协议应尽量稳定，`protocol_version` 在 v1 发布后的一个稳定窗口内避免频繁
+major bump。需要破坏性变更时，先让 Worker 支持新旧两个 protocol major，
+再滚动远端镜像。
+
+rollback 策略：
+
+- 在 Phase A 到 Phase C 保留 legacy transfer feature flag：
+  `BOHRIUM_TRANSFER_USE_LEGACY=1`。
+- legacy path 仍可走现有 `bohrium-sdk` / helper 逻辑，用于新包或远端镜像
+  出问题时快速回退。
+- Phase D 才移除 `bohrium-sdk` 依赖。移除后该 flag 失效，回滚需要回退镜像
+  或代码版本。
+- 每个 phase 必须能独立发布和回退到上一 phase。
+
+## 分阶段交付
+
+这份设计描述最终状态，但实施不能一次性合并。建议拆成至少四个 phase。
+
+### Phase A: 包提取与安装链路
+
+目标：建立独立 `packages/bohrium-transfer`、wheel 构建、OSS 安装和远端
+entrypoint，但功能尽量等价于当前实现。
+
+范围：
+
+- 将现有 `upload.py`、`artifacts.py`、`remote_transfer_helper.py` 的数据面
+  逻辑搬到独立 package，允许暂时继续依赖 `bohrium-sdk`。
+- 构建 wheel/sdist 与 sha256。
+- `Dockerfile.remote` 从 OSS 或本地 wheel 安装该 package。
+- Worker 可通过远端 entrypoint 执行 `version --json`。
+
+验收：
+
+- 不改变 submit/download 行为。
+- 远端 package 安装链路可用。
+- legacy feature flag 可回退到现有路径。
+
+### Phase B: 移除运行时源码复制
+
+目标：远端只调用预装 package，不再使用 `_helper_source()` 复制源码。
+
+范围：
+
+- `remote_runner.py` 改为调用
+  `python -m matmaster_bohrium_transfer.remote ...`。
+- 实现版本探测、capability 检查、exit code 三态处理。
+- 缺失或不兼容时给出可操作错误。
+
+验收：
+
+- 远端 submit/download 不再写 helper 源码。
+- 旧远端镜像失败信息清晰。
+- legacy feature flag 可回退。
+
+### Phase C: 重写上传数据面
+
+目标：实现 SDK-free multipart upload、并发、manifest、part retry 和
+`ZIP_STORED input.zip`。
+
+范围：
+
+- 自研 storeHost multipart client。
+- 上传 manifest 与 token 安全。
+- retry/backoff。
+- archive fingerprint。
+- 本地与远端 submit 走新 upload path。
+
+验收：
+
+- 本地与远端 submit 不再调用 `Tiefblue` 上传。
+- 上传不会整体读入大文件。
+- 同会话内 token 有效期内可 resume 已完成 parts。
+- 上传失败不调用 `job/add`。
+- legacy feature flag 可回退。
+
+### Phase D: 重写下载数据面并移除 bohrium-sdk
+
+目标：实现 SDK-free download、Range resume、并发 Range、sandbox fallback
+链路，并从依赖中移除 `bohrium-sdk`。
+
+范围：
+
+- Range probe 与并发 Range download。
+- `.part` manifest resume。
+- 完整保留 sandbox zip/log/iterate fallback 链。
+- 从 `pyproject.toml` 与 `Dockerfile.remote` 移除 `bohrium-sdk`。
+
+验收：
+
+- sandbox 与非 sandbox download 保持现有兼容性。
+- Range 支持时可并发续传。
+- Range 不支持或缺少 `Content-Length` 时明确退化。
+- `bohrium-sdk` 不再是运行依赖。
+
 ## 主项目改动范围
 
 预期改动文件或目录：
@@ -563,6 +915,9 @@ AGENTS.md 需要更新新的约定：
 - `X-Storage-Param` base64 JSON 正确。
 - `Authorization: Bearer <token>` 正确。
 - HTTP 4xx/5xx 分类为 typed errors。
+- 真正的 storeHost contract test 跑通 small file 的 init、part upload、
+  complete、download、iterate。该测试可以是手动或受环境变量保护的可选测试，
+  但 Phase C 合并前必须至少在真实环境执行并记录结果。
 
 `multipart.py`：
 
@@ -589,9 +944,14 @@ AGENTS.md 需要更新新的约定：
 `download.py`：
 
 - Range 支持时从 `.part` 续传。
+- Range 支持时并发下载不超过 `download_concurrency`。
 - Range 不支持时明确退化。
+- 缺少 `Content-Length` 时 `resume_supported=false` 且 `bytes_total=null`。
 - 解压到 staging 后原子发布。
 - zip slip 被阻止。
+- sandbox fallback 链完整保留：
+  `{job_id}.zip` -> 非 `task.zip` zip -> 任意 zip -> `resultUrl` zip ->
+  iterate 单对象 -> log-only。
 
 ### Remote CLI 测试
 
@@ -605,6 +965,8 @@ AGENTS.md 需要更新新的约定：
 
 - builtin `Bohrium submit` 本地路径调用独立包，不再 import `bohrium-sdk`。
 - 远端路径调用版本探测和 remote CLI，不再复制 helper 源码。
+- `paths.py` / `models.py` 仍留在主项目，transfer package 不接管 tool path
+  resolution。
 - 上传失败不调用 `job/add`。
 - 成功后 `job/add` payload 保持当前兼容语义。
 - download 本地和远端路径返回现有 public fields，并增加 transfer summary。
@@ -623,11 +985,15 @@ AGENTS.md 需要更新新的约定：
 - `bohrium-sdk` 不再是主项目或远端镜像的运行依赖。
 - builtin Bohrium 本地 submit 能上传 `ZIP_STORED input.zip` 并成功 `job/add`。
 - builtin Bohrium 远端 submit 不经 Worker 中转大文件。
-- 上传不会整体读入 100MB 以上文件。
+- 上传和下载内存占用有明确上界，不能整体读入大文件。若实现使用流式 request
+  body，峰值应接近 `concurrency * io_buffer_size + overhead`；若实现暂时
+  缓冲完整 part，峰值上界必须不超过 `concurrency * part_size + overhead`，
+  并在测试中显式验证。
 - multipart 上传支持并发和 part 级 retry。
-- 同会话重试能基于 manifest 跳过已完成上传 part。
-- download 支持 Range 时可以从 `.part` 续传。
+- 同会话、token 有效期内重试能基于 manifest 跳过已完成上传 part。
+- download 支持 Range 时可以从 `.part` 续传并支持并发 range parts。
 - Range 不支持时明确记录 `resume_supported=false`。
+- sandbox download fallback 链不回归。
 - token 不出现在普通日志、remote stdout、tool result。
 - 远端 package 缺失或版本不兼容时给出可操作错误。
 - 后续 SSE/Redis 进度接入可以通过新增 `ProgressSink` 完成。
