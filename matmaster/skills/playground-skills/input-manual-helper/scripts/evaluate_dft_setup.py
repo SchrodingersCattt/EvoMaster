@@ -39,14 +39,21 @@ import re
 import sys
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Category evaluators
 # ---------------------------------------------------------------------------
 
+
 class EvalCategory:
-    def __init__(self, name: str, status: str = "skip", score: int = 0,
-                 max_score: int = 1, issues: list = None, recommendations: list = None):
+    def __init__(
+        self,
+        name: str,
+        status: str = "skip",
+        score: int = 0,
+        max_score: int = 1,
+        issues: list = None,
+        recommendations: list = None,
+    ):
         self.name = name
         self.status = status  # "pass", "fail", "warn", "skip"
         self.score = score
@@ -77,7 +84,7 @@ def _parse_params(text: str) -> dict[str, str]:
         # Remove inline comments
         for comment_char in ("#", "!", "//"):
             if comment_char in stripped:
-                stripped = stripped[:stripped.index(comment_char)].strip()
+                stripped = stripped[: stripped.index(comment_char)].strip()
         if not stripped:
             continue
         # Skip section headers
@@ -122,6 +129,7 @@ def _get_int(params: dict, key: str) -> int | None:
 # ABACUS evaluation
 # ---------------------------------------------------------------------------
 
+
 def evaluate_abacus(workspace: Path) -> list[EvalCategory]:
     """Evaluate ABACUS workspace against best practices."""
     categories = []
@@ -130,8 +138,11 @@ def evaluate_abacus(workspace: Path) -> list[EvalCategory]:
     input_files = sorted(workspace.glob("INPUT*"))
     input_files = [f for f in input_files if f.suffix not in (".bak", ".fixed")]
     if not input_files:
-        categories.append(EvalCategory("file_integrity", "fail", 0, 1,
-                                       ["No INPUT file found in workspace"]))
+        categories.append(
+            EvalCategory(
+                "file_integrity", "fail", 0, 1, ["No INPUT file found in workspace"]
+            )
+        )
         return categories
 
     # Use primary INPUT
@@ -156,11 +167,15 @@ def evaluate_abacus(workspace: Path) -> list[EvalCategory]:
         cat.score = 1
         cat.status = "warn"
         cat.issues.append(f"ecutwfc={ecutwfc} Ry is below recommended 100 Ry standard")
-        cat.recommendations.append("Use ecutwfc=100 unless task explicitly requires different")
+        cat.recommendations.append(
+            "Use ecutwfc=100 unless task explicitly requires different"
+        )
     else:
         cat.score = 0
         cat.status = "fail"
-        cat.issues.append(f"ecutwfc={ecutwfc} Ry is too low for production calculations")
+        cat.issues.append(
+            f"ecutwfc={ecutwfc} Ry is too low for production calculations"
+        )
     if basis_type == "lcao" and "orbital_dir" not in params:
         cat.issues.append("basis_type=lcao but orbital_dir not set")
     categories.append(cat)
@@ -227,7 +242,9 @@ def evaluate_abacus(workspace: Path) -> list[EvalCategory]:
             cat.score = 1
             cat.status = "pass"
         else:
-            cat.issues.append(f"smearing_sigma={smearing_sigma} is large (recommend ≤0.015 Ry)")
+            cat.issues.append(
+                f"smearing_sigma={smearing_sigma} is large (recommend ≤0.015 Ry)"
+            )
             cat.status = "warn"
     elif not smearing_method:
         cat.issues.append("smearing_method not specified")
@@ -248,7 +265,9 @@ def evaluate_abacus(workspace: Path) -> list[EvalCategory]:
             if cal_stress == 1:
                 cat.score += 1
             else:
-                cat.issues.append("CRITICAL: cal_stress not set to 1 — cell not optimized")
+                cat.issues.append(
+                    "CRITICAL: cal_stress not set to 1 — cell not optimized"
+                )
                 cat.status = "fail"
         force_thr_ev = _get_float(params, "force_thr_ev")
         if force_thr_ev is not None:
@@ -278,7 +297,9 @@ def evaluate_abacus(workspace: Path) -> list[EvalCategory]:
             cat.score += 1
         else:
             cat.issues.append("nbands not set — may miss empty states")
-        cat.status = "pass" if cat.score == 3 else ("warn" if cat.score >= 2 else "fail")
+        cat.status = (
+            "pass" if cat.score == 3 else ("warn" if cat.score >= 2 else "fail")
+        )
         categories.append(cat)
 
     # 7. File reference integrity
@@ -307,7 +328,9 @@ def evaluate_abacus(workspace: Path) -> list[EvalCategory]:
         if efield_flag == 1:
             cat.score += 1
         else:
-            cat.issues.append("out_pot=2 without efield_flag=1 — missing dipole correction")
+            cat.issues.append(
+                "out_pot=2 without efield_flag=1 — missing dipole correction"
+            )
         if dip_cor_flag == 1:
             cat.score += 1
         else:
@@ -317,8 +340,12 @@ def evaluate_abacus(workspace: Path) -> list[EvalCategory]:
             cat.score += 1
         else:
             cat.issues.append("efield_dir not set — defaulting to z (2)")
-            cat.recommendations.append("Set efield_dir to vacuum direction (0=x, 1=y, 2=z)")
-        cat.status = "pass" if cat.score == 3 else ("warn" if cat.score >= 2 else "fail")
+            cat.recommendations.append(
+                "Set efield_dir to vacuum direction (0=x, 1=y, 2=z)"
+            )
+        cat.status = (
+            "pass" if cat.score == 3 else ("warn" if cat.score >= 2 else "fail")
+        )
         categories.append(cat)
 
     # 9. Mixing parameters
@@ -348,12 +375,16 @@ def evaluate_abacus(workspace: Path) -> list[EvalCategory]:
             if not stripped or stripped.startswith("#"):
                 continue
             if "//" in stripped:
-                stripped = stripped[:stripped.index("//")].strip()
+                stripped = stripped[: stripped.index("//")].strip()
             if re.match(r"^ATOMIC_SPECIES\s*$", stripped, re.IGNORECASE):
                 in_species = True
                 continue
             if in_species:
-                if re.match(r"^(NUMERICAL_ORBITAL|LATTICE|ATOMIC_POSITIONS)", stripped, re.IGNORECASE):
+                if re.match(
+                    r"^(NUMERICAL_ORBITAL|LATTICE|ATOMIC_POSITIONS)",
+                    stripped,
+                    re.IGNORECASE,
+                ):
                     break
                 parts = stripped.split()
                 if len(parts) >= 2:
@@ -364,7 +395,8 @@ def evaluate_abacus(workspace: Path) -> list[EvalCategory]:
                 cat.status = "pass"
             else:
                 cat.issues.append(
-                    f"ntype={ntype} in INPUT but STRU has {len(species)} species: {species}")
+                    f"ntype={ntype} in INPUT but STRU has {len(species)} species: {species}"
+                )
                 cat.status = "fail"
         categories.append(cat)
 
@@ -375,14 +407,16 @@ def evaluate_abacus(workspace: Path) -> list[EvalCategory]:
 # VASP evaluation (basic INCAR review)
 # ---------------------------------------------------------------------------
 
+
 def evaluate_vasp(workspace: Path) -> list[EvalCategory]:
     """Basic evaluation of VASP INCAR against best practices."""
     categories = []
 
     incar_path = workspace / "INCAR"
     if not incar_path.exists():
-        categories.append(EvalCategory("file_integrity", "fail", 0, 1,
-                                       ["No INCAR file found"]))
+        categories.append(
+            EvalCategory("file_integrity", "fail", 0, 1, ["No INCAR file found"])
+        )
         return categories
 
     text = incar_path.read_text(encoding="utf-8", errors="replace")
@@ -411,7 +445,8 @@ def evaluate_vasp(workspace: Path) -> list[EvalCategory]:
     else:
         cat.issues.append("No KPOINTS file found")
         cat.recommendations.append(
-            "Generate with: python generate_kpoints.py --structure POSCAR --mode auto")
+            "Generate with: python generate_kpoints.py --structure POSCAR --mode auto"
+        )
         cat.status = "fail"
     categories.append(cat)
 
@@ -437,7 +472,9 @@ def evaluate_vasp(workspace: Path) -> list[EvalCategory]:
         cat.score = 1
         cat.status = "pass"
         if ismear == -5 and sigma and sigma > 0.05:
-            cat.issues.append("ISMEAR=-5 (tetrahedron) doesn't use SIGMA, but SIGMA is set large")
+            cat.issues.append(
+                "ISMEAR=-5 (tetrahedron) doesn't use SIGMA, but SIGMA is set large"
+            )
     else:
         cat.status = "warn"
         cat.issues.append("ISMEAR not set — VASP default may not be optimal")
@@ -468,7 +505,9 @@ def evaluate_vasp(workspace: Path) -> list[EvalCategory]:
             cat.score += 1
         else:
             cat.issues.append("EDIFFG not set — using default convergence criterion")
-        cat.status = "pass" if cat.score == 2 else ("warn" if cat.score >= 1 else "fail")
+        cat.status = (
+            "pass" if cat.score == 2 else ("warn" if cat.score >= 1 else "fail")
+        )
         categories.append(cat)
 
     return categories
@@ -477,6 +516,7 @@ def evaluate_vasp(workspace: Path) -> list[EvalCategory]:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(
@@ -568,11 +608,20 @@ def main() -> None:
             # Provide actionable fix suggestions
             all_issues = [i for c in categories for i in c.issues if c.status == "fail"]
             if any("dipole" in i.lower() or "efield" in i.lower() for i in all_issues):
-                print("\n  💡 For slab/workfunction: use render_abacus_workflow.py --workflow workfunction")
-            if any("cal_force" in i.lower() or "cal_stress" in i.lower() for i in all_issues):
-                print("\n  💡 For relaxation: use render_abacus_workflow.py --workflow relax")
+                print(
+                    "\n  💡 For slab/workfunction: use render_abacus_workflow.py --workflow workfunction"
+                )
+            if any(
+                "cal_force" in i.lower() or "cal_stress" in i.lower()
+                for i in all_issues
+            ):
+                print(
+                    "\n  💡 For relaxation: use render_abacus_workflow.py --workflow relax"
+                )
             if any("kpoints" in i.lower() or "kpt" in i.lower() for i in all_issues):
-                print("\n  💡 Generate KPOINTS: python generate_kpoints.py --structure POSCAR --mode auto")
+                print(
+                    "\n  💡 Generate KPOINTS: python generate_kpoints.py --structure POSCAR --mode auto"
+                )
         else:
             print(f"\n{'─'*60}")
             print("  ✅ Setup looks good for submission.")
@@ -582,12 +631,27 @@ def main() -> None:
         print(f"\n{'─'*50}", file=sys.stderr)
         print("📋 Related tools:", file=sys.stderr)
         if args.software == "abacus":
-            print("  • workspace_review.py --dir . --software abacus  → Combined review (files+params+grade)", file=sys.stderr)
-            print("  • format_bp_report.py --dir . --software abacus  → Markdown evaluation report", file=sys.stderr)
-            print("  • preflight_abacus.py --dir . --fix  → Auto-fix INPUT errors", file=sys.stderr)
+            print(
+                "  • workspace_review.py --dir . --software abacus  → Combined review (files+params+grade)",
+                file=sys.stderr,
+            )
+            print(
+                "  • format_bp_report.py --dir . --software abacus  → Markdown evaluation report",
+                file=sys.stderr,
+            )
+            print(
+                "  • preflight_abacus.py --dir . --fix  → Auto-fix INPUT errors",
+                file=sys.stderr,
+            )
         else:
-            print("  • workspace_review.py --dir . --software vasp  → Combined review", file=sys.stderr)
-            print("  • generate_kpoints.py --structure POSCAR --mode auto  → KPOINTS generation", file=sys.stderr)
+            print(
+                "  • workspace_review.py --dir . --software vasp  → Combined review",
+                file=sys.stderr,
+            )
+            print(
+                "  • generate_kpoints.py --structure POSCAR --mode auto  → KPOINTS generation",
+                file=sys.stderr,
+            )
         print(f"{'─'*50}", file=sys.stderr)
 
     sys.exit(1 if n_fail > 0 else 0)

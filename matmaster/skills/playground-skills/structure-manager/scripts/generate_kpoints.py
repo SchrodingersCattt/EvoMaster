@@ -119,7 +119,7 @@ def generate_line_mode(structure, npoints: int = 40) -> str:
     path = kpath.kpath["path"]
     kpts = kpath.kpath["kpoints"]
 
-    lines = [f"k-points along high-symmetry path (pymatgen HighSymmKpath)"]
+    lines = ["k-points along high-symmetry path (pymatgen HighSymmKpath)"]
     # Count line segments
     n_segments = sum(len(seg) - 1 for seg in path)
     lines.append(f"{n_segments * npoints}")
@@ -148,7 +148,9 @@ def generate_line_mode(structure, npoints: int = 40) -> str:
     return "\n".join(lines) + "\n"
 
 
-def format_mesh_kpoints(mesh: list[int], comment: str, shift: list[float] | None = None) -> str:
+def format_mesh_kpoints(
+    mesh: list[int], comment: str, shift: list[float] | None = None
+) -> str:
     """Format a uniform mesh KPOINTS file."""
     if shift is None:
         shift = [0, 0, 0]
@@ -220,7 +222,11 @@ def main() -> None:
     # Load structure
     struct_path = Path(args.structure)
     if not struct_path.exists():
-        print(json.dumps({"success": False, "error": f"Structure file not found: {struct_path}"}))
+        print(
+            json.dumps(
+                {"success": False, "error": f"Structure file not found: {struct_path}"}
+            )
+        )
         sys.exit(1)
 
     try:
@@ -245,11 +251,22 @@ def main() -> None:
             result["type"] = "line-mode"
             result["npoints_per_segment"] = args.npoints
         except Exception as e:
-            print(json.dumps({"success": False, "error": f"Failed to generate k-path: {e}"}))
+            print(
+                json.dumps(
+                    {"success": False, "error": f"Failed to generate k-path: {e}"}
+                )
+            )
             sys.exit(1)
     elif args.mode == "mesh":
         if args.mesh is None:
-            print(json.dumps({"success": False, "error": "--mesh N1 N2 N3 required for mode=mesh"}))
+            print(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": "--mesh N1 N2 N3 required for mode=mesh",
+                    }
+                )
+            )
             sys.exit(1)
         mesh = args.mesh
         comment = f"Explicit mesh {mesh[0]}×{mesh[1]}×{mesh[2]}"

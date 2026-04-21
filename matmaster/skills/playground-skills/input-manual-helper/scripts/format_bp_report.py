@@ -23,15 +23,14 @@ Output: Structured Markdown report that can be used directly as a task response.
 """
 
 import argparse
-import json
 import re
 import sys
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Parameter parsing (shared with evaluate_dft_setup.py)
 # ---------------------------------------------------------------------------
+
 
 def _parse_params(text: str) -> dict[str, str]:
     """Parse key-value parameter file."""
@@ -42,7 +41,7 @@ def _parse_params(text: str) -> dict[str, str]:
             continue
         for ch in ("#", "!", "//"):
             if ch in stripped:
-                stripped = stripped[:stripped.index(ch)].strip()
+                stripped = stripped[: stripped.index(ch)].strip()
         if not stripped:
             continue
         if re.match(r"^\s*INPUT_PARAMETERS\s*$", stripped, re.IGNORECASE):
@@ -86,8 +85,18 @@ def _get_int(params: dict, key: str) -> int | None:
 # ---------------------------------------------------------------------------
 
 _CATEGORIES = [
-    "basis", "kpoints", "scf", "smearing", "relaxation",
-    "workflow", "files", "slab", "mixing", "ntype", "output", "overall"
+    "basis",
+    "kpoints",
+    "scf",
+    "smearing",
+    "relaxation",
+    "workflow",
+    "files",
+    "slab",
+    "mixing",
+    "ntype",
+    "output",
+    "overall",
 ]
 
 
@@ -101,7 +110,7 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
         "rationale": "",
         "physical_justification": "",
     }
-    
+
     calc = params.get("calculation", "scf").lower()
 
     if cat == "basis":
@@ -111,7 +120,9 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
             result["status"] = "FAIL"
             result["current_value"] = "ecutwfc not set"
             result["recommended"] = "ecutwfc 100"
-            result["rationale"] = "Plane-wave/LCAO cutoff energy determines basis completeness"
+            result["rationale"] = (
+                "Plane-wave/LCAO cutoff energy determines basis completeness"
+            )
             result["physical_justification"] = (
                 "ecutwfc=100 Ry provides converged total energies for most systems. "
                 "Lower values risk unconverged charge density and inaccurate forces."
@@ -119,7 +130,9 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
         elif ecutwfc >= 100:
             result["status"] = "PASS"
             result["current_value"] = f"ecutwfc={ecutwfc} Ry, basis_type={basis_type}"
-            result["rationale"] = "Cutoff energy is at or above the recommended standard"
+            result["rationale"] = (
+                "Cutoff energy is at or above the recommended standard"
+            )
         else:
             result["status"] = "WARN"
             result["current_value"] = f"ecutwfc={ecutwfc} Ry"
@@ -157,7 +170,9 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
                     try:
                         mesh = [int(x) for x in parts[:3]]
                         if all(m > 0 for m in mesh):
-                            result["current_value"] += f" (mesh: {mesh[0]}×{mesh[1]}×{mesh[2]})"
+                            result[
+                                "current_value"
+                            ] += f" (mesh: {mesh[0]}×{mesh[1]}×{mesh[2]})"
                             break
                     except ValueError:
                         continue
@@ -181,7 +196,9 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
         result["current_value"] = f"scf_thr={scf_thr}, scf_nmax={scf_nmax}"
         if scf_thr and scf_thr <= 1e-6:
             result["status"] = "PASS"
-            result["rationale"] = "SCF convergence threshold is tight enough for production"
+            result["rationale"] = (
+                "SCF convergence threshold is tight enough for production"
+            )
         elif scf_thr and scf_thr <= 1e-5:
             result["status"] = "WARN"
             result["current_value"] = f"scf_thr={scf_thr}"
@@ -202,11 +219,15 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
             result["current_value"] = f"{method}, σ={sigma}"
             if sigma <= 0.015:
                 result["status"] = "PASS"
-                result["rationale"] = "Smearing is appropriate for ground-state properties"
+                result["rationale"] = (
+                    "Smearing is appropriate for ground-state properties"
+                )
             else:
                 result["status"] = "WARN"
                 result["recommended"] = "smearing_sigma 0.01"
-                result["rationale"] = f"σ={sigma} is large; may introduce artificial electronic temperature"
+                result["rationale"] = (
+                    f"σ={sigma} is large; may introduce artificial electronic temperature"
+                )
         elif method:
             result["current_value"] = f"method={method}, σ not set"
             result["status"] = "WARN"
@@ -226,11 +247,11 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
             result["status"] = "N/A"
             result["rationale"] = f"Not a relaxation calculation (calc={calc})"
             return result
-        
+
         cal_force = _get_int(params, "cal_force")
         cal_stress = _get_int(params, "cal_stress")
         force_thr = _get_float(params, "force_thr_ev")
-        
+
         issues = []
         if cal_force != 1:
             issues.append("cal_force not set to 1 — forces NOT computed")
@@ -238,12 +259,12 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
             issues.append("cal_stress not set to 1 — stress NOT computed")
         if not force_thr:
             issues.append("force_thr_ev not set (no convergence criterion)")
-        
+
         if not issues:
             result["status"] = "PASS"
             result["current_value"] = f"cal_force=1, force_thr_ev={force_thr}"
             if calc == "cell-relax":
-                result["current_value"] += f", cal_stress=1"
+                result["current_value"] += ", cal_stress=1"
         else:
             result["status"] = "FAIL"
             result["current_value"] = "; ".join(issues)
@@ -260,15 +281,17 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
             init_chg = params.get("init_chg", "").lower()
             symmetry = _get_int(params, "symmetry")
             nbands = _get_int(params, "nbands")
-            
+
             issues = []
             if init_chg != "file":
-                issues.append("init_chg != 'file' (will redo SCF instead of reading charge)")
+                issues.append(
+                    "init_chg != 'file' (will redo SCF instead of reading charge)"
+                )
             if symmetry != 0:
                 issues.append("symmetry != 0 (k-path points will be folded)")
             if nbands is None:
                 issues.append("nbands not set (may miss empty states)")
-            
+
             if not issues:
                 result["status"] = "PASS"
                 result["current_value"] = f"init_chg=file, symmetry=0, nbands={nbands}"
@@ -288,10 +311,10 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
         stru_ref = params.get("stru_file", "STRU")
         kpt_ref = params.get("kpoint_file", "KPT")
         kspacing = params.get("kspacing")
-        
+
         stru_ok = (workspace / stru_ref).exists()
         kpt_ok = (workspace / kpt_ref).exists() or kspacing is not None
-        
+
         if stru_ok and kpt_ok:
             result["status"] = "PASS"
             result["current_value"] = f"STRU='{stru_ref}' ✓, KPT='{kpt_ref}' ✓"
@@ -303,21 +326,25 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
                 issues.append(f"KPT file '{kpt_ref}' NOT FOUND and no kspacing")
             result["status"] = "FAIL"
             result["current_value"] = "; ".join(issues)
-        result["physical_justification"] = "All referenced files must exist for ABACUS to run."
+        result["physical_justification"] = (
+            "All referenced files must exist for ABACUS to run."
+        )
 
     elif cat == "slab":
         out_pot = _get_int(params, "out_pot")
         efield = _get_int(params, "efield_flag")
         dip_cor = _get_int(params, "dip_cor_flag")
-        
+
         if out_pot != 2 and efield != 1:
             result["status"] = "N/A"
             result["rationale"] = "Not a slab/surface calculation"
             return result
-        
+
         if efield == 1 and dip_cor == 1:
             result["status"] = "PASS"
-            result["current_value"] = "Dipole correction enabled (efield_flag=1, dip_cor_flag=1)"
+            result["current_value"] = (
+                "Dipole correction enabled (efield_flag=1, dip_cor_flag=1)"
+            )
             efield_dir = _get_int(params, "efield_dir")
             if efield_dir is not None:
                 result["current_value"] += f", efield_dir={efield_dir}"
@@ -339,7 +366,7 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
         mixing_beta = _get_float(params, "mixing_beta")
         if mixing_type.lower() == "broyden":
             result["status"] = "PASS"
-            result["current_value"] = f"broyden"
+            result["current_value"] = "broyden"
             if mixing_beta:
                 result["current_value"] += f", β={mixing_beta}"
         elif mixing_type:
@@ -367,28 +394,38 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
                 if not s or s.startswith("#"):
                     continue
                 if "//" in s:
-                    s = s[:s.index("//")].strip()
+                    s = s[: s.index("//")].strip()
                 if re.match(r"^ATOMIC_SPECIES\s*$", s, re.IGNORECASE):
                     in_sp = True
                     continue
                 if in_sp:
-                    if re.match(r"^(NUMERICAL_ORBITAL|LATTICE|ATOMIC_POSITIONS)", s, re.IGNORECASE):
+                    if re.match(
+                        r"^(NUMERICAL_ORBITAL|LATTICE|ATOMIC_POSITIONS)",
+                        s,
+                        re.IGNORECASE,
+                    ):
                         break
                     parts = s.split()
                     if len(parts) >= 2:
                         species.append(parts[0])
-            
+
             if species:
                 if ntype == len(species):
                     result["status"] = "PASS"
-                    result["current_value"] = f"ntype={ntype} matches species: {species}"
+                    result["current_value"] = (
+                        f"ntype={ntype} matches species: {species}"
+                    )
                 elif ntype is not None:
                     result["status"] = "FAIL"
-                    result["current_value"] = f"ntype={ntype} but {len(species)} species in STRU"
+                    result["current_value"] = (
+                        f"ntype={ntype} but {len(species)} species in STRU"
+                    )
                     result["recommended"] = f"ntype {len(species)}"
                 else:
                     result["status"] = "WARN"
-                    result["current_value"] = f"ntype not set; STRU has {len(species)} species"
+                    result["current_value"] = (
+                        f"ntype not set; STRU has {len(species)} species"
+                    )
                     result["recommended"] = f"ntype {len(species)}"
             else:
                 result["status"] = "WARN"
@@ -409,16 +446,20 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
         out_params = {k: v for k, v in params.items() if k.startswith("out_")}
         if out_params:
             result["status"] = "PASS"
-            result["current_value"] = ", ".join(f"{k}={v}" for k, v in out_params.items())
+            result["current_value"] = ", ".join(
+                f"{k}={v}" for k, v in out_params.items()
+            )
         else:
             result["status"] = "WARN"
             result["current_value"] = "No explicit output parameters set"
-            result["rationale"] = "Consider setting out_chg, out_band, out_dos, out_pot as needed"
+            result["rationale"] = (
+                "Consider setting out_chg, out_band, out_dos, out_pot as needed"
+            )
 
     elif cat == "overall":
         # This is computed from other categories
         result["status"] = "SKIP"  # placeholder, computed in report
-    
+
     return result
 
 
@@ -426,24 +467,31 @@ def _evaluate_category_abacus(cat: str, params: dict, workspace: Path) -> dict:
 # Report generation
 # ---------------------------------------------------------------------------
 
-def _generate_report(evaluations: list[dict], params: dict, workspace: Path, software: str) -> str:
+
+def _generate_report(
+    evaluations: list[dict], params: dict, workspace: Path, software: str
+) -> str:
     """Generate structured Markdown best-practice report."""
     calc = params.get("calculation", "scf")
-    
+
     n_pass = sum(1 for e in evaluations if e["status"] == "PASS")
     n_fail = sum(1 for e in evaluations if e["status"] == "FAIL")
     n_warn = sum(1 for e in evaluations if e["status"] == "WARN")
     n_total = sum(1 for e in evaluations if e["status"] != "N/A")
-    
+
     if n_fail == 0 and n_warn == 0:
         overall_grade = "A — Excellent"
         overall_summary = "All best practices followed. Setup is production-ready."
     elif n_fail == 0 and n_warn <= 2:
         overall_grade = "B — Good"
-        overall_summary = "Minor improvements possible but setup is acceptable for production."
+        overall_summary = (
+            "Minor improvements possible but setup is acceptable for production."
+        )
     elif n_fail == 0:
         overall_grade = "C — Acceptable"
-        overall_summary = "Several warnings; review recommendations before production runs."
+        overall_summary = (
+            "Several warnings; review recommendations before production runs."
+        )
     elif n_fail == 1:
         overall_grade = "D — Needs improvement"
         overall_summary = "One critical issue must be fixed before submission."
@@ -452,28 +500,28 @@ def _generate_report(evaluations: list[dict], params: dict, workspace: Path, sof
         overall_summary = f"{n_fail} critical issues found. Must fix before proceeding."
 
     lines = []
-    lines.append(f"# DFT Best-Practice Evaluation Report")
-    lines.append(f"")
+    lines.append("# DFT Best-Practice Evaluation Report")
+    lines.append("")
     lines.append(f"**Software**: {software.upper()}")
     lines.append(f"**Calculation type**: `{calc}`")
     lines.append(f"**Workspace**: `{workspace}`")
-    lines.append(f"")
-    lines.append(f"## Executive Summary")
-    lines.append(f"")
+    lines.append("")
+    lines.append("## Executive Summary")
+    lines.append("")
     lines.append(f"| Grade | {overall_grade} |")
     lines.append(f"|-------|{'─' * len(overall_grade)}|")
     lines.append(f"| Pass | {n_pass}/{n_total} |")
     lines.append(f"| Warnings | {n_warn} |")
     lines.append(f"| Critical | {n_fail} |")
-    lines.append(f"")
+    lines.append("")
     lines.append(f"**Assessment**: {overall_summary}")
-    lines.append(f"")
-    
+    lines.append("")
+
     # Critical issues first
     fails = [e for e in evaluations if e["status"] == "FAIL"]
     if fails:
-        lines.append(f"## ❌ Critical Issues (Must Fix)")
-        lines.append(f"")
+        lines.append("## ❌ Critical Issues (Must Fix)")
+        lines.append("")
         for e in fails:
             lines.append(f"### {e['category'].replace('_', ' ').title()}")
             lines.append(f"- **Current**: {e['current_value']}")
@@ -481,14 +529,14 @@ def _generate_report(evaluations: list[dict], params: dict, workspace: Path, sof
                 lines.append(f"- **Recommended**: `{e['recommended']}`")
             if e.get("physical_justification"):
                 lines.append(f"- **Why**: {e['physical_justification']}")
-            lines.append(f"")
+            lines.append("")
 
     # Category details
-    lines.append(f"## Detailed Evaluation")
-    lines.append(f"")
-    lines.append(f"| Category | Status | Details |")
-    lines.append(f"|----------|--------|---------|")
-    
+    lines.append("## Detailed Evaluation")
+    lines.append("")
+    lines.append("| Category | Status | Details |")
+    lines.append("|----------|--------|---------|")
+
     status_icon = {"PASS": "✅", "FAIL": "❌", "WARN": "⚠️", "N/A": "—", "SKIP": "—"}
     for e in evaluations:
         if e["status"] == "SKIP":
@@ -499,41 +547,45 @@ def _generate_report(evaluations: list[dict], params: dict, workspace: Path, sof
         if len(detail) > 60:
             detail = detail[:57] + "..."
         lines.append(f"| {e['category']} | {icon} {e['status']} | {detail} |")
-    
-    lines.append(f"")
-    
+
+    lines.append("")
+
     # Warnings section
     warns = [e for e in evaluations if e["status"] == "WARN"]
     if warns:
-        lines.append(f"## ⚠️ Recommendations")
-        lines.append(f"")
+        lines.append("## ⚠️ Recommendations")
+        lines.append("")
         for e in warns:
             lines.append(f"- **{e['category']}**: {e.get('current_value', '')}")
             if e.get("recommended"):
                 lines.append(f"  - Suggested: `{e['recommended']}`")
             if e.get("physical_justification"):
                 lines.append(f"  - Rationale: {e['physical_justification']}")
-        lines.append(f"")
+        lines.append("")
 
     # Passing categories (brief)
     passes = [e for e in evaluations if e["status"] == "PASS"]
     if passes:
-        lines.append(f"## ✅ Passing Categories")
-        lines.append(f"")
+        lines.append("## ✅ Passing Categories")
+        lines.append("")
         for e in passes:
             lines.append(f"- **{e['category']}**: {e.get('current_value', 'OK')}")
-        lines.append(f"")
+        lines.append("")
 
     # Conclusion
-    lines.append(f"## Conclusion")
-    lines.append(f"")
+    lines.append("## Conclusion")
+    lines.append("")
     if n_fail == 0:
-        lines.append(f"The calculation setup follows DFT best practices and is ready for submission.")
+        lines.append(
+            "The calculation setup follows DFT best practices and is ready for submission."
+        )
     else:
-        lines.append(f"Fix the {n_fail} critical issue(s) listed above before submitting.")
-        lines.append(f"After fixing, re-run this evaluation to verify corrections.")
-    lines.append(f"")
-    
+        lines.append(
+            f"Fix the {n_fail} critical issue(s) listed above before submitting."
+        )
+        lines.append("After fixing, re-run this evaluation to verify corrections.")
+    lines.append("")
+
     return "\n".join(lines)
 
 
@@ -541,16 +593,21 @@ def _generate_report(evaluations: list[dict], params: dict, workspace: Path, sof
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Generate structured DFT best-practice evaluation report."
     )
     ap.add_argument("--dir", required=True, help="Workspace directory.")
-    ap.add_argument("--software", required=True, choices=["abacus", "vasp"],
-                    help="DFT software.")
+    ap.add_argument(
+        "--software", required=True, choices=["abacus", "vasp"], help="DFT software."
+    )
     ap.add_argument("--output", default=None, help="Output file (default: stdout).")
-    ap.add_argument("--categories", default="all",
-                    help="Comma-separated categories to evaluate (default: all).")
+    ap.add_argument(
+        "--categories",
+        default="all",
+        help="Comma-separated categories to evaluate (default: all).",
+    )
     args = ap.parse_args()
 
     workspace = Path(args.dir)
@@ -596,7 +653,11 @@ def main() -> None:
             result = _evaluate_category_abacus(cat, params, workspace)
         else:
             # VASP: simplified evaluation
-            result = {"category": cat, "status": "SKIP", "rationale": "VASP detailed eval not yet implemented"}
+            result = {
+                "category": cat,
+                "status": "SKIP",
+                "rationale": "VASP detailed eval not yet implemented",
+            }
         evaluations.append(result)
 
     # Generate report

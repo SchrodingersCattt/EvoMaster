@@ -47,7 +47,7 @@ def _render_run_sh(steps: list[dict]) -> str:
         lines.append(f"# Step {i}: {step['label']}")
         lines.append(f"cp {step['input_file']} INPUT")
         lines.append(f"cp {step['kpt_file']} KPT")
-        lines.append("OMP_NUM_THREADS=1 mpirun -np 16 abacus > log_step{i} 2>&1".format(i=i))
+        lines.append(f"OMP_NUM_THREADS=1 mpirun -np 16 abacus > log_step{i} 2>&1")
         lines.append("")
     return "\n".join(lines) + "\n"
 
@@ -64,8 +64,10 @@ def generate_scf_band(params: dict, output_dir: Path) -> dict:
     scf_params["out_chg"] = "1"
     scf_params["kpoint_file"] = "KPT_scf"
     scf_intent = RenderIntent(
-        software="abacus", task_type="scf",
-        structure_file=None, params=scf_params,
+        software="abacus",
+        task_type="scf",
+        structure_file=None,
+        params=scf_params,
     )
     scf_files = backend.render_all(scf_intent)
 
@@ -74,8 +76,10 @@ def generate_scf_band(params: dict, output_dir: Path) -> dict:
     nscf_params["kpoint_file"] = "KPT_band"
     nscf_params.setdefault("nbands", "40")
     nscf_intent = RenderIntent(
-        software="abacus", task_type="band",
-        structure_file=None, params=nscf_params,
+        software="abacus",
+        task_type="band",
+        structure_file=None,
+        params=nscf_params,
     )
     nscf_files = backend.render_all(nscf_intent)
 
@@ -104,10 +108,20 @@ def generate_scf_band(params: dict, output_dir: Path) -> dict:
     written.append("KPT_band")
 
     # run.sh
-    run_sh = _render_run_sh([
-        {"label": "SCF (charge density)", "input_file": "INPUT_scf", "kpt_file": "KPT_scf"},
-        {"label": "NSCF (band structure)", "input_file": "INPUT_nscf", "kpt_file": "KPT_band"},
-    ])
+    run_sh = _render_run_sh(
+        [
+            {
+                "label": "SCF (charge density)",
+                "input_file": "INPUT_scf",
+                "kpt_file": "KPT_scf",
+            },
+            {
+                "label": "NSCF (band structure)",
+                "input_file": "INPUT_nscf",
+                "kpt_file": "KPT_band",
+            },
+        ]
+    )
     (output_dir / "run.sh").write_text(run_sh, encoding="utf-8")
     written.append("run.sh")
 
@@ -126,8 +140,10 @@ def generate_scf_dos(params: dict, output_dir: Path) -> dict:
     scf_params["out_chg"] = "1"
     scf_params["kpoint_file"] = "KPT_scf"
     scf_intent = RenderIntent(
-        software="abacus", task_type="scf",
-        structure_file=None, params=scf_params,
+        software="abacus",
+        task_type="scf",
+        structure_file=None,
+        params=scf_params,
     )
     scf_files = backend.render_all(scf_intent)
 
@@ -136,8 +152,10 @@ def generate_scf_dos(params: dict, output_dir: Path) -> dict:
     nscf_params["kpoint_file"] = "KPT_dos"
     nscf_params.setdefault("nbands", "40")
     nscf_intent = RenderIntent(
-        software="abacus", task_type="dos",
-        structure_file=None, params=nscf_params,
+        software="abacus",
+        task_type="dos",
+        structure_file=None,
+        params=nscf_params,
     )
     nscf_files = backend.render_all(nscf_intent)
 
@@ -159,10 +177,16 @@ def generate_scf_dos(params: dict, output_dir: Path) -> dict:
     (output_dir / "KPT_dos").write_text(dos_kpt, encoding="utf-8")
     written.append("KPT_dos")
 
-    run_sh = _render_run_sh([
-        {"label": "SCF (charge density)", "input_file": "INPUT_scf", "kpt_file": "KPT_scf"},
-        {"label": "NSCF (DOS)", "input_file": "INPUT_nscf", "kpt_file": "KPT_dos"},
-    ])
+    run_sh = _render_run_sh(
+        [
+            {
+                "label": "SCF (charge density)",
+                "input_file": "INPUT_scf",
+                "kpt_file": "KPT_scf",
+            },
+            {"label": "NSCF (DOS)", "input_file": "INPUT_nscf", "kpt_file": "KPT_dos"},
+        ]
+    )
     (output_dir / "run.sh").write_text(run_sh, encoding="utf-8")
     written.append("run.sh")
 
@@ -176,8 +200,10 @@ def generate_single_task(task: str, params: dict, output_dir: Path) -> dict:
 
     backend = AbacusBackend()
     intent = RenderIntent(
-        software="abacus", task_type=task,
-        structure_file=None, params=params,
+        software="abacus",
+        task_type=task,
+        structure_file=None,
+        params=params,
     )
     files = backend.render_all(intent)
 
@@ -189,8 +215,7 @@ def generate_single_task(task: str, params: dict, output_dir: Path) -> dict:
 
     # Single-step run.sh
     run_sh = (
-        "#!/bin/bash\nset -e\n\n"
-        "OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1\n"
+        "#!/bin/bash\nset -e\n\n" "OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1\n"
     )
     (output_dir / "run.sh").write_text(run_sh, encoding="utf-8")
     written.append("run.sh")
@@ -206,13 +231,23 @@ def main() -> None:
         "--workflow",
         required=True,
         choices=[
-            "scf_band", "scf_dos", "scf_only", "scf",
-            "relax", "cell_relax", "cell-relax",
-            "vacancy", "defect", "bsse",
-            "workfunction", "work_function",
-            "dftu", "dft+u",
+            "scf_band",
+            "scf_dos",
+            "scf_only",
+            "scf",
+            "relax",
+            "cell_relax",
+            "cell-relax",
+            "vacancy",
+            "defect",
+            "bsse",
+            "workfunction",
+            "work_function",
+            "dftu",
+            "dft+u",
             "md",
-            "spin_scf", "magnetic",
+            "spin_scf",
+            "magnetic",
         ],
         help="Workflow type to generate.",
     )
@@ -259,6 +294,7 @@ def main() -> None:
         # Count species in ATOMIC_SPECIES section
         stru_text = stru_path.read_text(encoding="utf-8", errors="replace")
         import re as _re
+
         species = []
         in_species = False
         for line in stru_text.splitlines():
@@ -266,14 +302,15 @@ def main() -> None:
             if not stripped or stripped.startswith("#"):
                 continue
             if "//" in stripped:
-                stripped = stripped[:stripped.index("//")].strip()
+                stripped = stripped[: stripped.index("//")].strip()
             if _re.match(r"^ATOMIC_SPECIES\s*$", stripped, _re.IGNORECASE):
                 in_species = True
                 continue
             if in_species:
                 if _re.match(
                     r"^(NUMERICAL_ORBITAL|LATTICE_CONSTANT|LATTICE_VECTORS|ATOMIC_POSITIONS|ABF_ORBITAL)\s*$",
-                    stripped, _re.IGNORECASE,
+                    stripped,
+                    _re.IGNORECASE,
                 ):
                     break
                 parts = stripped.split()
@@ -281,7 +318,10 @@ def main() -> None:
                     species.append(parts[0])
         if species and "ntype" not in params:
             params["ntype"] = str(len(species))
-            print(f"[render_abacus_workflow] Auto-detected ntype={len(species)} from STRU ({species})", file=sys.stderr)
+            print(
+                f"[render_abacus_workflow] Auto-detected ntype={len(species)} from STRU ({species})",
+                file=sys.stderr,
+            )
 
     output_dir = Path(args.output_dir)
     workflow = args.workflow.lower().replace("-", "_")
@@ -312,6 +352,7 @@ def main() -> None:
     # Copy user-provided STRU into output directory (overwrite placeholder)
     if stru_path and result.get("success"):
         import shutil
+
         dest_stru = output_dir / "STRU"
         shutil.copy2(stru_path, dest_stru)
         if "STRU" not in result.get("files", []):
@@ -324,9 +365,18 @@ def main() -> None:
     if result.get("success"):
         print(f"\n{'─'*50}", file=sys.stderr)
         print("Next steps:", file=sys.stderr)
-        print(f"  1. python preflight_abacus.py --dir {args.output_dir}  → Validate workspace", file=sys.stderr)
-        print(f"  2. python workspace_review.py --dir {args.output_dir} --software abacus  → Full review + grade", file=sys.stderr)
-        print(f"  3. Submit via Bohrium: action='submit', input_dir='{args.output_dir}'", file=sys.stderr)
+        print(
+            f"  1. python preflight_abacus.py --dir {args.output_dir}  → Validate workspace",
+            file=sys.stderr,
+        )
+        print(
+            f"  2. python workspace_review.py --dir {args.output_dir} --software abacus  → Full review + grade",
+            file=sys.stderr,
+        )
+        print(
+            f"  3. Submit via Bohrium: action='submit', input_dir='{args.output_dir}'",
+            file=sys.stderr,
+        )
         print(f"{'─'*50}", file=sys.stderr)
 
     if not result.get("success"):

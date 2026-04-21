@@ -101,7 +101,8 @@ def main() -> None:
         "--task",
         default="scf",
         help=(
-            "Task type (default: scf). Examples: scf, opt, md, sp, " "relax, minimize, "
+            "Task type (default: scf). Examples: scf, opt, md, sp, "
+            "relax, minimize, "
             "band, dos, cell-relax, workfunction, dftu, eos"
         ),
     )
@@ -231,14 +232,32 @@ def main() -> None:
     print("Next steps:", file=sys.stderr)
     if sw == "abacus":
         out_dir_str = args.output_dir or "."
-        print(f"  1. python diagnose_input.py --software abacus --input INPUT --fix", file=sys.stderr)
-        print(f"  2. python preflight_abacus.py --dir {out_dir_str}  → Cross-check INPUT+STRU+KPT", file=sys.stderr)
-        print(f"  3. python evaluate_dft_setup.py --software abacus --dir {out_dir_str}  → Best-practice grade", file=sys.stderr)
+        print(
+            "  1. python diagnose_input.py --software abacus --input INPUT --fix",
+            file=sys.stderr,
+        )
+        print(
+            f"  2. python preflight_abacus.py --dir {out_dir_str}  → Cross-check INPUT+STRU+KPT",
+            file=sys.stderr,
+        )
+        print(
+            f"  3. python evaluate_dft_setup.py --software abacus --dir {out_dir_str}  → Best-practice grade",
+            file=sys.stderr,
+        )
     elif sw == "vasp":
-        print(f"  1. python evaluate_dft_setup.py --software vasp --dir .  → Best-practice evaluation", file=sys.stderr)
-        print(f"  2. python generate_kpoints.py --structure POSCAR --mode auto  → KPOINTS", file=sys.stderr)
+        print(
+            "  1. python evaluate_dft_setup.py --software vasp --dir .  → Best-practice evaluation",
+            file=sys.stderr,
+        )
+        print(
+            "  2. python generate_kpoints.py --structure POSCAR --mode auto  → KPOINTS",
+            file=sys.stderr,
+        )
     else:
-        print(f"  1. python diagnose_input.py --software {sw} --input <output>  → Validate", file=sys.stderr)
+        print(
+            f"  1. python diagnose_input.py --software {sw} --input <output>  → Validate",
+            file=sys.stderr,
+        )
     print(f"{'─'*50}", file=sys.stderr)
 
 

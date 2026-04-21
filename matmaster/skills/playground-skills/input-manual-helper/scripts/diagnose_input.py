@@ -159,23 +159,90 @@ def _abacus_auto_fix(text: str, diagnostics: list) -> tuple[str, list[str]]:
     # Re-render INPUT with fixes applied
     lines = ["INPUT_PARAMETERS"]
     category_order = [
-        ["suffix", "ntype", "calculation", "esolver_type", "pseudo_dir",
-         "orbital_dir", "stru_file", "kpoint_file", "symmetry"],
-        ["ecutwfc", "basis_type", "nspin", "nbands", "dft_functional",
-         "gamma_only", "kspacing", "smearing_method", "smearing_sigma",
-         "ks_solver", "noncolin", "lspinorb", "lda_plus_u", "hubbard_u",
-         "orbital_corr", "nupdown", "vdw_method"],
-        ["scf_thr", "scf_nmax", "mixing_type", "mixing_beta", "mixing_ndim",
-         "mixing_gg0", "init_chg"],
-        ["cal_force", "cal_stress", "force_thr_ev", "stress_thr",
-         "relax_nmax", "relax_method", "fixed_atoms"],
-        ["md_type", "md_nstep", "md_dt", "md_tfirst", "md_tlast",
-         "md_tfreq", "md_dumpfreq", "md_restartfreq", "init_vel"],
-        ["efield_flag", "dip_cor_flag", "efield_dir", "efield_amp",
-         "efield_pos_max", "efield_pos_dec", "gate_flag", "zgate",
-         "block", "block_down", "block_up", "block_height"],
-        ["out_chg", "out_dos", "out_band", "out_proj_band", "out_stru",
-         "out_pot", "out_wfc_lcao", "out_dipole", "out_mul"],
+        [
+            "suffix",
+            "ntype",
+            "calculation",
+            "esolver_type",
+            "pseudo_dir",
+            "orbital_dir",
+            "stru_file",
+            "kpoint_file",
+            "symmetry",
+        ],
+        [
+            "ecutwfc",
+            "basis_type",
+            "nspin",
+            "nbands",
+            "dft_functional",
+            "gamma_only",
+            "kspacing",
+            "smearing_method",
+            "smearing_sigma",
+            "ks_solver",
+            "noncolin",
+            "lspinorb",
+            "lda_plus_u",
+            "hubbard_u",
+            "orbital_corr",
+            "nupdown",
+            "vdw_method",
+        ],
+        [
+            "scf_thr",
+            "scf_nmax",
+            "mixing_type",
+            "mixing_beta",
+            "mixing_ndim",
+            "mixing_gg0",
+            "init_chg",
+        ],
+        [
+            "cal_force",
+            "cal_stress",
+            "force_thr_ev",
+            "stress_thr",
+            "relax_nmax",
+            "relax_method",
+            "fixed_atoms",
+        ],
+        [
+            "md_type",
+            "md_nstep",
+            "md_dt",
+            "md_tfirst",
+            "md_tlast",
+            "md_tfreq",
+            "md_dumpfreq",
+            "md_restartfreq",
+            "init_vel",
+        ],
+        [
+            "efield_flag",
+            "dip_cor_flag",
+            "efield_dir",
+            "efield_amp",
+            "efield_pos_max",
+            "efield_pos_dec",
+            "gate_flag",
+            "zgate",
+            "block",
+            "block_down",
+            "block_up",
+            "block_height",
+        ],
+        [
+            "out_chg",
+            "out_dos",
+            "out_band",
+            "out_proj_band",
+            "out_stru",
+            "out_pot",
+            "out_wfc_lcao",
+            "out_dipole",
+            "out_mul",
+        ],
     ]
 
     emitted: set = set()
@@ -286,7 +353,7 @@ def main() -> None:
                     print(f"{'─'*50}", file=sys.stderr)
                 else:
                     # Write to stdout
-                    print(f"\n--- FIXED INPUT ---")
+                    print("\n--- FIXED INPUT ---")
                     print(fixed_text)
                     print(f"--- Fixes applied: {len(fixes_applied)} ---")
                     for f in fixes_applied:
@@ -305,7 +372,7 @@ def main() -> None:
                     result_dict["fixes_applied"] = []
         else:
             print(
-                f"\nNote: --fix is currently supported for ABACUS only.",
+                "\nNote: --fix is currently supported for ABACUS only.",
                 file=sys.stderr,
             )
             if args.format == "json":
@@ -321,25 +388,47 @@ def main() -> None:
     sys.exit(1 if has_error else 0)
 
 
-def _print_related_tools(software: str, has_error: bool, diagnostics: list, fmt: str) -> None:
+def _print_related_tools(
+    software: str, has_error: bool, diagnostics: list, fmt: str
+) -> None:
     """Print cross-references to related scripts for tool discovery."""
     if fmt == "json":
         return  # don't pollute JSON output
     sw = software.lower().strip()
-    scripts_dir = Path(__file__).resolve().parent
     print(f"\n{'─'*50}", file=sys.stderr)
     print("📋 Related tools in this skill:", file=sys.stderr)
     if sw == "abacus":
-        print("  • preflight_abacus.py --dir .        → Full workspace validation (INPUT + STRU + KPT cross-check)", file=sys.stderr)
-        print("  • evaluate_dft_setup.py --software abacus --dir .  → Best-practice grade (12 categories)", file=sys.stderr)
-        print("  • render_abacus_workflow.py --workflow <type> --output-dir ./  → One-shot workflow generation", file=sys.stderr)
+        print(
+            "  • preflight_abacus.py --dir .        → Full workspace validation (INPUT + STRU + KPT cross-check)",
+            file=sys.stderr,
+        )
+        print(
+            "  • evaluate_dft_setup.py --software abacus --dir .  → Best-practice grade (12 categories)",
+            file=sys.stderr,
+        )
+        print(
+            "  • render_abacus_workflow.py --workflow <type> --output-dir ./  → One-shot workflow generation",
+            file=sys.stderr,
+        )
         if has_error:
-            print("  • diagnose_input.py --software abacus --input INPUT --fix  → Auto-fix mode", file=sys.stderr)
+            print(
+                "  • diagnose_input.py --software abacus --input INPUT --fix  → Auto-fix mode",
+                file=sys.stderr,
+            )
     elif sw == "vasp":
-        print("  • evaluate_dft_setup.py --software vasp --dir .  → Best-practice evaluation", file=sys.stderr)
-        print("  • generate_kpoints.py --structure POSCAR --mode auto  → KPOINTS generation", file=sys.stderr)
+        print(
+            "  • evaluate_dft_setup.py --software vasp --dir .  → Best-practice evaluation",
+            file=sys.stderr,
+        )
+        print(
+            "  • generate_kpoints.py --structure POSCAR --mode auto  → KPOINTS generation",
+            file=sys.stderr,
+        )
     else:
-        print(f"  • evaluate_dft_setup.py --software {sw} --dir .  → Best-practice check (if supported)", file=sys.stderr)
+        print(
+            f"  • evaluate_dft_setup.py --software {sw} --dir .  → Best-practice check (if supported)",
+            file=sys.stderr,
+        )
     print(f"{'─'*50}", file=sys.stderr)
 
 
