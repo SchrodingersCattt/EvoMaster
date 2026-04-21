@@ -333,18 +333,11 @@ class ChatStreamService:
         }
 
     @staticmethod
-    def _build_run_interrupted_message(
-        reason: str, previous_version: str | None, current_version: str | None
-    ) -> str:
+    def _build_run_interrupted_message(reason: str) -> str:
         if reason == 'restart':
             return '上一轮任务因服务重启中断，请重新发送以继续。'
-        if previous_version and current_version:
-            return (
-                '上一轮任务因服务升级'
-                f'（{previous_version} -> {current_version}）中断，请重新发送以继续。'
-            )
-        if current_version:
-            return f'上一轮任务因服务升级到 {current_version} 中断，请重新发送以继续。'
+        if reason == 'deploy':
+            return '上一轮任务因服务升级中断，请重新发送以继续。'
         return '上一轮任务因服务部署/重启中断，请重新发送以继续。'
 
     async def generate_subscribe_stream(
@@ -427,9 +420,7 @@ class ChatStreamService:
                     previous_version,
                     current_version,
                 )
-                run_interrupted_content = self._build_run_interrupted_message(
-                    reason, previous_version, current_version
-                )
+                run_interrupted_content = self._build_run_interrupted_message(reason)
                 last_user_content = (last_query or {}).get('content', '')
                 # 共享的可选元数据字段，SSE payload 和入库内容都需要
                 _meta: dict = {}
