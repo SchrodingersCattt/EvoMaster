@@ -41,6 +41,7 @@
 - Create: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/__init__.py`
 - Create: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/version.py`
 - Create: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/errors.py`
+- Create: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/security.py`
 - Create: `tests/matmaster_bohrium_transfer/test_version.py`
 - Modify: `pyproject.toml`
 - Modify: `uv.lock`
@@ -59,6 +60,7 @@ from matmaster_bohrium_transfer.version import (
     SCHEMA_VERSION,
     version_payload,
 )
+from matmaster_bohrium_transfer.security import redact_secrets
 
 
 def test_version_payload_exposes_protocol_and_capabilities() -> None:
@@ -71,6 +73,18 @@ def test_version_payload_exposes_protocol_and_capabilities() -> None:
     assert "zip_stored" in payload["capabilities"]
     assert "redacted_errors" in payload["capabilities"]
     assert sorted(payload["capabilities"]) == sorted(CAPABILITIES)
+
+
+def test_redact_secrets_available_before_remote_runner_phase() -> None:
+    redacted = redact_secrets(
+        {
+            "Authorization": "Bearer secret-token",
+            "url": "https://store/api/download/a?token=secret-token",
+        }
+    )
+
+    assert "secret-token" not in redacted
+    assert "<redacted>" in redacted
 ```
 
 - [ ] **Step 2: Run the failing test**
@@ -253,14 +267,69 @@ class RemoteExecutionError(TransferError):
     pass
 ```
 
-Modify root `pyproject.toml` to make uv install the workspace package:
+Create `packages/bohrium-transfer/src/matmaster_bohrium_transfer/security.py`:
+
+```python
+from __future__ import annotations
+
+import json
+import os
+import re
+from pathlib import Path
+from typing import Any
+
+SECRET_KEYS = {"token", "access_key", "accessKey", "authorization", "Authorization"}
+TOKEN_QUERY_RE = re.compile(r"(?i)(token|access_key|accessKey)=([^&\\s]+)")
+BEARER_RE = re.compile(r"(?i)(Bearer\\s+)[^&\\s]+")
+PATH_TOKEN_RE = re.compile(r"(?<=/)[A-Za-z0-9_\\-=]{24,}(?=/|$)")
+
+
+def _sanitize(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: "<redacted>" if str(key) in SECRET_KEYS else _sanitize(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize(item) for item in value]
+    if isinstance(value, str):
+        text = BEARER_RE.sub(r"\\1<redacted>", value)
+        text = TOKEN_QUERY_RE.sub(lambda m: f"{m.group(1)}=<redacted>", text)
+        return PATH_TOKEN_RE.sub("<redacted>", text)
+    return value
+
+
+def redact_secrets(value: Any) -> str:
+    sanitized = _sanitize(value)
+    if isinstance(sanitized, str):
+        return sanitized
+    return json.dumps(sanitized, ensure_ascii=False, sort_keys=True)
+
+
+def secure_write_json(path: str | Path, payload: dict[str, Any]) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    fd = os.open(target, flags, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+```
+
+Modify root `pyproject.toml` to make uv install the workspace package without changing any existing dependency entries:
+
+1. In the existing `[project].dependencies` list, insert this one new entry near the top:
 
 ```toml
-dependencies = [
-    "matmaster-bohrium-transfer",
-    # keep the existing project dependencies unchanged after this new entry
-]
+"matmaster-bohrium-transfer",
+```
 
+2. Append these sections at the end of `pyproject.toml`. If a `[tool.uv.sources]` section already exists when executing, merge the new source entry into the existing section instead of creating a duplicate section:
+
+```toml
 [tool.uv.workspace]
 members = ["packages/bohrium-transfer"]
 
@@ -565,9 +634,87 @@ git commit -m "feat: add bohrium transfer bundle install hook"
 - Modify: `matmaster/tools/builtin/bohrium_tool/remote_runner.py`
 - Test: `tests/matmaster/tools/builtin/test_bohrium_tool_remote_runner.py`
 
-- [ ] **Step 1: Add failing version-probe tests**
+- [ ] **Step 1: Update runner fake and add failing version-probe tests**
 
-Append to `tests/matmaster/tools/builtin/test_bohrium_tool_remote_runner.py`:
+Replace the existing `RunnerSession` test fake in `tests/matmaster/tools/builtin/test_bohrium_tool_remote_runner.py` with a version that recognizes both the legacy copied helper command and the new preinstalled package CLI:
+
+```python
+class RunnerSession:
+    def __init__(
+        self,
+        *,
+        helper_stdout: str = "",
+        helper_exit_code: int = 0,
+        version_stdout: str | None = None,
+        command_stdout: str | None = None,
+        version_exit_code: int | None = None,
+        command_exit_code: int | None = None,
+    ) -> None:
+        self.is_open = True
+        self.helper_stdout = helper_stdout
+        self.helper_exit_code = helper_exit_code
+        self.version_stdout = helper_stdout if version_stdout is None else version_stdout
+        self.command_stdout = helper_stdout if command_stdout is None else command_stdout
+        self.version_exit_code = (
+            helper_exit_code if version_exit_code is None else version_exit_code
+        )
+        self.command_exit_code = (
+            helper_exit_code if command_exit_code is None else command_exit_code
+        )
+        self.exec_calls: list[str] = []
+        self.writes: list[tuple[str, str]] = []
+
+    def exec_bash(
+        self,
+        command: str,
+        timeout=None,
+        cancel_token=None,
+    ) -> dict[str, Any]:
+        del timeout, cancel_token
+        self.exec_calls.append(command)
+        if command.startswith("command -v "):
+            return {
+                "stdout": "/usr/bin/python3\nPython 3.12.3\n",
+                "stderr": "",
+                "exit_code": 0,
+                "output": "/usr/bin/python3\nPython 3.12.3\n",
+            }
+        if command.startswith("mktemp -d "):
+            return {
+                "stdout": "/tmp/matmaster_bohrium_transfer.ABCD12\n",
+                "stderr": "",
+                "exit_code": 0,
+                "output": "/tmp/matmaster_bohrium_transfer.ABCD12\n",
+            }
+        if "matmaster_bohrium_transfer.remote version --json" in command:
+            return {
+                "stdout": self.version_stdout,
+                "stderr": "",
+                "exit_code": self.version_exit_code,
+                "output": self.version_stdout,
+            }
+        if "-m matmaster_bohrium_transfer.remote" in command:
+            return {
+                "stdout": self.command_stdout,
+                "stderr": "",
+                "exit_code": self.command_exit_code,
+                "output": self.command_stdout,
+            }
+        if "remote_transfer_helper.py" in command:
+            return {
+                "stdout": self.helper_stdout,
+                "stderr": "",
+                "exit_code": self.helper_exit_code,
+                "output": self.helper_stdout,
+            }
+        return {"stdout": "", "stderr": "", "exit_code": 0, "output": ""}
+
+    def write_file(self, path: str, content: str, encoding: str = "utf-8") -> None:
+        del encoding
+        self.writes.append((path, content))
+```
+
+Append these tests to the same file:
 
 ```python
 def test_remote_version_probe_uses_preinstalled_package() -> None:
@@ -651,6 +798,11 @@ def _parse_json_stdout(stdout: str, *, purpose: str) -> dict[str, Any]:
         ) from exc
     if not isinstance(parsed, dict):
         raise BohriumTransferError(f"{purpose} JSON output must be an object")
+    if parsed.get("schema_version") != SCHEMA_VERSION:
+        raise BohriumTransferError(
+            f"{purpose} schema_version mismatch: "
+            f"expected {SCHEMA_VERSION}, got {parsed.get('schema_version')!r}"
+        )
     return parsed
 
 
@@ -704,6 +856,142 @@ git commit -m "feat: probe remote bohrium transfer package"
 - Test: `tests/matmaster/tools/builtin/test_bohrium_tool_transfers.py`
 
 - [ ] **Step 1: Add failing runner execution tests**
+
+Replace the existing source-copy success test with the new default behavior:
+
+```python
+def test_run_remote_helper_writes_payload_file_and_cleans_up() -> None:
+    session = RunnerSession(
+        helper_stdout=json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.0",
+                "ok": True,
+                "oss_key": "prefix/input.zip",
+            }
+        )
+    )
+
+    result = run_remote_helper(
+        session,
+        subcommand="upload-submit",
+        payload={"token": "secret-token", "input_dir": "/share/input"},
+    )
+
+    assert result["oss_key"] == "prefix/input.zip"
+    payload_writes = [
+        item for item in session.writes if item[0].endswith("payload.json")
+    ]
+    assert len(payload_writes) == 1
+    assert json.loads(payload_writes[0][1])["schema_version"] == SCHEMA_VERSION
+    assert any(
+        "chmod 700 /tmp/matmaster_bohrium_transfer.ABCD12" in cmd
+        for cmd in session.exec_calls
+    )
+    assert any(
+        "chmod 600 /tmp/matmaster_bohrium_transfer.ABCD12/payload.json" in cmd
+        for cmd in session.exec_calls
+    )
+    assert any(
+        "rm -rf /tmp/matmaster_bohrium_transfer.ABCD12" in cmd
+        for cmd in session.exec_calls
+    )
+    helper_commands = [
+        cmd
+        for cmd in session.exec_calls
+        if "-m matmaster_bohrium_transfer.remote upload-submit" in cmd
+        and "--payload-file" in cmd
+    ]
+    assert len(helper_commands) == 1
+    assert "secret-token" not in helper_commands[0]
+    assert not any(path.endswith("remote_transfer_helper.py") for path, _ in session.writes)
+```
+
+Replace the existing schema mismatch cleanup test with a command-stage mismatch test that passes the version probe first:
+
+```python
+def test_run_remote_helper_rejects_schema_mismatch_and_cleans_up() -> None:
+    session = RunnerSession(
+        version_stdout=json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.0",
+                "ok": True,
+            }
+        ),
+        command_stdout=json.dumps(
+            {"schema_version": "v0", "protocol_version": "1.0", "ok": True}
+        ),
+    )
+
+    with pytest.raises(BohriumTransferError, match="schema_version"):
+        run_remote_helper(
+            session,
+            subcommand="upload-submit",
+            payload={"input_dir": "/share/input"},
+        )
+
+    assert any(
+        "rm -rf /tmp/matmaster_bohrium_transfer.ABCD12" in cmd
+        for cmd in session.exec_calls
+    )
+```
+
+Replace the existing non-JSON and `ok: false` tests with command-stage variants:
+
+```python
+def test_run_remote_helper_rejects_non_json_stdout() -> None:
+    session = RunnerSession(
+        version_stdout=json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.0",
+                "ok": True,
+            }
+        ),
+        command_stdout="not json",
+        command_exit_code=1,
+    )
+
+    with pytest.raises(BohriumTransferError, match="JSON"):
+        run_remote_helper(
+            session,
+            subcommand="download-results",
+            payload={"result_dir": "/share/results"},
+        )
+
+
+def test_run_remote_helper_rejects_ok_false_with_redacted_error() -> None:
+    session = RunnerSession(
+        version_stdout=json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.0",
+                "ok": True,
+            }
+        ),
+        command_stdout=json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.0",
+                "ok": False,
+                "error": "failed https://store/api/download/x?token=secret-token",
+            }
+        ),
+        command_exit_code=1,
+    )
+
+    with pytest.raises(BohriumTransferError) as exc_info:
+        run_remote_helper(
+            session,
+            subcommand="download-results",
+            payload={"result_dir": "/share/results"},
+        )
+
+    message = str(exc_info.value)
+    assert "secret-token" not in message
+    assert "token=<redacted>" in message
+```
 
 Append to `tests/matmaster/tools/builtin/test_bohrium_tool_remote_runner.py`:
 
@@ -933,12 +1221,12 @@ git commit -m "feat: use preinstalled bohrium transfer cli"
 
 ## Phase C: SDK-Free Upload
 
-### Task 6: Add Redaction, Secure File, Manifest, And Progress Primitives
+### Task 6: Add Manifest And Progress Primitives
 
 **Files:**
-- Create: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/security.py`
 - Create: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/manifest.py`
 - Create: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/progress.py`
+- Verify: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/security.py`
 - Test: `tests/matmaster_bohrium_transfer/test_security_manifest_progress.py`
 
 - [ ] **Step 1: Write failing primitive tests**
@@ -981,7 +1269,7 @@ def test_secure_write_json_uses_0600(tmp_path: Path) -> None:
     assert json.loads(path.read_text())["token"] == "secret"
 
 
-def test_manifest_store_round_trip_with_lock(tmp_path: Path) -> None:
+def test_manifest_store_round_trip_with_permissions(tmp_path: Path) -> None:
     store = ManifestStore(tmp_path / "transfers")
     manifest = {"schema_version": "v1", "transfer_id": "t1", "token": "secret"}
 
@@ -1019,59 +1307,9 @@ uv run pytest tests/matmaster_bohrium_transfer/test_security_manifest_progress.p
 
 Expected before implementation: import failures for new modules.
 
-- [ ] **Step 3: Implement security and manifest primitives**
+- [ ] **Step 3: Implement manifest and progress primitives**
 
-Create `security.py`:
-
-```python
-from __future__ import annotations
-
-import json
-import os
-import re
-from pathlib import Path
-from typing import Any
-
-SECRET_KEYS = {"token", "access_key", "accessKey", "authorization", "Authorization"}
-TOKEN_QUERY_RE = re.compile(r"(?i)(token|access_key|accessKey)=([^&\\s]+)")
-BEARER_RE = re.compile(r"(?i)(Bearer\\s+)[^&\\s]+")
-PATH_TOKEN_RE = re.compile(r"(?<=/)[A-Za-z0-9_\\-=]{24,}(?=/|$)")
-
-
-def _sanitize(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            key: "<redacted>" if str(key) in SECRET_KEYS else _sanitize(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [_sanitize(item) for item in value]
-    if isinstance(value, str):
-        text = BEARER_RE.sub(r"\\1<redacted>", value)
-        text = TOKEN_QUERY_RE.sub(lambda m: f"{m.group(1)}=<redacted>", text)
-        return PATH_TOKEN_RE.sub("<redacted>", text)
-    return value
-
-
-def redact_secrets(value: Any) -> str:
-    sanitized = _sanitize(value)
-    if isinstance(sanitized, str):
-        return sanitized
-    return json.dumps(sanitized, ensure_ascii=False, sort_keys=True)
-
-
-def secure_write_json(path: str | Path, payload: dict[str, Any]) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
-    fd = os.open(target, flags, 0o600)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(payload, fh, ensure_ascii=False, sort_keys=True)
-    except Exception:
-        target.unlink(missing_ok=True)
-        raise
-```
+Keep `security.py` from Task 1 unchanged. It already provides `redact_secrets()` and `secure_write_json()` for Phase B and for the manifest store below.
 
 Create `manifest.py`:
 
@@ -1364,7 +1602,6 @@ git commit -m "feat: add zip-stored bohrium transfer archives"
 - Create: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/client.py`
 - Create: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/multipart.py`
 - Test: `tests/matmaster_bohrium_transfer/test_client_multipart.py`
-- Test: `tests/matmaster_bohrium_transfer/test_storehost_contract.py`
 
 - [ ] **Step 1: Write failing client/multipart tests**
 
@@ -1413,6 +1650,14 @@ class FakeSession:
         if url.endswith("/api/upload/multipart/complete"):
             return FakeResponse(payload={"code": 0, "data": {"done": True}})
         raise AssertionError(url)
+
+
+class RecordingSink:
+    def __init__(self) -> None:
+        self.events = []
+
+    def emit(self, event) -> None:
+        self.events.append(event)
 
 
 def test_store_host_upload_part_sends_tiefblue_compatible_header() -> None:
@@ -1519,6 +1764,32 @@ def test_upload_file_multipart_resumes_completed_manifest_parts(tmp_path: Path) 
         "part-3",
     ]
     assert summary["resume_used"] is True
+
+
+def test_upload_file_multipart_emits_progress_events(tmp_path: Path) -> None:
+    file_path = tmp_path / "input.zip"
+    file_path.write_bytes(b"a" * 10)
+    session = FakeSession()
+    client = StoreHostClient("https://store.example", "token-1", session=session)
+    store = ManifestStore(tmp_path / "manifest")
+    sink = RecordingSink()
+
+    upload_file_multipart(
+        client=client,
+        file_path=file_path,
+        object_key="prefix/input.zip",
+        manifest_store=store,
+        transfer_id="t1",
+        part_size=4,
+        concurrency=2,
+        part_retries=1,
+        progress_sink=sink,
+    )
+
+    event_types = [event.event_type for event in sink.events]
+    assert "upload_started" in event_types
+    assert "upload_part_completed" in event_types
+    assert "upload_completed" in event_types
 ```
 
 - [ ] **Step 2: Run failing client/multipart tests**
@@ -1636,6 +1907,7 @@ from pathlib import Path
 from typing import Any
 
 from .manifest import ManifestStore
+from .progress import NoopProgressSink, ProgressSink, TransferProgressEvent
 
 
 def _read_part(file_path: Path, offset: int, size: int) -> bytes:
@@ -1742,13 +2014,28 @@ def upload_file_multipart(
     part_size: int = 64 * 1024 * 1024,
     concurrency: int = 4,
     part_retries: int = 3,
+    progress_sink: ProgressSink | None = None,
 ) -> dict[str, Any]:
     path = Path(file_path)
     stat_result = path.stat()
     file_size = stat_result.st_size
     file_mtime_ns = stat_result.st_mtime_ns
     parts = _part_specs(file_size, part_size)
+    sink = progress_sink or NoopProgressSink()
+    sink.emit(
+        TransferProgressEvent(
+            event_type="upload_started",
+            transfer_id=transfer_id,
+            phase="upload",
+            direction="upload",
+            bytes_done=0,
+            bytes_total=file_size,
+            parts_done=0,
+            parts_total=len(parts),
+        )
+    )
     token = str(getattr(client, "token", ""))
+    manifest_store.gc()
     initial_key, completed = _completed_from_manifest(
         manifest_store=manifest_store,
         transfer_id=transfer_id,
@@ -1789,7 +2076,7 @@ def upload_file_multipart(
             except Exception as exc:
                 last_error = exc
                 if attempt < part_retries:
-                    time.sleep(min(2 ** (attempt - 1), 30) + random.uniform(0, 0.25))
+                    time.sleep(min(2 ** (attempt - 1), 30) + random.uniform(0, 1.0))
         raise RuntimeError(f"part {spec['number']} failed") from last_error
 
     pending_parts = [part for part in parts if part["number"] not in completed]
@@ -1798,6 +2085,9 @@ def upload_file_multipart(
         for future in as_completed(futures):
             number, part_string = future.result()
             completed[number] = part_string
+            bytes_done = sum(
+                part["size"] for part in parts if part["number"] in completed
+            )
             _write_manifest(
                 manifest_store=manifest_store,
                 transfer_id=transfer_id,
@@ -1810,11 +2100,35 @@ def upload_file_multipart(
                 parts=parts,
                 completed=completed,
             )
+            sink.emit(
+                TransferProgressEvent(
+                    event_type="upload_part_completed",
+                    transfer_id=transfer_id,
+                    phase="upload",
+                    direction="upload",
+                    bytes_done=bytes_done,
+                    bytes_total=file_size,
+                    parts_done=len(completed),
+                    parts_total=len(parts),
+                )
+            )
     part_strings = [completed[number] for number in sorted(completed)]
     client.complete_multipart(
         object_key=object_key,
         initial_key=initial_key,
         part_strings=part_strings,
+    )
+    sink.emit(
+        TransferProgressEvent(
+            event_type="upload_completed",
+            transfer_id=transfer_id,
+            phase="upload",
+            direction="upload",
+            bytes_done=file_size,
+            bytes_total=file_size,
+            parts_done=len(parts),
+            parts_total=len(parts),
+        )
     )
     return {
         "ok": True,
@@ -1835,84 +2149,12 @@ uv run pytest tests/matmaster_bohrium_transfer/test_client_multipart.py -q
 
 Expected: tests pass.
 
-- [ ] **Step 6: Add optional real StoreHost contract test**
-
-Create `tests/matmaster_bohrium_transfer/test_storehost_contract.py`:
-
-```python
-from __future__ import annotations
-
-import os
-from pathlib import Path
-from urllib.parse import quote
-from uuid import uuid4
-
-import pytest
-
-from matmaster_bohrium_transfer.client import StoreHostClient
-from matmaster_bohrium_transfer.download import download_file
-from matmaster_bohrium_transfer.manifest import ManifestStore
-from matmaster_bohrium_transfer.multipart import upload_file_multipart
-
-
-def test_real_storehost_multipart_upload_complete_and_download(tmp_path: Path) -> None:
-    store_host = os.environ.get("BOHRIUM_STOREHOST_CONTRACT_HOST", "").rstrip("/")
-    token = os.environ.get("BOHRIUM_STOREHOST_CONTRACT_TOKEN", "").strip()
-    prefix = os.environ.get("BOHRIUM_STOREHOST_CONTRACT_PREFIX", "").strip().strip("/")
-    if not store_host or not token or not prefix:
-        pytest.skip(
-            "set BOHRIUM_STOREHOST_CONTRACT_HOST, "
-            "BOHRIUM_STOREHOST_CONTRACT_TOKEN, and "
-            "BOHRIUM_STOREHOST_CONTRACT_PREFIX to run StoreHost contract test"
-        )
-
-    source = tmp_path / "contract.bin"
-    payload = b"matmaster-storehost-contract\n" * 1024
-    source.write_bytes(payload)
-    object_key = f"{prefix}/contract-{uuid4().hex}.bin"
-    client = StoreHostClient(store_host, token)
-
-    upload_file_multipart(
-        client=client,
-        file_path=source,
-        object_key=object_key,
-        manifest_store=ManifestStore(tmp_path / "manifest"),
-        transfer_id="contract",
-        part_size=4096,
-        concurrency=2,
-        part_retries=2,
-    )
-
-    encoded = quote(object_key, safe="/")
-    download_url = (
-        f"{store_host}/api/download/{encoded}?token={token}"
-        "&Response-Content-Type=application/octet-stream"
-    )
-    downloaded = tmp_path / "downloaded.bin"
-    download_file(download_url, downloaded, part_size=4096, concurrency=2)
-
-    assert downloaded.read_bytes() == payload
-```
-
-- [ ] **Step 7: Verify client/multipart and skipped contract tests**
+- [ ] **Step 6: Commit client/multipart**
 
 Run:
 
 ```bash
-uv run pytest \
-  tests/matmaster_bohrium_transfer/test_client_multipart.py \
-  tests/matmaster_bohrium_transfer/test_storehost_contract.py \
-  -q
-```
-
-Expected without contract env vars: client/multipart tests pass and contract test is skipped. Expected with contract env vars: contract test uploads and downloads a tiny object successfully.
-
-- [ ] **Step 8: Commit client/multipart**
-
-Run:
-
-```bash
-git add packages/bohrium-transfer/src/matmaster_bohrium_transfer/client.py packages/bohrium-transfer/src/matmaster_bohrium_transfer/multipart.py tests/matmaster_bohrium_transfer/test_client_multipart.py tests/matmaster_bohrium_transfer/test_storehost_contract.py
+git add packages/bohrium-transfer/src/matmaster_bohrium_transfer/client.py packages/bohrium-transfer/src/matmaster_bohrium_transfer/multipart.py tests/matmaster_bohrium_transfer/test_client_multipart.py
 git commit -m "feat: add sdk-free bohrium multipart upload"
 ```
 
@@ -1974,6 +2216,42 @@ def test_upload_input_archive_does_not_import_bohrium_sdk(
 
     assert uploaded.oss_key == "sandbox/jobs/run-2/input.zip"
     assert calls[0]["zip_path"] == zip_path
+
+
+def test_upload_input_archive_legacy_flag_uses_tiefblue_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from matmaster.bohrium.upload import UploadedArchive, upload_input_archive
+
+    zip_path = tmp_path / "input.zip"
+    zip_path.write_bytes(b"zip-bytes")
+    calls: list[Path] = []
+
+    def fake_legacy_upload(*, create_data, zip_path):
+        calls.append(zip_path)
+        return UploadedArchive(
+            oss_key="legacy/input.zip",
+            download_url="https://store.example/api/download/legacy/input.zip?token=t",
+        )
+
+    monkeypatch.setenv("BOHRIUM_TRANSFER_USE_LEGACY", "1")
+    monkeypatch.setattr(
+        "matmaster.bohrium.upload._upload_input_archive_legacy",
+        fake_legacy_upload,
+    )
+
+    uploaded = upload_input_archive(
+        create_data={
+            "storePath": "legacy/",
+            "storeHost": "https://store.example",
+            "token": "t",
+        },
+        zip_path=zip_path,
+    )
+
+    assert uploaded.oss_key == "legacy/input.zip"
+    assert calls == [zip_path]
 ```
 
 - [ ] **Step 2: Run failing upload tests**
@@ -1993,13 +2271,17 @@ Modify `matmaster/bohrium/upload.py`:
 ```python
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
+from matmaster.bohrium.errors import BohriumTransferError
 from matmaster_bohrium_transfer.client import StoreHostClient
 from matmaster_bohrium_transfer.manifest import ManifestStore
 from matmaster_bohrium_transfer.multipart import upload_file_multipart
+
+_tiefblue_cls = None
 
 
 @dataclass(frozen=True)
@@ -2013,6 +2295,48 @@ def _build_download_url(store_host: str, oss_key: str, token: str) -> str:
     return (
         f"{store_host}/api/download/{encoded_key}?token={token}"
         "&Response-Content-Type=application/octet-stream"
+    )
+
+
+def _load_tiefblue_client():
+    global _tiefblue_cls
+    if _tiefblue_cls is not None:
+        return _tiefblue_cls
+    try:
+        from bohrium.resources.tiefblue import Tiefblue
+    except ImportError as exc:
+        raise BohriumTransferError(
+            "bohrium-sdk not installed. Run: pip install bohrium-sdk"
+        ) from exc
+    _tiefblue_cls = Tiefblue
+    return _tiefblue_cls
+
+
+def _upload_input_archive_legacy(
+    *,
+    create_data: dict,
+    zip_path: Path,
+) -> UploadedArchive:
+    tiefblue_client = _load_tiefblue_client()
+    store_path = str(create_data["storePath"]).strip()
+    if not store_path.endswith("/"):
+        store_path += "/"
+    store_host = str(create_data["storeHost"]).rstrip("/")
+    token = str(create_data["token"]).strip()
+    oss_key = f"{store_path}input.zip"
+    client = tiefblue_client(base_url=store_host)
+    response = client.upload_From_file_multi_part(
+        object_key=oss_key,
+        file_path=str(zip_path),
+        token=token,
+        progress_bar=False,
+    )
+    if response is not None and hasattr(response, "status_code"):
+        if response.status_code >= 400:
+            raise BohriumTransferError(f"Upload failed: {response.text}")
+    return UploadedArchive(
+        oss_key=oss_key,
+        download_url=_build_download_url(store_host, oss_key, token),
     )
 
 
@@ -2044,6 +2368,8 @@ def _upload_input_archive_sdk_free(
 
 
 def upload_input_archive(*, create_data: dict, zip_path: Path) -> UploadedArchive:
+    if os.environ.get("BOHRIUM_TRANSFER_USE_LEGACY") == "1":
+        return _upload_input_archive_legacy(create_data=create_data, zip_path=zip_path)
     return _upload_input_archive_sdk_free(create_data=create_data, zip_path=zip_path)
 ```
 
@@ -2160,6 +2486,7 @@ git commit -m "feat: use sdk-free bohrium submit upload"
 **Files:**
 - Create: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/download.py`
 - Test: `tests/matmaster_bohrium_transfer/test_download.py`
+- Test: `tests/matmaster_bohrium_transfer/test_storehost_contract.py`
 
 - [ ] **Step 1: Write failing download tests**
 
@@ -2222,6 +2549,14 @@ class FakeRangeSession:
         )
 
 
+class RecordingSink:
+    def __init__(self) -> None:
+        self.events = []
+
+    def emit(self, event) -> None:
+        self.events.append(event)
+
+
 def test_choose_sandbox_zip_prefers_job_id_and_skips_task_zip() -> None:
     objects = [
         {"path": "prefix/task.zip", "isDir": False},
@@ -2268,6 +2603,7 @@ def test_probe_range_handles_missing_content_length() -> None:
 def test_download_file_uses_concurrent_range_requests(tmp_path: Path) -> None:
     session = FakeRangeSession()
     dest = tmp_path / "out.zip"
+    sink = RecordingSink()
 
     summary = download_file(
         "https://store.example/api/download/out.zip?token=t",
@@ -2275,6 +2611,7 @@ def test_download_file_uses_concurrent_range_requests(tmp_path: Path) -> None:
         session=session,
         part_size=4,
         concurrency=3,
+        progress_sink=sink,
     )
 
     assert dest.read_bytes() == b"0123456789"
@@ -2286,6 +2623,10 @@ def test_download_file_uses_concurrent_range_requests(tmp_path: Path) -> None:
     assert ranges == ["bytes=0-3", "bytes=4-7", "bytes=8-9"]
     assert summary.bytes_total == 10
     assert summary.resume_supported is True
+    event_types = [event.event_type for event in sink.events]
+    assert "download_started" in event_types
+    assert "download_part_completed" in event_types
+    assert "download_completed" in event_types
 ```
 
 - [ ] **Step 2: Run failing download tests**
@@ -2302,6 +2643,8 @@ Expected before implementation: import failure for `download.py`.
 
 Create `download.py`:
 
+This implementation uses one `.part.{index}` file per Range request and then atomically assembles the final file. It intentionally avoids `os.pwrite()` so the same code path works on the remote Python/filesystem combination while still preserving resumable byte-range semantics.
+
 ```python
 from __future__ import annotations
 
@@ -2315,6 +2658,7 @@ from typing import Any
 import requests
 
 from .errors import ExtractError
+from .progress import NoopProgressSink, ProgressSink, TransferProgressEvent
 
 
 @dataclass(frozen=True)
@@ -2356,7 +2700,15 @@ def _range_specs(total: int, part_size: int) -> list[tuple[int, int, int]]:
     return specs
 
 
-def _download_stream(session, url: str, dest: Path, *, timeout: int) -> DownloadSummary:
+def _download_stream(
+    session,
+    url: str,
+    dest: Path,
+    *,
+    timeout: int,
+    progress_sink: ProgressSink,
+    transfer_id: str,
+) -> DownloadSummary:
     response = session.get(url, timeout=timeout, stream=True)
     response.raise_for_status()
     total_header = response.headers.get("Content-Length") if hasattr(response, "headers") else None
@@ -2370,7 +2722,29 @@ def _download_stream(session, url: str, dest: Path, *, timeout: int) -> Download
                 continue
             fh.write(chunk)
             bytes_done += len(chunk)
+            progress_sink.emit(
+                TransferProgressEvent(
+                    event_type="download_chunk_completed",
+                    transfer_id=transfer_id,
+                    phase="download",
+                    direction="download",
+                    bytes_done=bytes_done,
+                    bytes_total=bytes_total,
+                    resume_supported=False,
+                )
+            )
     tmp.replace(dest)
+    progress_sink.emit(
+        TransferProgressEvent(
+            event_type="download_completed",
+            transfer_id=transfer_id,
+            phase="download",
+            direction="download",
+            bytes_done=bytes_done,
+            bytes_total=bytes_total,
+            resume_supported=False,
+        )
+    )
     return DownloadSummary(
         path=dest,
         bytes_total=bytes_total,
@@ -2421,6 +2795,8 @@ def _download_ranges(
     part_size: int,
     concurrency: int,
     timeout: int,
+    progress_sink: ProgressSink,
+    transfer_id: str,
 ) -> DownloadSummary:
     specs = _range_specs(bytes_total, part_size)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -2444,6 +2820,17 @@ def _download_ranges(
         ]
         for future in as_completed(futures):
             bytes_done += future.result()
+            progress_sink.emit(
+                TransferProgressEvent(
+                    event_type="download_part_completed",
+                    transfer_id=transfer_id,
+                    phase="download",
+                    direction="download",
+                    bytes_done=bytes_done,
+                    bytes_total=bytes_total,
+                    resume_supported=True,
+                )
+            )
     tmp = dest.with_suffix(dest.suffix + ".part")
     with open(tmp, "wb") as out:
         for index, _start, _end in specs:
@@ -2456,6 +2843,17 @@ def _download_ranges(
     tmp.replace(dest)
     for part_path in part_paths.values():
         part_path.unlink(missing_ok=True)
+    progress_sink.emit(
+        TransferProgressEvent(
+            event_type="download_completed",
+            transfer_id=transfer_id,
+            phase="download",
+            direction="download",
+            bytes_done=bytes_total,
+            bytes_total=bytes_total,
+            resume_supported=True,
+        )
+    )
     return DownloadSummary(
         path=dest,
         bytes_total=bytes_total,
@@ -2472,14 +2870,28 @@ def download_file(
     part_size: int = 64 * 1024 * 1024,
     concurrency: int = 4,
     timeout: int = 300,
+    progress_sink: ProgressSink | None = None,
+    transfer_id: str = "download",
 ) -> DownloadSummary:
     http = session or requests.Session()
     target = Path(dest)
+    sink = progress_sink or NoopProgressSink()
     try:
         head = http.head(url, allow_redirects=True, timeout=30)
         capability = probe_range(head)
     except Exception:
         capability = RangeCapability(False, None, "head_failed")
+    sink.emit(
+        TransferProgressEvent(
+            event_type="download_started",
+            transfer_id=transfer_id,
+            phase="download",
+            direction="download",
+            bytes_done=0,
+            bytes_total=capability.bytes_total,
+            resume_supported=capability.resume_supported,
+        )
+    )
     if (
         capability.resume_supported
         and capability.bytes_total is not None
@@ -2493,8 +2905,17 @@ def download_file(
             part_size=part_size,
             concurrency=concurrency,
             timeout=timeout,
+            progress_sink=sink,
+            transfer_id=transfer_id,
         )
-    return _download_stream(http, url, target, timeout=timeout)
+    return _download_stream(
+        http,
+        url,
+        target,
+        timeout=timeout,
+        progress_sink=sink,
+        transfer_id=transfer_id,
+    )
 
 
 def choose_sandbox_zip_object(job_id: int | str, objects: list[dict[str, Any]]) -> str | None:
@@ -2545,12 +2966,84 @@ uv run pytest tests/matmaster_bohrium_transfer/test_download.py -q
 
 Expected: tests pass.
 
-- [ ] **Step 5: Commit download helpers**
+- [ ] **Step 5: Add optional real StoreHost contract test**
+
+Create `tests/matmaster_bohrium_transfer/test_storehost_contract.py`:
+
+```python
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from urllib.parse import quote
+from uuid import uuid4
+
+import pytest
+
+from matmaster_bohrium_transfer.client import StoreHostClient
+from matmaster_bohrium_transfer.download import download_file
+from matmaster_bohrium_transfer.manifest import ManifestStore
+from matmaster_bohrium_transfer.multipart import upload_file_multipart
+
+
+def test_real_storehost_multipart_upload_complete_and_download(tmp_path: Path) -> None:
+    store_host = os.environ.get("BOHRIUM_STOREHOST_CONTRACT_HOST", "").rstrip("/")
+    token = os.environ.get("BOHRIUM_STOREHOST_CONTRACT_TOKEN", "").strip()
+    prefix = os.environ.get("BOHRIUM_STOREHOST_CONTRACT_PREFIX", "").strip().strip("/")
+    if not store_host or not token or not prefix:
+        pytest.skip(
+            "set BOHRIUM_STOREHOST_CONTRACT_HOST, "
+            "BOHRIUM_STOREHOST_CONTRACT_TOKEN, and "
+            "BOHRIUM_STOREHOST_CONTRACT_PREFIX to run StoreHost contract test"
+        )
+
+    source = tmp_path / "contract.bin"
+    payload = b"matmaster-storehost-contract\n" * 1024
+    source.write_bytes(payload)
+    object_key = f"{prefix}/contract-{uuid4().hex}.bin"
+    client = StoreHostClient(store_host, token)
+
+    upload_file_multipart(
+        client=client,
+        file_path=source,
+        object_key=object_key,
+        manifest_store=ManifestStore(tmp_path / "manifest"),
+        transfer_id="contract",
+        part_size=4096,
+        concurrency=2,
+        part_retries=2,
+    )
+
+    encoded = quote(object_key, safe="/")
+    download_url = (
+        f"{store_host}/api/download/{encoded}?token={token}"
+        "&Response-Content-Type=application/octet-stream"
+    )
+    downloaded = tmp_path / "downloaded.bin"
+    download_file(download_url, downloaded, part_size=4096, concurrency=2)
+
+    assert downloaded.read_bytes() == payload
+```
+
+- [ ] **Step 6: Verify download helpers and skipped contract test**
 
 Run:
 
 ```bash
-git add packages/bohrium-transfer/src/matmaster_bohrium_transfer/download.py tests/matmaster_bohrium_transfer/test_download.py
+uv run pytest \
+  tests/matmaster_bohrium_transfer/test_download.py \
+  tests/matmaster_bohrium_transfer/test_storehost_contract.py \
+  -q
+```
+
+Expected without contract env vars: download tests pass and the contract test is skipped. Expected with contract env vars: contract test uploads and downloads a tiny object successfully.
+
+- [ ] **Step 7: Commit download helpers**
+
+Run:
+
+```bash
+git add packages/bohrium-transfer/src/matmaster_bohrium_transfer/download.py tests/matmaster_bohrium_transfer/test_download.py tests/matmaster_bohrium_transfer/test_storehost_contract.py
 git commit -m "feat: add bohrium transfer download helpers"
 ```
 
@@ -2562,20 +3055,88 @@ git commit -m "feat: add bohrium transfer download helpers"
 - Modify: `packages/bohrium-transfer/src/matmaster_bohrium_transfer/remote.py`
 - Test: `tests/matmaster/bohrium/test_artifacts.py`
 - Test: `tests/matmaster/tools/builtin/test_bohrium_tool_download.py`
+- Test: `tests/matmaster_bohrium_transfer/test_download.py`
 
-- [ ] **Step 1: Add regression test for sandbox fallback chain**
+- [ ] **Step 1: Add regression tests for package fallback and main-project delegation**
 
-Ensure `tests/matmaster/bohrium/test_artifacts.py` has these imports:
+Append to `tests/matmaster_bohrium_transfer/test_download.py`:
 
 ```python
 import io
-import zipfile
+
+from matmaster_bohrium_transfer.download import run_download_results_payload
+
+
+def test_run_download_results_payload_preserves_sandbox_fallback_order(tmp_path: Path) -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as zf:
+        zf.writestr("log", "done")
+    zip_bytes = buffer.getvalue()
+    calls: list[str] = []
+
+    class Response:
+        def __init__(self, content=b"", json_data=None, headers=None):
+            self.content = content
+            self._json = json_data or {}
+            self.ok = True
+            self.status_code = 200
+            self.headers = headers or {"Content-Length": str(len(content))}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._json
+
+        def iter_content(self, chunk_size=65536):
+            yield self.content
+
+    class FakeSession:
+        def post(self, url, **kwargs):
+            calls.append(url)
+            return Response(
+                json_data={
+                    "code": 0,
+                    "data": {
+                        "objects": [
+                            {"path": "prefix/task.zip", "isDir": False},
+                            {"path": "prefix/job-55.zip", "isDir": False},
+                        ],
+                        "hasNext": False,
+                    },
+                }
+            )
+
+        def head(self, url, **kwargs):
+            calls.append(f"HEAD {url}")
+            return Response(headers={"Content-Length": str(len(zip_bytes))})
+
+        def get(self, url, **kwargs):
+            calls.append(url)
+            return Response(content=zip_bytes)
+
+    result = run_download_results_payload(
+        {
+            "job_id": "job-55",
+            "detail_data": {
+                "resultUrl": "https://store.example/api/download/prefix/job-55.zip?token=t"
+            },
+            "result_dir": str(tmp_path / "results"),
+            "sandbox": True,
+        },
+        session=FakeSession(),
+    )
+
+    assert "log" in result["files"]
+    assert "done" in result["log_tail"]
+    assert any("iterate" in call for call in calls)
+    assert any("job-55.zip" in call for call in calls)
 ```
 
 Append to `tests/matmaster/bohrium/test_artifacts.py`:
 
 ```python
-def test_sandbox_download_preserves_zip_and_object_fallback_order(tmp_path, monkeypatch):
+def test_download_job_artifacts_delegates_to_transfer_package(tmp_path, monkeypatch):
     from matmaster.bohrium.artifacts import download_job_artifacts
     from matmaster.bohrium.types import BohriumContext, BohriumCredentials
 
@@ -2590,50 +3151,25 @@ def test_sandbox_download_preserves_zip_and_object_fallback_order(tmp_path, monk
         credential_source="env",
         sandbox=True,
     )
-    calls: list[str] = []
+    captured: dict = {}
 
-    class Response:
-        def __init__(self, content=b"", json_data=None):
-            self.content = content
-            self._json = json_data or {}
-            self.ok = True
-            self.status_code = 200
-            self.headers = {"Content-Length": str(len(content))}
+    def fake_get_file_token(ctx, *, file_path, bohr_job_id):
+        return "https://store.example", "prefix/log", "log-token"
 
-        def raise_for_status(self):
-            return None
+    def fake_run_download_results_payload(payload):
+        captured.update(payload)
+        return {
+            "ok": True,
+            "files": ["log"],
+            "log_tail": "done",
+            "result_dir": str(tmp_path / "results"),
+        }
 
-        def json(self):
-            return self._json
-
-        def iter_content(self, chunk_size=65536):
-            yield self.content
-
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as zf:
-        zf.writestr("log", "done")
-
-    def fake_post(url, **kwargs):
-        calls.append(url)
-        return Response(
-            json_data={
-                "code": 0,
-                "data": {
-                    "objects": [
-                        {"path": "prefix/task.zip", "isDir": False},
-                        {"path": "prefix/job-55.zip", "isDir": False},
-                    ],
-                    "hasNext": False,
-                },
-            }
-        )
-
-    def fake_get(url, **kwargs):
-        calls.append(url)
-        return Response(content=buffer.getvalue())
-
-    monkeypatch.setattr("matmaster.bohrium.artifacts.requests.post", fake_post)
-    monkeypatch.setattr("matmaster.bohrium.artifacts.requests.get", fake_get)
+    monkeypatch.setattr("matmaster.bohrium.artifacts.get_file_token", fake_get_file_token)
+    monkeypatch.setattr(
+        "matmaster.bohrium.artifacts.run_download_results_payload",
+        fake_run_download_results_payload,
+    )
 
     files, log_tail = download_job_artifacts(
         job_id="job-55",
@@ -2642,10 +3178,15 @@ def test_sandbox_download_preserves_zip_and_object_fallback_order(tmp_path, monk
         ctx=ctx,
     )
 
-    assert "log" in files
-    assert "done" in log_tail
-    assert any("iterate" in call for call in calls)
-    assert any("job-55.zip" in call for call in calls)
+    assert files == ["log"]
+    assert log_tail == "done"
+    assert captured["job_id"] == "job-55"
+    assert captured["sandbox"] is True
+    assert captured["sandbox_log_file"] == {
+        "host": "https://store.example",
+        "path": "prefix/log",
+        "token": "log-token",
+    }
 ```
 
 - [ ] **Step 2: Run existing download tests before refactor**
@@ -2658,39 +3199,75 @@ uv run pytest tests/matmaster/bohrium/test_artifacts.py tests/matmaster/tools/bu
 
 Expected before integration: tests pass against old implementation. This establishes the behavior to preserve.
 
-- [ ] **Step 3: Refactor `artifacts.py` to call transfer helpers without changing public API**
+- [ ] **Step 3: Refactor `artifacts.py` to delegate downloads to the transfer package**
 
-In `matmaster/bohrium/artifacts.py`, import helpers:
-
-```python
-from matmaster_bohrium_transfer.download import (
-    choose_sandbox_zip_object,
-    extract_zip_safe,
-)
-```
-
-Replace `_sandbox_choose_zip_object()` body with:
+In `matmaster/bohrium/artifacts.py`, import the package orchestrator:
 
 ```python
-def _sandbox_choose_zip_object(job_id: int | str, objects: list[dict]) -> str | None:
-    return choose_sandbox_zip_object(job_id, objects)
+from matmaster_bohrium_transfer.download import run_download_results_payload
 ```
 
-Replace `_extract_zip()` body with:
+Replace `download_job_artifacts()` with:
 
 ```python
-def _extract_zip(zip_path: Path, extract_dir: Path) -> list[str]:
-    try:
-        return extract_zip_safe(zip_path, extract_dir)
-    except zipfile.BadZipFile:
-        return [f"(bad zip: {zip_path.name})"]
+def download_job_artifacts(
+    *,
+    job_id: int | str,
+    detail_data: dict,
+    result_dir: Path,
+    ctx: BohriumContext,
+) -> tuple[list[str], str]:
+    payload: dict = {
+        "job_id": str(job_id),
+        "detail_data": detail_data,
+        "result_dir": str(result_dir),
+        "sandbox": ctx.sandbox,
+    }
+    if ctx.sandbox:
+        try:
+            host, path, token = get_file_token(
+                ctx,
+                file_path="log",
+                bohr_job_id=str(job_id),
+            )
+            if host and path and token:
+                payload["sandbox_log_file"] = {
+                    "host": host,
+                    "path": path,
+                    "token": token,
+                }
+        except Exception:
+            logger.debug("sandbox log token prefetch failed", exc_info=True)
+
+    result = run_download_results_payload(payload)
+    files = result.get("files") or []
+    if not isinstance(files, list):
+        files = []
+    return [str(item) for item in files], str(result.get("log_tail") or "")
 ```
 
-Keep the current `_sandbox_download_results()` fallback ordering intact.
+After this replacement, delete the now-unused local data-plane helpers from `artifacts.py`:
+
+```python
+_download_to_file
+_extract_zip
+_read_log
+_parse_sandbox_result_url
+_sandbox_iterate_objects
+_sandbox_download_object
+_sandbox_choose_zip_object
+_sandbox_download_log
+_merge_log_file
+_sandbox_relative_object_path
+_sandbox_download_objects
+_sandbox_download_results
+```
+
+Keep `get_file_token`, `BohriumContext`, and `BohriumTransferError` imports only if they are still used after cleanup. The main project should only assemble the payload and keep the public return type; fallback ordering and Range behavior now live in `matmaster_bohrium_transfer.download`.
 
 - [ ] **Step 4: Add package download orchestration for standard and sandbox jobs**
 
-Append to `packages/bohrium-transfer/src/matmaster_bohrium_transfer/download.py`:
+In `packages/bohrium-transfer/src/matmaster_bohrium_transfer/download.py`, add these imports to the existing import section near the top:
 
 ```python
 import os
@@ -2699,6 +3276,11 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from uuid import uuid4
 
 from .version import PROTOCOL_VERSION, SCHEMA_VERSION
+```
+
+Then append the orchestration functions to the end of `download.py`:
+
+```python
 
 _SANDBOX_OBJECT_DOWNLOAD_LIMIT = 128
 
@@ -3069,7 +3651,7 @@ Expected: tests pass; sandbox fallback behavior remains unchanged.
 Run:
 
 ```bash
-git add matmaster/bohrium/artifacts.py packages/bohrium-transfer/src/matmaster_bohrium_transfer/download.py packages/bohrium-transfer/src/matmaster_bohrium_transfer/remote.py tests/matmaster/bohrium/test_artifacts.py tests/matmaster/tools/builtin/test_bohrium_tool_download.py tests/matmaster_bohrium_transfer/test_remote_cli.py
+git add matmaster/bohrium/artifacts.py packages/bohrium-transfer/src/matmaster_bohrium_transfer/download.py packages/bohrium-transfer/src/matmaster_bohrium_transfer/remote.py tests/matmaster/bohrium/test_artifacts.py tests/matmaster/tools/builtin/test_bohrium_tool_download.py tests/matmaster_bohrium_transfer/test_download.py tests/matmaster_bohrium_transfer/test_remote_cli.py
 git commit -m "feat: preserve bohrium downloads through transfer package"
 ```
 
@@ -3079,6 +3661,9 @@ git commit -m "feat: preserve bohrium downloads through transfer package"
 - Modify: `pyproject.toml`
 - Modify: `uv.lock`
 - Modify: `Dockerfile.remote`
+- Modify: `matmaster/bohrium/upload.py`
+- Modify: `matmaster/tools/builtin/bohrium_tool/remote_runner.py`
+- Modify: `matmaster/bohrium/remote_transfer_helper.py`
 - Modify: `AGENTS.md`
 - Test: `tests/matmaster/test_import_audit.py`
 
@@ -3095,6 +3680,8 @@ def test_runtime_code_does_not_import_bohrium_sdk() -> None:
         Path("matmaster/bohrium"),
         Path("matmaster/tools/builtin/bohrium_tool"),
         Path("packages/bohrium-transfer/src/matmaster_bohrium_transfer"),
+        Path("src"),
+        Path("scripts"),
     ]
     offenders: list[str] = []
     for root in roots:
@@ -3146,7 +3733,47 @@ uv lock
 
 Expected: `uv.lock` no longer includes `bohrium-sdk` unless pulled transitively by another package.
 
-- [ ] **Step 4: Remove or quarantine legacy helper imports**
+- [ ] **Step 4: Remove legacy transfer branches and helper imports**
+
+Modify `matmaster/bohrium/upload.py` to delete these legacy symbols:
+
+```python
+_tiefblue_cls
+_load_tiefblue_client
+_upload_input_archive_legacy
+```
+
+Then make `upload_input_archive()` unconditionally use the SDK-free path:
+
+```python
+def upload_input_archive(*, create_data: dict, zip_path: Path) -> UploadedArchive:
+    return _upload_input_archive_sdk_free(create_data=create_data, zip_path=zip_path)
+```
+
+Modify `matmaster/tools/builtin/bohrium_tool/remote_runner.py` to delete the source-copy fallback:
+
+```python
+_helper_source
+_run_legacy_remote_helper
+```
+
+Then reduce `run_remote_helper()` to a compatibility alias with no environment-variable branch:
+
+```python
+def run_remote_helper(
+    session,
+    *,
+    subcommand: str,
+    payload: dict[str, Any],
+    timeout: int = 3600,
+) -> dict[str, Any]:
+    return run_remote_transfer(
+        session,
+        subcommand=subcommand,
+        payload=payload,
+        timeout=timeout,
+    )
+```
 
 If `matmaster/bohrium/remote_transfer_helper.py` still imports `bohrium.resources.tiefblue`, either delete the file or reduce it to a compatibility message that imports no SDK:
 
@@ -3164,6 +3791,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     return 1
 ```
+
+After this step, `rg -n "BOHRIUM_TRANSFER_USE_LEGACY|remote_transfer_helper|bohrium\\.resources|from bohrium|import bohrium" matmaster packages src scripts` must not report runtime imports or reachable legacy branches. It may still report documentation strings only if they are intentionally explanatory and not import statements.
 
 - [ ] **Step 5: Update AGENTS.md project contract**
 
@@ -3209,7 +3838,7 @@ Expected: all focused tests pass.
 Run:
 
 ```bash
-git add pyproject.toml uv.lock Dockerfile.remote AGENTS.md matmaster/bohrium/remote_transfer_helper.py tests/matmaster/test_import_audit.py
+git add pyproject.toml uv.lock Dockerfile.remote AGENTS.md matmaster/bohrium/upload.py matmaster/tools/builtin/bohrium_tool/remote_runner.py matmaster/bohrium/remote_transfer_helper.py tests/matmaster/test_import_audit.py
 git commit -m "feat: remove bohrium sdk transfer dependency"
 ```
 
@@ -3253,3 +3882,16 @@ git status --short
 ```
 
 Expected: only intentional implementation files are modified; `.superpowers/` and unrelated user edits remain unstaged.
+
+- [ ] **Step 4: Optional real StoreHost smoke**
+
+Run this only with disposable Bohrium StoreHost credentials and a safe prefix:
+
+```bash
+BOHRIUM_STOREHOST_CONTRACT_HOST="https://<store-host>" \
+BOHRIUM_STOREHOST_CONTRACT_TOKEN="<token>" \
+BOHRIUM_STOREHOST_CONTRACT_PREFIX="<prefix>/matmaster-contract" \
+uv run pytest tests/matmaster_bohrium_transfer/test_storehost_contract.py -q
+```
+
+Expected: the contract test uploads and downloads a tiny object successfully. Without these environment variables, the same test is skipped in normal focused test runs.
