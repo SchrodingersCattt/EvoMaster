@@ -1,15 +1,25 @@
 # Multi-MLIP Calculator Dispatch Guide
 
+## Scope
+
+This skill is **DPA-first**. The reason the same scripts work across four MLIP families is that every family exposes an ASE `Calculator`, and `_calculator.py` hides the family-specific construction behind a single `build_calculator()` call. **The unified ASE interface is what is portable — not the runtime environment.**
+
+The default submission image (`registry.dp.tech/dptech/dpa-calculator:...`) ships **only DeePMD-kit / DPA**. MACE, SevenNet and MatterSim Python packages are **not** installed there; treat them as opt-in and either (a) `pip install` them on top, or (b) switch to the multi-family LAMBench image.
+
 ## Supported Families
 
 The `_calculator.py` module supports four MLIP families via a unified `build_calculator()` interface:
 
-| Family | Package | Calculator Class | GPU? |
-|--------|---------|-----------------|------|
-| **DP** (DPA) | `deepmd-kit` | `deepmd.calculator.DP` | Yes |
-| **MACE** | `mace-torch` | `mace.calculators.mace_mp` | Yes |
-| **SevenNet** | `sevenn` | `sevenn.SevenNetCalculator` | Yes |
-| **MatterSim** | `mattersim` | `mattersim.forcefield.MatterSimCalculator` | Yes |
+| Family | Package | Calculator Class | In default image? | Install if missing |
+|--------|---------|------------------|-------------------|--------------------|
+| **DP** (DPA) | `deepmd-kit` | `deepmd.calculator.DP` | Yes | [deepmodeling/deepmd-kit](https://github.com/deepmodeling/deepmd-kit) |
+| **MACE** | `mace-torch` | `mace.calculators.mace_mp` | **No** | `pip install mace-torch` — [ACEsuit/mace](https://github.com/ACEsuit/mace) |
+| **SevenNet** | `sevenn` | `sevenn.SevenNetCalculator` | **No** | `pip install sevenn` — [MDIL-SNU/SevenNet](https://github.com/MDIL-SNU/SevenNet) |
+| **MatterSim** | `mattersim` | `mattersim.forcefield.MatterSimCalculator` | **No** | `pip install mattersim` — [microsoft/mattersim](https://github.com/microsoft/mattersim) |
+
+> When submitting with a non-DPA family, prepend the install into `cmd`, e.g.:
+> `cmd="source /mcp_server/AI4S-agent-tools/.venv/bin/activate && pip install mace-torch && python optimize_structure.py --model MACE-MP-0 ... > log 2>&1"`
+> Or use `Bohrium(action="list_images", keyword="lambench")` to pick a prebuilt multi-family image.
 
 ## How `build_calculator()` resolves models
 
