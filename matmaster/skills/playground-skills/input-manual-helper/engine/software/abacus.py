@@ -600,14 +600,17 @@ class AbacusBackend(SoftwareBackend):
         # For generic nscf with out_band=1, also use band-path KPT
         _params_lower = {k.lower(): v for k, v in (intent.params or {}).items()}
         use_band_kpt = task == "band" or (
-            task == "nscf"
-            and str(_params_lower.get("out_band", "0")) == "1"
+            task == "nscf" and str(_params_lower.get("out_band", "0")) == "1"
         )
         # Slab-related tasks: electrostatic potential, work function, efield,
         # dipole correction — all typically involve slab geometry with vacuum.
         use_slab_kpt = task in (
-            "pot", "potential", "workfunction",
-            "efield", "dipole", "dipole_correction",
+            "pot",
+            "potential",
+            "workfunction",
+            "efield",
+            "dipole",
+            "dipole_correction",
         )
         # Vacancy/BSSE tasks use kspacing in INPUT — KPT file is a comment-only
         # placeholder explaining that kspacing overrides the KPT file.

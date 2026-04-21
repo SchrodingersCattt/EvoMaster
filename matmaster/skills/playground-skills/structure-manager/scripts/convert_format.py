@@ -422,9 +422,15 @@ def main() -> None:
         out_fmt = args.output_fmt or _guess_fmt(args.output) or ""
         print(f"\n{'─'*50}", file=sys.stderr)
         print("📋 Next steps:", file=sys.stderr)
-        print(f"  • assess_structure.py --file {args.output}  → Validate converted structure", file=sys.stderr)
+        print(
+            f"  • assess_structure.py --file {args.output}  → Validate converted structure",
+            file=sys.stderr,
+        )
         if "vasp" in out_fmt or args.output.upper() in ("POSCAR", "CONTCAR"):
-            print(f"  • generate_kpoints.py --structure {args.output} --mode auto  → Generate KPOINTS", file=sys.stderr)
+            print(
+                f"  • generate_kpoints.py --structure {args.output} --mode auto  → Generate KPOINTS",
+                file=sys.stderr,
+            )
         print(f"{'─'*50}", file=sys.stderr)
 
     if not result.get("success"):
