@@ -18,6 +18,7 @@ import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
 import matmaster.tools.builtin.bohrium_tool.transfers as bohrium_transfers_module
 from matmaster.bohrium.endpoints import use_sandbox
 from matmaster.bohrium.errors import BohriumTransferError
+from matmaster.bohrium.upload import UploadedArchive
 from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
 from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
@@ -26,7 +27,6 @@ from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
     FakeRemoteSession,
     _fake_cred,
     _fake_submit_post_factory,
-    _install_fake_tiefblue,
     _patch_bridge,
 )
 
@@ -60,6 +60,30 @@ def _session_with_runtime(
         ),
     )
     return session
+
+
+def _install_fake_sdk_free_upload(monkeypatch, upload_calls: list) -> None:
+    def fake_upload(*, create_data, zip_path, manifest_root=None):
+        del manifest_root
+        store_path = str(create_data["storePath"]).strip()
+        if not store_path.endswith("/"):
+            store_path += "/"
+        store_host = str(create_data["storeHost"]).rstrip("/")
+        token = str(create_data["token"]).strip()
+        oss_key = f"{store_path}input.zip"
+        upload_calls.append((oss_key, str(zip_path), token))
+        return UploadedArchive(
+            oss_key=oss_key,
+            download_url=(
+                f"{store_host}/api/download/{oss_key}?token={token}"
+                "&Response-Content-Type=application/octet-stream"
+            ),
+        )
+
+    monkeypatch.setattr(
+        "matmaster.bohrium.upload._upload_input_archive_sdk_free",
+        fake_upload,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +251,7 @@ class TestBohriumExecution:
         )
 
         with monkeypatch.context() as m:
-            _install_fake_tiefblue(m, upload_calls)
+            _install_fake_sdk_free_upload(m, upload_calls)
             with caplog.at_level(logging.INFO):
                 result = asyncio.run(
                     tool.execute(
@@ -312,7 +336,7 @@ class TestBohriumExecution:
         )
 
         with monkeypatch.context() as m:
-            _install_fake_tiefblue(m, upload_calls)
+            _install_fake_sdk_free_upload(m, upload_calls)
             result = asyncio.run(
                 tool.execute(
                     {
@@ -357,7 +381,7 @@ class TestBohriumExecution:
         )
         monkeypatch.setattr(
             bohrium_transfers_module,
-            "run_remote_helper",
+            "run_remote_transfer",
             fake_remote_helper,
         )
 
@@ -421,7 +445,7 @@ class TestBohriumExecution:
                 raw_path=str(input_dir),
                 resolved_path=str(input_dir),
             )
-            _install_fake_tiefblue(m, upload_calls)
+            _install_fake_sdk_free_upload(m, upload_calls)
             result = asyncio.run(
                 tool.execute(
                     {
@@ -481,7 +505,7 @@ class TestBohriumExecution:
         )
         monkeypatch.setattr(
             bohrium_transfers_module,
-            "run_remote_helper",
+            "run_remote_transfer",
             fake_remote_helper,
         )
 
@@ -572,7 +596,7 @@ class TestBohriumExecution:
         )
         monkeypatch.setattr(
             bohrium_transfers_module,
-            "run_remote_helper",
+            "run_remote_transfer",
             fake_remote_helper,
         )
 
@@ -609,7 +633,7 @@ class TestBohriumExecution:
         )
 
         with monkeypatch.context() as m:
-            _install_fake_tiefblue(m, upload_calls)
+            _install_fake_sdk_free_upload(m, upload_calls)
             result = asyncio.run(
                 tool.execute(
                     {
@@ -664,27 +688,10 @@ class TestBohriumExecution:
                 }
             raise AssertionError(f"unexpected path: {path}")
 
-        class FakeTiefblueClient:
-            def __init__(self, base_url=None):
-                self.base_url = base_url
-
-            def upload_From_file_multi_part(
-                self, object_key, file_path, token="", progress_bar=False, **kw
-            ):
-                upload_calls.append((object_key, file_path, token))
-                assert progress_bar is False
-                return None
-
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
-        monkeypatch.setattr(
-            "matmaster.bohrium.upload._tiefblue_cls", None, raising=False
-        )
-        monkeypatch.setattr(
-            "matmaster.bohrium.upload._load_tiefblue_client",
-            lambda: FakeTiefblueClient,
-        )
+        _install_fake_sdk_free_upload(monkeypatch, upload_calls)
 
         result = asyncio.run(
             tool.execute(
@@ -864,6 +871,7 @@ class TestBohriumSessionCredentials:
         tool = BohriumTool(session=session, workdir=tmp_path)
 
         post_calls = []
+        upload_calls = []
 
         def fake_post(base_url, path, access_key, payload, timeout=30):
             post_calls.append((path, access_key))
@@ -879,22 +887,9 @@ class TestBohriumSessionCredentials:
                 }
             return {"code": 0, "data": {"jobId": "j2", "bohrJobId": "b2"}}
 
-        class FakeTiefblueClient:
-            def __init__(self, base_url=None):
-                pass
-
-            def upload_From_file_multi_part(self, *args, **kwargs):
-                return None
-
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
-        monkeypatch.setattr(
-            "matmaster.bohrium.upload._tiefblue_cls", None, raising=False
-        )
-        monkeypatch.setattr(
-            "matmaster.bohrium.upload._load_tiefblue_client",
-            lambda: FakeTiefblueClient,
-        )
+        _install_fake_sdk_free_upload(monkeypatch, upload_calls)
 
         result = asyncio.run(
             tool.execute(
