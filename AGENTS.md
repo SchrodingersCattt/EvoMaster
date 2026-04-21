@@ -115,20 +115,23 @@ git push -u gitlab <name>-main
 # 然后到 GitLab UI 新建 MR：source=<name>-main, target=main
 ```
 
-### 流水线硬约束：commit / MR 不得带「其它作者」
+### 流水线硬约束：新 commit / MR 不得带「其它作者」
 
-`main` 的流水线会拒绝出现额外作者署名的提交与 MR，因此：
+`main` 的流水线会拒绝**新提交**里出现额外作者署名，因此：
 
-- **commit 消息中不得出现** `Co-Authored-By: ...` 之类的 trailer，也不要保留 `Made-with: ...` 这种 IDE/agent 自动塞进去的 trailer。用 `git log -1 --format='%(trailers)'` 核一下。
-- **MR 描述里不要写** `Co-Authored-By`/联合作者之类的字段；只写改动摘要、测试说明、关联 issue 即可。
-- 如果历史 commit 里有 `Co-Authored-By`，在 cherry-pick 到 main 分支时用 `git commit --amend -m "..."` 重写消息把 trailer 去掉（cherry-pick 会保留原作者，author 字段不用动）。
-- `gitlab/main` 历史里**确实**残留过一些带 `Co-Authored-By: Claude ...` 的老 commit，那是流水线规则更严之前的遗留；新 MR 不要再带。
+- **新 commit 消息中不得出现** `Co-Authored-By: ...`、`Made-with: ...` 等 trailer（后者是某些 IDE/agent 会自动塞进去的，需主动清理）。提交前用 `git log -1 --format='%(trailers)'` 核一下，空输出即 OK。
+- **新 MR 的描述里不要写** `Co-Authored-By` 等联合作者字段；只写改动摘要、测试说明、关联 issue 即可。
+- 以 AI/助手辅助编写的 commit：`Author` 与 `Committer` 都是真人开发者，不加 Co-Authored-By。
+
+**不要改写历史 commit。** `gitlab/main`、`gitlab/test` 及各已存在分支的历史 commit 即便带 `Co-Authored-By: Claude ...` 之类的 trailer，也**保持原样**——那是流水线规则收紧之前的遗留，改写会破坏 SHA 链、影响他人分支 rebase 与回溯。约束只针对**本次及以后新产生的 commit**。
+
+如果要从带 Co-Authored-By 的 test commit 搬改动到 main：**不要** `git rebase -i` 去 reword 原 commit；而是在 **新建的 main 基线分支**上 `cherry-pick --no-commit` 后用 `git commit -m "..."` 重新写一条干净的新 commit（cherry-pick 保留原作者，author 字段不用改）。原 test commit 保留不动。
 
 ### 约定
 
-- test 分支是"随时可 rebase/force-push 的临时集成"；main 分支历史保持线性、commit 消息规范、无额外作者。
-- 以 AI/助手辅助编写的 commit：署名仍为真人开发者（`Author` 与 `Committer` 都是自己），不加 Co-Authored-By。
-- 把测试通过的改动搬到 main 时保留**原作者**；若需要合并多条 commit 也按本节流程。
+- test 分支是"集成/冒烟"分支；main 分支仅接受无额外作者 trailer 的新 commit。
+- 不改写任何已 push 的历史 commit；只对"即将新建"的 commit 负责。
+- 把测试通过的改动搬到 main 时保留**原作者**；若需要合并多条 commit 也按本节流程在**新分支**上重新组织。
 
 ---
 
