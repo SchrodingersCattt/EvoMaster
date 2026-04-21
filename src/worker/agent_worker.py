@@ -105,7 +105,7 @@ def _publish_run_interrupted_deploy(session_id: str) -> None:
         return
     previous_version = get_build_version()
     content = (
-        f'上一轮任务因服务升级（{previous_version} -> 新版本）中断，请重新发送以继续。'
+        '上一轮任务因服务升级中断，请重新发送以继续。'
         if previous_version
         else '上一轮任务因服务部署中断，请重新发送以继续。'
     )
