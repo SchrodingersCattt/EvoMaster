@@ -21,6 +21,7 @@ RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/
 WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md /app/
+COPY packages/bohrium-transfer /app/packages/bohrium-transfer/
 
 RUN uv venv && \
     . .venv/bin/activate && \
