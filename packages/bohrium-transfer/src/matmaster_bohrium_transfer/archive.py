@@ -18,6 +18,14 @@ class ArchiveResult:
     archive_compression: str = "stored"
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def directory_fingerprint(input_dir: str | Path) -> str:
     root = Path(input_dir)
     entries: list[dict[str, object]] = []
@@ -33,6 +41,7 @@ def directory_fingerprint(input_dir: str | Path) -> str:
                 "mtime_ns": st.st_mtime_ns,
                 "mode": stat.S_IMODE(st.st_mode),
                 "kind": kind,
+                "sha256": _file_sha256(path) if kind == "file" else None,
             }
         )
     raw = json.dumps(entries, ensure_ascii=False, separators=(",", ":")).encode()

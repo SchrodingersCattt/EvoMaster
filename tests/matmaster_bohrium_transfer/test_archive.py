@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import zipfile
 from pathlib import Path
 
@@ -47,6 +48,25 @@ def test_directory_fingerprint_changes_when_file_mtime_changes(
     first = directory_fingerprint(input_dir)
 
     file_path.write_text("bb", encoding="utf-8")
+    second = directory_fingerprint(input_dir)
+
+    assert first != second
+
+
+def test_directory_fingerprint_changes_when_same_size_content_changes_with_same_mtime(
+    tmp_path: Path,
+) -> None:
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    file_path = input_dir / "a.txt"
+    fixed_mtime_ns = 1_700_000_000_000_000_000
+
+    file_path.write_text("aa", encoding="utf-8")
+    os.utime(file_path, ns=(fixed_mtime_ns, fixed_mtime_ns))
+    first = directory_fingerprint(input_dir)
+
+    file_path.write_text("bb", encoding="utf-8")
+    os.utime(file_path, ns=(fixed_mtime_ns, fixed_mtime_ns))
     second = directory_fingerprint(input_dir)
 
     assert first != second
