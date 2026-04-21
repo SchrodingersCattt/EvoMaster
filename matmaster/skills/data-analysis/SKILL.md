@@ -36,3 +36,33 @@ Covers data quality control (QC), exploratory data analysis (EDA), and visualiza
 
 * Read the data file **before** generating any deliverable — do not hallucinate columns or values.
 * Every quantitative claim in a report (mean, Q1, outlier threshold) must come from an executed computation, not from mental arithmetic.
+
+## Visualization / Plotting Workflow
+
+When a task requires figures or plots from data:
+
+1. **Write a self-contained Python script** (e.g., `plot_qc.py`) that reads the data and produces the figure.
+2. **Use matplotlib** with `Agg` backend for headless environments:
+   ```python
+   import matplotlib
+   matplotlib.use('Agg')
+   import matplotlib.pyplot as plt
+   ```
+3. **Save figures as PNG** (default) or PDF. Always call `plt.savefig(filename, dpi=150, bbox_inches='tight')`.
+4. **Common QC plots**:
+   - **Box plots**: Show distribution per numeric column (outlier visualization)
+   - **Histograms**: Show value distribution for key variables
+   - **Scatter plots**: Show relationships between variables
+   - **Time series / trend lines**: If data has temporal ordering
+   - **Bar charts with error bars**: For summary statistics across groups
+5. **Label everything**: title, axis labels with units, legend if multiple series. Use readable font sizes (≥10pt).
+6. **Multiple subplots**: Use `plt.subplots(nrows, ncols)` for multi-panel figures. One figure with multiple panels is often better than many separate files.
+7. **Verify output**: After running the script, confirm the PNG/PDF file exists and has non-zero size.
+
+### Deliverable Completeness Checklist
+- [ ] QC report (Markdown) — with all required sections
+- [ ] Metrics JSON — with all task-specified top-level keys
+- [ ] Figures (PNG/PDF) — saved to disk, referenced in report
+- [ ] All files written before task completion
+- [ ] JSON files are parseable (`json.loads()` succeeds)
+- [ ] Markdown files are non-empty and well-structured

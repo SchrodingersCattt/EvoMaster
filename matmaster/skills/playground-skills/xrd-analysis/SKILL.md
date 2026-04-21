@@ -100,3 +100,10 @@ python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
 - "Solve this crystal structure from HKL data" → `solve_refine_scxrd.py`
 - "Generate a CIF from these diffraction files" → `solve_refine_scxrd.py`
 - "Identify the phase from XRD pattern" → mcp-mat-xrd `xrd_phase_identification` (then this skill for quantitative analysis)
+
+## Debugging & Troubleshooting
+
+See `references/debugging_checklist.md` for step-by-step debugging when SCXRD or PXRD tasks produce poor results. Key rules:
+- **SCXRD**: ALWAYS pass `--elements` and `--sg` to `solve_refine_scxrd.py`. If R1 > 0.15, try `--trials 5 --grid 128`.
+- **PXRD**: If refinement fails, verify initial parameters are within ~2% of true values. Use `--tolerance 0.5` for noisy data.
+- **Always deliver a CIF** for SCXRD tasks — even an imperfect CIF is better than none.
