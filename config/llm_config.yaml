@@ -161,4 +161,4 @@ routes:
   "bedrock-claude-opus":
     profile: opus_bedrock
 
-default: "opus"
+default: "qwen_3_6_plus"
