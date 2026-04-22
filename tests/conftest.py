@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Generator
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -103,6 +104,20 @@ class MockAsyncTool:
 
 
 # -- Fixtures --
+
+
+@pytest.fixture(autouse=True)
+def _suppress_devshell_eval_feishu() -> Generator[None]:
+    """Devshell 评测飞书在单测中不发真实 webhook（``from … import`` 需在调用方模块上 patch）。"""
+    with (
+        patch(
+            "evaluation.devshell_agent.sdk_tools_eval_run.notify_after_scoring_async"
+        ),
+        patch(
+            "evaluation.devshell_agent.loop_proposal_notify.notify_manual_review_proposal_async"
+        ),
+    ):
+        yield
 
 
 @pytest.fixture
