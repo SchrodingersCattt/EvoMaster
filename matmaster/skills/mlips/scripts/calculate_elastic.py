@@ -3,7 +3,7 @@
 Usage::
 
     python calculate_elastic.py --structure input.cif --model DPA3.1-3M \\
-        [--head Omat24] [--fmax 0.01] [--charge 0] [--spin 1]
+        [--head OMat24] [--fmax 0.01] [--charge 0] [--spin 1]
 
 Expects a **fully relaxed** periodic structure as input.
 

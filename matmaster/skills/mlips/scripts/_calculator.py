@@ -8,7 +8,7 @@ Usage (inside other scripts in this directory)::
 
     from _calculator import build_calculator, build_fparam, set_fparam
 
-    calc = build_calculator("DPA3.1-3M", head="Omat24")
+    calc = build_calculator("DPA3.1-3M", head="OMat24")
     atoms.calc = calc
 """
 
@@ -51,7 +51,7 @@ KNOWN_MODELS: dict[str, dict] = {
     "DPA3.2-5M": {
         "family": "DP",
         "url": "https://dp-storage-test2.oss-cn-zhangjiakou.aliyuncs.com/bohrium-test/bohrium/feedback/attachment/01KF3BF3TX9GVTC96Q0PCV01H3/DPA-3.2-5M.pt",
-        "default_head": "Omat24",
+        "default_head": "OMat24",
     },
     # ── MACE ──────────────────────────────────────────────────────────────
     "MACE-MP-0": {"family": "MACE", "model_id": "medium"},
@@ -139,8 +139,8 @@ def _init_dp(model_path: Path | str, head: str | None = None) -> Calculator:
     from deepmd.calculator import DP
 
     path = str(model_path)
-    if path.endswith(".pt") or path.endswith(".pth"):
-        return DP(model=path, head=head or "Omat24")
+    if head and (path.endswith(".pt") or path.endswith(".pth")):
+        return DP(model=path, head=head)
     return DP(model=path)
 
 
@@ -157,24 +157,67 @@ def _init_mace(model_path: Path | str | None, **_kw) -> Calculator:
 
 def _init_sevennet(model_id: str | None, **_kw) -> Calculator:
     try:
-        from sevenn.sevennet_calculator import SevenNetCalculator
-    except ImportError as exc:
-        raise ImportError("SevenNet is not installed. Run: pip install sevenn") from exc
-    name = model_id or "SevenNet-0"
-    kw: dict = {"model": name, "device": "cuda"}
-    if name == "7net-mf-ompa":
-        kw["modal"] = "omat24"
-    return SevenNetCalculator(**kw)
+        from sevenn.calculator import SevenNetCalculator
+    except ImportError:
+        try:
+            from sevenn.sevennet_calculator import SevenNetCalculator
+        except ImportError as exc:
+            raise ImportError(
+                "SevenNet is not installed. Run: pip install sevenn"
+            ) from exc
+    import torch
+
+    prev_dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch.float32)
+    try:
+        name = model_id or "SevenNet-0"
+        kw: dict = {"model": name, "device": "cuda"}
+        if name == "7net-mf-ompa":
+            kw["modal"] = "omat24"
+        return SevenNetCalculator(**kw)
+    finally:
+        torch.set_default_dtype(prev_dtype)
 
 
-def _init_mattersim(**_kw) -> Calculator:
+class _MatterSimWrapper(Calculator):
+    """Wrapper that ensures float32 default dtype during MatterSim forward pass."""
+
+    implemented_properties = ["energy", "forces", "stress"]
+
+    def __init__(self, inner):
+        Calculator.__init__(self)
+        self._inner = inner
+
+    def calculate(self, atoms=None, properties=None, system_changes=None):
+        import torch
+
+        prev = torch.get_default_dtype()
+        torch.set_default_dtype(torch.float32)
+        try:
+            self._inner.calculate(atoms, properties, system_changes)
+        finally:
+            torch.set_default_dtype(prev)
+        self.results = self._inner.results
+
+
+def _init_mattersim(_model=None, **_kw) -> Calculator:
     try:
         from mattersim.forcefield import MatterSimCalculator
     except ImportError as exc:
         raise ImportError(
             "MatterSim is not installed. Run: pip install mattersim"
         ) from exc
-    return MatterSimCalculator(load_path="MatterSim-v1.0.0-5M.pth", device="cuda")
+    import torch
+
+    prev = torch.get_default_dtype()
+    torch.set_default_dtype(torch.float32)
+    try:
+        inner = MatterSimCalculator(
+            load_path="MatterSim-v1.0.0-5M.pth", device="cuda"
+        )
+    finally:
+        torch.set_default_dtype(prev)
+    return _MatterSimWrapper(inner)
 
 
 _FAMILY_INIT = {
@@ -197,7 +240,7 @@ def build_calculator(
         One of: a known model name (e.g. ``"DPA3.1-3M"``), a URL, or a
         local file path.
     head
-        Model head (DP family only). E.g. ``"Omat24"``, ``"OMol25"``.
+        Model head (DP family only). E.g. ``"OMat24"``, ``"OMol25"``.
         Ignored for non-DP families.
 
     Returns
@@ -219,7 +262,7 @@ def build_calculator(
         )
 
     if family == "DP":
-        # Head: explicit arg > model metadata > "Omat24"
+        # Head: explicit arg > model metadata > "OMat24"
         if head is None and model_name_or_path in KNOWN_MODELS:
             head = KNOWN_MODELS[model_name_or_path].get("default_head")
         return init_fn(resolved, head=head)

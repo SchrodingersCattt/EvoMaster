@@ -38,7 +38,7 @@ model_name_or_path
 
 ### DP (DPA)
 
-- Requires `--head` for multi-head models (default: `Omat24`)
+- Requires `--head` for multi-head models (default: `OMat24`)
 - Supports `--charge` and `--spin` via fparam (DPA3.2-5M only)
 - Model files: `.pt` (PyTorch) or `.pb` (TensorFlow, legacy)
 
@@ -46,7 +46,7 @@ model_name_or_path
 
 - No `--head` flag (ignored)
 - Default dtype: `float64` for accuracy
-- Named models (`MACE-MP-0`) use `mace_mp()` auto-download
+- **Use `MACE-MP-0`** (calls `mace_mp()` auto-download, works in Bohrium). Avoid `MACE-MPA-0` — it downloads from GitHub releases which times out inside Bohrium containers.
 - Custom `.model` files: pass the local path
 
 ### SevenNet

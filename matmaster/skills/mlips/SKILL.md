@@ -30,19 +30,19 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 | **DPA3.1-3M** | DP | both images | General inorganic — **default**, 3M params |
 | **DPA3.2-5M** | DP | both images | General + charge/spin, supports `--charge`/`--spin` |
 | DPA2.4-7M | DP | both images | Legacy multi-head |
-| MACE-MP-0 / MACE-MPA-0 | MACE | multi-family only | General inorganic foundation — [ACEsuit/mace](https://github.com/ACEsuit/mace) |
+| **MACE-MP-0** | MACE | multi-family only | General inorganic foundation — [ACEsuit/mace](https://github.com/ACEsuit/mace). **Prefer over MACE-MPA-0** (MPA-0 downloads from GitHub which times out in Bohrium containers) |
 | SevenNet-0 / 7net-mf-ompa | SevenNet | multi-family only | Graph NN — [MDIL-SNU/SevenNet](https://github.com/MDIL-SNU/SevenNet) |
 | MatterSim-v1-5M | MatterSim | multi-family only | General inorganic, 5M params — [microsoft/mattersim](https://github.com/microsoft/mattersim) |
 
 > If using the DPA-only image and you need MACE/SevenNet/MatterSim, either switch to the multi-family image or prepend `pip install mace-torch` / `sevenn` / `mattersim` in `cmd`.
 
-**DPA heads**: `Omat24` (default, inorganic), `OMol25` (organic), `OC22` (catalysis), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
+**DPA heads**: `OMat24` or `Omat24` (default, inorganic — casing differs between model versions: DPA3.2-5M uses `OMat24`, DPA3.1-3M/DPA2.4-7M use `Omat24`), `OMol25` (organic), `OC22` (catalysis), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
 
 ## Task Scripts
 
 | Script | Usage | Output |
 |--------|-------|--------|
-| `optimize_structure.py` | `--structure in.cif --model DPA3.1-3M [--head Omat24] [--relax-cell] [--fmax 0.01]` | `*_optimized.cif`, `result.json` |
+| `optimize_structure.py` | `--structure in.cif --model DPA3.1-3M [--head OMat24] [--relax-cell] [--fmax 0.01]` | `*_optimized.cif`, `result.json` |
 | `calculate_phonon.py` | `--structure in.cif --model DPA3.1-3M --temperatures 300 600 [--calc-tdos] [--mesh 40]` | `phonon_band.png`, `result.json` |
 | `run_molecular_dynamics.py` | `--structure in.cif --model DPA3.1-3M --stages stages.json` | `trajs/*.extxyz`, `final_structure.xyz`, `result.json` |
 | `calculate_elastic.py` | `--structure relaxed.cif --model DPA3.1-3M` (input must be relaxed) | `elastic_matrix.csv`, `result.json` |
@@ -80,13 +80,13 @@ DPA3 checkpoints (`DPA3.1-3M.pt`, `DPA3.2-5M.pt`) are **multi-task / multi-head*
 dp --pt show DPA-3.2-5M.pt model-branch
 ```
 
-Typical DPA3 branches: `Omat24` (default inorganic), `OMol25`, `OC22`, `Organic_Reactions`, `ODAC23`, plus `RANDOM` (randomly initialized fitting net). Pick the branch whose training data best matches your system.
+Typical DPA3 branches: `OMat24` (default inorganic), `OMol25`, `OC22`, `Organic_Reactions`, `ODAC23`, plus `RANDOM` (randomly initialized fitting net). Pick the branch whose training data best matches your system.
 
 **Step 2 — freeze the chosen branch:**
 
 ```bash
 # --model-branch (preferred) or --head both work
-dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch Omat24
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch OMat24
 ```
 
 **Step 3 — use the frozen `.pth` in LAMMPS** (via the `deepmd` pair style):
