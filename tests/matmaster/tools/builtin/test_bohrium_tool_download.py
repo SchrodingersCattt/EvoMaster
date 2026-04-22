@@ -6,7 +6,8 @@ import asyncio
 import json
 from pathlib import Path
 
-import matmaster.bohrium.artifacts as bohrium_artifacts_module
+import matmaster_bohrium_transfer.download as transfer_download_module
+
 import matmaster.bohrium.client as bohrium_client_module
 import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
 import matmaster.tools.builtin.bohrium_tool.transfers as bohrium_transfers_module
@@ -249,7 +250,7 @@ class TestBohriumDownloadExecution:
         )
         monkeypatch.setattr(
             bohrium_transfers_module,
-            'run_remote_helper',
+            'run_remote_transfer',
             fake_remote_helper,
         )
 
@@ -304,7 +305,7 @@ class TestBohriumDownloadExecution:
         )
         monkeypatch.setattr(
             bohrium_transfers_module,
-            'run_remote_helper',
+            'run_remote_transfer',
             fake_remote_helper,
         )
 
@@ -381,19 +382,21 @@ class TestBohriumDownloadExecution:
             idx += 1
             return {'data': detail}
 
+        def fake_post(base_url, path, access_key, payload, timeout=30):
+            del base_url, access_key, timeout
+            assert path == '/openapi/v1/sandbox/job/file/token'
+            assert payload == {'filePath': 'log', 'jobId': 'job-789'}
+            return {
+                'code': 0,
+                'data': {
+                    'host': 'https://store.example',
+                    'path': 'prefix/log',
+                    'token': 'log-token',
+                },
+            }
+
         def fake_requests_post(url, *, headers=None, json=None, timeout=30):
             del headers, json, timeout
-            if url == 'https://openapi.test.dp.tech/openapi/v1/sandbox/job/file/token':
-                return _FakeDownloadResponse(
-                    json_data={
-                        'code': 0,
-                        'data': {
-                            'host': 'https://store.example',
-                            'path': 'prefix/log',
-                            'token': 'log-token',
-                        },
-                    }
-                )
             assert url == 'https://store.example/api/iterate'
             return _FakeDownloadResponse(
                 json_data={
@@ -429,13 +432,36 @@ class TestBohriumDownloadExecution:
                 return _FakeDownloadResponse(content=b'binary')
             return _FakeDownloadResponse(status_code=404)
 
+        class FakeStoreSession:
+            def post(self, url, *, headers=None, json=None, timeout=30):
+                return fake_requests_post(
+                    url,
+                    headers=headers,
+                    json=json,
+                    timeout=timeout,
+                )
+
+            def head(self, url, *, allow_redirects=True, timeout=30):
+                del allow_redirects, timeout
+                return _FakeDownloadResponse()
+
+            def get(self, url, *, headers=None, timeout=300, stream=True):
+                return fake_requests_get(
+                    url,
+                    headers=headers,
+                    timeout=timeout,
+                    stream=stream,
+                )
+
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, '_post', fake_post)
         monkeypatch.setattr(
-            bohrium_artifacts_module.requests, 'post', fake_requests_post
+            transfer_download_module.requests,
+            'Session',
+            lambda: FakeStoreSession(),
         )
-        monkeypatch.setattr(bohrium_artifacts_module.requests, 'get', fake_requests_get)
         import time as time_module
 
         monkeypatch.setattr(bohrium_tool_module, 'time', time_module, raising=False)

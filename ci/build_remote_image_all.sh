@@ -4,6 +4,11 @@
 #
 # 依赖：CI 中配置 BOHRIUM_ACCESS_KEY_TEST、BOHRIUM_PROJECT_ID_TEST、BOHRIUM_ACCESS_KEY_UAT、
 #       BOHRIUM_PROJECT_ID_UAT、BOHRIUM_ACCESS_KEY_PROD、BOHRIUM_PROJECT_ID_PROD（与各环境一致即可）。
+#
+# 此外需 OSS（上传 matmaster-bohrium-transfer wheel，并生成注入 URL/SHA 的 Dockerfile.remote.ci；
+# Bohrium 构建不支持 COPY 上下文或 docker build --build-arg）：
+#   OSS_ENDPOINT, OSS_BUCKET_NAME, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET
+# 可选：REMOTE_IMAGE_TRANSFER_OSS_PREFIX（默认 evomaster/calculation）。
 
 set -e
 
@@ -15,6 +20,17 @@ mkdir -p "$PARALLEL_DIR"
 
 declare -A ID_BY_ENV
 declare -A NAME_BY_ENV
+
+for v in OSS_ENDPOINT OSS_BUCKET_NAME OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET; do
+  if [[ -z "${!v:-}" ]]; then
+    echo "ERROR: $v is not set (required to upload matmaster-bohrium-transfer wheel to OSS)."
+    exit 1
+  fi
+done
+
+echo "=== Preparing matmaster-bohrium-transfer wheel + Dockerfile.remote.ci ==="
+python3 "${SCRIPT_DIR}/remote_transfer_prepare.py"
+export DOCKERFILE_PATH="${REPO_ROOT}/Dockerfile.remote.ci"
 
 # 先校验三环境变量都已配置
 for env in test uat prod; do

@@ -17,6 +17,8 @@ node_modules/
 build/
 develop-eggs/
 dist/
+# CI 生成：注入 OSS wheel URL 后供 Bohrium API 提交的 Dockerfile
+Dockerfile.remote.ci
 downloads/
 eggs/
 .eggs/
