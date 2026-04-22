@@ -212,9 +212,7 @@ def _init_mattersim(_model=None, **_kw) -> Calculator:
     prev = torch.get_default_dtype()
     torch.set_default_dtype(torch.float32)
     try:
-        inner = MatterSimCalculator(
-            load_path="MatterSim-v1.0.0-5M.pth", device="cuda"
-        )
+        inner = MatterSimCalculator(load_path="MatterSim-v1.0.0-5M.pth", device="cuda")
     finally:
         torch.set_default_dtype(prev)
     return _MatterSimWrapper(inner)
