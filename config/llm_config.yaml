@@ -97,6 +97,8 @@ profiles:
     model: "matmaster/qwen3.6-plus"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "high"
     supports_vision: true
     timeout: 1200
     stream_timeout: 120
