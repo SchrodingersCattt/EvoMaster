@@ -13,7 +13,7 @@ This is the devshell counterpart of
 **Ingest score (0/100):** a task passes (100) only when **every** scoring_checklist
 item passes; otherwise 0. The DevShell agent loop calls
 :func:`score_devshell_tasks_for_agent_loop` in-process, which treats ``token_budget_total``
-as non-blocking for the binary score (it still appears in ``score_reason``). The CLI
+and ``turn_budget`` as non-blocking for the binary score (they still appear in ``score_reason``). The CLI
 invocation uses strict ``ingest_optional_checklist_ids=()`` (empty). Per-axis weighted ratios
 are still recorded in ``score_reason`` for debugging; they do not affect the numeric ingest score.
 """
@@ -48,7 +48,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _QUESTION_BANK_DIR = REPO_ROOT / "evaluation" / "question_bank"
 
 # Used only by :func:`score_devshell_tasks_for_agent_loop` (in-process).
-_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS = frozenset({"token_budget_total"})
+_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS = frozenset({"token_budget_total", "turn_budget"})
 _EVIDENCE_MAPPING_PATH = REPO_ROOT / "evaluation" / "core" / "evidence_mapping.yaml"
 _META_FILENAMES = frozenset(
     {
@@ -702,7 +702,7 @@ def score_devshell_tasks_for_agent_loop(
     parallel_checklist_workers: int,
     submit: bool,
 ) -> int:
-    """In-process scoring for the DevShell agent loop (``token_budget_total`` optional)."""
+    """In-process scoring for the DevShell agent loop (``token_budget_total`` / ``turn_budget`` optional)."""
     return _run_score_devshell_tasks_impl(
         run_dir=run_dir.resolve(),
         eval_config=eval_config.resolve() if eval_config is not None else None,

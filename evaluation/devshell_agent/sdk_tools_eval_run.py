@@ -103,8 +103,8 @@ class MatmasterEvalMcpEvalRunMixin:
             "sanitized": True,
             "notes": [
                 "Per-repeat ingest score is 0 or 100 when all non-optional checklist items "
-                "passed; token_budget_total is optional (still in score_reason, excluded "
-                "from binary pass). "
+                "passed; token_budget_total and turn_budget are optional (still in score_reason, "
+                "excluded from binary pass). "
                 "Per-question score is 100 only when every repeat for that question scored "
                 "100; otherwise 0. macro_mean_0_100 is the mean of those per-question "
                 "0/100 values (questions fully passed ÷ question count × 100), matching "

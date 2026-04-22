@@ -20,7 +20,7 @@ SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编
 - 你需要在每轮总结里如实说明本轮触发了哪些子 Agent、是否形成了 commit（以编排器日志为准），以及为何继续或停止。
 
 ## 判分原则（与 `evaluation/docs/devshell/devshell_claude_code_eval.md` 一致）
-- 单次任务的**权威判分**来自 `evaluation/scripts/devshell/score_devshell_tasks.py`（`BinaryEvaluator`，基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl`）。本编排路径下对 ingest 采用 **`token_budget_total` 可选项**：该项仍参与核验并出现在 `score_reason`，但**不计入** binary 的 0/100；其余 `scoring_checklist` 项须**全部通过**该次 repeat 才计 100。
+- 单次任务的**权威判分**来自 `evaluation/scripts/devshell/score_devshell_tasks.py`（`BinaryEvaluator`，基于 `raw_runs.jsonl`、`workspaces/<task_id>/` 与 `logs/<task_id>/events_*.jsonl`）。本编排路径下对 ingest 采用 **`token_budget_total`、`turn_budget` 可选项**：这两项仍参与核验并出现在 `score_reason`，但**不计入** binary 的 0/100；其余 `scoring_checklist` 项须**全部通过**该次 repeat 才计 100。
 - 你看到的是编排器提供的**脱敏摘要**：`macro_mean_0_100` 为各题 0/100 的均值（每题需 k 次 repeat 在上述口径下均满分才算该题 100；即完全通过题占比×100），与 `pending_ingest` 聚合口径一致，但不暴露原始 `score_reason` 文本。
 - 你**不得**自行再读题库、evaluator 或原始 checklist 文本来解释低分。
 

@@ -169,7 +169,7 @@ def run_score_devshell_tasks(
     parallel_checklist_workers: int | None = None,
     submit: bool,
 ) -> tuple[int, str, str]:
-    """Run devshell scoring in-process (agent loop: ``token_budget_total`` optional)."""
+    """Run devshell scoring in-process (agent loop: ``token_budget_total`` / ``turn_budget`` optional)."""
     from evaluation.scripts.devshell.score_devshell_tasks import (
         score_devshell_tasks_for_agent_loop,
     )
