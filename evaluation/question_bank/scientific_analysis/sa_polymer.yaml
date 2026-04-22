@@ -2,7 +2,7 @@ version: v5
 capability: scientific_analysis
 domain: polymer
 questions:
-- id: pl_donor
+- id: pl_donor_20260422
   capability: scientific_analysis
   domain: polymer
   intent: Pre-screen PM6, PTB7-Th, D18, and P3HT donor polymers for a Y6-like acceptor window
@@ -44,6 +44,9 @@ questions:
     - conformational_note
     - shortlist
     - uncertainty_note
+  - key: grounding_source
+    value:
+      filename: donor_prescreen_bundle.json
   - key: turn_budget
     value:
       max: 24
@@ -97,7 +100,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: pl_membrane
+- id: pl_membrane_20260422
   capability: scientific_analysis
   domain: polymer
   intent: Compare PIM-1, Matrimid, and 6FDA-DAM membranes for CO2/N2 separation by integrating
@@ -139,6 +142,9 @@ questions:
     - tradeoff_discussion
     - free_volume_note
     - recommendation
+  - key: grounding_source
+    value:
+      filename: membrane_screening_bundle.json
   - key: turn_budget
     value:
       max: 24
