@@ -248,10 +248,6 @@ def main() -> None:
             "md",
             "spin_scf",
             "magnetic",
-            "phonon",
-            "phonopy",
-            "soc",
-            "spin_orbit",
         ],
         help="Workflow type to generate.",
     )
@@ -350,10 +346,6 @@ def main() -> None:
         result = generate_single_task("md", params, output_dir)
     elif workflow in ("spin_scf", "magnetic"):
         result = generate_single_task("spin_scf", params, output_dir)
-    elif workflow in ("phonon", "phonopy"):
-        result = generate_single_task("phonon", params, output_dir)
-    elif workflow in ("soc", "spin_orbit"):
-        result = generate_single_task("soc", params, output_dir)
     else:
         result = {"success": False, "error": f"Unknown workflow: {workflow}"}
 
