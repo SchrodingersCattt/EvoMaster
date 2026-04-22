@@ -746,10 +746,23 @@ def _write_cif(
         lines.append(f"_chemical_formula_weight           {mw}")
     if density_str != "?":
         lines.append(f"_exptl_crystal_density_diffrn      {density_str}")
+    lines.append("_exptl_crystal_density_meas        ?")
+
+    # Determine radiation type from wavelength
+    rad_type = "?"
+    if abs(wavelength - 0.71073) < 0.002:
+        rad_type = r"MoK\a"
+    elif abs(wavelength - 1.54178) < 0.003:
+        rad_type = r"CuK\a"
+    elif abs(wavelength - 0.56086) < 0.002:
+        rad_type = r"AgK\a"
+
     lines += [
         "",
         "# Data collection",
+        f"_diffrn_radiation_type            '{rad_type}'",
         f"_diffrn_radiation_wavelength      {wavelength:.5f}",
+        "_diffrn_radiation_probe            'x-ray'",
         "",
         "# Refinement statistics",
         f"_refine_ls_R_factor_gt            {rfactors['R1']:.4f}",

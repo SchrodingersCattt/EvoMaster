@@ -225,6 +225,19 @@ class AbacusBackend(SoftwareBackend):
         "afm": "spin_scf",
         "ferromagnetic": "spin_scf",
         "antiferromagnetic": "spin_scf",
+        # Phonon / lattice dynamics aliases → SCF with forces
+        "phonon": "phonon",
+        "phonopy": "phonon",
+        "dfpt": "phonon",
+        "finite_displacement": "phonon",
+        "fd": "phonon",
+        "lattice_dynamics": "phonon",
+        "frozen_phonon": "phonon",
+        # SOC / spin-orbit coupling aliases
+        "soc": "soc",
+        "spin_orbit": "soc",
+        "spin_orbit_coupling": "soc",
+        "spinorb": "soc",
     }
 
     def render(self, intent: RenderIntent) -> str:
@@ -381,6 +394,30 @@ class AbacusBackend(SoftwareBackend):
                     "mixing_beta": 0.1,
                     "mixing_ndim": 20,
                     "mixing_gg0": 1.5,
+                    "out_chg": 1,
+                }
+            )
+        elif task == "phonon":
+            # Phonon / lattice dynamics: SCF + forces for displaced structures
+            # (finite displacement / phonopy workflow). Requires tight SCF
+            # convergence and force/stress output for accurate force constants.
+            params.update(
+                {
+                    "calculation": "scf",
+                    "cal_force": 1,
+                    "cal_stress": 1,
+                    "scf_thr": "1e-8",
+                    "out_chg": 1,
+                }
+            )
+        elif task == "soc":
+            # Spin-orbit coupling: noncollinear magnetism + SOC
+            params.update(
+                {
+                    "calculation": "scf",
+                    "noncolin": 1,
+                    "lspinorb": 1,
+                    "nspin": 4,
                     "out_chg": 1,
                 }
             )
