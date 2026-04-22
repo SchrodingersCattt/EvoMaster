@@ -535,7 +535,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_007_20260421
+- id: IG_abacus_007_20260422
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS LCAO spin-polarized electric-field SCF and NSCF band inputs for
@@ -650,6 +650,9 @@ questions:
     value: INPUT_spin_elec_band
   - key: kpt_band_artifact
     value: KPT_band
+  - key: grounding_source
+    value:
+      filename: nanoribbon.stru
   - key: turn_budget
     value:
       max: 8
@@ -1129,7 +1132,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_005_20260421
+- id: IG_abacus_005_20260422
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence
@@ -1261,6 +1264,12 @@ questions:
     value: KPT_bulk
   - key: kpt_slab_artifact
     value: KPT_slab
+  - key: grounding_source
+    value:
+      filenames:
+      - bulk_al_fcc.stru
+      - slab_al_fcc100_5l.stru
+      - slab_al_fcc100_7l.stru
   - key: turn_budget
     value:
       max: 8
@@ -1372,7 +1381,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_006_20260421
+- id: IG_abacus_006_20260422
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW inputs for Mo surface-vacancy energy using bulk, pristine slab,
@@ -1610,6 +1619,12 @@ questions:
     value: INPUT_slab_vac
   - key: kpt_gamma_artifact
     value: KPT_gamma
+  - key: grounding_source
+    value:
+      filenames:
+      - mo_bulk.stru
+      - mo110_pristine.stru
+      - mo110_surface_vac.stru
   - key: turn_budget
     value:
       max: 8
