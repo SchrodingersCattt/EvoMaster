@@ -174,7 +174,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_general_intake_001_20260410v4
+- id: WO_general_intake_001_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Build a structured intake-and-analysis protocol with attachment-level triage priority
@@ -240,6 +240,9 @@ questions:
       - 图
       - 表
       - 文字说明
+  - key: grounding_source
+    value:
+      filename: attachment_manifest.json
   - key: turn_budget
     value:
       max: 8
@@ -301,7 +304,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_postproc_002_20260415
+- id: WO_general_postproc_002_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Produce structured post-processing pipeline artifacts with per-stage validation
@@ -358,6 +361,9 @@ questions:
       - 能带
       - MSD
       - 概率密度
+  - key: grounding_source
+    value:
+      filename: result_manifest.json
   - key: turn_budget
     value:
       max: 8
@@ -410,7 +416,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_planning_003_20260415
+- id: WO_general_planning_003_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Produce phased execution and resource-control artifacts with explicit branch conditions
@@ -474,6 +480,9 @@ questions:
       - 先筛选再深入计算
       - 并行
       - 报告结构
+  - key: grounding_source
+    value:
+      filename: mission_constraints.json
   - key: turn_budget
     value:
       max: 8
@@ -1452,7 +1461,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_007_20260415
+- id: WO_mlip_dpa_007_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Build a machine-checkable DP-GEN onboarding package with milestone gates and fallback
@@ -1514,6 +1523,9 @@ questions:
       - iter_ready
       - week1_plan
       flags: i
+  - key: grounding_source
+    value:
+      filename: dpgen_docs_brief.md
   - key: turn_budget
     value:
       max: 8

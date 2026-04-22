@@ -852,7 +852,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_006_20260411v4
+- id: WO_mlip_dpa_006_20260422
   capability: structure_construction
   domain: agnostic
   intent: Build and export three 1 mol/L Zn-salt aqueous model boxes near 2000 atoms with
@@ -914,6 +914,9 @@ questions:
       filename: composition_plan.json
       pattern: '"Zn\(ClO4\)2"\s*:\s*\{[\s\S]*?"n_formula_units"\s*:\s*\d+[\s\S]*?"n_water"\s*:\s*\d+[\s\S]*?"total_atoms"\s*:\s*(?:19\d\d|20\d\d|2100)'
       flags: i
+  - key: grounding_source
+    value:
+      filename: electrolyte_system_spec.json
   - key: turn_budget
     value:
       max: 16

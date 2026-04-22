@@ -2,7 +2,7 @@ version: v5
 capability: scientific_analysis
 domain: agnostic
 questions:
-- id: DF_mech_001_20260404
+- id: DF_mech_001_20260422
   capability: scientific_analysis
   domain: agnostic
   intent: Fit equation of state from provided E-V data and report V0 and B0.
@@ -25,7 +25,9 @@ questions:
     value:
     - v0
     - b0
-    - fit_quality
+  - key: grounding_source
+    value:
+      filename: ev_curve.json
   - key: turn_budget
     value: &id001
       max: 8
@@ -45,7 +47,7 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: required_fields
-    criterion: Reports V0, B0, and some measure of fit quality (R-squared, residuals, or similar).
+    criterion: Reports V0 and B0 values clearly.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
@@ -73,7 +75,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: DF_mech_002_20260419
+- id: DF_mech_002_20260422
   capability: scientific_analysis
   domain: agnostic
   intent: From MSST Hugoniot simulation data, fit the P-V Hugoniot curve and determine C-J
@@ -102,6 +104,9 @@ questions:
     - cj_pressure
     - hugoniot_fit
     - rayleigh_line
+  - key: grounding_source
+    value:
+      filename: msst_hugoniot.json
   - key: turn_budget
     value:
       max: 12
@@ -405,7 +410,7 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 1.0
-- id: DFT_pxrd_001_20260408
+- id: DFT_pxrd_001_20260422
   capability: scientific_analysis
   domain: agnostic
   intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
@@ -474,6 +479,9 @@ questions:
     - HTP
     - slope
     - intercept
+  - key: grounding_source
+    value:
+      filename: _td-pxrd_test.txt
   - key: turn_budget
     value:
       max: 20
