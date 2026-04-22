@@ -43,7 +43,7 @@ Other DPA versions (2.4, 3.1) do **not** use fparam — passing charge/spin has 
 
 The ASE workflows in this skill load the multi-task `.pt` file directly and pick a head via `--head`. **LAMMPS cannot consume the raw multi-task `.pt`** — you must first freeze a single branch into a `.pth`. The procedure is identical for DPA2.4-7M, DPA3.1-3M, and DPA3.2-5M.
 
-Requirements: `deepmd-kit >= 3.1.0` (verify with `dp --version`).
+Requirements: `deepmd-kit >= 3.1.0` (verify with `dp --version`; the `mlips:dev-0421` image reports `v1.3.3.dev2445` which **is** the v3.x codebase — the version string comes from `git describe` against an ancient tag).
 
 ### 1. Show available branches
 

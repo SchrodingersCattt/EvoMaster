@@ -19,7 +19,7 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 | machine | `c16_m64_1 * NVIDIA 4090` |
 | cmd | `python {script} {args} > log 2>&1` |
 
-**Multi-family image** preinstalls: deepmd-kit, mace-torch 0.3.12, sevenn 0.11.0, mattersim 1.1.2, lammps, ASE 3.23, phonopy, pymatgen, torch 2.4+cu121 (Python 3.12). All four MLIP families' ASE calculators work out-of-the-box on this image.
+**Multi-family image** preinstalls (in the default `base` conda env, Python 3.12): deepmd-kit (v3.x dev build, reported as `1.3.3.dev2445` due to git-describe — this **is** the v3.0.0+ codebase), mace-torch 0.3.12, sevenn 0.11.0, mattersim 1.1.2, lammps 2024.8.29, ASE 3.23, phonopy 2.34, pymatgen, torch 2.4+cu124. All four MLIP families work out-of-the-box. The image also contains `fc` and `test` conda envs — **ignore them**, they are incomplete subsets.
 
 > DPA-only image is smaller/faster to pull when you only need DPA. For missing packages on either image, prepend `pip install ... &&`.
 
@@ -72,7 +72,7 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
 DPA3 checkpoints (`DPA3.1-3M.pt`, `DPA3.2-5M.pt`) are **multi-task / multi-head** models and **cannot be loaded directly by LAMMPS**. You must first freeze a single head/branch into a `.pth` file. This is DPA-specific (MACE/SevenNet/MatterSim do not need this step).
 
-> Requires `deepmd-kit >= 3.1.0` (check with `dp --version`).
+> Requires `deepmd-kit >= 3.1.0` (check with `dp --version`; the multi-family image reports `v1.3.3.dev2445` which **is** the v3.x codebase).
 
 **Step 1 — list available branches (heads):**
 
