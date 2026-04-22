@@ -92,6 +92,20 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
+  qwen_3_6_plus:
+    provider: "openai"
+    model: "matmaster/qwen3.6-plus"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "high"
+    supports_vision: true
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
   compaction:
     provider: "openai"
     model: "gemini-3-flash-preview"
@@ -142,7 +156,9 @@ routes:
     profile: gemini-pro
   "cds/GPT-5.4":
     profile: gpt54
+  "matmaster/qwen3.6-plus":
+    profile: qwen_3_6_plus
   "bedrock-claude-opus":
     profile: opus_bedrock
 
-default: "opus"
+default: "qwen_3_6_plus"
