@@ -87,7 +87,8 @@ def test_generate_send_stream_replay_keeps_response_figures_but_dedupes_run_resu
         finally:
             await gen.aclose()
 
-    frames = asyncio.run(_collect_frames())
+    with patch('src.services.stream_service.notify_post_async'):
+        frames = asyncio.run(_collect_frames())
 
     assert [frame['type'] for frame in frames] == [
         'status',
