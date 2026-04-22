@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: semiconductor
 questions:
-- id: BP_struct_004_20260406
+- id: BP_struct_004_20260422
   capability: batch_processing
   domain: semiconductor
   intent: Perform batch post-processing of pre-computed band structures for 3 materials
