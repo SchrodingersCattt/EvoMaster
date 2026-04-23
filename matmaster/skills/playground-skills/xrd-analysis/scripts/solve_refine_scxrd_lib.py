@@ -16,72 +16,25 @@ from scipy.optimize import least_squares
 # ═══════════════════════════════════════════════════════════════════════
 _SF = {
     "H": ([0.4899, 0.2620, 0.1968, 0.0499], [20.659, 7.740, 49.552, 2.202], 0.0013),
-    "B": ([2.0545, 1.3326, 1.0979, 0.7068], [23.219, 1.021, 60.350, 0.140], -0.1932),
     "C": ([2.3100, 1.0200, 1.5886, 0.8650], [20.844, 10.208, 0.569, 51.651], 0.2156),
     "N": ([12.213, 3.1322, 2.0125, 1.1663], [0.006, 9.893, 28.998, 0.583], -11.529),
     "O": ([3.0485, 2.2868, 1.5463, 0.8670], [13.277, 5.701, 0.324, 32.909], 0.2508),
     "F": ([3.5392, 2.6412, 1.5170, 1.0243], [10.283, 4.294, 0.262, 26.148], 0.2776),
-    "Na": ([4.7626, 3.1736, 1.2674, 1.1128], [3.285, 8.842, 0.314, 129.424], 0.676),
-    "Mg": ([5.4204, 2.1735, 1.2269, 2.3073], [2.828, 79.261, 0.381, 7.194], 0.858),
-    "Al": ([6.4202, 1.9002, 1.5936, 1.9646], [3.039, 0.743, 31.547, 85.089], 1.115),
     "Si": ([6.2915, 3.0353, 1.9891, 1.5410], [2.439, 32.334, 0.679, 81.694], 1.1407),
     "P": ([6.4345, 4.1791, 1.7800, 1.4908], [1.907, 27.157, 0.526, 68.165], 1.1149),
     "S": ([6.9053, 5.2034, 1.4379, 1.5863], [1.468, 22.215, 0.254, 56.172], 0.8669),
     "Cl": ([11.460, 7.1964, 6.2556, 1.6455], [0.010, 1.166, 18.519, 47.778], -9.5574),
-    "K": ([8.2186, 7.4398, 1.0519, 0.8659], [12.795, 0.775, 213.187, 41.684], 1.423),
-    "Ca": ([8.6266, 7.3873, 1.5899, 1.0211], [10.442, 0.660, 178.437, 39.597], 1.375),
-    "Ti": ([9.7595, 7.3558, 1.6991, 1.9021], [7.851, 0.500, 35.634, 116.105], 1.281),
-    "V": ([10.297, 7.3510, 2.0700, 2.0570], [6.866, 0.438, 26.894, 102.478], 1.220),
-    "Cr": ([10.641, 7.3537, 3.3240, 1.4922], [6.104, 0.392, 20.263, 98.740], 1.183),
-    "Mn": ([11.282, 7.3573, 3.0193, 2.2441], [5.341, 0.343, 17.867, 83.754], 1.090),
-    "Co": ([12.285, 7.3409, 4.0030, 2.3488], [4.279, 0.278, 13.536, 71.169], 1.012),
-    "Ni": ([12.838, 7.2920, 4.4438, 2.3800], [3.878, 0.257, 12.176, 66.342], 1.034),
     "Br": ([17.179, 5.2358, 5.6377, 3.9851], [2.172, 16.580, 0.261, 41.433], 2.9557),
-    "Mo": ([3.7025, 17.236, 12.888, 3.7426], [0.277, 1.096, 11.004, 61.658], 4.387),
-    "Ag": ([19.281, 17.266, 4.1894, 2.2910], [0.647, 8.518, 24.395, 75.429], 3.863),
-    "Sn": ([19.189, 19.101, 4.4585, 2.4663], [5.831, 0.503, 26.891, 83.957], 4.782),
     "I": ([20.147, 18.995, 7.5138, 2.2735], [4.347, 0.381, 27.766, 66.878], 4.0712),
     "Fe": ([11.770, 7.3573, 3.5222, 2.3045], [4.761, 0.307, 15.353, 76.881], 1.0369),
     "Cu": ([13.338, 7.1676, 5.6158, 1.6735], [3.583, 0.247, 11.397, 64.812], 1.1910),
     "Zn": ([14.074, 7.0318, 5.1652, 2.4100], [3.266, 0.233, 10.316, 58.710], 1.3041),
 }
 
-# Atomic numbers for Z-scaled scattering-factor fallback
-_ATOMIC_Z = {
-    "H": 1, "He": 2, "Li": 3, "Be": 4, "B": 5, "C": 6, "N": 7, "O": 8,
-    "F": 9, "Ne": 10, "Na": 11, "Mg": 12, "Al": 13, "Si": 14, "P": 15,
-    "S": 16, "Cl": 17, "Ar": 18, "K": 19, "Ca": 20, "Sc": 21, "Ti": 22,
-    "V": 23, "Cr": 24, "Mn": 25, "Fe": 26, "Co": 27, "Ni": 28, "Cu": 29,
-    "Zn": 30, "Ga": 31, "Ge": 32, "As": 33, "Se": 34, "Br": 35, "Rb": 37,
-    "Sr": 38, "Y": 39, "Zr": 40, "Mo": 42, "Ag": 47, "Sn": 50, "I": 53,
-    "Ba": 56, "La": 57, "Pt": 78, "Au": 79, "Pb": 82,
-}
-
 
 def _scatt(element: str, s_sq: np.ndarray) -> np.ndarray:
-    """Atomic scattering factor f(sin²θ/λ²).
-
-    Uses Cromer-Mann 4-Gaussian parameterization when available.
-    Falls back to Z-scaled approximation from the nearest known element
-    for elements not in the table (much better than defaulting to C).
-    """
-    if element in _SF:
-        a, b, c = _SF[element]
-    else:
-        # Z-scaled fallback: find the closest element by atomic number
-        Z_target = _ATOMIC_Z.get(element, 6)
-        # Pick the element in _SF with closest Z
-        best_el = min(_SF, key=lambda e: abs(_ATOMIC_Z.get(e, 6) - Z_target))
-        Z_best = _ATOMIC_Z.get(best_el, 6)
-        a_ref, b, c_ref = _SF[best_el]
-        scale = Z_target / Z_best if Z_best > 0 else 1.0
-        a = [ai * scale for ai in a_ref]
-        c = c_ref * scale
-        print(
-            f"⚠ No scattering factor for '{element}'; "
-            f"using Z-scaled approximation from {best_el} (Z={Z_best}→{Z_target})",
-            file=sys.stderr,
-        )
+    """Atomic scattering factor f(sin²θ/λ²)."""
+    a, b, c = _SF.get(element, _SF["C"])
     f = np.full_like(s_sq, c, dtype=float)
     for ai, bi in zip(a, b):
         f += ai * np.exp(-bi * s_sq)
@@ -438,7 +391,7 @@ def _charge_flipping(
 # ═══════════════════════════════════════════════════════════════════════
 # Atom finding
 # ═══════════════════════════════════════════════════════════════════════
-def _find_atoms(rho, cell, sg_ops, sigma_thresh=3.5, min_dist_A=0.8):
+def _find_atoms(rho, cell, sg_ops, sigma_thresh=4.5, min_dist_A=0.8):
     """Locate atoms as peaks in the electron density."""
     from scipy.ndimage import maximum_filter
 
@@ -480,11 +433,24 @@ def _find_atoms(rho, cell, sg_ops, sigma_thresh=3.5, min_dist_A=0.8):
 
 def _assign_types(peak_vals, elements=None):
     """Guess atom types from peak heights."""
-    Z = _ATOMIC_Z
+    Z = {
+        "H": 1,
+        "C": 6,
+        "N": 7,
+        "O": 8,
+        "F": 9,
+        "Si": 14,
+        "P": 15,
+        "S": 16,
+        "Cl": 17,
+        "Br": 35,
+        "I": 53,
+        "Fe": 26,
+        "Cu": 29,
+        "Zn": 30,
+    }
     if elements is None:
-        # Default to common organic + heteroatom elements.
-        # The user should always pass --elements for best results.
-        elements = ["C", "N", "O", "F", "S", "Cl", "Br", "I"]
+        elements = ["C", "N", "O", "S", "Cl", "Br"]
     max_Z = max(Z.get(e, 6) for e in elements)
     max_val = peak_vals[0] if len(peak_vals) else 1
     types = []
@@ -624,12 +590,20 @@ def _crystal_system(sg_number: int) -> str:
 def _molecular_weight(formula_str: str) -> float:
     """Estimate molecular weight from formula string like 'C10 H12 N2 O3'."""
     _AW = {
-        "H": 1.008, "B": 10.811, "C": 12.011, "N": 14.007, "O": 15.999,
-        "F": 18.998, "Na": 22.990, "Mg": 24.305, "Al": 26.982, "Si": 28.086,
-        "P": 30.974, "S": 32.065, "Cl": 35.453, "K": 39.098, "Ca": 40.078,
-        "Ti": 47.867, "V": 50.942, "Cr": 51.996, "Mn": 54.938, "Fe": 55.845,
-        "Co": 58.933, "Ni": 58.693, "Cu": 63.546, "Zn": 65.38, "Br": 79.904,
-        "Mo": 95.95, "Ag": 107.868, "Sn": 118.710, "I": 126.904, "Ba": 137.327,
+        "H": 1.008,
+        "C": 12.011,
+        "N": 14.007,
+        "O": 15.999,
+        "F": 18.998,
+        "Si": 28.086,
+        "P": 30.974,
+        "S": 32.065,
+        "Cl": 35.453,
+        "Br": 79.904,
+        "I": 126.904,
+        "Fe": 55.845,
+        "Cu": 63.546,
+        "Zn": 65.38,
     }
     import re as _re
 
@@ -772,15 +746,10 @@ def _write_cif(
         lines.append(f"_chemical_formula_weight           {mw}")
     if density_str != "?":
         lines.append(f"_exptl_crystal_density_diffrn      {density_str}")
-    # F(000) estimate: total electrons in unit cell
-    if mw > 0 and Z > 0:
-        f000_est = int(round(Z * mw / 1.87))
-        lines.append(f"_exptl_crystal_F_000              {f000_est}")
     lines += [
         "",
         "# Data collection",
         f"_diffrn_radiation_wavelength      {wavelength:.5f}",
-        f"_diffrn_reflns_number             {rfactors['n_obs']}",
         "",
         "# Refinement statistics",
         f"_refine_ls_R_factor_gt            {rfactors['R1']:.4f}",
@@ -788,7 +757,6 @@ def _write_cif(
         f"_refine_ls_goodness_of_fit_ref    {rfactors['GOOF']:.3f}",
         f"_refine_ls_number_reflns          {rfactors['n_obs']}",
         f"_refine_ls_number_parameters      {rfactors['n_params']}",
-        f"_refine_ls_hydrogen_treatment     mixed",
         "",
         "loop_",
         " _atom_site_label",
