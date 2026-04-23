@@ -82,9 +82,6 @@ python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
 - `--elements "C H N O S"` — **strongly recommended**; provide expected element list for accurate atom-type assignment. Without it, defaults to common organic elements and heavy atoms may be misassigned.
 - `--sg <space_group>` — always pass the space group if known (from P4P/INS or literature). The script uses symmetry operations to constrain the solution; P1 default wastes parameters.
 - `--grid 128` for large unit cells (V > 2000 ų). `--trials 5` if R1 > 0.15 on first attempt.
-- `--grid 72` for quick initial runs or when time is limited (faster, adequate for most small molecules).
-
-**Time budget awareness**: The charge-flipping + refinement pipeline typically takes 30–120 seconds. If the first run succeeds (R1 < 0.15), proceed to CIF validation. Do NOT re-run multiple times unless R1 is poor. Budget your turns: 1 script run → check result → validate CIF → deliver.
 
 ## Hard Constraints
 
