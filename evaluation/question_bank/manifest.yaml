@@ -103,11 +103,6 @@ banks:
     domain: "agnostic"
     questions: 4
 
-  - path: "scientific_analysis/sa_alloy.yaml"
-    capability: "scientific_analysis"
-    domain: "alloy"
-    questions: 1
-
   - path: "scientific_analysis/sa_agnostic.yaml"
     capability: "scientific_analysis"
     domain: "agnostic"
@@ -161,7 +156,7 @@ banks:
   - path: "workflow_orchestration/wo_alloy.yaml"
     capability: "workflow_orchestration"
     domain: "alloy"
-    questions: 3
+    questions: 4
 
   - path: "workflow_orchestration/wo_agnostic.yaml"
     capability: "workflow_orchestration"
@@ -183,4 +178,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 124 questions across 27 active bank files
+# Total: 119 questions across 26 active bank files
