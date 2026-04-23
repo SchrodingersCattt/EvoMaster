@@ -177,6 +177,7 @@ def collect_figures_from_session(
                 importance=entry.importance,
                 placement_hint=entry.placement_hint,
                 source_tool_call_id=tool_call_id,
+                remote_path=resolved_path,
             )
         )
 
