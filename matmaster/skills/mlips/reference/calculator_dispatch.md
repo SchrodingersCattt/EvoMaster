@@ -6,7 +6,7 @@ This skill is **DPA-first**. The reason the same scripts work across four MLIP f
 
 ## Supported Families
 
-The `_calculator.py` module supports four MLIP families via a unified `build_calculator()` interface. The **multi-family image** (`mlips:dev-0421`) ships all four preinstalled:
+The `_calculator.py` module supports four MLIP families via a unified `build_calculator()` interface. DPA works on both images; non-DPA families require the multi-family image (`mlips:dev-0421`):
 
 | Family | Package | Version (in image) | Calculator Class |
 |--------|---------|---------------------|-----------------|
@@ -17,7 +17,7 @@ The `_calculator.py` module supports four MLIP families via a unified `build_cal
 
 > †deepmd-kit reports `1.3.3.dev2445` via `git describe` (2445 commits after the ancient v1.3.3 tag). This **is** the v3.0.0+ PyTorch codebase — not a v1.x build.
 
-> If using the DPA-only image (`dpa-calculator:e13a296f`) and you need MACE/SevenNet/MatterSim, either switch to the multi-family image or prepend `pip install <pkg> &&` in `cmd`.
+> DPA tasks should always use the DPA image (`dpa-calculator:e13a296f`). Switch to the multi-family image only when MACE/SevenNet/MatterSim is explicitly requested.
 
 ## How `build_calculator()` resolves models
 
@@ -70,9 +70,11 @@ model_name_or_path
 
 ## Docker images
 
-| Image | Families | Notes |
-|-------|----------|-------|
-| `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421` | **All four** (DP, MACE, SevenNet, MatterSim) + lammps | Python 3.12, torch 2.4+cu124, ASE 3.23, phonopy 2.34, pymatgen. Use the default `base` env; ignore `fc`/`test` envs (incomplete subsets). |
-| `registry.dp.tech/dptech/dpa-calculator:e13a296f` | DP only | Smaller, faster to pull when only DPA is needed |
+> **Default: DPA image.** Use the multi-family image only when MACE, SevenNet, or MatterSim is explicitly needed.
+
+| Image | Families | When to use |
+|-------|----------|-------------|
+| `registry.dp.tech/dptech/dpa-calculator:e13a296f` | **DP only** | **Default for all DPA tasks** (all DPA models + LAMMPS) |
+| `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421` | All four (DP, MACE, SevenNet, MatterSim) + lammps | Only when the user explicitly requests MACE/SevenNet/MatterSim. Use `base` env; ignore `fc`/`test` envs. |
 
 > If a package is missing, prepend `pip install <pkg> &&` before the script in `cmd`.
