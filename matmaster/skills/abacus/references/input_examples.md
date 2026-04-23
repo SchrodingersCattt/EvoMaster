@@ -3,6 +3,7 @@
 ## Quick Reference: Mandatory Parameters by Task Type
 
 Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `scf_thr`, `scf_nmax`, `smearing_method`, `smearing_sigma`.
+> **Basis-aware default**: `ecutwfc 100` is the standard baseline for `basis_type lcao`; for `basis_type pw`, prefer `ecutwfc 50` unless PP/system-specific convergence tests require higher values.
 
 | Task | Additional mandatory parameters | Common omission |
 |------|---------------------------------|-----------------|
