@@ -81,5 +81,6 @@ Reference-first policy:
 - Multi-species STRU examples: `references/stru_multispecies.md`
 - Electric field and dipole notes: `references/electric_field.md`
 - Troubleshooting: `references/troubleshooting.md`
+- Advanced task types (EOS, DFT+U, hybrid, phonon, SOC, vdW, MD, Berry phase): `references/advanced_tasks.md`
 - Output parameter guide (files, grep patterns): `references/output_params.md`
 - Parsed results and plots after the run: `matmaster/skills/playground-skills/result-analysis` (`parse_abacus.py`, etc.)

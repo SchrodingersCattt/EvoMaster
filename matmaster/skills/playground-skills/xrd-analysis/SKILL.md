@@ -100,3 +100,14 @@ python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
 - "Solve this crystal structure from HKL data" → `solve_refine_scxrd.py`
 - "Generate a CIF from these diffraction files" → `solve_refine_scxrd.py`
 - "Identify the phase from XRD pattern" → mcp-mat-xrd `xrd_phase_identification` (then this skill for quantitative analysis)
+
+## SCXRD Flag Discipline (Mandatory)
+
+Before calling `solve_refine_scxrd.py`, **always extract and pass all available metadata**:
+
+1. **`--elements`** — **MANDATORY**. Extract from INS `SFAC` line, task description, or known chemistry. Without it, heavy atoms are misassigned and R-factors are high.
+2. **`--sg`** — **MANDATORY** when known. Extract from P4P `SPGRP` or INS `LATT`+`SYMM`. The script defaults to P1 without it, wasting parameters.
+3. **`--grid 128`** — Use for any cell with V > 1500 ų.
+4. **`--trials 5`** — Always use when R1 > 0.10 on first attempt.
+
+See `references/scxrd_troubleshooting.md` for debugging steps when the solution is poor.
