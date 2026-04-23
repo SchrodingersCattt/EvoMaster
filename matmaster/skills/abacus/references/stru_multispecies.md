@@ -233,6 +233,8 @@ ls STRU KPT INPUT *.upf *.orb
 | Orbital files exist (LCAO)         | `ls *.orb`                           |
 | stru_file points to actual STRU    | `grep stru_file INPUT`               |
 | kpoint_file points to actual KPT   | `grep kpoint_file INPUT`             |
-| ecutwfc = 100                      | `grep ecutwfc INPUT`                 |
+| ecutwfc = 100 (LCAO baseline)      | `grep ecutwfc INPUT`                 |
 | smearing_sigma = 0.01              | `grep smearing_sigma INPUT`          |
 | scf_thr = 1.0e-7                   | `grep scf_thr INPUT`                 |
+
+> If you switch to `basis_type pw`, use `ecutwfc 50` as the default starting point, then tune by convergence tests when needed.
