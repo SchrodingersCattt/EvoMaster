@@ -90,9 +90,7 @@ def _build_dynamics(atoms, stage: dict, seed: int):
 
     if mode in ("NVT", "NVT-NH"):
         if NoseHooverChainNVT is not None:
-            return NoseHooverChainNVT(
-                atoms, timestep=dt, temperature_K=T, tdamp=tau_t
-            )
+            return NoseHooverChainNVT(atoms, timestep=dt, temperature_K=T, tdamp=tau_t)
         return Langevin(
             atoms, timestep=dt, temperature_K=T, friction=1.0 / tau_t, rng=rng
         )
