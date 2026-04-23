@@ -83,6 +83,8 @@ python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
 - `--sg <space_group>` — always pass the space group if known (from P4P/INS or literature). The script uses symmetry operations to constrain the solution; P1 default wastes parameters.
 - `--grid 128` for large unit cells (V > 2000 ų). `--trials 5` if R1 > 0.15 on first attempt.
 
+**Time awareness**: Default settings (grid=96, cycles=800, trials=3) complete within ~5 min for typical datasets. The script has built-in early convergence detection that stops cycling when phases stabilise — avoid increasing `--cycles` beyond 800 unless explicitly needed. Only escalate to `--grid 128` or `--trials 5` if R1 is poor on the first attempt.
+
 ## Hard Constraints
 
 - **USE PROVIDED SCRIPTS — MANDATORY**: You **must** use `refine_lattice_pxrd.py` for PXRD and `solve_refine_scxrd.py` for SCXRD. **Do NOT write custom Pawley refinement, charge-flipping, or least-squares code from scratch.** The provided scripts are tested and validated; hand-written replacements produce poor results (high R-factors, wrong atom assignments, fractional coordinates outside [0,1]). If a script fails, debug its inputs (file format, parameters) — do not replace it.
