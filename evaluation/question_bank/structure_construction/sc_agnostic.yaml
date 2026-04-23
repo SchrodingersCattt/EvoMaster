@@ -216,7 +216,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260409v2
+- id: SC_struct_005_20260423
   capability: structure_construction
   domain: agnostic
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and construct
@@ -270,10 +270,6 @@ questions:
     - is_disordered
     - ordered_replica_count
     - ordered_output_archive
-  - key: tool_call_budget
-    value:
-      min: 5
-      max: 30
   - key: turn_budget
     value: *id001
   - key: token_budget_total
@@ -323,10 +319,6 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: tool_call_budget
-    criterion: The whole 5-structure workflow stays within a modest tool-call budget.
-    axis: efficiency
-    verify: call_count_range
   - id: token_budget_total
     criterion: The run stays within a moderate total token budget.
     axis: efficiency
