@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: semiconductor
 questions:
-- id: BP_struct_004_20260422
+- id: BP_struct_004_20260423
   capability: batch_processing
   domain: semiconductor
   intent: Perform batch post-processing of pre-computed band structures for 3 materials
@@ -70,7 +70,8 @@ questions:
       - 1.25
       - 1.55
   - key: grounding_analysis_correct
-    value: Configuration from postprocessing_bandstr.json
+    value:
+      filename: postprocessing_bandstr.json
   - key: analysis_workflow_streamlined
     value: Unified workflow for all 3 materials
   - key: turn_budget
