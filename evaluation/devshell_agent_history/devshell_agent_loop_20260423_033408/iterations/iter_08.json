@@ -1,0 +1,24 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 8,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [],
+      "files_touched": [],
+      "followup_suggestion": "Re-run the P0 eval to confirm scores match the baseline; if regression persists the cause is external (model variance or environment) rather than code drift.",
+      "iteration_index": 8,
+      "needs_more_work": false,
+      "optimization_round": 10008,
+      "summary": "**P0 revert round (iter 8):** `git_revert_commits_after_base` confirmed no commits exist after base SHA `5694355fd578bfae9602e3bf7900cdb559166544` — HEAD already equals the baseline snapshot. No reverts were necessary; the repo is already at the pre-optimization baseline state."
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 8,
+    "macro_mean_0_100": 71,
+    "p0_regression": true,
+    "rationale": "## 第 8 轮迭代 — P0 回归门控失败（第 8 轮死锁）\n\n### P0 Gate 结果\n- **P0 宏平均**：71（基线 86，Δ -15）\n- **回归题目**：仅 IG_abacus_002（100→0）；SC_struct_009 本轮恢复\n\n### 八轮统计汇总\n| 题目 | I1 | I2 | I3 | I4 | I5 | I6 | I7 | I8 | 通过率 |\n|------|----|----|----|----|----|----|----|----|--------|\n| IG_abacus_002 | 0 | 0 | 100 | 0 | 0 | 0 | 0 | 0 | **1/8 (13%)** |\n| IG_abacus_003 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | **0/8 (0%)** |\n| SC_struct_009 | 0 | 0 | 0 | 100 | 0 | 0 | 0 | 100 | **2/8 (25%)** |\n| 两题同时通过 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | **0/8 (0%)** |\n\n### 结论不变\n- **8 轮零产品改动**，剩余 2 轮\n- 两道 flaky P0 回归题从未同时通过（0/8）\n- P0 门控死锁已消耗 80% 迭代预算\n- 本会话无法在不修改 P0 基线的前提下达标",
+    "target_met": false
+  }
+}

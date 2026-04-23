@@ -1,0 +1,14 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 1,
+  "optimization_delegations": [],
+  "optimization_reports": [],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 1,
+    "macro_mean_0_100": 57,
+    "p0_regression": true,
+    "rationale": "## 第 1 轮迭代 — P0 回归门控失败\n\n### P0 Gate 结果\n- **P0 宏平均**：57（基线 86，下降 29 分）\n- **非 P0 题目被跳过**（门控触发后不执行）\n\n### P0 题目明细（7 题，k=3）\n| 题目 | 得分 | 状态 |\n|------|------|------|\n| DD_general_004_20260422 | 100 | ✅ 通过 |\n| IG_abacus_002_20260422 | 0 | ❌ **回归**（基线 100→0）|\n| IG_abacus_003_20260422 | 0 | ❌ 未通过 |\n| SC_struct_009_20260420 | 0 | ❌ **回归**（基线 100→0）|\n| WO_direct_archive_extract_002_20260412 | 100 | ✅ 通过 |\n| WO_direct_exact_filename_002_20260412 | 100 | ✅ 通过 |\n| WO_direct_spec_priority_002_20260412 | 100 | ✅ 通过 |\n\n### 回归分析\n两道 P0 题目出现回归：\n1. **IG_abacus_002** (ABACUS 输入生成)：从 100 降至 0，3 次 repeat 均失败\n2. **SC_struct_009** (结构构造)：从 100 降至 0，3 次 repeat 均失败\n\n此外 **IG_abacus_003** 持续为 0（非新回归但仍未通过）。\n\n### 下一步\n本轮标记为 P0 回归失败。编排器将启动 optimization 子回合执行 `git revert` 撤销导致回归的提交（如有），然后继续下一轮迭代。本轮主 Agent 未做任何文件修改。",
+    "target_met": false
+  }
+}
