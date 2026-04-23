@@ -63,6 +63,24 @@ For structures with orientational or positional disorder (split positions):
 4. In SHELX: use `PART 1` / `PART 2` instructions with `SUMP` for occupancy
    constraints.
 
+## Performance & Timeout Avoidance
+
+The charge-flipping pipeline is computationally intensive. Plan your time budget:
+
+| Step | Typical time | Notes |
+|------|-------------|-------|
+| Script run (grid 96) | 30–120 s | Default; fine for most structures |
+| Script run (grid 72) | 10–40 s | Use for quick initial attempt |
+| Script run (grid 128) | 60–300 s | Only for large cells (V > 2000 ų) |
+| checkCIF validation | 5–15 s | Always run after CIF generation |
+
+**Avoid timeout**: Run the script ONCE with default settings. If R1 < 0.15, proceed directly to CIF validation and delivery. Do NOT:
+- Re-run the script multiple times with different parameters unless R1 > 0.15
+- Write custom refinement code (the script handles everything)
+- Spend turns debugging if the CIF already looks reasonable
+
+**If the script is slow**: Use `--grid 72 --cycles 500 --trials 2` for a faster initial attempt. Upgrade to `--grid 96 --trials 3` only if R1 > 0.15.
+
 ## Expected R-Factor Ranges
 
 | Structure quality | R1      | wR2     | GOOF    |

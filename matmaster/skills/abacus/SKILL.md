@@ -76,6 +76,7 @@ Reference-first policy:
 - Prefer local references below for stable and task-aligned guidance.
 - Use official ABACUS/Bohrium web documentation as fallback when local references are insufficient.
 
+- **Advanced multi-file tasks** (surface energy, vacancy, EOS): `references/advanced_tasks.md`
 - Input templates and multi-step examples: `references/input_examples.md`
 - STRU format basics: `references/stru_format.md`
 - Multi-species STRU examples: `references/stru_multispecies.md`
