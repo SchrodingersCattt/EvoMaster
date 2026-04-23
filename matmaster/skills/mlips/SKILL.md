@@ -12,29 +12,33 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
 ## Bohrium Submission
 
+> **Image selection rule — IMPORTANT:**
+> - **DPA tasks → always use the DPA image** (default, covers all DPA models).
+> - **Only switch to the multi-family image when the user explicitly requests MACE, SevenNet, or MatterSim.**
+
 | Item | Value |
 |------|-------|
-| **image (multi-family)** | `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421` |
-| image (DPA-only, lighter) | `registry.dp.tech/dptech/dpa-calculator:e13a296f` |
+| **image (DPA, default)** | `registry.dp.tech/dptech/dpa-calculator:e13a296f` |
+| image (multi-family, only for MACE/SevenNet/MatterSim) | `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421` |
 | machine | `c16_m64_1 * NVIDIA 4090` |
 | cmd | `python {script} {args} > log 2>&1` |
 
-**Multi-family image** preinstalls (in the default `base` conda env, Python 3.12): deepmd-kit (v3.x dev build, reported as `1.3.3.dev2445` due to git-describe — this **is** the v3.0.0+ codebase), mace-torch 0.3.12, sevenn 0.11.0, mattersim 1.1.2, lammps 2024.8.29, ASE 3.23, phonopy 2.34, pymatgen, torch 2.4+cu124. All four MLIP families work out-of-the-box. The image also contains `fc` and `test` conda envs — **ignore them**, they are incomplete subsets.
+**DPA image** ships deepmd-kit (v3.x), lammps, ASE 3.23, phonopy 2.34, pymatgen, torch 2.4+cu124. Supports all DPA models and all task scripts out-of-the-box.
 
-> DPA-only image is smaller/faster to pull when you only need DPA. For missing packages on either image, prepend `pip install ... &&`.
+**Multi-family image** additionally ships mace-torch 0.3.12, sevenn 0.11.0, mattersim 1.1.2. Use its default `base` conda env; ignore `fc`/`test` envs (incomplete subsets). deepmd-kit reports `1.3.3.dev2445` via git-describe — this **is** the v3.0.0+ codebase.
 
 ## Models
 
-| Model | Family | Preinstalled | Domain |
-|-------|--------|-------------|--------|
-| **DPA3.1-3M** | DP | both images | General inorganic — **default**, 3M params |
-| **DPA3.2-5M** | DP | both images | General + charge/spin, supports `--charge`/`--spin` |
-| DPA2.4-7M | DP | both images | Legacy multi-head |
-| **MACE-MP-0** | MACE | multi-family only | General inorganic foundation — [ACEsuit/mace](https://github.com/ACEsuit/mace). **Prefer over MACE-MPA-0** (MPA-0 downloads from GitHub which times out in Bohrium containers) |
-| SevenNet-0 / 7net-mf-ompa | SevenNet | multi-family only | Graph NN — [MDIL-SNU/SevenNet](https://github.com/MDIL-SNU/SevenNet) |
-| MatterSim-v1-5M | MatterSim | multi-family only | General inorganic, 5M params — [microsoft/mattersim](https://github.com/microsoft/mattersim) |
+| Model | Family | Image | Domain |
+|-------|--------|-------|--------|
+| **DPA3.1-3M** | DP | **DPA (default)** | General inorganic — **default**, 3M params |
+| **DPA3.2-5M** | DP | **DPA (default)** | General + charge/spin, supports `--charge`/`--spin` |
+| DPA2.4-7M | DP | **DPA (default)** | Legacy multi-head |
+| **MACE-MP-0** | MACE | multi-family | General inorganic foundation. **Prefer over MACE-MPA-0** (MPA-0 GitHub download times out in Bohrium) |
+| SevenNet-0 / 7net-mf-ompa | SevenNet | multi-family | Graph NN |
+| MatterSim-v1-5M | MatterSim | multi-family | General inorganic, 5M params |
 
-> If using the DPA-only image and you need MACE/SevenNet/MatterSim, either switch to the multi-family image or prepend `pip install mace-torch` / `sevenn` / `mattersim` in `cmd`.
+> Non-DPA families require the multi-family image. Do NOT use the multi-family image for pure DPA tasks.
 
 **DPA heads**: `OMat24` or `Omat24` (default, inorganic — casing differs between model versions: DPA3.2-5M uses `OMat24`, DPA3.1-3M/DPA2.4-7M use `Omat24`), `OMol25` (organic), `OC22` (catalysis), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
 
@@ -65,7 +69,8 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
 1. Prepare structure (CIF/POSCAR/XYZ)
 2. Copy script(s) + `_calculator.py` to working directory
-3. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
+3. Submit (DPA — default): `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dpa-calculator:e13a296f", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
+   Submit (MACE/SevenNet/MatterSim only): replace image with `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421`
 4. Poll and read `result.json`
 
 ## DPA + LAMMPS (requires freeze)
