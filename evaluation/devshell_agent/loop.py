@@ -68,6 +68,9 @@ class DevshellAgentLoop:
     _SDK_LOG_STREAM_EVENT_MAX_CHARS = 4_000
     _SDK_LOG_TEXT_BLOCK_MAX_CHARS = 100_000
     _SDK_LOG_SYSTEM_DATA_MAX_CHARS = 24_000
+    # SDK subprocess transport JSON buffer (default 1 MB is too small for
+    # large glob_paths results); 10 MB gives comfortable headroom.
+    _SDK_MAX_BUFFER_SIZE = 10 * 1024 * 1024
 
     SYSTEM_PROMPT_MAIN = _loop_prompts.SYSTEM_PROMPT_MAIN
     SYSTEM_PROMPT_CHECKLIST = _loop_prompts.SYSTEM_PROMPT_CHECKLIST
@@ -304,6 +307,7 @@ class DevshellAgentLoop:
             tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
             allowed_tools=allowed_tools,
             permission_mode=cfg.permission_mode,
+            max_buffer_size=self._SDK_MAX_BUFFER_SIZE,
         )
 
         self._write_session_manifest()
@@ -717,6 +721,7 @@ class DevshellAgentLoop:
                 tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
                 allowed_tools=optimization_allowed,
                 permission_mode=self._cfg.permission_mode,
+                max_buffer_size=self._SDK_MAX_BUFFER_SIZE,
             )
             log_line(
                 f"P0 revert sub-round: iteration {it}, base={base[:12]}…",
@@ -787,6 +792,7 @@ class DevshellAgentLoop:
                 tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
                 allowed_tools=optimization_allowed,
                 permission_mode=self._cfg.permission_mode,
+                max_buffer_size=self._SDK_MAX_BUFFER_SIZE,
             )
             log_line(
                 "optimization agent: "
@@ -898,6 +904,7 @@ class DevshellAgentLoop:
             tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
             allowed_tools=checklist_allowed,
             permission_mode=self._checklist_permission_mode_resolved(),
+            max_buffer_size=self._SDK_MAX_BUFFER_SIZE,
         )
         log_line(
             f"checklist agent: iteration {it}, {len(escalations)} escalation(s)",

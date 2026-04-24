@@ -368,6 +368,10 @@ GLOB_PATHS_SCHEMA: dict[str, Any] = {
             "type": "string",
             "description": "Glob pattern such as `*.py`.",
         },
+        "limit": {
+            "type": "integer",
+            "description": "Max paths to return (default 500, max 500). Use a specific pattern to narrow results if truncated.",
+        },
     },
     "required": ["base_dir", "pattern"],
 }
