@@ -226,6 +226,10 @@ class BohriumTool(BuiltinTool):
                 'type': 'integer',
                 'description': 'Maximum entries to return. Default: 20. (list_images, list_machines)',
             },
+            'include_public': {
+                'type': 'boolean',
+                'description': 'Whether to include public images in list_images results. Default: false. (list_images)',
+            },
         },
         'required': ['action'],
     }
@@ -747,6 +751,7 @@ class BohriumTool(BuiltinTool):
     def _list_images(self, args: dict[str, Any]) -> ToolResult:
         keyword = (args.get('keyword') or '').strip().lower()
         max_results = int(args.get('max_results', 20))
+        include_public = bool(args.get('include_public', False))
 
         ctx: BohriumContext | None = None
         try:
@@ -755,6 +760,7 @@ class BohriumTool(BuiltinTool):
                 ctx,
                 keyword=keyword,
                 max_results=max_results,
+                include_public=include_public,
             )
             self._log_request_context(
                 action='list_images',
