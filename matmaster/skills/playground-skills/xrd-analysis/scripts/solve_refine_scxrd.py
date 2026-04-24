@@ -54,11 +54,11 @@ def main():
     ap.add_argument("--wavelength", type=float, help="Wavelength in Å")
     ap.add_argument("--elements", help='Expected elements, e.g. "C H N O S"')
     ap.add_argument(
-        "--grid", type=int, default=96, help="Charge-flipping grid (default 96)"
+        "--grid", type=int, default=72, help="Charge-flipping grid (default 72; use 96-128 for large cells)"
     )
-    ap.add_argument("--cycles", type=int, default=800, help="CF cycles (default 800)")
+    ap.add_argument("--cycles", type=int, default=400, help="CF cycles (default 400; early-stop when phases converge)")
     ap.add_argument(
-        "--trials", type=int, default=3, help="CF random trials (default 3)"
+        "--trials", type=int, default=2, help="CF random trials (default 2; use 3-5 if R1>0.15)"
     )
     ap.add_argument("-o", "--output", default="refined.cif", help="Output CIF path")
     args = ap.parse_args()

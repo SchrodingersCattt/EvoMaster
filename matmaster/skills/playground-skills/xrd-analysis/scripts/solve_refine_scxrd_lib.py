@@ -381,9 +381,9 @@ def _charge_flipping(
             new_phases = np.angle(F_new[hi, ki, li])
 
             # Early convergence: stop if phases stabilise (circular mean diff)
-            if _cf_iter > 50:
+            if _cf_iter > 30:
                 phase_diff = np.mod(new_phases - phases + np.pi, 2 * np.pi) - np.pi
-                if np.mean(np.abs(phase_diff)) < 0.01:
+                if np.mean(np.abs(phase_diff)) < 0.02:
                     phases = new_phases
                     break
             phases = new_phases

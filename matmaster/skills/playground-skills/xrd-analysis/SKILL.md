@@ -51,21 +51,21 @@ python ${SKILL_DIR}/scripts/refine_lattice_pxrd.py \
 
 ## SCXRD Workflow
 
-> **⚠ STOP — MANDATORY**: For ANY task involving single-crystal XRD, HKL data, or CIF generation from diffraction data, your **very first action** must be to locate and run `solve_refine_scxrd.py` from this skill's `scripts/` directory. **Do NOT write custom charge-flipping, structure solution, refinement, or CIF-generation code** — hand-written alternatives consistently produce wrong atom assignments, bad R-factors, and fractional coordinates outside [0,1]. The provided script handles the entire pipeline.
+> **MANDATORY**: Use `solve_refine_scxrd.py` for ALL single-crystal XRD tasks. Do NOT write custom charge-flipping or refinement code.
 
-0. **Locate the script**: Find `solve_refine_scxrd.py` and its companion `solve_refine_scxrd_lib.py` in this skill's `scripts/` directory. Both files must be accessible from your working directory (copy them or use the full path). If the `${SKILL_DIR}` variable is unavailable, the script path is `matmaster/skills/playground-skills/xrd-analysis/scripts/solve_refine_scxrd.py`.
-1. **Parse data**: Identify the HKL file (SHELX HKLF4 format) and any P4P or INS file (cell parameters, space group) in the workspace.
-2. **Structure solution + refinement**: Run `solve_refine_scxrd.py` — it tries SHELX first (if installed), then falls back to Python charge-flipping + least-squares refinement. **Always pass `--elements` with the expected element list** (critical for correct atom-type assignment).
-3. **CIF generation**: The script writes a CIF file with cell parameters, space group, atom positions, R-factors, and GOOF. See `references/scxrd_cif_formatting.md` for required fields and formatting rules.
-4. **Quality check**: If R1 > 0.15, try: `--trials 5`, `--grid 128`, verify `--sg` and `--elements`. See `references/scxrd_solution_refinement.md`.
-5. **Validation**: Run `checkcif-validator` skill on the generated CIF. Fix any A-level alerts.
-6. **Disorder modeling** (if needed): See `references/scxrd_solution_refinement.md`.
+1. **Parse data**: Identify the HKL file (SHELX HKLF4) and any P4P/INS file in the workspace.
+2. **Run the script immediately** — pass all available info (`--elements`, `--sg`, `--p4p`/`--ins`). The script handles SHELX (if installed) or Python charge-flipping + LS refinement.
+3. **CIF output**: Script writes CIF + prints JSON summary. See `references/scxrd_cif_formatting.md`.
+4. **Quality check**: If R1 > 0.15 → retry with `--trials 5 --grid 96`. See `references/scxrd_solution_refinement.md`.
+5. **Validate**: Run `checkcif-validator` on the CIF. Fix A-level alerts.
+
+Script path: `${SKILL_DIR}/scripts/solve_refine_scxrd.py` (companion `solve_refine_scxrd_lib.py` must be co-located).
 
 ### Script: solve_refine_scxrd.py
 
 ```
 python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
-  --hkl reflections.hkl --p4p crystal.p4p -o refined.cif
+  --hkl reflections.hkl --p4p crystal.p4p --elements "C H N O" -o refined.cif
 
 # With INS file:
 python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
@@ -74,27 +74,25 @@ python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
 # Manual cell:
 python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
   --hkl reflections.hkl --cell "12.5 8.3 14.1 90 95.2 90" \
-  --sg P21 --wavelength 0.71073 -o refined.cif
+  --sg P21 --wavelength 0.71073 --elements "C H N O" -o refined.cif
 ```
 
-**Output**: CIF file + JSON summary printed to stdout with R1, wR2, GOOF, cell volume, atom count.
+**Key flags** (always use when available):
+- `--elements "C H N O S"` — **required** for correct atom-type assignment.
+- `--sg <space_group>` — always pass if known; P1 default wastes parameters.
+- `--grid 96` or `--grid 128` for large unit cells (V > 2000 ų), only if first attempt gives R1 > 0.15.
+- `--trials 5` if R1 > 0.15 on first attempt.
 
-**Best-practice flags** (always use when information is available):
-- `--elements "C H N O S"` — **strongly recommended**; provide expected element list for accurate atom-type assignment. Without it, defaults to common organic elements and heavy atoms may be misassigned.
-- `--sg <space_group>` — always pass the space group if known (from P4P/INS or literature). The script uses symmetry operations to constrain the solution; P1 default wastes parameters.
-- `--grid 128` for large unit cells (V > 2000 ų). `--trials 5` if R1 > 0.15 on first attempt.
-
-**Time awareness**: Default settings (grid=96, cycles=800, trials=3) complete within ~5 min for typical datasets. The script has built-in early convergence detection that stops cycling when phases stabilise — avoid increasing `--cycles` beyond 800 unless explicitly needed. Only escalate to `--grid 128` or `--trials 5` if R1 is poor on the first attempt.
+**Timing**: Defaults (grid=72, trials=2) complete in ~2-3 min. Early convergence detection stops when phases stabilise. Run the script as your **first action** to maximise time for validation.
 
 ## Hard Constraints
 
-- **USE PROVIDED SCRIPTS — MANDATORY**: You **must** use `refine_lattice_pxrd.py` for PXRD and `solve_refine_scxrd.py` for SCXRD. **Do NOT write custom Pawley refinement, charge-flipping, or least-squares code from scratch.** The provided scripts are tested and validated; hand-written replacements produce poor results (high R-factors, wrong atom assignments, fractional coordinates outside [0,1]). If a script fails, debug its inputs (file format, parameters) — do not replace it.
-- **Deliverables first**: For SCXRD tasks, ALWAYS produce a CIF file. An imperfect CIF is infinitely better than no CIF.
-- **No fabrication**: If refinement fails, report the failure honestly. Do NOT invent lattice parameters or R-factors.
-- **Validate**: ALWAYS run checkCIF on any generated CIF before finishing.
-- **Uncertainties**: For PXRD, always report lattice parameters with estimated standard deviations.
-- **Phase-separate fits**: For thermal expansion with phase transitions, fit EACH phase separately. Report slope, intercept, R² for each.
-- **Script-first debugging**: If `solve_refine_scxrd.py` gives poor R-factors: (1) check `--elements` flag — always pass expected elements; (2) try `--trials 5`; (3) try `--grid 128` for large cells; (4) verify space group is correct. Do NOT fall back to writing your own refinement code.
+- **Use provided scripts**: `refine_lattice_pxrd.py` for PXRD, `solve_refine_scxrd.py` for SCXRD. Do NOT write custom refinement code. If a script fails, debug its inputs — do not replace it.
+- **Deliverables first**: For SCXRD, ALWAYS produce a CIF. An imperfect CIF beats no CIF.
+- **No fabrication**: Do NOT invent lattice parameters or R-factors.
+- **Validate**: Run checkCIF on any generated CIF before finishing.
+- **Uncertainties**: Report PXRD lattice parameters with estimated standard deviations.
+- **Phase-separate fits**: For thermal expansion with transitions, fit EACH phase separately (slope, intercept, R²).
 
 ## When to Use
 
