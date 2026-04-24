@@ -288,16 +288,7 @@ def list_images(
                 "source": "sandbox_catalog",
             }
 
-    # Fetch public images
-    data = _get(
-        ctx.credentials.base_url,
-        "/openapi/v2/image/public",
-        ctx.credentials.access_key,
-        params={"page": 1, "pageSize": 1000},
-    )
-    public_images = (data.get("data") or {}).get("items") or []
-
-    # Fetch private images (paginated).
+    # Fetch private images only (paginated).
     # Server defaults to pageSize=10, so we page through until we've collected
     # every item the caller can see. Safety cap prevents runaway loops if the
     # server ever returns a bad `total`.
@@ -329,26 +320,21 @@ def list_images(
             break
         page += 1
 
-    # Combine public and private images
-    all_images = public_images + private_images
-
     if lowered_keyword:
         filtered = [
             record
-            for record in all_images
+            for record in private_images
             if lowered_keyword
             in str(record.get("name") or record.get("imageName") or "").lower()
             or lowered_keyword in str(record.get("description") or "").lower()
         ]
     else:
-        filtered = all_images
+        filtered = private_images
 
-    # Split into private (has direct url) and public (needs version lookup).
     # Private images from /openapi/v2/image/private carry a ready-to-use `url`
-    # field; querying the public version endpoint with a private image id returns
-    # nothing, so we short-circuit and build the version entry inline.
+    # field, so we build the result entries directly without fetching public
+    # version metadata.
     private_results: list[dict[str, Any]] = []
-    to_fetch: list[tuple[Any, str, str]] = []
     for record in filtered[:max_results]:
         img_id = record.get("id") or record.get("imageId")
         if img_id is None:
@@ -356,68 +342,27 @@ def list_images(
         name = record.get("name") or record.get("imageName") or ""
         description = record.get("description") or ""
         direct_url = record.get("url") or ""
+        entry: dict[str, Any] = {}
         if direct_url:
-            entry: dict[str, Any] = {"url": direct_url}
-            ver_str = name.split(":")[-1] if ":" in name else ""
-            if ver_str:
-                entry["version"] = ver_str
-            size = record.get("size") or ""
-            if size:
-                entry["size"] = size
-            result: dict[str, Any] = {
-                "id": img_id,
-                "name": name,
-                "versions": [entry],
-                "private": True,
-            }
-            if description:
-                result["description"] = description
-            private_results.append(result)
-        else:
-            to_fetch.append((img_id, name, description))
-
-    def _fetch_versions(item: tuple[Any, str, str]) -> dict[str, Any]:
-        img_id, name, description = item
-        try:
-            version_data = _get(
-                ctx.credentials.base_url,
-                f"/openapi/v2/image/public/{img_id}/version",
-                ctx.credentials.access_key,
-                params={
-                    "current": 1,
-                    "pageSize": 10,
-                    "page": 1,
-                    "resourceType": "",
-                    "version": "",
-                },
-            )
-            versions = (version_data.get("data") or {}).get("items") or []
-        except Exception:
-            versions = []
-
-        version_list = []
-        for version in versions:
-            entry: dict[str, Any] = {}
-            for key in ("url", "version", "resourceType", "desc", "size"):
-                value = version.get(key)
-                if value is not None and value != "":
-                    entry[key] = value
-            if entry:
-                version_list.append(entry)
+            entry["url"] = direct_url
+        ver_str = name.split(":")[-1] if ":" in name else ""
+        if ver_str:
+            entry["version"] = ver_str
+        size = record.get("size") or ""
+        if size:
+            entry["size"] = size
 
         result: dict[str, Any] = {
             "id": img_id,
             "name": name,
-            "versions": version_list,
+            "versions": [entry] if entry else [],
+            "private": True,
         }
         if description:
             result["description"] = description
-        return result
+        private_results.append(result)
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        public_results = list(pool.map(_fetch_versions, to_fetch))
-
-    results = public_results + private_results
+    results = private_results
 
     return {
         "success": True,

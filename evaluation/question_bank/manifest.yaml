@@ -88,6 +88,11 @@ banks:
     domain: "agnostic"
     questions: 3
 
+  - path: "execution_contract/ec_agnostic_bohrium.yaml"
+    capability: "execution_contract"
+    domain: "agnostic"
+    questions: 9
+
   - path: "input_generation/ig_agnostic_vasp.yaml"
     capability: "input_generation"
     domain: "agnostic"

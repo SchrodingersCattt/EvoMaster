@@ -1,0 +1,599 @@
+version: v5
+capability: execution_contract
+domain: agnostic
+questions:
+- id: EC_bohrium_lammps_submit_config_001_20260424v1
+  capability: execution_contract
+  domain: agnostic
+  intent: Generate a Bohrium submit request JSON for a LAMMPS job using the request-consistent submission defaults.
+  human_prompt_seed: |
+    帮我写一个 Bohrium 提交 JSON，跑 LAMMPS，输入文件是 `relax.lammps`，保存成 `submit_request.json`。不用真提交。
+  tags:
+  - wf_inputs
+  - phy_md
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: submit_request.json
+  - key: required_fields
+    value:
+      filename: submit_request.json
+      tokens:
+      - '"action": "submit"'
+      - '"image": "registry.dp.tech/dptech/lammps-agent:03810da8"'
+      flags: i
+  - key: cmd_exact
+    value:
+      filename: submit_request.json
+      pattern: '"cmd"\s*:\s*"lmp\s+-in\s+relax\.lammps\s+>\s+log\s+2>&1"'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes submit_request.json to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_fields
+    criterion: submit_request.json contains the expected Bohrium submit action and image field for the requested software task.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: cmd_exact
+    criterion: submit_request.json uses the expected Bohrium command form for the requested software task.
+    axis: correctness
+    verify: text_file_regex
+  - id: grounded_in_request
+    criterion: The produced submit_request.json is consistent with the user request and does not fabricate unrelated submission intent or mismatched software context.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration stays within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: EC_bohrium_orca_submit_config_001_20260424v1
+  capability: execution_contract
+  domain: agnostic
+  intent: Generate a Bohrium submit request JSON for an ORCA job using the request-consistent submission defaults.
+  human_prompt_seed: |
+    帮我写一个 Bohrium 提交 JSON，跑 ORCA，输入文件是 `input.inp`，保存成 `submit_request.json`。不用真提交。
+  tags:
+  - wf_inputs
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: submit_request.json
+  - key: required_fields
+    value:
+      filename: submit_request.json
+      tokens:
+      - '"action": "submit"'
+      - '"image": "registry.dp.tech/dptech/dp/native/prod-19853/orca:v6.1.1"'
+      flags: i
+  - key: cmd_exact
+    value:
+      filename: submit_request.json
+      pattern: '"cmd"\s*:\s*"OMPI_ALLOW_RUN_AS_ROOT=1\s+OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1\s+OMPI_MCA_rmaps_base_oversubscribe=1\s+/opt/orca611_avx2/orca\s+input\.inp\s+>\s+log\s+2>&1"'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes submit_request.json to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_fields
+    criterion: submit_request.json contains the expected Bohrium submit action and image field for the requested software task.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: cmd_exact
+    criterion: submit_request.json uses the expected Bohrium command form for the requested software task.
+    axis: correctness
+    verify: text_file_regex
+  - id: grounded_in_request
+    criterion: The produced submit_request.json is consistent with the user request and does not fabricate unrelated submission intent or mismatched software context.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration stays within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: EC_bohrium_mlips_submit_config_001_20260424v1
+  capability: execution_contract
+  domain: agnostic
+  intent: Generate a Bohrium submit request JSON for a DPA3 structure optimization request using the request-consistent submission defaults.
+  human_prompt_seed: |
+    帮我写一个 Bohrium 提交 JSON，用 DPA3 做结构优化，输入结构文件是 `input.cif`，保存成 `submit_request.json`。不用真提交。
+  tags:
+  - wf_inputs
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: submit_request.json
+  - key: required_fields
+    value:
+      filename: submit_request.json
+      tokens:
+      - '"action": "submit"'
+      - '"image": "registry.dp.tech/dptech/dpa-calculator:e13a296f"'
+      flags: i
+  - key: cmd_exact
+    value:
+      filename: submit_request.json
+      pattern: '"cmd"\s*:\s*"python\s+optimize_structure\.py\s+--structure\s+input\.cif\s+--model\s+DPA3\.1-3M\s+>\s+log\s+2>&1"'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes submit_request.json to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_fields
+    criterion: submit_request.json contains the expected Bohrium submit action and image field for the requested software task.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: cmd_exact
+    criterion: submit_request.json uses the expected Bohrium command form for the requested software task.
+    axis: correctness
+    verify: text_file_regex
+  - id: grounded_in_request
+    criterion: The produced submit_request.json is consistent with the user request and does not fabricate unrelated submission intent or mismatched software context.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration stays within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: EC_bohrium_pyatb_submit_config_001_20260424v1
+  capability: execution_contract
+  domain: agnostic
+  intent: Generate a Bohrium submit request JSON for a PyATB job using request-consistent submission behavior.
+  human_prompt_seed: |
+    帮我写一个 Bohrium 提交 JSON，跑 PyATB，保存成 `submit_request.json`。不用真提交。
+  tags:
+  - wf_inputs
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: submit_request.json
+  - key: required_fields
+    value:
+      filename: submit_request.json
+      tokens:
+      - '"action": "submit"'
+      flags: i
+  - key: cmd_exact
+    value:
+      filename: submit_request.json
+      pattern: '"cmd"\s*:\s*"python\s+run_pyatb\.py\s+>\s+log\s+2>&1"'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes submit_request.json to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_fields
+    criterion: submit_request.json contains a Bohrium submit action appropriate for the requested PyATB task and does not fabricate an unrelated software target.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: cmd_exact
+    criterion: submit_request.json uses the expected Bohrium command form for the requested PyATB task.
+    axis: correctness
+    verify: text_file_regex
+  - id: grounded_in_request
+    criterion: The produced submit_request.json is consistent with the PyATB request and any image handling shown in the output is not contradicted by the rest of the JSON content.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration stays within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: EC_bohrium_gromacs_submit_config_001_20260424v1
+  capability: execution_contract
+  domain: agnostic
+  intent: Generate a Bohrium submit request JSON for a GROMACS job using the request-consistent submission defaults.
+  human_prompt_seed: |
+    帮我写一个 Bohrium 提交 JSON，跑 GROMACS，保存成 `submit_request.json`。不用真提交。
+  tags:
+  - wf_inputs
+  - phy_md
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: submit_request.json
+  - key: required_fields
+    value:
+      filename: submit_request.json
+      tokens:
+      - '"action": "submit"'
+      - '"image": "registry.dp.tech/dptech/gromacs:2022.2"'
+      flags: i
+  - key: cmd_exact
+    value:
+      filename: submit_request.json
+      pattern: '"cmd"\s*:\s*"gmx\s+grompp\s+-f\s+md\.mdp\s+-c\s+conf\.gro\s+-p\s+topol\.top\s+-o\s+run\.tpr\s+&&\s+gmx\s+mdrun\s+-v\s+-deffnm\s+run\s+>\s+log\s+2>&1"'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes submit_request.json to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_fields
+    criterion: submit_request.json contains the expected Bohrium submit action and image field for the requested software task.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: cmd_exact
+    criterion: submit_request.json uses the expected Bohrium command form for the requested software task.
+    axis: correctness
+    verify: text_file_regex
+  - id: grounded_in_request
+    criterion: The produced submit_request.json is consistent with the user request and does not fabricate unrelated submission intent or mismatched software context.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration stays within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: EC_bohrium_abacus_submit_config_001_20260424v1
+  capability: execution_contract
+  domain: agnostic
+  intent: Generate a Bohrium submit request JSON for an ABACUS job using the request-consistent submission defaults.
+  human_prompt_seed: |
+    帮我写一个 Bohrium 提交 JSON，跑 ABACUS，保存成 `submit_request.json`。不用真提交。
+  tags:
+  - wf_inputs
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: submit_request.json
+  - key: required_fields
+    value:
+      filename: submit_request.json
+      tokens:
+      - '"action": "submit"'
+      - '"image": "registry.dp.tech/dptech/abacus:LTSv3.10.1"'
+      flags: i
+  - key: cmd_exact
+    value:
+      filename: submit_request.json
+      pattern: '"cmd"\s*:\s*"OMP_NUM_THREADS=1\s+mpirun\s+-np\s+16\s+abacus\s+>\s+log\s+2>&1"'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes submit_request.json to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_fields
+    criterion: submit_request.json contains the expected Bohrium submit action and image field for the requested software task.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: cmd_exact
+    criterion: submit_request.json uses the expected Bohrium command form for the requested software task.
+    axis: correctness
+    verify: text_file_regex
+  - id: grounded_in_request
+    criterion: The produced submit_request.json is consistent with the user request and does not fabricate unrelated submission intent or mismatched software context.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration stays within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: EC_bohrium_cp2k_submit_config_001_20260424v1
+  capability: execution_contract
+  domain: agnostic
+  intent: Generate a Bohrium submit request JSON for a CP2K job using the request-consistent submission defaults.
+  human_prompt_seed: |
+    帮我写一个 Bohrium 提交 JSON，跑 CP2K，输入文件是 `cp2k.inp`，保存成 `submit_request.json`。不用真提交。
+  tags:
+  - wf_inputs
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: submit_request.json
+  - key: required_fields
+    value:
+      filename: submit_request.json
+      tokens:
+      - '"action": "submit"'
+      - '"image": "registry.dp.tech/dptech/cp2k:2024.1"'
+      flags: i
+  - key: cmd_exact
+    value:
+      filename: submit_request.json
+      pattern: '"cmd"\s*:\s*"OMP_NUM_THREADS=1\s+mpirun\s+-np\s+32\s+cp2k\.popt\s+-i\s+cp2k\.inp\s+>\s+log\s+2>&1"'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes submit_request.json to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_fields
+    criterion: submit_request.json contains the expected Bohrium submit action and image field for the requested software task.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: cmd_exact
+    criterion: submit_request.json uses the expected Bohrium command form for the requested software task.
+    axis: correctness
+    verify: text_file_regex
+  - id: grounded_in_request
+    criterion: The produced submit_request.json is consistent with the user request and does not fabricate unrelated submission intent or mismatched software context.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration stays within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: EC_bohrium_qe_submit_config_001_20260424v1
+  capability: execution_contract
+  domain: agnostic
+  intent: Generate a Bohrium submit request JSON for a Quantum ESPRESSO job using the request-consistent submission defaults.
+  human_prompt_seed: |
+    帮我写一个 Bohrium 提交 JSON，跑 Quantum ESPRESSO，输入文件是 `qe.in`，保存成 `submit_request.json`。不用真提交。
+  tags:
+  - wf_inputs
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: submit_request.json
+  - key: required_fields
+    value:
+      filename: submit_request.json
+      tokens:
+      - '"action": "submit"'
+      - '"image": "registry.dp.tech/dptech/quantum-espresso:7.1"'
+      flags: i
+  - key: cmd_exact
+    value:
+      filename: submit_request.json
+      pattern: '"cmd"\s*:\s*"OMP_NUM_THREADS=1\s+mpirun\s+-np\s+32\s+pw\.x\s+-i\s+qe\.in\s+>\s+log\s+2>&1"'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes submit_request.json to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_fields
+    criterion: submit_request.json contains the expected Bohrium submit action and image field for the requested software task.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: cmd_exact
+    criterion: submit_request.json uses the expected Bohrium command form for the requested software task.
+    axis: correctness
+    verify: text_file_regex
+  - id: grounded_in_request
+    criterion: The produced submit_request.json is consistent with the user request and does not fabricate unrelated submission intent or mismatched software context.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration stays within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: EC_bohrium_abinit_submit_config_001_20260424v1
+  capability: execution_contract
+  domain: agnostic
+  intent: Generate a Bohrium submit request JSON for an ABINIT job using the request-consistent submission defaults.
+  human_prompt_seed: |
+    帮我写一个 Bohrium 提交 JSON，跑 ABINIT，输入文件是 `run.abi`，保存成 `submit_request.json`。不用真提交。
+  tags:
+  - wf_inputs
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: submit_request.json
+  - key: required_fields
+    value:
+      filename: submit_request.json
+      tokens:
+      - '"action": "submit"'
+      - '"image": "registry.dp.tech/dptech/dp/native/prod-19853/abinit:v9.10.3_pp"'
+      flags: i
+  - key: cmd_exact
+    value:
+      filename: submit_request.json
+      pattern: '"cmd"\s*:\s*"OMPI_ALLOW_RUN_AS_ROOT=1\s+OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1\s+OMPI_MCA_rmaps_base_oversubscribe=1\s+OMP_NUM_THREADS=1\s+mpirun\s+-np\s+32\s+abinit\s+run\.abi\s+>\s+log\s+2>&1"'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes submit_request.json to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_fields
+    criterion: submit_request.json contains the expected Bohrium submit action and image field for the requested software task.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: cmd_exact
+    criterion: submit_request.json uses the expected Bohrium command form for the requested software task.
+    axis: correctness
+    verify: text_file_regex
+  - id: grounded_in_request
+    criterion: The produced submit_request.json is consistent with the user request and does not fabricate unrelated submission intent or mismatched software context.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration stays within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
