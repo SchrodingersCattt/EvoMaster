@@ -1,6 +1,6 @@
 ---
 name: xrd-analysis
-description: "PXRD Pawley refinement (lattice parameter extraction, thermal expansion, phase transitions) and SCXRD structure solution/refinement/CIF generation. Use for any crystallographic data analysis task involving raw diffraction data."
+description: "PXRD Pawley refinement and SCXRD structure solution/CIF generation. Use for: diffraction data analysis, data formatting tasks (HKL/P4P/INS → CIF conversion), lattice parameter extraction, thermal expansion, or any task involving crystallographic diffraction data files."
 skill_type: operator
 depends_on: mcp-mat-xrd, checkcif-validator
 ---
@@ -15,7 +15,21 @@ Handles powder XRD (PXRD) lattice parameter refinement and single-crystal XRD (S
 - Task involves temperature-dependent PXRD analysis (thermal expansion, phase transitions)
 - Task involves solving a crystal structure from single-crystal HKL data
 - Task involves generating a CIF from diffraction data
+- Task involves formatting or converting SCXRD data files (HKL, P4P, INS) into CIF format
+- Task workspace contains `.hkl`, `.p4p`, or `.ins` diffraction data files
 - Task mentions SHELX, Rietveld, Pawley, or structure refinement
+- Task is categorized as data formatting for crystallographic / diffraction data
+
+## Quick Dispatch — Script Selection
+
+| Task type | Script | Key flags |
+|-----------|--------|-----------|
+| **SCXRD → CIF** (any HKL/P4P/INS data) | `solve_refine_scxrd.py` | `--hkl`, `--p4p`/`--ins`, `--elements`, `-o` |
+| **PXRD single pattern** | `refine_lattice_pxrd.py` | `--file`, `--crystal-system`, `--initial-params` |
+| **PXRD multi-temperature** | `refine_lattice_pxrd.py` | `--dir`, `--multi-temp` |
+| **Phase identification** | mcp-mat-xrd tool | `mat_xrd_xrd_phase_identification` |
+
+> **NEVER write custom refinement, charge-flipping, or CIF-generation code.** Always use the scripts above. This applies to ALL diffraction tasks including data formatting.
 
 ## PXRD Analysis Workflow
 
@@ -101,4 +115,8 @@ python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
 - "Analyze thermal expansion from temperature-dependent PXRD" → `refine_lattice_pxrd.py --multi-temp`
 - "Solve this crystal structure from HKL data" → `solve_refine_scxrd.py`
 - "Generate a CIF from these diffraction files" → `solve_refine_scxrd.py`
+- "Format / convert HKL data to CIF" → `solve_refine_scxrd.py`
+- "Process single-crystal diffraction data" → `solve_refine_scxrd.py`
+- "Extract structure from P4P / INS / HKL files" → `solve_refine_scxrd.py`
+- "Analyze PXRD pattern for phase / lattice" → `refine_lattice_pxrd.py` (optionally after mcp-mat-xrd phase ID)
 - "Identify the phase from XRD pattern" → mcp-mat-xrd `xrd_phase_identification` (then this skill for quantitative analysis)
