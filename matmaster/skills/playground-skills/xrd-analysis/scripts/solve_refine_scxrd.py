@@ -33,6 +33,7 @@ from solve_refine_scxrd_lib import (
     _find_atoms,
     _formula_from_atoms,
     _get_sg_ops,
+    _iterative_solve,
     _refine,
     _try_shelx,
     _write_cif,
@@ -140,42 +141,19 @@ def main():
         n_trials=args.trials,
     )
 
-    # ── Find atoms ──
-    frac_coords, peak_vals = _find_atoms(rho, cell, sg_ops)
-    if len(frac_coords) == 0:
+    # ── Iterative solve: find atoms → refine → ΔF → add atoms → repeat ──
+    atoms_ref, rfactors = _iterative_solve(
+        rho, hkl_data, cell, wl, sg_ops, elements=elements,
+        grid=args.grid, max_diff_cycles=5, verbose=True,
+    )
+    if len(atoms_ref) == 0:
         print(
             json.dumps(
                 {"success": False, "error": "No atoms found in charge-flipping density"}
             )
         )
         sys.exit(1)
-
-    # Limit to reasonable number (avoid noise peaks)
-    V = _cell_volume(cell)
-    max_atoms = max(int(V / 10), 60)  # ~10 ų per atom
-    frac_coords = frac_coords[:max_atoms]
-    peak_vals = peak_vals[:max_atoms]
-
-    types = _assign_types(peak_vals, elements)
-    atoms = [
-        {"elem": t, "frac": list(fc), "B": 2.0} for t, fc in zip(types, frac_coords)
-    ]
-    print(f"Atoms found: {len(atoms)}", file=sys.stderr)
-
-    # ── Refine ──
-    try:
-        atoms_ref, rfactors = _refine(atoms, hkl_data, cell, wl, sg_ops, max_iter=8)
-    except Exception as e:
-        print(f"Refinement error: {e}; writing unrefined CIF", file=sys.stderr)
-        atoms_ref = atoms
-        rfactors = {
-            "R1": 0.99,
-            "wR2": 0.99,
-            "GOOF": 0.0,
-            "n_obs": n_ref,
-            "n_params": 1 + 4 * len(atoms),
-            "scale": 1.0,
-        }
+    print(f"Atoms found: {len(atoms_ref)}", file=sys.stderr)
 
     # ── Write CIF ──
     formula = _formula_from_atoms(atoms_ref, sg_ops)

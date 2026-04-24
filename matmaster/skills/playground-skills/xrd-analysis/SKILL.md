@@ -1,6 +1,6 @@
 ---
 name: xrd-analysis
-description: "PXRD Pawley refinement (lattice parameter extraction, thermal expansion, phase transitions) and SCXRD structure solution/refinement/CIF generation. Use for any crystallographic data analysis task involving raw diffraction data."
+description: "Single-crystal XRD (SCXRD) structure solution from HKL reflections — produces refined CIF via charge-flipping or SHELX. Also: PXRD Pawley refinement for lattice parameters, thermal expansion, and phase transitions. Load when the task involves HKL/HKLF4 data, crystal structure determination, crystallographic refinement, single-crystal diffraction, or powder XRD analysis."
 skill_type: operator
 depends_on: mcp-mat-xrd, checkcif-validator
 ---
@@ -51,13 +51,16 @@ python ${SKILL_DIR}/scripts/refine_lattice_pxrd.py \
 
 ## SCXRD Workflow
 
-> **MANDATORY**: Use `solve_refine_scxrd.py` for ALL single-crystal XRD tasks. Do NOT write custom charge-flipping or refinement code.
+> **MANDATORY**: Use `solve_refine_scxrd.py` for ALL single-crystal XRD tasks. Do NOT write custom charge-flipping or refinement code. Do NOT spawn sub-agents to analyze or rewrite the script.
+
+> **TIME BUDGET**: The entire SCXRD workflow (script run + checkCIF + report) should complete in **< 8 minutes**. The script internally performs iterative difference Fourier refinement to recover missing atoms — do NOT attempt to replicate this manually.
 
 1. **Parse data**: Identify the HKL file (SHELX HKLF4) and any P4P/INS file in the workspace.
-2. **Run the script immediately** — pass all available info (`--elements`, `--sg`, `--p4p`/`--ins`). The script handles SHELX (if installed) or Python charge-flipping + LS refinement.
+2. **Run the script immediately** — pass all available info (`--elements`, `--sg`, `--p4p`/`--ins`). The script handles SHELX (if installed) or Python charge-flipping + iterative ΔF refinement.
 3. **CIF output**: Script writes CIF + prints JSON summary. See `references/scxrd_cif_formatting.md`.
-4. **Quality check**: If R1 > 0.15 → retry with `--trials 5 --grid 96`. See `references/scxrd_solution_refinement.md`.
-5. **Validate**: Run `checkcif-validator` on the CIF. Fix A-level alerts.
+4. **Quality check**: If R1 > 0.15 → retry **once** with `--trials 5 --grid 96`. Accept the result regardless — an imperfect CIF is the deliverable.
+5. **Validate**: Run `checkcif-validator` on the CIF. Fix A-level alerts if possible.
+6. **Report and finish**: Present the R-factors and CIF. Do NOT enter exploration loops trying to improve the solution further.
 
 Script path: `${SKILL_DIR}/scripts/solve_refine_scxrd.py` (companion `solve_refine_scxrd_lib.py` must be co-located).
 
@@ -87,8 +90,9 @@ python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
 
 ## Hard Constraints
 
-- **Use provided scripts**: `refine_lattice_pxrd.py` for PXRD, `solve_refine_scxrd.py` for SCXRD. Do NOT write custom refinement code. If a script fails, debug its inputs — do not replace it.
-- **Deliverables first**: For SCXRD, ALWAYS produce a CIF. An imperfect CIF beats no CIF.
+- **Use provided scripts**: `refine_lattice_pxrd.py` for PXRD, `solve_refine_scxrd.py` for SCXRD. Do NOT write custom refinement code. Do NOT read/analyze script source code. Do NOT spawn sub-agents to explore script internals.
+- **Deliverables first**: For SCXRD, ALWAYS produce a CIF. An imperfect CIF beats no CIF. If R1 > 0.15 after `--trials 5 --grid 96`, accept the CIF and move on.
+- **No exploration loops**: Run the script at most twice (default, then with enhanced parameters). Report the best result. Do NOT attempt iterative improvement, custom refinement, or sub-agent delegation.
 - **No fabrication**: Do NOT invent lattice parameters or R-factors.
 - **Validate**: Run checkCIF on any generated CIF before finishing.
 - **Uncertainties**: Report PXRD lattice parameters with estimated standard deviations.
@@ -96,8 +100,10 @@ python ${SKILL_DIR}/scripts/solve_refine_scxrd.py \
 
 ## When to Use
 
+- "Single-crystal XRD / SCXRD data" → `solve_refine_scxrd.py`
+- "Solve this crystal structure from HKL data" → `solve_refine_scxrd.py`
+- ".hkl file with .p4p or .ins file" → `solve_refine_scxrd.py`
+- "Generate a CIF from these diffraction files" → `solve_refine_scxrd.py`
 - "Refine lattice parameters from this PXRD data" → `refine_lattice_pxrd.py`
 - "Analyze thermal expansion from temperature-dependent PXRD" → `refine_lattice_pxrd.py --multi-temp`
-- "Solve this crystal structure from HKL data" → `solve_refine_scxrd.py`
-- "Generate a CIF from these diffraction files" → `solve_refine_scxrd.py`
 - "Identify the phase from XRD pattern" → mcp-mat-xrd `xrd_phase_identification` (then this skill for quantitative analysis)
