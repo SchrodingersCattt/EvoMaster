@@ -263,6 +263,8 @@ class BohriumTool(BuiltinTool):
             '\n'
             '### Actions\n'
             '- **submit**: package input directory and submit a job, returns job_id. '
+            'cmd runs in the directory where input files are unpacked — do NOT '
+            'prepend "cd <path> &&" or any directory change. '
             'cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
             '- **poll**: single-shot job status check, returns current status immediately. '
             'It does not download artifacts.\n'
