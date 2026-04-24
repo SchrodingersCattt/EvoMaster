@@ -29,6 +29,15 @@ _SF = {
     "Fe": ([11.770, 7.3573, 3.5222, 2.3045], [4.761, 0.307, 15.353, 76.881], 1.0369),
     "Cu": ([13.338, 7.1676, 5.6158, 1.6735], [3.583, 0.247, 11.397, 64.812], 1.1910),
     "Zn": ([14.074, 7.0318, 5.1652, 2.4100], [3.266, 0.233, 10.316, 58.710], 1.3041),
+    "Na": ([4.7626, 3.1736, 1.2674, 1.1128], [3.285, 8.842, 0.314, 129.424], 0.6760),
+    "Mg": ([5.4204, 2.1735, 1.2269, 2.3073], [2.828, 79.261, 0.381, 7.194], 0.8584),
+    "Al": ([6.4202, 1.9002, 1.5936, 1.9646], [3.039, 0.743, 31.547, 85.089], 1.1151),
+    "K": ([8.2186, 7.4398, 1.0519, 0.8659], [12.795, 0.775, 213.187, 41.684], 1.4228),
+    "Ca": ([8.6266, 7.3873, 1.5899, 1.0211], [10.442, 0.660, 85.748, 178.437], 1.3751),
+    "Ti": ([9.7595, 7.3558, 1.6991, 1.9021], [7.851, 0.500, 35.634, 116.105], 1.2807),
+    "Mn": ([11.282, 7.3573, 3.0193, 2.2441], [5.341, 0.343, 17.867, 83.754], 1.0896),
+    "Co": ([12.284, 7.3409, 4.0034, 2.3488], [4.279, 0.278, 13.536, 71.169], 1.0118),
+    "Ni": ([12.838, 7.2920, 4.4438, 2.3800], [3.878, 0.257, 12.176, 66.342], 1.0341),
 }
 
 
@@ -347,7 +356,7 @@ def _charge_flipping(
 
     for _ in range(n_trials):
         phases = rng.uniform(0, 2 * np.pi, len(f_obs))
-        for _ in range(cycles):
+        for _cf_iter in range(cycles):
             F_grid = np.zeros((N, N, N), dtype=complex)
             F = f_obs * np.exp(1j * phases)
             np.add.at(F_grid, (hi, ki, li), F)
@@ -367,9 +376,17 @@ def _charge_flipping(
             delta = delta_frac * sigma
             rho = np.where(rho < delta, -rho, rho)
 
+            # Vectorized phase extraction (replaces O(N) Python loop)
             F_new = np.fft.fftn(rho)
-            for i in range(len(f_obs)):
-                phases[i] = np.angle(F_new[hi[i], ki[i], li[i]])
+            new_phases = np.angle(F_new[hi, ki, li])
+
+            # Early convergence: stop if phases stabilise (circular mean diff)
+            if _cf_iter > 50:
+                phase_diff = np.mod(new_phases - phases + np.pi, 2 * np.pi) - np.pi
+                if np.mean(np.abs(phase_diff)) < 0.01:
+                    phases = new_phases
+                    break
+            phases = new_phases
 
         # Compute final density with latest phases
         F_grid = np.zeros((N, N, N), dtype=complex)
@@ -439,15 +456,24 @@ def _assign_types(peak_vals, elements=None):
         "N": 7,
         "O": 8,
         "F": 9,
+        "Na": 11,
+        "Mg": 12,
+        "Al": 13,
         "Si": 14,
         "P": 15,
         "S": 16,
         "Cl": 17,
-        "Br": 35,
-        "I": 53,
+        "K": 19,
+        "Ca": 20,
+        "Ti": 22,
+        "Mn": 25,
         "Fe": 26,
+        "Co": 27,
+        "Ni": 28,
         "Cu": 29,
         "Zn": 30,
+        "Br": 35,
+        "I": 53,
     }
     if elements is None:
         elements = ["C", "N", "O", "S", "Cl", "Br"]
@@ -595,15 +621,24 @@ def _molecular_weight(formula_str: str) -> float:
         "N": 14.007,
         "O": 15.999,
         "F": 18.998,
+        "Na": 22.990,
+        "Mg": 24.305,
+        "Al": 26.982,
         "Si": 28.086,
         "P": 30.974,
         "S": 32.065,
         "Cl": 35.453,
-        "Br": 79.904,
-        "I": 126.904,
+        "K": 39.098,
+        "Ca": 40.078,
+        "Ti": 47.867,
+        "Mn": 54.938,
         "Fe": 55.845,
+        "Co": 58.933,
+        "Ni": 58.693,
         "Cu": 63.546,
         "Zn": 65.38,
+        "Br": 79.904,
+        "I": 126.904,
     }
     import re as _re
 
