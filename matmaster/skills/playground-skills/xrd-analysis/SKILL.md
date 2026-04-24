@@ -51,9 +51,10 @@ python ${SKILL_DIR}/scripts/refine_lattice_pxrd.py \
 
 ## SCXRD Workflow
 
-> **MANDATORY**: Use `solve_refine_scxrd.py` for ALL SCXRD tasks. Do NOT write custom charge-flipping or refinement code.
+> **⚠ STOP — MANDATORY**: For ANY task involving single-crystal XRD, HKL data, or CIF generation from diffraction data, your **very first action** must be to locate and run `solve_refine_scxrd.py` from this skill's `scripts/` directory. **Do NOT write custom charge-flipping, structure solution, refinement, or CIF-generation code** — hand-written alternatives consistently produce wrong atom assignments, bad R-factors, and fractional coordinates outside [0,1]. The provided script handles the entire pipeline.
 
-1. **Parse data**: Provide HKL file (SHELX HKLF4 format) and P4P or INS file (cell parameters, space group).
+0. **Locate the script**: Find `solve_refine_scxrd.py` and its companion `solve_refine_scxrd_lib.py` in this skill's `scripts/` directory. Both files must be accessible from your working directory (copy them or use the full path). If the `${SKILL_DIR}` variable is unavailable, the script path is `matmaster/skills/playground-skills/xrd-analysis/scripts/solve_refine_scxrd.py`.
+1. **Parse data**: Identify the HKL file (SHELX HKLF4 format) and any P4P or INS file (cell parameters, space group) in the workspace.
 2. **Structure solution + refinement**: Run `solve_refine_scxrd.py` — it tries SHELX first (if installed), then falls back to Python charge-flipping + least-squares refinement. **Always pass `--elements` with the expected element list** (critical for correct atom-type assignment).
 3. **CIF generation**: The script writes a CIF file with cell parameters, space group, atom positions, R-factors, and GOOF. See `references/scxrd_cif_formatting.md` for required fields and formatting rules.
 4. **Quality check**: If R1 > 0.15, try: `--trials 5`, `--grid 128`, verify `--sg` and `--elements`. See `references/scxrd_solution_refinement.md`.
