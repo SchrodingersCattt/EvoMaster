@@ -1,6 +1,6 @@
 ---
 name: xrd-analysis
-description: "XRD analysis — PXRD Pawley refinement for lattice parameters, thermal expansion, and phase transitions; SCXRD structure solution from HKL reflections producing CIF via charge-flipping or SHELX. Load for powder XRD patterns, single-crystal diffraction data (HKL/HKLF4/P4P/INS), or crystallographic refinement."
+description: "Single-crystal XRD (SCXRD) structure solution from HKL reflections — produces refined CIF via charge-flipping or SHELX. Also: PXRD Pawley refinement for lattice parameters, thermal expansion, and phase transitions. Load when the task involves HKL/HKLF4 data, crystal structure determination, crystallographic refinement, single-crystal diffraction, or powder XRD analysis."
 skill_type: operator
 depends_on: mcp-mat-xrd, checkcif-validator
 ---
