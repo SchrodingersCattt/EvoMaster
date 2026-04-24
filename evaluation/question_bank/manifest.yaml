@@ -86,12 +86,7 @@ banks:
   - path: "execution_contract/ec_agnostic.yaml"
     capability: "execution_contract"
     domain: "agnostic"
-    questions: 3
-
-  - path: "execution_contract/ec_agnostic_bohrium.yaml"
-    capability: "execution_contract"
-    domain: "agnostic"
-    questions: 9
+    questions: 12
 
   - path: "input_generation/ig_agnostic_vasp.yaml"
     capability: "input_generation"
@@ -183,4 +178,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 119 questions across 26 active bank files
+# Total: 117 questions across 25 active bank files
