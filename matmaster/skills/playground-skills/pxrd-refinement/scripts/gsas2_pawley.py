@@ -108,19 +108,57 @@ def preprocess_to_xye(
     two_theta: np.ndarray,
     intensity: np.ndarray,
     outpath: str,
-) -> None:
+    warnings: list[str] | None = None,
+) -> dict:
     """
-    Preprocess raw intensity data and write as GSAS-II .xye file.
+    Adaptive preprocessing of raw intensity data, written as GSAS-II .xye.
 
-    Raw PXRD data often has a large constant background (baseline ~4.5,
-    peaks only ~0.1-0.4 above baseline). GSAS-II needs reasonable count
-    values, so we subtract the 5th-percentile baseline and scale by 1e4.
+    Decision is driven by the data's dynamic range (max/p5):
+      • dynamic range < 10  → DFT-style flat data (baseline ≈ peak top).
+        Subtract 5th-percentile baseline and scale by 1e4 to give GSAS-II
+        sensible count values (otherwise sigma=√I is meaningless).
+      • dynamic range ≥ 10  → real experimental counts. Pass through
+        unchanged (only ensure >=1 for sqrt). Touching it would distort
+        the proper Poisson sigma weights.
+
+    Returns a dict describing what was done (mode, scale, baseline) so the
+    caller can log the decision for transparency.
     """
-    baseline = np.percentile(intensity, 5)
-    y = (intensity - baseline) * 1e4
+    if warnings is None:
+        warnings = []
+
+    p5 = float(np.percentile(intensity, 5))
+    pmax = float(np.max(intensity))
+    pmin = float(np.min(intensity))
+
+    # Avoid divide-by-zero for the dynamic range estimate
+    denom = max(p5, 1e-9)
+    dyn_range = (pmax - pmin) / denom if denom > 0 else float("inf")
+
+    if dyn_range < 10.0:
+        # Synthetic / DFT-style flat data: scale up so sigma=√I has meaning
+        baseline = p5
+        scale = 1e4
+        y = (intensity - baseline) * scale
+        mode = "dft_scaled"
+        info = {"baseline": baseline, "scale": scale}
+    else:
+        # Real experimental counts: pass through unchanged
+        y = intensity.astype(float)
+        mode = "passthrough"
+        info = {"baseline": 0.0, "scale": 1.0}
+
     y = np.maximum(y, 1.0)
     sigma = np.sqrt(y)
     np.savetxt(outpath, np.column_stack([two_theta, y, sigma]), fmt="%.7f")
+
+    if mode == "dft_scaled":
+        warnings.append(
+            f"preprocess: low dynamic range ({dyn_range:.2f}) detected, "
+            f"applied baseline subtraction (-{p5:.4f}) and scale ×{int(info['scale'])}"
+        )
+
+    return {"mode": mode, "dynamic_range": round(dyn_range, 3), **info}
 
 
 def read_xy_file(filepath: str) -> tuple[np.ndarray, np.ndarray]:
@@ -218,12 +256,17 @@ def cell_dict_to_list(cell_dict: dict) -> list[float]:
     ]
 
 
-def generate_pawley_reflections(phase_data: dict, dmin: float) -> list:
+def generate_pawley_reflections(
+    phase_data: dict, dmin: float, dmax: float | None = None
+) -> list:
     """
     Generate and estimate Pawley reflection list.
 
     Mirrors GSAS-II's 'Pawley create' + 'Pawley estimate' GUI operations,
     which are not exposed in GSASIIscriptable directly.
+
+    `dmax` caps the maximum d-spacing considered; pass None for no upper
+    cap (use the full set of reflections >= dmin).
     """
     import GSASIIlattice as G2lat
     import GSASIImath as G2mth
@@ -233,7 +276,8 @@ def generate_pawley_reflections(phase_data: dict, dmin: float) -> list:
     cell = generalData["Cell"][1:7]
     A = G2lat.cell2A(cell)
     SGData = generalData["SGData"]
-    dmax = generalData.get("Pawley dmax", 100.0)
+    if dmax is None:
+        dmax = generalData.get("Pawley dmax", 100.0)
 
     HKLd = np.array(G2lat.GenHLaue(dmin, SGData, A))
     peaks = []
@@ -296,24 +340,28 @@ def refine_one_pattern(
     cell_list: list[float],
     wavelength: float,
     dmin: float,
-    two_theta_min: float,
-    two_theta_max: float,
+    two_theta_min: float | None,
+    two_theta_max: float | None,
     instprm_path: str,
     workdir: str,
     label: str = "pattern",
+    dmax: float | None = None,
+    debug_plot: str | None = None,
 ) -> dict:
     """
     Run GSAS-II Pawley refinement on a single pattern.
 
-    Returns a dict with cell parameters, ESDs, and R-factors.
+    Returns a dict with cell parameters, ESDs, R-factors, and a `warnings`
+    list describing preprocessing decisions and any per-step refinement
+    failures (these no longer crash the run, but they ARE surfaced).
     """
     import GSASIIscriptable as G2sc
 
     G2sc.SetPrintLevel("warn")
+    warnings: list[str] = []
 
-    # Preprocess and write temporary xye
     xye_path = os.path.join(workdir, f"{label}.xye")
-    preprocess_to_xye(two_theta, intensity, xye_path)
+    preprocess_info = preprocess_to_xye(two_theta, intensity, xye_path, warnings)
 
     gpx_path = os.path.join(workdir, f"{label}.gpx")
     gpx = G2sc.G2Project(newgpx=gpx_path)
@@ -326,14 +374,19 @@ def refine_one_pattern(
         histograms=[hist],
     )
 
-    hist.set_refinements({"Limits": [two_theta_min, two_theta_max]})
+    # If user did not specify limits, fall back to the full data range.
+    data_lo = float(two_theta.min())
+    data_hi = float(two_theta.max())
+    lim_lo = float(two_theta_min) if two_theta_min is not None else data_lo
+    lim_hi = float(two_theta_max) if two_theta_max is not None else data_hi
+    hist.set_refinements({"Limits": [lim_lo, lim_hi]})
 
-    # Enable Pawley mode
     phase.setPhaseEntryValue(["General", "doPawley"], True)
     phase.setPhaseEntryValue(["General", "Pawley dmin"], dmin)
+    if dmax is not None:
+        phase.setPhaseEntryValue(["General", "Pawley dmax"], dmax)
 
-    # Generate and estimate Pawley reflections (not automatic in scriptable API)
-    peaks = generate_pawley_reflections(phase.data, dmin)
+    peaks = generate_pawley_reflections(phase.data, dmin, dmax)
     xdata = hist.getdata("x")
     yobs = hist.getdata("yobs")
     inst_parms = hist.getHistEntryValue(["Instrument Parameters"])[0]
@@ -354,39 +407,42 @@ def refine_one_pattern(
     def _safe_refine(step_name: str) -> None:
         try:
             gpx.do_refinements([{}])
-        except Exception:
-            pass  # Convergence errors are non-fatal; keep going
+        except Exception as exc:
+            msg = f"refine step '{step_name}' raised {type(exc).__name__}: {exc}"
+            warnings.append(msg)
+            print(f"[gsas2_pawley][{label}] WARN {msg}", file=sys.stderr)
 
-    # Step 1: Background
     hist.set_refinements({"Background": {"no. coeffs": 6, "refine": True}})
     _safe_refine("Background")
 
-    # Step 2: Cell parameters
     phase.set_refinements({"Cell": True})
     _safe_refine("Cell")
 
-    # Step 3: Peak-shape (Caglioti U, V, W)
     hist.set_refinements({"Instrument Parameters": ["U", "V", "W"]})
     _safe_refine("UVW")
 
-    # Step 4: Zero-point shift
     hist.set_refinements({"Instrument Parameters": ["Zero"]})
     _safe_refine("Zero")
 
-    # Step 5: Extra convergence with more background terms
     hist.set_refinements({"Background": {"no. coeffs": 12, "refine": True}})
-    for _ in range(3):
-        _safe_refine("converge")
+    for i in range(3):
+        _safe_refine(f"converge_{i + 1}")
 
-    # Extract results
     cell = phase.get_cell()
     try:
         cell_esd = phase.get_cell_and_esd()
-    except Exception:
+    except Exception as exc:
         cell_esd = None
+        warnings.append(f"get_cell_and_esd failed: {exc}")
 
     wR = hist.get_wR()
     n_reflections = len(phase.data.get("Pawley ref", []))
+
+    if wR is not None and wR > 30.0:
+        warnings.append(
+            f"high wR ({wR:.2f}%); refinement likely poor — check initial cell, "
+            f"space group, peak-shape, or 2θ range"
+        )
 
     result = {
         "success": True,
@@ -400,10 +456,11 @@ def refine_one_pattern(
         "volume": round(cell["volume"], 4),
         "wR": round(wR, 2) if wR is not None else None,
         "n_reflections": n_reflections,
+        "limits": [round(lim_lo, 4), round(lim_hi, 4)],
+        "preprocess": preprocess_info,
+        "warnings": warnings,
     }
 
-    # Add ESDs if available
-    # get_cell_and_esd() returns (cell_dict, esd_dict) with keys like 'length_a'
     if cell_esd is not None:
         try:
             esd_dict = cell_esd[1] if isinstance(cell_esd, (tuple, list)) else {}
@@ -418,11 +475,37 @@ def refine_one_pattern(
             for param, key in key_map.items():
                 val = esd_dict.get(key, 0.0)
                 result[f"{param}_esd"] = round(float(val or 0.0), 6)
-        except Exception:
-            pass
+        except Exception as exc:
+            warnings.append(f"ESD extraction failed: {exc}")
+
+    if debug_plot:
+        try:
+            _write_debug_plot(hist, debug_plot, label)
+        except Exception as exc:
+            warnings.append(f"debug plot failed: {exc}")
 
     gpx.save()
     return result
+
+
+def _write_debug_plot(hist, outdir: str, label: str) -> None:
+    """
+    Dump (x, yobs, ycalc, ydiff) for the histogram so the caller can plot
+    or inspect the residuals offline. Writes <outdir>/<label>_pattern.csv.
+    """
+    os.makedirs(outdir, exist_ok=True)
+    x = hist.getdata("x")
+    yobs = hist.getdata("yobs")
+    try:
+        ycalc = hist.getdata("ycalc")
+    except Exception:
+        ycalc = np.zeros_like(yobs)
+    diff = yobs - ycalc
+    out = os.path.join(outdir, f"{label}_pattern.csv")
+    with open(out, "w") as f:
+        f.write("two_theta,yobs,ycalc,diff\n")
+        for xi, yo, yc, dv in zip(x, yobs, ycalc, diff):
+            f.write(f"{xi:.6f},{yo:.6f},{yc:.6f},{dv:.6f}\n")
 
 
 def run_single(args) -> dict:
@@ -446,6 +529,8 @@ def run_single(args) -> dict:
             instprm_path=instprm,
             workdir=tmpdir,
             label=Path(args.data).stem,
+            dmax=args.dmax,
+            debug_plot=args.debug_plot,
         )
     result["file"] = args.data
     return result
@@ -486,17 +571,17 @@ def run_directory(args) -> dict:
                     instprm_path=instprm,
                     workdir=tmpdir,
                     label=fpath.stem,
+                    dmax=args.dmax,
+                    debug_plot=args.debug_plot,
                 )
                 r["file"] = str(fpath)
-                # Chain: use refined cell as starting point for next pattern
-                if r["success"]:
+                # Optional chaining: use refined cell as starting point for
+                # next pattern. Off by default to avoid error accumulation
+                # across e.g. temperature series with phase transitions.
+                if args.chain_cell and r["success"]:
                     current_cell = [
-                        r["a"],
-                        r["b"],
-                        r["c"],
-                        r["alpha"],
-                        r["beta"],
-                        r["gamma"],
+                        r["a"], r["b"], r["c"],
+                        r["alpha"], r["beta"], r["gamma"],
                     ]
             except Exception as exc:
                 r = {"success": False, "file": str(fpath), "error": str(exc)}
@@ -534,17 +619,15 @@ def run_wide_csv(args) -> dict:
                     instprm_path=instprm,
                     workdir=tmpdir,
                     label=label,
+                    dmax=args.dmax,
+                    debug_plot=args.debug_plot,
                 )
                 r["temp_c"] = pat["temp_c"]
                 r["temp_label"] = pat["temp_label"]
-                if r["success"]:
+                if args.chain_cell and r["success"]:
                     current_cell = [
-                        r["a"],
-                        r["b"],
-                        r["c"],
-                        r["alpha"],
-                        r["beta"],
-                        r["gamma"],
+                        r["a"], r["b"], r["c"],
+                        r["alpha"], r["beta"], r["gamma"],
                     ]
             except Exception as exc:
                 r = {
@@ -589,25 +672,37 @@ def main() -> None:
         "--dmin",
         type=float,
         default=2.0,
-        help="Minimum d-spacing for Pawley reflections in Å (default: 2.0)",
+        help="Minimum d-spacing for Pawley reflections in Å (default: 2.0). "
+        "For high-resolution / large 2θ range data, lower (e.g. 1.0); "
+        "for noisy low-resolution data, raise (e.g. 2.5).",
+    )
+    ap.add_argument(
+        "--dmax",
+        type=float,
+        default=None,
+        help="Maximum d-spacing for Pawley reflections in Å "
+        "(default: None = no upper cap). Set when first reflection is far "
+        "below tmin and you want to skip it.",
     )
     ap.add_argument(
         "--tmin",
         type=float,
-        default=8.0,
-        help="Lower 2θ limit for refinement (default: 8.0°)",
+        default=None,
+        help="Lower 2θ limit for refinement (default: None = full data range)",
     )
     ap.add_argument(
         "--tmax",
         type=float,
-        default=50.0,
-        help="Upper 2θ limit for refinement (default: 50.0°)",
+        default=None,
+        help="Upper 2θ limit for refinement (default: None = full data range)",
     )
     ap.add_argument(
         "--instprm",
         default=None,
-        help="Path to GSAS-II instrument parameter file "
-        "(default: auto-generate Cu Kα template)",
+        help="Path to GSAS-II instrument parameter file. Default auto-generates "
+        "a Cu Kα template with conservative U/V/W tuned for synchrotron-style "
+        "narrow peaks; for lab diffractometers you SHOULD provide your own "
+        "instprm calibrated against a standard (e.g. LaB6/Si).",
     )
     ap.add_argument(
         "--gsas2-path",
@@ -620,6 +715,19 @@ def main() -> None:
         help="Input is a wide-table CSV with multiple temperature columns "
         "(header: Angle, T1, Angle, T2, ...)",
     )
+    ap.add_argument(
+        "--chain-cell",
+        action="store_true",
+        help="In multi-pattern modes (directory / wide-csv), feed the refined "
+        "cell of pattern N into pattern N+1 as starting point. Off by default "
+        "because it propagates errors and may straddle a phase transition.",
+    )
+    ap.add_argument(
+        "--debug-plot",
+        default=None,
+        help="If set, write per-pattern <label>_pattern.csv (2θ, yobs, ycalc, "
+        "diff) to this directory for offline inspection.",
+    )
     ap.add_argument("-o", "--output", help="Write JSON output to this file")
     args = ap.parse_args()
 
@@ -627,18 +735,26 @@ def main() -> None:
 
     data_path = Path(args.data)
 
-    if args.wide_csv:
-        result = run_wide_csv(args)
-    elif data_path.is_dir():
-        result = run_directory(args)
-    elif data_path.is_file():
-        result = run_single(args)
-    else:
-        print(
-            json.dumps({"success": False, "error": f"Not found: {args.data}"}),
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    # GSAS-II writes progress/SVD warnings to stdout via bare print(). That
+    # pollutes our JSON output and breaks agents that consume it. Swap stdout
+    # to stderr for the entire refinement, restore it only to emit JSON.
+    real_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        if args.wide_csv:
+            result = run_wide_csv(args)
+        elif data_path.is_dir():
+            result = run_directory(args)
+        elif data_path.is_file():
+            result = run_single(args)
+        else:
+            sys.stdout = real_stdout
+            print(
+                json.dumps({"success": False, "error": f"Not found: {args.data}"}),
+            )
+            sys.exit(1)
+    finally:
+        sys.stdout = real_stdout
 
     json_str = json.dumps(result, indent=2, ensure_ascii=False)
     print(json_str)

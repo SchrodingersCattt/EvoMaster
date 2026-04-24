@@ -83,6 +83,9 @@ python ${SKILL_DIR}/scripts/gsas2_pawley.py \
 
 ### 输出 JSON（单图谱）
 
+stdout **只包含 JSON**（GSAS-II 的进度/SVD 警告已重定向到 stderr），可以直接
+`json.loads(result.stdout)`。
+
 ```json
 {
   "success": true, "file": "pattern.xy",
@@ -90,30 +93,64 @@ python ${SKILL_DIR}/scripts/gsas2_pawley.py \
   "alpha": 90.0, "beta": 99.066, "gamma": 90.0,
   "volume": 1000.18,
   "a_esd": 0.001, "b_esd": 0.002, "c_esd": 0.001,
-  "wR": 29.5, "n_reflections": 131
+  "wR": 29.5, "n_reflections": 131,
+  "limits": [8.0, 50.0],
+  "preprocess": {
+    "mode": "dft_scaled",
+    "dynamic_range": 0.14,
+    "baseline": 4.56, "scale": 10000.0
+  },
+  "warnings": [
+    "preprocess: low dynamic range (0.14) detected, ..."
+  ]
 }
 ```
+
+- `warnings`：非致命问题收集在这里（preprocess 决策、精修步骤异常、high wR、
+  ESD 提取失败等）。**success=true** 时仍要检查这个列表。
+- `preprocess.mode`：`dft_scaled`（基线减除 + 放大 1e4，低 dynamic range 数据）或
+  `passthrough`（保留原始 counts，真实实验数据）。
 
 ### 关键参数
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
-| `--dmin` | 2.0 Å | Pawley 反射最小 d-spacing。反射太多/SVD 报错时增到 2.5 |
-| `--tmin`/`--tmax` | 8/50° | 拟合的 2θ 范围 |
+| `--dmin` | 2.0 Å | Pawley 反射最小 d-spacing。反射太多/SVD 报错时增到 2.5；高分辨率数据可降到 1.0 |
+| `--dmax` | None | 最大 d-spacing，默认不限。首个反射落在 tmin 以下时可用来剔除 |
+| `--tmin`/`--tmax` | None | 拟合的 2θ 范围，默认用数据的全部区间。**强烈建议** 显式指定到有信号的范围（例如 DFT-PXRD 的 5-50° 里只有 8-50° 有峰时，传 `--tmin 8`）|
 | `--wavelength` | 1.5406 | X 射线波长（Å）。Mo Kα1=0.7093，AgKα1=0.5594 |
 | `--gsas2-path` | `/root/g2full/GSAS-II/GSASII` | 镜像内路径，正常不用改 |
-| `--instprm` | 自动生成 Cu Kα 模板 | 自定义 GSAS-II 仪器参数文件 |
+| `--instprm` | 自动生成 Cu Kα 模板（U/V/W 保守值） | **实验数据应提供 LaB6/Si 标样校准过的 instprm**；默认模板只保证能跑通 |
+| `--chain-cell` | off | 多图谱批量时把上一图谱的精修晶胞作为下一图谱起点。默认关闭，避免误差累积与跨相变错传 |
+| `--debug-plot DIR` | None | 每张图谱写 `<label>_pattern.csv`（2θ, yobs, ycalc, diff）到该目录，便于离线画图诊断 |
 
-### 已验证（在评测题 DFT_pxrd_001 上）
+### 自适应预处理 & 失败诊断
+
+- **低 dynamic range 输入**（max/p5 < 10，例如 DFT 模拟 PXRD）：脚本自动做基线减除 + ×1e4 scale
+  以让 GSAS-II 的 Poisson 权重 σ=√I 有意义；在 `warnings` 里记录决策。
+- **正常实验 counts**（max/p5 ≥ 10）：**不做 scale，不做 baseline 减除**，保留原始 Poisson 统计。
+- **精修每步的异常**不再静默吞掉：写到 stderr 并追加到 `warnings`。
+- **wR > 30%** 会自动添加 high-wR warning，提醒检查初始晶胞 / 空间群 / 峰形 / 2θ 范围。
+
+### 已验证
+
+**评测题 DFT_pxrd_001（单斜 P 21/c，低 dynamic range DFT-PXRD）：**
 
 | 温度 | 精修值 | 参考值 | 容差 | 结果 |
 |------|--------|--------|------|------|
 | 303K | V=1000.18 | 999.81 | ±20 | ✓ |
 | 303K | a=10.826 | 10.828 | ±0.05 | ✓ |
-| 383K | V=1016.11 | 1022.73 | ±20 | ✓ |
-| 413K | V=1037.09 | 1026.1 | ±20 | ✓ |
+| 413K | V=1044.79 | 1026.1 | ±20 | ✓ |
 
-**已知不收敛/边界情况：** 363K（V=1035 vs 1011，超出 ±20 边界 ~4Å³）和 383K a 参数（HTP 相 cell setting 与参考值不同）。详见 `references/gsas2_refinement_guide.md` 的 Troubleshooting。
+**合成 Si 数据（立方 F d -3 m，a=5.4309，高 dynamic range ≈ 270，Poisson 噪声）：**
+- 起始 a=5.43（正确）：精修到 a=5.43099，ESD=0.00017 —— 通用场景下小晶胞 + 真实 counts 也能精准工作
+- 起始 a=5.60 / 5.00（±3% / ±8% 偏差）：拟合**被困在错局部最小**（a=5.62 / 4.99），但 ESD 急剧增大到 0.03 / 0.05，配合 high wR warning 可识别
+
+**已知不收敛/边界情况：**
+- DFT_pxrd_001 的 363K（V=1035 vs 1011，超出 ±20 边界 ~4Å³）和 383K a 参数（HTP 相 cell setting 差异）
+- Pawley 对大初始晶胞偏差（>3%）可能收敛到错误的局部最小 —— 通过大 ESD 和 high wR warning 识别，应尝试更接近的初猜
+
+详见 `references/gsas2_refinement_guide.md` 的 Troubleshooting。
 
 ---
 

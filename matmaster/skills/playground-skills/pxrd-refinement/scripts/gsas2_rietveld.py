@@ -85,13 +85,40 @@ def preprocess_to_xye(
     two_theta: np.ndarray,
     intensity: np.ndarray,
     outpath: str,
-) -> None:
-    """Subtract baseline, scale to reasonable count level, write .xye."""
-    baseline = np.percentile(intensity, 5)
-    y = (intensity - baseline) * 1e4
+    warnings: list[str] | None = None,
+) -> dict:
+    """
+    Adaptive preprocessing — see gsas2_pawley.preprocess_to_xye for rationale.
+
+    For dynamic range < 10 (DFT-style flat data), subtract 5th-percentile
+    baseline and scale by 1e4. Otherwise pass intensity through unchanged
+    (real experimental counts already have a meaningful Poisson sigma).
+    """
+    if warnings is None:
+        warnings = []
+    p5 = float(np.percentile(intensity, 5))
+    pmax = float(np.max(intensity))
+    pmin = float(np.min(intensity))
+    denom = max(p5, 1e-9)
+    dyn_range = (pmax - pmin) / denom if denom > 0 else float("inf")
+
+    if dyn_range < 10.0:
+        y = (intensity - p5) * 1e4
+        mode = "dft_scaled"
+        info = {"baseline": p5, "scale": 1e4}
+        warnings.append(
+            f"preprocess: low dynamic range ({dyn_range:.2f}) detected, "
+            f"applied baseline subtraction (-{p5:.4f}) and scale ×10000"
+        )
+    else:
+        y = intensity.astype(float)
+        mode = "passthrough"
+        info = {"baseline": 0.0, "scale": 1.0}
+
     y = np.maximum(y, 1.0)
     sigma = np.sqrt(y)
     np.savetxt(outpath, np.column_stack([two_theta, y, sigma]), fmt="%.7f")
+    return {"mode": mode, "dynamic_range": round(dyn_range, 3), **info}
 
 
 def read_xy_file(filepath: str) -> tuple[np.ndarray, np.ndarray]:
@@ -117,14 +144,18 @@ def read_xy_file(filepath: str) -> tuple[np.ndarray, np.ndarray]:
     return arr[:, 0], arr[:, 1]
 
 
-def _safe_refine(gpx, step_name: str, verbose: bool = True) -> bool:
-    """Run one refinement cycle; return True if successful."""
+def _safe_refine(
+    gpx, step_name: str, warnings: list[str], verbose: bool = True
+) -> bool:
+    """Run one refinement cycle; return True on success, log on failure."""
     try:
         gpx.do_refinements([{}])
         return True
     except Exception as exc:
+        msg = f"refine step '{step_name}' raised {type(exc).__name__}: {exc}"
+        warnings.append(msg)
         if verbose:
-            print(f"  [warn] {step_name}: {exc}", file=sys.stderr)
+            print(f"  [warn] {msg}", file=sys.stderr)
         return False
 
 
@@ -133,11 +164,12 @@ def run_rietveld(
     cif_file: str,
     wavelength: float,
     refine_level: str,
-    two_theta_min: float,
-    two_theta_max: float,
+    two_theta_min: float | None,
+    two_theta_max: float | None,
     instprm_path: str,
     export_cif: str | None,
     workdir: str,
+    warnings: list[str] | None = None,
 ) -> dict:
     """
     Run GSAS-II Rietveld refinement.
@@ -154,6 +186,9 @@ def run_rietveld(
     """
     import GSASIIscriptable as G2sc
 
+    if warnings is None:
+        warnings = []
+
     G2sc.SetPrintLevel("warn")
 
     gpx_path = os.path.join(workdir, "rietveld.gpx")
@@ -165,59 +200,53 @@ def run_rietveld(
         histograms=[hist],
     )
 
-    hist.set_refinements({"Limits": [two_theta_min, two_theta_max]})
+    # Default to full data range when limits unspecified.
+    xdata = hist.getdata("x")
+    lim_lo = float(two_theta_min) if two_theta_min is not None else float(xdata.min())
+    lim_hi = float(two_theta_max) if two_theta_max is not None else float(xdata.max())
+    hist.set_refinements({"Limits": [lim_lo, lim_hi]})
 
     gpx.set_Controls("cycles", 10)
 
-    # ── Round 1: Background + phase fraction ────────────────────────────
     hist.set_refinements({"Background": {"no. coeffs": 6, "refine": True}})
     phase.set_HAP_refinements({"Scale": True})
-    _safe_refine(gpx, "Background+Scale")
+    _safe_refine(gpx, "Background+Scale", warnings)
 
-    # ── Round 2: Cell parameters ─────────────────────────────────────────
     phase.set_refinements({"Cell": True})
-    _safe_refine(gpx, "Cell")
+    _safe_refine(gpx, "Cell", warnings)
 
-    # ── Round 3: Peak shape (Caglioti U, V, W) ───────────────────────────
     hist.set_refinements({"Instrument Parameters": ["U", "V", "W"]})
-    _safe_refine(gpx, "UVW")
+    _safe_refine(gpx, "UVW", warnings)
 
-    # ── Round 4: Zero-point + asymmetry ──────────────────────────────────
     hist.set_refinements({"Instrument Parameters": ["Zero", "SH/L"]})
-    _safe_refine(gpx, "Zero+SH/L")
+    _safe_refine(gpx, "Zero+SH/L", warnings)
 
     if refine_level == "basic":
-        # Converge with basic params only
-        for _ in range(3):
-            _safe_refine(gpx, "converge")
+        for i in range(3):
+            _safe_refine(gpx, f"converge_{i + 1}", warnings)
     else:
-        # ── Round 5: Atomic coordinates + Uiso ─────────────────────────────
         phase.set_refinements({"Atoms": {"all": "XU"}})
-        _safe_refine(gpx, "Atoms XU")
+        _safe_refine(gpx, "Atoms XU", warnings)
 
-        # A few convergence cycles
-        for _ in range(3):
-            _safe_refine(gpx, "converge-1")
+        for i in range(3):
+            _safe_refine(gpx, f"converge_post_atoms_{i + 1}", warnings)
 
         if refine_level == "full":
-            # ── Round 6: Occupancy + anisotropic Uani ──────────────────────
             try:
                 phase.set_refinements({"Atoms": {"all": "FXU"}})
-                _safe_refine(gpx, "Atoms FXU")
-            except Exception:
-                pass
+                _safe_refine(gpx, "Atoms FXU", warnings)
+            except Exception as exc:
+                warnings.append(f"set 'FXU' refine flag failed: {exc}")
 
-            # ── Round 7: Try anisotropic Uani if symmetry allows ───────────
             try:
                 phase.set_refinements({"Atoms": {"all": "FXUA"}})
-                _safe_refine(gpx, "Atoms FXUA")
-            except Exception:
-                pass
+                _safe_refine(gpx, "Atoms FXUA", warnings)
+            except Exception as exc:
+                warnings.append(f"set 'FXUA' refine flag failed: {exc}")
 
-        # Final convergence
         hist.set_refinements({"Background": {"no. coeffs": 12, "refine": True}})
-        for _ in range(5):
-            _safe_refine(gpx, "converge-final")
+        for i in range(5):
+            _safe_refine(gpx, f"converge_final_{i + 1}", warnings)
 
     # ── Extract results ──────────────────────────────────────────────────
     cell = phase.get_cell()
@@ -271,16 +300,21 @@ def run_rietveld(
     except Exception:
         pass
 
-    # Export refined CIF
     cif_out = None
     if export_cif:
         try:
             phase.export_CIF(export_cif)
             cif_out = export_cif
         except Exception as exc:
+            warnings.append(f"CIF export failed: {exc}")
             print(f"  [warn] CIF export failed: {exc}", file=sys.stderr)
 
     gpx.save()
+
+    if wR is not None and wR > 25.0:
+        warnings.append(
+            f"high wR ({wR:.2f}%); structure or peak-shape model may be wrong"
+        )
 
     result = {
         "success": True,
@@ -300,8 +334,10 @@ def run_rietveld(
             "Rwp": rwp,
             "wR": round(wR, 3) if wR is not None else None,
         },
+        "limits": [round(lim_lo, 4), round(lim_hi, 4)],
         "n_atoms": len(atoms_out),
         "atoms": atoms_out,
+        "warnings": warnings,
     }
     if cif_out:
         result["cif_file"] = cif_out
@@ -344,19 +380,21 @@ def main() -> None:
     ap.add_argument(
         "--tmin",
         type=float,
-        default=8.0,
-        help="Lower 2θ limit for refinement (default: 8.0°)",
+        default=None,
+        help="Lower 2θ limit for refinement (default: None = full data range)",
     )
     ap.add_argument(
         "--tmax",
         type=float,
-        default=50.0,
-        help="Upper 2θ limit for refinement (default: 50.0°)",
+        default=None,
+        help="Upper 2θ limit for refinement (default: None = full data range)",
     )
     ap.add_argument(
         "--instprm",
         default=None,
-        help="Path to GSAS-II instrument parameter file (default: auto Cu Kα)",
+        help="Path to GSAS-II instrument parameter file. Default auto-generates "
+        "a Cu Kα template; for lab diffractometers you SHOULD provide one "
+        "calibrated against a standard.",
     )
     ap.add_argument(
         "--gsas2-path",
@@ -375,33 +413,49 @@ def main() -> None:
 
     import GSASIIscriptable  # noqa: F401 — verify import works
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        instprm = args.instprm or make_instprm_file(args.wavelength, tmpdir)
+    # GSAS-II writes progress/SVD warnings to stdout via bare print(); we
+    # swap stdout to stderr during refinement so the final JSON is clean.
+    real_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            instprm = args.instprm or make_instprm_file(args.wavelength, tmpdir)
 
-        # Pre-process data into xye in workdir
-        data_path = Path(args.data)
-        if data_path.suffix.lower() in (".xye",):
-            # Already in correct format — pass through
-            xye_path = str(data_path)
-        else:
-            two_theta, intensity = read_xy_file(str(data_path))
-            xye_path = os.path.join(tmpdir, data_path.stem + ".xye")
-            preprocess_to_xye(two_theta, intensity, xye_path)
+            warnings: list[str] = []
+            data_path = Path(args.data)
+            if data_path.suffix.lower() in (".xye",):
+                xye_path = str(data_path)
+                preprocess_info = {"mode": "passthrough_xye", "scale": 1.0}
+            else:
+                two_theta, intensity = read_xy_file(str(data_path))
+                xye_path = os.path.join(tmpdir, data_path.stem + ".xye")
+                preprocess_info = preprocess_to_xye(
+                    two_theta, intensity, xye_path, warnings
+                )
 
-        try:
-            result = run_rietveld(
-                data_file=xye_path,
-                cif_file=args.cif,
-                wavelength=args.wavelength,
-                refine_level=args.refine_level,
-                two_theta_min=args.tmin,
-                two_theta_max=args.tmax,
-                instprm_path=instprm,
-                export_cif=args.export_cif,
-                workdir=tmpdir,
-            )
-        except Exception as exc:
-            result = {"success": False, "error": str(exc)}
+            try:
+                result = run_rietveld(
+                    data_file=xye_path,
+                    cif_file=args.cif,
+                    wavelength=args.wavelength,
+                    refine_level=args.refine_level,
+                    two_theta_min=args.tmin,
+                    two_theta_max=args.tmax,
+                    instprm_path=instprm,
+                    export_cif=args.export_cif,
+                    workdir=tmpdir,
+                    warnings=warnings,
+                )
+                result["preprocess"] = preprocess_info
+            except Exception as exc:
+                result = {
+                    "success": False,
+                    "error": str(exc),
+                    "preprocess": preprocess_info,
+                    "warnings": warnings,
+                }
+    finally:
+        sys.stdout = real_stdout
 
     result["file"] = args.data
     result["cif"] = args.cif
