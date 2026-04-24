@@ -255,10 +255,11 @@ class BohriumTool(BuiltinTool):
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str | None:
         return (
             '## Bohrium tool usage\n'
-            '- Load the corresponding software skill first (cp2k, qe, abacus, orca, '
+            '- **Always** load the corresponding software skill first (cp2k, qe, abacus, orca, '
             'lammps, gromacs, pyscf, abinit, pyatb, mlips) to obtain image, machine, '
-            'and cmd.\n'
-            '- When image or machine is unknown, call list_images / list_machines first.\n'
+            'and cmd — do this **before** calling list_images or list_machines.\n'
+            '- Only call list_images / list_machines when the loaded skill does not '
+            'provide a default image or machine, or you need to verify availability.\n'
             '\n'
             '### Actions\n'
             '- **submit**: package input directory and submit a job, returns job_id. '
