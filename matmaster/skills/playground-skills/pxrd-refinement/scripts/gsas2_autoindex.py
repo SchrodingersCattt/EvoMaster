@@ -389,7 +389,7 @@ def main():
             f"dyn={cr.dyn_range:.1f} peaks={cr.peak_count} reasons={cr.reasons}")
         if cr.verdict == "FAIL" and args.strict_curation:
             raise SystemExit(
-                f"Curation FAIL: {cr.reasons}. Pass --no-strict-curation to "
+                f"Curation FAIL: {cr.reasons}. Omit --strict-curation to "
                 "attempt indexing anyway."
             )
         if args.debug_plot:

@@ -54,6 +54,7 @@ import os
 import re
 import sys
 import tempfile
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import numpy as np
@@ -422,10 +423,20 @@ def refine_one_pattern(
     )
 
     # If user did not specify limits, fall back to the full data range.
+    # Clamp to the actual data range so a stray --tmin/--tmax can't produce an
+    # empty / inverted window that GSAS-II will silently "refine" against.
     data_lo = float(two_theta.min())
     data_hi = float(two_theta.max())
     lim_lo = float(two_theta_min) if two_theta_min is not None else data_lo
     lim_hi = float(two_theta_max) if two_theta_max is not None else data_hi
+    lim_lo = max(data_lo, min(lim_lo, data_hi))
+    lim_hi = max(data_lo, min(lim_hi, data_hi))
+    if lim_lo >= lim_hi:
+        warnings.append(
+            f"invalid 2θ limits [{lim_lo:.4f}, {lim_hi:.4f}] vs data "
+            f"[{data_lo:.4f}, {data_hi:.4f}]; falling back to full range"
+        )
+        lim_lo, lim_hi = data_lo, data_hi
     hist.set_refinements({"Limits": [lim_lo, lim_hi]})
 
     phase.setPhaseEntryValue(["General", "doPawley"], True)
@@ -815,26 +826,23 @@ def main() -> None:
 
     data_path = Path(args.data)
 
-    # GSAS-II writes progress/SVD warnings to stdout via bare print(). That
-    # pollutes our JSON output and breaks agents that consume it. Swap stdout
-    # to stderr for the entire refinement, restore it only to emit JSON.
-    real_stdout = sys.stdout
-    sys.stdout = sys.stderr
-    try:
+    # GSAS-II writes progress/SVD warnings to stdout via bare print(). Scope
+    # the redirect so any uncaught exception inside the refinement still leaves
+    # stdout in its original state, and so we never accidentally swallow a
+    # caller's stdout context.
+    if not (args.wide_csv or data_path.is_dir() or data_path.is_file()):
+        print(
+            json.dumps({"success": False, "error": f"Not found: {args.data}"}),
+        )
+        sys.exit(1)
+
+    with redirect_stdout(sys.stderr):
         if args.wide_csv:
             result = run_wide_csv(args)
         elif data_path.is_dir():
             result = run_directory(args)
-        elif data_path.is_file():
-            result = run_single(args)
         else:
-            sys.stdout = real_stdout
-            print(
-                json.dumps({"success": False, "error": f"Not found: {args.data}"}),
-            )
-            sys.exit(1)
-    finally:
-        sys.stdout = real_stdout
+            result = run_single(args)
 
     json_str = json.dumps(result, indent=2, ensure_ascii=False)
     print(json_str)
