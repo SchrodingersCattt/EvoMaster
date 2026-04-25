@@ -84,20 +84,46 @@ from curation import CurationResult, curate, write_diagnostic_plot  # noqa: E402
 DEFAULT_GSAS2_PATH = "/root/g2full/GSAS-II/GSASII"
 
 BRAVAIS_MAP = {
-    "cubic-F": 0, "cubic-I": 1, "cubic-P": 2,
-    "trigonal-R": 3, "hexagonal-P": 4, "trigonal-hexagonal-P": 4,
-    "tetragonal-I": 5, "tetragonal-P": 6,
-    "orthorhombic-F": 7, "orthorhombic-I": 8, "orthorhombic-A": 9,
-    "orthorhombic-B": 10, "orthorhombic-C": 11, "orthorhombic-P": 12,
-    "monoclinic-I": 13, "monoclinic-A": 14, "monoclinic-C": 15,
-    "monoclinic-P": 16, "triclinic": 17,
+    "cubic-F": 0,
+    "cubic-I": 1,
+    "cubic-P": 2,
+    "trigonal-R": 3,
+    "hexagonal-P": 4,
+    "trigonal-hexagonal-P": 4,
+    "tetragonal-I": 5,
+    "tetragonal-P": 6,
+    "orthorhombic-F": 7,
+    "orthorhombic-I": 8,
+    "orthorhombic-A": 9,
+    "orthorhombic-B": 10,
+    "orthorhombic-C": 11,
+    "orthorhombic-P": 12,
+    "monoclinic-I": 13,
+    "monoclinic-A": 14,
+    "monoclinic-C": 15,
+    "monoclinic-P": 16,
+    "triclinic": 17,
 }
-BRAVAIS_NAMES = ["Cubic-F", "Cubic-I", "Cubic-P", "Trigonal-R",
-                 "Trigonal/Hexagonal-P", "Tetragonal-I", "Tetragonal-P",
-                 "Orthorhombic-F", "Orthorhombic-I", "Orthorhombic-A",
-                 "Orthorhombic-B", "Orthorhombic-C", "Orthorhombic-P",
-                 "Monoclinic-I", "Monoclinic-A", "Monoclinic-C",
-                 "Monoclinic-P", "Triclinic"]
+BRAVAIS_NAMES = [
+    "Cubic-F",
+    "Cubic-I",
+    "Cubic-P",
+    "Trigonal-R",
+    "Trigonal/Hexagonal-P",
+    "Tetragonal-I",
+    "Tetragonal-P",
+    "Orthorhombic-F",
+    "Orthorhombic-I",
+    "Orthorhombic-A",
+    "Orthorhombic-B",
+    "Orthorhombic-C",
+    "Orthorhombic-P",
+    "Monoclinic-I",
+    "Monoclinic-A",
+    "Monoclinic-C",
+    "Monoclinic-P",
+    "Triclinic",
+]
 
 
 def log(msg):
@@ -147,8 +173,10 @@ def read_wide_csv_column(filepath: str, column: str) -> tuple[np.ndarray, np.nda
 
 
 def preprocess_for_indexing(
-    two_theta: np.ndarray, intensity: np.ndarray,
-    tmin: float | None = None, tmax: float | None = None,
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    tmin: float | None = None,
+    tmax: float | None = None,
     baseline_method: str = "piecewise_linear",
 ) -> tuple[np.ndarray, np.ndarray, CurationResult]:
     """Run the shared curation pipeline and return (tth, I_subtracted, result).
@@ -159,16 +187,21 @@ def preprocess_for_indexing(
     `tmin_cut` is usually mandatory on DFT-simulated data.
     """
     cr = curate(
-        two_theta, intensity,
+        two_theta,
+        intensity,
         baseline_method=baseline_method,
-        tmin_hint=tmin, tmax_hint=tmax,
+        tmin_hint=tmin,
+        tmax_hint=tmax,
     )
     return cr.tth, cr.intensity_subtracted, cr
 
 
 def pick_peaks(
-    two_theta: np.ndarray, I_sub: np.ndarray,
-    prominence_rel: float = 0.01, min_sep_points: int = 3, top_n: int = 30,
+    two_theta: np.ndarray,
+    I_sub: np.ndarray,
+    prominence_rel: float = 0.01,
+    min_sep_points: int = 3,
+    top_n: int = 30,
 ) -> list[tuple[float, float]]:
     """Fallback peak picker if curation didn't return a list.
 
@@ -189,7 +222,9 @@ def pick_peaks(
     return [(float(two_theta[i]), float(y_norm[i])) for i in idx]
 
 
-def peaks_from_curation(cr: CurationResult, top_n: int = 30) -> list[tuple[float, float]]:
+def peaks_from_curation(
+    cr: CurationResult, top_n: int = 30
+) -> list[tuple[float, float]]:
     """Reuse curation's peak positions, normalise intensities to [0, 1].
 
     `cr.peak_positions` is produced by the same SNR>=3 / prominence>=2% I_max
@@ -269,15 +304,23 @@ def run_index(
     signal.alarm(int(timeout_per_family * max(1, len(bravais_idxs))))
     try:
         result = G2idx.DoIndexPeaks(
-            peak_list, controls, bravais, dlg=None,
-            ifX20=True, timeout=timeout_per_family, M20_min=m20_min,
+            peak_list,
+            controls,
+            bravais,
+            dlg=None,
+            ifX20=True,
+            timeout=timeout_per_family,
+            M20_min=m20_min,
         )
         cells = result[-1] if isinstance(result, tuple) and result else result or []
     except _IndexTimeout:
-        log(f"DoIndexPeaks hit hard SIGALRM timeout after "
-            f"{int(time.time() - t0)}s — returning whatever was collected.")
+        log(
+            f"DoIndexPeaks hit hard SIGALRM timeout after "
+            f"{int(time.time() - t0)}s — returning whatever was collected."
+        )
     except Exception as e:
         import traceback
+
         log(f"DoIndexPeaks raised: {type(e).__name__}: {e}")
         log(traceback.format_exc())
     finally:
@@ -293,19 +336,23 @@ def format_candidates(cells) -> list[dict]:
     for c in cells:
         try:
             ibrav = int(c[2])
-            name = BRAVAIS_NAMES[ibrav] if 0 <= ibrav < len(BRAVAIS_NAMES) else str(ibrav)
-            out.append({
-                "M20": round(float(c[0]), 3),
-                "X20": int(c[1]),
-                "bravais": name,
-                "a": round(float(c[3]), 4),
-                "b": round(float(c[4]), 4),
-                "c": round(float(c[5]), 4),
-                "alpha": round(float(c[6]), 3),
-                "beta": round(float(c[7]), 3),
-                "gamma": round(float(c[8]), 3),
-                "volume": round(float(c[9]), 2),
-            })
+            name = (
+                BRAVAIS_NAMES[ibrav] if 0 <= ibrav < len(BRAVAIS_NAMES) else str(ibrav)
+            )
+            out.append(
+                {
+                    "M20": round(float(c[0]), 3),
+                    "X20": int(c[1]),
+                    "bravais": name,
+                    "a": round(float(c[3]), 4),
+                    "b": round(float(c[4]), 4),
+                    "c": round(float(c[5]), 4),
+                    "alpha": round(float(c[6]), 3),
+                    "beta": round(float(c[7]), 3),
+                    "gamma": round(float(c[8]), 3),
+                    "volume": round(float(c[9]), 2),
+                }
+            )
         except (IndexError, ValueError, TypeError):
             continue
     out.sort(key=lambda x: -x["M20"])
@@ -319,48 +366,93 @@ def main():
         epilog=__doc__,
     )
     p.add_argument("--data", required=True, help="Input PXRD file (.xye / .xy / CSV)")
-    p.add_argument("--wide-csv", action="store_true",
-                   help="Input is a wide CSV (Angle,T1,Angle,T2,...); use with --column")
+    p.add_argument(
+        "--wide-csv",
+        action="store_true",
+        help="Input is a wide CSV (Angle,T1,Angle,T2,...); use with --column",
+    )
     p.add_argument("--column", help="Column label for --wide-csv mode (e.g. '140 C')")
-    p.add_argument("--bravais", default="monoclinic-P",
-                   help="Comma-separated Bravais families to try, in order. "
-                        f"Choices: {','.join(BRAVAIS_MAP)}")
-    p.add_argument("--wavelength", type=float, default=1.5406, help="X-ray wavelength (Å)")
+    p.add_argument(
+        "--bravais",
+        default="monoclinic-P",
+        help="Comma-separated Bravais families to try, in order. "
+        f"Choices: {','.join(BRAVAIS_MAP)}",
+    )
+    p.add_argument(
+        "--wavelength", type=float, default=1.5406, help="X-ray wavelength (Å)"
+    )
     p.add_argument("--tmin", type=float, default=None, help="Minimum 2θ (°) to keep")
     p.add_argument("--tmax", type=float, default=None, help="Maximum 2θ (°) to keep")
-    p.add_argument("--top-n-peaks", type=int, default=18,
-                   help="Number of strongest peaks fed to the Visser indexer. "
-                        "Calibrated to the Materials Studio Reflex-TREOR workflow "
-                        "(typically 12–17 peaks of a manually curated list of "
-                        "background-removed/smoothed data). Going much higher "
-                        "(>25) starts feeding overlapping high-angle peaks that "
-                        "Visser cannot single-index — it produces low-FOM "
-                        "garbage candidates instead of a clean solution.")
-    p.add_argument("--prominence-rel", type=float, default=0.01,
-                   help="Relative prominence threshold (baseline-subtracted, 0–1)")
-    p.add_argument("--tmax-index", type=float, default=35.0,
-                   help="Maximum 2θ (°) used for indexing only. Material Studio "
-                        "Reflex defaults to ≤35° because at higher angles peaks "
-                        "overlap and Visser can't deterministically index them. "
-                        "Set 0 to use --tmax (= raw data max).")
-    p.add_argument("--timeout", type=int, default=180,
-                   help="Seconds per Bravais family before giving up")
-    p.add_argument("--nc-ratio", type=int, default=6, help="Max Nc/Nobs ratio (GSAS-II controls[2])")
-    p.add_argument("--m20-min", type=float, default=2.0, help="Minimum M20 FOM to accept a cell")
-    p.add_argument("--v1-hint", type=int, default=0,
-                   help="Starting unit-cell volume guess in Å³ (0 = auto-sweep).")
-    p.add_argument("--baseline-method",
-                   choices=["piecewise_linear", "linear", "mor", "none"],
-                   default="piecewise_linear",
-                   help="Baseline model used by the curation pipeline. See "
-                        "curation.py; default is piecewise-linear (three 1st-order "
-                        "fits).")
-    p.add_argument("--strict-curation", action="store_true",
-                   help="Abort indexing when curation verdict is FAIL. Default: "
-                        "still attempt indexing (FAIL is logged).")
-    p.add_argument("--debug-plot", default=None,
-                   help="If set, write <stem>_curation.png into this dir.")
-    p.add_argument("-o", "--output", help="Write full JSON result here (also printed to stdout)")
+    p.add_argument(
+        "--top-n-peaks",
+        type=int,
+        default=18,
+        help="Number of strongest peaks fed to the Visser indexer. "
+        "Calibrated to the Materials Studio Reflex-TREOR workflow "
+        "(typically 12–17 peaks of a manually curated list of "
+        "background-removed/smoothed data). Going much higher "
+        "(>25) starts feeding overlapping high-angle peaks that "
+        "Visser cannot single-index — it produces low-FOM "
+        "garbage candidates instead of a clean solution.",
+    )
+    p.add_argument(
+        "--prominence-rel",
+        type=float,
+        default=0.01,
+        help="Relative prominence threshold (baseline-subtracted, 0–1)",
+    )
+    p.add_argument(
+        "--tmax-index",
+        type=float,
+        default=35.0,
+        help="Maximum 2θ (°) used for indexing only. Material Studio "
+        "Reflex defaults to ≤35° because at higher angles peaks "
+        "overlap and Visser can't deterministically index them. "
+        "Set 0 to use --tmax (= raw data max).",
+    )
+    p.add_argument(
+        "--timeout",
+        type=int,
+        default=180,
+        help="Seconds per Bravais family before giving up",
+    )
+    p.add_argument(
+        "--nc-ratio",
+        type=int,
+        default=6,
+        help="Max Nc/Nobs ratio (GSAS-II controls[2])",
+    )
+    p.add_argument(
+        "--m20-min", type=float, default=2.0, help="Minimum M20 FOM to accept a cell"
+    )
+    p.add_argument(
+        "--v1-hint",
+        type=int,
+        default=0,
+        help="Starting unit-cell volume guess in Å³ (0 = auto-sweep).",
+    )
+    p.add_argument(
+        "--baseline-method",
+        choices=["piecewise_linear", "linear", "mor", "none"],
+        default="piecewise_linear",
+        help="Baseline model used by the curation pipeline. See "
+        "curation.py; default is piecewise-linear (three 1st-order "
+        "fits).",
+    )
+    p.add_argument(
+        "--strict-curation",
+        action="store_true",
+        help="Abort indexing when curation verdict is FAIL. Default: "
+        "still attempt indexing (FAIL is logged).",
+    )
+    p.add_argument(
+        "--debug-plot",
+        default=None,
+        help="If set, write <stem>_curation.png into this dir.",
+    )
+    p.add_argument(
+        "-o", "--output", help="Write full JSON result here (also printed to stdout)"
+    )
     p.add_argument("--gsas2-path", default=DEFAULT_GSAS2_PATH)
     args = p.parse_args()
 
@@ -374,19 +466,26 @@ def main():
         if args.wide_csv:
             if not args.column:
                 raise SystemExit("--wide-csv requires --column")
-            tth, I = read_wide_csv_column(args.data, args.column)
+            tth, inten = read_wide_csv_column(args.data, args.column)
         else:
-            tth, I = read_xye_or_xy(args.data)
+            tth, inten = read_xye_or_xy(args.data)
 
-        log(f"Loaded {len(tth)} points from {args.data}, 2θ {tth.min():.2f}–{tth.max():.2f}")
+        log(
+            f"Loaded {len(tth)} points from {args.data}, 2θ {tth.min():.2f}–{tth.max():.2f}"
+        )
 
-        raw_tth, raw_I = tth.copy(), I.copy()
+        raw_tth, raw_I = tth.copy(), inten.copy()
         tth, I_sub, cr = preprocess_for_indexing(
-            tth, I, args.tmin, args.tmax,
+            tth,
+            inten,
+            args.tmin,
+            args.tmax,
             baseline_method=args.baseline_method,
         )
-        log(f"Curation: verdict={cr.verdict} tmin_cut={cr.tmin_cut:.3f} "
-            f"dyn={cr.dyn_range:.1f} peaks={cr.peak_count} reasons={cr.reasons}")
+        log(
+            f"Curation: verdict={cr.verdict} tmin_cut={cr.tmin_cut:.3f} "
+            f"dyn={cr.dyn_range:.1f} peaks={cr.peak_count} reasons={cr.reasons}"
+        )
         if cr.verdict == "FAIL" and args.strict_curation:
             raise SystemExit(
                 f"Curation FAIL: {cr.reasons}. Omit --strict-curation to "
@@ -396,18 +495,22 @@ def main():
             os.makedirs(args.debug_plot, exist_ok=True)
             png = os.path.join(args.debug_plot, Path(args.data).stem + "_curation.png")
             try:
-                write_diagnostic_plot(cr, raw_tth, raw_I, png,
-                                      title=Path(args.data).stem)
+                write_diagnostic_plot(
+                    cr, raw_tth, raw_I, png, title=Path(args.data).stem
+                )
                 log(f"Wrote curation plot → {png}")
             except Exception as exc:
                 log(f"curation plot failed: {exc}")
 
         peaks = peaks_from_curation(cr, top_n=args.top_n_peaks)
         if len(peaks) < 6:
-            log(f"Curation gave only {len(peaks)} peaks; falling back to "
-                f"prominence-{args.prominence_rel} find_peaks on I_sub.")
+            log(
+                f"Curation gave only {len(peaks)} peaks; falling back to "
+                f"prominence-{args.prominence_rel} find_peaks on I_sub."
+            )
             peaks = pick_peaks(
-                tth, I_sub,
+                tth,
+                I_sub,
                 prominence_rel=args.prominence_rel,
                 top_n=args.top_n_peaks,
             )
@@ -415,13 +518,17 @@ def main():
             kept = [(t, h) for (t, h) in peaks if t <= args.tmax_index]
             if len(kept) >= 6:
                 if len(kept) < len(peaks):
-                    log(f"Trimming peaks to 2θ ≤ {args.tmax_index:g}° for "
+                    log(
+                        f"Trimming peaks to 2θ ≤ {args.tmax_index:g}° for "
                         f"indexing: {len(peaks)} → {len(kept)} (Material Studio "
-                        f"Reflex default; high-angle overlaps confuse Visser).")
+                        f"Reflex default; high-angle overlaps confuse Visser)."
+                    )
                 peaks = kept
             else:
-                log(f"WARN: --tmax-index={args.tmax_index} would leave only "
-                    f"{len(kept)} peaks; keeping the full set ({len(peaks)}).")
+                log(
+                    f"WARN: --tmax-index={args.tmax_index} would leave only "
+                    f"{len(kept)} peaks; keeping the full set ({len(peaks)})."
+                )
         if len(peaks) < 6:
             raise SystemExit(
                 f"Only {len(peaks)} peaks picked; need ≥ 6 for Visser indexing. "
@@ -442,9 +549,13 @@ def main():
 
         peak_list = build_gsas2_peak_list(peaks, args.wavelength)
         cells, dt = run_index(
-            peak_list, bravais_idxs, args.wavelength,
+            peak_list,
+            bravais_idxs,
+            args.wavelength,
             timeout_per_family=args.timeout,
-            nc_ratio=args.nc_ratio, m20_min=args.m20_min, v1_hint=args.v1_hint,
+            nc_ratio=args.nc_ratio,
+            m20_min=args.m20_min,
+            v1_hint=args.v1_hint,
         )
         log(f"DoIndexPeaks finished in {dt:.1f}s, got {len(cells)} candidates")
 
@@ -476,9 +587,13 @@ def main():
         raise
     except Exception as e:
         import traceback
+
         sys.stdout = _orig_stdout
-        err = {"success": False, "error": f"{type(e).__name__}: {e}",
-               "traceback": traceback.format_exc()}
+        err = {
+            "success": False,
+            "error": f"{type(e).__name__}: {e}",
+            "traceback": traceback.format_exc(),
+        }
         print(json.dumps(err, indent=2))
         sys.exit(2)
 

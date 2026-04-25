@@ -28,9 +28,7 @@ Design principles:
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 
@@ -73,8 +71,9 @@ class CurationResult:
         }
 
 
-def _rolling_min_smoothed(tth: np.ndarray, I: np.ndarray,
-                          half_window_deg: float = 3.0) -> np.ndarray:
+def _rolling_min_smoothed(
+    tth: np.ndarray, inten: np.ndarray, half_window_deg: float = 3.0
+) -> np.ndarray:
     """Rolling-minimum baseline followed by a box-average smoother.
 
     Used internally for artifact-end detection. We deliberately avoid
@@ -87,19 +86,21 @@ def _rolling_min_smoothed(tth: np.ndarray, I: np.ndarray,
     """
     dtth = float(np.median(np.diff(tth)))
     hw = max(10, int(half_window_deg / dtth))
-    n = len(I)
+    n = len(inten)
     bl = np.empty(n)
     for i in range(n):
         lo = max(0, i - hw)
         hi = min(n, i + hw + 1)
-        bl[i] = np.min(I[lo:hi])
+        bl[i] = np.min(inten[lo:hi])
     kern = np.ones(hw) / hw
     pad = hw
     padded = np.concatenate([np.full(pad, bl[0]), bl, np.full(pad, bl[-1])])
-    return np.convolve(padded, kern, mode="same")[pad:pad + n]
+    return np.convolve(padded, kern, mode="same")[pad : pad + n]
 
 
-def _mor_baseline(tth: np.ndarray, I: np.ndarray, half_window_deg: float = 3.0) -> np.ndarray:
+def _mor_baseline(
+    tth: np.ndarray, inten: np.ndarray, half_window_deg: float = 3.0
+) -> np.ndarray:
     """Morphological-opening-style baseline for plotting / generic use.
 
     Uses `pybaselines.Baseline.mor` when available (smoother, more accurate for
@@ -111,14 +112,15 @@ def _mor_baseline(tth: np.ndarray, I: np.ndarray, half_window_deg: float = 3.0) 
     hw = max(10, int(half_window_deg / dtth))
     try:
         from pybaselines import Baseline
-        return Baseline(x_data=tth).mor(I, half_window=hw)[0]
+
+        return Baseline(x_data=tth).mor(inten, half_window=hw)[0]
     except Exception:
-        return _rolling_min_smoothed(tth, I, half_window_deg)
+        return _rolling_min_smoothed(tth, inten, half_window_deg)
 
 
 def detect_artifact_end(
     tth: np.ndarray,
-    I: np.ndarray,
+    inten: np.ndarray,
     half_window_deg: float = 3.0,
     slope_k: float = 1.0,
     margin_deg: float = 1.0,
@@ -142,10 +144,10 @@ def detect_artifact_end(
       search_max_deg — cap so we don't clip away half the pattern if the
                        whole background has a mild positive tilt.
     """
-    bl = _rolling_min_smoothed(tth, I, half_window_deg)
+    bl = _rolling_min_smoothed(tth, inten, half_window_deg)
     dbl = np.gradient(bl, tth)
     span = float(tth[-1] - tth[0])
-    avg_slope = float(I.max() - I.min()) / max(span, 1e-6)
+    avg_slope = float(inten.max() - inten.min()) / max(span, 1e-6)
     thr = slope_k * avg_slope
     dtth = float(np.median(np.diff(tth)))
     sustain = max(3, int(sustain_deg / dtth))
@@ -168,60 +170,70 @@ def detect_artifact_end(
     return float(tth[0])
 
 
-def _baseline_linear(tth: np.ndarray, I: np.ndarray,
-                     n_iter: int = 5, pct: float = 25.0,
-                     k_sigma: float = 2.5) -> np.ndarray:
-    idx = np.argsort(I)[: max(10, int(pct * len(I) / 100))]
-    coef = np.polyfit(tth[idx], I[idx], 1)
+def _baseline_linear(
+    tth: np.ndarray,
+    inten: np.ndarray,
+    n_iter: int = 5,
+    pct: float = 25.0,
+    k_sigma: float = 2.5,
+) -> np.ndarray:
+    idx = np.argsort(inten)[: max(10, int(pct * len(inten) / 100))]
+    coef = np.polyfit(tth[idx], inten[idx], 1)
     for _ in range(n_iter):
         pred = np.polyval(coef, tth)
-        res = I - pred
+        res = inten - pred
         sigma = 1.4826 * np.median(np.abs(res - np.median(res)))
         mask = res < k_sigma * sigma
         if mask.sum() < 10:
             break
-        coef = np.polyfit(tth[mask], I[mask], 1)
+        coef = np.polyfit(tth[mask], inten[mask], 1)
     return np.polyval(coef, tth)
 
 
-def _baseline_piecewise_linear(tth: np.ndarray, I: np.ndarray,
-                               n_pieces: int = 3, **kw) -> np.ndarray:
+def _baseline_piecewise_linear(
+    tth: np.ndarray, inten: np.ndarray, n_pieces: int = 3, **kw
+) -> np.ndarray:
     edges = np.linspace(tth[0], tth[-1], n_pieces + 1)
-    base = np.zeros_like(I, dtype=float)
+    base = np.zeros_like(inten, dtype=float)
     for i in range(n_pieces):
         m = (tth >= edges[i]) & (tth <= edges[i + 1])
         if m.sum() < 10:
-            base[m] = float(np.median(I[m])) if m.any() else 0.0
+            base[m] = float(np.median(inten[m])) if m.any() else 0.0
             continue
-        base[m] = _baseline_linear(tth[m], I[m], **kw)
+        base[m] = _baseline_linear(tth[m], inten[m], **kw)
     dtth = float(np.median(np.diff(tth)))
     w = max(3, int(1.0 / dtth))
     kern = np.ones(w) / w
     pad = w
     padded = np.concatenate([np.full(pad, base[0]), base, np.full(pad, base[-1])])
-    return np.convolve(padded, kern, mode="same")[pad:pad + len(base)]
+    return np.convolve(padded, kern, mode="same")[pad : pad + len(base)]
 
 
-def fit_baseline(tth: np.ndarray, I: np.ndarray, method: str) -> np.ndarray:
+def fit_baseline(tth: np.ndarray, inten: np.ndarray, method: str) -> np.ndarray:
     """Dispatch to a baseline method.
 
     Preferred: 'piecewise_linear' — three stitched 1st-order fits. Robust,
     low-order, follows gentle curvature without overfitting real peaks.
     """
     if method == "linear":
-        return _baseline_linear(tth, I)
+        return _baseline_linear(tth, inten)
     if method == "piecewise_linear":
-        return _baseline_piecewise_linear(tth, I, n_pieces=3)
+        return _baseline_piecewise_linear(tth, inten, n_pieces=3)
     if method == "mor":
-        return _mor_baseline(tth, I, half_window_deg=3.0)
+        return _mor_baseline(tth, inten, half_window_deg=3.0)
     if method == "none":
-        return np.zeros_like(I, dtype=float)
+        return np.zeros_like(inten, dtype=float)
     raise ValueError(f"Unknown baseline method: {method!r}")
 
 
-def _peak_pick(tth: np.ndarray, I_sub: np.ndarray,
-               prom_snr: float = 3.0, prom_frac_Imax: float = 0.02):
+def _peak_pick(
+    tth: np.ndarray,
+    I_sub: np.ndarray,
+    prom_snr: float = 3.0,
+    prom_frac_Imax: float = 0.02,
+):
     from scipy.signal import find_peaks
+
     med = float(np.median(I_sub))
     mad = float(np.median(np.abs(I_sub - med)))
     noise = 1.4826 * mad
@@ -246,14 +258,14 @@ def _compute_metrics(
     coverage = {
         f"[{b0:g},{b1:g})": int(((tth_p >= b0) & (tth_p < b1)).sum()),
         f"[{b1:g},{b2:g})": int(((tth_p >= b1) & (tth_p < b2)).sum()),
-        f"[{b2:g},+)":      int((tth_p >= b2).sum()),
+        f"[{b2:g},+)": int((tth_p >= b2).sum()),
     }
     dd = np.diff(baseline, n=2)
     roughness = float(np.std(dd) / max(I_max, 1e-9))
     peak_mask = np.zeros_like(I_sub, dtype=bool)
     half = max(1, int(len(tth) / 200))
     for i in peak_idx:
-        peak_mask[max(0, i - half):min(len(tth), i + half)] = True
+        peak_mask[max(0, i - half) : min(len(tth), i + half)] = True
     bg_median = float(np.median(I_sub[~peak_mask])) if (~peak_mask).any() else 0.0
     dyn_range = float(I_max / max(noise, 1e-9))
     return {
@@ -265,14 +277,17 @@ def _compute_metrics(
     }
 
 
-def _make_verdict(m: dict, I_max: float, min_peaks: int, min_dyn_range: float,
-                  min_coverage_per_bin: int) -> tuple[str, list[str]]:
+def _make_verdict(
+    m: dict,
+    I_max: float,
+    min_peaks: int,
+    min_dyn_range: float,
+    min_coverage_per_bin: int,
+) -> tuple[str, list[str]]:
     v = "PASS"
     reasons: list[str] = []
     if m["dyn_range"] < min_dyn_range:
-        reasons.append(
-            f"dyn_range {m['dyn_range']:.1f} < {min_dyn_range:g}"
-        )
+        reasons.append(f"dyn_range {m['dyn_range']:.1f} < {min_dyn_range:g}")
         v = "FAIL"
     if m["peak_count"] < min_peaks:
         reasons.append(f"peak_count {m['peak_count']} < {min_peaks}")
@@ -306,8 +321,8 @@ def curate(
     two_theta: np.ndarray,
     intensity: np.ndarray,
     baseline_method: str = "piecewise_linear",
-    tmin_hint: Optional[float] = None,
-    tmax_hint: Optional[float] = None,
+    tmin_hint: float | None = None,
+    tmax_hint: float | None = None,
     auto_detect_artifact: bool = True,
     coverage_bins: tuple[float, float, float] = (15.0, 25.0, 40.0),
     min_peaks: int = 12,
@@ -349,20 +364,23 @@ def curate(
 
     m = (tth_all >= tmin_cut) & (tth_all <= tmax)
     tth = tth_all[m]
-    I = I_all[m]
+    inten = I_all[m]
     if len(tth) < 50:
         raise ValueError(
             f"Too few points after clipping to [{tmin_cut:.3f}, {tmax:.3f}]: "
             f"{len(tth)} (need >=50)."
         )
 
-    baseline = fit_baseline(tth, I, baseline_method)
-    I_sub = I - baseline
+    baseline = fit_baseline(tth, inten, baseline_method)
+    I_sub = inten - baseline
     peak_idx, noise, I_max = _peak_pick(tth, I_sub)
-    metrics = _compute_metrics(tth, I_sub, baseline, peak_idx, noise, I_max,
-                               coverage_bins)
+    metrics = _compute_metrics(
+        tth, I_sub, baseline, peak_idx, noise, I_max, coverage_bins
+    )
     verdict, reasons = _make_verdict(
-        metrics, I_max, min_peaks=min_peaks,
+        metrics,
+        I_max,
+        min_peaks=min_peaks,
         min_dyn_range=min_dyn_range,
         min_coverage_per_bin=min_coverage_per_bin,
     )
@@ -373,8 +391,12 @@ def curate(
         )
 
     return CurationResult(
-        tmin_cut=tmin_cut, tmax=tmax,
-        tth=tth, intensity=I, baseline=baseline, intensity_subtracted=I_sub,
+        tmin_cut=tmin_cut,
+        tmax=tmax,
+        tth=tth,
+        intensity=inten,
+        baseline=baseline,
+        intensity_subtracted=I_sub,
         baseline_method=baseline_method,
         dyn_range=metrics["dyn_range"],
         peak_count=metrics["peak_count"],
@@ -382,28 +404,44 @@ def curate(
         coverage=metrics["coverage"],
         bg_median=metrics["bg_median"],
         baseline_roughness=metrics["baseline_roughness"],
-        I_max=I_max, noise_rms=float(noise),
-        verdict=verdict, reasons=reasons,
+        I_max=I_max,
+        noise_rms=float(noise),
+        verdict=verdict,
+        reasons=reasons,
     )
 
 
-def write_diagnostic_plot(cr: CurationResult, raw_tth: np.ndarray,
-                          raw_I: np.ndarray, out_png: str,
-                          title: str = "") -> None:
+def write_diagnostic_plot(
+    cr: CurationResult,
+    raw_tth: np.ndarray,
+    raw_I: np.ndarray,
+    out_png: str,
+    title: str = "",
+) -> None:
     """Dump a two-panel PNG: raw+baseline on top, subtracted+peaks on bottom."""
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     fig, axes = plt.subplots(
-        2, 1, figsize=(12, 7), sharex=True,
+        2,
+        1,
+        figsize=(12, 7),
+        sharex=True,
         gridspec_kw={"height_ratios": [3, 2], "hspace": 0.12},
     )
     axes[0].plot(raw_tth, raw_I, lw=0.7, color="black", label="raw")
-    axes[0].axvline(cr.tmin_cut, color="red", ls="--", lw=1,
-                    label=f"tmin_cut={cr.tmin_cut:.2f}°")
-    axes[0].plot(cr.tth, cr.baseline, lw=1.0, color="tab:orange",
-                 label=f"{cr.baseline_method} baseline")
+    axes[0].axvline(
+        cr.tmin_cut, color="red", ls="--", lw=1, label=f"tmin_cut={cr.tmin_cut:.2f}°"
+    )
+    axes[0].plot(
+        cr.tth,
+        cr.baseline,
+        lw=1.0,
+        color="tab:orange",
+        label=f"{cr.baseline_method} baseline",
+    )
     axes[0].legend(loc="upper right", fontsize=8)
     axes[0].set_ylabel("I raw")
     axes[0].set_title(
@@ -413,8 +451,9 @@ def write_diagnostic_plot(cr: CurationResult, raw_tth: np.ndarray,
         fontsize=10,
     )
 
-    axes[1].plot(cr.tth, cr.intensity_subtracted, lw=0.7, color="tab:blue",
-                 label="I - baseline")
+    axes[1].plot(
+        cr.tth, cr.intensity_subtracted, lw=0.7, color="tab:blue", label="I - baseline"
+    )
     for p in cr.peak_positions:
         axes[1].axvline(p, color="gray", lw=0.3, alpha=0.5)
     axes[1].axhline(0, color="gray", lw=0.5, ls=":")

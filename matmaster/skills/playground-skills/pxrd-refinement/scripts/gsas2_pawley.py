@@ -381,7 +381,8 @@ def refine_one_pattern(
     if curation_mode != "off":
         try:
             curation = curate(
-                two_theta, intensity,
+                two_theta,
+                intensity,
                 baseline_method=baseline_method,
                 tmin_hint=two_theta_min,
                 tmax_hint=two_theta_max,
@@ -546,8 +547,7 @@ def refine_one_pattern(
         if curation is not None:
             try:
                 png = os.path.join(debug_plot, f"{label}_curation.png")
-                write_diagnostic_plot(curation, two_theta, intensity, png,
-                                      title=label)
+                write_diagnostic_plot(curation, two_theta, intensity, png, title=label)
             except Exception as exc:
                 warnings.append(f"curation plot failed: {exc}")
 
@@ -651,8 +651,12 @@ def run_directory(args) -> dict:
                 # across e.g. temperature series with phase transitions.
                 if args.chain_cell and r["success"]:
                     current_cell = [
-                        r["a"], r["b"], r["c"],
-                        r["alpha"], r["beta"], r["gamma"],
+                        r["a"],
+                        r["b"],
+                        r["c"],
+                        r["alpha"],
+                        r["beta"],
+                        r["gamma"],
                     ]
             except Exception as exc:
                 r = {"success": False, "file": str(fpath), "error": str(exc)}
@@ -699,8 +703,12 @@ def run_wide_csv(args) -> dict:
                 r["temp_label"] = pat["temp_label"]
                 if args.chain_cell and r["success"]:
                     current_cell = [
-                        r["a"], r["b"], r["c"],
-                        r["alpha"], r["beta"], r["gamma"],
+                        r["a"],
+                        r["b"],
+                        r["c"],
+                        r["alpha"],
+                        r["beta"],
+                        r["gamma"],
                     ]
             except Exception as exc:
                 r = {
