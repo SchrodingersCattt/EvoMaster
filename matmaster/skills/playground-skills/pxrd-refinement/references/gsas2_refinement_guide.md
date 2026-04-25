@@ -133,15 +133,22 @@ information. This is the correct approach.
 | Rwp (Rietveld) | same | < 10% | 10–15% | > 15% |
 | GOF | √(χ²) | 1.0–2.0 | 2–3 | > 3 |
 
+**Hard reject thresholds (per SKILL.md contract 3):**
+- Pawley `wR > 0.20` → cell is wrong, do not report.
+- Rietveld `Rwp > 0.15` → fit is wrong, do not report.
+- Refined volume differs from initial-cell volume by > 20% → cell is wrong (likely a
+  super-cell), do not report.
+
 **High wR causes and fixes:**
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | wR > 40% from step 1 | Wrong space group | Check phase identification |
-| wR > 40% after cell refine | Cell too far off | Refine manually or use better starting values |
+| wR > 40% after cell refine | Cell too far off | Use a better initial cell (literature / CIF / adjacent VT point) |
 | Sudden divergence | SVD singularity | Increase `--dmin`, narrow 2θ range |
 | Peaks misfit by ~0.5° | Wrong wavelength | Check and correct `--wavelength` |
 | Background dominates | Missing reflections | Check dmin covers your 2θ range |
+| `success=true`, V is 2x / 3x / 4x of initial | Refinement converged on a super-cell | Reject; the true cell needs a better starting point — do **not** report the inflated V |
 
 ### ESDs (estimated standard deviations)
 
@@ -149,6 +156,56 @@ ESDs on lattice parameters are extracted from the least-squares covariance matri
 They reflect **precision**, not accuracy. A ESD of 0.001 Å means the parameter is internally
 consistent to that level, but the true systematic error (from wavelength calibration, zero-point,
 etc.) may be larger.
+
+### Curation and the wR trap
+
+`curation.py` runs by default (`--curation-mode auto`) on every Pawley refinement and
+attaches its diagnostics to `result["curation"]`:
+
+```json
+{
+  "tmin_cut":   13.7,
+  "verdict":    "PASS" | "WARN" | "FAIL",
+  "peak_count": 25,
+  "peak_positions": [...],
+  "dyn_range":  39.4,
+  "coverage":   {"[15,25)": 5, "[25,40)": 15, "[40,+)": 5},
+  "baseline_method": "piecewise_linear",
+  "baseline_roughness": 1e-5,
+  "reasons":    ["clipped 8.7° of artifact prefix (tmin_cut=13.72°)"]
+}
+```
+
+What curation does, in order:
+
+1. **Artifact-prefix detection** via the derivative of a rolling-min baseline. PXRD
+   patterns from DFT simulation (and some real instruments at very low 2θ) carry a
+   broad smooth descending hump in roughly 5°–13° 2θ that is **not Bragg signal** —
+   it is low-angle scattering / detector smear. Curation detects where the slope
+   flattens out and sets `tmin_cut` ~1° past that point.
+2. **Low-order baseline fit** on the post-clip range. Default is `piecewise_linear`
+   (3 segments × degree-1). `--baseline-method linear` is the most conservative
+   single-segment option; `mor` is a morphological baseline good for strong
+   curvature but prone to small overshoot. **Do not use polynomial degree > 2** —
+   high-order polynomials swallow real peaks.
+3. **Peak picking** on the baseline-subtracted intensity, accepting peaks with
+   SNR ≥ 3 and prominence ≥ 2% of `I_max`. Counts coverage in
+   [15°, 25°) / [25°, 40°) / [40°, +∞).
+4. **Verdict**: `PASS` (refine), `WARN` (refine but log reasons), `FAIL`
+   (`dyn_range < 10` or `peak_count < 12` — `auto` still refines, `strict` aborts).
+
+**The wR trap.** When curation clips a low-2θ artifact, the GSAS-II background
+polynomial no longer has to stretch to absorb it, so wR can rise (e.g. 22% → 30%) —
+but the *cell* gets noticeably more accurate (a-error from 0.1 Å down to 0.01 Å),
+because the polynomial is no longer trading background freedom for peak-position
+freedom. The opposite trap: a fit with `wR ≈ 18%` on un-curated data can hide a cell
+that is wrong by several percent. **Trust `curation.tmin_cut` and the cell-vs-initial
+delta over the raw wR number.** The hard reject thresholds above still apply, but
+`wR = 0.25` with `verdict=PASS` and a cell within 1% of the initial is a much better
+result than `wR = 0.18` with the artifact left in.
+
+`--debug-plot DIR` writes `<label>_curation.png` (raw + baseline; subtracted +
+peak markers) for every pattern. **Read it whenever a refinement looks suspicious.**
 
 ---
 
@@ -158,16 +215,21 @@ The Pawley script supports three modes for multi-temperature data:
 
 ### A. Individual xy files (one per temperature)
 
+Replace `<SG>` and the `<A>/<B>/<C>/<BETA>` placeholders with the initial cell and space
+group provided by the user / literature / a prior refinement / a CIF model. Do **not**
+invent them from peak positions (see SKILL.md § "初始晶胞来源").
+
 ```
 # Place all patterns in a directory with consistent naming:
 python gsas2_pawley.py --data /path/to/patterns/ \
-  --space-group "P 21/c" --cell "a=10.83,b=10.2,c=9.2,beta=99.0" \
+  --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
   -o results.json
 ```
 
 The script chains refinements: the refined cell from one file becomes the starting cell for
 the next. Sort order follows filename alphabetical order, so name files consistently
-(e.g. `T303K.xy`, `T323K.xy`, ...).
+(e.g. `T1.xy`, `T2.xy`, ...). For data that spans a phase transition use separate jobs
+(see "Phase transitions" below) and do **not** rely on chaining across the transition.
 
 ### B. Wide-table CSV
 
@@ -175,7 +237,7 @@ the next. Sort order follows filename alphabetical order, so name files consiste
 # CSV with paired angle/intensity columns per temperature:
 # Header: Angle, 25 C, Angle, 40 C, ...
 python gsas2_pawley.py --data multi_temp.txt --wide-csv \
-  --space-group "P 21/c" --cell "a=10.83,b=10.2,c=9.2,beta=99.0" \
+  --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
   -o results.json
 ```
 
@@ -184,16 +246,16 @@ Output contains per-pattern results with `temp_c` and `temp_label` fields.
 ### Phase transitions
 
 If a structural phase transition occurs between two temperatures, run two **separate**
-refinement jobs with different initial cells:
+refinement jobs with different initial cells (one per phase):
 
 ```bash
-# Low-temperature phase (e.g. 303–363 K):
-python gsas2_pawley.py --data ltp_data/ --space-group "P 21/c" \
-  --cell "a=10.83,b=10.2,c=9.2,beta=99.0" -o ltp_results.json
+# Low-temperature phase:
+python gsas2_pawley.py --data ltp_data/ --space-group "<SG_LTP>" \
+  --cell "a=<A_LTP>,b=<B_LTP>,c=<C_LTP>,beta=<BETA_LTP>" -o ltp_results.json
 
-# High-temperature phase (e.g. 383–413 K):
-python gsas2_pawley.py --data htp_data/ --space-group "P 21/c" \
-  --cell "a=11.05,b=10.15,c=9.17,beta=99.0" -o htp_results.json
+# High-temperature phase:
+python gsas2_pawley.py --data htp_data/ --space-group "<SG_HTP>" \
+  --cell "a=<A_HTP>,b=<B_HTP>,c=<C_HTP>,beta=<BETA_HTP>" -o htp_results.json
 ```
 
 ---
@@ -210,12 +272,13 @@ registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119
 GSAS-II is pre-installed in this image. The `--gsas2-path` default
 `/root/g2full/GSAS-II/GSASII` is correct for this image.
 
-**Typical job command:**
+**Typical job command (placeholders `<SG>` / `<A>,<B>,<C>,<BETA>` must be replaced with the
+user-provided initial cell + space group):**
 ```bash
 python gsas2_pawley.py \
   --data /input/pattern.xy \
-  --space-group "P 21/c" \
-  --cell "a=10.83,b=10.2,c=9.2,beta=99.0" \
+  --space-group "<SG>" \
+  --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
   -o /output/result.json
 ```
 

@@ -23,18 +23,18 @@ Usage:
     --export-cif refined.cif \\
     -o result.json
 
-Output JSON:
+Output JSON (illustrative Si values):
   {
     "success": true,
     "file": "pattern.xye",
     "cell": {
-      "a": 10.826, "b": 10.172, "c": 9.197,
-      "alpha": 90.0, "beta": 99.07, "gamma": 90.0,
-      "volume": 1000.2
+      "a": 5.431, "b": 5.431, "c": 5.431,
+      "alpha": 90.0, "beta": 90.0, "gamma": 90.0,
+      "volume": 160.19
     },
-    "cell_esd": {"a": 0.001, "b": 0.002, ...},
+    "cell_esd": {"a": 0.0002, "b": 0.0002, ...},
     "r_factors": {"Rp": 8.5, "Rwp": 11.2, "GOF": 1.3},
-    "n_atoms": 24,
+    "n_atoms": 2,
     "cif_file": "refined.cif"
   }
 """

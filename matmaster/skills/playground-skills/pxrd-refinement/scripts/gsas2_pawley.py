@@ -7,20 +7,21 @@ Pawley extraction. Outputs cell parameters, ESDs, and R-factors as JSON.
 
 GSAS-II path: /root/g2full/GSAS-II/GSASII  (override with --gsas2-path)
 
-Usage:
+Usage (example values are Si / cubic; replace `--space-group` and `--cell` with the
+user-provided initial cell — do NOT invent one from peak positions):
   # Single pattern:
   python gsas2_pawley.py \\
     --data pattern.xye \\
-    --space-group "P 21/c" \\
-    --cell "a=10.83,b=10.2,c=9.2,beta=99.0" \\
+    --space-group "F d -3 m" \\
+    --cell "a=5.43,b=5.43,c=5.43" \\
     --wavelength 1.5406 \\
     -o result.json
 
   # Directory of patterns (e.g. multi-temperature):
   python gsas2_pawley.py \\
     --data /path/to/patterns/ \\
-    --space-group "P 21/c" \\
-    --cell "a=10.83,b=10.2,c=9.2,beta=99.0" \\
+    --space-group "<SG>" \\
+    --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \\
     --wavelength 1.5406 \\
     -o results.json
 
@@ -28,18 +29,18 @@ Usage:
   python gsas2_pawley.py \\
     --data multi_temp.txt \\
     --wide-csv \\
-    --space-group "P 21/c" \\
-    --cell "a=10.83,b=10.2,c=9.2,beta=99.0" \\
+    --space-group "<SG>" \\
+    --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \\
     -o results.json
 
-Output JSON (single pattern):
+Output JSON (single pattern, illustrative Si values):
   {
     "success": true, "file": "pattern.xye",
-    "a": 10.826, "b": 10.172, "c": 9.197,
-    "alpha": 90.0, "beta": 99.066, "gamma": 90.0,
-    "volume": 1000.18,
-    "a_esd": 0.001, "b_esd": 0.002, ...
-    "wR": 29.5, "n_reflections": 131
+    "a": 5.431, "b": 5.431, "c": 5.431,
+    "alpha": 90.0, "beta": 90.0, "gamma": 90.0,
+    "volume": 160.19,
+    "a_esd": 0.0002, ...
+    "wR": 8.5, "n_reflections": 12
   }
 
 Output JSON (multi-pattern):
@@ -56,6 +57,10 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+
+# Local import: curation lives next to this script
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from curation import CurationResult, curate, write_diagnostic_plot  # noqa: E402
 
 DEFAULT_GSAS2_PATH = "/root/g2full/GSAS-II/GSASII"
 
@@ -234,7 +239,7 @@ def parse_wide_csv(
 
 
 def parse_cell_string(cell_str: str) -> dict:
-    """Parse cell string like 'a=10.83,b=10.2,c=9.2,beta=99.0'."""
+    """Parse cell string like 'a=5.43,b=5.43,c=5.43' or 'a=10.0,b=9.5,c=8.2,beta=99.0'."""
     parts = {}
     for item in cell_str.split(","):
         item = item.strip()
@@ -347,18 +352,60 @@ def refine_one_pattern(
     label: str = "pattern",
     dmax: float | None = None,
     debug_plot: str | None = None,
+    curation_mode: str = "auto",
+    baseline_method: str = "piecewise_linear",
 ) -> dict:
     """
     Run GSAS-II Pawley refinement on a single pattern.
 
-    Returns a dict with cell parameters, ESDs, R-factors, and a `warnings`
-    list describing preprocessing decisions and any per-step refinement
-    failures (these no longer crash the run, but they ARE surfaced).
+    ``curation_mode``
+      - ``off``: skip data curation entirely; use user-supplied tmin/tmax.
+      - ``auto``: run curation; use its tmin_cut when the user did not
+        pass ``two_theta_min``. Surface verdict in warnings; FAIL records
+        a warning but still refines (so the caller can see the numbers).
+      - ``strict``: run curation; abort refinement on a FAIL verdict.
+    ``baseline_method``
+      Forwarded to ``curation.curate`` when curation is enabled.
+
+    Returns a dict with cell parameters, ESDs, R-factors, and a ``warnings``
+    list describing preprocessing / curation decisions and any per-step
+    refinement failures (these don't crash the run but ARE surfaced).
     """
     import GSASIIscriptable as G2sc
 
     G2sc.SetPrintLevel("warn")
     warnings: list[str] = []
+
+    curation: CurationResult | None = None
+    if curation_mode != "off":
+        try:
+            curation = curate(
+                two_theta, intensity,
+                baseline_method=baseline_method,
+                tmin_hint=two_theta_min,
+                tmax_hint=two_theta_max,
+            )
+            warnings.append(
+                f"curation verdict={curation.verdict} "
+                f"tmin_cut={curation.tmin_cut:.3f} dyn={curation.dyn_range:.1f} "
+                f"peaks={curation.peak_count} "
+                f"reasons={curation.reasons}"
+            )
+            if curation.verdict == "FAIL" and curation_mode == "strict":
+                return {
+                    "success": False,
+                    "file": label,
+                    "error": f"curation FAIL: {curation.reasons}",
+                    "curation": curation.summary_dict(),
+                    "warnings": warnings,
+                }
+            if two_theta_min is None and curation.tmin_cut > float(two_theta.min()):
+                two_theta_min = curation.tmin_cut
+                warnings.append(
+                    f"auto-applied tmin={curation.tmin_cut:.3f} from curation"
+                )
+        except Exception as exc:
+            warnings.append(f"curation skipped: {type(exc).__name__}: {exc}")
 
     xye_path = os.path.join(workdir, f"{label}.xye")
     preprocess_info = preprocess_to_xye(two_theta, intensity, xye_path, warnings)
@@ -460,6 +507,8 @@ def refine_one_pattern(
         "preprocess": preprocess_info,
         "warnings": warnings,
     }
+    if curation is not None:
+        result["curation"] = curation.summary_dict()
 
     if cell_esd is not None:
         try:
@@ -483,6 +532,13 @@ def refine_one_pattern(
             _write_debug_plot(hist, debug_plot, label)
         except Exception as exc:
             warnings.append(f"debug plot failed: {exc}")
+        if curation is not None:
+            try:
+                png = os.path.join(debug_plot, f"{label}_curation.png")
+                write_diagnostic_plot(curation, two_theta, intensity, png,
+                                      title=label)
+            except Exception as exc:
+                warnings.append(f"curation plot failed: {exc}")
 
     gpx.save()
     return result
@@ -531,6 +587,8 @@ def run_single(args) -> dict:
             label=Path(args.data).stem,
             dmax=args.dmax,
             debug_plot=args.debug_plot,
+            curation_mode=args.curation_mode,
+            baseline_method=args.baseline_method,
         )
     result["file"] = args.data
     return result
@@ -573,6 +631,8 @@ def run_directory(args) -> dict:
                     label=fpath.stem,
                     dmax=args.dmax,
                     debug_plot=args.debug_plot,
+                    curation_mode=args.curation_mode,
+                    baseline_method=args.baseline_method,
                 )
                 r["file"] = str(fpath)
                 # Optional chaining: use refined cell as starting point for
@@ -621,6 +681,8 @@ def run_wide_csv(args) -> dict:
                     label=label,
                     dmax=args.dmax,
                     debug_plot=args.debug_plot,
+                    curation_mode=args.curation_mode,
+                    baseline_method=args.baseline_method,
                 )
                 r["temp_c"] = pat["temp_c"]
                 r["temp_label"] = pat["temp_label"]
@@ -660,7 +722,7 @@ def main() -> None:
     ap.add_argument(
         "--cell",
         required=True,
-        help='Initial lattice params, e.g. "a=10.83,b=10.2,c=9.2,beta=99.0"',
+        help='Initial lattice params (cubic: "a=5.43,b=5.43,c=5.43"; monoclinic: "a=...,b=...,c=...,beta=...")',
     )
     ap.add_argument(
         "--wavelength",
@@ -726,7 +788,25 @@ def main() -> None:
         "--debug-plot",
         default=None,
         help="If set, write per-pattern <label>_pattern.csv (2θ, yobs, ycalc, "
-        "diff) to this directory for offline inspection.",
+        "diff) and, when curation runs, <label>_curation.png into this dir.",
+    )
+    ap.add_argument(
+        "--curation-mode",
+        choices=["off", "auto", "strict"],
+        default="auto",
+        help="Data curation behaviour. 'auto' (default): detect artifact "
+        "prefix + assign PASS/WARN/FAIL; override tmin when user didn't set "
+        "one, but still refine. 'strict': abort refinement on FAIL. 'off': "
+        "use user-supplied tmin/tmax only, no curation.",
+    )
+    ap.add_argument(
+        "--baseline-method",
+        choices=["piecewise_linear", "linear", "mor", "none"],
+        default="piecewise_linear",
+        help="Baseline model used by curation (not by GSAS-II background). "
+        "Prefer 'piecewise_linear' (three stitched 1st-order fits); fall back "
+        "to 'linear' for very clean / near-stationary backgrounds, or 'mor' "
+        "for highly curved baselines (accept bg_median bias).",
     )
     ap.add_argument("-o", "--output", help="Write JSON output to this file")
     args = ap.parse_args()
