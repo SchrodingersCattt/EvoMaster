@@ -33,6 +33,7 @@ from solve_refine_scxrd_lib import (
     _find_atoms,
     _formula_from_atoms,
     _get_sg_ops,
+    _iterative_solve,
     _refine,
     _try_shelx,
     _write_cif,
@@ -54,11 +55,11 @@ def main():
     ap.add_argument("--wavelength", type=float, help="Wavelength in Å")
     ap.add_argument("--elements", help='Expected elements, e.g. "C H N O S"')
     ap.add_argument(
-        "--grid", type=int, default=96, help="Charge-flipping grid (default 96)"
+        "--grid", type=int, default=72, help="Charge-flipping grid (default 72; use 96-128 for large cells)"
     )
-    ap.add_argument("--cycles", type=int, default=800, help="CF cycles (default 800)")
+    ap.add_argument("--cycles", type=int, default=400, help="CF cycles (default 400; early-stop when phases converge)")
     ap.add_argument(
-        "--trials", type=int, default=3, help="CF random trials (default 3)"
+        "--trials", type=int, default=2, help="CF random trials (default 2; use 3-5 if R1>0.15)"
     )
     ap.add_argument("-o", "--output", default="refined.cif", help="Output CIF path")
     args = ap.parse_args()
@@ -140,42 +141,19 @@ def main():
         n_trials=args.trials,
     )
 
-    # ── Find atoms ──
-    frac_coords, peak_vals = _find_atoms(rho, cell, sg_ops)
-    if len(frac_coords) == 0:
+    # ── Iterative solve: find atoms → refine → ΔF → add atoms → repeat ──
+    atoms_ref, rfactors = _iterative_solve(
+        rho, hkl_data, cell, wl, sg_ops, elements=elements,
+        grid=args.grid, max_diff_cycles=5, verbose=True,
+    )
+    if len(atoms_ref) == 0:
         print(
             json.dumps(
                 {"success": False, "error": "No atoms found in charge-flipping density"}
             )
         )
         sys.exit(1)
-
-    # Limit to reasonable number (avoid noise peaks)
-    V = _cell_volume(cell)
-    max_atoms = max(int(V / 10), 60)  # ~10 ų per atom
-    frac_coords = frac_coords[:max_atoms]
-    peak_vals = peak_vals[:max_atoms]
-
-    types = _assign_types(peak_vals, elements)
-    atoms = [
-        {"elem": t, "frac": list(fc), "B": 2.0} for t, fc in zip(types, frac_coords)
-    ]
-    print(f"Atoms found: {len(atoms)}", file=sys.stderr)
-
-    # ── Refine ──
-    try:
-        atoms_ref, rfactors = _refine(atoms, hkl_data, cell, wl, sg_ops, max_iter=8)
-    except Exception as e:
-        print(f"Refinement error: {e}; writing unrefined CIF", file=sys.stderr)
-        atoms_ref = atoms
-        rfactors = {
-            "R1": 0.99,
-            "wR2": 0.99,
-            "GOOF": 0.0,
-            "n_obs": n_ref,
-            "n_params": 1 + 4 * len(atoms),
-            "scale": 1.0,
-        }
+    print(f"Atoms found: {len(atoms_ref)}", file=sys.stderr)
 
     # ── Write CIF ──
     formula = _formula_from_atoms(atoms_ref, sg_ops)

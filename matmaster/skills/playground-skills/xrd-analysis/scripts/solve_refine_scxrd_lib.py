@@ -381,9 +381,9 @@ def _charge_flipping(
             new_phases = np.angle(F_new[hi, ki, li])
 
             # Early convergence: stop if phases stabilise (circular mean diff)
-            if _cf_iter > 50:
+            if _cf_iter > 30:
                 phase_diff = np.mod(new_phases - phases + np.pi, 2 * np.pi) - np.pi
-                if np.mean(np.abs(phase_diff)) < 0.01:
+                if np.mean(np.abs(phase_diff)) < 0.02:
                     phases = new_phases
                     break
             phases = new_phases
@@ -849,6 +849,214 @@ def _formula_from_atoms(atoms, sg_ops):
         n = counts[el]
         parts.append(f"{el}{n}" if n > 1 else el)
     return " ".join(parts)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Difference Fourier synthesis — find missing atoms from residual density
+# ═══════════════════════════════════════════════════════════════════════
+def _diff_fourier_atoms(
+    atoms, hkl_data, cell, wavelength, sg_ops, scale,
+    grid=96, sigma_thresh=3.0, min_dist_A=1.0, max_new=20,
+):
+    """Compute difference Fourier (Fo-Fc) map and find new atom peaks.
+
+    Returns list of new atom fractional coordinates and peak heights,
+    excluding positions already occupied by *atoms* or their symmetry
+    equivalents.
+    """
+    from scipy.ndimage import maximum_filter
+
+    hkl = hkl_data["hkl"]
+    fsq_obs = hkl_data["fsq"]
+    sel = fsq_obs > 0
+    hkl_sel = hkl[sel]
+    fsq_sel = fsq_obs[sel]
+
+    # Compute F_calc to get phases
+    Fc = _calc_f(atoms, hkl_sel, cell, wavelength, sg_ops)
+    Fc_scaled = np.sqrt(scale) * Fc  # scale is on F² so sqrt for F
+    phi_calc = np.angle(Fc_scaled)
+
+    # Difference amplitudes: |Fo| - |Fc|
+    fo = np.sqrt(np.maximum(fsq_sel, 0))
+    fc = np.abs(Fc_scaled)
+    delta_f = fo - fc
+
+    # Build difference Fourier map
+    N = grid
+    h, k, ell = hkl_sel[:, 0], hkl_sel[:, 1], hkl_sel[:, 2]
+    hi, ki, li = h % N, k % N, ell % N
+    hf, kf, lf = (-h) % N, (-k) % N, (-ell) % N
+
+    F_diff = delta_f * np.exp(1j * phi_calc)
+    F_grid = np.zeros((N, N, N), dtype=complex)
+    np.add.at(F_grid, (hi, ki, li), F_diff)
+    np.add.at(F_grid, (hf, kf, lf), F_diff.conjugate())
+    rho_diff = np.real(np.fft.ifftn(F_grid))
+
+    # Find peaks in difference density
+    sigma = np.std(rho_diff)
+    threshold = sigma_thresh * sigma
+    local_max = maximum_filter(rho_diff, size=3)
+    mask = (rho_diff == local_max) & (rho_diff > threshold)
+    coords = np.argwhere(mask)
+    vals = rho_diff[mask]
+    order = np.argsort(-vals)
+    coords = coords[order]
+    vals = vals[order]
+    frac = coords / N
+    a_len, b_len, c_len = cell[0], cell[1], cell[2]
+
+    # Filter: not too close to existing atoms or their symmetry equivalents
+    existing_frac = [np.array(at["frac"]) for at in atoms]
+    new_frac = []
+    new_vals = []
+    for i in range(min(len(frac), max_new * 3)):
+        too_close = False
+        for xk in existing_frac + new_frac:
+            for R, t in sg_ops:
+                equiv = (R @ xk + t) % 1.0
+                diff = frac[i] - equiv
+                diff -= np.round(diff)
+                dist = np.sqrt(
+                    (diff[0] * a_len) ** 2
+                    + (diff[1] * b_len) ** 2
+                    + (diff[2] * c_len) ** 2
+                )
+                if dist < min_dist_A:
+                    too_close = True
+                    break
+            if too_close:
+                break
+        if not too_close:
+            new_frac.append(frac[i])
+            new_vals.append(vals[i])
+            if len(new_frac) >= max_new:
+                break
+    return new_frac, new_vals
+
+
+def _iterative_solve(
+    rho, hkl_data, cell, wavelength, sg_ops, elements=None,
+    grid=96, max_diff_cycles=5, verbose=True,
+):
+    """Iterative structure solution: charge-flip peaks → refine → ΔF → add atoms → repeat.
+
+    Returns (atoms, rfactors) with significantly improved R-factors compared
+    to the single-pass pipeline.
+    """
+    V = _cell_volume(cell)
+    max_atoms = max(int(V / 10), 60)
+
+    # ── Initial atom finding with lower threshold to catch more atoms ──
+    frac_coords, peak_vals = _find_atoms(rho, cell, sg_ops, sigma_thresh=3.5)
+    if len(frac_coords) == 0:
+        return [], {"R1": 0.99, "wR2": 0.99, "GOOF": 0.0,
+                     "n_obs": 0, "n_params": 0, "scale": 1.0}
+
+    frac_coords = frac_coords[:max_atoms]
+    peak_vals = peak_vals[:max_atoms]
+    types = _assign_types(peak_vals, elements)
+    atoms = [
+        {"elem": t, "frac": list(fc), "B": 2.0}
+        for t, fc in zip(types, frac_coords)
+    ]
+    if verbose:
+        print(f"Initial atoms from charge-flipping: {len(atoms)}", file=sys.stderr)
+
+    # ── Iterative: refine → difference Fourier → add atoms → re-refine ──
+    best_r1 = 1.0
+    best_atoms = atoms
+    best_rfactors = None
+
+    for cycle in range(max_diff_cycles):
+        # Refine current model
+        try:
+            atoms_ref, rfactors = _refine(
+                atoms, hkl_data, cell, wavelength, sg_ops, max_iter=8
+            )
+        except Exception as e:
+            if verbose:
+                print(f"Refinement cycle {cycle} error: {e}", file=sys.stderr)
+            break
+
+        r1 = rfactors["R1"]
+        if verbose:
+            print(
+                f"Cycle {cycle}: {len(atoms_ref)} atoms, R1={r1:.4f}",
+                file=sys.stderr,
+            )
+
+        if r1 < best_r1:
+            best_r1 = r1
+            best_atoms = atoms_ref
+            best_rfactors = rfactors
+
+        # If R1 is already good enough, stop early
+        if r1 < 0.10:
+            break
+
+        # Difference Fourier to find missing atoms
+        new_frac, new_vals = _diff_fourier_atoms(
+            atoms_ref, hkl_data, cell, wavelength, sg_ops,
+            scale=rfactors["scale"], grid=grid,
+            sigma_thresh=2.5 if cycle > 1 else 3.0,
+            min_dist_A=1.0,
+            max_new=max(5, max_atoms - len(atoms_ref)),
+        )
+
+        if not new_frac:
+            if verbose:
+                print(f"No new atoms found in ΔF map at cycle {cycle}", file=sys.stderr)
+            break
+
+        # Assign types to new atoms
+        if new_vals:
+            new_types = _assign_types(
+                np.array(new_vals),
+                [e for e in (elements or ["C", "N", "O"]) if e != "H"],
+            )
+        else:
+            new_types = []
+
+        # Build extended atom list
+        atoms = list(atoms_ref)
+        added = 0
+        for nf, nt in zip(new_frac, new_types):
+            if len(atoms) >= max_atoms:
+                break
+            atoms.append({"elem": nt, "frac": list(nf), "B": 3.0})
+            added += 1
+
+        if verbose:
+            print(f"  Added {added} atoms from ΔF map", file=sys.stderr)
+        if added == 0:
+            break
+
+    # Final refinement with all atoms (more iterations)
+    if best_atoms and len(best_atoms) > 0:
+        try:
+            final_atoms, final_rf = _refine(
+                best_atoms, hkl_data, cell, wavelength, sg_ops, max_iter=15
+            )
+            if final_rf["R1"] < best_r1:
+                best_atoms = final_atoms
+                best_rfactors = final_rf
+                if verbose:
+                    print(
+                        f"Final refinement: {len(final_atoms)} atoms, R1={final_rf['R1']:.4f}",
+                        file=sys.stderr,
+                    )
+        except Exception:
+            pass
+
+    if best_rfactors is None:
+        best_rfactors = {
+            "R1": 0.99, "wR2": 0.99, "GOOF": 0.0,
+            "n_obs": len(hkl_data["fsq"]), "n_params": 1, "scale": 1.0,
+        }
+
+    return best_atoms, best_rfactors
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -82,4 +82,5 @@ Reference-first policy:
 - Electric field and dipole notes: `references/electric_field.md`
 - Troubleshooting: `references/troubleshooting.md`
 - Output parameter guide (files, grep patterns): `references/output_params.md`
+- Advanced tasks (surface energy, vacancy, EOS, DFT+U, phonon, basis-type detection): `references/advanced_tasks.md`
 - Parsed results and plots after the run: `matmaster/skills/playground-skills/result-analysis` (`parse_abacus.py`, etc.)
