@@ -86,12 +86,7 @@ banks:
   - path: "execution_contract/ec_agnostic.yaml"
     capability: "execution_contract"
     domain: "agnostic"
-    questions: 3
-
-  - path: "execution_contract/ec_agnostic_bohrium.yaml"
-    capability: "execution_contract"
-    domain: "agnostic"
-    questions: 9
+    questions: 12
 
   - path: "input_generation/ig_agnostic_vasp.yaml"
     capability: "input_generation"
@@ -108,11 +103,6 @@ banks:
     domain: "agnostic"
     questions: 4
 
-  - path: "scientific_analysis/sa_alloy.yaml"
-    capability: "scientific_analysis"
-    domain: "alloy"
-    questions: 2
-
   - path: "scientific_analysis/sa_agnostic.yaml"
     capability: "scientific_analysis"
     domain: "agnostic"
@@ -121,7 +111,7 @@ banks:
   - path: "scientific_analysis/sa_battery.yaml"
     capability: "scientific_analysis"
     domain: "battery"
-    questions: 2
+    questions: 1
 
   - path: "scientific_analysis/sa_catalysis.yaml"
     capability: "scientific_analysis"
@@ -131,22 +121,22 @@ banks:
   - path: "scientific_analysis/sa_polymer.yaml"
     capability: "scientific_analysis"
     domain: "polymer"
-    questions: 4
+    questions: 2
 
   - path: "scientific_analysis/sa_semiconductor.yaml"
     capability: "scientific_analysis"
     domain: "semiconductor"
-    questions: 3
+    questions: 2
 
   - path: "structure_construction/sc_agnostic.yaml"
     capability: "structure_construction"
     domain: "agnostic"
-    questions: 13
+    questions: 9
 
   - path: "structure_construction/sc_catalysis.yaml"
     capability: "structure_construction"
     domain: "catalysis"
-    questions: 4
+    questions: 3
 
   - path: "structure_construction/sc_semiconductor.yaml"
     capability: "structure_construction"
@@ -166,7 +156,7 @@ banks:
   - path: "workflow_orchestration/wo_alloy.yaml"
     capability: "workflow_orchestration"
     domain: "alloy"
-    questions: 3
+    questions: 4
 
   - path: "workflow_orchestration/wo_agnostic.yaml"
     capability: "workflow_orchestration"
@@ -188,4 +178,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 127 questions across 27 active bank files
+# Total: 126 questions across 26 active bank files

@@ -3,8 +3,8 @@
     "H_bond_length_A": 1.48,
     "output_format": "POSCAR",
     "passivate_bottom_dangling_bonds": true,
-    "passivate_top_if_needed": false,
-    "verify": "all bottom Si atoms are 4-coordinated after H addition"
+    "passivate_top_dangling_bonds": true,
+    "verify": "all top and bottom surface Si atoms are 4-coordinated after H addition"
   },
   "surface": {
     "bulk_structure": "Si diamond",

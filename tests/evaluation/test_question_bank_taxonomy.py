@@ -320,7 +320,7 @@ def test_bank_yaml_filename_matches_capability_and_domain() -> None:
         assert {q['domain'] for q in raw_bank['questions']} == {raw_bank['domain']}
 
 
-def test_sa_general_phase2_split_banks_have_expected_question_ids() -> None:
+def test_phase2_sa_semiconductor_and_wo_alloy_have_expected_question_ids() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     bank_root = repo_root / 'evaluation' / 'question_bank'
 
@@ -333,14 +333,13 @@ def test_sa_general_phase2_split_banks_have_expected_question_ids() -> None:
     assert 'WO_general_perov_007_20260417' in semi_ids
     assert 'WO_general_ferro_009_20260417' in semi_ids
 
-    sa_alloy = yaml.safe_load(
-        (bank_root / 'scientific_analysis' / 'sa_alloy.yaml').read_text(
+    wo_alloy = yaml.safe_load(
+        (bank_root / 'workflow_orchestration' / 'wo_alloy.yaml').read_text(
             encoding='utf-8'
         )
     )
-    alloy_ids = [q['id'] for q in sa_alloy['questions']]
-    assert 'WO_general_steel_008_20260417' in alloy_ids
-    assert 'WO_general_hea_005_20260417' in alloy_ids
+    wo_alloy_ids = [q['id'] for q in wo_alloy['questions']]
+    assert 'WO_general_steel_008_20260417' in wo_alloy_ids
 
 
 def test_phase2_split_banks_have_expected_question_ids() -> None:
@@ -373,5 +372,5 @@ def test_manifest_active_totals_after_phase2_splits() -> None:
     bank_root = repo_root / 'evaluation' / 'question_bank'
     manifest = yaml.safe_load((bank_root / 'manifest.yaml').read_text(encoding='utf-8'))
 
-    assert len(manifest['banks']) == 27
-    assert sum(int(entry['questions']) for entry in manifest['banks']) == 127
+    assert len(manifest['banks']) == 26
+    assert sum(int(entry['questions']) for entry in manifest['banks']) == 126

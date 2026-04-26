@@ -28,6 +28,10 @@ Use the local wrapper under `matmaster/skills/playground-skills/gromacs-system-p
 
 - `matmaster/skills/playground-skills/gromacs-system-prep/scripts/prepare_gmx.py`
 
+## Polymer Simulation Workflow
+
+For complete polymer MD workflows (build → parameterize → solvate → simulate → analyze), see `references/polymer_simulation_workflow.md`. This connects poly-generator, poly-forcefield, gromacs-system-prep, gromacs, and md-analysis skills.
+
 ## Polymer Adhesion / Multi-Layer Systems
 
 For adhesion, bilayer, or interface simulations:

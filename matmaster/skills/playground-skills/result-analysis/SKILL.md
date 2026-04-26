@@ -30,18 +30,9 @@ Extracts data from open-source simulation logs and produces publication-ready fi
 3. Aggregate: band gap workflow (SCF energy + NSCF band gap), surface energy, formation energy, adsorption energy
 4. Report as structured table or JSON
 
-## Ad-hoc ABACUS Output Parsing
+## ABACUS: files and manual grep
 
-| Data | File | Pattern |
-|------|------|---------|
-| Total energy | `running_scf.log` | `!FINAL_ETOT_IS <energy> eV` |
-| Fermi energy | `running_scf.log` | `EFERMI = <energy> eV` |
-| SCF convergence | `running_scf.log` | `charge density convergence is achieved` |
-| Forces | `running_scf.log` | After `TOTAL-FORCE (eV/Angstrom)` |
-| Band eigenvalues | `BANDS_1.dat` | Columnar: k-index, eigenvalues |
-| DOS | `DOS1_smearing.dat` | Columnar: energy, DOS |
-| Relaxed structure | `STRU_ION_D` | ABACUS STRU format |
-| Potential | `ElecStaticPot.cube` | Gaussian cube |
+For output-file names, INPUT↔file mapping, and log grep patterns (when not using `parse_abacus.py`), use the single reference: `matmaster/skills/abacus/references/output_params.md` (**ABACUS Output Files** and **Key grep patterns**).
 
 **CP2K**: `ENERGY| Total FORCE_EVAL ... :` (Hartree). **QE**: `!    total energy              =` (Ry).
 

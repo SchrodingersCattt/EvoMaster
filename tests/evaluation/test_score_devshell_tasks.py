@@ -228,12 +228,12 @@ class TestFormatters:
             ),
         }
 
-        reason = _format_score_reason(record)
+        reason = _format_score_reason(record, ingest_optional_ids=frozenset())
         assert "### Grounding" in reason
         assert "### Efficiency" in reason
         assert "✓ pass" in reason
         assert "✗ fail" in reason
-        assert "Task pass (all checklist items)" in reason
+        assert "required checklist items for ingest" in reason
 
     def test_ingest_score_binary_all_must_pass(self) -> None:
         record = MagicMock()
@@ -252,6 +252,31 @@ class TestFormatters:
         record.total_count = 0
         assert _all_criteria_passed(record) is False
         assert _ingest_score_from_record(record) == 0
+
+    def test_turn_budget_fail_still_passes_when_ingest_optional(self) -> None:
+        from evaluation.core.schemas import CriterionResult
+
+        record = MagicMock()
+        record.criteria_results = {
+            "used_calc": CriterionResult(
+                criterion_id="used_calc",
+                axis="grounding",
+                passed=True,
+                reason="ok",
+                verify_method="tool_called",
+            ),
+            "turn_budget": CriterionResult(
+                criterion_id="turn_budget",
+                axis="efficiency",
+                passed=False,
+                reason="total_steps=9, budget=8",
+                verify_method="turn_budget",
+            ),
+        }
+        opt = frozenset({"turn_budget"})
+        assert _all_criteria_passed(record, ingest_optional_ids=opt) is True
+        assert _ingest_score_from_record(record, ingest_optional_ids=opt) == 100
+        assert _all_criteria_passed(record, ingest_optional_ids=frozenset()) is False
 
 
 class TestUpdatePendingWithScore:

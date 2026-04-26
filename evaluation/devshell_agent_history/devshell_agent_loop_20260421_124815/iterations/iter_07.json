@@ -1,0 +1,33 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 7,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [
+        "174ef3e989915c587c9143190fef25bf26940ea5"
+      ],
+      "files_touched": [
+        "matmaster/skills/abacus/references/advanced_workflows.md",
+        "matmaster/skills/abacus/SKILL.md",
+        "matmaster/skills/playground-skills/xrd-analysis/references/debugging_checklist.md",
+        "matmaster/skills/playground-skills/xrd-analysis/SKILL.md",
+        "matmaster/skills/playground-skills/structure-manager/references/batch_structure_processing.md",
+        "matmaster/skills/playground-skills/structure-manager/SKILL.md",
+        "matmaster/skills/data-analysis/SKILL.md"
+      ],
+      "followup_suggestion": "Re-run eval on the 15 consistently failing questions to measure conversion rate. The highest-confidence improvements are ABACUS (agent now knows about render_abacus_workflow.py and preflight_abacus.py) and XRD analysis (stronger emphasis on --elements and --sg flags). If 6+ convert to passes, target is met. If ABACUS questions still fail, investigate whether the agent is actually loading the advanced_workflows.md reference during skill execution.",
+      "iteration_index": 7,
+      "needs_more_work": false,
+      "optimization_round": 1,
+      "summary": "### Additive-only skill improvements targeting 15 consistently failing questions\n\n**New reference files (3):**\n1. `matmaster/skills/abacus/references/advanced_workflows.md` — Targets ABACUS complex input failures (IG_abacus_004/006/007/008). Covers `render_abacus_workflow.py` and `preflight_abacus.py` usage (agent wasn't aware of these tools), EOS/Birch-Murnaghan workflows, DFT+U complete examples, SOC/noncollinear, advanced MD (NVT/NPT/heating), combined band+DOS multi-step, surface energy workflows, and quick decision map.\n\n2. `matmaster/skills/playground-skills/xrd-analysis/references/debugging_checklist.md` — Targets diffraction fitting failures (DF_scxrd_001/002, DFT_pxrd_001). Step-by-step debugging checklists emphasizing critical `--elements` and `--sg` flags, data format verification (HKL/P4P/INS parsing), common failure modes with exact fixes, and R-factor improvement steps.\n\n3. `matmaster/skills/playground-skills/structure-manager/references/batch_structure_processing.md` — Targets batch processing failures (BP_struct_004/005). Breadth-first execution strategy, save-early/fail-forward principles, standard batch workflow phases, common patterns, timeout strategy, error handling templates.\n\n**Additive sections to existing SKILL.md files (4):**\n4. `matmaster/skills/abacus/SKILL.md` — Added \"Automation Tools\" section pointing to powerful input-manual-helper scripts the agent wasn't using.\n5. `matmaster/skills/playground-skills/xrd-analysis/SKILL.md` — Added \"Debugging & Troubleshooting\" section with key rules.\n6. `matmaster/skills/playground-skills/structure-manager/SKILL.md` — Added \"Batch Processing\" section with key rules.\n7. `matmaster/skills/data-analysis/SKILL.md` — Added \"Visualization / Plotting Workflow\" with matplotlib guidance and deliverable completeness checklist.\n\n**Targeted failure buckets**: ig_abacus_complex_input (4q), data_fitting_scxrd_pxrd (3q), batch_processing_struct (2q), data_documentation (2q) = 11 of 15 consistent failures.\n\n**Safety**: All changes are strictly additive — no existing content was modified. New content was appended to existing SKILL.md files, and 3 new reference files were created. This avoids the P0 regression that caused the iter_01 optimization revert."
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 7,
+    "macro_mean_0_100": 37,
+    "rationale": "## Iteration 7 — P0 PASSED, Full Eval Complete (first since iter_01)\n\n### Scores\n- **P0 gate**: ✅ PASSED (7/7 = 100%) — broke the flakiness loop after 5 blocked iterations!\n- **macro_mean_0_100**: 37 (target: 60) — 18/49 questions fully passed\n- **Compare iter_01**: 49 (24/49 passed) — 12 fewer passes this run due to natural variance\n\n### Cross-Iteration Stability (iter_01 vs iter_07, same codebase)\n| Category | Count | Detail |\n|----------|-------|--------|\n| **Stable passes** | 15 | Core reliable questions — always pass |\n| **Consistent failures** | 15 | Hard gaps — always fail 0/3 all repeats |\n| **Flaky** | ~19 | Pass in one run, fail in another |\n\n### Consistent Failures (optimization targets)\n| Bucket | Questions | Count |\n|--------|-----------|-------|\n| IG_abacus complex | 004, 006, 007, 008 | 4 |\n| DF diffraction | scxrd_001/002, pxrd_001 | 3 |\n| BP struct | 004, 005 | 2 |\n| DD documentation | data_qc_plot, proposal_review | 2 |\n| Other | SR_db_003, SC_struct_SiH, CR_ZnS001, WO_steel_008 | 4 |\n\n### Optimization Delegated\n- **Round 1**: Conservative, additive-only skill changes targeting the 15 consistent failures\n- **Key constraint**: Do NOT modify existing working content (lesson from iter_02 P0 regression)\n- **Target**: Convert 6+ of 15 consistent failures → reaches 60 when combined with flaky passes\n\n### Resource Status\n- **Iterations remaining**: 3 (8–10)\n- **Critical path**: Optimization → validate (iter_08) → if needed, refine (iter_09) → final (iter_10)",
+    "target_met": false
+  }
+}

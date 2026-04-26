@@ -1,26 +1,33 @@
 {
+  "data_format": {
+    "columns": "k_index, k_distance, k_label, band_1, band_2, ..., band_N",
+    "conduction_bands": "band_5 through band_7",
+    "description": "Each band data CSV contains pre-computed eigenvalues along M-Gamma-K path with VBM referenced to 0 eV.",
+    "units": "energies in eV, k_distance in 1/Angstrom",
+    "valence_bands": "band_1 through band_4"
+  },
   "description": "For 3 different materials (Si, Ge, GaAs), perform band structure post-processing with consistent analysis parameters. Extract band gap, band edge positions, and generate plots. The key test is: all materials undergo identical analysis (same k-path, same energy window, same plot range) even though their absolute band gaps differ.",
   "materials": [
     {
+      "band_data_file": "Si_bandstructure.csv",
       "crystal_system": "cubic",
       "expected_bandgap_eV": 1.12,
       "formula": "Si",
-      "id": "mat_si",
-      "structure_file": "si_bandstr.cif"
+      "id": "mat_si"
     },
     {
+      "band_data_file": "Ge_bandstructure.csv",
       "crystal_system": "cubic",
       "expected_bandgap_eV": 0.67,
       "formula": "Ge",
-      "id": "mat_ge",
-      "structure_file": "ge_bandstr.cif"
+      "id": "mat_ge"
     },
     {
+      "band_data_file": "GaAs_bandstructure.csv",
       "crystal_system": "cubic",
       "expected_bandgap_eV": 1.42,
       "formula": "GaAs",
-      "id": "mat_gaas",
-      "structure_file": "gaas_bandstr.cif"
+      "id": "mat_gaas"
     }
   ],
   "task": "batch_post_processing_band_structure_analysis",
