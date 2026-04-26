@@ -1,0 +1,148 @@
+# Bohrium Submission Workflow for PXRD Refinement
+
+GSAS-II is not available locally. All refinement runs go through the `Bohrium` builtin
+tool, which submits to a Docker image with GSAS-II pre-installed.
+
+## 1. Image and machine
+
+| Item | Value |
+|---|---|
+| image | `registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119` |
+| GSAS-II install | `/root/g2full/GSAS-II/GSASII` (the script default) |
+| machine (single Pawley, basic Rietveld) | `c8_m32_cpu` |
+| machine (directory batch >= 5 patterns, full Rietveld) | `c16_m64_cpu` |
+
+Wall-time guidance: single-pattern Pawley 1-2 min; 8-temperature batch 5-10 min;
+Rietveld standard 3-5 min; auto-index up to `--timeout` per Bravais family
+(default 200 s, hard SIGALRM-enforced).
+
+## 2. Command templates
+
+`cmd` runs in the unzipped `input_dir/` (so use plain relative paths).
+Always end `cmd` with `> log 2>&1` (the tool auto-appends but be explicit).
+Never use `cd` inside `cmd`.
+
+Pawley, single pattern:
+
+    python3 gsas2_pawley.py --data pattern.xye \
+      --space-group "<SG>" \
+      --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
+      --wavelength 1.5406 --debug-plot plots \
+      -o result.json > log 2>&1
+
+Pawley, directory batch (preferred for multi-temperature):
+
+    python3 gsas2_pawley.py --data ./ \
+      --space-group "<SG>" \
+      --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
+      --wavelength 1.5406 --debug-plot plots \
+      -o results.json > log 2>&1
+
+Rietveld:
+
+    python3 gsas2_rietveld.py --data pattern.xye --cif structure.cif \
+      --wavelength 1.5406 --refine-level standard \
+      --export-cif refined.cif -o result.json > log 2>&1
+
+Auto-index (last resort, see `autoindex.md` first):
+
+    python3 gsas2_autoindex.py --data pattern.xye \
+      --bravais monoclinic-P --wavelength 1.5406 \
+      --timeout 200 --debug-plot plots \
+      -o candidates.json > log 2>&1
+
+`<SG>` is the Hermann-Mauguin space-group string (e.g. `P 21/c`, `F d -3 m`).
+`<A>/<B>/<C>/<BETA>` come from a reference - never invented from peak positions.
+
+## 3. Stage `input_dir/`
+
+Flat layout, script and all data files at the top level:
+
+    input_dir/
+      gsas2_pawley.py        (or gsas2_rietveld.py / gsas2_autoindex.py)
+      curation.py            (REQUIRED - the script imports it)
+      pattern_T1.xye
+      pattern_T2.xye
+      ...
+      structure.cif          (Rietveld only)
+
+Source: `matmaster/skills/playground-skills/pxrd-refinement/scripts/`. Always
+copy `curation.py` alongside any of the three scripts; missing it produces an
+immediate `ModuleNotFoundError`.
+
+## 4. Submit / poll / download
+
+Submit (returns `job_id`):
+
+    Bohrium(action="submit",
+            input_dir="input_dir",
+            image="registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119",
+            machine="c8_m32_cpu",
+            cmd="<one of the templates above>")
+
+Poll (non-blocking, has built-in 60 s throttle):
+
+    Bohrium(action="poll", job_id=job_id)
+    # status=Running cached=true  -> do other work, poll again later
+    # status=Finished              -> download
+    # status=Failed                -> download anyway, read log
+
+Download exactly once after a terminal state:
+
+    Bohrium(action="download", job_id=job_id, result_dir="results/run_<job_id>")
+
+### Polling discipline
+
+- Never use `Bash(sleep N)` to wait for a job. The poll throttle handles rate
+  limiting; just call poll again later between other tasks.
+- During the queue+run window (5-10 min typical), do useful work: stage the next
+  phase's `input_dir`, draft the report skeleton, double-check the initial cell
+  against literature.
+- For multi-job submissions (e.g. one LTP + one HTP job), submit ALL jobs first,
+  then interleave polls. Serial submit-poll-download triples wall time.
+
+### Re-submitting
+
+There is no scenario where re-submitting the same `input_dir + cmd` produces a
+different result - the image is deterministic. If a job fails, change something
+intentional (different cell, `--dmin`, `--tmin/--tmax`, space group) before the
+next submit. Looping is wasted quota and wasted turns.
+
+## 5. Output layout
+
+After `Bohrium(action="download", ...)`:
+
+    results/run_<job_id>/
+      log                    # script stdout + stderr (GSAS-II progress, warnings)
+      result.json            # or results.json (batch) / candidates.json (autoindex)
+      plots/                 # if --debug-plot was passed
+        pattern_T1_curation.png
+        pattern_T1_pattern.csv
+      refined.cif            # Rietveld only
+      (copies of input files)
+
+Read `log` first when `result.json` is missing or `success=false` - GSAS-II
+warnings about SVD singularities, missing reflections, and wavelength mismatch
+land there.
+
+## 6. Failure triage
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Result dir lacks `log` AND lacks `result.json` (only inputs + `mpi_debug.sh` come back) | The cmd never executed (most often: the agent passed a typo'd cmd, multi-line cmd whose newlines got eaten, or the cmd ended with a different redirect) | (1) Re-read the cmd vs. the single-line templates above; (2) ensure no embedded `\` line continuations; (3) ensure `curation.py` is in `input_dir/`; (4) re-submit with the corrected cmd. **Do NOT abandon Bohrium and write a local Python solver — that violates SKILL.md contract 1.** |
+| `log` exists but has GSAS-II progress and no `result.json` | Script crashed mid-refinement | Read `log` tail for the traceback; usual culprits: SVD singular (cell badly off), wavelength mismatch, missing `--space-group` |
+| `ModuleNotFoundError: curation` | `curation.py` not staged | Copy it into `input_dir/` and re-submit |
+| `ModuleNotFoundError: GSASIIscriptable` | `--gsas2-path` mis-set | Omit `--gsas2-path`; the default works on this image |
+| `success=true` but `wR > 0.20` (Pawley) / `Rwp > 0.15` (Rietveld) | Wrong initial cell or space group | See `gsas2_refinement_guide.md` "High wR causes and fixes" — get a better cell, **do not report the bad one** |
+| `success=true` but volume is ~2x / 3x / 4x of initial | Refinement converged on a supercell — cell is WRONG | Reject result per SKILL.md contract 3; revisit initial cell |
+| Auto-index returns `candidates: []` after full timeout | Likely the DFT-simulated low-angle artifact case | See `autoindex.md` — almost never recoverable; ask user for cell |
+
+Deeper script-level errors (SVD singular, Pawley reflection generation, etc.)
+in `gsas2_refinement_guide.md` section 8.
+
+## 7. Dev/debug shell (humans only)
+
+`ssh root@gqfj1207340.bohrium.tech` runs the same image at the same paths. The
+agent should NOT SSH - production workflow is exclusively
+`Bohrium(action=submit/poll/download)`. SSH is for engineers manually validating
+script changes before the next eval run.
