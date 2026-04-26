@@ -76,7 +76,7 @@ banks:
   - path: "data_diagnosis/dd_agnostic.yaml"
     capability: "data_diagnosis"
     domain: "agnostic"
-    questions: 2
+    questions: 1
 
   - path: "data_diagnosis/dd_semiconductor.yaml"
     capability: "data_diagnosis"
@@ -96,7 +96,7 @@ banks:
   - path: "input_generation/ig_agnostic_abacus.yaml"
     capability: "input_generation"
     domain: "agnostic"
-    questions: 8
+    questions: 6
 
   - path: "safety_refusal/sf_agnostic.yaml"
     capability: "safety_refusal"
@@ -106,7 +106,7 @@ banks:
   - path: "scientific_analysis/sa_agnostic.yaml"
     capability: "scientific_analysis"
     domain: "agnostic"
-    questions: 5
+    questions: 3
 
   - path: "scientific_analysis/sa_battery.yaml"
     capability: "scientific_analysis"
@@ -121,7 +121,7 @@ banks:
   - path: "scientific_analysis/sa_polymer.yaml"
     capability: "scientific_analysis"
     domain: "polymer"
-    questions: 2
+    questions: 1
 
   - path: "scientific_analysis/sa_semiconductor.yaml"
     capability: "scientific_analysis"
@@ -131,7 +131,7 @@ banks:
   - path: "structure_construction/sc_agnostic.yaml"
     capability: "structure_construction"
     domain: "agnostic"
-    questions: 9
+    questions: 8
 
   - path: "structure_construction/sc_catalysis.yaml"
     capability: "structure_construction"
@@ -178,4 +178,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 125 questions across 26 active bank files
+# Total: 118 questions across 26 active bank files
