@@ -14,7 +14,6 @@ from evaluation.devshell_agent import loop_prompts as _loop_prompts
 from evaluation.devshell_agent.config_state import (
     AgentLoopConfig,
     AgentLoopSharedState,
-    DevshellAgentCliDefaults,
     checklist_revision_sdk_max_turns_from_jobs,
     parallel_scoring_checklist_workers_from_jobs,
 )
