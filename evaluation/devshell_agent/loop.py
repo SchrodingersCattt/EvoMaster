@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
 from evaluation.devshell_agent import loop_prompts as _loop_prompts
 from evaluation.devshell_agent.config_state import (
+    AgentLoopConfig,
     AgentLoopSharedState,
     DevshellAgentCliDefaults,
     checklist_revision_sdk_max_turns_from_jobs,
@@ -25,6 +26,7 @@ from evaluation.devshell_agent.loop_proposal_notify import (
     notify_proposed_matmaster_exps_if_present,
     notify_proposed_question_bank_if_present,
 )
+from evaluation.devshell_agent.sdk_client_retry import sdk_client_with_retry
 from evaluation.devshell_agent.sdk_logging import log_line, log_sdk_message
 
 # ``ClaudeAgentOptions(tools=...)``: empty built-in tool set (``--tools`` with no
@@ -37,27 +39,6 @@ _DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED: list[str] = []
 def checklist_max_turns_for_shared_state(state: AgentLoopSharedState) -> int:
     """Claude SDK ``max_turns`` for the question_bank checklist-revision agent."""
     return checklist_revision_sdk_max_turns_from_jobs(int(state.defaults.jobs))
-
-
-@dataclass
-class AgentLoopConfig:
-    repo_root: Path
-    session_dir: Path
-    defaults: DevshellAgentCliDefaults
-    max_iterations: int
-    target_pass_rate: int
-    permission_mode: str
-    max_sdk_turns: int
-    extra_instruction: str = ""
-    eval_ingest_submit_each_iteration: bool = True
-    eval_ingest_submit_timeout: float = 120.0
-    enable_checklist_agent: bool = True
-    checklist_permission_mode: str = ""
-    history_root: Path | None = None
-    #: After each optimization sub-round, stage product-side paths and ``git commit``.
-    enable_optimization_auto_commit: bool = True
-    #: Skip ``exp_prompt_budget`` checks before commit (e.g. broken local env).
-    optimization_auto_commit_skip_budget: bool = False
 
 
 class DevshellAgentLoop:
@@ -84,37 +65,6 @@ class DevshellAgentLoop:
 
     def __init__(self, config: AgentLoopConfig) -> None:
         self._cfg = config
-
-    @staticmethod
-    async def _sdk_client_with_retry(
-        options: Any,
-        *,
-        retries: int = 2,
-        delay: float = 5.0,
-        log_file: TextIO | None = None,
-    ) -> Any:
-        """Connect a ``ClaudeSDKClient``, retrying on initialization timeout."""
-        from claude_agent_sdk import ClaudeSDKClient
-
-        last_exc: Exception | None = None
-        for attempt in range(1 + retries):
-            try:
-                client = ClaudeSDKClient(options=options)
-                await client.__aenter__()
-                return client
-            except Exception as exc:
-                if "Control request timeout" not in str(exc):
-                    raise
-                last_exc = exc
-                if attempt < retries:
-                    if log_file:
-                        log_line(
-                            f"SDK initialize timeout (attempt {attempt + 1}/{1 + retries}), "
-                            f"retrying in {delay}s …",
-                            log_file,
-                        )
-                    await asyncio.sleep(delay)
-        raise last_exc  # type: ignore[misc]
 
     @staticmethod
     def main_agent_allowed_tools() -> list[str]:
@@ -761,7 +711,7 @@ class DevshellAgentLoop:
                 f"P0 revert sub-round: iteration {it}, base={base[:12]}…",
                 loop_log,
             )
-            cc = await self._sdk_client_with_retry(
+            cc = await sdk_client_with_retry(
                 co,
                 retries=self._SDK_CONNECT_RETRIES,
                 delay=self._SDK_CONNECT_RETRY_DELAY,
@@ -839,7 +789,7 @@ class DevshellAgentLoop:
                 f"iteration {it}, round {delegation.get('optimization_round')}",
                 loop_log,
             )
-            cc = await self._sdk_client_with_retry(
+            cc = await sdk_client_with_retry(
                 co,
                 retries=self._SDK_CONNECT_RETRIES,
                 delay=self._SDK_CONNECT_RETRY_DELAY,
@@ -956,7 +906,7 @@ class DevshellAgentLoop:
             f"checklist agent: iteration {it}, {len(escalations)} escalation(s)",
             loop_log,
         )
-        cc = await self._sdk_client_with_retry(
+        cc = await sdk_client_with_retry(
             co,
             retries=self._SDK_CONNECT_RETRIES,
             delay=self._SDK_CONNECT_RETRY_DELAY,
