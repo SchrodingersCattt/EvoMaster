@@ -66,7 +66,7 @@ banks:
   - path: "batch_processing/bp_catalysis.yaml"
     capability: "batch_processing"
     domain: "catalysis"
-    questions: 2
+    questions: 1
 
   - path: "batch_processing/bp_semiconductor.yaml"
     capability: "batch_processing"
@@ -178,4 +178,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 126 questions across 26 active bank files
+# Total: 125 questions across 26 active bank files
