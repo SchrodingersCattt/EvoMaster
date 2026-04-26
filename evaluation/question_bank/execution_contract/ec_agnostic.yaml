@@ -333,7 +333,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: EC_bohrium_mlips_submit_config_001_20260424v2
+- id: EC_bohrium_mlips_submit_config_001_20260424v3
   capability: execution_contract
   domain: agnostic
   intent: Generate a Bohrium submit request JSON for a DPA3 structure optimization request using the request-consistent submission defaults.
@@ -464,7 +464,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: EC_bohrium_gromacs_submit_config_001_20260424v2
+- id: EC_bohrium_gromacs_submit_config_001_20260424v3
   capability: execution_contract
   domain: agnostic
   intent: Generate a Bohrium submit request JSON for a GROMACS job using the request-consistent submission defaults.
