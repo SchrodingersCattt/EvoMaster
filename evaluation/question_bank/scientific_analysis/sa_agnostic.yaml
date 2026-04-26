@@ -410,13 +410,13 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 1.0
-- id: DFT_pxrd_001_20260422
+- id: PXRD_thermal_expansion_001_20260426
   capability: scientific_analysis
   domain: agnostic
   intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
     parameters at each temperature, identify two structural phases (low-temperature RTP and
     high-temperature HTP), and fit linear thermal expansion equations for each phase.
-  human_prompt_seed: '文件 `_td-pxrd_test.txt` 包含一个化合物在 8 个温度下的变温粉末 X 射线衍射（PXRD）数据，温度标签对应关系为：25°C→303K、40°C→323K、60°C→343K、80°C→363K、100°C→383K、115°C→393K、130°C→403K、140°C→413K。该化合物为单斜晶系。
+  human_prompt_seed: '文件 `_td-pxrd_test.txt` 包含一个化合物在 8 个温度下的变温粉末 X 射线衍射（PXRD）数据，温度标签对应关系为：25°C→303K、40°C→323K、60°C→343K、80°C→363K、100°C→383K、115°C→393K、130°C→403K、140°C→413K。该化合物为单斜晶系，空间群提示为 P 21（No. 4）。两个相均可使用以下近似晶胞作为 Pawley 精修初猜，并从该初猜自由精修：a ≈ 10.9 Å，b ≈ 9.6 Å，c ≈ 10.5 Å，β ≈ 110°，V ≈ 1020 Å³。波长为 Cu Kα1，λ = 1.5406 Å。
 
     请对每个温度的 PXRD 图谱进行 Pawley 精修，提取晶格参数（a、b、c、β、V），并分析结果： 1. 识别两个结构相：低温相（1-RTP，303K–363K）和高温相（1-HTP，383K–413K）；
     2. 分别对两个相的各晶格参数（a、b、c、β、V）随温度的变化进行线性拟合，给出拟合方程（斜率、截距、R²）； 3. 报告各温度下的精修结果（晶格参数与 Rp/Rwp 指标）。
@@ -428,7 +428,7 @@ questions:
   - wf_postprocess
   data_files:
   - key: vt_pxrd_data
-    path: data/DFT_pxrd_001_20260408/_td-pxrd_test.txt
+    path: data/PXRD_thermal_expansion_001_20260426/_td-pxrd_test.txt
     oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/DF_thermo_001_20260408/1775629319__td-pxrd_test.txt
     description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K), CSV format
       with paired (2theta, intensity) columns for each temperature.
