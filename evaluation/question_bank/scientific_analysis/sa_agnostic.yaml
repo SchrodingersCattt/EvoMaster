@@ -259,7 +259,7 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 1.0
-- id: PXRD_thermal_expansion_001_20260426_v3
+- id: PXRD_thermal_expansion_001_20260426_v4
   capability: scientific_analysis
   domain: agnostic
   intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
@@ -272,14 +272,14 @@ questions:
     - 2θ 范围 5°–50°，其中 2θ < 14° 主要为低角伪影/噪声，建议精修使用 14°–50° 区间。
     - 推荐将数据按相拆分（RTP 4 点、HTP 4 点）分别精修，并在同一相内启用 chain-cell（前一温度精修结果作为下一温度初猜）以减小温度间散点。
 
-    文献参考晶胞（每相分别作为 Pawley 精修初猜，并基于此自由精修）：
-    - 低温相 RTP（303K – 363K）：a ≈ 10.85 Å, b ≈ 9.60 Å, c ≈ 10.50 Å, β ≈ 110.0°, V ≈ 1005 Å³
-    - 高温相 HTP（383K – 413K）：a ≈ 11.05 Å, b ≈ 9.60 Å, c ≈ 10.55 Å, β ≈ 110.0°, V ≈ 1025 Å³
+    文献参考晶胞（每相分别作为 Pawley 精修初猜，并基于此自由精修；c 与 β 是单斜结构敏感参数，如下文献值已对每相核对）：
+    - 低温相 RTP（303K – 363K）：a ≈ 10.83 Å, b ≈ 9.62 Å, c ≈ 10.13 Å, β ≈ 108.75°, V ≈ 1000 Å³
+    - 高温相 HTP（383K – 413K）：a ≈ 11.05 Å, b ≈ 9.48 Å, c ≈ 10.48 Å, β ≈ 111.25°, V ≈ 1023 Å³
 
     请对每个温度的 PXRD 图谱进行 Pawley 精修，提取晶格参数（a、b、c、β、V），并分析结果：
     1. 识别两个结构相：低温相（1-RTP，303K–363K）和高温相（1-HTP，383K–413K）。
     2. 分别对两个相的各晶格参数（a、b、c、β、V）随温度的变化进行线性拟合，给出拟合方程（斜率、截距、R²）。两相必须分别独立拟合，不能合并为一条直线，且 RTP 与 HTP 的斜率应基于各相内的 4 个温度点分别计算（不要让两相共享同一斜率值）。
-    3. 报告各温度下的精修结果。每个温度必须使用 Pawley 脚本（如 `gsas2_pawley.py`）输出 JSON 中真实的 volume（由收敛后的 a/b/c/β 计算得到），不要将 prompt 中的近似初猜（V ≈ 1005、1025 Å³）当作精修结果填入答案。
+    3. 报告各温度下的精修结果。每个温度必须使用 Pawley 脚本（如 `gsas2_pawley.py`）输出 JSON 中真实的 volume（由收敛后的 a/b/c/β 计算得到），不要将 prompt 中的近似初猜（V ≈ 1000、1023 Å³）当作精修结果填入答案。
 
     '
   tags:
@@ -288,7 +288,7 @@ questions:
   - wf_postprocess
   data_files:
   - key: vt_pxrd_data
-    path: data/PXRD_thermal_expansion_001_20260426_v3/_td-pxrd_test.txt
+    path: data/PXRD_thermal_expansion_001_20260426_v4/_td-pxrd_test.txt
     oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/DF_thermo_001_20260408/1775629319__td-pxrd_test.txt
     description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K), CSV format
       with paired (2theta, intensity) columns for each temperature.
