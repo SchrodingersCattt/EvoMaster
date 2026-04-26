@@ -7,7 +7,7 @@ questions:
   domain: agnostic
   intent: Generate a Bohrium submit request JSON for a LAMMPS job using the request-consistent submission defaults.
   human_prompt_seed: |
-    帮我写一个 Bohrium 提交 JSON，跑 LAMMPS，输入文件是 `relax.lammps`，保存成 `submit_request.json`。不用真提交。
+    帮我写一个 Bohrium 提交 JSON，跑 LAMMPS，输入文件是 `relax.lammps`，保存成 `submit_request.json`。不用真提交。明确必须字段：action/image/cmd。
   tags:
   - wf_inputs
   - phy_md
@@ -74,7 +74,7 @@ questions:
   domain: agnostic
   intent: Generate a Bohrium submit request JSON for an ORCA job using the request-consistent submission defaults.
   human_prompt_seed: |
-    帮我写一个 Bohrium 提交 JSON，跑 ORCA，输入文件是 `input.inp`，保存成 `submit_request.json`。不用真提交。
+    帮我写一个 Bohrium 提交 JSON，跑 ORCA，输入文件是 `input.inp`，保存成 `submit_request.json`。不用真提交。明确必须字段：action/image/cmd。
   tags:
   - wf_inputs
   data_files: []
@@ -140,7 +140,7 @@ questions:
   domain: agnostic
   intent: Generate a Bohrium submit request JSON for a DPA3 structure optimization request using the request-consistent submission defaults.
   human_prompt_seed: |
-    帮我写一个 Bohrium 提交 JSON，用 DPA3 做结构优化，输入结构文件是 `input.cif`，保存成 `submit_request.json`。不用真提交。
+    帮我写一个 Bohrium 提交 JSON，用 DPA3 做结构优化，输入结构文件是 `input.cif`，保存成 `submit_request.json`。不用真提交。明确必须字段：action/image/cmd。
   tags:
   - wf_inputs
   data_files: []
@@ -206,7 +206,7 @@ questions:
   domain: agnostic
   intent: Generate a Bohrium submit request JSON for a PyATB job using request-consistent submission behavior.
   human_prompt_seed: |
-    帮我写一个 Bohrium 提交 JSON，跑 PyATB，保存成 `submit_request.json`。不用真提交。
+    帮我写一个 Bohrium 提交 JSON，跑 PyATB，保存成 `submit_request.json`。不用真提交。明确必须字段：action/image/cmd。
   tags:
   - wf_inputs
   data_files: []
@@ -271,7 +271,7 @@ questions:
   domain: agnostic
   intent: Generate a Bohrium submit request JSON for a GROMACS job using the request-consistent submission defaults.
   human_prompt_seed: |
-    帮我写一个 Bohrium 提交 JSON，跑 GROMACS，保存成 `submit_request.json`。不用真提交。
+    帮我写一个 Bohrium 提交 JSON，跑 GROMACS，保存成 `submit_request.json`。不用真提交。明确必须字段：action/image/cmd。
   tags:
   - wf_inputs
   - phy_md
@@ -338,7 +338,7 @@ questions:
   domain: agnostic
   intent: Generate a Bohrium submit request JSON for an ABACUS job using the request-consistent submission defaults.
   human_prompt_seed: |
-    帮我写一个 Bohrium 提交 JSON，跑 ABACUS，保存成 `submit_request.json`。不用真提交。
+    帮我写一个 Bohrium 提交 JSON，跑 ABACUS，保存成 `submit_request.json`。不用真提交。明确必须字段：action/image/cmd。
   tags:
   - wf_inputs
   data_files: []
@@ -404,7 +404,7 @@ questions:
   domain: agnostic
   intent: Generate a Bohrium submit request JSON for a CP2K job using the request-consistent submission defaults.
   human_prompt_seed: |
-    帮我写一个 Bohrium 提交 JSON，跑 CP2K，输入文件是 `cp2k.inp`，保存成 `submit_request.json`。不用真提交。
+    帮我写一个 Bohrium 提交 JSON，跑 CP2K，输入文件是 `cp2k.inp`，保存成 `submit_request.json`。不用真提交。明确必须字段：action/image/cmd。
   tags:
   - wf_inputs
   data_files: []
@@ -470,7 +470,7 @@ questions:
   domain: agnostic
   intent: Generate a Bohrium submit request JSON for a Quantum ESPRESSO job using the request-consistent submission defaults.
   human_prompt_seed: |
-    帮我写一个 Bohrium 提交 JSON，跑 Quantum ESPRESSO，输入文件是 `qe.in`，保存成 `submit_request.json`。不用真提交。
+    帮我写一个 Bohrium 提交 JSON，跑 Quantum ESPRESSO，输入文件是 `qe.in`，保存成 `submit_request.json`。不用真提交。明确必须字段：action/image/cmd。
   tags:
   - wf_inputs
   data_files: []
@@ -536,7 +536,7 @@ questions:
   domain: agnostic
   intent: Generate a Bohrium submit request JSON for an ABINIT job using the request-consistent submission defaults.
   human_prompt_seed: |
-    帮我写一个 Bohrium 提交 JSON，跑 ABINIT，输入文件是 `run.abi`，保存成 `submit_request.json`。不用真提交。
+    帮我写一个 Bohrium 提交 JSON，跑 ABINIT，输入文件是 `run.abi`，保存成 `submit_request.json`。不用真提交。明确必须字段：action/image/cmd。
   tags:
   - wf_inputs
   data_files: []
