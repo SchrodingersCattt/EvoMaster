@@ -71,6 +71,9 @@ class DevshellAgentLoop:
     # SDK subprocess transport JSON buffer (default 1 MB is too small for
     # large glob_paths results); 10 MB gives comfortable headroom.
     _SDK_MAX_BUFFER_SIZE = 10 * 1024 * 1024
+    # Retry count for transient SDK client initialization timeouts.
+    _SDK_CONNECT_RETRIES = 2
+    _SDK_CONNECT_RETRY_DELAY = 5.0
 
     SYSTEM_PROMPT_MAIN = _loop_prompts.SYSTEM_PROMPT_MAIN
     SYSTEM_PROMPT_CHECKLIST = _loop_prompts.SYSTEM_PROMPT_CHECKLIST
@@ -81,6 +84,37 @@ class DevshellAgentLoop:
 
     def __init__(self, config: AgentLoopConfig) -> None:
         self._cfg = config
+
+    @staticmethod
+    async def _sdk_client_with_retry(
+        options: Any,
+        *,
+        retries: int = 2,
+        delay: float = 5.0,
+        log_file: TextIO | None = None,
+    ) -> Any:
+        """Connect a ``ClaudeSDKClient``, retrying on initialization timeout."""
+        from claude_agent_sdk import ClaudeSDKClient
+
+        last_exc: Exception | None = None
+        for attempt in range(1 + retries):
+            try:
+                client = ClaudeSDKClient(options=options)
+                await client.__aenter__()
+                return client
+            except Exception as exc:
+                if "Control request timeout" not in str(exc):
+                    raise
+                last_exc = exc
+                if attempt < retries:
+                    if log_file:
+                        log_line(
+                            f"SDK initialize timeout (attempt {attempt + 1}/{1 + retries}), "
+                            f"retrying in {delay}s …",
+                            log_file,
+                        )
+                    await asyncio.sleep(delay)
+        raise last_exc  # type: ignore[misc]
 
     @staticmethod
     def main_agent_allowed_tools() -> list[str]:
@@ -704,7 +738,7 @@ class DevshellAgentLoop:
         if not base:
             return 0
 
-        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+        from claude_agent_sdk import ClaudeAgentOptions
 
         from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
@@ -727,7 +761,13 @@ class DevshellAgentLoop:
                 f"P0 revert sub-round: iteration {it}, base={base[:12]}…",
                 loop_log,
             )
-            async with ClaudeSDKClient(options=co) as cc:
+            cc = await self._sdk_client_with_retry(
+                co,
+                retries=self._SDK_CONNECT_RETRIES,
+                delay=self._SDK_CONNECT_RETRY_DELAY,
+                log_file=loop_log,
+            )
+            async with cc:
                 await cc.query(
                     self._p0_revert_user_message(it=it, revert_base_sha=revert_base_sha)
                 )
@@ -776,7 +816,7 @@ class DevshellAgentLoop:
         if not delegations:
             return 0
 
-        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+        from claude_agent_sdk import ClaudeAgentOptions
 
         from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
@@ -799,7 +839,13 @@ class DevshellAgentLoop:
                 f"iteration {it}, round {delegation.get('optimization_round')}",
                 loop_log,
             )
-            async with ClaudeSDKClient(options=co) as cc:
+            cc = await self._sdk_client_with_retry(
+                co,
+                retries=self._SDK_CONNECT_RETRIES,
+                delay=self._SDK_CONNECT_RETRY_DELAY,
+                log_file=loop_log,
+            )
+            async with cc:
                 await cc.query(
                     self._optimization_user_message(it=it, delegation=delegation)
                 )
@@ -890,7 +936,7 @@ class DevshellAgentLoop:
             )
             ids_before = None
 
-        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+        from claude_agent_sdk import ClaudeAgentOptions
 
         from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
@@ -910,7 +956,13 @@ class DevshellAgentLoop:
             f"checklist agent: iteration {it}, {len(escalations)} escalation(s)",
             loop_log,
         )
-        async with ClaudeSDKClient(options=co) as cc:
+        cc = await self._sdk_client_with_retry(
+            co,
+            retries=self._SDK_CONNECT_RETRIES,
+            delay=self._SDK_CONNECT_RETRY_DELAY,
+            log_file=loop_log,
+        )
+        async with cc:
             await cc.query(self._checklist_user_message(it=it, escalations=escalations))
             async for message in cc.receive_response():
                 log_sdk_message(
