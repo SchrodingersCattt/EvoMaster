@@ -283,10 +283,6 @@ class AgentRunService:
         record_active_mcp_server callback added to run_meta mutates this same
         object via setdefault.
         """
-        # Defensive: tests that bypass __init__ via __new__ may not have set the
-        # attribute. Lazily initialize to avoid AttributeError.
-        if not hasattr(self, '_active_mcp_servers'):
-            self._active_mcp_servers = {}
         cached = self._active_mcp_servers.get(session_id)
         if cached is not None:
             return cached
