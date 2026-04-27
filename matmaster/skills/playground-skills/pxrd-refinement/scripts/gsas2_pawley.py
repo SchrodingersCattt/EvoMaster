@@ -59,9 +59,14 @@ from pathlib import Path
 
 import numpy as np
 
-# Local import: curation lives next to this script
+# Local imports: curation + pawley_core live next to this script
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from curation import CurationResult, curate, write_diagnostic_plot  # noqa: E402
+from pawley_core import (  # noqa: E402
+    perturb_seed_cells,
+    run_pawley_once,
+    summarize_multi_start,
+)
 
 DEFAULT_GSAS2_PATH = "/root/g2full/GSAS-II/GSASII"
 
@@ -262,83 +267,6 @@ def cell_dict_to_list(cell_dict: dict) -> list[float]:
     ]
 
 
-def generate_pawley_reflections(
-    phase_data: dict, dmin: float, dmax: float | None = None
-) -> list:
-    """
-    Generate and estimate Pawley reflection list.
-
-    Mirrors GSAS-II's 'Pawley create' + 'Pawley estimate' GUI operations,
-    which are not exposed in GSASIIscriptable directly.
-
-    `dmax` caps the maximum d-spacing considered; pass None for no upper
-    cap (use the full set of reflections >= dmin).
-    """
-    import GSASIIlattice as G2lat
-    import GSASIImath as G2mth
-    import GSASIIspc as G2spc
-
-    generalData = phase_data["General"]
-    cell = generalData["Cell"][1:7]
-    A = G2lat.cell2A(cell)
-    SGData = generalData["SGData"]
-    if dmax is None:
-        dmax = generalData.get("Pawley dmax", 100.0)
-
-    HKLd = np.array(G2lat.GenHLaue(dmin, SGData, A))
-    peaks = []
-    for h, k, l, d in HKLd:
-        if d > dmax:
-            continue
-        ext, mul = G2spc.GenHKLf([int(h), int(k), int(l)], SGData)[:2]
-        if not ext:
-            mul *= 2
-            peaks.append([int(h), int(k), int(l), mul, d, True, 1.0, 1.0])
-    peaks = G2mth.sortArray(peaks, 4, reverse=True)
-    return peaks
-
-
-def estimate_pawley_intensities(
-    peaks: list,
-    xdata: np.ndarray,
-    yobs: np.ndarray,
-    inst_parms: dict,
-    sample_parms: dict,
-    cell_volume: float,
-) -> list:
-    """
-    Initialize Pawley reflection intensities from observed pattern.
-
-    Mirrors GSAS-II's 'Pawley estimate' operation. Each reflection's F^2
-    is estimated from the observed peak height at the reflection position.
-    """
-    import GSASIIlattice as G2lat
-    import GSASIIpwd as G2pwd
-
-    Vst = 1.0 / cell_volume
-
-    for ref in peaks:
-        d = ref[4]
-        pos = G2lat.Dsp2pos(inst_parms, d)
-        indx = np.searchsorted(xdata, pos)
-        if 0 <= indx < len(yobs):
-            try:
-                fwhm = max(0.001, G2pwd.getFWHM(pos, inst_parms))
-                ref[6] = max(yobs[indx], 1.0) * fwhm * np.sqrt(np.pi)
-                # Lorentz-polarization correction for CW X-ray
-                lp = 1.0 / (
-                    2.0
-                    * np.sin(np.radians(pos / 2.0)) ** 2
-                    * np.cos(np.radians(pos / 2.0))
-                )
-                ref[6] /= sample_parms["Scale"][0] * Vst * lp * ref[3]
-            except Exception:
-                ref[6] = 1.0
-        else:
-            ref[6] = 1.0
-    return peaks
-
-
 def refine_one_pattern(
     two_theta: np.ndarray,
     intensity: np.ndarray,
@@ -355,6 +283,10 @@ def refine_one_pattern(
     debug_plot: str | None = None,
     curation_mode: str = "auto",
     baseline_method: str = "piecewise_linear",
+    multi_start: int = 1,
+    multi_start_seed: int = 42,
+    multi_start_len_sigma: float = 0.005,
+    multi_start_ang_sigma: float = 0.5,
 ) -> dict:
     """
     Run GSAS-II Pawley refinement on a single pattern.
@@ -367,14 +299,22 @@ def refine_one_pattern(
       - ``strict``: run curation; abort refinement on a FAIL verdict.
     ``baseline_method``
       Forwarded to ``curation.curate`` when curation is enabled.
+    ``multi_start``
+      Number of independent Pawley runs to launch from perturbed initial
+      cells, keeping the run with the lowest wR. ``1`` (default) preserves
+      the legacy single-shot behavior; ``5`` is the recommended setting
+      for noisy / DFT-simulated data and any pattern that gave wR > 20%
+      with a single shot. Perturbations are deterministic given
+      ``multi_start_seed``.
+    ``multi_start_len_sigma`` / ``multi_start_ang_sigma``
+      Std-dev of multiplicative log-normal perturbations on a/b/c (default
+      0.5 %) and additive perturbations on α/β/γ (default 0.5°). Tighten
+      to stay near the user-provided cell; loosen to widen the search.
 
-    Returns a dict with cell parameters, ESDs, R-factors, and a ``warnings``
-    list describing preprocessing / curation decisions and any per-step
-    refinement failures (these don't crash the run but ARE surfaced).
+    Returns a dict with cell parameters (best run), ESDs, R-factors, plus
+    a ``warnings`` list and (when ``multi_start > 1``) a ``multi_start``
+    summary listing every candidate's seed cell + wR + outcome.
     """
-    import GSASIIscriptable as G2sc
-
-    G2sc.SetPrintLevel("warn")
     warnings: list[str] = []
 
     curation: CurationResult | None = None
@@ -412,17 +352,6 @@ def refine_one_pattern(
     xye_path = os.path.join(workdir, f"{label}.xye")
     preprocess_info = preprocess_to_xye(two_theta, intensity, xye_path, warnings)
 
-    gpx_path = os.path.join(workdir, f"{label}.gpx")
-    gpx = G2sc.G2Project(newgpx=gpx_path)
-
-    hist = gpx.add_powder_histogram(xye_path, iparams=instprm_path)
-    phase = gpx.add_phase(
-        phasename="phase",
-        spacegroup=space_group,
-        cell=cell_list,
-        histograms=[hist],
-    )
-
     # If user did not specify limits, fall back to the full data range.
     # Clamp to the actual data range so a stray --tmin/--tmax can't produce an
     # empty / inverted window that GSAS-II will silently "refine" against.
@@ -438,141 +367,138 @@ def refine_one_pattern(
             f"[{data_lo:.4f}, {data_hi:.4f}]; falling back to full range"
         )
         lim_lo, lim_hi = data_lo, data_hi
-    hist.set_refinements({"Limits": [lim_lo, lim_hi]})
 
-    phase.setPhaseEntryValue(["General", "doPawley"], True)
-    phase.setPhaseEntryValue(["General", "Pawley dmin"], dmin)
-    if dmax is not None:
-        phase.setPhaseEntryValue(["General", "Pawley dmax"], dmax)
-
-    peaks = generate_pawley_reflections(phase.data, dmin, dmax)
-    xdata = hist.getdata("x")
-    yobs = hist.getdata("yobs")
-    inst_parms = hist.getHistEntryValue(["Instrument Parameters"])[0]
-    sample_parms = hist.getHistEntryValue(["Sample Parameters"])
-    cell_vol = phase.data["General"]["Cell"][7]
-
-    peaks = estimate_pawley_intensities(
-        peaks, xdata, yobs, inst_parms, sample_parms, cell_vol
+    k = max(1, int(multi_start))
+    seeds = perturb_seed_cells(
+        cell_list, k, multi_start_len_sigma, multi_start_ang_sigma, multi_start_seed
     )
-    phase.data["Pawley ref"] = peaks
 
-    # Fix histogram scale — must not refine it simultaneously with Pawley
-    # intensities (completely correlated → SVD singularity)
-    hist.setHistEntryValue(["Sample Parameters", "Scale"], [1.0, False])
-
-    gpx.set_Controls("cycles", 10)
-
-    def _safe_refine(step_name: str) -> None:
-        try:
-            gpx.do_refinements([{}])
-        except Exception as exc:
-            msg = f"refine step '{step_name}' raised {type(exc).__name__}: {exc}"
-            warnings.append(msg)
-            print(f"[gsas2_pawley][{label}] WARN {msg}", file=sys.stderr)
-
-    hist.set_refinements({"Background": {"no. coeffs": 6, "refine": True}})
-    _safe_refine("Background")
-
-    phase.set_refinements({"Cell": True})
-    _safe_refine("Cell")
-
-    hist.set_refinements({"Instrument Parameters": ["U", "V", "W"]})
-    _safe_refine("UVW")
-
-    hist.set_refinements({"Instrument Parameters": ["Zero"]})
-    _safe_refine("Zero")
-
-    hist.set_refinements({"Background": {"no. coeffs": 12, "refine": True}})
-    for i in range(3):
-        _safe_refine(f"converge_{i + 1}")
-
-    cell = phase.get_cell()
-    try:
-        cell_esd = phase.get_cell_and_esd()
-    except Exception as exc:
-        cell_esd = None
-        warnings.append(f"get_cell_and_esd failed: {exc}")
-
-    wR = hist.get_wR()
-    n_reflections = len(phase.data.get("Pawley ref", []))
-
-    if wR is not None and wR > 30.0:
-        warnings.append(
-            f"high wR ({wR:.2f}%); refinement likely poor — check initial cell, "
-            f"space group, peak-shape, or 2θ range"
+    candidates: list[dict] = []
+    for i, seed in enumerate(seeds):
+        sub_label = label if k == 1 else f"{label}__ms{i}"
+        only_debug_plot = debug_plot if i == 0 else None
+        cand = run_pawley_once(
+            xye_path=xye_path,
+            instprm_path=instprm_path,
+            space_group=space_group,
+            cell_list=seed,
+            dmin=dmin,
+            dmax=dmax,
+            lim_lo=lim_lo,
+            lim_hi=lim_hi,
+            workdir=workdir,
+            label=sub_label,
+            debug_plot=only_debug_plot,
         )
+        cand["_seed_index"] = i
+        cand["_seed_cell"] = [round(float(v), 5) for v in seed]
+        candidates.append(cand)
+
+    def _wr_key(c: dict) -> float:
+        if not c.get("success"):
+            return float("inf")
+        wr = c.get("wR")
+        return float(wr) if wr is not None else float("inf")
+
+    best = min(candidates, key=_wr_key)
+    if not best.get("success"):
+        return {
+            "success": False,
+            "file": label,
+            "error": best.get("error", "all multi-start runs failed"),
+            "preprocess": preprocess_info,
+            "limits": [round(lim_lo, 4), round(lim_hi, 4)],
+            "curation": curation.summary_dict() if curation is not None else None,
+            "multi_start": summarize_multi_start(candidates) if k > 1 else None,
+            "warnings": warnings + best.get("warnings", []),
+        }
+
+    best_warnings = best.get("warnings", [])
 
     result = {
         "success": True,
         "file": label,
-        "a": round(cell["length_a"], 5),
-        "b": round(cell["length_b"], 5),
-        "c": round(cell["length_c"], 5),
-        "alpha": round(cell["angle_alpha"], 4),
-        "beta": round(cell["angle_beta"], 4),
-        "gamma": round(cell["angle_gamma"], 4),
-        "volume": round(cell["volume"], 4),
-        "wR": round(wR, 2) if wR is not None else None,
-        "n_reflections": n_reflections,
+        "a": best["a"],
+        "b": best["b"],
+        "c": best["c"],
+        "alpha": best["alpha"],
+        "beta": best["beta"],
+        "gamma": best["gamma"],
+        "volume": best["volume"],
+        "wR": best.get("wR"),
+        "n_reflections": best.get("n_reflections"),
         "limits": [round(lim_lo, 4), round(lim_hi, 4)],
         "preprocess": preprocess_info,
-        "warnings": warnings,
+        "warnings": warnings + best_warnings,
     }
+    for k_esd in ("a_esd", "b_esd", "c_esd", "alpha_esd", "beta_esd", "gamma_esd"):
+        if k_esd in best:
+            result[k_esd] = best[k_esd]
     if curation is not None:
         result["curation"] = curation.summary_dict()
+    if k > 1:
+        result["multi_start"] = summarize_multi_start(candidates)
+        # surface a brief audit line so users grep'ing logs see the win
+        chosen = best["_seed_index"]
+        wRs = [(c.get("wR") if c.get("success") else None) for c in candidates]
+        result["warnings"].append(
+            f"multi-start picked seed {chosen}/{k - 1} (wR list={wRs})"
+        )
 
-    if cell_esd is not None:
+    if debug_plot and curation is not None:
         try:
-            esd_dict = cell_esd[1] if isinstance(cell_esd, (tuple, list)) else {}
-            key_map = {
-                "a": "length_a",
-                "b": "length_b",
-                "c": "length_c",
-                "alpha": "angle_alpha",
-                "beta": "angle_beta",
-                "gamma": "angle_gamma",
-            }
-            for param, key in key_map.items():
-                val = esd_dict.get(key, 0.0)
-                result[f"{param}_esd"] = round(float(val or 0.0), 6)
+            png = os.path.join(debug_plot, f"{label}_curation.png")
+            write_diagnostic_plot(curation, two_theta, intensity, png, title=label)
         except Exception as exc:
-            warnings.append(f"ESD extraction failed: {exc}")
+            result["warnings"].append(f"curation plot failed: {exc}")
 
-    if debug_plot:
-        try:
-            _write_debug_plot(hist, debug_plot, label)
-        except Exception as exc:
-            warnings.append(f"debug plot failed: {exc}")
-        if curation is not None:
-            try:
-                png = os.path.join(debug_plot, f"{label}_curation.png")
-                write_diagnostic_plot(curation, two_theta, intensity, png, title=label)
-            except Exception as exc:
-                warnings.append(f"curation plot failed: {exc}")
-
-    gpx.save()
     return result
 
 
-def _write_debug_plot(hist, outdir: str, label: str) -> None:
+def _refine_kwargs_from_args(args) -> dict:
+    """Common keyword args shared by run_single / run_directory / run_wide_csv."""
+    return {
+        "wavelength": args.wavelength,
+        "dmin": args.dmin,
+        "dmax": args.dmax,
+        "two_theta_min": args.tmin,
+        "two_theta_max": args.tmax,
+        "debug_plot": args.debug_plot,
+        "curation_mode": args.curation_mode,
+        "baseline_method": args.baseline_method,
+        "multi_start": args.multi_start,
+        "multi_start_seed": args.multi_start_seed,
+        "multi_start_len_sigma": args.multi_start_len_sigma,
+        "multi_start_ang_sigma": args.multi_start_ang_sigma,
+    }
+
+
+def _accept_chain_promotion(
+    prev: dict | None,
+    curr: dict,
+    wr_max: float,
+    vol_jump_max: float,
+) -> tuple[bool, str]:
     """
-    Dump (x, yobs, ycalc, ydiff) for the histogram so the caller can plot
-    or inspect the residuals offline. Writes <outdir>/<label>_pattern.csv.
+    Quality gate for cell promotion across a chained temperature series.
+
+    Promote curr → next iff curr converged with a tolerable wR AND its
+    volume is within ``vol_jump_max`` of the previously accepted result
+    (or no prior accepted result exists). Returns (accept, reason).
     """
-    os.makedirs(outdir, exist_ok=True)
-    x = hist.getdata("x")
-    yobs = hist.getdata("yobs")
-    try:
-        ycalc = hist.getdata("ycalc")
-    except Exception:
-        ycalc = np.zeros_like(yobs)
-    diff = yobs - ycalc
-    out = os.path.join(outdir, f"{label}_pattern.csv")
-    with open(out, "w") as f:
-        f.write("two_theta,yobs,ycalc,diff\n")
-        for xi, yo, yc, dv in zip(x, yobs, ycalc, diff):
-            f.write(f"{xi:.6f},{yo:.6f},{yc:.6f},{dv:.6f}\n")
+    if not curr.get("success"):
+        return False, "current refinement failed"
+    wr = curr.get("wR")
+    if wr is None or wr > wr_max:
+        return False, f"wR={wr} exceeds gate {wr_max}"
+    if prev is not None and prev.get("success"):
+        v_prev = prev.get("volume")
+        v_curr = curr.get("volume")
+        if v_prev and v_curr:
+            jump = abs(v_curr - v_prev) / v_prev
+            if jump > vol_jump_max:
+                return False, f"ΔV/V={jump:.3f} exceeds gate {vol_jump_max}"
+    return True, "ok"
 
 
 def run_single(args) -> dict:
@@ -589,20 +515,42 @@ def run_single(args) -> dict:
             intensity=intensity,
             space_group=args.space_group,
             cell_list=cell_list,
-            wavelength=args.wavelength,
-            dmin=args.dmin,
-            two_theta_min=args.tmin,
-            two_theta_max=args.tmax,
             instprm_path=instprm,
             workdir=tmpdir,
             label=Path(args.data).stem,
-            dmax=args.dmax,
-            debug_plot=args.debug_plot,
-            curation_mode=args.curation_mode,
-            baseline_method=args.baseline_method,
+            **_refine_kwargs_from_args(args),
         )
     result["file"] = args.data
     return result
+
+
+def _maybe_promote_cell(
+    args,
+    last_accepted: dict | None,
+    curr: dict,
+) -> tuple[list[float] | None, dict | None, str]:
+    """
+    Decide whether ``curr`` should be promoted to seed the next pattern in a
+    chained refinement series. Returns (new_cell_or_None, new_last_accepted,
+    reason). ``new_cell_or_None`` is ``None`` when promotion is rejected,
+    in which case the caller keeps using whatever cell it was using.
+    """
+    if not args.chain_cell:
+        return None, last_accepted, "chain disabled"
+    accept, reason = _accept_chain_promotion(
+        last_accepted, curr, args.chain_wr_max, args.chain_vol_jump_max
+    )
+    if not accept:
+        return None, last_accepted, reason
+    next_cell = [
+        curr["a"],
+        curr["b"],
+        curr["c"],
+        curr["alpha"],
+        curr["beta"],
+        curr["gamma"],
+    ]
+    return next_cell, curr, reason
 
 
 def run_directory(args) -> dict:
@@ -624,6 +572,7 @@ def run_directory(args) -> dict:
     with tempfile.TemporaryDirectory() as tmpdir:
         instprm = args.instprm or make_instprm_file(args.wavelength, tmpdir)
         current_cell = list(cell_list)
+        last_accepted: dict | None = None
 
         for fpath in files:
             try:
@@ -633,31 +582,21 @@ def run_directory(args) -> dict:
                     intensity=intensity,
                     space_group=args.space_group,
                     cell_list=current_cell,
-                    wavelength=args.wavelength,
-                    dmin=args.dmin,
-                    two_theta_min=args.tmin,
-                    two_theta_max=args.tmax,
                     instprm_path=instprm,
                     workdir=tmpdir,
                     label=fpath.stem,
-                    dmax=args.dmax,
-                    debug_plot=args.debug_plot,
-                    curation_mode=args.curation_mode,
-                    baseline_method=args.baseline_method,
+                    **_refine_kwargs_from_args(args),
                 )
                 r["file"] = str(fpath)
-                # Optional chaining: use refined cell as starting point for
-                # next pattern. Off by default to avoid error accumulation
-                # across e.g. temperature series with phase transitions.
-                if args.chain_cell and r["success"]:
-                    current_cell = [
-                        r["a"],
-                        r["b"],
-                        r["c"],
-                        r["alpha"],
-                        r["beta"],
-                        r["gamma"],
-                    ]
+                r["seed_cell"] = [round(float(v), 5) for v in current_cell]
+                next_cell, last_accepted, reason = _maybe_promote_cell(
+                    args, last_accepted, r
+                )
+                r["chain_decision"] = (
+                    "promoted" if next_cell is not None else f"rejected: {reason}"
+                )
+                if next_cell is not None:
+                    current_cell = next_cell
             except Exception as exc:
                 r = {"success": False, "file": str(fpath), "error": str(exc)}
             results.append(r)
@@ -678,6 +617,7 @@ def run_wide_csv(args) -> dict:
     with tempfile.TemporaryDirectory() as tmpdir:
         instprm = args.instprm or make_instprm_file(args.wavelength, tmpdir)
         current_cell = list(cell_list)
+        last_accepted: dict | None = None
 
         for pat in patterns:
             label = f"T{pat['temp_c']}C"
@@ -687,29 +627,22 @@ def run_wide_csv(args) -> dict:
                     intensity=pat["intensity"],
                     space_group=args.space_group,
                     cell_list=current_cell,
-                    wavelength=args.wavelength,
-                    dmin=args.dmin,
-                    two_theta_min=args.tmin,
-                    two_theta_max=args.tmax,
                     instprm_path=instprm,
                     workdir=tmpdir,
                     label=label,
-                    dmax=args.dmax,
-                    debug_plot=args.debug_plot,
-                    curation_mode=args.curation_mode,
-                    baseline_method=args.baseline_method,
+                    **_refine_kwargs_from_args(args),
                 )
                 r["temp_c"] = pat["temp_c"]
                 r["temp_label"] = pat["temp_label"]
-                if args.chain_cell and r["success"]:
-                    current_cell = [
-                        r["a"],
-                        r["b"],
-                        r["c"],
-                        r["alpha"],
-                        r["beta"],
-                        r["gamma"],
-                    ]
+                r["seed_cell"] = [round(float(v), 5) for v in current_cell]
+                next_cell, last_accepted, reason = _maybe_promote_cell(
+                    args, last_accepted, r
+                )
+                r["chain_decision"] = (
+                    "promoted" if next_cell is not None else f"rejected: {reason}"
+                )
+                if next_cell is not None:
+                    current_cell = next_cell
             except Exception as exc:
                 r = {
                     "success": False,
@@ -801,7 +734,56 @@ def main() -> None:
         action="store_true",
         help="In multi-pattern modes (directory / wide-csv), feed the refined "
         "cell of pattern N into pattern N+1 as starting point. Off by default "
-        "because it propagates errors and may straddle a phase transition.",
+        "because it propagates errors and may straddle a phase transition. "
+        "Promotion is gated by --chain-wr-max and --chain-vol-jump-max so a "
+        "bad refinement cannot poison the rest of the series.",
+    )
+    ap.add_argument(
+        "--chain-wr-max",
+        type=float,
+        default=25.0,
+        help="(With --chain-cell) Max wR (%%) for a refinement to be eligible "
+        "to seed the next pattern. Above this, the chain falls back to the "
+        "last accepted cell or the user-provided cell. Default: 25.",
+    )
+    ap.add_argument(
+        "--chain-vol-jump-max",
+        type=float,
+        default=0.05,
+        help="(With --chain-cell) Max relative volume change vs. the previously "
+        "accepted refinement (default 0.05 = 5%%). Larger jumps suggest a "
+        "phase transition or a bad local min — reject the promotion. Set to a "
+        "large value (e.g. 1.0) to disable the volume gate.",
+    )
+    ap.add_argument(
+        "--multi-start",
+        type=int,
+        default=1,
+        help="Number of independent Pawley runs per pattern, each from a "
+        "perturbed initial cell; the lowest-wR result is returned. Default 1 "
+        "(legacy single-shot). Use 5 for noisy / DFT-simulated data or any "
+        "pattern where a single shot gave wR > 20%%.",
+    )
+    ap.add_argument(
+        "--multi-start-seed",
+        type=int,
+        default=42,
+        help="RNG seed for multi-start perturbations. Identical seed → "
+        "identical seed cells across runs (reproducible).",
+    )
+    ap.add_argument(
+        "--multi-start-len-sigma",
+        type=float,
+        default=0.005,
+        help="Std-dev of multiplicative log-normal perturbations on a/b/c "
+        "for multi-start (default 0.005 = 0.5%%).",
+    )
+    ap.add_argument(
+        "--multi-start-ang-sigma",
+        type=float,
+        default=0.5,
+        help="Std-dev of additive perturbations (degrees) on α/β/γ for "
+        "multi-start (default 0.5°).",
     )
     ap.add_argument(
         "--debug-plot",
