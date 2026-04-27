@@ -43,10 +43,10 @@ Three scripts in `scripts/`, all run on Bohrium:
 2. **Submit / poll / download** via the `Bohrium` builtin tool. Pawley template (single line, copy verbatim — replace `<...>` placeholders only):
 
    ```
-   python3 gsas2_pawley.py --data ./ --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" --wavelength 1.5406 --debug-plot plots -o results.json > log 2>&1
+   python3 gsas2_pawley.py --data ./ --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" --wavelength 1.5406 --multi-start 5 --chain-cell --debug-plot plots -o results.json > log 2>&1
    ```
 
-   Image: `registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119`. Machine: `c8_m32_cpu` (`c16_m64_cpu` for batches ≥5 patterns). Full templates for Rietveld and autoindex, plus the parallel-submit + interleaved-poll pattern, are in `references/bohrium_workflow.md`. Key rules: never use `cd` in `cmd`; always end `cmd` with `> log 2>&1`; never block with `Bash(sleep)` while polling.
+   `--multi-start 5` runs Pawley five times from deterministically-perturbed seeds and keeps the lowest-wR result (cheap insurance against local-minimum traps; see `references/gsas2_refinement_guide.md` § "Multi-start"). `--chain-cell` only promotes refinements that pass the wR / volume-jump gates, so it is safe even on patterns that may straddle a phase transition. Image: `registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119`. Machine: `c8_m32_cpu` (`c16_m64_cpu` for batches ≥5 patterns; raise to `c16_m64_cpu` whenever `--multi-start ≥ 5` or input has > 5 patterns). Full templates for Rietveld and autoindex, plus the parallel-submit + interleaved-poll pattern, are in `references/bohrium_workflow.md`. Key rules: never use `cd` in `cmd`; always end `cmd` with `> log 2>&1`; never block with `Bash(sleep)` while polling.
 
 3. **Parse `result.json`**: check `success`, `warnings`, `curation.verdict` first; then `wR`/`Rwp` against the contract-3 thresholds; then cell vs. initial cell. On failure, see `references/gsas2_refinement_guide.md` § "Common errors and fixes" and adjust deliberately — do not loop.
 

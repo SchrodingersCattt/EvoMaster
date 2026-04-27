@@ -128,3 +128,30 @@ def async_llm_provider() -> MockAsyncLLMProvider:
 @pytest.fixture
 def async_tool() -> MockAsyncTool:
     return MockAsyncTool()
+
+
+@pytest.fixture
+def chat_events_table_with_mocks() -> tuple[Any, Any]:
+    """ChatEventsTable with `get_connection` mocked to a captured cursor.
+
+    The returned cursor records every ``cursor.execute`` call so tests
+    can assert on the SQL string and params tuple. Used by tests that
+    exercise ChatEventsTable's SQL-emitting methods without a real DB.
+    """
+    from unittest.mock import MagicMock, patch
+
+    from src.dao.chat_events_table import ChatEventsTable
+
+    with patch.object(ChatEventsTable, "init_table", lambda self: None):
+        table = ChatEventsTable()
+    cursor = MagicMock()
+    conn = MagicMock()
+    cursor_ctx = MagicMock()
+    cursor_ctx.__enter__.return_value = cursor
+    cursor_ctx.__exit__.return_value = False
+    conn.cursor.return_value = cursor_ctx
+    conn_ctx = MagicMock()
+    conn_ctx.__enter__.return_value = conn
+    conn_ctx.__exit__.return_value = False
+    table.get_connection = MagicMock(return_value=conn_ctx)
+    return table, cursor

@@ -27,7 +27,7 @@ Pawley, single pattern:
     python3 gsas2_pawley.py --data pattern.xye \
       --space-group "<SG>" \
       --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-      --wavelength 1.5406 --debug-plot plots \
+      --wavelength 1.5406 --multi-start 5 --debug-plot plots \
       -o result.json > log 2>&1
 
 Pawley, directory batch (preferred for multi-temperature):
@@ -35,8 +35,16 @@ Pawley, directory batch (preferred for multi-temperature):
     python3 gsas2_pawley.py --data ./ \
       --space-group "<SG>" \
       --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-      --wavelength 1.5406 --debug-plot plots \
+      --wavelength 1.5406 --multi-start 5 --chain-cell --debug-plot plots \
       -o results.json > log 2>&1
+
+`--multi-start 5` runs each pattern five times from deterministically perturbed seed
+cells and keeps the lowest-wR result (~5x runtime per pattern; well worth it for noisy
+or DFT-simulated data — see `gsas2_refinement_guide.md` § "Multi-start"). `--chain-cell`
+promotes each accepted refinement to seed the next pattern, gated by `--chain-wr-max`
+(default 25 %) and `--chain-vol-jump-max` (default 0.05) so a bad pattern can't poison
+downstream temperatures. Bump machine to `c16_m64_cpu` whenever `--multi-start ≥ 5` or
+the directory has > 5 patterns.
 
 Rietveld:
 
