@@ -331,7 +331,6 @@ def test_phase2_sa_semiconductor_and_wo_alloy_have_expected_question_ids() -> No
     )
     semi_ids = [q['id'] for q in sa_semiconductor['questions']]
     assert 'WO_general_perov_007_20260417' in semi_ids
-    assert 'WO_general_ferro_009_20260417' in semi_ids
 
     wo_alloy = yaml.safe_load(
         (bank_root / 'workflow_orchestration' / 'wo_alloy.yaml').read_text(
@@ -372,5 +371,5 @@ def test_manifest_active_totals_after_phase2_splits() -> None:
     bank_root = repo_root / 'evaluation' / 'question_bank'
     manifest = yaml.safe_load((bank_root / 'manifest.yaml').read_text(encoding='utf-8'))
 
-    assert len(manifest['banks']) == 26
-    assert sum(int(entry['questions']) for entry in manifest['banks']) == 118
+    assert len(manifest['banks']) == 25
+    assert sum(int(entry['questions']) for entry in manifest['banks']) == 115

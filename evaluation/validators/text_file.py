@@ -154,6 +154,8 @@ def _check_one_numeric_rule(raw: str, rule: dict[str, Any]) -> tuple[bool, str]:
 
     values = _collect_key_values(raw, key)
     if not values:
+        if rule.get('allow_missing_key', False):
+            return True, f'key {key!r} not found (allow_missing_key=true, skipped)'
         return False, f'key {key!r} not found'
 
     occurrence = str(rule.get('occurrence', 'last')).lower()

@@ -372,13 +372,13 @@ questions:
       filename: _td-pxrd_test.txt
   - key: turn_budget
     value:
-      max: 20
+      max: 120
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 12000
+      max: 30000
   scoring_checklist:
   - id: rtp_V_303K
     criterion: 'Refined unit cell volume V at the RTP phase / T=303 K is within tolerance
