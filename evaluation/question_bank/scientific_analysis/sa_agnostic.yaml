@@ -259,68 +259,107 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 1.0
-- id: PXRD_thermal_expansion_001_20260427
+- id: PXRD_thermal_expansion_001_20260427_v3
   capability: scientific_analysis
   domain: agnostic
   intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
     parameters at each temperature, identify two structural phases (low-temperature RTP and
     high-temperature HTP), and fit linear thermal expansion equations for each phase.
-  human_prompt_seed: '文件 `_td-pxrd_test.txt` 包含一个化合物在 8 个温度下的变温粉末 X 射线衍射（PXRD）数据，温度标签对应关系为：25°C→303K、40°C→323K、60°C→343K、80°C→363K、100°C→383K、115°C→393K、130°C→403K、140°C→413K。该化合物为单斜晶系，空间群提示为 P 21（No. 4）。两个相均可使用以下近似晶胞作为 Pawley 精修初猜，并从该初猜自由精修：a ≈ 10.9 Å，b ≈ 9.6 Å，c ≈ 10.5 Å，β ≈ 110°，V ≈ 1020 Å³。波长为 Cu Kα1，λ = 1.5406 Å。
+  human_prompt_seed: "文件 `_td-pxrd_test.txt` 包含一个化合物在 8 个温度下的变温粉末 X 射线衍射（PXRD）数据，温度标签对应关系为：30°C→303K、50°C→323K、70°C→343K、90°C→363K、110°C→383K、120°C→393K、130°C→403K、140°C→413K。该化合物为单斜晶系，空间群提示为 P 21（No. 4），波长为 Cu Kα1，λ = 1.5406 Å。
 
-    请对每个温度的 PXRD 图谱进行 Pawley 精修，提取晶格参数（a、b、c、β、V），并分析结果： 1. 识别两个结构相：低温相（1-RTP，303K–363K）和高温相（1-HTP，383K–413K）；
-    2. 分别对两个相的各晶格参数（a、b、c、β、V）随温度的变化进行线性拟合，给出拟合方程（斜率、截距、R²）； 3. 报告各温度下的精修结果（晶格参数与 Rp/Rwp 指标）。
+    数据特征与精修策略：
+    - 数据为实测变温实验数据，扣除背景前的动态范围约 10×–30×；2θ 范围 5°–50°，建议精修使用 14°–50° 区间以避开低角伪影。
+    - 推荐将数据按相拆分（RTP 4 点、HTP 4 点）分别精修，并在同一相内启用 chain-cell（前一温度精修结果作为下一温度初猜）。
+    - 同相内的体积/晶胞参数应单调或近似单调随温度变化；若某温度精修结果 V 相对邻近温度跳变 >5%，应视为收敛到错误盆地（可能为 √2 或 2× 的伪解），需要从相邻温度结果重新初始化或多起点重精修。
 
-    '
+    文献参考晶胞（每相分别作为 Pawley 精修初猜，并基于此自由精修；c 与 β 是单斜结构敏感参数，如下文献值已对每相核对）：
+    - 低温相 RTP（303K – 363K）：a ≈ 10.83 Å, b ≈ 9.62 Å, c ≈ 10.13 Å, β ≈ 108.75°, V ≈ 1000 Å³
+    - 高温相 HTP（383K – 413K）：a ≈ 11.05 Å, b ≈ 9.48 Å, c ≈ 10.48 Å, β ≈ 111.25°, V ≈ 1023 Å³
+
+    请对每个温度的 PXRD 图谱进行 Pawley 精修，提取晶格参数（a、b、c、β、V），并分析结果：
+    1. 识别两个结构相：低温相（1-RTP，303K–363K）和高温相（1-HTP，383K–413K）。
+    2. 分别对两个相的各晶格参数（a、b、c、β、V）随温度的变化进行线性拟合，给出拟合方程（斜率、截距、R²）。两相必须分别独立拟合，不能合并为一条直线，且 RTP 与 HTP 的斜率应基于各相内的 4 个温度点分别计算（不要让两相共享同一斜率值）。
+    3. 报告各温度下的精修结果。每个温度必须使用 Pawley 脚本（如 `gsas2_pawley.py`）输出 JSON 中真实的 volume（由收敛后的 a/b/c/β 计算得到），不要将 prompt 中的近似初猜（V ≈ 1000、1023 Å³）当作精修结果填入答案。
+
+    【机器评分约定】最终答案末尾追加一个 eval_results 标签包裹的 JSON 块（数值无单位，约定单位为 Å / Å³ / Å·K⁻¹ / Å³·K⁻¹），至少需含以下 dot-path（其余字段如其它温度、b/beta、intercept、r_squared 可按情况补充；fits 为同相内 4 点线性拟合，RTP 与 HTP 必须独立）：
+
+    - rtp.{303K,363K}.V，rtp.303K.a，rtp.fits.V.slope，rtp.fits.a.slope
+    - htp.{383K,413K}.V，htp.383K.a，htp.fits.V.slope，htp.fits.c.slope
+
+    数值必须来自实际 Pawley 精修与线性拟合，不得填入 prompt 中的初猜近似值。
+    "
   tags:
   - char_xrd
   - phy_phonon
   - wf_postprocess
   data_files:
   - key: vt_pxrd_data
-    path: data/PXRD_thermal_expansion_001_20260426/_td-pxrd_test.txt
-    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/DF_thermo_001_20260408/1775629319__td-pxrd_test.txt
-    description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K), CSV format
-      with paired (2theta, intensity) columns for each temperature.
+    path: data/PXRD_thermal_expansion_001_20260427_v3/_td-pxrd_test.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/PXRD_thermal_expansion_001_20260427_v3/1777279719__td-pxrd_test.txt
+    description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K, °C labels
+      30/50/70/90/110/120/130/140), CSV format with paired (2theta, intensity) columns per
+      temperature. Generated from real laboratory diffractometer scans (Cu Kα1, 5°–50° 2θ,
+      step 0.0197°).
   reference_answers:
   - key: rtp_V_303K
-    value: 999.81
-    tolerance: 20.0
+    value:
+      json_path: rtp.303K.V
+      target: 999.81
+      tolerance: 20.0
     unit: A3
   - key: rtp_V_363K
-    value: 1011.67
-    tolerance: 20.0
+    value:
+      json_path: rtp.363K.V
+      target: 1011.67
+      tolerance: 20.0
     unit: A3
   - key: htp_V_383K
-    value: 1022.73
-    tolerance: 20.0
+    value:
+      json_path: htp.383K.V
+      target: 1022.73
+      tolerance: 20.0
     unit: A3
   - key: htp_V_413K
-    value: 1026.1
-    tolerance: 20.0
+    value:
+      json_path: htp.413K.V
+      target: 1026.1
+      tolerance: 20.0
     unit: A3
   - key: rtp_a_303K
-    value: 10.828
-    tolerance: 0.05
+    value:
+      json_path: rtp.303K.a
+      target: 10.828
+      tolerance: 0.05
     unit: A
   - key: htp_a_383K
-    value: 11.0506
-    tolerance: 0.05
+    value:
+      json_path: htp.383K.a
+      target: 11.0506
+      tolerance: 0.05
     unit: A
   - key: rtp_V_slope
-    value: 0.2013
-    tolerance: 0.06
+    value:
+      json_path: rtp.fits.V.slope
+      target: 0.2013
+      tolerance: 0.06
     unit: A3/K
   - key: htp_V_slope
-    value: 0.1154
-    tolerance: 0.06
+    value:
+      json_path: htp.fits.V.slope
+      target: 0.1154
+      tolerance: 0.06
     unit: A3/K
   - key: rtp_a_slope
-    value: 0.00129
-    tolerance: 0.0006
+    value:
+      json_path: rtp.fits.a.slope
+      target: 0.00129
+      tolerance: 0.0006
     unit: A/K
   - key: htp_c_slope
-    value: -0.00053
-    tolerance: 0.0006
+    value:
+      json_path: htp.fits.c.slope
+      target: -0.00053
+      tolerance: 0.0006
     unit: A/K
   - key: required_fields
     value:
@@ -342,63 +381,68 @@ questions:
       max: 30000
   scoring_checklist:
   - id: rtp_V_303K
-    criterion: Refined unit cell volume at 303 K (RTP phase) is within tolerance of 999.81
-      Å³.
+    criterion: 'Refined unit cell volume V at the RTP phase / T=303 K is within tolerance
+      (target 999.81 ± 20.0 Å³). Read from the eval_results JSON path rtp.303K.V.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.5
   - id: rtp_V_363K
-    criterion: Refined unit cell volume at 363 K (RTP phase) is within tolerance of 1011.67
-      Å³.
+    criterion: 'Refined unit cell volume V at RTP / T=363 K is within tolerance (target
+      1011.67 ± 20.0 Å³). Read from eval_results path rtp.363K.V.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.0
   - id: htp_V_383K
-    criterion: Refined unit cell volume at 383 K (HTP phase) is within tolerance of 1022.73
-      Å³.
+    criterion: 'Refined unit cell volume V at HTP / T=383 K is within tolerance (target
+      1022.73 ± 20.0 Å³). Read from eval_results path htp.383K.V.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.5
   - id: htp_V_413K
-    criterion: Refined unit cell volume at 413 K (HTP phase) is within tolerance of 1026.10
-      Å³.
+    criterion: 'Refined unit cell volume V at HTP / T=413 K is within tolerance (target
+      1026.10 ± 20.0 Å³). Read from eval_results path htp.413K.V.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.0
   - id: rtp_a_303K
-    criterion: Refined lattice parameter a at 303 K (RTP phase) is within tolerance of 10.828
-      Å.
+    criterion: 'Refined lattice parameter a at RTP / T=303 K is within tolerance (target
+      10.828 ± 0.05 Å). Read from eval_results path rtp.303K.a.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.0
   - id: htp_a_383K
-    criterion: Refined lattice parameter a at 383 K (HTP phase) is within tolerance of 11.0506
-      Å.
+    criterion: 'Refined lattice parameter a at HTP / T=383 K is within tolerance (target
+      11.0506 ± 0.05 Å). Read from eval_results path htp.383K.a.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.0
   - id: rtp_V_slope
-    criterion: Linear fit slope of V vs T for RTP phase (303–363 K) is within tolerance of
-      0.2013 Å³/K.
+    criterion: 'Linear-fit slope of V vs T over the four RTP temperatures (303/323/343/363 K)
+      is within tolerance (target 0.2013 ± 0.06 Å³/K). Read from eval_results path
+      rtp.fits.V.slope.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 2.0
   - id: htp_V_slope
-    criterion: Linear fit slope of V vs T for HTP phase (383–413 K) is within tolerance of
-      0.1154 Å³/K.
+    criterion: 'Linear-fit slope of V vs T over the four HTP temperatures (383/393/403/413 K)
+      is within tolerance (target 0.1154 ± 0.06 Å³/K). Read from eval_results path
+      htp.fits.V.slope.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 2.0
   - id: rtp_a_slope
-    criterion: Linear fit slope of a vs T for RTP phase is within tolerance of 0.00129 Å/K.
+    criterion: 'Linear-fit slope of a vs T over the four RTP temperatures (303/323/343/363 K)
+      is within tolerance (target 0.00129 ± 0.0006 Å/K). Read from eval_results path
+      rtp.fits.a.slope.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.5
   - id: htp_c_slope
-    criterion: Linear fit slope of c vs T for HTP phase is within tolerance of -0.00053 Å/K
-      (negative thermal expansion along c axis in HTP phase).
+    criterion: 'Linear-fit slope of c vs T over the four HTP temperatures (383/393/403/413 K)
+      is within tolerance (target -0.00053 ± 0.0006 Å/K). Read from eval_results path
+      htp.fits.c.slope.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.5
   - id: required_fields
     criterion: Answer reports both RTP and HTP phases with linear fit equations including

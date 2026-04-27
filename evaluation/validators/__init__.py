@@ -1,5 +1,10 @@
 """Deterministic validators for MATTER evaluation (optional heavy deps)."""
 
+from .answer_text import (
+    check_answer_json_numeric,
+    extract_json_block,
+    navigate_json_path,
+)
 from .checkcif import (
     CheckCIFResult,
     check_checkcif_no_a_alerts,
@@ -53,6 +58,10 @@ __all__ = [
     'check_text_file_kpt_path',
     'check_text_file_numeric_range',
     'check_text_file_regex',
+    # answer_text (deterministic checks on the agent's answer string)
+    'check_answer_json_numeric',
+    'extract_json_block',
+    'navigate_json_path',
     # structure_molcrys (MolCrysKit-backed)
     'check_disorder_dan2_integer_formula',
     'check_molcrys_local_env',

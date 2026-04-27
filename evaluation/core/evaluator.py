@@ -24,6 +24,7 @@ from .evaluator_batch_checks import (
 from .evaluator_helpers import (
     build_llm_context,
     build_safety_eval_record,
+    check_answer_json_numeric_from_ref,
     check_checkcif_alerts,
     check_duration_budget,
     check_molcrys_local_env_from_evidence,
@@ -514,6 +515,14 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return _TEXT_FILE_DISPATCH[item.verify](evidence=evidence, ref=ref)
+
+        # --- answer_json_numeric: parse a fenced JSON block in the answer
+        # and apply target ± tolerance to a specific key (deterministic
+        # alternative to llm_binary_judge for numerical criteria) ---
+        if item.verify == 'answer_json_numeric':
+            if ref is None:
+                return False, 'missing reference answer'
+            return check_answer_json_numeric_from_ref(answer=answer, ref=ref)
 
         if item.verify == 'llm_binary_judge':
             if item.axis == 'grounding':
