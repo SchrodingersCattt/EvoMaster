@@ -709,6 +709,14 @@ class Exp:
             if isinstance(cfg, dict) and cfg.get("sync_tools")
         }
 
+        run_meta_for_record = getattr(ctx, "run_meta", None) or {}
+        external_record = run_meta_for_record.get("record_active_mcp_server")
+        if external_record is not None and not callable(external_record):
+            self.logger.warning(
+                "run_meta.record_active_mcp_server is not callable, ignoring"
+            )
+            external_record = None
+
         builtin_cfg = self._config.tools.builtin or []
         allow_builtin_all = "*" in builtin_cfg
         allowed_builtin = set(builtin_cfg) if not allow_builtin_all else None
@@ -775,6 +783,16 @@ class Exp:
                     catalog.register_overlay(lazy_tool, source="mcp")
                 else:
                     registry.register(lazy_tool, source="mcp")
+
+            if external_record is not None:
+                try:
+                    external_record(mcp_server)
+                except Exception:
+                    self.logger.warning(
+                        "record_active_mcp_server callback raised for server=%s",
+                        mcp_server,
+                        exc_info=True,
+                    )
 
         skill_tool = SkillTool(
             session=ctx.session,
