@@ -812,8 +812,7 @@ class Exp:
         # Replay servers activated by Skill on past turns of this session.
         # on_skill_hit reads only from the on-disk schema cache (no MCP IO),
         # is idempotent (skips tools already in registry), and warns +
-        # skips on cache miss -- no need for an extra server_config guard
-        # here, since Connection-time validation belongs to LazyMCPConnector.
+        # skips on cache miss.
         replay_servers = run_meta_for_record.get("active_mcp_servers") or ()
         if isinstance(replay_servers, (set, frozenset, list, tuple)):
             for server_name in replay_servers:

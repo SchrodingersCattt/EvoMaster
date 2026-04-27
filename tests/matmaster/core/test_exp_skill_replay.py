@@ -118,13 +118,15 @@ async def test_replay_is_idempotent_with_use_skill(tmp_path):
     exp._init_skill_tools(ctx, registry)
     assert "mat_sg_build_bulk" in registry
 
+    tool_before = registry.get_raw("mat_sg_build_bulk")
+
     skill_tool = registry.get_raw("Skill")
     raw_result = await skill_tool.execute({"skill": "test-skill"})
     result = normalize_tool_result(raw_result)
     assert result.status == "success"
 
-    keys = [k for k in registry._tools if k == "mat_sg_build_bulk"]
-    assert len(keys) == 1
+    tool_after = registry.get_raw("mat_sg_build_bulk")
+    assert tool_after is tool_before
 
 
 @pytest.mark.asyncio
