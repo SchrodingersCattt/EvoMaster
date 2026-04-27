@@ -10,35 +10,37 @@ overflow.
 
 Three tests pin the contract:
   * placeholder count vs. params length
-  * column positions (catches future shift-by-one bugs)
+  * column-name-keyed value mapping (catches shift-by-one bugs while
+    tolerating harmless consistent reorderings)
   * pymysql-style ``query % args`` does not raise
 """
 
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+import re
+from typing import Any
 
 import pytest
 
 from src.dao.chat_events_table import ChatEventsTable
 
+_INSERT_COLUMNS_RE = re.compile(
+    r"\(\s*([^)]+)\s*\)\s*VALUES", re.IGNORECASE | re.DOTALL
+)
 
-@pytest.fixture
-def table_with_mocks() -> tuple[ChatEventsTable, MagicMock]:
-    with patch.object(ChatEventsTable, "init_table", lambda self: None):
-        table = ChatEventsTable()
-    cursor = MagicMock()
-    conn = MagicMock()
-    cursor_ctx = MagicMock()
-    cursor_ctx.__enter__.return_value = cursor
-    cursor_ctx.__exit__.return_value = False
-    conn.cursor.return_value = cursor_ctx
-    conn_ctx = MagicMock()
-    conn_ctx.__enter__.return_value = conn
-    conn_ctx.__exit__.return_value = False
-    table.get_connection = MagicMock(return_value=conn_ctx)
-    return table, cursor
+
+def _parse_insert_param_columns(sql: str) -> list[str]:
+    """Return the parameterized columns from an INSERT statement.
+
+    Drops ``created_at`` because the DAO binds it via a literal ``NOW()`` in
+    the VALUES clause, not via a ``%s`` placeholder, so it is absent from the
+    params tuple.
+    """
+    match = _INSERT_COLUMNS_RE.search(sql)
+    assert match, f"Could not parse INSERT columns from SQL: {sql!r}"
+    columns = [c.strip() for c in match.group(1).split(",")]
+    return [c for c in columns if c != "created_at"]
 
 
 def _call_add_history_checkpoint(table: ChatEventsTable) -> None:
@@ -54,9 +56,9 @@ def _call_add_history_checkpoint(table: ChatEventsTable) -> None:
 
 
 def test_add_history_checkpoint_param_count_matches_placeholders(
-    table_with_mocks: tuple[ChatEventsTable, MagicMock],
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
 ) -> None:
-    table, cursor = table_with_mocks
+    table, cursor = chat_events_table_with_mocks
     cursor.rowcount = 1
 
     _call_add_history_checkpoint(table)
@@ -71,43 +73,47 @@ def test_add_history_checkpoint_param_count_matches_placeholders(
 
 
 def test_add_history_checkpoint_writes_correct_column_values(
-    table_with_mocks: tuple[ChatEventsTable, MagicMock],
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
 ) -> None:
-    table, cursor = table_with_mocks
-    cursor.rowcount = 1
-
-    _call_add_history_checkpoint(table)
-
-    _, params = cursor.execute.call_args[0]
-    # INSERT column order:
-    # (session_id, source, type, content, task_id, invocation_id, spawn_id)
-    assert params[0] == "sess-x"
-    assert params[1] == "System"
-    assert params[2] == "history_checkpoint"
-    content = json.loads(params[3])
-    assert content["covered_until_event_id"] == 42
-    assert content["base_messages"] == [{"role": "system", "content": "compacted"}]
-    assert content["reason"] == "summary"
-    assert params[4] == "t1"
-    assert params[5] == "inv1"
-    assert params[6] == "spawn-a"
-
-
-def test_add_history_checkpoint_sql_format_string_compatible_with_pymysql(
-    table_with_mocks: tuple[ChatEventsTable, MagicMock],
-) -> None:
-    """pymysql binds args via ``query % escaped_args``; mismatched arity raises.
-
-    Reproduce that exact step here so any future arity drift fails fast.
-    """
-    table, cursor = table_with_mocks
+    table, cursor = chat_events_table_with_mocks
     cursor.rowcount = 1
 
     _call_add_history_checkpoint(table)
 
     sql, params = cursor.execute.call_args[0]
+    columns = _parse_insert_param_columns(sql)
+    row = dict(zip(columns, params, strict=True))
+
+    assert row["session_id"] == "sess-x"
+    assert row["source"] == "System"
+    assert row["type"] == "history_checkpoint"
+    content = json.loads(row["content"])
+    assert content["covered_until_event_id"] == 42
+    assert content["base_messages"] == [{"role": "system", "content": "compacted"}]
+    assert content["reason"] == "summary"
+    assert row["task_id"] == "t1"
+    assert row["invocation_id"] == "inv1"
+    assert row["spawn_id"] == "spawn-a"
+
+
+def test_add_history_checkpoint_sql_format_string_compatible_with_pymysql(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    """pymysql binds args via ``query % escaped_args``; mismatched arity raises.
+
+    Reproduce that exact step here so any future arity drift fails fast.
+    """
+    table, cursor = chat_events_table_with_mocks
+    cursor.rowcount = 1
+
+    _call_add_history_checkpoint(table)
+
+    sql, params = cursor.execute.call_args[0]
+    # repr(p) stands in for pymysql's conn.literal(arg). Both produce one
+    # string per element, so arity drift fails identically; only the arity
+    # invariant matters for this regression test.
     sanitized = tuple(repr(p) for p in params)
     try:
         sql % sanitized
-    except TypeError as exc:  # pragma: no cover - failure path
+    except TypeError as exc:
         pytest.fail(f"pymysql-style % formatting fails: {exc}")
