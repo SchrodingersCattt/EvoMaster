@@ -333,7 +333,6 @@ class ChatEventsTable(BaseTable):
                     ''',
                     (
                         session_id,
-                        session_id,
                         'System',
                         'history_checkpoint',
                         json.dumps(checkpoint_content, ensure_ascii=False),
