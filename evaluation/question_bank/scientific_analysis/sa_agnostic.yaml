@@ -259,18 +259,18 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 1.0
-- id: PXRD_thermal_expansion_001_20260427_v2
+- id: PXRD_thermal_expansion_001_20260427_v3
   capability: scientific_analysis
   domain: agnostic
   intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
     parameters at each temperature, identify two structural phases (low-temperature RTP and
     high-temperature HTP), and fit linear thermal expansion equations for each phase.
-  human_prompt_seed: "文件 `_td-pxrd_test.txt` 包含一个化合物在 8 个温度下的变温粉末 X 射线衍射（PXRD）数据，温度标签对应关系为：25°C→303K、40°C→323K、60°C→343K、80°C→363K、100°C→383K、115°C→393K、130°C→403K、140°C→413K。该化合物为单斜晶系，空间群提示为 P 21（No. 4），波长为 Cu Kα1，λ = 1.5406 Å。
+  human_prompt_seed: "文件 `_td-pxrd_test.txt` 包含一个化合物在 8 个温度下的变温粉末 X 射线衍射（PXRD）数据，温度标签对应关系为：30°C→303K、50°C→323K、70°C→343K、90°C→363K、110°C→383K、120°C→393K、130°C→403K、140°C→413K。该化合物为单斜晶系，空间群提示为 P 21（No. 4），波长为 Cu Kα1，λ = 1.5406 Å。
 
     数据特征与精修策略：
-    - 数据为模拟生成、动态范围较小且噪声偏高，预期 Pawley wR 在 0.20–0.30 区间属于正常情况；判定精修是否成功应主要依据精修体积相对初猜偏离是否 >20%、以及晶格参数随温度的连续性，wR 偏高本身不直接判失败。
-    - 2θ 范围 5°–50°，其中 2θ < 14° 主要为低角伪影/噪声，建议精修使用 14°–50° 区间。
-    - 推荐将数据按相拆分（RTP 4 点、HTP 4 点）分别精修，并在同一相内启用 chain-cell（前一温度精修结果作为下一温度初猜）以减小温度间散点。
+    - 数据为实测变温实验数据，扣除背景前的动态范围约 10×–30×；2θ 范围 5°–50°，建议精修使用 14°–50° 区间以避开低角伪影。
+    - 推荐将数据按相拆分（RTP 4 点、HTP 4 点）分别精修，并在同一相内启用 chain-cell（前一温度精修结果作为下一温度初猜）。
+    - 同相内的体积/晶胞参数应单调或近似单调随温度变化；若某温度精修结果 V 相对邻近温度跳变 >5%，应视为收敛到错误盆地（可能为 √2 或 2× 的伪解），需要从相邻温度结果重新初始化或多起点重精修。
 
     文献参考晶胞（每相分别作为 Pawley 精修初猜，并基于此自由精修；c 与 β 是单斜结构敏感参数，如下文献值已对每相核对）：
     - 低温相 RTP（303K – 363K）：a ≈ 10.83 Å, b ≈ 9.62 Å, c ≈ 10.13 Å, β ≈ 108.75°, V ≈ 1000 Å³
@@ -294,10 +294,12 @@ questions:
   - wf_postprocess
   data_files:
   - key: vt_pxrd_data
-    path: data/PXRD_thermal_expansion_001_20260427_v2/_td-pxrd_test.txt
-    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/DF_thermo_001_20260408/1775629319__td-pxrd_test.txt
-    description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K), CSV format
-      with paired (2theta, intensity) columns for each temperature.
+    path: data/PXRD_thermal_expansion_001_20260427_v3/_td-pxrd_test.txt
+    oss_url: ''
+    description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K, °C labels
+      30/50/70/90/110/120/130/140), CSV format with paired (2theta, intensity) columns per
+      temperature. Generated from real laboratory diffractometer scans (Cu Kα1, 5°–50° 2θ,
+      step 0.0197°). Re-upload to OSS when promoting beyond local CLI runs.
   reference_answers:
   - key: rtp_V_303K
     value:
