@@ -269,6 +269,75 @@ class AgentRunService:
         """Validate configs at startup -- delegates to PlaygroundManager."""
         self._pg_manager.validate_startup()
 
+    def _resolve_active_mcp_servers(
+        self,
+        session_id: str,
+        events_table: Any,
+        exp_config: Any,
+    ) -> set[str]:
+        """Return the activated-MCP-server set for a session.
+
+        Looks up the in-memory hot cache first; on miss, scans the DB events
+        once via _resolve_active_mcp_servers_from_events and populates the
+        cache. The returned set is the canonical mutable container -- the
+        record_active_mcp_server callback added to run_meta mutates this same
+        object via setdefault.
+        """
+        # Defensive: tests that bypass __init__ via __new__ may not have set the
+        # attribute. Lazily initialize to avoid AttributeError.
+        if not hasattr(self, '_active_mcp_servers'):
+            self._active_mcp_servers = {}
+        cached = self._active_mcp_servers.get(session_id)
+        if cached is not None:
+            return cached
+
+        rebuilt: set[str] = set()
+        if (
+            events_table is not None
+            and getattr(exp_config, "skills", None) is not None
+            and exp_config.skills.enabled
+        ):
+            try:
+                raw_events = events_table.get_session_events(
+                    session_id,
+                    limit=_DIALOG_HISTORY_MAX_EVENTS,
+                )
+            except Exception:
+                logger.warning(
+                    "active_mcp rehydrate: get_session_events failed for session_id=%s",
+                    session_id,
+                    exc_info=True,
+                )
+                raw_events = []
+
+            cache_dir = Path(exp_config.skills.cache_dir)
+            skill_registry = None
+            try:
+                from matmaster.skills.registry import SkillRegistry
+
+                roots_raw = exp_config.skills.skills_root
+                if isinstance(roots_raw, list):
+                    roots = [Path(r) for r in roots_raw if r]
+                elif roots_raw:
+                    roots = [Path(roots_raw)]
+                else:
+                    roots = []
+                if roots:
+                    skill_registry = SkillRegistry(roots)
+            except Exception:
+                logger.warning(
+                    "active_mcp rehydrate: building SkillRegistry failed; "
+                    "falling back to tool_call-only inference",
+                    exc_info=True,
+                )
+
+            rebuilt = _resolve_active_mcp_servers_from_events(
+                raw_events, cache_dir, skill_registry
+            )
+
+        self._active_mcp_servers[session_id] = rebuilt
+        return rebuilt
+
     async def run_agent(
         self,
         session_id: str,
@@ -630,6 +699,26 @@ class AgentRunService:
                         }
                     }
                 )
+
+            # Resolve active MCP servers (hot cache + DB rehydrate). Must run
+            # AFTER history is available so the snapshot frozen below reflects
+            # any servers recovered from past turns.
+            active_servers = self._resolve_active_mcp_servers(
+                session_id, events_table, exp_config
+            )
+
+            def _record_active_mcp_server(server: str) -> None:
+                self._active_mcp_servers.setdefault(session_id, set()).add(server)
+
+            pg_ctx = pg_ctx.model_copy(
+                update={
+                    'run_meta': {
+                        **pg_ctx.run_meta,
+                        'active_mcp_servers': frozenset(active_servers),
+                        'record_active_mcp_server': _record_active_mcp_server,
+                    }
+                }
+            )
 
             # -- Stage 6: Generator event stream --
             run_result_event = None
