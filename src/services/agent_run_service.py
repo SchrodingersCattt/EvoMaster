@@ -161,6 +161,11 @@ class AgentRunService:
     def __init__(self, sessions_service=None):
         self._sessions_service = sessions_service or get_sessions_service()
         self._pg_manager = PlaygroundManager(_project_root)
+        # Hot cache: session_id -> set of mcp_server names already activated
+        # by Skill on any past turn. The authoritative source is DB events
+        # (skill_hit + assistant tool_calls); this dict only avoids re-scanning
+        # the DB on every turn. Populated lazily on cache miss.
+        self._active_mcp_servers: dict[str, set[str]] = {}
 
     def init_playground_sync(self) -> None:
         """Validate configs at startup -- delegates to PlaygroundManager."""
