@@ -145,7 +145,7 @@ class AgentTool(BuiltinTool):
             '- If you need a short response, say so (for example: "report in under 200 words").',
             "- Lookups: hand over the exact command. Investigations: hand over the question.",
             "- Terse command-style prompts produce shallow, generic work.",
-            "- Match the user's language." "",
+            "- Match the user's language (Chinese/English). ",
             "Never delegate understanding.",
             "- Do not write prompts like based on your findings, fix the bug. Include the relevant file paths, suspected cause, and what specifically should change.",
         ]
