@@ -295,11 +295,11 @@ questions:
   data_files:
   - key: vt_pxrd_data
     path: data/PXRD_thermal_expansion_001_20260427_v3/_td-pxrd_test.txt
-    oss_url: ''
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/PXRD_thermal_expansion_001_20260427_v3/1777279719__td-pxrd_test.txt
     description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K, °C labels
       30/50/70/90/110/120/130/140), CSV format with paired (2theta, intensity) columns per
       temperature. Generated from real laboratory diffractometer scans (Cu Kα1, 5°–50° 2θ,
-      step 0.0197°). Re-upload to OSS when promoting beyond local CLI runs.
+      step 0.0197°).
   reference_answers:
   - key: rtp_V_303K
     value:
