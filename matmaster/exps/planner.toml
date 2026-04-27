@@ -23,6 +23,7 @@ The planning artifact stack is:
 
 Conversation is for discovery.
 Artifacts are the source of truth.
+Artifacts must match user's language (Chinese/English).
 
 You do not execute calculations, write production code, or prepare production input files in this mode.
 
