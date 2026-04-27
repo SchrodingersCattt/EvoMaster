@@ -78,3 +78,73 @@ async def test_on_skill_hit_invokes_record_active_mcp_server(tmp_path):
     assert result.status == "success", result.content
 
     assert recorded == ["mat_sg"]
+
+
+@pytest.mark.asyncio
+async def test_init_skill_tools_replays_active_servers_into_registry(tmp_path):
+    """active_mcp_servers in run_meta must trigger on_skill_hit during init."""
+    env = _setup_skill_env(tmp_path)
+    cfg = _build_cfg(env)
+    exp = Exp(cfg)
+    registry = ToolRegistry()
+
+    ctx = MagicMock(spec=PlaygroundContext)
+    ctx.session = MagicMock()
+    ctx.execution_workdir = str(tmp_path)
+    ctx.run_meta = {"active_mcp_servers": frozenset({"mat_sg"})}
+
+    # No use_skill call -- replay must inject the lazy tool by itself.
+    exp._init_skill_tools(ctx, registry)
+
+    assert "mat_sg_build_bulk" in registry
+
+    from matmaster.tools.lazy_mcp import LazyMCPTool
+
+    tool = registry.get_raw("mat_sg_build_bulk")
+    assert isinstance(tool, LazyMCPTool)
+
+
+@pytest.mark.asyncio
+async def test_replay_is_idempotent_with_use_skill(tmp_path):
+    """Replay + a fresh use_skill call must not duplicate the tool."""
+    env = _setup_skill_env(tmp_path)
+    cfg = _build_cfg(env)
+    exp = Exp(cfg)
+    registry = ToolRegistry()
+
+    ctx = MagicMock(spec=PlaygroundContext)
+    ctx.session = MagicMock()
+    ctx.execution_workdir = str(tmp_path)
+    ctx.run_meta = {"active_mcp_servers": frozenset({"mat_sg"})}
+
+    exp._init_skill_tools(ctx, registry)
+    assert "mat_sg_build_bulk" in registry
+
+    skill_tool = registry.get_raw("Skill")
+    raw_result = await skill_tool.execute({"skill": "test-skill"})
+    result = normalize_tool_result(raw_result)
+    assert result.status == "success"
+
+    keys = [k for k in registry._tools if k == "mat_sg_build_bulk"]
+    assert len(keys) == 1
+
+
+@pytest.mark.asyncio
+async def test_replay_silently_skips_servers_with_no_cache(tmp_path):
+    """A server in active set but missing cache must not crash; just warn."""
+    env = _setup_skill_env(tmp_path)
+    # Note: no `mat_unknown.json` in cache dir.
+    cfg = _build_cfg(env)
+    exp = Exp(cfg)
+    registry = ToolRegistry()
+
+    ctx = MagicMock(spec=PlaygroundContext)
+    ctx.session = MagicMock()
+    ctx.execution_workdir = str(tmp_path)
+    ctx.run_meta = {"active_mcp_servers": frozenset({"mat_unknown"})}
+
+    exp._init_skill_tools(ctx, registry)
+
+    # Skill tool still registered, no exception, no spurious tool.
+    assert "Skill" in registry
+    assert not any(k.startswith("mat_unknown_") for k in registry._tools)
