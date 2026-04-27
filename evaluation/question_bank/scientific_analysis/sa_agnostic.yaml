@@ -259,7 +259,7 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 1.0
-- id: PXRD_thermal_expansion_001_20260426_v4
+- id: PXRD_thermal_expansion_001_20260427
   capability: scientific_analysis
   domain: agnostic
   intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
@@ -288,7 +288,7 @@ questions:
   - wf_postprocess
   data_files:
   - key: vt_pxrd_data
-    path: data/PXRD_thermal_expansion_001_20260426_v4/_td-pxrd_test.txt
+    path: data/PXRD_thermal_expansion_001_20260426/_td-pxrd_test.txt
     oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/DF_thermo_001_20260408/1775629319__td-pxrd_test.txt
     description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K), CSV format
       with paired (2theta, intensity) columns for each temperature.
