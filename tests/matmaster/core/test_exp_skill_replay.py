@@ -24,9 +24,7 @@ def _setup_skill_env(tmp_path):
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
     (cache_dir / "mat_sg.json").write_text(
-        json.dumps(
-            [{"name": "build_bulk", "description": "Build", "input_schema": {}}]
-        )
+        json.dumps([{"name": "build_bulk", "description": "Build", "input_schema": {}}])
     )
     (tmp_path / "mcp_config.json").write_text(json.dumps({"mcpServers": {}}))
     (tmp_path / "mcp.yaml").write_text(

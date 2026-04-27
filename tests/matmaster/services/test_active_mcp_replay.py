@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from src.services.agent_run_service import _resolve_active_mcp_servers_from_events
@@ -48,17 +47,15 @@ def test_assistant_state_tool_calls_use_longest_prefix(tmp_path):
 def test_tool_call_event_alone_resolves_server(tmp_path):
     cache_dir = _make_cache_dir(tmp_path, ["mat_sg"])
     events = [{"type": "tool_call", "tool_name": "mat_sg_build_bulk"}]
-    assert _resolve_active_mcp_servers_from_events(
-        events, cache_dir, None
-    ) == {"mat_sg"}
+    assert _resolve_active_mcp_servers_from_events(events, cache_dir, None) == {
+        "mat_sg"
+    }
 
 
 def test_unknown_server_prefix_is_ignored(tmp_path):
     cache_dir = _make_cache_dir(tmp_path, ["mat_xrd"])
     events = [{"type": "tool_call", "tool_name": "totally_unrelated_tool"}]
-    assert (
-        _resolve_active_mcp_servers_from_events(events, cache_dir, None) == set()
-    )
+    assert _resolve_active_mcp_servers_from_events(events, cache_dir, None) == set()
 
 
 def test_skill_hit_resolves_via_registry(tmp_path):
@@ -75,17 +72,15 @@ def test_skill_hit_resolves_via_registry(tmp_path):
     registry = SkillRegistry([tmp_path / "skills"])
     events = [{"type": "skill_hit", "content": {"skill_name": "test-skill"}}]
 
-    assert _resolve_active_mcp_servers_from_events(
-        events, cache_dir, registry
-    ) == {"mat_sg"}
+    assert _resolve_active_mcp_servers_from_events(events, cache_dir, registry) == {
+        "mat_sg"
+    }
 
 
 def test_skill_hit_without_registry_is_dropped(tmp_path):
     cache_dir = _make_cache_dir(tmp_path, ["mat_sg"])
     events = [{"type": "skill_hit", "content": {"skill_name": "anything"}}]
-    assert (
-        _resolve_active_mcp_servers_from_events(events, cache_dir, None) == set()
-    )
+    assert _resolve_active_mcp_servers_from_events(events, cache_dir, None) == set()
 
 
 def test_skill_hit_with_unknown_skill_is_dropped(tmp_path):
@@ -99,6 +94,4 @@ def test_skill_hit_with_unknown_skill_is_dropped(tmp_path):
     registry = SkillRegistry([skill_root])
     events = [{"type": "skill_hit", "content": {"skill_name": "nope"}}]
 
-    assert _resolve_active_mcp_servers_from_events(
-        events, cache_dir, registry
-    ) == set()
+    assert _resolve_active_mcp_servers_from_events(events, cache_dir, registry) == set()

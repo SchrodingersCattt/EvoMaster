@@ -19,8 +19,9 @@ def test_agent_run_service_initializes_active_mcp_servers_dict():
     assert svc._active_mcp_servers == {}
 
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import RunResultEvent
@@ -41,10 +42,9 @@ async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
         svc._active_mcp_servers = {"sess-1": {"mat_xrd"}}
 
         called = {"n": 0}
-        original = (
-            __import__("src.services.agent_run_service", fromlist=["x"])
-            ._resolve_active_mcp_servers_from_events
-        )
+        original = __import__(
+            "src.services.agent_run_service", fromlist=["x"]
+        )._resolve_active_mcp_servers_from_events
 
         def _spy(events, cache_dir, registry):
             called["n"] += 1
