@@ -1,0 +1,24 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 8,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [],
+      "files_touched": [],
+      "followup_suggestion": "重新运行评测以确认 P0 分数恢复到基线水平。",
+      "iteration_index": 8,
+      "needs_more_work": false,
+      "optimization_round": 10008,
+      "summary": "**P0 回归 revert 完成**：成功 revert 了 `e8b9da96..HEAD` 区间内的 1 个提交（`65dd9fd6`），仓库已恢复到第 8 轮迭代开局基线状态。"
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 8,
+    "macro_mean_0_100": 71,
+    "p0_regression": true,
+    "rationale": "## 第 8 轮迭代 — P0 回归门控失败（第 2 次本会话）\n\n### P0 Gate 结果\n- **P0 宏平均**：71（基线 100，**Δ -29**）——本会话最严重 P0 回归\n- **回归题目**：2/7 题\n- **非 P0 题目被跳过**\n\n### P0 题目明细\n| 题目 | 得分 | repeat_count | 状态 |\n|------|------|-------------|------|\n| DD_general_004 | 100 | 3 | ✅ 稳定 |\n| IG_abacus_002 | **0** | 3 | ❌ flaky（iter_03 也失败过）|\n| IG_abacus_003 | 100 | 3 | ✅ 本轮通过 |\n| SC_struct_009 | **0** | **2** | ❌ ⚠️ 仅 2 次 repeat（可能超时）|\n| WO 系列 ×3 | 100 | 3 | ✅ 稳定 |\n\n### P0 跨迭代趋势（本会话）\n| 题目 | i01 | i02 | i03 | i04 | i05 | i06 | i07 | i08 |\n|------|-----|-----|-----|-----|-----|-----|-----|-----|\n| IG_abacus_002 | 100 | 100 | **0** | 100 | 100 | 100 | 100 | **0** |\n| IG_abacus_003 | **0** | **0** | 100 | **0** | 100 | **0** | 100 | 100 |\n| SC_struct_009 | 100 | 100 | 100 | 100 | 100 | 100 | 100 | **0** |\n| P0 通过 | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |\n\n### 特殊观察\n- **SC_struct_009 仅 2 次 repeat**：正常应该 3 次。可能第 3 次超时或基础设施问题。这是 SC_struct_009 本会话**首次失败**，此前 7/7 通过。\n- **IG_abacus_002/003 跷跷板继续**：002 和 003 交替通过/失败，从未在 P0 同时失败过\n\n### 影响\n- iter_07 的 XRD 脚本恢复优化将被 revert（**第 3 次**因 P0 flaky 被无辜 revert）\n- 剩余 2 轮迭代\n\n### 下一步\n- 编排器执行 git revert\n- iter_09 需要再次尝试 XRD 脚本恢复\n- P0 flaky 是系统性瓶颈——但只剩 2 轮，每轮约 30% 概率因 P0 flaky 浪费",
+    "target_met": false
+  }
+}
