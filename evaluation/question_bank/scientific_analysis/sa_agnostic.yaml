@@ -281,45 +281,12 @@ questions:
     2. 分别对两个相的各晶格参数（a、b、c、β、V）随温度的变化进行线性拟合，给出拟合方程（斜率、截距、R²）。两相必须分别独立拟合，不能合并为一条直线，且 RTP 与 HTP 的斜率应基于各相内的 4 个温度点分别计算（不要让两相共享同一斜率值）。
     3. 报告各温度下的精修结果。每个温度必须使用 Pawley 脚本（如 `gsas2_pawley.py`）输出 JSON 中真实的 volume（由收敛后的 a/b/c/β 计算得到），不要将 prompt 中的近似初猜（V ≈ 1000、1023 Å³）当作精修结果填入答案。
 
-    【机器评分约定 — 必须遵守】
-    自动评分会从你的最终答案中解析一个结构化 JSON 块用于晶格/斜率定量校验，因此请在最终答案末尾追加一个用 `<eval_results>` 包裹的 JSON 块（**单位：Å、°、Å³、Å/K、Å³/K**，仅填数值不要带单位字符串）：
+    【机器评分约定】最终答案末尾追加一个 eval_results 标签包裹的 JSON 块（数值无单位，约定单位为 Å / Å³ / Å·K⁻¹ / Å³·K⁻¹），至少需含以下 dot-path（其余字段如其它温度、b/beta、intercept、r_squared 可按情况补充；fits 为同相内 4 点线性拟合，RTP 与 HTP 必须独立）：
 
-    <eval_results>
-    {
-      \"rtp\": {
-        \"303K\": {\"a\": <num>, \"b\": <num>, \"c\": <num>, \"beta\": <num>, \"V\": <num>},
-        \"323K\": {\"a\": <num>, \"b\": <num>, \"c\": <num>, \"beta\": <num>, \"V\": <num>},
-        \"343K\": {\"a\": <num>, \"b\": <num>, \"c\": <num>, \"beta\": <num>, \"V\": <num>},
-        \"363K\": {\"a\": <num>, \"b\": <num>, \"c\": <num>, \"beta\": <num>, \"V\": <num>},
-        \"fits\": {
-          \"a\":    {\"slope\": <num>, \"intercept\": <num>, \"r_squared\": <num>},
-          \"b\":    {\"slope\": <num>, \"intercept\": <num>, \"r_squared\": <num>},
-          \"c\":    {\"slope\": <num>, \"intercept\": <num>, \"r_squared\": <num>},
-          \"beta\": {\"slope\": <num>, \"intercept\": <num>, \"r_squared\": <num>},
-          \"V\":    {\"slope\": <num>, \"intercept\": <num>, \"r_squared\": <num>}
-        }
-      },
-      \"htp\": {
-        \"383K\": {\"a\": <num>, \"b\": <num>, \"c\": <num>, \"beta\": <num>, \"V\": <num>},
-        \"393K\": {\"a\": <num>, \"b\": <num>, \"c\": <num>, \"beta\": <num>, \"V\": <num>},
-        \"403K\": {\"a\": <num>, \"b\": <num>, \"c\": <num>, \"beta\": <num>, \"V\": <num>},
-        \"413K\": {\"a\": <num>, \"b\": <num>, \"c\": <num>, \"beta\": <num>, \"V\": <num>},
-        \"fits\": {
-          \"a\":    {\"slope\": <num>, \"intercept\": <num>, \"r_squared\": <num>},
-          \"b\":    {\"slope\": <num>, \"intercept\": <num>, \"r_squared\": <num>},
-          \"c\":    {\"slope\": <num>, \"intercept\": <num>, \"r_squared\": <num>},
-          \"beta\": {\"slope\": <num>, \"intercept\": <num>, \"r_squared\": <num>},
-          \"V\":    {\"slope\": <num>, \"intercept\": <num>, \"r_squared\": <num>}
-        }
-      }
-    }
-    </eval_results>
+    - rtp.{303K,363K}.V，rtp.303K.a，rtp.fits.V.slope，rtp.fits.a.slope
+    - htp.{383K,413K}.V，htp.383K.a，htp.fits.V.slope，htp.fits.c.slope
 
-    要求：
-    - 所有数值必须来自实际 Pawley 精修与线性拟合结果，禁止填入 prompt 中的初猜近似值。
-    - `fits` 为四点（同相内 4 个温度）的线性拟合，RTP 与 HTP 必须分别独立拟合。
-    - 该 JSON 块为机器评分输入；仍可在它之外用自然语言展开方法、表格与讨论。
-
+    数值必须来自实际 Pawley 精修与线性拟合，不得填入 prompt 中的初猜近似值。
     "
   tags:
   - char_xrd
