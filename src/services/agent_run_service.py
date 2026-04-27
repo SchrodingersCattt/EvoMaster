@@ -155,6 +155,104 @@ async def _emit_error_and_close_fanout(
     )
 
 
+def _legal_servers_from_cache_dir(cache_dir: Path) -> list[str]:
+    """List MCP server names with on-disk schema caches.
+
+    Cache files are produced by `matmaster.tools.cache_mcp_schemas` and named
+    `<server>.json`; their existence is a stronger guarantee than mcp_config
+    membership for replay purposes (Exp._init_skill_tools loads schemas from
+    here without any network IO).
+    """
+    if not cache_dir.exists():
+        return []
+    return sorted(p.stem for p in cache_dir.glob("*.json") if p.is_file())
+
+
+def _match_longest_server(tool_name: str, legal: list[str]) -> str | None:
+    """Match an MCP tool_name to its server using the longest prefix in `legal`.
+
+    Examples (with legal = {"mat_xrd", "mat_struct_db", "mat_sg"}):
+      mat_xrd_read           -> mat_xrd
+      mat_struct_db_query    -> mat_struct_db
+      totally_unrelated_tool -> None
+
+    A naive `name.split("_", 1)[0]` would mis-classify all of these as "mat",
+    which is why we compare against the cache-derived legal list.
+    """
+    best: str | None = None
+    for server in legal:
+        if tool_name == server or tool_name.startswith(server + "_"):
+            if best is None or len(server) > len(best):
+                best = server
+    return best
+
+
+def _resolve_active_mcp_servers_from_events(
+    events: list[dict],
+    cache_dir: Path,
+    skill_registry: Any | None,
+) -> set[str]:
+    """Resolve which MCP servers were activated in past turns from raw DB events.
+
+    The authoritative source for activation is the persisted event stream of a
+    session. This helper walks events of types `skill_hit` (resolved via
+    SkillRegistry) and `assistant_state` / `tool_call` (matched against the
+    on-disk schema cache via longest-prefix). Pure function; no DB / network IO.
+    """
+    legal = _legal_servers_from_cache_dir(cache_dir)
+    if not legal and skill_registry is None:
+        return set()
+    legal_set = set(legal)
+
+    resolved: set[str] = set()
+
+    def _add_from_tool_calls(tool_calls: Any) -> None:
+        if not isinstance(tool_calls, list):
+            return
+        for tc in tool_calls:
+            if not isinstance(tc, dict):
+                continue
+            name = tc.get("name") or ""
+            if not isinstance(name, str) or not name:
+                continue
+            server = _match_longest_server(name, legal)
+            if server:
+                resolved.add(server)
+
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        ev_type = ev.get("type")
+        content = ev.get("content")
+        if ev_type == "skill_hit" and skill_registry is not None:
+            skill_name = ""
+            if isinstance(content, dict):
+                skill_name = content.get("skill_name") or ""
+            elif isinstance(content, str):
+                skill_name = content
+            if not skill_name:
+                continue
+            try:
+                skill = skill_registry.get_skill(skill_name)
+            except Exception:
+                continue
+            if skill is None:
+                continue
+            mcp_server = getattr(getattr(skill, "meta_info", None), "mcp_server", None)
+            if isinstance(mcp_server, str) and mcp_server in legal_set:
+                resolved.add(mcp_server)
+        elif ev_type == "assistant_state" and isinstance(content, dict):
+            _add_from_tool_calls(content.get("tool_calls"))
+        elif ev_type == "tool_call":
+            tool_name = ev.get("tool_name") or ""
+            if isinstance(tool_name, str) and tool_name:
+                server = _match_longest_server(tool_name, legal)
+                if server:
+                    resolved.add(server)
+
+    return resolved
+
+
 class AgentRunService:
     """Agent execution service: pipeline orchestration via matmaster components."""
 
