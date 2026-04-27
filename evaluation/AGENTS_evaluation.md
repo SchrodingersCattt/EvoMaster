@@ -254,6 +254,7 @@ evaluation/question_bank/
 | `checkcif_no_a_alerts` | `{"filename": str, "max_a_alerts": int}` | 在 workspace 中找到匹配 `filename`（glob，默认 `*.cif`）的 CIF 文件，POST 到 IUCr checkCIF 服务（`https://checkcif.iucr.org/cgi-bin/checkcif_hkl.pl`），解析 HTML 响应中的 A/B/C/G 级别警告数，验证 A 级警告数 ≤ `max_a_alerts`（默认 0）。实现见 `evaluation/validators/checkcif.py`。|
 | `text_file_contains_all` | `{"filename": str, "tokens": list[str], "flags": str, "case_sensitive": bool, "normalize_whitespace": bool}` | 读取 workspace 文本文件并检查 `tokens` 全部出现；可选 `flags: "i"`、大小写与空白归一化控制；若该条 ref 上设 `workspace_resolve: root`，则只读**根目录**下该文件名 |
 | `text_file_regex` | `{"filename": str, "pattern": str, "flags": str}` | 读取 workspace 文本文件并做正则匹配（`flags` 支持 `i/m/s`）；若该条 ref 上设 `workspace_resolve: root`，则只读**根目录**下该文件名 |
+| `answer_json_numeric` | `{"json_path": str, "target": float, "tolerance": float}` | **代码校验**的数值检查：从 agent answer 中提取 `<eval_results>...</eval_results>` 标签（或退化为 ```` ```json ```` 围栏）包裹的 JSON 块，按 dot-path 取 `json_path` 处的数值并校验 `|val − target| ≤ tolerance`。**适用场景**：晶格/拟合斜率/热力学常数等定量字段，避免 `numerical_range` 的"全文最近数"漂移和 `llm_binary_judge` 在数学题上的方差；题目需在 `human_prompt_seed` 中要求 agent 输出该 JSON 块。实现见 `evaluation/validators/answer_text.py`。|
 
 ### 不需要对应 `reference_answers` 条目
 

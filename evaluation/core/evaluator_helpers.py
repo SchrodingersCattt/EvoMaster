@@ -11,6 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from evaluation.validators.answer_text import (
+    check_answer_json_numeric,
+)
 from evaluation.validators.structure_general import (
     check_atom_count,
     check_bond_angle,
@@ -752,4 +755,54 @@ def check_text_file_kpt_path_from_evidence(
         require_line_mode=bool(cfg.get('require_line_mode', True)),
         require_order=bool(cfg.get('require_order', True)),
         workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
+
+
+def check_answer_json_numeric_from_ref(
+    *, answer: str, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Wire ``answer_json_numeric`` from a ``ReferenceAnswer`` config.
+
+    Reference answer schema (``ref.value`` is a dict)::
+
+        value:
+          json_path: rtp.303K.V   # dot-separated dict keys in the answer JSON
+          target: 999.81          # numeric target (or use ref-level ``value``+``tolerance``)
+          tolerance: 20.0         # absolute tolerance
+
+    For backward compatibility, when ``ref.value`` is plain numeric, ``target``
+    falls back to that value and ``tolerance`` to ``ref.tolerance`` — but
+    ``json_path`` must always be supplied via the dict form (otherwise we
+    cannot know which field to read).
+    """
+    cfg = _cfg(ref)
+    json_path = str(cfg.get('json_path', '')).strip()
+    if not json_path:
+        return False, "reference answer must provide non-empty 'json_path'"
+
+    if 'target' in cfg:
+        try:
+            target = float(cfg['target'])
+        except (TypeError, ValueError):
+            return False, "'target' must be numeric"
+    elif isinstance(ref.value, (int, float)):
+        target = float(ref.value)
+    else:
+        return False, "missing numeric 'target' (set value.target or ref.value)"
+
+    if 'tolerance' in cfg:
+        try:
+            tolerance = float(cfg['tolerance'])
+        except (TypeError, ValueError):
+            return False, "'tolerance' must be numeric"
+    elif ref.tolerance is not None:
+        tolerance = float(ref.tolerance)
+    else:
+        return False, "missing 'tolerance' (set value.tolerance or ref.tolerance)"
+
+    return check_answer_json_numeric(
+        answer,
+        json_path=json_path,
+        target=target,
+        tolerance=tolerance,
     )
