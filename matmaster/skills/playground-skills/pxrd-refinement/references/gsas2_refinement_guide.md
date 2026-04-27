@@ -108,6 +108,32 @@ will produce SVD (singular value decomposition) errors if both are refined simul
 The script fixes the Scale to 1.0 and allows Pawley intensities to absorb all intensity
 information. This is the correct approach.
 
+### Multi-start (`--multi-start N`)
+
+A single Pawley run from one initial cell can settle into a wrong local minimum, especially
+on noisy or DFT-simulated patterns: the refinement may converge with `wR ≈ 22 %` but place
+`a` 0.07 Å away from the true value, which then poisons every downstream slope / volume.
+
+`--multi-start N` runs the same multi-step strategy from `N` initial cells (the user-provided
+seed plus `N-1` deterministic perturbations: log-normal ±0.5 % on a/b/c, additive ±0.5 ° on
+α/β/γ; tunable via `--multi-start-len-sigma` / `--multi-start-ang-sigma`). The result with
+the lowest `wR` wins; every candidate's seed cell + wR + outcome is preserved in
+`result["multi_start"]` for audit.
+
+When to use it:
+
+- **Always for noisy / DFT-simulated single patterns** where the user provides only an
+  approximate initial cell. `--multi-start 5` is a good default; the runtime cost scales
+  linearly with N but each Pawley pass is < 1 min, so 5× is cheap.
+- **Always for variable-temperature series.** Combine with `--chain-cell` (see § 6) so each
+  temperature both samples K seeds *and* benefits from the previous accepted cell.
+- Skip (`--multi-start 1`, the legacy default) only when you already have a CIF / prior
+  refinement within < 0.1 % of the truth.
+
+`--multi-start-seed` defaults to 42 and makes perturbations reproducible across runs.
+Do **not** raise the perturbation sigmas above 1 % / 1 ° without good reason — too-wide
+seeds drift into neighboring basins and slow convergence.
+
 ### Rietveld (gsas2_rietveld.py)
 
 | Round | Refined parameters |
@@ -217,19 +243,25 @@ The Pawley script supports three modes for multi-temperature data:
 
 Replace `<SG>` and the `<A>/<B>/<C>/<BETA>` placeholders with the initial cell and space
 group provided by the user / literature / a prior refinement / a CIF model. Do **not**
-invent them from peak positions (see SKILL.md § "初始晶胞来源").
+invent them from peak positions (see SKILL.md § "Hard contracts").
 
 ```
-# Place all patterns in a directory with consistent naming:
+# Place all patterns in a directory with consistent naming, then run:
 python gsas2_pawley.py --data /path/to/patterns/ \
   --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
+  --multi-start 5 --chain-cell \
   -o results.json
 ```
 
-The script chains refinements: the refined cell from one file becomes the starting cell for
-the next. Sort order follows filename alphabetical order, so name files consistently
-(e.g. `T1.xy`, `T2.xy`, ...). For data that spans a phase transition use separate jobs
-(see "Phase transitions" below) and do **not** rely on chaining across the transition.
+`--chain-cell` feeds each accepted refinement into the next pattern as its seed; combined
+with `--multi-start 5`, this makes intra-phase results internally consistent. Promotion is
+gated by `--chain-wr-max` (default 25 %) and `--chain-vol-jump-max` (default 0.05) so a bad
+refinement cannot poison downstream temperatures — when a pattern is rejected the chain
+reverts to the last accepted cell. Sort order follows alphabetical filename order, so name
+files consistently (e.g. `pattern_303K.xy`, `pattern_323K.xy`, ...). For data that spans a
+phase transition use **separate** jobs per phase (see "Phase transitions" below); the
+quality gate will reject a transition jump but the cleanest pattern is to not chain across
+phases at all.
 
 ### B. Wide-table CSV
 
@@ -238,10 +270,13 @@ the next. Sort order follows filename alphabetical order, so name files consiste
 # Header: Angle, 25 C, Angle, 40 C, ...
 python gsas2_pawley.py --data multi_temp.txt --wide-csv \
   --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
+  --multi-start 5 --chain-cell \
   -o results.json
 ```
 
-Output contains per-pattern results with `temp_c` and `temp_label` fields.
+Output contains per-pattern results with `temp_c` and `temp_label` fields, plus
+`seed_cell` (the cell actually used as initial guess after chain promotion) and
+`chain_decision` (`promoted` or `rejected: <reason>`).
 
 ### Phase transitions
 
@@ -279,8 +314,13 @@ python gsas2_pawley.py \
   --data /input/pattern.xy \
   --space-group "<SG>" \
   --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
+  --multi-start 5 \
   -o /output/result.json
 ```
+
+For a temperature series, swap `--data` for the directory of xy files and add
+`--chain-cell` so the refined cell of each accepted pattern seeds the next one
+(quality-gated by default — see § 6).
 
 ---
 
