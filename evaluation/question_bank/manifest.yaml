@@ -73,11 +73,6 @@ banks:
     domain: "semiconductor"
     questions: 1
 
-  - path: "data_diagnosis/dd_agnostic.yaml"
-    capability: "data_diagnosis"
-    domain: "agnostic"
-    questions: 1
-
   - path: "data_diagnosis/dd_semiconductor.yaml"
     capability: "data_diagnosis"
     domain: "semiconductor"
@@ -116,7 +111,7 @@ banks:
   - path: "scientific_analysis/sa_catalysis.yaml"
     capability: "scientific_analysis"
     domain: "catalysis"
-    questions: 2
+    questions: 1
 
   - path: "scientific_analysis/sa_polymer.yaml"
     capability: "scientific_analysis"
@@ -126,7 +121,7 @@ banks:
   - path: "scientific_analysis/sa_semiconductor.yaml"
     capability: "scientific_analysis"
     domain: "semiconductor"
-    questions: 2
+    questions: 1
 
   - path: "structure_construction/sc_agnostic.yaml"
     capability: "structure_construction"
@@ -178,4 +173,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 118 questions across 26 active bank files
+# Total: 115 questions across 25 active bank files
