@@ -863,6 +863,16 @@ questions:
   reference_answers:
   - key: output_artifact
     value: README.md
+  - key: correct_content
+    value:
+      filename: README.md
+      tokens:
+      - Project
+      - materials simulation
+      - Python
+      - NumPy
+      - ASE
+      flags: i
   - key: turn_budget
     value:
       max: 6
@@ -878,10 +888,9 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: correct_content
-    criterion: README.md contains the requested content (project heading, description,
-      requirements section with Python/NumPy/ASE).
+    criterion: README.md contains the requested content sections.
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_contains_all
   - id: tool_preference
     criterion: Agent uses the dedicated Write tool (not bash echo/printf/cat heredoc)
       to create the file. Check the tool call log for tool name.
@@ -912,6 +921,16 @@ questions:
   reference_answers:
   - key: output_artifact
     value: metals_table.md
+  - key: no_truncation
+    value:
+      filename: metals_table.md
+      pattern: '^(?!.*\.\.\.).*$'
+      match_mode: fullmatch_all_lines
+  - key: row_count
+    value:
+      filename: metals_table.md
+      pattern: '^\|?\s*[A-Z][a-z]?\s*\|'
+      min_matches: 20
   - key: turn_budget
     value:
       max: 8
@@ -927,15 +946,13 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: no_truncation
-    criterion: The table contains at least 20 rows of metal data with no ellipsis
-      (...), no "and so on", and no truncation indicators.
+    criterion: The table file must not contain truncation indicators like ellipsis.
     axis: correctness
-    verify: llm_binary_judge
-  - id: complete_columns
-    criterion: Each row includes all four requested columns (symbol, atomic number,
-      crystal structure, lattice constant).
+    verify: text_file_regex
+  - id: row_count
+    criterion: The table contains at least 20 data rows (excluding header/separator).
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_regex
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
@@ -984,6 +1001,28 @@ questions:
     value: mgal2o4.txt
   - key: al2o3_artifact
     value: al2o3.txt
+  - key: diamond_content
+    value:
+      filename: diamond.txt
+      tokens:
+      - Diamond
+      - C
+      - FCC
+      flags: i
+  - key: nacl_content
+    value:
+      filename: nacl.txt
+      tokens:
+      - NaCl
+      - rock salt
+      flags: i
+  - key: batio3_content
+    value:
+      filename: batio3.txt
+      tokens:
+      - BaTiO3
+      - perovskite
+      flags: i
   - key: turn_budget
     value:
       max: 12
@@ -1018,11 +1057,18 @@ questions:
     criterion: Agent writes `al2o3.txt` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: content_correct
-    criterion: Each file contains the correct material name, chemical formula, and
-      crystal structure type as specified.
+  - id: diamond_content
+    criterion: diamond.txt contains Diamond, C, and FCC.
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_contains_all
+  - id: nacl_content
+    criterion: nacl.txt contains NaCl and rock salt.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: batio3_content
+    criterion: batio3.txt contains BaTiO3 and perovskite.
+    axis: correctness
+    verify: text_file_contains_all
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
@@ -1064,6 +1110,16 @@ questions:
     value:
       filename: INCAR
       pattern: 'ISMEAR\s*=\s*1'
+  - key: defaults_filled
+    value:
+      filename: INCAR
+      tokens:
+      - SIGMA
+      - EDIFF
+      - IBRION
+      - NSW
+      - ISIF
+      flags: i
   - key: turn_budget
     value:
       max: 8
@@ -1087,10 +1143,9 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: defaults_filled
-    criterion: INCAR includes default values for fields NOT in run_spec.json (SIGMA=0.05,
-      EDIFF=1E-6, IBRION=2, NSW=100, ISIF=3).
+    criterion: INCAR includes default values for fields NOT in run_spec.json.
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_contains_all
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
