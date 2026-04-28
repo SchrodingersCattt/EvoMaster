@@ -22,6 +22,10 @@ MATMASTER_TOOLS_SERVER = os.getenv(
     "MATMASTER_TOOLS_SERVER",
     f"https://matmaster-tools-server{URL_PART}.bohrium.com",
 )
+BOHRIUM_OPEN_API_BASE = os.getenv(
+    "BOHRIUM_OPEN_API_BASE",
+    f"https://open{URL_PART}.bohrium.com" if URL_PART else "https://open.bohrium.com",
+)
 
 # 调用 matmaster-tools-server 评测接口（ingest、question-catalog 等）时的鉴权，与
 # ``require_evaluation_access`` 中的服务密钥分支对齐（Nacos evaluation.service_api_keys）。
