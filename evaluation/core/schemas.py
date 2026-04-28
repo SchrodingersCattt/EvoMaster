@@ -78,6 +78,11 @@ VerifyLiteral = Literal[
     'text_file_regex',
     # deterministic numeric check on a JSON block emitted in the agent's answer
     'answer_json_numeric',
+    # JSON file checks
+    'json_file_schema',
+    'json_file_numeric_range',
+    # tool usage check (did agent call a specific tool name?)
+    'tool_name_used',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
@@ -311,6 +316,9 @@ class QuestionItem(BaseModel):
             'text_file_numeric_range',
             'text_file_regex',
             'answer_json_numeric',
+            'json_file_schema',
+            'json_file_numeric_range',
+            'tool_name_used',
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:
