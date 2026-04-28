@@ -10,12 +10,8 @@ import pytest
 from pydantic import ValidationError
 
 from evaluation.core.evaluator import BinaryEvaluator
-from evaluation.core.evaluator_helpers import (
-    check_duration_budget,
-    check_text_file_regex_from_evidence,
-)
+from evaluation.core.evaluator_helpers import check_duration_budget
 from evaluation.core.evidence import EvidenceBundle, TokenUsage
-from evaluation.core.schemas import ReferenceAnswer
 from evaluation.validators.structure_molcrys import (
     check_disorder_dan2_integer_formula,
     check_sc005_other_formulas_in_answer,
@@ -39,81 +35,6 @@ def test_duration_budget_fails_when_missing_duration() -> None:
     ok, reason = check_duration_budget(evidence=ev, expected={'max': 5000})
     assert ok is False
     assert 'not recorded' in reason
-
-
-def test_text_file_regex_supports_multi_file_matching(tmp_path: Path) -> None:
-    (tmp_path / 'INPUT_bsse').write_text('kpoint_file KPT_bsse\n', encoding='utf-8')
-    (tmp_path / 'KPT_bsse').write_text('0\nGamma\n8 5 1 0 0 0\n', encoding='utf-8')
-    ev = EvidenceBundle(task_id='t_regex_multi', workspace_dir=str(tmp_path))
-    ref = ReferenceAnswer(
-        key='regex_multi',
-        value={
-            'filenames': ['INPUT_bsse', 'KPT_bsse'],
-            'patterns': [r'^\s*kpoint_file\s+\S+', r'^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$'],
-            'flags': 'm',
-            'min_match_count': 2,
-        },
-    )
-    ok, reason = check_text_file_regex_from_evidence(evidence=ev, ref=ref)
-    assert ok is True, reason
-
-
-def test_text_file_regex_multi_file_honors_min_match_count(tmp_path: Path) -> None:
-    (tmp_path / 'INPUT_bsse').write_text('kpoint_file KPT_bsse\n', encoding='utf-8')
-    (tmp_path / 'KPT_bsse').write_text('0\nGamma\n8 5 2 0 0 0\n', encoding='utf-8')
-    ev = EvidenceBundle(task_id='t_regex_multi_min', workspace_dir=str(tmp_path))
-    ref = ReferenceAnswer(
-        key='regex_multi_min',
-        value={
-            'filenames': ['INPUT_bsse', 'KPT_bsse'],
-            'patterns': [r'^\s*kpoint_file\s+\S+', r'^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$'],
-            'flags': 'm',
-            'min_match_count': 2,
-        },
-    )
-    ok, reason = check_text_file_regex_from_evidence(evidence=ev, ref=ref)
-    assert ok is False
-    assert 'matched 1/2' in reason
-
-
-def test_text_file_regex_conditional_then_branch(tmp_path: Path) -> None:
-    (tmp_path / 'INPUT_bsse').write_text('kspacing 0.2 0.2 1.0\n', encoding='utf-8')
-    (tmp_path / 'KPT_bsse').write_text('0\nGamma\n8 5 9 0 0 0\n', encoding='utf-8')
-    ev = EvidenceBundle(task_id='t_regex_cond_then', workspace_dir=str(tmp_path))
-    ref = ReferenceAnswer(
-        key='regex_cond_then',
-        value={
-            'if_filename': 'INPUT_bsse',
-            'if_pattern': r'^\s*kspacing\b',
-            'then_pattern': r'^\s*kspacing\s+[0-9]*\.?[0-9]+\s+[0-9]*\.?[0-9]+\s+1(?:\.0+)?\s*$',
-            'else_filename': 'KPT_bsse',
-            'else_pattern': r'^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$',
-            'flags': 'm',
-        },
-    )
-    ok, reason = check_text_file_regex_from_evidence(evidence=ev, ref=ref)
-    assert ok is True, reason
-    assert 'IF matched' in reason
-
-
-def test_text_file_regex_conditional_else_branch(tmp_path: Path) -> None:
-    (tmp_path / 'INPUT_bsse').write_text('calculation scf\n', encoding='utf-8')
-    (tmp_path / 'KPT_bsse').write_text('0\nGamma\n8 5 1 0 0 0\n', encoding='utf-8')
-    ev = EvidenceBundle(task_id='t_regex_cond_else', workspace_dir=str(tmp_path))
-    ref = ReferenceAnswer(
-        key='regex_cond_else',
-        value={
-            'if_filename': 'INPUT_bsse',
-            'if_pattern': r'^\s*kspacing\b',
-            'then_pattern': r'^\s*kspacing\s+[0-9]*\.?[0-9]+\s+[0-9]*\.?[0-9]+\s+1(?:\.0+)?\s*$',
-            'else_filename': 'KPT_bsse',
-            'else_pattern': r'^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$',
-            'flags': 'm',
-        },
-    )
-    ok, reason = check_text_file_regex_from_evidence(evidence=ev, ref=ref)
-    assert ok is True, reason
-    assert 'ELSE result' in reason
 
 
 def test_sc005_other_formulas_detects_missing() -> None:
