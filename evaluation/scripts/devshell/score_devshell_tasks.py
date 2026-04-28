@@ -48,7 +48,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _QUESTION_BANK_DIR = REPO_ROOT / "evaluation" / "question_bank"
 
 # Used only by :func:`score_devshell_tasks_for_agent_loop` (in-process).
-_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS = frozenset({"token_budget_total", "turn_budget"})
+_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS = frozenset({"token_budget_total", "turn_budget", "efficiency_judge"})
 _EVIDENCE_MAPPING_PATH = REPO_ROOT / "evaluation" / "core" / "evidence_mapping.yaml"
 _META_FILENAMES = frozenset(
     {
