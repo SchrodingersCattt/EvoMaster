@@ -7,7 +7,6 @@ the repository's single-file size limit.
 from __future__ import annotations
 
 import fnmatch
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
