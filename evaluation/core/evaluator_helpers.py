@@ -7,6 +7,7 @@ the repository's single-file size limit.
 from __future__ import annotations
 
 import fnmatch
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -913,3 +914,11 @@ def check_answer_json_numeric_from_ref(
         target=target,
         tolerance=tolerance,
     )
+
+
+# Re-export from evaluator_json_checks to keep import paths stable
+from .evaluator_json_checks import (  # noqa: E402, F401
+    check_json_file_numeric_range,
+    check_json_file_schema,
+    check_tool_name_used,
+)
