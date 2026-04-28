@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: catalysis
 questions:
-- id: BP_elec_001_20260406v2
+- id: BP_elec_001_20260428
   capability: batch_processing
   domain: catalysis
   intent: Batch-compute H adsorption energy on 3 different metal (001) surfaces using mock
@@ -93,7 +93,13 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: efficiency_judge
-    criterion: Batch workflow is organized efficiently without redundant steps.
+    criterion: >-
+      Batch workflow is organized efficiently without gratuitously repeated
+      identical tool calls for the same metal. Parallel tool calls for
+      different metals that happen to fail (e.g. MCP server errors) followed
+      by a fallback approach are acceptable and should NOT be counted as
+      redundancy. Focus on whether the overall workflow avoids unnecessary
+      duplication of completed work.
     axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget

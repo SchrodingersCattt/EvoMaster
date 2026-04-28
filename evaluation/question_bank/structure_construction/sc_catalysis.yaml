@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: catalysis
 questions:
-- id: CR_SC_ZnS001_20260411
+- id: CR_SC_ZnS001_20260428
   capability: structure_construction
   domain: catalysis
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per doc 3.1.2.
@@ -58,8 +58,11 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: The ZnS(001) slab construction and polar-surface handling complete without
-      redundant exploratory calls.
+    criterion: >-
+      The ZnS(001) slab construction and polar-surface handling complete without
+      gratuitously repeated identical tool calls. Tool-discovery fallback
+      (e.g. trying an MCP tool that errors, then switching to a script-based
+      approach) is acceptable and should NOT be counted as redundancy.
     axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget
