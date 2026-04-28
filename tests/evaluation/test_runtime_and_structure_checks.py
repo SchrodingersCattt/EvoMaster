@@ -76,6 +76,46 @@ def test_text_file_regex_multi_file_honors_min_match_count(tmp_path: Path) -> No
     assert 'matched 1/2' in reason
 
 
+def test_text_file_regex_conditional_then_branch(tmp_path: Path) -> None:
+    (tmp_path / 'INPUT_bsse').write_text('kspacing 0.2 0.2 1.0\n', encoding='utf-8')
+    (tmp_path / 'KPT_bsse').write_text('0\nGamma\n8 5 9 0 0 0\n', encoding='utf-8')
+    ev = EvidenceBundle(task_id='t_regex_cond_then', workspace_dir=str(tmp_path))
+    ref = ReferenceAnswer(
+        key='regex_cond_then',
+        value={
+            'if_filename': 'INPUT_bsse',
+            'if_pattern': r'^\s*kspacing\b',
+            'then_pattern': r'^\s*kspacing\s+[0-9]*\.?[0-9]+\s+[0-9]*\.?[0-9]+\s+1(?:\.0+)?\s*$',
+            'else_filename': 'KPT_bsse',
+            'else_pattern': r'^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$',
+            'flags': 'm',
+        },
+    )
+    ok, reason = check_text_file_regex_from_evidence(evidence=ev, ref=ref)
+    assert ok is True, reason
+    assert 'IF matched' in reason
+
+
+def test_text_file_regex_conditional_else_branch(tmp_path: Path) -> None:
+    (tmp_path / 'INPUT_bsse').write_text('calculation scf\n', encoding='utf-8')
+    (tmp_path / 'KPT_bsse').write_text('0\nGamma\n8 5 1 0 0 0\n', encoding='utf-8')
+    ev = EvidenceBundle(task_id='t_regex_cond_else', workspace_dir=str(tmp_path))
+    ref = ReferenceAnswer(
+        key='regex_cond_else',
+        value={
+            'if_filename': 'INPUT_bsse',
+            'if_pattern': r'^\s*kspacing\b',
+            'then_pattern': r'^\s*kspacing\s+[0-9]*\.?[0-9]+\s+[0-9]*\.?[0-9]+\s+1(?:\.0+)?\s*$',
+            'else_filename': 'KPT_bsse',
+            'else_pattern': r'^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$',
+            'flags': 'm',
+        },
+    )
+    ok, reason = check_text_file_regex_from_evidence(evidence=ev, ref=ref)
+    assert ok is True, reason
+    assert 'ELSE result' in reason
+
+
 def test_sc005_other_formulas_detects_missing() -> None:
     ok, reason = check_sc005_other_formulas_in_answer('disorder_DAP-4 nonsense')
     assert ok is False

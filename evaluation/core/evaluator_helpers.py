@@ -693,6 +693,53 @@ def check_text_file_regex_from_evidence(
     cfg = _cfg(ref)
     flags = str(cfg.get('flags', ''))
     resolve_mode = _workspace_resolve_from_ref(ref)
+
+    if_pattern = str(cfg.get('if_pattern', '')).strip()
+    then_pattern = str(cfg.get('then_pattern', '')).strip()
+    else_pattern = str(cfg.get('else_pattern', '')).strip()
+    if if_pattern or then_pattern or else_pattern:
+        if not (if_pattern and then_pattern and else_pattern):
+            return (
+                False,
+                "conditional regex requires non-empty 'if_pattern', 'then_pattern', and 'else_pattern'",
+            )
+        if_filename = str(cfg.get('if_filename', cfg.get('filename', ''))).strip()
+        if not if_filename:
+            return False, "conditional regex requires 'if_filename' or 'filename'"
+        else_filename = str(cfg.get('else_filename', '')).strip() or if_filename
+
+        cond_ok, cond_reason = check_text_file_regex(
+            ws,
+            filename=if_filename,
+            pattern=if_pattern,
+            flags=flags,
+            workspace_resolve=resolve_mode,
+        )
+        if cond_ok:
+            then_ok, then_reason = check_text_file_regex(
+                ws,
+                filename=if_filename,
+                pattern=then_pattern,
+                flags=flags,
+                workspace_resolve=resolve_mode,
+            )
+            return (
+                then_ok,
+                f'conditional regex IF matched on {if_filename}: {cond_reason}; THEN result: {then_reason}',
+            )
+
+        else_ok, else_reason = check_text_file_regex(
+            ws,
+            filename=else_filename,
+            pattern=else_pattern,
+            flags=flags,
+            workspace_resolve=resolve_mode,
+        )
+        return (
+            else_ok,
+            f'conditional regex IF not matched on {if_filename}: {cond_reason}; ELSE result on {else_filename}: {else_reason}',
+        )
+
     raw_filenames = cfg.get('filenames')
     if isinstance(raw_filenames, list) and raw_filenames:
         filenames = [str(name).strip() for name in raw_filenames if str(name).strip()]

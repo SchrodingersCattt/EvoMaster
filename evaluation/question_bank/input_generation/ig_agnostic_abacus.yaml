@@ -48,18 +48,12 @@ questions:
   - key: must_input_bsse_vacuum_kspacing
     value:
       filename: INPUT_bsse
-      pattern: \A(?:(?!^\s*kspacing\b)[\s\S])*\Z|^\s*kspacing\s+[0-9]*\.?[0-9]+\s+[0-9]*\.?[0-9]+\s+1(?:\.0+)?\s*$
-      flags: ims
-  - key: must_input_bsse_vacuum_kpt_fallback
-    value:
-      filenames:
-      - INPUT_bsse
-      - KPT_bsse
-      patterns:
-      - ^\s*kspacing\b
-      - ^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$
+      if_filename: INPUT_bsse
+      if_pattern: ^\s*kspacing\b
+      then_pattern: ^\s*kspacing\s+[0-9]*\.?[0-9]+\s+[0-9]*\.?[0-9]+\s+1(?:\.0+)?\s*$
+      else_filename: KPT_bsse
+      else_pattern: ^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$
       flags: m
-      min_match_count: 1
   - key: suggested_input_bsse_numerics
     value:
       filename: INPUT_bsse
@@ -128,14 +122,9 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: must_input_bsse_vacuum_kspacing
-    criterion: '[Must] If INPUT_bsse contains `kspacing`, it must be 3-component and the 3rd
-      component must be ~=1.0. Single-value `kspacing` is not accepted.'
-    axis: correctness
-    verify: text_file_regex
-    weight: 1.0
-  - id: must_input_bsse_vacuum_kpt_fallback
-    criterion: '[Must] Fallback routing: if INPUT_bsse has `kspacing`, this branch passes directly;
-      otherwise KPT_bsse must provide a mesh line with third-axis sampling = 1.'
+    criterion: '[Must] Conditional routing: if INPUT_bsse has `kspacing`, it must be 3-component
+      with third component ~=1.0 (single-value form not accepted); if INPUT_bsse has no `kspacing`,
+      then KPT_bsse must provide a mesh line with third-axis sampling = 1.'
     axis: correctness
     verify: text_file_regex
     weight: 1.0
