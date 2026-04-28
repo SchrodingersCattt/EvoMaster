@@ -27,7 +27,6 @@ import numpy as np
 from scipy.optimize import least_squares
 from scipy.signal import find_peaks
 
-
 # ---------------------------------------------------------------------------
 # Crystal system constraints
 # ---------------------------------------------------------------------------
