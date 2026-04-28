@@ -211,7 +211,6 @@ questions:
   - abacus
   - electrostatics
   - phy_surface
-  priority: P0
   data_files:
   - key: base_al_slab
     path: data/IG_abacus_003_20260406/base_al_slab.stru

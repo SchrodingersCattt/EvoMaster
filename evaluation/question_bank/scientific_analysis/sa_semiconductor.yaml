@@ -16,6 +16,7 @@ questions:
   - meta_userlog
   - mat_perovskite
   - wf_report
+  priority: P0
   data_files: []
   reference_answers:
   - key: additive_json
