@@ -10,33 +10,42 @@ Provides:
 """
 
 import numpy as np
-from typing import List, Tuple, Dict, Optional
 
 # ---------------------------------------------------------------------------
 # Cromer-Mann scattering factor coefficients  (a1 b1 a2 b2 a3 b3 a4 b4 c)
 # f(s) = sum_i a_i exp(-b_i s^2) + c   where s = sin(theta)/lambda
 # ---------------------------------------------------------------------------
-CROMER_MANN: Dict[str, Tuple[float, ...]] = {
-    "H":  (0.489918, 20.6593, 0.262003, 7.74039, 0.196767, 49.5519, 0.049879, 2.20159, 0.001305),
+CROMER_MANN: dict[str, tuple[float, ...]] = {
+    "H": (
+        0.489918,
+        20.6593,
+        0.262003,
+        7.74039,
+        0.196767,
+        49.5519,
+        0.049879,
+        2.20159,
+        0.001305,
+    ),
     "He": (0.8734, 9.1037, 0.6309, 3.3568, 0.3112, 22.9276, 0.1780, 0.9821, 0.0064),
     "Li": (1.1282, 3.9546, 0.7508, 1.0524, 0.6175, 85.3905, 0.4653, 168.261, 0.0377),
     "Be": (1.5919, 43.6427, 1.1278, 1.8623, 0.5391, 103.483, 0.7029, 0.5420, 0.0385),
-    "B":  (2.0545, 23.2185, 1.3326, 1.0210, 1.0979, 60.3498, 0.7068, 0.1403, -0.1932),
-    "C":  (2.3100, 20.8439, 1.0200, 10.2075, 1.5886, 0.5687, 0.8650, 51.6512, 0.2156),
-    "N":  (12.2126, 0.0057, 3.1322, 9.8933, 2.0125, 28.9975, 1.1663, 0.5826, -11.529),
-    "O":  (3.0485, 13.2771, 2.2868, 5.7011, 1.5463, 0.3239, 0.8670, 32.9089, 0.2508),
-    "F":  (3.5392, 10.2825, 2.6412, 4.2944, 1.5170, 0.2615, 1.0243, 26.1476, 0.2776),
+    "B": (2.0545, 23.2185, 1.3326, 1.0210, 1.0979, 60.3498, 0.7068, 0.1403, -0.1932),
+    "C": (2.3100, 20.8439, 1.0200, 10.2075, 1.5886, 0.5687, 0.8650, 51.6512, 0.2156),
+    "N": (12.2126, 0.0057, 3.1322, 9.8933, 2.0125, 28.9975, 1.1663, 0.5826, -11.529),
+    "O": (3.0485, 13.2771, 2.2868, 5.7011, 1.5463, 0.3239, 0.8670, 32.9089, 0.2508),
+    "F": (3.5392, 10.2825, 2.6412, 4.2944, 1.5170, 0.2615, 1.0243, 26.1476, 0.2776),
     "Na": (4.7626, 3.2850, 3.1736, 8.8422, 1.2674, 0.3136, 1.1128, 129.424, 0.6760),
     "Mg": (5.4204, 2.8275, 2.1735, 79.2611, 1.2269, 0.3808, 2.3073, 7.1937, 0.8584),
     "Al": (6.4202, 3.0387, 1.9002, 0.7426, 1.5936, 31.5472, 1.9646, 85.0886, 1.1151),
     "Si": (6.2915, 2.4386, 3.0353, 32.3337, 1.9891, 0.6785, 1.5410, 81.6937, 1.1407),
-    "P":  (6.4345, 1.9067, 4.1791, 27.157, 1.7800, 0.526, 1.4908, 68.1645, 1.1149),
-    "S":  (6.9053, 1.4679, 5.2034, 22.2151, 1.4379, 0.2536, 1.5863, 56.172, 0.8669),
+    "P": (6.4345, 1.9067, 4.1791, 27.157, 1.7800, 0.526, 1.4908, 68.1645, 1.1149),
+    "S": (6.9053, 1.4679, 5.2034, 22.2151, 1.4379, 0.2536, 1.5863, 56.172, 0.8669),
     "Cl": (11.4604, 0.0104, 7.1964, 1.1662, 6.2556, 18.5194, 1.6455, 47.7784, -9.5574),
-    "K":  (8.2186, 12.7949, 7.4398, 0.7748, 1.0519, 213.187, 0.8659, 41.6841, 1.4228),
+    "K": (8.2186, 12.7949, 7.4398, 0.7748, 1.0519, 213.187, 0.8659, 41.6841, 1.4228),
     "Ca": (8.6266, 10.4421, 7.3873, 0.6599, 1.5899, 85.7484, 1.0211, 178.437, 1.3751),
     "Ti": (9.7595, 7.8508, 7.3558, 0.5000, 1.6991, 35.6338, 1.9021, 116.105, 1.2807),
-    "V":  (10.2971, 6.8657, 7.3511, 0.4385, 2.0703, 26.8938, 2.0571, 102.478, 1.2199),
+    "V": (10.2971, 6.8657, 7.3511, 0.4385, 2.0703, 26.8938, 2.0571, 102.478, 1.2199),
     "Cr": (10.6406, 6.1038, 7.3537, 0.3920, 3.3240, 20.2626, 1.4922, 98.7399, 1.1832),
     "Mn": (11.2819, 5.3409, 7.3573, 0.3432, 3.0193, 17.8674, 2.2441, 83.7543, 1.0896),
     "Fe": (11.7695, 4.7611, 7.3573, 0.3072, 3.5222, 15.3535, 2.3045, 76.8805, 1.0369),
@@ -52,23 +61,65 @@ CROMER_MANN: Dict[str, Tuple[float, ...]] = {
     "Rb": (17.5816, 1.7139, 7.6598, 14.7957, 5.8981, 0.1603, 2.7817, 31.2087, 2.0782),
     "Sr": (17.5663, 1.5564, 9.8184, 14.0988, 5.422, 0.1664, 2.6694, 132.376, 2.5064),
     "Zr": (17.8765, 1.2762, 10.948, 11.916, 5.4173, 0.117647, 3.6571, 87.6627, 2.0693),
-    "I":  (20.1472, 4.347, 18.9949, 0.3814, 7.5138, 27.766, 2.2735, 66.8776, 4.0712),
+    "I": (20.1472, 4.347, 18.9949, 0.3814, 7.5138, 27.766, 2.2735, 66.8776, 4.0712),
     "Ba": (20.3361, 3.216, 19.297, 0.2756, 10.888, 20.2073, 2.6959, 167.202, 7.1364),
 }
 
 # Molecular weights (g/mol) for common elements
-ATOMIC_WEIGHTS: Dict[str, float] = {
-    "H": 1.008, "He": 4.003, "Li": 6.941, "Be": 9.012, "B": 10.81,
-    "C": 12.011, "N": 14.007, "O": 15.999, "F": 18.998, "Ne": 20.180,
-    "Na": 22.990, "Mg": 24.305, "Al": 26.982, "Si": 28.086, "P": 30.974,
-    "S": 32.065, "Cl": 35.453, "Ar": 39.948, "K": 39.098, "Ca": 40.078,
-    "Sc": 44.956, "Ti": 47.867, "V": 50.942, "Cr": 51.996, "Mn": 54.938,
-    "Fe": 55.845, "Co": 58.933, "Ni": 58.693, "Cu": 63.546, "Zn": 65.38,
-    "Ga": 69.723, "Ge": 72.64, "As": 74.922, "Se": 78.96, "Br": 79.904,
-    "Rb": 85.468, "Sr": 87.62, "Y": 88.906, "Zr": 91.224, "Mo": 95.96,
-    "Ag": 107.868, "Cd": 112.411, "Sn": 118.710, "Sb": 121.760,
-    "I": 126.904, "Ba": 137.327, "La": 138.905, "Ce": 140.116,
-    "W": 183.84, "Pt": 195.084, "Au": 196.967, "Pb": 207.2, "Bi": 208.980,
+ATOMIC_WEIGHTS: dict[str, float] = {
+    "H": 1.008,
+    "He": 4.003,
+    "Li": 6.941,
+    "Be": 9.012,
+    "B": 10.81,
+    "C": 12.011,
+    "N": 14.007,
+    "O": 15.999,
+    "F": 18.998,
+    "Ne": 20.180,
+    "Na": 22.990,
+    "Mg": 24.305,
+    "Al": 26.982,
+    "Si": 28.086,
+    "P": 30.974,
+    "S": 32.065,
+    "Cl": 35.453,
+    "Ar": 39.948,
+    "K": 39.098,
+    "Ca": 40.078,
+    "Sc": 44.956,
+    "Ti": 47.867,
+    "V": 50.942,
+    "Cr": 51.996,
+    "Mn": 54.938,
+    "Fe": 55.845,
+    "Co": 58.933,
+    "Ni": 58.693,
+    "Cu": 63.546,
+    "Zn": 65.38,
+    "Ga": 69.723,
+    "Ge": 72.64,
+    "As": 74.922,
+    "Se": 78.96,
+    "Br": 79.904,
+    "Rb": 85.468,
+    "Sr": 87.62,
+    "Y": 88.906,
+    "Zr": 91.224,
+    "Mo": 95.96,
+    "Ag": 107.868,
+    "Cd": 112.411,
+    "Sn": 118.710,
+    "Sb": 121.760,
+    "I": 126.904,
+    "Ba": 137.327,
+    "La": 138.905,
+    "Ce": 140.116,
+    "W": 183.84,
+    "Pt": 195.084,
+    "Au": 196.967,
+    "Pb": 207.2,
+    "Bi": 208.980,
 }
 
 # ---------------------------------------------------------------------------
@@ -78,41 +129,75 @@ ATOMIC_WEIGHTS: Dict[str, float] = {
 # R is a 3×3 integer rotation, t is a fractional translation (mod 1)
 # ---------------------------------------------------------------------------
 
-def _op(r: List[List[int]], t: List[float] = None):
+
+def _op(r: list[list[int]], t: list[float] = None):
     """Helper to build (rotation_matrix, translation_vector)."""
     t = t or [0.0, 0.0, 0.0]
     return (np.array(r, dtype=float), np.array(t, dtype=float))
 
+
 _I = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
 _nI = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
 
-SPACE_GROUPS: Dict[str, dict] = {
+SPACE_GROUPS: dict[str, dict] = {
     # --- Triclinic ---
     "P1": {
-        "number": 1, "symbol": "P1", "crystal_system": "triclinic",
+        "number": 1,
+        "symbol": "P1",
+        "crystal_system": "triclinic",
         "ops": [_op(_I)],
     },
     "P-1": {
-        "number": 2, "symbol": "P-1", "crystal_system": "triclinic",
+        "number": 2,
+        "symbol": "P-1",
+        "crystal_system": "triclinic",
         "ops": [_op(_I), _op(_nI)],
     },
     # --- Monoclinic ---
     "P2_1": {
-        "number": 4, "symbol": "P2_1", "crystal_system": "monoclinic",
+        "number": 4,
+        "symbol": "P2_1",
+        "crystal_system": "monoclinic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], [0, 0.5, 0]),
         ],
     },
     "P21": {  # alias
-        "number": 4, "symbol": "P2_1", "crystal_system": "monoclinic",
+        "number": 4,
+        "symbol": "P2_1",
+        "crystal_system": "monoclinic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], [0, 0.5, 0]),
         ],
     },
+    "P2_1/m": {
+        "number": 11,
+        "symbol": "P2_1/m",
+        "crystal_system": "monoclinic",
+        "ops": [
+            _op(_I),
+            _op([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], [0, 0.5, 0]),
+            _op(_nI),
+            _op([[1, 0, 0], [0, -1, 0], [0, 0, 1]], [0, 0.5, 0]),
+        ],
+    },
+    "P21/m": {  # alias
+        "number": 11,
+        "symbol": "P2_1/m",
+        "crystal_system": "monoclinic",
+        "ops": [
+            _op(_I),
+            _op([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], [0, 0.5, 0]),
+            _op(_nI),
+            _op([[1, 0, 0], [0, -1, 0], [0, 0, 1]], [0, 0.5, 0]),
+        ],
+    },
     "C2": {
-        "number": 5, "symbol": "C2", "crystal_system": "monoclinic",
+        "number": 5,
+        "symbol": "C2",
+        "crystal_system": "monoclinic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, 1, 0], [0, 0, -1]]),
@@ -122,7 +207,9 @@ SPACE_GROUPS: Dict[str, dict] = {
         ],
     },
     "Cc": {
-        "number": 9, "symbol": "Cc", "crystal_system": "monoclinic",
+        "number": 9,
+        "symbol": "Cc",
+        "crystal_system": "monoclinic",
         "ops": [
             _op(_I),
             _op([[1, 0, 0], [0, -1, 0], [0, 0, 1]], [0, 0, 0.5]),
@@ -131,7 +218,9 @@ SPACE_GROUPS: Dict[str, dict] = {
         ],
     },
     "P2_1/c": {
-        "number": 14, "symbol": "P2_1/c", "crystal_system": "monoclinic",
+        "number": 14,
+        "symbol": "P2_1/c",
+        "crystal_system": "monoclinic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], [0, 0.5, 0]),
@@ -140,7 +229,9 @@ SPACE_GROUPS: Dict[str, dict] = {
         ],
     },
     "P21/c": {  # alias
-        "number": 14, "symbol": "P2_1/c", "crystal_system": "monoclinic",
+        "number": 14,
+        "symbol": "P2_1/c",
+        "crystal_system": "monoclinic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], [0, 0.5, 0]),
@@ -149,7 +240,9 @@ SPACE_GROUPS: Dict[str, dict] = {
         ],
     },
     "C2/c": {
-        "number": 15, "symbol": "C2/c", "crystal_system": "monoclinic",
+        "number": 15,
+        "symbol": "C2/c",
+        "crystal_system": "monoclinic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], [0, 0, 0.5]),
@@ -164,7 +257,9 @@ SPACE_GROUPS: Dict[str, dict] = {
     },
     # --- Orthorhombic ---
     "P2_12_12": {
-        "number": 18, "symbol": "P2_12_12", "crystal_system": "orthorhombic",
+        "number": 18,
+        "symbol": "P2_12_12",
+        "crystal_system": "orthorhombic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]),
@@ -173,7 +268,9 @@ SPACE_GROUPS: Dict[str, dict] = {
         ],
     },
     "P212121": {
-        "number": 19, "symbol": "P2_12_12_1", "crystal_system": "orthorhombic",
+        "number": 19,
+        "symbol": "P2_12_12_1",
+        "crystal_system": "orthorhombic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, -1, 0], [0, 0, 1]], [0.5, 0, 0.5]),
@@ -182,7 +279,9 @@ SPACE_GROUPS: Dict[str, dict] = {
         ],
     },
     "P2_12_12_1": {
-        "number": 19, "symbol": "P2_12_12_1", "crystal_system": "orthorhombic",
+        "number": 19,
+        "symbol": "P2_12_12_1",
+        "crystal_system": "orthorhombic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, -1, 0], [0, 0, 1]], [0.5, 0, 0.5]),
@@ -191,7 +290,9 @@ SPACE_GROUPS: Dict[str, dict] = {
         ],
     },
     "Pna2_1": {
-        "number": 33, "symbol": "Pna2_1", "crystal_system": "orthorhombic",
+        "number": 33,
+        "symbol": "Pna2_1",
+        "crystal_system": "orthorhombic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, -1, 0], [0, 0, 1]], [0, 0, 0.5]),
@@ -200,7 +301,9 @@ SPACE_GROUPS: Dict[str, dict] = {
         ],
     },
     "Pna21": {  # alias
-        "number": 33, "symbol": "Pna2_1", "crystal_system": "orthorhombic",
+        "number": 33,
+        "symbol": "Pna2_1",
+        "crystal_system": "orthorhombic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, -1, 0], [0, 0, 1]], [0, 0, 0.5]),
@@ -209,7 +312,9 @@ SPACE_GROUPS: Dict[str, dict] = {
         ],
     },
     "Pbca": {
-        "number": 61, "symbol": "Pbca", "crystal_system": "orthorhombic",
+        "number": 61,
+        "symbol": "Pbca",
+        "crystal_system": "orthorhombic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, -1, 0], [0, 0, 1]], [0.5, 0, 0.5]),
@@ -222,7 +327,9 @@ SPACE_GROUPS: Dict[str, dict] = {
         ],
     },
     "Pnma": {
-        "number": 62, "symbol": "Pnma", "crystal_system": "orthorhombic",
+        "number": 62,
+        "symbol": "Pnma",
+        "crystal_system": "orthorhombic",
         "ops": [
             _op(_I),
             _op([[-1, 0, 0], [0, -1, 0], [0, 0, 1]], [0.5, 0, 0.5]),
@@ -237,7 +344,7 @@ SPACE_GROUPS: Dict[str, dict] = {
 }
 
 # Convenient alias map for lookup
-SG_ALIASES: Dict[str, str] = {
+SG_ALIASES: dict[str, str] = {
     "P 1": "P1",
     "P -1": "P-1",
     "P 2(1)": "P2_1",
@@ -246,6 +353,10 @@ SG_ALIASES: Dict[str, str] = {
     "P 21/c": "P21/c",
     "P21/c": "P21/c",
     "C 2": "C2",
+    "P2_1/m": "P2_1/m",
+    "P 2(1)/m": "P2_1/m",
+    "P 21/m": "P21/m",
+    "P21/m": "P21/m",
     "C c": "Cc",
     "C 2/c": "C2/c",
     "P 2(1) 2(1) 2": "P2_12_12",
@@ -260,7 +371,7 @@ SG_ALIASES: Dict[str, str] = {
 }
 
 
-def lookup_sg(name: str) -> Optional[dict]:
+def lookup_sg(name: str) -> dict | None:
     """Look up a space group by name (with alias resolution)."""
     name = name.strip()
     # Direct lookup
@@ -289,8 +400,10 @@ def get_crystal_system(sg_name: str) -> str:
 # Structure factor calculation
 # ---------------------------------------------------------------------------
 
-def calc_f_calc(hkl: np.ndarray, atoms: List[dict], cell: dict,
-                sg_ops: List[tuple]) -> np.ndarray:
+
+def calc_f_calc(
+    hkl: np.ndarray, atoms: list[dict], cell: dict, sg_ops: list[tuple]
+) -> np.ndarray:
     """
     Calculate structure factors F_calc for an array of (h,k,l).
 
@@ -309,9 +422,11 @@ def calc_f_calc(hkl: np.ndarray, atoms: List[dict], cell: dict,
     cos_al, cos_be, cos_ga = np.cos(al), np.cos(be), np.cos(ga)
     sin_al, sin_be, sin_ga = np.sin(al), np.sin(be), np.sin(ga)
 
-    vol = a * b * c * np.sqrt(
-        1 - cos_al ** 2 - cos_be ** 2 - cos_ga ** 2
-        + 2 * cos_al * cos_be * cos_ga
+    vol = (
+        a
+        * b
+        * c
+        * np.sqrt(1 - cos_al**2 - cos_be**2 - cos_ga**2 + 2 * cos_al * cos_be * cos_ga)
     )
 
     # Reciprocal cell
@@ -329,7 +444,9 @@ def calc_f_calc(hkl: np.ndarray, atoms: List[dict], cell: dict,
 
     # 1/d^2
     d_star_sq = (
-        (h * ar) ** 2 + (k * br) ** 2 + (l * cr) ** 2
+        (h * ar) ** 2
+        + (k * br) ** 2
+        + (l * cr) ** 2
         + 2 * h * k * ar * br * cos_ga_r
         + 2 * h * l * ar * cr * cos_be_r
         + 2 * k * l * br * cr * cos_al_r
@@ -351,14 +468,15 @@ def calc_f_calc(hkl: np.ndarray, atoms: List[dict], cell: dict,
             cm = CROMER_MANN["C"]
         a1, b1, a2, b2, a3, b3, a4, b4, cc = cm
         f0 = (
-            a1 * np.exp(-b1 * s_sq) +
-            a2 * np.exp(-b2 * s_sq) +
-            a3 * np.exp(-b3 * s_sq) +
-            a4 * np.exp(-b4 * s_sq) + cc
+            a1 * np.exp(-b1 * s_sq)
+            + a2 * np.exp(-b2 * s_sq)
+            + a3 * np.exp(-b3 * s_sq)
+            + a4 * np.exp(-b4 * s_sq)
+            + cc
         )
 
         # Debye-Waller
-        dw = np.exp(-8 * np.pi ** 2 * uiso * s_sq)
+        dw = np.exp(-8 * np.pi**2 * uiso * s_sq)
 
         # Sum over symmetry operations
         for R, t in sg_ops:
@@ -373,12 +491,17 @@ def calc_f_calc(hkl: np.ndarray, atoms: List[dict], cell: dict,
 # Charge-flipping algorithm
 # ---------------------------------------------------------------------------
 
-def charge_flipping(hkl: np.ndarray, f_obs: np.ndarray,
-                    grid_size: int = 72, n_trials: int = 2,
-                    n_cycles: int = 400, delta_frac: float = 0.15,
-                    convergence_window: int = 20,
-                    convergence_threshold: float = 0.002
-                    ) -> Tuple[np.ndarray, float]:
+
+def charge_flipping(
+    hkl: np.ndarray,
+    f_obs: np.ndarray,
+    grid_size: int = 72,
+    n_trials: int = 2,
+    n_cycles: int = 400,
+    delta_frac: float = 0.15,
+    convergence_window: int = 20,
+    convergence_threshold: float = 0.002,
+) -> tuple[np.ndarray, float]:
     """
     Charge-flipping structure solution.
 
@@ -422,7 +545,7 @@ def charge_flipping(hkl: np.ndarray, f_obs: np.ndarray,
                 rho[hi, ki, li] = F[i]
 
             # Inverse FFT to get density
-            rho_real = np.real(np.fft.ifftn(rho)) * N ** 3
+            rho_real = np.real(np.fft.ifftn(rho)) * N**3
 
             # Flip low-density voxels
             sigma = np.std(rho_real)
@@ -431,7 +554,7 @@ def charge_flipping(hkl: np.ndarray, f_obs: np.ndarray,
             rho_real[mask] = -rho_real[mask]
 
             # Forward FFT
-            rho_k = np.fft.fftn(rho_real) / N ** 3
+            rho_k = np.fft.fftn(rho_real) / N**3
 
             # Extract new phases, keep |F_obs|
             F_new = np.zeros(len(hkl), dtype=complex)
@@ -446,7 +569,7 @@ def charge_flipping(hkl: np.ndarray, f_obs: np.ndarray,
 
             # R-factor
             f_calc_mag = np.abs(F_new)
-            scale = np.sum(f_obs * f_calc_mag) / (np.sum(f_calc_mag ** 2) + 1e-12)
+            scale = np.sum(f_obs * f_calc_mag) / (np.sum(f_calc_mag**2) + 1e-12)
             r = np.sum(np.abs(f_obs - scale * f_calc_mag)) / (np.sum(f_obs) + 1e-12)
             r_history.append(r)
 
@@ -463,7 +586,7 @@ def charge_flipping(hkl: np.ndarray, f_obs: np.ndarray,
             ki = int(kk) % N
             li = int(ll) % N
             rho[hi, ki, li] = F[i]
-        final_rho = np.real(np.fft.ifftn(rho)) * N ** 3
+        final_rho = np.real(np.fft.ifftn(rho)) * N**3
 
         final_r = r_history[-1] if r_history else 1.0
         if final_r < best_r:
@@ -473,11 +596,13 @@ def charge_flipping(hkl: np.ndarray, f_obs: np.ndarray,
     return best_rho, best_r
 
 
-def find_atoms_from_density(rho: np.ndarray, cell: dict,
-                            elements: List[str],
-                            sigma_thresh: float = 3.5,
-                            min_dist: float = 0.8
-                            ) -> List[dict]:
+def find_atoms_from_density(
+    rho: np.ndarray,
+    cell: dict,
+    elements: list[str],
+    sigma_thresh: float = 3.5,
+    min_dist: float = 0.8,
+) -> list[dict]:
     """
     Find atomic positions from an electron density map.
 
@@ -505,8 +630,15 @@ def find_atoms_from_density(rho: np.ndarray, cell: dict,
                     # Check if local maximum (6-connected)
                     val = rho[i, j, k]
                     is_max = True
-                    for di, dj, dk in [(1,0,0),(-1,0,0),(0,1,0),(0,-1,0),(0,0,1),(0,0,-1)]:
-                        ni, nj, nk = (i+di) % N, (j+dj) % N, (k+dk) % N
+                    for di, dj, dk in [
+                        (1, 0, 0),
+                        (-1, 0, 0),
+                        (0, 1, 0),
+                        (0, -1, 0),
+                        (0, 0, 1),
+                        (0, 0, -1),
+                    ]:
+                        ni, nj, nk = (i + di) % N, (j + dj) % N, (k + dk) % N
                         if rho[ni, nj, nk] > val:
                             is_max = False
                             break
@@ -564,6 +696,7 @@ def find_atoms_from_density(rho: np.ndarray, cell: dict,
 # Symmetry operation <-> string conversion
 # ---------------------------------------------------------------------------
 
+
 def symop_to_xyz(R: np.ndarray, t: np.ndarray) -> str:
     """Convert (R, t) to CIF xyz string like 'x, y, z' or '-x, y+1/2, -z+1/2'."""
     labels = ["x", "y", "z"]
@@ -581,9 +714,9 @@ def symop_to_xyz(R: np.ndarray, t: np.ndarray) -> str:
             # Convert to fraction string
             if abs(frac - 0.5) < 0.01:
                 terms.append("+1/2")
-            elif abs(frac - 1.0/3) < 0.01:
+            elif abs(frac - 1.0 / 3) < 0.01:
                 terms.append("+1/3")
-            elif abs(frac - 2.0/3) < 0.01:
+            elif abs(frac - 2.0 / 3) < 0.01:
                 terms.append("+2/3")
             elif abs(frac - 0.25) < 0.01:
                 terms.append("+1/4")
@@ -598,28 +731,38 @@ def symop_to_xyz(R: np.ndarray, t: np.ndarray) -> str:
     return ", ".join(parts)
 
 
-def molecular_weight(elements: List[str]) -> float:
+def molecular_weight(elements: list[str]) -> float:
     """Sum of atomic weights for given element list."""
     return sum(ATOMIC_WEIGHTS.get(e, 12.0) for e in elements)
 
 
-def cell_volume(a: float, b: float, c: float,
-                alpha: float, beta: float, gamma: float) -> float:
+def cell_volume(
+    a: float, b: float, c: float, alpha: float, beta: float, gamma: float
+) -> float:
     """Unit cell volume from parameters (lengths Å, angles degrees)."""
     al = np.radians(alpha)
     be = np.radians(beta)
     ga = np.radians(gamma)
-    return a * b * c * np.sqrt(
-        1 - np.cos(al)**2 - np.cos(be)**2 - np.cos(ga)**2
-        + 2 * np.cos(al) * np.cos(be) * np.cos(ga)
+    return (
+        a
+        * b
+        * c
+        * np.sqrt(
+            1
+            - np.cos(al) ** 2
+            - np.cos(be) ** 2
+            - np.cos(ga) ** 2
+            + 2 * np.cos(al) * np.cos(be) * np.cos(ga)
+        )
     )
 
 
-def hill_formula(elements: List[str]) -> str:
+def hill_formula(elements: list[str]) -> str:
     """
     Return molecular formula in Hill order (C first, then H, then alphabetical).
     """
     from collections import Counter
+
     counts = Counter(elements)
     parts = []
     # Hill: C first, H second, then alpha
