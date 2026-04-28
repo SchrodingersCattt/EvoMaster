@@ -6,31 +6,44 @@ skill_type: operator
 
 # Skill Manager
 
-Manage the user's personal skill library via the MatMaster Tools Server API.
+Manage the user's personal skill library via the Bohrium Open API.
 
 ## Prerequisites
 
-- **API Base**: `${MATMASTER_TOOLS_SERVER}` (environment variable, typically `https://matmaster-tools-server.bohrium.com`)
-- **User ID**: `${MATMASTER_USER_ID}` (environment variable, set by the runtime)
-- All requests require header: `X-User-Id: ${MATMASTER_USER_ID}`
+The following environment variables must be set by the runtime:
 
-Check that both variables are set before proceeding:
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `BOHRIUM_OPEN_API_BASE` | API base URL (env-dependent) | `https://open.test.bohrium.com` |
+| `BOHRIUM_ACCESS_KEY` | User's access key for authentication | `a59507ca...` |
+| `MATMASTER_USER_ID` | Numeric user ID | `110680` |
+
+Check before proceeding:
 
 ```bash
-echo "TOOLS_SERVER=${MATMASTER_TOOLS_SERVER}"
+echo "API_BASE=${BOHRIUM_OPEN_API_BASE}"
 echo "USER_ID=${MATMASTER_USER_ID}"
+echo "ACCESS_KEY=${BOHRIUM_ACCESS_KEY:+set}"
 ```
 
-If either is empty, inform the user that the skill library is unavailable in the current session.
+If any is empty, inform the user that the skill library is unavailable in the current session.
+
+### API Base by Environment
+
+| SERVICE_ENV | Base URL |
+|-------------|----------|
+| `test` | `https://open.test.bohrium.com` |
+| `prod` | `https://open.bohrium.com` |
 
 ## Operations
 
 ### 1. List Skills
 
 ```bash
-curl -s -X GET \
-  "${MATMASTER_TOOLS_SERVER}/api/v1/users/${MATMASTER_USER_ID}/skills" \
-  -H "X-User-Id: ${MATMASTER_USER_ID}" | python3 -m json.tool
+curl -s \
+  -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
+  "${BOHRIUM_OPEN_API_BASE}/openapi/v1/matmaster/users/${MATMASTER_USER_ID}/skills" \
+  | python3 -m json.tool
 ```
 
 Response `.data` is an array of skill objects (newest first). Key fields:
@@ -61,9 +74,10 @@ cd /path/to/parent && zip -r /tmp/skill_upload.zip my-skill-dir/
 
 ```bash
 curl -s -X POST \
-  "${MATMASTER_TOOLS_SERVER}/api/v1/users/${MATMASTER_USER_ID}/skills/upload-zip" \
-  -H "X-User-Id: ${MATMASTER_USER_ID}" \
-  -F "file=@/tmp/skill_upload.zip" | python3 -m json.tool
+  -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
+  -F "file=@/tmp/skill_upload.zip" \
+  "${BOHRIUM_OPEN_API_BASE}/openapi/v1/matmaster/users/${MATMASTER_USER_ID}/skills/upload-zip" \
+  | python3 -m json.tool
 ```
 
 Response on success: `{ "code": 0, "data": { "object_key": "..." } }`
@@ -76,10 +90,11 @@ Use the `object_key` from Step 2:
 
 ```bash
 curl -s -X POST \
-  "${MATMASTER_TOOLS_SERVER}/api/v1/users/${MATMASTER_USER_ID}/skills" \
-  -H "X-User-Id: ${MATMASTER_USER_ID}" \
+  -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"bundle_object_key": "<OBJECT_KEY_FROM_STEP_2>", "status": "ready"}' | python3 -m json.tool
+  -d '{"bundle_object_key": "<OBJECT_KEY_FROM_STEP_2>", "status": "ready"}' \
+  "${BOHRIUM_OPEN_API_BASE}/openapi/v1/matmaster/users/${MATMASTER_USER_ID}/skills" \
+  | python3 -m json.tool
 ```
 
 The server parses `SKILL.md` from the zip to extract the display name automatically.
