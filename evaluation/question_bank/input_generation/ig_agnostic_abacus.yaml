@@ -2,7 +2,7 @@ version: v5
 capability: input_generation
 domain: agnostic
 questions:
-- id: IG_abacus_001_20260422
+- id: IG_abacus_001_20260428
   capability: input_generation
   domain: agnostic
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place
@@ -17,6 +17,7 @@ questions:
     2) 在真空区域布置 empty 原子层，保证位于 slab 外侧而不是埋入体内。
 
     3) 生成与该场景匹配的 SCF INPUT，沿真空方向使用单点/稀疏采样。
+       说明：k 采样可用 kspacing 或 KPT 两种路线；若使用 KPT，建议采用 `KPT_bsse` 文件名与 Gamma 风格。
 
 
     将结果写入当前目录：`STRU_bsse`、`INPUT_bsse`。
@@ -48,13 +49,12 @@ questions:
   - key: must_input_bsse_vacuum_kspacing
     value:
       filename: INPUT_bsse
-      checks:
-      - key: kspacing
-        component: 3
-        min: 0.8
-        max: 1.2
-        component_count_allowed:
-        - 3
+      if_filename: INPUT_bsse
+      if_pattern: ^\s*kspacing\b
+      then_pattern: ^\s*kspacing\s+[0-9]*\.?[0-9]+\s+[0-9]*\.?[0-9]+\s+1(?:\.0+)?\s*$
+      else_filename: KPT_bsse
+      else_pattern: ^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$
+      flags: m
   - key: suggested_input_bsse_numerics
     value:
       filename: INPUT_bsse
@@ -123,10 +123,11 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: must_input_bsse_vacuum_kspacing
-    criterion: '[Must] INPUT_bsse uses three-component `kspacing` and sets the third
-      (vacuum-axis) component to ~=1.0.'
+    criterion: '[Must] Conditional routing: if INPUT_bsse has `kspacing`, it must be 3-component
+      with third component ~=1.0 (single-value form not accepted); if INPUT_bsse has no `kspacing`,
+      then KPT_bsse must provide a mesh line with third-axis sampling = 1.'
     axis: correctness
-    verify: text_file_numeric_range
+    verify: text_file_regex
     weight: 1.0
   - id: suggested_input_bsse_numerics
     criterion: '[Suggested] INPUT_bsse follows benchmark numeric settings with tolerance (`ecutwfc
@@ -549,6 +550,7 @@ questions:
     2) 生成与体相场景匹配的 SCF INPUT（均匀三维采样）。
 
     3) 在最终回答中简要说明 vacancy 场景为何需要 ghost 基组补偿。
+       说明：均匀三维采样可用 kspacing 或 KPT 两种路线；若使用 KPT，建议采用 `KPT_vac_bsse` 文件名与 Gamma 风格。
 
 
     将结果写入当前目录：`STRU_vac_bsse`、`INPUT_vac_bsse`。
@@ -581,26 +583,12 @@ questions:
   - key: must_input_vac_uniform_kspacing
     value:
       filename: INPUT_vac_bsse
-      checks:
-      - key: kspacing
-        component: 1
-        min: 0.08
-        max: 0.2
-        component_count_allowed:
-        - 1
-        - 3
-      - key: kspacing
-        component: 2
-        min: 0.08
-        max: 0.2
-        if_component_count_in:
-        - 3
-      - key: kspacing
-        component: 3
-        min: 0.08
-        max: 0.2
-        if_component_count_in:
-        - 3
+      if_filename: INPUT_vac_bsse
+      if_pattern: ^\s*kspacing\b
+      then_pattern: ^\s*kspacing\s+((?:0\.(?:0[89]|1\d|20?)(?:0+)?))(?:\s+\1\s+\1)?\s*$
+      else_filename: KPT_vac_bsse
+      else_pattern: ^\s*([1-9]\d*)\s+\1\s+\1(?:\s+\d+){0,3}\s*$
+      flags: m
   - key: suggested_input_vac_numerics
     value:
       filename: INPUT_vac_bsse
@@ -668,10 +656,12 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: must_input_vac_uniform_kspacing
-    criterion: '[Must] INPUT_vac_bsse uses kspacing around 0.10 with tolerance (about 0.08~0.20,
-      isotropic or explicit uniform three-component form).'
+    criterion: '[Must] Conditional routing: if INPUT_vac_bsse has `kspacing`, it must be either
+      a single value in 0.08~0.20 or an explicit uniform three-component form in the same range;
+      if INPUT_vac_bsse has no `kspacing`, then KPT_vac_bsse must provide a uniform mesh line
+      (n n n).'
     axis: correctness
-    verify: text_file_numeric_range
+    verify: text_file_regex
     weight: 1.0
   - id: suggested_input_vac_numerics
     criterion: '[Suggested] INPUT_vac_bsse follows benchmark numeric settings with tolerance
