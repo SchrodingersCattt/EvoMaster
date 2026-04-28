@@ -23,11 +23,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-import numpy as np
-
-# Import the helper library (same directory)
 sys.path.insert(0, str(Path(__file__).parent))
-from solve_refine_scxrd_lib import (
+
+import numpy as np  # noqa: E402
+from solve_refine_scxrd_lib import (  # noqa: E402
     SPACE_GROUPS,
     calc_f_calc,
     cell_volume,
@@ -57,13 +56,13 @@ def parse_hkl(path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
                 continue
             # HKLF4 fixed-format: h(4) k(4) l(4) F²(8) sigma(8) [batch(4)]
             # Try fixed-width first (handles merged fields like l+F²)
-            h = k = l = None
+            h = k = l_idx = None
             fo2 = sig = None
             if len(line) >= 28:
                 try:
                     h = int(line[0:4])
                     k = int(line[4:8])
-                    l = int(line[8:12])
+                    l_idx = int(line[8:12])
                     fo2 = float(line[12:20])
                     sig = float(line[20:28])
                 except (ValueError, IndexError):
@@ -72,7 +71,7 @@ def parse_hkl(path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
                 parts = line.split()
                 if len(parts) >= 5:
                     try:
-                        h, k, l = int(parts[0]), int(parts[1]), int(parts[2])
+                        h, k, l_idx = int(parts[0]), int(parts[1]), int(parts[2])
                         fo2 = float(parts[3])
                         sig = float(parts[4])
                     except (ValueError, IndexError):
@@ -81,11 +80,11 @@ def parse_hkl(path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
                     continue
 
             # End marker: 0 0 0
-            if h == 0 and k == 0 and l == 0:
+            if h == 0 and k == 0 and l_idx == 0:
                 break
 
             if fo2 > 0 and sig > 0:
-                hkl_list.append([h, k, l])
+                hkl_list.append([h, k, l_idx])
                 f_list.append(np.sqrt(fo2))  # |F| from F²
                 sig_list.append(sig / (2 * np.sqrt(fo2) + 1e-12))  # sigma(|F|)
 
@@ -104,7 +103,7 @@ def parse_ins(path: str) -> dict:
     with open(path) as f:
         lines = f.readlines()
 
-    for i, line in enumerate(lines):
+    for _i, line in enumerate(lines):
         parts = line.split()
         if not parts:
             continue
@@ -272,7 +271,7 @@ END
                     if refined:
                         return refined
                 return atoms
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    except (subprocess.TimeoutExpired, OSError):
         pass
 
     return None
@@ -484,7 +483,7 @@ def write_cif(
     lines = []
     lines.append(f"data_{title.replace(' ', '_')}")
     lines.append("")
-    lines.append(f"_audit_creation_method          'solve_refine_scxrd.py'")
+    lines.append("_audit_creation_method          'solve_refine_scxrd.py'")
     lines.append(f"_chemical_formula_sum            '{formula}'")
     lines.append(f"_chemical_formula_weight          {mw:.2f}")
     lines.append("")
@@ -600,7 +599,7 @@ def main():
     args = parser.parse_args()
 
     # --- Step 1: Discover and parse input files ---
-    print(f"=== SCXRD Pipeline ===")
+    print("=== SCXRD Pipeline ===")
     print(f"HKL: {args.hkl}")
 
     companions = auto_discover_files(args.hkl)
@@ -805,7 +804,7 @@ def main():
         print(f"JSON summary written to {args.json}")
 
     # Print summary to stdout
-    print(f"\n=== Result Summary ===")
+    print("\n=== Result Summary ===")
     print(f"Formula: {summary['formula']}")
     print(f"Space group: {sg_name} ({sg_info['crystal_system']})")
     print(

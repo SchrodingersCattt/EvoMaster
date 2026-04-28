@@ -22,8 +22,6 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-
 import numpy as np
 from scipy.optimize import least_squares
 from scipy.signal import find_peaks
@@ -78,14 +76,14 @@ def guess_crystal_system(sg: str) -> str:
     return "orthorhombic"
 
 
-def cell_to_params(cell: Dict, crystal_system: str) -> np.ndarray:
+def cell_to_params(cell: dict, crystal_system: str) -> np.ndarray:
     """Extract free parameters for the crystal system."""
     free = CRYSTAL_SYSTEMS[crystal_system]
     return np.array([cell[k] for k in free])
 
 
 def params_to_cell(params: np.ndarray, crystal_system: str,
-                   base_cell: Dict) -> Dict:
+                   base_cell: dict) -> dict:
     """Reconstruct full cell from free parameters."""
     cell = dict(base_cell)
     free = CRYSTAL_SYSTEMS[crystal_system]
@@ -119,8 +117,8 @@ def params_to_cell(params: np.ndarray, crystal_system: str,
 # Peak positions from cell
 # ---------------------------------------------------------------------------
 
-def calc_two_theta(h: int, k: int, l: int, cell: Dict,
-                   wavelength: float) -> Optional[float]:
+def calc_two_theta(h: int, k: int, l_idx: int, cell: dict,
+                   wavelength: float) -> float | None:
     """Calculate 2θ for a reflection (h,k,l) given cell and wavelength."""
     a, b, c = cell["a"], cell["b"], cell["c"]
     al = np.radians(cell.get("alpha", 90.0))
@@ -147,10 +145,10 @@ def calc_two_theta(h: int, k: int, l: int, cell: Dict,
     cos_ga_r = (cos_al * cos_be - cos_ga) / (sin_al * sin_be + 1e-12)
 
     d_star_sq = (
-        (h * ar)**2 + (k * br)**2 + (l * cr)**2
+        (h * ar)**2 + (k * br)**2 + (l_idx * cr)**2
         + 2 * h * k * ar * br * cos_ga_r
-        + 2 * h * l * ar * cr * cos_be_r
-        + 2 * k * l * br * cr * cos_al_r
+        + 2 * h * l_idx * ar * cr * cos_be_r
+        + 2 * k * l_idx * br * cr * cos_al_r
     )
 
     sin_theta = wavelength * np.sqrt(d_star_sq) / 2.0
@@ -159,19 +157,19 @@ def calc_two_theta(h: int, k: int, l: int, cell: Dict,
     return 2 * np.degrees(np.arcsin(sin_theta))
 
 
-def generate_hkl_list(cell: Dict, wavelength: float,
+def generate_hkl_list(cell: dict, wavelength: float,
                       two_theta_max: float = 80.0,
-                      h_max: int = 10) -> List[Tuple[int, int, int, float]]:
+                      h_max: int = 10) -> list[tuple[int, int, int, float]]:
     """Generate (h, k, l, 2θ) for all reflections within range."""
     reflections = []
     for h in range(-h_max, h_max + 1):
         for k in range(-h_max, h_max + 1):
-            for l in range(-h_max, h_max + 1):
-                if h == 0 and k == 0 and l == 0:
+            for l_idx in range(-h_max, h_max + 1):
+                if h == 0 and k == 0 and l_idx == 0:
                     continue
-                tt = calc_two_theta(h, k, l, cell, wavelength)
+                tt = calc_two_theta(h, k, l_idx, cell, wavelength)
                 if tt is not None and 5 < tt < two_theta_max:
-                    reflections.append((h, k, l, tt))
+                    reflections.append((h, k, l_idx, tt))
     # Remove duplicates (same 2theta within tolerance)
     reflections.sort(key=lambda x: x[3])
     return reflections
@@ -181,7 +179,7 @@ def generate_hkl_list(cell: Dict, wavelength: float,
 # Peak finding from PXRD pattern
 # ---------------------------------------------------------------------------
 
-def load_xy_pattern(path: str) -> Tuple[np.ndarray, np.ndarray]:
+def load_xy_pattern(path: str) -> tuple[np.ndarray, np.ndarray]:
     """Load a 2-column XY pattern (2θ, intensity)."""
     data = []
     with open(path) as f:
@@ -238,9 +236,9 @@ def find_peaks_adaptive(two_theta: np.ndarray, intensity: np.ndarray,
 # Pawley refinement (peak-position matching)
 # ---------------------------------------------------------------------------
 
-def pawley_refine(obs_peaks: np.ndarray, cell: Dict,
+def pawley_refine(obs_peaks: np.ndarray, cell: dict,
                   crystal_system: str, wavelength: float,
-                  two_theta_max: float = None) -> Tuple[Dict, float]:
+                  two_theta_max: float = None) -> tuple[dict, float]:
     """
     Pawley-type refinement: refine cell to match observed peak positions.
 
@@ -304,7 +302,7 @@ def pawley_refine(obs_peaks: np.ndarray, cell: Dict,
 # Multi-temperature mode
 # ---------------------------------------------------------------------------
 
-def parse_temperature(filename: str) -> Optional[float]:
+def parse_temperature(filename: str) -> float | None:
     """Extract temperature from filename (e.g. 'pattern_300K.xy' -> 300.0)."""
     m = re.search(r'(\d+(?:\.\d+)?)\s*[Kk]', filename)
     if m:
@@ -319,7 +317,7 @@ def parse_temperature(filename: str) -> Optional[float]:
 
 
 def thermal_expansion_fit(temps: np.ndarray, params: np.ndarray
-                          ) -> Dict:
+                          ) -> dict:
     """Linear fit of lattice parameter vs temperature."""
     if len(temps) < 2:
         return {"slope": 0.0, "intercept": float(params[0]), "R2": 0.0}
@@ -339,7 +337,7 @@ def thermal_expansion_fit(temps: np.ndarray, params: np.ndarray
 
 
 def detect_phase_transitions(temps: np.ndarray, volumes: np.ndarray,
-                             threshold: float = 0.03) -> List[int]:
+                             threshold: float = 0.03) -> list[int]:
     """
     Detect phase transition indices where volume jump exceeds threshold (fractional).
     """
@@ -394,7 +392,7 @@ def main():
     elif crystal_system in ("tetragonal", "hexagonal", "trigonal"):
         cell["b"] = cell["a"]
 
-    print(f"=== PXRD Pawley Refinement ===")
+    print("=== PXRD Pawley Refinement ===")
     print(f"Space group: {args.sg} ({crystal_system})")
     print(f"Initial cell: {cell}")
     print(f"Wavelength: {args.wavelength:.5f} Å")
@@ -429,7 +427,7 @@ def main():
             print(f"  Found {len(obs_peaks)} peaks")
 
             if len(obs_peaks) < 3:
-                print(f"  WARNING: Too few peaks, skipping")
+                print("  WARNING: Too few peaks, skipping")
                 results.append({
                     "file": fname, "success": False,
                     "error": "too few peaks",

@@ -440,16 +440,16 @@ def calc_f_calc(
 
     h = hkl[:, 0]
     k = hkl[:, 1]
-    l = hkl[:, 2]
+    l_idx = hkl[:, 2]
 
     # 1/d^2
     d_star_sq = (
         (h * ar) ** 2
         + (k * br) ** 2
-        + (l * cr) ** 2
+        + (l_idx * cr) ** 2
         + 2 * h * k * ar * br * cos_ga_r
-        + 2 * h * l * ar * cr * cos_be_r
-        + 2 * k * l * br * cr * cos_al_r
+        + 2 * h * l_idx * ar * cr * cos_be_r
+        + 2 * k * l_idx * br * cr * cos_al_r
     )
     s_sq = d_star_sq / 4.0  # (sin(theta)/lambda)^2
 
@@ -481,7 +481,7 @@ def calc_f_calc(
         # Sum over symmetry operations
         for R, t in sg_ops:
             pos = R @ np.array([x, y, z]) + t
-            phase = 2 * np.pi * (h * pos[0] + k * pos[1] + l * pos[2])
+            phase = 2 * np.pi * (h * pos[0] + k * pos[1] + l_idx * pos[2])
             F += occ * f0 * dw * np.exp(1j * phase)
 
     return F
@@ -535,7 +535,7 @@ def charge_flipping(
         rho = np.zeros((N, N, N), dtype=complex)
         r_history = []
 
-        for cycle in range(n_cycles):
+        for _cycle in range(n_cycles):
             # Place F into grid
             rho[:] = 0
             for i, (hh, kk, ll) in enumerate(hkl):
@@ -680,7 +680,7 @@ def find_atoms_from_density(
     atoms = []
     # Count how many of each element we expect (simple: distribute evenly)
     # In practice, we assign heaviest elements to strongest peaks
-    for idx, (val, fx, fy, fz) in enumerate(filtered):
+    for idx, (_val, fx, fy, fz) in enumerate(filtered):
         if idx < len(elements):
             # Assign from sorted elements
             elem = elem_weights[idx % len(elem_weights)][1]
