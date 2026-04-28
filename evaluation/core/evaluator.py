@@ -16,11 +16,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .evaluator_batch_checks import (
-    check_batch_consistent_calls,
-    check_batch_single_variable_sweep,
-    check_batch_tool_args_constant,
-)
 from .evaluator_helpers import (
     build_llm_context,
     build_safety_eval_record,
@@ -424,10 +419,6 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return self._check_contains_all(answer=answer, expected=ref.value)
-        if item.verify == 'tool_called':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_tool_called(tool_calls=tool_calls, expected=ref.value)
         if item.verify == 'tool_args_match':
             if ref is None:
                 return False, 'missing reference answer'
@@ -441,10 +432,6 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return self._check_event_type_called(evidence=evidence, expected=ref.value)
-        if item.verify == 'source_type_used':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_source_type_used(evidence=evidence, expected=ref.value)
         if item.verify == 'call_count_range':
             if ref is None:
                 return False, 'missing reference answer'
@@ -560,25 +547,6 @@ class BinaryEvaluator:
                     evidence=evidence,
                     ref=ref,
                 ),
-            )
-
-        if item.verify == 'batch_single_variable_sweep':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_batch_single_variable_sweep(
-                tool_calls=tool_calls, evidence=evidence, ref=ref
-            )
-        if item.verify == 'batch_tool_args_constant':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_batch_tool_args_constant(
-                tool_calls=tool_calls, evidence=evidence, ref=ref
-            )
-        if item.verify == 'batch_consistent_calls':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_batch_consistent_calls(
-                tool_calls=tool_calls, evidence=evidence, ref=ref
             )
 
         return False, f'unsupported verify type: {item.verify}'
@@ -704,24 +672,6 @@ class BinaryEvaluator:
         return True, 'all tokens found'
 
     @staticmethod
-    def _check_tool_called(
-        *,
-        tool_calls: list[dict[str, Any]],
-        expected: Any,
-    ) -> tuple[bool, str]:
-        targets = (
-            [str(t) for t in expected]
-            if isinstance(expected, list)
-            else [str(expected)]
-        )
-        for call in tool_calls:
-            name = call.get('tool_name', '')
-            if name in targets:
-                return True, f"tool '{name}' called at step {call.get('step')}"
-        called_names = sorted({c.get('tool_name', '') for c in tool_calls})
-        return False, f'none of {targets} called (called: {called_names})'
-
-    @staticmethod
     def _check_tool_args_match(
         *,
         tool_calls: list[dict[str, Any]],
@@ -840,26 +790,6 @@ class BinaryEvaluator:
                     f"event_type '{evt.event_type.value}' found at step {evt.step}",
                 )
         found = sorted({e.event_type.value for e in evidence.events})
-        return False, f'none of {targets} found (found: {found})'
-
-    @staticmethod
-    def _check_source_type_used(
-        *, evidence: EvidenceBundle | None, expected: Any
-    ) -> tuple[bool, str]:
-        if evidence is None:
-            return False, 'no EvidenceBundle provided'
-        targets = (
-            [str(t) for t in expected]
-            if isinstance(expected, list)
-            else [str(expected)]
-        )
-        for evt in evidence.events:
-            if evt.source_type.value in targets and evt.succeeded:
-                return (
-                    True,
-                    f"source_type '{evt.source_type.value}' found at step {evt.step}",
-                )
-        found = sorted({e.source_type.value for e in evidence.events})
         return False, f'none of {targets} found (found: {found})'
 
     @staticmethod
@@ -1035,39 +965,6 @@ class BinaryEvaluator:
     # ------------------------------------------------------------------
     # Batch processing checks (implementations in evaluator_batch_checks.py)
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _check_batch_single_variable_sweep(
-        *,
-        tool_calls: list[dict[str, Any]],
-        evidence: EvidenceBundle | None,
-        ref: ReferenceAnswer,
-    ) -> tuple[bool, str]:
-        return check_batch_single_variable_sweep(
-            tool_calls=tool_calls, evidence=evidence, ref=ref
-        )
-
-    @staticmethod
-    def _check_batch_tool_args_constant(
-        *,
-        tool_calls: list[dict[str, Any]],
-        evidence: EvidenceBundle | None,
-        ref: ReferenceAnswer,
-    ) -> tuple[bool, str]:
-        return check_batch_tool_args_constant(
-            tool_calls=tool_calls, evidence=evidence, ref=ref
-        )
-
-    @staticmethod
-    def _check_batch_consistent_calls(
-        *,
-        tool_calls: list[dict[str, Any]],
-        evidence: EvidenceBundle | None,
-        ref: ReferenceAnswer,
-    ) -> tuple[bool, str]:
-        return check_batch_consistent_calls(
-            tool_calls=tool_calls, evidence=evidence, ref=ref
-        )
 
     # ------------------------------------------------------------------
     # Utilities
