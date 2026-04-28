@@ -33,28 +33,40 @@ from scipy.signal import find_peaks
 # ---------------------------------------------------------------------------
 
 CRYSTAL_SYSTEMS = {
-    "cubic":        ["a"],
-    "tetragonal":   ["a", "c"],
+    "cubic": ["a"],
+    "tetragonal": ["a", "c"],
     "orthorhombic": ["a", "b", "c"],
-    "hexagonal":    ["a", "c"],
-    "trigonal":     ["a", "c"],
-    "monoclinic":   ["a", "b", "c", "beta"],
-    "triclinic":    ["a", "b", "c", "alpha", "beta", "gamma"],
+    "hexagonal": ["a", "c"],
+    "trigonal": ["a", "c"],
+    "monoclinic": ["a", "b", "c", "beta"],
+    "triclinic": ["a", "b", "c", "alpha", "beta", "gamma"],
 }
 
 # Space group -> crystal system (subset)
 SG_CRYSTAL_SYSTEM = {
-    "Pm-3m": "cubic", "Fm-3m": "cubic", "Im-3m": "cubic",
-    "Fd-3m": "cubic", "Pa-3": "cubic",
-    "P4/mmm": "tetragonal", "I4/mmm": "tetragonal",
-    "P6_3/mmc": "hexagonal", "P6_3mc": "hexagonal",
-    "R-3m": "trigonal", "R3m": "trigonal",
-    "Pnma": "orthorhombic", "Pbca": "orthorhombic",
-    "P2_12_12_1": "orthorhombic", "P212121": "orthorhombic",
-    "Cmcm": "orthorhombic", "Cmc21": "orthorhombic",
-    "P2_1/c": "monoclinic", "P21/c": "monoclinic",
-    "C2/c": "monoclinic", "C2/m": "monoclinic",
-    "P-1": "triclinic", "P1": "triclinic",
+    "Pm-3m": "cubic",
+    "Fm-3m": "cubic",
+    "Im-3m": "cubic",
+    "Fd-3m": "cubic",
+    "Pa-3": "cubic",
+    "P4/mmm": "tetragonal",
+    "I4/mmm": "tetragonal",
+    "P6_3/mmc": "hexagonal",
+    "P6_3mc": "hexagonal",
+    "R-3m": "trigonal",
+    "R3m": "trigonal",
+    "Pnma": "orthorhombic",
+    "Pbca": "orthorhombic",
+    "P2_12_12_1": "orthorhombic",
+    "P212121": "orthorhombic",
+    "Cmcm": "orthorhombic",
+    "Cmc21": "orthorhombic",
+    "P2_1/c": "monoclinic",
+    "P21/c": "monoclinic",
+    "C2/c": "monoclinic",
+    "C2/m": "monoclinic",
+    "P-1": "triclinic",
+    "P1": "triclinic",
 }
 
 
@@ -83,8 +95,7 @@ def cell_to_params(cell: dict, crystal_system: str) -> np.ndarray:
     return np.array([cell[k] for k in free])
 
 
-def params_to_cell(params: np.ndarray, crystal_system: str,
-                   base_cell: dict) -> dict:
+def params_to_cell(params: np.ndarray, crystal_system: str, base_cell: dict) -> dict:
     """Reconstruct full cell from free parameters."""
     cell = dict(base_cell)
     free = CRYSTAL_SYSTEMS[crystal_system]
@@ -118,8 +129,10 @@ def params_to_cell(params: np.ndarray, crystal_system: str,
 # Peak positions from cell
 # ---------------------------------------------------------------------------
 
-def calc_two_theta(h: int, k: int, l_idx: int, cell: dict,
-                   wavelength: float) -> float | None:
+
+def calc_two_theta(
+    h: int, k: int, l_idx: int, cell: dict, wavelength: float
+) -> float | None:
     """Calculate 2θ for a reflection (h,k,l) given cell and wavelength."""
     a, b, c = cell["a"], cell["b"], cell["c"]
     al = np.radians(cell.get("alpha", 90.0))
@@ -129,9 +142,11 @@ def calc_two_theta(h: int, k: int, l_idx: int, cell: dict,
     cos_al, cos_be, cos_ga = np.cos(al), np.cos(be), np.cos(ga)
     sin_al, sin_be, sin_ga = np.sin(al), np.sin(be), np.sin(ga)
 
-    vol = a * b * c * np.sqrt(
-        1 - cos_al**2 - cos_be**2 - cos_ga**2
-        + 2 * cos_al * cos_be * cos_ga
+    vol = (
+        a
+        * b
+        * c
+        * np.sqrt(1 - cos_al**2 - cos_be**2 - cos_ga**2 + 2 * cos_al * cos_be * cos_ga)
     )
     if vol < 1e-6:
         return None
@@ -146,7 +161,9 @@ def calc_two_theta(h: int, k: int, l_idx: int, cell: dict,
     cos_ga_r = (cos_al * cos_be - cos_ga) / (sin_al * sin_be + 1e-12)
 
     d_star_sq = (
-        (h * ar)**2 + (k * br)**2 + (l_idx * cr)**2
+        (h * ar) ** 2
+        + (k * br) ** 2
+        + (l_idx * cr) ** 2
         + 2 * h * k * ar * br * cos_ga_r
         + 2 * h * l_idx * ar * cr * cos_be_r
         + 2 * k * l_idx * br * cr * cos_al_r
@@ -158,9 +175,9 @@ def calc_two_theta(h: int, k: int, l_idx: int, cell: dict,
     return 2 * np.degrees(np.arcsin(sin_theta))
 
 
-def generate_hkl_list(cell: dict, wavelength: float,
-                      two_theta_max: float = 80.0,
-                      h_max: int = 10) -> list[tuple[int, int, int, float]]:
+def generate_hkl_list(
+    cell: dict, wavelength: float, two_theta_max: float = 80.0, h_max: int = 10
+) -> list[tuple[int, int, int, float]]:
     """Generate (h, k, l, 2θ) for all reflections within range."""
     reflections = []
     for h in range(-h_max, h_max + 1):
@@ -179,6 +196,7 @@ def generate_hkl_list(cell: dict, wavelength: float,
 # ---------------------------------------------------------------------------
 # Peak finding from PXRD pattern
 # ---------------------------------------------------------------------------
+
 
 def load_xy_pattern(path: str) -> tuple[np.ndarray, np.ndarray]:
     """Load a 2-column XY pattern (2θ, intensity)."""
@@ -201,8 +219,9 @@ def load_xy_pattern(path: str) -> tuple[np.ndarray, np.ndarray]:
     return data[:, 0], data[:, 1]
 
 
-def find_peaks_adaptive(two_theta: np.ndarray, intensity: np.ndarray,
-                        min_peaks: int = 8) -> np.ndarray:
+def find_peaks_adaptive(
+    two_theta: np.ndarray, intensity: np.ndarray, min_peaks: int = 8
+) -> np.ndarray:
     """
     Find peaks with adaptive threshold.
     Falls back to progressively lower thresholds if too few peaks found.
@@ -218,8 +237,9 @@ def find_peaks_adaptive(two_theta: np.ndarray, intensity: np.ndarray,
         distance = max(3, int(len(two_theta) / 200))
         prominence = frac * y_max * 0.02
 
-        indices, props = find_peaks(y, height=height, distance=distance,
-                                    prominence=prominence)
+        indices, props = find_peaks(
+            y, height=height, distance=distance, prominence=prominence
+        )
         if len(indices) >= min_peaks:
             return two_theta[indices]
 
@@ -237,9 +257,14 @@ def find_peaks_adaptive(two_theta: np.ndarray, intensity: np.ndarray,
 # Pawley refinement (peak-position matching)
 # ---------------------------------------------------------------------------
 
-def pawley_refine(obs_peaks: np.ndarray, cell: dict,
-                  crystal_system: str, wavelength: float,
-                  two_theta_max: float = None) -> tuple[dict, float]:
+
+def pawley_refine(
+    obs_peaks: np.ndarray,
+    cell: dict,
+    crystal_system: str,
+    wavelength: float,
+    two_theta_max: float = None,
+) -> tuple[dict, float]:
     """
     Pawley-type refinement: refine cell to match observed peak positions.
 
@@ -257,8 +282,9 @@ def pawley_refine(obs_peaks: np.ndarray, cell: dict,
             if trial_cell[k] < 0.5:
                 return np.ones(len(obs_peaks)) * 1000.0
 
-        hkl_list = generate_hkl_list(trial_cell, wavelength,
-                                     two_theta_max=two_theta_max)
+        hkl_list = generate_hkl_list(
+            trial_cell, wavelength, two_theta_max=two_theta_max
+        )
         if not hkl_list:
             return np.ones(len(obs_peaks)) * 1000.0
 
@@ -284,13 +310,14 @@ def pawley_refine(obs_peaks: np.ndarray, cell: dict,
             upper[i] = min(p0[i] + 10.0, 150.0)
 
     try:
-        result = least_squares(residuals, p0, bounds=(lower, upper),
-                               method="trf", max_nfev=500)
+        result = least_squares(
+            residuals, p0, bounds=(lower, upper), method="trf", max_nfev=500
+        )
         refined_cell = params_to_cell(result.x, crystal_system, cell)
 
         # Calculate wR
         r = residuals(result.x)
-        wr = np.sqrt(np.sum(r**2) / (len(obs_peaks) * np.mean(obs_peaks)**2 + 1e-12))
+        wr = np.sqrt(np.sum(r**2) / (len(obs_peaks) * np.mean(obs_peaks) ** 2 + 1e-12))
 
         return refined_cell, float(wr)
 
@@ -303,13 +330,14 @@ def pawley_refine(obs_peaks: np.ndarray, cell: dict,
 # Multi-temperature mode
 # ---------------------------------------------------------------------------
 
+
 def parse_temperature(filename: str) -> float | None:
     """Extract temperature from filename (e.g. 'pattern_300K.xy' -> 300.0)."""
-    m = re.search(r'(\d+(?:\.\d+)?)\s*[Kk]', filename)
+    m = re.search(r"(\d+(?:\.\d+)?)\s*[Kk]", filename)
     if m:
         return float(m.group(1))
     # Try plain numbers in filename
-    m = re.search(r'_(\d{2,4})(?:_|\.|$)', filename)
+    m = re.search(r"_(\d{2,4})(?:_|\.|$)", filename)
     if m:
         val = float(m.group(1))
         if 100 <= val <= 2000:
@@ -317,8 +345,7 @@ def parse_temperature(filename: str) -> float | None:
     return None
 
 
-def thermal_expansion_fit(temps: np.ndarray, params: np.ndarray
-                          ) -> dict:
+def thermal_expansion_fit(temps: np.ndarray, params: np.ndarray) -> dict:
     """Linear fit of lattice parameter vs temperature."""
     if len(temps) < 2:
         return {"slope": 0.0, "intercept": float(params[0]), "R2": 0.0}
@@ -326,8 +353,8 @@ def thermal_expansion_fit(temps: np.ndarray, params: np.ndarray
     coeffs = np.polyfit(temps, params, 1)
     slope, intercept = coeffs
     pred = np.polyval(coeffs, temps)
-    ss_res = np.sum((params - pred)**2)
-    ss_tot = np.sum((params - np.mean(params))**2)
+    ss_res = np.sum((params - pred) ** 2)
+    ss_tot = np.sum((params - np.mean(params)) ** 2)
     r2 = 1 - ss_res / (ss_tot + 1e-12)
 
     return {
@@ -337,8 +364,9 @@ def thermal_expansion_fit(temps: np.ndarray, params: np.ndarray
     }
 
 
-def detect_phase_transitions(temps: np.ndarray, volumes: np.ndarray,
-                             threshold: float = 0.03) -> list[int]:
+def detect_phase_transitions(
+    temps: np.ndarray, volumes: np.ndarray, threshold: float = 0.03
+) -> list[int]:
     """
     Detect phase transition indices where volume jump exceeds threshold (fractional).
     """
@@ -348,7 +376,9 @@ def detect_phase_transitions(temps: np.ndarray, volumes: np.ndarray,
     sorted_idx = np.argsort(temps)
     sorted_vols = volumes[sorted_idx]
     for i in range(1, len(sorted_vols)):
-        frac_change = abs(sorted_vols[i] - sorted_vols[i-1]) / (sorted_vols[i-1] + 1e-12)
+        frac_change = abs(sorted_vols[i] - sorted_vols[i - 1]) / (
+            sorted_vols[i - 1] + 1e-12
+        )
         if frac_change > threshold:
             transitions.append(int(sorted_idx[i]))
     return transitions
@@ -358,20 +388,34 @@ def detect_phase_transitions(temps: np.ndarray, volumes: np.ndarray,
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
-        description="PXRD Pawley lattice parameter refinement")
-    parser.add_argument("--data", required=True,
-                        help="Path to XY file or directory of XY files")
+        description="PXRD Pawley lattice parameter refinement"
+    )
+    parser.add_argument(
+        "--data", required=True, help="Path to XY file or directory of XY files"
+    )
     parser.add_argument("--sg", required=True, help="Space group symbol")
-    parser.add_argument("--cell", required=True,
-                        help="Initial cell as 'a=X,b=Y,c=Z[,alpha=A,beta=B,gamma=G]'")
-    parser.add_argument("--wavelength", type=float, default=1.5406,
-                        help="X-ray wavelength in Å (default: 1.5406 CuKα)")
-    parser.add_argument("--multi-temp", action="store_true",
-                        help="Multi-temperature mode (data is directory)")
-    parser.add_argument("--output", "-o", default="result.json",
-                        help="Output JSON path")
+    parser.add_argument(
+        "--cell",
+        required=True,
+        help="Initial cell as 'a=X,b=Y,c=Z[,alpha=A,beta=B,gamma=G]'",
+    )
+    parser.add_argument(
+        "--wavelength",
+        type=float,
+        default=1.5406,
+        help="X-ray wavelength in Å (default: 1.5406 CuKα)",
+    )
+    parser.add_argument(
+        "--multi-temp",
+        action="store_true",
+        help="Multi-temperature mode (data is directory)",
+    )
+    parser.add_argument(
+        "--output", "-o", default="result.json", help="Output JSON path"
+    )
     parser.add_argument("--debug-plot", help="Directory for debug plots")
     args = parser.parse_args()
 
@@ -402,15 +446,18 @@ def main():
     data_path = Path(args.data)
     if data_path.is_dir():
         files = sorted(
-            glob.glob(str(data_path / "*.xy")) +
-            glob.glob(str(data_path / "*.dat")) +
-            glob.glob(str(data_path / "*.csv")) +
-            glob.glob(str(data_path / "*.txt"))
+            glob.glob(str(data_path / "*.xy"))
+            + glob.glob(str(data_path / "*.dat"))
+            + glob.glob(str(data_path / "*.csv"))
+            + glob.glob(str(data_path / "*.txt"))
         )
         if not files:
             # Try all files
-            files = sorted(str(p) for p in data_path.iterdir()
-                           if p.is_file() and not p.name.startswith("."))
+            files = sorted(
+                str(p)
+                for p in data_path.iterdir()
+                if p.is_file() and not p.name.startswith(".")
+            )
     else:
         files = [str(data_path)]
 
@@ -422,31 +469,47 @@ def main():
         print(f"\n--- {fname} ---")
         try:
             two_theta, intensity = load_xy_pattern(fpath)
-            print(f"  Loaded {len(two_theta)} points, 2θ range: [{two_theta[0]:.2f}, {two_theta[-1]:.2f}]")
+            print(
+                f"  Loaded {len(two_theta)} points, 2θ range: [{two_theta[0]:.2f}, {two_theta[-1]:.2f}]"
+            )
 
             obs_peaks = find_peaks_adaptive(two_theta, intensity)
             print(f"  Found {len(obs_peaks)} peaks")
 
             if len(obs_peaks) < 3:
                 print("  WARNING: Too few peaks, skipping")
-                results.append({
-                    "file": fname, "success": False,
-                    "error": "too few peaks",
-                })
+                results.append(
+                    {
+                        "file": fname,
+                        "success": False,
+                        "error": "too few peaks",
+                    }
+                )
                 continue
 
             refined_cell, wr = pawley_refine(
-                obs_peaks, cell, crystal_system, args.wavelength,
+                obs_peaks,
+                cell,
+                crystal_system,
+                args.wavelength,
                 two_theta_max=two_theta[-1],
             )
 
-            vol = (refined_cell["a"] * refined_cell["b"] * refined_cell["c"] *
-                   np.sqrt(1 - np.cos(np.radians(refined_cell.get("alpha", 90)))**2
-                           - np.cos(np.radians(refined_cell.get("beta", 90)))**2
-                           - np.cos(np.radians(refined_cell.get("gamma", 90)))**2
-                           + 2 * np.cos(np.radians(refined_cell.get("alpha", 90)))
-                           * np.cos(np.radians(refined_cell.get("beta", 90)))
-                           * np.cos(np.radians(refined_cell.get("gamma", 90)))))
+            vol = (
+                refined_cell["a"]
+                * refined_cell["b"]
+                * refined_cell["c"]
+                * np.sqrt(
+                    1
+                    - np.cos(np.radians(refined_cell.get("alpha", 90))) ** 2
+                    - np.cos(np.radians(refined_cell.get("beta", 90))) ** 2
+                    - np.cos(np.radians(refined_cell.get("gamma", 90))) ** 2
+                    + 2
+                    * np.cos(np.radians(refined_cell.get("alpha", 90)))
+                    * np.cos(np.radians(refined_cell.get("beta", 90)))
+                    * np.cos(np.radians(refined_cell.get("gamma", 90)))
+                )
+            )
 
             temp = parse_temperature(fname)
 
@@ -462,18 +525,23 @@ def main():
                 entry["temperature_K"] = temp
             results.append(entry)
 
-            print(f"  Refined: a={refined_cell['a']:.4f} b={refined_cell['b']:.4f} "
-                  f"c={refined_cell['c']:.4f}")
+            print(
+                f"  Refined: a={refined_cell['a']:.4f} b={refined_cell['b']:.4f} "
+                f"c={refined_cell['c']:.4f}"
+            )
             print(f"  Volume: {vol:.3f} Å³, wR = {wr:.4f}")
             if temp is not None:
                 print(f"  Temperature: {temp} K")
 
         except Exception as e:
             print(f"  ERROR: {e}", file=sys.stderr)
-            results.append({
-                "file": fname, "success": False,
-                "error": str(e),
-            })
+            results.append(
+                {
+                    "file": fname,
+                    "success": False,
+                    "error": str(e),
+                }
+            )
 
     # Multi-temperature analysis
     thermal = {}
@@ -493,14 +561,18 @@ def main():
             vals = np.array([r["cell"][param] for r in successful])
             fit = thermal_expansion_fit(temps, vals)
             thermal[param] = fit
-            print(f"\nThermal expansion ({param}): "
-                  f"slope={fit['slope']:.6e}, R²={fit['R2']:.4f}")
+            print(
+                f"\nThermal expansion ({param}): "
+                f"slope={fit['slope']:.6e}, R²={fit['R2']:.4f}"
+            )
 
         # Volume thermal expansion
         vol_fit = thermal_expansion_fit(temps, vols)
         thermal["volume"] = vol_fit
-        print(f"\nVolume thermal expansion: "
-              f"slope={vol_fit['slope']:.4e} Å³/K, R²={vol_fit['R2']:.4f}")
+        print(
+            f"\nVolume thermal expansion: "
+            f"slope={vol_fit['slope']:.4e} Å³/K, R²={vol_fit['R2']:.4f}"
+        )
 
     # Output
     output = {
@@ -516,7 +588,7 @@ def main():
     if successful and len(successful) >= 2:
         transitions_found = detect_phase_transitions(
             np.array([r["temperature_K"] for r in successful]),
-            np.array([r["volume"] for r in successful])
+            np.array([r["volume"] for r in successful]),
         )
         if transitions_found:
             output["phase_transitions"] = transitions_found
