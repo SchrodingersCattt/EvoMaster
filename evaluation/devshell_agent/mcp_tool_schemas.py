@@ -100,7 +100,8 @@ REPORT_ITERATION_SCHEMA: dict[str, Any] = {
             "type": "integer",
             "description": (
                 "Per-question 0/100: 100 only when every repeat run for that question "
-                "scored 100 (full checklist each time). Mean over questions = "
+                "scored 100 (all required checklist items each time; token_budget_total "
+                "and turn_budget are optional for ingest). Mean over questions = "
                 "(questions fully passed ÷ question count) × 100; matches target_pass_rate."
             ),
         },
@@ -366,6 +367,10 @@ GLOB_PATHS_SCHEMA: dict[str, Any] = {
         "pattern": {
             "type": "string",
             "description": "Glob pattern such as `*.py`.",
+        },
+        "limit": {
+            "type": "integer",
+            "description": "Max paths to return (default 500, max 500). Use a specific pattern to narrow results if truncated.",
         },
     },
     "required": ["base_dir", "pattern"],

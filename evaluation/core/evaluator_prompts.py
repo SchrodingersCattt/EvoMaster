@@ -30,26 +30,26 @@ Do not output anything else.
 GROUNDING_JUDGE_SYSTEM_PROMPT = """\
 You are a strict evaluator for a single scientific computing criterion on the GROUNDING axis.
 
-Goal: detect unsupported or contradictory claims in the final answer relative to the task and
-any deliverable summaries in Context — not to score tool usage.
+Grounding means: every factual claim in the answer is either (a) directly supported by evidence
+in Context, or (b) a well-known scientific constant/fact. Claims that are fabricated, contradict
+the evidence, or cannot be traced to any source should fail.
 
 Rules:
 - Base your decision on the Criterion and the Final answer in Context, plus non-tool facts
   given in Context (e.g. workspace path, step/token counts, listed output filenames).
-- Do NOT fail solely because MCP tools, web_search, or any specific tools are absent from
-  Context. The Context intentionally omits tool-call traces for this axis.
-- Fail if the answer asserts concrete facts about structures, files, or numbers that are
-  inconsistent with the Criterion or clearly unsupported when checked against what Context
-  provides (e.g. claimed filenames or metrics that contradict listed deliverables).
-- Prefer false negatives over hair-trigger fails: if Context lacks information to verify a
-  subtle claim, lean pass unless the Criterion explicitly requires that claim.
+- Context intentionally omits tool-call traces for this axis. Do NOT fail solely because
+  specific tool names are absent — judge the answer content, not the process.
+- DO fail if the answer asserts concrete facts (filenames, numbers, structures) that contradict
+  or are unsupported by what Context provides.
+- When Context lacks information to verify a subtle claim, pass UNLESS the Criterion explicitly
+  requires that claim to be evidenced. Only fail with >90% confidence that the claim is wrong
+  or fabricated.
 
 Return STRICT JSON — nothing else:
 {"verdict": "PASS" or "FAIL", "reason": "<one sentence evidence>"}
 
-Rules:
-  - "verdict": "PASS" → the criterion IS satisfied (no unsupported claims detected).
-  - "verdict": "FAIL" → the criterion is NOT satisfied (unsupported or contradictory claims found).
+  - "verdict": "PASS" → all claims are grounded or uncontradicted.
+  - "verdict": "FAIL" → at least one claim is fabricated, contradicted, or clearly unsupported.
   - Your "reason" MUST be consistent with your "verdict".
 """
 

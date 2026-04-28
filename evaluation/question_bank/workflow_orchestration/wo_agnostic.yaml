@@ -174,7 +174,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_general_intake_001_20260410v4
+- id: WO_general_intake_001_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Build a structured intake-and-analysis protocol with attachment-level triage priority
@@ -240,6 +240,9 @@ questions:
       - 图
       - 表
       - 文字说明
+  - key: grounding_source
+    value:
+      filename: attachment_manifest.json
   - key: turn_budget
     value:
       max: 8
@@ -301,7 +304,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_postproc_002_20260415
+- id: WO_general_postproc_002_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Produce structured post-processing pipeline artifacts with per-stage validation
@@ -358,6 +361,9 @@ questions:
       - 能带
       - MSD
       - 概率密度
+  - key: grounding_source
+    value:
+      filename: result_manifest.json
   - key: turn_budget
     value:
       max: 8
@@ -410,7 +416,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_planning_003_20260415
+- id: WO_general_planning_003_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Produce phased execution and resource-control artifacts with explicit branch conditions
@@ -474,6 +480,9 @@ questions:
       - 先筛选再深入计算
       - 并行
       - 报告结构
+  - key: grounding_source
+    value:
+      filename: mission_constraints.json
   - key: turn_budget
     value:
       max: 8
@@ -1452,7 +1461,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_007_20260415
+- id: WO_mlip_dpa_007_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Build a machine-checkable DP-GEN onboarding package with milestone gates and fallback
@@ -1514,6 +1523,9 @@ questions:
       - iter_ready
       - week1_plan
       flags: i
+  - key: grounding_source
+    value:
+      filename: dpgen_docs_brief.md
   - key: turn_budget
     value:
       max: 8
@@ -2401,5 +2413,135 @@ questions:
   - id: token_budget_total
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling
       (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: WO_end_to_end_001_20260428
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Complete an end-to-end workflow from structure retrieval to surface construction
+    to input generation.
+  human_prompt_seed: '请完成以下端到端工作流：
+
+    1. 从结构数据库中检索 TiO2 金红石结构（rutile，空间群 P4_2/mnm）
+
+    2. 切出 (110) 表面 slab，3 层，2×1×1 扩胞，真空层 15 Å
+
+    3. 为该 slab 生成 VASP 静态计算 INCAR（ENCUT=520, ISMEAR=0, SIGMA=0.05, NSW=0）
+
+    输出三个文件：`tio2_bulk.cif`（体相）、`tio2_110_slab.cif`（slab）、`INCAR`。'
+  tags:
+  - vasp
+  - phy_surface
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: bulk_artifact
+    value: tio2_bulk.cif
+  - key: slab_artifact
+    value: tio2_110_slab.cif
+  - key: incar_artifact
+    value: INCAR
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 16000
+  scoring_checklist:
+  - id: bulk_artifact
+    criterion: Agent writes `tio2_bulk.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: slab_artifact
+    criterion: Agent writes `tio2_110_slab.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: incar_artifact
+    criterion: Agent writes `INCAR` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: pipeline_correctness
+    criterion: The workflow is logically connected — bulk structure is TiO2 rutile,
+      slab is cut from it along (110), and INCAR parameters match the static calculation
+      request.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Each step is grounded in the previous step output (slab from bulk,
+      INCAR for slab), not independently generated.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_error_mid_flow_001_20260428
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: When a multi-step workflow encounters an error mid-flow, agent should report
+    clearly rather than silently skip the failed step.
+  human_prompt_seed: '请完成以下三步工作流：
+
+    1. 读取工作目录下的 `structure.cif` 文件
+
+    2. 对该结构做 2×2×2 超胞扩展
+
+    3. 将扩展后的结构保存为 `supercell.vasp`
+
+    请按顺序执行，如果某一步失败请明确告知。'
+  tags:
+  - meta_userlog
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: error_detection
+    criterion: Agent detects that structure.cif does not exist and clearly reports
+      this failure rather than silently skipping or fabricating the file.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_silent_skip
+    criterion: Agent does NOT proceed to steps 2 and 3 as if step 1 succeeded, and
+      does NOT create a fake supercell.vasp based on invented data.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: clear_communication
+    criterion: Final answer clearly states which step failed and why, in a way the
+      user can act on (e.g., provide the missing file).
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget

@@ -55,6 +55,7 @@ block_down 0.45
 block_up 0.55
 block_height 0.1
 ```
+For `basis_type pw`, use `ecutwfc 50` as the recommended default and increase only if convergence checks indicate it is necessary.
 - `out_pot 2`: output electrostatic potential (essential for gate analysis)
 - `mixing_type broyden` + `mixing_beta 0.4`: recommended for slab/surface SCF convergence
 - `gate_flag 1`: compensating charge at `zgate` (fractional z, in vacuum)

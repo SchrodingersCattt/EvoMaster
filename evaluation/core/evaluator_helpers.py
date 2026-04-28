@@ -11,6 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from evaluation.validators.answer_text import (
+    check_answer_json_numeric,
+)
 from evaluation.validators.structure_general import (
     check_atom_count,
     check_bond_angle,
@@ -691,6 +694,113 @@ def check_text_file_regex_from_evidence(
     if err:
         return False, err
     cfg = _cfg(ref)
+    flags = str(cfg.get('flags', ''))
+    resolve_mode = _workspace_resolve_from_ref(ref)
+
+    if_pattern = str(cfg.get('if_pattern', '')).strip()
+    then_pattern = str(cfg.get('then_pattern', '')).strip()
+    else_pattern = str(cfg.get('else_pattern', '')).strip()
+    if if_pattern or then_pattern or else_pattern:
+        if not (if_pattern and then_pattern and else_pattern):
+            return (
+                False,
+                "conditional regex requires non-empty 'if_pattern', 'then_pattern', and 'else_pattern'",
+            )
+        if_filename = str(cfg.get('if_filename', cfg.get('filename', ''))).strip()
+        if not if_filename:
+            return False, "conditional regex requires 'if_filename' or 'filename'"
+        else_filename = str(cfg.get('else_filename', '')).strip() or if_filename
+
+        cond_ok, cond_reason = check_text_file_regex(
+            ws,
+            filename=if_filename,
+            pattern=if_pattern,
+            flags=flags,
+            workspace_resolve=resolve_mode,
+        )
+        if cond_ok:
+            then_ok, then_reason = check_text_file_regex(
+                ws,
+                filename=if_filename,
+                pattern=then_pattern,
+                flags=flags,
+                workspace_resolve=resolve_mode,
+            )
+            return (
+                then_ok,
+                f'conditional regex IF matched on {if_filename}: {cond_reason}; THEN result: {then_reason}',
+            )
+
+        else_ok, else_reason = check_text_file_regex(
+            ws,
+            filename=else_filename,
+            pattern=else_pattern,
+            flags=flags,
+            workspace_resolve=resolve_mode,
+        )
+        return (
+            else_ok,
+            f'conditional regex IF not matched on {if_filename}: {cond_reason}; ELSE result on {else_filename}: {else_reason}',
+        )
+
+    raw_filenames = cfg.get('filenames')
+    if isinstance(raw_filenames, list) and raw_filenames:
+        filenames = [str(name).strip() for name in raw_filenames if str(name).strip()]
+        if not filenames:
+            return False, "reference answer must provide non-empty 'filenames' list"
+        raw_patterns = cfg.get('patterns')
+        if raw_patterns is None:
+            shared_pattern = str(cfg.get('pattern', '')).strip()
+            if not shared_pattern:
+                return (
+                    False,
+                    "multi-file regex requires 'pattern' or non-empty 'patterns' list",
+                )
+            patterns = [shared_pattern] * len(filenames)
+        else:
+            if not isinstance(raw_patterns, list) or not raw_patterns:
+                return (
+                    False,
+                    "reference answer 'patterns' must be a non-empty list when provided",
+                )
+            patterns = [str(p).strip() for p in raw_patterns]
+            if len(patterns) != len(filenames):
+                return (
+                    False,
+                    "'patterns' length must equal 'filenames' length for multi-file regex",
+                )
+            if any(not p for p in patterns):
+                return False, "all entries in 'patterns' must be non-empty"
+        min_match_count = int(cfg.get('min_match_count', len(filenames)))
+        if min_match_count < 1:
+            return False, "'min_match_count' must be >= 1"
+        if min_match_count > len(filenames):
+            return (
+                False,
+                f"'min_match_count'={min_match_count} exceeds number of files {len(filenames)}",
+            )
+        matched = 0
+        details: list[str] = []
+        for filename, pattern in zip(filenames, patterns, strict=False):
+            ok, reason = check_text_file_regex(
+                ws,
+                filename=filename,
+                pattern=pattern,
+                flags=flags,
+                workspace_resolve=resolve_mode,
+            )
+            details.append(f'{filename}: {reason}')
+            if ok:
+                matched += 1
+        passed = matched >= min_match_count
+        return (
+            passed,
+            (
+                f'multi-file regex matched {matched}/{len(filenames)} files '
+                f'(required >= {min_match_count}); ' + '; '.join(details)
+            ),
+        )
+
     pattern = str(cfg.get('pattern', ''))
     if not pattern:
         return False, "reference answer must provide non-empty 'pattern'"
@@ -698,8 +808,8 @@ def check_text_file_regex_from_evidence(
         ws,
         filename=str(cfg.get('filename', '')),
         pattern=pattern,
-        flags=str(cfg.get('flags', '')),
-        workspace_resolve=_workspace_resolve_from_ref(ref),
+        flags=flags,
+        workspace_resolve=resolve_mode,
     )
 
 
@@ -753,3 +863,61 @@ def check_text_file_kpt_path_from_evidence(
         require_order=bool(cfg.get('require_order', True)),
         workspace_resolve=_workspace_resolve_from_ref(ref),
     )
+
+
+def check_answer_json_numeric_from_ref(
+    *, answer: str, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Wire ``answer_json_numeric`` from a ``ReferenceAnswer`` config.
+
+    Reference answer schema (``ref.value`` is a dict)::
+
+        value:
+          json_path: rtp.303K.V   # dot-separated dict keys in the answer JSON
+          target: 999.81          # numeric target (or use ref-level ``value``+``tolerance``)
+          tolerance: 20.0         # absolute tolerance
+
+    For backward compatibility, when ``ref.value`` is plain numeric, ``target``
+    falls back to that value and ``tolerance`` to ``ref.tolerance`` — but
+    ``json_path`` must always be supplied via the dict form (otherwise we
+    cannot know which field to read).
+    """
+    cfg = _cfg(ref)
+    json_path = str(cfg.get('json_path', '')).strip()
+    if not json_path:
+        return False, "reference answer must provide non-empty 'json_path'"
+
+    if 'target' in cfg:
+        try:
+            target = float(cfg['target'])
+        except (TypeError, ValueError):
+            return False, "'target' must be numeric"
+    elif isinstance(ref.value, (int, float)):
+        target = float(ref.value)
+    else:
+        return False, "missing numeric 'target' (set value.target or ref.value)"
+
+    if 'tolerance' in cfg:
+        try:
+            tolerance = float(cfg['tolerance'])
+        except (TypeError, ValueError):
+            return False, "'tolerance' must be numeric"
+    elif ref.tolerance is not None:
+        tolerance = float(ref.tolerance)
+    else:
+        return False, "missing 'tolerance' (set value.tolerance or ref.tolerance)"
+
+    return check_answer_json_numeric(
+        answer,
+        json_path=json_path,
+        target=target,
+        tolerance=tolerance,
+    )
+
+
+# Re-export from evaluator_json_checks to keep import paths stable
+from .evaluator_json_checks import (  # noqa: E402, F401
+    check_json_file_numeric_range,
+    check_json_file_schema,
+    check_tool_name_used,
+)

@@ -16,16 +16,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .evaluator_batch_checks import (
-    check_batch_consistent_calls,
-    check_batch_single_variable_sweep,
-    check_batch_tool_args_constant,
-)
 from .evaluator_helpers import (
     build_llm_context,
     build_safety_eval_record,
+    check_answer_json_numeric_from_ref,
     check_checkcif_alerts,
     check_duration_budget,
+    check_json_file_numeric_range,
+    check_json_file_schema,
     check_molcrys_local_env_from_evidence,
     check_molcrys_slab_integrity,
     check_sc005_disorder_formulas,
@@ -45,6 +43,7 @@ from .evaluator_helpers import (
     check_text_file_numeric_range_from_evidence,
     check_text_file_regex_from_evidence,
     check_token_budget,
+    check_tool_name_used,
     check_turn_budget,
 )
 from .evaluator_prompts import BINARY_JUDGE_SYSTEM_PROMPT as _BINARY_JUDGE_SYSTEM_PROMPT
@@ -395,6 +394,19 @@ class BinaryEvaluator:
     # Per-item dispatch
     # ------------------------------------------------------------------
 
+    # Registry: verify_type → (handler, needs_ref)
+    # Handler signature: (ctx) -> (bool, str)
+    # ctx is a dict with keys: answer, evidence, ref, tool_calls, question, item
+    _VERIFY_REGISTRY: dict[str, tuple[Any, bool]] = {}
+
+    @classmethod
+    def _register_verify(cls, name: str, *, needs_ref: bool = True):
+        def decorator(fn):
+            cls._VERIFY_REGISTRY[name] = (fn, needs_ref)
+            return fn
+
+        return decorator
+
     def _check_item(
         self,
         *,
@@ -407,127 +419,44 @@ class BinaryEvaluator:
     ) -> tuple[bool, str]:
         ref = reference_map.get(item.id)
 
-        if item.verify == 'exact_match':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_exact_match(
-                answer=answer, expected=ref.value, tolerance=ref.tolerance
-            )
-        if item.verify == 'numerical_range':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_numerical_range(
-                answer=answer, expected=ref.value, tolerance=ref.tolerance
-            )
-        if item.verify == 'contains_all':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_contains_all(answer=answer, expected=ref.value)
-        if item.verify == 'tool_called':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_tool_called(tool_calls=tool_calls, expected=ref.value)
-        if item.verify == 'tool_args_match':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_tool_args_match(tool_calls=tool_calls, ref=ref)
-        if item.verify == 'tool_observation_field':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_tool_observation_field(evidence=evidence, ref=ref)
-
-        if item.verify == 'event_type_called':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_event_type_called(evidence=evidence, expected=ref.value)
-        if item.verify == 'source_type_used':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_source_type_used(evidence=evidence, expected=ref.value)
-        if item.verify == 'call_count_range':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_call_count_range(evidence=evidence, expected=ref.value)
-        if item.verify == 'no_retries':
-            return self._check_no_retries(evidence=evidence)
-        if item.verify == 'artifact_exists':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_artifact_exists(evidence=evidence, ref=ref)
-        if item.verify == 'token_budget':
-            if ref is None:
-                return False, 'missing reference answer'
-            return check_token_budget(evidence=evidence, expected=ref.value)
-        if item.verify == 'turn_budget':
-            if ref is None:
-                return False, 'missing reference answer'
-            return check_turn_budget(evidence=evidence, expected=ref.value)
-        if item.verify == 'duration_budget':
-            if ref is None:
-                return False, 'missing reference answer'
-            return check_duration_budget(evidence=evidence, expected=ref.value)
-        if item.verify == 'molcrys_slab_molecular_integrity':
-            if ref is None:
-                return False, 'missing reference answer'
-            return check_molcrys_slab_integrity(evidence=evidence, ref=ref)
-        if item.verify == 'sc005_disorder_formulas':
-            if ref is None:
-                return False, 'missing reference answer'
-            return check_sc005_disorder_formulas(answer=answer)
-        if item.verify == 'molcrys_local_env':
-            if ref is None:
-                return False, 'missing reference answer'
-            return check_molcrys_local_env_from_evidence(evidence=evidence, ref=ref)
-
-        # --- checkcif_no_a_alerts: IUCr checkCIF web service ---
-        if item.verify == 'checkcif_no_a_alerts':
-            if ref is None:
-                return False, 'missing reference answer'
-            return check_checkcif_alerts(evidence=evidence, ref=ref)
-
-        # --- struct_file_* programmatic structure checks ---
-        _STRUCT_FILE_DISPATCH = {
-            'struct_file_atom_count': check_struct_file_atom_count,
-            'struct_file_formula': check_struct_file_formula,
-            'struct_file_bond_count': check_struct_file_bond_count,
-            'struct_file_bond_length': check_struct_file_bond_length,
-            'struct_file_bond_angle': check_struct_file_bond_angle,
-            'struct_file_cell_param': check_struct_file_cell_param,
-            'struct_file_stoichiometry_ratio': check_struct_file_stoichiometry_ratio,
-            'struct_file_coordination': check_struct_file_coordination,
-            'struct_file_layer_count': check_struct_file_layer_count,
-            'struct_file_count': check_struct_file_count,
-            'struct_file_surface_termination': check_struct_file_surface_termination,
-        }
-        if item.verify in _STRUCT_FILE_DISPATCH:
-            if ref is None:
-                return False, 'missing reference answer'
-            return _STRUCT_FILE_DISPATCH[item.verify](evidence=evidence, ref=ref)
-
-        _TEXT_FILE_DISPATCH = {
-            'text_file_contains_all': check_text_file_contains_all_from_evidence,
-            'text_file_kpt_path': check_text_file_kpt_path_from_evidence,
-            'text_file_numeric_range': check_text_file_numeric_range_from_evidence,
-            'text_file_regex': check_text_file_regex_from_evidence,
-        }
-        if item.verify in _TEXT_FILE_DISPATCH:
-            if ref is None:
-                return False, 'missing reference answer'
-            return _TEXT_FILE_DISPATCH[item.verify](evidence=evidence, ref=ref)
-
+        # LLM judge is special — needs self for judge_binary
         if item.verify == 'llm_binary_judge':
-            if item.axis == 'grounding':
-                return self.judge_binary(
-                    criterion=item.criterion,
-                    context=build_llm_context(
-                        question=question,
-                        answer=answer,
-                        evidence=evidence,
-                        ref=ref,
-                        include_tool_calls=False,
-                    ),
-                    system_prompt=_GROUNDING_JUDGE_SYSTEM_PROMPT,
-                )
+            return self._dispatch_llm_judge(
+                item=item,
+                question=question,
+                answer=answer,
+                evidence=evidence,
+                ref=ref,
+            )
+
+        entry = self._VERIFY_REGISTRY.get(item.verify)
+        if entry is None:
+            return False, f'unsupported verify type: {item.verify}'
+
+        handler, needs_ref = entry
+        if needs_ref and ref is None:
+            return False, f'missing reference answer for {item.id} ({item.verify})'
+
+        ctx = {
+            'answer': answer,
+            'evidence': evidence,
+            'ref': ref,
+            'tool_calls': tool_calls,
+            'question': question,
+            'item': item,
+        }
+        return handler(ctx)
+
+    def _dispatch_llm_judge(
+        self,
+        *,
+        item: ScoringCheckItem,
+        question: QuestionItem,
+        answer: str,
+        evidence: EvidenceBundle | None,
+        ref: ReferenceAnswer | None,
+    ) -> tuple[bool, str]:
+        if item.axis == 'grounding':
             return self.judge_binary(
                 criterion=item.criterion,
                 context=build_llm_context(
@@ -535,29 +464,19 @@ class BinaryEvaluator:
                     answer=answer,
                     evidence=evidence,
                     ref=ref,
+                    include_tool_calls=False,
                 ),
+                system_prompt=_GROUNDING_JUDGE_SYSTEM_PROMPT,
             )
-
-        if item.verify == 'batch_single_variable_sweep':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_batch_single_variable_sweep(
-                tool_calls=tool_calls, evidence=evidence, ref=ref
-            )
-        if item.verify == 'batch_tool_args_constant':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_batch_tool_args_constant(
-                tool_calls=tool_calls, evidence=evidence, ref=ref
-            )
-        if item.verify == 'batch_consistent_calls':
-            if ref is None:
-                return False, 'missing reference answer'
-            return self._check_batch_consistent_calls(
-                tool_calls=tool_calls, evidence=evidence, ref=ref
-            )
-
-        return False, f'unsupported verify type: {item.verify}'
+        return self.judge_binary(
+            criterion=item.criterion,
+            context=build_llm_context(
+                question=question,
+                answer=answer,
+                evidence=evidence,
+                ref=ref,
+            ),
+        )
 
     # ------------------------------------------------------------------
     # v5 LLM binary judge
@@ -678,24 +597,6 @@ class BinaryEvaluator:
         if missing:
             return False, f'missing tokens: {missing}'
         return True, 'all tokens found'
-
-    @staticmethod
-    def _check_tool_called(
-        *,
-        tool_calls: list[dict[str, Any]],
-        expected: Any,
-    ) -> tuple[bool, str]:
-        targets = (
-            [str(t) for t in expected]
-            if isinstance(expected, list)
-            else [str(expected)]
-        )
-        for call in tool_calls:
-            name = call.get('tool_name', '')
-            if name in targets:
-                return True, f"tool '{name}' called at step {call.get('step')}"
-        called_names = sorted({c.get('tool_name', '') for c in tool_calls})
-        return False, f'none of {targets} called (called: {called_names})'
 
     @staticmethod
     def _check_tool_args_match(
@@ -819,26 +720,6 @@ class BinaryEvaluator:
         return False, f'none of {targets} found (found: {found})'
 
     @staticmethod
-    def _check_source_type_used(
-        *, evidence: EvidenceBundle | None, expected: Any
-    ) -> tuple[bool, str]:
-        if evidence is None:
-            return False, 'no EvidenceBundle provided'
-        targets = (
-            [str(t) for t in expected]
-            if isinstance(expected, list)
-            else [str(expected)]
-        )
-        for evt in evidence.events:
-            if evt.source_type.value in targets and evt.succeeded:
-                return (
-                    True,
-                    f"source_type '{evt.source_type.value}' found at step {evt.step}",
-                )
-        found = sorted({e.source_type.value for e in evidence.events})
-        return False, f'none of {targets} found (found: {found})'
-
-    @staticmethod
     def _check_call_count_range(
         *, evidence: EvidenceBundle | None, expected: Any
     ) -> tuple[bool, str]:
@@ -858,8 +739,10 @@ class BinaryEvaluator:
     @staticmethod
     def _check_no_retries(*, evidence: EvidenceBundle | None) -> tuple[bool, str]:
         if evidence is None:
-            return True, 'no EvidenceBundle provided (skipped)'
+            return False, 'no tool call evidence available'
         calls = evidence.tool_calls
+        if not calls:
+            return True, 'no tool calls recorded'
         for i in range(1, len(calls)):
             if (
                 calls[i].tool_name == calls[i - 1].tool_name
@@ -911,39 +794,6 @@ class BinaryEvaluator:
     # Batch processing checks (implementations in evaluator_batch_checks.py)
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _check_batch_single_variable_sweep(
-        *,
-        tool_calls: list[dict[str, Any]],
-        evidence: EvidenceBundle | None,
-        ref: ReferenceAnswer,
-    ) -> tuple[bool, str]:
-        return check_batch_single_variable_sweep(
-            tool_calls=tool_calls, evidence=evidence, ref=ref
-        )
-
-    @staticmethod
-    def _check_batch_tool_args_constant(
-        *,
-        tool_calls: list[dict[str, Any]],
-        evidence: EvidenceBundle | None,
-        ref: ReferenceAnswer,
-    ) -> tuple[bool, str]:
-        return check_batch_tool_args_constant(
-            tool_calls=tool_calls, evidence=evidence, ref=ref
-        )
-
-    @staticmethod
-    def _check_batch_consistent_calls(
-        *,
-        tool_calls: list[dict[str, Any]],
-        evidence: EvidenceBundle | None,
-        ref: ReferenceAnswer,
-    ) -> tuple[bool, str]:
-        return check_batch_consistent_calls(
-            tool_calls=tool_calls, evidence=evidence, ref=ref
-        )
-
     # ------------------------------------------------------------------
     # Utilities
     # ------------------------------------------------------------------
@@ -979,6 +829,157 @@ class BinaryEvaluator:
             return _try_loads(stripped[start : end + 1])
         raise ValueError('No JSON object found')
 
+
+# ---------------------------------------------------------------------------
+# Verify handler registrations
+# ---------------------------------------------------------------------------
+
+_R = BinaryEvaluator._register_verify
+
+
+@_R('exact_match')
+def _h_exact_match(ctx):
+    return BinaryEvaluator._check_exact_match(
+        answer=ctx['answer'],
+        expected=ctx['ref'].value,
+        tolerance=ctx['ref'].tolerance,
+    )
+
+
+@_R('numerical_range')
+def _h_numerical_range(ctx):
+    return BinaryEvaluator._check_numerical_range(
+        answer=ctx['answer'],
+        expected=ctx['ref'].value,
+        tolerance=ctx['ref'].tolerance,
+    )
+
+
+@_R('contains_all')
+def _h_contains_all(ctx):
+    return BinaryEvaluator._check_contains_all(
+        answer=ctx['answer'],
+        expected=ctx['ref'].value,
+    )
+
+
+@_R('tool_args_match')
+def _h_tool_args_match(ctx):
+    return BinaryEvaluator._check_tool_args_match(
+        tool_calls=ctx['tool_calls'],
+        ref=ctx['ref'],
+    )
+
+
+@_R('tool_observation_field')
+def _h_tool_observation_field(ctx):
+    return BinaryEvaluator._check_tool_observation_field(
+        evidence=ctx['evidence'],
+        ref=ctx['ref'],
+    )
+
+
+@_R('event_type_called')
+def _h_event_type_called(ctx):
+    return BinaryEvaluator._check_event_type_called(
+        evidence=ctx['evidence'],
+        expected=ctx['ref'].value,
+    )
+
+
+@_R('call_count_range')
+def _h_call_count_range(ctx):
+    return BinaryEvaluator._check_call_count_range(
+        evidence=ctx['evidence'],
+        expected=ctx['ref'].value,
+    )
+
+
+@_R('no_retries', needs_ref=False)
+def _h_no_retries(ctx):
+    return BinaryEvaluator._check_no_retries(evidence=ctx['evidence'])
+
+
+@_R('artifact_exists')
+def _h_artifact_exists(ctx):
+    return BinaryEvaluator._check_artifact_exists(
+        evidence=ctx['evidence'],
+        ref=ctx['ref'],
+    )
+
+
+@_R('token_budget')
+def _h_token_budget(ctx):
+    return check_token_budget(evidence=ctx['evidence'], expected=ctx['ref'].value)
+
+
+@_R('turn_budget')
+def _h_turn_budget(ctx):
+    return check_turn_budget(evidence=ctx['evidence'], expected=ctx['ref'].value)
+
+
+@_R('duration_budget')
+def _h_duration_budget(ctx):
+    return check_duration_budget(evidence=ctx['evidence'], expected=ctx['ref'].value)
+
+
+@_R('molcrys_slab_molecular_integrity')
+def _h_molcrys_slab(ctx):
+    return check_molcrys_slab_integrity(evidence=ctx['evidence'], ref=ctx['ref'])
+
+
+@_R('sc005_disorder_formulas')
+def _h_sc005(ctx):
+    return check_sc005_disorder_formulas(answer=ctx['answer'])
+
+
+@_R('molcrys_local_env')
+def _h_molcrys_env(ctx):
+    return check_molcrys_local_env_from_evidence(
+        evidence=ctx['evidence'],
+        ref=ctx['ref'],
+    )
+
+
+@_R('checkcif_no_a_alerts')
+def _h_checkcif(ctx):
+    return check_checkcif_alerts(evidence=ctx['evidence'], ref=ctx['ref'])
+
+
+# Bulk-register (evidence, ref) handlers
+def _evidence_ref_handler(fn):
+    return lambda ctx: fn(evidence=ctx['evidence'], ref=ctx['ref'])
+
+
+for _name, _fn in [
+    ('struct_file_atom_count', check_struct_file_atom_count),
+    ('struct_file_formula', check_struct_file_formula),
+    ('struct_file_bond_count', check_struct_file_bond_count),
+    ('struct_file_bond_length', check_struct_file_bond_length),
+    ('struct_file_bond_angle', check_struct_file_bond_angle),
+    ('struct_file_cell_param', check_struct_file_cell_param),
+    ('struct_file_stoichiometry_ratio', check_struct_file_stoichiometry_ratio),
+    ('struct_file_coordination', check_struct_file_coordination),
+    ('struct_file_layer_count', check_struct_file_layer_count),
+    ('struct_file_count', check_struct_file_count),
+    ('struct_file_surface_termination', check_struct_file_surface_termination),
+    ('text_file_contains_all', check_text_file_contains_all_from_evidence),
+    ('text_file_kpt_path', check_text_file_kpt_path_from_evidence),
+    ('text_file_numeric_range', check_text_file_numeric_range_from_evidence),
+    ('text_file_regex', check_text_file_regex_from_evidence),
+    ('json_file_schema', check_json_file_schema),
+    ('json_file_numeric_range', check_json_file_numeric_range),
+    ('tool_name_used', check_tool_name_used),
+]:
+    BinaryEvaluator._VERIFY_REGISTRY[_name] = (_evidence_ref_handler(_fn), True)
+
+
+@_R('answer_json_numeric')
+def _h_answer_json_numeric(ctx):
+    return check_answer_json_numeric_from_ref(answer=ctx['answer'], ref=ctx['ref'])
+
+
+del _R, _name, _fn, _evidence_ref_handler
 
 # ---------------------------------------------------------------------------
 # Backward-compat alias

@@ -41,6 +41,25 @@ class DevshellAgentCliDefaults:
 
 
 @dataclass
+class AgentLoopConfig:
+    repo_root: Path
+    session_dir: Path
+    defaults: DevshellAgentCliDefaults
+    max_iterations: int
+    target_pass_rate: int
+    permission_mode: str
+    max_sdk_turns: int
+    extra_instruction: str = ""
+    eval_ingest_submit_each_iteration: bool = True
+    eval_ingest_submit_timeout: float = 120.0
+    enable_checklist_agent: bool = True
+    checklist_permission_mode: str = ""
+    history_root: Path | None = None
+    enable_optimization_auto_commit: bool = True
+    optimization_auto_commit_skip_budget: bool = False
+
+
+@dataclass
 class AgentLoopSharedState:
     repo_root: Path
     session_dir: Path

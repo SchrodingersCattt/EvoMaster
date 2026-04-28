@@ -37,6 +37,7 @@ questions:
   - wf_recovery
   - wf_sweep
   - wf_inputs
+  priority: P0
   data_files:
   - key: failure_recovery
     path: data/BP_struct_005/failure_recovery.json

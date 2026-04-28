@@ -3,6 +3,7 @@
 ## Quick Reference: Mandatory Parameters by Task Type
 
 Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `scf_thr`, `scf_nmax`, `smearing_method`, `smearing_sigma`.
+> **Basis-aware default**: `ecutwfc 100` is the standard baseline for `basis_type lcao`; for `basis_type pw`, prefer `ecutwfc 50` unless PP/system-specific convergence tests require higher values.
 
 | Task | Additional mandatory parameters | Common omission |
 |------|---------------------------------|-----------------|
@@ -280,9 +281,17 @@ Line
 When generating multiple INPUT files for a comparative study (surface energy, vacancy formation, EOS, etc.):
 
 1. **All INPUT files must share identical**: `basis_type`, `ecutwfc`, `smearing_method`, `smearing_sigma`, `scf_thr`. Use exactly the same values — do not vary these between bulk and slab.
-2. **Each INPUT must reference its STRU and KPT files** when not using default names: add `stru_file <name>` and `kpoint_file <name>`.
-3. **Task-specific mandatory params still apply**: a `cell-relax` INPUT inside a multi-file set still needs `cal_force 1`, `cal_stress 1`, `force_thr_ev`, `stress_thr`, `relax_nmax`. A `relax` INPUT still needs `cal_force 1`, `force_thr_ev`, `relax_nmax`.
+2. **Each INPUT must reference its STRU and KPT files**: add `stru_file <name>` and `kpoint_file <name>` **in every INPUT file**. This is mandatory whenever the workspace contains multiple STRU/KPT files or uses non-default names. ABACUS defaults to looking for files named `STRU` and `KPT` — if your files are named differently (e.g. `bulk.stru`, `KPT_slab`), ABACUS will fail silently.
+3. **Task-specific mandatory params still apply**: a `cell-relax` INPUT inside a multi-file set still needs `cal_force 1`, `cal_stress 1`, `force_thr_ev`, `stress_thr`, `relax_nmax`. A `relax` INPUT still needs `cal_force 1`, `force_thr_ev`, `relax_nmax`. **These are NEVER implied by `calculation`** — you must write them explicitly.
 4. **Recommended standard values** for consistency: `scf_thr 1.0e-7`, `smearing_method gauss`, `smearing_sigma 0.01`.
+
+## File Reference Rule — CRITICAL
+
+**Every non-default filename must be explicitly referenced in INPUT.** Common mistakes:
+- ❌ STRU file is `mo_bulk.stru` but INPUT has no `stru_file` → ABACUS looks for `STRU`, fails
+- ❌ KPT file is `KPT_slab` but INPUT has no `kpoint_file` → ABACUS looks for `KPT`, fails
+- ❌ Two-step workflow: created `KPT_band` for NSCF but forgot to create `KPT_scf` for SCF → SCF INPUT references `kpoint_file KPT_scf` which doesn't exist
+- ✅ Always: `stru_file <exact_filename>` and `kpoint_file <exact_filename>` in every INPUT
 
 ---
 
@@ -290,11 +299,14 @@ When generating multiple INPUT files for a comparative study (surface energy, va
 
 Before finalizing any INPUT file, verify none of these apply:
 
-- ❌ `cell-relax` without `cal_force 1` → optimizer has no forces, silently broken
+- ❌ `cell-relax` without `cal_force 1` → optimizer has no forces, **silently broken** (most common error)
 - ❌ `cell-relax` without `cal_stress 1` → cell vectors not optimized
+- ❌ `relax` without `cal_force 1` → same problem, forces not computed
 - ❌ Using `force_thr` (Ry/Bohr) instead of `force_thr_ev` (eV/Å) → wrong units
 - ❌ SCF feeding NSCF but missing `out_chg 1` → NSCF fails to read charge
 - ❌ NSCF with `symmetry 1` → k-path folded, wrong band plot
 - ❌ Slab KPT with >1 in vacuum direction → wasted computation, wrong physics
 - ❌ Multi-file set with inconsistent `ecutwfc` or `smearing_sigma` → invalidates energy differences
-- ❌ Aligned spaces/tabs in INPUT instead of single space → cosmetically inconsistent (ABACUS accepts both but single-space is canonical)
+- ❌ **STRU/KPT file named non-default but INPUT missing `stru_file`/`kpoint_file`** → ABACUS looks for `STRU`/`KPT`, fails silently
+- ❌ **Two-step workflow with only one KPT file** → SCF needs uniform mesh KPT, NSCF needs line-mode KPT; must create both
+- ❌ **INPUT references a file that doesn't exist** → always list workspace files and verify every referenced filename exists

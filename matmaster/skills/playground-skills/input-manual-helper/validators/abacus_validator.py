@@ -126,11 +126,14 @@ class ABACUSValidator(BaseValidator):
         diags.extend(self._check_md(text))
         diags.extend(self._check_spin(text))
         diags.extend(self._check_dft_plus_u(text))
+        diags.extend(self._check_dftu(text))
         diags.extend(self._check_mixing(text))
         diags.extend(self._check_scf_nmax(text))
         diags.extend(self._check_smearing(text))
         diags.extend(self._check_nscf_bands(text))
         diags.extend(self._check_efield(text))
+        diags.extend(self._check_relax_output(text))
+        diags.extend(self._check_scf_for_nscf(text))
         return diags
 
     # -----------------------------------------------------------------------
@@ -234,27 +237,51 @@ class ABACUSValidator(BaseValidator):
             return diags
 
         cal_force = _parse_int(text, "cal_force")
-        if cal_force is not None and cal_force == 0:
-            line_num = find_line(text, "cal_force")
+        # ABACUS defaults cal_force=0; missing or explicit 0 both break relax
+        if cal_force is None or cal_force == 0:
+            line_num = find_line(text, "cal_force") or 1
             diags.append(
                 Diagnostic(
                     severity=SEVERITY_ERROR,
-                    message=f"cal_force=0 but calculation='{calc}' requires forces. Set cal_force=1.",
+                    message=(
+                        f"calculation='{calc}' requires forces but cal_force is "
+                        f"{'missing (default 0)' if cal_force is None else '0'}. "
+                        "Set cal_force=1. ABACUS never implies cal_force from "
+                        "the calculation keyword."
+                    ),
                     line=line_num,
                     param="cal_force",
+                    suggestion="Add: cal_force  1",
+                )
+            )
+
+        # force_thr_ev should be present for relax/cell-relax
+        if _parse_float(text, "force_thr_ev") is None:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=f"calculation='{calc}' but force_thr_ev is not set. Default may be too loose or tight. Recommended: force_thr_ev 0.01 (eV/Å). Do NOT use force_thr (Ry/Bohr) — different units!",
+                    param="force_thr_ev",
+                    suggestion="Add: force_thr_ev  0.01",
                 )
             )
 
         if calc == "cell-relax":
             cal_stress = _parse_int(text, "cal_stress")
-            if cal_stress is not None and cal_stress == 0:
-                line_num = find_line(text, "cal_stress")
+            # ABACUS defaults cal_stress=0; missing or explicit 0 breaks cell-relax
+            if cal_stress is None or cal_stress == 0:
+                line_num = find_line(text, "cal_stress") or 1
                 diags.append(
                     Diagnostic(
                         severity=SEVERITY_ERROR,
-                        message="cal_stress=0 but calculation='cell-relax' requires stress tensor. Set cal_stress=1.",
+                        message=(
+                            "calculation='cell-relax' requires stress tensor but "
+                            f"cal_stress is {'missing (default 0)' if cal_stress is None else '0'}. "
+                            "Set cal_stress=1. Without it cell vectors are NOT optimized."
+                        ),
                         line=line_num,
                         param="cal_stress",
+                        suggestion="Add: cal_stress  1",
                     )
                 )
 
@@ -278,14 +305,20 @@ class ABACUSValidator(BaseValidator):
             return diags
 
         cal_force = _parse_int(text, "cal_force")
-        if cal_force is not None and cal_force == 0:
-            line_num = find_line(text, "cal_force")
+        # ABACUS defaults cal_force=0; missing or explicit 0 both break MD
+        if cal_force is None or cal_force == 0:
+            line_num = find_line(text, "cal_force") or 1
             diags.append(
                 Diagnostic(
                     severity=SEVERITY_ERROR,
-                    message="cal_force=0 but calculation='md' requires forces. Set cal_force=1.",
+                    message=(
+                        "calculation='md' requires forces but cal_force is "
+                        f"{'missing (default 0)' if cal_force is None else '0'}. "
+                        "Set cal_force=1."
+                    ),
                     line=line_num,
                     param="cal_force",
+                    suggestion="Add: cal_force  1",
                 )
             )
 
@@ -447,7 +480,35 @@ class ABACUSValidator(BaseValidator):
     def _check_efield(self, text: str) -> list[Diagnostic]:
         """Check electric field / dipole correction parameter consistency."""
         diags: list[Diagnostic] = []
+
+        # Check: out_pot=2 (electrostatic potential output) without dipole
+        # correction is suspect for slab calculations — the periodic boundary
+        # condition introduces an artificial field across the vacuum.
+        out_pot = _parse_int(text, "out_pot")
         efield_flag = _parse_int(text, "efield_flag")
+        if out_pot == 2 and efield_flag != 1:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "out_pot=2 (electrostatic potential output) is set but "
+                        "efield_flag/dip_cor_flag are not enabled. For slab "
+                        "calculations, dipole correction is essential to remove "
+                        "the artificial electric field from periodic images. "
+                        "Add: efield_flag 1, dip_cor_flag 1, efield_dir 2."
+                    ),
+                    param="efield_flag",
+                    suggestion=(
+                        "Add: efield_flag  1\n"
+                        "     dip_cor_flag  1\n"
+                        "     efield_dir  2\n"
+                        "     efield_pos_max  0.0\n"
+                        "     efield_pos_dec  0.1\n"
+                        "     efield_amp  0.0"
+                    ),
+                )
+            )
+
         if efield_flag != 1:
             return diags
         # efield_dir should be set
@@ -461,10 +522,24 @@ class ABACUSValidator(BaseValidator):
                     suggestion="Add: efield_dir  2",
                 )
             )
+        # dip_cor_flag should be set when efield_flag=1
+        dip_cor = _parse_int(text, "dip_cor_flag")
+        if dip_cor is None or dip_cor != 1:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "efield_flag=1 but dip_cor_flag is not set to 1. "
+                        "Dipole correction (dip_cor_flag=1) is needed for "
+                        "proper slab electrostatic potential treatment."
+                    ),
+                    param="dip_cor_flag",
+                    suggestion="Add: dip_cor_flag  1",
+                )
+            )
         # gate_flag checks
         gate_flag = _parse_int(text, "gate_flag")
         if gate_flag == 1:
-            dip_cor = _parse_int(text, "dip_cor_flag")
             if dip_cor != 1:
                 diags.append(
                     Diagnostic(
@@ -472,6 +547,100 @@ class ABACUSValidator(BaseValidator):
                         message="gate_flag=1 typically requires dip_cor_flag=1 for proper charged slab treatment.",
                         param="dip_cor_flag",
                         suggestion="Add: dip_cor_flag  1",
+                    )
+                )
+        return diags
+
+    def _check_relax_output(self, text: str) -> list[Diagnostic]:
+        """Check that relaxation produces output structure."""
+        diags: list[Diagnostic] = []
+        calc = (_parse_value(text, "calculation") or "scf").lower()
+        if calc not in ("relax", "cell-relax"):
+            return diags
+        out_stru = _parse_int(text, "out_stru")
+        if out_stru is None or out_stru == 0:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        f"calculation='{calc}' but out_stru is not set to 1. "
+                        "Without it the optimized structure (STRU_NOW) is not written."
+                    ),
+                    param="out_stru",
+                    suggestion="Add: out_stru  1",
+                )
+            )
+        return diags
+
+    def _check_scf_for_nscf(self, text: str) -> list[Diagnostic]:
+        """Check SCF + out_chg for NSCF workflow readiness."""
+        diags: list[Diagnostic] = []
+        calc = (_parse_value(text, "calculation") or "scf").lower()
+        if calc != "scf":
+            return diags
+        # If this is a plain SCF with out_chg=0, warn that it won't support followup nscf
+        out_chg = _parse_int(text, "out_chg")
+        # Only warn if there are signs this might be prep for nscf (e.g. mentions in comments)
+        # Actually, always recommend out_chg=1 for SCF as it's cheap and enables restart
+        if out_chg is None or out_chg == 0:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "SCF calculation without out_chg=1. Setting out_chg=1 is recommended: "
+                        "it enables restart from converged charge and is required for any "
+                        "follow-up NSCF (band structure / DOS) calculation."
+                    ),
+                    param="out_chg",
+                    suggestion="Add: out_chg  1",
+                )
+            )
+        return diags
+
+    def _check_dftu(self, text: str) -> list[Diagnostic]:
+        """Additional DFT+U checks (nspin requirement).
+
+        Note: hubbard_u and orbital_corr presence are already checked by
+        _check_dft_plus_u. This method adds the nspin=2 recommendation.
+        """
+        diags: list[Diagnostic] = []
+        lda_plus_u = _parse_int(text, "lda_plus_u")
+        if lda_plus_u != 1:
+            return diags
+
+        # DFT+U usually requires nspin=2 for proper treatment of
+        # localized d/f electrons (magnetic ground states, orbital ordering)
+        nspin = _parse_int(text, "nspin")
+        if nspin is None or nspin < 2:
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "lda_plus_u=1 typically requires nspin=2 for proper "
+                        "treatment of localized d/f electrons. "
+                        f"{'nspin not set (default 1)' if nspin is None else f'nspin={nspin}'}. "
+                        "Without nspin=2, the magnetic ground state is not explored."
+                    ),
+                    param="nspin",
+                    suggestion="Add: nspin  2",
+                )
+            )
+
+        # When nspin=2 is set, recommend mixing parameters for convergence
+        nspin_val = _parse_int(text, "nspin")
+        if nspin_val == 2:
+            mixing_beta = _parse_float(text, "mixing_beta")
+            if mixing_beta is None or mixing_beta > 0.5:
+                diags.append(
+                    Diagnostic(
+                        severity=SEVERITY_WARNING,
+                        message=(
+                            "DFT+U with nspin=2: recommend mixing_beta=0.1 and "
+                            "mixing_ndim=20 for stable SCF convergence. "
+                            f"{'mixing_beta not set' if mixing_beta is None else f'mixing_beta={mixing_beta} (too high)'}."
+                        ),
+                        param="mixing_beta",
+                        suggestion="Add: mixing_beta  0.1\n     mixing_ndim  20\n     mixing_gg0  1.5",
                     )
                 )
         return diags
@@ -490,6 +659,39 @@ class ABACUSValidator(BaseValidator):
                     message="nscf with out_band/out_dos: set 'nbands' explicitly to include empty states above Fermi level.",
                     param="nbands",
                     suggestion="Add: nbands  <number>  # typically nelec/2 + 10..30",
+                )
+            )
+        # symmetry must be 0 for NSCF band/DOS — symmetry=1 folds k-path
+        sym = _parse_int(text, "symmetry")
+        if out_band or out_dos:
+            if sym is None or sym != 0:
+                line_num = find_line(text, "symmetry") or 1
+                diags.append(
+                    Diagnostic(
+                        severity=SEVERITY_ERROR,
+                        message=(
+                            "NSCF with out_band/out_dos requires symmetry=0. "
+                            f"{'symmetry is not set (default 1)' if sym is None else f'symmetry={sym}'} — "
+                            "line-mode k-paths will be folded/reordered, producing wrong band plots."
+                        ),
+                        line=line_num,
+                        param="symmetry",
+                        suggestion="Add: symmetry  0",
+                    )
+                )
+        # init_chg must be 'file' for NSCF
+        init_chg = _parse_value(text, "init_chg")
+        if init_chg is None or init_chg.lower() != "file":
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_ERROR,
+                    message=(
+                        "NSCF calculation requires init_chg=file to read converged "
+                        "charge density from a prior SCF step. Without it, NSCF "
+                        "re-runs SCF from scratch with atomic charge."
+                    ),
+                    param="init_chg",
+                    suggestion="Add: init_chg  file",
                 )
             )
         return diags

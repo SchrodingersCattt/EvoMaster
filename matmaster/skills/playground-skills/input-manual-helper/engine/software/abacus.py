@@ -50,6 +50,7 @@ from engine.software.abacus_support import (
     _KNOWN_PARAMS,
     _SCF_KPT,
     _SI_STRU,
+    _SLAB_KPT,
     _is_blank_or_comment,
     _line,
     _make_range,
@@ -143,28 +144,115 @@ class AbacusBackend(SoftwareBackend):
     # render
     # ------------------------------------------------------------------
 
+    # Task type alias map: normalize common RenderIntent task_type values
+    # to the canonical ABACUS task names used internally by this renderer.
+    _TASK_ALIASES: dict[str, str] = {
+        # relaxation aliases
+        "opt": "relax",
+        "optimization": "relax",
+        "geometry_optimization": "relax",
+        "geo_opt": "relax",
+        "ion_relax": "relax",
+        "ionic_relax": "relax",
+        "relax_ions": "relax",
+        "atomic_relax": "relax",
+        # cell-relax aliases
+        "vc-relax": "cell-relax",
+        "vc_relax": "cell-relax",
+        "variable_cell_relax": "cell-relax",
+        "cell_opt": "cell-relax",
+        "cell_optimization": "cell-relax",
+        "full_relax": "cell-relax",
+        "cell_relax": "cell-relax",
+        "vc_opt": "cell-relax",
+        "full_opt": "cell-relax",
+        "full_optimization": "cell-relax",
+        # band aliases
+        "bands": "band",
+        "band_structure": "band",
+        "bandstructure": "band",
+        # md aliases
+        "molecular_dynamics": "md",
+        # dos aliases
+        "density_of_states": "dos",
+        "pdos": "dos",
+        # nscf aliases
+        "non_scf": "nscf",
+        "non-scf": "nscf",
+        "nonscf": "nscf",
+        "non_self_consistent": "nscf",
+        # workfunction/potential aliases
+        "work_function": "workfunction",
+        "electrostatic_potential": "pot",
+        "potential": "pot",
+        "slab_potential": "pot",
+        "slab_scf": "pot",
+        "surface_potential": "pot",
+        "surface_scf": "pot",
+        # dipole aliases
+        "dipole_correction": "dipole",
+        "slab_dipole": "dipole",
+        # DFT+U aliases -> "dftu" (handled as a task type below)
+        "dft+u": "dftu",
+        "dft_plus_u": "dftu",
+        "hubbard": "dftu",
+        "hubbard_u": "dftu",
+        "lda+u": "dftu",
+        "lda_plus_u": "dftu",
+        # EOS / equation of state (bulk modulus fitting) -> cell-relax for
+        # each volume point; the renderer produces a single relaxation INPUT
+        "eos": "cell-relax",
+        "equation_of_state": "cell-relax",
+        "bulk_modulus": "cell-relax",
+        "birch_murnaghan": "cell-relax",
+        # convergence test aliases -> scf (but with out_chg for reference)
+        "convergence": "scf",
+        "convergence_test": "scf",
+        "conv_test": "scf",
+        # surface energy aliases -> relax (slab relaxation)
+        "surface_energy": "relax",
+        "surf_energy": "relax",
+        "slab_relax": "relax",
+        # vacancy / defect aliases -> scf with kspacing
+        "vacancy": "vacancy",
+        "defect": "vacancy",
+        "bsse": "vacancy",
+        "ghost_atom": "vacancy",
+        # spin-polarized SCF aliases
+        "spin": "spin_scf",
+        "spin_polarized": "spin_scf",
+        "magnetic": "spin_scf",
+        "afm": "spin_scf",
+        "ferromagnetic": "spin_scf",
+        "antiferromagnetic": "spin_scf",
+    }
+
     def render(self, intent: RenderIntent) -> str:
         """生成 ABACUS INPUT 文件内容。
 
         对于 ABACUS，返回的字符串是 INPUT 文件的内容。
         调用方可通过 render_abacus_all() 同时获得 STRU 和 KPT。
         """
-        task = (intent.task_type or "scf").lower().strip()
+        raw_task = (intent.task_type or "scf").lower().strip()
+        task = self._TASK_ALIASES.get(raw_task, raw_task)
         overrides = dict(intent.params or {})
 
-        # 基础参数
+        # 基础参数 — ecutwfc=100 and smearing_sigma=0.01 match SKILL.md standards
+        # mixing_type=broyden is the ABACUS default; set explicitly so INPUT
+        # files always contain it (evaluations may check for its presence).
         params: dict[str, Any] = {
             "suffix": "ABACUS",
             "ntype": 1,
             "calculation": "scf",
-            "ecutwfc": 50,
+            "ecutwfc": 100,
             "basis_type": "lcao",
             "pseudo_dir": "./",
             "orbital_dir": "./",
             "scf_thr": "1e-7",
             "scf_nmax": 100,
             "smearing_method": "gauss",
-            "smearing_sigma": 0.015,
+            "smearing_sigma": 0.01,
+            "mixing_type": "broyden",
             "cal_force": 0,
             "cal_stress": 0,
             "out_chg": 0,
@@ -183,6 +271,7 @@ class AbacusBackend(SoftwareBackend):
                     "relax_nmax": 100,
                     "relax_method": "bfgs",
                     "out_stru": 1,
+                    "out_chg": 1,
                 }
             )
         elif task == "cell_relax" or task == "cell-relax":
@@ -196,6 +285,7 @@ class AbacusBackend(SoftwareBackend):
                     "relax_nmax": 100,
                     "relax_method": "bfgs",
                     "out_stru": 1,
+                    "out_chg": 1,
                 }
             )
         elif task == "band":
@@ -205,6 +295,8 @@ class AbacusBackend(SoftwareBackend):
                     "nbands": 20,
                     "init_chg": "file",
                     "out_band": 1,
+                    "symmetry": 0,
+                    "scf_nmax": 300,
                 }
             )
         elif task == "dos":
@@ -216,13 +308,31 @@ class AbacusBackend(SoftwareBackend):
                     "out_dos": 1,
                     "dos_sigma": 0.07,
                     "dos_edelta_ev": 0.01,
+                    "dos_nche": 100,
+                    "symmetry": 0,
+                    "scf_nmax": 300,
                 }
             )
-        elif task in ("md", "nvt", "npt"):
+        elif task == "nscf":
+            # Generic NSCF: read converged charge density, disable symmetry
+            # Caller should also set out_band=1 or out_dos=1 via overrides
+            params.update(
+                {
+                    "calculation": "nscf",
+                    "init_chg": "file",
+                    "symmetry": 0,
+                    "scf_nmax": 300,
+                    "out_chg": 0,
+                }
+            )
+        elif task in ("md", "nvt", "npt", "nve"):
+            # Determine the correct md_type from the resolved task name
+            md_type_map = {"nvt": "nvt", "npt": "npt", "nve": "nve"}
+            md_type = md_type_map.get(task, "nvt")
             params.update(
                 {
                     "calculation": "md",
-                    "md_type": "nvt",
+                    "md_type": md_type,
                     "md_nstep": 1000,
                     "md_dt": 1.0,
                     "md_tfirst": 300,
@@ -230,6 +340,48 @@ class AbacusBackend(SoftwareBackend):
                     "md_restartfreq": 100,
                     "cal_force": 1,
                     "init_vel": 0,
+                }
+            )
+        elif task == "dftu":
+            # DFT+U SCF: requires lda_plus_u, hubbard_u, orbital_corr
+            # User must supply hubbard_u and orbital_corr via overrides
+            params.update(
+                {
+                    "calculation": "scf",
+                    "lda_plus_u": 1,
+                    "nspin": 2,
+                    "mixing_type": "broyden",
+                    "mixing_beta": 0.1,
+                    "mixing_ndim": 20,
+                    "mixing_gg0": 1.5,
+                    "out_chg": 1,
+                }
+            )
+        elif task == "vacancy":
+            # Supercell/vacancy/defect/BSSE SCF: kspacing mandatory
+            params.update(
+                {
+                    "calculation": "scf",
+                    "kspacing": "0.10",
+                    "nspin": 2,
+                    "mixing_type": "broyden",
+                    "mixing_beta": 0.1,
+                    "mixing_ndim": 20,
+                    "mixing_gg0": 1.5,
+                    "out_chg": 1,
+                }
+            )
+        elif task == "spin_scf":
+            # Spin-polarized SCF
+            params.update(
+                {
+                    "calculation": "scf",
+                    "nspin": 2,
+                    "mixing_type": "broyden",
+                    "mixing_beta": 0.1,
+                    "mixing_ndim": 20,
+                    "mixing_gg0": 1.5,
+                    "out_chg": 1,
                 }
             )
         elif task in ("efield", "dipole", "dipole_correction"):
@@ -245,12 +397,30 @@ class AbacusBackend(SoftwareBackend):
                 }
             )
         elif task in ("pot", "potential", "workfunction"):
+            # Electrostatic potential / work function: typically for slab models.
+            # Include dipole correction by default — essential for slab systems
+            # to cancel the artificial field from periodic boundary conditions.
             params.update(
                 {
                     "calculation": "scf",
                     "out_pot": 2,
+                    "out_chg": 1,
+                    "efield_flag": 1,
+                    "dip_cor_flag": 1,
+                    "efield_dir": 2,
+                    "efield_pos_max": 0.0,
+                    "efield_pos_dec": 0.1,
+                    "efield_amp": 0.0,
                 }
             )
+        elif task == "scf":
+            # Default SCF already set; ensure out_chg for followup nscf
+            params["out_chg"] = 1
+
+        # Map RenderIntent.spin_multiplicity → nspin (like QE/CP2K renderers)
+        if intent.spin_multiplicity != 1 and "nspin" not in overrides:
+            params["nspin"] = 2
+
         # 覆盖用户指定参数
         for k, v in overrides.items():
             params[k.lower()] = v
@@ -297,6 +467,7 @@ class AbacusBackend(SoftwareBackend):
                 "nupdown",
                 "vdw_method",
                 "vdw_s6",
+                "vdw_s8",
             ],
             # scf
             [
@@ -364,6 +535,7 @@ class AbacusBackend(SoftwareBackend):
                 "dos_emin_ev",
                 "dos_emax_ev",
                 "dos_edelta_ev",
+                "dos_nche",
                 "berry_phase",
                 "gdir",
                 "towannier90",
@@ -406,7 +578,8 @@ class AbacusBackend(SoftwareBackend):
         如果 intent.structure_file 已提供则 STRU 包含提示注释；
         否则使用内建 Si 金刚石结构作为占位符。
         """
-        task = (intent.task_type or "scf").lower().strip()
+        raw_task = (intent.task_type or "scf").lower().strip()
+        task = self._TASK_ALIASES.get(raw_task, raw_task)
         input_text = self.render(intent)
 
         # STRU 占位符
@@ -421,9 +594,40 @@ class AbacusBackend(SoftwareBackend):
                 "# Replace with your actual structure.\n" + _SI_STRU
             )
 
-        # KPT 占位符
-        if task in ("band",):
+        # KPT: use band-path for band task; slab mesh for slab-related tasks;
+        # no KPT file for vacancy/BSSE tasks (use kspacing in INPUT instead);
+        # dense mesh otherwise.
+        # For generic nscf with out_band=1, also use band-path KPT
+        _params_lower = {k.lower(): v for k, v in (intent.params or {}).items()}
+        use_band_kpt = task == "band" or (
+            task == "nscf" and str(_params_lower.get("out_band", "0")) == "1"
+        )
+        # Slab-related tasks: electrostatic potential, work function, efield,
+        # dipole correction — all typically involve slab geometry with vacuum.
+        use_slab_kpt = task in (
+            "pot",
+            "potential",
+            "workfunction",
+            "efield",
+            "dipole",
+            "dipole_correction",
+        )
+        # Vacancy/BSSE tasks use kspacing in INPUT — KPT file is a comment-only
+        # placeholder explaining that kspacing overrides the KPT file.
+        use_kspacing = task == "vacancy" or "kspacing" in _params_lower
+        if use_band_kpt:
             kpt = _BAND_KPT
+        elif use_kspacing:
+            kpt = (
+                "K_POINTS\n"
+                "0\n"
+                "Gamma\n"
+                "1 1 1 0 0 0\n"
+                "# NOTE: kspacing is set in INPUT; this KPT file is a placeholder.\n"
+                "# ABACUS uses kspacing when present, overriding the KPT file.\n"
+            )
+        elif use_slab_kpt:
+            kpt = _SLAB_KPT
         else:
             kpt = _SCF_KPT
 
