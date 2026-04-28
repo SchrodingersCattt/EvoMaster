@@ -22,8 +22,8 @@ MATMASTER_TOOLS_SERVER = os.getenv(
     "MATMASTER_TOOLS_SERVER",
     f"https://matmaster-tools-server{URL_PART}.bohrium.com",
 )
-BOHRIUM_OPEN_API_BASE = os.getenv(
-    "BOHRIUM_OPEN_API_BASE",
+BOHRIUM_OPENAPI_BASE_COM = os.getenv(
+    "BOHRIUM_OPENAPI_BASE_COM",
     f"https://open{URL_PART}.bohrium.com" if URL_PART else "https://open.bohrium.com",
 )
 
