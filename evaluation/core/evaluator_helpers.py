@@ -691,6 +691,66 @@ def check_text_file_regex_from_evidence(
     if err:
         return False, err
     cfg = _cfg(ref)
+    flags = str(cfg.get('flags', ''))
+    resolve_mode = _workspace_resolve_from_ref(ref)
+    raw_filenames = cfg.get('filenames')
+    if isinstance(raw_filenames, list) and raw_filenames:
+        filenames = [str(name).strip() for name in raw_filenames if str(name).strip()]
+        if not filenames:
+            return False, "reference answer must provide non-empty 'filenames' list"
+        raw_patterns = cfg.get('patterns')
+        if raw_patterns is None:
+            shared_pattern = str(cfg.get('pattern', '')).strip()
+            if not shared_pattern:
+                return (
+                    False,
+                    "multi-file regex requires 'pattern' or non-empty 'patterns' list",
+                )
+            patterns = [shared_pattern] * len(filenames)
+        else:
+            if not isinstance(raw_patterns, list) or not raw_patterns:
+                return (
+                    False,
+                    "reference answer 'patterns' must be a non-empty list when provided",
+                )
+            patterns = [str(p).strip() for p in raw_patterns]
+            if len(patterns) != len(filenames):
+                return (
+                    False,
+                    "'patterns' length must equal 'filenames' length for multi-file regex",
+                )
+            if any(not p for p in patterns):
+                return False, "all entries in 'patterns' must be non-empty"
+        min_match_count = int(cfg.get('min_match_count', len(filenames)))
+        if min_match_count < 1:
+            return False, "'min_match_count' must be >= 1"
+        if min_match_count > len(filenames):
+            return (
+                False,
+                f"'min_match_count'={min_match_count} exceeds number of files {len(filenames)}",
+            )
+        matched = 0
+        details: list[str] = []
+        for filename, pattern in zip(filenames, patterns, strict=False):
+            ok, reason = check_text_file_regex(
+                ws,
+                filename=filename,
+                pattern=pattern,
+                flags=flags,
+                workspace_resolve=resolve_mode,
+            )
+            details.append(f'{filename}: {reason}')
+            if ok:
+                matched += 1
+        passed = matched >= min_match_count
+        return (
+            passed,
+            (
+                f'multi-file regex matched {matched}/{len(filenames)} files '
+                f'(required >= {min_match_count}); ' + '; '.join(details)
+            ),
+        )
+
     pattern = str(cfg.get('pattern', ''))
     if not pattern:
         return False, "reference answer must provide non-empty 'pattern'"
@@ -698,8 +758,8 @@ def check_text_file_regex_from_evidence(
         ws,
         filename=str(cfg.get('filename', '')),
         pattern=pattern,
-        flags=str(cfg.get('flags', '')),
-        workspace_resolve=_workspace_resolve_from_ref(ref),
+        flags=flags,
+        workspace_resolve=resolve_mode,
     )
 
 
