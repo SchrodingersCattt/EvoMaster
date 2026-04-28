@@ -1,6 +1,6 @@
 ---
 name: skill-manager
-description: "List, upload, and delete user skills in the MatMaster skill library. Use this when the user wants to save a workflow as a reusable skill, check existing skills, or remove one."
+description: "List and upload user skills to the MatMaster skill library. Use this when the user wants to save a workflow as a reusable skill or check what skills they already have."
 skill_type: operator
 ---
 
@@ -34,7 +34,6 @@ curl -s -X GET \
 ```
 
 Response `.data` is an array of skill objects (newest first). Key fields:
-- `id` — skill ID (for delete)
 - `name` — display name (parsed from SKILL.md in the package)
 - `status` — `ready` / `uploading` / `failed`
 - `byte_size`, `file_count` — package stats
@@ -58,7 +57,7 @@ description: "What this skill does"
 cd /path/to/parent && zip -r /tmp/skill_upload.zip my-skill-dir/
 ```
 
-#### Step 2 — Upload the zip (server-side)
+#### Step 2 — Upload the zip
 
 ```bash
 curl -s -X POST \
@@ -85,20 +84,10 @@ curl -s -X POST \
 
 The server parses `SKILL.md` from the zip to extract the display name automatically.
 
-Response on success returns the complete skill record with `id`, `name`, `status`, `artifact_id`, etc.
-
 #### Cleanup
 
 ```bash
 rm -f /tmp/skill_upload.zip
-```
-
-### 3. Delete Skill
-
-```bash
-curl -s -X DELETE \
-  "${MATMASTER_TOOLS_SERVER}/api/v1/users/${MATMASTER_USER_ID}/skills/<SKILL_ID>" \
-  -H "X-User-Id: ${MATMASTER_USER_ID}" | python3 -m json.tool
 ```
 
 ## Error Handling
@@ -107,7 +96,6 @@ All responses follow `{ "code": int, "data": ..., "msg": "..." }`. Check `code =
 
 Common errors:
 - HTTP 400: invalid or empty zip, `bundle_object_key` ownership mismatch
-- HTTP 404: skill not found (on delete)
 - HTTP 413: zip exceeds 100 MiB limit
 - HTTP 503: OSS unavailable
 
