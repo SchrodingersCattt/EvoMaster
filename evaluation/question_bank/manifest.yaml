@@ -74,10 +74,15 @@ banks:
     domain: "semiconductor"
     questions: 1
 
+  - path: "data_diagnosis/dd_agnostic.yaml"
+    capability: "data_diagnosis"
+    domain: "agnostic"
+    questions: 2
+
   - path: "execution_contract/ec_agnostic.yaml"
     capability: "execution_contract"
     domain: "agnostic"
-    questions: 12
+    questions: 18
 
   - path: "input_generation/ig_agnostic_vasp.yaml"
     capability: "input_generation"
@@ -89,15 +94,20 @@ banks:
     domain: "agnostic"
     questions: 6
 
+  - path: "input_generation/ig_agnostic_md.yaml"
+    capability: "input_generation"
+    domain: "agnostic"
+    questions: 3
+
   - path: "safety_refusal/sf_agnostic.yaml"
     capability: "safety_refusal"
     domain: "agnostic"
-    questions: 4
+    questions: 6
 
   - path: "scientific_analysis/sa_agnostic.yaml"
     capability: "scientific_analysis"
     domain: "agnostic"
-    questions: 3
+    questions: 5
 
   - path: "scientific_analysis/sa_battery.yaml"
     capability: "scientific_analysis"
@@ -148,7 +158,7 @@ banks:
   - path: "workflow_orchestration/wo_agnostic.yaml"
     capability: "workflow_orchestration"
     domain: "agnostic"
-    questions: 25
+    questions: 27
 
   - path: "workflow_orchestration/wo_battery.yaml"
     capability: "workflow_orchestration"
