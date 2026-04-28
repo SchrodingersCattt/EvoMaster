@@ -217,7 +217,7 @@ class TestFormatters:
                 axis="grounding",
                 passed=True,
                 reason="tool called",
-                verify_method="tool_called",
+                verify_method="tool_name_used",
             ),
             "token_budget_total": CriterionResult(
                 criterion_id="token_budget_total",
@@ -263,7 +263,7 @@ class TestFormatters:
                 axis="grounding",
                 passed=True,
                 reason="ok",
-                verify_method="tool_called",
+                verify_method="tool_name_used",
             ),
             "turn_budget": CriterionResult(
                 criterion_id="turn_budget",
@@ -334,7 +334,7 @@ class TestScoreTask:
                     id="used_calc",
                     criterion="Uses bash-backed calc call.",
                     axis="grounding",
-                    verify="tool_called",
+                    verify="tool_name_used",
                 ),
                 ScoringCheckItem(
                     id="token_budget_total",
@@ -412,7 +412,7 @@ class TestScoreTask:
                     id="used_calc",
                     criterion="Uses bash-backed calc call.",
                     axis="grounding",
-                    verify="tool_called",
+                    verify="tool_name_used",
                 ),
                 ScoringCheckItem(
                     id="wall_ms",
