@@ -14,11 +14,11 @@ pseudo_dir              ./pseudopotentials/
 orbital_dir             ./orbitals/
 
 # Electronic structure
-ecutwfc                 50
+ecutwfc                 100
 basis_type              lcao
 nspin                   1
 smearing_method         gauss
-smearing_sigma          0.015
+smearing_sigma          0.01
 
 # SCF convergence
 scf_thr                 1e-7

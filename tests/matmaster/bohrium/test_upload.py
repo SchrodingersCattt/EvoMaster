@@ -5,21 +5,30 @@ from pathlib import Path
 
 import pytest
 
-from matmaster.bohrium.errors import BohriumTransferError
-from matmaster.bohrium.upload import upload_input_archive
-from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
-    _install_fake_tiefblue,
-)
+from matmaster.bohrium.upload import UploadedArchive, upload_input_archive
 
 
 def test_upload_input_archive_returns_oss_key_and_download_url(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    upload_calls: list[tuple[str, str, str]] = []
-    _install_fake_tiefblue(monkeypatch, upload_calls)
     zip_path = tmp_path / "input.zip"
     zip_path.write_bytes(b"zip-bytes")
+
+    def fake_upload_file(*, create_data, zip_path, manifest_root=None):
+        del create_data, manifest_root
+        return UploadedArchive(
+            oss_key="sandbox/jobs/run-1/input.zip",
+            download_url=(
+                "https://store.example.com/api/download/"
+                "sandbox/jobs/run-1/input.zip?token=token-123"
+            ),
+        )
+
+    monkeypatch.setattr(
+        "matmaster.bohrium.upload._upload_input_archive_sdk_free",
+        fake_upload_file,
+    )
 
     uploaded = upload_input_archive(
         create_data={
@@ -32,10 +41,9 @@ def test_upload_input_archive_returns_oss_key_and_download_url(
 
     assert uploaded.oss_key == "sandbox/jobs/run-1/input.zip"
     assert uploaded.download_url.startswith("https://store.example.com/api/download/")
-    assert upload_calls[0][2] == "token-123"
 
 
-def test_upload_input_archive_surfaces_missing_sdk(
+def test_upload_input_archive_does_not_import_bohrium_sdk(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -43,20 +51,74 @@ def test_upload_input_archive_surfaces_missing_sdk(
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
         if name.startswith("bohrium"):
-            raise ImportError("bohrium-sdk is unavailable")
+            raise AssertionError("bohrium-sdk must not be imported")
         return original_import(name, globals, locals, fromlist, level)
 
-    monkeypatch.setattr("matmaster.bohrium.upload._tiefblue_cls", None, raising=False)
-    monkeypatch.setattr(builtins, "__import__", fake_import)
     zip_path = tmp_path / "input.zip"
     zip_path.write_bytes(b"zip-bytes")
+    calls: list[dict] = []
 
-    with pytest.raises(BohriumTransferError, match="bohrium-sdk"):
-        upload_input_archive(
-            create_data={
-                "storePath": "sandbox/jobs/run-2/",
-                "storeHost": "https://store.example.com",
-                "token": "token-456",
-            },
-            zip_path=zip_path,
+    def fake_upload_file(*, create_data, zip_path, manifest_root=None):
+        del manifest_root
+        calls.append({"create_data": create_data, "zip_path": zip_path})
+        return UploadedArchive(
+            oss_key="sandbox/jobs/run-2/input.zip",
+            download_url=(
+                "https://store.example.com/api/download/"
+                "sandbox/jobs/run-2/input.zip?token=token-456"
+            ),
         )
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    monkeypatch.setattr(
+        "matmaster.bohrium.upload._upload_input_archive_sdk_free",
+        fake_upload_file,
+    )
+
+    uploaded = upload_input_archive(
+        create_data={
+            "storePath": "sandbox/jobs/run-2/",
+            "storeHost": "https://store.example.com",
+            "token": "token-456",
+        },
+        zip_path=zip_path,
+    )
+
+    assert uploaded.oss_key == "sandbox/jobs/run-2/input.zip"
+    assert calls[0]["zip_path"] == zip_path
+
+
+def test_upload_input_archive_legacy_flag_still_uses_sdk_free_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zip_path = tmp_path / "input.zip"
+    zip_path.write_bytes(b"zip-bytes")
+    calls: list[Path] = []
+
+    def fake_upload(*, create_data, zip_path, manifest_root=None):
+        del manifest_root
+        del create_data
+        calls.append(zip_path)
+        return UploadedArchive(
+            oss_key="sdk-free/input.zip",
+            download_url="https://store.example/api/download/sdk-free/input.zip?token=t",
+        )
+
+    monkeypatch.setenv("BOHRIUM_TRANSFER_USE_LEGACY", "1")
+    monkeypatch.setattr(
+        "matmaster.bohrium.upload._upload_input_archive_sdk_free",
+        fake_upload,
+    )
+
+    uploaded = upload_input_archive(
+        create_data={
+            "storePath": "legacy/",
+            "storeHost": "https://store.example",
+            "token": "t",
+        },
+        zip_path=zip_path,
+    )
+
+    assert uploaded.oss_key == "sdk-free/input.zip"
+    assert calls == [zip_path]

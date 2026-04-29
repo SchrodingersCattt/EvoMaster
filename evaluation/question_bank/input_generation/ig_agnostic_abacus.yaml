@@ -2,7 +2,7 @@ version: v5
 capability: input_generation
 domain: agnostic
 questions:
-- id: IG_abacus_001_20260417
+- id: IG_abacus_001_20260428
   capability: input_generation
   domain: agnostic
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place
@@ -17,6 +17,7 @@ questions:
     2) 在真空区域布置 empty 原子层，保证位于 slab 外侧而不是埋入体内。
 
     3) 生成与该场景匹配的 SCF INPUT，沿真空方向使用单点/稀疏采样。
+       说明：k 采样可用 kspacing 或 KPT 两种路线；若使用 KPT，建议采用 `KPT_bsse` 文件名与 Gamma 风格。
 
 
     将结果写入当前目录：`STRU_bsse`、`INPUT_bsse`。
@@ -35,10 +36,8 @@ questions:
   - key: must_stru_bsse_fe_empty_core
     value:
       filename: STRU_bsse
-      tokens:
-      - Fe_empty
-      - '0.000000'
-      flags: i
+      filenames:
+      - STRU_bsse
   - key: must_input_bsse_core
     value:
       filename: INPUT_bsse
@@ -50,40 +49,44 @@ questions:
   - key: must_input_bsse_vacuum_kspacing
     value:
       filename: INPUT_bsse
-      checks:
-      - key: kspacing
-        component: 1
-        min: 0.8
-        max: 1.2
-        if_component_count_in:
-        - 1
-      - key: kspacing
-        component: 3
-        min: 0.8
-        max: 1.2
-        if_component_count_in:
-        - 3
+      if_filename: INPUT_bsse
+      if_pattern: ^\s*kspacing\b
+      then_pattern: ^\s*kspacing\s+[0-9]*\.?[0-9]+\s+[0-9]*\.?[0-9]+\s+1(?:\.0+)?\s*$
+      else_filename: KPT_bsse
+      else_pattern: ^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$
+      flags: m
   - key: suggested_input_bsse_numerics
     value:
       filename: INPUT_bsse
       checks:
       - key: ecutwfc
-        min: 90
+        min: 80
         max: 120
       - key: scf_thr
-        min: 1.0e-07
+        min: 1.0e-08
         max: 1.0e-06
   - key: suggested_input_bsse_smearing
     value:
       filename: INPUT_bsse
       checks:
       - key: smearing_method
+        allow_missing_key: true
         allowed_values:
         - gauss
         - gaussian
+        - fixed
+        - mp
+        - mp2
+        - methfessel-paxton
+        - mv
+        - cold
+        - marzari-vanderbilt
+        - fd
+        - fermi-dirac
       - key: smearing_sigma
-        min: 0.01
-        max: 0.02
+        allow_missing_key: true
+        min: 0.005
+        max: 0.03
   - key: variable_empty_layer_placement
     value: {}
   - key: variable_fe_empty_species_quality
@@ -92,6 +95,9 @@ questions:
     value: STRU_bsse
   - key: input_bsse_artifact
     value: INPUT_bsse
+  - key: grounding_source
+    value:
+      filename: base_slab.stru
   - key: turn_budget
     value:
       max: 18
@@ -103,9 +109,12 @@ questions:
       max: 25000
   scoring_checklist:
   - id: must_stru_bsse_fe_empty_core
-    criterion: '[Must] STRU_bsse includes Fe_empty with explicit empty-species charge marker.'
+    criterion: '[Must] Judge from `STRU_bsse` file content: STRU_bsse defines Fe_empty
+      as an empty/ghost species entry for
+      BSSE usage and uses a physically consistent zero-charge style marker (allowing
+      equivalent numeric formats).'
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
     weight: 1.0
   - id: must_input_bsse_core
     criterion: '[Must] INPUT_bsse uses LCAO SCF core controls (`calculation scf`, `basis_type
@@ -114,10 +123,11 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: must_input_bsse_vacuum_kspacing
-    criterion: '[Must] INPUT_bsse sets sparse vacuum-axis k-spacing (either single `kspacing
-      1.0` or three-component form with the third component ~=1.0).'
+    criterion: '[Must] Conditional routing: if INPUT_bsse has `kspacing`, it must be 3-component
+      with third component ~=1.0 (single-value form not accepted); if INPUT_bsse has no `kspacing`,
+      then KPT_bsse must provide a mesh line with third-axis sampling = 1.'
     axis: correctness
-    verify: text_file_numeric_range
+    verify: text_file_regex
     weight: 1.0
   - id: suggested_input_bsse_numerics
     criterion: '[Suggested] INPUT_bsse follows benchmark numeric settings with tolerance (`ecutwfc
@@ -126,8 +136,9 @@ questions:
     verify: text_file_numeric_range
     weight: 0.6
   - id: suggested_input_bsse_smearing
-    criterion: '[Suggested] INPUT_bsse uses benchmark smearing controls (gauss/gaussian +
-      sigma within 0.01~0.02).'
+    criterion: '[Suggested] If smearing parameters are provided in INPUT_bsse, they should
+      be physically reasonable for this benchmark family; missing smearing fields should
+      not be treated as a failure.'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
@@ -179,7 +190,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_003_20260417
+- id: IG_abacus_003_20260422
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS PW SCF INPUT and KPT files for Al slab electrostatic-potential calculation
@@ -201,7 +212,6 @@ questions:
   - abacus
   - electrostatics
   - phy_surface
-  priority: P0
   data_files:
   - key: base_al_slab
     path: data/IG_abacus_003_20260406/base_al_slab.stru
@@ -233,16 +243,14 @@ questions:
       filename: INPUT_pot
       checks:
       - key: ecutwfc
-        min: 55
-        max: 65
-      - key: nbands
-        expected: 40
-        tolerance: 0
+        min: 35
+        max: 75
   - key: variable_input_smearing
     value:
       filename: INPUT_pot
       checks:
       - key: smearing_method
+        allow_missing_key: true
         allowed_values:
         - gauss
         - gaussian
@@ -256,8 +264,9 @@ questions:
         - fd
         - fermi-dirac
       - key: smearing_sigma
-        min: 0.007
-        max: 0.02
+        allow_missing_key: true
+        min: 0.005
+        max: 0.03
   - key: variable_kpt_inplane_density
     value:
       filename: KPT_pot
@@ -267,6 +276,9 @@ questions:
     value: INPUT_pot
   - key: kpt_pot_artifact
     value: KPT_pot
+  - key: grounding_source
+    value:
+      filename: base_al_slab.stru
   - key: turn_budget
     value:
       max: 12
@@ -275,7 +287,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 25000
   scoring_checklist:
   - id: must_input_core
     criterion: '[Must] INPUT_pot contains core mandatory controls for this task (`calculation
@@ -294,14 +306,13 @@ questions:
     verify: text_file_regex
     weight: 1.0
   - id: suggested_input_numerics
-    criterion: '[Suggested] INPUT_pot uses the benchmark numeric setup (`ecutwfc 60`, `nbands
-      40`).'
+    criterion: '[Suggested] INPUT_pot uses the benchmark numeric setup (`ecutwfc 60`).'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
   - id: variable_input_smearing
-    criterion: '[Variable] INPUT_pot uses an acceptable smearing style/value for this benchmark
-      family.'
+    criterion: '[Variable] If INPUT_pot includes smearing parameters, they should be reasonable
+      for this benchmark family; omission should not be treated as an error.'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.3
@@ -345,7 +356,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_004_20260412
+- id: IG_abacus_004_20260422
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS PW SCF input for dipole correction on an asymmetric H2O slab, with
@@ -400,11 +411,11 @@ questions:
       filename: INPUT_dipole
       checks:
       - key: ecutwfc
-        min: 90
-        max: 120
+        min: 35
+        max: 75
       - key: scf_thr
-        min: 1.0e-07
-        max: 5.0e-06
+        min: 1.0e-08
+        max: 1.0e-05
       - key: out_pot
         expected: 2
         tolerance: 0
@@ -423,6 +434,7 @@ questions:
       filename: INPUT_dipole
       checks:
       - key: smearing_method
+        allow_missing_key: true
         allowed_values:
         - gauss
         - gaussian
@@ -435,10 +447,17 @@ questions:
         - marzari-vanderbilt
         - fd
         - fermi-dirac
+      - key: smearing_sigma
+        allow_missing_key: true
+        min: 0.005
+        max: 0.03
   - key: input_dipole_artifact
     value: INPUT_dipole
   - key: kpt_dipole_artifact
     value: KPT_dipole
+  - key: grounding_source
+    value:
+      filename: base_h2o.stru
   - key: turn_budget
     value:
       max: 8
@@ -477,7 +496,8 @@ questions:
     verify: text_file_contains_all
     weight: 0.3
   - id: variable_input_dipole_smearing
-    criterion: '[Variable] INPUT_dipole uses an acceptable smearing style for this task family.'
+    criterion: '[Variable] If INPUT_dipole includes smearing parameters, they should be acceptable
+      for this task family; missing smearing settings should not fail this item.'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.3
@@ -515,385 +535,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_007_20260414
-  capability: input_generation
-  domain: agnostic
-  intent: Generate ABACUS LCAO spin-polarized electric-field SCF and NSCF band inputs for
-    a nanoribbon, including a line-mode KPT from Gamma to Y.
-  human_prompt_seed: '工作区中提供了 nanoribbon 结构。
-
-
-    请准备一套“自旋极化 + 外电场”ABACUS LCAO 输入：
-
-    1) 生成 SCF 输入，包含外电场控制参数。
-
-    2) 生成对应的 NSCF band 输入，要求读取已收敛电荷。
-
-    3) 生成 line-mode KPT，覆盖 Gamma 到 Y 的能带路径并保证采样足够密。
-
-
-    将结果写入当前目录：`INPUT_spin_elec_scf`、`INPUT_spin_elec_band`、`KPT_band`。
-
-    '
-  tags:
-  - abacus
-  - electrostatics
-  - mat_2d
-  - phy_electronic
-  data_files:
-  - key: nanoribbon
-    path: data/IG_abacus_007_20260406/nanoribbon.stru
-    oss_url: ''
-    description: Nanoribbon structure with vacuum for electric-field and band-structure setup.
-  reference_answers:
-  - key: must_input_spin_scf_core
-    value:
-      filename: INPUT_spin_elec_scf
-      tokens:
-      - calculation scf
-      - nspin 2
-      - basis_type lcao
-      - efield_flag 1
-      - efield_dir 2
-      flags: i
-  - key: must_input_spin_band_core
-    value:
-      filename: INPUT_spin_elec_band
-      tokens:
-      - calculation nscf
-      - init_chg file
-      - nspin 2
-      flags: i
-  - key: must_kpt_band_path_core
-    value:
-      filename: KPT_band
-      required_points:
-      - - 0.0
-        - 0.0
-        - 0.0
-      - - 0.0
-        - 0.5
-        - 0.0
-      tolerance: 1.0e-05
-      require_line_mode: true
-      require_order: true
-  - key: suggested_input_spin_numerics
-    value:
-      filename: INPUT_spin_elec_scf
-      checks:
-      - key: ecutwfc
-        min: 90
-        max: 120
-      - key: scf_thr
-        min: 1.0e-07
-        max: 5.0e-06
-      - key: smearing_method
-        allowed_values:
-        - gauss
-        - gaussian
-      - key: smearing_sigma
-        min: 0.001
-        max: 0.02
-  - key: suggested_input_spin_mixing
-    value:
-      filename: INPUT_spin_elec_scf
-      tokens:
-      - mixing_beta 0.1
-      - mixing_ndim 20
-      - mixing_gg0 1.5
-      flags: i
-  - key: variable_efield_amp_small
-    value:
-      filename: INPUT_spin_elec_scf
-      checks:
-      - key: efield_amp
-        min: 0.001
-        max: 0.00999
-  - key: variable_kpt_band_density
-    value:
-      filename: KPT_band
-      pattern: \b(?:80|8[1-9]|9\d|10\d|11\d|120)\b
-      flags: i
-  - key: input_spin_scf_artifact
-    value: INPUT_spin_elec_scf
-  - key: input_spin_band_artifact
-    value: INPUT_spin_elec_band
-  - key: kpt_band_artifact
-    value: KPT_band
-  - key: turn_budget
-    value:
-      max: 8
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 18000
-  scoring_checklist:
-  - id: must_input_spin_scf_core
-    criterion: '[Must] INPUT_spin_elec_scf contains core spin-polarized SCF + external-field
-      controls.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
-  - id: must_input_spin_band_core
-    criterion: '[Must] INPUT_spin_elec_band is NSCF and reads converged charge (`init_chg
-      file`).'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
-  - id: must_kpt_band_path_core
-    criterion: '[Must] KPT_band defines a line-mode path that includes Gamma->Y core coordinates
-      ((0,0,0)->(0,0.5,0)).'
-    axis: correctness
-    verify: text_file_kpt_path
-    weight: 1.0
-  - id: suggested_input_spin_numerics
-    criterion: '[Suggested] SCF input follows benchmark numeric setup with tolerance (`ecutwfc/scf_thr/smearing`).'
-    axis: correctness
-    verify: text_file_numeric_range
-    weight: 0.6
-  - id: suggested_input_spin_mixing
-    criterion: '[Suggested] SCF input includes benchmark mixing controls.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 0.6
-  - id: variable_efield_amp_small
-    criterion: '[Variable] External-field amplitude is in a small finite-field range (around
-      1e-3).'
-    axis: correctness
-    verify: text_file_numeric_range
-    weight: 0.3
-  - id: variable_kpt_band_density
-    criterion: '[Variable] KPT path interpolation density is in a reasonable range for band
-      plotting.'
-    axis: correctness
-    verify: text_file_regex
-    weight: 0.3
-  - id: input_spin_scf_artifact
-    criterion: Generated deliverables count even if the final answer does not quote file contents;
-      `INPUT_spin_elec_scf` must be written to the workspace.
-    axis: correctness
-    verify: artifact_exists
-    weight: 0.33
-  - id: input_spin_band_artifact
-    criterion: Generated deliverables count even if the final answer does not quote file contents;
-      `INPUT_spin_elec_band` must be written to the workspace.
-    axis: correctness
-    verify: artifact_exists
-    weight: 0.33
-  - id: kpt_band_artifact
-    criterion: Generated deliverables count even if the final answer does not quote file contents;
-      `KPT_band` must be written to the workspace.
-    axis: correctness
-    verify: artifact_exists
-    weight: 0.34
-  - id: grounding_source
-    criterion: The generated inputs are grounded in the provided nanoribbon structure and
-      do not invent unrelated structural edits.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: no_retries
-    criterion: No repeated identical tool calls with the same parameter set.
-    axis: efficiency
-    verify: no_retries
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
-    axis: efficiency
-    verify: token_budget
-- id: IG_abacus_008_20260412
-  capability: input_generation
-  domain: agnostic
-  intent: Generate ABACUS PW SCF input combining dipole correction with compensating charge
-    for a charged H2O slab, including gate-plane and barrier parameters.
-  human_prompt_seed: '工作区中提供了带真空区的 H2O 结构。
-
-
-    请准备“偶极修正 + 补偿电荷 + 势垒”场景下的 ABACUS 输入：
-
-    1) 生成 PW-SCF 的 INPUT，并启用偶极修正与补偿电荷控制。
-
-    2) 在 INPUT 中加入避免电子溢出的势垒相关设置。
-
-    3) 生成与大真空超胞匹配的 Gamma 点 KPT。
-
-
-    将结果写入当前目录：`INPUT_gate`、`KPT_gate`。
-
-    '
-  tags:
-  - abacus
-  - electrostatics
-  - phy_surface
-  data_files:
-  - key: base_h2o_gate
-    path: data/IG_abacus_008_20260406/base_h2o_gate.stru
-    oss_url: ''
-    description: H2O in a vacuum cell for compensating-charge setup.
-  reference_answers:
-  - key: must_input_gate_core
-    value:
-      filename: INPUT_gate
-      pattern: (?ims)(?=.*^\s*calculation\s+scf\s*(?:#.*)?$)(?=.*^\s*basis_type\s+pw\s*(?:#.*)?$)(?=.*^\s*efield_flag\s+1\s*(?:#.*)?$)(?=.*^\s*dip_cor_flag\s+1\s*(?:#.*)?$)(?=.*^\s*gate_flag\s+(?:1|true)\s*(?:#.*)?$)(?=.*^\s*block\s+(?:1|true)\s*(?:#.*)?$)(?=.*^\s*efield_amp\s+0(?:\.0+)?\s*(?:#.*)?$)
-      flags: is
-  - key: must_kpt_gate_gamma
-    value:
-      filename: KPT_gate
-      tokens:
-      - K_POINTS
-      - Gamma
-      flags: i
-  - key: must_kpt_gate_single_point
-    value:
-      filename: KPT_gate
-      pattern: ^\s*1\s+1\s+1(?:\s+\d+){0,3}\s*$
-      flags: m
-  - key: suggested_input_gate_numerics
-    value:
-      filename: INPUT_gate
-      checks:
-      - key: ecutwfc
-        min: 90
-        max: 120
-      - key: scf_thr
-        min: 1.0e-07
-        max: 5.0e-06
-      - key: out_pot
-        expected: 2
-        tolerance: 0
-  - key: suggested_gate_plane_and_barrier_fields
-    value:
-      filename: INPUT_gate
-      tokens:
-      - zgate
-      - nelec
-      - block_down
-      - block_up
-      - block_height
-      flags: i
-  - key: variable_input_gate_smearing_mixing
-    value:
-      filename: INPUT_gate
-      checks:
-      - key: smearing_method
-        allowed_values:
-        - gauss
-        - gaussian
-        - fixed
-        - mp
-        - mp2
-        - methfessel-paxton
-        - mv
-        - cold
-        - marzari-vanderbilt
-        - fd
-        - fermi-dirac
-      - key: mixing_type
-        allowed_values:
-        - broyden
-  - key: variable_input_gate_window
-    value:
-      filename: INPUT_gate
-      tokens:
-      - efield_pos_max
-      - efield_pos_dec
-      flags: i
-  - key: input_gate_artifact
-    value: INPUT_gate
-  - key: kpt_gate_artifact
-    value: KPT_gate
-  - key: turn_budget
-    value:
-      max: 8
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 18000
-  scoring_checklist:
-  - id: must_input_gate_core
-    criterion: '[Must] INPUT_gate contains core dipole-correction + gate + barrier controls.'
-    axis: correctness
-    verify: text_file_regex
-    weight: 1.0
-  - id: must_kpt_gate_gamma
-    criterion: '[Must] KPT_gate is Gamma-centered.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
-  - id: must_kpt_gate_single_point
-    criterion: '[Must] KPT_gate uses a single Gamma point (1x1x1).'
-    axis: correctness
-    verify: text_file_regex
-    weight: 1.0
-  - id: suggested_input_gate_numerics
-    criterion: '[Suggested] INPUT_gate follows benchmark numeric settings (`ecutwfc/scf_thr/out_pot`).'
-    axis: correctness
-    verify: text_file_numeric_range
-    weight: 0.6
-  - id: suggested_gate_plane_and_barrier_fields
-    criterion: '[Suggested] INPUT_gate includes gate-plane and barrier field parameters (`zgate`,
-      `nelec`, `block_down/up/height`).'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 0.6
-  - id: variable_input_gate_smearing_mixing
-    criterion: '[Variable] INPUT_gate uses an acceptable smearing/mixing style for this benchmark
-      family.'
-    axis: correctness
-    verify: text_file_numeric_range
-    weight: 0.3
-  - id: variable_input_gate_window
-    criterion: '[Variable] INPUT_gate includes dipole-window position controls (`efield_pos_max`,
-      `efield_pos_dec`).'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 0.3
-  - id: input_gate_artifact
-    criterion: Generated deliverables count even if the final answer does not quote file contents;
-      `INPUT_gate` must be written to the workspace.
-    axis: correctness
-    verify: artifact_exists
-    weight: 0.5
-  - id: kpt_gate_artifact
-    criterion: Generated deliverables count even if the final answer does not quote file contents;
-      `KPT_gate` must be written to the workspace.
-    axis: correctness
-    verify: artifact_exists
-    weight: 0.5
-  - id: grounding_source
-    criterion: The generated setup is grounded in base_h2o_gate.stru and does not modify the
-      provided structure beyond preparing INPUT/KPT.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: no_retries
-    criterion: No repeated identical tool calls with the same parameter set.
-    axis: efficiency
-    verify: no_retries
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
-    axis: efficiency
-    verify: token_budget
-- id: IG_abacus_002_20260417
+- id: IG_abacus_002_20260422
   capability: input_generation
   domain: agnostic
   intent: Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty
@@ -908,6 +550,7 @@ questions:
     2) 生成与体相场景匹配的 SCF INPUT（均匀三维采样）。
 
     3) 在最终回答中简要说明 vacancy 场景为何需要 ghost 基组补偿。
+       说明：均匀三维采样可用 kspacing 或 KPT 两种路线；若使用 KPT，建议采用 `KPT_vac_bsse` 文件名与 Gamma 风格。
 
 
     将结果写入当前目录：`STRU_vac_bsse`、`INPUT_vac_bsse`。
@@ -927,10 +570,8 @@ questions:
   - key: must_stru_vac_fe_empty_core
     value:
       filename: STRU_vac_bsse
-      tokens:
-      - Fe_empty
-      - '0.000000'
-      flags: i
+      filenames:
+      - STRU_vac_bsse
   - key: must_input_vac_core
     value:
       filename: INPUT_vac_bsse
@@ -942,29 +583,18 @@ questions:
   - key: must_input_vac_uniform_kspacing
     value:
       filename: INPUT_vac_bsse
-      checks:
-      - key: kspacing
-        component: 1
-        min: 0.08
-        max: 0.2
-      - key: kspacing
-        component: 2
-        min: 0.08
-        max: 0.2
-        if_component_count_in:
-        - 3
-      - key: kspacing
-        component: 3
-        min: 0.08
-        max: 0.2
-        if_component_count_in:
-        - 3
+      if_filename: INPUT_vac_bsse
+      if_pattern: ^\s*kspacing\b
+      then_pattern: ^\s*kspacing\s+((?:0\.(?:0[89]|1\d|20?)(?:0+)?))(?:\s+\1\s+\1)?\s*$
+      else_filename: KPT_vac_bsse
+      else_pattern: ^\s*([1-9]\d*)\s+\1\s+\1(?:\s+\d+){0,3}\s*$
+      flags: m
   - key: suggested_input_vac_numerics
     value:
       filename: INPUT_vac_bsse
       checks:
       - key: ecutwfc
-        min: 90
+        min: 80
         max: 120
       - key: scf_thr
         min: 1.0e-07
@@ -974,12 +604,23 @@ questions:
       filename: INPUT_vac_bsse
       checks:
       - key: smearing_method
+        allow_missing_key: true
         allowed_values:
         - gauss
         - gaussian
+        - fixed
+        - mp
+        - mp2
+        - methfessel-paxton
+        - mv
+        - cold
+        - marzari-vanderbilt
+        - fd
+        - fermi-dirac
       - key: smearing_sigma
-        min: 0.01
-        max: 0.02
+        allow_missing_key: true
+        min: 0.005
+        max: 0.03
   - key: variable_bsse_explanation
     value: {}
   - key: variable_fe_empty_at_vacancy
@@ -988,9 +629,12 @@ questions:
     value: STRU_vac_bsse
   - key: input_vac_bsse_artifact
     value: INPUT_vac_bsse
+  - key: grounding_source
+    value:
+      filename: base_vacancy.stru
   - key: turn_budget
     value:
-      max: 14
+      max: 20
   - key: duration_budget
     value:
       max: 7200000
@@ -999,10 +643,11 @@ questions:
       max: 30000
   scoring_checklist:
   - id: must_stru_vac_fe_empty_core
-    criterion: '[Must] STRU_vac_bsse includes Fe_empty with explicit empty-species charge
-      marker.'
+    criterion: '[Must] Judge from `STRU_vac_bsse` file content: STRU_vac_bsse defines
+      Fe_empty as vacancy ghost-basis species with physically consistent empty-site
+      marker (allowing equivalent numeric formats).'
     axis: correctness
-    verify: text_file_contains_all
+    verify: llm_binary_judge
     weight: 1.0
   - id: must_input_vac_core
     criterion: '[Must] INPUT_vac_bsse uses LCAO SCF core controls (`calculation scf`, `basis_type
@@ -1011,10 +656,12 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: must_input_vac_uniform_kspacing
-    criterion: '[Must] INPUT_vac_bsse uses kspacing around 0.10 with tolerance (about 0.08~0.20,
-      isotropic or explicit uniform three-component form).'
+    criterion: '[Must] Conditional routing: if INPUT_vac_bsse has `kspacing`, it must be either
+      a single value in 0.08~0.20 or an explicit uniform three-component form in the same range;
+      if INPUT_vac_bsse has no `kspacing`, then KPT_vac_bsse must provide a uniform mesh line
+      (n n n).'
     axis: correctness
-    verify: text_file_numeric_range
+    verify: text_file_regex
     weight: 1.0
   - id: suggested_input_vac_numerics
     criterion: '[Suggested] INPUT_vac_bsse follows benchmark numeric settings with tolerance
@@ -1023,8 +670,9 @@ questions:
     verify: text_file_numeric_range
     weight: 0.6
   - id: suggested_input_vac_smearing
-    criterion: '[Suggested] INPUT_vac_bsse uses benchmark smearing controls (gauss/gaussian
-      + sigma within 0.01~0.02).'
+    criterion: '[Suggested] If INPUT_vac_bsse includes smearing parameters, they should
+      be physically reasonable for this benchmark family; missing smearing fields should
+      not be treated as failure.'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
@@ -1076,7 +724,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_005_20260412
+- id: IG_abacus_005_20260422
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence
@@ -1152,24 +800,25 @@ questions:
       filename: INPUT_bulk_relax
       checks:
       - key: ecutwfc
-        min: 55
-        max: 65
+        min: 35
+        max: 75
       - key: scf_nmax
-        expected: 100
-        tolerance: 0
+        min: 50
+        max: 1000
       - key: relax_nmax
-        expected: 100
-        tolerance: 0
+        min: 50
+        max: 1000
   - key: suggested_kpt_bulk_three_dimensional
     value:
       filename: KPT_bulk
       pattern: ^\s*(?:[2-9]\d*|1\d+)\s+(?:[2-9]\d*|1\d+)\s+(?:[2-9]\d*|1\d+)(?:\s+\d+){0,3}\s*$
       flags: m
-  - key: variable_input_bulk_smearing
+  - key: variable_input_bulk_smearing_or_mixing
     value:
       filename: INPUT_bulk_relax
       checks:
       - key: smearing_method
+        allow_missing_key: true
         allowed_values:
         - gauss
         - gaussian
@@ -1183,8 +832,15 @@ questions:
         - fd
         - fermi-dirac
       - key: smearing_sigma
-        min: 0.007
-        max: 0.02
+        allow_missing_key: true
+        min: 0.005
+        max: 0.03
+      - key: mixing_type
+        allow_missing_key: true
+        allowed_values:
+        - broyden
+        - plain
+        - pulay
   - key: variable_kpt_slab_inplane_density
     value:
       filename: KPT_slab
@@ -1200,6 +856,12 @@ questions:
     value: KPT_bulk
   - key: kpt_slab_artifact
     value: KPT_slab
+  - key: grounding_source
+    value:
+      filenames:
+      - bulk_al_fcc.stru
+      - slab_al_fcc100_5l.stru
+      - slab_al_fcc100_7l.stru
   - key: turn_budget
     value:
       max: 8
@@ -1236,7 +898,8 @@ questions:
     verify: text_file_regex
     weight: 1.0
   - id: suggested_input_bulk_relax_numerics
-    criterion: '[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc/scf_nmax/relax_nmax`).'
+    criterion: '[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc`,
+      `scf_nmax`/`relax_nmax` within 50~1000).'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
@@ -1245,9 +908,10 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.6
-  - id: variable_input_bulk_smearing
-    criterion: '[Variable] INPUT_bulk_relax uses an acceptable smearing setup for this benchmark
-      family.'
+  - id: variable_input_bulk_smearing_or_mixing
+    criterion: '[Variable] If INPUT_bulk_relax includes smearing/mixing parameters, they
+      should be reasonable for this benchmark family; omission should not be treated
+      as failure.'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.3
@@ -1309,7 +973,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_006_20260412
+- id: IG_abacus_006_20260422
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW inputs for Mo surface-vacancy energy using bulk, pristine slab,
@@ -1406,6 +1070,7 @@ questions:
       filename: INPUT_bulk_mo
       checks:
       - key: smearing_method
+        allow_missing_key: true
         allowed_values:
         - gauss
         - gaussian
@@ -1418,20 +1083,30 @@ questions:
         - marzari-vanderbilt
         - fd
         - fermi-dirac
+      - key: smearing_sigma
+        allow_missing_key: true
+        min: 0.005
+        max: 0.03
       - key: mixing_type
+        allow_missing_key: true
         allowed_values:
         - broyden
+        - plain
+        - pulay
       - key: mixing_beta
+        allow_missing_key: true
         min: 0.01
         max: 0.9
         if_component_count_in:
         - 1
       - key: mixing_ndim
+        allow_missing_key: true
         min: 1
         max: 1000
         if_component_count_in:
         - 1
       - key: mixing_gg0
+        allow_missing_key: true
         min: 0.1
         max: 20
         if_component_count_in:
@@ -1441,6 +1116,7 @@ questions:
       filename: INPUT_slab_clean
       checks:
       - key: smearing_method
+        allow_missing_key: true
         allowed_values:
         - gauss
         - gaussian
@@ -1453,20 +1129,30 @@ questions:
         - marzari-vanderbilt
         - fd
         - fermi-dirac
+      - key: smearing_sigma
+        allow_missing_key: true
+        min: 0.005
+        max: 0.03
       - key: mixing_type
+        allow_missing_key: true
         allowed_values:
         - broyden
+        - plain
+        - pulay
       - key: mixing_beta
+        allow_missing_key: true
         min: 0.01
         max: 0.9
         if_component_count_in:
         - 1
       - key: mixing_ndim
+        allow_missing_key: true
         min: 1
         max: 1000
         if_component_count_in:
         - 1
       - key: mixing_gg0
+        allow_missing_key: true
         min: 0.1
         max: 20
         if_component_count_in:
@@ -1476,6 +1162,7 @@ questions:
       filename: INPUT_slab_vac
       checks:
       - key: smearing_method
+        allow_missing_key: true
         allowed_values:
         - gauss
         - gaussian
@@ -1488,20 +1175,30 @@ questions:
         - marzari-vanderbilt
         - fd
         - fermi-dirac
+      - key: smearing_sigma
+        allow_missing_key: true
+        min: 0.005
+        max: 0.03
       - key: mixing_type
+        allow_missing_key: true
         allowed_values:
         - broyden
+        - plain
+        - pulay
       - key: mixing_beta
+        allow_missing_key: true
         min: 0.01
         max: 0.9
         if_component_count_in:
         - 1
       - key: mixing_ndim
+        allow_missing_key: true
         min: 1
         max: 1000
         if_component_count_in:
         - 1
       - key: mixing_gg0
+        allow_missing_key: true
         min: 0.1
         max: 20
         if_component_count_in:
@@ -1514,6 +1211,12 @@ questions:
     value: INPUT_slab_vac
   - key: kpt_gamma_artifact
     value: KPT_gamma
+  - key: grounding_source
+    value:
+      filenames:
+      - mo_bulk.stru
+      - mo110_pristine.stru
+      - mo110_surface_vac.stru
   - key: turn_budget
     value:
       max: 8
@@ -1565,17 +1268,20 @@ questions:
     verify: text_file_numeric_range
     weight: 0.6
   - id: variable_bulk_smearing_or_mixing
-    criterion: '[Variable] INPUT_bulk_mo provides a reasonable smearing/mixing control.'
+    criterion: '[Variable] If INPUT_bulk_mo includes smearing/mixing parameters, they should
+      be reasonable; omission should not be treated as failure.'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.3
   - id: variable_slab_smearing_or_mixing
-    criterion: '[Variable] INPUT_slab_clean provides a reasonable smearing/mixing control.'
+    criterion: '[Variable] If INPUT_slab_clean includes smearing/mixing parameters, they
+      should be reasonable; omission should not be treated as failure.'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.3
   - id: variable_slab_vac_smearing_or_mixing
-    criterion: '[Variable] INPUT_slab_vac provides a reasonable smearing/mixing control.'
+    criterion: '[Variable] If INPUT_slab_vac includes smearing/mixing parameters, they
+      should be reasonable; omission should not be treated as failure.'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.3

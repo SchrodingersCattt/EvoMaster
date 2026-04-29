@@ -143,6 +143,7 @@ async def test_planner_job_enqueues_with_planner_mode_field() -> None:
     with (
         patch('src.services.stream_service.REDIS_URL', 'redis://test'),
         patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
+        patch('src.services.stream_service.notify_post_async'),
         patch(
             'src.services.stream_service.asyncio.wait_for',
             side_effect=_stream_closed_immediately,

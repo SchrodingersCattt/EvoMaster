@@ -1,6 +1,6 @@
 ---
 name: mcp-mat-sg
-description: 当需要构建、生成或修改原子结构时调用本 skill。支持从 SMILES 构建分子、Wyckoff/模板构建晶体、切表面 slab、超胞、缺陷、掺杂、交联聚合物等。
+description: 当需要构建、生成或修改原子结构时调用本 skill。支持从 SMILES 构建分子、Wyckoff/模板构建晶体、切表面 slab、超胞、二维范德华异质结与界面、缺陷、掺杂、交联聚合物等；亦含 CIF 补氢、分子晶体缺氢与价键/连接性核对。
 skill_type: mcp-loader
 mcp_server: mat_sg
 ---

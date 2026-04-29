@@ -110,7 +110,7 @@ if [[ -z "${BOHRIUM_PROJECT_ID:-}" ]]; then
   log "ERROR: BOHRIUM_PROJECT_ID is not set."
   exit 1
 fi
-DOCKERFILE_PATH="$REPO_ROOT/Dockerfile.remote"
+DOCKERFILE_PATH="${DOCKERFILE_PATH:-$REPO_ROOT/Dockerfile.remote}"
 if [[ ! -f "$DOCKERFILE_PATH" ]]; then
   log "ERROR: $DOCKERFILE_PATH not found."
   exit 1

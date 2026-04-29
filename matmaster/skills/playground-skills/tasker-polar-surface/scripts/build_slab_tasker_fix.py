@@ -107,7 +107,11 @@ def parse_charge_map(s: str):
 
 
 def get_z_layer_data(atoms, layer_tol=0.5):
-    """Identify z-layers and return layer ids, mean z, and atom indices per layer."""
+    """Identify z-layers and return layer ids, mean z, and atom indices per layer.
+
+    Deterministic: layer atom indices are always sorted ascending, and
+    layers are ordered by ascending mean-z coordinate.
+    """
     z_layers, _ = get_layers(atoms, (0, 0, 1), tolerance=layer_tol)
     z_layers = np.asarray(z_layers)
 
@@ -120,10 +124,19 @@ def get_z_layer_data(atoms, layer_tol=0.5):
 
     for lid in layer_ids_sorted:
         idx = np.where(z_layers == lid)[0]
-        layer_atoms.append(idx.tolist())
+        # Sort indices for deterministic output
+        idx_sorted = sorted(idx.tolist())
+        layer_atoms.append(idx_sorted)
         layer_z.append(positions[idx, 2].mean())
 
-    return layer_ids_sorted.tolist(), np.array(layer_z), layer_atoms
+    # Re-sort by ascending mean z to ensure determinism regardless of
+    # internal layer-id ordering from get_layers()
+    order = np.argsort(layer_z)
+    layer_atoms = [layer_atoms[i] for i in order]
+    layer_z_arr = np.array([layer_z[i] for i in order])
+    layer_ids_sorted = [layer_ids_sorted[i] for i in order]
+
+    return layer_ids_sorted, layer_z_arr, layer_atoms
 
 
 def compute_layer_charges(atoms, charge_map, layer_tol):
@@ -354,11 +367,15 @@ def process_single(params: dict) -> dict:
             write(output_path, slab, format=output_format)
 
         if not quiet:
+            cell_lengths = np.linalg.norm(slab.cell, axis=1)
+            cell_str = "[" + ", ".join(f"{v:.4f}" for v in cell_lengths) + "]"
+            # Sort charge_map keys for deterministic output
+            charge_sorted = dict(sorted(charge_map.items()))
             print(f"\n[FINAL] 保存到 {output_path}")
             print(f"  格式: {output_format}")
             print(f"  原子数: {len(slab)}")
-            print(f"  晶胞尺寸: {np.linalg.norm(slab.cell, axis=1)}")
-            print(f"  charge_map = {charge_map}")
+            print(f"  晶胞尺寸: {cell_str}")
+            print(f"  charge_map = {charge_sorted}")
             print(f"  layer_tol = {layer_tol}")
             print(f"  meta = {meta}")
 

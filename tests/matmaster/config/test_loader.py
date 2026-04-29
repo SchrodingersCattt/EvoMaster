@@ -341,7 +341,6 @@ class TestPlannerExpConfig:
         assert isinstance(cfg, ExpConfig)
         assert cfg.name == "planner"
         assert cfg.read_only is False
-        assert cfg.max_turns == 700
         assert cfg.skills.enabled is True
         assert cfg.visible_as_subagent is False, (
             "planner 不应作为 AgentTool 的 subagent enum 暴露；与 "

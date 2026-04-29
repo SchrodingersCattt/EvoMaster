@@ -3,7 +3,7 @@
 Usage::
 
     python run_molecular_dynamics.py --structure input.cif --model DPA3.1-3M \\
-        --stages stages.json [--head Omat24] [--save-interval 100] \\
+        --stages stages.json [--head OMat24] [--save-interval 100] \\
         [--seed 42] [--charge 0] [--spin 1]
 
 The ``--stages`` JSON file is a list of stage dicts, e.g.::
@@ -42,9 +42,13 @@ from _calculator import build_calculator, build_fparam, set_fparam
 from ase import units
 from ase.io import read, write
 from ase.md.langevin import Langevin
-from ase.md.nose_hoover_chain import NoseHooverChainNVT
 from ase.md.npt import NPT
 from ase.md.nvtberendsen import NVTBerendsen
+
+try:
+    from ase.md.nose_hoover_chain import NoseHooverChainNVT
+except ImportError:
+    NoseHooverChainNVT = None
 from ase.md.velocitydistribution import (
     MaxwellBoltzmannDistribution,
     Stationary,
@@ -85,7 +89,11 @@ def _build_dynamics(atoms, stage: dict, seed: int):
     rng = np.random.RandomState(seed)
 
     if mode in ("NVT", "NVT-NH"):
-        return NoseHooverChainNVT(atoms, timestep=dt, temperature_K=T, tdamp=tau_t)
+        if NoseHooverChainNVT is not None:
+            return NoseHooverChainNVT(atoms, timestep=dt, temperature_K=T, tdamp=tau_t)
+        return Langevin(
+            atoms, timestep=dt, temperature_K=T, friction=1.0 / tau_t, rng=rng
+        )
     if mode == "NVT-Berendsen":
         return NVTBerendsen(atoms, timestep=dt, temperature_K=T, taut=tau_t)
     if mode in ("NVT-Langevin", "Langevin"):

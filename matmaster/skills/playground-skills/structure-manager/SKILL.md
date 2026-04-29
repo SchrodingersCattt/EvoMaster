@@ -54,5 +54,8 @@ For band structure, DOS, work function, or defect calculations, see `references/
 * For LAMMPS conversions, always provide `--type-map` and `--atom-style` when non-atomic.
 * **Deliverable-first**: Prioritize producing actual structure files. Do not stop at planning/spec-generation.
 * Structure identification must include database identifiers (CCDC REFCODE / ICSD code) when deposited.
-* After obtaining any new structure, run `assess_structure.py`.
+* After obtaining any new structure, run `assess_structure.py`. **This is mandatory, not optional.**
 * **Grounding depth**: For structural analysis, provide physical/chemical explanations, not just labels. Trace structural physics of each specific material.
+* **Deterministic workflow**: When multiple equivalent approaches exist (e.g. database search vs generation), pick the most reliable one consistently. For known materials: database first → generation fallback. For novel structures: generation directly.
+* **Save early, save often**: Write intermediate structure files to disk before attempting further operations. If a downstream step fails, the intermediate is still deliverable.
+* **Verify after every transformation**: After any operation that changes a structure (supercell, slab, defect, conversion), re-run `assess_structure.py` and verify: (1) formula matches expectations, (2) atom count is correct, (3) dimensionality is right (3D for bulk, 2D for slab).

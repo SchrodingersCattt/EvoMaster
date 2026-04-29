@@ -37,11 +37,9 @@ VerifyLiteral = Literal[
     'exact_match',
     'numerical_range',
     'contains_all',
-    'tool_called',
     'tool_args_match',
     'tool_observation_field',
     'event_type_called',
-    'source_type_used',
     'call_count_range',
     'no_retries',
     'artifact_exists',
@@ -52,9 +50,6 @@ VerifyLiteral = Literal[
     'molcrys_local_env',
     'sc005_disorder_formulas',
     'llm_binary_judge',
-    'batch_single_variable_sweep',
-    'batch_tool_args_constant',
-    'batch_consistent_calls',
     # pymatgen-backed structure-file checks
     'struct_file_atom_count',
     'struct_file_formula',
@@ -76,6 +71,13 @@ VerifyLiteral = Literal[
     'text_file_kpt_path',
     'text_file_numeric_range',
     'text_file_regex',
+    # deterministic numeric check on a JSON block emitted in the agent's answer
+    'answer_json_numeric',
+    # JSON file checks
+    'json_file_schema',
+    'json_file_numeric_range',
+    # tool usage check (did agent call a specific tool name?)
+    'tool_name_used',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
@@ -290,15 +292,10 @@ class QuestionItem(BaseModel):
             'exact_match',
             'numerical_range',
             'contains_all',
-            'tool_called',
             'tool_args_match',
             'tool_observation_field',
             'event_type_called',
-            'source_type_used',
             'call_count_range',
-            'batch_single_variable_sweep',
-            'batch_tool_args_constant',
-            'batch_consistent_calls',
             'duration_budget',
             'turn_budget',
             'molcrys_slab_molecular_integrity',
@@ -308,6 +305,10 @@ class QuestionItem(BaseModel):
             'text_file_kpt_path',
             'text_file_numeric_range',
             'text_file_regex',
+            'answer_json_numeric',
+            'json_file_schema',
+            'json_file_numeric_range',
+            'tool_name_used',
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:

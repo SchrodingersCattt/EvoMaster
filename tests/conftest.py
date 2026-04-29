@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Generator
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -105,6 +106,20 @@ class MockAsyncTool:
 # -- Fixtures --
 
 
+@pytest.fixture(autouse=True)
+def _suppress_devshell_eval_feishu() -> Generator[None]:
+    """Devshell 评测飞书在单测中不发真实 webhook（``from … import`` 需在调用方模块上 patch）。"""
+    with (
+        patch(
+            "evaluation.devshell_agent.sdk_tools_eval_run.notify_after_scoring_async"
+        ),
+        patch(
+            "evaluation.devshell_agent.loop_proposal_notify.notify_manual_review_proposal_async"
+        ),
+    ):
+        yield
+
+
 @pytest.fixture
 def async_llm_provider() -> MockAsyncLLMProvider:
     return MockAsyncLLMProvider()
@@ -113,3 +128,30 @@ def async_llm_provider() -> MockAsyncLLMProvider:
 @pytest.fixture
 def async_tool() -> MockAsyncTool:
     return MockAsyncTool()
+
+
+@pytest.fixture
+def chat_events_table_with_mocks() -> tuple[Any, Any]:
+    """ChatEventsTable with `get_connection` mocked to a captured cursor.
+
+    The returned cursor records every ``cursor.execute`` call so tests
+    can assert on the SQL string and params tuple. Used by tests that
+    exercise ChatEventsTable's SQL-emitting methods without a real DB.
+    """
+    from unittest.mock import MagicMock, patch
+
+    from src.dao.chat_events_table import ChatEventsTable
+
+    with patch.object(ChatEventsTable, "init_table", lambda self: None):
+        table = ChatEventsTable()
+    cursor = MagicMock()
+    conn = MagicMock()
+    cursor_ctx = MagicMock()
+    cursor_ctx.__enter__.return_value = cursor
+    cursor_ctx.__exit__.return_value = False
+    conn.cursor.return_value = cursor_ctx
+    conn_ctx = MagicMock()
+    conn_ctx.__enter__.return_value = conn
+    conn_ctx.__exit__.return_value = False
+    table.get_connection = MagicMock(return_value=conn_ctx)
+    return table, cursor

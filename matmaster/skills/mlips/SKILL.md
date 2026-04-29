@@ -8,38 +8,45 @@ skill_type: operator
 
 MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
-> **Scope: DPA-first.** The default image ships DPA only. Other families (MACE, SevenNet, MatterSim) are supported **via the same unified ASE calculator interface** in `_calculator.py`, but their Python packages are **not preinstalled** — you must install them yourself (see table below) or switch to the multi-family LAMBench image. Treat anything non-DPA as opt-in.
+> **Scope: DPA-first.** All scripts and examples default to DPA. Other families (MACE, SevenNet, MatterSim) are supported through the **same unified ASE calculator interface** in `_calculator.py`. The multi-family image ships all four families preinstalled; use DPA as the primary model and switch family only when needed.
 
 ## Bohrium Submission
 
-| Item | Default |
-|------|---------|
-| image | `registry.dp.tech/dptech/dpa-calculator:e13a296f` (DPA only) |
+> **Image selection rule — IMPORTANT:**
+> - **DPA tasks → always use the DPA image** (default, covers all DPA models).
+> - **Only switch to the multi-family image when the user explicitly requests MACE, SevenNet, or MatterSim.**
+
+| Item | Value |
+|------|-------|
+| **image (DPA, default)** | `registry.dp.tech/dptech/dpa-calculator:e13a296f` |
+| image (multi-family, only for MACE/SevenNet/MatterSim) | `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421` |
 | machine | `c16_m64_1 * NVIDIA 4090` |
 | cmd | `python {script} {args} > log 2>&1` |
 
-> Default image has DPA, ASE, phonopy, pymatgen preinstalled.
-> For missing packages, prepend `pip install ... &&`, or activate the bundled env first: `source /mcp_server/AI4S-agent-tools/.venv/bin/activate && pip install <pkg> && python ...`.
-> For multi-family work, use the LAMBench image (see `Bohrium(action="list_images", keyword="lambench")`, e.g. `registry.dp.tech/dptech/dp/native/prod-375/lambench:v2.9`).
+**DPA image** ships deepmd-kit (v3.x), lammps, ASE 3.23, phonopy 2.34, pymatgen, torch 2.4+cu124. Supports all DPA models and all task scripts out-of-the-box.
+
+**Multi-family image** additionally ships mace-torch 0.3.12, sevenn 0.11.0, mattersim 1.1.2. Use its default `base` conda env; ignore `fc`/`test` envs (incomplete subsets). deepmd-kit reports `1.3.3.dev2445` via git-describe — this **is** the v3.0.0+ codebase.
 
 ## Models
 
-| Model | Family | Domain | Install (if not in image) |
-|-------|--------|--------|---------------------------|
-| **DPA3.1-3M** | DP | General inorganic — **default**, 3M params | preinstalled |
-| **DPA3.2-5M** | DP | General + charge/spin, supports `--charge`/`--spin` | preinstalled |
-| DPA2.4-7M | DP | Legacy multi-head | preinstalled |
-| MACE-MP-0 / MACE-MPA-0 | MACE | General inorganic foundation | `pip install mace-torch` — [ACEsuit/mace](https://github.com/ACEsuit/mace) |
-| SevenNet-0 / 7net-mf-ompa | SevenNet | Graph NN | `pip install sevenn` — [MDIL-SNU/SevenNet](https://github.com/MDIL-SNU/SevenNet) |
-| MatterSim-v1-5M | MatterSim | General inorganic, 5M params | `pip install mattersim` — [microsoft/mattersim](https://github.com/microsoft/mattersim) |
+| Model | Family | Image | Domain |
+|-------|--------|-------|--------|
+| **DPA3.1-3M** | DP | **DPA (default)** | General inorganic — **default**, 3M params |
+| **DPA3.2-5M** | DP | **DPA (default)** | General + charge/spin, supports `--charge`/`--spin` |
+| DPA2.4-7M | DP | **DPA (default)** | Legacy multi-head |
+| **MACE-MP-0** | MACE | multi-family | General inorganic foundation. **Prefer over MACE-MPA-0** (MPA-0 GitHub download times out in Bohrium) |
+| SevenNet-0 / 7net-mf-ompa | SevenNet | multi-family | Graph NN |
+| MatterSim-v1-5M | MatterSim | multi-family | General inorganic, 5M params |
 
-**DPA heads**: `Omat24` (default, inorganic), `OMol25` (organic), `OC22` (catalysis), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
+> Non-DPA families require the multi-family image. Do NOT use the multi-family image for pure DPA tasks.
+
+**DPA heads**: `OMat24` or `Omat24` (default, inorganic — casing differs between model versions: DPA3.2-5M uses `OMat24`, DPA3.1-3M/DPA2.4-7M use `Omat24`), `OMol25` (organic), `OC22` (catalysis), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
 
 ## Task Scripts
 
 | Script | Usage | Output |
 |--------|-------|--------|
-| `optimize_structure.py` | `--structure in.cif --model DPA3.1-3M [--head Omat24] [--relax-cell] [--fmax 0.01]` | `*_optimized.cif`, `result.json` |
+| `optimize_structure.py` | `--structure in.cif --model DPA3.1-3M [--head OMat24] [--relax-cell] [--fmax 0.01]` | `*_optimized.cif`, `result.json` |
 | `calculate_phonon.py` | `--structure in.cif --model DPA3.1-3M --temperatures 300 600 [--calc-tdos] [--mesh 40]` | `phonon_band.png`, `result.json` |
 | `run_molecular_dynamics.py` | `--structure in.cif --model DPA3.1-3M --stages stages.json` | `trajs/*.extxyz`, `final_structure.xyz`, `result.json` |
 | `calculate_elastic.py` | `--structure relaxed.cif --model DPA3.1-3M` (input must be relaxed) | `elastic_matrix.csv`, `result.json` |
@@ -62,14 +69,15 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
 1. Prepare structure (CIF/POSCAR/XYZ)
 2. Copy script(s) + `_calculator.py` to working directory
-3. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dpa-calculator:e13a296f", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
+3. Submit (DPA — default): `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dpa-calculator:e13a296f", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
+   Submit (MACE/SevenNet/MatterSim only): replace image with `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421`
 4. Poll and read `result.json`
 
 ## DPA + LAMMPS (requires freeze)
 
 DPA3 checkpoints (`DPA3.1-3M.pt`, `DPA3.2-5M.pt`) are **multi-task / multi-head** models and **cannot be loaded directly by LAMMPS**. You must first freeze a single head/branch into a `.pth` file. This is DPA-specific (MACE/SevenNet/MatterSim do not need this step).
 
-> Requires `deepmd-kit >= 3.1.0` (check with `dp --version`).
+> Requires `deepmd-kit >= 3.1.0` (check with `dp --version`; the multi-family image reports `v1.3.3.dev2445` which **is** the v3.x codebase).
 
 **Step 1 — list available branches (heads):**
 
@@ -77,13 +85,13 @@ DPA3 checkpoints (`DPA3.1-3M.pt`, `DPA3.2-5M.pt`) are **multi-task / multi-head*
 dp --pt show DPA-3.2-5M.pt model-branch
 ```
 
-Typical DPA3 branches: `Omat24` (default inorganic), `OMol25`, `OC22`, `Organic_Reactions`, `ODAC23`, plus `RANDOM` (randomly initialized fitting net). Pick the branch whose training data best matches your system.
+Typical DPA3 branches: `OMat24` (default inorganic), `OMol25`, `OC22`, `Organic_Reactions`, `ODAC23`, plus `RANDOM` (randomly initialized fitting net). Pick the branch whose training data best matches your system.
 
 **Step 2 — freeze the chosen branch:**
 
 ```bash
 # --model-branch (preferred) or --head both work
-dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch Omat24
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch OMat24
 ```
 
 **Step 3 — use the frozen `.pth` in LAMMPS** (via the `deepmd` pair style):

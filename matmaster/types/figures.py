@@ -33,6 +33,7 @@ class FigureDescriptor(BaseModel):
     importance: Literal["primary", "secondary"] = "secondary"
     placement_hint: Literal["sidebar_only", "appendix_candidate"] = "sidebar_only"
     source_tool_call_id: str | None = None
+    remote_path: str | None = None
 
 
 class FigureUploadConfig(BaseModel):

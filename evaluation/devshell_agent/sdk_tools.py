@@ -323,19 +323,34 @@ class MatmasterEvalMcpToolkit(MatmasterEvalMcpEvalRunMixin):
             ]
         }
 
+    _GLOB_PATHS_MAX_LIMIT = 500
+
     async def _glob_paths(self, *, role: str, args: dict[str, Any]) -> dict[str, Any]:
         base_dir = self._resolve_agent_path(
             str(args["base_dir"]), role=role, write=False
         )
         pattern = str(args["pattern"])
-        matches = sorted(self._display_path(path) for path in base_dir.rglob(pattern))
+        limit = min(
+            max(1, int(args.get("limit") or self._GLOB_PATHS_MAX_LIMIT)),
+            self._GLOB_PATHS_MAX_LIMIT,
+        )
+        all_matches = sorted(
+            self._display_path(path) for path in base_dir.rglob(pattern)
+        )
+        truncated = len(all_matches) > limit
+        matches = all_matches[:limit]
+        result: dict[str, Any] = {
+            "base_dir": self._display_path(base_dir),
+            "matches": matches,
+        }
+        if truncated:
+            result["truncated"] = True
+            result["total"] = len(all_matches)
         return {
             "content": [
                 {
                     "type": "text",
-                    "text": DevshellEvalSubprocess.format_tool_result_text(
-                        {"base_dir": self._display_path(base_dir), "matches": matches}
-                    ),
+                    "text": DevshellEvalSubprocess.format_tool_result_text(result),
                 }
             ]
         }

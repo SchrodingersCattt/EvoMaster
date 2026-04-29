@@ -2,105 +2,6 @@ version: v5
 capability: structure_construction
 domain: agnostic
 questions:
-- id: SR_db_003_20260416v1
-  capability: structure_construction
-  domain: agnostic
-  intent: Generate and summarize candidate crystal structures under explicit superconducting constraints.
-  human_prompt_seed: '按“超导临界温度大于 40 K、空间群编号为 225”使用工具生成 10 个候选晶体结构。
-
-
-    请完成以下交付：
-
-    1) `candidate_structures.json`：列出 10 个候选，每个候选至少包含 `rank`, `formula`, `space_group`, `selection_basis`,
-    `structure_identifier`；
-
-    2) `screening_report.md`：说明你使用了哪些筛选条件、是否真的找到了 10 个候选、如果不足 10 个是如何如实报告的；
-
-    3) 在最终回答中总结：候选数是否满足要求，筛选中最可能出现的不确定性是什么。
-
-
-    注意：
-    - 本题是结构生成题，不是数据库检索题；
-    - 不要把重点放在后续计算，重点是候选生成结果与汇总。
-
-    '
-  tags:
-  - wf_batch
-  - meta_userlog
-  data_files: []
-  reference_answers:
-  - key: candidate_json
-    value: candidate_structures.json
-  - key: screening_report
-    value: screening_report.md
-  - key: candidate_required_tokens
-    value:
-      filename: candidate_structures.json
-      tokens:
-      - rank
-      - formula
-      - space_group
-      - selection_basis
-      - structure_identifier
-      flags: i
-  - key: screening_required_tokens
-    value:
-      filename: screening_report.md
-      tokens:
-      - Tc
-      - 40
-      - 225
-      - 候选
-      - 不确定性
-      flags: i
-  - key: turn_budget
-    value:
-      max: 10
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 9000
-  scoring_checklist:
-  - id: candidate_json
-    criterion: Agent writes `candidate_structures.json` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: screening_report
-    criterion: Agent writes `screening_report.md` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: candidate_required_tokens
-    criterion: Candidate JSON includes ranking and required metadata fields for screened structures.
-    axis: correctness
-    verify: text_file_contains_all
-  - id: screening_required_tokens
-    criterion: Screening report explicitly states the Tc and space-group criteria, candidate-count
-      handling, and uncertainty note.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The answer honestly reflects whether the generation step yields enough candidates and does not fabricate missing entries.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical screening calls with the same parameters.
-    axis: efficiency
-    verify: no_retries
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
 - id: SC_struct_002_20260409
   capability: structure_construction
   domain: agnostic
@@ -216,93 +117,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_004_20260409
-  capability: structure_construction
-  domain: agnostic
-  intent: Exfoliate a MoS2 monolayer from bulk 2H-MoS2 and verify the 2D structure.
-  human_prompt_seed: '读取 `twod_spec.json`，从体相 2H-MoS2 中剥离单层 MoS2。 添加 20 A z 方向真空层，验证化学计量比为
-    MoS2，层厚约 3.1 A。 输出结构文件为 `MoS2_monolayer_POSCAR`。
-
-    '
-  tags:
-  - mat_2d
-  - phy_surface
-  data_files:
-  - key: twod_spec
-    path: data/SC_struct_004/twod_spec.json
-    oss_url: ''
-    description: Specification for MoS2 monolayer exfoliation.
-  reference_answers:
-  - key: stoichiometry_formula
-    value:
-      filename: MoS2_monolayer_POSCAR
-      formula: MoS2
-  - key: layer_thickness_A
-    value:
-      filename: MoS2_monolayer_POSCAR
-      element_a: S
-      element_b: S
-      cutoff_A: 4.0
-      expected: 3.13
-      tolerance: 0.6
-  - key: required_fields
-    value:
-    - structure_file
-    - stoichiometry_verified
-    - layer_thickness_A
-    - vacuum_A
-  - key: turn_budget
-    value: *id001
-  - key: duration_budget
-    value: *id002
-  - key: token_budget_total
-    value: *id003
-  scoring_checklist:
-  - id: stoichiometry_formula
-    criterion: The output structure file has MoS2 stoichiometry (verified by reading the file).
-    axis: correctness
-    verify: struct_file_formula
-  - id: layer_thickness_A
-    criterion: The mean S-S nearest-neighbor distance read from the output POSCAR is approximately
-      3.13 A, representative of the MoS2 monolayer S-Mo-S sandwich thickness.
-    axis: correctness
-    verify: struct_file_bond_length
-  - id: required_fields
-    criterion: Output includes structure file, explicit MoS2 stoichiometry verification, layer
-      thickness near 3.1 A, and vacuum layer near 20 A.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The answer explains how monolayer stoichiometry, in-plane extent, layer thickness,
-      and vacuum are verified from the delivered POSCAR/structure (geometric definitions),
-      not asserted without structural basis. Judge solely from the final answer and named
-      deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific
-      tool.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical exfoliation or slab cuts with the same parameters.
-    axis: efficiency
-    verify: no_retries
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: efficiency_judge
-    criterion: Monolayer exfoliation and stoichiometry verification complete in a direct workflow.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling
-      (tunable per task after calibration).
-    axis: efficiency
-    verify: token_budget
-- id: SC_struct_005_20260409v2
+- id: SC_struct_005_20260423
   capability: structure_construction
   domain: agnostic
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and construct
@@ -356,10 +171,6 @@ questions:
     - is_disordered
     - ordered_replica_count
     - ordered_output_archive
-  - key: tool_call_budget
-    value:
-      min: 5
-      max: 30
   - key: turn_budget
     value: *id001
   - key: token_budget_total
@@ -409,10 +220,6 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: tool_call_budget
-    criterion: The whole 5-structure workflow stays within a modest tool-call budget.
-    axis: efficiency
-    verify: call_count_range
   - id: token_budget_total
     criterion: The run stays within a moderate total token budget.
     axis: efficiency
@@ -691,7 +498,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260404
+- id: SC_struct_009_20260420
   capability: structure_construction
   domain: agnostic
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce trilayers
@@ -742,7 +549,8 @@ questions:
     - outermost_O_termination
     - ce_o_ratio
   - key: turn_budget
-    value: *id001
+    value:
+      max: 25
   - key: duration_budget
     value: *id002
   - key: token_budget_total
@@ -787,11 +595,6 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: efficiency_judge
-    criterion: The CeO2(111) slab construction and validation workflow completes without unnecessary
-      exploratory calls.
-    axis: efficiency
-    verify: llm_binary_judge
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
       benchmark ceiling (tunable per deployment).
@@ -942,7 +745,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_006_20260411v4
+- id: WO_mlip_dpa_006_20260422
   capability: structure_construction
   domain: agnostic
   intent: Build and export three 1 mol/L Zn-salt aqueous model boxes near 2000 atoms with
@@ -1004,6 +807,9 @@ questions:
       filename: composition_plan.json
       pattern: '"Zn\(ClO4\)2"\s*:\s*\{[\s\S]*?"n_formula_units"\s*:\s*\d+[\s\S]*?"n_water"\s*:\s*\d+[\s\S]*?"total_atoms"\s*:\s*(?:19\d\d|20\d\d|2100)'
       flags: i
+  - key: grounding_source
+    value:
+      filename: electrolyte_system_spec.json
   - key: turn_budget
     value:
       max: 16
@@ -1090,204 +896,6 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_011_20260415
-  capability: structure_construction
-  domain: agnostic
-  intent: Build a multi-component Fe-Ni-Co-Cr-V alloy structure from an fcc-Ni 5x5x5 supercell
-    template and report composition constraints.
-  human_prompt_seed: '请构建一个 Fe-Ni-Co-Cr-V 合金结构并导出为 `alloy_5x5x5_feni_cocrv.cif`。
-
-    目标组成比例（原子分数）： Fe:Ni:Co:Cr:V = 0.635:0.165:0.10:0.05:0.05。
-
-    要求： 1) 先以 fcc-Ni 为模板，构建 5×5×5 超胞后再进行掺杂替换； 2) 生成 `alloy_composition_report.json`，至少包含：
-    `template`, `supercell`, `target_ratio`, `element_counts`, `notes`； 3) 在最终回答中说明比例如何映射到整数原子数，并给出可能的取整偏差说明。
-
-    '
-  tags:
-  - mat_alloy
-  - phy_surface
-  - mat_hea
-  - meta_userlog
-  data_files: []
-  reference_answers:
-  - key: structure_artifact
-    value: alloy_5x5x5_feni_cocrv.cif
-  - key: report_artifact
-    value: alloy_composition_report.json
-  - key: report_required_tokens
-    value:
-      filename: alloy_composition_report.json
-      must_cover:
-      - template
-      - supercell
-      - target_ratio
-      - element_counts
-      - Fe
-      - Ni
-      - Co
-      - Cr
-      - V
-  - key: turn_budget
-    value:
-      max: 18
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 10000
-  scoring_checklist:
-  - id: structure_artifact
-    criterion: Agent writes `alloy_5x5x5_feni_cocrv.cif` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: report_artifact
-    criterion: Agent writes `alloy_composition_report.json` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: report_required_tokens
-    criterion: Composition report includes template/supercell metadata and explicit element-count
-      entries for Fe, Ni, Co, Cr, and V.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The final answer ties alloy construction details to `alloy_5x5x5_feni_cocrv.cif`
-      and `alloy_composition_report.json`, and explicitly discusses integer mapping or rounding
-      of the target fractions.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical tool calls with the same parameter set.
-    axis: efficiency
-    verify: no_retries
-  - id: efficiency_judge
-    criterion: Workflow follows a compact path (template build → supercell → doping → report)
-      without redundant loops.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling
-      (tunable per task after calibration).
-    axis: efficiency
-    verify: token_budget
-- id: SC_struct_012_20260415
-  capability: structure_construction
-  domain: agnostic
-  intent: Construct corundum (alpha-Al2O3) using Wyckoff-position information and validate
-    lattice/formula consistency.
-  human_prompt_seed: '请基于刚玉（corundum, alpha-Al2O3）的 Wyckoff 位点信息构建晶体结构，并导出为 `corundum_wyckoff.cif`。
-
-    已知目标信息： - 空间群编号：167； - 晶格常数近似：a=b≈4.7602 Å, c≈12.9933 Å； - 采用 Wyckoff 位点方式构建，而不是只给出最终化学式。
-
-    交付物要求： 1) `corundum_wyckoff.cif`； 2) `wyckoff_construction_notes.md`，说明所用空间群、位点设置、坐标参数与结果检查要点。
-
-    最终回答需简要说明：为什么该结构与 corundum 一致，以及参数可能存在的小偏差来源。'
-  tags:
-  - phy_surface
-  - mat_oxide
-  - meta_userlog
-  data_files: []
-  reference_answers:
-  - key: structure_artifact
-    value: corundum_wyckoff.cif
-  - key: notes_artifact
-    value: wyckoff_construction_notes.md
-  - key: formula_check
-    value:
-      filename: corundum_wyckoff.cif
-      formula: Al2O3
-  - key: lattice_a
-    value:
-      filename: corundum_wyckoff.cif
-      param: a
-      expected: 4.7602
-      tolerance: 0.5
-  - key: lattice_c
-    value:
-      filename: corundum_wyckoff.cif
-      param: c
-      expected: 12.9933
-      tolerance: 1.0
-  - key: notes_required_tokens
-    value:
-      filename: wyckoff_construction_notes.md
-      must_cover:
-      - Wyckoff
-      - 167
-      - Al2O3
-      - lattice
-      - coordinate
-  - key: turn_budget
-    value:
-      max: 16
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 9000
-  scoring_checklist:
-  - id: structure_artifact
-    criterion: Agent writes `corundum_wyckoff.cif` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: notes_artifact
-    criterion: Agent writes `wyckoff_construction_notes.md` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: formula_check
-    criterion: Output CIF has reduced formula consistent with Al2O3.
-    axis: correctness
-    verify: struct_file_formula
-  - id: lattice_a
-    criterion: Lattice parameter a is consistent with corundum reference scale.
-    axis: correctness
-    verify: struct_file_cell_param
-  - id: lattice_c
-    criterion: Lattice parameter c is consistent with corundum reference scale.
-    axis: correctness
-    verify: struct_file_cell_param
-  - id: notes_required_tokens
-    criterion: Notes describe Wyckoff-based construction details.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The final answer is grounded in `corundum_wyckoff.cif` and the Wyckoff-construction
-      notes, rather than generic mineral background.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical tool calls with the same parameter set.
-    axis: efficiency
-    verify: no_retries
-  - id: efficiency_judge
-    criterion: Workflow converges quickly from Wyckoff information to structure export and
-      documentation, without redundant rebuild loops.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling
-      (tunable per task after calibration).
-    axis: efficiency
-    verify: token_budget
 - id: SC_struct_013_20260411v3
   capability: structure_construction
   domain: agnostic
@@ -1345,108 +953,6 @@ questions:
   - id: efficiency_judge
     criterion: Workflow completes in a compact sequence (build bulk → cut slabs → make supercells
       → compare) without redundant loops.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling
-      (tunable per task after calibration).
-    axis: efficiency
-    verify: token_budget
-- id: SC_struct_014_20260415
-  capability: structure_construction
-  domain: agnostic
-  intent: Build a perovskite crystal from explicit space group and Wyckoff position inputs
-    and verify formula/lattice consistency.
-  human_prompt_seed: '请按给定空间群和 Wyckoff 位点信息构建晶体结构，并导出 `srtio3_wyckoff.cif`：
-
-    - 空间群：Pm-3m（No. 221） - 晶格常数：a=b=c=3.90 Å，alpha=beta=gamma=90° - 位点： - Sr: 1b (0.5, 0.5,
-    0.5) - Ti: 1a (0.0, 0.0, 0.0) - O:  3d (0.5, 0.0, 0.0)
-
-    同时生成 `wyckoff_build_report.md`，说明如何把上述位点映射到结构构建参数，并给出结果自检要点（化学式、晶格参数）。
-
-    最终回答需简要给出该结构类型（如立方钙钛矿）及潜在误差来源。'
-  tags:
-  - phy_surface
-  - mat_perovskite
-  - meta_userlog
-  data_files: []
-  reference_answers:
-  - key: structure_artifact
-    value: srtio3_wyckoff.cif
-  - key: report_artifact
-    value: wyckoff_build_report.md
-  - key: formula_check
-    value:
-      filename: srtio3_wyckoff.cif
-      formula: SrTiO3
-  - key: lattice_a
-    value:
-      filename: srtio3_wyckoff.cif
-      param: a
-      expected: 3.9
-      tolerance: 0.3
-  - key: report_required_tokens
-    value:
-      filename: wyckoff_build_report.md
-      must_cover:
-      - Wyckoff
-      - 221
-      - SrTiO3
-      - Pm-3m
-      - lattice
-      - uncertainty
-  - key: turn_budget
-    value:
-      max: 14
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 9000
-  scoring_checklist:
-  - id: structure_artifact
-    criterion: Agent writes `srtio3_wyckoff.cif` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: report_artifact
-    criterion: Agent writes `wyckoff_build_report.md` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: formula_check
-    criterion: Output CIF has reduced formula consistent with SrTiO3.
-    axis: correctness
-    verify: struct_file_formula
-  - id: lattice_a
-    criterion: Lattice parameter a is consistent with the target cubic scale around 3.90 Å.
-    axis: correctness
-    verify: struct_file_cell_param
-  - id: report_required_tokens
-    criterion: Report explains Wyckoff-position mapping, space-group setting, and uncertainty
-      caveats.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: The final answer is grounded in `srtio3_wyckoff.cif` and the report, not generic
-      perovskite descriptions.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical tool calls with the same parameter set.
-    axis: efficiency
-    verify: no_retries
-  - id: efficiency_judge
-    criterion: Workflow converges directly from Wyckoff inputs to structure export and validation
-      note without redundant exploratory steps.
     axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget

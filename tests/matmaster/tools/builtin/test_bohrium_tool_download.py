@@ -6,9 +6,12 @@ import asyncio
 import json
 from pathlib import Path
 
-import matmaster.bohrium.artifacts as bohrium_artifacts_module
+import matmaster_bohrium_transfer.download as transfer_download_module
+
 import matmaster.bohrium.client as bohrium_client_module
 import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
+import matmaster.tools.builtin.bohrium_tool.transfers as bohrium_transfers_module
+from matmaster.bohrium.errors import BohriumTransferError
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.tool_result import ToolResult
 from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
@@ -192,25 +195,63 @@ class TestBohriumDownloadExecution:
         assert payload['log_tail'] == 'boom\n'
         assert sleep_calls == []
 
-    def test_download_remote_share_stages_and_uploads(self, tmp_path, monkeypatch):
+    def test_download_remote_share_uses_direct_remote_helper(
+        self, tmp_path, monkeypatch
+    ):
         session = FakeRemoteSession(is_open=True)
         tool = BohriumTool(session=session, workdir=tmp_path)
+        helper_calls: list[tuple[str, dict]] = []
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
             del base_url, access_key, params, timeout
-            return {'data': {'status': 2}}
+            return {
+                'data': {
+                    'status': 2,
+                    'resultUrl': 'https://store.example/api/download/'
+                    'prefix/job-remote.zip?token=root-token',
+                }
+            }
 
         def fake_download_artifacts(*, job_id, detail_data, result_dir, ctx):
-            del job_id, detail_data, ctx
-            result_dir.mkdir(parents=True, exist_ok=True)
-            (result_dir / 'log').write_text('done\n', encoding='utf-8')
-            return ['log'], 'done\n'
+            del job_id, detail_data, result_dir, ctx
+            raise AssertionError('remote download must not use local artifacts path')
+
+        def fake_remote_helper(session_arg, *, subcommand, payload, timeout=3600):
+            del timeout
+            assert session_arg is session
+            helper_calls.append((subcommand, payload))
+            return {
+                'schema_version': 'v1',
+                'ok': True,
+                'result_dir': '/share/remote/results',
+                'files': ['log'],
+                'log_tail': 'done\n',
+            }
+
+        def fake_post(base_url, path, access_key, payload, timeout=30):
+            del base_url, access_key, timeout
+            assert path == '/openapi/v1/sandbox/job/file/token'
+            assert payload == {'filePath': 'log', 'jobId': 'job-remote'}
+            return {
+                'code': 0,
+                'data': {
+                    'host': 'https://store.example',
+                    'path': 'prefix/log',
+                    'token': 'short-log-token',
+                },
+            }
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, '_post', fake_post)
         monkeypatch.setattr(
             bohrium_tool_module, 'download_job_artifacts', fake_download_artifacts
+        )
+        monkeypatch.setattr(
+            bohrium_transfers_module,
+            'run_remote_transfer',
+            fake_remote_helper,
         )
 
         result = asyncio.run(
@@ -226,17 +267,22 @@ class TestBohriumDownloadExecution:
         assert result.status == 'success'
         payload = json.loads(result.content)
         assert payload['result_dir'] == '/share/remote/results'
-        assert session.upload_calls
-        local_dir, remote_dir, exclude = session.upload_calls[0]
-        assert local_dir != '/share/remote/results'
-        assert remote_dir == '/share/remote/results'
-        assert exclude is None
+        assert session.upload_calls == []
+        assert helper_calls[0][0] == 'download-results'
+        helper_payload = helper_calls[0][1]
+        assert helper_payload['result_dir'] == '/share/remote/results'
+        assert helper_payload['sandbox'] is True
+        assert helper_payload['sandbox_log_file'] == {
+            'host': 'https://store.example',
+            'path': 'prefix/log',
+            'token': 'short-log-token',
+        }
+        assert 'access_key' not in json.dumps(helper_payload)
 
-    def test_download_remote_share_upload_failure_returns_local_staging_path(
+    def test_download_remote_share_helper_failure_returns_error_without_local_staging(
         self, tmp_path, monkeypatch
     ):
         session = FakeRemoteSession(is_open=True)
-        session.upload_error = RuntimeError('upload failed')
         tool = BohriumTool(session=session, workdir=tmp_path)
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
@@ -244,16 +290,23 @@ class TestBohriumDownloadExecution:
             return {'data': {'status': 2}}
 
         def fake_download_artifacts(*, job_id, detail_data, result_dir, ctx):
-            del job_id, detail_data, ctx
-            result_dir.mkdir(parents=True, exist_ok=True)
-            (result_dir / 'log').write_text('done\n', encoding='utf-8')
-            return ['log'], 'done\n'
+            del job_id, detail_data, result_dir, ctx
+            raise AssertionError('remote download must not use local artifacts path')
+
+        def fake_remote_helper(session_arg, *, subcommand, payload, timeout=3600):
+            del session_arg, subcommand, payload, timeout
+            raise BohriumTransferError('remote helper failed: network unreachable')
 
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
         monkeypatch.setattr(
             bohrium_tool_module, 'download_job_artifacts', fake_download_artifacts
+        )
+        monkeypatch.setattr(
+            bohrium_transfers_module,
+            'run_remote_transfer',
+            fake_remote_helper,
         )
 
         result = asyncio.run(
@@ -266,11 +319,10 @@ class TestBohriumDownloadExecution:
             )
         )
 
-        assert result.status == 'success'
-        payload = json.loads(result.content)
-        assert payload['result_dir'] != '/share/remote/results'
-        assert payload['result_dir'].startswith('/')
-        assert session.upload_calls
+        assert result.status == 'error'
+        assert 'network unreachable' in result.content
+        assert '/tmp' not in result.content
+        assert session.upload_calls == []
 
     def test_download_unknown_status_returns_error(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
@@ -330,19 +382,21 @@ class TestBohriumDownloadExecution:
             idx += 1
             return {'data': detail}
 
+        def fake_post(base_url, path, access_key, payload, timeout=30):
+            del base_url, access_key, timeout
+            assert path == '/openapi/v1/sandbox/job/file/token'
+            assert payload == {'filePath': 'log', 'jobId': 'job-789'}
+            return {
+                'code': 0,
+                'data': {
+                    'host': 'https://store.example',
+                    'path': 'prefix/log',
+                    'token': 'log-token',
+                },
+            }
+
         def fake_requests_post(url, *, headers=None, json=None, timeout=30):
             del headers, json, timeout
-            if url == 'https://openapi.test.dp.tech/openapi/v1/sandbox/job/file/token':
-                return _FakeDownloadResponse(
-                    json_data={
-                        'code': 0,
-                        'data': {
-                            'host': 'https://store.example',
-                            'path': 'prefix/log',
-                            'token': 'log-token',
-                        },
-                    }
-                )
             assert url == 'https://store.example/api/iterate'
             return _FakeDownloadResponse(
                 json_data={
@@ -378,13 +432,36 @@ class TestBohriumDownloadExecution:
                 return _FakeDownloadResponse(content=b'binary')
             return _FakeDownloadResponse(status_code=404)
 
+        class FakeStoreSession:
+            def post(self, url, *, headers=None, json=None, timeout=30):
+                return fake_requests_post(
+                    url,
+                    headers=headers,
+                    json=json,
+                    timeout=timeout,
+                )
+
+            def head(self, url, *, allow_redirects=True, timeout=30):
+                del allow_redirects, timeout
+                return _FakeDownloadResponse()
+
+            def get(self, url, *, headers=None, timeout=300, stream=True):
+                return fake_requests_get(
+                    url,
+                    headers=headers,
+                    timeout=timeout,
+                    stream=stream,
+                )
+
         monkeypatch.delenv('BOHRIUM_USE_SANDBOX', raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_client_module, '_get', fake_get)
+        monkeypatch.setattr(bohrium_client_module, '_post', fake_post)
         monkeypatch.setattr(
-            bohrium_artifacts_module.requests, 'post', fake_requests_post
+            transfer_download_module.requests,
+            'Session',
+            lambda: FakeStoreSession(),
         )
-        monkeypatch.setattr(bohrium_artifacts_module.requests, 'get', fake_requests_get)
         import time as time_module
 
         monkeypatch.setattr(bohrium_tool_module, 'time', time_module, raising=False)

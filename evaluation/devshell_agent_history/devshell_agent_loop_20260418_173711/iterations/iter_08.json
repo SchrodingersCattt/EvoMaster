@@ -1,0 +1,24 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 8,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [],
+      "files_touched": [],
+      "followup_suggestion": "Re-run the P0 eval to confirm scores match the baseline. If regression persists, investigate whether the P0 drop originates from non-code factors (model routing, environment, flakiness).",
+      "iteration_index": 8,
+      "needs_more_work": false,
+      "optimization_round": 10008,
+      "summary": "**P0 Revert Round (iter 8):** Called `git_revert_commits_after_base` with base_sha `ccfdea0cacdedf0f4bc09498a5fa0cfd41c5d863`. Result: **no commits after base — nothing to revert**. HEAD was already at the baseline snapshot; the repo state is unchanged and matches the P0 baseline."
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 8,
+    "macro_mean_0_100": 62,
+    "p0_regression": true,
+    "rationale": "## Iteration 8 — ⛔ P0 REGRESSION (5th this session, 4th consecutive)\n\n**P0 gate failed.** P0 = 62% vs baseline 75%. Delta = −13. Non-P0 skipped.\n\n### Stochastic Seesaw\n| Question | iter_07 | iter_08 | Pattern |\n|----------|---------|---------|---------|\n| BP_struct_003 | 0 | **100 ✅** | Passed! (was failing iter_05–07) |\n| DF_mech_002 | 0 | **0 ⚠️** | Failed! (regressed from baseline) |\n\nBP_struct_003 finally passes again, but now DF_mech_002 fails — they seem to almost never both pass simultaneously.\n\n### Complete P0 Stochastic History (8 iterations, same codebase since iter_03)\n| Iter | BP_struct_003 | DF_mech_002 | Both Pass? | P0 Score |\n|------|:---:|:---:|:---:|:---:|\n| 1 | ✗ | ✓ | No | 62% |\n| 2 | ✗ | ✗ | No | 50% |\n| 3 | ✗ | ✓ | No | 62% |\n| **4** | **✓** | **✓** | **YES** | **75%** |\n| 5 | ✗ | ✓ | No | 62% |\n| 6 | ✗ | ✓ | No | 62% |\n| 7 | ✗ | ✗ | No | 50% |\n| 8 | ✓ | ✗ | No | 62% |\n\n**Both pass simultaneously: 1 out of 8 iterations (12.5%)**. This matches the statistical expectation: if BP_struct_003 has ~25% pass rate and DF_mech_002 has ~75% pass rate, P(both) ≈ 19%. The P0 baseline of 75% requires this unlikely coincidence every single iteration.\n\n### Session Summary (with 2 iterations remaining)\n- **Best confirmed full-run**: 24% (iter_04)\n- **Best P0**: 75% (iter_04, lucky coincidence)\n- **Reliable P0**: 50–62%\n- **P0 gate failures**: 5 of 7 attempts (71%)\n- **Consecutive failures**: 4 (iter_05–08)\n- **Code state**: Unchanged since iter_03 (all optimization commits reverted)\n- **Target**: 60% — unreachable due to P0 gate deadlock\n\n### Recommendation\nThe P0 gate mechanism needs recalibration. Specifically:\n1. **BP_struct_003**: 25% pass rate across 8 iterations — not reliable enough for P0 sentinel duty\n2. **DF_mech_002**: 75% pass rate — marginally reliable at k=3\n3. **Baseline inflation**: iter_04's lucky 75% baseline created an unescapable trap",
+    "target_met": false
+  }
+}

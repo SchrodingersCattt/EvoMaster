@@ -3,35 +3,17 @@
 from __future__ import annotations
 
 from datetime import datetime
-from unittest.mock import MagicMock, patch
-
-import pytest
+from typing import Any
+from unittest.mock import MagicMock
 
 from src.dao.chat_events_table import ChatEventsTable
 from src.services.events_service import ChatEventsService
 
 
-@pytest.fixture
-def table_with_mocks() -> tuple[ChatEventsTable, MagicMock]:
-    with patch.object(ChatEventsTable, "init_table", lambda self: None):
-        table = ChatEventsTable()
-    cursor = MagicMock()
-    conn = MagicMock()
-    cursor_ctx = MagicMock()
-    cursor_ctx.__enter__.return_value = cursor
-    cursor_ctx.__exit__.return_value = False
-    conn.cursor.return_value = cursor_ctx
-    conn_ctx = MagicMock()
-    conn_ctx.__enter__.return_value = conn
-    conn_ctx.__exit__.return_value = False
-    table.get_connection = MagicMock(return_value=conn_ctx)
-    return table, cursor
-
-
 def test_add_event_accepts_spawn_id_keyword_and_passes_to_insert(
-    table_with_mocks: tuple[ChatEventsTable, MagicMock],
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
 ) -> None:
-    table, cursor = table_with_mocks
+    table, cursor = chat_events_table_with_mocks
     cursor.rowcount = 1
 
     table.add_event(
@@ -51,9 +33,9 @@ def test_add_event_accepts_spawn_id_keyword_and_passes_to_insert(
 
 
 def test_get_session_events_default_sql_filters_parent_only_rows(
-    table_with_mocks: tuple[ChatEventsTable, MagicMock],
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
 ) -> None:
-    table, cursor = table_with_mocks
+    table, cursor = chat_events_table_with_mocks
     cursor.fetchall.return_value = []
 
     table.get_session_events("sess-x")
@@ -63,9 +45,9 @@ def test_get_session_events_default_sql_filters_parent_only_rows(
 
 
 def test_get_session_events_include_spawn_true_omits_spawn_id_filter(
-    table_with_mocks: tuple[ChatEventsTable, MagicMock],
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
 ) -> None:
-    table, cursor = table_with_mocks
+    table, cursor = chat_events_table_with_mocks
     cursor.fetchall.return_value = []
 
     table.get_session_events("sess-x", include_spawn=True)
@@ -75,9 +57,9 @@ def test_get_session_events_include_spawn_true_omits_spawn_id_filter(
 
 
 def test_get_session_events_row_dicts_include_spawn_id_key(
-    table_with_mocks: tuple[ChatEventsTable, MagicMock],
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
 ) -> None:
-    table, cursor = table_with_mocks
+    table, cursor = chat_events_table_with_mocks
     ts = datetime(2026, 3, 26, 12, 0, 0)
     cursor.fetchall.return_value = [
         {
@@ -124,9 +106,9 @@ def test_events_service_get_session_events_passes_include_spawn() -> None:
 
 
 def test_get_bohrium_events_pairs_tool_call_and_result(
-    table_with_mocks: tuple[ChatEventsTable, MagicMock],
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
 ) -> None:
-    table, cursor = table_with_mocks
+    table, cursor = chat_events_table_with_mocks
     ts = datetime(2026, 4, 8, 12, 0, 0)
     cursor.fetchall.return_value = [
         {
