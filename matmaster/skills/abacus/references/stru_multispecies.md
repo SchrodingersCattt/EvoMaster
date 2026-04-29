@@ -199,37 +199,6 @@ ls *.upf *.orb
 
 ---
 
-### APNS Archive Structure
-
-The downloaded archive has two directories:
-
-- `apns-pseudopotentials-v1/` — PP files named `<Element>.upf` (e.g., `Si.upf`, `Fe.upf`, `Mo.upf`)
-- `apns-orbitals-efficiency-v1/` — Orbital files named `<Element>_gga_<radius>au_100Ry_<config>.orb`
-
-**Common orbital filenames** (efficiency basis; use when STRU doesn't specify):
-
-| Element | Orbital file |
-|---------|-------------|
-| H  | `H_gga_6au_100Ry_2s1p.orb` |
-| C  | `C_gga_7au_100Ry_2s2p1d.orb` |
-| N  | `N_gga_7au_100Ry_2s2p1d.orb` |
-| O  | `O_gga_7au_100Ry_2s2p1d.orb` |
-| Si | `Si_gga_8au_100Ry_2s2p1d.orb` |
-| Fe | `Fe_gga_9au_100Ry_4s2p2d1f.orb` |
-| Cu | `Cu_gga_9au_100Ry_4s2p2d1f.orb` |
-| Mo | `Mo_gga_9au_100Ry_4s2p2d1f.orb` |
-| Ti | `Ti_gga_9au_100Ry_2s2p2d1f.orb` |
-| Ba | `Ba_gga_10au_100Ry_2s2p2d.orb` |
-| Ga | `Ga_gga_9au_100Ry_2s2p2d.orb` |
-| As | `As_gga_9au_100Ry_2s2p1d.orb` |
-| Zn | `Zn_gga_9au_100Ry_4s2p2d1f.orb` |
-| S  | `S_gga_8au_100Ry_2s2p1d.orb` |
-| Al | `Al_gga_9au_100Ry_2s2p1d.orb` |
-
-> **If your element is not listed**: run `ls apns-orbitals-efficiency-v1/<Element>_gga_*` to discover the exact filename. Pattern: `<Element>_gga_<R>au_100Ry_<config>.orb`.
-
----
-
 ## CIF → STRU Conversion
 
 When starting from CIF/POSCAR, convert first — do NOT hand-write STRU:

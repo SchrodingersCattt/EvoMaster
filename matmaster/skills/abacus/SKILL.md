@@ -70,21 +70,12 @@ Notes:
 - `-np` is typically half of CPU cores for this profile (32 -> 16).
 - For GPU tasks, use environment-approved GPU machine profiles with `basis_type pw`.
 
-## Pre-Submission Validation
-
-After generating all INPUT/STRU/KPT files, run the validation script before Bohrium submission:
-```bash
-python ${SKILL_DIR}/scripts/validate_input.py --dir <input_dir>
-```
-It catches the most common silent failures: ntype mismatch, missing cal_force/cal_stress, missing out_chg for SCF→NSCF, wrong basis_type, missing PP/orbital files, and stru_file/kpoint_file reference errors. Fix any FAIL items before submitting.
-
 ## References
 
 Reference-first policy:
 - Prefer local references below for stable and task-aligned guidance.
 - Use official ABACUS/Bohrium web documentation as fallback when local references are insufficient.
 
-- **Pre-flight validator**: `scripts/validate_input.py` — run before every Bohrium submit
 - Input templates and multi-step examples: `references/input_examples.md`
 - STRU format basics: `references/stru_format.md`
 - Multi-species STRU examples: `references/stru_multispecies.md`
