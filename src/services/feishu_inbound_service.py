@@ -54,8 +54,12 @@ def _extract_text_from_message(message: dict[str, Any]) -> str:
 
 def _parse_sse_response_chunks(
     sse_piece: str,
+    seen_stream_ids: set[str],
 ) -> list[tuple[str, bool]]:
-    """解析 SSE 片段，返回 [(text, is_new_stream), ...]。"""
+    """解析 SSE 片段，返回 [(text, is_new_stream), ...]。
+
+    用 stream_id（如 turn-0, turn-1）区分轮次，首次出现的 stream_id 标记为新轮。
+    """
     results: list[tuple[str, bool]] = []
     for line in sse_piece.splitlines():
         ls = line.strip()
@@ -68,7 +72,10 @@ def _parse_sse_response_chunks(
         if payload.get("type") == "response" and payload.get("source") == "MatMaster":
             content = payload.get("content")
             if isinstance(content, str) and content:
-                is_new = payload.get("stream_state") == "start"
+                sid = payload.get("stream_id") or ""
+                is_new = sid != "" and sid not in seen_stream_ids
+                if is_new:
+                    seen_stream_ids.add(sid)
                 results.append((content, is_new))
         elif payload.get("type") == "error":
             err = payload.get("content")
@@ -136,11 +143,14 @@ async def _run_agent_and_reply_feishu(
 
     base_prompt = user_prompt.strip()
     all_segments: list[list[str]] = [[]]
+    seen_stream_ids: set[str] = set()
     try:
         async for sse_piece in stream_svc.generate_send_stream(
             session_id, base_prompt, ctx
         ):
-            for chunk, is_new_stream in _parse_sse_response_chunks(sse_piece):
+            for chunk, is_new_stream in _parse_sse_response_chunks(
+                sse_piece, seen_stream_ids
+            ):
                 if is_new_stream:
                     all_segments.append([])
                 all_segments[-1].append(chunk)
