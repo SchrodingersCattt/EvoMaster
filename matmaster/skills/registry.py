@@ -268,6 +268,11 @@ class SkillRegistry:
     def get_all_skills(self) -> list[Skill]:
         return list(self._skills.values())
 
+    def remove_skills(self, names: set[str]) -> None:
+        """按名称移除已注册的 skill。"""
+        for name in names:
+            self._skills.pop(name, None)
+
     def get_meta_info_context(self) -> str:
         """生成 [Skill: name] description 格式的汇总字符串。"""
         lines: list[str] = []

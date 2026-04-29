@@ -13,6 +13,7 @@ import logging
 import re
 import shutil
 import zipfile
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +23,12 @@ from utils.env import MATMASTER_TOOLS_SERVER
 
 if TYPE_CHECKING:
     from matmaster.config.exp import ExpConfig
+
+
+@dataclass
+class UserSkillsSyncResult:
+    roots: list[Path] = field(default_factory=list)
+    disabled_builtin_names: set[str] = field(default_factory=set)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -75,16 +82,16 @@ def materialize_user_skills_for_run(
     user_id: str,
     *,
     project_root: Path,
-) -> list[Path]:
-    """同步返回：本机 skill 根目录列表（每个用户 skill 一个目录）。失败时返回 []。"""
+) -> UserSkillsSyncResult:
+    """同步返回用户技能目录列表 + 被用户关闭的 builtin 技能名集合。"""
     uid = (user_id or '').strip()
     if not uid:
-        return []
+        return UserSkillsSyncResult()
 
     base = (MATMASTER_TOOLS_SERVER or '').strip().rstrip('/')
     if not base:
         logger.warning('MATMASTER_TOOLS_SERVER empty, skip user skills sync')
-        return []
+        return UserSkillsSyncResult()
 
     list_url = f'{base}/api/v1/users/{uid}/skills'
     headers = {'X-User-Id': uid}
@@ -103,23 +110,34 @@ def materialize_user_skills_for_run(
             e,
             exc_info=True,
         )
-        return []
+        return UserSkillsSyncResult()
 
     if not isinstance(payload, dict) or payload.get('code') != 0:
         logger.warning(
             'user skills list bad response user_id=%s payload=%s', uid, payload
         )
-        return []
+        return UserSkillsSyncResult()
 
     data = payload.get('data')
     if not isinstance(data, list) or not data:
-        return []
+        return UserSkillsSyncResult()
 
+    disabled_builtin_names: set[str] = set()
     for item in data:
         if not isinstance(item, dict):
             continue
+        source = (item.get('source') or '').strip().lower()
+        enabled = item.get('enabled', True)
+        if source == 'builtin':
+            if not enabled:
+                name = (item.get('name') or '').strip()
+                if name:
+                    disabled_builtin_names.add(name)
+            continue
         status = (item.get('status') or '').strip().lower()
         if status != 'ready':
+            continue
+        if not enabled:
             continue
         skill_id = (item.get('id') or '').strip()
         artifact_id = (item.get('artifact_id') or '').strip()
@@ -197,24 +215,44 @@ def materialize_user_skills_for_run(
             len(roots),
             [str(p) for p in roots],
         )
-    return roots
+    if disabled_builtin_names:
+        logger.info(
+            'disabled builtin skills: user_id=%s names=%s',
+            uid,
+            disabled_builtin_names,
+        )
+    return UserSkillsSyncResult(
+        roots=roots,
+        disabled_builtin_names=disabled_builtin_names,
+    )
 
 
 def merge_user_skill_roots_into_exp_config(
     exp_config: ExpConfig,
     extra_roots: list[Path],
+    disabled_skill_names: set[str] | None = None,
 ) -> ExpConfig:
-    """将本机用户 skill 目录追加到 ``ExpConfig.skills.skills_root``（list[str]）。"""
-    if not extra_roots:
-        return exp_config
+    """将本机用户 skill 目录追加到 ``ExpConfig.skills.skills_root``，
+    并将禁用技能名写入 ``disabled_skill_names``。"""
     skills = exp_config.skills
-    raw = skills.skills_root
-    if isinstance(raw, list):
-        merged = [str(x) for x in raw if x]
-    else:
-        merged = [str(raw).strip()] if (raw or '').strip() else []
-    for p in extra_roots:
-        merged.append(str(p.resolve()))
+    updates: dict = {}
+
+    if extra_roots:
+        raw = skills.skills_root
+        if isinstance(raw, list):
+            merged = [str(x) for x in raw if x]
+        else:
+            merged = [str(raw).strip()] if (raw or '').strip() else []
+        for p in extra_roots:
+            merged.append(str(p.resolve()))
+        updates['skills_root'] = merged
+
+    if disabled_skill_names:
+        updates['disabled_skill_names'] = sorted(disabled_skill_names)
+
+    if not updates:
+        return exp_config
+
     return exp_config.model_copy(
-        update={'skills': skills.model_copy(update={'skills_root': merged})}
+        update={'skills': skills.model_copy(update=updates)}
     )
