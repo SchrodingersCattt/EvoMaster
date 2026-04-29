@@ -12,6 +12,7 @@ from src.dao.feishu_app_config_table import FeishuAppConfig, get_feishu_app_conf
 from src.dao.feishu_binding_table import get_feishu_binding_table
 from src.dao.redis_dao import get_redis_dao
 from src.models.chat import ChatSendRequest
+from src.utils.constant import DB_CONFIG
 from src.services.feishu_open_api import (
     add_reaction,
     get_tenant_access_token,
@@ -79,6 +80,30 @@ def _collect_current_response_chunks(
     return chunks
 
 
+def _get_user_last_project_id(user_id: str) -> int | None:
+    """从 user_preference 表读取用户上次选择的 project_id。"""
+    import pymysql
+
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT last_selected_project_id FROM user_preference"
+                    " WHERE user_id = %s LIMIT 1",
+                    (user_id,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    val = row.get("last_selected_project_id")
+                    return int(val) if val is not None else None
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning("feishu _get_user_last_project_id failed: %s", exc)
+    return None
+
+
 async def _run_agent_and_reply_feishu(
     *,
     user_id: str,
@@ -88,7 +113,12 @@ async def _run_agent_and_reply_feishu(
     tenant_token: str,
 ) -> None:
     stream_svc = get_stream_service()
-    req = ChatSendRequest(content=user_prompt, mode="direct")
+    project_id = _get_user_last_project_id(user_id)
+    req = ChatSendRequest(
+        content=user_prompt,
+        mode="direct",
+        bohrium_project_id=project_id,
+    )
     try:
         remaining = await check_quota(user_id)
         if remaining <= 0:
