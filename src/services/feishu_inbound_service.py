@@ -100,8 +100,8 @@ def _get_user_preferences(
                 if row:
                     pid = row.get("last_selected_project_id")
                     project_id = int(pid) if pid is not None else None
-                    model = row.get("last_selected_model")
-                    llm = str(model).strip() if model else None
+                    m = row.get("last_selected_model")
+                    llm = str(m).strip() if m else None
 
                 cursor.execute(
                     "SELECT org_id FROM evo_chat_sessions"
@@ -128,12 +128,12 @@ async def _run_agent_and_reply_feishu(
     tenant_token: str,
 ) -> None:
     stream_svc = get_stream_service()
-    project_id, llm, org_id = _get_user_preferences(user_id)
+    project_id, model, org_id = _get_user_preferences(user_id)
     req = ChatSendRequest(
         content=user_prompt,
         mode="direct",
         bohrium_project_id=project_id,
-        llm=llm,
+        model=model,
     )
     try:
         remaining = await check_quota(user_id)
