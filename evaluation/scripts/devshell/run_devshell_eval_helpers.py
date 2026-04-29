@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -200,6 +202,24 @@ def _load_summary_file(summary_file: Path) -> dict[str, Any]:
     return {"parse_error": True, "missing_file": str(summary_file)}
 
 
+def _kill_process_group(proc: subprocess.Popen[Any]) -> None:
+    """Send SIGKILL to the entire process group, then reap."""
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except OSError:
+        pass
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except OSError:
+            pass
+        proc.wait()
+
+
 def _run_devshell_task(
     *,
     cmd: list[str | Path],
@@ -216,33 +236,37 @@ def _run_devshell_task(
     log_mode = "a" if console_log_append else "w"
     try:
         if console_log_file is None:
-            proc = subprocess.run(cmd, cwd=cwd, env=env, timeout=timeout)
+            proc = subprocess.Popen(
+                cmd,
+                cwd=cwd,
+                env=env,
+                start_new_session=True,
+            )
+            proc.communicate(timeout=timeout)
         else:
             with console_log_file.open(log_mode, encoding="utf-8") as f:
                 out = _TeeTextIO(f, sys.stderr) if tee_stderr else f
-                proc = subprocess.run(
+                proc = subprocess.Popen(
                     cmd,
                     cwd=cwd,
                     env=env,
                     stdout=out,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    timeout=timeout,
+                    start_new_session=True,
                 )
-    except subprocess.TimeoutExpired as e:
+                proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_process_group(proc)
         duration_ms = int((time.monotonic() - t0) * 1000)
         summary = _load_summary_file(summary_file)
         if not isinstance(summary, dict):
             summary = {}
-        lim = (
-            float(e.timeout) if getattr(e, "timeout", None) else float(timeout_sec or 0)
-        )
         summary = {
             **summary,
             "task_wall_timeout": True,
-            "timeout_seconds": lim,
+            "timeout_seconds": float(timeout_sec or 0),
         }
-        # Same convention as coreutils `timeout` / common CI (timed out)
         return 124, duration_ms, summary
 
     duration_ms = int((time.monotonic() - t0) * 1000)
