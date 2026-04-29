@@ -78,10 +78,15 @@ def _collect_current_response_chunks(
     return chunks
 
 
-def _get_user_preferences(user_id: str) -> tuple[int | None, str | None]:
-    """从 user_preference 表读取用户上次选择的 project_id 和 model。"""
+def _get_user_preferences(
+    user_id: str,
+) -> tuple[int | None, str | None, str | None]:
+    """从 DB 读取用户偏好：(project_id, llm, org_id)。"""
     import pymysql
 
+    project_id: int | None = None
+    llm: str | None = None
+    org_id: str | None = None
     try:
         conn = pymysql.connect(**DB_CONFIG)
         try:
@@ -94,16 +99,24 @@ def _get_user_preferences(user_id: str) -> tuple[int | None, str | None]:
                 row = cursor.fetchone()
                 if row:
                     pid = row.get("last_selected_project_id")
+                    project_id = int(pid) if pid is not None else None
                     model = row.get("last_selected_model")
-                    return (
-                        int(pid) if pid is not None else None,
-                        str(model).strip() if model else None,
-                    )
+                    llm = str(model).strip() if model else None
+
+                cursor.execute(
+                    "SELECT org_id FROM evo_chat_sessions"
+                    " WHERE user_id = %s AND org_id IS NOT NULL AND org_id != ''"
+                    " ORDER BY created_at DESC LIMIT 1",
+                    (user_id,),
+                )
+                org_row = cursor.fetchone()
+                if org_row:
+                    org_id = str(org_row["org_id"]).strip() or None
         finally:
             conn.close()
     except Exception as exc:
         logger.warning("feishu _get_user_preferences failed: %s", exc)
-    return None, None
+    return project_id, llm, org_id
 
 
 async def _run_agent_and_reply_feishu(
@@ -115,7 +128,7 @@ async def _run_agent_and_reply_feishu(
     tenant_token: str,
 ) -> None:
     stream_svc = get_stream_service()
-    project_id, llm = _get_user_preferences(user_id)
+    project_id, llm, org_id = _get_user_preferences(user_id)
     req = ChatSendRequest(
         content=user_prompt,
         mode="direct",
@@ -149,7 +162,7 @@ async def _run_agent_and_reply_feishu(
         return
 
     try:
-        ctx = stream_svc.prepare_send_message(session_id, req, user_id, org_id=None)
+        ctx = stream_svc.prepare_send_message(session_id, req, user_id, org_id=org_id)
     except Exception:
         logger.exception("feishu prepare_send_message failed session_id=%s", session_id)
         reply_text_message(
