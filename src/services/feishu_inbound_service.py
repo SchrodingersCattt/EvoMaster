@@ -52,15 +52,12 @@ def _extract_text_from_message(message: dict[str, Any]) -> str:
     return raw.strip()
 
 
-def _parse_sse_response_chunks(
+def _collect_current_response_chunks(
     sse_piece: str,
-    seen_stream_ids: set[str],
-) -> list[tuple[str, bool]]:
-    """解析 SSE 片段，返回 [(text, is_new_stream), ...]。
-
-    用 stream_id（如 turn-0, turn-1）区分轮次，首次出现的 stream_id 标记为新轮。
-    """
-    results: list[tuple[str, bool]] = []
+    invocation_id: str,
+) -> list[str]:
+    """只收集当前 invocation 的 MatMaster response 片段，忽略历史重放。"""
+    chunks: list[str] = []
     for line in sse_piece.splitlines():
         ls = line.strip()
         if not ls.startswith("data:"):
@@ -69,19 +66,17 @@ def _parse_sse_response_chunks(
             payload = json.loads(ls[5:].strip())
         except json.JSONDecodeError:
             continue
+        if payload.get("invocation_id") != invocation_id:
+            continue
         if payload.get("type") == "response" and payload.get("source") == "MatMaster":
             content = payload.get("content")
             if isinstance(content, str) and content:
-                sid = payload.get("stream_id") or ""
-                is_new = sid != "" and sid not in seen_stream_ids
-                if is_new:
-                    seen_stream_ids.add(sid)
-                results.append((content, is_new))
+                chunks.append(content)
         elif payload.get("type") == "error":
             err = payload.get("content")
             if isinstance(err, str) and err:
-                results.append((f"[错误] {err}", False))
-    return results
+                chunks.append(f"[错误] {err}")
+    return chunks
 
 
 async def _run_agent_and_reply_feishu(
@@ -142,18 +137,12 @@ async def _run_agent_and_reply_feishu(
     reaction_id = add_reaction(message_id, "OnIt", tenant_token=tenant_token)
 
     base_prompt = user_prompt.strip()
-    all_segments: list[list[str]] = [[]]
-    seen_stream_ids: set[str] = set()
+    parts: list[str] = []
     try:
         async for sse_piece in stream_svc.generate_send_stream(
             session_id, base_prompt, ctx
         ):
-            for chunk, is_new_stream in _parse_sse_response_chunks(
-                sse_piece, seen_stream_ids
-            ):
-                if is_new_stream:
-                    all_segments.append([])
-                all_segments[-1].append(chunk)
+            parts.extend(_collect_current_response_chunks(sse_piece, ctx.invocation_id))
     except Exception:
         logger.exception("feishu generate_send_stream failed session_id=%s", session_id)
         reply_text_message(
@@ -166,8 +155,7 @@ async def _run_agent_and_reply_feishu(
         if reaction_id:
             remove_reaction(message_id, reaction_id, tenant_token=tenant_token)
 
-    last_parts = all_segments[-1] if all_segments else []
-    text = "".join(last_parts).strip()
+    text = "".join(parts).strip()
     if len(text) > _MAX_REPLY_LEN:
         text = text[:_MAX_REPLY_LEN] + "\n…（已截断）"
     if not text:
