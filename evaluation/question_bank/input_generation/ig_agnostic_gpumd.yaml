@@ -360,4 +360,3 @@ questions:
     criterion: 输入包含 MSD 自洽测试关键命令。
     axis: correctness
     verify: text_file_contains_all
-
