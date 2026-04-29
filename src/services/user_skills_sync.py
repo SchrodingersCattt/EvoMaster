@@ -30,39 +30,40 @@ class UserSkillsSyncResult:
     roots: list[Path] = field(default_factory=list)
     disabled_builtin_names: set[str] = field(default_factory=set)
 
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-_USER_SKILLS_CACHE_SEG = re.compile(r'[^a-zA-Z0-9._-]+')
+_USER_SKILLS_CACHE_SEG = re.compile(r"[^a-zA-Z0-9._-]+")
 
 
 def _safe_user_segment(user_id: str) -> str:
-    s = (user_id or '').strip()
+    s = (user_id or "").strip()
     if not s:
-        return 'unknown'
-    cleaned = _USER_SKILLS_CACHE_SEG.sub('_', s).strip('_') or 'unknown'
+        return "unknown"
+    cleaned = _USER_SKILLS_CACHE_SEG.sub("_", s).strip("_") or "unknown"
     return cleaned[:128]
 
 
 def _safe_extract_zip(zip_bytes: bytes, dest: Path) -> None:
     if not zip_bytes:
-        raise ValueError('empty zip')
+        raise ValueError("empty zip")
     dest.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
         try:
             z.testzip()
         except zipfile.BadZipFile as e:
-            raise ValueError('invalid zip') from e
+            raise ValueError("invalid zip") from e
         for info in z.infolist():
             if info.is_dir():
                 continue
             name = info.filename
             parts = [
-                p for p in name.replace('\\', '/').split('/') if p not in ('', '.')
+                p for p in name.replace("\\", "/").split("/") if p not in ("", ".")
             ]
-            if any(p == '..' for p in parts):
+            if any(p == ".." for p in parts):
                 continue
-            rel = '/'.join(parts)
+            rel = "/".join(parts)
             if not rel:
                 continue
             target = dest / rel
@@ -75,7 +76,7 @@ def _safe_extract_zip(zip_bytes: bytes, dest: Path) -> None:
 
 
 def _meta_path(dest: Path) -> Path:
-    return dest / '.user_skill_meta.json'
+    return dest / ".user_skill_meta.json"
 
 
 def materialize_user_skills_for_run(
@@ -84,19 +85,19 @@ def materialize_user_skills_for_run(
     project_root: Path,
 ) -> UserSkillsSyncResult:
     """同步返回用户技能目录列表 + 被用户关闭的 builtin 技能名集合。"""
-    uid = (user_id or '').strip()
+    uid = (user_id or "").strip()
     if not uid:
         return UserSkillsSyncResult()
 
-    base = (MATMASTER_TOOLS_SERVER or '').strip().rstrip('/')
+    base = (MATMASTER_TOOLS_SERVER or "").strip().rstrip("/")
     if not base:
-        logger.warning('MATMASTER_TOOLS_SERVER empty, skip user skills sync')
+        logger.warning("MATMASTER_TOOLS_SERVER empty, skip user skills sync")
         return UserSkillsSyncResult()
 
-    list_url = f'{base}/api/v1/users/{uid}/skills'
-    headers = {'X-User-Id': uid}
+    list_url = f"{base}/api/v1/users/{uid}/skills"
+    headers = {"X-User-Id": uid}
     roots: list[Path] = []
-    cache_root = project_root / 'runs' / '.user_skills_cache' / _safe_user_segment(uid)
+    cache_root = project_root / "runs" / ".user_skills_cache" / _safe_user_segment(uid)
 
     try:
         with httpx.Client(timeout=httpx.Timeout(60.0, connect=15.0)) as client:
@@ -105,20 +106,20 @@ def materialize_user_skills_for_run(
             payload: dict[str, Any] = r.json()
     except Exception as e:
         logger.warning(
-            'user skills list failed user_id=%s: %s',
+            "user skills list failed user_id=%s: %s",
             uid,
             e,
             exc_info=True,
         )
         return UserSkillsSyncResult()
 
-    if not isinstance(payload, dict) or payload.get('code') != 0:
+    if not isinstance(payload, dict) or payload.get("code") != 0:
         logger.warning(
-            'user skills list bad response user_id=%s payload=%s', uid, payload
+            "user skills list bad response user_id=%s payload=%s", uid, payload
         )
         return UserSkillsSyncResult()
 
-    data = payload.get('data')
+    data = payload.get("data")
     if not isinstance(data, list) or not data:
         return UserSkillsSyncResult()
 
@@ -126,26 +127,26 @@ def materialize_user_skills_for_run(
     for item in data:
         if not isinstance(item, dict):
             continue
-        source = (item.get('source') or '').strip().lower()
-        enabled = item.get('enabled', True)
-        if source == 'builtin':
+        source = (item.get("source") or "").strip().lower()
+        enabled = item.get("enabled", True)
+        if source == "builtin":
             if not enabled:
-                name = (item.get('name') or '').strip()
+                name = (item.get("name") or "").strip()
                 if name:
                     disabled_builtin_names.add(name)
             continue
-        status = (item.get('status') or '').strip().lower()
-        if status != 'ready':
+        status = (item.get("status") or "").strip().lower()
+        if status != "ready":
             continue
         if not enabled:
             continue
-        skill_id = (item.get('id') or '').strip()
-        artifact_id = (item.get('artifact_id') or '').strip()
+        skill_id = (item.get("id") or "").strip()
+        artifact_id = (item.get("artifact_id") or "").strip()
         if not skill_id or not artifact_id:
             continue
 
         dest = cache_root / skill_id
-        sha = item.get('content_sha256')
+        sha = item.get("content_sha256")
         if isinstance(sha, str):
             sha = sha.strip().lower()
         else:
@@ -155,14 +156,14 @@ def materialize_user_skills_for_run(
         mp = _meta_path(dest)
         if mp.exists() and dest.is_dir():
             try:
-                meta = json.loads(mp.read_text(encoding='utf-8'))
+                meta = json.loads(mp.read_text(encoding="utf-8"))
             except Exception:
                 meta = {}
-            if sha and meta.get('content_sha256') == sha:
+            if sha and meta.get("content_sha256") == sha:
                 roots.append(dest)
                 continue
 
-        dl = f'{base}/api/v1/artifacts/{artifact_id}/download'
+        dl = f"{base}/api/v1/artifacts/{artifact_id}/download"
         try:
             with httpx.Client(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
                 dr = client.get(dl, headers=headers)
@@ -170,7 +171,7 @@ def materialize_user_skills_for_run(
                 zbytes = dr.content
         except Exception as e:
             logger.warning(
-                'user skill bundle download failed skill_id=%s artifact_id=%s: %s',
+                "user skill bundle download failed skill_id=%s artifact_id=%s: %s",
                 skill_id,
                 artifact_id,
                 e,
@@ -184,17 +185,17 @@ def materialize_user_skills_for_run(
             mp.write_text(
                 json.dumps(
                     {
-                        'content_sha256': sha,
-                        'artifact_id': artifact_id,
-                        'skill_id': skill_id,
+                        "content_sha256": sha,
+                        "artifact_id": artifact_id,
+                        "skill_id": skill_id,
                     },
                     ensure_ascii=False,
                 ),
-                encoding='utf-8',
+                encoding="utf-8",
             )
         except Exception as e:
             logger.warning(
-                'user skill extract failed skill_id=%s: %s',
+                "user skill extract failed skill_id=%s: %s",
                 skill_id,
                 e,
                 exc_info=True,
@@ -210,14 +211,14 @@ def materialize_user_skills_for_run(
 
     if roots:
         logger.info(
-            'user skills materialized: user_id=%s count=%s dirs=%s',
+            "user skills materialized: user_id=%s count=%s dirs=%s",
             uid,
             len(roots),
             [str(p) for p in roots],
         )
     if disabled_builtin_names:
         logger.info(
-            'disabled builtin skills: user_id=%s names=%s',
+            "disabled builtin skills: user_id=%s names=%s",
             uid,
             disabled_builtin_names,
         )
@@ -242,17 +243,15 @@ def merge_user_skill_roots_into_exp_config(
         if isinstance(raw, list):
             merged = [str(x) for x in raw if x]
         else:
-            merged = [str(raw).strip()] if (raw or '').strip() else []
+            merged = [str(raw).strip()] if (raw or "").strip() else []
         for p in extra_roots:
             merged.append(str(p.resolve()))
-        updates['skills_root'] = merged
+        updates["skills_root"] = merged
 
     if disabled_skill_names:
-        updates['disabled_skill_names'] = sorted(disabled_skill_names)
+        updates["disabled_skill_names"] = sorted(disabled_skill_names)
 
     if not updates:
         return exp_config
 
-    return exp_config.model_copy(
-        update={'skills': skills.model_copy(update=updates)}
-    )
+    return exp_config.model_copy(update={"skills": skills.model_copy(update=updates)})
