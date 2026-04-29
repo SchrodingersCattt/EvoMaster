@@ -23,6 +23,7 @@ from src.services.stream_service import get_stream_service
 from src.utils.constant import DB_CONFIG, REDIS_URL
 from src.utils.feishu_event_crypto import parse_event_json as feishu_parse_event_json
 from src.utils.feishu_event_crypto import verify_lark_signature
+from utils.env import SERVICE_ENV
 
 logger = logging.getLogger(__name__)
 
@@ -268,9 +269,11 @@ async def handle_feishu_im_message_event_v1(
     user_id = table.get_user_id_by_open_id(open_id, tenant_id=app_cfg.tenant_id)
 
     if not user_id:
+        env_part = f".{SERVICE_ENV}" if SERVICE_ENV and SERVICE_ENV != "prod" else ""
+        bind_url = f"https://matmaster{env_part}.bohrium.com/matmaster/feishu"
         reply_text_message(
             message_id,
-            "尚未绑定飞书账号：请在 MatMaster 网页端登录后，于集成设置中完成绑定。",
+            f"尚未绑定飞书账号，请前往 {bind_url} 完成绑定。",
             tenant_token=tenant_token,
         )
         return
