@@ -31,7 +31,8 @@ RUN pip install --no-cache-dir \
     "lightgbm==4.6.0" \
     "mendeleev==1.1.0" \
     "matminer==0.10.0" \
-    "pint>=0.24"
+    "pint>=0.24" \
+    "lark-cli==1.0.3"
 
 # 默认留空：本地可用 docker build --build-arg 传入。remote-image 流水线由 ci/remote_transfer_prepare.py
 # 构建 wheel 上传 OSS 后，生成 Dockerfile.remote.ci 并替换下面两行中的 URL/SHA 再提交 Bohrium API。
