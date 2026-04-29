@@ -52,8 +52,11 @@ def _extract_text_from_message(message: dict[str, Any]) -> str:
     return raw.strip()
 
 
-def _accumulate_assistant_from_sse(sse_piece: str) -> list[str]:
-    chunks: list[str] = []
+def _parse_sse_response_chunks(
+    sse_piece: str,
+) -> list[tuple[str, bool]]:
+    """解析 SSE 片段，返回 [(text, is_new_stream), ...]。"""
+    results: list[tuple[str, bool]] = []
     for line in sse_piece.splitlines():
         ls = line.strip()
         if not ls.startswith("data:"):
@@ -63,14 +66,15 @@ def _accumulate_assistant_from_sse(sse_piece: str) -> list[str]:
         except json.JSONDecodeError:
             continue
         if payload.get("type") == "response" and payload.get("source") == "MatMaster":
-            c = payload.get("content")
-            if isinstance(c, str) and c:
-                chunks.append(c)
+            content = payload.get("content")
+            if isinstance(content, str) and content:
+                is_new = payload.get("stream_state") == "start"
+                results.append((content, is_new))
         elif payload.get("type") == "error":
             err = payload.get("content")
             if isinstance(err, str) and err:
-                chunks.append(f"[错误] {err}")
-    return chunks
+                results.append((f"[错误] {err}", False))
+    return results
 
 
 async def _run_agent_and_reply_feishu(
@@ -131,12 +135,15 @@ async def _run_agent_and_reply_feishu(
     reaction_id = add_reaction(message_id, "OnIt", tenant_token=tenant_token)
 
     base_prompt = user_prompt.strip()
-    parts: list[str] = []
+    all_segments: list[list[str]] = [[]]
     try:
         async for sse_piece in stream_svc.generate_send_stream(
             session_id, base_prompt, ctx
         ):
-            parts.extend(_accumulate_assistant_from_sse(sse_piece))
+            for chunk, is_new_stream in _parse_sse_response_chunks(sse_piece):
+                if is_new_stream:
+                    all_segments.append([])
+                all_segments[-1].append(chunk)
     except Exception:
         logger.exception("feishu generate_send_stream failed session_id=%s", session_id)
         reply_text_message(
@@ -149,7 +156,8 @@ async def _run_agent_and_reply_feishu(
         if reaction_id:
             remove_reaction(message_id, reaction_id, tenant_token=tenant_token)
 
-    text = "".join(parts).strip()
+    last_parts = all_segments[-1] if all_segments else []
+    text = "".join(last_parts).strip()
     if len(text) > _MAX_REPLY_LEN:
         text = text[:_MAX_REPLY_LEN] + "\n…（已截断）"
     if not text:
