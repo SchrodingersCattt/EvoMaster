@@ -13,7 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgfortran5 \
     libquadmath0 \
     openbabel \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
+
+# 飞书 Lark CLI
+RUN npm install -g @larksuite/cli
 
 # 安装 Python 依赖（dpdata 的 mol/sdf 格式依赖 rdkit）
 RUN pip install --no-cache-dir \
@@ -31,8 +36,7 @@ RUN pip install --no-cache-dir \
     "lightgbm==4.6.0" \
     "mendeleev==1.1.0" \
     "matminer==0.10.0" \
-    "pint>=0.24" \
-    "lark-cli==1.0.3"
+    "pint>=0.24"
 
 # 默认留空：本地可用 docker build --build-arg 传入。remote-image 流水线由 ci/remote_transfer_prepare.py
 # 构建 wheel 上传 OSS 后，生成 Dockerfile.remote.ci 并替换下面两行中的 URL/SHA 再提交 Bohrium API。
