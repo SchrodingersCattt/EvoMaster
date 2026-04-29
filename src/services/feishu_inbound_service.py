@@ -12,7 +12,6 @@ from src.dao.feishu_app_config_table import FeishuAppConfig, get_feishu_app_conf
 from src.dao.feishu_binding_table import get_feishu_binding_table
 from src.dao.redis_dao import get_redis_dao
 from src.models.chat import ChatSendRequest
-from src.utils.constant import DB_CONFIG
 from src.services.feishu_open_api import (
     add_reaction,
     get_tenant_access_token,
@@ -21,11 +20,9 @@ from src.services.feishu_open_api import (
 )
 from src.services.quota_service import check_quota
 from src.services.stream_service import get_stream_service
-from src.utils.constant import REDIS_URL
+from src.utils.constant import DB_CONFIG, REDIS_URL
 from src.utils.feishu_event_crypto import parse_event_json as feishu_parse_event_json
-from src.utils.feishu_event_crypto import (
-    verify_lark_signature,
-)
+from src.utils.feishu_event_crypto import verify_lark_signature
 
 logger = logging.getLogger(__name__)
 
