@@ -76,10 +76,3 @@ BOHRIUM_DEFAULT_IMAGE_NAME = (
     or BOHRIUM_ENV_DEFAULT_IMAGE_NAMES['test']
 )
 
-# 飞书应用（事件 HTTP 回调）：订阅「将事件发送至开发者服务器」时使用
-FEISHU_APP_ID = (os.getenv('FEISHU_APP_ID') or '').strip() or None
-FEISHU_APP_SECRET = (os.getenv('FEISHU_APP_SECRET') or '').strip() or None
-FEISHU_ENCRYPT_KEY = (os.getenv('FEISHU_ENCRYPT_KEY') or '').strip() or None
-FEISHU_VERIFICATION_TOKEN = (
-    os.getenv('FEISHU_VERIFICATION_TOKEN') or ''
-).strip() or None

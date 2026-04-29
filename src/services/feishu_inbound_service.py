@@ -8,19 +8,14 @@ import re
 import uuid
 from typing import Any
 
+from src.dao.feishu_app_config_table import FeishuAppConfig, get_feishu_app_config_table
 from src.dao.feishu_binding_table import get_feishu_binding_table
 from src.dao.redis_dao import get_redis_dao
 from src.models.chat import ChatSendRequest
 from src.services.feishu_open_api import get_tenant_access_token, reply_text_message
 from src.services.quota_service import check_quota
 from src.services.stream_service import get_stream_service
-from src.utils.constant import (
-    FEISHU_APP_ID,
-    FEISHU_APP_SECRET,
-    FEISHU_ENCRYPT_KEY,
-    FEISHU_VERIFICATION_TOKEN,
-    REDIS_URL,
-)
+from src.utils.constant import REDIS_URL
 from src.utils.feishu_event_crypto import parse_event_json as feishu_parse_event_json
 from src.utils.feishu_event_crypto import (
     verify_lark_signature,
@@ -28,7 +23,6 @@ from src.utils.feishu_event_crypto import (
 
 logger = logging.getLogger(__name__)
 
-# 幂等与 session 映射（Redis）
 _FEISHU_DEDUP_PREFIX = 'feishu:evt:'
 _FEISHU_SESS_PREFIX = 'feishu:sess:'
 _MAX_REPLY_LEN = 12000
@@ -54,7 +48,6 @@ def _extract_text_from_message(message: dict[str, Any]) -> str:
 
 
 def _accumulate_assistant_from_sse(sse_piece: str) -> list[str]:
-    """单帧 SSE 文本中解析 ag-ui data JSON，收集 MatMaster response 片段。"""
     chunks: list[str] = []
     for line in sse_piece.splitlines():
         ls = line.strip()
@@ -178,7 +171,6 @@ def _session_id_for_chat(chat_id: str, open_id: str) -> str:
 
 
 def _event_dedup_once(message_id: str) -> bool:
-    """若已处理过该 message_id 返回 False；否则占位并返回 True。"""
     if not REDIS_URL or not message_id:
         return True
     client = get_redis_dao().create_client()
@@ -186,7 +178,6 @@ def _event_dedup_once(message_id: str) -> bool:
         return True
     key = _FEISHU_DEDUP_PREFIX + message_id
     try:
-        # nx=True: 仅首次成功
         ok = client.set(key, '1', ex=86400, nx=True)
         return bool(ok)
     except Exception as e:
@@ -194,7 +185,10 @@ def _event_dedup_once(message_id: str) -> bool:
         return True
 
 
-async def handle_feishu_im_message_event_v1(event_obj: dict[str, Any]) -> None:
+async def handle_feishu_im_message_event_v1(
+    event_obj: dict[str, Any],
+    app_cfg: FeishuAppConfig,
+) -> None:
     """处理解密后的 im.message.receive_v1（event 字段内容）。"""
     sender = event_obj.get('sender') or {}
     sender_type = (sender.get('sender_type') or '').strip().lower()
@@ -220,13 +214,10 @@ async def handle_feishu_im_message_event_v1(event_obj: dict[str, Any]) -> None:
         logger.info('feishu empty text after extract message_id=%s', message_id)
         return
 
-    if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
-        logger.warning('feishu credentials not configured')
-        return
+    tenant_token = get_tenant_access_token(app_cfg.app_id, app_cfg.app_secret)
 
     table = get_feishu_binding_table()
-    user_id = table.get_user_id_by_open_id(open_id)
-    tenant_token = get_tenant_access_token(FEISHU_APP_ID, FEISHU_APP_SECRET)
+    user_id = table.get_user_id_by_open_id(open_id, tenant_id=app_cfg.tenant_id)
 
     if not user_id:
         reply_text_message(
@@ -247,8 +238,8 @@ async def handle_feishu_im_message_event_v1(event_obj: dict[str, Any]) -> None:
     )
 
 
-def _verify_event_token(parsed: dict[str, Any]) -> bool:
-    if not FEISHU_VERIFICATION_TOKEN:
+def _verify_event_token(parsed: dict[str, Any], verify_token: str | None) -> bool:
+    if not verify_token:
         return True
     tok: str | None = None
     if parsed.get('type') == 'url_verification':
@@ -259,22 +250,30 @@ def _verify_event_token(parsed: dict[str, Any]) -> bool:
             tok = header.get('token')
     if tok is None:
         return True
-    return str(tok) == FEISHU_VERIFICATION_TOKEN
+    return str(tok) == verify_token
+
+
+def _load_app_config(tenant_id: str) -> FeishuAppConfig | None:
+    table = get_feishu_app_config_table()
+    return table.get_by_tenant_id(tenant_id)
 
 
 async def process_feishu_event_request(
     *,
+    tenant_id: str,
     raw_body: bytes,
     headers: dict[str, str],
-) -> tuple[dict[str, Any], int, dict[str, Any] | None]:
+) -> tuple[dict[str, Any], int, dict[str, Any] | None, FeishuAppConfig | None]:
     """
-    处理飞书 POST。返回 (JSON 体, HTTP 状态码, 可选的 IM 事件体供 BackgroundTasks 处理)。
+    处理飞书 POST。
+    返回 (JSON 体, HTTP 状态码, 可选 IM 事件体, 关联的 app 配置)。
     """
-    if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
-        logger.warning('FEISHU_APP_ID / FEISHU_APP_SECRET not set')
-        return ({'msg': 'feishu not configured'}, 503, None)
+    app_cfg = _load_app_config(tenant_id)
+    if not app_cfg:
+        logger.warning('feishu app config not found for tenant_id=%s', tenant_id)
+        return ({'msg': 'tenant not configured'}, 404, None, None)
 
-    enc_key = FEISHU_ENCRYPT_KEY or ''
+    enc_key = app_cfg.encrypt_key or ''
 
     def _hdr(name: str) -> str | None:
         for k, v in headers.items():
@@ -287,24 +286,24 @@ async def process_feishu_event_request(
         ts = _hdr('x-lark-request-timestamp')
         nonce = _hdr('x-lark-request-nonce')
         if not verify_lark_signature(ts, nonce, enc_key, raw_body, sig):
-            logger.warning('feishu signature verification failed')
-            return ({'msg': 'invalid signature'}, 401, None)
+            logger.warning('feishu signature verification failed tenant_id=%s', tenant_id)
+            return ({'msg': 'invalid signature'}, 401, None, None)
 
     try:
         parsed = feishu_parse_event_json(raw_body, enc_key or None)
     except Exception as e:
         logger.warning('feishu parse_event_json failed: %s', e)
-        return ({'msg': 'invalid body'}, 400, None)
+        return ({'msg': 'invalid body'}, 400, None, None)
 
-    if not _verify_event_token(parsed):
-        logger.warning('feishu verification token mismatch')
-        return ({'msg': 'invalid token'}, 403, None)
+    if not _verify_event_token(parsed, app_cfg.verify_token):
+        logger.warning('feishu verification token mismatch tenant_id=%s', tenant_id)
+        return ({'msg': 'invalid token'}, 403, None, None)
 
     if parsed.get('type') == 'url_verification':
         ch = parsed.get('challenge')
         if ch is not None:
-            return ({'challenge': ch}, 200, None)
-        return ({'msg': 'no challenge'}, 400, None)
+            return ({'challenge': ch}, 200, None, None)
+        return ({'msg': 'no challenge'}, 400, None, None)
 
     schema = parsed.get('schema')
     header = parsed.get('header') or {}
@@ -312,7 +311,7 @@ async def process_feishu_event_request(
     if schema == '2.0' and event_type == 'im.message.receive_v1':
         event_body = parsed.get('event') or {}
         if isinstance(event_body, dict):
-            return ({}, 200, event_body)
-        return ({}, 200, None)
+            return ({}, 200, event_body, app_cfg)
+        return ({}, 200, None, None)
 
-    return ({}, 200, None)
+    return ({}, 200, None, None)
