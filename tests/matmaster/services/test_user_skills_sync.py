@@ -39,10 +39,13 @@ def test_merge_user_skill_roots_into_exp_config_appends_paths(tmp_path: Path) ->
 
 
 def test_materialize_empty_user_id() -> None:
-    from src.services.user_skills_sync import materialize_user_skills_for_run
+    from src.services.user_skills_sync import UserSkillsSyncResult, materialize_user_skills_for_run
 
-    assert materialize_user_skills_for_run('', project_root=Path('/tmp')) == []
-    assert materialize_user_skills_for_run('   ', project_root=Path('/tmp')) == []
+    result = materialize_user_skills_for_run('', project_root=Path('/tmp'))
+    assert isinstance(result, UserSkillsSyncResult)
+    assert result.roots == []
+    result2 = materialize_user_skills_for_run('   ', project_root=Path('/tmp'))
+    assert result2.roots == []
 
 
 @patch('src.services.user_skills_sync.MATMASTER_TOOLS_SERVER', 'https://ts.example.com')
@@ -89,7 +92,7 @@ def test_materialize_downloads_and_extracts(
 
     client_cls.side_effect = _client_cm
 
-    roots = materialize_user_skills_for_run('user-1', project_root=tmp_path)
-    assert len(roots) == 1
-    skill_dir = roots[0]
+    result = materialize_user_skills_for_run('user-1', project_root=tmp_path)
+    assert len(result.roots) == 1
+    skill_dir = result.roots[0]
     assert (skill_dir / 'SKILL.md').is_file()
