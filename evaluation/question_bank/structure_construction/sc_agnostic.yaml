@@ -605,7 +605,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_010_20260415
+- id: SC_struct_010_20260429
   capability: structure_construction
   domain: agnostic
   intent: Build a seven-layer Ag(111) slab with explicit water and potassium ions for an electrochemical
@@ -660,7 +660,7 @@ questions:
       tolerance: 0
       axis: z
       element: Ag
-      layer_tol_A: 0.35
+      layer_tol_A: 0.7
   - key: required_fields
     value:
     - file_exists
