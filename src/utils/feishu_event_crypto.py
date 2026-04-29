@@ -23,7 +23,7 @@ def feishu_sha256_signature(
     body: bytes,
 ) -> str:
     """X-Lark-Signature：sha256(timestamp + nonce + encrypt_key + raw_body) hex。"""
-    b1 = (timestamp + nonce + encrypt_key).encode('utf-8')
+    b1 = (timestamp + nonce + encrypt_key).encode("utf-8")
     b = b1 + body
     return hashlib.sha256(b).hexdigest()
 
@@ -46,14 +46,14 @@ class FeishuAESCipher:
 
     def __init__(self, encrypt_key: str) -> None:
         if AES is None:
-            raise RuntimeError('pycryptodome is required for Feishu event decrypt')
+            raise RuntimeError("pycryptodome is required for Feishu event decrypt")
         self._bs = AES.block_size
         self._key = hashlib.sha256(FeishuAESCipher._str_to_bytes(encrypt_key)).digest()
 
     @staticmethod
     def _str_to_bytes(data: str | bytes) -> bytes:
         if isinstance(data, str):
-            return data.encode('utf-8')
+            return data.encode("utf-8")
         return data
 
     @staticmethod
@@ -71,12 +71,12 @@ class FeishuAESCipher:
         enc = raw[self._bs :]
         cipher = AES.new(self._key, AES.MODE_CBC, iv)
         dec = cipher.decrypt(enc)
-        text = self._unpad(dec).decode('utf-8')
+        text = self._unpad(dec).decode("utf-8")
         # 部分示例从首个 { 到最后一个 } 截取 JSON
-        l = text.find('{')
-        r = text.rfind('}')
-        if l != -1 and r != -1 and r >= l:
-            return text[l : r + 1]
+        left = text.find("{")
+        right = text.rfind("}")
+        if left != -1 and right != -1 and right >= left:
+            return text[left : right + 1]
         return text
 
 
@@ -89,15 +89,15 @@ def decrypt_event_body(encrypt_key: str, encrypt_b64: str) -> dict[str, Any]:
 def parse_event_json(body: bytes, encrypt_key: str | None) -> dict[str, Any]:
     """解析 POST body：明文 JSON 或 {"encrypt": "..."}。"""
     try:
-        obj = json.loads(body.decode('utf-8'))
+        obj = json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as e:
-        logger.warning('feishu parse_event_json invalid json: %s', e)
+        logger.warning("feishu parse_event_json invalid json: %s", e)
         raise
-    if isinstance(obj, dict) and 'encrypt' in obj:
+    if isinstance(obj, dict) and "encrypt" in obj:
         if not encrypt_key:
-            raise ValueError('event body is encrypted but FEISHU_ENCRYPT_KEY is empty')
-        inner = decrypt_event_body(encrypt_key, str(obj['encrypt']))
+            raise ValueError("event body is encrypted but FEISHU_ENCRYPT_KEY is empty")
+        inner = decrypt_event_body(encrypt_key, str(obj["encrypt"]))
         return inner
     if isinstance(obj, dict):
         return obj
-    raise ValueError('unexpected event body type')
+    raise ValueError("unexpected event body type")
