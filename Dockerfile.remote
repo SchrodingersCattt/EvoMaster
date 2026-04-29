@@ -13,7 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgfortran5 \
     libquadmath0 \
     openbabel \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
+
+# 飞书 Lark CLI
+RUN npm install -g @larksuite/cli
 
 # 安装 Python 依赖（dpdata 的 mol/sdf 格式依赖 rdkit）
 RUN pip install --no-cache-dir \
