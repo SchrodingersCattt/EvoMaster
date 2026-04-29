@@ -17,7 +17,6 @@ _token_cache: dict[str, tuple[str, float]] = {}
 
 
 def get_tenant_access_token(app_id: str, app_secret: str) -> str:
-    """获取 tenant_access_token，进程内缓存至过期前 60s。"""
     cache_key = app_id.strip()
     now = time.time()
     hit = _token_cache.get(cache_key)
@@ -49,7 +48,6 @@ def reply_text_message(
     *,
     tenant_token: str,
 ) -> dict[str, Any]:
-    """回复一条文本消息（引用用户消息）。"""
     url = f'{FEISHU_API_BASE}/im/v1/messages/{message_id}/reply'
     headers = {
         'Authorization': f'Bearer {tenant_token}',
