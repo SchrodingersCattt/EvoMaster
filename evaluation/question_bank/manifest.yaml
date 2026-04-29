@@ -82,7 +82,7 @@ banks:
   - path: "execution_contract/ec_agnostic.yaml"
     capability: "execution_contract"
     domain: "agnostic"
-    questions: 18
+    questions: 9
 
   - path: "input_generation/ig_agnostic_vasp.yaml"
     capability: "input_generation"
@@ -108,12 +108,6 @@ banks:
     capability: "scientific_analysis"
     domain: "agnostic"
     questions: 5
-
-  - path: "scientific_analysis/sa_battery.yaml"
-    capability: "scientific_analysis"
-    domain: "battery"
-    questions: 1
-
 
   - path: "scientific_analysis/sa_polymer.yaml"
     capability: "scientific_analysis"
@@ -175,4 +169,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 115 questions across 25 active bank files
+# Total: 119 questions across 24 active bank files
