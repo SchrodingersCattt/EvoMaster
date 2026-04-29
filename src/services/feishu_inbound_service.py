@@ -12,7 +12,12 @@ from src.dao.feishu_app_config_table import FeishuAppConfig, get_feishu_app_conf
 from src.dao.feishu_binding_table import get_feishu_binding_table
 from src.dao.redis_dao import get_redis_dao
 from src.models.chat import ChatSendRequest
-from src.services.feishu_open_api import get_tenant_access_token, reply_text_message
+from src.services.feishu_open_api import (
+    add_reaction,
+    get_tenant_access_token,
+    remove_reaction,
+    reply_text_message,
+)
 from src.services.quota_service import check_quota
 from src.services.stream_service import get_stream_service
 from src.utils.constant import REDIS_URL
@@ -123,6 +128,8 @@ async def _run_agent_and_reply_feishu(
         )
         return
 
+    reaction_id = add_reaction(message_id, "OnIt", tenant_token=tenant_token)
+
     base_prompt = user_prompt.strip()
     parts: list[str] = []
     try:
@@ -138,6 +145,9 @@ async def _run_agent_and_reply_feishu(
             tenant_token=tenant_token,
         )
         return
+    finally:
+        if reaction_id:
+            remove_reaction(message_id, reaction_id, tenant_token=tenant_token)
 
     text = "".join(parts).strip()
     if len(text) > _MAX_REPLY_LEN:
