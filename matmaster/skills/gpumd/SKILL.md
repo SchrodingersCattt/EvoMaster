@@ -45,13 +45,13 @@ Other small potentials in the repo:
 - `potentials/nep/C_2024_NEP4.txt` — Carbon
 - `potentials/nep/Si_2022_NEP3_5body.txt` — Silicon
 
-**Universal NEP89** (~15 MB, may be slow to download):
+**Universal NEP89** (~15 MB, covers 89 elements):
 
 ```bash
-curl -fsSL --max-time 300 -o nep.txt https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/nep/nep89_20250409/nep89_20250409.txt
+curl -fsSL -o nep.txt https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/gpumd/potentials/nep89_20250409.txt
 ```
 
-If NEP89 download times out, fall back to a small element-specific potential above. Do NOT retry more than once.
+This is hosted on internal OSS and downloads fast from Bohrium nodes.
 
 Browse all available potentials: https://gpumd.cn/database.html
 
