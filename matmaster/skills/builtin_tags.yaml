@@ -14,6 +14,7 @@ tag_definitions:
 skills:
   abacus: [first-principles]
   abinit: [first-principles]
+  vasp: [first-principles]
   cp2k: [first-principles]
   quantum_espresso: [first-principles]
   pyscf: [first-principles]
@@ -22,6 +23,7 @@ skills:
 
   lammps: [molecular-dynamics]
   gromacs: [molecular-dynamics]
+  gpumd: [machine-learning-potential, molecular-dynamics]
   mlips: [machine-learning-potential, molecular-dynamics]
 
   inspect-atomic-structure: [structure]
