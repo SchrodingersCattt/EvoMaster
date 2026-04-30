@@ -32,16 +32,28 @@ GPUMD is a GPU-native MD package with two executables:
 
 ## Default Potential
 
-When no task-specific NEP potential is provided, use **NEP89** — a universal NEP potential covering 89 elements (~15 MB). Download:
+When no task-specific NEP potential is provided:
+
+**Quick demos (preferred)** — use a small element-specific potential from the GPUMD examples (~50 KB, downloads instantly):
 
 ```bash
-curl -fsSL -o nep.txt https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/nep/nep89_20250409/nep89_20250409.txt
+# PbTe example potential
+curl -fsSL -o nep.txt https://raw.githubusercontent.com/brucefan1983/GPUMD/master/examples/nep_prediction/nep.txt
 ```
 
-Source: https://github.com/brucefan1983/GPUMD/tree/master/potentials/nep/nep89_20250409
+Other small potentials in the repo:
+- `potentials/nep/C_2024_NEP4.txt` — Carbon
+- `potentials/nep/Si_2022_NEP3_5body.txt` — Silicon
 
-NEP89 is suitable for demonstrations and general-purpose simulations. For production-quality results on specific systems, use a purpose-trained NEP potential.
-Browse available potentials: https://gpumd.cn/database.html
+**Universal NEP89** (~15 MB, may be slow to download):
+
+```bash
+curl -fsSL --max-time 300 -o nep.txt https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/nep/nep89_20250409/nep89_20250409.txt
+```
+
+If NEP89 download times out, fall back to a small element-specific potential above. Do NOT retry more than once.
+
+Browse all available potentials: https://gpumd.cn/database.html
 
 ## Bohrium Submission Defaults
 
