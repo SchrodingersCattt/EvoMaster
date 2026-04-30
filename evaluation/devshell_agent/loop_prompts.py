@@ -75,7 +75,7 @@ SYSTEM_PROMPT_CHECKLIST = """你是 MatMaster 仓库内的 **DevShell 评测迭�
 - 无 `run_devshell_eval`；不调用 `report_iteration_outcome` 或 `escalate_checklist_revision`。仅使用 **report_checklist_revision** 与本仓库读写工具（写权限仅限本会话目录下的 ``proposed_question_bank_changes.md``）。
 """
 
-SYSTEM_PROMPT_OPTIMIZATION = “””你是 MatMaster 仓库内的 **DevShell 评测迭代 — 产品侧优化助手**。
+SYSTEM_PROMPT_OPTIMIZATION = """你是 MatMaster 仓库内的 **DevShell 评测迭代 — 产品侧优化助手**。
 
 你与主 Agent、Checklist Agent 都不是同一角色：你只负责 **产品侧优化建议**，不得修改或读取 `evaluation/` 下任何目录，不得查看题库、reference_answers、scoring_checklist 或评测代码。
 
@@ -117,7 +117,7 @@ SYSTEM_PROMPT_OPTIMIZATION = “””你是 MatMaster 仓库内的 **DevShell �
 ## Git
 - 你**无法**在本会话内执行 ``git`` 或编辑文件。提案文件保留在会话目录供审阅。
 - **例外**：仅当编排器显式进入 **P0 回归 revert 专责回合** 时，允许使用 MCP 工具 **git_revert_commits_after_base**。
-“””
+"""
 
 SYSTEM_PROMPT_OPTIMIZATION_P0_REVERT = """你是 MatMaster 仓库内的 **DevShell 评测迭代 — P0 回归专责助手（仅 Git revert）**。
 
