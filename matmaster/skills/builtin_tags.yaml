@@ -24,7 +24,12 @@ skills:
   gromacs: [molecular-dynamics]
   mlips: [machine-learning-potential, molecular-dynamics]
 
-  mcp-mat-sg: [structure]
+  inspect-atomic-structure: [structure]
+  build-atomic-structure: [structure]
+  transform-atomic-structure: [structure]
+  assemble-atomic-structure: [structure]
+  operate-molecular-crystal: [structure]
+  sample-atomic-structures: [structure]
   mcp-mat-struct-db: [structure]
   structure-manager: [structure]
   tasker-polar-surface: [structure]

@@ -2046,7 +2046,7 @@ requires-dist = [
     { name = "mcp" },
     { name = "mendeleev", marker = "extra == 'calculation'", specifier = "==1.1.0" },
     { name = "ml-dtypes", marker = "extra == 'calculation'", specifier = "==0.5.4" },
-    { name = "molcrys-kit", marker = "extra == 'calculation'", git = "https://github.com/SchrodingersCattt/MolCrysKit.git" },
+    { name = "molcrys-kit", marker = "extra == 'calculation'", url = "https://github.com/SchrodingersCattt/MolCrysKit/archive/refs/tags/v0.2.0.tar.gz" },
     { name = "mpich", marker = "extra == 'calculation'", specifier = "==5.0.0" },
     { name = "openai" },
     { name = "openbabel-wheel", marker = "extra == 'calculation'", specifier = "==3.1.1.23" },
@@ -2263,14 +2263,29 @@ wheels = [
 
 [[package]]
 name = "molcrys-kit"
-version = "0.1.0"
-source = { git = "https://github.com/SchrodingersCattt/MolCrysKit.git#67d255b0ce8906ee4ee6f85875fa7b99a93468a2" }
+version = "0.2.0"
+source = { url = "https://github.com/SchrodingersCattt/MolCrysKit/archive/refs/tags/v0.2.0.tar.gz" }
 dependencies = [
     { name = "ase" },
     { name = "networkx" },
     { name = "numpy" },
     { name = "pymatgen" },
     { name = "scipy" },
+]
+sdist = { hash = "sha256:74c0ee1227457841363abd441ab4dfeb33f156954ac86ad88d3bdee34019e7d2" }
+
+[package.metadata]
+requires-dist = [
+    { name = "ase", specifier = ">=3.26.0" },
+    { name = "networkx", specifier = ">=2.5.0" },
+    { name = "nglview", marker = "extra == 'vis'" },
+    { name = "numpy", specifier = ">=1.18.0" },
+    { name = "py3dmol", marker = "extra == 'vis'" },
+    { name = "pymatgen" },
+    { name = "pymatgen", marker = "extra == 'io'", specifier = ">=2020.0.0" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=6.0.0" },
+    { name = "pytest-cov", marker = "extra == 'test'" },
+    { name = "scipy", specifier = ">=1.4.0" },
 ]
 
 [[package]]
