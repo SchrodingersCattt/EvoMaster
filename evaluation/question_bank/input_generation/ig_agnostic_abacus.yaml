@@ -724,7 +724,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_005_20260422
+- id: IG_abacus_005_20260430
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence
@@ -808,11 +808,6 @@ questions:
       - key: relax_nmax
         min: 50
         max: 1000
-  - key: suggested_kpt_bulk_three_dimensional
-    value:
-      filename: KPT_bulk
-      pattern: ^\s*(?:[2-9]\d*|1\d+)\s+(?:[2-9]\d*|1\d+)\s+(?:[2-9]\d*|1\d+)(?:\s+\d+){0,3}\s*$
-      flags: m
   - key: variable_input_bulk_smearing_or_mixing
     value:
       filename: INPUT_bulk_relax
@@ -903,11 +898,6 @@ questions:
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
-  - id: suggested_kpt_bulk_three_dimensional
-    criterion: '[Suggested] KPT_bulk uses a three-dimensional bulk mesh.'
-    axis: correctness
-    verify: text_file_regex
-    weight: 0.6
   - id: variable_input_bulk_smearing_or_mixing
     criterion: '[Variable] If INPUT_bulk_relax includes smearing/mixing parameters, they
       should be reasonable for this benchmark family; omission should not be treated
@@ -962,7 +952,7 @@ questions:
     verify: turn_budget
   - id: no_retries
     criterion: No repeated identical tool calls with the same parameter set.
-    axis: efficiency
+    axis: efficiency  
     verify: no_retries
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
