@@ -20,6 +20,7 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 2. Generate `INPUT` (and `KPT` when needed).
 3. For uncertain params/workflows, check local `references/*` first.
 4. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
+5. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
 
 ## Hard Guards (Must Pass)
 
@@ -41,8 +42,12 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 ## Parameter Baseline (Use Judgment, Not Blind Fixed Values)
 
 - Use physically reasonable `ecutwfc`, `smearing`, and SCF thresholds for system and PP quality.
+- For fast tasks with lower accuracy requirements, choose lower-precision settings (including lower `ecutwfc`) to prioritize turnaround time.
 - Distinguish `LCAO` vs `PW` parameter semantics and sensitivity; do not directly copy basis-specific settings across modes.
+- Use `smearing_sigma 0.015` as the default starting point unless the task specifies otherwise.
 - For critical parameters, verify intent and physical meaning before finalizing.
+- If a parameter meaning is unclear, check the official ABACUS input reference:
+  `http://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html`.
 - Typical production defaults are acceptable, but task requirements override defaults.
 - If the task specifies cutoffs or convergence policy, follow the task first.
 - Keep multi-file studies (EOS/surface/vacancy comparisons) consistent on core numerics.
