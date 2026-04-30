@@ -41,7 +41,7 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 ## Parameter Baseline (Use Judgment, Not Blind Fixed Values)
 
 - Use physically reasonable `ecutwfc`, `smearing`, and SCF thresholds for system and PP quality.
-- For quick-turn tasks, prefer a lower-but-reasonable `ecutwfc` first, then tighten only if convergence/accuracy requires it.
+- For fast tasks with lower accuracy requirements, choose lower-precision settings (including lower `ecutwfc`) to prioritize turnaround time.
 - Distinguish `LCAO` vs `PW` parameter semantics and sensitivity; do not directly copy basis-specific settings across modes.
 - Use `smearing_sigma 0.015` as the default starting point unless the task specifies otherwise.
 - For critical parameters, verify intent and physical meaning before finalizing.
