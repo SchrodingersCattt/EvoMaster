@@ -23,6 +23,7 @@ from evaluation.devshell_agent.git_iteration import (
 )
 from evaluation.devshell_agent.loop_proposal_notify import (
     notify_proposed_matmaster_exps_if_present,
+    notify_proposed_optimization_if_present,
     notify_proposed_question_bank_if_present,
 )
 from evaluation.devshell_agent.sdk_client_retry import sdk_client_with_retry
@@ -825,6 +826,12 @@ class DevshellAgentLoop:
                     loop_log=loop_log,
                 )
             notify_proposed_matmaster_exps_if_present(
+                session_dir=self._cfg.session_dir,
+                iteration_index=it,
+                delegation=delegation,
+                optimization_reports=reports,
+            )
+            notify_proposed_optimization_if_present(
                 session_dir=self._cfg.session_dir,
                 iteration_index=it,
                 delegation=delegation,
