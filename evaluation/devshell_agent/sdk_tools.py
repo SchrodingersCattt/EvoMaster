@@ -16,7 +16,6 @@ from evaluation.devshell_agent.path_policy import (
     PROPOSED_OPTIMIZATION_CHANGES_NAME,
     PROPOSED_QUESTION_BANK_CHANGES_NAME,
     devshell_main_agent_history_root,
-    is_blocked_matmaster_exps_path,
 )
 from evaluation.devshell_agent.path_policy import is_under as _path_is_under
 from evaluation.devshell_agent.sdk_tools_eval_run import MatmasterEvalMcpEvalRunMixin
