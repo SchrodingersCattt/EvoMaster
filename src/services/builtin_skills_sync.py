@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import logging
 import re
 import zipfile
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 _SKILLS_ROOT = Path(__file__).resolve().parents[2] / "matmaster" / "skills"
+_CACHE_DIR = Path(__file__).resolve().parents[2] / "matmaster" / "cache"
 _TAGS_FILE = _SKILLS_ROOT / "builtin_tags.yaml"
 
 _ZIP_EXCLUDE = frozenset(
@@ -47,6 +49,25 @@ def _get_version() -> str:
         return get_build_version() or "unknown"
     except Exception:
         return "unknown"
+
+
+def _load_tools_from_cache(mcp_server: str | None) -> list[dict[str, str]] | None:
+    """Load tool name+description from cached MCP schema for an mcp-loader skill."""
+    if not mcp_server:
+        return None
+    cache_file = _CACHE_DIR / f"{mcp_server}.json"
+    if not cache_file.exists():
+        logger.warning("No cached schema for MCP server '%s'", mcp_server)
+        return None
+    try:
+        schemas = json.loads(cache_file.read_text(encoding="utf-8"))
+        return [
+            {"name": t["name"], "description": t.get("description", "")}
+            for t in schemas
+        ]
+    except Exception as e:
+        logger.warning("Failed to load cache for '%s': %s", mcp_server, e)
+        return None
 
 
 def _zip_skill_dir(skill_dir: Path) -> tuple[bytes, str, int, int]:
@@ -122,21 +143,25 @@ def _scan_builtin_skills(
         name = data.get("name", skill_dir.name)
         description = data.get("description", "")
         tags = skill_tags_map.get(name)
+        mcp_server = data.get("mcp_server")
 
         zip_bytes, sha256, byte_size, file_count = _zip_skill_dir(skill_dir)
 
-        results.append(
-            {
-                "name": name,
-                "description": description,
-                "tags": tags,
-                "skill_dir": skill_dir,
-                "zip_bytes": zip_bytes,
-                "content_sha256": sha256,
-                "byte_size": byte_size,
-                "file_count": file_count,
-            }
-        )
+        tools = _load_tools_from_cache(mcp_server)
+
+        result_item: dict[str, Any] = {
+            "name": name,
+            "description": description,
+            "tags": tags,
+            "skill_dir": skill_dir,
+            "zip_bytes": zip_bytes,
+            "content_sha256": sha256,
+            "byte_size": byte_size,
+            "file_count": file_count,
+        }
+        if tools is not None:
+            result_item["tools"] = tools
+        results.append(result_item)
 
     return results
 
@@ -173,6 +198,8 @@ def sync_builtin_skills_to_tools_server() -> bool:
             }
             if object_key:
                 item["bundle_object_key"] = object_key
+            if skill.get("tools"):
+                item["tools"] = skill["tools"]
             sync_items.append(item)
             logger.info(
                 "builtin skill packed: name=%s sha256=%s size=%d files=%d key=%s",
