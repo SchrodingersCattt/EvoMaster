@@ -2287,6 +2287,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'test'" },
     { name = "scipy", specifier = ">=1.4.0" },
 ]
+provides-extras = ["io", "vis", "test"]
 
 [[package]]
 name = "monty"
