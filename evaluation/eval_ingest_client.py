@@ -837,10 +837,10 @@ def post_question_catalog_sync(
         if len(qid) > 512:
             return False, f"question_id too long (>512): {qid[:80]!r}..."
         if "question_text" not in raw:
-            return False, f'missing question_text for question_id={qid!r}'
+            return False, f"missing question_text for question_id={qid!r}"
         qt_raw = raw["question_text"]
         if not isinstance(qt_raw, str):
-            return False, f'question_text must be a string for question_id={qid!r}'
+            return False, f"question_text must be a string for question_id={qid!r}"
         qtext = clip_ingest_text_field(qt_raw, max_len=EVAL_ITEM_QUESTION_TEXT_MAX_LEN)
         if not qtext:
             return False, f"empty question_text after trim for question_id={qid!r}"
@@ -849,7 +849,11 @@ def post_question_catalog_sync(
         except ValueError as e:
             return False, f"invalid priority for question_id={qid!r}: {e}"
         capability = str(raw.get("capability") or "").strip()
-        item: dict[str, Any] = {"question_id": qid, "question_text": qtext, "priority": pri}
+        item: dict[str, Any] = {
+            "question_id": qid,
+            "question_text": qtext,
+            "priority": pri,
+        }
         if capability:
             item["capability"] = capability
         body_items.append(
