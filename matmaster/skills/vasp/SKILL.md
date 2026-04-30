@@ -73,10 +73,11 @@ recommended pseudopotentials but do not generate the file.
 
 ## Bohrium Submission
 
-No default image or machine is provided. Use Bohrium's `list_images` and
-`list_machines` to find available VASP images and machine types. Do not
-guess machine names — only use values returned by `list_machines`.
-If no VASP image exists, do not submit the task.
+| Item | Default Value |
+|------|---------------|
+| image | Use Bohrium `list_images` with keyword `vasp`. If none exists, do not submit. |
+| machine | `c32_m128_cpu` |
+| cmd | `mpirun vasp_std > log 2>&1` |
 
 Notes:
 - Use `vasp_gam` for Gamma-only, `vasp_ncl` for SOC/noncollinear.
