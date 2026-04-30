@@ -23,6 +23,7 @@ class QuestionTag(StrEnum):
     code_pymatgen = 'code_pymatgen'
     code_ase = 'code_ase'
     code_mlip = 'code_mlip'
+    gpumd = 'gpumd'
     code_dpa = 'code_dpa'
     code_dpgen = 'code_dpgen'
     phy_surface = 'phy_surface'
