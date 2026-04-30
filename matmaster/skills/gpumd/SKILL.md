@@ -32,15 +32,16 @@ GPUMD is a GPU-native MD package with two executables:
 
 ## Default Potential
 
-When no task-specific NEP potential is provided, use **NEP89** — a universal NEP potential covering 89 elements. Download:
+When no task-specific NEP potential is provided, use **NEP89** — a universal NEP potential covering 89 elements (~15 MB). Download:
 
 ```bash
-wget https://gitlab.com/brucefan1983/nep-data/-/raw/main/NEP89/nep.txt -O nep.txt
+curl -fsSL -o nep.txt https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/nep/nep89_20250409/nep89_20250409.txt
 ```
 
-Source: https://gitlab.com/brucefan1983/nep-data/-/tree/main/NEP89
+Source: https://github.com/brucefan1983/GPUMD/tree/master/potentials/nep/nep89_20250409
 
 NEP89 is suitable for demonstrations and general-purpose simulations. For production-quality results on specific systems, use a purpose-trained NEP potential.
+Browse available potentials: https://gpumd.cn/database.html
 
 ## Bohrium Submission Defaults
 

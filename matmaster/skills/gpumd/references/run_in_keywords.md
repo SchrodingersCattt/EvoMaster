@@ -85,6 +85,7 @@ All `compute_*` keywords must appear **before** the `run` in the same block.
 - `output_interval`: write averaged results every N steps. Typical: 1000-10000.
 - `transport_dir`: 0=x, 1=y, 2=z.
 - `max_omega`: max angular frequency in THz for SHC/DOS. `compute_shc` also takes `num_omega` (number of frequency bins); `compute_dos` does NOT take `num_omega`.
+- **Nyquist constraint for `compute_dos`/`compute_shc`**: `max_omega` must be < `pi / (sample_interval * time_step)`. Example: `sample_interval=5`, `time_step=1` fs -> max_omega < 628 THz. With `sample_interval=10`, max_omega < 314 THz. Violating this causes "Velocity sampling rate < Nyquist frequency" error.
 
 ## Dump Keywords
 
