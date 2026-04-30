@@ -648,6 +648,8 @@ class Exp:
             return
 
         skill_registry = SkillRegistry(roots)
+        if skills_cfg.disabled_skill_names:
+            skill_registry.remove_skills(set(skills_cfg.disabled_skill_names))
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
 
         # MCP runtime config: ALWAYS self-load from config_dir.
