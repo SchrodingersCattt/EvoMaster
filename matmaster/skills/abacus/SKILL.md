@@ -20,6 +20,7 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 2. Generate `INPUT` (and `KPT` when needed).
 3. For uncertain params/workflows, check local `references/*` first.
 4. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
+5. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
 
 ## Hard Guards (Must Pass)
 
