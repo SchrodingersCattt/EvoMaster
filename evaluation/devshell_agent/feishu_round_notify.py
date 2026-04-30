@@ -401,7 +401,10 @@ def _notify_manual_review_proposal_impl(
             f"**会话目录**\n`{session_dir.resolve()}`",
             f"**提案文件**\n`{proposal_path.name}`（{size} bytes）",
         ]
-        if optimization_round is not None and kind in ("matmaster_exps", "optimization"):
+        if optimization_round is not None and kind in (
+            "matmaster_exps",
+            "optimization",
+        ):
             lines.append(f"**optimization_round**\n{optimization_round}")
         if rt:
             lines.extend(["", "**子 Agent 报告摘要**", rt])
