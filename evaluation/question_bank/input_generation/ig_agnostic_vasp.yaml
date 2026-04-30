@@ -20,115 +20,40 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - EDIFF
       - IBRION
       - ICHARG
-      - ISIF
       - ISMEAR
-      - ISPIN
-      - ISYM
       - LORBIT
       - NSW
-      - PREC
       flags: i
-  - key: param_EDIFF
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*IBRION\s*=\s*\-1\b
       flags: im
-  - key: param_EMAX
+  - key: critical_ICHARG
     value:
       filename: INCAR
-      pattern: ^\s*EMAX\s*=\s*10(?:\.\d*)?\s*$
+      pattern: ^\s*ICHARG\s*=\s*11\b
       flags: im
-  - key: param_EMIN
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*EMIN\s*=\s*\-20(?:\.\d*)?\s*$
+      pattern: ^\s*ISMEAR\s*=\s*\-1\b
       flags: im
-  - key: param_IBRION
+  - key: critical_LORBIT
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*\-1(?:\.0*)?\s*$
+      pattern: ^\s*LORBIT\s*=\s*11\b
       flags: im
-  - key: param_ICHARG
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*ICHARG\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISIF
-    value:
-      filename: INCAR
-      pattern: ^\s*ISIF\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*\-1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_LVTOT
-    value:
-      filename: INCAR
-      pattern: ^\s*LVTOT\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_NEDOS
-    value:
-      filename: INCAR
-      pattern: ^\s*NEDOS\s*=\s*1000(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*800(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_NWRITE
-    value:
-      filename: INCAR
-      pattern: ^\s*NWRITE\s*=\s*3(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*Low\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.1\d*\s*$
+      pattern: ^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -138,95 +63,44 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 1.00e-10
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = -1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMAX
-    criterion: INCAR sets EMAX = 10.000000
+  - id: critical_ICHARG
+    criterion: INCAR sets ICHARG = 11 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMIN
-    criterion: INCAR sets EMIN = -20.000000
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = -1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = -1
+  - id: critical_LORBIT
+    criterion: INCAR sets LORBIT = 11 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ICHARG
-    criterion: INCAR sets ICHARG = 11
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISIF
-    criterion: INCAR sets ISIF = 2
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP band structure calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set.
+      Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = -1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LVTOT
-    criterion: INCAR sets LVTOT = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NEDOS
-    criterion: INCAR sets NEDOS = 1000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 800
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NWRITE
-    criterion: INCAR sets NWRITE = 3
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = Low
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.100000
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -238,11 +112,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_002_20260430
@@ -267,126 +141,40 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
       - ALGO
       - EDIFF
-      - ENCUT
-      - GGA
       - ISMEAR
-      - ISYM
-      - IVDW
-      - LORBIT
-      - LREAL
       - NSW
       - PREC
       flags: i
-  - key: param_ADDGRID
+  - key: critical_ALGO
     value:
       filename: INCAR
-      pattern: ^\s*ADDGRID\s*=\s*\.?(?:FALSE|F)\.?\s*$
+      pattern: ^\s*ALGO\s*=\s*Fast\b
       flags: im
-  - key: param_ALGO
+  - key: critical_EDIFF
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*Fast\s*$
+      pattern: ^\s*EDIFF\s*=\s*\S+
       flags: im
-  - key: param_EDIFF
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*ISMEAR\s*=\s*0\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.\d*)?\s*$
+      pattern: ^\s*NSW\s*=\s*0\b
       flags: im
-  - key: param_GGA
+  - key: critical_PREC
     value:
       filename: INCAR
-      pattern: ^\s*GGA\s*=\s*PE\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_IVDW
-    value:
-      filename: INCAR
-      pattern: ^\s*IVDW\s*=\s*12(?:\.0*)?\s*$
-      flags: im
-  - key: param_LAECHG
-    value:
-      filename: INCAR
-      pattern: ^\s*LAECHG\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LASPH
-    value:
-      filename: INCAR
-      pattern: ^\s*LASPH\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_LREAL
-    value:
-      filename: INCAR
-      pattern: ^\s*LREAL\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_NCORE
-    value:
-      filename: INCAR
-      pattern: ^\s*NCORE\s*=\s*24(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*150(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_NUPDOWN
-    value:
-      filename: INCAR
-      pattern: ^\s*NUPDOWN\s*=\s*\-1(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*Accurate\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.01\d*\s*$
-      flags: im
-  - key: param_SYMPREC
-    value:
-      filename: INCAR
-      pattern: ^\s*SYMPREC\s*=\s*\S+\s*$
+      pattern: ^\s*PREC\s*=\s*Accurate\b
       flags: im
   - key: turn_budget
     value:
@@ -396,103 +184,44 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ADDGRID
-    criterion: INCAR sets ADDGRID = .FALSE.
+  - id: critical_ALGO
+    criterion: INCAR sets ALGO = Fast (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = Fast
+  - id: critical_EDIFF
+    criterion: INCAR sets EDIFF = 1e-06 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 1.00e-06
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520.000000
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_GGA
-    criterion: INCAR sets GGA = PE
+  - id: critical_PREC
+    criterion: INCAR sets PREC = Accurate (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = 0
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP hybrid DFT (HSE06) calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is
+      set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_IVDW
-    criterion: INCAR sets IVDW = 12
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LAECHG
-    criterion: INCAR sets LAECHG = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LASPH
-    criterion: INCAR sets LASPH = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LREAL
-    criterion: INCAR sets LREAL = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NCORE
-    criterion: INCAR sets NCORE = 24
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 150
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NUPDOWN
-    criterion: INCAR sets NUPDOWN = -1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = Accurate
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.010000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SYMPREC
-    criterion: INCAR sets SYMPREC = 1.00e-08
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -504,11 +233,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_003_20260430
@@ -531,168 +260,40 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - ALGO
       - EDIFF
       - IBRION
-      - ICHARG
       - ISIF
-      - ISMEAR
       - ISPIN
-      - ISYM
-      - LORBIT
-      - LREAL
-      - MAGMOM
       - NSW
-      - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_EDIFF
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*FAST\s*$
+      pattern: ^\s*EDIFF\s*=\s*\S+
       flags: im
-  - key: param_AMIX
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*AMIX\s*=\s*0\.4\d*\s*$
+      pattern: ^\s*IBRION\s*=\s*1\b
       flags: im
-  - key: param_BMIX
+  - key: critical_ISIF
     value:
       filename: INCAR
-      pattern: ^\s*BMIX\s*=\s*1(?:\.\d*)?\s*$
+      pattern: ^\s*ISIF\s*=\s*3\b
       flags: im
-  - key: param_EDIFF
+  - key: critical_ISPIN
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*0\.0001\d*\s*$
+      pattern: ^\s*ISPIN\s*=\s*2\b
       flags: im
-  - key: param_IBRION
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ICHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*ICHARG\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISIF
-    value:
-      filename: INCAR
-      pattern: ^\s*ISIF\s*=\s*3(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISTART
-    value:
-      filename: INCAR
-      pattern: ^\s*ISTART\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LELF
-    value:
-      filename: INCAR
-      pattern: ^\s*LELF\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_LPLANE
-    value:
-      filename: INCAR
-      pattern: ^\s*LPLANE\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LREAL
-    value:
-      filename: INCAR
-      pattern: ^\s*LREAL\s*=\s*FALSE\s*$
-      flags: im
-  - key: param_LVHAR
-    value:
-      filename: INCAR
-      pattern: ^\s*LVHAR\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LVTOT
-    value:
-      filename: INCAR
-      pattern: ^\s*LVTOT\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_MAGMOM
-    value:
-      filename: INCAR
-      pattern: ^\s*MAGMOM\s*=\s*.*$
-      flags: im
-  - key: param_MAXMIX
-    value:
-      filename: INCAR
-      pattern: ^\s*MAXMIX\s*=\s*\-45(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*60(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELMIN
-    value:
-      filename: INCAR
-      pattern: ^\s*NELMIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_NPAR
-    value:
-      filename: INCAR
-      pattern: ^\s*NPAR\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*20(?:\.0*)?\s*$
-      flags: im
-  - key: param_POTIM
-    value:
-      filename: INCAR
-      pattern: ^\s*POTIM\s*=\s*0\.5\d*\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*MED\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.2\d*\s*$
-      flags: im
-  - key: param_SYMPREC
-    value:
-      filename: INCAR
-      pattern: ^\s*SYMPREC\s*=\s*\S+\s*$
+      pattern: ^\s*NSW\s*=\s*20\b
       flags: im
   - key: turn_budget
     value:
@@ -702,135 +303,44 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = FAST
+  - id: critical_EDIFF
+    criterion: INCAR sets EDIFF = 0.0001 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_AMIX
-    criterion: INCAR sets AMIX = 0.4
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = 1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_BMIX
-    criterion: INCAR sets BMIX = 1.0
+  - id: critical_ISIF
+    criterion: INCAR sets ISIF = 3 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 0.0001
+  - id: critical_ISPIN
+    criterion: INCAR sets ISPIN = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = 1
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 20 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ICHARG
-    criterion: INCAR sets ICHARG = 1
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP full cell relaxation calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is
+      set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISIF
-    criterion: INCAR sets ISIF = 3
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISTART
-    criterion: INCAR sets ISTART = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LELF
-    criterion: INCAR sets LELF = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LPLANE
-    criterion: INCAR sets LPLANE = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LREAL
-    criterion: INCAR sets LREAL = FALSE
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LVHAR
-    criterion: INCAR sets LVHAR = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LVTOT
-    criterion: INCAR sets LVTOT = .FALSE
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAGMOM
-    criterion: INCAR sets MAGMOM = 1*7.0000 4*0.0000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAXMIX
-    criterion: INCAR sets MAXMIX = -45
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 60
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELMIN
-    criterion: INCAR sets NELMIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NPAR
-    criterion: INCAR sets NPAR = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 20
-    axis: correctness
-    verify: text_file_regex
-  - id: param_POTIM
-    criterion: INCAR sets POTIM = 0.5
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = MED
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SYMPREC
-    criterion: INCAR sets SYMPREC = 1e-05
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -842,11 +352,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_004_20260430
@@ -870,153 +380,40 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
       - ALGO
-      - EDIFF
-      - ENCUT
-      - GGA
       - HFSCREEN
-      - ICHARG
       - ISMEAR
-      - ISYM
-      - IVDW
-      - LORBIT
-      - LREAL
+      - LHFCALC
       - NSW
-      - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_ALGO
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*All\s*$
+      pattern: ^\s*ALGO\s*=\s*All\b
       flags: im
-  - key: param_EDIFF
+  - key: critical_HFSCREEN
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*HFSCREEN\s*=\s*\S+
       flags: im
-  - key: param_ENCUT
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.\d*)?\s*$
+      pattern: ^\s*ISMEAR\s*=\s*0\b
       flags: im
-  - key: param_GGA
+  - key: critical_LHFCALC
     value:
       filename: INCAR
-      pattern: ^\s*GGA\s*=\s*PE\s*$
+      pattern: ^\s*LHFCALC\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
-  - key: param_HFSCREEN
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*HFSCREEN\s*=\s*0\.2\d*\s*$
-      flags: im
-  - key: param_ICHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*ICHARG\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_IVDW
-    value:
-      filename: INCAR
-      pattern: ^\s*IVDW\s*=\s*12(?:\.0*)?\s*$
-      flags: im
-  - key: param_LAECHG
-    value:
-      filename: INCAR
-      pattern: ^\s*LAECHG\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LASPH
-    value:
-      filename: INCAR
-      pattern: ^\s*LASPH\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LHFCALC
-    value:
-      filename: INCAR
-      pattern: ^\s*LHFCALC\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_LREAL
-    value:
-      filename: INCAR
-      pattern: ^\s*LREAL\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_NCORE
-    value:
-      filename: INCAR
-      pattern: ^\s*NCORE\s*=\s*24(?:\.0*)?\s*$
-      flags: im
-  - key: param_NEDOS
-    value:
-      filename: INCAR
-      pattern: ^\s*NEDOS\s*=\s*2000(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*100(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*Accurate\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.01\d*\s*$
-      flags: im
-  - key: param_SYMPREC
-    value:
-      filename: INCAR
-      pattern: ^\s*SYMPREC\s*=\s*\S+\s*$
-      flags: im
-  - key: param_VDW_A1
-    value:
-      filename: INCAR
-      pattern: ^\s*VDW_A1\s*=\s*0\.383\d*\s*$
-      flags: im
-  - key: param_VDW_A2
-    value:
-      filename: INCAR
-      pattern: ^\s*VDW_A2\s*=\s*5\.685\d*\s*$
-      flags: im
-  - key: param_VDW_S8
-    value:
-      filename: INCAR
-      pattern: ^\s*VDW_S8\s*=\s*2\.31\d*\s*$
+      pattern: ^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -1026,123 +423,44 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = All
+  - id: critical_ALGO
+    criterion: INCAR sets ALGO = All (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 1.00e-05
+  - id: critical_HFSCREEN
+    criterion: INCAR sets HFSCREEN = 0.2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520.000000
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_GGA
-    criterion: INCAR sets GGA = PE
+  - id: critical_LHFCALC
+    criterion: INCAR sets LHFCALC = .TRUE. (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_HFSCREEN
-    criterion: INCAR sets HFSCREEN = 0.200000
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ICHARG
-    criterion: INCAR sets ICHARG = 1
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP hybrid DFT (HSE06) calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is
+      set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_IVDW
-    criterion: INCAR sets IVDW = 12
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LAECHG
-    criterion: INCAR sets LAECHG = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LASPH
-    criterion: INCAR sets LASPH = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LHFCALC
-    criterion: INCAR sets LHFCALC = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LREAL
-    criterion: INCAR sets LREAL = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NCORE
-    criterion: INCAR sets NCORE = 24
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NEDOS
-    criterion: INCAR sets NEDOS = 2000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 100
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = Accurate
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.010000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SYMPREC
-    criterion: INCAR sets SYMPREC = 1.00e-08
-    axis: correctness
-    verify: text_file_regex
-  - id: param_VDW_A1
-    criterion: INCAR sets VDW_A1 = 0.383000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_VDW_A2
-    criterion: INCAR sets VDW_A2 = 5.685000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_VDW_S8
-    criterion: INCAR sets VDW_S8 = 2.310000
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1154,11 +472,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_005_20260430
@@ -1179,150 +497,40 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - ALGO
-      - EDIFF
-      - ENCUT
-      - GGA
-      - IBRION
       - ISPIN
-      - ISYM
       - LDAU
-      - LDAUJ
       - LDAUL
+      - LDAUTYPE
       - LDAUU
-      - LORBIT
-      - MAGMOM
-      - NSW
-      - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_ISPIN
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*A\s*$
+      pattern: ^\s*ISPIN\s*=\s*2\b
       flags: im
-  - key: param_EDIFF
+  - key: critical_LDAU
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*LDAU\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
-  - key: param_EMAX
+  - key: critical_LDAUL
     value:
       filename: INCAR
-      pattern: ^\s*EMAX\s*=\s*15(?:\.\d*)?\s*$
+      pattern: ^\s*LDAUL\s*=\s*\S+
       flags: im
-  - key: param_EMIN
+  - key: critical_LDAUTYPE
     value:
       filename: INCAR
-      pattern: ^\s*EMIN\s*=\s*\-15(?:\.\d*)?\s*$
+      pattern: ^\s*LDAUTYPE\s*=\s*2\b
       flags: im
-  - key: param_ENAUG
+  - key: critical_LDAUU
     value:
       filename: INCAR
-      pattern: ^\s*ENAUG\s*=\s*659\.424\d*\s*$
-      flags: im
-  - key: param_ENCUT
-    value:
-      filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.\d*)?\s*$
-      flags: im
-  - key: param_GGA
-    value:
-      filename: INCAR
-      pattern: ^\s*GGA\s*=\s*PE\s*$
-      flags: im
-  - key: param_IBRION
-    value:
-      filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*\-1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_KPAR
-    value:
-      filename: INCAR
-      pattern: ^\s*KPAR\s*=\s*4(?:\.0*)?\s*$
-      flags: im
-  - key: param_LDAU
-    value:
-      filename: INCAR
-      pattern: ^\s*LDAU\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LDAUJ
-    value:
-      filename: INCAR
-      pattern: ^\s*LDAUJ\s*=\s*.*$
-      flags: im
-  - key: param_LDAUL
-    value:
-      filename: INCAR
-      pattern: ^\s*LDAUL\s*=\s*.*$
-      flags: im
-  - key: param_LDAUTYPE
-    value:
-      filename: INCAR
-      pattern: ^\s*LDAUTYPE\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_LDAUU
-    value:
-      filename: INCAR
-      pattern: ^\s*LDAUU\s*=\s*.*$
-      flags: im
-  - key: param_LMAXMIX
-    value:
-      filename: INCAR
-      pattern: ^\s*LMAXMIX\s*=\s*4(?:\.0*)?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_MAGMOM
-    value:
-      filename: INCAR
-      pattern: ^\s*MAGMOM\s*=\s*.*$
-      flags: im
-  - key: param_NCORE
-    value:
-      filename: INCAR
-      pattern: ^\s*NCORE\s*=\s*12(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*200(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*High\s*$
-      flags: im
-  - key: param_PSTRESS
-    value:
-      filename: INCAR
-      pattern: ^\s*PSTRESS\s*=\s*0(?:\.\d*)?\s*$
-      flags: im
-  - key: param_SYMPREC
-    value:
-      filename: INCAR
-      pattern: ^\s*SYMPREC\s*=\s*\S+\s*$
+      pattern: ^\s*LDAUU\s*=\s*\S+
       flags: im
   - key: turn_budget
     value:
@@ -1332,119 +540,44 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = A
+  - id: critical_ISPIN
+    criterion: INCAR sets ISPIN = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 5.00e-07
+  - id: critical_LDAU
+    criterion: INCAR sets LDAU = .TRUE. (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMAX
-    criterion: INCAR sets EMAX = 15.000000
+  - id: critical_LDAUL
+    criterion: INCAR sets LDAUL = -1 -1 2 -1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMIN
-    criterion: INCAR sets EMIN = -15.000000
+  - id: critical_LDAUTYPE
+    criterion: INCAR sets LDAUTYPE = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENAUG
-    criterion: INCAR sets ENAUG = 659.424000
+  - id: critical_LDAUU
+    criterion: INCAR sets LDAUU = 0.000 0.000 4.380 0.000 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520.000000
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP DFT+U calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_GGA
-    criterion: INCAR sets GGA = PE
-    axis: correctness
-    verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = -1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_KPAR
-    criterion: INCAR sets KPAR = 4
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LDAU
-    criterion: INCAR sets LDAU = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LDAUJ
-    criterion: INCAR sets LDAUJ = 0.000 0.000 0.000 0.000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LDAUL
-    criterion: INCAR sets LDAUL = -1 -1 2 -1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LDAUTYPE
-    criterion: INCAR sets LDAUTYPE = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LDAUU
-    criterion: INCAR sets LDAUU = 0.000 0.000 4.380 0.000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LMAXMIX
-    criterion: INCAR sets LMAXMIX = 4
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAGMOM
-    criterion: INCAR sets MAGMOM = 12*1.0000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NCORE
-    criterion: INCAR sets NCORE = 12
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 200
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = High
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PSTRESS
-    criterion: INCAR sets PSTRESS = 0.000000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SYMPREC
-    criterion: INCAR sets SYMPREC = 1.00e-04
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1456,11 +589,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_006_20260430
@@ -1485,122 +618,34 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - ALGO
-      - EDIFF
-      - ENCUT
-      - GGA
-      - IBRION
       - ISPIN
-      - ISYM
-      - LORBIT
-      - MAGMOM
+      - LASPH
       - METAGGA
       - NSW
-      - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_ISPIN
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*A\s*$
+      pattern: ^\s*ISPIN\s*=\s*2\b
       flags: im
-  - key: param_EDIFF
+  - key: critical_LASPH
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*LASPH\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
-  - key: param_EMAX
+  - key: critical_METAGGA
     value:
       filename: INCAR
-      pattern: ^\s*EMAX\s*=\s*15(?:\.\d*)?\s*$
+      pattern: ^\s*METAGGA\s*=\s*SCAN\b
       flags: im
-  - key: param_EMIN
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*EMIN\s*=\s*\-15(?:\.\d*)?\s*$
-      flags: im
-  - key: param_ENAUG
-    value:
-      filename: INCAR
-      pattern: ^\s*ENAUG\s*=\s*659\.424\d*\s*$
-      flags: im
-  - key: param_ENCUT
-    value:
-      filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.\d*)?\s*$
-      flags: im
-  - key: param_GGA
-    value:
-      filename: INCAR
-      pattern: ^\s*GGA\s*=\s*PE\s*$
-      flags: im
-  - key: param_IBRION
-    value:
-      filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*\-1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_KPAR
-    value:
-      filename: INCAR
-      pattern: ^\s*KPAR\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_LASPH
-    value:
-      filename: INCAR
-      pattern: ^\s*LASPH\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LMAXTAU
-    value:
-      filename: INCAR
-      pattern: ^\s*LMAXTAU\s*=\s*6(?:\.0*)?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_MAGMOM
-    value:
-      filename: INCAR
-      pattern: ^\s*MAGMOM\s*=\s*.*$
-      flags: im
-  - key: param_METAGGA
-    value:
-      filename: INCAR
-      pattern: ^\s*METAGGA\s*=\s*SCAN\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*200(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*High\s*$
-      flags: im
-  - key: param_SYMPREC
-    value:
-      filename: INCAR
-      pattern: ^\s*SYMPREC\s*=\s*\S+\s*$
+      pattern: ^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -1610,99 +655,40 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = A
+  - id: critical_ISPIN
+    criterion: INCAR sets ISPIN = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 5.00e-07
+  - id: critical_LASPH
+    criterion: INCAR sets LASPH = .TRUE. (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMAX
-    criterion: INCAR sets EMAX = 15.000000
+  - id: critical_METAGGA
+    criterion: INCAR sets METAGGA = SCAN (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMIN
-    criterion: INCAR sets EMIN = -15.000000
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENAUG
-    criterion: INCAR sets ENAUG = 659.424000
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP meta-GGA calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520.000000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_GGA
-    criterion: INCAR sets GGA = PE
-    axis: correctness
-    verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = -1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_KPAR
-    criterion: INCAR sets KPAR = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LASPH
-    criterion: INCAR sets LASPH = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LMAXTAU
-    criterion: INCAR sets LMAXTAU = 6
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAGMOM
-    criterion: INCAR sets MAGMOM = 10*1.0000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_METAGGA
-    criterion: INCAR sets METAGGA = SCAN
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 200
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = High
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SYMPREC
-    criterion: INCAR sets SYMPREC = 1.00e-04
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1714,11 +700,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_007_20260430
@@ -1742,174 +728,52 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - ALGO
-      - EDIFF
-      - ENCUT
       - IBRION
-      - ICHARG
-      - ISIF
       - ISMEAR
       - ISPIN
       - ISYM
-      - LORBIT
-      - LREAL
-      - MAGMOM
       - NSW
-      - PREC
+      - POTIM
+      - SIGMA
       flags: i
-  - key: param_ALGO
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*FAST\s*$
+      pattern: ^\s*IBRION\s*=\s*0\b
       flags: im
-  - key: param_AMIX
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*AMIX\s*=\s*0\.4\d*\s*$
+      pattern: ^\s*ISMEAR\s*=\s*1\b
       flags: im
-  - key: param_BMIX
+  - key: critical_ISPIN
     value:
       filename: INCAR
-      pattern: ^\s*BMIX\s*=\s*1(?:\.\d*)?\s*$
+      pattern: ^\s*ISPIN\s*=\s*2\b
       flags: im
-  - key: param_EDIFF
+  - key: critical_ISYM
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*0\.0001\d*\s*$
+      pattern: ^\s*ISYM\s*=\s*0\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.0*)?\s*$
+      pattern: ^\s*NSW\s*=\s*5000\b
       flags: im
-  - key: param_IBRION
+  - key: critical_POTIM
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*0(?:\.0*)?\s*$
+      pattern: ^\s*POTIM\s*=\s*\S+
       flags: im
-  - key: param_ICHARG
+  - key: critical_SIGMA
     value:
       filename: INCAR
-      pattern: ^\s*ICHARG\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISIF
-    value:
-      filename: INCAR
-      pattern: ^\s*ISIF\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISTART
-    value:
-      filename: INCAR
-      pattern: ^\s*ISTART\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_LPLANE
-    value:
-      filename: INCAR
-      pattern: ^\s*LPLANE\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LREAL
-    value:
-      filename: INCAR
-      pattern: ^\s*LREAL\s*=\s*Auto\s*$
-      flags: im
-  - key: param_LVTOT
-    value:
-      filename: INCAR
-      pattern: ^\s*LVTOT\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_MAGMOM
-    value:
-      filename: INCAR
-      pattern: ^\s*MAGMOM\s*=\s*.*$
-      flags: im
-  - key: param_MAXMIX
-    value:
-      filename: INCAR
-      pattern: ^\s*MAXMIX\s*=\s*\-45(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*60(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELMIN
-    value:
-      filename: INCAR
-      pattern: ^\s*NELMIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_NPAR
-    value:
-      filename: INCAR
-      pattern: ^\s*NPAR\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*5000(?:\.0*)?\s*$
-      flags: im
-  - key: param_POTIM
-    value:
-      filename: INCAR
-      pattern: ^\s*POTIM\s*=\s*0\.5\d*\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*MED\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.2\d*\s*$
-      flags: im
-  - key: param_SMASS
-    value:
-      filename: INCAR
-      pattern: ^\s*SMASS\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_TEBEG
-    value:
-      filename: INCAR
-      pattern: ^\s*TEBEG\s*=\s*300(?:\.0*)?\s*$
-      flags: im
-  - key: param_TEEND
-    value:
-      filename: INCAR
-      pattern: ^\s*TEEND\s*=\s*300(?:\.0*)?\s*$
+      pattern: ^\s*SIGMA\s*=\s*\S+
       flags: im
   - key: turn_budget
     value:
@@ -1919,139 +783,52 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = FAST
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_AMIX
-    criterion: INCAR sets AMIX = 0.4
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = 1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_BMIX
-    criterion: INCAR sets BMIX = 1.0
+  - id: critical_ISPIN
+    criterion: INCAR sets ISPIN = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 0.0001
+  - id: critical_ISYM
+    criterion: INCAR sets ISYM = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 5000 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = 0
+  - id: critical_POTIM
+    criterion: INCAR sets POTIM = 0.5 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ICHARG
-    criterion: INCAR sets ICHARG = 1
+  - id: critical_SIGMA
+    criterion: INCAR sets SIGMA = 0.2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISIF
-    criterion: INCAR sets ISIF = 2
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP AIMD calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISTART
-    criterion: INCAR sets ISTART = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LPLANE
-    criterion: INCAR sets LPLANE = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LREAL
-    criterion: INCAR sets LREAL = Auto
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LVTOT
-    criterion: INCAR sets LVTOT = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAGMOM
-    criterion: INCAR sets MAGMOM = 1*5.0000 1*0.0000 2*7.0000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAXMIX
-    criterion: INCAR sets MAXMIX = -45
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 60
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELMIN
-    criterion: INCAR sets NELMIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NPAR
-    criterion: INCAR sets NPAR = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 5000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_POTIM
-    criterion: INCAR sets POTIM = 0.5
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = MED
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SMASS
-    criterion: INCAR sets SMASS = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_TEBEG
-    criterion: INCAR sets TEBEG = 300
-    axis: correctness
-    verify: text_file_regex
-  - id: param_TEEND
-    criterion: INCAR sets TEEND = 300
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2063,11 +840,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_008_20260430
@@ -2090,116 +867,40 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - ALGO
-      - EDIFF
-      - EDIFFG
-      - ENCUT
       - IBRION
-      - ICHARG
       - ISIF
       - ISMEAR
-      - ISPIN
-      - NSW
-      - PREC
+      - NFREE
+      - POTIM
       flags: i
-  - key: param_ALGO
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*Normal\s*$
+      pattern: ^\s*IBRION\s*=\s*6\b
       flags: im
-  - key: param_EDIFF
+  - key: critical_ISIF
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*0\.0001\d*\s*$
+      pattern: ^\s*ISIF\s*=\s*3\b
       flags: im
-  - key: param_EDIFFG
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*EDIFFG\s*=\s*\-0\.05\d*\s*$
+      pattern: ^\s*ISMEAR\s*=\s*0\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_NFREE
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*500(?:\.0*)?\s*$
+      pattern: ^\s*NFREE\s*=\s*2\b
       flags: im
-  - key: param_IBRION
+  - key: critical_POTIM
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*6(?:\.0*)?\s*$
-      flags: im
-  - key: param_ICHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*ICHARG\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISIF
-    value:
-      filename: INCAR
-      pattern: ^\s*ISIF\s*=\s*3(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISTART
-    value:
-      filename: INCAR
-      pattern: ^\s*ISTART\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*100(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELMIN
-    value:
-      filename: INCAR
-      pattern: ^\s*NELMIN\s*=\s*5(?:\.0*)?\s*$
-      flags: im
-  - key: param_NFREE
-    value:
-      filename: INCAR
-      pattern: ^\s*NFREE\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*200(?:\.0*)?\s*$
-      flags: im
-  - key: param_POTIM
-    value:
-      filename: INCAR
-      pattern: ^\s*POTIM\s*=\s*0\.015\d*\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*High\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.02\d*\s*$
+      pattern: ^\s*POTIM\s*=\s*\S+
       flags: im
   - key: turn_budget
     value:
@@ -2209,95 +910,44 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = Normal
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = 6 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 0.0001
+  - id: critical_ISIF
+    criterion: INCAR sets ISIF = 3 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFFG
-    criterion: INCAR sets EDIFFG = -0.05
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 500
+  - id: critical_NFREE
+    criterion: INCAR sets NFREE = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = 6
+  - id: critical_POTIM
+    criterion: INCAR sets POTIM = 0.015 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ICHARG
-    criterion: INCAR sets ICHARG = 2
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP elastic constants calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set.
+      Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISIF
-    criterion: INCAR sets ISIF = 3
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISTART
-    criterion: INCAR sets ISTART = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 100
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELMIN
-    criterion: INCAR sets NELMIN = 5
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NFREE
-    criterion: INCAR sets NFREE = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 200
-    axis: correctness
-    verify: text_file_regex
-  - id: param_POTIM
-    criterion: INCAR sets POTIM = 0.015
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = High
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.02
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2309,11 +959,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_009_20260430
@@ -2336,82 +986,34 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
       - EDIFF
-      - ENCUT
-      - GGA
       - IBRION
       - ISMEAR
-      - NSW
-      - PREC
+      - LEPSILON
       flags: i
-  - key: param_AGGAC
+  - key: critical_EDIFF
     value:
       filename: INCAR
-      pattern: ^\s*AGGAC\s*=\s*0(?:\.\d*)?\s*$
+      pattern: ^\s*EDIFF\s*=\s*\S+
       flags: im
-  - key: param_EDIFF
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*IBRION\s*=\s*8\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*400(?:\.0*)?\s*$
+      pattern: ^\s*ISMEAR\s*=\s*0\b
       flags: im
-  - key: param_GGA
+  - key: critical_LEPSILON
     value:
       filename: INCAR
-      pattern: ^\s*GGA\s*=\s*ML\s*$
-      flags: im
-  - key: param_IBRION
-    value:
-      filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*8(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_LEPSILON
-    value:
-      filename: INCAR
-      pattern: ^\s*LEPSILON\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LPEAD
-    value:
-      filename: INCAR
-      pattern: ^\s*LPEAD\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LUSE_VDW
-    value:
-      filename: INCAR
-      pattern: ^\s*LUSE_VDW\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*Accurate\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.01\d*\s*$
-      flags: im
-  - key: param_ZAB_VDW
-    value:
-      filename: INCAR
-      pattern: ^\s*ZAB_VDW\s*=\s*\-1\.8867\d*\s*$
+      pattern: ^\s*LEPSILON\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
   - key: turn_budget
     value:
@@ -2421,71 +1023,40 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_AGGAC
-    criterion: INCAR sets AGGAC = 0.0000
+  - id: critical_EDIFF
+    criterion: INCAR sets EDIFF = 0.0001 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 1.d-4
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = 8 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 400
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_GGA
-    criterion: INCAR sets GGA = ML
+  - id: critical_LEPSILON
+    criterion: INCAR sets LEPSILON = .TRUE. (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = 8
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP DFPT/phonon calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LEPSILON
-    criterion: INCAR sets LEPSILON = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LPEAD
-    criterion: INCAR sets LPEAD = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LUSE_VDW
-    criterion: INCAR sets LUSE_VDW = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = Accurate
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.01
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ZAB_VDW
-    criterion: INCAR sets ZAB_VDW = -1.8867
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2497,11 +1068,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_010_20260430
@@ -2525,194 +1096,52 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - ALGO
-      - EDIFF
       - ENCUT
-      - IBRION
-      - ICHARG
-      - ISIF
       - ISMEAR
+      - ISPIN
       - ISYM
-      - LORBIT
-      - LREAL
+      - LMAXMIX
       - LSORBIT
-      - MAGMOM
-      - NSW
       - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_ENCUT
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*N\s*$
+      pattern: ^\s*ENCUT\s*=\s*520\b
       flags: im
-  - key: param_EDIFF
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*0\.0001\d*\s*$
+      pattern: ^\s*ISMEAR\s*=\s*0\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_ISPIN
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.0*)?\s*$
+      pattern: ^\s*ISPIN\s*=\s*2\b
       flags: im
-  - key: param_EPSILON
+  - key: critical_ISYM
     value:
       filename: INCAR
-      pattern: ^\s*EPSILON\s*=\s*1(?:\.0*)?\s*$
+      pattern: ^\s*ISYM\s*=\s*0\b
       flags: im
-  - key: param_GGA_COMPAT
+  - key: critical_LMAXMIX
     value:
       filename: INCAR
-      pattern: ^\s*GGA_COMPAT\s*=\s*\.?(?:FALSE|F)\.?\s*$
+      pattern: ^\s*LMAXMIX\s*=\s*4\b
       flags: im
-  - key: param_IBRION
+  - key: critical_LSORBIT
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*2(?:\.0*)?\s*$
+      pattern: ^\s*LSORBIT\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
-  - key: param_ICHARG
+  - key: critical_PREC
     value:
       filename: INCAR
-      pattern: ^\s*ICHARG\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_IDIPOL
-    value:
-      filename: INCAR
-      pattern: ^\s*IDIPOL\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISIF
-    value:
-      filename: INCAR
-      pattern: ^\s*ISIF\s*=\s*3(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISTART
-    value:
-      filename: INCAR
-      pattern: ^\s*ISTART\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_KPAR
-    value:
-      filename: INCAR
-      pattern: ^\s*KPAR\s*=\s*4(?:\.0*)?\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LDIPOL
-    value:
-      filename: INCAR
-      pattern: ^\s*LDIPOL\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LMAXMIX
-    value:
-      filename: INCAR
-      pattern: ^\s*LMAXMIX\s*=\s*4(?:\.0*)?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_LPLANE
-    value:
-      filename: INCAR
-      pattern: ^\s*LPLANE\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LREAL
-    value:
-      filename: INCAR
-      pattern: ^\s*LREAL\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LSCALU
-    value:
-      filename: INCAR
-      pattern: ^\s*LSCALU\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LSORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LSORBIT\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LVTOT
-    value:
-      filename: INCAR
-      pattern: ^\s*LVTOT\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_MAGMOM
-    value:
-      filename: INCAR
-      pattern: ^\s*MAGMOM\s*=\s*.*$
-      flags: im
-  - key: param_NBANDS
-    value:
-      filename: INCAR
-      pattern: ^\s*NBANDS\s*=\s*98(?:\.0*)?\s*$
-      flags: im
-  - key: param_NCORE
-    value:
-      filename: INCAR
-      pattern: ^\s*NCORE\s*=\s*28(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*60(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELMIN
-    value:
-      filename: INCAR
-      pattern: ^\s*NELMIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSIM
-    value:
-      filename: INCAR
-      pattern: ^\s*NSIM\s*=\s*4(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_POTIM
-    value:
-      filename: INCAR
-      pattern: ^\s*POTIM\s*=\s*0\.5\d*\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*ACC\s*$
-      flags: im
-  - key: param_PSTRESS
-    value:
-      filename: INCAR
-      pattern: ^\s*PSTRESS\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.025\d*\s*$
+      pattern: ^\s*PREC\s*=\s*Accurate\b
       flags: im
   - key: turn_budget
     value:
@@ -2722,155 +1151,52 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = N
+  - id: critical_ENCUT
+    criterion: INCAR sets ENCUT = 520 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 0.0001
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520
+  - id: critical_ISPIN
+    criterion: INCAR sets ISPIN = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EPSILON
-    criterion: INCAR sets EPSILON = 1
+  - id: critical_ISYM
+    criterion: INCAR sets ISYM = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_GGA_COMPAT
-    criterion: INCAR sets GGA_COMPAT = .FALSE.
+  - id: critical_LMAXMIX
+    criterion: INCAR sets LMAXMIX = 4 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = 2
+  - id: critical_LSORBIT
+    criterion: INCAR sets LSORBIT = .TRUE. (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ICHARG
-    criterion: INCAR sets ICHARG = 11
+  - id: critical_PREC
+    criterion: INCAR sets PREC = Accurate (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IDIPOL
-    criterion: INCAR sets IDIPOL = 0
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP SOC calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISIF
-    criterion: INCAR sets ISIF = 3
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISTART
-    criterion: INCAR sets ISTART = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_KPAR
-    criterion: INCAR sets KPAR = 4
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LDIPOL
-    criterion: INCAR sets LDIPOL = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LMAXMIX
-    criterion: INCAR sets LMAXMIX = 4
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LPLANE
-    criterion: INCAR sets LPLANE = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LREAL
-    criterion: INCAR sets LREAL = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LSCALU
-    criterion: INCAR sets LSCALU = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LSORBIT
-    criterion: INCAR sets LSORBIT = .TRUE
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LVTOT
-    criterion: INCAR sets LVTOT = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAGMOM
-    criterion: INCAR sets MAGMOM = 0 0 2.2 0 0 2.2 0 0 2.2 0 0 2.2 0 0 2.2 0 0 2.2 0 0 2.2 0 0 ...
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NBANDS
-    criterion: INCAR sets NBANDS = 98
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NCORE
-    criterion: INCAR sets NCORE = 28
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 60
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELMIN
-    criterion: INCAR sets NELMIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSIM
-    criterion: INCAR sets NSIM = 4
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_POTIM
-    criterion: INCAR sets POTIM = 0.5
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = ACC
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PSTRESS
-    criterion: INCAR sets PSTRESS = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.025
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2882,11 +1208,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_011_20260430
@@ -2909,111 +1235,40 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - ALGO
       - EDIFF
-      - ENCUT
       - IBRION
       - ISMEAR
-      - ISPIN
-      - ISYM
       - LORBIT
-      - MAGMOM
       - NSW
-      - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_EDIFF
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*Fast\s*$
+      pattern: ^\s*EDIFF\s*=\s*\S+
       flags: im
-  - key: param_EDIFF
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*IBRION\s*=\s*\-1\b
       flags: im
-  - key: param_EMAX
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*EMAX\s*=\s*15(?:\.\d*)?\s*$
+      pattern: ^\s*ISMEAR\s*=\s*\-5\b
       flags: im
-  - key: param_EMIN
+  - key: critical_LORBIT
     value:
       filename: INCAR
-      pattern: ^\s*EMIN\s*=\s*\-15(?:\.\d*)?\s*$
+      pattern: ^\s*LORBIT\s*=\s*11\b
       flags: im
-  - key: param_ENAUG
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*ENAUG\s*=\s*659\.424\d*\s*$
-      flags: im
-  - key: param_ENCUT
-    value:
-      filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.\d*)?\s*$
-      flags: im
-  - key: param_IBRION
-    value:
-      filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*\-1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*\-5(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_MAGMOM
-    value:
-      filename: INCAR
-      pattern: ^\s*MAGMOM\s*=\s*.*$
-      flags: im
-  - key: param_NPAR
-    value:
-      filename: INCAR
-      pattern: ^\s*NPAR\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSIM
-    value:
-      filename: INCAR
-      pattern: ^\s*NSIM\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*High\s*$
-      flags: im
-  - key: param_PSTRESS
-    value:
-      filename: INCAR
-      pattern: ^\s*PSTRESS\s*=\s*0(?:\.\d*)?\s*$
-      flags: im
-  - key: param_SYMPREC
-    value:
-      filename: INCAR
-      pattern: ^\s*SYMPREC\s*=\s*\S+\s*$
+      pattern: ^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -3023,91 +1278,44 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = Fast
+  - id: critical_EDIFF
+    criterion: INCAR sets EDIFF = 1e-07 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 1.00e-07
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = -1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMAX
-    criterion: INCAR sets EMAX = 15.000000
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = -5 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMIN
-    criterion: INCAR sets EMIN = -15.000000
+  - id: critical_LORBIT
+    criterion: INCAR sets LORBIT = 11 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENAUG
-    criterion: INCAR sets ENAUG = 659.424000
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520.000000
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP DOS calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = -1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = -5
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAGMOM
-    criterion: INCAR sets MAGMOM = 5*1.0000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NPAR
-    criterion: INCAR sets NPAR = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSIM
-    criterion: INCAR sets NSIM = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = High
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PSTRESS
-    criterion: INCAR sets PSTRESS = 0.000000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SYMPREC
-    criterion: INCAR sets SYMPREC = 1.00e-08
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -3119,11 +1327,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_012_20260430
@@ -3145,171 +1353,46 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
       - ALGO
-      - EDIFF
-      - EDIFFG
-      - ENCUT
-      - GGA
       - HFSCREEN
       - IBRION
-      - ISIF
-      - ISMEAR
       - ISPIN
-      - ISYM
-      - LORBIT
-      - LREAL
-      - MAGMOM
+      - LHFCALC
       - NSW
-      - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_ALGO
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*Conjugate\s*$
+      pattern: ^\s*ALGO\s*=\s*Conjugate\b
       flags: im
-  - key: param_EDIFF
+  - key: critical_HFSCREEN
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*HFSCREEN\s*=\s*\S+
       flags: im
-  - key: param_EDIFFG
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*EDIFFG\s*=\s*\-\S+\s*$
+      pattern: ^\s*IBRION\s*=\s*1\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_ISPIN
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*550(?:\.0*)?\s*$
+      pattern: ^\s*ISPIN\s*=\s*2\b
       flags: im
-  - key: param_GGA
+  - key: critical_LHFCALC
     value:
       filename: INCAR
-      pattern: ^\s*GGA\s*=\s*PE\s*$
+      pattern: ^\s*LHFCALC\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
-  - key: param_HFSCREEN
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*HFSCREEN\s*=\s*0\.2\d*\s*$
-      flags: im
-  - key: param_IBRION
-    value:
-      filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISIF
-    value:
-      filename: INCAR
-      pattern: ^\s*ISIF\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISTART
-    value:
-      filename: INCAR
-      pattern: ^\s*ISTART\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*3(?:\.0*)?\s*$
-      flags: im
-  - key: param_LASPH
-    value:
-      filename: INCAR
-      pattern: ^\s*LASPH\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LDAUPRINT
-    value:
-      filename: INCAR
-      pattern: ^\s*LDAUPRINT\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_LHFCALC
-    value:
-      filename: INCAR
-      pattern: ^\s*LHFCALC\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LMAXMIX
-    value:
-      filename: INCAR
-      pattern: ^\s*LMAXMIX\s*=\s*4(?:\.0*)?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_LREAL
-    value:
-      filename: INCAR
-      pattern: ^\s*LREAL\s*=\s*Auto\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_MAGMOM
-    value:
-      filename: INCAR
-      pattern: ^\s*MAGMOM\s*=\s*.*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*300(?:\.0*)?\s*$
-      flags: im
-  - key: param_NFREE
-    value:
-      filename: INCAR
-      pattern: ^\s*NFREE\s*=\s*15(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*500(?:\.0*)?\s*$
-      flags: im
-  - key: param_NUPDOWN
-    value:
-      filename: INCAR
-      pattern: ^\s*NUPDOWN\s*=\s*20(?:\.0*)?\s*$
-      flags: im
-  - key: param_POTIM
-    value:
-      filename: INCAR
-      pattern: ^\s*POTIM\s*=\s*0\.02\d*\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*Normal\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.02\d*\s*$
-      flags: im
-  - key: param_SYSTEM
-    value:
-      filename: INCAR
-      pattern: ^\s*SYSTEM\s*=\s*VASPcalc\s*$
+      pattern: ^\s*NSW\s*=\s*500\b
       flags: im
   - key: turn_budget
     value:
@@ -3319,135 +1402,48 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = Conjugate
+  - id: critical_ALGO
+    criterion: INCAR sets ALGO = Conjugate (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 1e-04
+  - id: critical_HFSCREEN
+    criterion: INCAR sets HFSCREEN = 0.2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFFG
-    criterion: INCAR sets EDIFFG = -1e-02
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = 1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 550
+  - id: critical_ISPIN
+    criterion: INCAR sets ISPIN = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_GGA
-    criterion: INCAR sets GGA = PE
+  - id: critical_LHFCALC
+    criterion: INCAR sets LHFCALC = .TRUE. (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_HFSCREEN
-    criterion: INCAR sets HFSCREEN = 0.2
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 500 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = 1
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP hybrid DFT (HSE06) calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is
+      set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISIF
-    criterion: INCAR sets ISIF = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISTART
-    criterion: INCAR sets ISTART = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 3
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LASPH
-    criterion: INCAR sets LASPH = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LDAUPRINT
-    criterion: INCAR sets LDAUPRINT = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LHFCALC
-    criterion: INCAR sets LHFCALC = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LMAXMIX
-    criterion: INCAR sets LMAXMIX = 4
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LREAL
-    criterion: INCAR sets LREAL = Auto
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAGMOM
-    criterion: INCAR sets MAGMOM = 4*5.0 4*0.0 24*0 24*0 4*0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 300
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NFREE
-    criterion: INCAR sets NFREE = 15
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 500
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NUPDOWN
-    criterion: INCAR sets NUPDOWN = 20
-    axis: correctness
-    verify: text_file_regex
-  - id: param_POTIM
-    criterion: INCAR sets POTIM = 0.02
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = Normal
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.02
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SYSTEM
-    criterion: INCAR sets SYSTEM = VASPcalc
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -3459,11 +1455,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_013_20260430
@@ -3486,109 +1482,46 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - EDIFF
       - EDIFFG
-      - ENCUT
-      - GGA
       - IBRION
       - ISIF
       - ISMEAR
-      - LREAL
       - NSW
+      - SIGMA
       flags: i
-  - key: param_EDIFF
+  - key: critical_EDIFFG
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*EDIFFG\s*=\s*\S+
       flags: im
-  - key: param_EDIFFG
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*EDIFFG\s*=\s*\-0\.01\d*\s*$
+      pattern: ^\s*IBRION\s*=\s*2\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_ISIF
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*400(?:\.0*)?\s*$
+      pattern: ^\s*ISIF\s*=\s*2\b
       flags: im
-  - key: param_GGA
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*GGA\s*=\s*PE\s*$
+      pattern: ^\s*ISMEAR\s*=\s*1\b
       flags: im
-  - key: param_IALGO
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*IALGO\s*=\s*38(?:\.0*)?\s*$
+      pattern: ^\s*NSW\s*=\s*301\b
       flags: im
-  - key: param_IBRION
+  - key: critical_SIGMA
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_INIWAV
-    value:
-      filename: INCAR
-      pattern: ^\s*INIWAV\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISIF
-    value:
-      filename: INCAR
-      pattern: ^\s*ISIF\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*\-5(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISTART
-    value:
-      filename: INCAR
-      pattern: ^\s*ISTART\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_LREAL
-    value:
-      filename: INCAR
-      pattern: ^\s*LREAL\s*=\s*Auto\s*$
-      flags: im
-  - key: param_LVTOT
-    value:
-      filename: INCAR
-      pattern: ^\s*LVTOT\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*101(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELMIN
-    value:
-      filename: INCAR
-      pattern: ^\s*NELMIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*301(?:\.0*)?\s*$
-      flags: im
-  - key: param_NWRITE
-    value:
-      filename: INCAR
-      pattern: ^\s*NWRITE\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_POTIM
-    value:
-      filename: INCAR
-      pattern: ^\s*POTIM\s*=\s*0\.2\d*\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.2\d*\s*$
+      pattern: ^\s*SIGMA\s*=\s*\S+
       flags: im
   - key: turn_budget
     value:
@@ -3598,91 +1531,48 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 0.1E-05
+  - id: critical_EDIFFG
+    criterion: INCAR sets EDIFFG = -0.01 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFFG
-    criterion: INCAR sets EDIFFG = -0.01
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 400
+  - id: critical_ISIF
+    criterion: INCAR sets ISIF = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_GGA
-    criterion: INCAR sets GGA = PE
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = 1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IALGO
-    criterion: INCAR sets IALGO = 38
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 301 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = 2
+  - id: critical_SIGMA
+    criterion: INCAR sets SIGMA = 0.2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_INIWAV
-    criterion: INCAR sets INIWAV = 1
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP full cell relaxation calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is
+      set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISIF
-    criterion: INCAR sets ISIF = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = -5
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISTART
-    criterion: INCAR sets ISTART = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LREAL
-    criterion: INCAR sets LREAL = Auto
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LVTOT
-    criterion: INCAR sets LVTOT = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 101
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELMIN
-    criterion: INCAR sets NELMIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 301
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NWRITE
-    criterion: INCAR sets NWRITE = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_POTIM
-    criterion: INCAR sets POTIM = 0.2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.2
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -3694,11 +1584,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_014_20260430
@@ -3720,158 +1610,40 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - ALGO
-      - EDIFF
-      - EDIFFG
-      - ENCUT
       - IBRION
       - ISIF
       - ISMEAR
-      - ISPIN
-      - ISYM
-      - IVDW
-      - LREAL
       - NSW
       - PREC
       flags: i
-  - key: param_ADDGRID
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*ADDGRID\s*=\s*\.?(?:TRUE|T)\.?\s*$
+      pattern: ^\s*IBRION\s*=\s*\-1\b
       flags: im
-  - key: param_ALGO
+  - key: critical_ISIF
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*Fast\s*$
+      pattern: ^\s*ISIF\s*=\s*2\b
       flags: im
-  - key: param_EDIFF
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*ISMEAR\s*=\s*0\b
       flags: im
-  - key: param_EDIFFG
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*EDIFFG\s*=\s*\-\S+\s*$
+      pattern: ^\s*NSW\s*=\s*0\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_PREC
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*440(?:\.0*)?\s*$
-      flags: im
-  - key: param_IBRION
-    value:
-      filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*\-1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISIF
-    value:
-      filename: INCAR
-      pattern: ^\s*ISIF\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_IVDW
-    value:
-      filename: INCAR
-      pattern: ^\s*IVDW\s*=\s*.*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LREAL
-    value:
-      filename: INCAR
-      pattern: ^\s*LREAL\s*=\s*Auto\s*$
-      flags: im
-  - key: param_LVTOT
-    value:
-      filename: INCAR
-      pattern: ^\s*LVTOT\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_NCORE
-    value:
-      filename: INCAR
-      pattern: ^\s*NCORE\s*=\s*24(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*100(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELMDL
-    value:
-      filename: INCAR
-      pattern: ^\s*NELMDL\s*=\s*\-15(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELMIN
-    value:
-      filename: INCAR
-      pattern: ^\s*NELMIN\s*=\s*5(?:\.0*)?\s*$
-      flags: im
-  - key: param_NFREE
-    value:
-      filename: INCAR
-      pattern: ^\s*NFREE\s*=\s*10(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSIM
-    value:
-      filename: INCAR
-      pattern: ^\s*NSIM\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_NWRITE
-    value:
-      filename: INCAR
-      pattern: ^\s*NWRITE\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_POTIM
-    value:
-      filename: INCAR
-      pattern: ^\s*POTIM\s*=\s*0\.2\d*\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*accurate\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.03\d*\s*$
-      flags: im
-  - key: param_SYSTEM
-    value:
-      filename: INCAR
-      pattern: ^\s*SYSTEM\s*=\s*.*$
+      pattern: ^\s*PREC\s*=\s*Accurate\b
       flags: im
   - key: turn_budget
     value:
@@ -3881,127 +1653,44 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ADDGRID
-    criterion: INCAR sets ADDGRID = T
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = -1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = Fast
+  - id: critical_ISIF
+    criterion: INCAR sets ISIF = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 1E-06
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFFG
-    criterion: INCAR sets EDIFFG = -1E-02
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 440
+  - id: critical_PREC
+    criterion: INCAR sets PREC = Accurate (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = -1
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISIF
-    criterion: INCAR sets ISIF = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_IVDW
-    criterion: INCAR sets IVDW = 12.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = F
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LREAL
-    criterion: INCAR sets LREAL = Auto
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LVTOT
-    criterion: INCAR sets LVTOT = F
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = F
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NCORE
-    criterion: INCAR sets NCORE = 24
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 100
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELMDL
-    criterion: INCAR sets NELMDL = -15
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELMIN
-    criterion: INCAR sets NELMIN = 5
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NFREE
-    criterion: INCAR sets NFREE = 10
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSIM
-    criterion: INCAR sets NSIM = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NWRITE
-    criterion: INCAR sets NWRITE = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_POTIM
-    criterion: INCAR sets POTIM = 0.2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = accurate
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.03
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SYSTEM
-    criterion: INCAR sets SYSTEM = SiO2
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -4013,11 +1702,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_015_20260430
@@ -4040,127 +1729,46 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - ALGO
-      - EDIFF
-      - ENCUT
-      - GGA
+      - HFSCREEN
       - IBRION
-      - ICHARG
-      - ISMEAR
+      - ISIF
       - ISPIN
+      - LHFCALC
       - LSORBIT
-      - MAGMOM
-      - NSW
-      - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_HFSCREEN
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*Normal\s*$
+      pattern: ^\s*HFSCREEN\s*=\s*\S+
       flags: im
-  - key: param_EDIFF
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*IBRION\s*=\s*2\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_ISIF
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.\d*)?\s*$
+      pattern: ^\s*ISIF\s*=\s*2\b
       flags: im
-  - key: param_GGA
+  - key: critical_ISPIN
     value:
       filename: INCAR
-      pattern: ^\s*GGA\s*=\s*PE\s*$
+      pattern: ^\s*ISPIN\s*=\s*2\b
       flags: im
-  - key: param_IBRION
+  - key: critical_LHFCALC
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*\-1(?:\.0*)?\s*$
+      pattern: ^\s*LHFCALC\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
-  - key: param_ICHARG
+  - key: critical_LSORBIT
     value:
       filename: INCAR
-      pattern: ^\s*ICHARG\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*\-5(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_KPAR
-    value:
-      filename: INCAR
-      pattern: ^\s*KPAR\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_LAECHG
-    value:
-      filename: INCAR
-      pattern: ^\s*LAECHG\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LMAXMIX
-    value:
-      filename: INCAR
-      pattern: ^\s*LMAXMIX\s*=\s*4(?:\.0*)?\s*$
-      flags: im
-  - key: param_LSORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LSORBIT\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_MAGMOM
-    value:
-      filename: INCAR
-      pattern: ^\s*MAGMOM\s*=\s*.*$
-      flags: im
-  - key: param_NCORE
-    value:
-      filename: INCAR
-      pattern: ^\s*NCORE\s*=\s*24(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*200(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*Accurate\s*$
-      flags: im
-  - key: param_SAXIS
-    value:
-      filename: INCAR
-      pattern: ^\s*SAXIS\s*=\s*.*$
-      flags: im
-  - key: param_SYSTEM
-    value:
-      filename: INCAR
-      pattern: ^\s*SYSTEM\s*=\s*.*$
+      pattern: ^\s*LSORBIT\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
   - key: turn_budget
     value:
@@ -4170,103 +1778,48 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = Normal
+  - id: critical_HFSCREEN
+    criterion: INCAR sets HFSCREEN = 0.2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 1.00e-06
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520.000000
+  - id: critical_ISIF
+    criterion: INCAR sets ISIF = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_GGA
-    criterion: INCAR sets GGA = PE
+  - id: critical_ISPIN
+    criterion: INCAR sets ISPIN = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = -1
+  - id: critical_LHFCALC
+    criterion: INCAR sets LHFCALC = True (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ICHARG
-    criterion: INCAR sets ICHARG = 1
+  - id: critical_LSORBIT
+    criterion: INCAR sets LSORBIT = True (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = -5
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP hybrid DFT (HSE06) calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is
+      set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_KPAR
-    criterion: INCAR sets KPAR = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LAECHG
-    criterion: INCAR sets LAECHG = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LMAXMIX
-    criterion: INCAR sets LMAXMIX = 4
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LSORBIT
-    criterion: INCAR sets LSORBIT = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAGMOM
-    criterion: INCAR sets MAGMOM = 9*0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NCORE
-    criterion: INCAR sets NCORE = 24
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 200
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = Accurate
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SAXIS
-    criterion: INCAR sets SAXIS = 0.0000 0.0000 1.0000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SYSTEM
-    criterion: INCAR sets SYSTEM = BiIS-acdcd16c0d76_scf_ncl
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -4278,11 +1831,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_016_20260430
@@ -4306,105 +1859,40 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
       - ALGO
       - ENCUT
-      - ICHARG
       - ISMEAR
       - ISPIN
-      - LORBIT
-      - LREAL
-      - MAGMOM
       - NSW
-      - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_ALGO
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*FAST\s*$
+      pattern: ^\s*ALGO\s*=\s*FAST\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_ENCUT
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.0*)?\s*$
+      pattern: ^\s*ENCUT\s*=\s*520\b
       flags: im
-  - key: param_ICHARG
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*ICHARG\s*=\s*1(?:\.0*)?\s*$
+      pattern: ^\s*ISMEAR\s*=\s*\-5\b
       flags: im
-  - key: param_ISMEAR
+  - key: critical_ISPIN
     value:
       filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*\-5(?:\.0*)?\s*$
+      pattern: ^\s*ISPIN\s*=\s*2\b
       flags: im
-  - key: param_ISPIN
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISTART
-    value:
-      filename: INCAR
-      pattern: ^\s*ISTART\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LELF
-    value:
-      filename: INCAR
-      pattern: ^\s*LELF\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LHVAR
-    value:
-      filename: INCAR
-      pattern: ^\s*LHVAR\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_LREAL
-    value:
-      filename: INCAR
-      pattern: ^\s*LREAL\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LVTOT
-    value:
-      filename: INCAR
-      pattern: ^\s*LVTOT\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_MAGMOM
-    value:
-      filename: INCAR
-      pattern: ^\s*MAGMOM\s*=\s*.*$
-      flags: im
-  - key: param_NELMIN
-    value:
-      filename: INCAR
-      pattern: ^\s*NELMIN\s*=\s*5(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*MED\s*$
+      pattern: ^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -4414,87 +1902,44 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = FAST
+  - id: critical_ALGO
+    criterion: INCAR sets ALGO = FAST (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520
+  - id: critical_ENCUT
+    criterion: INCAR sets ENCUT = 520 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ICHARG
-    criterion: INCAR sets ICHARG = 1
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = -5 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = -5
+  - id: critical_ISPIN
+    criterion: INCAR sets ISPIN = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 2
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISTART
-    criterion: INCAR sets ISTART = 1
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LELF
-    criterion: INCAR sets LELF = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LHVAR
-    criterion: INCAR sets LHVAR = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LREAL
-    criterion: INCAR sets LREAL = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LVTOT
-    criterion: INCAR sets LVTOT = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAGMOM
-    criterion: INCAR sets MAGMOM = 1*7.0000 1*0.0000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELMIN
-    criterion: INCAR sets NELMIN = 5
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = MED
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -4506,11 +1951,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_017_20260430
@@ -4533,142 +1978,46 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
       - EDIFF
-      - EDIFFG
-      - ENCUT
       - IBRION
       - ISIF
       - ISMEAR
-      - ISPIN
-      - ISYM
-      - LORBIT
-      - LREAL
       - NSW
       - PREC
       flags: i
-  - key: param_EDIFF
+  - key: critical_EDIFF
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*EDIFF\s*=\s*\S+
       flags: im
-  - key: param_EDIFFG
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*EDIFFG\s*=\s*\-0\.01\d*\s*$
+      pattern: ^\s*IBRION\s*=\s*1\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_ISIF
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*450(?:\.0*)?\s*$
+      pattern: ^\s*ISIF\s*=\s*3\b
       flags: im
-  - key: param_IBRION
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*1(?:\.0*)?\s*$
+      pattern: ^\s*ISMEAR\s*=\s*1\b
       flags: im
-  - key: param_ISIF
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*ISIF\s*=\s*3(?:\.0*)?\s*$
+      pattern: ^\s*NSW\s*=\s*1\b
       flags: im
-  - key: param_ISMEAR
+  - key: critical_PREC
     value:
       filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISTART
-    value:
-      filename: INCAR
-      pattern: ^\s*ISTART\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_KPAR
-    value:
-      filename: INCAR
-      pattern: ^\s*KPAR\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_KSPACING
-    value:
-      filename: INCAR
-      pattern: ^\s*KSPACING\s*=\s*0\.16\d*\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LMAXMIX
-    value:
-      filename: INCAR
-      pattern: ^\s*LMAXMIX\s*=\s*4(?:\.0*)?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_LREAL
-    value:
-      filename: INCAR
-      pattern: ^\s*LREAL\s*=\s*Auto\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_NCORE
-    value:
-      filename: INCAR
-      pattern: ^\s*NCORE\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*150(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELMDL
-    value:
-      filename: INCAR
-      pattern: ^\s*NELMDL\s*=\s*\-9(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELMIN
-    value:
-      filename: INCAR
-      pattern: ^\s*NELMIN\s*=\s*5(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_POTIM
-    value:
-      filename: INCAR
-      pattern: ^\s*POTIM\s*=\s*0\.2\d*\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*Accurate\s*$
-      flags: im
-  - key: param_SIGMA
-    value:
-      filename: INCAR
-      pattern: ^\s*SIGMA\s*=\s*0\.1\d*\s*$
+      pattern: ^\s*PREC\s*=\s*Accurate\b
       flags: im
   - key: turn_budget
     value:
@@ -4678,115 +2027,48 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 1E-06
+  - id: critical_EDIFF
+    criterion: INCAR sets EDIFF = 1e-06 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFFG
-    criterion: INCAR sets EDIFFG = -0.01
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = 1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 450
+  - id: critical_ISIF
+    criterion: INCAR sets ISIF = 3 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = 1
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = 1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISIF
-    criterion: INCAR sets ISIF = 3
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = 1
+  - id: critical_PREC
+    criterion: INCAR sets PREC = Accurate (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 1
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP VASP calculation calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set.
+      Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISTART
-    criterion: INCAR sets ISTART = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_KPAR
-    criterion: INCAR sets KPAR = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_KSPACING
-    criterion: INCAR sets KSPACING = 0.16
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LMAXMIX
-    criterion: INCAR sets LMAXMIX = 4
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LREAL
-    criterion: INCAR sets LREAL = Auto
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NCORE
-    criterion: INCAR sets NCORE = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 150
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELMDL
-    criterion: INCAR sets NELMDL = -9
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELMIN
-    criterion: INCAR sets NELMIN = 5
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_POTIM
-    criterion: INCAR sets POTIM = 0.2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = Accurate
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SIGMA
-    criterion: INCAR sets SIGMA = 0.1
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -4798,11 +2080,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_018_20260430
@@ -4825,116 +2107,40 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - ALGO
-      - EDIFF
-      - ENCUT
-      - GGA
       - IBRION
       - ISPIN
-      - ISYM
       - LORBIT
       - MAGMOM
       - NSW
-      - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*A\s*$
+      pattern: ^\s*IBRION\s*=\s*\-1\b
       flags: im
-  - key: param_EDIFF
+  - key: critical_ISPIN
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*ISPIN\s*=\s*2\b
       flags: im
-  - key: param_EMAX
+  - key: critical_LORBIT
     value:
       filename: INCAR
-      pattern: ^\s*EMAX\s*=\s*15(?:\.\d*)?\s*$
+      pattern: ^\s*LORBIT\s*=\s*11\b
       flags: im
-  - key: param_EMIN
+  - key: critical_MAGMOM
     value:
       filename: INCAR
-      pattern: ^\s*EMIN\s*=\s*\-15(?:\.\d*)?\s*$
+      pattern: ^\s*MAGMOM\s*=\s*\S+
       flags: im
-  - key: param_ENAUG
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*ENAUG\s*=\s*659\.424\d*\s*$
-      flags: im
-  - key: param_ENCUT
-    value:
-      filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.\d*)?\s*$
-      flags: im
-  - key: param_GGA
-    value:
-      filename: INCAR
-      pattern: ^\s*GGA\s*=\s*PE\s*$
-      flags: im
-  - key: param_IBRION
-    value:
-      filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*\-1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_KPAR
-    value:
-      filename: INCAR
-      pattern: ^\s*KPAR\s*=\s*4(?:\.0*)?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_MAGMOM
-    value:
-      filename: INCAR
-      pattern: ^\s*MAGMOM\s*=\s*.*$
-      flags: im
-  - key: param_NCORE
-    value:
-      filename: INCAR
-      pattern: ^\s*NCORE\s*=\s*12(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELM
-    value:
-      filename: INCAR
-      pattern: ^\s*NELM\s*=\s*200(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*High\s*$
-      flags: im
-  - key: param_PSTRESS
-    value:
-      filename: INCAR
-      pattern: ^\s*PSTRESS\s*=\s*0(?:\.\d*)?\s*$
-      flags: im
-  - key: param_SYMPREC
-    value:
-      filename: INCAR
-      pattern: ^\s*SYMPREC\s*=\s*\S+\s*$
+      pattern: ^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -4944,95 +2150,44 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = A
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = -1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 5.00e-07
+  - id: critical_ISPIN
+    criterion: INCAR sets ISPIN = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMAX
-    criterion: INCAR sets EMAX = 15.000000
+  - id: critical_LORBIT
+    criterion: INCAR sets LORBIT = 11 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMIN
-    criterion: INCAR sets EMIN = -15.000000
+  - id: critical_MAGMOM
+    criterion: INCAR sets MAGMOM = 6*1.0000 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENAUG
-    criterion: INCAR sets ENAUG = 659.424000
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520.000000
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_GGA
-    criterion: INCAR sets GGA = PE
-    axis: correctness
-    verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = -1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_KPAR
-    criterion: INCAR sets KPAR = 4
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAGMOM
-    criterion: INCAR sets MAGMOM = 6*1.0000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NCORE
-    criterion: INCAR sets NCORE = 12
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELM
-    criterion: INCAR sets NELM = 200
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = High
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PSTRESS
-    criterion: INCAR sets PSTRESS = 0.000000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SYMPREC
-    criterion: INCAR sets SYMPREC = 1.00e-04
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -5044,11 +2199,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_019_20260430
@@ -5070,114 +2225,40 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
       - ALGO
       - ENCUT
-      - ICHARG
       - ISMEAR
       - ISPIN
-      - LORBIT
-      - LREAL
       - NSW
-      - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_ALGO
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*FAST\s*$
+      pattern: ^\s*ALGO\s*=\s*FAST\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_ENCUT
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.0*)?\s*$
+      pattern: ^\s*ENCUT\s*=\s*520\b
       flags: im
-  - key: param_ICHARG
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*ICHARG\s*=\s*1(?:\.0*)?\s*$
+      pattern: ^\s*ISMEAR\s*=\s*\-5\b
       flags: im
-  - key: param_ISMEAR
+  - key: critical_ISPIN
     value:
       filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*\-5(?:\.0*)?\s*$
+      pattern: ^\s*ISPIN\s*=\s*1\b
       flags: im
-  - key: param_ISPIN
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISTART
-    value:
-      filename: INCAR
-      pattern: ^\s*ISTART\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_LCHARG
-    value:
-      filename: INCAR
-      pattern: ^\s*LCHARG\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LELF
-    value:
-      filename: INCAR
-      pattern: ^\s*LELF\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LHVAR
-    value:
-      filename: INCAR
-      pattern: ^\s*LHVAR\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_LPLANE
-    value:
-      filename: INCAR
-      pattern: ^\s*LPLANE\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LREAL
-    value:
-      filename: INCAR
-      pattern: ^\s*LREAL\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LSCALU
-    value:
-      filename: INCAR
-      pattern: ^\s*LSCALU\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_LVTOT
-    value:
-      filename: INCAR
-      pattern: ^\s*LVTOT\s*=\s*\.?(?:TRUE|T)\.?\s*$
-      flags: im
-  - key: param_LWAVE
-    value:
-      filename: INCAR
-      pattern: ^\s*LWAVE\s*=\s*\.?(?:FALSE|F)\.?\s*$
-      flags: im
-  - key: param_NCORE
-    value:
-      filename: INCAR
-      pattern: ^\s*NCORE\s*=\s*4(?:\.0*)?\s*$
-      flags: im
-  - key: param_NELMIN
-    value:
-      filename: INCAR
-      pattern: ^\s*NELMIN\s*=\s*5(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*MED\s*$
+      pattern: ^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -5187,95 +2268,44 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = FAST
+  - id: critical_ALGO
+    criterion: INCAR sets ALGO = FAST (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520
+  - id: critical_ENCUT
+    criterion: INCAR sets ENCUT = 520 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ICHARG
-    criterion: INCAR sets ICHARG = 1
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = -5 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = -5
+  - id: critical_ISPIN
+    criterion: INCAR sets ISPIN = 1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 1
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ISTART
-    criterion: INCAR sets ISTART = 1
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_LCHARG
-    criterion: INCAR sets LCHARG = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LELF
-    criterion: INCAR sets LELF = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LHVAR
-    criterion: INCAR sets LHVAR = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LPLANE
-    criterion: INCAR sets LPLANE = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LREAL
-    criterion: INCAR sets LREAL = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LSCALU
-    criterion: INCAR sets LSCALU = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LVTOT
-    criterion: INCAR sets LVTOT = .TRUE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LWAVE
-    criterion: INCAR sets LWAVE = .FALSE.
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NCORE
-    criterion: INCAR sets NCORE = 4
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NELMIN
-    criterion: INCAR sets NELMIN = 5
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = MED
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -5287,11 +2317,11 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_incar_020_20260430
@@ -5313,111 +2343,46 @@ questions:
   reference_answers:
   - key: incar_artifact
     value: INCAR
-  - key: incar_core_tokens
+  - key: incar_critical_tokens
     value:
       filename: INCAR
       tokens:
-      - ALGO
       - EDIFF
-      - ENCUT
       - IBRION
       - ISMEAR
       - ISPIN
-      - ISYM
       - LORBIT
-      - MAGMOM
       - NSW
-      - PREC
       flags: i
-  - key: param_ALGO
+  - key: critical_EDIFF
     value:
       filename: INCAR
-      pattern: ^\s*ALGO\s*=\s*Fast\s*$
+      pattern: ^\s*EDIFF\s*=\s*\S+
       flags: im
-  - key: param_EDIFF
+  - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*EDIFF\s*=\s*\S+\s*$
+      pattern: ^\s*IBRION\s*=\s*\-1\b
       flags: im
-  - key: param_EMAX
+  - key: critical_ISMEAR
     value:
       filename: INCAR
-      pattern: ^\s*EMAX\s*=\s*15(?:\.\d*)?\s*$
+      pattern: ^\s*ISMEAR\s*=\s*\-5\b
       flags: im
-  - key: param_EMIN
+  - key: critical_ISPIN
     value:
       filename: INCAR
-      pattern: ^\s*EMIN\s*=\s*\-15(?:\.\d*)?\s*$
+      pattern: ^\s*ISPIN\s*=\s*2\b
       flags: im
-  - key: param_ENAUG
+  - key: critical_LORBIT
     value:
       filename: INCAR
-      pattern: ^\s*ENAUG\s*=\s*659\.424\d*\s*$
+      pattern: ^\s*LORBIT\s*=\s*11\b
       flags: im
-  - key: param_ENCUT
+  - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520(?:\.\d*)?\s*$
-      flags: im
-  - key: param_IBRION
-    value:
-      filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*\-1(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISMEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*ISMEAR\s*=\s*\-5(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISPIN
-    value:
-      filename: INCAR
-      pattern: ^\s*ISPIN\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_ISYM
-    value:
-      filename: INCAR
-      pattern: ^\s*ISYM\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_LORBIT
-    value:
-      filename: INCAR
-      pattern: ^\s*LORBIT\s*=\s*11(?:\.0*)?\s*$
-      flags: im
-  - key: param_MAGMOM
-    value:
-      filename: INCAR
-      pattern: ^\s*MAGMOM\s*=\s*.*$
-      flags: im
-  - key: param_NPAR
-    value:
-      filename: INCAR
-      pattern: ^\s*NPAR\s*=\s*2(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSIM
-    value:
-      filename: INCAR
-      pattern: ^\s*NSIM\s*=\s*1(?:\.0*)?\s*$
-      flags: im
-  - key: param_NSW
-    value:
-      filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0(?:\.0*)?\s*$
-      flags: im
-  - key: param_PREC
-    value:
-      filename: INCAR
-      pattern: ^\s*PREC\s*=\s*High\s*$
-      flags: im
-  - key: param_PSTRESS
-    value:
-      filename: INCAR
-      pattern: ^\s*PSTRESS\s*=\s*0(?:\.\d*)?\s*$
-      flags: im
-  - key: param_SYMPREC
-    value:
-      filename: INCAR
-      pattern: ^\s*SYMPREC\s*=\s*\S+\s*$
+      pattern: ^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -5427,91 +2392,48 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 15000
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
     axis: correctness
     verify: artifact_exists
-  - id: incar_core_tokens
+  - id: incar_critical_tokens
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: param_ALGO
-    criterion: INCAR sets ALGO = Fast
+  - id: critical_EDIFF
+    criterion: INCAR sets EDIFF = 1e-07 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EDIFF
-    criterion: INCAR sets EDIFF = 1.00e-07
+  - id: critical_IBRION
+    criterion: INCAR sets IBRION = -1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMAX
-    criterion: INCAR sets EMAX = 15.000000
+  - id: critical_ISMEAR
+    criterion: INCAR sets ISMEAR = -5 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_EMIN
-    criterion: INCAR sets EMIN = -15.000000
+  - id: critical_ISPIN
+    criterion: INCAR sets ISPIN = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENAUG
-    criterion: INCAR sets ENAUG = 659.424000
+  - id: critical_LORBIT
+    criterion: INCAR sets LORBIT = 11 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_ENCUT
-    criterion: INCAR sets ENCUT = 520.000000
+  - id: critical_NSW
+    criterion: INCAR sets NSW = 0 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: param_IBRION
-    criterion: INCAR sets IBRION = -1
+  - id: reasonable_params
+    criterion: The INCAR uses physically reasonable general settings for a VASP DOS calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
-    verify: text_file_regex
-  - id: param_ISMEAR
-    criterion: INCAR sets ISMEAR = -5
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISPIN
-    criterion: INCAR sets ISPIN = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_ISYM
-    criterion: INCAR sets ISYM = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_LORBIT
-    criterion: INCAR sets LORBIT = 11
-    axis: correctness
-    verify: text_file_regex
-  - id: param_MAGMOM
-    criterion: INCAR sets MAGMOM = 5*1.0000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NPAR
-    criterion: INCAR sets NPAR = 2
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSIM
-    criterion: INCAR sets NSIM = 1
-    axis: correctness
-    verify: text_file_regex
-  - id: param_NSW
-    criterion: INCAR sets NSW = 0
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PREC
-    criterion: INCAR sets PREC = High
-    axis: correctness
-    verify: text_file_regex
-  - id: param_PSTRESS
-    criterion: INCAR sets PSTRESS = 0.000000
-    axis: correctness
-    verify: text_file_regex
-  - id: param_SYMPREC
-    criterion: INCAR sets SYMPREC = 1.00e-08
-    axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, element order) rather than hallucinated. Judge solely from the final answer and stated
-      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided task_spec.json data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and
+      stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -5523,10 +2445,10 @@ questions:
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
