@@ -309,7 +309,7 @@ def test_delegate_optimization_records_round_and_payload(tmp_path: Path) -> None
             "symptom": "Low score due to missing deliverable structure.",
             "suggested_focus": ["matmaster/skills"],
             "candidate_layers": ["skill"],
-            "execution_track": "code_edit",
+            "execution_track": "proposal_only",
             "failure_buckets": [],
             "capabilities_affected": [],
             "allowed_evidence_paths": ["matmaster/skills/result-analysis/SKILL.md"],
@@ -453,18 +453,8 @@ def test_optimization_user_message_guides_system_prompt_candidates_to_proposal(
 
     assert "candidate_layers" in message
     assert "`system_prompt`" in message
-    assert (
-        "默认不要修改 `matmaster/skills/`、`matmaster/tools/`、`src/` 等产品代码"
-        in message
-    )
-    assert (
-        "优先读取现有 `matmaster/exps/_base.toml` / `matmaster/exps/direct.toml`"
-        in message
-    )
-    assert "`proposed_matmaster_exps_changes.md`" in message
-    assert "Target file" in message
-    assert "Existing rule(s) to replace or merge" in message
-    assert "Prompt budget impact" in message
+    assert "proposed_matmaster_exps_changes.md" in message
+    assert "proposed_optimization_changes.md" in message
 
 
 def test_optimization_user_message_guides_skill_and_tool_candidates(
@@ -523,17 +513,13 @@ def test_proposal_only_optimization_skips_auto_commit_and_records_track(
         "notes": "proposal only",
     }
 
-    with patch(
-        "evaluation.devshell_agent.optimization_auto_commit.commit_optimization_changes"
-    ) as mock_commit:
-        loop._apply_optimization_auto_commit(
-            it=1,
-            delegation=delegation,
-            state=state,
-            loop_log=io.StringIO(),
-        )
+    loop._record_optimization_proposal(
+        it=1,
+        delegation=delegation,
+        state=state,
+        loop_log=io.StringIO(),
+    )
 
-    mock_commit.assert_not_called()
     track_path = tmp_path / "session" / "optimization_proposal_tracks.jsonl"
     assert track_path.is_file()
     rows = [
