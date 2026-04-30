@@ -1,0 +1,424 @@
+{
+  "_meta": {
+    "description": "POTCAR pseudopotential recommendations per element. Based on VASP wiki 'Choosing pseudopotentials'.",
+    "suffixes": {
+      "": "standard",
+      "_GW": "optimized for GW calculations",
+      "_d": "d-electrons treated as valence",
+      "_h": "hard (higher cutoff, more accurate)",
+      "_pv": "p-electrons in valence (semi-core p)",
+      "_s": "soft (fewer electrons, faster, less accurate)",
+      "_sv": "s+p semi-core in valence"
+    }
+  },
+  "general_rules": [
+    "For structure optimization: standard or _pv is usually sufficient",
+    "For magnetic properties: use _pv or _sv (include semicore)",
+    "For GW/BSE: ALWAYS use _GW variants",
+    "For phonons in large supercells: _s may be acceptable for rough estimates",
+    "Soft potentials (_s) should NOT be used with hybrid functionals"
+  ],
+  "heavy_elements_soc": [
+    "Hf",
+    "Ta",
+    "W",
+    "Re",
+    "Os",
+    "Ir",
+    "Pt",
+    "Au",
+    "Hg",
+    "Tl",
+    "Pb",
+    "Bi",
+    "Po",
+    "At"
+  ],
+  "magnetic_elements": [
+    "Cr",
+    "Mn",
+    "Fe",
+    "Co",
+    "Ni",
+    "Cu",
+    "Gd",
+    "Eu"
+  ],
+  "recommendations": {
+    "Ag": {
+      "alt": "Ag_pv",
+      "default": "Ag",
+      "enmax": 250,
+      "gw": "Ag_sv_GW"
+    },
+    "Al": {
+      "default": "Al",
+      "enmax": 240,
+      "gw": "Al_GW"
+    },
+    "Ar": {
+      "default": "Ar",
+      "enmax": 266
+    },
+    "As": {
+      "default": "As",
+      "enmax": 210,
+      "gw": "As_GW"
+    },
+    "Au": {
+      "alt": "Au_pv",
+      "default": "Au",
+      "enmax": 230,
+      "gw": "Au_sv_GW"
+    },
+    "B": {
+      "default": "B",
+      "enmax": 319,
+      "gw": "B_GW"
+    },
+    "Ba": {
+      "default": "Ba_sv",
+      "enmax": 240,
+      "gw": "Ba_sv_GW"
+    },
+    "Be": {
+      "default": "Be",
+      "enmax": 309,
+      "gw": "Be_GW"
+    },
+    "Bi": {
+      "default": "Bi_d",
+      "enmax": 243,
+      "gw": "Bi_d_GW"
+    },
+    "Br": {
+      "default": "Br",
+      "enmax": 216,
+      "gw": "Br_GW"
+    },
+    "C": {
+      "default": "C",
+      "enmax": 400,
+      "gw": "C_GW",
+      "hard": "C_h"
+    },
+    "Ca": {
+      "alt": "Ca_pv",
+      "default": "Ca_sv",
+      "enmax": 267,
+      "gw": "Ca_sv_GW"
+    },
+    "Cd": {
+      "default": "Cd",
+      "enmax": 274,
+      "gw": "Cd_sv_GW"
+    },
+    "Ce": {
+      "default": "Ce",
+      "enmax": 273
+    },
+    "Cl": {
+      "default": "Cl",
+      "enmax": 262,
+      "gw": "Cl_GW"
+    },
+    "Co": {
+      "alt": "Co_pv",
+      "default": "Co",
+      "enmax": 268,
+      "gw": "Co_sv_GW"
+    },
+    "Cr": {
+      "alt": "Cr_sv",
+      "default": "Cr_pv",
+      "enmax": 266,
+      "gw": "Cr_sv_GW"
+    },
+    "Cs": {
+      "default": "Cs_sv",
+      "enmax": 220,
+      "gw": "Cs_sv_GW"
+    },
+    "Cu": {
+      "alt": "Cu",
+      "default": "Cu_pv",
+      "enmax": 295,
+      "gw": "Cu_sv_GW",
+      "note": "pv needed for Cu oxides"
+    },
+    "F": {
+      "default": "F",
+      "enmax": 400,
+      "gw": "F_GW",
+      "hard": "F_h"
+    },
+    "Fe": {
+      "alt": "Fe",
+      "default": "Fe_pv",
+      "enmax": 268,
+      "gw": "Fe_sv_GW"
+    },
+    "Ga": {
+      "alt": "Ga",
+      "default": "Ga_d",
+      "enmax": 283,
+      "gw": "Ga_d_GW"
+    },
+    "Ge": {
+      "alt": "Ge",
+      "default": "Ge_d",
+      "enmax": 310,
+      "gw": "Ge_d_GW"
+    },
+    "H": {
+      "default": "H",
+      "enmax": 250,
+      "gw": "H_GW"
+    },
+    "He": {
+      "default": "He",
+      "enmax": 479
+    },
+    "Hf": {
+      "default": "Hf_pv",
+      "enmax": 220,
+      "gw": "Hf_sv_GW"
+    },
+    "Hg": {
+      "default": "Hg",
+      "enmax": 233
+    },
+    "I": {
+      "default": "I",
+      "enmax": 176,
+      "gw": "I_GW"
+    },
+    "In": {
+      "default": "In_d",
+      "enmax": 240,
+      "gw": "In_d_GW"
+    },
+    "Ir": {
+      "default": "Ir",
+      "enmax": 211,
+      "gw": "Ir_sv_GW"
+    },
+    "K": {
+      "alt": "K_pv",
+      "default": "K_sv",
+      "enmax": 260,
+      "gw": "K_sv_GW"
+    },
+    "Kr": {
+      "default": "Kr",
+      "enmax": 234
+    },
+    "La": {
+      "alt": "La_s",
+      "default": "La",
+      "enmax": 219,
+      "gw": "La_GW"
+    },
+    "Li": {
+      "alt": "Li",
+      "default": "Li_sv",
+      "enmax": 499,
+      "gw": "Li_sv_GW",
+      "note": "sv for accurate results"
+    },
+    "Mg": {
+      "alt": "Mg",
+      "default": "Mg_pv",
+      "enmax": 405,
+      "gw": "Mg_pv_GW",
+      "note": "pv important for oxides"
+    },
+    "Mn": {
+      "alt": "Mn_sv",
+      "default": "Mn_pv",
+      "enmax": 270,
+      "gw": "Mn_sv_GW"
+    },
+    "Mo": {
+      "alt": "Mo_sv",
+      "default": "Mo_pv",
+      "enmax": 225,
+      "gw": "Mo_sv_GW"
+    },
+    "N": {
+      "default": "N",
+      "enmax": 400,
+      "gw": "N_GW",
+      "hard": "N_h"
+    },
+    "Na": {
+      "alt": "Na",
+      "default": "Na_pv",
+      "enmax": 260,
+      "gw": "Na_pv_GW"
+    },
+    "Nb": {
+      "alt": "Nb_sv",
+      "default": "Nb_pv",
+      "enmax": 209,
+      "gw": "Nb_sv_GW"
+    },
+    "Ne": {
+      "default": "Ne",
+      "enmax": 344
+    },
+    "Ni": {
+      "alt": "Ni_pv",
+      "default": "Ni",
+      "enmax": 270,
+      "gw": "Ni_sv_GW"
+    },
+    "O": {
+      "default": "O",
+      "enmax": 400,
+      "gw": "O_GW",
+      "hard": "O_h",
+      "note": "use O_h for oxides with short bonds"
+    },
+    "Os": {
+      "default": "Os_pv",
+      "enmax": 228,
+      "gw": "Os_sv_GW"
+    },
+    "P": {
+      "default": "P",
+      "enmax": 255,
+      "gw": "P_GW"
+    },
+    "Pb": {
+      "default": "Pb_d",
+      "enmax": 238,
+      "gw": "Pb_d_GW"
+    },
+    "Pd": {
+      "alt": "Pd_pv",
+      "default": "Pd",
+      "enmax": 251,
+      "gw": "Pd_sv_GW"
+    },
+    "Pt": {
+      "alt": "Pt_pv",
+      "default": "Pt",
+      "enmax": 230,
+      "gw": "Pt_sv_GW"
+    },
+    "Rb": {
+      "default": "Rb_sv",
+      "enmax": 220,
+      "gw": "Rb_sv_GW"
+    },
+    "Re": {
+      "default": "Re_pv",
+      "enmax": 226,
+      "gw": "Re_sv_GW"
+    },
+    "Rh": {
+      "default": "Rh_pv",
+      "enmax": 247,
+      "gw": "Rh_sv_GW"
+    },
+    "Ru": {
+      "default": "Ru_pv",
+      "enmax": 240,
+      "gw": "Ru_sv_GW"
+    },
+    "S": {
+      "default": "S",
+      "enmax": 259,
+      "gw": "S_GW"
+    },
+    "Sb": {
+      "default": "Sb",
+      "enmax": 172,
+      "gw": "Sb_GW"
+    },
+    "Sc": {
+      "default": "Sc_sv",
+      "enmax": 225,
+      "gw": "Sc_sv_GW"
+    },
+    "Se": {
+      "default": "Se",
+      "enmax": 212,
+      "gw": "Se_GW"
+    },
+    "Si": {
+      "default": "Si",
+      "enmax": 245,
+      "gw": "Si_GW"
+    },
+    "Sn": {
+      "default": "Sn_d",
+      "enmax": 241,
+      "gw": "Sn_d_GW"
+    },
+    "Sr": {
+      "default": "Sr_sv",
+      "enmax": 229,
+      "gw": "Sr_sv_GW"
+    },
+    "Ta": {
+      "default": "Ta_pv",
+      "enmax": 224,
+      "gw": "Ta_sv_GW"
+    },
+    "Tc": {
+      "default": "Tc_pv",
+      "enmax": 229,
+      "gw": "Tc_sv_GW"
+    },
+    "Te": {
+      "default": "Te",
+      "enmax": 175,
+      "gw": "Te_GW"
+    },
+    "Ti": {
+      "alt": "Ti_sv",
+      "default": "Ti_pv",
+      "enmax": 275,
+      "gw": "Ti_sv_GW"
+    },
+    "Tl": {
+      "default": "Tl_d",
+      "enmax": 237,
+      "gw": "Tl_d_GW"
+    },
+    "V": {
+      "alt": "V_sv",
+      "default": "V_pv",
+      "enmax": 264,
+      "gw": "V_sv_GW"
+    },
+    "W": {
+      "alt": "W_sv",
+      "default": "W_pv",
+      "enmax": 224,
+      "gw": "W_sv_GW"
+    },
+    "Xe": {
+      "default": "Xe",
+      "enmax": 180
+    },
+    "Y": {
+      "default": "Y_sv",
+      "enmax": 213,
+      "gw": "Y_sv_GW"
+    },
+    "Zn": {
+      "alt": "Zn_sv",
+      "default": "Zn",
+      "enmax": 277,
+      "gw": "Zn_sv_GW"
+    },
+    "Zr": {
+      "default": "Zr_sv",
+      "enmax": 230,
+      "gw": "Zr_sv_GW"
+    }
+  }
+}

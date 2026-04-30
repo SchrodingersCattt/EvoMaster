@@ -76,6 +76,12 @@ Notes:
 - Use `vasp_gam` for Gamma-only, `vasp_ncl` for SOC/noncollinear.
 - POTCAR must be present in the run directory (user responsibility).
 
+## Scripts
+
+- `scripts/get_potcar.py --elements "Fe,O"` — recommend pseudopotentials, compute ENCUT from ENMAX
+- `scripts/validate_incar.py -f INCAR -t relax` — check tag conflicts, missing required tags, ENCUT reasonableness
+- `scripts/generate_kpoints.py` — generate KPOINTS from structure (auto mesh, line-mode, slab detection)
+
 ## References (read on demand)
 
 - `references/incar_tags.md` — INCAR tag reference organized by calculation type
