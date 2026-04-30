@@ -97,7 +97,7 @@ def validate_workspace(workspace: Path) -> list[str]:
         messages.append("FAIL: No INPUT files found in workspace.")
         return messages
 
-    all_files = set(f.name for f in workspace.iterdir() if f.is_file())
+    all_files = {f.name for f in workspace.iterdir() if f.is_file()}
 
     for input_file in input_files:
         prefix = f"[{input_file.name}]"
