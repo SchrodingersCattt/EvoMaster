@@ -17,7 +17,6 @@ Exit code: 0 if all checks pass, 1 if any FAIL.
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sys
 from pathlib import Path
@@ -122,7 +121,9 @@ def validate_workspace(workspace: Path) -> list[str]:
             )
         elif stru_path.is_file():
             # Validate ntype
-            species_count, has_orbital, referenced_files = _count_stru_species(stru_path)
+            species_count, has_orbital, referenced_files = _count_stru_species(
+                stru_path
+            )
             ntype_str = params.get("ntype", "")
             if ntype_str:
                 try:
@@ -133,9 +134,13 @@ def validate_workspace(workspace: Path) -> list[str]:
                             f"{species_count} species in ATOMIC_SPECIES."
                         )
                     else:
-                        messages.append(f"PASS {prefix}: ntype={ntype_val} matches STRU species count.")
+                        messages.append(
+                            f"PASS {prefix}: ntype={ntype_val} matches STRU species count."
+                        )
                 except ValueError:
-                    messages.append(f"WARN {prefix}: ntype='{ntype_str}' is not an integer.")
+                    messages.append(
+                        f"WARN {prefix}: ntype='{ntype_str}' is not an integer."
+                    )
 
             # Validate basis_type vs NUMERICAL_ORBITAL
             basis = params.get("basis_type", "pw")
@@ -150,7 +155,9 @@ def validate_workspace(workspace: Path) -> list[str]:
                     f"ABACUS will crash."
                 )
             else:
-                messages.append(f"PASS {prefix}: basis_type={basis} consistent with STRU.")
+                messages.append(
+                    f"PASS {prefix}: basis_type={basis} consistent with STRU."
+                )
 
             # Check ecutwfc baseline
             ecutwfc_str = params.get("ecutwfc", "")
@@ -238,10 +245,16 @@ def validate_workspace(workspace: Path) -> list[str]:
         # --- SCF feeding NSCF check ---
         if calc == "scf" and params.get("out_chg") != "1":
             # Check if there's a companion NSCF INPUT
-            nscf_inputs = [
-                f for f in input_files
-                if f != input_file and "nscf" in _parse_input(f).get("calculation", "").lower()
-            ] if len(input_files) > 1 else []
+            nscf_inputs = (
+                [
+                    f
+                    for f in input_files
+                    if f != input_file
+                    and "nscf" in _parse_input(f).get("calculation", "").lower()
+                ]
+                if len(input_files) > 1
+                else []
+            )
             if nscf_inputs:
                 messages.append(
                     f"FAIL {prefix}: SCF with companion NSCF but out_chg is not 1. "
@@ -257,7 +270,11 @@ def validate_workspace(workspace: Path) -> list[str]:
                 f"WARN {prefix}: Multiple STRU-like files ({stru_files_in_dir}) but no stru_file set. "
                 f"ABACUS will use 'STRU' by default."
             )
-        if len(kpt_files_in_dir) > 1 and "kpoint_file" not in params and not has_kspacing:
+        if (
+            len(kpt_files_in_dir) > 1
+            and "kpoint_file" not in params
+            and not has_kspacing
+        ):
             messages.append(
                 f"WARN {prefix}: Multiple KPT-like files ({kpt_files_in_dir}) but no kpoint_file set. "
                 f"ABACUS will use 'KPT' by default."
