@@ -30,7 +30,7 @@ Handles downloading, validating, and converting crystal structure files (CIF, PO
 | `build_gamma_al2o3.py` | `[-o gamma_al2o3.cif]` → γ-Al₂O₃ defect-spinel structure |
 | `build_molecular_crystal_slab.py` | `--file input.cif --miller 1 1 0 --layers 4 [-o output.cif]` |
 | `passivate_surface.py` | `slab.cif [-o passivated.cif] [--element Si] [--bond-length 1.48]` |
-| `generate_kpoints.py` | `--structure POSCAR --mode auto\|line\|mesh\|slab --density 40` → KPOINTS file |
+| ~~`generate_kpoints.py`~~ | Moved to `matmaster/skills/vasp/scripts/generate_kpoints.py` |
 
 **convert_format.py key flags**: `--type-map` **required** for LAMMPS. `--atom-style` must match source file. `--frame N` for multi-frame.
 
