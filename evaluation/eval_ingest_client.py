@@ -848,8 +848,12 @@ def post_question_catalog_sync(
             pri = normalize_catalog_priority_for_sync(raw.get("priority"))
         except ValueError as e:
             return False, f"invalid priority for question_id={qid!r}: {e}"
+        capability = str(raw.get("capability") or "").strip()
+        item: dict[str, Any] = {"question_id": qid, "question_text": qtext, "priority": pri}
+        if capability:
+            item["capability"] = capability
         body_items.append(
-            {"question_id": qid, "question_text": qtext, "priority": pri},
+            item,
         )
 
     body = {"items": body_items}
