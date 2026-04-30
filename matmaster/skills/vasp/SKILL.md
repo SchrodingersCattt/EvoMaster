@@ -83,7 +83,11 @@ recommended pseudopotentials but do not generate the file.
 |------|---------------|
 | image | Use Bohrium `list_images` with keyword `vasp`. If none exists, do not submit. |
 | machine | `c32_m128_cpu` |
-| cmd | `mpirun -np 32 vasp_std > log 2>&1` |
+| cmd | `OMP_NUM_THREADS=1 mpirun -np 16 vasp_std > log 2>&1` |
+
+Notes:
+- `-np` is typically half of CPU cores (32 virtual cores → 16 physical cores on Bohrium).
+- Use `vasp_gam` for Gamma-only, `vasp_ncl` for SOC/noncollinear calculations.
 
 Notes:
 - Use `vasp_gam` for Gamma-only, `vasp_ncl` for SOC/noncollinear.
