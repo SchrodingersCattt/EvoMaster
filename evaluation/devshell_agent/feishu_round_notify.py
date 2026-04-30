@@ -335,9 +335,10 @@ def notify_after_scoring_async(
             "ingest_result": ingest_result,
         },
         name="devshell_eval_feishu",
-        daemon=True,
+        daemon=False,
     )
     t.start()
+    t.join(timeout=30)
 
 
 def _read_proposal_preview(path: Path) -> str:
@@ -456,6 +457,7 @@ def notify_manual_review_proposal_async(
             "optimization_round": optimization_round,
         },
         name="devshell_proposal_feishu",
-        daemon=True,
+        daemon=False,
     )
     t.start()
+    t.join(timeout=30)
