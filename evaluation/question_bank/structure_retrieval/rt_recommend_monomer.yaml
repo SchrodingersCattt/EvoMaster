@@ -1,11 +1,11 @@
 version: v5
 capability: structure_retrieval  
-domain: recommend              # 本 bank 属于哪个材料场景；同文件内所有题必须一致
+domain: agnostic              # 本 bank 属于哪个材料场景；同文件内所有题必须一致
 
 questions:
   - id: SR_recommend_20260430   # 题目 ID；建议格式：<前缀>_<主题>_<日期>
     capability: structure_retrieval  # 必须与顶层 capability 一致
-    domain: recommend              # 必须与顶层 domain 一致
+    domain: agnostic              # 必须与顶层 domain 一致
     intent: Recommend soluble acrylate NTD photoresist monomers and provide verified SMILES from databases.
 
     human_prompt_seed: |-  # Direct prompt for the agent; be explicit about inputs, task, and output filename
