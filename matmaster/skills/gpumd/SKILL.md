@@ -30,6 +30,18 @@ GPUMD is a GPU-native MD package with two executables:
 8. **Group columns required for group-based keywords.** If using `source`/`sink` in NEMD ensembles, `compute_temperature group_method`, or group-filtered `compute_*`/`dump_*`, the `model.xyz` must define group columns in Properties.
 9. **`compute_*` and `dump_*` reset after each `run`.** If a second `run` block needs the same compute/dump, re-specify them before that `run`.
 
+## Default Potential
+
+When no task-specific NEP potential is provided, use **NEP89** — a universal NEP potential covering 89 elements. Download:
+
+```bash
+wget https://gitlab.com/brucefan1983/nep-data/-/raw/main/NEP89/nep.txt -O nep.txt
+```
+
+Source: https://gitlab.com/brucefan1983/nep-data/-/tree/main/NEP89
+
+NEP89 is suitable for demonstrations and general-purpose simulations. For production-quality results on specific systems, use a purpose-trained NEP potential.
+
 ## Bohrium Submission Defaults
 
 | Item | Default Value |
