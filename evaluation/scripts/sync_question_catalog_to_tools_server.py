@@ -63,7 +63,13 @@ def _stable_unique_catalog_items(
             pri = normalize_catalog_priority_for_sync(q.priority)
         except ValueError as e:
             return [], f"invalid priority for question_id={qid!r}: {e}"
-        out.append({"question_id": qid, "question_text": qtext, "priority": pri})
+        capability = str(getattr(q, 'capability', '') or '').strip()
+        out.append({
+            "question_id": qid,
+            "question_text": qtext,
+            "priority": pri,
+            "capability": capability,
+        })
     return out, None
 
 
