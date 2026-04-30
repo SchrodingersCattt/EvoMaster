@@ -53,12 +53,18 @@ recommended pseudopotentials but do not generate the file.
 - **DFT+U**: `LDAU = .TRUE.`, `LDAUTYPE = 2` (Dudarev), `LDAUL`, `LDAUU`,
   `LDAUJ` arrays matching species order in POSCAR.
 - **Meta-GGA (SCAN/R2SCAN)**: `LASPH = .TRUE.` is required.
-- **POTCAR must exist before submission.** VASP cannot run without POTCAR.
-  Before submitting a Bohrium job, verify POTCAR is present in the input
-  directory. If the user has not provided POTCAR, do NOT submit — instead
-  inform them that POTCAR is required (license-restricted, cannot be
-  auto-generated). State recommended PAW pseudopotentials (e.g.,
-  `Al`, `Si`, `O`, `Fe_pv`, `Ti_sv`) so they know what to prepare.
+- **POTCAR must be resolved before submission.** VASP cannot run without
+  POTCAR. Before submitting, use AskQuestion to ask the user where POTCAR
+  is located. Options:
+  - "VASP 镜像中已内置 POTCAR（如 `/opt/vasp/potcar/PBE/`）"
+  - "Bohrium 节点上的某个目录（请填路径）"
+  - "我没有 POTCAR"
+  If the user has no POTCAR, do NOT submit — inform them POTCAR is
+  license-restricted and cannot be auto-generated, then stop.
+  If POTCAR is in the image or on a node path, write a `run.sh` that
+  copies/concatenates POTCAR from that path before running VASP.
+  State recommended PAW pseudopotentials (e.g., `Al`, `Si`, `O`,
+  `Fe_pv`, `Ti_sv`) so they know what elements to prepare.
 
 ## K-point Rules
 
