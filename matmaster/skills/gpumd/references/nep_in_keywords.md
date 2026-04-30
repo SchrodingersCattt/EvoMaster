@@ -68,6 +68,70 @@ Tip: if virial data is absent from `train.xyz`, set `lambda_v 0.0` explicitly â€
 | `lambda_shear` | `lambda_shear <w>` | `0.0` | Shear-modulus regularization weight. |
 | `lambda_zbl` | `lambda_zbl <w>` | `0.0` | ZBL loss weight. |
 
+## Common Configurations
+
+### Single-Element System
+```
+type       1 Si
+cutoff     8 4
+n_max      4 4
+basis_size 12 12
+l_max      4 2 0
+neuron     30
+lambda_e   1.0
+lambda_f   1.0
+lambda_v   0.1
+batch      1000
+population 50
+generation 100000
+```
+- `type 1 Si`: single element, N=1.
+- Default `neuron 30` is sufficient for single-element.
+
+### System Without Virial Data
+```
+type       2 Li F
+cutoff     8 4
+n_max      4 4
+basis_size 12 12
+l_max      4 2 0
+neuron     40
+lambda_e   1.0
+lambda_f   1.0
+lambda_v   0.0
+batch      1000
+population 50
+generation 100000
+```
+- **Must set `lambda_v 0.0`** when `train.xyz` contains no virial/stress data.
+- If virial data is present for only some frames, keep `lambda_v` at a small positive value (e.g. 0.01).
+
+### High-Energy / Radiation Damage (ZBL)
+```
+type       2 W He
+cutoff     8 4
+n_max      4 4
+basis_size 12 12
+l_max      4 2 0
+neuron     40
+lambda_e   1.0
+lambda_f   1.0
+lambda_v   0.1
+zbl        1.0 2.0
+batch      1000
+population 50
+generation 150000
+```
+- `zbl 1.0 2.0`: blend ZBL repulsion from 1.0 to 2.0 A. Ensures physical short-range repulsion for close atomic encounters.
+
+### Specifying NEP Version
+```
+version    4
+type       3 C H O
+...
+```
+- `version 4` is the current default. Explicitly set if reproducibility with a specific NEP version is needed.
+
 ## Output Files
 
 Training produces:

@@ -131,3 +131,67 @@ run        500000
 - `active 100 0.1`: check disagreement every 100 steps, save if max force difference > 0.1 eV/A.
 - `dump_observer 1000 observe`: write per-potential predictions every 1000 steps.
 - `observe` mode outputs individual potentials; use `average` for averaged predictions.
+
+## Example 6: NEMD Thermal Conductivity (Source-Sink Method)
+
+Non-equilibrium MD with heat source and sink groups.
+
+**Prerequisites**: `model.xyz` must have a `group` column defining at least 3 groups:
+- Group 0: bulk atoms
+- Group 1: heat source slab
+- Group 2: heat sink slab
+
+See `references/model_xyz_format.md` for the extended XYZ format with group columns.
+
+```
+potential  nep.txt
+
+velocity   300
+time_step  1
+
+# Stage 1: Equilibration (NVT, 200 ps)
+ensemble   nvt_nhc 300 300 100
+dump_thermo 1000
+run        200000
+
+# Stage 2: NEMD production (heat_nhc, 2 ns)
+ensemble   heat_nhc 300 300 100 source 1 sink 2
+compute_temperature group_method 0
+dump_thermo 1000
+run        2000000
+```
+
+**Key points:**
+- `heat_nhc 300 300 100 source 1 sink 2`: NHC thermostat at 300 K, source=group 1, sink=group 2.
+- Groups must be defined in `model.xyz` with a `group:I:1` column.
+- `compute_temperature group_method 0` outputs per-group temperatures for the temperature profile.
+- Alternative ensembles: `heat_lan` (Langevin) or `heat_bdp` (BDP) with the same syntax.
+- `compute_temperature` and `dump_thermo` must be re-specified — they reset after each `run`.
+
+## Example 7: Phonon Density of States (DOS)
+
+Vibrational density of states from velocity autocorrelation.
+
+```
+potential  nep.txt
+
+velocity   300
+
+# Stage 1: Equilibration (NVT, 100 ps)
+ensemble   nvt_nhc 300 300 100
+dump_thermo 1000
+run        100000
+
+# Stage 2: NVE production for DOS (200 ps)
+ensemble   nve
+compute_dos 5 200 400 50.0
+dump_thermo 1000
+run        200000
+```
+
+**Key points:**
+- NVE is required for accurate DOS from velocity autocorrelation.
+- `compute_dos 5 200 400 50.0`: sample every 5 steps, 200 correlation points, 400 frequency bins, max 50 THz.
+- Frequency resolution = max_omega / num_omega = 50/400 = 0.125 THz.
+- Correlation time window = 5 x 200 x 1 fs = 1 ps.
+- For species-resolved DOS, append `group_method <idx> group_id <id>`.

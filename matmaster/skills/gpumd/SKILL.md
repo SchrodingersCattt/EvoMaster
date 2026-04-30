@@ -24,8 +24,11 @@ GPUMD is a GPU-native MD package with two executables:
 2. **Two-stage pattern: equilibrate then produce.** Equilibration (NVT/NPT) → production (NVE for transport, or target ensemble). Separate with distinct `run` blocks.
 3. **`compute_*` before its `run`.** Any `compute_hac`, `compute_hnemd`, `compute_shc`, `compute_msd`, `compute_sdc`, `compute_viscosity`, `compute_dos` must appear before the `run` command in the same block.
 4. **`dump_*` before its `run`.** Same rule for `dump_thermo`, `dump_position`, `dump_force`, `dump_dipole`, `dump_polarizability`, `dump_observer`.
-5. **NVE for transport properties.** EMD (`compute_hac`), MSD (`compute_msd`), SHC (`compute_shc`), viscosity (`compute_viscosity`) require `ensemble nve` in the production stage.
+5. **NVE for equilibrium transport properties.** EMD (`compute_hac`), MSD (`compute_msd`), DOS (`compute_dos`), SHC (`compute_shc`), viscosity (`compute_viscosity`) require `ensemble nve` in the production stage. Exception: HNEMD (`compute_hnemd`) uses NVT; NEMD source-sink (`heat_nhc`/`heat_lan`/`heat_bdp`) uses its own thermostatted ensemble.
 6. **NEP: `type` line must list actual species.** `type N El1 El2 ...` where N = number of species, matching `train.xyz` data.
+7. **`model.xyz` must use extended XYZ format.** Header line 2 must contain `lattice="..."` (9 floats, row-major) and `pbc="T T T"`. See `references/model_xyz_format.md`.
+8. **Group columns required for group-based keywords.** If using `source`/`sink` in NEMD ensembles, `compute_temperature group_method`, or group-filtered `compute_*`/`dump_*`, the `model.xyz` must define group columns in Properties.
+9. **`compute_*` and `dump_*` reset after each `run`.** If a second `run` block needs the same compute/dump, re-specify them before that `run`.
 
 ## Bohrium Submission Defaults
 
@@ -41,3 +44,4 @@ GPUMD is a GPU-native MD package with two executables:
 - `references/run_in_keywords.md` — complete keyword reference for `run.in`
 - `references/nep_in_keywords.md` — NEP training parameter reference for `nep.in`
 - `references/input_examples.md` — worked examples for common simulation types
+- `references/model_xyz_format.md` — model.xyz extended XYZ format, group definitions
