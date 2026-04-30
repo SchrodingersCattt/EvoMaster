@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# ``matmaster/exps/``: never auto-commit; optimization agent must not edit in-loop.
-# Human-reviewed proposals go next to the session (see ``PROPOSED_MATMASTER_EXPS_CHANGES_NAME``).
+# ``matmaster/exps/``: optimization agent must not edit; proposals only.
 MATMASTER_EXPS_PREFIX = "matmaster/exps"
 
 # Per-run snapshots live under ``evaluation/<segment>/<session_name>/``; ``index.jsonl`` is under ``<segment>/``.

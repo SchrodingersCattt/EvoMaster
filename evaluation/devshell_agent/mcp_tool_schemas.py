@@ -284,8 +284,8 @@ REPORT_OPTIMIZATION_RESULT_SCHEMA: dict[str, Any] = {
             "type": "array",
             "items": {"type": "string"},
             "description": (
-                "Usually empty; the orchestrator may append SHAs after auto-commit. "
-                "Leave as [] when unknown."
+                "Always empty in proposal-only mode. "
+                "Leave as []."
             ),
         },
         "needs_more_work": {
