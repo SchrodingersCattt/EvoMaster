@@ -482,7 +482,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SA_unit_conversion_001_20260428
+- id: SA_unit_conversion_001_20260430
   capability: scientific_analysis
   domain: agnostic
   intent: Correctly convert energy values between Rydberg and eV units.
@@ -505,21 +505,24 @@ questions:
   - key: total_energy_check
     value:
       filename: energy_ev.json
-      key: total_energy_eV
-      expected: -2159.3
-      tolerance: 1.0
+      checks:
+        - key: total_energy_eV
+          min: -2160.3
+          max: -2158.3
   - key: fermi_energy_check
     value:
       filename: energy_ev.json
-      key: fermi_energy_eV
-      expected: 6.15
-      tolerance: 0.1
+      checks:
+        - key: fermi_energy_eV
+          min: 6.05
+          max: 6.25
   - key: band_gap_check
     value:
       filename: energy_ev.json
-      key: band_gap_eV
-      expected: 1.135
-      tolerance: 0.05
+      checks:
+        - key: band_gap_eV
+          min: 1.085
+          max: 1.185
   - key: turn_budget
     value:
       max: 8
