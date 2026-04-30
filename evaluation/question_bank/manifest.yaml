@@ -99,10 +99,20 @@ banks:
     domain: "agnostic"
     questions: 11
 
-  - path: "input_generation/ig_agnostic_md.yaml"
+  - path: "input_generation/ig_agnostic_lammps.yaml"
     capability: "input_generation"
     domain: "agnostic"
-    questions: 3
+    questions: 1
+
+  - path: "input_generation/ig_agnostic_cp2k.yaml"
+    capability: "input_generation"
+    domain: "agnostic"
+    questions: 1
+
+  - path: "input_generation/ig_agnostic_gromacs.yaml"
+    capability: "input_generation"
+    domain: "agnostic"
+    questions: 1
 
   - path: "safety_refusal/sf_agnostic.yaml"
     capability: "safety_refusal"
@@ -179,4 +189,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 133 questions across 26 active bank files
+# Total: 133 questions across 28 active bank files
