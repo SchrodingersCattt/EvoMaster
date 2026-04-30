@@ -533,13 +533,7 @@ class DevshellAgentLoop:
 
     @staticmethod
     def _optimization_execution_track(delegation: dict[str, Any]) -> str:
-        track = str(delegation.get("execution_track") or "").strip()
-        if track:
-            return track
-        layers = DevshellAgentLoop._candidate_layers_for_delegation(delegation)
-        if layers == ["system_prompt"]:
-            return "proposal_only"
-        return "code_edit"
+        return "proposal_only"
 
     def _record_optimization_proposal_track(
         self,
