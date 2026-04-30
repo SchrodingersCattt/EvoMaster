@@ -19,9 +19,7 @@ def main():
     args = parser.parse_args()
 
     potcar_path = (
-        Path(__file__).resolve().parent.parent
-        / "data"
-        / "potcar_recommend.json"
+        Path(__file__).resolve().parent.parent / "data" / "potcar_recommend.json"
     )
     with open(potcar_path) as f:
         db = json.load(f)
