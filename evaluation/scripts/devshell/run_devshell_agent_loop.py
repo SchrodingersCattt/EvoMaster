@@ -140,26 +140,6 @@ class DevshellAgentLoopCli:
             ),
         )
         p.add_argument(
-            "--enable-optimization-auto-commit",
-            action=argparse.BooleanOptionalAction,
-            default=True,
-            help=(
-                "After each optimization sub-round that reports a result, stage "
-                "product-side paths under the repo (excluding evaluation/ and results/) "
-                "and run git commit. Messages start with chore(devshell): to satisfy "
-                "commit-msg hooks."
-            ),
-        )
-        p.add_argument(
-            "--optimization-auto-commit-skip-budget",
-            action=argparse.BooleanOptionalAction,
-            default=False,
-            help=(
-                "Skip exp_prompt_budget checks before optimization auto-commit "
-                "(when matmaster/exps/*.toml are staged)."
-            ),
-        )
-        p.add_argument(
             "--checklist-permission-mode",
             type=str,
             default="",
@@ -365,10 +345,6 @@ class DevshellAgentLoopCli:
             enable_checklist_agent=bool(args.enable_checklist_agent),
             checklist_permission_mode=str(args.checklist_permission_mode or ""),
             history_root=(repo_root / "evaluation" / "devshell_agent_history"),
-            enable_optimization_auto_commit=bool(args.enable_optimization_auto_commit),
-            optimization_auto_commit_skip_budget=bool(
-                args.optimization_auto_commit_skip_budget
-            ),
         )
 
         print(f"Session directory: {session_dir}", file=sys.stderr)

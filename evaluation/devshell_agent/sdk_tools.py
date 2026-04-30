@@ -130,14 +130,7 @@ class MatmasterEvalMcpToolkit(MatmasterEvalMcpEvalRunMixin):
 
     @staticmethod
     def _optimization_execution_track(args: dict[str, Any]) -> str:
-        layers = [
-            str(x).strip()
-            for x in (args.get("candidate_layers") or [])
-            if str(x).strip()
-        ]
-        if layers == ["system_prompt"]:
-            return "proposal_only"
-        return "code_edit"
+        return "proposal_only"
 
     def _display_path(self, path: Path) -> str:
         repo_root = self._state.repo_root.resolve()

@@ -55,8 +55,6 @@ class AgentLoopConfig:
     enable_checklist_agent: bool = True
     checklist_permission_mode: str = ""
     history_root: Path | None = None
-    enable_optimization_auto_commit: bool = True
-    optimization_auto_commit_skip_budget: bool = False
 
 
 @dataclass
