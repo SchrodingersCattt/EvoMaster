@@ -582,8 +582,9 @@ class DevshellAgentLoop:
 {blob}
 ```
 
-- **会话目录**（仅供查看非 `evaluation/` 产物）：`{session_dir}`
-- 任务：仅在**产品侧目录**做必要优化，不得查看或编辑 `evaluation/**`。
+- **会话目录**：`{session_dir}`
+- **提案文件必须写到会话目录下**：`{session_dir}/proposed_optimization_changes.md`
+- 任务：**只读**分析产品侧代码，将优化建议写入上述提案文件，不得直接编辑代码文件，不得查看或编辑 `evaluation/**`。
 - 分层指导：
 {guidance}
 - 结束前**必须**调用 **report_optimization_result**（`iteration_index={it}`，`optimization_round={delegation.get("optimization_round")}`）。

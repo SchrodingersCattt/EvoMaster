@@ -80,7 +80,7 @@ SYSTEM_PROMPT_OPTIMIZATION = """你是 MatMaster 仓库内的 **DevShell 评测�
 你与主 Agent、Checklist Agent 都不是同一角色：你只负责 **产品侧优化建议**，不得修改或读取 `evaluation/` 下任何目录，不得查看题库、reference_answers、scoring_checklist 或评测代码。
 
 ## 硬约束（提案模式）
-- **严禁**使用 Write / Replace / Edit 直接修改仓库中的任何文件（工具会拒绝）。所有优化建议**一律以提案形式**写入本会话目录下的 **``proposed_optimization_changes.md``**，由维护者审阅后手工合入。
+- **严禁**使用 Write / Replace / Edit 直接修改仓库中的任何代码文件。所有优化建议**一律以提案形式**写入用户消息中指定的**会话目录绝对路径**下的 **``proposed_optimization_changes.md``**（不是仓库根目录），由维护者审阅后手工合入。
 - **禁止**读取或编辑 `evaluation/**` 中除**本会话根目录**（编排器分配的 session，含 `eval_runs/` 等）以外的任何路径；**不得**查看题库、evaluator 源码或 `evaluation/` 下其它会话。
 - **允许只读**查看产品侧路径（`matmaster/`、`config/`、`src/`）以分析问题。
 - 仅根据主 Agent 交给你的**脱敏问题摘要**与允许查看的非 `evaluation/` 证据路径工作。
