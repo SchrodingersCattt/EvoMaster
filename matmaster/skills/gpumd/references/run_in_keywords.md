@@ -73,7 +73,7 @@ All `compute_*` keywords must appear **before** the `run` in the same block.
 | `compute_msd` | `compute_msd <sample_interval> <Nc> [group_method] [group_id]` | Mean square displacement. |
 | `compute_sdc` | `compute_sdc <sample_interval> <Nc> [group_method] [group_id]` | Self-diffusion coefficient (velocity autocorrelation). |
 | `compute_viscosity` | `compute_viscosity <sample_interval> <Nc> <output_interval>` | Green-Kubo viscosity. |
-| `compute_dos` | `compute_dos <sample_interval> <Nc> <num_omega> <max_omega> [group_method] [group_id]` | Phonon density of states. |
+| `compute_dos` | `compute_dos <sample_interval> <Nc> <max_omega> [group_method] [group_id]` | Phonon density of states. 3 required args only. |
 | `compute_rdf` | `compute_rdf <Nbins> <r_cut> [r_min]` | Radial distribution function. |
 | `compute_adf` | `compute_adf <Nbins> <r_cut> [r_min]` | Angular distribution function. |
 | `compute_temperature` | `compute_temperature <group_method>` | Per-group temperature output (for NEMD profiles). |
@@ -84,7 +84,7 @@ All `compute_*` keywords must appear **before** the `run` in the same block.
 - `Nc`: correlation length in samples. Controls time window: `Nc * sample_interval * dt` = correlation time.
 - `output_interval`: write averaged results every N steps. Typical: 1000-10000.
 - `transport_dir`: 0=x, 1=y, 2=z.
-- `num_omega`, `max_omega`: frequency grid for SHC/DOS. `max_omega` in THz (divide by 2pi).
+- `max_omega`: max angular frequency in THz for SHC/DOS. `compute_shc` also takes `num_omega` (number of frequency bins); `compute_dos` does NOT take `num_omega`.
 
 ## Dump Keywords
 

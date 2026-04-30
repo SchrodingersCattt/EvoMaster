@@ -184,14 +184,14 @@ run        100000
 
 # Stage 2: NVE production for DOS (200 ps)
 ensemble   nve
-compute_dos 5 200 400 50.0
+compute_dos 5 200 50.0
 dump_thermo 1000
 run        200000
 ```
 
 **Key points:**
 - NVE is required for accurate DOS from velocity autocorrelation.
-- `compute_dos 5 200 400 50.0`: sample every 5 steps, 200 correlation points, 400 frequency bins, max 50 THz.
+- `compute_dos 5 200 50.0`: sample every 5 steps, 200 correlation points, max 50 THz. Only 3 required args — no `num_omega` parameter.
 - Frequency resolution = max_omega / num_omega = 50/400 = 0.125 THz.
 - Correlation time window = 5 x 200 x 1 fs = 1 ps.
 - For species-resolved DOS, append `group_method <idx> group_id <id>`.
