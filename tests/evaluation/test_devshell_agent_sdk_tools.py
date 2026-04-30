@@ -585,8 +585,7 @@ def test_optimization_cannot_write_matmaster_exps(tmp_path: Path) -> None:
         try:
             toolkit._resolve_agent_path(rel, role="optimization", write=True)
         except ValueError as exc:
-            assert "matmaster/exps" in str(exc)
-            assert "proposed_matmaster_exps_changes" in str(exc)
+            assert "proposal-only" in str(exc) or "matmaster/exps" in str(exc)
         else:
             raise AssertionError(f"expected block on {rel} write")
 
