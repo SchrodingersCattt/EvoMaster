@@ -1,6 +1,6 @@
 ---
 name: vasp
-description: "Use this skill for VASP input file generation tasks: INCAR, KPOINTS, POSCAR preparation. Covers SCF, relaxation, band structure, DOS, MD, hybrid DFT, SOC, magnetism, DFT+U, optical, NEB, and more."
+description: "Use this skill for any VASP-related task: running VASP examples, input file generation (INCAR, KPOINTS, POSCAR), submitting VASP jobs to Bohrium, and VASP workflow guidance. Covers SCF, relaxation, band structure, DOS, MD, hybrid DFT, SOC, magnetism, DFT+U, optical, NEB, and more."
 skill_type: operator
 ---
 
@@ -53,8 +53,12 @@ recommended pseudopotentials but do not generate the file.
 - **DFT+U**: `LDAU = .TRUE.`, `LDAUTYPE = 2` (Dudarev), `LDAUL`, `LDAUU`,
   `LDAUJ` arrays matching species order in POSCAR.
 - **Meta-GGA (SCAN/R2SCAN)**: `LASPH = .TRUE.` is required.
-- **POTCAR note**: Always state recommended PAW pseudopotentials (e.g.,
-  `Al`, `Si`, `O`, `Fe_pv`, `Ti_sv`) but do not generate the file.
+- **POTCAR must exist before submission.** VASP cannot run without POTCAR.
+  Before submitting a Bohrium job, verify POTCAR is present in the input
+  directory. If the user has not provided POTCAR, do NOT submit — instead
+  inform them that POTCAR is required (license-restricted, cannot be
+  auto-generated). State recommended PAW pseudopotentials (e.g.,
+  `Al`, `Si`, `O`, `Fe_pv`, `Ti_sv`) so they know what to prepare.
 
 ## K-point Rules
 
