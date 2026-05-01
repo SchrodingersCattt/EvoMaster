@@ -36,7 +36,6 @@ class QuestionTag(StrEnum):
     phy_magnetism = 'phy_magnetism'
     chem_co2rr = 'chem_co2rr'
     chem_her = 'chem_her'
-    catalysis_lab = 'catalysis_lab'
     chem_electrolyte = 'chem_electrolyte'
     mat_perovskite = 'mat_perovskite'
     mat_hea = 'mat_hea'
