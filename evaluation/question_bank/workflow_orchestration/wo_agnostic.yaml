@@ -1406,7 +1406,6 @@ questions:
     '
   tags:
   - code_mlip
-  - code_dpa
   - wf_report
   - phy_surface
   data_files: []
@@ -1710,7 +1709,6 @@ questions:
     '
   tags:
   - code_mlip
-  - code_dpa
   - phy_defect
   - phy_surface
   data_files: []
@@ -1784,7 +1782,6 @@ questions:
     '
   tags:
   - code_mlip
-  - code_dpa
   - phy_elastic
   - phy_surface
   data_files: []
@@ -1864,7 +1861,6 @@ questions:
     \ query 输入梳理、mock 后处理过程、结果与改进建议。\n\n最终回答请给出：本次微调是否满足继续下游验证的最低条件。\n"
   tags:
   - meta_userlog
-  - code_dpa
   - code_mlip
   data_files: []
   reference_answers:
@@ -1961,7 +1957,6 @@ questions:
     '
   tags:
   - code_mlip
-  - code_dpa
   - phy_phonon
   - phy_surface
   data_files: []
@@ -2039,7 +2034,6 @@ questions:
     '
   tags:
   - code_mlip
-  - code_dpa
   - phy_md
   - phy_surface
   data_files: []
@@ -2112,7 +2106,6 @@ questions:
     \ query 输入梳理、mock 后处理的两阶段流程、关键参数与不确定性。\n\n最终回答中请简要说明：检索到的结构与声子结果是否相互一致。\n"
   tags:
   - code_mlip
-  - code_dpa
   - phy_surface
   - phy_phonon
   - meta_userlog
@@ -2214,7 +2207,6 @@ questions:
     \ 输入梳理、mock 后处理流程、关键观察与误差来源。\n\n最终回答中简要确认是否满足 300 K / 1 ps / 1 fs 三个条件。\n"
   tags:
   - code_mlip
-  - code_dpa
   - phy_md
   - phy_surface
   - meta_userlog
