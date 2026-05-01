@@ -108,7 +108,7 @@ relax_nmax      100
 kspacing        0.10
 ```
 
-For magnetic systems (e.g., Fe vacancy): add `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5`.
+For magnetic systems, add `nspin 2` and tune mixing parameters (`mixing_beta`, `mixing_ndim`, `mixing_gg0`) for convergence.
 
 > Remember: `ntype` in INPUT must include the ghost species.
 

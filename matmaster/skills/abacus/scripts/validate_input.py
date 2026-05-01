@@ -168,9 +168,9 @@ def validate_workspace(workspace: Path) -> list[str]:
                         messages.append(
                             f"WARN {prefix}: ecutwfc={ecutwfc} is low for LCAO (standard: 100)."
                         )
-                    elif basis == "pw" and ecutwfc < 15:
+                    elif basis == "pw" and ecutwfc < 30:
                         messages.append(
-                            f"WARN {prefix}: ecutwfc={ecutwfc} is unusually low for PW (even low-cost benchmarks typically use ≥15)."
+                            f"WARN {prefix}: ecutwfc={ecutwfc} is low for PW (standard: 50+). If this is a low-cost benchmark, this may be intentional."
                         )
                 except ValueError:
                     pass

@@ -54,7 +54,7 @@ relax_nmax 100
 ```
 > **Critical**: `cal_force 1` and `cal_stress 1` are BOTH mandatory for cell-relax. Without `cal_force 1`, ABACUS does not compute forces and the optimizer cannot work. Without `cal_stress 1`, cell vectors are not optimized. These are NOT implied by `calculation cell-relax` — you must include them explicitly.
 
-### Vacancy / BSSE Ghost Atom INPUT Example
+### BSSE Ghost Atom INPUT Example (Bulk / Supercell)
 ```
 INPUT_PARAMETERS
 calculation scf
@@ -64,31 +64,16 @@ scf_thr 1.0e-7
 scf_nmax 100
 smearing_method gauss
 smearing_sigma 0.01
-nspin 2
-mixing_beta 0.1
-mixing_ndim 20
-mixing_gg0 1.5
 kspacing 0.10
 ```
-> **Critical**: Use `kspacing` (not a KPT file) for supercell/vacancy/BSSE calculations. For magnetic systems (Fe vacancy), include `nspin 2` and mixing parameters. `scf_nmax 100` is the standard value — do not increase to 200 unless the system is known to have convergence difficulties.
+> Use `kspacing` (not a KPT file) for supercell/vacancy/BSSE calculations.
+> For magnetic systems, add `nspin 2` and tune mixing parameters (`mixing_beta`, `mixing_ndim`, `mixing_gg0`) for convergence.
 
-### Slab BSSE Ghost Atom INPUT Example
+### BSSE Ghost Atom INPUT Example (Slab)
+Same as above, but set the vacuum direction of kspacing to `1.00`:
 ```
-INPUT_PARAMETERS
-calculation scf
-basis_type lcao
-ecutwfc 100
-scf_thr 1.0e-7
-scf_nmax 100
-smearing_method gauss
-smearing_sigma 0.01
-nspin 2
-mixing_beta 0.1
-mixing_ndim 20
-mixing_gg0 1.5
 kspacing 0.10 0.10 1.00
 ```
-> For slab BSSE calculations: set the vacuum direction of kspacing to `1.00`.
 
 ### Work Function / Electrostatic Potential INPUT Example
 ```
@@ -285,21 +270,14 @@ When generating multiple INPUT files for a comparative study (surface energy, va
 3. **Task-specific mandatory params still apply**: a `cell-relax` INPUT inside a multi-file set still needs `cal_force 1`, `cal_stress 1`, `force_thr_ev`, `stress_thr`, `relax_nmax`. A `relax` INPUT still needs `cal_force 1`, `force_thr_ev`, `relax_nmax`. **These are NEVER implied by `calculation`** — you must write them explicitly.
 4. **Recommended standard values** for consistency: `scf_thr 1.0e-7`, `smearing_method gauss`, `smearing_sigma 0.01`.
 
-## Low-Cost / Benchmark Mode Parameter Ranges (PW)
+## Low-Cost / Benchmark Mode Guidance (PW)
 
-When a task requests "low-cost", "benchmark", or "minimal cost" parameters for PW calculations:
+When a task requests "low-cost", "benchmark", or "minimal cost" parameters:
 
-| Parameter | Acceptable Range | Recommended | NEVER Use |
-|-----------|-----------------|-------------|-----------|
-| `ecutwfc` | 15–30 Ry | 20 Ry | ≥ 50 Ry (that's production, not low-cost) |
-| `scf_thr` | 1.0e-6 to 1.0e-7 | 1.0e-7 | > 1.0e-5 |
-| `stress_thr` (cell-relax) | 0.5–1.0 | 0.5 | > 1.0 |
-| `force_thr_ev` | 0.01–0.05 | 0.02 | > 0.1 |
-| `relax_nmax` | ≥ 50 | 100 | < 50 |
-| `smearing_sigma` | 0.01–0.02 | 0.015 | > 0.05 |
-
-> "Low-cost" means reducing `ecutwfc` and k-points. It does NOT mean
-> relaxing convergence thresholds to unphysical values.
+- **`ecutwfc`**: reduce significantly from the production default (e.g. use roughly 1/3 to 1/2 of the standard 50 Ry). The exact value depends on the pseudopotential.
+- **k-points**: reduce density or use Gamma-only where the task allows.
+- **Convergence thresholds** (`scf_thr`, `stress_thr`, `force_thr_ev`): keep at physically reasonable values — "low-cost" means cheaper basis, not looser convergence.
+- **`relax_nmax`**: keep ≥ 50 to ensure the optimizer has enough steps.
 
 ---
 

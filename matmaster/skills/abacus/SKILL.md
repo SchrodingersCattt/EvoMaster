@@ -51,7 +51,7 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
   `http://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html`.
 - Typical production defaults are acceptable, but task requirements override defaults.
 - If the task specifies cutoffs or convergence policy, follow the task first.
-- **Low-cost / benchmark mode**: when the task requests "low-cost", "benchmark", or "minimal cost" parameters, use reduced `ecutwfc` (15–25 Ry for PW) instead of the standard 50 Ry default.
+- **Low-cost / benchmark mode**: when the task requests "low-cost", "benchmark", or "minimal cost" parameters, significantly reduce `ecutwfc` from production defaults. See `references/input_examples.md` for guidance.
 - Keep multi-file studies (EOS/surface/vacancy comparisons) consistent on core numerics.
 
 ## Task-Specific Deltas
