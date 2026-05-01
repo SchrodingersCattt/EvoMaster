@@ -16,19 +16,19 @@ slices:
   - target: "Skill: vasp"
     type: skill
     slices:
-      - "@vasp"
+      - "@eng_vasp"
     count: 24
 
   - target: "Skill: abacus"
     type: skill
     slices:
-      - "@abacus"
+      - "@eng_abacus"
     count: 13
 
   - target: "Skill: gpumd"
     type: skill
     slices:
-      - "@gpumd"
+      - "@eng_gpumd"
     count: 11
 
   - target: "Skill: mlips"
@@ -65,19 +65,19 @@ slices:
   - target: "Skill: cp2k"
     type: skill
     slices:
-      - "@cp2k"
+      - "@eng_cp2k"
     count: 1
 
   - target: "Skill: lammps"
     type: skill
     slices:
-      - "@lammps"
+      - "@eng_lammps"
     count: 1
 
   - target: "Skill: gromacs"
     type: skill
     slices:
-      - "@gromacs"
+      - "@eng_gromacs"
     count: 1
 
   # ── Tools ───────────────────────────────────────────────────────────

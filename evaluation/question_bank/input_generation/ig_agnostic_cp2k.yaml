@@ -18,7 +18,7 @@ questions:
 
     输出文件名为 `cp2k.inp`。'
   tags:
-  - cp2k
+  - eng_cp2k
   data_files: []
   reference_answers:
   - key: input_artifact

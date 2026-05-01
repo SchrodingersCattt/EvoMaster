@@ -20,7 +20,7 @@ questions:
 
     输出文件名为 `em.mdp`。'
   tags:
-  - gromacs
+  - eng_gromacs
   data_files: []
   reference_answers:
   - key: input_artifact

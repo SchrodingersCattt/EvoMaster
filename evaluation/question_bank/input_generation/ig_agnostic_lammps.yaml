@@ -21,7 +21,7 @@ questions:
 
     输出文件名为 `in.lammps`。'
   tags:
-  - lammps
+  - eng_lammps
   data_files: []
   reference_answers:
   - key: input_artifact

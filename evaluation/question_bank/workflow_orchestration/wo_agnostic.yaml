@@ -89,7 +89,7 @@ questions:
     \n最终回答中请简要总结 Al 与 O 的电荷转移方向，并标注为 mock 后处理结果。\n"
   tags:
   - phy_surface
-  - abacus
+  - eng_abacus
   - meta_userlog
   data_files: []
   reference_answers:
@@ -827,7 +827,7 @@ questions:
 
     '
   tags:
-  - abacus
+  - eng_abacus
   - phy_defect
   - log_diagnosis
   data_files: []
@@ -1108,7 +1108,7 @@ questions:
     \ `calculation_settings`；\n2) `gaas_elastic_abacus_report.md`：说明 query 输入梳理、mock 后处理流程与不确定性。\n\
     \n最终回答中简要给出 C11/C12/C44 与体模量。\n"
   tags:
-  - abacus
+  - eng_abacus
   - phy_elastic
   - phy_surface
   - meta_userlog
@@ -2435,7 +2435,7 @@ questions:
 
     输出三个文件：`tio2_bulk.cif`（体相）、`tio2_110_slab.cif`（slab）、`INCAR`。'
   tags:
-  - vasp
+  - eng_vasp
   - phy_surface
   - meta_database
   data_files: []

@@ -10,7 +10,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 Lu4N4 体系生成一个能带结构计算的 VASP INCAR 文件。要求：非自洽计算，从已有电荷密度读取，输出投影能带。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - phy_electronic
   data_files:
   - key: task_spec
@@ -132,7 +132,7 @@ questions:
 
     '
   tags:
-  - vasp
+  - eng_vasp
   - log_diagnosis
   - mat_perovskite
   - mat_semiconductor
@@ -254,7 +254,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 ErNaO3 生成一个结构弛豫(relaxation)计算的 VASP INCAR。需要同时优化离子位置和晶胞参数。Er 含 f 电子，需要自旋极化。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - log_diagnosis
   - mat_perovskite
   - phy_magnetism
@@ -378,7 +378,7 @@ questions:
 
     '
   tags:
-  - vasp
+  - eng_vasp
   - hybrid_functional
   - mat_mof
   data_files:
@@ -499,7 +499,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为含稀土和过渡金属的氧化物 RbPmMo2O8 生成一个 DFT+U 计算的 VASP INCAR。需要对 Mo 的 d 轨道施加 Hubbard U 校正。元素顺序为 Rb, Pm, Mo, O。体系为磁性体系。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - phy_magnetism
   data_files:
   - key: task_spec
@@ -621,7 +621,7 @@ questions:
 
     '
   tags:
-  - vasp
+  - eng_vasp
   - hybrid_functional
   - wf_sweep
   - phy_magnetism
@@ -735,7 +735,7 @@ questions:
 
     '
   tags:
-  - vasp
+  - eng_vasp
   - phy_md
   - phy_magnetism
   data_files:
@@ -876,7 +876,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 BaZrO3 生成一个弹性常数计算的 VASP INCAR。使用有限差分法计算弹性张量，位移幅度 0.015 A。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - phy_elastic
   - wf_inputs
   - mat_perovskite
@@ -1000,7 +1000,7 @@ questions:
 
     '
   tags:
-  - vasp
+  - eng_vasp
   - wf_inputs
   data_files:
   - key: task_spec
@@ -1112,7 +1112,7 @@ questions:
 
     '
   tags:
-  - vasp
+  - eng_vasp
   - phy_electronic
   - phy_magnetism
   data_files:
@@ -1255,7 +1255,7 @@ questions:
 
     '
   tags:
-  - vasp
+  - eng_vasp
   - phy_electronic
   data_files:
   - key: task_spec
@@ -1375,7 +1375,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。Fe 含磁性，需要固定总磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - hybrid_functional
   - phy_magnetism
   data_files:
@@ -1506,7 +1506,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元碳化物表面 (Ta,V)2C (C33O2Ta16V16) 生成一个表面弛豫计算的 VASP INCAR。表面计算需要固定晶胞形状，体系为金属。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - phy_surface
   - log_diagnosis
   - phy_electronic
@@ -1638,7 +1638,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为氢钝化的 SiO2 slab 模型 H16O24Si12 生成一个静态计算的 VASP INCAR。体系是绝缘体 slab，需要固定晶胞形状。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - phy_surface
   - phy_electronic
   data_files:
@@ -1759,7 +1759,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 BiSI 中 I 替位 S 缺陷体系生成一个 HSE06+SOC 缺陷计算的 VASP INCAR。含重元素 Bi 需要自旋轨道耦合，缺陷计算需要固定晶胞形状，使用 HSE06 获取准确缺陷能级。需要离子弛豫。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - phy_defect
   - hybrid_functional
   - phy_electronic
@@ -1893,7 +1893,7 @@ questions:
 
     '
   tags:
-  - vasp
+  - eng_vasp
   - wf_inputs
   - phy_magnetism
   data_files:
@@ -2014,7 +2014,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为简单金属 Al (FCC) 生成一个高精度结构优化的 VASP INCAR，作为后续光学计算的前驱步骤。需要高精度设置和完全优化晶胞参数。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - wf_inputs
   - log_diagnosis
   - phy_electronic
@@ -2146,7 +2146,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为双钙钛矿 Ca4TaOs 生成一个磁性自洽(SCF)计算的 VASP INCAR。体系含 5d 过渡金属(Ta, Os)，需要自旋极化和适当的初始磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - phy_magnetism
   - log_diagnosis
   - mat_perovskite
@@ -2268,7 +2268,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为硼酸铯 B12Cs4O20 生成一个非磁性绝缘体的静态 SCF 计算 VASP INCAR。体系为非磁性，宽带隙绝缘体。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - log_diagnosis
   - phy_electronic
   data_files:
@@ -2389,7 +2389,7 @@ questions:
     '
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元硒化物 Na3AlSe 生成一个磁性金属体系的静态 SCF 计算 VASP INCAR。体系为磁性金属，需要投影态密度。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
-  - vasp
+  - eng_vasp
   - phy_magnetism
   - log_diagnosis
   data_files:

@@ -24,7 +24,7 @@ questions:
 
     '
   tags:
-  - abacus
+  - eng_abacus
   - phy_surface
   data_files:
   - key: base_slab
@@ -226,7 +226,7 @@ questions:
 
     '
   tags:
-  - abacus
+  - eng_abacus
   - electrostatics
   - phy_surface
   data_files:
@@ -392,7 +392,7 @@ questions:
 
     '
   tags:
-  - abacus
+  - eng_abacus
   - electrostatics
   - phy_surface
   data_files:
@@ -574,7 +574,7 @@ questions:
 
     '
   tags:
-  - abacus
+  - eng_abacus
   - phy_defect
   priority: P0
   data_files:
@@ -761,7 +761,7 @@ questions:
 
     '
   tags:
-  - abacus
+  - eng_abacus
   - phy_surface
   - wf_inputs
   data_files:
@@ -1000,7 +1000,7 @@ questions:
 
     '
   tags:
-  - abacus
+  - eng_abacus
   - phy_defect
   - wf_inputs
   data_files:

@@ -12,7 +12,7 @@ questions:
   - wf_inputs
   - phy_md
   - mat_2d
-  - gpumd
+  - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
@@ -48,7 +48,7 @@ questions:
   - wf_inputs
   - phy_md
   - mat_2d
-  - gpumd
+  - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
@@ -84,7 +84,7 @@ questions:
   - wf_inputs
   - phy_md
   - mat_2d
-  - gpumd
+  - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
@@ -122,7 +122,7 @@ questions:
   - wf_inputs
   - phy_md
   - mat_semiconductor
-  - gpumd
+  - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
@@ -162,7 +162,7 @@ questions:
   - wf_inputs
   - wf_sweep
   - phy_md
-  - gpumd
+  - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
@@ -197,7 +197,7 @@ questions:
   - code_mlip
   - wf_inputs
   - phy_md
-  - gpumd
+  - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
@@ -234,7 +234,7 @@ questions:
   - code_mlip
   - wf_inputs
   - phy_md
-  - gpumd
+  - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
@@ -272,7 +272,7 @@ questions:
   - wf_inputs
   - phy_md
   - wf_sweep
-  - gpumd
+  - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
@@ -309,7 +309,7 @@ questions:
   - wf_inputs
   - phy_md
   - wf_sweep
-  - gpumd
+  - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
@@ -345,7 +345,7 @@ questions:
   - code_mlip
   - wf_inputs
   - phy_md
-  - gpumd
+  - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
@@ -397,7 +397,7 @@ questions:
   - code_mlip
   - wf_inputs
   - phy_md
-  - gpumd
+  - eng_gpumd
   data_files:
   - key: train_xyz
     path: data/IG_nep_001_20260428/train.xyz

@@ -497,7 +497,7 @@ questions:
 
     输出文件名为 `INCAR`。'
   tags:
-  - vasp
+  - eng_vasp
   data_files:
   - key: run_spec
     path: data/EC_spec_partial_001/run_spec.json
@@ -569,7 +569,7 @@ questions:
 
     注意：输出文件名必须严格为 `POSCAR`（全大写），不是 `poscar` 或其他变体。'
   tags:
-  - vasp
+  - eng_vasp
   data_files: []
   reference_answers:
   - key: output_artifact
