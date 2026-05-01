@@ -16,7 +16,9 @@ slices:
     slices:
       - input_generation@vasp
       - workflow_orchestration@vasp
-    count: 21
+      - execution_contract@vasp
+      - scientific_analysis@vasp
+    count: 24
 
   - target: "Skill: abacus"
     type: skill
@@ -37,7 +39,8 @@ slices:
       - workflow_orchestration@code_mlip
       - input_generation@code_mlip
       - input_generation@code_dpa
-    count: 24
+      - workflow_orchestration@code_dpa
+    count: 32
 
   - target: "Skill: atomic-structure"
     type: skill
@@ -50,14 +53,18 @@ slices:
     slices:
       - structure_construction@phy_surface
       - workflow_orchestration@phy_surface
-    count: 35
+      - batch_processing@phy_surface
+      - input_generation@phy_surface
+      - structure_retrieval@phy_surface
+    count: 44
 
   - target: "Skill: xrd + checkcif"
     type: skill
     slices:
       - scientific_analysis@char_xrd
       - scientific_analysis@char_cif_validation
-    count: 5
+      - structure_construction@char_xrd
+    count: 6
 
   - target: "Skill: data-analysis"
     type: skill
@@ -97,7 +104,9 @@ slices:
       - batch_processing
       - workflow_orchestration@wf_batch
       - workflow_orchestration@wf_sweep
-    count: 8
+      - execution_contract@wf_batch
+      - input_generation@wf_sweep
+    count: 13
 
   # ── Prompts ─────────────────────────────────────────────────────────
 
@@ -140,11 +149,14 @@ slices:
     slices:
       - structure_construction@phy_defect
       - workflow_orchestration@phy_defect
-    count: 6
+      - input_generation@phy_defect
+      - scientific_analysis@phy_defect
+    count: 11
 
   - target: "Cross: MD workflow"
     type: cross
     slices:
       - input_generation@phy_md
       - workflow_orchestration@phy_md
-    count: 16
+      - structure_construction@phy_md
+    count: 17
