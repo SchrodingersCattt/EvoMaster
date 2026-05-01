@@ -64,6 +64,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -185,6 +188,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -304,6 +310,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -424,6 +433,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -541,6 +553,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -656,6 +671,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -784,6 +802,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -911,6 +932,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -1024,6 +1048,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -1152,6 +1179,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -1279,6 +1309,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -1403,6 +1436,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -1532,6 +1568,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -1654,6 +1693,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -1779,6 +1821,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -1903,6 +1948,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -2028,6 +2076,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -2151,6 +2202,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -2269,6 +2323,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -2393,6 +2450,9 @@ questions:
   - key: token_budget_total
     value:
       max: 15000
+  - key: reasonable_params
+    value:
+      filename: INCAR
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
