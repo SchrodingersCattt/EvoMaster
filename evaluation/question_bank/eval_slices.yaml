@@ -16,7 +16,7 @@ slices:
     slices:
       - input_generation@vasp
       - workflow_orchestration@vasp
-    count: 24
+    count: 21
 
   - target: "Skill: abacus"
     type: skill
@@ -50,14 +50,14 @@ slices:
     slices:
       - structure_construction@phy_surface
       - workflow_orchestration@phy_surface
-    count: 44
+    count: 35
 
   - target: "Skill: xrd + checkcif"
     type: skill
     slices:
       - scientific_analysis@char_xrd
       - scientific_analysis@char_cif_validation
-    count: 4
+    count: 5
 
   - target: "Skill: data-analysis"
     type: skill
@@ -89,7 +89,7 @@ slices:
     type: tool
     slices:
       - structure_retrieval
-    count: 8
+    count: 9
 
   - target: "Tool: Bohrium batch/sweep"
     type: tool
@@ -97,7 +97,7 @@ slices:
       - batch_processing
       - workflow_orchestration@wf_batch
       - workflow_orchestration@wf_sweep
-    count: 13
+    count: 8
 
   # ── Prompts ─────────────────────────────────────────────────────────
 
@@ -140,11 +140,11 @@ slices:
     slices:
       - structure_construction@phy_defect
       - workflow_orchestration@phy_defect
-    count: 11
+    count: 6
 
   - target: "Cross: MD workflow"
     type: cross
     slices:
       - input_generation@phy_md
       - workflow_orchestration@phy_md
-    count: 17
+    count: 16
