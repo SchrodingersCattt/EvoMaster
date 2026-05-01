@@ -285,6 +285,24 @@ When generating multiple INPUT files for a comparative study (surface energy, va
 3. **Task-specific mandatory params still apply**: a `cell-relax` INPUT inside a multi-file set still needs `cal_force 1`, `cal_stress 1`, `force_thr_ev`, `stress_thr`, `relax_nmax`. A `relax` INPUT still needs `cal_force 1`, `force_thr_ev`, `relax_nmax`. **These are NEVER implied by `calculation`** — you must write them explicitly.
 4. **Recommended standard values** for consistency: `scf_thr 1.0e-7`, `smearing_method gauss`, `smearing_sigma 0.01`.
 
+## Low-Cost / Benchmark Mode Parameter Ranges (PW)
+
+When a task requests "low-cost", "benchmark", or "minimal cost" parameters for PW calculations:
+
+| Parameter | Acceptable Range | Recommended | NEVER Use |
+|-----------|-----------------|-------------|-----------|
+| `ecutwfc` | 15–30 Ry | 20 Ry | ≥ 50 Ry (that's production, not low-cost) |
+| `scf_thr` | 1.0e-6 to 1.0e-7 | 1.0e-7 | > 1.0e-5 |
+| `stress_thr` (cell-relax) | 0.5–1.0 | 0.5 | > 1.0 |
+| `force_thr_ev` | 0.01–0.05 | 0.02 | > 0.1 |
+| `relax_nmax` | ≥ 50 | 100 | < 50 |
+| `smearing_sigma` | 0.01–0.02 | 0.015 | > 0.05 |
+
+> "Low-cost" means reducing `ecutwfc` and k-points. It does NOT mean
+> relaxing convergence thresholds to unphysical values.
+
+---
+
 ## File Reference Rule — CRITICAL
 
 **Every non-default filename must be explicitly referenced in INPUT.** Common mistakes:
