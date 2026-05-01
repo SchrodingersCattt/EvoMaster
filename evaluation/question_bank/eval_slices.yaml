@@ -4,10 +4,6 @@
 #   capability = question_bank subdirectory (input_generation, workflow_orchestration, …)
 #   tag        = question-level tag used to filter (vasp, abacus, code_mlip, …)
 #   When no @tag, the entire capability directory is the slice.
-#
-# quick_slices:  minimum set for fast iteration feedback
-# full_slices:   quick + additional slices for comprehensive validation
-#                "same" means full == quick (no extra slices)
 
 version: "v1"
 
@@ -17,188 +13,138 @@ slices:
 
   - target: "Skill: vasp"
     type: skill
-    quick_slices:
-      - input_generation@vasp
-    quick_count: 20
-    full_slices:
+    slices:
       - input_generation@vasp
       - workflow_orchestration@vasp
-    full_count: 24
+    count: 24
 
   - target: "Skill: abacus"
     type: skill
-    quick_slices:
-      - input_generation@abacus
-    quick_count: 6
-    full_slices:
+    slices:
       - input_generation@abacus
       - workflow_orchestration@abacus
-    full_count: 13
+    count: 13
 
   - target: "Skill: gpumd"
     type: skill
-    quick_slices:
+    slices:
       - input_generation@gpumd
-    quick_count: 11
-    full_slices: same
-    full_count: 11
+    count: 11
 
   - target: "Skill: mlips"
     type: skill
-    quick_slices:
-      - workflow_orchestration@code_mlip
-    quick_count: 13
-    full_slices:
+    slices:
       - workflow_orchestration@code_mlip
       - input_generation@code_mlip
       - input_generation@code_dpa
-    full_count: 24
+    count: 24
 
   - target: "Skill: atomic-structure"
     type: skill
-    quick_slices:
+    slices:
       - structure_construction
-    quick_count: 11
-    full_slices: same
-    full_count: 11
+    count: 11
 
   - target: "Skill: tasker-polar-surface"
     type: skill
-    quick_slices:
-      - structure_construction@phy_surface
-    quick_count: 5
-    full_slices:
+    slices:
       - structure_construction@phy_surface
       - workflow_orchestration@phy_surface
-    full_count: 44
+    count: 44
 
   - target: "Skill: xrd + checkcif"
     type: skill
-    quick_slices:
+    slices:
       - scientific_analysis@char_xrd
       - scientific_analysis@char_cif_validation
-    quick_count: 4
-    full_slices: same
-    full_count: 4
+    count: 4
 
   - target: "Skill: data-analysis"
     type: skill
-    quick_slices:
+    slices:
       - data_diagnosis
-    quick_count: 3
-    full_slices: same
-    full_count: 3
+    count: 3
 
   - target: "Skill: cp2k"
     type: skill
-    quick_slices:
+    slices:
       - input_generation@cp2k
-    quick_count: 1
-    full_slices: same
-    full_count: 1
+    count: 1
 
   - target: "Skill: lammps"
     type: skill
-    quick_slices:
+    slices:
       - input_generation@lammps
-    quick_count: 1
-    full_slices: same
-    full_count: 1
+    count: 1
 
   - target: "Skill: gromacs"
     type: skill
-    quick_slices:
+    slices:
       - input_generation@gromacs
-    quick_count: 1
-    full_slices: same
-    full_count: 1
+    count: 1
 
   # ── Tools ───────────────────────────────────────────────────────────
 
   - target: "Tool: mcp-mat-struct-db"
     type: tool
-    quick_slices:
-      - structure_retrieval@meta_database
-    quick_count: 7
-    full_slices:
+    slices:
       - structure_retrieval
-    full_count: 8
+    count: 8
 
   - target: "Tool: Bohrium batch/sweep"
     type: tool
-    quick_slices:
-      - batch_processing
-    quick_count: 4
-    full_slices:
+    slices:
       - batch_processing
       - workflow_orchestration@wf_batch
       - workflow_orchestration@wf_sweep
-    full_count: 13
+    count: 13
 
   # ── Prompts ─────────────────────────────────────────────────────────
 
   - target: "Prompt: safety"
     type: prompt
-    quick_slices:
+    slices:
       - safety_refusal
-    quick_count: 6
-    full_slices: same
-    full_count: 6
+    count: 6
 
   - target: "Prompt: execution contract"
     type: prompt
-    quick_slices:
+    slices:
       - execution_contract
-    quick_count: 9
-    full_slices: same
-    full_count: 9
+    count: 9
 
   - target: "Prompt: scientific analysis"
     type: prompt
-    quick_slices:
+    slices:
       - scientific_analysis
-    quick_count: 7
-    full_slices: same
-    full_count: 7
+    count: 7
 
   # ── Cross-cutting ───────────────────────────────────────────────────
 
   - target: "Cross: hybrid DFT"
     type: cross
-    quick_slices:
-      - input_generation@hybrid_functional
-    quick_count: 3
-    full_slices:
+    slices:
       - input_generation@hybrid_functional
       - workflow_orchestration@hybrid_functional
-    full_count: 5
+    count: 5
 
   - target: "Cross: phonon"
     type: cross
-    quick_slices:
-      - workflow_orchestration@phy_phonon
-    quick_count: 6
-    full_slices:
+    slices:
       - workflow_orchestration@phy_phonon
       - scientific_analysis@phy_phonon
-    full_count: 8
+    count: 8
 
   - target: "Cross: defect"
     type: cross
-    quick_slices:
-      - structure_construction@phy_defect
-    quick_count: 4
-    full_slices:
+    slices:
       - structure_construction@phy_defect
       - workflow_orchestration@phy_defect
-    full_count: 11
+    count: 11
 
   - target: "Cross: MD workflow"
     type: cross
-    quick_slices:
-      - input_generation@phy_md
-    quick_count: 13
-    full_slices:
+    slices:
       - input_generation@phy_md
       - workflow_orchestration@phy_md
-    full_count: 17
+    count: 17
