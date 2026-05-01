@@ -270,7 +270,7 @@ Line
 - Use consistent parameters across all.
 
 ### KPT for Slab Calculations
-- In-plane: dense mesh. **Min `12 12` for metals**; `20 20` for accurate surface energy.
+- In-plane: dense mesh. **Minimum `12 12` for metals** (hard floor — do not use less); `20 20` for production-quality surface energy.
 - Vacuum direction: **always `1`**. Never more than 1 k-point.
 - `kspacing` mode: `kspacing 0.10 0.10 1.00` (slab, z=vacuum). Bulk: `kspacing 0.10`.
 

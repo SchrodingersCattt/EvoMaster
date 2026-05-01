@@ -38,6 +38,7 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 - Supercell/vacancy/defect/BSSE: prefer `kspacing` in `INPUT` (avoid brittle manual meshes).
 - Band structure: use dedicated line-mode KPT for NSCF step.
 - SCF and NSCF should not share a single KPT by default in band/DOS workflows.
+- Metal slab calculations: **minimum 12×12 in-plane** k-points (or equivalent `kspacing ≤ 0.10` in-plane). Do not use less.
 
 ## Parameter Baseline (Use Judgment, Not Blind Fixed Values)
 
@@ -50,6 +51,7 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
   `http://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html`.
 - Typical production defaults are acceptable, but task requirements override defaults.
 - If the task specifies cutoffs or convergence policy, follow the task first.
+- **Low-cost / benchmark mode**: when the task requests "low-cost", "benchmark", or "minimal cost" parameters, use reduced `ecutwfc` (15–25 Ry for PW) instead of the standard 50 Ry default.
 - Keep multi-file studies (EOS/surface/vacancy comparisons) consistent on core numerics.
 
 ## Task-Specific Deltas
