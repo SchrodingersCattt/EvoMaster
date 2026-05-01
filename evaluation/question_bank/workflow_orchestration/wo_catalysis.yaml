@@ -16,7 +16,6 @@ questions:
     '
   tags:
   - abacus
-  - bsse
   - phy_surface
   - log_diagnosis
   data_files: []

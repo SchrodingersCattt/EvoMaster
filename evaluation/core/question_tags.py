@@ -53,7 +53,6 @@ class QuestionTag(StrEnum):
     screening_hte = 'screening_hte'
     log_diagnosis = 'log_diagnosis'
     electrostatics = 'electrostatics'
-    bsse = 'bsse'
     hybrid_functional = 'hybrid_functional'
     lammps = 'lammps'
     cp2k = 'cp2k'

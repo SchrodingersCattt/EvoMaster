@@ -828,7 +828,6 @@ questions:
     '
   tags:
   - abacus
-  - bsse
   - phy_defect
   - log_diagnosis
   data_files: []

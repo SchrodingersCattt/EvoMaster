@@ -25,7 +25,6 @@ questions:
     '
   tags:
   - abacus
-  - bsse
   - phy_surface
   data_files:
   - key: base_slab
@@ -576,7 +575,6 @@ questions:
     '
   tags:
   - abacus
-  - bsse
   - phy_defect
   priority: P0
   data_files:
