@@ -152,7 +152,7 @@ banks:
   - path: "structure_retrieval/rt_agnostic.yaml"
     capability: "structure_retrieval"
     domain: "agnostic"
-    questions: 7
+    questions: 8
 
   - path: "structure_retrieval/rt_battery.yaml"
     capability: "structure_retrieval"
