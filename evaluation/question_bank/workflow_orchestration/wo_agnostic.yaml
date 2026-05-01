@@ -76,7 +76,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_elec_008_20260415
+- id: WO_elec_008_20260501
   capability: workflow_orchestration
   domain: agnostic
   intent: Perform ABACUS Bader charge analysis for Al2O3 and summarize per-atom charge transfer
@@ -152,8 +152,9 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: The final answer is grounded in Bader-analysis artifacts and does not invent
-      unsupported per-atom values.
+    criterion: Final answer values match the provided mock data (Al avg Bader charge
+      +2.31 e, O avg Bader charge -1.54 e) and are presented in the generated artifact
+      files (JSON + report), not hallucinated from other sources.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -1092,7 +1093,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_007_20260415
+- id: WO_mech_007_20260501
   capability: workflow_orchestration
   domain: agnostic
   intent: Calculate GaAs elastic constants and bulk modulus with ABACUS and summarize the
@@ -1166,8 +1167,9 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Final answer is grounded in generated ABACUS elastic artifacts rather than
-      unsupported recalled values.
+    criterion: Final answer values match the provided mock data (C11=118.4, C12=53.7,
+      C44=59.2, bulk_modulus=75.3 GPa) and are presented in the generated artifact
+      files (JSON + report), not hallucinated from other sources.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
