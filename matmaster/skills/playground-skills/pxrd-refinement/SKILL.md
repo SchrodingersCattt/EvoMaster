@@ -40,15 +40,30 @@ Three scripts in `scripts/`, all run on Bohrium:
 
 1. **Stage `input_dir/`**: copy the script + `curation.py` + all data files, flat. Working directory inside the container is the unzipped `input_dir`, so use plain relative paths.
 
-2. **Submit / poll / download** via the `Bohrium` builtin tool. Pawley template (single line, copy verbatim — replace `<...>` placeholders only):
+2. **Write a `run.sh` wrapper** inside `input_dir/`. Bohrium's job system silently drops commands that contain embedded quotes in the `cmd` field (e.g. `--space-group "P 21"` or `--cell "a=10.8,..."`). The reliable method is to put the full command in a shell script:
 
+   ```bash
+   # input_dir/run.sh — write this via Bash(cat <<'RUNEOF' > run.sh ...)
+   #!/bin/bash
+   python3 gsas2_pawley.py \
+     --data ./ \
+     --space-group "P 21" \
+     --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
+     --wavelength 1.5406 \
+     --multi-start 5 --chain-cell \
+     --debug-plot plots \
+     -o results.json
    ```
-   python3 gsas2_pawley.py --data ./ --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" --wavelength 1.5406 --multi-start 5 --chain-cell --debug-plot plots -o results.json > log 2>&1
-   ```
 
-   `--multi-start 5` runs Pawley five times from deterministically-perturbed seeds and keeps the lowest-wR result (cheap insurance against local-minimum traps; see `references/gsas2_refinement_guide.md` § "Multi-start"). `--chain-cell` only promotes refinements that pass the wR / volume-jump gates, so it is safe even on patterns that may straddle a phase transition. Image: `registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119`. Machine: `c8_m32_cpu` (`c16_m64_cpu` for batches ≥5 patterns; raise to `c16_m64_cpu` whenever `--multi-start ≥ 5` or input has > 5 patterns). Full templates for Rietveld and autoindex, plus the parallel-submit + interleaved-poll pattern, are in `references/bohrium_workflow.md`. Key rules: never use `cd` in `cmd`; always end `cmd` with `> log 2>&1`; never block with `Bash(sleep)` while polling.
+   Then submit with `cmd="bash run.sh > log 2>&1"` — this is the **only** cmd string you should ever pass to the Bohrium tool. Never put the `python3 gsas2_pawley.py ...` invocation directly in the `cmd` field.
 
-3. **Parse `result.json`**: check `success`, `warnings`, `curation.verdict` first; then `wR`/`Rwp` against the contract-3 thresholds; then cell vs. initial cell. On failure, see `references/gsas2_refinement_guide.md` § "Common errors and fixes" and adjust deliberately — do not loop.
+   `--multi-start 5` runs Pawley five times from deterministically-perturbed seeds and keeps the lowest-wR result (cheap insurance against local-minimum traps; see `references/gsas2_refinement_guide.md` § "Multi-start"). `--chain-cell` only promotes refinements that pass the wR / volume-jump gates, so it is safe even on patterns that may straddle a phase transition. Image: `registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119`. Machine: `c8_m32_cpu` (`c16_m64_cpu` for batches ≥5 patterns; raise to `c16_m64_cpu` whenever `--multi-start ≥ 5` or input has > 5 patterns). Full templates for Rietveld and autoindex, plus the parallel-submit + interleaved-poll pattern, are in `references/bohrium_workflow.md`. Key rules: never use `cd` in `cmd`; always end `cmd` with `> log 2>&1`. **Polling discipline:** after submitting, call `Bash(command="sleep 60")` (or the `next_check_seconds` value from the last poll response) **before** each poll. A single Pawley batch takes 3-10 minutes; burning turns on cached-status polls is the #1 cause of turn-budget timeout. Submit all jobs, then loop: sleep → poll all → if any still Running, sleep again.
+
+3. **Parse `results.json`**: check `success`, `warnings`, `curation.verdict` first; then `wR`/`Rwp` against the contract-3 thresholds; then cell vs. initial cell. On failure, see `references/gsas2_refinement_guide.md` § "Common errors and fixes" and adjust deliberately — do not loop.
+
+4. **Rescue high-wR cold-start points with reverse chain-cell.** In a VT-PXRD batch, the coldest temperatures often have noisier data and yield wR > 10% even with multi-start. If the first 1–2 patterns in a forward chain have wR > 10% but later patterns are good (wR < 5%), re-run the same batch with `--chain-cell-direction reverse` added to `run.sh`. This seeds from the well-refined high-temperature end backwards, typically cutting cold-start wR in half.
+
+5. **Merge forward and reverse per-temperature.** After running both forward and reverse, build the final result table by picking, **for each temperature independently**, the run with the lower wR. Do not blindly take all values from one direction. Example: if forward gives better 303K (wR 15% vs 16%) but reverse gives better 343K/363K (wR 4% vs 9%), combine them.
 
 ## When `gsas2_autoindex.py` is appropriate
 

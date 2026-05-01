@@ -415,15 +415,25 @@ def pick_best_candidate(
         )
 
     if _is_cold_start_regime(successes):
+        wRs = sorted(float(c["wR"]) for c in successes)
+        spread_str = (
+            f"cold-start tiebreak: all seeds wR > {COLD_START_WR_FLOOR:.1f}% "
+            f"and spread {wRs[-1] - wRs[0]:.2f}% < {COLD_START_WR_SPREAD:.1f}%"
+        )
+        if anchor_volume is not None:
+            best_anchor = min(successes, key=lambda c: float(c["wR"]))
+            return best_anchor, (
+                f"{spread_str}; anchor active → min-wR among anchor-surviving seeds "
+                f"(seed_index={best_anchor.get('_seed_index')}, "
+                f"wR={best_anchor['wR']:.2f}%){anchor_reason}"
+            )
         seed0 = next(
             (c for c in successes if c.get("_seed_index") == 0),
             None,
         )
         if seed0 is not None:
-            wRs = sorted(float(c["wR"]) for c in successes)
             return seed0, (
-                f"cold-start tiebreak: all seeds wR > {COLD_START_WR_FLOOR:.1f}% "
-                f"and spread {wRs[-1] - wRs[0]:.2f}% < {COLD_START_WR_SPREAD:.1f}%; "
+                f"{spread_str}; "
                 f"preferring seed_index=0 (prompt initial cell) over min-wR"
                 f"{anchor_reason}"
             )

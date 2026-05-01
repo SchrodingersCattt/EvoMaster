@@ -16,27 +16,44 @@ Wall-time guidance: single-pattern Pawley 1-2 min; 8-temperature batch 5-10 min;
 Rietveld standard 3-5 min; auto-index up to `--timeout` per Bravais family
 (default 200 s, hard SIGALRM-enforced).
 
-## 2. Command templates
+## 2. Command templates — always use a `run.sh` wrapper
 
-`cmd` runs in the unzipped `input_dir/` (so use plain relative paths).
-Always end `cmd` with `> log 2>&1` (the tool auto-appends but be explicit).
-Never use `cd` inside `cmd`.
+**Critical:** Bohrium's job system silently drops commands that contain embedded
+quotes in the `cmd` field. A `cmd` like
+`python3 gsas2_pawley.py --space-group "P 21" --cell "a=10.83,..."` will appear
+to succeed (job status = Finished) but produces **no log file and no output** — the
+script never executes.
 
-Pawley, single pattern:
+The reliable pattern is:
 
-    python3 gsas2_pawley.py --data pattern.xye \
-      --space-group "<SG>" \
-      --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-      --wavelength 1.5406 --multi-start 5 --debug-plot plots \
-      -o result.json > log 2>&1
+1. Write the full command into `input_dir/run.sh` (a plain shell script).
+2. Submit with `cmd="bash run.sh > log 2>&1"` — this is the **only** cmd you
+   should pass to the Bohrium tool.
 
-Pawley, directory batch (preferred for multi-temperature):
+All templates below show the **`run.sh` content** — copy into a file, then submit
+with `cmd="bash run.sh > log 2>&1"`.
 
-    python3 gsas2_pawley.py --data ./ \
-      --space-group "<SG>" \
-      --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-      --wavelength 1.5406 --multi-start 5 --chain-cell --debug-plot plots \
-      -o results.json > log 2>&1
+### Pawley, single pattern (`run.sh`)
+
+```bash
+#!/bin/bash
+python3 gsas2_pawley.py --data pattern.xye \
+  --space-group "<SG>" \
+  --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
+  --wavelength 1.5406 --multi-start 5 --debug-plot plots \
+  -o result.json
+```
+
+### Pawley, directory batch (`run.sh`, preferred for multi-temperature)
+
+```bash
+#!/bin/bash
+python3 gsas2_pawley.py --data ./ \
+  --space-group "<SG>" \
+  --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
+  --wavelength 1.5406 --multi-start 5 --chain-cell --debug-plot plots \
+  -o results.json
+```
 
 `--multi-start 5` runs each pattern five times from deterministically perturbed seed
 cells and keeps the lowest-wR result (~5x runtime per pattern; well worth it for noisy
@@ -46,27 +63,42 @@ promotes each accepted refinement to seed the next pattern, gated by `--chain-wr
 downstream temperatures. Bump machine to `c16_m64_cpu` whenever `--multi-start ≥ 5` or
 the directory has > 5 patterns.
 
-Rietveld:
+### Rietveld (`run.sh`)
 
-    python3 gsas2_rietveld.py --data pattern.xye --cif structure.cif \
-      --wavelength 1.5406 --refine-level standard \
-      --export-cif refined.cif -o result.json > log 2>&1
+```bash
+#!/bin/bash
+python3 gsas2_rietveld.py --data pattern.xye --cif structure.cif \
+  --wavelength 1.5406 --refine-level standard \
+  --export-cif refined.cif -o result.json
+```
 
-Auto-index (last resort, see `autoindex.md` first):
+### Auto-index (`run.sh`, last resort — see `autoindex.md` first)
 
-    python3 gsas2_autoindex.py --data pattern.xye \
-      --bravais monoclinic-P --wavelength 1.5406 \
-      --timeout 200 --debug-plot plots \
-      -o candidates.json > log 2>&1
+```bash
+#!/bin/bash
+python3 gsas2_autoindex.py --data pattern.xye \
+  --bravais monoclinic-P --wavelength 1.5406 \
+  --timeout 200 --debug-plot plots \
+  -o candidates.json
+```
+
+### Submitting
+
+After writing `run.sh` into `input_dir/`:
+
+    Bohrium(action="submit", ..., cmd="bash run.sh > log 2>&1")
+
+Never put the python3 invocation directly in the `cmd` field.
 
 `<SG>` is the Hermann-Mauguin space-group string (e.g. `P 21/c`, `F d -3 m`).
-`<A>/<B>/<C>/<BETA>` come from a reference - never invented from peak positions.
+`<A>/<B>/<C>/<BETA>` come from a reference — never invented from peak positions.
 
 ## 3. Stage `input_dir/`
 
 Flat layout, script and all data files at the top level:
 
     input_dir/
+      run.sh                 (REQUIRED - the shell wrapper you write)
       gsas2_pawley.py        (or gsas2_rietveld.py / gsas2_autoindex.py)
       curation.py            (REQUIRED - the script imports it)
       pattern_T1.xye
@@ -76,7 +108,8 @@ Flat layout, script and all data files at the top level:
 
 Source: `matmaster/skills/playground-skills/pxrd-refinement/scripts/`. Always
 copy `curation.py` alongside any of the three scripts; missing it produces an
-immediate `ModuleNotFoundError`.
+immediate `ModuleNotFoundError`. Always write a `run.sh` that calls the script
+with all arguments (see § 2 templates).
 
 ## 4. Submit / poll / download
 
@@ -86,7 +119,7 @@ Submit (returns `job_id`):
             input_dir="input_dir",
             image="registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119",
             machine="c8_m32_cpu",
-            cmd="<one of the templates above>")
+            cmd="bash run.sh > log 2>&1")
 
 Poll (non-blocking, has built-in 60 s throttle):
 
@@ -101,13 +134,16 @@ Download exactly once after a terminal state:
 
 ### Polling discipline
 
-- Never use `Bash(sleep N)` to wait for a job. The poll throttle handles rate
-  limiting; just call poll again later between other tasks.
+- **Always `Bash(sleep N)` before polling.** Use `sleep 60` before the first poll
+  and `sleep <next_check_seconds>` (from the last poll response) before each
+  subsequent poll. A single Pawley batch takes 3-10 minutes; burning turns on
+  cached-status polls is the #1 cause of turn-budget timeout.
 - During the queue+run window (5-10 min typical), do useful work: stage the next
   phase's `input_dir`, draft the report skeleton, double-check the initial cell
   against literature.
 - For multi-job submissions (e.g. one LTP + one HTP job), submit ALL jobs first,
-  then interleave polls. Serial submit-poll-download triples wall time.
+  then loop: `Bash(sleep 60)` → poll all → if any still Running, sleep again.
+  Serial submit-poll-download triples wall time.
 
 ### Re-submitting
 
@@ -137,7 +173,7 @@ land there.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Result dir lacks `log` AND lacks `result.json` (only inputs + `mpi_debug.sh` come back) | The cmd never executed (most often: the agent passed a typo'd cmd, multi-line cmd whose newlines got eaten, or the cmd ended with a different redirect) | (1) Re-read the cmd vs. the single-line templates above; (2) ensure no embedded `\` line continuations; (3) ensure `curation.py` is in `input_dir/`; (4) re-submit with the corrected cmd. **Do NOT abandon Bohrium and write a local Python solver — that violates SKILL.md contract 1.** |
+| Result dir lacks `log` AND lacks `result.json` (only inputs + `mpi_debug.sh` come back) | The cmd never executed — almost always because the python3 invocation was placed directly in the `cmd` field instead of in `run.sh`. Bohrium silently drops commands with embedded quotes. | (1) Verify `run.sh` exists in `input_dir/` with the correct python3 invocation; (2) verify the submit used `cmd="bash run.sh > log 2>&1"` and nothing else; (3) ensure `curation.py` is in `input_dir/`; (4) re-submit. **Do NOT abandon Bohrium and write a local Python solver — that violates SKILL.md contract 1.** |
 | `log` exists but has GSAS-II progress and no `result.json` | Script crashed mid-refinement | Read `log` tail for the traceback; usual culprits: SVD singular (cell badly off), wavelength mismatch, missing `--space-group` |
 | `ModuleNotFoundError: curation` | `curation.py` not staged | Copy it into `input_dir/` and re-submit |
 | `ModuleNotFoundError: GSASIIscriptable` | `--gsas2-path` mis-set | Omit `--gsas2-path`; the default works on this image |
