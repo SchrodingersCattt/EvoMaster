@@ -64,12 +64,14 @@ def _stable_unique_catalog_items(
         except ValueError as e:
             return [], f"invalid priority for question_id={qid!r}: {e}"
         capability = str(getattr(q, "capability", "") or "").strip()
+        tags = [str(t).strip() for t in (getattr(q, "tags", None) or []) if str(t).strip()]
         out.append(
             {
                 "question_id": qid,
                 "question_text": qtext,
                 "priority": pri,
                 "capability": capability,
+                "tags": tags,
             }
         )
     return out, None

@@ -849,6 +849,7 @@ def post_question_catalog_sync(
         except ValueError as e:
             return False, f"invalid priority for question_id={qid!r}: {e}"
         capability = str(raw.get("capability") or "").strip()
+        tags = [str(t).strip() for t in (raw.get("tags") or []) if str(t).strip()]
         item: dict[str, Any] = {
             "question_id": qid,
             "question_text": qtext,
@@ -856,6 +857,8 @@ def post_question_catalog_sync(
         }
         if capability:
             item["capability"] = capability
+        if tags:
+            item["tags"] = tags
         body_items.append(
             item,
         )
