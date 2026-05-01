@@ -41,12 +41,12 @@ questions:
   - key: must_stru_bsse_fe_empty_frozen
     value:
       filename: STRU_bsse
-      pattern: (?i)(?:^Fe_empty$[\s\S]*?)0\s+0\s+0\s+mag
+      pattern: (?i)(?:^Fe_empty$[\s\S]*?)\d+\.\d+\s+\d+\.\d+\s+\d+\.\d+\s+0\s+0\s+0
       flags: im
   - key: must_stru_bsse_fe_empty_zero_mag
     value:
       filename: STRU_bsse
-      pattern: 0\s+0\s+0\s+mag\s+0\.0
+      pattern: 0\s+0\s+0\s*(?:mag\s+0\.0|$)
       flags: im
   - key: must_input_bsse_core
     value:
@@ -129,7 +129,8 @@ questions:
     verify: text_file_regex
     weight: 1.0
   - id: must_stru_bsse_fe_empty_zero_mag
-    criterion: '[Must] Fe_empty atoms in STRU_bsse have zero magnetic moment (mag 0.0).'
+    criterion: '[Must] Fe_empty atoms in STRU_bsse have zero or omitted magnetic moment
+      (either "0 0 0 mag 0.0" or "0 0 0" at end of line).'
     axis: correctness
     verify: text_file_regex
     weight: 1.0
