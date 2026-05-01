@@ -1,6 +1,6 @@
 ---
 name: abacus
-description: "Use this skill for ABACUS tasks. Keep it decision-focused: enforce hard guards, generate valid INPUT/STRU/KPT, and delegate detailed templates/troubleshooting to references."
+description: "MUST use this skill for ANY task involving ABACUS (SCF, relax, cell-relax, band structure, DOS, MD, work function, BSSE, vacancy, surface energy, DFT+U, phonon, EOS). Contains hard guards on parameters, low-cost benchmark ranges, K-point rules, and validation scripts that prevent silent failures."
 skill_type: operator
 ---
 
