@@ -19,7 +19,6 @@ questions:
     \ eV\n"
   tags:
   - wf_batch
-  - chem_her
   - phy_surface
   data_files: []
   reference_answers:
