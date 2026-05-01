@@ -25,7 +25,6 @@ questions:
     '
   tags:
   - char_xrd
-  - char_cif_validation
   - phy_defect
   data_files:
   - key: hkl_file
@@ -151,7 +150,6 @@ questions:
     '
   tags:
   - char_xrd
-  - char_cif_validation
   - phy_defect
   data_files:
   - key: hkl_file

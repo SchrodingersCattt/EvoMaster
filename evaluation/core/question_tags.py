@@ -46,7 +46,6 @@ class QuestionTag(StrEnum):
     mat_2d = 'mat_2d'
     mat_alloy = 'mat_alloy'
     char_xrd = 'char_xrd'
-    char_cif_validation = 'char_cif_validation'
     safety_policy = 'safety_policy'
     safety_hazard = 'safety_hazard'
     screening_hte = 'screening_hte'

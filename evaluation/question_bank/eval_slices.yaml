@@ -54,7 +54,6 @@ slices:
     type: skill
     slices:
       - "@char_xrd"
-      - "@char_cif_validation"
     count: 4
 
   - target: "Skill: data-analysis"
