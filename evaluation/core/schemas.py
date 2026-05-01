@@ -382,16 +382,17 @@ class LLMRuntimeConfig(BaseModel):
 class CapabilitySlice(BaseModel):
     """One OR-branch in ``include_slices``: capability plus optional domain/tag filters."""
 
-    capability: str
+    capability: str | None = None
     domains: list[str] | None = None
     tags: list[str] | None = None
 
     @field_validator('capability')
     @classmethod
-    def _capability_non_empty(cls, value: str) -> str:
-        if not str(value).strip():
-            raise ValueError('capability cannot be empty')
-        return str(value).strip()
+    def _capability_normalize(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = str(value).strip()
+        return stripped if stripped else None
 
     @field_validator('domains')
     @classmethod

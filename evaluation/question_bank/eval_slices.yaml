@@ -1,9 +1,11 @@
 # eval_slices.yaml — Maps each skill / tool / prompt to its evaluation slices.
 #
-# Slice notation:  <capability>@<tag>
-#   capability = question_bank subdirectory (input_generation, workflow_orchestration, …)
-#   tag        = question-level tag used to filter (vasp, abacus, code_mlip, …)
-#   When no @tag, the entire capability directory is the slice.
+# Slice notation:
+#   <capability>            — all questions in that capability
+#   <capability>@<tag>      — questions in that capability with given tag
+#   @<tag>                  — questions across ALL capabilities with given tag
+#
+# Multiple tags with comma are AND: @t1,t2 matches questions having both tags.
 
 version: "v1"
 
@@ -14,33 +16,27 @@ slices:
   - target: "Skill: vasp"
     type: skill
     slices:
-      - input_generation@vasp
-      - workflow_orchestration@vasp
-      - execution_contract@vasp
-      - scientific_analysis@vasp
+      - "@vasp"
     count: 24
 
   - target: "Skill: abacus"
     type: skill
     slices:
-      - input_generation@abacus
-      - workflow_orchestration@abacus
+      - "@abacus"
     count: 13
 
   - target: "Skill: gpumd"
     type: skill
     slices:
-      - input_generation@gpumd
+      - "@gpumd"
     count: 11
 
   - target: "Skill: mlips"
     type: skill
     slices:
-      - workflow_orchestration@code_mlip
-      - input_generation@code_mlip
-      - input_generation@code_dpa
-      - workflow_orchestration@code_dpa
-    count: 32
+      - "@code_mlip"
+      - "@code_dpa"
+    count: 24
 
   - target: "Skill: atomic-structure"
     type: skill
@@ -51,20 +47,15 @@ slices:
   - target: "Skill: tasker-polar-surface"
     type: skill
     slices:
-      - structure_construction@phy_surface
-      - workflow_orchestration@phy_surface
-      - batch_processing@phy_surface
-      - input_generation@phy_surface
-      - structure_retrieval@phy_surface
+      - "@phy_surface"
     count: 44
 
   - target: "Skill: xrd + checkcif"
     type: skill
     slices:
-      - scientific_analysis@char_xrd
-      - scientific_analysis@char_cif_validation
-      - structure_construction@char_xrd
-    count: 6
+      - "@char_xrd"
+      - "@char_cif_validation"
+    count: 4
 
   - target: "Skill: data-analysis"
     type: skill
@@ -75,19 +66,19 @@ slices:
   - target: "Skill: cp2k"
     type: skill
     slices:
-      - input_generation@cp2k
+      - "@cp2k"
     count: 1
 
   - target: "Skill: lammps"
     type: skill
     slices:
-      - input_generation@lammps
+      - "@lammps"
     count: 1
 
   - target: "Skill: gromacs"
     type: skill
     slices:
-      - input_generation@gromacs
+      - "@gromacs"
     count: 1
 
   # ── Tools ───────────────────────────────────────────────────────────
@@ -102,10 +93,8 @@ slices:
     type: tool
     slices:
       - batch_processing
-      - workflow_orchestration@wf_batch
-      - workflow_orchestration@wf_sweep
-      - execution_contract@wf_batch
-      - input_generation@wf_sweep
+      - "@wf_batch"
+      - "@wf_sweep"
     count: 13
 
   # ── Prompts ─────────────────────────────────────────────────────────
@@ -133,30 +122,23 @@ slices:
   - target: "Cross: hybrid DFT"
     type: cross
     slices:
-      - input_generation@hybrid_functional
-      - workflow_orchestration@hybrid_functional
+      - "@hybrid_functional"
     count: 5
 
   - target: "Cross: phonon"
     type: cross
     slices:
-      - workflow_orchestration@phy_phonon
-      - scientific_analysis@phy_phonon
+      - "@phy_phonon"
     count: 8
 
   - target: "Cross: defect"
     type: cross
     slices:
-      - structure_construction@phy_defect
-      - workflow_orchestration@phy_defect
-      - input_generation@phy_defect
-      - scientific_analysis@phy_defect
+      - "@phy_defect"
     count: 11
 
   - target: "Cross: MD workflow"
     type: cross
     slices:
-      - input_generation@phy_md
-      - workflow_orchestration@phy_md
-      - structure_construction@phy_md
+      - "@phy_md"
     count: 17
