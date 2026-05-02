@@ -9,7 +9,7 @@ questions:
   human_prompt_seed: '构建 MoSe2 训练集，覆盖原型、应变、扰动、空位等情形，并将训练集统一命名为 `train.xyz`（总帧数 > 100）。
     基于该训练集生成 ABACUS 静态计算输入文件 `INPUT_scf`。
     生成用于该体系训练的 `nep.in`。'
-  tags: [code_mlip, eng_abacus]
+  tags: [eng_gpumd, eng_abacus]
   data_files: []
   reference_answers:
   - key: train_xyz_artifact
