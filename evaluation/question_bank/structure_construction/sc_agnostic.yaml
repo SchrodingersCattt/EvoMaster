@@ -155,7 +155,6 @@ questions:
 
     '
   tags:
-  - phy_defect
   reference_answers:
   - key: structures_processed
     value:

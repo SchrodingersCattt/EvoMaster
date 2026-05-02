@@ -123,12 +123,6 @@ slices:
       - "@phy_phonon"
     count: 8
 
-  - target: "Cross: defect"
-    type: cross
-    slices:
-      - "@phy_defect"
-    count: 11
-
   - target: "Cross: MD workflow"
     type: cross
     slices:

@@ -573,7 +573,6 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_defect
   priority: P0
   data_files:
   - key: base_vacancy
@@ -999,7 +998,6 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_defect
   - wf_inputs
   data_files:
   - key: mo_bulk

@@ -822,7 +822,6 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_defect
   data_files: []
   reference_answers:
   - key: ef_Fe53Cr_eV
@@ -1586,7 +1585,6 @@ questions:
     \n最终回答请明确：该掺杂体系是否通过“可进入电子结构分析”的前置检查。\n"
   tags:
   - phy_surface
-  - phy_defect
   - phy_elastic
   - phy_phonon
   data_files: []
@@ -1692,7 +1690,6 @@ questions:
     '
   tags:
   - code_mlip
-  - phy_defect
   - phy_surface
   data_files: []
   reference_answers:

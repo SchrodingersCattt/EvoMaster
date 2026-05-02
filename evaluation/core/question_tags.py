@@ -26,7 +26,6 @@ class QuestionTag(StrEnum):
     phy_surface = 'phy_surface'
     phy_phonon = 'phy_phonon'
     phy_electronic = 'phy_electronic'
-    phy_defect = 'phy_defect'
     phy_elastic = 'phy_elastic'
     phy_eos = 'phy_eos'
     phy_md = 'phy_md'

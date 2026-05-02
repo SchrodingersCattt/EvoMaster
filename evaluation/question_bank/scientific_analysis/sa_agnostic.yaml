@@ -25,7 +25,6 @@ questions:
     '
   tags:
   - char_xrd
-  - phy_defect
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_001_20260408/A23050101A0735.hkl
@@ -150,7 +149,6 @@ questions:
     '
   tags:
   - char_xrd
-  - phy_defect
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_002_20260408/A23050102A0375.hkl

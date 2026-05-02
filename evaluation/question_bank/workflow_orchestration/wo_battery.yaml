@@ -14,7 +14,6 @@ questions:
     \ Å³，原始约1316.68 Å³）；\n6. 输出掺杂形成能(eV)、体积变化率(%)。\n"
   tags:
   - wf_inputs
-  - phy_defect
   - wf_postprocess
   priority: P0
   data_files: []

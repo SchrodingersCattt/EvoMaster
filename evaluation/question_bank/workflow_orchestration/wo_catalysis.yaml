@@ -385,7 +385,6 @@ questions:
 
     '
   tags:
-  - phy_defect
   - wf_postprocess
   - phy_surface
   priority: P0

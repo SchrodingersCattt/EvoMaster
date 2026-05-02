@@ -1749,7 +1749,6 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 BiSI 中 I 替位 S 缺陷体系生成一个 HSE06+SOC 缺陷计算的 VASP INCAR。含重元素 Bi 需要自旋轨道耦合，缺陷计算需要固定晶胞形状，使用 HSE06 获取准确缺陷能级。需要离子弛豫。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - phy_defect
   - phy_electronic
   data_files:
   - key: task_spec
