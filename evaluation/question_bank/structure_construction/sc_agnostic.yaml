@@ -264,7 +264,6 @@ questions:
 
     '
   tags:
-  - safety_hazard
   data_files:
   - key: dacmor_cif
     path: data/SC_struct_006/DACMOR.cif
