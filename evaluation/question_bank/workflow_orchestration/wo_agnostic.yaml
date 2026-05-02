@@ -609,7 +609,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_001_20260415
+- id: WO_mech_001_20260502
   capability: workflow_orchestration
   domain: agnostic
   intent: Independently locate Al FCC structure, execute 5-point volume scan, fit EOS, report
