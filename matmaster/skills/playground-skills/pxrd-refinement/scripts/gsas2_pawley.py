@@ -463,6 +463,27 @@ def pick_best_candidate(
             f"and spread {wRs[-1] - wRs[0]:.2f}% < {COLD_START_WR_SPREAD:.1f}%"
         )
         if anchor_volume is not None:
+            if (
+                reference_volume is not None
+                and reference_volume > 0
+                and len(successes) >= 2
+            ):
+                with_vol = [
+                    c for c in successes if c.get("volume") is not None
+                ]
+                if with_vol:
+                    closest = min(
+                        with_vol,
+                        key=lambda c: abs(
+                            float(c["volume"]) - reference_volume
+                        ),
+                    )
+                    return closest, (
+                        f"{spread_str}; anchor + ref-vol proximity: "
+                        f"seed_index={closest.get('_seed_index')}, "
+                        f"wR={closest['wR']:.2f}%, V={closest['volume']:.2f} "
+                        f"(ref V={reference_volume:.2f}){anchor_reason}"
+                    )
             best_anchor = min(successes, key=lambda c: float(c["wR"]))
             return best_anchor, (
                 f"{spread_str}; anchor active → min-wR among anchor-surviving seeds "
