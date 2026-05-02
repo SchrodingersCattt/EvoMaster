@@ -122,7 +122,6 @@ questions:
     '
   tags:
   - meta_database
-  - wf_postprocess
   data_files: []
   reference_answers:
   - key: retrieval_json

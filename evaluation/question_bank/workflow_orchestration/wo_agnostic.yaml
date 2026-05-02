@@ -319,7 +319,6 @@ questions:
 
     '
   tags:
-  - wf_postprocess
   data_files:
   - key: result_manifest
     path: data/WO_general_userlog_006_20260410v3/result_manifest.json
@@ -548,7 +547,6 @@ questions:
 
     '
   tags:
-  - wf_postprocess
   data_files: []
   reference_answers:
   - key: gamma_optical_max_cm1
@@ -996,7 +994,6 @@ questions:
 
     最终回答中简要给出“是否可能形成固溶体”的结论与依据。'
   tags:
-  - wf_postprocess
   data_files: []
   reference_answers:
   - key: hea_summary_json

@@ -14,7 +14,6 @@ class QuestionTag(StrEnum):
     # 软件相关
     eng_vasp = 'eng_vasp'
     eng_abacus = 'eng_abacus'
-    wf_postprocess = 'wf_postprocess'
     wf_report = 'wf_report'
     code_pymatgen = 'code_pymatgen'
     code_ase = 'code_ase'

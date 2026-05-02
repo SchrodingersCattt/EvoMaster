@@ -194,7 +194,6 @@ questions:
     \ `hull_distance`, `stability_label`, `reference_phases`, `notes`；\n2) `cucrzr_convex_hull_report.md`：说明\
     \ query 输入梳理、mock 后处理流程、稳定性判据及不确定性。\n\n最终回答中请明确说明该结构在热力学稳定性上的定性结论（稳定/亚稳/不稳定）。\n"
   tags:
-  - wf_postprocess
   data_files: []
   reference_answers:
   - key: hull_summary_json
