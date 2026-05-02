@@ -117,12 +117,6 @@ slices:
 
   # ── Cross-cutting ───────────────────────────────────────────────────
 
-  - target: "Cross: hybrid DFT"
-    type: cross
-    slices:
-      - "@hybrid_functional"
-    count: 5
-
   - target: "Cross: phonon"
     type: cross
     slices:

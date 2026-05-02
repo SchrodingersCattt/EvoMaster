@@ -379,7 +379,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - hybrid_functional
   - mat_mof
   data_files:
   - key: task_spec
@@ -622,7 +621,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - hybrid_functional
   - wf_sweep
   - phy_magnetism
   data_files:
@@ -1376,7 +1374,6 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。Fe 含磁性，需要固定总磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - hybrid_functional
   - phy_magnetism
   data_files:
   - key: task_spec
@@ -1761,7 +1758,6 @@ questions:
   tags:
   - eng_vasp
   - phy_defect
-  - hybrid_functional
   - phy_electronic
   data_files:
   - key: task_spec

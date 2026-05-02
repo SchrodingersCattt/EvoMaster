@@ -45,7 +45,6 @@ class QuestionTag(StrEnum):
     safety_hazard = 'safety_hazard'
     screening_hte = 'screening_hte'
     log_diagnosis = 'log_diagnosis'
-    hybrid_functional = 'hybrid_functional'
     eng_lammps = 'eng_lammps'
     eng_cp2k = 'eng_cp2k'
     eng_gromacs = 'eng_gromacs'
