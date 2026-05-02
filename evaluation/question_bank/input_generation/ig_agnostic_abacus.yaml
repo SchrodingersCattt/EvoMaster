@@ -227,7 +227,6 @@ questions:
     '
   tags:
   - eng_abacus
-  - electrostatics
   - phy_surface
   data_files:
   - key: base_al_slab
@@ -393,7 +392,6 @@ questions:
     '
   tags:
   - eng_abacus
-  - electrostatics
   - phy_surface
   data_files:
   - key: base_h2o
