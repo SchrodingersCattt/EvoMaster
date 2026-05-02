@@ -122,9 +122,3 @@ slices:
     slices:
       - "@phy_phonon"
     count: 8
-
-  - target: "Cross: MD workflow"
-    type: cross
-    slices:
-      - "@phy_md"
-    count: 17

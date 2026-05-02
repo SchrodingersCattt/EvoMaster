@@ -10,7 +10,6 @@ questions:
   tags:
   - code_mlip
   - wf_inputs
-  - phy_md
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -45,7 +44,6 @@ questions:
   tags:
   - code_mlip
   - wf_inputs
-  - phy_md
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -80,7 +78,6 @@ questions:
   tags:
   - code_mlip
   - wf_inputs
-  - phy_md
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -117,7 +114,6 @@ questions:
   tags:
   - code_mlip
   - wf_inputs
-  - phy_md
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -157,7 +153,6 @@ questions:
   - code_mlip
   - wf_inputs
   - wf_sweep
-  - phy_md
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -192,7 +187,6 @@ questions:
   tags:
   - code_mlip
   - wf_inputs
-  - phy_md
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -229,7 +223,6 @@ questions:
   tags:
   - code_mlip
   - wf_inputs
-  - phy_md
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -266,7 +259,6 @@ questions:
   tags:
   - code_mlip
   - wf_inputs
-  - phy_md
   - wf_sweep
   - eng_gpumd
   data_files: []
@@ -303,7 +295,6 @@ questions:
   tags:
   - code_mlip
   - wf_inputs
-  - phy_md
   - wf_sweep
   - eng_gpumd
   data_files: []
@@ -340,7 +331,6 @@ questions:
   tags:
   - code_mlip
   - wf_inputs
-  - phy_md
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -392,7 +382,6 @@ questions:
   tags:
   - code_mlip
   - wf_inputs
-  - phy_md
   - eng_gpumd
   data_files:
   - key: train_xyz

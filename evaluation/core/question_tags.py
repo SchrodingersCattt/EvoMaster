@@ -25,7 +25,6 @@ class QuestionTag(StrEnum):
     eng_gpumd = 'eng_gpumd'
     phy_surface = 'phy_surface'
     phy_phonon = 'phy_phonon'
-    phy_md = 'phy_md'
     char_xrd = 'char_xrd'
     safety_policy = 'safety_policy'
     safety_hazard = 'safety_hazard'
