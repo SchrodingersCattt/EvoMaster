@@ -426,8 +426,7 @@ questions:
     4) `stop_loss.md`：定义触发停止条件（时间/资源/质量）与应急降级方案。
 
     '
-  tags:
-  - meta_database
+  tags: []
   data_files:
   - key: mission_constraints
     path: data/WO_general_userlog_007_20260410v3/mission_constraints.json
