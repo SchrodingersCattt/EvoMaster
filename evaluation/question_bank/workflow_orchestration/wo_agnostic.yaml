@@ -1488,7 +1488,6 @@ questions:
     '
   tags:
   - meta_userlog
-  - code_dpgen
   - wf_report
   data_files:
   - key: dpgen_docs
