@@ -14,7 +14,6 @@ questions:
   tags:
   - phy_md
   - wf_report
-  - phy_electronic
   data_files: []
   reference_answers:
   - key: gap_value_eV

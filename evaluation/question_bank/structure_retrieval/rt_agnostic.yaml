@@ -616,7 +616,6 @@ questions:
 
     注意：本题仅评估检索与结构元数据汇总。'
   tags:
-  - phy_electronic
   - meta_database
   data_files: []
   reference_answers:

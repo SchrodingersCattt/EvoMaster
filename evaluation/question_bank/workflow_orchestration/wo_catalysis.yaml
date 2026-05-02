@@ -90,7 +90,6 @@ questions:
     \ `notes`；\n2) `pd111_work_function_report.md`：说明 query 输入梳理、mock 后处理流程和结果解读。\n\n最终回答需明确给出功函数数值（eV）并确认\
     \ vacuum_direction=z。\n"
   tags:
-  - phy_electronic
   - phy_surface
   - eng_abacus
   data_files: []

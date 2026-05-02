@@ -12,7 +12,6 @@ questions:
 
     '
   tags:
-  - phy_electronic
   - phy_surface
   priority: P0
   data_files: []

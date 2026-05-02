@@ -25,7 +25,6 @@ class QuestionTag(StrEnum):
     eng_gpumd = 'eng_gpumd'
     phy_surface = 'phy_surface'
     phy_phonon = 'phy_phonon'
-    phy_electronic = 'phy_electronic'
     phy_eos = 'phy_eos'
     phy_md = 'phy_md'
     phy_magnetism = 'phy_magnetism'

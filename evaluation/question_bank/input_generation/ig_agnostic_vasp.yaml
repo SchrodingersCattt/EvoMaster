@@ -11,7 +11,6 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 Lu4N4 体系生成一个能带结构计算的 VASP INCAR 文件。要求：非自洽计算，从已有电荷密度读取，输出投影能带。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_001/task_spec.json
@@ -1103,7 +1102,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - phy_electronic
   - phy_magnetism
   data_files:
   - key: task_spec
@@ -1246,7 +1244,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_011/task_spec.json
@@ -1497,7 +1494,6 @@ questions:
   tags:
   - eng_vasp
   - phy_surface
-  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_013/task_spec.json
@@ -1628,7 +1624,6 @@ questions:
   tags:
   - eng_vasp
   - phy_surface
-  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_014/task_spec.json
@@ -1748,7 +1743,6 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为 BiSI 中 I 替位 S 缺陷体系生成一个 HSE06+SOC 缺陷计算的 VASP INCAR。含重元素 Bi 需要自旋轨道耦合，缺陷计算需要固定晶胞形状，使用 HSE06 获取准确缺陷能级。需要离子弛豫。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_015/task_spec.json
@@ -2002,7 +1996,6 @@ questions:
   tags:
   - eng_vasp
   - wf_inputs
-  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_017/task_spec.json
@@ -2252,7 +2245,6 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为硼酸铯 B12Cs4O20 生成一个非磁性绝缘体的静态 SCF 计算 VASP INCAR。体系为非磁性，宽带隙绝缘体。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - phy_electronic
   data_files:
   - key: task_spec
     path: data/IG_incar_019/task_spec.json

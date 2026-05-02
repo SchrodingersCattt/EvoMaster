@@ -26,7 +26,6 @@ questions:
   tags:
   - wf_batch
   - wf_postprocess
-  - phy_electronic
   data_files:
   - key: postprocessing_bandstr
     path: data/BP_struct_004/postprocessing_bandstr.json
