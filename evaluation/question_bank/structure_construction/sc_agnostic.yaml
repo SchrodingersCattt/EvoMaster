@@ -267,7 +267,6 @@ questions:
   tags:
   - phy_surface
   - safety_hazard
-  - log_diagnosis
   data_files:
   - key: dacmor_cif
     path: data/SC_struct_006/DACMOR.cif
@@ -369,7 +368,6 @@ questions:
     '
   tags:
   - mat_oxide
-  - log_diagnosis
   data_files: []
   reference_answers:
   - key: file_exists

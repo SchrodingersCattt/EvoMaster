@@ -828,7 +828,6 @@ questions:
   tags:
   - eng_abacus
   - phy_defect
-  - log_diagnosis
   data_files: []
   reference_answers:
   - key: ef_Fe53Cr_eV
