@@ -1272,7 +1272,6 @@ questions:
     \ `bulk_modulus`；\n2) `alloy_eos_report.md`：说明 query 输入梳理、mock 后处理流程、体积扫描策略与不确定性。\n\n\
     最终回答中简要说明该 EOS 结果能支持哪些定性判断。\n"
   tags:
-  - wf_sweep
   data_files: []
   reference_answers:
   - key: eos_summary_json
@@ -2260,7 +2259,6 @@ questions:
 
     在最终回答中简要总结：是否满足“10 个候选 + Tc 阈值 + 空间群约束”三项要求。'
   tags:
-  - wf_batch
   data_files: []
   reference_answers:
   - key: candidate_json

@@ -385,7 +385,6 @@ questions:
 
     文件名分别为：diamond.txt, nacl.txt, zns.txt, batio3.txt, mgal2o4.txt, al2o3.txt'
   tags:
-  - wf_batch
   priority: P0
   data_files: []
   reference_answers:

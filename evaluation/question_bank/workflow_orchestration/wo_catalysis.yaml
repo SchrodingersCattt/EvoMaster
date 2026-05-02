@@ -186,7 +186,6 @@ questions:
   tags:
   - struct_surface
   - code_mlip
-  - wf_batch
   data_files: []
   reference_answers:
   - key: turn_budget

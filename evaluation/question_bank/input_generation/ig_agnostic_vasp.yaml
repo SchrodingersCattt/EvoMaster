@@ -612,7 +612,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - wf_sweep
   data_files:
   - key: task_spec
     path: data/IG_incar_006/task_spec.json

@@ -33,9 +33,7 @@ questions:
 
     '
   tags:
-  - wf_batch
   - wf_recovery
-  - wf_sweep
   - wf_inputs
   priority: P0
   data_files:
