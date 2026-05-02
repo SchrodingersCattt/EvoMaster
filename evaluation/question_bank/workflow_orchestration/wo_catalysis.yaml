@@ -93,7 +93,6 @@ questions:
   - phy_electronic
   - phy_surface
   - eng_abacus
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: wf_json_artifact

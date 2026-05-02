@@ -89,7 +89,6 @@ questions:
   tags:
   - phy_surface
   - eng_abacus
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: bader_json_artifact
@@ -197,7 +196,6 @@ questions:
 
     '
   tags:
-  - meta_userlog
   - phy_surface
   data_files:
   - key: attachment_manifest
@@ -325,7 +323,6 @@ questions:
 
     '
   tags:
-  - meta_userlog
   - wf_postprocess
   data_files:
   - key: result_manifest
@@ -436,7 +433,6 @@ questions:
 
     '
   tags:
-  - meta_userlog
   - wf_report
   - meta_database
   data_files:
@@ -922,7 +918,6 @@ questions:
   - phy_elastic
   - phy_surface
   - meta_database
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: elastic_compare_json
@@ -1015,7 +1010,6 @@ questions:
     最终回答中简要给出“是否可能形成固溶体”的结论与依据。'
   tags:
   - wf_postprocess
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: hea_summary_json
@@ -1107,7 +1101,6 @@ questions:
   - eng_abacus
   - phy_elastic
   - phy_surface
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1203,7 +1196,6 @@ questions:
   - screening_hte
   - phy_elastic
   - phy_surface
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1301,7 +1293,6 @@ questions:
   - screening_hte
   - phy_eos
   - wf_sweep
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: eos_summary_json
@@ -1482,7 +1473,6 @@ questions:
 
     '
   tags:
-  - meta_userlog
   - wf_report
   data_files:
   - key: dpgen_docs
@@ -1595,7 +1585,6 @@ questions:
     \ `band_dos_status`；\n3) `srti03_nb125_workflow_report.md`：说明 query 输入梳理、mock 后处理流程、关键观察与不确定性。\n\
     \n最终回答请明确：该掺杂体系是否通过“可进入电子结构分析”的前置检查。\n"
   tags:
-  - meta_userlog
   - phy_surface
   - phy_defect
   - phy_elastic
@@ -1854,7 +1843,6 @@ questions:
     \ `dpa3_finetune_config.json`：记录 `input_files`、训练步数、学习率策略、loss 关键参数、验证划分；\n2) `dpa3_finetune_report.md`：概述\
     \ query 输入梳理、mock 后处理过程、结果与改进建议。\n\n最终回答请给出：本次微调是否满足继续下游验证的最低条件。\n"
   tags:
-  - meta_userlog
   - code_mlip
   data_files: []
   reference_answers:
@@ -2102,7 +2090,6 @@ questions:
   - code_mlip
   - phy_surface
   - phy_phonon
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: phonon_json
@@ -2203,7 +2190,6 @@ questions:
   - code_mlip
   - phy_md
   - phy_surface
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: md_summary_artifact
@@ -2496,7 +2482,6 @@ questions:
 
     请按顺序执行，如果某一步失败请明确告知。'
   tags:
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: turn_budget

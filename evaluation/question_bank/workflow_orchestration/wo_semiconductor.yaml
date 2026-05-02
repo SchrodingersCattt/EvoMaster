@@ -97,7 +97,6 @@ questions:
   - eng_abacus
   - phy_phonon
   - phy_surface
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: phonon_json

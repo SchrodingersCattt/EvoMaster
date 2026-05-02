@@ -8,7 +8,6 @@ from enum import StrEnum
 class QuestionTag(StrEnum):
     """Allowed v5 question tags."""
 
-    meta_userlog = 'meta_userlog'
     meta_literature = 'meta_literature'
     meta_database = 'meta_database'
     wf_batch = 'wf_batch'

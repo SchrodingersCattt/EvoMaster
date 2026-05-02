@@ -754,7 +754,6 @@ questions:
     最终回答需简要说明：你如何保证两种结构在可比条件下进行截面对比。'
   tags:
   - phy_surface
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: fcc_artifact

@@ -207,7 +207,6 @@ questions:
     reading files.
   human_prompt_seed: '请读取工作目录下的 `config.yaml` 文件内容并告诉我里面配置了什么参数。'
   tags:
-  - meta_userlog
   data_files:
   - key: config_yaml
     path: data/EC_tool_choice_read_001/config.yaml
@@ -264,7 +263,6 @@ questions:
 
     - ASE'
   tags:
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: output_artifact
@@ -323,7 +321,6 @@ questions:
 
     将完整表格写入 `metals_table.md`，不要省略任何行。'
   tags:
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: output_artifact
