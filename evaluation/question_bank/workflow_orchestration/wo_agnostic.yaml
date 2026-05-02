@@ -904,7 +904,6 @@ questions:
 
     最终回答中简要给出 C11/C12/C44/B 及与参考数据的一致性判断。'
   tags:
-  - screening_hte
   - meta_database
   data_files: []
   reference_answers:
@@ -1179,7 +1178,6 @@ questions:
     \ `deformation_settings`；\n2) `srtio3_elastic_apex_report.md`：说明 query 输入梳理、mock 后处理流程与结果可靠性讨论。\n\
     \n最终回答中简要给出关键弹性常数并解释其物理含义。\n"
   tags:
-  - screening_hte
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1274,7 +1272,6 @@ questions:
     \ `bulk_modulus`；\n2) `alloy_eos_report.md`：说明 query 输入梳理、mock 后处理流程、体积扫描策略与不确定性。\n\n\
     最终回答中简要说明该 EOS 结果能支持哪些定性判断。\n"
   tags:
-  - screening_hte
   - wf_sweep
   data_files: []
   reference_answers:

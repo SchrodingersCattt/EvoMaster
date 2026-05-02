@@ -14,7 +14,6 @@ questions:
 
     最终回答需简要判断该结果在室温机械性能评估上的可信度。'
   tags:
-  - screening_hte
   - meta_database
   data_files: []
   reference_answers:
@@ -105,7 +104,6 @@ questions:
 
     最终回答中简要说明：优化后结构相对输入结构的主要变化（可定性描述）。'
   tags:
-  - screening_hte
   data_files: []
   reference_answers:
   - key: optimized_structure
