@@ -118,7 +118,6 @@ questions:
   - code_mlip
   - wf_inputs
   - phy_md
-  - mat_semiconductor
   - eng_gpumd
   data_files: []
   reference_answers:
