@@ -25,7 +25,7 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_surface
+  - struct_surface
   data_files:
   - key: base_slab
     path: data/IG_abacus_001_20260404/base_slab.stru
@@ -227,7 +227,7 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_surface
+  - struct_surface
   data_files:
   - key: base_al_slab
     path: data/IG_abacus_003_20260406/base_al_slab.stru
@@ -392,7 +392,7 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_surface
+  - struct_surface
   data_files:
   - key: base_h2o
     path: data/IG_abacus_004_20260406/base_h2o.stru
@@ -759,7 +759,7 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_surface
+  - struct_surface
   - wf_inputs
   data_files:
   - key: bulk_al_fcc

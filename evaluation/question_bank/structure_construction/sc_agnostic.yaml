@@ -32,7 +32,7 @@ questions:
 
     '
   tags:
-  - phy_surface
+  - struct_surface
   data_files: []
   reference_answers:
   - key: unit_cell_atoms
@@ -264,7 +264,6 @@ questions:
 
     '
   tags:
-  - phy_surface
   - safety_hazard
   data_files:
   - key: dacmor_cif
@@ -509,7 +508,7 @@ questions:
 
     '
   tags:
-  - phy_surface
+  - struct_surface
   priority: P0
   data_files: []
   reference_answers:
@@ -619,7 +618,7 @@ questions:
 
     '
   tags:
-  - phy_surface
+  - struct_surface
   data_files: []
   reference_answers:
   - key: file_exists
@@ -751,7 +750,7 @@ questions:
 
     最终回答需简要说明：你如何保证两种结构在可比条件下进行截面对比。'
   tags:
-  - phy_surface
+  - struct_surface
   data_files: []
   reference_answers:
   - key: fcc_artifact

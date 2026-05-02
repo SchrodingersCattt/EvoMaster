@@ -85,7 +85,6 @@ questions:
     \ `charge_transfer`；\n2) `al2o3_bader_report.md`：说明 query 输入梳理、mock 后处理流程、主要电荷转移趋势与不确定性。\n\
     \n最终回答中请简要总结 Al 与 O 的电荷转移方向，并标注为 mock 后处理结果。\n"
   tags:
-  - phy_surface
   - eng_abacus
   data_files: []
   reference_answers:
@@ -194,7 +193,6 @@ questions:
 
     '
   tags:
-  - phy_surface
   data_files:
   - key: attachment_manifest
     path: data/WO_general_userlog_005_20260410v3/attachment_manifest.json
@@ -626,7 +624,6 @@ questions:
 
     '
   tags:
-  - phy_surface
   - meta_database
   data_files: []
   reference_answers:
@@ -716,7 +713,6 @@ questions:
 
     '
   tags:
-  - phy_surface
   data_files: []
   reference_answers:
   - key: detonation_velocity_m_s
@@ -909,7 +905,6 @@ questions:
     最终回答中简要给出 C11/C12/C44/B 及与参考数据的一致性判断。'
   tags:
   - screening_hte
-  - phy_surface
   - meta_database
   data_files: []
   reference_answers:
@@ -1092,7 +1087,6 @@ questions:
     \n最终回答中简要给出 C11/C12/C44 与体模量。\n"
   tags:
   - eng_abacus
-  - phy_surface
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1186,7 +1180,6 @@ questions:
     \n最终回答中简要给出关键弹性常数并解释其物理含义。\n"
   tags:
   - screening_hte
-  - phy_surface
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1383,7 +1376,6 @@ questions:
   tags:
   - code_mlip
   - wf_report
-  - phy_surface
   data_files: []
   reference_answers:
   - key: lattice_a_A
@@ -1575,7 +1567,6 @@ questions:
     \ `band_dos_status`；\n3) `srti03_nb125_workflow_report.md`：说明 query 输入梳理、mock 后处理流程、关键观察与不确定性。\n\
     \n最终回答请明确：该掺杂体系是否通过“可进入电子结构分析”的前置检查。\n"
   tags:
-  - phy_surface
   data_files: []
   reference_answers:
   - key: relaxed_struct
@@ -1679,7 +1670,6 @@ questions:
     '
   tags:
   - code_mlip
-  - phy_surface
   data_files: []
   reference_answers:
   - key: forward_barrier_eV
@@ -1751,7 +1741,6 @@ questions:
     '
   tags:
   - code_mlip
-  - phy_surface
   data_files: []
   reference_answers:
   - key: C11_GPa
@@ -1924,7 +1913,6 @@ questions:
     '
   tags:
   - code_mlip
-  - phy_surface
   data_files: []
   reference_answers:
   - key: gamma_optical_max_cm1
@@ -2000,7 +1988,6 @@ questions:
     '
   tags:
   - code_mlip
-  - phy_surface
   data_files: []
   reference_answers:
   - key: avg_temperature_K
@@ -2071,7 +2058,6 @@ questions:
     \ query 输入梳理、mock 后处理的两阶段流程、关键参数与不确定性。\n\n最终回答中请简要说明：检索到的结构与声子结果是否相互一致。\n"
   tags:
   - code_mlip
-  - phy_surface
   data_files: []
   reference_answers:
   - key: phonon_json
@@ -2170,7 +2156,6 @@ questions:
     \ 输入梳理、mock 后处理流程、关键观察与误差来源。\n\n最终回答中简要确认是否满足 300 K / 1 ps / 1 fs 三个条件。\n"
   tags:
   - code_mlip
-  - phy_surface
   data_files: []
   reference_answers:
   - key: md_summary_artifact
@@ -2278,7 +2263,6 @@ questions:
 
     在最终回答中简要总结：是否满足“10 个候选 + Tc 阈值 + 空间群约束”三项要求。'
   tags:
-  - phy_surface
   - wf_batch
   data_files: []
   reference_answers:
@@ -2389,7 +2373,7 @@ questions:
     输出三个文件：`tio2_bulk.cif`（体相）、`tio2_110_slab.cif`（slab）、`INCAR`。'
   tags:
   - eng_vasp
-  - phy_surface
+  - struct_surface
   - meta_database
   data_files: []
   reference_answers:

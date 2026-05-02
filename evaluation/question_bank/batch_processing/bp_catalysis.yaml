@@ -19,7 +19,7 @@ questions:
     \ eV\n"
   tags:
   - wf_batch
-  - phy_surface
+  - struct_surface
   data_files: []
   reference_answers:
   - key: E_ads_Cu

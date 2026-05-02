@@ -121,7 +121,6 @@ questions:
 
     '
   tags:
-  - phy_surface
   - meta_database
   - wf_postprocess
   data_files: []
@@ -517,7 +516,6 @@ questions:
 
     最终回答需简要确认候选数量和可下载资源情况。'
   tags:
-  - phy_surface
   - meta_database
   data_files: []
   reference_answers:

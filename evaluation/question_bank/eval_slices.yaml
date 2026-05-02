@@ -46,8 +46,8 @@ slices:
   - target: "Skill: tasker-polar-surface"
     type: skill
     slices:
-      - "@phy_surface"
-    count: 44
+      - "@struct_surface"
+    count: 22
 
   - target: "Skill: xrd + checkcif"
     type: skill

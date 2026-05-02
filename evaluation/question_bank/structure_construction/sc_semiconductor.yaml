@@ -12,7 +12,7 @@ questions:
 
     '
   tags:
-  - phy_surface
+  - struct_surface
   data_files:
   - key: hetero_spec
     path: data/SC_struct_001/hetero_spec.json
@@ -113,7 +113,7 @@ questions:
 
     '
   tags:
-  - phy_surface
+  - struct_surface
   data_files:
   - key: hydrogen_cap_spec
     path: data/SC_struct_003/hydrogen_cap_spec.json
