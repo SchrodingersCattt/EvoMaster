@@ -3,7 +3,7 @@
 These exercise ``gsas2_pawley.pick_best_candidate`` and
 ``gsas2_pawley.summarize_multi_start`` against real-data fixtures captured
 from two different evaluation runs of the same task
-(``PXRD_thermal_expansion_001_20260427_v3``).
+(``PXRD_thermal_expansion_001_20260502_v4``).
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ def _candidate(
 
 
 # ---------------------------------------------------------------------------
-# Real fixtures from runs of PXRD_thermal_expansion_001_20260427_v3
+# Real fixtures from runs of PXRD_thermal_expansion_001_20260502_v4
 # ---------------------------------------------------------------------------
 
 T303K_COLD_START_FAILING = [
