@@ -509,8 +509,8 @@ questions:
 
     请完成以下交付：
 
-    1) `heusler_candidates.json`：至少包含 `rank`, `formula`, `space_group`, `database_source`,
-    `structure_identifier`, `cif_link_or_path`； 2) `heusler_retrieval_report.md`：说明检索条件、Heusler
+    1) `heusler_candidates.json`：至少包含 `rank`, `formula`, `space_group`, `space_group_number`,
+    `database_source`, `structure_identifier`, `cif_link_or_path`； 2) `heusler_retrieval_report.md`：说明检索条件、Heusler
     识别依据与结果不确定性。
 
     最终回答需简要确认候选数量和可下载资源情况。'
@@ -529,6 +529,7 @@ questions:
       - rank
       - formula
       - space_group
+      - space_group_number
       - database_source
       - structure_identifier
       - cif_link_or_path
