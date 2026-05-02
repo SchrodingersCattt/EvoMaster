@@ -716,7 +716,6 @@ questions:
     For each candidate include: `name`, `SMILES`, `CAS` (if available), `source_database` (where the SMILES/CAS was obtained).
     DO NOT FABRICATE any SMILES, CAS, or identifiers. All chemistry identifiers must be retrieved from authoritative databases accessible via the system (do not invent values or guess SMILES).
   tags:
-  - mat_polymer
   data_files: []
   reference_answers:
   - key: grounding_source

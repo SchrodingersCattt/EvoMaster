@@ -32,7 +32,6 @@ class QuestionTag(StrEnum):
     phy_eos = 'phy_eos'
     phy_md = 'phy_md'
     phy_magnetism = 'phy_magnetism'
-    mat_polymer = 'mat_polymer'
     mat_semiconductor = 'mat_semiconductor'
     char_xrd = 'char_xrd'
     safety_policy = 'safety_policy'
