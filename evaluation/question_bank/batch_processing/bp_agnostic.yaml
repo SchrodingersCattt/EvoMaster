@@ -34,7 +34,6 @@ questions:
     '
   tags:
   - wf_recovery
-  - wf_inputs
   priority: P0
   data_files:
   - key: failure_recovery

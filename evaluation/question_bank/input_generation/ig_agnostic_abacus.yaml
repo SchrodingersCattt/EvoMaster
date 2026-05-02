@@ -760,7 +760,6 @@ questions:
   tags:
   - eng_abacus
   - struct_surface
-  - wf_inputs
   data_files:
   - key: bulk_al_fcc
     path: data/IG_abacus_005_20260406/bulk_al_fcc.stru
@@ -998,7 +997,6 @@ questions:
     '
   tags:
   - eng_abacus
-  - wf_inputs
   data_files:
   - key: mo_bulk
     path: data/IG_abacus_006_20260406/mo_bulk.stru

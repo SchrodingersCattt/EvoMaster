@@ -9,7 +9,6 @@ questions:
   human_prompt_seed: "请按 EMD 热导率流程给石墨烯写一份可直接运行的 `run.in`。要求包含平衡段和生产段，并在生产段输出热流相关统计。"
   tags:
   - code_mlip
-  - wf_inputs
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -43,7 +42,6 @@ questions:
   human_prompt_seed: "请生成一份用于石墨烯 HNEMD 热导率与 SHC 分解的 `run.in`，先平衡再生产，生产段要包含 HNEMD 驱动和 SHC 相关设置。"
   tags:
   - code_mlip
-  - wf_inputs
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -77,7 +75,6 @@ questions:
   human_prompt_seed: "请写一份用于界面热输运 NEMD 的 `run.in`：需要固定区、热源/热汇、温度统计，以及后续 SHC 相关设置。"
   tags:
   - code_mlip
-  - wf_inputs
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -113,7 +110,6 @@ questions:
   human_prompt_seed: "请写一份液态硅的 `run.in`：先高温平衡，再在后续阶段包含自扩散、MSD、黏度和 RDF/ADF 统计。"
   tags:
   - code_mlip
-  - wf_inputs
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -151,7 +147,6 @@ questions:
   human_prompt_seed: "请准备一个主动学习场景的 `run.in`：需要多势函数观察、不确定性触发保存，以及观察者输出设置。"
   tags:
   - code_mlip
-  - wf_inputs
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -185,7 +180,6 @@ questions:
   human_prompt_seed: "请写一份用于偶极输出自洽检查的 `run.in`，要求包含多势函数、NVE、`dump_dipole` 与位置输出。"
   tags:
   - code_mlip
-  - wf_inputs
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -221,7 +215,6 @@ questions:
   human_prompt_seed: "请写一份用于极化率输出自洽检查的 `run.in`，要求包含多势函数、NVE、`dump_polarizability` 与位置输出。"
   tags:
   - code_mlip
-  - wf_inputs
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -257,7 +250,6 @@ questions:
   human_prompt_seed: "请准备一份多势函数观察模式的 `run.in`，要求使用 `dump_observer observe` 输出观测结果。"
   tags:
   - code_mlip
-  - wf_inputs
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -292,7 +284,6 @@ questions:
   human_prompt_seed: "请准备一份多势函数平均模式的 `run.in`，要求使用 `dump_observer average` 输出平均观测结果。"
   tags:
   - code_mlip
-  - wf_inputs
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -327,7 +318,6 @@ questions:
   human_prompt_seed: "请写一份用于 MSD 自洽测试的 `run.in`，要求包含 NVE、`compute_msd` 与基本积分参数。"
   tags:
   - code_mlip
-  - wf_inputs
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -378,7 +368,6 @@ questions:
     输出到当前目录：`nep.in`、`nep_input_note.md`。'
   tags:
   - code_mlip
-  - wf_inputs
   - eng_gpumd
   data_files:
   - key: train_xyz
