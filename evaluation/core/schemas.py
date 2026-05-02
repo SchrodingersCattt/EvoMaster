@@ -418,6 +418,13 @@ class EvalConfig(BaseModel):
     """Top-level evaluation config."""
 
     k: int = 1
+    exp: ModeLiteral = Field(
+        default='direct',
+        description=(
+            'Experiment / mode name passed to ``load_exp_config()``. '
+            'Maps to ``matmaster/exps/{exp}.toml``.'
+        ),
+    )
     question_bank_dir: str = 'evaluation/question_bank'
     output_dir: str = 'runs/mat_master_eval'
     run_label: str = 'matter_eval'

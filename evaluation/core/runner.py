@@ -208,15 +208,16 @@ def _apply_filters(
 def expand_run_plan(
     *, questions: list[QuestionItem], config: EvalConfig
 ) -> list[dict[str, Any]]:
-    """Expand direct mode × k repeat plan.
+    """Expand mode × k repeat plan.
 
-    v5: MATTER eval runs only ``direct`` (no per-question mode scope).
+    ``config.exp`` selects the matmaster exp (default ``direct``).
     """
+    mode = config.exp
     plan: list[dict[str, Any]] = []
     for question in questions:
         for repeat_idx in range(config.k):
             plan.append(
-                {'question': question, 'mode': 'direct', 'repeat_idx': repeat_idx}
+                {'question': question, 'mode': mode, 'repeat_idx': repeat_idx}
             )
     return plan
 
