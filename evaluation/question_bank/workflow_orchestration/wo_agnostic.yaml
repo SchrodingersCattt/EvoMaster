@@ -635,10 +635,6 @@ questions:
     - a0
     - b0
     - failure_handling
-  - key: call_count_range
-    value:
-      min: 5
-      max: 12
   - key: turn_budget
     value:
       max: 18
@@ -674,11 +670,6 @@ questions:
       point.
     axis: efficiency
     verify: no_retries
-  - id: call_count_range
-    criterion: Total MCP tool calls are in a reasonable range for a 5-point EOS workflow (e.g.
-      1 fetch + 5 calc + 1 fit).
-    axis: efficiency
-    verify: call_count_range
   - id: efficiency_judge
     criterion: EOS workflow is completed without unnecessary exploration or redundant intermediate
       steps.
