@@ -156,7 +156,6 @@ questions:
     '
   tags:
   - phy_defect
-  - char_xrd
   reference_answers:
   - key: structures_processed
     value:
