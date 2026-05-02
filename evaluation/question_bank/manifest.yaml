@@ -122,7 +122,7 @@ banks:
   - path: "scientific_analysis/sa_agnostic.yaml"
     capability: "scientific_analysis"
     domain: "agnostic"
-    questions: 5
+    questions: 6
 
   - path: "scientific_analysis/sa_polymer.yaml"
     capability: "scientific_analysis"
@@ -189,4 +189,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 133 questions across 28 active bank files
+# Total: 135 questions across 28 active bank files

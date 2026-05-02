@@ -10,7 +10,7 @@ tool, which submits to a Docker image with GSAS-II pre-installed.
 | image | `registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119` |
 | GSAS-II install | `/root/g2full/GSAS-II/GSASII` (the script default) |
 | machine (single Pawley, basic Rietveld) | `c8_m32_cpu` |
-| machine (directory batch >= 5 patterns, full Rietveld) | `c16_m64_cpu` |
+| machine (directory batch >= 5 patterns, full Rietveld) | `c32_m128_cpu` |
 
 Wall-time guidance: single-pattern Pawley 1-2 min; 8-temperature batch 5-10 min;
 Rietveld standard 3-5 min; auto-index up to `--timeout` per Bravais family
@@ -60,7 +60,7 @@ cells and keeps the lowest-wR result (~5x runtime per pattern; well worth it for
 or DFT-simulated data — see `gsas2_refinement_guide.md` § "Multi-start"). `--chain-cell`
 promotes each accepted refinement to seed the next pattern, gated by `--chain-wr-max`
 (default 25 %) and `--chain-vol-jump-max` (default 0.05) so a bad pattern can't poison
-downstream temperatures. Bump machine to `c16_m64_cpu` whenever `--multi-start ≥ 5` or
+downstream temperatures. Bump machine to `c32_m128_cpu` whenever `--multi-start ≥ 5` or
 the directory has > 5 patterns.
 
 ### Rietveld (`run.sh`)
@@ -118,7 +118,7 @@ Submit (returns `job_id`):
     Bohrium(action="submit",
             input_dir="input_dir",
             image="registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119",
-            machine="c16_m64_cpu",
+            machine="c32_m128_cpu",
             cmd="bash run.sh > log 2>&1")
 
 Poll (non-blocking, has built-in 60 s throttle):
