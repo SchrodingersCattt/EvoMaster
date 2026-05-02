@@ -33,7 +33,6 @@ class QuestionTag(StrEnum):
     phy_md = 'phy_md'
     phy_magnetism = 'phy_magnetism'
     mat_perovskite = 'mat_perovskite'
-    mat_hea = 'mat_hea'
     mat_oxide = 'mat_oxide'
     mat_polymer = 'mat_polymer'
     mat_mof = 'mat_mof'

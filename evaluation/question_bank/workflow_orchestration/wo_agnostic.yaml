@@ -1014,7 +1014,6 @@ questions:
 
     最终回答中简要给出“是否可能形成固溶体”的结论与依据。'
   tags:
-  - mat_hea
   - wf_postprocess
   - meta_userlog
   data_files: []

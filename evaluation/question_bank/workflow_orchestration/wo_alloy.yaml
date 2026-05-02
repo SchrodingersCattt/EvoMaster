@@ -296,7 +296,6 @@ questions:
   tags:
   - meta_userlog
   - phy_elastic
-  - mat_hea
   data_files: []
   reference_answers:
   - key: tensile_json
