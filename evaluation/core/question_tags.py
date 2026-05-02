@@ -38,7 +38,6 @@ class QuestionTag(StrEnum):
     mat_polymer = 'mat_polymer'
     mat_mof = 'mat_mof'
     mat_semiconductor = 'mat_semiconductor'
-    mat_2d = 'mat_2d'
     mat_alloy = 'mat_alloy'
     char_xrd = 'char_xrd'
     safety_policy = 'safety_policy'

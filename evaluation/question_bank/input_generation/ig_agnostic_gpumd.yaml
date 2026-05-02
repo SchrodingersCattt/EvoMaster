@@ -11,7 +11,6 @@ questions:
   - code_mlip
   - wf_inputs
   - phy_md
-  - mat_2d
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -47,7 +46,6 @@ questions:
   - code_mlip
   - wf_inputs
   - phy_md
-  - mat_2d
   - eng_gpumd
   data_files: []
   reference_answers:
@@ -83,7 +81,6 @@ questions:
   - code_mlip
   - wf_inputs
   - phy_md
-  - mat_2d
   - eng_gpumd
   data_files: []
   reference_answers:

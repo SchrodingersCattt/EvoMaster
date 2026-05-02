@@ -13,7 +13,6 @@ questions:
     '
   tags:
   - phy_surface
-  - mat_2d
   data_files:
   - key: hetero_spec
     path: data/SC_struct_001/hetero_spec.json
