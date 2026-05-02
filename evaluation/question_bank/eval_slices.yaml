@@ -116,9 +116,3 @@ slices:
     count: 7
 
   # ── Cross-cutting ───────────────────────────────────────────────────
-
-  - target: "Cross: phonon"
-    type: cross
-    slices:
-      - "@phy_phonon"
-    count: 8

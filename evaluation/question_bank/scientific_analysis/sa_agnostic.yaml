@@ -286,7 +286,6 @@ questions:
     "
   tags:
   - char_xrd
-  - phy_phonon
   - wf_postprocess
   data_files:
   - key: vt_pxrd_data

@@ -24,7 +24,6 @@ class QuestionTag(StrEnum):
     code_mlip = 'code_mlip'
     eng_gpumd = 'eng_gpumd'
     phy_surface = 'phy_surface'
-    phy_phonon = 'phy_phonon'
     char_xrd = 'char_xrd'
     safety_policy = 'safety_policy'
     safety_hazard = 'safety_hazard'
