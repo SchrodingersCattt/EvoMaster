@@ -500,7 +500,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_db_009_20260416v1
+- id: SR_db_009_20260502
   capability: structure_retrieval
   domain: agnostic
   intent: Retrieve five candidate Heusler-alloy structures and summarize downloadable structure
