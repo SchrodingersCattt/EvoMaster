@@ -427,7 +427,6 @@ questions:
     最终回答中确认每条候选如何满足上述组合约束。'
   tags:
   - phy_magnetism
-  - mat_oxide
   - meta_userlog
   data_files: []
   reference_answers:
@@ -621,7 +620,6 @@ questions:
 
     注意：本题仅评估检索与结构元数据汇总。'
   tags:
-  - mat_oxide
   - phy_electronic
   - meta_userlog
   data_files: []
