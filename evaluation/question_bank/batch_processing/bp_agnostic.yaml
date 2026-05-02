@@ -33,7 +33,6 @@ questions:
 
     '
   tags:
-  - wf_recovery
   priority: P0
   data_files:
   - key: failure_recovery

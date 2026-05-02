@@ -10,7 +10,6 @@ class QuestionTag(StrEnum):
 
     meta_literature = 'meta_literature'
     meta_database = 'meta_database'
-    wf_recovery = 'wf_recovery'
     # 软件相关
     eng_vasp = 'eng_vasp'
     eng_abacus = 'eng_abacus'
