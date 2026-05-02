@@ -35,7 +35,7 @@ slices:
     type: skill
     slices:
       - "@code_mlip"
-    count: 24
+    count: 10
 
   - target: "Skill: atomic-structure"
     type: skill
