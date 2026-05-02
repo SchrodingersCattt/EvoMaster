@@ -12,7 +12,6 @@ questions:
 
     '
   tags:
-  - wf_report
   data_files: []
   reference_answers:
   - key: gap_value_eV
@@ -428,7 +427,6 @@ questions:
 
     '
   tags:
-  - wf_report
   - meta_database
   data_files:
   - key: mission_constraints
@@ -1368,7 +1366,6 @@ questions:
     '
   tags:
   - code_mlip
-  - wf_report
   data_files: []
   reference_answers:
   - key: lattice_a_A
@@ -1448,7 +1445,6 @@ questions:
 
     '
   tags:
-  - wf_report
   data_files:
   - key: dpgen_docs
     path: data/WO_general_userlog_001_20260410v3/dpgen_docs_brief.md

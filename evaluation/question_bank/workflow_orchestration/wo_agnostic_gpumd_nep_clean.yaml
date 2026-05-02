@@ -64,7 +64,7 @@ questions:
   domain: agnostic
   intent: Predict Si phonon spectrum using Si_Fan_2019 Tersoff mini potential and assess optical-branch frequency.
   human_prompt_seed: '获取https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/tersoff/Si_Fan_2019.txt，使用这个势函数采取gpumd计算Si的声子谱，计算出Si光学支频率'
-  tags: [code_mlip, wf_report]
+  tags: [code_mlip]
   data_files: []
   reference_answers:
   - key: run_input_artifact
@@ -108,7 +108,7 @@ questions:
   domain: agnostic
   intent: Compute graphene DOS and heat capacity with GPUMD using Graphene_Lindsay_2010_modified potential.
   human_prompt_seed: '获取 https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/tersoff/Graphene_Lindsay_2010_modified.txt，生成可直接运行的 `run.in`,采用 GPUMD 计算石墨烯 DOS 与热容。'
-  tags: [code_mlip, wf_report]
+  tags: [code_mlip]
   data_files: []
   reference_answers:
   - key: run_input_artifact
@@ -152,7 +152,7 @@ questions:
   domain: agnostic
   intent: Compute Si thermal expansion coefficient with GPUMD using Si_Fan_2019 Tersoff mini potential.
   human_prompt_seed: '获取 https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/tersoff/Si_Fan_2019.txt，使用这个势函数采用 GPUMD 计算 Si 的热膨胀系数。'
-  tags: [code_mlip, wf_report]
+  tags: [code_mlip]
   data_files: []
   reference_answers:
   - key: run_input_artifact

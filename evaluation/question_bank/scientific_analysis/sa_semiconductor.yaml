@@ -13,7 +13,6 @@ questions:
 
     最终回答中简要说明：为什么该候选最值得优先验证。'
   tags:
-  - wf_report
   priority: P0
   data_files: []
   reference_answers:
