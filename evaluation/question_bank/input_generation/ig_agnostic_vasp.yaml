@@ -251,7 +251,6 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 ErNaO3 生成一个结构弛豫(relaxation)计算的 VASP INCAR。需要同时优化离子位置和晶胞参数。Er 含 f 电子，需要自旋极化。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_003/task_spec.json
@@ -492,7 +491,6 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为含稀土和过渡金属的氧化物 RbPmMo2O8 生成一个 DFT+U 计算的 VASP INCAR。需要对 Mo 的 d 轨道施加 Hubbard U 校正。元素顺序为 Rb, Pm, Mo, O。体系为磁性体系。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_005/task_spec.json
@@ -615,7 +613,6 @@ questions:
   tags:
   - eng_vasp
   - wf_sweep
-  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_006/task_spec.json
@@ -728,7 +725,6 @@ questions:
   tags:
   - eng_vasp
   - phy_md
-  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_007/task_spec.json
@@ -1102,7 +1098,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_010/task_spec.json
@@ -1363,7 +1358,6 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。Fe 含磁性，需要固定总磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_012/task_spec.json
@@ -1875,7 +1869,6 @@ questions:
   tags:
   - eng_vasp
   - wf_inputs
-  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_016/task_spec.json
@@ -2125,7 +2118,6 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为双钙钛矿 Ca4TaOs 生成一个磁性自洽(SCF)计算的 VASP INCAR。体系含 5d 过渡金属(Ta, Os)，需要自旋极化和适当的初始磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_018/task_spec.json
@@ -2364,7 +2356,6 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为三元硒化物 Na3AlSe 生成一个磁性金属体系的静态 SCF 计算 VASP INCAR。体系为磁性金属，需要投影态密度。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - phy_magnetism
   data_files:
   - key: task_spec
     path: data/IG_incar_020/task_spec.json
