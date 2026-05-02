@@ -427,6 +427,7 @@ questions:
     最终回答中确认每条候选如何满足上述组合约束。'
   tags:
   - phy_magnetism
+  - meta_database
   - meta_userlog
   data_files: []
   reference_answers:
@@ -524,6 +525,7 @@ questions:
     最终回答需简要确认候选数量和可下载资源情况。'
   tags:
   - phy_surface
+  - meta_database
   - meta_userlog
   data_files: []
   reference_answers:
@@ -621,6 +623,7 @@ questions:
     注意：本题仅评估检索与结构元数据汇总。'
   tags:
   - phy_electronic
+  - meta_database
   - meta_userlog
   data_files: []
   reference_answers:

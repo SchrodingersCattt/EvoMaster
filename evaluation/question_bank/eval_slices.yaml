@@ -84,8 +84,8 @@ slices:
   - target: "Tool: mcp-mat-struct-db"
     type: tool
     slices:
-      - structure_retrieval
-    count: 9
+      - "@meta_database"
+    count: 13
 
   - target: "Tool: Bohrium batch/sweep"
     type: tool
