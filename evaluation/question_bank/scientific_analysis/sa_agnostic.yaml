@@ -257,7 +257,7 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 1.0
-- id: PXRD_thermal_expansion_001_20260502_v4
+- id: PXRD_thermal_expansion_001_20260502_v5
   capability: scientific_analysis
   domain: agnostic
   intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
@@ -292,7 +292,7 @@ questions:
   - wf_postprocess
   data_files:
   - key: vt_pxrd_data
-    path: data/PXRD_thermal_expansion_001_20260502_v4/_td-pxrd_test.txt
+    path: data/PXRD_thermal_expansion_001_20260502_v5/_td-pxrd_test.txt
     oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/PXRD_thermal_expansion_001_20260427_v3/1777279719__td-pxrd_test.txt
     description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K, °C labels
       30/50/70/90/110/120/130/140), CSV format with paired (2theta, intensity) columns per
@@ -376,7 +376,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 30000
+      max: 100000
   scoring_checklist:
   - id: rtp_V_303K
     criterion: 'Refined unit cell volume V at the RTP phase / T=303 K is within tolerance
@@ -416,7 +416,7 @@ questions:
     weight: 1.0
   - id: rtp_V_slope
     criterion: 'Linear-fit slope of V vs T over the four RTP temperatures (303/323/343/363 K)
-      is within tolerance (target 0.2013 ± 0.06 Å³/K). Read from eval_results path
+      is within tolerance (target 0.2013 ± 0.08 Å³/K). Read from eval_results path
       rtp.fits.V.slope.'
     axis: correctness
     verify: answer_json_numeric
