@@ -85,7 +85,7 @@ slices:
     type: tool
     slices:
       - "@meta_database"
-    count: 13
+    count: 14
 
   - target: "Tool: Bohrium batch/sweep"
     type: tool
