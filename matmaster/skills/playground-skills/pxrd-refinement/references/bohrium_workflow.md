@@ -118,7 +118,7 @@ Submit (returns `job_id`):
     Bohrium(action="submit",
             input_dir="input_dir",
             image="registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119",
-            machine="c8_m32_cpu",
+            machine="c16_m64_cpu",
             cmd="bash run.sh > log 2>&1")
 
 Poll (non-blocking, has built-in 60 s throttle):
@@ -134,16 +134,10 @@ Download exactly once after a terminal state:
 
 ### Polling discipline
 
-- **Always `Bash(sleep N)` before polling.** Use `sleep 60` before the first poll
-  and `sleep <next_check_seconds>` (from the last poll response) before each
-  subsequent poll. A single Pawley batch takes 3-10 minutes; burning turns on
-  cached-status polls is the #1 cause of turn-budget timeout.
-- During the queue+run window (5-10 min typical), do useful work: stage the next
-  phase's `input_dir`, draft the report skeleton, double-check the initial cell
-  against literature.
-- For multi-job submissions (e.g. one LTP + one HTP job), submit ALL jobs first,
-  then loop: `Bash(sleep 60)` → poll all → if any still Running, sleep again.
-  Serial submit-poll-download triples wall time.
+- **Always `Bash(sleep 45)` before polling.** Never sleep > 60 s. A Pawley batch
+  finishes in 3-8 min; 4-5 polls suffice.
+- Submit ALL jobs first, then loop: `Bash(sleep 45)` → poll all → if any still
+  Running, sleep again. Serial submit-poll-download triples wall time.
 
 ### Re-submitting
 

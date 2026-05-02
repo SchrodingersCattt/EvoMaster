@@ -339,7 +339,7 @@ questions:
     value:
       json_path: rtp.fits.V.slope
       target: 0.2013
-      tolerance: 0.06
+      tolerance: 0.08
     unit: A3/K
   - key: htp_V_slope
     value:

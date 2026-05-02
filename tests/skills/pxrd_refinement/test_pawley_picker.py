@@ -28,6 +28,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
 from gsas2_pawley import (  # noqa: E402
     COLD_START_WR_FLOOR,
     COLD_START_WR_SPREAD,
+    REF_VOL_WR_TOLERANCE,
     pick_best_candidate,
     summarize_multi_start,
 )
@@ -284,6 +285,95 @@ class TestPickBestCandidateAnchor:
         assert picked["volume"] == pytest.approx(1001.0, abs=0.01)
         assert "anchor V=999.00" in reason
         assert "1 rejected" in reason
+        assert "min-wR" in reason
+
+
+class TestPickBestCandidateRefVol:
+    """Reference-volume proximity — used for the first chain point (no anchor)."""
+
+    def test_ref_vol_prefers_closer_seed_over_min_wr(self):
+        """Real 303K scenario: seed 3 has min wR=6.8% but V=1002.68 far from
+        ref V≈999; seed 4 has wR=8.61% but V=996.37 much closer."""
+        candidates = [
+            _candidate(0, wR=8.6, a=10.779, b=9.747, c=10.12, beta=108.37, volume=993.43),
+            _candidate(1, wR=9.69, a=10.902, b=9.575, c=10.02, beta=108.82, volume=1033.43),
+            _candidate(2, wR=8.65, a=10.779, b=9.614, c=10.10, beta=109.07, volume=990.71),
+            _candidate(3, wR=6.8, a=10.708, b=9.748, c=10.12, beta=108.37, volume=1002.68),
+            _candidate(4, wR=8.61, a=10.798, b=9.693, c=10.15, beta=109.24, volume=996.37),
+        ]
+        picked, reason = pick_best_candidate(
+            candidates, reference_volume=999.38,
+        )
+        assert picked["_seed_index"] == 4
+        assert "ref-vol proximity" in reason
+        assert "min-wR=6.80%" in reason
+
+    def test_ref_vol_no_effect_when_anchor_active(self):
+        """When chain anchor is set, ref_vol proximity is skipped."""
+        candidates = [
+            _candidate(0, wR=3.5, a=10.87, b=9.63, c=10.14, beta=108.80, volume=1005.0),
+            _candidate(1, wR=3.2, a=10.90, b=9.63, c=10.15, beta=108.80, volume=1009.0),
+        ]
+        picked, reason = pick_best_candidate(
+            candidates, anchor_volume=1007.0, anchor_max_jump=0.03,
+            reference_volume=950.0,
+        )
+        assert picked["_seed_index"] == 1
+        assert "min-wR" in reason
+        assert "ref-vol" not in reason
+
+    def test_ref_vol_no_effect_when_min_wr_is_closest(self):
+        """When min-wR seed is also closest to reference, normal min-wR path."""
+        candidates = [
+            _candidate(0, wR=5.0, a=10.83, b=9.62, c=10.13, beta=108.75, volume=999.0),
+            _candidate(1, wR=7.0, a=10.70, b=9.60, c=10.10, beta=108.50, volume=980.0),
+        ]
+        picked, reason = pick_best_candidate(
+            candidates, reference_volume=1000.0,
+        )
+        assert picked["_seed_index"] == 0
+        assert "min-wR" in reason
+
+    def test_ref_vol_respects_tolerance_boundary(self):
+        """Seed outside the wR tolerance window is NOT considered."""
+        candidates = [
+            _candidate(0, wR=5.0, a=10.83, b=9.62, c=10.13, beta=108.75, volume=1010.0),
+            _candidate(
+                1, wR=5.0 + REF_VOL_WR_TOLERANCE + 0.1,
+                a=10.83, b=9.62, c=10.13, beta=108.75, volume=999.0,
+            ),
+        ]
+        picked, reason = pick_best_candidate(
+            candidates, reference_volume=1000.0,
+        )
+        assert picked["_seed_index"] == 0
+        assert "min-wR" in reason
+
+    def test_ref_vol_overrides_cold_start_seed0_preference(self):
+        """In cold-start regime (all wR>10%, spread<1.5%) without anchor,
+        ref-vol proximity should take priority over seed-0 fallback."""
+        candidates = [
+            _candidate(0, wR=15.61, a=10.785, b=9.58, c=10.05, beta=108.8, volume=982.4),
+            _candidate(1, wR=15.86, a=10.811, b=9.62, c=10.13, beta=108.75, volume=998.5),
+            _candidate(2, wR=15.53, a=10.657, b=9.50, c=9.90, beta=108.5, volume=939.0),
+            _candidate(3, wR=15.88, a=10.723, b=9.55, c=10.00, beta=108.6, volume=971.3),
+            _candidate(4, wR=15.88, a=10.808, b=9.57, c=10.02, beta=108.7, volume=979.7),
+        ]
+        picked, reason = pick_best_candidate(
+            candidates, reference_volume=999.4,
+        )
+        assert picked["_seed_index"] == 1
+        assert "ref-vol proximity" in reason
+        assert picked["volume"] == pytest.approx(998.5, abs=0.1)
+
+    def test_ref_vol_none_is_backwards_compatible(self):
+        """reference_volume=None (default) doesn't change behavior."""
+        candidates = [
+            _candidate(0, wR=8.6, a=10.779, b=9.747, c=10.12, beta=108.37, volume=993.0),
+            _candidate(1, wR=6.8, a=10.708, b=9.748, c=10.12, beta=108.37, volume=1003.0),
+        ]
+        picked, reason = pick_best_candidate(candidates)
+        assert picked["_seed_index"] == 1
         assert "min-wR" in reason
 
 

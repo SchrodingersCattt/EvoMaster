@@ -353,17 +353,28 @@ def _is_cold_start_regime(successes: list[dict]) -> bool:
     )
 
 
+REF_VOL_WR_TOLERANCE = 3.0  # % — wR penalty budget for reference-volume proximity
+
+
 def pick_best_candidate(
     candidates: list[dict],
     *,
     anchor_volume: float | None = None,
     anchor_max_jump: float = 0.05,
+    reference_volume: float | None = None,
 ) -> tuple[dict, str]:
     """Pick the best Pawley candidate from a multi-start ensemble.
 
     Returns ``(picked, reason)``.
 
     Default rule: minimum wR among successful seeds.
+
+    Reference-volume proximity (first point, no chain anchor): when
+    ``reference_volume`` is set and ``anchor_volume`` is None, candidates
+    whose wR is within ``REF_VOL_WR_TOLERANCE`` of the minimum are
+    short-listed, and the one closest to ``reference_volume`` wins. This
+    prevents a low-wR wrong-basin solution from beating a physically
+    correct one when the data is noisy.
 
     Cold-start tiebreak: when every successful seed has wR above
     COLD_START_WR_FLOOR and the spread is below COLD_START_WR_SPREAD,
@@ -413,6 +424,37 @@ def pick_best_candidate(
             f"only successful seed (seed_index={only.get('_seed_index')})"
             f"{anchor_reason}"
         )
+
+    # Reference-volume proximity: when no chain anchor exists, prefer
+    # candidates close to the initial cell's volume over pure min-wR.
+    # This fires in both cold-start and normal regimes, as long as there
+    # is no chain anchor (first point in a chain or single-pattern mode).
+    if (
+        reference_volume is not None
+        and reference_volume > 0
+        and anchor_volume is None
+        and len(successes) >= 2
+    ):
+        min_wR = min(float(c["wR"]) for c in successes)
+        near_best = [
+            c
+            for c in successes
+            if float(c["wR"]) <= min_wR + REF_VOL_WR_TOLERANCE
+            and c.get("volume") is not None
+        ]
+        if near_best:
+            closest = min(
+                near_best,
+                key=lambda c: abs(float(c["volume"]) - reference_volume),
+            )
+            min_wR_cand = min(successes, key=lambda c: float(c["wR"]))
+            if closest is not min_wR_cand:
+                return closest, (
+                    f"ref-vol proximity: seed_index={closest.get('_seed_index')}, "
+                    f"wR={closest['wR']:.2f}%, V={closest['volume']:.2f} "
+                    f"(ref V={reference_volume:.2f}, min-wR={min_wR:.2f}%, "
+                    f"tolerance={REF_VOL_WR_TOLERANCE:.1f}%){anchor_reason}"
+                )
 
     if _is_cold_start_regime(successes):
         wRs = sorted(float(c["wR"]) for c in successes)
@@ -617,6 +659,14 @@ def cell_dict_to_list(cell_dict: dict) -> list[float]:
     ]
 
 
+def cell_volume(cell_list: list[float]) -> float:
+    """Compute unit-cell volume from [a,b,c,alpha,beta,gamma] in Å/degrees."""
+    a, b, c, alpha, beta, gamma = cell_list
+    ar, br, gr = np.radians(alpha), np.radians(beta), np.radians(gamma)
+    ca, cb, cg = np.cos(ar), np.cos(br), np.cos(gr)
+    return a * b * c * np.sqrt(1 - ca**2 - cb**2 - cg**2 + 2 * ca * cb * cg)
+
+
 # ---------------------------------------------------------------------------
 # Single-pattern refinement (entry point for all modes)
 # ---------------------------------------------------------------------------
@@ -644,6 +694,7 @@ def refine_one_pattern(
     multi_start_ang_sigma: float = 0.5,
     anchor_volume: float | None = None,
     anchor_max_jump: float = 0.05,
+    reference_volume: float | None = None,
 ) -> dict:
     """Run GSAS-II Pawley refinement on a single pattern (multi-start capable)."""
     warnings: list[str] = []
@@ -726,6 +777,7 @@ def refine_one_pattern(
         candidates,
         anchor_volume=anchor_volume,
         anchor_max_jump=anchor_max_jump,
+        reference_volume=reference_volume,
     )
     if not best.get("success"):
         return {
@@ -873,6 +925,7 @@ def run_single(args) -> dict:
     """Refine a single PXRD file."""
     cell_dict = parse_cell_string(args.cell)
     cell_list = cell_dict_to_list(cell_dict)
+    ref_vol = cell_volume(cell_list)
 
     two_theta, intensity = read_xy_file(args.data)
 
@@ -886,6 +939,7 @@ def run_single(args) -> dict:
             instprm_path=instprm,
             workdir=tmpdir,
             label=Path(args.data).stem,
+            reference_volume=ref_vol,
             **_refine_kwargs_from_args(args),
         )
     result["file"] = args.data
@@ -906,6 +960,7 @@ def run_directory(args) -> dict:
 
     cell_dict = parse_cell_string(args.cell)
     cell_list = cell_dict_to_list(cell_dict)
+    ref_vol = cell_volume(cell_list)
     results = []
     canonical_index = {str(path): idx for idx, path in enumerate(files)}
     run_files = list(files)
@@ -931,6 +986,7 @@ def run_directory(args) -> dict:
                     label=fpath.stem,
                     anchor_volume=anchor_volume,
                     anchor_max_jump=args.chain_vol_jump_max,
+                    reference_volume=ref_vol,
                     **_refine_kwargs_from_args(args),
                 )
                 r["file"] = str(fpath)
@@ -966,6 +1022,7 @@ def run_wide_csv(args) -> dict:
 
     cell_dict = parse_cell_string(args.cell)
     cell_list = cell_dict_to_list(cell_dict)
+    ref_vol = cell_volume(cell_list)
     results = []
     canonical_index = {
         (pat["temp_c"], pat["temp_label"]): idx for idx, pat in enumerate(patterns)
@@ -993,6 +1050,7 @@ def run_wide_csv(args) -> dict:
                     label=label,
                     anchor_volume=anchor_volume,
                     anchor_max_jump=args.chain_vol_jump_max,
+                    reference_volume=ref_vol,
                     **_refine_kwargs_from_args(args),
                 )
                 r["temp_c"] = pat["temp_c"]
