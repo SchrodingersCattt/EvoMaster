@@ -869,7 +869,6 @@ questions:
   human_prompt_seed: 读取 `task_spec.json` 中的任务描述。为钙钛矿 BaZrO3 生成一个弹性常数计算的 VASP INCAR。使用有限差分法计算弹性张量，位移幅度 0.015 A。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - phy_elastic
   - wf_inputs
   data_files:
   - key: task_spec
