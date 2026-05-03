@@ -384,6 +384,7 @@ questions:
     '
   tags:
   - struct_surface
+  - struct_transform
   priority: P0
   data_files: []
   reference_answers:

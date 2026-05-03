@@ -12,6 +12,7 @@ questions:
 
     '
   tags:
+  - struct_build
   data_files: []
   reference_answers:
   - key: gap_value_eV
@@ -544,6 +545,7 @@ questions:
 
     '
   tags:
+  - struct_build
   data_files: []
   reference_answers:
   - key: gamma_optical_max_cm1
@@ -699,6 +701,7 @@ questions:
 
     '
   tags:
+  - struct_build
   data_files: []
   reference_answers:
   - key: detonation_velocity_m_s
@@ -798,6 +801,7 @@ questions:
 
     '
   tags:
+  - struct_transform
   - eng_abacus
   data_files: []
   reference_answers:
@@ -1546,6 +1550,7 @@ questions:
     \ `band_dos_status`；\n3) `srti03_nb125_workflow_report.md`：说明 query 输入梳理、mock 后处理流程、关键观察与不确定性。\n\
     \n最终回答请明确：该掺杂体系是否通过“可进入电子结构分析”的前置检查。\n"
   tags:
+  - struct_transform
   data_files: []
   reference_answers:
   - key: relaxed_struct
@@ -1648,6 +1653,7 @@ questions:
 
     '
   tags:
+  - struct_transform
   - code_mlip
   data_files: []
   reference_answers:
@@ -2242,6 +2248,7 @@ questions:
 
     在最终回答中简要总结：是否满足“10 个候选 + Tc 阈值 + 空间群约束”三项要求。'
   tags:
+  - struct_build
   data_files: []
   reference_answers:
   - key: candidate_json

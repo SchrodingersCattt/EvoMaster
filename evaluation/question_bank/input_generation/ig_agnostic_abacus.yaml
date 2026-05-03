@@ -573,6 +573,7 @@ questions:
     '
   tags:
   - eng_abacus
+  - struct_transform
   priority: P0
   data_files:
   - key: base_vacancy
@@ -997,6 +998,7 @@ questions:
     '
   tags:
   - eng_abacus
+  - struct_transform
   data_files:
   - key: mo_bulk
     path: data/IG_abacus_006_20260406/mo_bulk.stru

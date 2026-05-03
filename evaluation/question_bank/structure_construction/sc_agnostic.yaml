@@ -33,6 +33,7 @@ questions:
     '
   tags:
   - struct_surface
+  - struct_molcrys
   data_files: []
   reference_answers:
   - key: unit_cell_atoms
@@ -155,6 +156,7 @@ questions:
 
     '
   tags:
+  - struct_molcrys
   reference_answers:
   - key: structures_processed
     value:
@@ -264,6 +266,7 @@ questions:
 
     '
   tags:
+  - struct_molcrys
   data_files:
   - key: dacmor_cif
     path: data/SC_struct_006/DACMOR.cif
@@ -364,6 +367,7 @@ questions:
 
     '
   tags:
+  - struct_build
   data_files: []
   reference_answers:
   - key: file_exists
