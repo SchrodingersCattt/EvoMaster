@@ -47,7 +47,7 @@ slices:
     type: skill
     slices:
       - "@struct_transform"
-    count: 8
+    count: 9
 
   - target: "Skill: operate-molecular-crystal"
     type: skill
