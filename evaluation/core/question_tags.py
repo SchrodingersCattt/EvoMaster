@@ -8,20 +8,21 @@ from enum import StrEnum
 class QuestionTag(StrEnum):
     """Allowed v5 question tags."""
 
-    meta_literature = 'meta_literature'
+    # 数据来源
     meta_database = 'meta_database'
-    # 软件相关
+    # 计算引擎
     eng_vasp = 'eng_vasp'
     eng_abacus = 'eng_abacus'
-    code_pymatgen = 'code_pymatgen'
-    code_ase = 'code_ase'
-    code_mlip = 'code_mlip'
     eng_gpumd = 'eng_gpumd'
+    eng_lammps = 'eng_lammps'
+    eng_cp2k = 'eng_cp2k'
+    eng_gromacs = 'eng_gromacs'
+    # 代码库/工具链
+    code_mlip = 'code_mlip'
+    # 结构操作
     struct_surface = 'struct_surface'
     struct_build = 'struct_build'
     struct_transform = 'struct_transform'
     struct_molcrys = 'struct_molcrys'
+    # 表征
     char_xrd = 'char_xrd'
-    eng_lammps = 'eng_lammps'
-    eng_cp2k = 'eng_cp2k'
-    eng_gromacs = 'eng_gromacs'
