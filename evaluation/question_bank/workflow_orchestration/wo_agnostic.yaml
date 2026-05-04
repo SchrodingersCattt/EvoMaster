@@ -18,6 +18,7 @@ questions:
     '
   tags:
   - struct_build
+  - eng_cp2k
   data_files: []
   reference_answers:
   - key: gap_value_eV

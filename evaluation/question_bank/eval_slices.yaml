@@ -77,7 +77,7 @@ slices:
     type: skill
     slices:
       - "@eng_cp2k"
-    count: 1
+    count: 2
 
   - target: "Skill: lammps"
     type: skill
