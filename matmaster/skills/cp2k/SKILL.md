@@ -70,6 +70,12 @@ Merge a method template's XC/ADMM/HF sections into the chosen task template.
 - **Basis set file**: referenced by `BASIS_SET_FILE_NAME` in the input (typically bundled in the CP2K Docker image)
 - **Pseudopotential file**: referenced by `POTENTIAL_FILE_NAME` (typically bundled in the image)
 
+## Common Pitfalls
+
+- **`WFN_RESTART_FILE_NAME` belongs under `&DFT`, NOT `&SCF`**. Placing it under `&SCF` causes a parse error.
+- **ADMM auxiliary basis syntax (CP2K ≥ 2024.1)**: use `BASIS_SET AUX_FIT cFIT3` in `&KIND`, not the deprecated `AUX_FIT_BASIS_SET`. The auxiliary basis file is `BASIS_ADMM` or `BASIS_ADMM_MOLOPT`.
+- **Multi-step workflows (e.g. PBE → HSE06)**: write a `run.sh` that chains both calculations in sequence and submit once via Bohrium. This avoids multiple submit/poll/download cycles and saves turns.
+
 ## Physical Checks
 
 Before submission, verify:
@@ -80,7 +86,7 @@ Before submission, verify:
 - **SCF convergence**: EPS_SCF usually 1.0E-6 or tighter for production
 - **Basis set / potential consistency**: DZVP-MOLOPT-SR-GTH + GTH-PBE for standard PBE; check if functional change requires different pseudopotentials
 - **DFT+U**: confirm U values come from literature or linear-response calculations, not arbitrary choices
-- **Hybrid (ADMM)**: verify auxiliary basis (e.g. cFIT or cpFIT) is compatible with the primary basis
+- **Hybrid (ADMM)**: verify auxiliary basis (e.g. cFIT3) is compatible with the primary basis; add `BASIS_SET_FILE_NAME BASIS_ADMM` or `BASIS_ADMM_MOLOPT` under `&DFT`
 - **Band structure**: requires a completed SCF `.wfn` restart file; k-path should match the crystal system's Brillouin zone
 
 ## Submission Workflow

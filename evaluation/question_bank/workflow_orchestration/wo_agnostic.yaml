@@ -37,13 +37,13 @@ questions:
       flags: i
   - key: turn_budget
     value:
-      max: 18
+      max: 35
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 50000
   scoring_checklist:
   - id: gap_value_eV
     criterion: Gap value is in tolerance.
