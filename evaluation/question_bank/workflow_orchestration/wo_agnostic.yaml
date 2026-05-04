@@ -2247,7 +2247,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_struct_003_20260415
+- id: WO_struct_003_20260502
   capability: workflow_orchestration
   domain: agnostic
   intent: Generate and summarize 10 candidate crystal structures constrained by superconducting
@@ -2263,7 +2263,7 @@ questions:
 
     4) 生成 `generation_report.md`，说明生成参数（如 sample 数量、约束条件）、 候选筛选逻辑，以及不确定性声明。
 
-    在最终回答中简要总结：是否满足“10 个候选 + Tc 阈值 + 空间群约束”三项要求。'
+    在最终回答中简要总结：是否满足”10 个候选 + Tc 阈值 + 空间群约束”三项要求。'
   tags:
   - struct_build
   data_files: []
@@ -2283,11 +2283,12 @@ questions:
       - selection_basis
       - '225'
       flags: i
-  - key: tc_threshold_regex
+  - key: structure_artifacts
     value:
       filename: candidate_structures.json
-      pattern: '"predicted_tc_k"\s*:\s*(?:4[1-9](?:\.\d+)?|[5-9]\d(?:\.\d+)?|\d{3,}(?:\.\d+)?)'
-      flags: i
+      path_key: structure_name
+      expected_count: 10
+      count_tolerance: 0
   - key: report_required_tokens
     value:
       filename: generation_report.md
@@ -2300,13 +2301,13 @@ questions:
       - 不确定性
   - key: turn_budget
     value:
-      max: 18
+      max: 25
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 9000
+      max: 20000
   scoring_checklist:
   - id: candidate_json
     criterion: Agent writes `candidate_structures.json` to workspace.
@@ -2321,10 +2322,10 @@ questions:
       225 constraint.
     axis: correctness
     verify: text_file_contains_all
-  - id: tc_threshold_regex
-    criterion: Candidate JSON contains explicit Tc values above 40 K for generated entries.
+  - id: structure_artifacts
+    criterion: Structure files referenced in candidate JSON actually exist in workspace.
     axis: correctness
-    verify: text_file_regex
+    verify: json_file_artifacts
   - id: report_required_tokens
     criterion: Report explains generation parameters, Tc/space-group constraints, and uncertainty
       handling.

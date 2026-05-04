@@ -76,6 +76,7 @@ VerifyLiteral = Literal[
     # JSON file checks
     'json_file_schema',
     'json_file_numeric_range',
+    'json_file_artifacts',
     # tool usage check (did agent call a specific tool name?)
     'tool_name_used',
 ]
@@ -308,6 +309,7 @@ class QuestionItem(BaseModel):
             'answer_json_numeric',
             'json_file_schema',
             'json_file_numeric_range',
+            'json_file_artifacts',
             'tool_name_used',
         }
         for item in self.scoring_checklist:

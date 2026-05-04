@@ -917,6 +917,7 @@ def check_answer_json_numeric_from_ref(
 
 # Re-export from evaluator_json_checks to keep import paths stable
 from .evaluator_json_checks import (  # noqa: E402, F401
+    check_json_file_artifacts,
     check_json_file_numeric_range,
     check_json_file_schema,
     check_tool_name_used,
