@@ -23,7 +23,16 @@
       SCF_GUESS ATOMIC
       EPS_SCF 1.0E-6
       MAX_SCF 50
-      ! For metals: add ADDED_MOS and SMEAR
+      ! --- OT method (recommended for insulators/liquids, faster than diagonalization) ---
+      ! &OT
+      !   MINIMIZER DIIS
+      !   PRECONDITIONER FULL_SINGLE_INVERSE  ! Use for large systems (>100 atoms)
+      !   ! PRECONDITIONER FULL_ALL           ! Use for small systems (<50 atoms)
+      ! &END OT
+      ! Note: OT does NOT produce eigenvalues. If you need HOMO/LUMO,
+      ! use diagonalization (default) with ADDED_MOS instead.
+      !
+      ! --- For metals: add ADDED_MOS and SMEAR ---
       ! ADDED_MOS 20
       ! &SMEAR ON
       !   METHOD FERMI_DIRAC
