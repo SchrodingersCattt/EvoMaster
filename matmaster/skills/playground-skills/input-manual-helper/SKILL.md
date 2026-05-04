@@ -147,7 +147,6 @@ PySCF jobs are Python scripts; no input-file generation is needed. Write the cal
   Usage: `python render_input.py --software <name> --task <task_type> --output <output_file> [--structure <structure_file>] [--overrides <json>]`.
 - **diagnose_input.py** — Validate input file; usage: `python diagnose_input.py --software <name> --input <input_file> [--json_out diag.json]`.
 - **complete_param.py** — (Optional) Auto-complete parameters based on context.
-- **list_references.py** — List available reference templates by software.
 
 ### Validation and reference
 

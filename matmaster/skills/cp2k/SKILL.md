@@ -63,7 +63,7 @@ If the user provides a complete CP2K input file, skip the render/diagnose steps 
 
 Merge a method template's XC/ADMM/HF sections into the chosen task template.
 
-**Template location**: all `.inp` templates are under `input-manual-helper/references/cp2k/` (sibling skill directory). Read the template file before writing CP2K inputs — do not guess parameters.
+**Template location**: all `.inp` templates are under `references/` in this skill directory. Read the template file before writing CP2K inputs — do not guess parameters.
 
 ## Required Files
 
