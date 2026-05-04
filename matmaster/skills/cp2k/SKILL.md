@@ -85,7 +85,7 @@ Before submission, verify:
 - **REL_CUTOFF**: typically 60-80 Ry
 - **K-points**: periodic systems require a Monkhorst-Pack grid consistent with cell size; 1x1x1 only for molecules or very large cells
 - **SCF convergence**: EPS_SCF usually 1.0E-6 or tighter for production
-- **Basis set / potential consistency**: DZVP-MOLOPT-SR-GTH + GTH-PBE for standard PBE; check if functional change requires different pseudopotentials
+- **Basis set**: default to `DZVP-MOLOPT-SR-GTH` for all elements. Only use `TZV2P-MOLOPT-GTH` when higher accuracy is explicitly required — it is significantly slower for large systems (>100 atoms). Potential: `GTH-PBE` for PBE-based functionals (including HSE06)
 - **DFT+U**: confirm U values come from literature or linear-response calculations, not arbitrary choices
 - **Hybrid (ADMM)**: verify auxiliary basis (e.g. cFIT3) is compatible with the primary basis; add `BASIS_SET_FILE_NAME BASIS_ADMM` or `BASIS_ADMM_MOLOPT` under `&DFT`
 - **Band structure**: requires a completed SCF `.wfn` restart file; k-path should match the crystal system's Brillouin zone
