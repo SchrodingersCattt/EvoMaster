@@ -24,9 +24,9 @@ questions:
 
     '
   tags:
-  - abacus
-  - bsse
-  - phy_surface
+  - eng_abacus
+  - code_mlip
+  - struct_surface
   data_files:
   - key: base_slab
     path: data/IG_abacus_001_20260404/base_slab.stru
@@ -209,9 +209,9 @@ questions:
 
     '
   tags:
-  - abacus
-  - electrostatics
-  - phy_surface
+  - eng_abacus
+  - code_mlip
+  - struct_surface
   data_files:
   - key: base_al_slab
     path: data/IG_abacus_003_20260406/base_al_slab.stru
@@ -375,9 +375,9 @@ questions:
 
     '
   tags:
-  - abacus
-  - electrostatics
-  - phy_surface
+  - eng_abacus
+  - code_mlip
+  - struct_surface
   data_files:
   - key: base_h2o
     path: data/IG_abacus_004_20260406/base_h2o.stru
@@ -557,9 +557,9 @@ questions:
 
     '
   tags:
-  - abacus
-  - bsse
-  - phy_defect
+  - eng_abacus
+  - code_mlip
+  - struct_transform
   priority: P0
   data_files:
   - key: base_vacancy
@@ -745,9 +745,9 @@ questions:
 
     '
   tags:
-  - abacus
-  - phy_surface
-  - wf_inputs
+  - eng_abacus
+  - code_mlip
+  - struct_surface
   data_files:
   - key: bulk_al_fcc
     path: data/IG_abacus_005_20260406/bulk_al_fcc.stru
@@ -977,9 +977,9 @@ questions:
 
     '
   tags:
-  - abacus
-  - phy_defect
-  - wf_inputs
+  - eng_abacus
+  - code_mlip
+  - struct_transform
   data_files:
   - key: mo_bulk
     path: data/IG_abacus_006_20260406/mo_bulk.stru
