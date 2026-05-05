@@ -51,13 +51,14 @@ Three scripts in `scripts/`, all run on Bohrium:
      --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
      --wavelength 1.5406 \
      --multi-start 5 --chain-cell \
+     --standardize-cell ref \
      --debug-plot plots \
      -o results.json
    ```
 
    Then submit with `cmd="bash run.sh > log 2>&1"` — this is the **only** cmd string you should ever pass to the Bohrium tool. Never put the `python3 gsas2_pawley.py ...` invocation directly in the `cmd` field.
 
-   `--multi-start 5` runs Pawley five times from deterministically-perturbed seeds and keeps the lowest-wR result (cheap insurance against local-minimum traps; see `references/gsas2_refinement_guide.md` § "Multi-start"). `--chain-cell` only promotes refinements that pass the wR / volume-jump gates, so it is safe even on patterns that may straddle a phase transition. Image: `registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119`. Machine: `c32_m128_cpu`. Full templates in `references/bohrium_workflow.md`. Key rules: never use `cd` in `cmd`; always end `cmd` with `> log 2>&1`. **Polling discipline:** `Bash(command="sleep 45")` before **every** poll. Never `sleep` > 60 s. Submit all jobs at once, then loop: sleep 45 → poll all → sleep again until all Finished. A batch takes 3-8 min; 4-5 polls suffice.
+   `--multi-start 5` runs Pawley five times from deterministically-perturbed seeds and keeps the lowest-wR result (cheap insurance against local-minimum traps; see `references/gsas2_refinement_guide.md` § "Multi-start"). `--chain-cell` only promotes refinements that pass the wR / volume-jump gates, so it is safe even on patterns that may straddle a phase transition. `--standardize-cell ref` aligns each refined cell to the initial-cell setting via axis-permutation search (handles monoclinic a↔c/β flip, orthorhombic axis relabelling, etc.); use `--standardize-cell niggli` for triclinic or when the refined cell may be a non-standard reduced cell (requires spglib in the image). **Always pass `--standardize-cell ref` (or `niggli` for triclinic) in VT-PXRD or any multi-pattern run** to ensure consistent cell parameters across patterns. Image: `registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119`. Machine: `c32_m128_cpu`. Full templates in `references/bohrium_workflow.md`. Key rules: never use `cd` in `cmd`; always end `cmd` with `> log 2>&1`. **Polling discipline:** `Bash(command="sleep 45")` before **every** poll. Never `sleep` > 60 s. Submit all jobs at once, then loop: sleep 45 → poll all → sleep again until all Finished. A batch takes 3-8 min; 4-5 polls suffice.
 
 3. **Parse `results.json`**: check `success`, `warnings`, `curation.verdict` first; then `wR`/`Rwp` against the contract-3 thresholds; then cell vs. initial cell. On failure, see `references/gsas2_refinement_guide.md` § "Common errors and fixes" and adjust deliberately — do not loop.
 
