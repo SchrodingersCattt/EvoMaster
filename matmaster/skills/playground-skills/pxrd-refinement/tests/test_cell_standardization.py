@@ -21,6 +21,7 @@ from gsas2_pawley import (  # noqa: E402
     cell_to_lattice,
     cell_volume,
     lattice_to_cell,
+    merge_chain_directions,
     niggli_reduce_cell,
     standardize_cell,
 )
@@ -116,3 +117,32 @@ def test_standardize_cell_can_use_niggli_before_reference_alignment():
     assert result["alpha"] == pytest.approx(75.1, abs=0.01)
     assert result["beta"] == pytest.approx(85.0, abs=0.01)
     assert result["gamma"] == pytest.approx(80.0, abs=0.01)
+
+
+def test_merge_chain_directions_prefers_reference_volume_for_high_wr_tie():
+    reference_volume = 999.3806
+    forward = [
+        {"success": True, "file": "pxrd_303K.xy", "wR": 16.18, "volume": 997.6932},
+        {"success": True, "file": "pxrd_323K.xy", "wR": 17.63, "volume": 998.6489},
+        {"success": True, "file": "pxrd_343K.xy", "wR": 3.67, "volume": 1004.1638},
+        {"success": True, "file": "pxrd_363K.xy", "wR": 3.66, "volume": 1006.1947},
+    ]
+    reverse = [
+        {"success": True, "file": "pxrd_303K.xy", "wR": 16.12, "volume": 1002.5346},
+        {"success": True, "file": "pxrd_323K.xy", "wR": 16.27, "volume": 1001.8401},
+        {"success": True, "file": "pxrd_343K.xy", "wR": 3.67, "volume": 1004.0133},
+        {"success": True, "file": "pxrd_363K.xy", "wR": 3.67, "volume": 1006.3714},
+    ]
+
+    merged, audit = merge_chain_directions(forward, reverse, reference_volume)
+
+    assert [r["merge_source"] for r in merged] == [
+        "forward",
+        "forward",
+        "forward",
+        "forward",
+    ]
+    assert merged[0]["volume"] == pytest.approx(997.6932)
+    assert merged[1]["volume"] == pytest.approx(998.6489)
+    assert audit["merged"]["V_slope"] == pytest.approx(0.155097, abs=1e-6)
+    assert audit["table"][0]["reason"].startswith("both high-wR/tied")

@@ -1091,6 +1091,144 @@ def _chain_anchor_volume(args, last_accepted: dict | None) -> float | None:
     return float(volume) if volume is not None else None
 
 
+def _clone_args_with_direction(args, direction: str):
+    values = vars(args).copy()
+    values["chain_cell_direction"] = direction
+    return argparse.Namespace(**values)
+
+
+def _result_temperature_key(result: dict, fallback: int) -> float:
+    if result.get("temp_c") is not None:
+        return float(result["temp_c"]) + 273.15
+    label = str(result.get("file") or result.get("temp_label") or "")
+    match = re.search(r"(\d+)\s*K", label, flags=re.IGNORECASE)
+    if match:
+        return float(match.group(1))
+    match = re.search(r"(\d+)\s*C", label, flags=re.IGNORECASE)
+    if match:
+        return float(match.group(1)) + 273.15
+    return float(fallback)
+
+
+def _volume_slope(results: list[dict]) -> float | None:
+    pairs = [
+        (_result_temperature_key(r, i), r.get("volume"))
+        for i, r in enumerate(results)
+        if r.get("success") and r.get("volume") is not None
+    ]
+    if len(pairs) < 2:
+        return None
+    x = np.array([p[0] for p in pairs], dtype=float)
+    y = np.array([p[1] for p in pairs], dtype=float)
+    return float(np.polyfit(x, y, 1)[0])
+
+
+def _volume_audit(results: list[dict]) -> dict:
+    volumes = [
+        float(r["volume"])
+        for r in results
+        if r.get("success") and r.get("volume") is not None
+    ]
+    if len(volumes) < 2:
+        return {
+            "n_points": len(volumes),
+            "monotonic_or_near": None,
+            "max_adjacent_jump_fraction": None,
+            "V_slope": _volume_slope(results),
+        }
+    deltas = [volumes[i + 1] - volumes[i] for i in range(len(volumes) - 1)]
+    jumps = [
+        abs(volumes[i + 1] - volumes[i]) / volumes[i]
+        for i in range(len(volumes) - 1)
+        if volumes[i]
+    ]
+    return {
+        "n_points": len(volumes),
+        "monotonic_or_near": all(delta >= -1.0 for delta in deltas),
+        "max_adjacent_jump_fraction": max(jumps) if jumps else 0.0,
+        "V_slope": _volume_slope(results),
+    }
+
+
+def _pick_chain_merge_candidate(
+    forward: dict,
+    reverse: dict,
+    reference_volume: float,
+    high_wr: float = 10.0,
+    wr_tie: float = 3.0,
+) -> tuple[dict, dict]:
+    """Pick one forward/reverse result using the PXRD merge contract."""
+    f_ok = forward.get("success")
+    r_ok = reverse.get("success")
+    f_wr = forward.get("wR")
+    r_wr = reverse.get("wR")
+    f_vol = forward.get("volume")
+    r_vol = reverse.get("volume")
+    f_dv = abs(float(f_vol) - reference_volume) if f_vol is not None else None
+    r_dv = abs(float(r_vol) - reference_volume) if r_vol is not None else None
+
+    if f_ok and not r_ok:
+        source, reason = "forward", "reverse failed"
+    elif r_ok and not f_ok:
+        source, reason = "reverse", "forward failed"
+    elif not f_ok and not r_ok:
+        source, reason = "forward", "both failed"
+    elif (
+        f_wr is not None
+        and r_wr is not None
+        and f_wr > high_wr
+        and r_wr > high_wr
+        and abs(f_wr - r_wr) < wr_tie
+        and f_dv is not None
+        and r_dv is not None
+    ):
+        source = "forward" if f_dv <= r_dv else "reverse"
+        reason = "both high-wR/tied; picked closer to reference volume"
+    elif f_wr is not None and r_wr is not None:
+        source = "forward" if f_wr <= r_wr else "reverse"
+        reason = "picked lower wR"
+    else:
+        source = "forward"
+        reason = "missing wR; kept forward"
+
+    chosen = dict(forward if source == "forward" else reverse)
+    chosen["merge_source"] = source
+    chosen["merge_reason"] = reason
+    table_row = {
+        "file": forward.get("file") or reverse.get("file"),
+        "temp_c": forward.get("temp_c", reverse.get("temp_c")),
+        "temp_label": forward.get("temp_label", reverse.get("temp_label")),
+        "wR_forward": f_wr,
+        "V_forward": f_vol,
+        "dV_ref_forward": f_dv,
+        "wR_reverse": r_wr,
+        "V_reverse": r_vol,
+        "dV_ref_reverse": r_dv,
+        "chosen": source,
+        "reason": reason,
+    }
+    return chosen, table_row
+
+
+def merge_chain_directions(
+    forward_results: list[dict], reverse_results: list[dict], reference_volume: float
+) -> tuple[list[dict], dict]:
+    merged: list[dict] = []
+    table: list[dict] = []
+    for fwd, rev in zip(forward_results, reverse_results):
+        chosen, row = _pick_chain_merge_candidate(fwd, rev, reference_volume)
+        merged.append(chosen)
+        table.append(row)
+    audit = {
+        "reference_volume": round(float(reference_volume), 4),
+        "table": table,
+        "forward": _volume_audit(forward_results),
+        "reverse": _volume_audit(reverse_results),
+        "merged": _volume_audit(merged),
+    }
+    return merged, audit
+
+
 # ---------------------------------------------------------------------------
 # CLI modes
 # ---------------------------------------------------------------------------
@@ -1136,8 +1274,53 @@ def run_directory(args) -> dict:
     cell_dict = parse_cell_string(args.cell)
     cell_list = cell_dict_to_list(cell_dict)
     ref_vol = cell_volume(cell_list)
-    results = []
     canonical_index = {str(path): idx for idx, path in enumerate(files)}
+
+    if args.chain_cell and args.chain_cell_direction == "both":
+        forward = _run_directory_direction(
+            _clone_args_with_direction(args, "forward"),
+            files=files,
+            cell_list=cell_list,
+            ref_vol=ref_vol,
+            canonical_index=canonical_index,
+        )
+        reverse = _run_directory_direction(
+            _clone_args_with_direction(args, "reverse"),
+            files=files,
+            cell_list=cell_list,
+            ref_vol=ref_vol,
+            canonical_index=canonical_index,
+        )
+        merged, audit = merge_chain_directions(
+            forward["results"], reverse["results"], ref_vol
+        )
+        return {
+            "success": True,
+            "chain_cell_direction": "both",
+            "merge_strategy": "high-wR reference-volume proximity, otherwise lower wR",
+            "merge_audit": audit,
+            "forward_results": forward["results"],
+            "reverse_results": reverse["results"],
+            "results": merged,
+        }
+
+    return _run_directory_direction(
+        args,
+        files=files,
+        cell_list=cell_list,
+        ref_vol=ref_vol,
+        canonical_index=canonical_index,
+    )
+
+
+def _run_directory_direction(
+    args,
+    files: list[Path],
+    cell_list: list[float],
+    ref_vol: float,
+    canonical_index: dict[str, int],
+) -> dict:
+    results = []
     run_files = list(files)
     if args.chain_cell and args.chain_cell_direction == "reverse":
         run_files = list(reversed(run_files))
@@ -1198,10 +1381,55 @@ def run_wide_csv(args) -> dict:
     cell_dict = parse_cell_string(args.cell)
     cell_list = cell_dict_to_list(cell_dict)
     ref_vol = cell_volume(cell_list)
-    results = []
     canonical_index = {
         (pat["temp_c"], pat["temp_label"]): idx for idx, pat in enumerate(patterns)
     }
+
+    if args.chain_cell and args.chain_cell_direction == "both":
+        forward = _run_wide_csv_direction(
+            _clone_args_with_direction(args, "forward"),
+            patterns=patterns,
+            cell_list=cell_list,
+            ref_vol=ref_vol,
+            canonical_index=canonical_index,
+        )
+        reverse = _run_wide_csv_direction(
+            _clone_args_with_direction(args, "reverse"),
+            patterns=patterns,
+            cell_list=cell_list,
+            ref_vol=ref_vol,
+            canonical_index=canonical_index,
+        )
+        merged, audit = merge_chain_directions(
+            forward["results"], reverse["results"], ref_vol
+        )
+        return {
+            "success": True,
+            "chain_cell_direction": "both",
+            "merge_strategy": "high-wR reference-volume proximity, otherwise lower wR",
+            "merge_audit": audit,
+            "forward_results": forward["results"],
+            "reverse_results": reverse["results"],
+            "results": merged,
+        }
+
+    return _run_wide_csv_direction(
+        args,
+        patterns=patterns,
+        cell_list=cell_list,
+        ref_vol=ref_vol,
+        canonical_index=canonical_index,
+    )
+
+
+def _run_wide_csv_direction(
+    args,
+    patterns: list[dict],
+    cell_list: list[float],
+    ref_vol: float,
+    canonical_index: dict[tuple, int],
+) -> dict:
+    results = []
     run_patterns = list(patterns)
     if args.chain_cell and args.chain_cell_direction == "reverse":
         run_patterns = list(reversed(run_patterns))
@@ -1309,7 +1537,7 @@ def main() -> None:
     ap.add_argument("--chain-cell", action="store_true")
     ap.add_argument(
         "--chain-cell-direction",
-        choices=["forward", "reverse"],
+        choices=["forward", "reverse", "both"],
         default="forward",
     )
     ap.add_argument("--chain-wr-max", type=float, default=25.0)

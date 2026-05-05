@@ -249,7 +249,7 @@ invent them from peak positions (see SKILL.md § "Hard contracts").
 # Place all patterns in a directory with consistent naming, then run:
 python gsas2_pawley.py --data /path/to/patterns/ \
   --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-  --multi-start 5 --chain-cell \
+  --multi-start 5 --chain-cell --chain-cell-direction both --standardize-cell ref \
   -o results.json
 ```
 
@@ -261,7 +261,9 @@ reverts to the last accepted cell. Sort order follows alphabetical filename orde
 files consistently (e.g. `pattern_303K.xy`, `pattern_323K.xy`, ...). For data that spans a
 phase transition use **separate** jobs per phase (see "Phase transitions" below); the
 quality gate will reject a transition jump but the cleanest pattern is to not chain across
-phases at all.
+phases at all. For noisy variable-temperature data, `--chain-cell-direction both` runs
+forward and reverse chains internally and returns merged `results`; inspect `merge_audit`
+to see which direction was selected at each temperature.
 
 ### B. Wide-table CSV
 
@@ -270,7 +272,7 @@ phases at all.
 # Header: Angle, 25 C, Angle, 40 C, ...
 python gsas2_pawley.py --data multi_temp.txt --wide-csv \
   --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-  --multi-start 5 --chain-cell \
+  --multi-start 5 --chain-cell --chain-cell-direction both --standardize-cell ref \
   -o results.json
 ```
 
