@@ -945,7 +945,7 @@ questions:
     verify: turn_budget
   - id: no_retries
     criterion: No repeated identical tool calls with the same parameter set.
-    axis: efficiency  
+    axis: efficiency
     verify: no_retries
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
