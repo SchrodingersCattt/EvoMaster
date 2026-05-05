@@ -78,6 +78,11 @@ Chem.MolToMolFile(mol, "molecule.mol")
 
 ## Hard Guards
 
+- **Never hand-write fractional coordinates into a manually constructed ASE
+  `cell` array.** Fractional coordinates depend on the cell angle convention
+  (γ=60° vs 120° for hexagonal). Use `pymatgen Lattice.from_parameters()` +
+  `Structure()` or `Structure.from_spacegroup()` to avoid mismatch. ASE `bulk()`
+  is safe for named prototypes only.
 - Output filename and extension MUST exactly match the caller's specification
   (spelling, casing, abbreviation, suffix). Never substitute conventional
   aliases or systematic equivalents (e.g. do not rename `gamma_alumina.cif`
