@@ -143,7 +143,7 @@ pytest-mr-main:
       cd /app &&
       python -V &&
       . .venv/bin/activate &&
-      uv pip install pytest pytest-asyncio pytest-cov pytest-xdist pytest-timer &&
+      uv pip install pytest pytest-asyncio pytest-cov pytest-xdist pytest-timer numpy &&
       pytest -n 8 --cov=./ --cov-report term-missing --cov-report html:/app/htmlcov -sv
       "
     - docker cp ${CI_PROJECT_DIR}/tests/. "testcov-${CI_PIPELINE_ID}":/app/tests/
