@@ -86,55 +86,149 @@ COLD_START_WR_SPREAD = 1.5
 _CELL_FIELDS = ("a", "b", "c", "alpha", "beta", "gamma", "volume")
 _ESD_FIELDS = ("a_esd", "b_esd", "c_esd", "alpha_esd", "beta_esd", "gamma_esd")
 
-_MONOCLINIC_SG_PREFIXES = {"P 2", "P 21", "C 2", "I 2", "A 2", "B 2"}
+
+# ---------------------------------------------------------------------------
+# Cell standardisation — spglib Niggli reduction + reference-cell alignment
+# ---------------------------------------------------------------------------
+
+# Axis permutations: (a,b,c,α,β,γ) index mapping for all 6 orderings.
+# α = angle(b,c), β = angle(a,c), γ = angle(a,b).
+_AXIS_PERMS = [
+    (0, 1, 2, 3, 4, 5),  # a  b  c  α β γ  (identity)
+    (0, 2, 1, 4, 3, 5),  # a  c  b  β α γ
+    (1, 0, 2, 3, 5, 4),  # b  a  c  α γ β
+    (1, 2, 0, 5, 3, 4),  # b  c  a  γ α β
+    (2, 0, 1, 4, 5, 3),  # c  a  b  β γ α
+    (2, 1, 0, 5, 4, 3),  # c  b  a  γ β α
+]
 
 
-def is_monoclinic(space_group: str, cell_list: list[float]) -> bool:
-    """Detect monoclinic (unique axis b) from space group or cell geometry."""
-    sg = space_group.strip()
-    for prefix in _MONOCLINIC_SG_PREFIXES:
-        if sg.startswith(prefix):
-            return True
-    a, b, c, alpha, beta, gamma = cell_list
-    if abs(alpha - 90.0) < 0.5 and abs(gamma - 90.0) < 0.5 and abs(beta - 90.0) > 0.5:
-        return True
-    return False
+def cell_to_lattice(cell: list[float]) -> np.ndarray:
+    """[a,b,c,α,β,γ] (Å/deg) → 3×3 row-vector lattice matrix."""
+    a, b, c, alpha, beta, gamma = cell
+    ar, br, gr = np.radians(alpha), np.radians(beta), np.radians(gamma)
+    bx = b * np.cos(gr)
+    by = b * np.sin(gr)
+    cx = c * np.cos(br)
+    cy = c * (np.cos(ar) - np.cos(br) * np.cos(gr)) / np.sin(gr)
+    cz = np.sqrt(max(c * c - cx * cx - cy * cy, 0.0))
+    return np.array([[a, 0.0, 0.0], [bx, by, 0.0], [cx, cy, cz]])
 
 
-def standardize_monoclinic_cell(result: dict, ref_cell: list[float]) -> dict:
-    """Ensure the refined monoclinic cell is in the same setting as *ref_cell*.
+def lattice_to_cell(L: np.ndarray) -> list[float]:
+    """3×3 row-vector lattice matrix → [a,b,c,α,β,γ]."""
+    va, vb, vc = L[0], L[1], L[2]
+    a, b, c = (np.linalg.norm(v) for v in (va, vb, vc))
+    alpha = np.degrees(np.arccos(np.clip(np.dot(vb, vc) / (b * c), -1, 1)))
+    beta = np.degrees(np.arccos(np.clip(np.dot(va, vc) / (a * c), -1, 1)))
+    gamma = np.degrees(np.arccos(np.clip(np.dot(va, vb) / (a * b), -1, 1)))
+    return [float(a), float(b), float(c), float(alpha), float(beta), float(gamma)]
 
-    Monoclinic (unique axis b) has one non-trivial cell equivalence:
-    (a, c, beta) <-> (c, a, 180-beta).  If the refinement converged to
-    the alternate setting, flip it back so that a/c/beta stay comparable
-    across a temperature series.
 
-    Decision rule: compare Euclidean distance in (a, c, beta) space to
-    the reference; pick whichever setting is closer.
+def niggli_reduce_cell(cell: list[float]) -> list[float]:
+    """Niggli-reduce a cell using spglib, with fallback to identity."""
+    try:
+        import spglib
+
+        L = cell_to_lattice(cell)
+        L_reduced = spglib.niggli_reduce(L)
+        if L_reduced is None:
+            return list(cell)
+        return lattice_to_cell(L_reduced)
+    except ImportError:
+        print(
+            "[gsas2_pawley] WARNING: spglib not available, "
+            "Niggli reduction skipped",
+            file=sys.stderr,
+        )
+        return list(cell)
+
+
+def _cell_distance_weighted(c1: list[float], c2: list[float]) -> float:
+    """Distance between two cells, weighting lengths (Å) and angles (°)."""
+    d = 0.0
+    for i in range(3):
+        d += (c1[i] - c2[i]) ** 2
+    for i in range(3, 6):
+        d += ((c1[i] - c2[i]) / 10.0) ** 2
+    return d
+
+
+def _enumerate_equivalent_settings(cell: list[float]) -> list[list[float]]:
+    """Generate all equivalent cell settings via axis permutation + angle supplement."""
+    out: list[list[float]] = []
+    for perm in _AXIS_PERMS:
+        base = [cell[perm[i]] for i in range(6)]
+        queue = [base]
+        for ang_idx in (3, 4, 5):
+            expanded = []
+            for v in queue:
+                expanded.append(v)
+                if abs(v[ang_idx] - 90.0) > 0.5:
+                    alt = list(v)
+                    alt[ang_idx] = 180.0 - alt[ang_idx]
+                    expanded.append(alt)
+            queue = expanded
+        out.extend(queue)
+    return out
+
+
+def standardize_cell(
+    result: dict, ref_cell: list[float], niggli: bool = False
+) -> dict:
+    """Standardise refined cell to the same setting as *ref_cell*.
+
+    Enumerates axis permutations × angle-supplement equivalences of
+    the refined cell (and optionally its Niggli-reduced form) and picks
+    the setting closest to *ref_cell*.
 
     Operates in-place and returns the same dict.
     """
-    a, b, c = result["a"], result["b"], result["c"]
-    beta = result["beta"]
-    a0, _, c0 = ref_cell[0], ref_cell[1], ref_cell[2]
-    beta0 = ref_cell[4]
+    cur = [
+        result["a"], result["b"], result["c"],
+        result["alpha"], result["beta"], result["gamma"],
+    ]
 
-    d_orig = (a - a0) ** 2 + (c - c0) ** 2 + (beta - beta0) ** 2
-    alt_a, alt_c, alt_beta = c, a, 180.0 - beta
-    d_swap = (alt_a - a0) ** 2 + (alt_c - c0) ** 2 + (alt_beta - beta0) ** 2
+    sources = [cur]
+    if niggli:
+        sources.append(niggli_reduce_cell(cur))
 
-    if d_swap < d_orig:
-        result["a"] = round(alt_a, 5)
-        result["c"] = round(alt_c, 5)
-        result["beta"] = round(alt_beta, 4)
-        if "a_esd" in result and "c_esd" in result:
-            result["a_esd"], result["c_esd"] = result["c_esd"], result["a_esd"]
-        result["volume"] = round(
-            cell_volume(
-                [alt_a, b, alt_c, result["alpha"], alt_beta, result["gamma"]]
-            ),
-            4,
-        )
+    candidates: list[list[float]] = []
+    for src in sources:
+        candidates.extend(_enumerate_equivalent_settings(src))
+
+    best = cur
+    best_d = _cell_distance_weighted(cur, ref_cell)
+    for cand in candidates:
+        d = _cell_distance_weighted(cand, ref_cell)
+        if d < best_d - 1e-8:
+            best_d = d
+            best = cand
+
+    if best is not cur:
+        result["a"] = round(best[0], 5)
+        result["b"] = round(best[1], 5)
+        result["c"] = round(best[2], 5)
+        result["alpha"] = round(best[3], 4)
+        result["beta"] = round(best[4], 4)
+        result["gamma"] = round(best[5], 4)
+
+        old_esds = [result.get(f) for f in _ESD_FIELDS]
+        if all(e is not None for e in old_esds):
+            for perm in _AXIS_PERMS:
+                permuted = [cur[perm[i]] for i in range(6)]
+                if all(
+                    abs(permuted[i] - best[i]) < 0.01
+                    or abs(180.0 - permuted[i] - best[i]) < 0.01
+                    for i in range(6)
+                ):
+                    reordered = [old_esds[perm[i]] for i in range(6)]
+                    for field, val in zip(_ESD_FIELDS, reordered):
+                        result[field] = val
+                    break
+
+        result["volume"] = round(cell_volume(best), 4)
+
     return result
 
 
@@ -767,8 +861,14 @@ def refine_one_pattern(
     anchor_volume: float | None = None,
     anchor_max_jump: float = 0.05,
     reference_volume: float | None = None,
+    standardize_cell_mode: str | None = None,
 ) -> dict:
-    """Run GSAS-II Pawley refinement on a single pattern (multi-start capable)."""
+    """Run GSAS-II Pawley refinement on a single pattern (multi-start capable).
+
+    *standardize_cell_mode*: ``None`` (off), ``"ref"`` (align to ref_cell
+    via axis-permutation search), or ``"niggli"`` (Niggli-reduce first,
+    then align).
+    """
     warnings: list[str] = []
 
     curation: CurationResult | None = None
@@ -881,8 +981,8 @@ def refine_one_pattern(
         "preprocess": preprocess_info,
         "warnings": warnings + best_warnings,
     }
-    if is_monoclinic(space_group, cell_list):
-        standardize_monoclinic_cell(result, ref_cell=cell_list)
+    if standardize_cell_mode:
+        standardize_cell(result, ref_cell=cell_list, niggli=standardize_cell_mode == "niggli")
     if anchor_volume is not None:
         result["anchor_volume"] = round(float(anchor_volume), 4)
         result["anchor_max_jump"] = anchor_max_jump
@@ -933,6 +1033,7 @@ def _refine_kwargs_from_args(args) -> dict:
         "multi_start_seed": args.multi_start_seed,
         "multi_start_len_sigma": args.multi_start_len_sigma,
         "multi_start_ang_sigma": args.multi_start_ang_sigma,
+        "standardize_cell_mode": getattr(args, "standardize_cell", None),
     }
 
 
@@ -1227,6 +1328,14 @@ def main() -> None:
         "--baseline-method",
         choices=["piecewise_linear", "linear", "mor", "none"],
         default="piecewise_linear",
+    )
+    ap.add_argument(
+        "--standardize-cell",
+        choices=["ref", "niggli"],
+        default=None,
+        help="Post-refinement cell standardisation: 'ref' aligns to the "
+        "initial cell via axis-permutation search; 'niggli' additionally "
+        "Niggli-reduces (requires spglib) before aligning. Default: off.",
     )
     ap.add_argument("-o", "--output", help="Write JSON output to this file")
     args = ap.parse_args()
