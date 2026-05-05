@@ -13,7 +13,6 @@ questions:
     INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_ENCUT
     value:
@@ -98,7 +97,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_ENCUT
     value:
@@ -195,7 +193,6 @@ questions:
     INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_ISIF
     value:
@@ -299,7 +296,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_HFSCREEN
     value:
@@ -381,7 +377,6 @@ questions:
     U 校正。元素顺序为 Rb, Pm, Mo, O。体系为磁性体系。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_ISPIN
     value:
@@ -503,7 +498,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_ISPIN
     value:
@@ -596,7 +590,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_IBRION
     value:
@@ -709,7 +702,6 @@ questions:
     `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_IBRION
     value:
@@ -793,7 +785,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_IBRION
     value:
@@ -862,7 +853,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_LORBIT
     value:
@@ -946,7 +936,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_ISMEAR
     value:
@@ -1048,7 +1037,6 @@ questions:
     含磁性，需要固定总磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_HFSCREEN
     value:
@@ -1142,7 +1130,6 @@ questions:
     INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_IBRION
     value:
@@ -1208,7 +1195,6 @@ questions:
     INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_IBRION
     value:
@@ -1297,7 +1283,6 @@ questions:
     HSE06 获取准确缺陷能级。需要离子弛豫。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_IBRION
     value:
@@ -1402,7 +1387,6 @@ questions:
     '
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_ISPIN
     value:
@@ -1487,7 +1471,6 @@ questions:
     INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_ISIF
     value:
@@ -1565,7 +1548,6 @@ questions:
     INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_IBRION
     value:
@@ -1667,7 +1649,6 @@ questions:
     `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_ISPIN
     value:
@@ -1745,7 +1726,6 @@ questions:
     写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
-  - code_mlip
   reference_answers:
   - key: param_ISPIN
     value:
