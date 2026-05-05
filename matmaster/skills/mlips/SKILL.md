@@ -47,7 +47,7 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 | Script | Usage | Output |
 |--------|-------|--------|
 | `optimize_structure.py` | `--structure in.cif --model DPA3.1-3M [--head OMat24] [--relax-cell] [--fmax 0.01]` | `*_optimized.cif`, `result.json` |
-| `calculate_phonon.py` | `--structure in.cif --model DPA3.1-3M --temperatures 300 600 [--calc-tdos] [--mesh 40]` | `phonon_band.png`, `result.json` |
+| `calculate_phonon.py` | `--structure in.cif --model DPA3.1-3M [--supercell 5 5 1] --temperatures 300 600 [--calc-tdos] [--mesh 40]` | `phonon_band.png`, `result.json` |
 | `run_molecular_dynamics.py` | `--structure in.cif --model DPA3.1-3M --stages stages.json` | `trajs/*.extxyz`, `final_structure.xyz`, `result.json` |
 | `calculate_elastic.py` | `--structure relaxed.cif --model DPA3.1-3M` (input must be relaxed) | `elastic_matrix.csv`, `result.json` |
 | `run_neb.py` | `--initial ini.cif --final fin.cif --model DPA3.1-3M [--images 5]` | `neb_band.pdf`, `result.json` |
