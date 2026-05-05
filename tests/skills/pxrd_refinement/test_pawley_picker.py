@@ -25,6 +25,7 @@ _SCRIPTS_DIR = (
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+pytest.importorskip("numpy")  # skip gracefully when numpy is absent
 from gsas2_pawley import (  # noqa: E402
     COLD_START_WR_FLOOR,
     COLD_START_WR_SPREAD,
@@ -193,12 +194,26 @@ class TestPickBestCandidateFailures:
     def test_all_failed_returns_first_with_reason(self):
         candidates = [
             _candidate(
-                0, wR=0.0, a=0, b=0, c=0, beta=0, volume=0,
-                success=False, error="GSAS-II crashed",
+                0,
+                wR=0.0,
+                a=0,
+                b=0,
+                c=0,
+                beta=0,
+                volume=0,
+                success=False,
+                error="GSAS-II crashed",
             ),
             _candidate(
-                1, wR=0.0, a=0, b=0, c=0, beta=0, volume=0,
-                success=False, error="GSAS-II crashed",
+                1,
+                wR=0.0,
+                a=0,
+                b=0,
+                c=0,
+                beta=0,
+                volume=0,
+                success=False,
+                error="GSAS-II crashed",
             ),
         ]
         picked, reason = pick_best_candidate(candidates)
@@ -208,8 +223,15 @@ class TestPickBestCandidateFailures:
     def test_single_success_uses_it_directly(self):
         candidates = [
             _candidate(
-                0, wR=0.0, a=0, b=0, c=0, beta=0, volume=0,
-                success=False, error="GSAS-II crashed",
+                0,
+                wR=0.0,
+                a=0,
+                b=0,
+                c=0,
+                beta=0,
+                volume=0,
+                success=False,
+                error="GSAS-II crashed",
             ),
             _candidate(1, wR=15.5, a=10.84, b=9.57, c=10.17, beta=107.77, volume=998.0),
         ]
@@ -220,16 +242,33 @@ class TestPickBestCandidateFailures:
     def test_seed0_failed_falls_through_to_min_wr(self):
         candidates = [
             _candidate(
-                0, wR=0.0, a=0, b=0, c=0, beta=0, volume=0,
-                success=False, error="GSAS-II crashed",
+                0,
+                wR=0.0,
+                a=0,
+                b=0,
+                c=0,
+                beta=0,
+                volume=0,
+                success=False,
+                error="GSAS-II crashed",
             ),
             _candidate(
-                1, wR=15.86, a=10.84651, b=9.57011, c=10.16808,
-                beta=107.77448, volume=998.50,
+                1,
+                wR=15.86,
+                a=10.84651,
+                b=9.57011,
+                c=10.16808,
+                beta=107.77448,
+                volume=998.50,
             ),
             _candidate(
-                2, wR=15.53, a=10.83692, b=9.6048, c=10.12915,
-                beta=109.1897, volume=939.00,
+                2,
+                wR=15.53,
+                a=10.83692,
+                b=9.6048,
+                c=10.12915,
+                beta=109.1897,
+                volume=939.00,
             ),
         ]
         picked, reason = pick_best_candidate(candidates)
@@ -245,7 +284,9 @@ class TestPickBestCandidateAnchor:
             _candidate(2, wR=3.00, a=10.9, b=9.7, c=10.1, beta=108.8, volume=1015.0),
         ]
         picked, reason = pick_best_candidate(
-            candidates, anchor_volume=1006.0, anchor_max_jump=0.03,
+            candidates,
+            anchor_volume=1006.0,
+            anchor_max_jump=0.03,
         )
         assert picked["volume"] == pytest.approx(1015.0, abs=0.01)
         assert picked["_seed_index"] == 2
@@ -258,7 +299,9 @@ class TestPickBestCandidateAnchor:
             _candidate(1, wR=3.1, a=10.9, b=9.7, c=10.2, beta=108.8, volume=1010.0),
         ]
         picked, reason = pick_best_candidate(
-            candidates, anchor_volume=1500.0, anchor_max_jump=0.03,
+            candidates,
+            anchor_volume=1500.0,
+            anchor_max_jump=0.03,
         )
         assert picked["_seed_index"] == 1
         assert "anchor V=1500.00 rejected all seeds" in reason
@@ -266,7 +309,8 @@ class TestPickBestCandidateAnchor:
 
     def test_anchor_none_is_backwards_compatible(self):
         picked, reason = pick_best_candidate(
-            T303K_COLD_START_FAILING, anchor_volume=None,
+            T303K_COLD_START_FAILING,
+            anchor_volume=None,
         )
         assert picked["_seed_index"] == 0
         assert "cold-start tiebreak" in reason
@@ -279,7 +323,9 @@ class TestPickBestCandidateAnchor:
             _candidate(2, wR=15.40, a=10.8, b=9.6, c=10.1, beta=108.8, volume=1001.0),
         ]
         picked, reason = pick_best_candidate(
-            candidates, anchor_volume=999.0, anchor_max_jump=0.03,
+            candidates,
+            anchor_volume=999.0,
+            anchor_max_jump=0.03,
         )
         assert picked["_seed_index"] == 2
         assert picked["volume"] == pytest.approx(1001.0, abs=0.01)
@@ -295,14 +341,25 @@ class TestPickBestCandidateRefVol:
         """Real 303K scenario: seed 3 has min wR=6.8% but V=1002.68 far from
         ref V≈999; seed 4 has wR=8.61% but V=996.37 much closer."""
         candidates = [
-            _candidate(0, wR=8.6, a=10.779, b=9.747, c=10.12, beta=108.37, volume=993.43),
-            _candidate(1, wR=9.69, a=10.902, b=9.575, c=10.02, beta=108.82, volume=1033.43),
-            _candidate(2, wR=8.65, a=10.779, b=9.614, c=10.10, beta=109.07, volume=990.71),
-            _candidate(3, wR=6.8, a=10.708, b=9.748, c=10.12, beta=108.37, volume=1002.68),
-            _candidate(4, wR=8.61, a=10.798, b=9.693, c=10.15, beta=109.24, volume=996.37),
+            _candidate(
+                0, wR=8.6, a=10.779, b=9.747, c=10.12, beta=108.37, volume=993.43
+            ),
+            _candidate(
+                1, wR=9.69, a=10.902, b=9.575, c=10.02, beta=108.82, volume=1033.43
+            ),
+            _candidate(
+                2, wR=8.65, a=10.779, b=9.614, c=10.10, beta=109.07, volume=990.71
+            ),
+            _candidate(
+                3, wR=6.8, a=10.708, b=9.748, c=10.12, beta=108.37, volume=1002.68
+            ),
+            _candidate(
+                4, wR=8.61, a=10.798, b=9.693, c=10.15, beta=109.24, volume=996.37
+            ),
         ]
         picked, reason = pick_best_candidate(
-            candidates, reference_volume=999.38,
+            candidates,
+            reference_volume=999.38,
         )
         assert picked["_seed_index"] == 4
         assert "ref-vol proximity" in reason
@@ -315,7 +372,9 @@ class TestPickBestCandidateRefVol:
             _candidate(1, wR=3.2, a=10.90, b=9.63, c=10.15, beta=108.80, volume=1009.0),
         ]
         picked, reason = pick_best_candidate(
-            candidates, anchor_volume=1007.0, anchor_max_jump=0.03,
+            candidates,
+            anchor_volume=1007.0,
+            anchor_max_jump=0.03,
             reference_volume=950.0,
         )
         assert picked["_seed_index"] == 1
@@ -329,7 +388,8 @@ class TestPickBestCandidateRefVol:
             _candidate(1, wR=7.0, a=10.70, b=9.60, c=10.10, beta=108.50, volume=980.0),
         ]
         picked, reason = pick_best_candidate(
-            candidates, reference_volume=1000.0,
+            candidates,
+            reference_volume=1000.0,
         )
         assert picked["_seed_index"] == 0
         assert "min-wR" in reason
@@ -339,12 +399,18 @@ class TestPickBestCandidateRefVol:
         candidates = [
             _candidate(0, wR=5.0, a=10.83, b=9.62, c=10.13, beta=108.75, volume=1010.0),
             _candidate(
-                1, wR=5.0 + REF_VOL_WR_TOLERANCE + 0.1,
-                a=10.83, b=9.62, c=10.13, beta=108.75, volume=999.0,
+                1,
+                wR=5.0 + REF_VOL_WR_TOLERANCE + 0.1,
+                a=10.83,
+                b=9.62,
+                c=10.13,
+                beta=108.75,
+                volume=999.0,
             ),
         ]
         picked, reason = pick_best_candidate(
-            candidates, reference_volume=1000.0,
+            candidates,
+            reference_volume=1000.0,
         )
         assert picked["_seed_index"] == 0
         assert "min-wR" in reason
@@ -353,14 +419,23 @@ class TestPickBestCandidateRefVol:
         """In cold-start regime (all wR>10%, spread<1.5%) without anchor,
         ref-vol proximity should take priority over seed-0 fallback."""
         candidates = [
-            _candidate(0, wR=15.61, a=10.785, b=9.58, c=10.05, beta=108.8, volume=982.4),
-            _candidate(1, wR=15.86, a=10.811, b=9.62, c=10.13, beta=108.75, volume=998.5),
+            _candidate(
+                0, wR=15.61, a=10.785, b=9.58, c=10.05, beta=108.8, volume=982.4
+            ),
+            _candidate(
+                1, wR=15.86, a=10.811, b=9.62, c=10.13, beta=108.75, volume=998.5
+            ),
             _candidate(2, wR=15.53, a=10.657, b=9.50, c=9.90, beta=108.5, volume=939.0),
-            _candidate(3, wR=15.88, a=10.723, b=9.55, c=10.00, beta=108.6, volume=971.3),
-            _candidate(4, wR=15.88, a=10.808, b=9.57, c=10.02, beta=108.7, volume=979.7),
+            _candidate(
+                3, wR=15.88, a=10.723, b=9.55, c=10.00, beta=108.6, volume=971.3
+            ),
+            _candidate(
+                4, wR=15.88, a=10.808, b=9.57, c=10.02, beta=108.7, volume=979.7
+            ),
         ]
         picked, reason = pick_best_candidate(
-            candidates, reference_volume=999.4,
+            candidates,
+            reference_volume=999.4,
         )
         assert picked["_seed_index"] == 1
         assert "ref-vol proximity" in reason
@@ -369,8 +444,12 @@ class TestPickBestCandidateRefVol:
     def test_ref_vol_none_is_backwards_compatible(self):
         """reference_volume=None (default) doesn't change behavior."""
         candidates = [
-            _candidate(0, wR=8.6, a=10.779, b=9.747, c=10.12, beta=108.37, volume=993.0),
-            _candidate(1, wR=6.8, a=10.708, b=9.748, c=10.12, beta=108.37, volume=1003.0),
+            _candidate(
+                0, wR=8.6, a=10.779, b=9.747, c=10.12, beta=108.37, volume=993.0
+            ),
+            _candidate(
+                1, wR=6.8, a=10.708, b=9.748, c=10.12, beta=108.37, volume=1003.0
+            ),
         ]
         picked, reason = pick_best_candidate(candidates)
         assert picked["_seed_index"] == 1
@@ -393,8 +472,15 @@ class TestSummarizeMultiStart:
         candidates = [
             _candidate(0, wR=15.5, a=10.83, b=9.62, c=10.13, beta=108.75, volume=982.0),
             _candidate(
-                1, wR=0, a=0, b=0, c=0, beta=0, volume=0,
-                success=False, error="refine step 'Cell' raised SVD",
+                1,
+                wR=0,
+                a=0,
+                b=0,
+                c=0,
+                beta=0,
+                volume=0,
+                success=False,
+                error="refine step 'Cell' raised SVD",
             ),
         ]
         summary = summarize_multi_start(candidates)
