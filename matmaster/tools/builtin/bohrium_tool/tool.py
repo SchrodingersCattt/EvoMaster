@@ -575,17 +575,26 @@ class BohriumTool(BuiltinTool):
             else:
                 message = f'Unexpected status code {code}. Retry poll or check Bohrium console.'
 
+            # Attempt to fetch live log tail for running/terminal jobs
+            log_tail = ''
+            if sandbox:
+                try:
+                    log_tail = self._fetch_log_tail(ctx, str(job_id))
+                except Exception:
+                    pass
+
+            result_payload: dict[str, Any] = {
+                'success': True,
+                'job_id': job_id,
+                'status': status_label,
+                'message': message,
+            }
+            if log_tail:
+                result_payload['log_tail'] = log_tail
+
             return ToolResult(
                 status='success',
-                content=json.dumps(
-                    {
-                        'success': True,
-                        'job_id': job_id,
-                        'status': status_label,
-                        'message': message,
-                    },
-                    ensure_ascii=False,
-                ),
+                content=json.dumps(result_payload, ensure_ascii=False),
             )
 
         except Exception as exc:
@@ -597,6 +606,19 @@ class BohriumTool(BuiltinTool):
                 exc_info=True,
             )
             return ToolResult(status='error', content=f'Poll failed: {exc}')
+
+    def _fetch_log_tail(self, ctx: BohriumContext, job_id: str, max_lines: int = 15) -> str:
+        """Best-effort fetch of live log tail from a sandbox job."""
+        host, path, token = get_file_token(ctx, file_path='log', bohr_job_id=job_id)
+        if not (host and path and token):
+            return ''
+        import urllib.request
+        url = f"https://{host}{path}?token={token}"
+        req = urllib.request.Request(url, headers={'Range': 'bytes=-4096'})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            raw = resp.read().decode('utf-8', errors='replace')
+        lines = raw.strip().splitlines()
+        return '\n'.join(lines[-max_lines:])
 
     def _download(self, args: dict[str, Any]) -> ToolResult:
         raw_job_id = args.get('job_id')

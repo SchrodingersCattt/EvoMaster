@@ -27,7 +27,6 @@ Handles downloading, validating, and converting crystal structure files (CIF, PO
 | `assess_structure.py` | `--file structure.cif` → JSON: is_valid, dimensionality, formula, warnings |
 | `convert_format.py` | `--input in.cif --output POSCAR --output-fmt vasp/poscar [--type-map O H] [--atom-style full]` |
 | `fetch_web_structure.py` | `--url <direct_link>` or `--page <html_url>` → downloads structure files |
-| `build_gamma_al2o3.py` | `[-o gamma_al2o3.cif]` → γ-Al₂O₃ defect-spinel structure |
 | `build_molecular_crystal_slab.py` | `--file input.cif --miller 1 1 0 --layers 4 [-o output.cif]` |
 | `passivate_surface.py` | `slab.cif [-o passivated.cif] [--element Si] [--bond-length 1.48]` |
 | ~~`generate_kpoints.py`~~ | Moved to `matmaster/skills/vasp/scripts/generate_kpoints.py` |
