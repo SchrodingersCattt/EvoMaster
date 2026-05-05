@@ -149,3 +149,53 @@ def test_merge_chain_directions_prefers_reference_volume_for_high_wr_tie():
     assert "merged" not in audit
     assert "forward" not in audit
     assert "reverse" not in audit
+    # Both candidates within 1% of reference_volume → no off-ref warning.
+    assert audit["warnings"] == []
+    assert all(row["warning"] is None for row in audit["table"])
+
+
+def test_merge_warns_when_both_directions_off_reference_volume():
+    """Reproduces the r2 303K wrong-basin scenario: both fwd and rev are high-wR
+    *and* > 1% off reference volume → the merge picks the lesser-evil candidate
+    but flags the pattern in `merge_audit.warnings` so the agent can re-refine.
+    """
+    reference_volume = 999.3806
+    forward = [
+        {"success": True, "file": "pxrd_303K.xy", "wR": 14.15, "volume": 980.2117},
+        {"success": True, "file": "pxrd_323K.xy", "wR": 3.66, "volume": 998.66},
+    ]
+    reverse = [
+        {"success": True, "file": "pxrd_303K.xy", "wR": 14.23, "volume": 972.4012},
+        {"success": True, "file": "pxrd_323K.xy", "wR": 3.50, "volume": 998.50},
+    ]
+
+    merged, audit = merge_chain_directions(forward, reverse, reference_volume)
+
+    assert merged[0]["merge_source"] == "forward"
+    assert merged[0]["merge_warning"] == "both_directions_off_ref"
+    assert audit["table"][0]["warning"] == "both_directions_off_ref"
+    assert audit["table"][1]["warning"] is None
+    assert len(audit["warnings"]) == 1
+    flag = audit["warnings"][0]
+    assert flag["file"] == "pxrd_303K.xy"
+    assert flag["issue"] == "both_directions_off_ref"
+    assert flag["wR_forward"] == pytest.approx(14.15)
+    assert flag["dV_ref_forward"] == pytest.approx(19.169, abs=1e-2)
+
+
+def test_merge_does_not_warn_when_low_wr_even_if_volume_diverges_from_ref():
+    """A clean, low-wR refinement that lands far from the seed cell is the user's
+    reference being off (e.g. unexpected expansion), not a basin failure. No warning.
+    """
+    reference_volume = 1000.0
+    forward = [
+        {"success": True, "file": "p.xy", "wR": 3.10, "volume": 1025.0},
+    ]
+    reverse = [
+        {"success": True, "file": "p.xy", "wR": 3.05, "volume": 1024.5},
+    ]
+
+    _, audit = merge_chain_directions(forward, reverse, reference_volume)
+
+    assert audit["warnings"] == []
+    assert audit["table"][0]["warning"] is None

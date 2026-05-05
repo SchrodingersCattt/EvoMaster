@@ -1097,6 +1097,10 @@ def _clone_args_with_direction(args, direction: str):
     return argparse.Namespace(**values)
 
 
+_BOTH_OFF_REF_WR_GATE = 10.0
+_BOTH_OFF_REF_DV_FRACTION = 0.01
+
+
 def _pick_chain_merge_candidate(
     forward: dict,
     reverse: dict,
@@ -1138,9 +1142,27 @@ def _pick_chain_merge_candidate(
         source = "forward"
         reason = "missing wR; kept forward"
 
+    warning: str | None = None
+    if (
+        f_ok
+        and r_ok
+        and f_wr is not None
+        and r_wr is not None
+        and f_wr > _BOTH_OFF_REF_WR_GATE
+        and r_wr > _BOTH_OFF_REF_WR_GATE
+        and reference_volume > 0
+        and f_dv is not None
+        and r_dv is not None
+        and (f_dv / reference_volume) > _BOTH_OFF_REF_DV_FRACTION
+        and (r_dv / reference_volume) > _BOTH_OFF_REF_DV_FRACTION
+    ):
+        warning = "both_directions_off_ref"
+
     chosen = dict(forward if source == "forward" else reverse)
     chosen["merge_source"] = source
     chosen["merge_reason"] = reason
+    if warning:
+        chosen["merge_warning"] = warning
     table_row = {
         "file": forward.get("file") or reverse.get("file"),
         "temp_c": forward.get("temp_c", reverse.get("temp_c")),
@@ -1153,6 +1175,7 @@ def _pick_chain_merge_candidate(
         "dV_ref_reverse": r_dv,
         "chosen": source,
         "reason": reason,
+        "warning": warning,
     }
     return chosen, table_row
 
@@ -1166,9 +1189,22 @@ def merge_chain_directions(
         chosen, row = _pick_chain_merge_candidate(fwd, rev, reference_volume)
         merged.append(chosen)
         table.append(row)
+    warnings = [
+        {
+            "file": row.get("file"),
+            "issue": row["warning"],
+            "wR_forward": row.get("wR_forward"),
+            "wR_reverse": row.get("wR_reverse"),
+            "dV_ref_forward": row.get("dV_ref_forward"),
+            "dV_ref_reverse": row.get("dV_ref_reverse"),
+        }
+        for row in table
+        if row.get("warning")
+    ]
     audit = {
         "reference_volume": round(float(reference_volume), 4),
         "table": table,
+        "warnings": warnings,
     }
     return merged, audit
 

@@ -123,8 +123,11 @@ the lowest `wR` wins; every candidate's seed cell + wR + outcome is preserved in
 When to use it:
 
 - **Always for noisy / DFT-simulated single patterns** where the user provides only an
-  approximate initial cell. `--multi-start 5` is a good default; the runtime cost scales
-  linearly with N but each Pawley pass is < 1 min, so 5× is cheap.
+  approximate initial cell. `--multi-start 8` is the recommended default; 5 is cheaper
+  and OK for clean lab data, but on noisy / DFT-simulated patterns or cold-start chain
+  anchors 5 perturbations sometimes all collapse to the same wrong basin (typical
+  symptom: |V_refined − V_seed| > 1.5 % with `wR > 10 %`). The runtime cost scales
+  linearly with N but each Pawley pass is < 1 min, so 8× is cheap.
 - **Always for variable-temperature series.** Combine with `--chain-cell` (see § 6) so each
   temperature both samples K seeds *and* benefits from the previous accepted cell.
 - Skip (`--multi-start 1`, the legacy default) only when you already have a CIF / prior
@@ -249,12 +252,12 @@ invent them from peak positions (see SKILL.md § "Hard contracts").
 # Place all patterns in a directory with consistent naming, then run:
 python gsas2_pawley.py --data /path/to/patterns/ \
   --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-  --multi-start 5 --chain-cell --chain-cell-direction both --standardize-cell ref \
+  --multi-start 8 --chain-cell --chain-cell-direction both --standardize-cell ref \
   -o results.json
 ```
 
 `--chain-cell` feeds each accepted refinement into the next pattern as its seed; combined
-with `--multi-start 5`, this makes intra-phase results internally consistent. Promotion is
+with `--multi-start 8`, this makes intra-phase results internally consistent. Promotion is
 gated by `--chain-wr-max` (default 25 %) and `--chain-vol-jump-max` (default 0.05) so a bad
 refinement cannot poison downstream temperatures — when a pattern is rejected the chain
 reverts to the last accepted cell. Sort order follows alphabetical filename order, so name
@@ -262,8 +265,10 @@ files consistently (e.g. `pattern_303K.xy`, `pattern_323K.xy`, ...). For data th
 phase transition use **separate** jobs per phase (see "Phase transitions" below); the
 quality gate will reject a transition jump but the cleanest pattern is to not chain across
 phases at all. For noisy variable-temperature data, `--chain-cell-direction both` runs
-forward and reverse chains internally and returns merged `results`; inspect `merge_audit`
-to see which direction was selected at each temperature.
+forward and reverse chains internally and returns merged `results`; inspect
+`merge_audit.table` to see which direction was selected at each temperature, and
+`merge_audit.warnings` for any pattern that ended up high-wR + far from `reference_volume`
+in both directions (the merge picked the lesser-evil candidate but the cell is suspect).
 
 ### B. Wide-table CSV
 
@@ -272,7 +277,7 @@ to see which direction was selected at each temperature.
 # Header: Angle, 25 C, Angle, 40 C, ...
 python gsas2_pawley.py --data multi_temp.txt --wide-csv \
   --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-  --multi-start 5 --chain-cell --chain-cell-direction both --standardize-cell ref \
+  --multi-start 8 --chain-cell --chain-cell-direction both --standardize-cell ref \
   -o results.json
 ```
 
@@ -316,7 +321,7 @@ python gsas2_pawley.py \
   --data /input/pattern.xy \
   --space-group "<SG>" \
   --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-  --multi-start 5 \
+  --multi-start 8 \
   -o /output/result.json
 ```
 
