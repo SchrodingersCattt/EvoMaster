@@ -25,7 +25,6 @@ _SCRIPTS_DIR = (
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-pytest.importorskip("numpy")  # skip gracefully when numpy is absent
 from gsas2_pawley import (  # noqa: E402
     COLD_START_WR_FLOOR,
     COLD_START_WR_SPREAD,
