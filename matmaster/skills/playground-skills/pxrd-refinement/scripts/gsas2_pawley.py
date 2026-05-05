@@ -1099,12 +1099,39 @@ def _clone_args_with_direction(args, direction: str):
 
 _BOTH_OFF_REF_WR_GATE = 10.0
 _BOTH_OFF_REF_DV_FRACTION = 0.01
+_BOTH_OFF_REF_CELL_FRACTION = 0.01
+
+
+def _relative_cell_distance(
+    result: dict, ref_cell: list[float] | None
+) -> float | None:
+    """L1 sum of relative differences over a/b/c plus any non-90° angle.
+
+    Volume is intentionally NOT included: V can match by chance even when
+    individual axes diverge (in monoclinic, V = a·b·c·sin(β), so
+    different (a, c, β) combinations can give the same volume). This
+    metric is the discriminating signal that V proximity misses.
+    """
+    if ref_cell is None or len(ref_cell) < 6:
+        return None
+    if any(result.get(k) is None for k in ("a", "b", "c")):
+        return None
+    d = 0.0
+    for i, k in enumerate(("a", "b", "c")):
+        if ref_cell[i] > 0:
+            d += abs(float(result[k]) - ref_cell[i]) / ref_cell[i]
+    for i, k in enumerate(("alpha", "beta", "gamma"), start=3):
+        ref_ang = ref_cell[i]
+        if abs(ref_ang - 90.0) > 0.5 and result.get(k) is not None and ref_ang > 0:
+            d += abs(float(result[k]) - ref_ang) / ref_ang
+    return d
 
 
 def _pick_chain_merge_candidate(
     forward: dict,
     reverse: dict,
     reference_volume: float,
+    reference_cell: list[float] | None = None,
     high_wr: float = 10.0,
     wr_tie: float = 3.0,
 ) -> tuple[dict, dict]:
@@ -1117,6 +1144,8 @@ def _pick_chain_merge_candidate(
     r_vol = reverse.get("volume")
     f_dv = abs(float(f_vol) - reference_volume) if f_vol is not None else None
     r_dv = abs(float(r_vol) - reference_volume) if r_vol is not None else None
+    f_cd = _relative_cell_distance(forward, reference_cell)
+    r_cd = _relative_cell_distance(reverse, reference_cell)
 
     if f_ok and not r_ok:
         source, reason = "forward", "reverse failed"
@@ -1130,11 +1159,16 @@ def _pick_chain_merge_candidate(
         and f_wr > high_wr
         and r_wr > high_wr
         and abs(f_wr - r_wr) < wr_tie
-        and f_dv is not None
-        and r_dv is not None
     ):
-        source = "forward" if f_dv <= r_dv else "reverse"
-        reason = "both high-wR/tied; picked closer to reference volume"
+        if f_cd is not None and r_cd is not None:
+            source = "forward" if f_cd <= r_cd else "reverse"
+            reason = "both high-wR/tied; picked closer to reference cell"
+        elif f_dv is not None and r_dv is not None:
+            source = "forward" if f_dv <= r_dv else "reverse"
+            reason = "both high-wR/tied; picked closer to reference volume"
+        else:
+            source = "forward" if (f_wr or 0) <= (r_wr or 0) else "reverse"
+            reason = "both high-wR/tied; missing cell/volume; kept lower wR"
     elif f_wr is not None and r_wr is not None:
         source = "forward" if f_wr <= r_wr else "reverse"
         reason = "picked lower wR"
@@ -1150,13 +1184,22 @@ def _pick_chain_merge_candidate(
         and r_wr is not None
         and f_wr > _BOTH_OFF_REF_WR_GATE
         and r_wr > _BOTH_OFF_REF_WR_GATE
-        and reference_volume > 0
-        and f_dv is not None
-        and r_dv is not None
-        and (f_dv / reference_volume) > _BOTH_OFF_REF_DV_FRACTION
-        and (r_dv / reference_volume) > _BOTH_OFF_REF_DV_FRACTION
     ):
-        warning = "both_directions_off_ref"
+        v_off = (
+            reference_volume > 0
+            and f_dv is not None
+            and r_dv is not None
+            and (f_dv / reference_volume) > _BOTH_OFF_REF_DV_FRACTION
+            and (r_dv / reference_volume) > _BOTH_OFF_REF_DV_FRACTION
+        )
+        cell_off = (
+            f_cd is not None
+            and r_cd is not None
+            and f_cd > _BOTH_OFF_REF_CELL_FRACTION
+            and r_cd > _BOTH_OFF_REF_CELL_FRACTION
+        )
+        if v_off or cell_off:
+            warning = "both_directions_off_ref"
 
     chosen = dict(forward if source == "forward" else reverse)
     chosen["merge_source"] = source
@@ -1170,9 +1213,11 @@ def _pick_chain_merge_candidate(
         "wR_forward": f_wr,
         "V_forward": f_vol,
         "dV_ref_forward": f_dv,
+        "cell_dist_forward": f_cd,
         "wR_reverse": r_wr,
         "V_reverse": r_vol,
         "dV_ref_reverse": r_dv,
+        "cell_dist_reverse": r_cd,
         "chosen": source,
         "reason": reason,
         "warning": warning,
@@ -1181,12 +1226,17 @@ def _pick_chain_merge_candidate(
 
 
 def merge_chain_directions(
-    forward_results: list[dict], reverse_results: list[dict], reference_volume: float
+    forward_results: list[dict],
+    reverse_results: list[dict],
+    reference_volume: float,
+    reference_cell: list[float] | None = None,
 ) -> tuple[list[dict], dict]:
     merged: list[dict] = []
     table: list[dict] = []
     for fwd, rev in zip(forward_results, reverse_results):
-        chosen, row = _pick_chain_merge_candidate(fwd, rev, reference_volume)
+        chosen, row = _pick_chain_merge_candidate(
+            fwd, rev, reference_volume, reference_cell=reference_cell
+        )
         merged.append(chosen)
         table.append(row)
     warnings = [
@@ -1197,15 +1247,19 @@ def merge_chain_directions(
             "wR_reverse": row.get("wR_reverse"),
             "dV_ref_forward": row.get("dV_ref_forward"),
             "dV_ref_reverse": row.get("dV_ref_reverse"),
+            "cell_dist_forward": row.get("cell_dist_forward"),
+            "cell_dist_reverse": row.get("cell_dist_reverse"),
         }
         for row in table
         if row.get("warning")
     ]
-    audit = {
+    audit: dict = {
         "reference_volume": round(float(reference_volume), 4),
         "table": table,
         "warnings": warnings,
     }
+    if reference_cell is not None and len(reference_cell) >= 6:
+        audit["reference_cell"] = [round(float(x), 5) for x in reference_cell[:6]]
     return merged, audit
 
 
@@ -1272,12 +1326,18 @@ def run_directory(args) -> dict:
             canonical_index=canonical_index,
         )
         merged, audit = merge_chain_directions(
-            forward["results"], reverse["results"], ref_vol
+            forward["results"],
+            reverse["results"],
+            ref_vol,
+            reference_cell=cell_list,
         )
         return {
             "success": True,
             "chain_cell_direction": "both",
-            "merge_strategy": "high-wR reference-volume proximity, otherwise lower wR",
+            "merge_strategy": (
+                "high-wR reference-cell proximity (V proximity fallback), "
+                "otherwise lower wR"
+            ),
             "merge_audit": audit,
             "forward_results": forward["results"],
             "reverse_results": reverse["results"],
@@ -1381,12 +1441,18 @@ def run_wide_csv(args) -> dict:
             canonical_index=canonical_index,
         )
         merged, audit = merge_chain_directions(
-            forward["results"], reverse["results"], ref_vol
+            forward["results"],
+            reverse["results"],
+            ref_vol,
+            reference_cell=cell_list,
         )
         return {
             "success": True,
             "chain_cell_direction": "both",
-            "merge_strategy": "high-wR reference-volume proximity, otherwise lower wR",
+            "merge_strategy": (
+                "high-wR reference-cell proximity (V proximity fallback), "
+                "otherwise lower wR"
+            ),
             "merge_audit": audit,
             "forward_results": forward["results"],
             "reverse_results": reverse["results"],

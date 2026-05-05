@@ -199,3 +199,101 @@ def test_merge_does_not_warn_when_low_wr_even_if_volume_diverges_from_ref():
 
     assert audit["warnings"] == []
     assert audit["table"][0]["warning"] is None
+
+
+def _ref_cell_303K() -> list[float]:
+    return [10.83, 9.62, 10.13, 90.0, 108.75, 90.0]
+
+
+def test_merge_picks_closer_reference_cell_when_volumes_match():
+    """Reproduces the audit-run r0/r1 303K basin trap: forward and reverse both
+    have V ≈ V_ref but reverse converged to a wildly different `a` (10.98 vs
+    target 10.83). V proximity alone would pick reverse (V closer); the
+    cell-distance tiebreak picks forward (cell closer).
+    """
+    ref_cell = _ref_cell_303K()
+    forward = [
+        {
+            "success": True, "file": "pxrd_303K.xy", "wR": 16.18,
+            "volume": 997.6942,
+            "a": 10.8199, "b": 9.5512, "c": 10.1568,
+            "alpha": 90.0, "beta": 108.75, "gamma": 90.0,
+        },
+    ]
+    reverse = [
+        {
+            "success": True, "file": "pxrd_303K.xy", "wR": 16.14,
+            "volume": 998.9899,
+            "a": 10.9803, "b": 9.4500, "c": 10.0500,
+            "alpha": 90.0, "beta": 108.629, "gamma": 90.0,
+        },
+    ]
+
+    merged, audit = merge_chain_directions(
+        forward, reverse, reference_volume=999.3806, reference_cell=ref_cell
+    )
+
+    assert merged[0]["merge_source"] == "forward"
+    assert audit["table"][0]["reason"].endswith("reference cell")
+    assert audit["table"][0]["cell_dist_forward"] < audit["table"][0]["cell_dist_reverse"]
+    assert audit["reference_cell"] == [10.83, 9.62, 10.13, 90.0, 108.75, 90.0]
+
+
+def test_merge_warns_when_axes_diverge_even_if_volume_matches():
+    """V matches reference within 0.5% on both directions but `a` differs by
+    > 1%; the picker still selects the closer cell, AND the audit must flag
+    the pattern so the agent does not silently report the wrong-basin solution.
+    """
+    ref_cell = _ref_cell_303K()
+    forward = [
+        {
+            "success": True, "file": "pxrd_303K.xy", "wR": 16.18,
+            "volume": 997.6942,
+            "a": 10.8199, "b": 9.5512, "c": 10.1568,
+            "alpha": 90.0, "beta": 108.75, "gamma": 90.0,
+        },
+    ]
+    reverse = [
+        {
+            "success": True, "file": "pxrd_303K.xy", "wR": 16.14,
+            "volume": 998.9899,
+            "a": 10.9803, "b": 9.4500, "c": 10.0500,
+            "alpha": 90.0, "beta": 108.629, "gamma": 90.0,
+        },
+    ]
+
+    _, audit = merge_chain_directions(
+        forward, reverse, reference_volume=999.3806, reference_cell=ref_cell
+    )
+
+    assert len(audit["warnings"]) == 1
+    flag = audit["warnings"][0]
+    assert flag["issue"] == "both_directions_off_ref"
+    assert flag["cell_dist_forward"] is not None
+    assert flag["cell_dist_reverse"] is not None
+    assert flag["cell_dist_reverse"] > flag["cell_dist_forward"]
+
+
+def test_merge_falls_back_to_volume_when_no_reference_cell():
+    """Backward-compatible path: when the caller does not supply
+    reference_cell (e.g. a programmatic invocation that only knows V_ref),
+    the picker still uses V proximity for high-wR ties.
+    """
+    forward = [
+        {"success": True, "file": "p.xy", "wR": 16.0, "volume": 999.0,
+         "a": 10.82, "b": 9.55, "c": 10.16,
+         "alpha": 90.0, "beta": 108.75, "gamma": 90.0},
+    ]
+    reverse = [
+        {"success": True, "file": "p.xy", "wR": 16.0, "volume": 1004.0,
+         "a": 10.82, "b": 9.55, "c": 10.16,
+         "alpha": 90.0, "beta": 108.75, "gamma": 90.0},
+    ]
+
+    merged, audit = merge_chain_directions(forward, reverse, reference_volume=1000.0)
+
+    assert merged[0]["merge_source"] == "forward"
+    assert "reference_cell" not in audit
+    assert audit["table"][0]["cell_dist_forward"] is None
+    assert audit["table"][0]["cell_dist_reverse"] is None
+    assert audit["table"][0]["reason"].endswith("reference volume")
