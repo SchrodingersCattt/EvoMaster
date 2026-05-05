@@ -295,7 +295,7 @@ questions:
       - potential
       - potential
       - velocity
-      - time_step 
+      - time_step
       - ensemble nve
       - dump_observer average
       - run
