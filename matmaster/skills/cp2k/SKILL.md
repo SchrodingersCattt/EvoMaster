@@ -75,7 +75,7 @@ Merge a method template's XC/ADMM/HF sections into the chosen task template.
 ## Common Pitfalls
 
 - **`WFN_RESTART_FILE_NAME` belongs under `&DFT`, NOT `&SCF`**. Placing it under `&SCF` causes a parse error.
-- **ADMM auxiliary basis syntax (CP2K ≥ 2024.1)**: use `BASIS_SET AUX_FIT cFIT3` in `&KIND`, not the deprecated `AUX_FIT_BASIS_SET`. The auxiliary basis file is `BASIS_ADMM` or `BASIS_ADMM_MOLOPT`.
+- **ADMM auxiliary basis syntax (CP2K ≥ 2024.1)**: use `BASIS_SET AUX_FIT cFIT3` in `&KIND`, not the deprecated `AUX_FIT_BASIS_SET`. The matching file is `BASIS_SET_FILE_NAME BASIS_ADMM` (NOT `BASIS_ADMM_MOLOPT` — `cFIT3` is absent from that file).
 
 ## Physical Checks
 
