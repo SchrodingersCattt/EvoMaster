@@ -1097,59 +1097,6 @@ def _clone_args_with_direction(args, direction: str):
     return argparse.Namespace(**values)
 
 
-def _result_temperature_key(result: dict, fallback: int) -> float:
-    if result.get("temp_c") is not None:
-        return float(result["temp_c"]) + 273.15
-    label = str(result.get("file") or result.get("temp_label") or "")
-    match = re.search(r"(\d+)\s*K", label, flags=re.IGNORECASE)
-    if match:
-        return float(match.group(1))
-    match = re.search(r"(\d+)\s*C", label, flags=re.IGNORECASE)
-    if match:
-        return float(match.group(1)) + 273.15
-    return float(fallback)
-
-
-def _volume_slope(results: list[dict]) -> float | None:
-    pairs = [
-        (_result_temperature_key(r, i), r.get("volume"))
-        for i, r in enumerate(results)
-        if r.get("success") and r.get("volume") is not None
-    ]
-    if len(pairs) < 2:
-        return None
-    x = np.array([p[0] for p in pairs], dtype=float)
-    y = np.array([p[1] for p in pairs], dtype=float)
-    return float(np.polyfit(x, y, 1)[0])
-
-
-def _volume_audit(results: list[dict]) -> dict:
-    volumes = [
-        float(r["volume"])
-        for r in results
-        if r.get("success") and r.get("volume") is not None
-    ]
-    if len(volumes) < 2:
-        return {
-            "n_points": len(volumes),
-            "monotonic_or_near": None,
-            "max_adjacent_jump_fraction": None,
-            "V_slope": _volume_slope(results),
-        }
-    deltas = [volumes[i + 1] - volumes[i] for i in range(len(volumes) - 1)]
-    jumps = [
-        abs(volumes[i + 1] - volumes[i]) / volumes[i]
-        for i in range(len(volumes) - 1)
-        if volumes[i]
-    ]
-    return {
-        "n_points": len(volumes),
-        "monotonic_or_near": all(delta >= -1.0 for delta in deltas),
-        "max_adjacent_jump_fraction": max(jumps) if jumps else 0.0,
-        "V_slope": _volume_slope(results),
-    }
-
-
 def _pick_chain_merge_candidate(
     forward: dict,
     reverse: dict,
@@ -1222,9 +1169,6 @@ def merge_chain_directions(
     audit = {
         "reference_volume": round(float(reference_volume), 4),
         "table": table,
-        "forward": _volume_audit(forward_results),
-        "reverse": _volume_audit(reverse_results),
-        "merged": _volume_audit(merged),
     }
     return merged, audit
 

@@ -144,5 +144,8 @@ def test_merge_chain_directions_prefers_reference_volume_for_high_wr_tie():
     ]
     assert merged[0]["volume"] == pytest.approx(997.6932)
     assert merged[1]["volume"] == pytest.approx(998.6489)
-    assert audit["merged"]["V_slope"] == pytest.approx(0.155097, abs=1e-6)
+    assert audit["reference_volume"] == pytest.approx(999.3806, abs=1e-4)
     assert audit["table"][0]["reason"].startswith("both high-wR/tied")
+    assert "merged" not in audit
+    assert "forward" not in audit
+    assert "reverse" not in audit
