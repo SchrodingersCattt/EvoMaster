@@ -86,6 +86,57 @@ COLD_START_WR_SPREAD = 1.5
 _CELL_FIELDS = ("a", "b", "c", "alpha", "beta", "gamma", "volume")
 _ESD_FIELDS = ("a_esd", "b_esd", "c_esd", "alpha_esd", "beta_esd", "gamma_esd")
 
+_MONOCLINIC_SG_PREFIXES = {"P 2", "P 21", "C 2", "I 2", "A 2", "B 2"}
+
+
+def is_monoclinic(space_group: str, cell_list: list[float]) -> bool:
+    """Detect monoclinic (unique axis b) from space group or cell geometry."""
+    sg = space_group.strip()
+    for prefix in _MONOCLINIC_SG_PREFIXES:
+        if sg.startswith(prefix):
+            return True
+    a, b, c, alpha, beta, gamma = cell_list
+    if abs(alpha - 90.0) < 0.5 and abs(gamma - 90.0) < 0.5 and abs(beta - 90.0) > 0.5:
+        return True
+    return False
+
+
+def standardize_monoclinic_cell(result: dict, ref_cell: list[float]) -> dict:
+    """Ensure the refined monoclinic cell is in the same setting as *ref_cell*.
+
+    Monoclinic (unique axis b) has one non-trivial cell equivalence:
+    (a, c, beta) <-> (c, a, 180-beta).  If the refinement converged to
+    the alternate setting, flip it back so that a/c/beta stay comparable
+    across a temperature series.
+
+    Decision rule: compare Euclidean distance in (a, c, beta) space to
+    the reference; pick whichever setting is closer.
+
+    Operates in-place and returns the same dict.
+    """
+    a, b, c = result["a"], result["b"], result["c"]
+    beta = result["beta"]
+    a0, _, c0 = ref_cell[0], ref_cell[1], ref_cell[2]
+    beta0 = ref_cell[4]
+
+    d_orig = (a - a0) ** 2 + (c - c0) ** 2 + (beta - beta0) ** 2
+    alt_a, alt_c, alt_beta = c, a, 180.0 - beta
+    d_swap = (alt_a - a0) ** 2 + (alt_c - c0) ** 2 + (alt_beta - beta0) ** 2
+
+    if d_swap < d_orig:
+        result["a"] = round(alt_a, 5)
+        result["c"] = round(alt_c, 5)
+        result["beta"] = round(alt_beta, 4)
+        if "a_esd" in result and "c_esd" in result:
+            result["a_esd"], result["c_esd"] = result["c_esd"], result["a_esd"]
+        result["volume"] = round(
+            cell_volume(
+                [alt_a, b, alt_c, result["alpha"], alt_beta, result["gamma"]]
+            ),
+            4,
+        )
+    return result
+
 
 # ---------------------------------------------------------------------------
 # GSAS-II kernel helpers (only usable when GSAS-II is on sys.path)
@@ -830,6 +881,8 @@ def refine_one_pattern(
         "preprocess": preprocess_info,
         "warnings": warnings + best_warnings,
     }
+    if is_monoclinic(space_group, cell_list):
+        standardize_monoclinic_cell(result, ref_cell=cell_list)
     if anchor_volume is not None:
         result["anchor_volume"] = round(float(anchor_volume), 4)
         result["anchor_max_jump"] = anchor_max_jump
