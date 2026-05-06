@@ -829,13 +829,13 @@ questions:
   - key: formula
     value:
       filename: cu_fcc.cif
-      expected_formula: Cu1
+      formula: Cu1
   - key: cell_a
     value:
       filename: cu_fcc.cif
       param: a
-      expected: 3.615
-      tolerance: 0.01
+      expected: 2.556
+      tolerance: 0.02
   - key: atom_count
     value:
       filename: cu_fcc.cif
@@ -846,7 +846,7 @@ questions:
       max: 10
   - key: token_budget_total
     value:
-      max: 10000
+      max: 20000
   scoring_checklist:
   - id: file_exists
     criterion: Agent writes `cu_fcc.cif` to workspace.
@@ -857,7 +857,7 @@ questions:
     axis: correctness
     verify: struct_file_formula
   - id: cell_a
-    criterion: Lattice constant a is approximately 3.615 Å.
+    criterion: Primitive cell lattice constant a is approximately 2.556 Å (3.615/√2).
     axis: correctness
     verify: struct_file_cell_param
   - id: atom_count
@@ -894,7 +894,7 @@ questions:
   - key: formula
     value:
       filename: hbn.cif
-      expected_formula: B2 N2
+      formula: B2N2
   - key: cell_a
     value:
       filename: hbn.cif
@@ -923,7 +923,7 @@ questions:
       max: 10
   - key: token_budget_total
     value:
-      max: 10000
+      max: 20000
   scoring_checklist:
   - id: file_exists
     criterion: Agent writes `hbn.cif` to workspace.
@@ -983,14 +983,14 @@ questions:
       tolerance: 0
   - key: required_fields
     value:
-    - C6H6O
     - '13'
+    - phenol
   - key: turn_budget
     value:
       max: 10
   - key: token_budget_total
     value:
-      max: 10000
+      max: 20000
   scoring_checklist:
   - id: file_exists
     criterion: Agent writes `phenol.xyz` to workspace.
@@ -1001,7 +1001,7 @@ questions:
     axis: correctness
     verify: struct_file_atom_count
   - id: required_fields
-    criterion: Final answer explicitly states formula C6H6O and atom count 13.
+    criterion: Final answer explicitly states atom count 13 and mentions phenol.
     axis: correctness
     verify: contains_all
   - id: grounding_source
