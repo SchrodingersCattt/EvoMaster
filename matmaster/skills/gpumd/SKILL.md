@@ -59,10 +59,31 @@ Browse all available potentials: https://gpumd.cn/database.html
 
 | Item | Default Value |
 |------|---------------|
-| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/gpumd:1.0.1-1777451100` |
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/gpumd:1.0.2-1777991160` |
 | machine | `c16_m64_1 * NVIDIA 4090` |
 | cmd (gpumd) | `gpumd > log 2>&1` |
 | cmd (nep) | `nep > log 2>&1` |
+
+## `nep.in` Default Tags (Quick Baseline)
+
+Use this baseline when the task does not override settings.
+`type` is mandatory and species names must match the actual dataset.
+
+```text
+type          2 Te Pb # this is a mandatory keyword
+version       4       # default
+cutoff        8 4     # default
+n_max         6 6     # default
+basis_size    6 6     # default
+l_max         4 2 0   # default
+neuron        30      # default
+lambda_e      1.0     # default
+lambda_f      1.0     # default
+lambda_v      0.1     # default
+batch         1000    # default
+population    50      # default
+generation    100000  # default
+```
 
 ## References (read on demand)
 
