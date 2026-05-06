@@ -292,6 +292,9 @@ questions:
     - htp.{383K,413K}.V，htp.383K.a，htp.fits.V.slope，htp.fits.c.slope
 
     数值必须来自实际 Pawley 精修与线性拟合，不得填入 prompt 中的初猜近似值。
+
+    最终答案中请额外用 1–2 句简述精修质量审计：`curation.verdict` / `warnings` 是否提示问题；`merge_audit.warnings`
+    或 `self_heal_audit.outliers` 是否为空，如不为空请指出受影响的温度点。
     "
   tags:
   - char_xrd
@@ -463,6 +466,47 @@ questions:
     axis: correctness
     verify: llm_binary_judge
     weight: 1.5
+  - id: bohrium_submit_executed
+    criterion: Tool-call log or final answer shows that each Bohrium submit was followed
+      by a download and that the result directory contained both a log file and a results
+      JSON file before numeric outputs were read.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
+  - id: bohrium_job_budget
+    criterion: Total Bohrium submit calls in the tool-call log is at most 3 for this
+      two-phase task. Poll and download calls do not count as submits.
+    axis: efficiency
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: curation_inspected
+    criterion: Agent inspected the curation diagnostics or warnings field of the Pawley
+      results JSON for at least one pattern, either by mentioning it in the final answer
+      or through visible tool-call observations.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
+  - id: runsh_wrapper_used
+    criterion: Each Bohrium submit command uses the run.sh wrapper pattern such as
+      bash run.sh > log 2>&1, with the python3 gsas2_pawley.py invocation inside
+      run.sh rather than inlined with embedded quotes in the cmd field.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
+  - id: merge_audit_surfaced
+    criterion: When reporting per-pattern cells from a chain-cell-direction both run,
+      the agent referenced merge_audit (table or warnings) or self_heal_audit at least
+      once in the final answer or reasoning.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
+  - id: local_solver_avoided
+    criterion: All refinement results came from gsas2_pawley.py executed on Bohrium.
+      Agent did not bypass GSAS-II by writing a local scipy/numpy least-squares Pawley
+      replacement.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
   - id: grounding_source
     criterion: Lattice parameters and fit results are derived from Pawley refinement of the
       provided PXRD data file, not from literature values or hallucination. Judge from the
