@@ -9,7 +9,7 @@ phase you are trying to refine.
 Auto-indexing on PXRD is a hard problem on clean lab data and a much harder
 problem on simulated / artifact-laden data. Before running, check that you
 genuinely have no other cell source - user prompt, CIF, prior refinement, an
-adjacent VT-PXRD point, literature for an isostructural compound. **Any of those
+adjacent pattern in the same series/phase, literature for an isostructural compound. **Any of those
 beats indexing.**
 
 If you do run it, treat the output as a hypothesis to verify with a Pawley
@@ -18,7 +18,7 @@ peaks is not a cell - it is a guess that survived the prefilter.
 
 ## Known failure mode: DFT-simulated PXRD with low-angle artifact
 
-Most DFT-simulated VT-PXRD patterns we see exhibit a smooth monotonic descending
+Most DFT-simulated PXRD patterns we see exhibit a smooth monotonic descending
 "hump" between roughly 5 deg and 13 deg in 2theta - low-angle scattering /
 detector smear, not Bragg signal. Curation correctly clips that prefix
 (`tmin_cut` lands around 13-15 deg).

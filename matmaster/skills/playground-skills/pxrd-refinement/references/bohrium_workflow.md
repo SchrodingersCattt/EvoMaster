@@ -12,7 +12,7 @@ tool, which submits to a Docker image with GSAS-II pre-installed.
 | machine (single Pawley, basic Rietveld) | `c8_m32_cpu` |
 | machine (directory batch >= 5 patterns, full Rietveld) | `c32_m128_cpu` |
 
-Wall-time guidance: single-pattern Pawley 1-2 min; 8-temperature batch 5-10 min;
+Wall-time guidance: single-pattern Pawley 1-2 min; 8-pattern batch 5-10 min;
 Rietveld standard 3-5 min; auto-index up to `--timeout` per Bravais family
 (default 200 s, hard SIGALRM-enforced).
 
@@ -44,7 +44,7 @@ python3 gsas2_pawley.py --data pattern.xye \
   -o result.json
 ```
 
-### Pawley, directory batch (`run.sh`, preferred for multi-temperature)
+### Pawley, directory batch (`run.sh`, preferred for multi-pattern series)
 
 ```bash
 #!/bin/bash
@@ -65,13 +65,20 @@ runtime and the agent will exceed the 1200 s online task timeout. Use the cell-d
 tiebreak + `merge_audit.warnings` to handle wrong-basin patterns instead. `--chain-cell`
 promotes each accepted refinement to seed the next pattern, gated by `--chain-wr-max`
 (default 25 %) and `--chain-vol-jump-max` (default 0.05) so a bad pattern can't poison
-downstream temperatures. `--chain-cell-direction both` runs forward and reverse internally
+downstream patterns. `--chain-cell-direction both` runs forward and reverse internally
 and returns merged `results` plus `merge_audit` (with `table` and `warnings`) /
 `forward_results` / `reverse_results`. The `warnings` list flags any pattern that is
 high-wR (>10%) in both directions AND > 1% off `reference_volume` in both — those
 patterns are at risk of being a wrong-basin solution even after merge.
 Bump machine to `c32_m128_cpu` whenever `--multi-start ≥ 5` or the directory has > 5
 patterns.
+
+`--self-heal-chain` is enabled by default for chained runs. It scans the merged
+series for single-pattern volume outliers and re-refines each rescued pattern
+in-process with `--self-heal-multi-start` starts (default 5). This improves wrong-basin
+robustness, but each rescued outlier costs roughly one extra K-start single-pattern
+refinement. Disable with `--no-self-heal-chain` when you intentionally need raw chain
+output or cannot afford rescue work under the wall-clock budget.
 
 ### Rietveld (`run.sh`)
 
