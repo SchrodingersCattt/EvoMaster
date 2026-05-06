@@ -73,7 +73,7 @@ def format_question_for_judge(q: dict) -> str:
         "Scoring checklist:",
     ]
     for item in q.get("scoring_checklist", []):
-        parts.append(f"  - [{item.get('verify','')}] {item.get('criterion','')}")
+        parts.append(f"  - [{item.get('verify', '')}] {item.get('criterion', '')}")
     return "\n".join(parts)
 
 
@@ -130,9 +130,19 @@ def judge_rule(
         if start >= 0 and end > start:
             result = json.loads(text[start:end])
             return result
-        return {"covered": False, "confidence": "low", "covered_by": [], "reason": "parse error"}
+        return {
+            "covered": False,
+            "confidence": "low",
+            "covered_by": [],
+            "reason": "parse error",
+        }
     except Exception as e:
-        return {"covered": False, "confidence": "low", "covered_by": [], "reason": f"error: {e}"}
+        return {
+            "covered": False,
+            "confidence": "low",
+            "covered_by": [],
+            "reason": f"error: {e}",
+        }
 
 
 # ── Skill-tag mapping for filtering relevant questions ────────────────────────
@@ -163,13 +173,28 @@ SKILL_TAG_MAP: dict[str, list[str]] = {
 # Also match by capability for workflow/general questions
 CAPABILITY_SKILLS: dict[str, list[str]] = {
     "workflow_orchestration": [
-        "cp2k", "mlips", "build-atomic-structure", "sample-atomic-structures",
+        "cp2k",
+        "mlips",
+        "build-atomic-structure",
+        "sample-atomic-structures",
     ],
     "execution_contract": [
-        "vasp", "abacus", "cp2k", "gpumd", "lammps", "gromacs",
+        "vasp",
+        "abacus",
+        "cp2k",
+        "gpumd",
+        "lammps",
+        "gromacs",
     ],
     "input_generation": [
-        "vasp", "abacus", "cp2k", "quantum_espresso", "abinit", "orca", "lammps", "gromacs",
+        "vasp",
+        "abacus",
+        "cp2k",
+        "quantum_espresso",
+        "abinit",
+        "orca",
+        "lammps",
+        "gromacs",
     ],
 }
 
@@ -182,7 +207,7 @@ def get_relevant_questions(rule: dict, all_questions: dict[str, dict]) -> list[d
     tag_matched = []
     cap_matched = []
 
-    for qid, q in all_questions.items():
+    for _qid, q in all_questions.items():
         q_tags = q.get("tags") or []
         q_cap = q.get("capability") or ""
 
@@ -227,10 +252,16 @@ def save_cache(cache: dict[str, dict]) -> None:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--max-rules", type=int, default=0, help="Limit rules to process (0=all)")
+    parser.add_argument(
+        "--max-rules", type=int, default=0, help="Limit rules to process (0=all)"
+    )
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--workers", type=int, default=4)
-    parser.add_argument("--skip-covered", action="store_true", help="Only judge rules marked uncovered by keyword matching")
+    parser.add_argument(
+        "--skip-covered",
+        action="store_true",
+        help="Only judge rules marked uncovered by keyword matching",
+    )
     args = parser.parse_args()
 
     if not COVERAGE_INPUT.exists():
@@ -293,13 +324,15 @@ def main():
                 except Exception as e:
                     errors += 1
                     rule = futures[future]
-                    results.append({
-                        **rule,
-                        "covered": False,
-                        "confidence": "low",
-                        "covered_by": [],
-                        "reason": f"error: {e}",
-                    })
+                    results.append(
+                        {
+                            **rule,
+                            "covered": False,
+                            "confidence": "low",
+                            "covered_by": [],
+                            "reason": f"error: {e}",
+                        }
+                    )
 
         save_cache(cache)
         print(f"Judged {judged} rules ({errors} errors)")
@@ -326,7 +359,12 @@ def main():
             entry["covered"] += 1
 
     # Sort uncovered by severity
-    severity_order = {"hard_guard": 0, "pitfall": 1, "physical_check": 2, "decision_tree": 3}
+    severity_order = {
+        "hard_guard": 0,
+        "pitfall": 1,
+        "physical_check": 2,
+        "decision_tree": 3,
+    }
     uncovered_rules = [r for r in results if not r.get("covered")]
     uncovered_rules.sort(key=lambda r: severity_order.get(r.get("rule_type", ""), 99))
 
@@ -339,11 +377,21 @@ def main():
             "uncovered_rules": uncovered,
             "coverage_pct": round(100 * covered / total, 1) if total else 0,
             "by_rule_type": {
-                k: {**v, "pct": round(100 * v["covered"] / v["total"], 1) if v["total"] else 0}
+                k: {
+                    **v,
+                    "pct": (
+                        round(100 * v["covered"] / v["total"], 1) if v["total"] else 0
+                    ),
+                }
                 for k, v in sorted(by_type.items())
             },
             "by_skill": {
-                k: {**v, "pct": round(100 * v["covered"] / v["total"], 1) if v["total"] else 0}
+                k: {
+                    **v,
+                    "pct": (
+                        round(100 * v["covered"] / v["total"], 1) if v["total"] else 0
+                    ),
+                }
                 for k, v in sorted(by_skill.items(), key=lambda x: -x[1]["total"])
             },
         },
@@ -386,10 +434,12 @@ def main():
     print(f"  Uncovered:      {uncovered}")
     print(f"  Critical gaps:  {len(output['uncovered_critical'])}")
     print(f"{'='*60}")
-    print(f"\n  By rule type:")
+    print("\n  By rule type:")
     for rt, info in output["summary"]["by_rule_type"].items():
-        print(f"    {rt:20s}: {info['covered']:3d}/{info['total']:3d} ({info['pct']:.0f}%)")
-    print(f"\n  Top skills by gap count:")
+        print(
+            f"    {rt:20s}: {info['covered']:3d}/{info['total']:3d} ({info['pct']:.0f}%)"
+        )
+    print("\n  Top skills by gap count:")
     gaps_by_skill = {}
     for r in uncovered_rules:
         sn = r.get("source_name", "?")
@@ -397,7 +447,9 @@ def main():
     for sn, count in sorted(gaps_by_skill.items(), key=lambda x: -x[1])[:15]:
         total_s = by_skill[sn]["total"]
         cov_s = by_skill[sn]["covered"]
-        print(f"    {sn:35s}: {count:3d} uncovered / {total_s} total ({round(100*cov_s/total_s)}% covered)")
+        print(
+            f"    {sn:35s}: {count:3d} uncovered / {total_s} total ({round(100*cov_s/total_s)}% covered)"
+        )
 
 
 if __name__ == "__main__":
