@@ -203,8 +203,16 @@ def _load_summary_file(summary_file: Path) -> dict[str, Any]:
 
 
 def _kill_process_group(proc: subprocess.Popen[Any]) -> None:
-    """Send SIGKILL to the entire process group, then reap."""
+    """Terminate the child process tree as well as the platform allows."""
     if proc.poll() is not None:
+        return
+    if os.name == "nt":
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
         return
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
