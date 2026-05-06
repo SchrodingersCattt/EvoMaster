@@ -2,12 +2,12 @@ version: v5
 capability: workflow_orchestration
 domain: agnostic
 questions:
-- id: WO_elec_002_20260503
+- id: WO_elec_002_20260506
   capability: workflow_orchestration
   domain: agnostic
-  intent: 'Build and execute periodic liquid water gap workflow: construct 64-water box, compute
+  intent: 'Build and execute periodic liquid water gap workflow: construct 32-water box, compute
     HOMO-LUMO gap with hybrid acceleration.'
-  human_prompt_seed: '计算周期性液态水体系的 HOMO-LUMO gap： 构建 64 个水分子的周期性盒子（密度 ~1.0 g/cm3）， 使用杂化泛函或加速方案（如先
+  human_prompt_seed: '计算周期性液态水体系的 HOMO-LUMO gap： 构建 32 个水分子的周期性盒子（密度 ~1.0 g/cm3）， 使用杂化泛函或加速方案（如先
     PBE 再 HSE 单点）计算电子 gap。
 
     请完成以下交付：
