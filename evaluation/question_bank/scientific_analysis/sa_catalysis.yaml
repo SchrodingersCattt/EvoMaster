@@ -1,0 +1,167 @@
+version: v5
+capability: scientific_analysis
+domain: catalysis
+questions:
+- id: SA_her_mos2_001_20260506
+  capability: scientific_analysis
+  domain: catalysis
+  intent: Compare bulk and exfoliated MoS2 HER electrochemical performance from uploaded LSV and CV traces.
+  human_prompt_seed: '工作目录中有两组 MoS2 析氢电催化数据：bulk MoS2 和 exfoliated MoS2。文件包括各自的 LSV 极化曲线，以及 20/40/60/80/100 mV/s 的 CV 扫描序列。
+
+    请完成以下分析：
+
+    1. 对比两种材料的 HER 活性，报告能体现活性差异的电位/电流指标；
+    2. 从极化曲线估算两种材料的 Tafel 行为，并说明拟合区间选择是否合理；
+    3. 从不同扫速 CV 序列估算电化学双电层相关指标；
+    4. 判断 exfoliated MoS2 相对 bulk MoS2 是否表现出更好的 HER 动力学，并说明依据；
+    5. 简要说明数据中可能影响定量比较的不确定性。
+
+    最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含：
+    `mos2.potential_at_5mA_V`, `exmos2.potential_at_5mA_V`,
+    `mos2.tafel_mV_dec`, `exmos2.tafel_mV_dec`,
+    `mos2.cdl_mF`, `exmos2.cdl_mF`。'
+  tags:
+  - char_ec_lsv
+  - char_ec_cv
+  data_files:
+  - key: mos2_lsv
+    path: data/SA_her_mos2_001/mos2_lsv_50mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080961_mos2_lsv_50mvps.txt
+    description: Bulk MoS2 HER LSV trace.
+  - key: exmos2_lsv
+    path: data/SA_her_mos2_001/exmos2_lsv_50mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080955_exmos2_lsv_50mvps.txt
+    description: Exfoliated MoS2 HER LSV trace.
+  - key: mos2_cv_20
+    path: data/SA_her_mos2_001/mos2_cv_20mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080957_mos2_cv_20mvps.txt
+    description: Bulk MoS2 CV trace at 20 mV/s.
+  - key: mos2_cv_40
+    path: data/SA_her_mos2_001/mos2_cv_40mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080958_mos2_cv_40mvps.txt
+    description: Bulk MoS2 CV trace at 40 mV/s.
+  - key: mos2_cv_60
+    path: data/SA_her_mos2_001/mos2_cv_60mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080959_mos2_cv_60mvps.txt
+    description: Bulk MoS2 CV trace at 60 mV/s.
+  - key: mos2_cv_80
+    path: data/SA_her_mos2_001/mos2_cv_80mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080960_mos2_cv_80mvps.txt
+    description: Bulk MoS2 CV trace at 80 mV/s.
+  - key: mos2_cv_100
+    path: data/SA_her_mos2_001/mos2_cv_100mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080956_mos2_cv_100mvps.txt
+    description: Bulk MoS2 CV trace at 100 mV/s.
+  - key: exmos2_cv_20
+    path: data/SA_her_mos2_001/exmos2_cv_20mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080952_exmos2_cv_20mvps.txt
+    description: Exfoliated MoS2 CV trace at 20 mV/s.
+  - key: exmos2_cv_40
+    path: data/SA_her_mos2_001/exmos2_cv_40mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080953_exmos2_cv_40mvps.txt
+    description: Exfoliated MoS2 CV trace at 40 mV/s.
+  - key: exmos2_cv_60
+    path: data/SA_her_mos2_001/exmos2_cv_60mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080954_exmos2_cv_60mvps.txt
+    description: Exfoliated MoS2 CV trace at 60 mV/s.
+  - key: exmos2_cv_80
+    path: data/SA_her_mos2_001/exmos2_cv_80mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080954_exmos2_cv_80mvps.txt
+    description: Exfoliated MoS2 CV trace at 80 mV/s.
+  - key: exmos2_cv_100
+    path: data/SA_her_mos2_001/exmos2_cv_100mvps.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080951_exmos2_cv_100mvps.txt
+    description: Exfoliated MoS2 CV trace at 100 mV/s.
+  reference_answers:
+  - key: mos2_potential_5ma
+    value:
+      json_path: mos2.potential_at_5mA_V
+      target: -0.898320987654321
+      tolerance: 0.08
+    unit: V
+  - key: exmos2_potential_5ma
+    value:
+      json_path: exmos2.potential_at_5mA_V
+      target: -0.8298936170212765
+      tolerance: 0.08
+    unit: V
+  - key: mos2_tafel
+    value:
+      json_path: mos2.tafel_mV_dec
+      target: 570.7008285358526
+      tolerance: 120.0
+    unit: mV/dec
+  - key: exmos2_tafel
+    value:
+      json_path: exmos2.tafel_mV_dec
+      target: 281.5381155338602
+      tolerance: 80.0
+    unit: mV/dec
+  - key: mos2_cdl
+    value:
+      json_path: mos2.cdl_mF
+      target: 0.10337500000000004
+      tolerance: 0.05
+    unit: mF
+  - key: exmos2_cdl
+    value:
+      json_path: exmos2.cdl_mF
+      target: 0.05984999999999998
+      tolerance: 0.04
+    unit: mF
+  - key: turn_budget
+    value:
+      max: 45
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: mos2_potential_5ma
+    criterion: Bulk MoS2 potential at the selected activity benchmark is consistent with the uploaded LSV trace.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: exmos2_potential_5ma
+    criterion: Exfoliated MoS2 potential at the selected activity benchmark is consistent with the uploaded LSV trace.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: mos2_tafel
+    criterion: Bulk MoS2 Tafel descriptor reported in eval_results is consistent with the uploaded LSV trace.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: exmos2_tafel
+    criterion: Exfoliated MoS2 Tafel descriptor reported in eval_results is consistent with the uploaded LSV trace.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: mos2_cdl
+    criterion: Bulk MoS2 double-layer descriptor reported in eval_results is consistent with the scan-rate CV series.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: exmos2_cdl
+    criterion: Exfoliated MoS2 double-layer descriptor reported in eval_results is consistent with the scan-rate CV series.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: comparison_conclusion
+    criterion: The final answer identifies exfoliated MoS2 as having better HER kinetics based on the LSV/Tafel evidence, while discussing uncertainty in capacitance comparison.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: The analysis is grounded in the uploaded LSV and CV files and states how the metrics were obtained from those files.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

@@ -26,3 +26,9 @@ class QuestionTag(StrEnum):
     struct_molcrys = 'struct_molcrys'
     # 表征
     char_xrd = 'char_xrd'
+    char_pl = 'char_pl'
+    char_lifetime = 'char_lifetime'
+    char_uvvis = 'char_uvvis'
+    char_ec_lsv = 'char_ec_lsv'
+    char_ec_cv = 'char_ec_cv'
+    char_battery_cycling = 'char_battery_cycling'

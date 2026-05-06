@@ -49,7 +49,7 @@ def _load_raw(source: dict[str, Any] | str | Path) -> dict[str, Any]:
 
     import yaml
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     return _expand_env_vars(data)

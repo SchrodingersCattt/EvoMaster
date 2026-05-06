@@ -245,17 +245,33 @@ def _run_devshell_task(
             proc.communicate(timeout=timeout)
         else:
             with console_log_file.open(log_mode, encoding="utf-8") as f:
-                out = _TeeTextIO(f, sys.stderr) if tee_stderr else f
-                proc = subprocess.Popen(
-                    cmd,
-                    cwd=cwd,
-                    env=env,
-                    stdout=out,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    start_new_session=True,
-                )
-                proc.communicate(timeout=timeout)
+                if tee_stderr:
+                    proc = subprocess.Popen(
+                        cmd,
+                        cwd=cwd,
+                        env=env,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        start_new_session=True,
+                    )
+                    output, _ = proc.communicate(timeout=timeout)
+                    if output:
+                        f.write(output)
+                        f.flush()
+                        sys.stderr.write(output)
+                        sys.stderr.flush()
+                else:
+                    proc = subprocess.Popen(
+                        cmd,
+                        cwd=cwd,
+                        env=env,
+                        stdout=f,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        start_new_session=True,
+                    )
+                    proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         _kill_process_group(proc)
         duration_ms = int((time.monotonic() - t0) * 1000)
