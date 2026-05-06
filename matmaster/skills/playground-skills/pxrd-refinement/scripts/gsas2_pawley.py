@@ -19,12 +19,12 @@ Usage:
     --data pattern.xye --space-group "F d -3 m" \\
     --cell "a=5.43,b=5.43,c=5.43" --wavelength 1.5406 -o result.json
 
-  # Directory of patterns (e.g. multi-temperature):
+  # Directory of patterns (e.g. one condition per file):
   python gsas2_pawley.py \\
     --data /path/to/patterns/ --space-group "<SG>" \\
     --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" -o results.json
 
-  # Wide-table CSV (multiple temperatures in one file):
+  # Wide-table CSV (paired angle/intensity columns in one file):
   python gsas2_pawley.py \\
     --data multi_temp.txt --wide-csv --space-group "<SG>" \\
     --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" -o results.json
@@ -39,6 +39,7 @@ Output JSON (multi-pattern):
 import argparse
 import csv
 import json
+import logging
 import os
 import re
 import sys
@@ -82,9 +83,11 @@ CELL_PARAMS = {
 
 COLD_START_WR_FLOOR = 10.0
 COLD_START_WR_SPREAD = 1.5
+_SIN_GAMMA_FLOOR = 1e-3
 
 _CELL_FIELDS = ("a", "b", "c", "alpha", "beta", "gamma", "volume")
 _ESD_FIELDS = ("a_esd", "b_esd", "c_esd", "alpha_esd", "beta_esd", "gamma_esd")
+_LOGGER = logging.getLogger("gsas2_pawley")
 
 
 # ---------------------------------------------------------------------------
@@ -107,10 +110,15 @@ def cell_to_lattice(cell: list[float]) -> np.ndarray:
     """[a,b,c,α,β,γ] (Å/deg) → 3×3 row-vector lattice matrix."""
     a, b, c, alpha, beta, gamma = cell
     ar, br, gr = np.radians(alpha), np.radians(beta), np.radians(gamma)
+    sin_gamma = float(np.sin(gr))
+    if abs(sin_gamma) < _SIN_GAMMA_FLOOR:
+        raise ValueError(
+            f"cell gamma={gamma}° too close to 0/180; cannot build lattice safely"
+        )
     bx = b * np.cos(gr)
-    by = b * np.sin(gr)
+    by = b * sin_gamma
     cx = c * np.cos(br)
-    cy = c * (np.cos(ar) - np.cos(br) * np.cos(gr)) / np.sin(gr)
+    cy = c * (np.cos(ar) - np.cos(br) * np.cos(gr)) / sin_gamma
     cz = np.sqrt(max(c * c - cx * cx - cy * cy, 0.0))
     return np.array([[a, 0.0, 0.0], [bx, by, 0.0], [cx, cy, cz]])
 
@@ -125,7 +133,16 @@ def lattice_to_cell(L: np.ndarray) -> list[float]:
     return [float(a), float(b), float(c), float(alpha), float(beta), float(gamma)]
 
 
-def niggli_reduce_cell(cell: list[float]) -> list[float]:
+def _record_warning(warnings_out: list | None, message: str) -> None:
+    if warnings_out is not None:
+        warnings_out.append(message)
+    else:
+        _LOGGER.warning(message)
+
+
+def niggli_reduce_cell(
+    cell: list[float], *, warnings_out: list | None = None
+) -> list[float]:
     """Niggli-reduce a cell using spglib, with fallback to identity."""
     try:
         import spglib
@@ -136,10 +153,15 @@ def niggli_reduce_cell(cell: list[float]) -> list[float]:
             return list(cell)
         return lattice_to_cell(L_reduced)
     except ImportError:
-        print(
-            "[gsas2_pawley] WARNING: spglib not available, "
-            "Niggli reduction skipped",
-            file=sys.stderr,
+        _record_warning(
+            warnings_out,
+            "spglib not available; Niggli reduction skipped",
+        )
+        return list(cell)
+    except ValueError as exc:
+        _record_warning(
+            warnings_out,
+            f"Niggli reduction skipped: {exc}",
         )
         return list(cell)
 
@@ -154,22 +176,28 @@ def _cell_distance_weighted(c1: list[float], c2: list[float]) -> float:
     return d
 
 
-def _enumerate_equivalent_settings(cell: list[float]) -> list[list[float]]:
+def _enumerate_equivalent_settings(
+    cell: list[float],
+) -> list[tuple[list[float], tuple[int, ...], tuple[bool, bool, bool]]]:
     """Generate all equivalent cell settings via axis permutation + angle supplement."""
-    out: list[list[float]] = []
+    out: list[tuple[list[float], tuple[int, ...], tuple[bool, bool, bool]]] = []
     for perm in _AXIS_PERMS:
         base = [cell[perm[i]] for i in range(6)]
-        queue = [base]
+        queue: list[tuple[list[float], tuple[bool, bool, bool]]] = [
+            (base, (False, False, False))
+        ]
         for ang_idx in (3, 4, 5):
-            expanded = []
-            for v in queue:
-                expanded.append(v)
+            expanded: list[tuple[list[float], tuple[bool, bool, bool]]] = []
+            for v, supplemented in queue:
+                expanded.append((v, supplemented))
                 if abs(v[ang_idx] - 90.0) > 0.5:
                     alt = list(v)
                     alt[ang_idx] = 180.0 - alt[ang_idx]
-                    expanded.append(alt)
+                    mask = list(supplemented)
+                    mask[ang_idx - 3] = True
+                    expanded.append((alt, tuple(mask)))
             queue = expanded
-        out.extend(queue)
+        out.extend((candidate, perm, supplemented) for candidate, supplemented in queue)
     return out
 
 
@@ -189,21 +217,33 @@ def standardize_cell(
         result["alpha"], result["beta"], result["gamma"],
     ]
 
-    sources = [cur]
+    warnings = result.setdefault("warnings", [])
+    sources: list[tuple[list[float], bool]] = [(cur, True)]
     if niggli:
-        sources.append(niggli_reduce_cell(cur))
+        sources.append((niggli_reduce_cell(cur, warnings_out=warnings), False))
 
-    candidates: list[list[float]] = []
-    for src in sources:
-        candidates.extend(_enumerate_equivalent_settings(src))
+    candidates: list[
+        tuple[list[float], tuple[int, ...], tuple[bool, bool, bool], bool]
+    ] = []
+    for src, esd_from_original in sources:
+        candidates.extend(
+            (cand, perm, supplemented, esd_from_original)
+            for cand, perm, supplemented in _enumerate_equivalent_settings(src)
+        )
 
     best = cur
+    best_perm: tuple[int, ...] | None = None
+    best_supplemented: tuple[bool, bool, bool] | None = None
+    best_esd_from_original = True
     best_d = _cell_distance_weighted(cur, ref_cell)
-    for cand in candidates:
+    for cand, perm, supplemented, esd_from_original in candidates:
         d = _cell_distance_weighted(cand, ref_cell)
         if d < best_d - 1e-8:
             best_d = d
             best = cand
+            best_perm = perm
+            best_supplemented = supplemented
+            best_esd_from_original = esd_from_original
 
     if best is not cur:
         result["a"] = round(best[0], 5)
@@ -215,17 +255,24 @@ def standardize_cell(
 
         old_esds = [result.get(f) for f in _ESD_FIELDS]
         if all(e is not None for e in old_esds):
-            for perm in _AXIS_PERMS:
-                permuted = [cur[perm[i]] for i in range(6)]
-                if all(
-                    abs(permuted[i] - best[i]) < 0.01
-                    or abs(180.0 - permuted[i] - best[i]) < 0.01
-                    for i in range(6)
-                ):
-                    reordered = [old_esds[perm[i]] for i in range(6)]
-                    for field, val in zip(_ESD_FIELDS, reordered):
-                        result[field] = val
-                    break
+            if best_esd_from_original and best_perm is not None:
+                reordered = [old_esds[best_perm[i]] for i in range(6)]
+                for field, val in zip(_ESD_FIELDS, reordered):
+                    result[field] = val
+            else:
+                for field in _ESD_FIELDS:
+                    result[field] = None
+                warnings.append(
+                    "ESDs cleared because Niggli cell standardisation changed "
+                    "the basis beyond an explicit axis permutation"
+                )
+
+        if any(best_supplemented or (False, False, False)):
+            result["standardize_cell_angle_supplements"] = {
+                "alpha": bool(best_supplemented[0]),
+                "beta": bool(best_supplemented[1]),
+                "gamma": bool(best_supplemented[2]),
+            }
 
         result["volume"] = round(cell_volume(best), 4)
 
@@ -982,7 +1029,9 @@ def refine_one_pattern(
         "warnings": warnings + best_warnings,
     }
     if standardize_cell_mode:
-        standardize_cell(result, ref_cell=cell_list, niggli=standardize_cell_mode == "niggli")
+        result = standardize_cell(
+            result, ref_cell=cell_list, niggli=standardize_cell_mode == "niggli"
+        )
     if anchor_volume is not None:
         result["anchor_volume"] = round(float(anchor_volume), 4)
         result["anchor_max_jump"] = anchor_max_jump
@@ -1231,6 +1280,12 @@ def merge_chain_directions(
     reference_volume: float,
     reference_cell: list[float] | None = None,
 ) -> tuple[list[dict], dict]:
+    if len(forward_results) != len(reverse_results):
+        raise ValueError(
+            "forward/reverse chain result lengths differ: "
+            f"{len(forward_results)} != {len(reverse_results)}"
+        )
+
     merged: list[dict] = []
     table: list[dict] = []
     for fwd, rev in zip(forward_results, reverse_results):
@@ -1900,7 +1955,9 @@ def main() -> None:
         "average of their immediate successful neighbours. Re-refine each "
         "outlier in-process with --self-heal-multi-start restarts and a "
         "neighbour-average cell as initial guess; replace the original only "
-        "if the retry lands closer to the neighbour average. Default: on.",
+        "if the retry lands closer to the neighbour average. Cost: each rescued "
+        "pattern adds roughly one K-start single-pattern refinement "
+        "(K = --self-heal-multi-start, default 5). Default: on.",
     )
     ap.add_argument(
         "--no-self-heal-chain",
@@ -1971,7 +2028,13 @@ def main() -> None:
                     ),
                 )
                 sys.exit(1)
-        args._explicit_files = sorted({p.resolve() for p in data_paths})
+        ordered: list[Path] = []
+        seen: set[Path] = set()
+        for p in (candidate.resolve() for candidate in data_paths):
+            if p not in seen:
+                seen.add(p)
+                ordered.append(p)
+        args._explicit_files = ordered
         args.data = str(args._explicit_files[0].parent)
         mode = "directory"
 

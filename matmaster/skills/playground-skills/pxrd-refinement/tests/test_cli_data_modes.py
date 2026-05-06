@@ -118,6 +118,27 @@ def test_multi_file_mode_routes_to_directory(tmp_path, monkeypatch):
     }
 
 
+def test_multi_file_mode_preserves_argv_order_and_deduplicates(tmp_path, monkeypatch):
+    f1 = tmp_path / "c.xy"
+    f2 = tmp_path / "a.xy"
+    f3 = tmp_path / "b.xy"
+    for f in (f1, f2, f3):
+        f.write_text("0 0\n", encoding="utf-8")
+
+    cap = _stub_main_run(
+        monkeypatch,
+        argv=[
+            "--data", str(f1), str(f2), str(f1), str(f3),
+            "--space-group", "P 21",
+            "--cell", "a=10.83,b=9.62,c=10.13,beta=108.75",
+            "--chain-cell",
+        ],
+    )
+
+    assert cap["mode"] == "directory"
+    assert [p.name for p in cap["args"]._explicit_files] == ["c.xy", "a.xy", "b.xy"]
+
+
 def test_multi_file_mode_with_directory_rejected(tmp_path, monkeypatch, capsys):
     f1 = tmp_path / "pxrd_303K.xy"
     f1.write_text("0 0\n", encoding="utf-8")

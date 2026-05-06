@@ -7,6 +7,7 @@ Run from project root:
 
 from __future__ import annotations
 
+import builtins
 import sys
 from pathlib import Path
 
@@ -42,6 +43,11 @@ def test_cell_lattice_roundtrip_preserves_low_symmetry_cell():
     assert cell_volume(roundtripped) == pytest.approx(cell_volume(cell), abs=1e-8)
 
 
+def test_cell_to_lattice_rejects_degenerate_gamma():
+    with pytest.raises(ValueError, match="gamma=.*too close"):
+        cell_to_lattice([5.0, 6.0, 7.0, 90.0, 90.0, 179.99999])
+
+
 def test_standardize_cell_aligns_monoclinic_alternate_setting_to_reference():
     ref = [10.83, 9.59, 10.13, 90.0, 108.8, 90.0]
     result = {
@@ -62,6 +68,36 @@ def test_standardize_cell_aligns_monoclinic_alternate_setting_to_reference():
     assert result["alpha"] == pytest.approx(90.0, abs=0.01)
     assert result["beta"] == pytest.approx(108.7, abs=0.01)
     assert result["gamma"] == pytest.approx(90.0, abs=0.01)
+
+
+def test_standardize_cell_reorders_esds_from_explicit_axis_permutation():
+    ref = [5.0, 7.0, 9.0, 90.0, 92.0, 88.0]
+    result = {
+        "a": 7.0,
+        "b": 5.0,
+        "c": 9.0,
+        "alpha": 90.0,
+        "beta": 88.0,
+        "gamma": 92.0,
+        "volume": 315.0,
+        "a_esd": 0.07,
+        "b_esd": 0.05,
+        "c_esd": 0.09,
+        "alpha_esd": 0.90,
+        "beta_esd": 0.88,
+        "gamma_esd": 0.92,
+    }
+
+    standardize_cell(result, ref_cell=ref, niggli=False)
+
+    assert [result[field] for field in (
+        "a_esd",
+        "b_esd",
+        "c_esd",
+        "alpha_esd",
+        "beta_esd",
+        "gamma_esd",
+    )] == [0.05, 0.07, 0.09, 0.90, 0.92, 0.88]
 
 
 def test_standardize_cell_aligns_orthorhombic_axis_permutation_to_reference():
@@ -94,6 +130,22 @@ def test_spglib_niggli_reduce_preserves_volume():
 
     assert reduced != cell
     assert cell_volume(reduced) == pytest.approx(cell_volume(cell), abs=1e-8)
+
+
+def test_niggli_reduce_cell_records_missing_spglib_warning(monkeypatch):
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "spglib":
+            raise ImportError("no spglib in test")
+        return real_import(name, *args, **kwargs)
+
+    warnings: list[str] = []
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    cell = [10.83, 9.59, 10.13, 90.0, 108.8, 90.0]
+    assert niggli_reduce_cell(cell, warnings_out=warnings) == cell
+    assert warnings == ["spglib not available; Niggli reduction skipped"]
 
 
 def test_standardize_cell_can_use_niggli_before_reference_alignment():
@@ -152,6 +204,17 @@ def test_merge_chain_directions_prefers_reference_volume_for_high_wr_tie():
     # Both candidates within 1% of reference_volume → no off-ref warning.
     assert audit["warnings"] == []
     assert all(row["warning"] is None for row in audit["table"])
+
+
+def test_merge_chain_directions_rejects_length_mismatch():
+    forward = [{"success": True, "file": "a.xy", "wR": 1.0, "volume": 100.0}]
+    reverse = [
+        {"success": True, "file": "a.xy", "wR": 1.0, "volume": 100.0},
+        {"success": True, "file": "b.xy", "wR": 1.0, "volume": 101.0},
+    ]
+
+    with pytest.raises(ValueError, match="lengths differ"):
+        merge_chain_directions(forward, reverse, reference_volume=100.0)
 
 
 def test_merge_warns_when_both_directions_off_reference_volume():
