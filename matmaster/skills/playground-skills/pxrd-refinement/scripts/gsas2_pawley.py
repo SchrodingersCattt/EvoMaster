@@ -1452,13 +1452,17 @@ def run_single(args) -> dict:
 
 
 def run_directory(args) -> dict:
-    """Refine all PXRD files in a directory."""
-    data_dir = Path(args.data)
-    exts = ("*.xye", "*.xy", "*.dat", "*.csv", "*.txt", "*.raw")
-    files = []
-    for ext in exts:
-        files.extend(data_dir.glob(ext))
-    files = sorted(set(files))
+    """Refine all PXRD files in a directory (or an explicit file list)."""
+    explicit = getattr(args, "_explicit_files", None)
+    if explicit:
+        files = [Path(p) for p in explicit]
+    else:
+        data_dir = Path(args.data)
+        exts = ("*.xye", "*.xy", "*.dat", "*.csv", "*.txt", "*.raw")
+        files = []
+        for ext in exts:
+            files.extend(data_dir.glob(ext))
+        files = sorted(set(files))
 
     if not files:
         return {"success": False, "error": f"No data files in {args.data}"}
@@ -1756,8 +1760,13 @@ def main() -> None:
     ap.add_argument(
         "--data",
         required=True,
-        help="PXRD data file (.xye/.xy/.dat/.csv), directory of patterns, "
-        "or wide-table CSV (use --wide-csv)",
+        nargs="+",
+        help="PXRD data input. Accepts: (1) one .xye/.xy/.dat/.csv file "
+        "(single-pattern mode), (2) one directory of patterns (chain-cell "
+        "mode, files auto-globbed), (3) two or more files (chain-cell mode, "
+        "files used in argv order — convenient when bash glob expansion "
+        "passes them in directly), or (4) one wide-table CSV with --wide-csv. "
+        "Mixing files and directories in (3) is rejected.",
     )
     ap.add_argument(
         "--space-group",
@@ -1854,18 +1863,58 @@ def main() -> None:
 
     setup_gsas2(args.gsas2_path)
 
-    data_path = Path(args.data)
+    data_paths = [Path(p) for p in args.data]
+    args._explicit_files = None
 
-    if not (args.wide_csv or data_path.is_dir() or data_path.is_file()):
-        print(
-            json.dumps({"success": False, "error": f"Not found: {args.data}"}),
-        )
-        sys.exit(1)
+    if args.wide_csv:
+        if len(data_paths) != 1:
+            print(
+                json.dumps(
+                    {"success": False, "error": "--wide-csv accepts exactly one path"}
+                ),
+            )
+            sys.exit(1)
+        if not data_paths[0].is_file():
+            print(
+                json.dumps(
+                    {"success": False, "error": f"Wide-CSV file not found: {args.data[0]}"}
+                ),
+            )
+            sys.exit(1)
+        args.data = str(data_paths[0])
+        mode = "wide_csv"
+    elif len(data_paths) == 1:
+        p = data_paths[0]
+        if not (p.is_dir() or p.is_file()):
+            print(
+                json.dumps({"success": False, "error": f"Not found: {p}"}),
+            )
+            sys.exit(1)
+        args.data = str(p)
+        mode = "directory" if p.is_dir() else "single"
+    else:
+        for p in data_paths:
+            if not p.is_file():
+                print(
+                    json.dumps(
+                        {
+                            "success": False,
+                            "error": (
+                                f"Multi-file --data mode requires every path to be a "
+                                f"file; not a file: {p}"
+                            ),
+                        }
+                    ),
+                )
+                sys.exit(1)
+        args._explicit_files = sorted({p.resolve() for p in data_paths})
+        args.data = str(args._explicit_files[0].parent)
+        mode = "directory"
 
     with redirect_stdout(sys.stderr):
-        if args.wide_csv:
+        if mode == "wide_csv":
             result = run_wide_csv(args)
-        elif data_path.is_dir():
+        elif mode == "directory":
             result = run_directory(args)
         else:
             result = run_single(args)
