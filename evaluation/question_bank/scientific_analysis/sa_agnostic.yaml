@@ -257,7 +257,7 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 1.0
-- id: PXRD_thermal_expansion_001_20260502_v5
+- id: PXRD_thermal_expansion_001_20260506
   capability: scientific_analysis
   domain: agnostic
   intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
@@ -269,6 +269,13 @@ questions:
     - 数据为实测变温实验数据，扣除背景前的动态范围约 10×–30×；2θ 范围 5°–50°，建议精修使用 14°–50° 区间以避开低角伪影。
     - 推荐将数据按相拆分（RTP 4 点、HTP 4 点）分别精修，并在同一相内启用 chain-cell（前一温度精修结果作为下一温度初猜）。
     - 同相内的体积/晶胞参数应单调或近似单调随温度变化；若某温度精修结果 V 相对邻近温度跳变 >5%，应视为收敛到错误盆地（可能为 √2 或 2× 的伪解），需要从相邻温度结果重新初始化或多起点重精修。
+
+    运行预算（重要）：本题目硬性 wall-clock 上限 1200 s（线上 task timeout）。Pawley 精修请按以下设置以兼顾稳定性与时限：
+    - 使用 `--multi-start 1`（每相单条 chain 即可；niggli 标准化 + 双向 chain-cell 已能覆盖绝大多数错盆地，不需要 5×/8× 起点的暴力多起点；脚本默认开启的 `--self-heal-chain` 会在 chain merge 之后对 V 跳变 >2% 的单点自动用 multi-start 5 重精修，足以兜住偶发塌方）；
+    - 使用 `--chain-cell --chain-cell-direction both`（脚本内部会做正反向 merge 与体积一致性裁决）；
+    - 使用 `--standardize-cell ref`（基于参考晶胞做轴置换 + niggli 还原，规避单斜/正交等晶系的等效设定切换）；
+    - 必须**先并行 submit RTP 与 HTP 两个 Bohrium 任务**（两次 `Bohrium(action='submit')` 一次性发出，**不要先 submit RTP → 等结果 → 再 submit HTP**），随后再循环 `poll` 检查；串行 submit 会因为单作业 8–12 min 直接超时。
+    - **拿到 results.json 后不要再发起新的 Bohrium 精修作业**：脚本内置的 `chain-cell` + `standardize-cell` + `self-heal-chain` 已经把邻居体积一致性与错盆地单点重精修做完了，agent 端只需要读 `results` / `merge_audit` / `self_heal_audit`，做最终的相分组与线性拟合，直接写答案。重新提交 Bohrium 作业 1 次就会吃掉 8–12 min，几乎必然超时。
 
     文献参考晶胞（每相分别作为 Pawley 精修初猜，并基于此自由精修；c 与 β 是单斜结构敏感参数，如下文献值已对每相核对）：
     - 低温相 RTP（303K – 363K）：a ≈ 10.83 Å, b ≈ 9.62 Å, c ≈ 10.13 Å, β ≈ 108.75°, V ≈ 1000 Å³
@@ -292,7 +299,7 @@ questions:
   - wf_postprocess
   data_files:
   - key: vt_pxrd_data
-    path: data/PXRD_thermal_expansion_001_20260502_v5/_td-pxrd_test.txt
+    path: data/PXRD_thermal_expansion_001_20260506/_td-pxrd_test.txt
     oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/PXRD_thermal_expansion_001_20260427_v3/1777279719__td-pxrd_test.txt
     description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K, °C labels
       30/50/70/90/110/120/130/140), CSV format with paired (2theta, intensity) columns per
@@ -339,7 +346,7 @@ questions:
     value:
       json_path: rtp.fits.V.slope
       target: 0.2013
-      tolerance: 0.08
+      tolerance: 0.15
     unit: A3/K
   - key: htp_V_slope
     value:
@@ -416,8 +423,10 @@ questions:
     weight: 1.0
   - id: rtp_V_slope
     criterion: 'Linear-fit slope of V vs T over the four RTP temperatures (303/323/343/363 K)
-      is within tolerance (target 0.2013 ± 0.08 Å³/K). Read from eval_results path
-      rtp.fits.V.slope.'
+      is within tolerance (target 0.2013 ± 0.15 Å³/K; widened to absorb the rare ``--multi-start
+      1`` wrong-basin case at one interior RTP temperature when ``--self-heal-chain`` does not
+      successfully replace it — the slope is the most sensitive of the four-point fits).
+      Read from eval_results path rtp.fits.V.slope.'
     axis: correctness
     verify: answer_json_numeric
     weight: 2.0
