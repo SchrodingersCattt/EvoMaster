@@ -293,8 +293,12 @@ questions:
 
     数值必须来自实际 Pawley 精修与线性拟合，不得填入 prompt 中的初猜近似值。
 
-    最终答案中请额外用 1–2 句简述精修质量审计：`curation.verdict` / `warnings` 是否提示问题；`merge_audit.warnings`
-    或 `self_heal_audit.outliers` 是否为空，如不为空请指出受影响的温度点。
+    最终答案中请额外用 2–4 句简述审计信息：
+    - 精修质量审计：`curation.verdict` / `warnings` 是否提示问题；`merge_audit.warnings` 或 `self_heal_audit.outliers`
+      是否为空，如不为空请指出受影响的温度点。
+    - Bohrium 执行审计：总共发起了几次 `Bohrium(action='submit')`（本题应 ≤3）；提交命令是否使用
+      `cmd='bash run.sh > log 2>&1'`；下载后是否确认每个结果目录包含 `log` 与 `results.json`；结果是否来自
+      Bohrium 上运行的 `gsas2_pawley.py` 而不是本地 scipy/numpy 近似拟合。
     "
   tags:
   - char_xrd
@@ -467,15 +471,19 @@ questions:
     verify: llm_binary_judge
     weight: 1.5
   - id: bohrium_submit_executed
-    criterion: Tool-call log or final answer shows that each Bohrium submit was followed
-      by a download and that the result directory contained both a log file and a results
-      JSON file before numeric outputs were read.
+    criterion: Pass if the final answer, workspace evidence, or tool-call observations
+      state that each Bohrium submit was downloaded and produced both a log file and a
+      results JSON before numeric outputs were read. Do not fail solely because the visible
+      tool-call excerpt is truncated, unless there is positive evidence that no successful
+      Bohrium result directory existed.
     axis: correctness
     verify: llm_binary_judge
     weight: 0.5
   - id: bohrium_job_budget
-    criterion: Total Bohrium submit calls in the tool-call log is at most 3 for this
-      two-phase task. Poll and download calls do not count as submits.
+    criterion: Pass if the final answer, workspace evidence, or tool-call observations
+      indicate at most 3 Bohrium submit calls for this two-phase task. Poll and download
+      calls do not count as submits. Fail only if the evidence shows more than 3 submits
+      or redundant re-runs/parameter sweeps.
     axis: efficiency
     verify: llm_binary_judge
     weight: 1.0
@@ -487,9 +495,10 @@ questions:
     verify: llm_binary_judge
     weight: 0.5
   - id: runsh_wrapper_used
-    criterion: Each Bohrium submit command uses the run.sh wrapper pattern such as
-      bash run.sh > log 2>&1, with the python3 gsas2_pawley.py invocation inside
-      run.sh rather than inlined with embedded quotes in the cmd field.
+    criterion: Pass if the final answer, workspace run.sh files, or tool-call observations
+      show the run.sh wrapper pattern such as bash run.sh > log 2>&1, with the python3
+      gsas2_pawley.py invocation inside run.sh rather than inlined with embedded quotes
+      in the cmd field.
     axis: correctness
     verify: llm_binary_judge
     weight: 0.5
@@ -501,9 +510,10 @@ questions:
     verify: llm_binary_judge
     weight: 0.5
   - id: local_solver_avoided
-    criterion: All refinement results came from gsas2_pawley.py executed on Bohrium.
-      Agent did not bypass GSAS-II by writing a local scipy/numpy least-squares Pawley
-      replacement.
+    criterion: Pass if the final answer, workspace files, or tool-call observations show
+      that refinement results came from gsas2_pawley.py executed on Bohrium, and there is
+      no positive evidence that the agent bypassed GSAS-II by writing a local scipy/numpy
+      least-squares Pawley replacement.
     axis: correctness
     verify: llm_binary_judge
     weight: 0.5
