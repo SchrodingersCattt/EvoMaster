@@ -91,6 +91,25 @@ def test_directory_mode(tmp_path, monkeypatch):
     assert cap["args"]._explicit_files is None
 
 
+def test_two_theta_range_alias_sets_tmin_tmax(tmp_path, monkeypatch):
+    f = tmp_path / "pxrd_303K.xy"
+    f.write_text("0.0 0.0\n1.0 1.0\n", encoding="utf-8")
+
+    cap = _stub_main_run(
+        monkeypatch,
+        argv=[
+            "--data", str(f),
+            "--space-group", "P 21",
+            "--cell", "a=10.83,b=9.62,c=10.13,beta=108.75",
+            "--two-theta-range", "14", "50",
+        ],
+    )
+
+    assert cap["mode"] == "single"
+    assert cap["args"].tmin == 14.0
+    assert cap["args"].tmax == 50.0
+
+
 def test_multi_file_mode_routes_to_directory(tmp_path, monkeypatch):
     f1 = tmp_path / "pxrd_303K.xy"
     f2 = tmp_path / "pxrd_323K.xy"

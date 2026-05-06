@@ -1907,6 +1907,15 @@ def main() -> None:
     ap.add_argument("--dmax", type=float, default=None)
     ap.add_argument("--tmin", type=float, default=None)
     ap.add_argument("--tmax", type=float, default=None)
+    ap.add_argument(
+        "--two-theta-range",
+        nargs=2,
+        type=float,
+        metavar=("TMIN", "TMAX"),
+        default=None,
+        help="Alias for --tmin TMIN --tmax TMAX. Accepted to avoid wasting "
+        "remote submissions on common wrapper spelling.",
+    )
     ap.add_argument("--instprm", default=None)
     ap.add_argument(
         "--gsas2-path",
@@ -1981,6 +1990,11 @@ def main() -> None:
     )
     ap.add_argument("-o", "--output", help="Write JSON output to this file")
     args = ap.parse_args()
+    if args.two_theta_range is not None:
+        if args.tmin is None:
+            args.tmin = args.two_theta_range[0]
+        if args.tmax is None:
+            args.tmax = args.two_theta_range[1]
 
     setup_gsas2(args.gsas2_path)
 
