@@ -812,7 +812,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_001_20260506
+- id: SC_struct_build_001_20260507
   capability: structure_construction
   domain: agnostic
   intent: Build FCC copper primitive cell using ASE bulk prototype and verify lattice
@@ -877,7 +877,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_002_20260506
+- id: SC_struct_build_002_20260507
   capability: structure_construction
   domain: agnostic
   intent: Build hexagonal boron nitride (hBN) unit cell from space group and Wyckoff
@@ -962,7 +962,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_003_20260506
+- id: SC_struct_build_003_20260507
   capability: structure_construction
   domain: agnostic
   intent: Build a phenol molecule from SMILES using RDKit and verify atom count and
