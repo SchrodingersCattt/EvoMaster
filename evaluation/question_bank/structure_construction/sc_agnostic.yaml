@@ -817,9 +817,9 @@ questions:
   domain: agnostic
   intent: Build FCC copper primitive cell using ASE bulk prototype and verify lattice
     constant and space group.
-  human_prompt_seed: '构建 FCC 铜 (Cu) 的原胞结构，使用实验晶格常数 a = 3.615 Å。
+  human_prompt_seed: '构建 FCC 铜 (Cu) 的晶体结构，使用实验晶格常数 a = 3.615 Å。
     导出为 `cu_fcc.cif`。在最终回答中明确报告：(1) 晶格常数；(2) 空间群编号；(3)
-    原胞中的原子数。'
+    单胞中的原子数。'
   tags:
   - struct_build
   data_files: []
@@ -834,12 +834,12 @@ questions:
     value:
       filename: cu_fcc.cif
       param: a
-      expected: 2.556
+      expected: 3.615
       tolerance: 0.02
   - key: atom_count
     value:
       filename: cu_fcc.cif
-      expected: 1
+      expected: 4
       tolerance: 0
   - key: turn_budget
     value:
@@ -857,11 +857,11 @@ questions:
     axis: correctness
     verify: struct_file_formula
   - id: cell_a
-    criterion: Primitive cell lattice constant a is approximately 2.556 Å (3.615/√2).
+    criterion: Lattice constant a is approximately 3.615 Å.
     axis: correctness
     verify: struct_file_cell_param
   - id: atom_count
-    criterion: Primitive cell contains exactly 1 atom.
+    criterion: Conventional FCC cell contains 4 atoms.
     axis: correctness
     verify: struct_file_atom_count
   - id: grounding_source
