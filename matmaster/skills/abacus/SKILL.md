@@ -17,6 +17,8 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 ## Minimum Workflow
 
 1. Read provided `STRU` first and reuse filenames exactly (PP/orbital/structure).
+   Pseudopotentials (`.upf`) default path: `/root/apns-pseudopotentials-v1/`.
+   Orbitals (`.orb`) default path: `/root/apns-orbitals-efficiency-v1/`.
 2. Generate `INPUT` (and `KPT` when needed).
 3. For uncertain params/workflows, check local `references/*` first.
 4. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
@@ -71,7 +73,7 @@ Keep the previous default profile unless task/environment explicitly overrides i
 
 | Item | Default |
 |------|---------|
-| image | `registry.dp.tech/dptech/abacus:LTSv3.10.1` |
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.1-1778066220` |
 | machine | `c32_m128_cpu` |
 | cmd | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |
 
