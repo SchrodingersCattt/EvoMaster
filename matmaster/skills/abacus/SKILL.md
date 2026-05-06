@@ -73,7 +73,7 @@ Keep the previous default profile unless task/environment explicitly overrides i
 
 | Item | Default |
 |------|---------|
-| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.1-1778066220` |
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.1-1778080680` |
 | machine | `c32_m128_cpu` |
 | cmd | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |
 
