@@ -812,3 +812,207 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
+- id: SC_struct_build_001_20260506
+  capability: structure_construction
+  domain: agnostic
+  intent: Build FCC copper primitive cell using ASE bulk prototype and verify lattice
+    constant and space group.
+  human_prompt_seed: '构建 FCC 铜 (Cu) 的原胞结构，使用实验晶格常数 a = 3.615 Å。
+    导出为 `cu_fcc.cif`。在最终回答中明确报告：(1) 晶格常数；(2) 空间群编号；(3)
+    原胞中的原子数。'
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: cu_fcc.cif
+  - key: formula
+    value:
+      filename: cu_fcc.cif
+      expected_formula: Cu1
+  - key: cell_a
+    value:
+      filename: cu_fcc.cif
+      param: a
+      expected: 3.615
+      tolerance: 0.01
+  - key: atom_count
+    value:
+      filename: cu_fcc.cif
+      expected: 1
+      tolerance: 0
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `cu_fcc.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: formula
+    criterion: Structure formula is Cu.
+    axis: correctness
+    verify: struct_file_formula
+  - id: cell_a
+    criterion: Lattice constant a is approximately 3.615 Å.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: atom_count
+    criterion: Primitive cell contains exactly 1 atom.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: grounding_source
+    criterion: Final answer explicitly states the lattice constant, space group number,
+      and atom count from the built structure.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SC_struct_build_002_20260506
+  capability: structure_construction
+  domain: agnostic
+  intent: Build hexagonal boron nitride (hBN) unit cell from space group and Wyckoff
+    positions, verifying correct cell angles and stoichiometry.
+  human_prompt_seed: '构建六方氮化硼 (hBN) 的单胞结构。参数：空间群 P6₃/mmc (#194)，
+    a = 2.504 Å, c = 6.661 Å。导出为 `hbn.cif`。在最终回答中明确报告：(1)
+    晶格参数 a, c；(2) gamma 角；(3) 单胞原子数；(4) 化学计量比 B:N。'
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: hbn.cif
+  - key: formula
+    value:
+      filename: hbn.cif
+      expected_formula: B2 N2
+  - key: cell_a
+    value:
+      filename: hbn.cif
+      param: a
+      expected: 2.504
+      tolerance: 0.01
+  - key: cell_c
+    value:
+      filename: hbn.cif
+      param: c
+      expected: 6.661
+      tolerance: 0.01
+  - key: cell_gamma
+    value:
+      filename: hbn.cif
+      param: gamma
+      expected: 120.0
+      tolerance: 0.5
+  - key: atom_count
+    value:
+      filename: hbn.cif
+      expected: 4
+      tolerance: 0
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `hbn.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: formula
+    criterion: Structure formula is B2N2 (1:1 stoichiometry).
+    axis: correctness
+    verify: struct_file_formula
+  - id: cell_a
+    criterion: Lattice constant a is approximately 2.504 Å.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: cell_c
+    criterion: Lattice constant c is approximately 6.661 Å.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: cell_gamma
+    criterion: Cell angle gamma is 120 degrees (hexagonal).
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: atom_count
+    criterion: Unit cell contains exactly 4 atoms.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: grounding_source
+    criterion: Final answer reports lattice parameters, gamma angle, atom count, and
+      B:N ratio from the built structure.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SC_struct_build_003_20260506
+  capability: structure_construction
+  domain: agnostic
+  intent: Build a phenol molecule from SMILES using RDKit and verify atom count and
+    chemical formula.
+  human_prompt_seed: '从 SMILES `c1ccc(cc1)O` 构建苯酚 (phenol) 分子的三维结构。
+    导出为 `phenol.xyz`。在最终回答中报告：(1) 化学式；(2) 原子总数；(3)
+    是否所有原子都有合理的三维坐标（无重叠）。'
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: phenol.xyz
+  - key: atom_count
+    value:
+      filename: phenol.xyz
+      expected: 13
+      tolerance: 0
+  - key: required_fields
+    value:
+    - C6H6O
+    - '13'
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `phenol.xyz` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: atom_count
+    criterion: Molecule contains exactly 13 atoms (6C + 6H + 1O).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: required_fields
+    criterion: Final answer explicitly states formula C6H6O and atom count 13.
+    axis: correctness
+    verify: contains_all
+  - id: grounding_source
+    criterion: Final answer confirms all atoms have valid 3D coordinates and no overlaps.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

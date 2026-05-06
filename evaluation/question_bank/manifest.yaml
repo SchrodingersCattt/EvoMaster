@@ -137,7 +137,7 @@ banks:
   - path: "structure_construction/sc_agnostic.yaml"
     capability: "structure_construction"
     domain: "agnostic"
-    questions: 7
+    questions: 10
 
   - path: "structure_construction/sc_catalysis.yaml"
     capability: "structure_construction"
