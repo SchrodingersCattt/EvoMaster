@@ -108,7 +108,7 @@ questions:
   intent: 'Generate VASP INCAR for a static SCF calculation of organic-inorganic hybrid perovskite C26H28Cl4N4Pb2. Semiconductor, high-precision convergence.
 
     '
-  human_prompt_seed: 为有机-无机杂化钙钛矿 C26H28Cl4N4Pb2 生成一个 静态自洽(SCF)计算的 VASP INCAR 文件。体系是半导体，需要高精度收敛，并启动色散修正（设置 IVDW）。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 为有机-无机杂化钙钛矿 C26H28Cl4N4Pb2 生成一个 静态自洽(SCF)计算的 VASP INCAR 文件。体系是半导体，需要高精度收敛。 将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
   reference_answers:
@@ -332,7 +332,7 @@ questions:
   intent: 'Generate VASP INCAR for HSE06 hybrid functional calculation of MOF C30H22N4O10Zn2. Accurate electronic structure and band gap.
 
     '
-  human_prompt_seed: 为金属有机框架(MOF) C30H22N4O10Zn2 生成一个 HSE06 杂化泛函静态计算的 VASP INCAR。需要精确的电子结构和带隙，并启动色散修正（设置 IVDW）。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 为金属有机框架(MOF) C30H22N4O10Zn2 生成一个 HSE06 杂化泛函静态计算的 VASP INCAR。需要精确的电子结构和带隙。 将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
   reference_answers:
@@ -1411,7 +1411,7 @@ questions:
   intent: 'Generate VASP INCAR for static calculation of hydrogen-passivated SiO2 slab H16O24Si12. Insulator, fixed cell (ISIF=2).
 
     '
-  human_prompt_seed: 为氢钝化的 SiO2 slab 模型 H16O24Si12 生成一个静态计算的 VASP INCAR。体系是绝缘体 slab，需要固定晶胞形状，并启动色散修正（设置 IVDW）。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 为氢钝化的 SiO2 slab 模型 H16O24Si12 生成一个静态计算的 VASP INCAR。体系是绝缘体 slab，需要固定晶胞形状。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
   - struct_surface
