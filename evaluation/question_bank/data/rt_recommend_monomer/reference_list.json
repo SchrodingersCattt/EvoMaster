@@ -1,0 +1,54 @@
+
+{
+  "description": "Recommend soluble acrylate NTD photoresist monomers and provide verified SMILES from databases.",
+  "recommend_reference_list": [
+  {
+    "name": "四乙二醇二甲基丙烯酸酯",
+    "SMILES": "C=C(C)C(OCCOCCOCCOCCOC(C(C)=C)=O)=O",
+    "CAS": "109-17-1",
+    "notes": "contains four ethylene glycol units; highly soluble in PGMEA and acetone"
+  },
+  {
+    "name": "3-羟基-1-金刚烷基甲基丙烯酸酯",
+    "SMILES": "C(OC12CC3CC(CC(O)(C3)C1)C2)(=O)C(C)=C",
+    "CAS": "115372-36-6",
+    "notes": "hydroxyl and adamantyl groups; used in 193nm resists; good solubility in organic solvents"
+  },
+  {
+    "name": "1,6-己二醇二丙烯酸酯",
+    "SMILES": "C=CC(=O)OCCCCCCOC(=O)C=C",
+    "CAS": "13048-33-4",
+    "notes": "long alkyl-chain diacrylate; excellent solubility in various organic solvents"
+  },
+  {
+    "name": "三羟甲基丙烷三丙烯酸酯",
+    "SMILES": "CCC(COC(=O)C=C)(COC(=O)C=C)COC(=O)C=C",
+    "CAS": "15625-89-5",
+    "notes": "trifunctional acrylate; good solubility in acetone and PGMEA"
+  },
+  {
+    "name": "1-金刚烷基甲基丙烯酸酯",
+    "SMILES": "C(OC12CC3CC(CC(C3)C1)C2)(=O)C(C)=C",
+    "CAS": "16887-36-8",
+    "notes": "classic NTD resist monomer; adamantyl provides etch resistance; good solubility"
+  },
+  {
+    "name": "2-羰基-四氢呋喃-3-羟基-甲基丙烯酸酯",
+    "SMILES": "C(OC1CCOC1=O)(=O)C(C)=C",
+    "CAS": "195000-66-9",
+    "notes": "contains γ-lactone type group; polar, suitable for polar solvent systems"
+  },
+  {
+    "name": "2-乙基-2-金刚烷基甲基丙烯酸酯",
+    "SMILES": "C(OC1(CC)C2CC3CC1CC(C3)C2)(=O)C(C)=C",
+    "CAS": "209982-56-9",
+    "notes": "ethyl-adamantyl acrylate; commonly used in NTD resists; excellent etch resistance"
+  },
+  {
+    "name": "4-羟基丁基丙烯酸酯",
+    "SMILES": "C=CC(=O)OCCCCO",
+    "CAS": "2478-10-6",
+    "notes": "hydroxy-terminated; polar; good solubility in alcohols and PGMEA"
+  }
+]
+}

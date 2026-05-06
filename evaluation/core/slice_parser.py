@@ -1,4 +1,4 @@
-"""Parse ``--slices`` expressions: ``cap cap[dom] cap[d1,d2] cap@t1,t2`` (OR of slices)."""
+"""Parse ``--slices`` expressions: ``cap cap[dom] cap[d1,d2] cap@t1,t2 @t1`` (OR of slices)."""
 
 from __future__ import annotations
 
@@ -98,6 +98,7 @@ def parse_slices_expression(expr: str) -> list[CapabilitySlice]:
     - ``cap[a]`` or ``cap[a,b]``: capability must match and domain in the listed set (OR).
     - ``cap@t1`` or ``cap@t1,t2``: each slice uses **at most one** ``@``; after capability /
       ``[domains]``, optional tags are comma-separated; multiple tags are **AND**.
+    - ``@t1`` or ``@t1,t2``: tag-only filter — matches across **all** capabilities.
     - No whitespace inside ``[...]`` (use commas only). No whitespace after ``@`` in the
       tag list (use ``@t1,t2`` not ``@t1, t2``).
     - More than one ``@`` in a slice is invalid — use ``cap@tag1,tag2`` instead of
@@ -120,8 +121,11 @@ def parse_slices_expression(expr: str) -> list[CapabilitySlice]:
                     'use commas for multiple tags, e.g. cap@tag1,tag2'
                 )
             cap_dom, rest = piece.split('@', 1)
-            cap, domains = _parse_capability_domain_token(cap_dom)
             tags = _parse_tags_after_at(piece=piece, rest=rest)
+            if cap_dom.strip():
+                cap, domains = _parse_capability_domain_token(cap_dom)
+            else:
+                cap, domains = None, None
         else:
             cap, domains = _parse_capability_domain_token(piece)
         out.append(CapabilitySlice(capability=cap, domains=domains, tags=tags))

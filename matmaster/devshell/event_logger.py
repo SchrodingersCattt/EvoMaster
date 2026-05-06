@@ -77,6 +77,8 @@ class EventLogger:
         if event_type in _SKIP_TYPES:
             return
 
+        self._current_spawn_id = getattr(event, "spawn_id", None) or None
+
         if isinstance(event, ThoughtEvent):
             self._handle_thought(event)
             return
@@ -173,20 +175,20 @@ class EventLogger:
 
     def _event_to_record(self, event: Any) -> dict[str, Any] | None:
         if isinstance(event, ToolCallEvent):
-            return {
+            record: dict[str, Any] = {
                 "type": "tool_call",
                 "tool": event.tool_name,
                 "call_id": event.call_id,
                 "args": event.arguments,
             }
-        if isinstance(event, ToolResultEvent):
-            return {
+        elif isinstance(event, ToolResultEvent):
+            record = {
                 "type": "tool_result",
                 "tool": event.tool_name,
                 "call_id": event.call_id,
                 "content": event.result,
             }
-        if isinstance(event, RunResultEvent):
+        elif isinstance(event, RunResultEvent):
             record = {
                 "type": "run_result",
                 "status": event.status,
@@ -194,12 +196,16 @@ class EventLogger:
             }
             if event.finish_detail is not None:
                 record["finish_detail"] = event.finish_detail.model_dump(mode="json")
-            return record
-        return None
+        else:
+            return None
+        return record
 
     def _write_record(self, record: dict[str, Any]) -> None:
         record["ts"] = datetime.now(timezone.utc).isoformat()
         record["run_id"] = self._run_id
+        spawn_id = getattr(self, "_current_spawn_id", None)
+        if spawn_id:
+            record["spawn_id"] = spawn_id
         fh = self._ensure_open()
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
         fh.flush()

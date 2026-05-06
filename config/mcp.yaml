@@ -14,6 +14,16 @@ calculation_servers:
 tool_include_only:
   # mat_sn: use builtin PaperSearch (search-papers-enhanced) instead of lazy MCP tools
   mat_sn: []
+  # mat_sg: only sampling (CALYPSO / CrystalFormer) plus the dispatcher
+  # job-control trio survives. Build/transform/assemble/inspect have been
+  # localised to the atomic-structure-* operator skills; exposing the legacy
+  # mat_sg builders again would let agents bypass local skills.
+  mat_sg:
+    - "submit_generate_calypso_structures"
+    - "submit_generate_crystalformer_structures"
+    - "query_job_status"
+    - "get_job_results"
+    - "terminate_job"
   mat_doc:
     - extract_material_data_from_pdf
   mat_nmr:
@@ -75,28 +85,12 @@ calculation_executors:
           app_key: "agent"
       resources:
         envs: {}
+    # Only dispatcher job control runs synchronously; submit_generate_* are async.
+    # Other builders/transformers have been localised to atomic-structure-* skills.
     sync_tools:
-      - add_hydrogens
-      - generate_ordered_replicas
-      - apply_structure_transformation
-      - remove_solvents
-      - build_bulk_structure_by_template
-      - build_bulk_structure_by_wyckoff
-      - extract_molecules_from_crystal
-      - make_supercell_structure
-      - make_defect_structure
-      - make_doped_structure
-      - make_amorphous_structure
-      - make_crosslinked_structure
-      - build_polymer_chain
-      - build_molecule_structures_from_smiles
-      - add_cell_for_molecules
-      - build_surface_slab
-      - build_surface_adsorbate
-      - build_surface_interface
-      - analyze_wyckoff_positions
-      - get_structure_info
-      - get_molecule_info
+      - query_job_status
+      - get_job_results
+      - terminate_job
   mat_compdart:
     executor:
       type: "dispatcher"

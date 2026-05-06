@@ -51,7 +51,7 @@ calculation = [
     "pymatgen>=2024.1",
     "dpdata>=0.2.18",
     "cp2k-input-tools>=0.9.0",
-    "molcrys-kit @ git+https://github.com/SchrodingersCattt/MolCrysKit.git",
+    "molcrys-kit @ https://github.com/SchrodingersCattt/MolCrysKit/archive/refs/tags/v0.2.0.tar.gz",
     "mace-torch>=0.3.0",
     # DeepMD 栈及常见传递依赖（版本锁定便于复现；不含 pip）
     "array-api-compat==1.14.0",

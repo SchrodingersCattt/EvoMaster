@@ -21,9 +21,6 @@ questions:
 
     '
   tags:
-  - wf_batch
-  - wf_sweep
-  - wf_inputs
   data_files:
   - key: convergence_encut
     path: data/BP_struct_003/convergence_encut.json

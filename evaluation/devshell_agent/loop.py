@@ -23,6 +23,7 @@ from evaluation.devshell_agent.git_iteration import (
 )
 from evaluation.devshell_agent.loop_proposal_notify import (
     notify_proposed_matmaster_exps_if_present,
+    notify_proposed_optimization_if_present,
     notify_proposed_question_bank_if_present,
 )
 from evaluation.devshell_agent.sdk_client_retry import sdk_client_with_retry
@@ -170,8 +171,6 @@ class DevshellAgentLoop:
             "eval_ingest_submit_timeout": cfg.eval_ingest_submit_timeout,
             "enable_checklist_agent": cfg.enable_checklist_agent,
             "enable_optimization_agent": True,
-            "enable_optimization_auto_commit": cfg.enable_optimization_auto_commit,
-            "optimization_auto_commit_skip_budget": cfg.optimization_auto_commit_skip_budget,
             "max_checklist_sdk_turns": checklist_revision_sdk_max_turns_from_jobs(
                 cfg.defaults.jobs
             ),
@@ -491,24 +490,6 @@ class DevshellAgentLoop:
             )
 
         lines = ["- `candidate_layers`: " + ", ".join(f"`{layer}`" for layer in layers)]
-        if layers == ["system_prompt"]:
-            lines.extend(
-                [
-                    "- 仅命中 `system_prompt`：默认不要修改 `matmaster/skills/`、"
-                    "`matmaster/tools/`、`src/` 等产品代码。",
-                    "- 优先读取现有 `matmaster/exps/_base.toml` / "
-                    "`matmaster/exps/direct.toml`，识别重复、冲突或可合并规则。",
-                    "- 若判断确实需要改 exp：只在 "
-                    "`proposed_matmaster_exps_changes.md` 中写 proposal，"
-                    "不要尝试绕过限制落代码改动。",
-                    "- proposal 使用固定模板并逐项填写："
-                    "`Target file`、`Existing rule(s) to replace or merge`、"
-                    "`Proposed text`、`Why not skill/tool layer`、"
-                    "`Expected cross-task benefit`、`Prompt budget impact`。",
-                ]
-            )
-            return "\n".join(lines) + "\n"
-
         if "skill" in layers:
             lines.append(
                 "- 命中 `skill`：优先检查 `matmaster/skills/`，并遵守 "
@@ -516,30 +497,19 @@ class DevshellAgentLoop:
             )
         if "tool" in layers:
             lines.append(
-                "- 命中 `tool`：优先检查 `matmaster/tools/` 与相关 tool descriptions；"
-                "避免把工具契约问题错误堆进 Skills。"
+                "- 命中 `tool`：优先检查 `matmaster/tools/` 与相关 tool descriptions。"
             )
         if "runtime" in layers:
             lines.append(
                 "- 命中 `runtime`：优先检查 `config/`、`matmaster/adaptors/`、"
-                "`matmaster/devshell/`、必要时 `src/` 的运行时链路。"
+                "`matmaster/devshell/`、必要时 `src/`。"
             )
         if "system_prompt" in layers:
             lines.append(
-                "- 同时命中 `system_prompt`：只有在确认问题属于跨任务执行契约，且"
-                "不能更合理地下沉到 skill/tool/runtime 层时，才写 exp proposal。"
+                "- 命中 `system_prompt`：只有确认属于跨任务执行契约且不能下沉到 "
+                "skill/tool/runtime 层时，才在 `proposed_matmaster_exps_changes.md` 写提案。"
             )
         return "\n".join(lines) + "\n"
-
-    @staticmethod
-    def _optimization_execution_track(delegation: dict[str, Any]) -> str:
-        track = str(delegation.get("execution_track") or "").strip()
-        if track:
-            return track
-        layers = DevshellAgentLoop._candidate_layers_for_delegation(delegation)
-        if layers == ["system_prompt"]:
-            return "proposal_only"
-        return "code_edit"
 
     def _record_optimization_proposal_track(
         self,
@@ -585,7 +555,7 @@ class DevshellAgentLoop:
             loop_log,
         )
 
-    def _apply_optimization_auto_commit(
+    def _record_optimization_proposal(
         self,
         *,
         it: int,
@@ -593,40 +563,12 @@ class DevshellAgentLoop:
         state: AgentLoopSharedState,
         loop_log: TextIO,
     ) -> None:
-        cfg = self._cfg
-        if not cfg.enable_optimization_auto_commit:
-            return
-        if self._optimization_execution_track(delegation) == "proposal_only":
-            self._record_optimization_proposal_track(
-                it=it,
-                delegation=delegation,
-                state=state,
-                loop_log=loop_log,
-            )
-            return
-        from evaluation.devshell_agent.optimization_auto_commit import (
-            commit_optimization_changes,
+        self._record_optimization_proposal_track(
+            it=it,
+            delegation=delegation,
+            state=state,
+            loop_log=loop_log,
         )
-
-        rnd = int(delegation.get("optimization_round", -1))
-        slug = self._optimization_delegation_slug(delegation)
-        res = commit_optimization_changes(
-            cfg.repo_root,
-            cfg.session_dir,
-            iteration_index=it,
-            optimization_round=rnd,
-            slug=slug,
-            skip_exp_budget=cfg.optimization_auto_commit_skip_budget,
-            log=loop_log,
-        )
-        if res.commit_sha:
-            for row in state.optimization_reports:
-                if (
-                    int(row.get("iteration_index", -1)) == it
-                    and int(row.get("optimization_round", -1)) == rnd
-                ):
-                    row["commit_shas"] = [res.commit_sha]
-                    break
 
     def _optimization_user_message(self, *, it: int, delegation: dict[str, Any]) -> str:
         session_dir = self._cfg.session_dir.resolve()
@@ -640,8 +582,9 @@ class DevshellAgentLoop:
 {blob}
 ```
 
-- **会话目录**（仅供查看非 `evaluation/` 产物）：`{session_dir}`
-- 任务：仅在**产品侧目录**做必要优化，不得查看或编辑 `evaluation/**`。
+- **会话目录**：`{session_dir}`
+- **提案文件必须写到会话目录下**：`{session_dir}/proposed_optimization_changes.md`
+- 任务：**只读**分析产品侧代码，将优化建议写入上述提案文件，不得直接编辑代码文件，不得查看或编辑 `evaluation/**`。
 - 分层指导：
 {guidance}
 - 结束前**必须**调用 **report_optimization_result**（`iteration_index={it}`，`optimization_round={delegation.get("optimization_round")}`）。
@@ -824,13 +767,19 @@ class DevshellAgentLoop:
                 )
                 warning = 1
             else:
-                self._apply_optimization_auto_commit(
+                self._record_optimization_proposal(
                     it=it,
                     delegation=delegation,
                     state=state,
                     loop_log=loop_log,
                 )
             notify_proposed_matmaster_exps_if_present(
+                session_dir=self._cfg.session_dir,
+                iteration_index=it,
+                delegation=delegation,
+                optimization_reports=reports,
+            )
+            notify_proposed_optimization_if_present(
                 session_dir=self._cfg.session_dir,
                 iteration_index=it,
                 delegation=delegation,

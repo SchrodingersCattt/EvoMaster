@@ -11,7 +11,6 @@ questions:
 
     如果查询失败，请分析失败原因，尝试其他合理的获取方式（如按化学式搜索等），并在最终回答中说明失败原因和你的处理策略。'
   tags:
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -63,7 +62,6 @@ questions:
     rather than fabricating data or silently skipping.
   human_prompt_seed: '请读取工作目录下的 `experiment_data.csv`，对其中的能量数据做统计分析（均值、标准差、最大最小值），并将结果写入 `stats_report.json`。'
   tags:
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: turn_budget

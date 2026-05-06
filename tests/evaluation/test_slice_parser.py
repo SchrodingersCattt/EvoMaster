@@ -90,3 +90,26 @@ def test_rejects_whitespace_after_at() -> None:
 def test_rejects_whitespace_in_comma_separated_tags() -> None:
     with pytest.raises(ValueError, match='whitespace'):
         parse_slices_expression('cap@wf_batch, abacus')
+
+
+def test_tag_only_single() -> None:
+    out = parse_slices_expression('@vasp')
+    assert len(out) == 1
+    assert out[0].capability is None
+    assert out[0].domains is None
+    assert out[0].tags == ['vasp']
+
+
+def test_tag_only_multiple_tags() -> None:
+    out = parse_slices_expression('@vasp,phy_surface')
+    assert len(out) == 1
+    assert out[0].capability is None
+    assert out[0].tags == ['vasp', 'phy_surface']
+
+
+def test_tag_only_mixed_with_capability() -> None:
+    out = parse_slices_expression('@vasp input_generation@abacus data_diagnosis')
+    assert len(out) == 3
+    assert out[0].capability is None and out[0].tags == ['vasp']
+    assert out[1].capability == 'input_generation' and out[1].tags == ['abacus']
+    assert out[2].capability == 'data_diagnosis' and out[2].tags is None

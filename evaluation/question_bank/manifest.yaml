@@ -82,7 +82,7 @@ banks:
   - path: "execution_contract/ec_agnostic.yaml"
     capability: "execution_contract"
     domain: "agnostic"
-    questions: 18
+    questions: 9
 
   - path: "input_generation/ig_agnostic_vasp.yaml"
     capability: "input_generation"
@@ -94,10 +94,25 @@ banks:
     domain: "agnostic"
     questions: 6
 
-  - path: "input_generation/ig_agnostic_md.yaml"
+  - path: "input_generation/ig_agnostic_gpumd.yaml"
     capability: "input_generation"
     domain: "agnostic"
-    questions: 3
+    questions: 11
+
+  - path: "input_generation/ig_agnostic_lammps.yaml"
+    capability: "input_generation"
+    domain: "agnostic"
+    questions: 1
+
+  - path: "input_generation/ig_agnostic_cp2k.yaml"
+    capability: "input_generation"
+    domain: "agnostic"
+    questions: 1
+
+  - path: "input_generation/ig_agnostic_gromacs.yaml"
+    capability: "input_generation"
+    domain: "agnostic"
+    questions: 1
 
   - path: "safety_refusal/sf_agnostic.yaml"
     capability: "safety_refusal"
@@ -107,13 +122,7 @@ banks:
   - path: "scientific_analysis/sa_agnostic.yaml"
     capability: "scientific_analysis"
     domain: "agnostic"
-    questions: 5
-
-  - path: "scientific_analysis/sa_battery.yaml"
-    capability: "scientific_analysis"
-    domain: "battery"
-    questions: 1
-
+    questions: 6
 
   - path: "scientific_analysis/sa_polymer.yaml"
     capability: "scientific_analysis"
@@ -128,7 +137,7 @@ banks:
   - path: "structure_construction/sc_agnostic.yaml"
     capability: "structure_construction"
     domain: "agnostic"
-    questions: 8
+    questions: 10
 
   - path: "structure_construction/sc_catalysis.yaml"
     capability: "structure_construction"
@@ -143,7 +152,7 @@ banks:
   - path: "structure_retrieval/rt_agnostic.yaml"
     capability: "structure_retrieval"
     domain: "agnostic"
-    questions: 7
+    questions: 8
 
   - path: "structure_retrieval/rt_battery.yaml"
     capability: "structure_retrieval"
@@ -160,6 +169,11 @@ banks:
     domain: "agnostic"
     questions: 27
 
+  - path: "workflow_orchestration/wo_agnostic_gpumd_nep_clean.yaml"
+    capability: "workflow_orchestration"
+    domain: "agnostic"
+    questions: 4
+
   - path: "workflow_orchestration/wo_battery.yaml"
     capability: "workflow_orchestration"
     domain: "battery"
@@ -175,4 +189,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 115 questions across 25 active bank files
+# Total: 135 questions across 28 active bank files

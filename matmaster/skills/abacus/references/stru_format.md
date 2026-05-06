@@ -7,7 +7,7 @@ The STRU file has five sections, in order:
 ATOMIC_SPECIES
 <Label> <Mass> <PseudopotentialFile>
 ```
-One line per species. For ghost/empty atoms, create a separate species entry (e.g. `Fe_empty`) with the same PP and orbital files but treat it as a distinct `ntype`.
+One line per species. For ghost/empty atoms, create a separate species entry (e.g. `X_empty` where X is the element) with the same PP and orbital files but treat it as a distinct `ntype`.
 
 ## NUMERICAL_ORBITAL (LCAO only)
 ```
@@ -43,23 +43,24 @@ x1 y1 z1  m mx my mz
 - `InitialMagneticMoment`: Bohr magnetons. `0.0` for non-magnetic.
 - For multiple species: repeat label/moment/count/coords block per species, same order as ATOMIC_SPECIES.
 
-**Multi-species example** (Fe + ghost atoms):
+**Multi-species example** (real atoms + ghost atoms for BSSE):
 ```
 ATOMIC_POSITIONS
 Cartesian_angstrom
-Fe
+X
 2.0
 4
 0.000  0.000  0.000  1 1 1
 1.435  1.435  1.435  1 1 1
 0.000  2.870  0.000  1 1 1
 2.870  0.000  0.000  1 1 1
-Fe_empty
+X_empty
 0.0
 2
 0.000  0.000  4.300  0 0 0
 1.435  1.435  5.735  0 0 0
 ```
+Replace `X` / `X_empty` with the actual element name (e.g. Fe, Mo, Cu).
 
 ---
 
@@ -68,21 +69,21 @@ Fe_empty
 LCAO numerical orbitals are atom-centered. Removing an atom (vacancy) or surface boundary removes basis functions → **BSSE**.
 
 **Fix**: ghost atoms contribute basis functions but zero valence charge and zero magnetic moment:
-1. `ATOMIC_SPECIES`: add ghost species (e.g. `Fe_empty`) with **same** `.upf` and `.orb`
+1. `ATOMIC_SPECIES`: add ghost species (e.g. `X_empty`) with **same** `.upf` and `.orb` as the real species
 2. `NUMERICAL_ORBITAL`: add same `.orb` for ghost species
 3. `INPUT`: set `ntype` = total species count (real + ghost)
 4. `ATOMIC_POSITIONS`: ghost atoms with moment `0.0`, mobility `0 0 0`
 
-**Vacancy example** (bcc Fe):
+**Example** (generic element X with vacancy):
 ```
 ATOMIC_SPECIES
-Fe      55.845  Fe.upf
-Fe_empty 55.845  Fe.upf
+X       <mass>  X.upf
+X_empty <mass>  X.upf
 
 NUMERICAL_ORBITAL
-Fe_gga_9au_100Ry_4s2p2d1f.orb
-Fe_gga_9au_100Ry_4s2p2d1f.orb
+X_orb.orb
+X_orb.orb
 ```
-INPUT: `ntype 2`, typically `nspin 2` for magnetic Fe.
+INPUT: `ntype 2`. For magnetic elements, add `nspin 2`.
 
 **Surface slab**: place empty atoms ~2.0 A from outermost real atoms, in vacuum on both sides.

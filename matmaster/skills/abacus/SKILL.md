@@ -1,6 +1,6 @@
 ---
 name: abacus
-description: "Use this skill for ABACUS tasks. Keep it decision-focused: enforce hard guards, generate valid INPUT/STRU/KPT, and delegate detailed templates/troubleshooting to references."
+description: "MUST use this skill for ANY task involving ABACUS (SCF, relax, cell-relax, band structure, DOS, MD, work function, BSSE, vacancy, surface energy, DFT+U, phonon, EOS). Contains hard guards on parameters, low-cost benchmark ranges, K-point rules, and validation scripts that prevent silent failures."
 skill_type: operator
 ---
 
@@ -17,9 +17,12 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 ## Minimum Workflow
 
 1. Read provided `STRU` first and reuse filenames exactly (PP/orbital/structure).
+   Pseudopotentials (`.upf`) default path: `/root/apns-pseudopotentials-v1/`.
+   Orbitals (`.orb`) default path: `/root/apns-orbitals-efficiency-v1/`.
 2. Generate `INPUT` (and `KPT` when needed).
 3. For uncertain params/workflows, check local `references/*` first.
 4. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
+5. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
 
 ## Hard Guards (Must Pass)
 
@@ -37,14 +40,22 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 - Supercell/vacancy/defect/BSSE: prefer `kspacing` in `INPUT` (avoid brittle manual meshes).
 - Band structure: use dedicated line-mode KPT for NSCF step.
 - SCF and NSCF should not share a single KPT by default in band/DOS workflows.
+- Metal slab calculations: **minimum 12×12 in-plane** k-points (or equivalent `kspacing ≤ 0.10` in-plane). Do not use less.
 
 ## Parameter Baseline (Use Judgment, Not Blind Fixed Values)
 
 - Use physically reasonable `ecutwfc`, `smearing`, and SCF thresholds for system and PP quality.
+- `ecutwfc` (Type: Real): energy cutoff for plane-wave functions. Unit is `Ry`. Even under `basis_type lcao`, `ecutwfc` is still required because local pseudopotential parts and related forces are evaluated in plane-wave representation. Default baseline: `50` (PW), `100` (LCAO), unless task requirements override.
+- In low-cost or benchmark settings, `ecutwfc` can be set below the default baseline if task intent prioritizes speed over accuracy.
+- For fast tasks with lower accuracy requirements, choose lower-precision settings (including lower `ecutwfc`) to prioritize turnaround time.
 - Distinguish `LCAO` vs `PW` parameter semantics and sensitivity; do not directly copy basis-specific settings across modes.
+- Use `smearing_sigma 0.015` as the default starting point unless the task specifies otherwise.
 - For critical parameters, verify intent and physical meaning before finalizing.
+- If a parameter meaning is unclear, check the official ABACUS input reference:
+  `http://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html`.
 - Typical production defaults are acceptable, but task requirements override defaults.
 - If the task specifies cutoffs or convergence policy, follow the task first.
+- **Low-cost / benchmark mode**: when the task requests "low-cost", "benchmark", or "minimal cost" parameters, significantly reduce `ecutwfc` from production defaults. See `references/input_examples.md` for guidance.
 - Keep multi-file studies (EOS/surface/vacancy comparisons) consistent on core numerics.
 
 ## Task-Specific Deltas
@@ -62,7 +73,7 @@ Keep the previous default profile unless task/environment explicitly overrides i
 
 | Item | Default |
 |------|---------|
-| image | `registry.dp.tech/dptech/abacus:LTSv3.10.1` |
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.1-1778080680` |
 | machine | `c32_m128_cpu` |
 | cmd | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |
 
@@ -70,12 +81,21 @@ Notes:
 - `-np` is typically half of CPU cores for this profile (32 -> 16).
 - For GPU tasks, use environment-approved GPU machine profiles with `basis_type pw`.
 
+## Pre-Submission Validation
+
+After generating all INPUT/STRU/KPT files, run the validation script before Bohrium submission:
+```bash
+python ${SKILL_DIR}/scripts/validate_input.py --dir <input_dir>
+```
+It catches the most common silent failures: ntype mismatch, missing cal_force/cal_stress, missing out_chg for SCF→NSCF, wrong basis_type, missing PP/orbital files, and stru_file/kpoint_file reference errors. Fix any FAIL items before submitting.
+
 ## References
 
 Reference-first policy:
 - Prefer local references below for stable and task-aligned guidance.
 - Use official ABACUS/Bohrium web documentation as fallback when local references are insufficient.
 
+- **Pre-flight validator**: `scripts/validate_input.py` — run before every Bohrium submit
 - Input templates and multi-step examples: `references/input_examples.md`
 - STRU format basics: `references/stru_format.md`
 - Multi-species STRU examples: `references/stru_multispecies.md`
