@@ -1294,6 +1294,11 @@ def _result_cell_list(r: dict | None) -> list[float] | None:
         return None
 
 
+_SELF_HEAL_GOOD_WR_GATE = 10.0
+_SELF_HEAL_NEIGHBOUR_RADIUS = 2
+_SELF_HEAL_CELL_TOL = 0.005
+
+
 def self_heal_chain_outliers(
     chain_results: list[dict],
     args,
@@ -1305,10 +1310,20 @@ def self_heal_chain_outliers(
     """Post-chain rescue for single-pattern wrong-basin convergence.
 
     For each chain element whose refined volume drifts ``> v_jump_threshold``
-    from the average of its successful immediate neighbours, re-refine that
-    pattern in-process with a higher ``multi_start`` and a neighbour-average
-    cell as the initial guess.  Replace the chain result only if the retry
-    produces a volume closer to the neighbour average than the original.
+    from the volume target derived from its trustworthy neighbours,
+    re-refine that pattern in-process with a higher ``multi_start`` budget
+    and a robust initial cell guess.  Replace the chain result only if the
+    retry both (a) lands closer in volume to the neighbour target than the
+    original AND (b) does not move further away from the reference cell
+    shape.  The latter guard prevents a single-pattern rescue from picking
+    a wrong-basin retry whose volume happens to match the (also-wrong)
+    neighbour mean but whose ``a/b/c/β`` are degenerate alternatives — a
+    real failure mode for monoclinic / orthorhombic settings.
+
+    Init / target selection (in priority order):
+      1. low-wR (< ``_SELF_HEAL_GOOD_WR_GATE``) successful neighbours within
+         radius ``_SELF_HEAL_NEIGHBOUR_RADIUS``.
+      2. if none qualify, the reference cell / volume passed in.
 
     The helper does NOT consume any chain-position metadata (e.g. temperature)
     beyond list order; it operates purely on the order in which patterns were
@@ -1340,34 +1355,64 @@ def self_heal_chain_outliers(
 
     success_by_idx = {i: (v, c) for i, v, c in successes}
 
+    def _trustworthy_neighbours(idx: int) -> list[tuple[int, float, list[float]]]:
+        out: list[tuple[int, float, list[float]]] = []
+        for j, v, c in successes:
+            if j == idx:
+                continue
+            if abs(j - idx) > _SELF_HEAL_NEIGHBOUR_RADIUS:
+                continue
+            wr = healed[j].get("wR")
+            if wr is None or wr >= _SELF_HEAL_GOOD_WR_GATE:
+                continue
+            out.append((j, v, c))
+        return out
+
+    def _immediate_neighbours(idx: int) -> list[tuple[int, float, list[float]]]:
+        return [
+            (j, *success_by_idx[j])
+            for j in (idx - 1, idx + 1)
+            if j in success_by_idx and j != idx
+        ]
+
     with tempfile.TemporaryDirectory() as tmpdir:
         instprm = args.instprm or make_instprm_file(args.wavelength, tmpdir)
         for idx in range(n):
             v_orig = _result_volume(healed[idx])
-            if v_orig is None:
+            cell_orig = _result_cell_list(healed[idx])
+            if v_orig is None or cell_orig is None:
                 continue
-            neigh_idxs = [
-                j for j in (idx - 1, idx + 1) if j in success_by_idx and j != idx
-            ]
-            if not neigh_idxs:
+
+            jump_neigh = _immediate_neighbours(idx)
+            if not jump_neigh:
                 continue
-            neigh_vs = [success_by_idx[j][0] for j in neigh_idxs]
-            neigh_cells = np.array([success_by_idx[j][1] for j in neigh_idxs])
-            v_target = float(np.mean(neigh_vs))
-            rel = abs(v_orig - v_target) / max(abs(v_target), 1e-9)
+            jump_target = float(np.mean([v for _, v, _ in jump_neigh]))
+            rel = abs(v_orig - jump_target) / max(abs(jump_target), 1e-9)
             if rel <= v_jump_threshold:
                 continue
 
             fpath = healed[idx].get("file") or ""
-            init_cell = neigh_cells.mean(axis=0).tolist()
-
-            audit_row = {
+            audit_row: dict = {
                 "file": fpath,
                 "v_original": round(v_orig, 4),
-                "v_neighbour_target": round(v_target, 4),
+                "v_neighbour_target": round(jump_target, 4),
                 "rel_jump": round(rel, 4),
-                "init_cell_neighbour_avg": [round(x, 5) for x in init_cell],
             }
+
+            trust = _trustworthy_neighbours(idx)
+            if trust:
+                init_cell = np.array([c for _, _, c in trust]).mean(axis=0).tolist()
+                v_target = float(np.mean([v for _, v, _ in trust]))
+                init_source = (
+                    f"low-wR neighbours within radius {_SELF_HEAL_NEIGHBOUR_RADIUS}"
+                )
+            else:
+                init_cell = list(reference_cell)
+                v_target = float(reference_volume)
+                init_source = "reference cell (no low-wR neighbour)"
+            audit_row["init_source"] = init_source
+            audit_row["init_cell"] = [round(x, 5) for x in init_cell]
+            audit_row["v_target"] = round(v_target, 4)
 
             if not fpath or not Path(fpath).is_file():
                 audit_row["decision"] = "skipped_no_file"
@@ -1394,19 +1439,36 @@ def self_heal_chain_outliers(
                 retry["file"] = fpath
                 retry["self_heal_origin"] = "chain_outlier_retry"
                 retry_v = _result_volume(retry)
-                if retry_v is None:
+                retry_cell = _result_cell_list(retry)
+                if retry_v is None or retry_cell is None:
                     audit_row["decision"] = "skipped_retry_failed"
                     audit_row["retry_error"] = retry.get("error") or "no volume"
                     audit_entries.append(audit_row)
                     continue
                 rel_retry = abs(retry_v - v_target) / max(abs(v_target), 1e-9)
+                cell_dist_orig = _relative_cell_distance(healed[idx], reference_cell)
+                cell_dist_retry = _relative_cell_distance(retry, reference_cell)
                 audit_row["v_retry"] = round(retry_v, 4)
                 audit_row["rel_retry"] = round(rel_retry, 4)
                 audit_row["wR_original"] = healed[idx].get("wR")
                 audit_row["wR_retry"] = retry.get("wR")
-                if rel_retry < rel:
+                audit_row["cell_dist_original"] = (
+                    None if cell_dist_orig is None else round(cell_dist_orig, 5)
+                )
+                audit_row["cell_dist_retry"] = (
+                    None if cell_dist_retry is None else round(cell_dist_retry, 5)
+                )
+                v_better = rel_retry < rel
+                cell_not_worse = (
+                    cell_dist_retry is None
+                    or cell_dist_orig is None
+                    or cell_dist_retry <= cell_dist_orig + _SELF_HEAL_CELL_TOL
+                )
+                if v_better and cell_not_worse:
                     audit_row["decision"] = "replaced"
                     healed[idx] = retry
+                elif v_better and not cell_not_worse:
+                    audit_row["decision"] = "kept_chain_cell_drift"
                 else:
                     audit_row["decision"] = "kept_chain"
             except Exception as exc:
@@ -1417,6 +1479,8 @@ def self_heal_chain_outliers(
     return healed, {
         "v_jump_threshold": v_jump_threshold,
         "multi_start": multi_start,
+        "neighbour_wr_gate": _SELF_HEAL_GOOD_WR_GATE,
+        "neighbour_radius": _SELF_HEAL_NEIGHBOUR_RADIUS,
         "outliers": audit_entries,
     }
 

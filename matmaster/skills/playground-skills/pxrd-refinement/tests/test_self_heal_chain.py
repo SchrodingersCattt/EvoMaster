@@ -170,3 +170,60 @@ def test_failed_chain_element_not_flagged() -> None:
     )
     assert audit["outliers"] == []
     assert healed == chain
+
+
+def test_init_source_uses_low_wR_neighbour_when_available() -> None:
+    """Picker prefers a low-wR distance-2 neighbour over a high-wR
+    immediate neighbour when initialising the rescue cell."""
+    chain = [
+        # 303 outlier: V=969 (off ref by 3%)
+        _result("/missing/303.xy", 969.85, a=10.72, success=True),
+        # 323 trash: V close to outlier, wR = 17 -> excluded
+        {**_result("/missing/323.xy", 994.05, a=10.76), "wR": 17.0},
+        # 343 good: wR = 3.7 -> qualifies as low-wR neighbour at radius 2
+        {**_result("/missing/343.xy", 1005.32, a=10.87), "wR": 3.7},
+        # 363 good: wR = 3.7
+        {**_result("/missing/363.xy", 1007.27, a=10.88), "wR": 3.7},
+    ]
+    healed, audit = self_heal_chain_outliers(
+        chain,
+        args=_stub_args(),
+        reference_cell=REF_CELL,
+        reference_volume=REF_VOL,
+        v_jump_threshold=0.02,
+        multi_start=5,
+    )
+    assert audit["neighbour_wr_gate"] == 10.0
+    assert audit["neighbour_radius"] == 2
+    flagged = [o for o in audit["outliers"] if "303.xy" in o["file"]]
+    assert len(flagged) == 1
+    row = flagged[0]
+    assert row["init_source"].startswith("low-wR neighbours")
+    # idx=0; only 343K (idx=2, distance 2) qualifies (363K is distance 3 > radius 2)
+    assert row["init_cell"][0] == 10.87
+    assert row["v_target"] == round(1005.32, 4)
+
+
+def test_init_source_falls_back_to_reference_when_all_neighbours_high_wr() -> None:
+    """If every neighbour within radius 2 has wR >= gate, picker uses the
+    reference cell / volume passed in rather than averaging trash."""
+    chain = [
+        _result("/missing/303.xy", 969.85, a=10.72),
+        {**_result("/missing/323.xy", 994.05, a=10.76), "wR": 18.0},
+        {**_result("/missing/343.xy", 1005.32, a=10.87), "wR": 22.0},
+        _result("/missing/363.xy", 1007.27, a=10.88),
+    ]
+    healed, audit = self_heal_chain_outliers(
+        chain,
+        args=_stub_args(),
+        reference_cell=REF_CELL,
+        reference_volume=REF_VOL,
+        v_jump_threshold=0.02,
+        multi_start=5,
+    )
+    flagged = [o for o in audit["outliers"] if "303.xy" in o["file"]]
+    assert len(flagged) == 1
+    row = flagged[0]
+    assert row["init_source"].startswith("reference cell")
+    assert row["init_cell"][0] == round(REF_CELL[0], 5)
+    assert row["v_target"] == round(REF_VOL, 4)
