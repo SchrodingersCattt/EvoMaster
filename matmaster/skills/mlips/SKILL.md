@@ -60,6 +60,7 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 ## Key Rules
 
 - **Structure preparation runs locally.** Scripts that only use pymatgen/ASE to build or inspect structures (no MLIP inference) should run via `Bash`, not Bohrium. Only submit to Bohrium when the script imports `_calculator.py` or calls a model. This avoids wasting minutes on submit/poll/download cycles for pure-Python tasks.
+- **Validate before optimizing.** Before submitting to Bohrium for MLIP relaxation, verify the input structure is physically reasonable (min interatomic distance > 1.0 Å, correct stoichiometry). If the structure has issues, fix the construction logic first — do not attempt to rely on the optimizer to fix a fundamentally broken starting geometry.
 - **Convergence**: `--fmax 0.01` for optimization, `--fmax 0.05` for NEB.
 - **Cell relaxation**: `--relax-cell` for equilibrium properties (elastic, phonon).
 - **Elastic**: Input MUST be fully relaxed (run optimize first with `--relax-cell`).
