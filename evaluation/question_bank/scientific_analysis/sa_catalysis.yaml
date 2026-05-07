@@ -6,7 +6,31 @@ questions:
   capability: scientific_analysis
   domain: catalysis
   intent: Compare bulk and exfoliated MoS2 HER electrochemical performance from uploaded LSV and CV traces.
-  human_prompt_seed: '工作目录中有两组 MoS2 析氢电催化数据：bulk MoS2 和 exfoliated MoS2。文件包括各自的 LSV 极化曲线，以及 20/40/60/80/100 mV/s 的 CV 扫描序列。
+  human_prompt_seed: '请下载并分析以下通过 OSS URL 提供的两组 MoS2 析氢电催化数据（bulk MoS2 与 exfoliated MoS2，含各自 50 mV/s 的 LSV 极化曲线，以及 20/40/60/80/100 mV/s 的 CV 扫描序列）：
+
+    - `mos2_lsv_50mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080961_mos2_lsv_50mvps.txt`
+
+    - `exmos2_lsv_50mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080955_exmos2_lsv_50mvps.txt`
+
+    - `mos2_cv_20mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080957_mos2_cv_20mvps.txt`
+
+    - `mos2_cv_40mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080958_mos2_cv_40mvps.txt`
+
+    - `mos2_cv_60mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080959_mos2_cv_60mvps.txt`
+
+    - `mos2_cv_80mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080960_mos2_cv_80mvps.txt`
+
+    - `mos2_cv_100mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080956_mos2_cv_100mvps.txt`
+
+    - `exmos2_cv_20mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080952_exmos2_cv_20mvps.txt`
+
+    - `exmos2_cv_40mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080953_exmos2_cv_40mvps.txt`
+
+    - `exmos2_cv_60mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080954_exmos2_cv_60mvps.txt`
+
+    - `exmos2_cv_80mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080954_exmos2_cv_80mvps.txt`
+
+    - `exmos2_cv_100mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080951_exmos2_cv_100mvps.txt`
 
     请完成以下分析：
 

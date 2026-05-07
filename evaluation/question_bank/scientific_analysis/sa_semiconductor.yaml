@@ -88,10 +88,11 @@ questions:
   capability: scientific_analysis
   domain: semiconductor
   intent: Extract photoluminescence peak, band width, and lifetime metrics from uploaded Mn-doped perovskite spectra.
-  human_prompt_seed: '工作目录中有两个光谱数据文件：
+  human_prompt_seed: '请下载并分析以下通过 OSS URL 提供的两个光谱数据文件：
 
-    - `mn_perovskite_em_ex365.txt`：365 nm 激发下的 Mn 发光发射谱；
-    - `mn_perovskite_decay_ex365_pl520.txt`：同一样品在 520 nm 附近监测的时间衰减曲线。
+    - `mn_perovskite_em_ex365.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_perovskite_pl_lifetime_001/1778080963_mn_perovskite_em_ex365.txt`（365 nm 激发下的 Mn 发光发射谱）
+
+    - `mn_perovskite_decay_ex365_pl520.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_perovskite_pl_lifetime_001/1778080962_mn_perovskite_decay_ex365_pl520.txt`（同一样品在 520 nm 附近监测的时间衰减曲线）
 
     请完成以下分析：
 

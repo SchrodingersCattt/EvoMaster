@@ -14,7 +14,6 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.request import urlopen
 
 import yaml
 
@@ -272,24 +271,14 @@ def _stage_data_files(
     workspace: Path,
     prompt: str,
 ) -> str:
-    """Copy or download question data files into the agent workspace.
-
-    Local ``data_files.path`` remains the preferred fast path. When the repository
-    intentionally does not carry a large artifact, an ``oss_url`` can be supplied;
-    the file is downloaded into the workspace using the basename from
-    ``data_files.path`` so prompts can reference stable filenames.
-    """
+    """Copy question data files into the agent workspace and rewrite prompt paths."""
     staged: list[str] = []
     for df in question.data_files:
         src = bank_dir / df.path
-        dest = workspace / src.name
-        if src.exists():
-            shutil.copy2(src, dest)
-        elif df.oss_url:
-            with urlopen(df.oss_url, timeout=60) as resp:
-                dest.write_bytes(resp.read())
-        else:
+        if not src.exists():
             continue
+        dest = workspace / src.name
+        shutil.copy2(src, dest)
         staged.append(src.name)
         if df.path in prompt:
             prompt = prompt.replace(df.path, src.name)

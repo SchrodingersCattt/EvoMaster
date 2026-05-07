@@ -624,11 +624,21 @@ questions:
   capability: scientific_analysis
   domain: agnostic
   intent: Quantify cadmium in a wastewater sample from CHI linear-sweep voltammetry calibration traces.
-  human_prompt_seed: '工作目录中有一组 CHI660E 线性扫描伏安数据文件：
+  human_prompt_seed: '请下载并分析以下通过 OSS URL 提供的 CHI660E 线性扫描伏安数据文件：
 
-    - `cd_lsv_blank.txt`
-    - `cd_lsv_cal_10ugL.txt`, `cd_lsv_cal_30ugL.txt`, `cd_lsv_cal_50ugL.txt`, `cd_lsv_cal_70ugL.txt`, `cd_lsv_cal_100ugL.txt`
-    - `cd_lsv_wastewater_sample.txt`
+    - `cd_lsv_blank.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080946_cd_lsv_blank.txt`
+
+    - `cd_lsv_cal_10ugL.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080947_cd_lsv_cal_10ugL.txt`
+
+    - `cd_lsv_cal_30ugL.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080948_cd_lsv_cal_30ugL.txt`
+
+    - `cd_lsv_cal_50ugL.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080949_cd_lsv_cal_50ugL.txt`
+
+    - `cd_lsv_cal_70ugL.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080950_cd_lsv_cal_70ugL.txt`
+
+    - `cd_lsv_cal_100ugL.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080946_cd_lsv_cal_100ugL.txt`
+
+    - `cd_lsv_wastewater_sample.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080950_cd_lsv_wastewater_sample.txt`
 
     这些文件来自同一套 Cd 标准与废水样品测定。请完成以下分析：
 
@@ -749,7 +759,11 @@ questions:
   capability: scientific_analysis
   domain: agnostic
   intent: Analyze a UV-Vis plate-reader export for MAF-4 enzyme-cascade glucose sensing.
-  human_prompt_seed: '工作目录中的 `glucose_uvvis_platereader.txt` 是一个酶级联比色葡萄糖检测实验的酶标仪导出文件，包含标准样和未知血清样的读数。
+  human_prompt_seed: '请下载并分析以下通过 OSS URL 提供的酶级联比色葡萄糖检测实验酶标仪导出文件：
+
+    - `glucose_uvvis_platereader.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_uvvis_glucose_maf4_001/1778080964_glucose_uvvis_platereader.txt`
+
+    该文件包含标准样和未知血清样的读数。
 
     请完成以下分析：
 
@@ -866,7 +880,11 @@ questions:
   capability: scientific_analysis
   domain: agnostic
   intent: Compare paired PXRD traces to determine whether enzyme encapsulation preserves the MAF-4 crystalline phase.
-  human_prompt_seed: '工作目录中的 `maf4_enzyme_vs_pristine_pxrd.txt` 含有两个粉末 XRD 图谱：enzyme@MAF-4 与 pristine MAF-4。
+  human_prompt_seed: '请下载并分析以下通过 OSS URL 提供的粉末 XRD 数据文件：
+
+    - `maf4_enzyme_vs_pristine_pxrd.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_pxrd_maf4_phase_001/1778080965_maf4_enzyme_vs_pristine_pxrd.txt`
+
+    该文件含有两个图谱：enzyme@MAF-4 与 pristine MAF-4。
 
     请完成以下分析：
 

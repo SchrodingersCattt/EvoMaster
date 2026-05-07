@@ -6,7 +6,11 @@ questions:
   capability: scientific_analysis
   domain: battery
   intent: Analyze LiFePO4 half-cell cycling data from a Neware workbook.
-  human_prompt_seed: '工作目录中的 `lfp_cycling.xlsx` 是一个 LiFePO4 半电池恒流充放电测试导出的 Neware 工作簿。
+  human_prompt_seed: '请下载并分析以下通过 OSS URL 提供的 Neware 工作簿：
+
+    - `lfp_cycling.xlsx` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lfp_cycling_001/1778083319_002_6(--).xlsx`
+
+    该工作簿来自 LiFePO4 半电池恒流充放电测试。
 
     请完成以下分析：
 
