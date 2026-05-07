@@ -42,8 +42,10 @@ from .evaluator_helpers import (
 )
 from .evaluator_struct_helpers import (
     check_struct_file_all_occupancy_one,
+    check_struct_file_integer_stoichiometry,
     check_struct_file_min_interatomic_distance,
     check_struct_file_parsable,
+    check_struct_file_replicas_distinct,
     check_struct_file_space_group,
 )
 
@@ -176,6 +178,8 @@ for _name, _fn in [
     ("struct_file_layer_count", check_struct_file_layer_count),
     ("struct_file_parsable", check_struct_file_parsable),
     ("struct_file_all_occupancy_one", check_struct_file_all_occupancy_one),
+    ("struct_file_integer_stoichiometry", check_struct_file_integer_stoichiometry),
+    ("struct_file_replicas_distinct", check_struct_file_replicas_distinct),
     ("struct_file_space_group", check_struct_file_space_group),
     (
         "struct_file_min_interatomic_distance",
