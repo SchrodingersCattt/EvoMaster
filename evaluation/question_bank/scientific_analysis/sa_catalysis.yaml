@@ -55,8 +55,7 @@ questions:
     {"mos2": {"potential_at_5mA_V": 0, "tafel_mV_dec": 0, "cdl_mF_cm2": 0}, "exmos2": {"potential_at_5mA_V": 0, "tafel_mV_dec": 0, "cdl_mF_cm2": 0}}
     ```'
   tags:
-  - char_ec_lsv
-  - char_ec_cv
+  - char_electrochem
   data_files:
   - key: mos2_lsv
     path: data/SA_her_mos2_001/mos2_lsv_50mvps.txt

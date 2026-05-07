@@ -30,7 +30,7 @@ questions:
     {"cycle1": {"discharge_capacity_mAh_g": 0, "coulombic_efficiency_pct": 0}, "cycle10": {"discharge_capacity_mAh_g": 0, "retention_vs_cycle2_pct": 0}}
     ```'
   tags:
-  - char_battery_cycling
+  - char_electrochem
   data_files:
   - key: cycling_workbook
     path: data/SA_lfp_cycling_001/lfp_cycling.xlsx

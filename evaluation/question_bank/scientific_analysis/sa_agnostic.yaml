@@ -658,7 +658,7 @@ questions:
     {"calibration": {"slope_A_per_ugL": 0, "r_squared": 0}, "sample": {"cd_mg_L": 0, "peak_potential_V": 0}}
     ```'
   tags:
-  - char_ec_lsv
+  - char_electrochem
   data_files:
   - key: blank_trace
     path: data/SA_lsv_cd_001/cd_lsv_blank.txt
@@ -790,7 +790,7 @@ questions:
     {"assay": {"endpoint_wavelength_nm": 0}, "calibration": {"slope_abs_per_uM": 0, "intercept_abs": 0, "r_squared": 0}, "sample1": {"diluted_glucose_uM": 0, "serum_glucose_mM": 0}}
     ```'
   tags:
-  - char_uvvis
+  - char_spectroscopy
   data_files:
   - key: plate_reader_export
     path: data/SA_uvvis_glucose_maf4_001/glucose_uvvis_platereader.txt
