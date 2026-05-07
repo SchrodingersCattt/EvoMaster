@@ -2,7 +2,7 @@ version: v5
 capability: input_generation
 domain: agnostic
 questions:
-- id: IG_incar_001_20260506
+- id: IG_incar_001_20260508
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for a band structure calculation of Lu4N4. Non-self-consistent run reading existing charge density (ICHARG=11), with projected band output (LORBIT=11).
@@ -88,6 +88,10 @@ questions:
       file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
+  - id: soc_consideration
+    criterion: Agent acknowledges or considers spin-orbit coupling (SOC) for Lu (Z=71, heavy lanthanide) in the band structure calculation. The agent should either enable LSORBIT=.TRUE. or explicitly discuss whether SOC is needed for this system.
+    axis: grounding
+    verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
@@ -104,7 +108,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_002_20260507
+- id: IG_incar_002_20260508
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for a static SCF calculation of organic-inorganic hybrid perovskite C26H28Cl4N4Pb2. Semiconductor, high-precision convergence.
@@ -156,6 +160,11 @@ questions:
       filename: INCAR
       pattern: ^\s*IVDW\s*=\s*(?:11|12)\b
       flags: im
+  - key: correct_ISMEAR_semiconductor
+    value:
+      filename: INCAR
+      pattern: ^\s*ISMEAR\s*=\s*(0|-5)\b
+      flags: im
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -187,6 +196,10 @@ questions:
       file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
+  - id: correct_ISMEAR_semiconductor
+    criterion: INCAR sets ISMEAR = 0 (Gaussian) or ISMEAR = -5 (tetrahedron) which are appropriate for semiconductors. Positive ISMEAR values (Methfessel-Paxton, for metals) must not be used.
+    axis: correctness
+    verify: text_file_regex
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
@@ -331,7 +344,7 @@ questions:
     criterion: INCAR sets LORBIT = 11 (critical param).
     axis: correctness
     verify: text_file_regex
-- id: IG_incar_004_20260507
+- id: IG_incar_004_20260508
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for HSE06 hybrid functional calculation of MOF C30H22N4O10Zn2. Accurate electronic structure and band gap.
@@ -383,6 +396,11 @@ questions:
       filename: INCAR
       pattern: ^\s*IVDW\s*=\s*(?:11|12)\b
       flags: im
+  - key: correct_ISMEAR_semiconductor
+    value:
+      filename: INCAR
+      pattern: ^\s*ISMEAR\s*=\s*(0|-5)\b
+      flags: im
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -414,6 +432,10 @@ questions:
       file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
+  - id: correct_ISMEAR_semiconductor
+    criterion: INCAR sets ISMEAR = 0 (Gaussian) or ISMEAR = -5 (tetrahedron) which are appropriate for semiconductors/insulators with a band gap. Positive ISMEAR values (Methfessel-Paxton, for metals) must not be used.
+    axis: correctness
+    verify: text_file_regex
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
@@ -973,7 +995,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_010_20260506
+- id: IG_incar_010_20260508
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for spin-orbit coupling calculation of heavy-element halide Br6H6Pb2S2. Pb SOC is significant.
@@ -1026,6 +1048,11 @@ questions:
       filename: INCAR
       pattern: ^\s*PREC\s*=\s*Accurate\b
       flags: im
+  - key: critical_LNONCOLLINEAR
+    value:
+      filename: INCAR
+      pattern: ^\s*LNONCOLLINEAR\s*=\s*\.?(?:TRUE|T)\.?
+      flags: im
   - key: turn_budget
     value:
       max: 8
@@ -1069,6 +1096,10 @@ questions:
     verify: text_file_regex
   - id: critical_PREC
     criterion: INCAR sets PREC = Accurate (critical param).
+    axis: correctness
+    verify: text_file_regex
+  - id: critical_LNONCOLLINEAR
+    criterion: INCAR sets LNONCOLLINEAR = .TRUE. as required for SOC calculations (LSORBIT implies non-collinear magnetism).
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
@@ -1429,7 +1460,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_014_20260507
+- id: IG_incar_014_20260508
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for static calculation of hydrogen-passivated SiO2 slab H16O24Si12. Insulator, fixed cell (ISIF=2).
@@ -1481,6 +1512,11 @@ questions:
       filename: INCAR
       pattern: ^\s*IVDW\s*=\s*(?:11|12)\b
       flags: im
+  - key: correct_ISMEAR_insulator
+    value:
+      filename: INCAR
+      pattern: ^\s*ISMEAR\s*=\s*(0|-5)\b
+      flags: im
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -1512,6 +1548,10 @@ questions:
       file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
+  - id: correct_ISMEAR_insulator
+    criterion: INCAR sets ISMEAR = 0 (Gaussian) or ISMEAR = -5 (tetrahedron) which are appropriate for insulators. Positive ISMEAR values (Methfessel-Paxton, for metals) must not be used for insulating systems.
+    axis: correctness
+    verify: text_file_regex
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
@@ -1532,7 +1572,7 @@ questions:
     criterion: INCAR sets IVDW = 11 or 12 (critical param).
     axis: correctness
     verify: text_file_regex
-- id: IG_incar_015_20260504
+- id: IG_incar_015_20260508
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for defect calculation of I-on-S substitution in BiSI with HSE06+SOC. Heavy element Bi requires SOC.
@@ -1585,6 +1625,11 @@ questions:
       filename: INCAR
       pattern: ^\s*LSORBIT\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
+  - key: critical_LNONCOLLINEAR
+    value:
+      filename: INCAR
+      pattern: ^\s*LNONCOLLINEAR\s*=\s*\.?(?:TRUE|T)\.?
+      flags: im
   - key: turn_budget
     value:
       max: 8
@@ -1628,6 +1673,10 @@ questions:
     verify: text_file_regex
   - id: critical_LSORBIT
     criterion: INCAR sets LSORBIT = True (critical param).
+    axis: correctness
+    verify: text_file_regex
+  - id: critical_LNONCOLLINEAR
+    criterion: INCAR sets LNONCOLLINEAR = .TRUE. as required for SOC calculations (LSORBIT implies non-collinear magnetism).
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
@@ -1843,7 +1892,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_018_20260507
+- id: IG_incar_018_20260508
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for magnetic SCF calculation of double perovskite Ca4TaOs. 5d transition metals (Ta, Os); spin-polarized with MAGMOM.
@@ -1939,6 +1988,10 @@ questions:
       file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
+  - id: soc_consideration
+    criterion: Agent acknowledges or considers spin-orbit coupling (SOC) for the 5d heavy transition metals Ta and Os. The agent should either enable LSORBIT=.TRUE. or explicitly discuss whether SOC is needed for these heavy 5d elements.
+    axis: grounding
+    verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
@@ -1955,7 +2008,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_019_20260507
+- id: IG_incar_019_20260508
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for non-magnetic insulator static SCF calculation of cesium borate B12Cs4O20. Non-magnetic (ISPIN=1), wide-gap insulator.
@@ -2001,6 +2054,11 @@ questions:
   - key: reasonable_params
     value:
       filename: INCAR
+  - key: correct_ISMEAR_insulator
+    value:
+      filename: INCAR
+      pattern: ^\s*ISMEAR\s*=\s*(0|-5)\b
+      flags: im
   scoring_checklist:
   - id: incar_artifact
     criterion: INCAR file is generated.
@@ -2032,6 +2090,10 @@ questions:
       file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
+  - id: correct_ISMEAR_insulator
+    criterion: INCAR sets ISMEAR = 0 (Gaussian) or ISMEAR = -5 (tetrahedron) which are appropriate for wide-gap insulators. Positive ISMEAR values (Methfessel-Paxton, for metals) must not be used for insulating systems.
+    axis: correctness
+    verify: text_file_regex
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency

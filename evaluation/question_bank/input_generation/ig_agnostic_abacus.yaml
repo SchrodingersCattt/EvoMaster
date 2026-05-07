@@ -2,7 +2,7 @@ version: v5
 capability: input_generation
 domain: agnostic
 questions:
-- id: IG_abacus_001_20260504
+- id: IG_abacus_001_20260508
   capability: input_generation
   domain: agnostic
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place
@@ -96,6 +96,11 @@ questions:
         allow_missing_key: true
         min: 0.001
         max: 0.1
+  - key: must_input_bsse_ntype_matches_species
+    value:
+      filename: INPUT_bsse
+      pattern: (?im)^\s*ntype\s+2\s*$
+      flags: im
   - key: variable_empty_layer_placement
     value: {}
   - key: variable_fe_empty_species_quality
@@ -159,6 +164,12 @@ questions:
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
+  - id: must_input_bsse_ntype_matches_species
+    criterion: '[Must] INPUT_bsse sets ntype to 2, matching the two species (Fe and Fe_empty)
+      defined in STRU_bsse ATOMIC_SPECIES.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
   - id: variable_empty_layer_placement
     criterion: '[Variable] Empty Fe layers are placed on both slab sides in vacuum, not buried
       inside slab.'
@@ -207,7 +218,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_007_20260507
+- id: IG_abacus_007_20260508
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS Si LCAO-SCF inputs and Bohrium submission configuration.
@@ -232,6 +243,11 @@ questions:
     value:
       filename: INPUT
       pattern: (?im)^\s*pseudo_dir\s+/root/apns-pseudopotentials-v1/?\s*$
+      flags: im
+  - key: must_input_orbital_dir
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*orbital_dir\s+\S+
       flags: im
   - key: must_stru_si_pseudo
     value:
@@ -285,6 +301,12 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
+  - id: must_input_orbital_dir
+    criterion: '[Must] INPUT includes an explicit orbital_dir path, required for LCAO Bohrium
+      jobs where orbital files are not in the default location.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
   - id: must_stru_si_pseudo
     criterion: '[Must] STRU uses the available Si pseudopotential filename.'
     axis: correctness
@@ -309,7 +331,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_008_20260507
+- id: IG_abacus_008_20260508
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS Si PW-SCF inputs and Bohrium submission configuration.
@@ -341,6 +363,11 @@ questions:
     value:
       filename: INPUT
       pattern: (?im)^\s*pseudo_dir\s+/root/apns-pseudopotentials-v1/?\s*$
+      flags: im
+  - key: must_input_ntype_matches_species
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*ntype\s+1\s*$
       flags: im
   - key: must_stru_si_pseudo
     value:
@@ -396,6 +423,12 @@ questions:
     weight: 1.0
   - id: must_input_pseudo_dir
     criterion: '[Must] INPUT points ABACUS to the APNS pseudopotential directory.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_input_ntype_matches_species
+    criterion: '[Must] INPUT sets ntype to 1, matching the single species (Si) defined in
+      STRU ATOMIC_SPECIES.'
     axis: correctness
     verify: text_file_regex
     weight: 1.0
@@ -588,7 +621,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_004_20260504
+- id: IG_abacus_004_20260508
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS PW SCF input for dipole correction on an asymmetric H2O slab, with
@@ -625,6 +658,11 @@ questions:
       - dip_cor_flag 1
       - efield_amp 0.0
       flags: i
+  - key: must_input_dipole_ntype_matches_species
+    value:
+      filename: INPUT_dipole
+      pattern: (?im)^\s*ntype\s+2\s*$
+      flags: im
   - key: must_kpt_dipole_gamma_marker
     value:
       filename: KPT_dipole
@@ -704,6 +742,12 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
+  - id: must_input_dipole_ntype_matches_species
+    criterion: '[Must] INPUT_dipole sets ntype to 2, matching the two species (H and O) defined
+      in the STRU ATOMIC_SPECIES section.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
   - id: must_kpt_dipole_gamma_marker
     criterion: '[Must] KPT_dipole is a Gamma-centered K-point file.'
     axis: correctness
@@ -766,7 +810,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_002_20260504
+- id: IG_abacus_002_20260508
   capability: input_generation
   domain: agnostic
   intent: Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty
@@ -810,6 +854,11 @@ questions:
       - basis_type lcao
       - nspin 2
       flags: i
+  - key: must_input_vac_ntype_matches_species
+    value:
+      filename: INPUT_vac_bsse
+      pattern: (?im)^\s*ntype\s+2\s*$
+      flags: im
   - key: must_input_vac_uniform_kspacing
     value:
       filename: INPUT_vac_bsse
@@ -885,6 +934,12 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
+  - id: must_input_vac_ntype_matches_species
+    criterion: '[Must] INPUT_vac_bsse sets ntype to 2, matching the two species (Fe and Fe_empty)
+      defined in STRU_vac_bsse ATOMIC_SPECIES.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
   - id: must_input_vac_uniform_kspacing
     criterion: '[Must] Conditional routing: if INPUT_vac_bsse has `kspacing`, it must be either
       a single value in 0.08~0.20 or an explicit uniform three-component form in the same range;
@@ -954,7 +1009,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_005_20260504
+- id: IG_abacus_005_20260508
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence
@@ -1011,6 +1066,19 @@ questions:
       tokens:
       - calculation relax
       - basis_type pw
+      flags: i
+  - key: must_input_bulk_relax_cal_force_stress
+    value:
+      filename: INPUT_bulk_relax
+      tokens:
+      - cal_force 1
+      - cal_stress 1
+      flags: i
+  - key: must_input_slab5_cal_force
+    value:
+      filename: INPUT_slab5
+      tokens:
+      - cal_force 1
       flags: i
   - key: must_kpt_slab_gamma_marker
     value:
@@ -1105,6 +1173,17 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
+  - id: must_input_bulk_relax_cal_force_stress
+    criterion: '[Must] INPUT_bulk_relax explicitly sets cal_force 1 and cal_stress 1, required
+      for cell-relax calculations.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_slab5_cal_force
+    criterion: '[Must] INPUT_slab5 explicitly sets cal_force 1, required for relax calculations.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
   - id: must_kpt_slab_gamma_marker
     criterion: '[Must] KPT_slab is Gamma-centered.'
     axis: correctness
@@ -1185,7 +1264,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_006_20260504
+- id: IG_abacus_006_20260508
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW inputs for Mo surface-vacancy energy using bulk, pristine slab,
@@ -1242,6 +1321,13 @@ questions:
       tokens:
       - calculation scf
       - basis_type pw
+      flags: i
+  - key: must_input_bulk_mo_cal_force_stress
+    value:
+      filename: INPUT_bulk_mo
+      tokens:
+      - cal_force 1
+      - cal_stress 1
       flags: i
   - key: must_kpt_gamma_markers
     value:
@@ -1450,6 +1536,12 @@ questions:
     weight: 1.0
   - id: must_input_slab_vac_mode
     criterion: '[Must] INPUT_slab_vac uses PW SCF mode.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_bulk_mo_cal_force_stress
+    criterion: '[Must] INPUT_bulk_mo explicitly sets cal_force 1 and cal_stress 1, required
+      for cell-relax calculations.'
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
