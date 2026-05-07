@@ -235,6 +235,18 @@ def get_relevant_questions(rule: dict, all_questions: dict[str, dict]) -> list[d
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
+def _compute_cache_key(rule: dict, relevant_questions: list[dict]) -> str:
+    """Compute a cache key from rule text + relevant questions' checklists."""
+    import hashlib
+
+    parts = [rule.get("text", "")]
+    for q in sorted(relevant_questions, key=lambda x: x.get("id", "")):
+        parts.append(q.get("id", ""))
+        for item in q.get("scoring_checklist", []):
+            parts.append(f"{item.get('id', '')}:{item.get('verify', '')}:{item.get('criterion', '')}")
+    return hashlib.md5("|".join(parts).encode()).hexdigest()
+
+
 def load_cache() -> dict[str, dict]:
     if CACHE_FILE.exists():
         try:
@@ -244,10 +256,9 @@ def load_cache() -> dict[str, dict]:
     return {}
 
 
-def save_cache(cache: dict[str, dict], fingerprint: str = "") -> None:
+def save_cache(cache: dict[str, dict]) -> None:
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    to_save = {**cache, "__q_fingerprint__": fingerprint}
-    CACHE_FILE.write_text(json.dumps(to_save, ensure_ascii=False))
+    CACHE_FILE.write_text(json.dumps(cache, ensure_ascii=False))
 
 
 def main():
@@ -283,31 +294,23 @@ def main():
         rules = rules[: args.max_rules]
         print(f"Limited to {len(rules)} rules")
 
-    # Build question bank fingerprint for cache invalidation
-    import hashlib
-
-    q_ids = sorted(q["id"] for q in all_questions.values()) if isinstance(all_questions, dict) else sorted(q["id"] for q in all_questions)
-    q_fingerprint = hashlib.md5(",".join(q_ids).encode()).hexdigest()[:12]
-
-    # Load cache — invalidate if question bank changed
-    raw_cache = load_cache()
-    cached_fingerprint = raw_cache.get("__q_fingerprint__", "")
-    if cached_fingerprint != q_fingerprint:
-        print(f"Cache invalidated: question bank changed ({cached_fingerprint[:8]}→{q_fingerprint[:8]})")
-        cache = {}
-    else:
-        cache = {k: v for k, v in raw_cache.items() if k != "__q_fingerprint__"}
-    print(f"Cache: {len(cache)} entries (fingerprint: {q_fingerprint})")
+    # Load cache (keyed by content hash, not rule ID)
+    cache = load_cache()
+    print(f"Cache: {len(cache)} entries")
 
     client = openai.OpenAI(api_key=API_KEY, base_url=API_BASE, timeout=30.0)
 
+    # For each rule, compute relevant questions and cache key
     results = []
     to_judge = []
 
     for rule in rules:
-        rid = rule["id"]
-        if rid in cache:
-            results.append({**rule, **cache[rid]})
+        relevant = get_relevant_questions(rule, all_questions)
+        cache_key = _compute_cache_key(rule, relevant)
+        rule["_cache_key"] = cache_key
+        rule["_relevant"] = relevant
+        if cache_key in cache:
+            results.append({**rule, **cache[cache_key]})
         else:
             to_judge.append(rule)
 
@@ -318,7 +321,7 @@ def main():
         errors = 0
 
         def process_rule(rule):
-            relevant = get_relevant_questions(rule, all_questions)
+            relevant = rule["_relevant"]
             return rule, judge_rule(client, args.model, rule, relevant)
 
         with ThreadPoolExecutor(max_workers=args.workers) as executor:
@@ -326,13 +329,13 @@ def main():
             for future in as_completed(futures):
                 try:
                     rule, judgment = future.result()
-                    rid = rule["id"]
-                    cache[rid] = judgment
+                    cache_key = rule["_cache_key"]
+                    cache[cache_key] = judgment
                     results.append({**rule, **judgment})
                     judged += 1
                     if judged % 50 == 0:
                         print(f"  Progress: {judged}/{len(to_judge)}")
-                        save_cache(cache, q_fingerprint)
+                        save_cache(cache)
                 except Exception as e:
                     errors += 1
                     rule = futures[future]
@@ -346,8 +349,13 @@ def main():
                         }
                     )
 
-        save_cache(cache, q_fingerprint)
+        save_cache(cache)
         print(f"Judged {judged} rules ({errors} errors)")
+
+    # Clean internal fields before output
+    for r in results:
+        r.pop("_cache_key", None)
+        r.pop("_relevant", None)
 
     # Compute summary
     total = len(results)
