@@ -14,16 +14,18 @@ GROMACS is a high-performance molecular dynamics package primarily designed for 
 |------|---------------------|
 | image | `registry.dp.tech/dptech/gromacs:2022.2` |
 | machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
-| cmd | `gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run > log 2>&1` |
+| cmd | `gmx_mpi grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx_mpi mdrun -v -deffnm run > log 2>&1` |
 
 | Item | GPU Alternative |
 |------|-----------------|
 | machine | `c6_m60_1 * NVIDIA 4090` |
-| cmd | `gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run -gpu_id 0 > log 2>&1` |
+| cmd | `gmx_mpi grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx_mpi mdrun -v -deffnm run -gpu_id 0 > log 2>&1` |
 
+> **The Bohrium GROMACS image has `gmx_mpi` only (not `gmx`).** Do NOT use `-ntmpi` (thread-MPI is not compiled in).
 > Adjust `grompp` arguments to match actual filenames.
 > For GPU options: `Bohrium(action="list_machines", machine_type="gpu", keyword="4090")`.
 > For different GROMACS versions: `Bohrium(action="list_images", keyword="gromacs")`.
+> When submitting multiple systems in parallel, use **distinct file names** (e.g. `sysA_init.gro`, `sysB_init.gro`) to avoid Bohrium upload cache collisions.
 
 ## Input Preparation
 
@@ -84,7 +86,7 @@ If the user provides `.gro` + `.top` + `.mdp` (or a pre-built `.tpr`), skip prep
 2. Generate/verify MDP: `render_input.py --software gromacs --task md --output md.mdp`
 3. Ensure `.gro`, `.top`, `.mdp` are in one directory
 4. Submit (the cmd runs both grompp and mdrun):
-   `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/gromacs:2022.2", cmd="gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run > log 2>&1")`
+   `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/gromacs:2022.2", cmd="gmx_mpi grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx_mpi mdrun -v -deffnm run > log 2>&1")`
 5. Poll: `Bohrium(action="poll", job_id=<id>)`
 
 ## Post-Processing
