@@ -1056,7 +1056,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_002_20260507
+- id: SC_struct_build_002_20260507v2
   capability: structure_construction
   domain: agnostic
   intent: Build hexagonal boron nitride (hBN) unit cell from space group and Wyckoff
@@ -1097,6 +1097,16 @@ questions:
       filename: hbn.cif
       expected: 4
       tolerance: 0
+  - key: space_group_number
+    value:
+      filename: hbn.cif
+      expected_number: 194
+      symprec: 0.1
+  - key: space_group_tokens
+    value:
+    - '194'
+    - P6
+    - mmc
   - key: turn_budget
     value:
       max: 10
@@ -1128,6 +1138,14 @@ questions:
     criterion: Unit cell contains exactly 4 atoms.
     axis: correctness
     verify: struct_file_atom_count
+  - id: space_group_number
+    criterion: The file `hbn.cif` is identified as space group #194 by pymatgen.
+    axis: correctness
+    verify: struct_file_space_group
+  - id: space_group_tokens
+    criterion: Final answer explicitly reports space group number 194 and the P6_3/mmc setting.
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: Final answer reports lattice parameters, gamma angle, atom count, and
       B:N ratio from the built structure.
