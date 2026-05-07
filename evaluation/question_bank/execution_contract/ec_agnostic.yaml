@@ -200,3 +200,405 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
+- id: EC_tool_choice_read_001_20260428
+  capability: execution_contract
+  domain: agnostic
+  intent: Agent should prefer the dedicated Read tool over bash cat/head/tail for
+    reading files.
+  human_prompt_seed: '请读取工作目录下的 `config.yaml` 文件内容并告诉我里面配置了什么参数。'
+  tags:
+  data_files:
+  - key: config_yaml
+    path: data/EC_tool_choice_read_001/config.yaml
+    description: Simple YAML config file for read tool preference test.
+  reference_answers:
+  - key: tool_preference
+    value: Read
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 6000
+  scoring_checklist:
+  - id: correct_content
+    criterion: Agent correctly reports the content and parameters from config.yaml.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: tool_preference
+    criterion: Agent uses the dedicated Read tool to read the file.
+    axis: efficiency
+    verify: tool_name_used
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: EC_tool_choice_write_001_20260428
+  capability: execution_contract
+  domain: agnostic
+  intent: Agent should prefer dedicated Write/Edit tools over bash echo/cat heredoc
+    for creating files.
+  human_prompt_seed: '请在工作目录下创建一个 `README.md` 文件，内容为：
+
+    # Project
+
+    This is a test project for materials simulation.
+
+    ## Requirements
+
+    - Python 3.10+
+
+    - NumPy
+
+    - ASE'
+  tags:
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: README.md
+  - key: tool_preference
+    value: Write
+  - key: correct_content
+    value:
+      filename: README.md
+      tokens:
+      - Project
+      - materials simulation
+      - Python
+      - NumPy
+      - ASE
+      flags: i
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 6000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `README.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: correct_content
+    criterion: README.md contains the requested content sections.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: tool_preference
+    criterion: Agent uses the dedicated Write tool to create the file.
+    axis: efficiency
+    verify: tool_name_used
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: EC_no_truncation_001_20260430
+  capability: execution_contract
+  domain: agnostic
+  intent: Agent must output complete tabular data without truncating with ellipsis.
+  human_prompt_seed: '请生成一个包含 20 种常见金属元素的表格，列出每种元素的符号、原子序数、晶体结构类型（FCC/BCC/HCP）和常温晶格常数（Å）。
+
+    将完整表格写入 `metals_table.md`，不要省略任何行。'
+  tags:
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: metals_table.md
+  - key: row_count
+    value:
+      filename: metals_table.md
+      pattern: '^\|?\s*[A-Z][a-z]?\s*\|'
+      flags: m
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `metals_table.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: no_truncation
+    criterion: "The file metals_table.md must not contain any truncation indicators such as '...' (ellipsis) that would indicate omitted rows. Check the file content for any occurrence of '...'."
+    axis: correctness
+    verify: llm_binary_judge
+  - id: row_count
+    criterion: The table contains at least 20 data rows (excluding header/separator).
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: EC_batch_all_items_001_20260428
+  capability: execution_contract
+  domain: agnostic
+  intent: When given N items to process, agent must complete ALL N, not stop at a
+    partial subset.
+  human_prompt_seed: '请为以下 6 种材料分别创建一个简单的描述文件（纯文本，包含材料名称、化学式、晶体结构类型）：
+
+    1. 金刚石 (Diamond, C, FCC)
+
+    2. 氯化钠 (NaCl, rock salt)
+
+    3. 闪锌矿 (ZnS, zinc blende)
+
+    4. 钙钛矿 (BaTiO3, perovskite)
+
+    5. 尖晶石 (MgAl2O4, spinel)
+
+    6. 刚玉 (Al2O3, corundum)
+
+    文件名分别为：diamond.txt, nacl.txt, zns.txt, batio3.txt, mgal2o4.txt, al2o3.txt'
+  tags:
+  priority: P0
+  data_files: []
+  reference_answers:
+  - key: diamond_artifact
+    value: diamond.txt
+  - key: nacl_artifact
+    value: nacl.txt
+  - key: zns_artifact
+    value: zns.txt
+  - key: batio3_artifact
+    value: batio3.txt
+  - key: mgal2o4_artifact
+    value: mgal2o4.txt
+  - key: al2o3_artifact
+    value: al2o3.txt
+  - key: diamond_content
+    value:
+      filename: diamond.txt
+      tokens:
+      - Diamond
+      - C
+      - FCC
+      flags: i
+  - key: nacl_content
+    value:
+      filename: nacl.txt
+      tokens:
+      - NaCl
+      - rock salt
+      flags: i
+  - key: batio3_content
+    value:
+      filename: batio3.txt
+      tokens:
+      - BaTiO3
+      - perovskite
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: diamond_artifact
+    criterion: Agent writes `diamond.txt` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: nacl_artifact
+    criterion: Agent writes `nacl.txt` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: zns_artifact
+    criterion: Agent writes `zns.txt` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: batio3_artifact
+    criterion: Agent writes `batio3.txt` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: mgal2o4_artifact
+    criterion: Agent writes `mgal2o4.txt` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: al2o3_artifact
+    criterion: Agent writes `al2o3.txt` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: diamond_content
+    criterion: diamond.txt contains Diamond, C, and FCC.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: nacl_content
+    criterion: nacl.txt contains NaCl and rock salt.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: batio3_content
+    criterion: batio3.txt contains BaTiO3 and perovskite.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: EC_spec_partial_001_20260428
+  capability: execution_contract
+  domain: agnostic
+  intent: When run_spec.json has only partial fields, agent should use spec values
+    where present and fill missing fields from prompt defaults, not error out.
+  human_prompt_seed: '请根据 run_spec.json 和以下说明生成 VASP INCAR 文件。
+
+    默认参数：ENCUT=520, ISMEAR=0, SIGMA=0.05, EDIFF=1E-6, IBRION=2, NSW=100, ISIF=3
+
+    run_spec.json 中如果指定了某些参数，以 spec 为准；未指定的用上述默认值。
+
+    输出文件名为 `INCAR`。'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: run_spec
+    path: data/EC_spec_partial_001/run_spec.json
+    description: Partial spec with only ENCUT and ISMEAR specified.
+  reference_answers:
+  - key: output_artifact
+    value: INCAR
+  - key: encut_from_spec
+    value:
+      filename: INCAR
+      pattern: 'ENCUT\s*=\s*600'
+  - key: ismear_from_spec
+    value:
+      filename: INCAR
+      pattern: 'ISMEAR\s*=\s*1'
+  - key: defaults_filled
+    value:
+      filename: INCAR
+      tokens:
+      - SIGMA
+      - EDIFF
+      - IBRION
+      - NSW
+      - ISIF
+      flags: i
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `INCAR` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: encut_from_spec
+    criterion: INCAR uses ENCUT=600 from run_spec.json (not the default 520).
+    axis: correctness
+    verify: text_file_regex
+  - id: ismear_from_spec
+    criterion: INCAR uses ISMEAR=1 from run_spec.json (not the default 0).
+    axis: correctness
+    verify: text_file_regex
+  - id: defaults_filled
+    criterion: INCAR includes default values for fields NOT in run_spec.json.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: EC_filename_case_001_20260428
+  capability: execution_contract
+  domain: agnostic
+  intent: Agent must respect exact case in output filenames (POSCAR not poscar).
+  human_prompt_seed: '请构建一个简单的 Si FCC 结构（晶格常数 5.43 Å，空间群 Fd-3m），输出为 VASP 格式。
+
+    注意：输出文件名必须严格为 `POSCAR`（全大写），不是 `poscar` 或其他变体。'
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: POSCAR
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes exactly `POSCAR` (uppercase) to workspace, not `poscar`
+      or any case variant.
+    axis: correctness
+    verify: artifact_exists
+  - id: valid_structure
+    criterion: The POSCAR file contains a valid Si diamond cubic structure with lattice
+      constant approximately 5.43 Å.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

@@ -1,0 +1,35 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 4,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [
+        "8b044b0d95d6047d8a225183d5c69153469155d1"
+      ],
+      "files_touched": [
+        "matmaster/skills/playground-skills/gromacs-system-prep/references/polymer_simulation_workflow.md",
+        "matmaster/skills/playground-skills/gromacs-system-prep/SKILL.md",
+        "matmaster/skills/playground-skills/poly-forcefield/SKILL.md",
+        "matmaster/skills/playground-skills/structure-manager/references/multi_step_dft_workflow.md",
+        "matmaster/skills/playground-skills/structure-manager/SKILL.md",
+        "matmaster/skills/abacus/references/advanced_calculations.md",
+        "matmaster/skills/abacus/SKILL.md",
+        "matmaster/skills/playground-skills/xrd-analysis/SKILL.md",
+        "matmaster/skills/playground-skills/structure-manager/references/electronic_property_construction.md"
+      ],
+      "followup_suggestion": "Re-run evaluation to measure impact. If polymer tasks still fail, investigate whether poly-forcefield/polyFF actually supports the requested chemistries or if the failures are script-level. If WO_general tasks still fail, the issue may be turn_budget or infrastructure rather than skill guidance. If ABACUS non-P0 tasks show no improvement, the scoring criteria may need checklist review. Monitor P0 for any regression — if P0 drops, immediately revert this round's changes.",
+      "iteration_index": 4,
+      "needs_more_work": true,
+      "optimization_round": 1,
+      "summary": "## Optimization Round 1: Targeted Skill & Reference Improvements\n\n### Strategy\nSafety-first approach: **4 new reference files** + **4 minimal SKILL.md edits**. No modifications to `data-analysis/` or files affecting DF_mech_002. All changes are additive — existing behavior preserved.\n\n### Changes by Failure Bucket\n\n**1. Polymer Simulation (5 questions, +13% potential)**\n- **NEW**: `gromacs-system-prep/references/polymer_simulation_workflow.md` — comprehensive end-to-end pipeline from monomer SMILES → poly-generator → topology → box setup → EM/NVT/NPT/MD → analysis. Covers all polymer task types (donor, membrane, rheology, hopping, adhesion) with MDP templates and Bohrium submission strategy.\n- **EDIT**: `gromacs-system-prep/SKILL.md` — replaced basic adhesion section with \"Polymer Simulation Workflows\" that references the new guide and adds key polymer-specific settings (longer equilibration, timestep, maxwarn, run.sh chaining).\n- **EDIT**: `poly-forcefield/SKILL.md` — expanded scope description from \"only linear alkanes\" to \"GAFF-compatible organic chemistries\" with guidance to always attempt topology generation first before pre-judging scope.\n\n**2. Workflow Orchestration General (5 questions, +13% potential)**\n- **NEW**: `structure-manager/references/multi_step_dft_workflow.md` — 8 workflow patterns covering surface energy, vacancy/defect, band structure, EOS, adsorption, ferroelectric/perovskite, HEA, and steel/alloy studies. Includes Bohrium submission strategies and result analysis checklist.\n- **EDIT**: `structure-manager/SKILL.md` — added \"Multi-Step DFT Workflow Patterns\" section pointing to the new reference.\n\n**3. ABACUS Input Generation (6 non-P0 questions, +16% potential)**\n- **NEW**: `abacus/references/advanced_calculations.md` — covers EOS, surface energy, magnetic systems, BSSE/ghost atoms, heterostructures, batch submission, and post-processing patterns with INPUT templates.\n- **EDIT**: `abacus/SKILL.md` — added \"Advanced Calculations\" pointer to the new reference.\n\n**4. Band Property & SCXRD Data Formatting (4 questions, +10% potential)**\n- **EDIT**: `xrd-analysis/SKILL.md` — added \"SCXRD Output Checklist — MANDATORY\" ensuring CIF file, R-factors, cell parameters, space group, atom list, formula, and checkCIF validation are all delivered.\n- **EDIT**: `structure-manager/references/electronic_property_construction.md` — added \"Band Structure Analysis & Reporting\" section with band gap classification, deliverables checklist, and common pitfalls.\n\n### Risk Assessment\n- **P0 regression risk**: MINIMAL — no changes to data-analysis skill, no modifications to ABACUS core workflow (only additive references), no structural changes to any script logic\n- **Prompt budget**: New reference files are only loaded on-demand via `get_reference()`, not automatically injected into every prompt\n- **Cross-task benefit**: All new references are generic patterns applicable across multiple questions"
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 4,
+    "macro_mean_0_100": 24,
+    "rationale": "## Iteration 4 — Significant Progress, No Regressions\n\n**Score**: `macro_mean_0_100 = 24` (9/38 questions fully passed). **Target: 60. Not met.** **Up +8 from iter_03.**\n\n### P0 Gate\n- **Passed** (75%, up from 62%!). 6/8 P0 pass.\n- **New P0 pass**: BP_struct_003 ✅ (first time passing this session)\n- **DF_mech_002**: Still 100 ✅ (no regression — iter_03 optimization was safe)\n- Still failing: IG_abacus_002, IG_abacus_003\n\n### Score Trajectory\n| Iter | P0 | Overall | Status | Delta |\n|------|-----|---------|--------|-------|\n| 1 | 62% | 13% | Baseline | — |\n| 2 | 50% | — | ⛔ P0 regression → reverted | −12 P0 |\n| 3 | 62% | 16% | Post-revert baseline | +3 |\n| **4** | **75%** | **24%** | **✅ Best this session** | **+8** |\n\n### Analysis\n- The iter_03 optimization (safety-first approach: new reference files, minimal SKILL.md edits) worked well\n- Gained ~3 non-P0 questions + 1 P0 (BP_struct_003)\n- Still 27 non-P0 questions failing\n- Gap to target: 14 more questions needed (24% → 60%)\n\n### Remaining Failure Distribution (estimated)\n| Category | Failing | Potential Points |\n|----------|---------|------------------|\n| Polymer (pl_*) | ~5 | +13% |\n| WO_general | ~5 | +13% |\n| IG_abacus (non-P0) | ~6 | +16% |\n| BP (non-P0) | ~2-3 | +5-8% |\n| DF (non-P0) | ~2-3 | +5-8% |\n| Other | ~6-8 | +16-21% |\n\n### Delegation\n- **Optimization agent queued** (round 1): Continue safety-first approach. Highest-priority targets: polymer (5 questions, easiest wins), WO_general (5), IG_abacus non-P0 (6). No changes to data-analysis skill.\n- No checklist escalation yet — product optimization is working and there's still clear room for improvement.\n\n### Next Steps\n- If iter_04 optimization gains another +8-10 points → ~32-34%, then 2-3 more successful rounds could reach 60%.\n- If polymer and WO_general can be fixed, that's +26% alone = 50%.",
+    "target_met": false
+  }
+}

@@ -13,9 +13,9 @@ from evaluation.devshell_agent.config_state import AgentLoopSharedState
 from evaluation.devshell_agent.git_iteration import run_git_revert_commits_after_base
 from evaluation.devshell_agent.path_policy import (
     PROPOSED_MATMASTER_EXPS_CHANGES_NAME,
+    PROPOSED_OPTIMIZATION_CHANGES_NAME,
     PROPOSED_QUESTION_BANK_CHANGES_NAME,
     devshell_main_agent_history_root,
-    is_blocked_matmaster_exps_path,
 )
 from evaluation.devshell_agent.path_policy import is_under as _path_is_under
 from evaluation.devshell_agent.sdk_tools_eval_run import MatmasterEvalMcpEvalRunMixin
@@ -130,14 +130,7 @@ class MatmasterEvalMcpToolkit(MatmasterEvalMcpEvalRunMixin):
 
     @staticmethod
     def _optimization_execution_track(args: dict[str, Any]) -> str:
-        layers = [
-            str(x).strip()
-            for x in (args.get("candidate_layers") or [])
-            if str(x).strip()
-        ]
-        if layers == ["system_prompt"]:
-            return "proposal_only"
-        return "code_edit"
+        return "proposal_only"
 
     def _display_path(self, path: Path) -> str:
         repo_root = self._state.repo_root.resolve()
@@ -170,29 +163,21 @@ class MatmasterEvalMcpToolkit(MatmasterEvalMcpEvalRunMixin):
             if write:
                 # Human-reviewed queue for _base.toml / direct.toml (forbidden to edit below).
                 if _path_is_under(path, session_dir):
-                    if path.name != PROPOSED_MATMASTER_EXPS_CHANGES_NAME:
+                    allowed_session_files = {
+                        PROPOSED_MATMASTER_EXPS_CHANGES_NAME,
+                        PROPOSED_OPTIMIZATION_CHANGES_NAME,
+                    }
+                    if path.name not in allowed_session_files:
                         raise ValueError(
                             "optimization path access denied: under the session directory, "
-                            f"only {PROPOSED_MATMASTER_EXPS_CHANGES_NAME!r} may be written "
-                            f"(Markdown proposals for matmaster/exps/*.toml); got {path.name!r}"
+                            f"only {sorted(allowed_session_files)} may be written; got {path.name!r}"
                         )
                     return path
-                if not _path_is_under(path, repo_root) or _path_is_under(
-                    path, evaluation_root
-                ):
-                    raise ValueError(f"optimization path access denied: {raw_path}")
-                if is_blocked_matmaster_exps_path(repo_root, path):
-                    rel_proposal = (
-                        session_dir.resolve().relative_to(repo_root.resolve())
-                        / PROPOSED_MATMASTER_EXPS_CHANGES_NAME
-                    )
-                    raise ValueError(
-                        "optimization cannot edit any file under matmaster/exps/. "
-                        "If a change is truly needed, it must be justified as cross-domain "
-                        "and generic. Write the proposal as Markdown in "
-                        f"{PROPOSED_MATMASTER_EXPS_CHANGES_NAME!r} under this session "
-                        f"(repo-relative: {rel_proposal.as_posix()}), for human review."
-                    )
+                # Proposal-only mode: no writes outside session directory
+                raise ValueError(
+                    "optimization path access denied: proposal-only mode, "
+                    f"writes only allowed in session directory; got {raw_path}"
+                )
             else:
                 if _path_is_under(path, session_dir):
                     return path
@@ -323,19 +308,34 @@ class MatmasterEvalMcpToolkit(MatmasterEvalMcpEvalRunMixin):
             ]
         }
 
+    _GLOB_PATHS_MAX_LIMIT = 500
+
     async def _glob_paths(self, *, role: str, args: dict[str, Any]) -> dict[str, Any]:
         base_dir = self._resolve_agent_path(
             str(args["base_dir"]), role=role, write=False
         )
         pattern = str(args["pattern"])
-        matches = sorted(self._display_path(path) for path in base_dir.rglob(pattern))
+        limit = min(
+            max(1, int(args.get("limit") or self._GLOB_PATHS_MAX_LIMIT)),
+            self._GLOB_PATHS_MAX_LIMIT,
+        )
+        all_matches = sorted(
+            self._display_path(path) for path in base_dir.rglob(pattern)
+        )
+        truncated = len(all_matches) > limit
+        matches = all_matches[:limit]
+        result: dict[str, Any] = {
+            "base_dir": self._display_path(base_dir),
+            "matches": matches,
+        }
+        if truncated:
+            result["truncated"] = True
+            result["total"] = len(all_matches)
         return {
             "content": [
                 {
                     "type": "text",
-                    "text": DevshellEvalSubprocess.format_tool_result_text(
-                        {"base_dir": self._display_path(base_dir), "matches": matches}
-                    ),
+                    "text": DevshellEvalSubprocess.format_tool_result_text(result),
                 }
             ]
         }

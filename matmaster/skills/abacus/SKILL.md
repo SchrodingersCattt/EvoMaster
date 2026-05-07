@@ -1,114 +1,106 @@
 ---
 name: abacus
-description: "MUST use this skill for ANY task involving ABACUS (input preparation, parameter configuration, SCF, band structure, DOS, geometry/cell relaxation, MD, electric field, dipole correction, BSSE, electrostatic potential, etc.)."
+description: "MUST use this skill for ANY task involving ABACUS (SCF, relax, cell-relax, band structure, DOS, MD, work function, BSSE, vacancy, surface energy, DFT+U, phonon, EOS). Contains hard guards on parameters, low-cost benchmark ranges, K-point rules, and validation scripts that prevent silent failures."
 skill_type: operator
 ---
 
 # ABACUS Skill
 
-ABACUS supports plane-wave (PW) and numerical atomic orbital (LCAO) basis sets.
+ABACUS supports PW and LCAO basis sets. This skill should focus on producing
+correct, runnable files and avoiding silent-failure configurations.
 
-**Action rule**: When generating ABACUS input files, **always use Write tool**. **Read any provided STRU first** to extract: (1) PP/orbital filenames — reuse exactly, never invent; (2) ntype from species count; (3) basis_type from NUMERICAL_ORBITAL presence; (4) coordinate type and geometry (detect slab vs bulk by vacuum gap). Then Write all output files.
+## When to Use
 
-## Bohrium Submission
+Use this skill for any ABACUS task: SCF, band/DOS, relax/cell-relax, MD,
+electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
+
+## Minimum Workflow
+
+1. Read provided `STRU` first and reuse filenames exactly (PP/orbital/structure).
+   Pseudopotentials (`.upf`) default path: `/root/apns-pseudopotentials-v1/`.
+   Orbitals (`.orb`) default path: `/root/apns-orbitals-efficiency-v1/`.
+2. Generate `INPUT` (and `KPT` when needed).
+3. For uncertain params/workflows, check local `references/*` first.
+4. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
+5. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
+
+## Hard Guards (Must Pass)
+
+- `ntype` in `INPUT` must equal species count in `STRU` `ATOMIC_SPECIES`.
+- For `relax`/`cell-relax`/`md`, set `cal_force 1` explicitly.
+- For `cell-relax`, also set `cal_stress 1` explicitly.
+- For SCF -> NSCF workflows:
+  - SCF: `out_chg 1`
+  - NSCF: `init_chg file`, `symmetry 0`, `nbands <N>`, plus `out_band 1` or `out_dos 1`
+- If file names are not defaults, set `stru_file` and `kpoint_file` to real names.
+- Every referenced file must exist in workspace.
+
+## K-point Rules
+
+- Supercell/vacancy/defect/BSSE: prefer `kspacing` in `INPUT` (avoid brittle manual meshes).
+- Band structure: use dedicated line-mode KPT for NSCF step.
+- SCF and NSCF should not share a single KPT by default in band/DOS workflows.
+- Metal slab calculations: **minimum 12×12 in-plane** k-points (or equivalent `kspacing ≤ 0.10` in-plane). Do not use less.
+
+## Parameter Baseline (Use Judgment, Not Blind Fixed Values)
+
+- Use physically reasonable `ecutwfc`, `smearing`, and SCF thresholds for system and PP quality.
+- `ecutwfc` (Type: Real): energy cutoff for plane-wave functions. Unit is `Ry`. Even under `basis_type lcao`, `ecutwfc` is still required because local pseudopotential parts and related forces are evaluated in plane-wave representation. Default baseline: `50` (PW), `100` (LCAO), unless task requirements override.
+- In low-cost or benchmark settings, `ecutwfc` can be set below the default baseline if task intent prioritizes speed over accuracy.
+- For fast tasks with lower accuracy requirements, choose lower-precision settings (including lower `ecutwfc`) to prioritize turnaround time.
+- Distinguish `LCAO` vs `PW` parameter semantics and sensitivity; do not directly copy basis-specific settings across modes.
+- Use `smearing_sigma 0.015` as the default starting point unless the task specifies otherwise.
+- For critical parameters, verify intent and physical meaning before finalizing.
+- If a parameter meaning is unclear, check the official ABACUS input reference:
+  `http://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html`.
+- Typical production defaults are acceptable, but task requirements override defaults.
+- If the task specifies cutoffs or convergence policy, follow the task first.
+- **Low-cost / benchmark mode**: when the task requests "low-cost", "benchmark", or "minimal cost" parameters, significantly reduce `ecutwfc` from production defaults. See `references/input_examples.md` for guidance.
+- Keep multi-file studies (EOS/surface/vacancy comparisons) consistent on core numerics.
+
+## Task-Specific Deltas
+
+- `relax`: include `force_thr_ev` and `relax_nmax`.
+- `cell-relax`: include `force_thr_ev`, `stress_thr`, and `relax_nmax`.
+- Work function / slab potential: `out_pot 2`; add dipole correction when needed.
+- Spin/noncollinear/SOC: keep `nspin`, `noncolin`, and `lspinorb` consistent.
+
+## Bohrium Submission Defaults
+
+This section is the **single source of truth** for ABACUS `image` / `machine` / `cmd` on Bohrium. Other skills (for example `matmaster/skills/playground-skills/input-manual-helper`) refer here instead of copying the values.
+
+Keep the previous default profile unless task/environment explicitly overrides it.
 
 | Item | Default |
 |------|---------|
-| image | `registry.dp.tech/dptech/abacus:LTSv3.10.1` |
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.1-1778080680` |
 | machine | `c32_m128_cpu` |
 | cmd | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |
 
-> `-np` = **half CPU cores** (32 → 16). GPU: `c8_m60_1 * NVIDIA 4090` with `basis_type pw`.
+Notes:
+- `-np` is typically half of CPU cores for this profile (32 -> 16).
+- For GPU tasks, use environment-approved GPU machine profiles with `basis_type pw`.
 
-## K-point Strategy
+## Pre-Submission Validation
 
-| Scenario | Use `kspacing` in INPUT | Use KPT file |
-|----------|:-----------------------:|:------------:|
-| Supercell (vacancy, defect, BSSE) | ✅ **mandatory** | ✗ |
-| Standard bulk | optional | ✅ |
-| Slab | ✅ recommended | ✅ |
-| Band structure (k-path) | ✗ | ✅ (line-mode) |
-
-**Supercell rule**: Always use `kspacing` (e.g. `0.10 0.10 0.10`) inside INPUT. For slabs: `kspacing 0.10 0.10 1.00` (vacuum direction = 1.00).
-
-## Input Files
-
-Three files: **INPUT** (parameters), **STRU** (structure), **KPT** (k-points; optional with `kspacing`).
-
-**INPUT** format: `keyword value` with single space. See `references/input_examples.md` for templates.
-
-**STRU** format: See `references/stru_format.md`. Key: `LATTICE_CONSTANT 1.8897259886` (1 Å in Bohr), species order must match ATOMIC_SPECIES.
-
-**KPT**: Must start with `K_POINTS`. Use `Gamma` mesh for uniform sampling, line-mode for bands.
-
-### Recommended generation
+After generating all INPUT/STRU/KPT files, run the validation script before Bohrium submission:
 ```bash
-uv run python scripts/render_input.py --software abacus --task scf --output INPUT
-uv run python scripts/diagnose_input.py --software abacus --input INPUT
+python ${SKILL_DIR}/scripts/validate_input.py --dir <input_dir>
 ```
+It catches the most common silent failures: ntype mismatch, missing cal_force/cal_stress, missing out_chg for SCF→NSCF, wrong basis_type, missing PP/orbital files, and stru_file/kpoint_file reference errors. Fix any FAIL items before submitting.
 
-## Task Types
+## References
 
-| Task | `calculation` value | Notes |
-|------|-------------------|-------|
-| scf | `scf` | Single-point energy |
-| band | `nscf` | Needs prior SCF charge density |
-| dos | `nscf` | Needs prior SCF charge density |
-| relax | `relax` | Atomic relaxation |
-| cell_relax | `cell-relax` | Full cell + position relaxation |
-| md | `md` | NVT molecular dynamics |
+Reference-first policy:
+- Prefer local references below for stable and task-aligned guidance.
+- Use official ABACUS/Bohrium web documentation as fallback when local references are insufficient.
 
-## Mandatory Parameters Per Task
-
-| Task | MUST-ADD (beyond baseline) |
-|------|---------------------------|
-| **relax** | `cal_force 1`, `force_thr_ev 0.01`, `relax_nmax 100` |
-| **cell-relax** | `cal_force 1`, `cal_stress 1`, `force_thr_ev 0.01`, `stress_thr 0.5`, `relax_nmax 100` |
-| **SCF → NSCF** | SCF: `out_chg 1`; NSCF: `init_chg file`, `symmetry 0`, `nbands <N>`, `out_band 1` or `out_dos 1` |
-| **work function** | `out_pot 2` |
-| **dipole correction** | `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_pos_max`, `efield_pos_dec`, `efield_amp 0.0` |
-| **spin-polarized** | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` |
-| **supercell/vacancy/BSSE** | `kspacing 0.10` inside INPUT |
-
-> Use **`force_thr_ev`** (eV/Å), not `force_thr` (Ry/Bohr). Before writing INPUT, consult `references/input_examples.md`.
-
-## Band/DOS Two-Step Workflow
-
-SCF (`out_chg 1`) → NSCF (`init_chg file`, `symmetry 0`, `nbands`, `out_band 1` or `out_dos 1`). For Bohrium: write `run.sh` that runs both steps sequentially. Details in `references/input_examples.md`.
-
-## Electric Field & Dipole Correction
-
-See `references/electric_field.md`. Key: dipole correction = `efield_flag 1` + `dip_cor_flag 1` + `efield_amp 0.0`. Work function: `out_pot 2`.
-
-## STRU Pre-flight Checklist
-
-1. PP filenames match actual files (`ls *.upf`)
-2. NUMERICAL_ORBITAL entries match `.orb` files (LCAO only)
-3. `LATTICE_CONSTANT 1.8897259886`
-4. ATOMIC_POSITIONS species order = ATOMIC_SPECIES order
-5. Total atom count matches expected composition
-
-Full STRU format details: `references/stru_format.md`.
-
-## Required Files
-
-- **Pseudopotentials** (`.upf`) and **Orbitals** (`.orb`, LCAO): Download from AIS Square:
-  ```bash
-  wget -q "https://store.aissquare.com/datasets/dc875646-a526-41f1-a180-d54b218fc80a/ABACUS-APNS-PPORBs-v1.zip" && unzip -qo ABACUS-APNS-PPORBs-v1.zip
-  cp apns-pseudopotentials-v1/Si.upf .
-  cp apns-orbitals-efficiency-v1/Si_gga_7au_100Ry_2s2p1d.orb .
-  ```
-
-## Output Files
-
-See `references/output_params.md` for output file list and grep patterns.
-
-## Submission Workflow
-
-1. Prepare STRU (or convert from CIF/POSCAR)
-2. Download PP + orbital files from AIS Square
-3. Generate INPUT via `render_input.py`
-4. Prepare KPT (or use `kspacing`)
-5. Diagnose via `diagnose_input.py`
-6. Submit via Bohrium tool
-7. Poll and read results
+- **Pre-flight validator**: `scripts/validate_input.py` — run before every Bohrium submit
+- Input templates and multi-step examples: `references/input_examples.md`
+- STRU format basics: `references/stru_format.md`
+- Multi-species STRU examples: `references/stru_multispecies.md`
+- Electric field and dipole notes: `references/electric_field.md`
+- Troubleshooting: `references/troubleshooting.md`
+- Output parameter guide (files, grep patterns): `references/output_params.md`
+- Advanced tasks (surface energy, vacancy, EOS, DFT+U, phonon, basis-type detection): `references/advanced_tasks.md`
+- Parsed results and plots after the run: `matmaster/skills/playground-skills/result-analysis` (`parse_abacus.py`, etc.)

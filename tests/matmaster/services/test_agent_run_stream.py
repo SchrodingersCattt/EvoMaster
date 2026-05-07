@@ -32,6 +32,12 @@ from matmaster.types.events import (
 # ---------------------------------------------------------------------------
 
 
+def _make_empty_sync_result():
+    from src.services.user_skills_sync import UserSkillsSyncResult
+
+    return UserSkillsSyncResult()
+
+
 def _make_mock_playground(pg_ctx: Any) -> Any:
     """Build a mock Playground that returns the given PlaygroundContext."""
     pg = MagicMock()
@@ -142,7 +148,7 @@ def _standard_patches():
         patch('src.services.agent_run_service.derive_skill_sync_spec'),
         patch(
             'src.services.agent_run_service.materialize_user_skills_for_run',
-            return_value=[],
+            return_value=_make_empty_sync_result(),
         ),
         patch(
             'src.services.agent_run_service.HistoryRestoreService',

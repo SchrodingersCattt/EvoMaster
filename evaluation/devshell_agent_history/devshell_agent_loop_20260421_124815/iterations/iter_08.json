@@ -1,0 +1,24 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 8,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [],
+      "files_touched": [],
+      "followup_suggestion": "Re-run the eval to confirm P0 scores have recovered to baseline levels before attempting any new optimization.",
+      "iteration_index": 8,
+      "needs_more_work": false,
+      "optimization_round": 10008,
+      "summary": "**P0 regression revert (iter 8):** Successfully reverted 1 commit (`174ef3e9`) that was after baseline `dcae31ae`. The repo HEAD is now back to the state at the start of iteration 8 (before the optimization auto-commit). This restores the P0 baseline scores."
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 8,
+    "macro_mean_0_100": 71,
+    "p0_regression": true,
+    "rationale": "## Iteration 8 — P0 REGRESSION (6th gate failure overall)\n\n### P0 Gate Result\n- **P0 mean**: 71 (baseline: 100) — **delta: -29**\n- **Regressed**: DD_general_004 + IG_abacus_003 (same pair as iter_02 and iter_06)\n\n### P0 History Summary (8 iterations)\n| Iter | P0 Result | Regressed | Notes |\n|------|-----------|-----------|-------|\n| 1 | ✅ 100 | — | Baseline |\n| 2 | ❌ 71 | DD_004 + IG_003 | After optimization (reverted) |\n| 3 | ❌ 86 | IG_003 | Post-revert flakiness |\n| 4 | ❌ 86 | DD_004 | Flakiness |\n| 5 | ❌ 86 | IG_002 | Flakiness |\n| 6 | ❌ 71 | DD_004 + IG_003 | Flakiness |\n| 7 | ✅ 100 | — | **Lucky pass → full eval** |\n| 8 | ❌ 71 | DD_004 + IG_003 | After optimization, can't evaluate |\n\n**P0 pass rate: 2/8 = 25%** — matches our earlier estimate.\n\n### Impact\n- The iter_07 optimization was applied but **cannot be evaluated** because P0 gate blocked non-P0 questions\n- We cannot determine if the conservative optimization helped or hurt non-P0 scores\n- The orchestrator will likely revert the optimization commits\n\n### Resource Status\n| Metric | Value |\n|--------|-------|\n| Iterations remaining | **2** (9–10) |\n| Full evals completed | **2** (iter_01, iter_07) |\n| P0-blocked | **6** (iters 2–6, 8) |\n| Optimizations applied & validated | **0** |\n\n### Prognosis\nWith 25% P0 pass rate and 2 iterations remaining, expected number of full evals ≈ 0.5. **Reaching target 60 is extremely unlikely.** Even if we pass P0 once more, we'd need the optimization to work AND get favorable variance — a low-probability compound event.",
+    "target_met": false
+  }
+}

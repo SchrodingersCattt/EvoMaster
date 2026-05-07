@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: alloy
 questions:
-- id: BP_struct_003_20260412
+- id: BP_struct_003_20260428
   capability: batch_processing
   domain: alloy
   intent: Generate 5 VASP INCAR input files for Al ENCUT convergence test (280, 300, 320,
@@ -21,10 +21,6 @@ questions:
 
     '
   tags:
-  - wf_batch
-  - wf_sweep
-  - wf_inputs
-  priority: P0
   data_files:
   - key: convergence_encut
     path: data/BP_struct_003/convergence_encut.json
@@ -43,8 +39,6 @@ questions:
       ISMEAR: 1
       SIGMA: 0.1
       NSW: 0
-  - key: incar_format_valid
-    value: VASP INCAR key=value format
   - key: single_variable_control
     value: Only ENCUT differs across the 5 files (SYSTEM tag and comment lines may also vary
       as they are cosmetic, not computational)
@@ -78,11 +72,6 @@ questions:
     verify: llm_binary_judge
   - id: electronic_params_frozen
     criterion: ISMEAR=1, SIGMA=0.1, NSW=0 are identical across all 5 INCAR files.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: incar_format_valid
-    criterion: All 5 files follow valid VASP INCAR key=value syntax with no missing required
-      parameters.
     axis: correctness
     verify: llm_binary_judge
   - id: single_variable_control

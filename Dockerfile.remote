@@ -13,7 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgfortran5 \
     libquadmath0 \
     openbabel \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
+
+# 飞书 Lark CLI
+RUN npm install -g @larksuite/cli
 
 # 安装 Python 依赖（dpdata 的 mol/sdf 格式依赖 rdkit）
 RUN pip install --no-cache-dir \
@@ -32,6 +37,12 @@ RUN pip install --no-cache-dir \
     "mendeleev==1.1.0" \
     "matminer==0.10.0" \
     "pint>=0.24"
+
+# MolCrysKit is installed from the release tarball so this image does not need git.
+ARG MOLCRYS_KIT_REF=v0.2.0
+RUN pip install --no-cache-dir \
+    "https://github.com/SchrodingersCattt/MolCrysKit/archive/refs/tags/${MOLCRYS_KIT_REF}.tar.gz" \
+    "packmol>=21.2.1"
 
 # 默认留空：本地可用 docker build --build-arg 传入。remote-image 流水线由 ci/remote_transfer_prepare.py
 # 构建 wheel 上传 OSS 后，生成 Dockerfile.remote.ci 并替换下面两行中的 URL/SHA 再提交 Bohrium API。

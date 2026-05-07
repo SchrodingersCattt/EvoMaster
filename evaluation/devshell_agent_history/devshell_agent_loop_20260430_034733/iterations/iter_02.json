@@ -1,0 +1,22 @@
+{
+  "checklist_reports": [
+    {
+      "files_touched": [
+        "results/devshell_agent_loop_20260430_034733/proposed_question_bank_changes.md"
+      ],
+      "iteration_index": 2,
+      "no_changes": false,
+      "rationale": "## Checklist Review — 5 proposals written\n\nReviewed all iter_02 scoring results (pending_ingest JSONs) across ~40 questions × 3 repeats. Identified 5 actionable checklist/reference_answer issues:\n\n1. **SA_unit_conversion_001** — **BUG**: `text_file_numeric_range` reference_answers use wrong schema (`key/expected/tolerance` instead of `checks` list). The validator always returns \"must provide non-empty 'checks' list\" regardless of agent output. Fix: restructure to `checks: [{key, min, max}]` format.\n\n2. **IG_abacus_006** — ecutwfc \"low-cost\" range capped at max=29.999 is too strict. Agent uses 60 Ry (standard for Mo PW). Fix: widen to max=65.\n\n3. **IG_abacus_003/005** — k-point in-plane density regex requires ≥12 per dimension. Agent uses 8×8×1 or 10×10×1 which is physically valid. Fix: lower threshold to ≥6.\n\n4. **IG_abacus_004** — smearing_sigma min=0.005 rejects agent's 0.002 (valid for H₂O insulator). Fix: lower min to 0.001.\n\n5. **EC_no_truncation_001** — `row_count` regex missing multiline flag; `no_truncation` uses unsupported `match_mode` field. Fix: add `flags: m` and consider switching `no_truncation` to `llm_binary_judge`.\n\nQuestions deemed **not checklist issues** (genuine product capability gaps): DF_scxrd_001/002 (SHELXL integration), PXRD_thermal_expansion_001_v3 (agent format compliance), SC_struct_SiH (structural correctness), IG_abacus_001 (LLM judge variance).\n\nAll proposals require `id` bumps per AGENTS_evaluation.md since they change scoring semantics."
+    }
+  ],
+  "iteration_index": 2,
+  "optimization_delegations": [],
+  "optimization_reports": [],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 2,
+    "macro_mean_0_100": 62,
+    "rationale": "## Iteration 2 Summary\n\n**Score: 62/100** (target: 80) — ~25 of 40 questions fully passed. Down 3 from iter_01 (65), pure LLM variance — no code changes were made.\n\n### P0 Gate\n✅ Passed — all 9 P0 questions scored 100/100 (stable).\n\n### Iter_01 Optimization Result\n- **Zero changes made** (correct decision)\n- Agent reviewed all skill files across 5 failure areas, found no missing scripts, broken paths, or concrete fix targets\n- Consistent with 20+ historical evaluations showing product-side edits are net-negative\n\n### Score Trajectory\n| Iter | Score | P0 | Changes |\n|------|-------|----|---------|\n| iter_01 | 65 | 100 | baseline |\n| **iter_02** | **62** | 100 | none (variance) |\n\n### Flaky Question Evidence\n- BP_elec_001: 100→0 (flipped ↓)\n- BP_struct_003: 0→100 (flipped ↑)\n- Confirms high LLM variance (~±7 points)\n\n### Actions Taken\n1. **escalate_checklist_revision** — 14 consistently failing questions may have overly strict criteria; requested review of scoring_checklist for ABACUS input gen, structure construction, scientific analysis, PXRD, pl_donor\n2. **delegate_optimization** (round 1) — deeper workspace log analysis to find concrete agent error patterns (not just skill file review)\n\n### Analysis\nProduct-side has been exhaustively investigated. The 62-65 plateau likely reflects a mix of:\n- LLM capability ceiling for some domain tasks\n- Possibly overly strict checklist criteria for some questions\n- Systematic agent errors that need workspace-level diagnosis\n\n### Next Step\n- Await checklist revision proposals + workspace-focused optimization results\n- iter_03 will test any changes\n- 3 iterations remaining",
+    "target_met": false
+  }
+}

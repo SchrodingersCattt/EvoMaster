@@ -1,5 +1,7 @@
 # ABACUS Output Control Parameters
 
+Canonical reference for which **INPUT keywords** produce which **output files**, and for **manual grep** on logs. For scripted extraction and plots after a run, see `matmaster/skills/playground-skills/result-analysis` (`parse_abacus.py`, `plot_publication.py`).
+
 Include in INPUT as needed. Results written to `OUT.ABACUS/`.
 
 | Parameter | Values | Default | Purpose |

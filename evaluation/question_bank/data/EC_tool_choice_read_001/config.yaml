@@ -1,0 +1,17 @@
+simulation:
+  method: DFT
+  functional: PBE
+  basis_set: PAW
+  cutoff_energy: 520
+  k_points: [4, 4, 4]
+  smearing: gaussian
+  sigma: 0.05
+
+structure:
+  formula: Si
+  space_group: Fd-3m
+  lattice_constant: 5.43
+
+output:
+  format: VASP
+  verbosity: normal

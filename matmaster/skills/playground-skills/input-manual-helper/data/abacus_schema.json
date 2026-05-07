@@ -1171,5 +1171,33 @@
     ],
     "name": "cal_cond",
     "param_type": "integer"
+  },
+  {
+    "category": "ionic",
+    "default": null,
+    "description": "Force convergence threshold in eV/Å for ionic relaxation. PREFERRED over force_thr (which uses Ry/Bohr — completely different units). Typical: 0.01 eV/Å for standard accuracy, 0.005 for tight convergence. Relation: force_thr_ev 0.01 ≈ force_thr 3.9e-4 Ry/Bohr. Always use this parameter instead of force_thr to avoid unit confusion.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#force-thr-ev",
+    "name": "force_thr_ev",
+    "param_type": "float",
+    "unit": "eV/Å",
+    "valid_range": [
+      1e-06,
+      10.0
+    ]
+  },
+  {
+    "category": "output",
+    "default": 100,
+    "description": "Chebyshev expansion order for LCAO DOS calculation. REQUIRED when basis_type=lcao and out_dos=1. Higher values give better energy resolution but slower computation. Typical: 100. Without this parameter, LCAO DOS output may be empty or incorrect.",
+    "doc_url": "https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html#dos-nche",
+    "name": "dos_nche",
+    "param_type": "integer",
+    "requires": [
+      "out_dos"
+    ],
+    "valid_range": [
+      10,
+      10000
+    ]
   }
 ]

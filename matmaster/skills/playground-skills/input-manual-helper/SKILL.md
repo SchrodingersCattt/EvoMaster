@@ -59,8 +59,7 @@ uv run python scripts/diagnose_input.py --software abacus --input INPUT
 
 **After generation and diagnosis:**
 - Place INPUT, STRU, KPT, pseudopotentials, and orbital files in one directory.
-- Submit with **`Bohrium`**: `action="submit"`, `input_dir="<dir>"`, `image="registry.dp.tech/dptech/abacus:LTSv3.10.1"`, `cmd="OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1"`, `machine="c32_m128_cpu"`.
-  (Use half the CPU core count for `-np`; e.g. 32-core machine → `mpirun -np 16`.)
+- Submit with **`Bohrium`**: `action="submit"`, `input_dir="<dir>"`, plus **`image`**, **`cmd`**, and **`machine`** from the **Bohrium Submission Defaults** table in `matmaster/skills/abacus/SKILL.md` (do not duplicate those values here).
 
 ### CP2K, QE, ABINIT, LAMMPS, ORCA input generation (render_input.py + diagnose_input.py)
 
@@ -148,7 +147,6 @@ PySCF jobs are Python scripts; no input-file generation is needed. Write the cal
   Usage: `python render_input.py --software <name> --task <task_type> --output <output_file> [--structure <structure_file>] [--overrides <json>]`.
 - **diagnose_input.py** — Validate input file; usage: `python diagnose_input.py --software <name> --input <input_file> [--json_out diag.json]`.
 - **complete_param.py** — (Optional) Auto-complete parameters based on context.
-- **list_references.py** — List available reference templates by software.
 
 ### Validation and reference
 

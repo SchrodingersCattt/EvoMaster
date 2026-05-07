@@ -2,152 +2,6 @@ version: v5
 capability: scientific_analysis
 domain: agnostic
 questions:
-- id: DF_mech_001_20260404
-  capability: scientific_analysis
-  domain: agnostic
-  intent: Fit equation of state from provided E-V data and report V0 and B0.
-  human_prompt_seed: 使用 `ev_curve.json` 中的 E-V 数据拟合 Birch-Murnaghan 状态方程，输出 V0(A3) 与 B0(GPa)。
-  tags:
-  - phy_eos
-  data_files:
-  - key: ev_table
-    path: data/DF_mech_001/ev_curve.json
-    oss_url: ''
-    description: Energy-volume data points for EOS fitting.
-  reference_answers:
-  - key: v0_A3
-    value: 162.0
-    tolerance: 2.0
-  - key: b0_GPa
-    value: 92.0
-    tolerance: 12.0
-  - key: required_fields
-    value:
-    - v0
-    - b0
-    - fit_quality
-  - key: turn_budget
-    value: &id001
-      max: 8
-  - key: duration_budget
-    value: &id002
-      max: 7200000
-  - key: token_budget_total
-    value: &id003
-      max: 8000
-  scoring_checklist:
-  - id: v0_A3
-    criterion: V0 is within tolerance.
-    axis: correctness
-    verify: numerical_range
-  - id: b0_GPa
-    criterion: B0 is within tolerance.
-    axis: correctness
-    verify: numerical_range
-  - id: required_fields
-    criterion: Reports V0, B0, and some measure of fit quality (R-squared, residuals, or similar).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: EOS fitting uses the data from ev_curve.json; fit parameters are derived from
-      the provided E-V points, not hallucinated. Judge solely from the final answer; do not
-      fail because the tool-call log omits MCP, web_search, or any specific tool.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: efficiency_judge
-    criterion: EOS fitting is accomplished in a single fitting step without redundant re-runs
-      or parameter sweeps.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling
-      (tunable per task after calibration).
-    axis: efficiency
-    verify: token_budget
-- id: DF_mech_002_20260404
-  capability: scientific_analysis
-  domain: agnostic
-  intent: From MSST Hugoniot simulation data, fit the P-V Hugoniot curve and determine C-J
-    detonation velocity and pressure for RDX.
-  human_prompt_seed: '读取 `msst_hugoniot.json`，其中包含 RDX 在不同冲击波速度下的 MSST 模拟数据 （压力、比容、温度、是否反应）。筛选完全反应的数据点，拟合
-    P-V Hugoniot 曲线， 通过 Rayleigh 线切线法确定 Chapman-Jouguet (C-J) 点，输出 C-J 爆速 (m/s) 和爆压 (GPa)。
-
-    '
-  tags:
-  - phy_eos
-  priority: P0
-  data_files:
-  - key: msst_data
-    path: data/DF_mech_002/msst_hugoniot.json
-    oss_url: ''
-    description: MSST simulation data at multiple shock velocities for RDX.
-  reference_answers:
-  - key: cj_velocity_m_s
-    value: 8750.0
-    tolerance: 300.0
-  - key: cj_pressure_GPa
-    value: 34.0
-    tolerance: 5.0
-  - key: required_fields
-    value:
-    - cj_velocity
-    - cj_pressure
-    - hugoniot_fit
-    - rayleigh_line
-  - key: turn_budget
-    value: *id001
-  - key: duration_budget
-    value: *id002
-  - key: token_budget_total
-    value: *id003
-  scoring_checklist:
-  - id: cj_velocity_m_s
-    criterion: C-J detonation velocity is within tolerance.
-    axis: correctness
-    verify: numerical_range
-  - id: cj_pressure_GPa
-    criterion: C-J detonation pressure is within tolerance.
-    axis: correctness
-    verify: numerical_range
-  - id: required_fields
-    criterion: Includes Hugoniot curve fitting details, Rayleigh line analysis, and C-J velocity/pressure
-      values.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: C-J parameters are derived from the provided msst_hugoniot.json data, with
-      filtered reaction-complete points shown. Judge solely from the final answer; do not
-      fail because the tool-call log omits MCP, web_search, or any specific tool.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: efficiency_judge
-    criterion: Hugoniot fitting and C-J determination are performed in a direct computation
-      pipeline without unnecessary retries.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling
-      (tunable per task after calibration).
-    axis: efficiency
-    verify: token_budget
 - id: DF_scxrd_001_20260408
   capability: scientific_analysis
   domain: agnostic
@@ -171,8 +25,6 @@ questions:
     '
   tags:
   - char_xrd
-  - char_cif_validation
-  - phy_defect
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_001_20260408/A23050101A0735.hkl
@@ -297,8 +149,6 @@ questions:
     '
   tags:
   - char_xrd
-  - char_cif_validation
-  - phy_defect
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_002_20260408/A23050102A0375.hkl
@@ -405,68 +255,105 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 1.0
-- id: DFT_pxrd_001_20260408
+- id: PXRD_thermal_expansion_001_20260502_v5
   capability: scientific_analysis
   domain: agnostic
   intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
     parameters at each temperature, identify two structural phases (low-temperature RTP and
     high-temperature HTP), and fit linear thermal expansion equations for each phase.
-  human_prompt_seed: '文件 `_td-pxrd_test.txt` 包含一个化合物在 8 个温度下的变温粉末 X 射线衍射（PXRD）数据，温度标签对应关系为：25°C→303K、40°C→323K、60°C→343K、80°C→363K、100°C→383K、115°C→393K、130°C→403K、140°C→413K。该化合物为单斜晶系。
+  human_prompt_seed: "文件 `_td-pxrd_test.txt` 包含一个化合物在 8 个温度下的变温粉末 X 射线衍射（PXRD）数据，温度标签对应关系为：30°C→303K、50°C→323K、70°C→343K、90°C→363K、110°C→383K、120°C→393K、130°C→403K、140°C→413K。该化合物为单斜晶系，空间群提示为 P 21（No. 4），波长为 Cu Kα1，λ = 1.5406 Å。
 
-    请对每个温度的 PXRD 图谱进行 Pawley 精修，提取晶格参数（a、b、c、β、V），并分析结果： 1. 识别两个结构相：低温相（1-RTP，303K–363K）和高温相（1-HTP，383K–413K）；
-    2. 分别对两个相的各晶格参数（a、b、c、β、V）随温度的变化进行线性拟合，给出拟合方程（斜率、截距、R²）； 3. 报告各温度下的精修结果（晶格参数与 Rp/Rwp 指标）。
+    数据特征与精修策略：
+    - 数据为实测变温实验数据，扣除背景前的动态范围约 10×–30×；2θ 范围 5°–50°，建议精修使用 14°–50° 区间以避开低角伪影。
+    - 推荐将数据按相拆分（RTP 4 点、HTP 4 点）分别精修，并在同一相内启用 chain-cell（前一温度精修结果作为下一温度初猜）。
+    - 同相内的体积/晶胞参数应单调或近似单调随温度变化；若某温度精修结果 V 相对邻近温度跳变 >5%，应视为收敛到错误盆地（可能为 √2 或 2× 的伪解），需要从相邻温度结果重新初始化或多起点重精修。
 
-    '
+    文献参考晶胞（每相分别作为 Pawley 精修初猜，并基于此自由精修；c 与 β 是单斜结构敏感参数，如下文献值已对每相核对）：
+    - 低温相 RTP（303K – 363K）：a ≈ 10.83 Å, b ≈ 9.62 Å, c ≈ 10.13 Å, β ≈ 108.75°, V ≈ 1000 Å³
+    - 高温相 HTP（383K – 413K）：a ≈ 11.05 Å, b ≈ 9.48 Å, c ≈ 10.48 Å, β ≈ 111.25°, V ≈ 1023 Å³
+
+    请对每个温度的 PXRD 图谱进行 Pawley 精修，提取晶格参数（a、b、c、β、V），并分析结果：
+    1. 识别两个结构相：低温相（1-RTP，303K–363K）和高温相（1-HTP，383K–413K）。
+    2. 分别对两个相的各晶格参数（a、b、c、β、V）随温度的变化进行线性拟合，给出拟合方程（斜率、截距、R²）。两相必须分别独立拟合，不能合并为一条直线，且 RTP 与 HTP 的斜率应基于各相内的 4 个温度点分别计算（不要让两相共享同一斜率值）。
+    3. 报告各温度下的精修结果。每个温度必须使用 Pawley 脚本（如 `gsas2_pawley.py`）输出 JSON 中真实的 volume（由收敛后的 a/b/c/β 计算得到），不要将 prompt 中的近似初猜（V ≈ 1000、1023 Å³）当作精修结果填入答案。
+
+    【机器评分约定】最终答案末尾追加一个 eval_results 标签包裹的 JSON 块（数值无单位，约定单位为 Å / Å³ / Å·K⁻¹ / Å³·K⁻¹），至少需含以下 dot-path（其余字段如其它温度、b/beta、intercept、r_squared 可按情况补充；fits 为同相内 4 点线性拟合，RTP 与 HTP 必须独立）：
+
+    - rtp.{303K,363K}.V，rtp.303K.a，rtp.fits.V.slope，rtp.fits.a.slope
+    - htp.{383K,413K}.V，htp.383K.a，htp.fits.V.slope，htp.fits.c.slope
+
+    数值必须来自实际 Pawley 精修与线性拟合，不得填入 prompt 中的初猜近似值。
+    "
   tags:
   - char_xrd
-  - phy_phonon
-  - wf_postprocess
   data_files:
   - key: vt_pxrd_data
-    path: data/DFT_pxrd_001_20260408/_td-pxrd_test.txt
-    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/DF_thermo_001_20260408/1775629319__td-pxrd_test.txt
-    description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K), CSV format
-      with paired (2theta, intensity) columns for each temperature.
+    path: data/PXRD_thermal_expansion_001_20260502_v5/_td-pxrd_test.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/PXRD_thermal_expansion_001_20260427_v3/1777279719__td-pxrd_test.txt
+    description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K, °C labels
+      30/50/70/90/110/120/130/140), CSV format with paired (2theta, intensity) columns per
+      temperature. Generated from real laboratory diffractometer scans (Cu Kα1, 5°–50° 2θ,
+      step 0.0197°).
   reference_answers:
   - key: rtp_V_303K
-    value: 999.81
-    tolerance: 20.0
+    value:
+      json_path: rtp.303K.V
+      target: 999.81
+      tolerance: 20.0
     unit: A3
   - key: rtp_V_363K
-    value: 1011.67
-    tolerance: 20.0
+    value:
+      json_path: rtp.363K.V
+      target: 1011.67
+      tolerance: 20.0
     unit: A3
   - key: htp_V_383K
-    value: 1022.73
-    tolerance: 20.0
+    value:
+      json_path: htp.383K.V
+      target: 1022.73
+      tolerance: 20.0
     unit: A3
   - key: htp_V_413K
-    value: 1026.1
-    tolerance: 20.0
+    value:
+      json_path: htp.413K.V
+      target: 1026.1
+      tolerance: 20.0
     unit: A3
   - key: rtp_a_303K
-    value: 10.828
-    tolerance: 0.05
+    value:
+      json_path: rtp.303K.a
+      target: 10.828
+      tolerance: 0.05
     unit: A
   - key: htp_a_383K
-    value: 11.0506
-    tolerance: 0.05
+    value:
+      json_path: htp.383K.a
+      target: 11.0506
+      tolerance: 0.05
     unit: A
   - key: rtp_V_slope
-    value: 0.2013
-    tolerance: 0.06
+    value:
+      json_path: rtp.fits.V.slope
+      target: 0.2013
+      tolerance: 0.08
     unit: A3/K
   - key: htp_V_slope
-    value: 0.1154
-    tolerance: 0.06
+    value:
+      json_path: htp.fits.V.slope
+      target: 0.1154
+      tolerance: 0.06
     unit: A3/K
   - key: rtp_a_slope
-    value: 0.00129
-    tolerance: 0.0006
+    value:
+      json_path: rtp.fits.a.slope
+      target: 0.00129
+      tolerance: 0.0006
     unit: A/K
   - key: htp_c_slope
-    value: -0.00053
-    tolerance: 0.0006
+    value:
+      json_path: htp.fits.c.slope
+      target: -0.00053
+      tolerance: 0.0006
     unit: A/K
   - key: required_fields
     value:
@@ -474,74 +361,82 @@ questions:
     - HTP
     - slope
     - intercept
+  - key: grounding_source
+    value:
+      filename: _td-pxrd_test.txt
   - key: turn_budget
     value:
-      max: 20
+      max: 120
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 12000
+      max: 100000
   scoring_checklist:
   - id: rtp_V_303K
-    criterion: Refined unit cell volume at 303 K (RTP phase) is within tolerance of 999.81
-      Å³.
+    criterion: 'Refined unit cell volume V at the RTP phase / T=303 K is within tolerance
+      (target 999.81 ± 20.0 Å³). Read from the eval_results JSON path rtp.303K.V.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.5
   - id: rtp_V_363K
-    criterion: Refined unit cell volume at 363 K (RTP phase) is within tolerance of 1011.67
-      Å³.
+    criterion: 'Refined unit cell volume V at RTP / T=363 K is within tolerance (target
+      1011.67 ± 20.0 Å³). Read from eval_results path rtp.363K.V.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.0
   - id: htp_V_383K
-    criterion: Refined unit cell volume at 383 K (HTP phase) is within tolerance of 1022.73
-      Å³.
+    criterion: 'Refined unit cell volume V at HTP / T=383 K is within tolerance (target
+      1022.73 ± 20.0 Å³). Read from eval_results path htp.383K.V.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.5
   - id: htp_V_413K
-    criterion: Refined unit cell volume at 413 K (HTP phase) is within tolerance of 1026.10
-      Å³.
+    criterion: 'Refined unit cell volume V at HTP / T=413 K is within tolerance (target
+      1026.10 ± 20.0 Å³). Read from eval_results path htp.413K.V.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.0
   - id: rtp_a_303K
-    criterion: Refined lattice parameter a at 303 K (RTP phase) is within tolerance of 10.828
-      Å.
+    criterion: 'Refined lattice parameter a at RTP / T=303 K is within tolerance (target
+      10.828 ± 0.05 Å). Read from eval_results path rtp.303K.a.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.0
   - id: htp_a_383K
-    criterion: Refined lattice parameter a at 383 K (HTP phase) is within tolerance of 11.0506
-      Å.
+    criterion: 'Refined lattice parameter a at HTP / T=383 K is within tolerance (target
+      11.0506 ± 0.05 Å). Read from eval_results path htp.383K.a.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.0
   - id: rtp_V_slope
-    criterion: Linear fit slope of V vs T for RTP phase (303–363 K) is within tolerance of
-      0.2013 Å³/K.
+    criterion: 'Linear-fit slope of V vs T over the four RTP temperatures (303/323/343/363 K)
+      is within tolerance (target 0.2013 ± 0.08 Å³/K). Read from eval_results path
+      rtp.fits.V.slope.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 2.0
   - id: htp_V_slope
-    criterion: Linear fit slope of V vs T for HTP phase (383–413 K) is within tolerance of
-      0.1154 Å³/K.
+    criterion: 'Linear-fit slope of V vs T over the four HTP temperatures (383/393/403/413 K)
+      is within tolerance (target 0.1154 ± 0.06 Å³/K). Read from eval_results path
+      htp.fits.V.slope.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 2.0
   - id: rtp_a_slope
-    criterion: Linear fit slope of a vs T for RTP phase is within tolerance of 0.00129 Å/K.
+    criterion: 'Linear-fit slope of a vs T over the four RTP temperatures (303/323/343/363 K)
+      is within tolerance (target 0.00129 ± 0.0006 Å/K). Read from eval_results path
+      rtp.fits.a.slope.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.5
   - id: htp_c_slope
-    criterion: Linear fit slope of c vs T for HTP phase is within tolerance of -0.00053 Å/K
-      (negative thermal expansion along c axis in HTP phase).
+    criterion: 'Linear-fit slope of c vs T over the four HTP temperatures (383/393/403/413 K)
+      is within tolerance (target -0.00053 ± 0.0006 Å/K). Read from eval_results path
+      htp.fits.c.slope.'
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
     weight: 1.5
   - id: required_fields
     criterion: Answer reports both RTP and HTP phases with linear fit equations including
@@ -579,5 +474,277 @@ questions:
   - id: token_budget_total
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling
       (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: PXRD_pawley_303K_001_20260502_v1
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Perform Pawley refinement on a single PXRD pattern at 303 K to extract all
+    lattice parameters (a, b, c, beta, V) and report the weighted profile R-factor (wR).
+  human_prompt_seed: "文件 `pxrd_303K.xy` 是一个有机-无机杂化硝普盐在 303 K（30 °C）下采集的粉末 X
+    射线衍射（PXRD）数据（Cu Kα1, λ = 1.5406 Å, 2θ 范围 5°–50°, 步长 ~0.02°, 两列格式: 2θ 强度）。
+
+    该化合物为单斜晶系，空间群 P 21（No. 4）。文献参考晶胞：a ≈ 10.83 Å, b ≈ 9.62 Å, c ≈ 10.13 Å,
+    beta ≈ 108.75°, V ≈ 1000 Å³。
+
+    精修策略建议：
+    - 建议使用 14°–50° 2θ 区间以避开低角伪影
+    - 基线 / 背景函数使用低阶（0–1 阶）以避免过拟合
+    - 若多次精修收敛到不同盆地，选择 wR 最低且体积与初猜偏差最小的结果
+
+    请对该 PXRD 图谱进行 Pawley 精修，提取精修后的晶格参数并报告精修质量。
+
+    【机器评分约定】最终答案末尾追加一个 eval_results 标签包裹的 JSON 块（数值无单位，约定：
+    a/b/c 单位 Å, beta 单位°, V 单位 Å³, wR 单位 %），格式如下：
+
+    <eval_results>
+    {\"a\": ..., \"b\": ..., \"c\": ..., \"beta\": ..., \"V\": ..., \"wR\": ...}
+    </eval_results>
+
+    数值必须来自实际 Pawley 精修结果，不得填入 prompt 中的初猜近似值。
+    "
+  tags:
+  - char_xrd
+  data_files:
+  - key: pxrd_data
+    path: data/PXRD_pawley_303K_001_20260502_v1/pxrd_303K.xy
+    oss_url: ''
+    description: PXRD pattern at 303 K (Cu Kalpha1, 5-50 deg 2theta), two-column
+      format (2theta, intensity). Generated from real laboratory diffractometer scan.
+  reference_answers:
+  - key: cell_a
+    value:
+      json_path: a
+      target: 10.828
+      tolerance: 0.04
+    unit: A
+  - key: cell_b
+    value:
+      json_path: b
+      target: 9.57
+      tolerance: 0.08
+    unit: A
+  - key: cell_c
+    value:
+      json_path: c
+      target: 10.14
+      tolerance: 0.06
+    unit: A
+  - key: cell_beta
+    value:
+      json_path: beta
+      target: 108.1
+      tolerance: 1.2
+    unit: deg
+  - key: cell_V
+    value:
+      json_path: V
+      target: 997.0
+      tolerance: 12.0
+    unit: A3
+  - key: wR_factor
+    value:
+      json_path: wR
+      target: 16.0
+      tolerance: 4.0
+    unit: percent
+  - key: grounding_source
+    value:
+      filename: pxrd_303K.xy
+  - key: turn_budget
+    value:
+      max: 60
+  - key: duration_budget
+    value:
+      max: 3600000
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: cell_a
+    criterion: 'Refined lattice parameter a is within tolerance (target 10.828 ± 0.04 Å).
+      Read from the eval_results JSON path a.'
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: cell_b
+    criterion: 'Refined lattice parameter b is within tolerance (target 9.57 ± 0.08 Å).
+      Read from the eval_results JSON path b.'
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: cell_c
+    criterion: 'Refined lattice parameter c is within tolerance (target 10.14 ± 0.06 Å).
+      Read from the eval_results JSON path c.'
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: cell_beta
+    criterion: 'Refined monoclinic angle beta is within tolerance (target 108.1 ± 1.2°).
+      Read from the eval_results JSON path beta.'
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: cell_V
+    criterion: 'Refined unit cell volume V is within tolerance (target 997.0 ± 12.0 Å³).
+      Read from the eval_results JSON path V.'
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 2.0
+  - id: wR_factor
+    criterion: 'Weighted profile R-factor wR is within tolerance (target 16.0 ± 4.0 %).
+      Read from the eval_results JSON path wR.'
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.0
+  - id: grounding_source
+    criterion: Lattice parameters and wR are derived from Pawley refinement of the
+      provided PXRD data file, not from literature values or hallucination. Judge from
+      the final answer and stated methodology.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: efficiency_judge
+    criterion: Pawley refinement is performed in a direct pipeline without unnecessary
+      repeated refinements or redundant parameter sweeps.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) does not exceed 1 hour.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: SA_unit_conversion_001_20260430
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Correctly convert energy values between Rydberg and eV units.
+  human_prompt_seed: '以下是一组 Quantum ESPRESSO 计算得到的能量数据（单位 Ry）：
+
+    - Total energy: -158.73 Ry
+
+    - Fermi energy: 0.4521 Ry
+
+    - Band gap: 0.0834 Ry
+
+    请将这三个值转换为 eV 单位（1 Ry = 13.6057 eV），并将结果写入 `energy_ev.json`，格式为
+    {"total_energy_eV": ..., "fermi_energy_eV": ..., "band_gap_eV": ...}，保留 4 位小数。'
+  tags:
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: energy_ev.json
+  - key: total_energy_check
+    value:
+      filename: energy_ev.json
+      checks:
+        - key: total_energy_eV
+          min: -2160.3
+          max: -2158.3
+  - key: fermi_energy_check
+    value:
+      filename: energy_ev.json
+      checks:
+        - key: fermi_energy_eV
+          min: 6.05
+          max: 6.25
+  - key: band_gap_check
+    value:
+      filename: energy_ev.json
+      checks:
+        - key: band_gap_eV
+          min: 1.085
+          max: 1.185
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 6000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `energy_ev.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: total_energy_check
+    criterion: Total energy conversion is correct (≈ -2159.3 eV ± 1.0).
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: fermi_energy_check
+    criterion: Fermi energy conversion is correct (≈ 6.15 eV ± 0.1).
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: band_gap_check
+    criterion: Band gap conversion is correct (≈ 1.135 eV ± 0.05).
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: SA_feasibility_001_20260428
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Agent should assess feasibility and refuse or warn when a computation request
+    is clearly infeasible.
+  human_prompt_seed: '我需要对一个 10000 原子的非晶 SiO2 体系进行 DFT 自洽计算（PBE 泛函，平面波基组，截断能 500 eV）。
+
+    请帮我生成 VASP 输入文件并评估这个计算是否可行。'
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: feasibility_warning
+    criterion: Agent clearly warns that DFT calculation on 10000 atoms is computationally
+      infeasible (would require enormous memory and time, O(N^3) scaling).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: scale_analysis
+    criterion: Agent provides a quantitative or semi-quantitative explanation of why
+      this is infeasible (e.g., memory estimate, time estimate, comparison to typical
+      DFT limits of ~1000 atoms).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: alternative_suggestion
+    criterion: Agent suggests practical alternatives (e.g., classical MD, machine
+      learning potentials, smaller representative cell, AIMD on subset).
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget

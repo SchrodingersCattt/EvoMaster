@@ -110,14 +110,17 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
         run_meta={"source": "test"},
     )
 
+    # mat_sg now only ships sampling + job-control tools in the schema cache;
+    # this patch narrows that further to a single CALYPSO submit tool to prove
+    # mcp_runtime_patch can override mcp.yaml.
     exp_cfg = ExpConfig(
         tools=ExpToolsConfig(builtin=["execute_bash"]),
         skills=ExpSkillsConfig(
             enabled=True,
-            skills_root=["matmaster/skills/lazymcp/mcp-mat-sg"],
+            skills_root=["matmaster/skills/atomic-structure/sample-atomic-structures"],
             mcp_runtime_patch={
                 "tool_include_only": {
-                    "mat_sg": ["generate_ordered_replicas"],
+                    "mat_sg": ["submit_generate_calypso_structures"],
                 },
             },
             cache_dir="matmaster/cache",
@@ -136,11 +139,18 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
             assert "mat_sg_build_surface_slab" not in _tool_names(reg)
 
             use_skill = next(t for t in reg.all_tools if t.name == "use_skill")
-            await use_skill.execute({"skill_name": "mcp-mat-sg", "action": "get_info"})
+            await use_skill.execute(
+                {"skill_name": "sample-atomic-structures", "action": "get_info"}
+            )
             names = _tool_names(reg)
+            # Build/transform/assemble tools no longer ship in the schema cache.
             assert "mat_sg_build_surface_slab" not in names
-            assert "mat_sg_generate_ordered_replicas" in names
+            assert "mat_sg_generate_ordered_replicas" not in names
             assert "mat_sg_get_structure_info" not in names
+            # Patch narrows the surviving sampling+job-control set to one tool.
+            assert "mat_sg_submit_generate_calypso_structures" in names
+            assert "mat_sg_submit_generate_crystalformer_structures" not in names
+            assert "mat_sg_query_job_status" not in names
         finally:
             await exp._run_cleanup_callbacks()
 

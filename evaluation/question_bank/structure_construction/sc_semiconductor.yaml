@@ -12,8 +12,7 @@ questions:
 
     '
   tags:
-  - phy_surface
-  - mat_2d
+  - struct_surface
   data_files:
   - key: hetero_spec
     path: data/SC_struct_001/hetero_spec.json
@@ -103,7 +102,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260412
+- id: SC_struct_SiH_20260423
   capability: structure_construction
   domain: semiconductor
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab with
@@ -114,7 +113,7 @@ questions:
 
     '
   tags:
-  - phy_surface
+  - struct_surface
   data_files:
   - key: hydrogen_cap_spec
     path: data/SC_struct_003/hydrogen_cap_spec.json

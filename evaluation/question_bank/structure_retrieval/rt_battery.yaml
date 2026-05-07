@@ -21,7 +21,6 @@ questions:
     注意：本题是结构检索与汇总，不要求后续计算。'
   tags:
   - meta_database
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: candidates_json

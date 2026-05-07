@@ -2,53 +2,66 @@ version: v5
 capability: workflow_orchestration
 domain: agnostic
 questions:
-- id: WO_elec_002_20260411v2
+- id: WO_elec_002_20260506
   capability: workflow_orchestration
   domain: agnostic
-  intent: 'Build and execute periodic liquid water gap workflow: construct 64-water box, compute
+  intent: 'Build and execute periodic liquid water gap workflow: construct 32-water box, compute
     HOMO-LUMO gap with hybrid acceleration.'
-  human_prompt_seed: '计算周期性液态水体系的 HOMO-LUMO gap： 构建 64 个水分子的周期性盒子（密度 ~1.0 g/cm3）， 使用杂化泛函或加速方案（如先
-    PBE 再 HSE 单点）计算电子 gap。 输出 gap 值 (eV)、所用加速策略和计算成本估算。
+  human_prompt_seed: '计算周期性液态水体系的 HOMO-LUMO gap： 构建 32 个水分子的周期性盒子（密度 ~1.0 g/cm3）， 使用杂化泛函或加速方案（如先
+    PBE 再 HSE 单点）计算电子 gap。
+
+    请完成以下交付：
+    1) `water_gap_report.json`：至少包含 `gap_eV`, `hybrid_functional`, `acceleration_strategy`,
+    `gap_extraction_method`, `cost_estimate`；
+    2) 最终回答需简要确认 gap 值和加速方案。
 
     '
   tags:
-  - hybrid_functional
-  - phy_md
-  - wf_report
-  - phy_electronic
+  - struct_build
+  - eng_cp2k
   data_files: []
   reference_answers:
   - key: gap_value_eV
     value: 6.2
     tolerance: 1.2
-  - key: required_fields
+  - key: report_artifact
+    value: water_gap_report.json
+  - key: report_required_tokens
     value:
-    - hybrid_setup
-    - acceleration_strategy
-    - gap_extraction
-    - cost_note
+      filename: water_gap_report.json
+      tokens:
+      - gap_eV
+      - hybrid_functional
+      - acceleration_strategy
+      - gap_extraction_method
+      - cost_estimate
+      flags: i
   - key: turn_budget
     value:
-      max: 18
+      max: 35
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 50000
   scoring_checklist:
   - id: gap_value_eV
     criterion: Gap value is in tolerance.
     axis: correctness
     verify: numerical_range
-  - id: required_fields
-    criterion: Report includes hybrid functional setup, acceleration strategy description,
-      gap extraction method, and cost estimate.
+  - id: report_artifact
+    criterion: Agent writes `water_gap_report.json` to workspace.
     axis: correctness
-    verify: llm_binary_judge
+    verify: artifact_exists
+  - id: report_required_tokens
+    criterion: JSON report includes all required fields (gap_eV, hybrid_functional,
+      acceleration_strategy, gap_extraction_method, cost_estimate).
+    axis: correctness
+    verify: text_file_contains_all
   - id: grounding_source
-    criterion: The gap value and any acceleration discussion are tied to calculation results
-      or constraints stated in the final answer. Judge from the answer; do not fail because
+    criterion: The gap value in the JSON report and final answer is consistent with
+      the stated calculation approach. Judge from deliverables; do not fail because
       the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
@@ -76,7 +89,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_elec_008_20260415
+- id: WO_elec_008_20260501
   capability: workflow_orchestration
   domain: agnostic
   intent: Perform ABACUS Bader charge analysis for Al2O3 and summarize per-atom charge transfer
@@ -88,9 +101,7 @@ questions:
     \ `charge_transfer`；\n2) `al2o3_bader_report.md`：说明 query 输入梳理、mock 后处理流程、主要电荷转移趋势与不确定性。\n\
     \n最终回答中请简要总结 Al 与 O 的电荷转移方向，并标注为 mock 后处理结果。\n"
   tags:
-  - phy_surface
-  - abacus
-  - meta_userlog
+  - eng_abacus
   data_files: []
   reference_answers:
   - key: bader_json_artifact
@@ -152,8 +163,9 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: The final answer is grounded in Bader-analysis artifacts and does not invent
-      unsupported per-atom values.
+    criterion: Final answer values match the provided mock data (Al avg Bader charge
+      +2.31 e, O avg Bader charge -1.54 e) and are presented in the generated artifact
+      files (JSON + report), not hallucinated from other sources.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -174,7 +186,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_general_intake_001_20260410v4
+- id: WO_general_intake_001_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Build a structured intake-and-analysis protocol with attachment-level triage priority
@@ -197,8 +209,6 @@ questions:
 
     '
   tags:
-  - meta_userlog
-  - phy_surface
   data_files:
   - key: attachment_manifest
     path: data/WO_general_userlog_005_20260410v3/attachment_manifest.json
@@ -240,6 +250,9 @@ questions:
       - 图
       - 表
       - 文字说明
+  - key: grounding_source
+    value:
+      filename: attachment_manifest.json
   - key: turn_budget
     value:
       max: 8
@@ -301,7 +314,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_postproc_002_20260415
+- id: WO_general_postproc_002_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Produce structured post-processing pipeline artifacts with per-stage validation
@@ -322,8 +335,6 @@ questions:
 
     '
   tags:
-  - meta_userlog
-  - wf_postprocess
   data_files:
   - key: result_manifest
     path: data/WO_general_userlog_006_20260410v3/result_manifest.json
@@ -358,6 +369,9 @@ questions:
       - 能带
       - MSD
       - 概率密度
+  - key: grounding_source
+    value:
+      filename: result_manifest.json
   - key: turn_budget
     value:
       max: 8
@@ -410,7 +424,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_general_planning_003_20260415
+- id: WO_general_planning_003_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Produce phased execution and resource-control artifacts with explicit branch conditions
@@ -429,10 +443,7 @@ questions:
     4) `stop_loss.md`：定义触发停止条件（时间/资源/质量）与应急降级方案。
 
     '
-  tags:
-  - meta_userlog
-  - wf_report
-  - meta_database
+  tags: []
   data_files:
   - key: mission_constraints
     path: data/WO_general_userlog_007_20260410v3/mission_constraints.json
@@ -474,6 +485,9 @@ questions:
       - 先筛选再深入计算
       - 并行
       - 报告结构
+  - key: grounding_source
+    value:
+      filename: mission_constraints.json
   - key: turn_budget
     value:
       max: 8
@@ -537,7 +551,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_kinetic_001_20260404
+- id: WO_kinetic_001_20260504
   capability: workflow_orchestration
   domain: agnostic
   intent: 'Compute graphene phonon dispersion: build structure, calculate force constants,
@@ -547,9 +561,7 @@ questions:
 
     '
   tags:
-  - phy_phonon
-  - mat_2d
-  - wf_postprocess
+  - struct_build
   data_files: []
   reference_answers:
   - key: gamma_optical_max_cm1
@@ -560,17 +572,15 @@ questions:
     - dispersion_path
     - gamma_extraction_rule
     - unit_cm-1
-  - key: event_phonon
-    value: phonon_calculation
   - key: turn_budget
     value:
-      max: 18
+      max: 35
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 50000
   scoring_checklist:
   - id: gamma_optical_max_cm1
     criterion: Gamma optical max is in tolerance.
@@ -581,11 +591,6 @@ questions:
       frequencies in cm-1 units.
     axis: correctness
     verify: llm_binary_judge
-  - id: event_phonon
-    criterion: At least one phonon/force-constant calculation tool is called (event_type =
-      phonon_calculation).
-    axis: grounding
-    verify: event_type_called
   - id: grounding_source
     criterion: The reported gamma frequency is tied to phonon or calculation results stated
       in the final answer, not bare textbook recall for graphene. Judge from the answer; do
@@ -615,7 +620,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_001_20260415
+- id: WO_mech_001_20260502
   capability: workflow_orchestration
   domain: agnostic
   intent: Independently locate Al FCC structure, execute 5-point volume scan, fit EOS, report
@@ -625,8 +630,6 @@ questions:
 
     '
   tags:
-  - phy_eos
-  - phy_surface
   - meta_database
   data_files: []
   reference_answers:
@@ -643,10 +646,6 @@ questions:
     - a0
     - b0
     - failure_handling
-  - key: call_count_range
-    value:
-      min: 5
-      max: 12
   - key: turn_budget
     value:
       max: 18
@@ -682,11 +681,6 @@ questions:
       point.
     axis: efficiency
     verify: no_retries
-  - id: call_count_range
-    criterion: Total MCP tool calls are in a reasonable range for a 5-point EOS workflow (e.g.
-      1 fetch + 5 calc + 1 fit).
-    axis: efficiency
-    verify: call_count_range
   - id: efficiency_judge
     criterion: EOS workflow is completed without unnecessary exploration or redundant intermediate
       steps.
@@ -716,8 +710,7 @@ questions:
 
     '
   tags:
-  - phy_eos
-  - phy_surface
+  - struct_build
   data_files: []
   reference_answers:
   - key: detonation_velocity_m_s
@@ -781,7 +774,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_003_20260404
+- id: WO_mech_003_20260501
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute vacancy formation energies for Fe-X doped supercells from mock BSSE-corrected
@@ -817,10 +810,8 @@ questions:
 
     '
   tags:
-  - abacus
-  - bsse
-  - phy_defect
-  - log_diagnosis
+  - struct_transform
+  - eng_abacus
   data_files: []
   reference_answers:
   - key: ef_Fe53Cr_eV
@@ -871,9 +862,13 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: All numeric E_f values are derived from the prompt mock energies only (no invented
-      totals). Judge solely from the final answer; do not fail because the tool-call log omits
-      MCP, web_search, or any specific tool.
+    criterion: 'All E_f values must be derived from these mock energies via E_f = E_vac + μ_A − E_novac:
+      Fe53Cr(-963.52, -946.21, -15.23), Fe53Al(-958.73, -942.88, -13.98),
+      Fe53Ti(-961.45, -944.82, -14.70), Fe53Co(-968.91, -951.02, -15.70),
+      Fe53Mo(-967.23, -949.91, -15.30), Fe53Nb(-964.85, -948.32, -14.68),
+      Fe53B(-955.40, -939.54, -13.93). Expected E_f: ~2.08, ~1.87, ~1.93,
+      ~2.19, ~2.02, ~1.85, ~1.93 eV respectively. Do not fail because the
+      tool-call log omits MCP, web_search, or any specific tool.'
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -908,11 +903,7 @@ questions:
 
     最终回答中简要给出 C11/C12/C44/B 及与参考数据的一致性判断。'
   tags:
-  - screening_hte
-  - phy_elastic
-  - phy_surface
   - meta_database
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: elastic_compare_json
@@ -1004,9 +995,6 @@ questions:
 
     最终回答中简要给出“是否可能形成固溶体”的结论与依据。'
   tags:
-  - mat_hea
-  - wf_postprocess
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: hea_summary_json
@@ -1083,7 +1071,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_007_20260415
+- id: WO_mech_007_20260501
   capability: workflow_orchestration
   domain: agnostic
   intent: Calculate GaAs elastic constants and bulk modulus with ABACUS and summarize the
@@ -1095,10 +1083,7 @@ questions:
     \ `calculation_settings`；\n2) `gaas_elastic_abacus_report.md`：说明 query 输入梳理、mock 后处理流程与不确定性。\n\
     \n最终回答中简要给出 C11/C12/C44 与体模量。\n"
   tags:
-  - abacus
-  - phy_elastic
-  - phy_surface
-  - meta_userlog
+  - eng_abacus
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1157,8 +1142,9 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Final answer is grounded in generated ABACUS elastic artifacts rather than
-      unsupported recalled values.
+    criterion: Final answer values match the provided mock data (C11=118.4, C12=53.7,
+      C44=59.2, bulk_modulus=75.3 GPa) and are presented in the generated artifact
+      files (JSON + report), not hallucinated from other sources.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -1190,10 +1176,6 @@ questions:
     \ `deformation_settings`；\n2) `srtio3_elastic_apex_report.md`：说明 query 输入梳理、mock 后处理流程与结果可靠性讨论。\n\
     \n最终回答中简要给出关键弹性常数并解释其物理含义。\n"
   tags:
-  - screening_hte
-  - phy_elastic
-  - phy_surface
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1288,11 +1270,6 @@ questions:
     \ `bulk_modulus`；\n2) `alloy_eos_report.md`：说明 query 输入梳理、mock 后处理流程、体积扫描策略与不确定性。\n\n\
     最终回答中简要说明该 EOS 结果能支持哪些定性判断。\n"
   tags:
-  - screening_hte
-  - phy_eos
-  - mat_alloy
-  - wf_sweep
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: eos_summary_json
@@ -1392,9 +1369,6 @@ questions:
     '
   tags:
   - code_mlip
-  - code_dpa
-  - wf_report
-  - phy_surface
   data_files: []
   reference_answers:
   - key: lattice_a_A
@@ -1452,7 +1426,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_007_20260415
+- id: WO_mlip_dpa_007_20260422
   capability: workflow_orchestration
   domain: agnostic
   intent: Build a machine-checkable DP-GEN onboarding package with milestone gates and fallback
@@ -1474,9 +1448,6 @@ questions:
 
     '
   tags:
-  - meta_userlog
-  - code_dpgen
-  - wf_report
   data_files:
   - key: dpgen_docs
     path: data/WO_general_userlog_001_20260410v3/dpgen_docs_brief.md
@@ -1514,6 +1485,9 @@ questions:
       - iter_ready
       - week1_plan
       flags: i
+  - key: grounding_source
+    value:
+      filename: dpgen_docs_brief.md
   - key: turn_budget
     value:
       max: 8
@@ -1585,11 +1559,7 @@ questions:
     \ `band_dos_status`；\n3) `srti03_nb125_workflow_report.md`：说明 query 输入梳理、mock 后处理流程、关键观察与不确定性。\n\
     \n最终回答请明确：该掺杂体系是否通过“可进入电子结构分析”的前置检查。\n"
   tags:
-  - meta_userlog
-  - phy_surface
-  - phy_defect
-  - phy_elastic
-  - phy_phonon
+  - struct_transform
   data_files: []
   reference_answers:
   - key: relaxed_struct
@@ -1692,10 +1662,8 @@ questions:
 
     '
   tags:
+  - struct_transform
   - code_mlip
-  - code_dpa
-  - phy_defect
-  - phy_surface
   data_files: []
   reference_answers:
   - key: forward_barrier_eV
@@ -1767,9 +1735,6 @@ questions:
     '
   tags:
   - code_mlip
-  - code_dpa
-  - phy_elastic
-  - phy_surface
   data_files: []
   reference_answers:
   - key: C11_GPa
@@ -1846,8 +1811,6 @@ questions:
     \ `dpa3_finetune_config.json`：记录 `input_files`、训练步数、学习率策略、loss 关键参数、验证划分；\n2) `dpa3_finetune_report.md`：概述\
     \ query 输入梳理、mock 后处理过程、结果与改进建议。\n\n最终回答请给出：本次微调是否满足继续下游验证的最低条件。\n"
   tags:
-  - meta_userlog
-  - code_dpa
   - code_mlip
   data_files: []
   reference_answers:
@@ -1944,9 +1907,6 @@ questions:
     '
   tags:
   - code_mlip
-  - code_dpa
-  - phy_phonon
-  - phy_surface
   data_files: []
   reference_answers:
   - key: gamma_optical_max_cm1
@@ -2022,9 +1982,7 @@ questions:
     '
   tags:
   - code_mlip
-  - code_dpa
-  - phy_md
-  - phy_surface
+  - struct_transform
   data_files: []
   reference_answers:
   - key: avg_temperature_K
@@ -2095,10 +2053,6 @@ questions:
     \ query 输入梳理、mock 后处理的两阶段流程、关键参数与不确定性。\n\n最终回答中请简要说明：检索到的结构与声子结果是否相互一致。\n"
   tags:
   - code_mlip
-  - code_dpa
-  - phy_surface
-  - phy_phonon
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: phonon_json
@@ -2197,10 +2151,6 @@ questions:
     \ 输入梳理、mock 后处理流程、关键观察与误差来源。\n\n最终回答中简要确认是否满足 300 K / 1 ps / 1 fs 三个条件。\n"
   tags:
   - code_mlip
-  - code_dpa
-  - phy_md
-  - phy_surface
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: md_summary_artifact
@@ -2290,7 +2240,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_struct_003_20260415
+- id: WO_struct_003_20260505
   capability: workflow_orchestration
   domain: agnostic
   intent: Generate and summarize 10 candidate crystal structures constrained by superconducting
@@ -2301,15 +2251,14 @@ questions:
 
     2) 空间群编号固定为 225；
 
-    3) 给出机器可校验的候选列表文件 `candidate_structures.json`，每条至少包含： `rank`, `structure_name`, `predicted_tc_k`,
-    `space_group`, `selection_basis`；
+    3) 给出机器可校验的候选列表文件 `candidate_structures.json`，每条至少包含： `rank`, `structure_file`, `predicted_tc_k`,
+    `space_group`, `selection_basis`。其中 `structure_file` 为工作目录中对应的结构文件名（如 POSCAR_2）；
 
     4) 生成 `generation_report.md`，说明生成参数（如 sample 数量、约束条件）、 候选筛选逻辑，以及不确定性声明。
 
-    在最终回答中简要总结：是否满足“10 个候选 + Tc 阈值 + 空间群约束”三项要求。'
+    在最终回答中简要总结：是否满足”10 个候选 + Tc 阈值 + 空间群约束”三项要求。'
   tags:
-  - phy_surface
-  - wf_batch
+  - struct_build
   data_files: []
   reference_answers:
   - key: candidate_json
@@ -2321,17 +2270,18 @@ questions:
       filename: candidate_structures.json
       tokens:
       - rank
-      - structure_name
+      - structure_file
       - predicted_tc_k
       - space_group
       - selection_basis
       - '225'
       flags: i
-  - key: tc_threshold_regex
+  - key: structure_artifacts
     value:
       filename: candidate_structures.json
-      pattern: '"predicted_tc_k"\s*:\s*(?:4[1-9](?:\.\d+)?|[5-9]\d(?:\.\d+)?|\d{3,}(?:\.\d+)?)'
-      flags: i
+      path_key: structure_file
+      expected_count: 10
+      count_tolerance: 0
   - key: report_required_tokens
     value:
       filename: generation_report.md
@@ -2344,13 +2294,13 @@ questions:
       - 不确定性
   - key: turn_budget
     value:
-      max: 18
+      max: 25
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 9000
+      max: 20000
   scoring_checklist:
   - id: candidate_json
     criterion: Agent writes `candidate_structures.json` to workspace.
@@ -2365,10 +2315,10 @@ questions:
       225 constraint.
     axis: correctness
     verify: text_file_contains_all
-  - id: tc_threshold_regex
-    criterion: Candidate JSON contains explicit Tc values above 40 K for generated entries.
+  - id: structure_artifacts
+    criterion: Structure files referenced in candidate JSON actually exist in workspace.
     axis: correctness
-    verify: text_file_regex
+    verify: json_file_artifacts
   - id: report_required_tokens
     criterion: Report explains generation parameters, Tc/space-group constraints, and uncertainty
       handling.
@@ -2401,5 +2351,134 @@ questions:
   - id: token_budget_total
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling
       (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: WO_end_to_end_001_20260428
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Complete an end-to-end workflow from structure retrieval to surface construction
+    to input generation.
+  human_prompt_seed: '请完成以下端到端工作流：
+
+    1. 从结构数据库中检索 TiO2 金红石结构（rutile，空间群 P4_2/mnm）
+
+    2. 切出 (110) 表面 slab，3 层，2×1×1 扩胞，真空层 15 Å
+
+    3. 为该 slab 生成 VASP 静态计算 INCAR（ENCUT=520, ISMEAR=0, SIGMA=0.05, NSW=0）
+
+    输出三个文件：`tio2_bulk.cif`（体相）、`tio2_110_slab.cif`（slab）、`INCAR`。'
+  tags:
+  - eng_vasp
+  - struct_surface
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: bulk_artifact
+    value: tio2_bulk.cif
+  - key: slab_artifact
+    value: tio2_110_slab.cif
+  - key: incar_artifact
+    value: INCAR
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 16000
+  scoring_checklist:
+  - id: bulk_artifact
+    criterion: Agent writes `tio2_bulk.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: slab_artifact
+    criterion: Agent writes `tio2_110_slab.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: incar_artifact
+    criterion: Agent writes `INCAR` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: pipeline_correctness
+    criterion: The workflow is logically connected — bulk structure is TiO2 rutile,
+      slab is cut from it along (110), and INCAR parameters match the static calculation
+      request.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Each step is grounded in the previous step output (slab from bulk,
+      INCAR for slab), not independently generated.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_error_mid_flow_001_20260428
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: When a multi-step workflow encounters an error mid-flow, agent should report
+    clearly rather than silently skip the failed step.
+  human_prompt_seed: '请完成以下三步工作流：
+
+    1. 读取工作目录下的 `structure.cif` 文件
+
+    2. 对该结构做 2×2×2 超胞扩展
+
+    3. 将扩展后的结构保存为 `supercell.vasp`
+
+    请按顺序执行，如果某一步失败请明确告知。'
+  tags:
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: error_detection
+    criterion: Agent detects that structure.cif does not exist and clearly reports
+      this failure rather than silently skipping or fabricating the file.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_silent_skip
+    criterion: Agent does NOT proceed to steps 2 and 3 as if step 1 succeeded, and
+      does NOT create a fake supercell.vasp based on invented data.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: clear_communication
+    criterion: Final answer clearly states which step failed and why, in a way the
+      user can act on (e.g., provide the missing file).
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget

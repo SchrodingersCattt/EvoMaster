@@ -2,13 +2,18 @@ version: v5
 capability: batch_processing
 domain: semiconductor
 questions:
-- id: BP_struct_004_20260406
+- id: BP_struct_004_20260423
   capability: batch_processing
   domain: semiconductor
-  intent: Perform batch post-processing of band structures for 3 materials (Si, Ge, GaAs)
-    with unified analysis parameters. Extract band gaps and band edge positions using identical
-    k-paths, energy windows, and plot specifications across all materials.
+  intent: Perform batch post-processing of pre-computed band structures for 3 materials
+    (Si, Ge, GaAs) with unified analysis parameters. Extract band gaps and band edge
+    positions using identical k-paths, energy windows, and plot specifications across
+    all materials.
   human_prompt_seed: '从 `postprocessing_bandstr.json` 读取 3 种材料（Si, Ge, GaAs）的带结构后处理配置。
+
+    每种材料对应一个预计算的能带数据 CSV 文件（Si_bandstructure.csv、Ge_bandstructure.csv、GaAs_bandstructure.csv），包含沿
+    M-Gamma-K 路径的能带本征值数据。CSV 列格式为：k_index, k_distance, k_label, band_1, ..., band_N，其中 band_1–band_4
+    为价带，band_5–band_7 为导带，能量单位 eV，已参考 VBM = 0。
 
     对每种材料执行相同的分析流程： 1. k-path 固定为 M-Gamma-K，每段 50 个 k 点 2. 能量窗口统一为 [-5, 5] eV 3. 费米面参考点：VBM（价带最大值）
     4. 所有绘图使用相同样式和范围
@@ -19,14 +24,23 @@ questions:
 
     '
   tags:
-  - wf_batch
-  - wf_postprocess
-  - phy_electronic
   data_files:
   - key: postprocessing_bandstr
     path: data/BP_struct_004/postprocessing_bandstr.json
     oss_url: ''
     description: Batch band structure analysis configuration with unified parameters.
+  - key: si_band_csv
+    path: data/BP_struct_004/Si_bandstructure.csv
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/BP_struct_004/1776789716_Si_bandstructure.csv
+    description: Pre-computed Si band structure eigenvalues along M-Gamma-K (101 k-points, 7 bands, VBM=0 eV).
+  - key: ge_band_csv
+    path: data/BP_struct_004/Ge_bandstructure.csv
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/BP_struct_004/1776789717_Ge_bandstructure.csv
+    description: Pre-computed Ge band structure eigenvalues along M-Gamma-K (101 k-points, 7 bands, VBM=0 eV).
+  - key: gaas_band_csv
+    path: data/BP_struct_004/GaAs_bandstructure.csv
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/BP_struct_004/1776789717_GaAs_bandstructure.csv
+    description: Pre-computed GaAs band structure eigenvalues along M-Gamma-K (101 k-points, 7 bands, VBM=0 eV).
   reference_answers:
   - key: analysis_count_correct
     value: 3
@@ -44,16 +58,17 @@ questions:
   - key: bandgap_extracted
     value:
       si:
-      - 1.02
-      - 1.22
+      - 0.95
+      - 1.25
       ge:
-      - 0.57
-      - 0.77
+      - 0.55
+      - 0.80
       gaas:
-      - 1.32
-      - 1.52
+      - 1.25
+      - 1.55
   - key: grounding_analysis_correct
-    value: Configuration from postprocessing_bandstr.json
+    value:
+      filename: postprocessing_bandstr.json
   - key: analysis_workflow_streamlined
     value: Unified workflow for all 3 materials
   - key: turn_budget
@@ -64,7 +79,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value: &id003
-      max: 35000
+      max: 40000
   scoring_checklist:
   - id: analysis_count_correct
     criterion: Exactly 3 materials are analyzed (Si, Ge, GaAs).
@@ -88,8 +103,10 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: bandgap_extracted
-    criterion: 'Band gap values extracted for all 3 materials and fall within expected range
-      (Si: 1.0–1.2 eV, Ge: 0.6–0.8 eV, GaAs: 1.3–1.5 eV).'
+    criterion: 'Band gap values extracted for all 3 materials from the provided CSV data
+      and fall within expected range (Si: 0.95–1.25 eV, Ge: 0.55–0.80 eV, GaAs: 1.25–1.55 eV).
+      The agent must read band gaps from the pre-computed CSV eigenvalue data, not generate
+      new band structures.'
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_analysis_correct

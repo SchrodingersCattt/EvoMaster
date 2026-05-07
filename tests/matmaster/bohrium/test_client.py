@@ -145,31 +145,19 @@ def test_list_images_non_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(base_url, path, access_key, *, params=None, timeout=30):
         del base_url, access_key, timeout
         get_calls.append((path, params))
-        if path == "/openapi/v2/image/public":
+        if path == "/openapi/v2/image/private":
             return {
                 "data": {
                     "items": [
                         {
                             "id": 1,
-                            "name": "CP2K",
+                            "name": "CP2K:2024.1",
                             "description": "CP2K production image",
+                            "url": "registry.dp.tech/dptech/cp2k:2024.1",
                         },
                         {"id": 2, "name": "GROMACS", "description": "MD image"},
-                    ]
-                }
-            }
-        if path == "/openapi/v2/image/private":
-            return {"data": {"items": []}}
-        if path == "/openapi/v2/image/public/1/version":
-            return {
-                "data": {
-                    "items": [
-                        {
-                            "url": "registry.dp.tech/dptech/cp2k:2024.1",
-                            "version": "2024.1",
-                            "resourceType": "CPU",
-                        }
-                    ]
+                    ],
+                    "total": 2,
                 }
             }
         raise AssertionError(f"unexpected path: {path}")
@@ -180,11 +168,11 @@ def test_list_images_non_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result["success"] is True
     assert result["total_found"] == 1
     assert result["returned"] == 1
-    assert result["images"][0]["name"] == "CP2K"
+    assert result["images"][0]["name"] == "CP2K:2024.1"
     assert result["images"][0]["versions"][0]["version"] == "2024.1"
-    assert get_calls[0][0] == "/openapi/v2/image/public"
-    assert get_calls[1][0] == "/openapi/v2/image/private"
-    assert get_calls[2][0] == "/openapi/v2/image/public/1/version"
+    assert result["images"][0]["private"] is True
+    assert len(get_calls) == 1
+    assert get_calls[0][0] == "/openapi/v2/image/private"
 
 
 def test_list_images_sandbox_uses_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -214,30 +202,18 @@ def test_list_images_sandbox_falls_back_when_catalog_empty(
     def fake_get(base_url, path, access_key, *, params=None, timeout=30):
         del base_url, access_key, timeout
         get_calls.append((path, params))
-        if path == "/openapi/v2/image/public":
+        if path == "/openapi/v2/image/private":
             return {
                 "data": {
                     "items": [
                         {
                             "id": 1,
-                            "name": "CP2K",
+                            "name": "CP2K:2024.1",
                             "description": "CP2K production image",
-                        }
-                    ]
-                }
-            }
-        if path == "/openapi/v2/image/private":
-            return {"data": {"items": []}}
-        if path == "/openapi/v2/image/public/1/version":
-            return {
-                "data": {
-                    "items": [
-                        {
                             "url": "registry.dp.tech/dptech/cp2k:2024.1",
-                            "version": "2024.1",
-                            "resourceType": "CPU",
                         }
-                    ]
+                    ],
+                    "total": 1,
                 }
             }
         raise AssertionError(f"unexpected path: {path}")
@@ -253,11 +229,11 @@ def test_list_images_sandbox_falls_back_when_catalog_empty(
     assert result["success"] is True
     assert result["total_found"] == 1
     assert result["returned"] == 1
-    assert result["images"][0]["name"] == "CP2K"
+    assert result["images"][0]["name"] == "CP2K:2024.1"
+    assert result["images"][0]["private"] is True
     assert "source" not in result or result["source"] != "sandbox_catalog"
-    assert get_calls[0][0] == "/openapi/v2/image/public"
-    assert get_calls[1][0] == "/openapi/v2/image/private"
-    assert get_calls[2][0] == "/openapi/v2/image/public/1/version"
+    assert len(get_calls) == 1
+    assert get_calls[0][0] == "/openapi/v2/image/private"
 
 
 def test_list_machines_non_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:

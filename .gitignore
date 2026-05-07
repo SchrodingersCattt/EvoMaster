@@ -197,3 +197,9 @@ logs/
 
 # CI generated artifacts
 ci/generated-eval-child.yml
+
+# Coverage analysis generated output
+evaluation/coverage_report.json
+evaluation/semantic_coverage_report.json
+evaluation/scripts/coverage/.semantic_cache.json
+evaluation/uncovered_rules_full.md

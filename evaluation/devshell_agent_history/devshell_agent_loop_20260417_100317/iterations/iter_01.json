@@ -1,0 +1,32 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 1,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [
+        "8238e318b299166b003ac48d37ba819a2527757d"
+      ],
+      "files_touched": [
+        "matmaster/skills/abacus/SKILL.md",
+        "matmaster/skills/abacus/references/input_examples.md",
+        "matmaster/skills/playground-skills/xrd-analysis/SKILL.md",
+        "matmaster/skills/playground-skills/input-manual-helper/references/abacus/task_band.INPUT",
+        "matmaster/skills/playground-skills/input-manual-helper/references/abacus/task_dos.INPUT",
+        "matmaster/skills/playground-skills/structure-manager/references/electronic_property_construction.md"
+      ],
+      "followup_suggestion": "Re-run evaluation focusing on IG_abacus and DF_scxrd/DFT_pxrd questions to verify the fixes. The 18 unstable questions (structure construction, workflow orchestration, cross-reference) may need a second optimization round focusing on those specific capabilities after the main cluster fixes are validated. Band property tasks (5/5 fail) are diverse — further investigation of specific scoring criteria needed.",
+      "iteration_index": 1,
+      "needs_more_work": true,
+      "optimization_round": 1,
+      "summary": "## Optimization Summary\n\n### Root Cause Analysis (from workspace evidence)\n\nExamined failing task workspaces across the three major failure clusters:\n\n**ABACUS Input Generation (6/8 fail)** — Found three concrete defect patterns:\n1. **Missing `cal_force 1` / `cal_stress 1`** in `cell-relax` INPUTs (IG_abacus_006): optimizer silently broken\n2. **Missing SCF KPT file** in two-step workflows (IG_abacus_007): SCF INPUT references `kpoint_file KPT` but only `KPT_band` exists\n3. **Missing `stru_file`/`kpoint_file` directives** for non-default filenames (IG_abacus_008): ABACUS looks for `STRU`/`KPT` which don't exist\n\n**XRD/PXRD (3/3 always fail)** — Agent bypasses provided skill scripts:\n- SCXRD: writes custom `solve_structure.py` instead of using `solve_refine_scxrd.py` → R1=0.35, GOOF=11.6, fractional coords >1\n- PXRD: writes custom `pawley_refine.py` instead of `refine_lattice_pxrd.py`\n\n### Changes Made\n\n1. **`matmaster/skills/abacus/SKILL.md`**:\n   - Added mandatory \"INPUT Pre-delivery Checklist\" with File Reference, Relaxation Parameter, Two-Step Workflow, and Multi-File guards\n   - Updated Band/DOS workflow to emphasize dual KPT file creation\n\n2. **`matmaster/skills/abacus/references/input_examples.md`**:\n   - Added \"File Reference Rule — CRITICAL\" section with ❌/✅ examples\n   - Extended Common Mistakes Checklist with 3 new file-reference and workflow items\n   - Strengthened multi-file consistency rules\n\n3. **`matmaster/skills/playground-skills/xrd-analysis/SKILL.md`**:\n   - Added MANDATORY banners in PXRD/SCXRD workflows\n   - Strengthened Hard Constraints with explicit \"USE PROVIDED SCRIPTS\" rule\n   - Added script-first debugging guidance for poor R-factors\n\n4. **`matmaster/skills/playground-skills/input-manual-helper/references/abacus/task_band.INPUT`**:\n   - Fixed scf_nmax 1→300, scf_thr 1e-9→1e-7; added explicit `symmetry 0`\n\n5. **`matmaster/skills/playground-skills/input-manual-helper/references/abacus/task_dos.INPUT`**:\n   - Added missing `dos_nche 100` (required for LCAO)\n\n6. **`matmaster/skills/playground-skills/structure-manager/references/electronic_property_construction.md`**:\n   - Updated post-processing guidance to permit tight-binding when task specifies it"
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 1,
+    "macro_mean_0_100": 40,
+    "rationale": "## Iteration 1 — Baseline Results\n\n**Score**: `macro_mean_0_100 = 40` (23/57 questions fully passed all k=3 repeats). **Target: 60. Not met.**\n\n### P0 Gate\n- **Passed** (67%): 6/9 P0 questions fully passed. Failed P0: BP_struct_003 (unstable), IG_abacus_002 (unstable), IG_abacus_003 (always fail).\n\n### Score Breakdown by Capability Area\n| Area | Pass | Fail | Notes |\n|------|------|------|-------|\n| Polymer (pl_*) | 5/5 | 0 | All pass ✅ |\n| WO_direct (exec contract) | 3/3 | 0 | All pass ✅ |\n| DF (data formatting) | 2/5 | 3 | scxrd always fail |\n| IG_abacus (input gen) | 2/8 | 6 | Major gap |\n| SC_struct (structure) | 6/13 | 7 | Mixed / unstable |\n| WO_general (workflow) | 1/6 | 5 | Mostly unstable |\n| CR (cross-reference) | 2/6 | 4 | Mostly unstable |\n| BP (band property) | 0/5 | 5 | All fail |\n| DD (diagnostics) | 1/3 | 2 | Mixed |\n| SR (search/retrieval) | 0/1 | 1 | Always fail |\n| DFT/XRD | 0/1 | 1 | Always fail |\n| SC_elec | 1/1 | 0 | Pass ✅ |\n\n### Failure Buckets\n1. **ABACUS input generation** (6/8 fail) — top priority, skill-layer fix\n2. **Band property workflow** (5/5 fail) — missing/incomplete skill\n3. **XRD/PXRD formatting** (3/3 always fail) — missing skill\n4. **Structure construction instability** (7/13 fail) — fragile guidance\n5. **General workflow orchestration** (5/6 fail) — domain-specific planning gaps\n6. **Cross-reference instability** (4/6 fail) — complex multi-step fragility\n\n### Delegation\n- **Optimization agent queued** (round 1): Focus on `matmaster/skills/abacus/`, band-property skills, and XRD formatting skills. Candidate layer: `skill`.\n- No checklist escalation needed at this stage — failures are clearly product-side capability gaps.\n\n### Next Steps\n- Await optimization agent to improve ABACUS, BP, and XRD skills.\n- Re-run eval in iteration 2 to measure impact.",
+    "target_met": false
+  }
+}

@@ -1,0 +1,128 @@
+# eval_slices.yaml — Maps each skill / tool / prompt to its evaluation slices.
+#
+# Slice notation:
+#   <capability>            — all questions in that capability
+#   <capability>@<tag>      — questions in that capability with given tag
+#   @<tag>                  — questions across ALL capabilities with given tag
+#
+# Multiple tags with comma are AND: @t1,t2 matches questions having both tags.
+
+version: "v1"
+
+slices:
+
+  # ── Skills ──────────────────────────────────────────────────────────
+
+  - target: "Skill: vasp"
+    type: skill
+    slices:
+      - "@eng_vasp"
+    count: 24
+
+  - target: "Skill: abacus"
+    type: skill
+    slices:
+      - "@eng_abacus"
+    count: 13
+
+  - target: "Skill: gpumd"
+    type: skill
+    slices:
+      - "@eng_gpumd"
+    count: 11
+
+  - target: "Skill: mlips"
+    type: skill
+    slices:
+      - "@code_mlip"
+    count: 9
+
+  - target: "Skill: build-atomic-structure"
+    type: skill
+    slices:
+      - "@struct_build"
+    count: 5
+
+  - target: "Skill: transform-atomic-structure"
+    type: skill
+    slices:
+      - "@struct_transform"
+    count: 9
+
+  - target: "Skill: operate-molecular-crystal"
+    type: skill
+    slices:
+      - "@struct_molcrys"
+    count: 3
+
+  - target: "Skill: tasker-polar-surface"
+    type: skill
+    slices:
+      - "@struct_surface"
+    count: 22
+
+  - target: "Skill: xrd + checkcif"
+    type: skill
+    slices:
+      - "@char_xrd"
+    count: 3
+
+  - target: "Skill: data-analysis"
+    type: skill
+    slices:
+      - data_diagnosis
+    count: 3
+
+  - target: "Skill: cp2k"
+    type: skill
+    slices:
+      - "@eng_cp2k"
+    count: 2
+
+  - target: "Skill: lammps"
+    type: skill
+    slices:
+      - "@eng_lammps"
+    count: 1
+
+  - target: "Skill: gromacs"
+    type: skill
+    slices:
+      - "@eng_gromacs"
+    count: 1
+
+  # ── Tools ───────────────────────────────────────────────────────────
+
+  - target: "Tool: mcp-mat-struct-db"
+    type: tool
+    slices:
+      - "@meta_database"
+    count: 13
+
+  - target: "Tool: Bohrium batch/sweep"
+    type: tool
+    slices:
+      - batch_processing
+    count: 4
+
+  # ── Prompts ─────────────────────────────────────────────────────────
+
+  - target: "Prompt: safety"
+    type: prompt
+    slices:
+      - safety_refusal
+    count: 6
+
+  - target: "Prompt: execution contract"
+    type: prompt
+    slices:
+      - execution_contract
+    count: 9
+
+  - target: "Prompt: scientific analysis"
+    type: prompt
+    slices:
+      - scientific_analysis
+    count: 7
+
+  # ── Cross-cutting ───────────────────────────────────────────────────

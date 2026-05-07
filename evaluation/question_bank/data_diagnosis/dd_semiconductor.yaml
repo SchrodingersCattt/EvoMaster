@@ -2,7 +2,7 @@ version: v5
 capability: data_diagnosis
 domain: semiconductor
 questions:
-- id: DD_general_004_20260404
+- id: DD_general_004_20260422
   capability: data_diagnosis
   domain: semiconductor
   intent: Diagnose relaxation divergence caused by POTIM too large combined with wrong initial
@@ -12,7 +12,6 @@ questions:
 
     '
   tags:
-  - log_diagnosis
   priority: P0
   data_files:
   - key: case_bundle
@@ -32,6 +31,9 @@ questions:
   - key: turn_budget
     value: &id001
       max: 8
+  - key: grounding_evidence
+    value:
+      filename: case_bundle.json
   - key: duration_budget
     value: &id002
       max: 7200000

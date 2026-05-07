@@ -432,13 +432,15 @@ class AgentRunService:
                 and user_id_for_skills
                 and user_id_for_skills.strip()
             ):
-                user_skill_roots = await asyncio.to_thread(
+                sync_result = await asyncio.to_thread(
                     materialize_user_skills_for_run,
                     user_id_for_skills.strip(),
                     project_root=_project_root,
                 )
                 exp_config = merge_user_skill_roots_into_exp_config(
-                    exp_config, user_skill_roots
+                    exp_config,
+                    sync_result.roots,
+                    disabled_skill_names=sync_result.disabled_builtin_names,
                 )
             skill_sync_spec = derive_skill_sync_spec(
                 exp_config, project_root=_project_root

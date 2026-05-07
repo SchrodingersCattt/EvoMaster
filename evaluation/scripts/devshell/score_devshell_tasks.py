@@ -11,8 +11,11 @@ This is the devshell counterpart of
 4. Write score / score_reason back to ``pending_ingest/*.json`` or submit them.
 
 **Ingest score (0/100):** a task passes (100) only when **every** scoring_checklist
-item passes; otherwise 0. Per-axis weighted ratios are still recorded in
-``score_reason`` for debugging; they do not affect the numeric ingest score.
+item passes; otherwise 0. The DevShell agent loop calls
+:func:`score_devshell_tasks_for_agent_loop` in-process, which treats ``token_budget_total``
+and ``turn_budget`` as non-blocking for the binary score (they still appear in ``score_reason``). The CLI
+invocation uses strict ``ingest_optional_checklist_ids=()`` (empty). Per-axis weighted ratios
+are still recorded in ``score_reason`` for debugging; they do not affect the numeric ingest score.
 """
 
 from __future__ import annotations
@@ -43,6 +46,11 @@ from evaluation.scripts.baseline.score_baseline_tasks import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _QUESTION_BANK_DIR = REPO_ROOT / "evaluation" / "question_bank"
+
+# Used only by :func:`score_devshell_tasks_for_agent_loop` (in-process).
+_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS = frozenset(
+    {"token_budget_total", "turn_budget", "efficiency_judge", "no_retries"}
+)
 _EVIDENCE_MAPPING_PATH = REPO_ROOT / "evaluation" / "core" / "evidence_mapping.yaml"
 _META_FILENAMES = frozenset(
     {
@@ -270,7 +278,7 @@ def _build_evidence(
 _AXIS_SECTION_ORDER = ("correctness", "grounding", "efficiency")
 
 
-def _format_score_reason(record: Any) -> str:
+def _format_score_reason(record: Any, *, ingest_optional_ids: frozenset[str]) -> str:
     by_axis: dict[str, list[tuple[str, Any]]] = {}
     for cid, result in record.criteria_results.items():
         by_axis.setdefault(result.axis, []).append((cid, result))
@@ -304,16 +312,43 @@ def _format_score_reason(record: Any) -> str:
         f"({record.passed_count}/{record.total_count} criteria passed)"
     )
     lines.append("")
-    ap = _all_criteria_passed(record)
+    ap = _all_criteria_passed(record, ingest_optional_ids=ingest_optional_ids)
     lines.append(
-        f"**Task pass (all checklist items):** {'yes' if ap else 'no'} "
-        f"(ingest score {'100' if ap else '0'})"
+        f"**Task pass (required checklist items for ingest):** "
+        f"{'yes' if ap else 'no'} (ingest score {'100' if ap else '0'})"
     )
+    if ingest_optional_ids:
+        lines.append("")
+        lines.append(
+            "**Ingest-optional criteria (evaluated but excluded from binary 0/100):** "
+            f"{', '.join(sorted(ingest_optional_ids))}"
+        )
     return "\n".join(lines)
 
 
-def _all_criteria_passed(record: Any) -> bool:
-    """True iff every scoring criterion passed (same as ``passed_count == total_count``)."""
+def _all_criteria_passed(
+    record: Any,
+    *,
+    ingest_optional_ids: frozenset[str] | None = None,
+) -> bool:
+    """True iff every non-optional scoring criterion passed.
+
+    When ``ingest_optional_ids`` is empty, equivalent to ``passed_count == total_count``.
+    """
+    optional = ingest_optional_ids or frozenset()
+    cr = getattr(record, "criteria_results", None)
+    if isinstance(cr, dict) and cr:
+        required_total = 0
+        required_passed = 0
+        for cid, result in cr.items():
+            if cid in optional:
+                continue
+            required_total += 1
+            if getattr(result, "passed", False):
+                required_passed += 1
+        if required_total <= 0:
+            return True
+        return required_passed == required_total
     total = int(getattr(record, "total_count", 0) or 0)
     if total <= 0:
         return False
@@ -321,9 +356,15 @@ def _all_criteria_passed(record: Any) -> bool:
     return passed == total
 
 
-def _ingest_score_from_record(record: Any) -> int:
-    """Binary 0/100 for ingest: 100 only when all checklist items pass."""
-    return 100 if _all_criteria_passed(record) else 0
+def _ingest_score_from_record(
+    record: Any, *, ingest_optional_ids: frozenset[str] | None = None
+) -> int:
+    """Binary 0/100 for ingest: 100 when all non-optional checklist items pass."""
+    return (
+        100
+        if _all_criteria_passed(record, ingest_optional_ids=ingest_optional_ids)
+        else 0
+    )
 
 
 def _update_pending_with_score(
@@ -380,6 +421,7 @@ def score_task(
     run_dir: Path,
     question: QuestionItem,
     evaluator: BinaryEvaluator,
+    ingest_optional_checklist_ids: frozenset[str] | None = None,
 ) -> dict[str, Any]:
     task_id = str(row.get("task_id") or "")
     workspace = run_dir / "workspaces" / task_id
@@ -429,16 +471,252 @@ def score_task(
             "error": str(exc),
         }
 
-    all_pass = _all_criteria_passed(record)
+    opt = ingest_optional_checklist_ids or frozenset()
+    all_pass = _all_criteria_passed(record, ingest_optional_ids=opt)
     return {
         "task_id": task_id,
         "question_id": question.id,
-        "score": _ingest_score_from_record(record),
+        "score": _ingest_score_from_record(record, ingest_optional_ids=opt),
         "all_criteria_passed": all_pass,
-        "score_reason": _format_score_reason(record),
+        "score_reason": _format_score_reason(record, ingest_optional_ids=opt),
         "record": record,
         "error": None,
     }
+
+
+def _run_score_devshell_tasks_impl(
+    *,
+    run_dir: Path,
+    eval_config: Path | None,
+    question_bank_dir: Path | None,
+    tasks: list[str] | None,
+    dry_run: bool,
+    submit: bool,
+    eval_ingest_timeout: float,
+    score_jobs: int,
+    parallel_checklist_workers: int,
+    ingest_optional_checklist_ids: frozenset[str],
+) -> int:
+    raw_runs_path = run_dir / "raw_runs.jsonl"
+    rows_by_task = _load_raw_run_rows(raw_runs_path)
+    if not rows_by_task:
+        print(
+            f"error: missing or empty raw_runs.jsonl under {run_dir}", file=sys.stderr
+        )
+        return 1
+
+    config_path = eval_config or (REPO_ROOT / "evaluation" / "config.yaml")
+    config = _load_eval_config(config_path)
+    llm_cfg: LLMRuntimeConfig | None = _build_evaluator_llm_cfg(config)
+    axis_weights: dict[str, float] = config.get(
+        "axis_weights", {"correctness": 1.0, "grounding": 1.0, "efficiency": 1.0}
+    )
+    if llm_cfg is None:
+        print(
+            "warning: no evaluator_llm configured — llm_binary_judge checks will "
+            "return (False, 'no evaluator LLM configured')",
+            file=sys.stderr,
+        )
+
+    sj = max(1, int(score_jobs))
+    parallel_checklist = max(1, int(parallel_checklist_workers))
+    ingest_optional_ids = ingest_optional_checklist_ids
+
+    def _build_evaluator() -> BinaryEvaluator:
+        return BinaryEvaluator(
+            llm_cfg=llm_cfg,
+            axis_weights=axis_weights,
+            parallel_checklist_workers=parallel_checklist,
+        )
+
+    bank_dir = question_bank_dir or _QUESTION_BANK_DIR
+    try:
+        question_map = _build_question_map(Path(bank_dir))
+    except Exception as exc:
+        print(f"error: failed to load question banks: {exc}", file=sys.stderr)
+        return 1
+
+    task_ids = sorted(rows_by_task)
+    if tasks:
+        task_filter = set(tasks)
+        task_ids = [task_id for task_id in task_ids if task_id in task_filter]
+        if not task_ids:
+            print(f"error: none of --tasks {tasks} matched raw_runs", file=sys.stderr)
+            return 1
+
+    pending_dir = run_dir / "pending_ingest"
+    results: list[dict[str, Any]] = []
+    n_ok = 0
+    n_err = 0
+
+    optional_note = (
+        f", agent-ingest-optional={sorted(ingest_optional_ids)}"
+        if ingest_optional_ids
+        else ""
+    )
+    print(
+        f"Scoring {len(task_ids)} task(s) in {run_dir} "
+        f"(score-jobs={sj}, parallel-checklist-workers={parallel_checklist}"
+        f"{optional_note})",
+        file=sys.stderr,
+    )
+
+    skip_tasks: dict[str, str] = {}
+    scored_by_task: dict[str, dict[str, Any]] = {}
+
+    if sj <= 1:
+        evaluator = _build_evaluator()
+        for task_id in task_ids:
+            row = rows_by_task[task_id]
+            question_id = str(row.get("question_id") or "")
+            question = question_map.get(question_id)
+            if question is None:
+                skip_tasks[task_id] = question_id
+                continue
+            scored_by_task[task_id] = score_task(
+                row=row,
+                run_dir=run_dir,
+                question=question,
+                evaluator=evaluator,
+                ingest_optional_checklist_ids=ingest_optional_ids,
+            )
+    else:
+
+        def _score_one_task(task_id: str) -> tuple[str, dict[str, Any] | None, str]:
+            row = rows_by_task[task_id]
+            question_id = str(row.get("question_id") or "")
+            question = question_map.get(question_id)
+            if question is None:
+                return task_id, None, question_id
+            ev = _build_evaluator()
+            return (
+                task_id,
+                score_task(
+                    row=row,
+                    run_dir=run_dir,
+                    question=question,
+                    evaluator=ev,
+                    ingest_optional_checklist_ids=ingest_optional_ids,
+                ),
+                "",
+            )
+
+        with ThreadPoolExecutor(max_workers=sj) as pool:
+            future_map = {pool.submit(_score_one_task, tid): tid for tid in task_ids}
+            for fut in as_completed(future_map):
+                tid, res, miss_q = fut.result()
+                if res is None:
+                    skip_tasks[tid] = miss_q
+                else:
+                    scored_by_task[tid] = res
+
+    for task_id in task_ids:
+        if task_id in skip_tasks:
+            qid = skip_tasks[task_id]
+            print(
+                f"  [skip] {task_id}: question_id {qid!r} not found in bank",
+                file=sys.stderr,
+            )
+            n_err += 1
+            continue
+
+        result = scored_by_task[task_id]
+        row = rows_by_task[task_id]
+        question_id = str(row.get("question_id") or "")
+        results.append(result)
+
+        if result["error"]:
+            print(f"  [error] {task_id}: {result['error']}", file=sys.stderr)
+            n_err += 1
+        else:
+            label = "pass" if result.get("all_criteria_passed") else "fail"
+            print(
+                f"  [scored] {task_id}: {result['score']}/100 ({label}, q={question_id})",
+                file=sys.stderr,
+            )
+            n_ok += 1
+
+        if dry_run:
+            print(f"\n--- {task_id} score_reason ---")
+            print(result["score_reason"])
+            print()
+            continue
+
+        pending_path = pending_dir / f"{task_id}.json"
+        if pending_path.is_file():
+            ok = _update_pending_with_score(
+                pending_path,
+                score=result["score"],
+                score_reason=result["score_reason"],
+                all_criteria_passed=bool(result.get("all_criteria_passed")),
+            )
+            if ok:
+                print(f"  [pending] updated {pending_path.name}", file=sys.stderr)
+            if submit and ok and not result["error"]:
+                submit_ok, msg = _submit_pending(
+                    pending_path,
+                    timeout=eval_ingest_timeout,
+                )
+                if submit_ok:
+                    print(f"  [ingest] {task_id} ok ({msg})", file=sys.stderr)
+                else:
+                    print(f"  [ingest] {task_id} failed: {msg}", file=sys.stderr)
+        elif submit:
+            print(
+                f"  [warn] {task_id}: no pending_ingest/{task_id}.json found",
+                file=sys.stderr,
+            )
+
+    if results:
+        print(
+            "\n{:<45} {:>8} {:>8}".format("task_id", "score", "status"), file=sys.stderr
+        )
+        print("-" * 65, file=sys.stderr)
+        scores_valid: list[int] = []
+        for result in results:
+            status = "error" if result["error"] else "ok"
+            print(
+                "{:<45} {:>8} {:>8}".format(result["task_id"], result["score"], status),
+                file=sys.stderr,
+            )
+            if not result["error"]:
+                scores_valid.append(int(result["score"]))
+        if scores_valid:
+            avg = round(sum(scores_valid) / len(scores_valid))
+            print(
+                f"\n  All-criteria pass rate (mean of 0/100 scores): {avg}/100 "
+                f"({len(scores_valid)} task(s))",
+                file=sys.stderr,
+            )
+        print(f"\nDone: {n_ok} scored, {n_err} errors", file=sys.stderr)
+        if dry_run:
+            print("(dry-run: no files modified, no submissions made)", file=sys.stderr)
+
+    return 0 if n_err == 0 else 1
+
+
+def score_devshell_tasks_for_agent_loop(
+    *,
+    run_dir: Path,
+    eval_config: Path | None,
+    eval_ingest_timeout: float,
+    score_jobs: int,
+    parallel_checklist_workers: int,
+    submit: bool,
+) -> int:
+    """In-process scoring for the DevShell agent loop (``token_budget_total`` / ``turn_budget`` optional)."""
+    return _run_score_devshell_tasks_impl(
+        run_dir=run_dir.resolve(),
+        eval_config=eval_config.resolve() if eval_config is not None else None,
+        question_bank_dir=None,
+        tasks=None,
+        dry_run=False,
+        submit=submit,
+        eval_ingest_timeout=eval_ingest_timeout,
+        score_jobs=score_jobs,
+        parallel_checklist_workers=parallel_checklist_workers,
+        ingest_optional_checklist_ids=_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS,
+    )
 
 
 def main() -> int:
@@ -496,195 +774,25 @@ def main() -> int:
         parser.error("provide --run-dir or --run-label")
         return 2
 
-    raw_runs_path = run_dir / "raw_runs.jsonl"
-    rows_by_task = _load_raw_run_rows(raw_runs_path)
-    if not rows_by_task:
-        print(
-            f"error: missing or empty raw_runs.jsonl under {run_dir}", file=sys.stderr
-        )
-        return 1
-
-    config_path = args.eval_config or (REPO_ROOT / "evaluation" / "config.yaml")
-    config = _load_eval_config(config_path)
-    llm_cfg: LLMRuntimeConfig | None = _build_evaluator_llm_cfg(config)
-    axis_weights: dict[str, float] = config.get(
-        "axis_weights", {"correctness": 1.0, "grounding": 1.0, "efficiency": 1.0}
+    tasks_list = list(args.tasks) if args.tasks else None
+    return _run_score_devshell_tasks_impl(
+        run_dir=run_dir,
+        eval_config=(
+            args.eval_config.resolve() if args.eval_config is not None else None
+        ),
+        question_bank_dir=(
+            args.question_bank_dir.resolve()
+            if args.question_bank_dir is not None
+            else None
+        ),
+        tasks=tasks_list,
+        dry_run=args.dry_run,
+        submit=args.submit,
+        eval_ingest_timeout=float(args.eval_ingest_timeout),
+        score_jobs=max(1, int(args.score_jobs)),
+        parallel_checklist_workers=max(1, int(args.parallel_checklist_workers)),
+        ingest_optional_checklist_ids=frozenset(),
     )
-    if llm_cfg is None:
-        print(
-            "warning: no evaluator_llm configured — llm_binary_judge checks will "
-            "return (False, 'no evaluator LLM configured')",
-            file=sys.stderr,
-        )
-
-    score_jobs = max(1, int(args.score_jobs))
-    parallel_checklist = max(1, int(args.parallel_checklist_workers))
-
-    def _build_evaluator() -> BinaryEvaluator:
-        return BinaryEvaluator(
-            llm_cfg=llm_cfg,
-            axis_weights=axis_weights,
-            parallel_checklist_workers=parallel_checklist,
-        )
-
-    bank_dir = args.question_bank_dir or _QUESTION_BANK_DIR
-    try:
-        question_map = _build_question_map(Path(bank_dir))
-    except Exception as exc:
-        print(f"error: failed to load question banks: {exc}", file=sys.stderr)
-        return 1
-
-    task_ids = sorted(rows_by_task)
-    if args.tasks:
-        task_filter = set(args.tasks)
-        task_ids = [task_id for task_id in task_ids if task_id in task_filter]
-        if not task_ids:
-            print(
-                f"error: none of --tasks {args.tasks} matched raw_runs", file=sys.stderr
-            )
-            return 1
-
-    pending_dir = run_dir / "pending_ingest"
-    results: list[dict[str, Any]] = []
-    n_ok = 0
-    n_err = 0
-
-    print(
-        f"Scoring {len(task_ids)} task(s) in {run_dir} "
-        f"(score-jobs={score_jobs}, parallel-checklist-workers={parallel_checklist})",
-        file=sys.stderr,
-    )
-
-    skip_tasks: dict[str, str] = {}
-    scored_by_task: dict[str, dict[str, Any]] = {}
-
-    if score_jobs <= 1:
-        evaluator = _build_evaluator()
-        for task_id in task_ids:
-            row = rows_by_task[task_id]
-            question_id = str(row.get("question_id") or "")
-            question = question_map.get(question_id)
-            if question is None:
-                skip_tasks[task_id] = question_id
-                continue
-            scored_by_task[task_id] = score_task(
-                row=row,
-                run_dir=run_dir,
-                question=question,
-                evaluator=evaluator,
-            )
-    else:
-
-        def _score_one_task(task_id: str) -> tuple[str, dict[str, Any] | None, str]:
-            row = rows_by_task[task_id]
-            question_id = str(row.get("question_id") or "")
-            question = question_map.get(question_id)
-            if question is None:
-                return task_id, None, question_id
-            ev = _build_evaluator()
-            return (
-                task_id,
-                score_task(
-                    row=row,
-                    run_dir=run_dir,
-                    question=question,
-                    evaluator=ev,
-                ),
-                "",
-            )
-
-        with ThreadPoolExecutor(max_workers=score_jobs) as pool:
-            future_map = {pool.submit(_score_one_task, tid): tid for tid in task_ids}
-            for fut in as_completed(future_map):
-                tid, res, miss_q = fut.result()
-                if res is None:
-                    skip_tasks[tid] = miss_q
-                else:
-                    scored_by_task[tid] = res
-
-    for task_id in task_ids:
-        if task_id in skip_tasks:
-            qid = skip_tasks[task_id]
-            print(
-                f"  [skip] {task_id}: question_id {qid!r} not found in bank",
-                file=sys.stderr,
-            )
-            n_err += 1
-            continue
-
-        result = scored_by_task[task_id]
-        row = rows_by_task[task_id]
-        question_id = str(row.get("question_id") or "")
-        results.append(result)
-
-        if result["error"]:
-            print(f"  [error] {task_id}: {result['error']}", file=sys.stderr)
-            n_err += 1
-        else:
-            label = "pass" if result.get("all_criteria_passed") else "fail"
-            print(
-                f"  [scored] {task_id}: {result['score']}/100 ({label}, q={question_id})",
-                file=sys.stderr,
-            )
-            n_ok += 1
-
-        if args.dry_run:
-            print(f"\n--- {task_id} score_reason ---")
-            print(result["score_reason"])
-            print()
-            continue
-
-        pending_path = pending_dir / f"{task_id}.json"
-        if pending_path.is_file():
-            ok = _update_pending_with_score(
-                pending_path,
-                score=result["score"],
-                score_reason=result["score_reason"],
-                all_criteria_passed=bool(result.get("all_criteria_passed")),
-            )
-            if ok:
-                print(f"  [pending] updated {pending_path.name}", file=sys.stderr)
-            if args.submit and ok and not result["error"]:
-                submit_ok, msg = _submit_pending(
-                    pending_path,
-                    timeout=args.eval_ingest_timeout,
-                )
-                if submit_ok:
-                    print(f"  [ingest] {task_id} ok ({msg})", file=sys.stderr)
-                else:
-                    print(f"  [ingest] {task_id} failed: {msg}", file=sys.stderr)
-        elif args.submit:
-            print(
-                f"  [warn] {task_id}: no pending_ingest/{task_id}.json found",
-                file=sys.stderr,
-            )
-
-    if results:
-        print(
-            "\n{:<45} {:>8} {:>8}".format("task_id", "score", "status"), file=sys.stderr
-        )
-        print("-" * 65, file=sys.stderr)
-        scores_valid: list[int] = []
-        for result in results:
-            status = "error" if result["error"] else "ok"
-            print(
-                "{:<45} {:>8} {:>8}".format(result["task_id"], result["score"], status),
-                file=sys.stderr,
-            )
-            if not result["error"]:
-                scores_valid.append(int(result["score"]))
-        if scores_valid:
-            avg = round(sum(scores_valid) / len(scores_valid))
-            print(
-                f"\n  All-criteria pass rate (mean of 0/100 scores): {avg}/100 "
-                f"({len(scores_valid)} task(s))",
-                file=sys.stderr,
-            )
-        print(f"\nDone: {n_ok} scored, {n_err} errors", file=sys.stderr)
-        if args.dry_run:
-            print("(dry-run: no files modified, no submissions made)", file=sys.stderr)
-
-    return 0 if n_err == 0 else 1
 
 
 if __name__ == "__main__":

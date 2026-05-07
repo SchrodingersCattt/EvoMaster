@@ -5,15 +5,15 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
 from evaluation.devshell_agent import loop_prompts as _loop_prompts
 from evaluation.devshell_agent.config_state import (
+    AgentLoopConfig,
     AgentLoopSharedState,
-    DevshellAgentCliDefaults,
     checklist_revision_sdk_max_turns_from_jobs,
     parallel_scoring_checklist_workers_from_jobs,
 )
@@ -23,8 +23,10 @@ from evaluation.devshell_agent.git_iteration import (
 )
 from evaluation.devshell_agent.loop_proposal_notify import (
     notify_proposed_matmaster_exps_if_present,
+    notify_proposed_optimization_if_present,
     notify_proposed_question_bank_if_present,
 )
+from evaluation.devshell_agent.sdk_client_retry import sdk_client_with_retry
 from evaluation.devshell_agent.sdk_logging import log_line, log_sdk_message
 
 # ``ClaudeAgentOptions(tools=...)``: empty built-in tool set (``--tools`` with no
@@ -39,27 +41,6 @@ def checklist_max_turns_for_shared_state(state: AgentLoopSharedState) -> int:
     return checklist_revision_sdk_max_turns_from_jobs(int(state.defaults.jobs))
 
 
-@dataclass
-class AgentLoopConfig:
-    repo_root: Path
-    session_dir: Path
-    defaults: DevshellAgentCliDefaults
-    max_iterations: int
-    target_pass_rate: int
-    permission_mode: str
-    max_sdk_turns: int
-    extra_instruction: str = ""
-    eval_ingest_submit_each_iteration: bool = True
-    eval_ingest_submit_timeout: float = 120.0
-    enable_checklist_agent: bool = True
-    checklist_permission_mode: str = ""
-    history_root: Path | None = None
-    #: After each optimization sub-round, stage product-side paths and ``git commit``.
-    enable_optimization_auto_commit: bool = True
-    #: Skip ``exp_prompt_budget`` checks before commit (e.g. broken local env).
-    optimization_auto_commit_skip_budget: bool = False
-
-
 class DevshellAgentLoop:
     """Runs the Claude SDK client for multiple outer iterations."""
 
@@ -68,6 +49,12 @@ class DevshellAgentLoop:
     _SDK_LOG_STREAM_EVENT_MAX_CHARS = 4_000
     _SDK_LOG_TEXT_BLOCK_MAX_CHARS = 100_000
     _SDK_LOG_SYSTEM_DATA_MAX_CHARS = 24_000
+    # SDK subprocess transport JSON buffer (default 1 MB is too small for
+    # large glob_paths results); 10 MB gives comfortable headroom.
+    _SDK_MAX_BUFFER_SIZE = 10 * 1024 * 1024
+    # Retry count for transient SDK client initialization timeouts.
+    _SDK_CONNECT_RETRIES = 2
+    _SDK_CONNECT_RETRY_DELAY = 5.0
 
     SYSTEM_PROMPT_MAIN = _loop_prompts.SYSTEM_PROMPT_MAIN
     SYSTEM_PROMPT_CHECKLIST = _loop_prompts.SYSTEM_PROMPT_CHECKLIST
@@ -121,7 +108,7 @@ class DevshellAgentLoop:
         session_dir = cfg.session_dir.resolve()
         return f"""## 第 {it} / {cfg.max_iterations} 轮迭代
 
-- **目标全项通过率**：{cfg.target_pass_rate}/100（与 `macro_mean_0_100` 同刻度）。`macro_mean_0_100` 为：每道题在 **k 次 repeat 的 checklist 均全过** 才算该题通过（该题计 100），否则该题计 0；再对所有题取算术平均，即 **（完全通过的题目数 ÷ 题目数）× 100**。编排器在 `macro_mean_0_100 >= {cfg.target_pass_rate}` 时结束迭代。若你认为已充分达标，也可将 `target_met` 设为 true。
+- **目标全项通过率**：{cfg.target_pass_rate}/100（与 `macro_mean_0_100` 同刻度）。`macro_mean_0_100` 为：每道题在 **k 次 repeat** 下，除可选项 **`token_budget_total`、`turn_budget`** 外 checklist **均全过** 才算该题通过（该题计 100），否则该题计 0；再对所有题取算术平均，即 **（完全通过的题目数 ÷ 题目数）× 100**。编排器在 `macro_mean_0_100 >= {cfg.target_pass_rate}` 时结束迭代。若你认为已充分达标，也可将 `target_met` 设为 true。
 - **会话目录**（本机路径，用于阅读产物）：`{session_dir}`
 
 ### 你必须完成的步骤
@@ -129,7 +116,7 @@ class DevshellAgentLoop:
 2. 检查返回结果中是否有 `p0_gate_failed: true`（P0 回归门控失败）：
    - **若 P0 回归**：不要调用 delegate_optimization 或 escalate_checklist_revision，直接跳到步骤 4 报告本轮失败。
    - **若 P0 通过或无 P0 题目**：继续步骤 3。
-3. 读取**脱敏摘要**（`macro_mean_0_100`、`task_scores`；单题 `score` 为 0/100：**该题 k 次 repeat 全部 checklist 全过** 才为 100）。除 **main_read_text / main_glob_paths / main_grep_text** 允许的 ``evaluation/devshell_agent_history/`` 整目录外，不要自行读取 `evaluation/**` 其它路径或原始 `score_reason`。若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**（优先填写 **candidate_layers** 与 **failure_buckets**、**capabilities_affected**；`candidate_layers` 用 ``skill / tool / system_prompt / runtime`` 标注你判断最像哪一层；**allowed_evidence_paths** 尽量用会话级路径如 ``eval_runs/iter_XX/raw_runs.jsonl``，避免逐题 workspace）；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
+3. 读取**脱敏摘要**（`macro_mean_0_100`、`task_scores`；单题 `score` 为 0/100：**该题 k 次 repeat 在「除 `token_budget_total`、`turn_budget` 外 checklist 全过」口径下** 才为 100）。除 **main_read_text / main_glob_paths / main_grep_text** 允许的 ``evaluation/devshell_agent_history/`` 整目录外，不要自行读取 `evaluation/**` 其它路径或原始 `score_reason`。若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**（优先填写 **candidate_layers** 与 **failure_buckets**、**capabilities_affected**；`candidate_layers` 用 ``skill / tool / system_prompt / runtime`` 标注你判断最像哪一层；**allowed_evidence_paths** 尽量用会话级路径如 ``eval_runs/iter_XX/raw_runs.jsonl``，避免逐题 workspace）；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
 4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实 `macro_mean_0_100`（完全通过题占比×100，与 `target_pass_rate` 同口径）与 `files_touched`（主 Agent 自身通常为空）；在 `rationale` 中总结本轮分流、子 Agent 结果与下一步。若 P0 回归，在 rationale 中说明回归详情。
 {extra_block}
 """
@@ -184,8 +171,6 @@ class DevshellAgentLoop:
             "eval_ingest_submit_timeout": cfg.eval_ingest_submit_timeout,
             "enable_checklist_agent": cfg.enable_checklist_agent,
             "enable_optimization_agent": True,
-            "enable_optimization_auto_commit": cfg.enable_optimization_auto_commit,
-            "optimization_auto_commit_skip_budget": cfg.optimization_auto_commit_skip_budget,
             "max_checklist_sdk_turns": checklist_revision_sdk_max_turns_from_jobs(
                 cfg.defaults.jobs
             ),
@@ -304,6 +289,7 @@ class DevshellAgentLoop:
             tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
             allowed_tools=allowed_tools,
             permission_mode=cfg.permission_mode,
+            max_buffer_size=self._SDK_MAX_BUFFER_SIZE,
         )
 
         self._write_session_manifest()
@@ -504,24 +490,6 @@ class DevshellAgentLoop:
             )
 
         lines = ["- `candidate_layers`: " + ", ".join(f"`{layer}`" for layer in layers)]
-        if layers == ["system_prompt"]:
-            lines.extend(
-                [
-                    "- 仅命中 `system_prompt`：默认不要修改 `matmaster/skills/`、"
-                    "`matmaster/tools/`、`src/` 等产品代码。",
-                    "- 优先读取现有 `matmaster/exps/_base.toml` / "
-                    "`matmaster/exps/direct.toml`，识别重复、冲突或可合并规则。",
-                    "- 若判断确实需要改 exp：只在 "
-                    "`proposed_matmaster_exps_changes.md` 中写 proposal，"
-                    "不要尝试绕过限制落代码改动。",
-                    "- proposal 使用固定模板并逐项填写："
-                    "`Target file`、`Existing rule(s) to replace or merge`、"
-                    "`Proposed text`、`Why not skill/tool layer`、"
-                    "`Expected cross-task benefit`、`Prompt budget impact`。",
-                ]
-            )
-            return "\n".join(lines) + "\n"
-
         if "skill" in layers:
             lines.append(
                 "- 命中 `skill`：优先检查 `matmaster/skills/`，并遵守 "
@@ -529,30 +497,19 @@ class DevshellAgentLoop:
             )
         if "tool" in layers:
             lines.append(
-                "- 命中 `tool`：优先检查 `matmaster/tools/` 与相关 tool descriptions；"
-                "避免把工具契约问题错误堆进 Skills。"
+                "- 命中 `tool`：优先检查 `matmaster/tools/` 与相关 tool descriptions。"
             )
         if "runtime" in layers:
             lines.append(
                 "- 命中 `runtime`：优先检查 `config/`、`matmaster/adaptors/`、"
-                "`matmaster/devshell/`、必要时 `src/` 的运行时链路。"
+                "`matmaster/devshell/`、必要时 `src/`。"
             )
         if "system_prompt" in layers:
             lines.append(
-                "- 同时命中 `system_prompt`：只有在确认问题属于跨任务执行契约，且"
-                "不能更合理地下沉到 skill/tool/runtime 层时，才写 exp proposal。"
+                "- 命中 `system_prompt`：只有确认属于跨任务执行契约且不能下沉到 "
+                "skill/tool/runtime 层时，才在 `proposed_matmaster_exps_changes.md` 写提案。"
             )
         return "\n".join(lines) + "\n"
-
-    @staticmethod
-    def _optimization_execution_track(delegation: dict[str, Any]) -> str:
-        track = str(delegation.get("execution_track") or "").strip()
-        if track:
-            return track
-        layers = DevshellAgentLoop._candidate_layers_for_delegation(delegation)
-        if layers == ["system_prompt"]:
-            return "proposal_only"
-        return "code_edit"
 
     def _record_optimization_proposal_track(
         self,
@@ -598,7 +555,7 @@ class DevshellAgentLoop:
             loop_log,
         )
 
-    def _apply_optimization_auto_commit(
+    def _record_optimization_proposal(
         self,
         *,
         it: int,
@@ -606,40 +563,12 @@ class DevshellAgentLoop:
         state: AgentLoopSharedState,
         loop_log: TextIO,
     ) -> None:
-        cfg = self._cfg
-        if not cfg.enable_optimization_auto_commit:
-            return
-        if self._optimization_execution_track(delegation) == "proposal_only":
-            self._record_optimization_proposal_track(
-                it=it,
-                delegation=delegation,
-                state=state,
-                loop_log=loop_log,
-            )
-            return
-        from evaluation.devshell_agent.optimization_auto_commit import (
-            commit_optimization_changes,
+        self._record_optimization_proposal_track(
+            it=it,
+            delegation=delegation,
+            state=state,
+            loop_log=loop_log,
         )
-
-        rnd = int(delegation.get("optimization_round", -1))
-        slug = self._optimization_delegation_slug(delegation)
-        res = commit_optimization_changes(
-            cfg.repo_root,
-            cfg.session_dir,
-            iteration_index=it,
-            optimization_round=rnd,
-            slug=slug,
-            skip_exp_budget=cfg.optimization_auto_commit_skip_budget,
-            log=loop_log,
-        )
-        if res.commit_sha:
-            for row in state.optimization_reports:
-                if (
-                    int(row.get("iteration_index", -1)) == it
-                    and int(row.get("optimization_round", -1)) == rnd
-                ):
-                    row["commit_shas"] = [res.commit_sha]
-                    break
 
     def _optimization_user_message(self, *, it: int, delegation: dict[str, Any]) -> str:
         session_dir = self._cfg.session_dir.resolve()
@@ -653,8 +582,9 @@ class DevshellAgentLoop:
 {blob}
 ```
 
-- **会话目录**（仅供查看非 `evaluation/` 产物）：`{session_dir}`
-- 任务：仅在**产品侧目录**做必要优化，不得查看或编辑 `evaluation/**`。
+- **会话目录**：`{session_dir}`
+- **提案文件必须写到会话目录下**：`{session_dir}/proposed_optimization_changes.md`
+- 任务：**只读**分析产品侧代码，将优化建议写入上述提案文件，不得直接编辑代码文件，不得查看或编辑 `evaluation/**`。
 - 分层指导：
 {guidance}
 - 结束前**必须**调用 **report_optimization_result**（`iteration_index={it}`，`optimization_round={delegation.get("optimization_round")}`）。
@@ -700,7 +630,7 @@ class DevshellAgentLoop:
         if not base:
             return 0
 
-        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+        from claude_agent_sdk import ClaudeAgentOptions
 
         from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
@@ -717,12 +647,19 @@ class DevshellAgentLoop:
                 tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
                 allowed_tools=optimization_allowed,
                 permission_mode=self._cfg.permission_mode,
+                max_buffer_size=self._SDK_MAX_BUFFER_SIZE,
             )
             log_line(
                 f"P0 revert sub-round: iteration {it}, base={base[:12]}…",
                 loop_log,
             )
-            async with ClaudeSDKClient(options=co) as cc:
+            cc = await sdk_client_with_retry(
+                co,
+                retries=self._SDK_CONNECT_RETRIES,
+                delay=self._SDK_CONNECT_RETRY_DELAY,
+                log_file=loop_log,
+            )
+            async with cc:
                 await cc.query(
                     self._p0_revert_user_message(it=it, revert_base_sha=revert_base_sha)
                 )
@@ -771,7 +708,7 @@ class DevshellAgentLoop:
         if not delegations:
             return 0
 
-        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+        from claude_agent_sdk import ClaudeAgentOptions
 
         from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
@@ -787,13 +724,20 @@ class DevshellAgentLoop:
                 tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
                 allowed_tools=optimization_allowed,
                 permission_mode=self._cfg.permission_mode,
+                max_buffer_size=self._SDK_MAX_BUFFER_SIZE,
             )
             log_line(
                 "optimization agent: "
                 f"iteration {it}, round {delegation.get('optimization_round')}",
                 loop_log,
             )
-            async with ClaudeSDKClient(options=co) as cc:
+            cc = await sdk_client_with_retry(
+                co,
+                retries=self._SDK_CONNECT_RETRIES,
+                delay=self._SDK_CONNECT_RETRY_DELAY,
+                log_file=loop_log,
+            )
+            async with cc:
                 await cc.query(
                     self._optimization_user_message(it=it, delegation=delegation)
                 )
@@ -823,13 +767,19 @@ class DevshellAgentLoop:
                 )
                 warning = 1
             else:
-                self._apply_optimization_auto_commit(
+                self._record_optimization_proposal(
                     it=it,
                     delegation=delegation,
                     state=state,
                     loop_log=loop_log,
                 )
             notify_proposed_matmaster_exps_if_present(
+                session_dir=self._cfg.session_dir,
+                iteration_index=it,
+                delegation=delegation,
+                optimization_reports=reports,
+            )
+            notify_proposed_optimization_if_present(
                 session_dir=self._cfg.session_dir,
                 iteration_index=it,
                 delegation=delegation,
@@ -884,7 +834,7 @@ class DevshellAgentLoop:
             )
             ids_before = None
 
-        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+        from claude_agent_sdk import ClaudeAgentOptions
 
         from evaluation.devshell_agent.sdk_tools import MatmasterEvalMcpToolkit
 
@@ -898,12 +848,19 @@ class DevshellAgentLoop:
             tools=_DEVSHELL_SDK_BUILTIN_TOOLS_DISABLED,
             allowed_tools=checklist_allowed,
             permission_mode=self._checklist_permission_mode_resolved(),
+            max_buffer_size=self._SDK_MAX_BUFFER_SIZE,
         )
         log_line(
             f"checklist agent: iteration {it}, {len(escalations)} escalation(s)",
             loop_log,
         )
-        async with ClaudeSDKClient(options=co) as cc:
+        cc = await sdk_client_with_retry(
+            co,
+            retries=self._SDK_CONNECT_RETRIES,
+            delay=self._SDK_CONNECT_RETRY_DELAY,
+            log_file=loop_log,
+        )
+        async with cc:
             await cc.query(self._checklist_user_message(it=it, escalations=escalations))
             async for message in cc.receive_response():
                 log_sdk_message(

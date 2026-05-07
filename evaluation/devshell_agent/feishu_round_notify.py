@@ -38,7 +38,7 @@ _MAX_REPORT_INLINE = 900
 _MAX_PROPOSAL_PREVIEW = 2800
 
 
-ProposalKind = Literal["question_bank", "matmaster_exps"]
+ProposalKind = Literal["question_bank", "matmaster_exps", "optimization"]
 
 
 def _post_webhook(url: str, body: dict[str, Any]) -> None:
@@ -335,9 +335,10 @@ def notify_after_scoring_async(
             "ingest_result": ingest_result,
         },
         name="devshell_eval_feishu",
-        daemon=True,
+        daemon=False,
     )
     t.start()
+    t.join(timeout=30)
 
 
 def _read_proposal_preview(path: Path) -> str:
@@ -370,16 +371,21 @@ def _notify_manual_review_proposal_impl(
 
         env = (os.environ.get("SERVICE_ENV") or "").strip()
         env_prefix = f"[{env}] " if env else ""
+        rnd_s = (
+            f" · opt_round {optimization_round}"
+            if optimization_round is not None
+            else ""
+        )
         if kind == "question_bank":
             title = (
                 f"{env_prefix}Devshell · 题库提案（待合入） · iter {iteration_index}"
             )
-        else:
-            rnd_s = (
-                f" · opt_round {optimization_round}"
-                if optimization_round is not None
-                else ""
+        elif kind == "optimization":
+            title = (
+                f"{env_prefix}Devshell · 优化提案（待合入） · "
+                f"iter {iteration_index}{rnd_s}"
             )
+        else:
             title = (
                 f"{env_prefix}Devshell · exp/系统提示词提案（待合入） · "
                 f"iter {iteration_index}{rnd_s}"
@@ -391,12 +397,15 @@ def _notify_manual_review_proposal_impl(
 
         preview = _read_proposal_preview(proposal_path)
         lines: list[str] = [
-            f"**类型**\n{'题库 / checklist' if kind == 'question_bank' else 'matmaster/exps（系统提示词层）'}",
+            f"**类型**\n{'题库 / checklist' if kind == 'question_bank' else '产品侧优化提案（skill / tool / prompt）' if kind == 'optimization' else 'matmaster/exps（系统提示词层）'}",
             f"**迭代**\n{iteration_index}",
             f"**会话目录**\n`{session_dir.resolve()}`",
             f"**提案文件**\n`{proposal_path.name}`（{size} bytes）",
         ]
-        if optimization_round is not None and kind == "matmaster_exps":
+        if optimization_round is not None and kind in (
+            "matmaster_exps",
+            "optimization",
+        ):
             lines.append(f"**optimization_round**\n{optimization_round}")
         if rt:
             lines.extend(["", "**子 Agent 报告摘要**", rt])
@@ -430,7 +439,7 @@ def notify_manual_review_proposal_async(
     report_text: str = "",
     optimization_round: int | None = None,
 ) -> None:
-    """子回合写出非空 ``proposed_question_bank_changes.md`` / ``proposed_matmaster_exps_changes.md`` 时发飞书提醒。"""
+    """子回合写出非空 proposal 文件时发飞书提醒。"""
     if not (FEISHU_WEBHOOK_URL or "").strip():
         return
     if not proposal_path.is_file() or proposal_path.stat().st_size <= 0:
@@ -448,6 +457,7 @@ def notify_manual_review_proposal_async(
             "optimization_round": optimization_round,
         },
         name="devshell_proposal_feishu",
-        daemon=True,
+        daemon=False,
     )
     t.start()
+    t.join(timeout=30)

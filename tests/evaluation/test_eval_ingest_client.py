@@ -114,6 +114,20 @@ def test_extract_ingest_tokens_prefers_last_vendor_turn() -> None:
     )
 
 
+def test_extract_ingest_tokens_vendor_turn_bedrock_camelcase() -> None:
+    assert (
+        extract_ingest_tokens(
+            {
+                "usage": {"totalTokens": 999},
+                "usage_vendor_by_turn": [
+                    {"inputTokens": 1, "outputTokens": 1, "totalTokens": 23000},
+                ],
+            }
+        )
+        == 23000
+    )
+
+
 def test_extract_ingest_tokens_empty_vendor_list_uses_usage() -> None:
     assert (
         extract_ingest_tokens(

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+from unittest.mock import patch
 
 from evaluation.devshell_agent.subprocess_runner import (
     DevshellEvalSubprocess,
     RunDevshellEvalParams,
+    run_score_devshell_tasks,
 )
 
 
@@ -91,6 +94,37 @@ def test_build_run_devshell_eval_argv_eval_ingest_run_id() -> None:
     argv = invoker.build_argv(script, params)
     i = argv.index("--eval-ingest-run-id")
     assert argv[i + 1] == "11111111-1111-1111-1111-111111111111"
+
+
+def test_run_score_devshell_tasks_uses_in_process_agent_scorer() -> None:
+    """Orchestrator scores in-process with score_devshell_tasks_for_agent_loop."""
+    repo = Path("/repo")
+    run_dir = Path("/repo/results/run1")
+    captured: dict[str, Any] = {}
+
+    def fake_agent_loop(**kwargs: Any) -> int:
+        captured.clear()
+        captured.update(kwargs)
+        return 0
+
+    with patch(
+        "evaluation.scripts.devshell.score_devshell_tasks.score_devshell_tasks_for_agent_loop",
+        fake_agent_loop,
+    ):
+        run_score_devshell_tasks(
+            repo_root=repo,
+            run_dir=run_dir,
+            eval_config=None,
+            eval_ingest_timeout=60.0,
+            score_jobs=2,
+            parallel_checklist_workers=4,
+            submit=False,
+        )
+
+    assert captured["run_dir"] == run_dir
+    assert captured["submit"] is False
+    assert captured["score_jobs"] == 2
+    assert captured["parallel_checklist_workers"] == 4
 
 
 def test_build_run_devshell_eval_argv_fallback_model() -> None:

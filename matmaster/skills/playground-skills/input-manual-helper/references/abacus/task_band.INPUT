@@ -17,7 +17,7 @@ pseudo_dir              ./pseudopotentials/
 orbital_dir             ./orbitals/
 
 # Electronic structure
-ecutwfc                 50
+ecutwfc                 100
 basis_type              lcao
 nspin                   1
 nbands                  20
@@ -27,11 +27,14 @@ init_chg                file
 
 # Smearing (needed for numerical stability in nscf)
 smearing_method         gauss
-smearing_sigma          0.015
+smearing_sigma          0.01
 
-# SCF (one-shot, nscf uses fixed charge)
-scf_thr                 1e-9
-scf_nmax                1
+# SCF settings for NSCF (read fixed charge from SCF)
+scf_thr                 1e-7
+scf_nmax                300
+
+# IMPORTANT: NSCF requires symmetry off for line-mode k-paths
+symmetry                0
 
 # Output band structure
 out_band                1

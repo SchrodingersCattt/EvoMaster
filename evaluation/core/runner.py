@@ -163,7 +163,7 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
 
 
 def _question_matches_slice(question: QuestionItem, sl: CapabilitySlice) -> bool:
-    if question.capability.lower() != sl.capability.lower():
+    if sl.capability is not None and question.capability.lower() != sl.capability.lower():
         return False
     if sl.domains is not None:
         allowed = {d.lower() for d in sl.domains}

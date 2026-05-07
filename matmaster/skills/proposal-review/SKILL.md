@@ -43,8 +43,16 @@ When writing reviews in Chinese, use the following standard terms consistently:
 * Discuss 可执行性 alongside general 可行性 in the feasibility section — cover resource requirements, team capability, timeline realism, and technical risk mitigation specifically from an operational execution perspective.
 * Include a 立项 recommendation tied to the overall score and risk assessment.
 
+## Deliverable Format Requirements
+
+* **Scorecard JSON**: Must contain all scoring dimensions as top-level keys with numeric values within the specified range. Include `total_score` and `recommendation` (e.g. "建议立项" / "不建议立项" / "建议有条件立项").
+* **Rationale Markdown**: Structured sections per dimension; each section cites ≥ 2 specific evidence points from the proposal. Must include separate 可行性 and 可执行性 assessments.
+* **Risk assessment JSON** (if required): Top-level `risks` array with `{description, severity, mitigation}` objects.
+* **Always write all required deliverable files before reporting task completion.** Check filenames match the task specification exactly.
+
 ## Rules
 
 * All conclusions must be traceable to the proposal text. Do not invent facts or cite external knowledge not in the document.
 * Respect the score ranges specified in the evaluation policy.
 * JSON deliverables must have all task-specified keys at the top level.
+* **Completeness check**: Before finishing, list all files in the workspace and verify every required deliverable exists with correct filename and valid content (JSON parseable, Markdown non-empty).

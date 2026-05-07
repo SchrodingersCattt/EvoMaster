@@ -1,0 +1,25 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 1,
+  "optimization_delegations": [],
+  "optimization_reports": [
+    {
+      "commit_shas": [],
+      "files_touched": [
+        "results/devshell_agent_loop_20260505_132038/proposed_optimization_changes.md"
+      ],
+      "followup_suggestion": "Apply proposals 1-4 and re-run the eval with k=3. If SC_struct_008 still fails, check whether the agent is actually loading the `build-atomic-structure` skill (vs only `structure-manager`) and consider adding a cross-reference in the skill registry. For WO_* questions, if still failing, inspect workspace logs to identify which specific workflow step is non-deterministic.",
+      "iteration_index": 1,
+      "needs_more_work": false,
+      "optimization_round": 1,
+      "summary": "Wrote `proposed_optimization_changes.md` with 4 proposals targeting stochastic failures in SC_struct_008, WO_kinetic_001, and WO_struct_003:\n\n1. **`build-atomic-structure/SKILL.md`** — Add \"Known-Material Fast Paths\" table routing gamma-alumina to the dedicated `build_gamma_al2o3.py` script instead of ad-hoc construction.\n2. **`build-atomic-structure/SKILL.md`** — Add relaxation checkpoint hard guard: save unrelaxed file under task filename before attempting relaxation.\n3. **`direct.toml`** — Add \"Multi-step Workflow Reliability\" section mandating step enumeration, per-step verification, and intermediate artifact saves for workflow tasks.\n4. **`structure-manager/SKILL.md`** — Strengthen deterministic routing to mandate dedicated builder scripts over manual construction.\n\nRoot cause: the agent has multiple valid approaches for these tasks but non-deterministically picks paths of varying reliability. Proposals reduce variance by mandating known-good scripts and enforcing intermediate verification discipline."
+    }
+  ],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 1,
+    "macro_mean_0_100": 40,
+    "rationale": "## Iter 01 Summary\n\n- **P0 gate**: passed (no P0 questions).\n- **Score**: `macro_mean_0_100 = 40` (2/5 questions fully passed across all k=3 repeats).\n  - ✅ WO_elec_002_20260503 — all 3 repeats passed\n  - ✅ WO_mech_002_20260404 — all 3 repeats passed\n  - ❌ SC_struct_008_20260410 — not all repeats passed\n  - ❌ WO_kinetic_001_20260504 — not all repeats passed\n  - ❌ WO_struct_003_20260502 — not all repeats passed\n- **Target 80 NOT met** (40 < 80).\n\n### Context from History\nThe same 5-question set scored **80/100** in the two prior sessions (20260504_110657 and 20260505_100625). The failures are **stochastic** — each question passes in some sessions but not others. This run hit an unlucky variance pattern where 3 questions failed simultaneously.\n\n### Delegation\n- **delegate_optimization** queued (round 1): Focus on improving reliability/consistency of borderline questions via skill and system_prompt layers. Key areas: structure construction guidance (SC_struct_008), kinetics workflow (WO_kinetic_001), structure workflow (WO_struct_003).\n\n### Next Steps\nThe optimization sub-agent will analyze `raw_runs.jsonl` and propose product-side changes to `matmaster/exps/direct.toml` and/or `matmaster/skills/` to reduce stochastic failures. A re-run after those changes should achieve ≥80.",
+    "target_met": false
+  }
+}

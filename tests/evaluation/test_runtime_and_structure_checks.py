@@ -12,6 +12,11 @@ from pydantic import ValidationError
 from evaluation.core.evaluator import BinaryEvaluator
 from evaluation.core.evaluator_helpers import check_duration_budget
 from evaluation.core.evidence import EvidenceBundle, TokenUsage
+from evaluation.validators.answer_text import (
+    check_answer_json_numeric,
+    extract_json_block,
+    navigate_json_path,
+)
 from evaluation.validators.structure_molcrys import (
     check_disorder_dan2_integer_formula,
     check_sc005_other_formulas_in_answer,
@@ -35,6 +40,140 @@ def test_duration_budget_fails_when_missing_duration() -> None:
     ok, reason = check_duration_budget(evidence=ev, expected={'max': 5000})
     assert ok is False
     assert 'not recorded' in reason
+
+
+# ---------------------------------------------------------------------------
+# answer_json_numeric: deterministic numeric check on a JSON block in the answer
+# ---------------------------------------------------------------------------
+
+
+_ANSWER_TAG_SAMPLE = """
+We performed Pawley refinement at each temperature. Summary follows.
+
+<eval_results>
+{
+  "rtp": {
+    "303K": {"a": 10.83, "V": 999.81},
+    "363K": {"a": 10.92, "V": 1011.67},
+    "fits": {"V": {"slope": 0.2013, "r_squared": 0.99}}
+  },
+  "htp": {
+    "383K": {"a": 11.05, "V": 1022.73},
+    "fits": {"V": {"slope": 0.1154}}
+  }
+}
+</eval_results>
+
+That's the result.
+"""
+
+_ANSWER_FENCE_SAMPLE = """
+Refinement done.
+
+```json
+{"rtp": {"303K": {"V": 999.81}}}
+```
+"""
+
+
+def test_answer_json_numeric_extracts_from_eval_results_tag() -> None:
+    obj, reason = extract_json_block(_ANSWER_TAG_SAMPLE)
+    assert obj is not None, reason
+    assert obj['rtp']['303K']['V'] == 999.81
+
+
+def test_answer_json_numeric_extracts_from_json_fence() -> None:
+    obj, _ = extract_json_block(_ANSWER_FENCE_SAMPLE)
+    assert obj is not None
+    assert obj['rtp']['303K']['V'] == 999.81
+
+
+def test_answer_json_numeric_no_block_fails_clearly() -> None:
+    obj, reason = extract_json_block('No structured block here, just prose.')
+    assert obj is None
+    assert 'eval_results' in reason or 'json' in reason
+
+
+def test_answer_json_numeric_invalid_json_block_reports_decode_error() -> None:
+    bad = '<eval_results>{not: valid}</eval_results>'
+    obj, reason = extract_json_block(bad)
+    assert obj is None
+    assert 'JSON' in reason or 'json' in reason
+
+
+def test_navigate_json_path_handles_numeric_keys() -> None:
+    obj = {'rtp': {'303K': {'V': 999.81}}}
+    val, err = navigate_json_path(obj, 'rtp.303K.V')
+    assert err == ''
+    assert val == 999.81
+
+
+def test_navigate_json_path_missing_key_lists_available() -> None:
+    obj = {'rtp': {'303K': {'V': 999.81}}}
+    val, err = navigate_json_path(obj, 'rtp.323K.V')
+    assert val is None
+    assert "'323K'" in err
+    assert '303K' in err  # available keys mentioned
+
+
+def test_check_answer_json_numeric_pass_within_tolerance() -> None:
+    ok, reason = check_answer_json_numeric(
+        _ANSWER_TAG_SAMPLE,
+        json_path='rtp.fits.V.slope',
+        target=0.2013,
+        tolerance=0.06,
+    )
+    assert ok, reason
+    assert "path='rtp.fits.V.slope'" in reason
+
+
+def test_check_answer_json_numeric_fail_outside_tolerance() -> None:
+    ok, reason = check_answer_json_numeric(
+        _ANSWER_TAG_SAMPLE,
+        json_path='htp.fits.V.slope',
+        target=0.5,
+        tolerance=0.05,
+    )
+    assert not ok
+    assert 'found=0.1154' in reason
+
+
+def test_check_answer_json_numeric_does_not_fall_back_to_other_keys() -> None:
+    """Regression for the numerical_range pitfall: a lookup must not silently
+    pick a number from a different field (different temperature/phase) just
+    because the magnitude happens to be closest."""
+    ok, reason = check_answer_json_numeric(
+        _ANSWER_TAG_SAMPLE,
+        json_path='rtp.303K.V',
+        target=1022.73,  # this is HTP/383K — must NOT pass on RTP/303K key
+        tolerance=10.0,
+    )
+    assert not ok
+    assert 'found=999.81' in reason
+
+
+def test_check_answer_json_numeric_rejects_non_numeric_value() -> None:
+    answer = '<eval_results>{"rtp":{"303K":{"V":"approx 999.8"}}}</eval_results>'
+    ok, reason = check_answer_json_numeric(
+        answer, json_path='rtp.303K.V', target=999.81, tolerance=20.0
+    )
+    assert not ok
+    assert 'not numeric' in reason
+
+
+def test_check_answer_json_numeric_via_evaluator_helper_dispatch() -> None:
+    """End-to-end: ReferenceAnswer.value as a dict drives the verifier."""
+    from evaluation.core.evaluator_helpers import (
+        check_answer_json_numeric_from_ref,
+    )
+    from evaluation.core.schemas import ReferenceAnswer
+
+    ref = ReferenceAnswer(
+        key='rtp_V_303K',
+        value={'json_path': 'rtp.303K.V', 'target': 999.81, 'tolerance': 20.0},
+    )
+    ok, reason = check_answer_json_numeric_from_ref(answer=_ANSWER_TAG_SAMPLE, ref=ref)
+    assert ok, reason
 
 
 def test_sc005_other_formulas_detects_missing() -> None:
