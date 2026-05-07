@@ -2166,17 +2166,11 @@ questions:
   intent: Generate VASP INCAR for a magnetic Fe BCC system with correct spin-polarization settings.
   human_prompt_seed: '工作区中有 Fe_bcc.vasp（体心立方铁，2个原子）。
 
-    生成 SCF 计算的 INCAR 文件 `INCAR_mag`，要求：
+    请生成适合该体系的 SCF 计算 INCAR 文件 `INCAR_mag`。
 
-    - 自旋极化计算
+    注意：Fe 是典型的铁磁性金属，请确保计算设置正确反映其磁性。
 
-    - 初始磁矩设置为每个 Fe 原子 5.0 μB
-
-    - PBE 泛函
-
-    - ENCUT = 520 eV
-
-    - 电子步收敛精度 1E-6 eV'
+    ENCUT = 520 eV，电子步收敛精度 1E-6 eV，PBE 泛函。'
   tags:
   - eng_vasp
   data_files: []
@@ -2248,21 +2242,13 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Generate VASP INCAR for NiO with DFT+U (Dudarev) settings.
-  human_prompt_seed: '工作区中有 NiO.vasp（NaCl结构氧化镍，4个原子：2 Ni + 2 O）。
+  human_prompt_seed: '工作区中有 NiO.vasp（NaCl结构氧化镍，4个原子：2 Ni + 2 O，POSCAR 中原子顺序为 Ni O）。
 
-    生成 DFT+U 静态计算的 INCAR 文件 `INCAR_dftu`，要求：
+    NiO 是强关联反铁磁绝缘体，Ni 3d 电子存在强 on-site Coulomb 相互作用。
+    请生成考虑强关联效应的静态计算 INCAR 文件 `INCAR_dftu`。
 
-    - Dudarev 方法 (LDAUTYPE=2)
-
-    - Ni 的 d 轨道 U=6.2 eV, J=0
-
-    - O 不加 U
-
-    - 自旋极化（NiO 是反铁磁体）
-
-    - PBE 泛函，ENCUT=550
-
-    - POSCAR 中原子顺序为 Ni O'
+    要求使用 Hubbard U 校正，Ni 的有效 U 值取 6.2 eV。
+    PBE 泛函，ENCUT=550 eV。'
   tags:
   - eng_vasp
   data_files: []
