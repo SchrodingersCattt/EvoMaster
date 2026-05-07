@@ -37,7 +37,6 @@ from .evaluator_helpers import (
     check_text_file_numeric_range_from_evidence,
     check_text_file_regex_from_evidence,
     check_token_budget,
-    check_tool_name_used,
     check_turn_budget,
 )
 from .evaluator_struct_helpers import (
@@ -74,38 +73,6 @@ def _h_numerical_range(ctx):
 def _h_contains_all(ctx):
     return BinaryEvaluator._check_contains_all(
         answer=ctx["answer"],
-        expected=ctx["ref"].value,
-    )
-
-
-@_R("tool_args_match")
-def _h_tool_args_match(ctx):
-    return BinaryEvaluator._check_tool_args_match(
-        tool_calls=ctx["tool_calls"],
-        ref=ctx["ref"],
-    )
-
-
-@_R("tool_observation_field")
-def _h_tool_observation_field(ctx):
-    return BinaryEvaluator._check_tool_observation_field(
-        evidence=ctx["evidence"],
-        ref=ctx["ref"],
-    )
-
-
-@_R("event_type_called")
-def _h_event_type_called(ctx):
-    return BinaryEvaluator._check_event_type_called(
-        evidence=ctx["evidence"],
-        expected=ctx["ref"].value,
-    )
-
-
-@_R("call_count_range")
-def _h_call_count_range(ctx):
-    return BinaryEvaluator._check_call_count_range(
-        evidence=ctx["evidence"],
         expected=ctx["ref"].value,
     )
 
@@ -194,7 +161,6 @@ for _name, _fn in [
     ("json_file_schema", check_json_file_schema),
     ("json_file_numeric_range", check_json_file_numeric_range),
     ("json_file_artifacts", check_json_file_artifacts),
-    ("tool_name_used", check_tool_name_used),
 ]:
     BinaryEvaluator._VERIFY_REGISTRY[_name] = (_evidence_ref_handler(_fn), True)
 
