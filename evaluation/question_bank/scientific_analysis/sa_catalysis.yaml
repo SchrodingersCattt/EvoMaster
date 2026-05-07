@@ -32,6 +32,9 @@ questions:
 
     - `exmos2_cv_100mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080951_exmos2_cv_100mvps.txt`
 
+    电极几何面积（来自实验报告）：bulk MoS2 = 0.48 cm² (0.6 cm × 0.8 cm)；exfoliated MoS2 = 0.40 cm² (0.5 cm × 0.8 cm)。
+    请把 LSV/CV 中的电流转换为电流密度（mA/cm²）后再做容性分析。
+
     请完成以下分析：
 
     1. 对比两种材料的 HER 活性，报告能体现活性差异的电位/电流指标；
@@ -43,12 +46,12 @@ questions:
     最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含：
     `mos2.potential_at_5mA_V`, `exmos2.potential_at_5mA_V`,
     `mos2.tafel_mV_dec`, `exmos2.tafel_mV_dec`,
-    `mos2.cdl_mF`, `exmos2.cdl_mF`。
+    `mos2.cdl_mF_cm2`, `exmos2.cdl_mF_cm2`。
 
     JSON 中字段名形如 `a.b` 表示嵌套对象（顶层 `a` 下的子键 `b`），请使用嵌套结构而不要写成扁平字符串键。结构示例（数值仅占位）：
 
     ```json
-    {"mos2": {"potential_at_5mA_V": 0, "tafel_mV_dec": 0, "cdl_mF": 0}, "exmos2": {"potential_at_5mA_V": 0, "tafel_mV_dec": 0, "cdl_mF": 0}}
+    {"mos2": {"potential_at_5mA_V": 0, "tafel_mV_dec": 0, "cdl_mF_cm2": 0}, "exmos2": {"potential_at_5mA_V": 0, "tafel_mV_dec": 0, "cdl_mF_cm2": 0}}
     ```'
   tags:
   - char_ec_lsv
@@ -129,16 +132,16 @@ questions:
     unit: mV/dec
   - key: mos2_cdl
     value:
-      json_path: mos2.cdl_mF
-      target: 0.10337500000000004
-      tolerance: 0.05
-    unit: mF
+      json_path: mos2.cdl_mF_cm2
+      target: 1.1096
+      tolerance: 0.15
+    unit: mF/cm^2
   - key: exmos2_cdl
     value:
-      json_path: exmos2.cdl_mF
-      target: 0.05984999999999998
-      tolerance: 0.04
-    unit: mF
+      json_path: exmos2.cdl_mF_cm2
+      target: 0.53125
+      tolerance: 0.10
+    unit: mF/cm^2
   - key: turn_budget
     value:
       max: 45
