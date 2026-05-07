@@ -2589,6 +2589,29 @@ questions:
   reference_answers:
   - key: em_output
     value: em.gro
+  - key: single_submission
+    value:
+      filename: run.sh
+      tokens: [gmx_mpi pdb2gmx, gmx_mpi solvate, genion, gmx_mpi mdrun]
+      case_sensitive: false
+  - key: gmx_mpi_used
+    value:
+      filename: run.sh
+      tokens: [gmx_mpi]
+      case_sensitive: true
+  - key: maxwarn_used
+    value:
+      filename: run.sh
+      tokens: [-maxwarn]
+  - key: set_e_in_script
+    value:
+      filename: run.sh
+      tokens: [set -e]
+  - key: genion_pipe
+    value:
+      filename: run.sh
+      pattern: "echo.*\\|.*gmx_mpi\\s+genion|printf.*\\|.*gmx_mpi\\s+genion"
+      flags: i
   - key: turn_budget
     value:
       max: 15
@@ -2600,14 +2623,14 @@ questions:
       max: 25000
   scoring_checklist:
   - id: single_submission
-    criterion: All steps (pdb2gmx, editconf, solvate, genion, grompp, mdrun) are
-      chained in a single run.sh script submitted once to Bohrium.
+    criterion: All steps (pdb2gmx, solvate, genion, mdrun) are chained in a single
+      run.sh script submitted once to Bohrium.
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_contains_all
   - id: gmx_mpi_used
-    criterion: The run.sh script uses `gmx_mpi` (not `gmx`) for all GROMACS commands.
+    criterion: The run.sh script uses `gmx_mpi` for GROMACS commands.
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_contains_all
   - id: no_local_gmx
     criterion: Agent does NOT attempt to run any gmx/gmx_mpi command locally (outside
       of the Bohrium submission).
@@ -2617,11 +2640,11 @@ questions:
     criterion: The genion command uses echo/pipe (e.g. `echo "SOL" | gmx_mpi genion ...`)
       to provide interactive group selection.
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_regex
   - id: maxwarn_used
-    criterion: grompp invocations include `-maxwarn` flag (value >= 1).
+    criterion: grompp invocations include `-maxwarn` flag.
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_contains_all
   - id: topology_before_solvate
     criterion: The topology file exists (via pdb2gmx) before `solvate -p` is called.
     axis: correctness
@@ -2632,10 +2655,9 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: set_e_in_script
-    criterion: The run.sh script includes `set -e` (or equivalent) so that it aborts
-      on first error.
+    criterion: The run.sh script includes `set -e` so that it aborts on first error.
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_contains_all
   - id: em_convergence
     criterion: Final answer reports EM convergence (step count and potential energy).
     axis: correctness
