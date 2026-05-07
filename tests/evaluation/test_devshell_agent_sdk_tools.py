@@ -657,5 +657,3 @@ def test_checklist_writes_proposal_only_under_session(tmp_path: Path) -> None:
         assert "proposed_question_bank_changes" in str(exc)
     else:
         raise AssertionError("expected block on arbitrary session file write")
-
-
