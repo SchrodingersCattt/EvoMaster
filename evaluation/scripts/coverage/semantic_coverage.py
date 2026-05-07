@@ -98,7 +98,7 @@ def build_user_prompt(rule: dict, relevant_questions: list[dict]) -> str:
         "",
         f"POTENTIALLY RELEVANT QUESTIONS ({len(relevant_questions)}):",
     ]
-    for q in relevant_questions[:8]:  # Limit to 8 most relevant
+    for q in relevant_questions:
         parts.append("")
         parts.append(format_question_for_judge(q))
     if not relevant_questions:
@@ -228,8 +228,8 @@ def get_relevant_questions(rule: dict, all_questions: dict[str, dict]) -> list[d
 
     # Prefer tag-matched; only use capability fallback if no tag matches
     if tag_matched:
-        return tag_matched[:8]
-    return cap_matched[:8]
+        return tag_matched
+    return cap_matched
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
