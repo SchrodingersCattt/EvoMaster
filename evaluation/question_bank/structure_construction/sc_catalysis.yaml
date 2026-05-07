@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: catalysis
 questions:
-- id: CR_SC_ZnS001_20260428
+- id: CR_SC_ZnS001_20260507
   capability: structure_construction
   domain: catalysis
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per doc 3.1.2.
@@ -23,6 +23,18 @@ questions:
       tolerance: 2
       axis: z
       layer_tol_A: 0.5
+  - key: zn_s_ratio
+    value:
+      filename: ZnS_001_slab.cif
+      element_a: Zn
+      element_b: S
+      expected_ratio: 1.0
+      tolerance: 0.01
+  - key: slab_atom_count
+    value:
+      filename: ZnS_001_slab.cif
+      expected: 24
+      tolerance: 0
   - key: turn_budget
     value:
       max: 22
@@ -43,8 +55,16 @@ questions:
       0.5 Å along z are merged into one plane.
     axis: correctness
     verify: struct_file_layer_count
+  - id: zn_s_ratio
+    criterion: The output slab preserves Zn:S = 1:1 stoichiometry.
+    axis: correctness
+    verify: struct_file_stoichiometry_ratio
+  - id: slab_atom_count
+    criterion: The 3-bilayer 2x2x1 ZnS(001) slab contains exactly 24 atoms.
+    axis: correctness
+    verify: struct_file_atom_count
   - id: supercell_vacuum_ok
-    criterion: 交付的 ZnS(001) slab 采用 2×2×1 扩胞，真空层 ≥15 Å。
+    criterion: 交付的 ZnS(001) slab 采用 2×2×1 扩胞，真空层 ≥15 Å；若只在答案中声明，必须与 `ZnS_001_slab.cif` 的晶胞尺寸和层厚说明一致。
     axis: correctness
     verify: llm_binary_judge
     weight: 1.0
@@ -77,7 +97,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SC_elec_004_20260404
+- id: SC_elec_004_20260507
   capability: structure_construction
   domain: catalysis
   intent: Build Ag(001) surface slab and place CO molecule at ontop site for adsorption calculation.
@@ -96,9 +116,38 @@ questions:
   - struct_surface
   data_files: []
   reference_answers:
+  - key: bare_slab_file
+    value: bare_slab.vasp
+  - key: molecule_file
+    value: CO_molecule.vasp
+  - key: adsorbed_system_file
+    value: adsorbed_system.vasp
   - key: slab_layers
-    value: 4
-    tolerance: 0
+    value:
+      filename: bare_slab.vasp
+      expected: 4
+      tolerance: 0
+      axis: z
+      element: Ag
+      layer_tol_A: 0.5
+  - key: slab_ag_count
+    value:
+      filename: bare_slab.vasp
+      element: Ag
+      expected: 36
+      tolerance: 0
+  - key: co_c_count
+    value:
+      filename: CO_molecule.vasp
+      element: C
+      expected: 1
+      tolerance: 0
+  - key: co_o_count
+    value:
+      filename: CO_molecule.vasp
+      element: O
+      expected: 1
+      tolerance: 0
   - key: required_fields
     value:
     - bare_slab_file
@@ -117,11 +166,34 @@ questions:
     value:
       max: 8000
   scoring_checklist:
-  - id: slab_layers
-    criterion: Slab has exactly 4 atomic layers (4 z-distinct atomic planes, 36 Ag atoms in
-      3×3 supercell).
+  - id: bare_slab_file
+    criterion: Agent writes `bare_slab.vasp` to workspace.
     axis: correctness
-    verify: numerical_range
+    verify: artifact_exists
+  - id: molecule_file
+    criterion: Agent writes `CO_molecule.vasp` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: adsorbed_system_file
+    criterion: Agent writes `adsorbed_system.vasp` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: slab_layers
+    criterion: The file `bare_slab.vasp` has exactly 4 Ag atomic layers along z.
+    axis: correctness
+    verify: struct_file_layer_count
+  - id: slab_ag_count
+    criterion: The file `bare_slab.vasp` contains exactly 36 Ag atoms for the 3x3 four-layer slab.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: co_c_count
+    criterion: The file `CO_molecule.vasp` contains exactly one C atom.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: co_o_count
+    criterion: The file `CO_molecule.vasp` contains exactly one O atom.
+    axis: correctness
+    verify: struct_file_atom_count
   - id: required_fields
     criterion: Output includes three structure files, layer count, vacuum thickness, and adsorption
       site description.

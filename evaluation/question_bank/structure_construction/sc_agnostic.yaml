@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: agnostic
 questions:
-- id: SC_struct_002_20260409
+- id: SC_struct_002_20260507
   capability: structure_construction
   domain: agnostic
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular crystal
@@ -53,6 +53,12 @@ questions:
     - total_atoms
     - atom_count_ratio_check
     - molecule_integrity_check
+  - key: explicit_report_tokens
+    value:
+    - '144'
+    - '576'
+    - '4'
+    - slab_PUBMUU03_110.cif
   - key: molcrys_slab_molecular_integrity
     value:
       unit_cell_atoms: 144
@@ -87,6 +93,11 @@ questions:
       / connectivity reasoning.
     axis: correctness
     verify: llm_binary_judge
+  - id: explicit_report_tokens
+    criterion: Final answer explicitly includes the 144-atom input cell, 576-atom slab,
+      4x atom-count scaling, and `slab_PUBMUU03_110.cif` output basename.
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: The answer states what physical picture is used (molecular connectivity, periodic
       boundaries, (110) plane vs bulk, and how that supports or contradicts cutting molecules),
@@ -118,7 +129,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260423
+- id: SC_struct_005_20260507
   capability: structure_construction
   domain: agnostic
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and construct
@@ -152,7 +163,9 @@ questions:
 
     每个结构的 ordered replica 输出文件命名为 `ordered_<原始文件名>.cif`（例如 `ordered_disorder_DAN-2.cif`）。
 
-    最终答案按文件名逐项列出上述信息。
+    所有 ordered replica 必须是完全有序结构：输出 CIF 中所有 `_atom_site_occupancy` 均为 1，不得保留 partial/split occupancy。
+
+    最终答案按文件名逐项列出上述信息，并显式写出每个原始文件名与对应 `ordered_<原始文件名>.cif` 的配对。
 
     '
   tags:
@@ -162,7 +175,26 @@ questions:
     value:
       pattern: ordered_*.cif
       expected: 5
-      tolerance: 1
+      tolerance: 0
+  - key: ordered_files_parsable
+    value:
+      filename: ordered_*.cif
+  - key: ordered_files_occupancy_one
+    value:
+      filename: ordered_*.cif
+      tolerance: 1.0e-6
+  - key: ordered_file_name_mapping
+    value:
+    - disorder_DAN-2.cif
+    - disorder_DAP-4.cif
+    - disorder_PAP-H4.cif
+    - disorder_PAP-M5.cif
+    - disorder_TILPEN.cif
+    - ordered_disorder_DAN-2.cif
+    - ordered_disorder_DAP-4.cif
+    - ordered_disorder_PAP-H4.cif
+    - ordered_disorder_PAP-M5.cif
+    - ordered_disorder_TILPEN.cif
   - key: sc005_disorder_formulas
     value: {}
   - key: required_fields
@@ -184,6 +216,15 @@ questions:
       output files in workspace).
     axis: correctness
     verify: struct_file_count
+  - id: ordered_files_parsable
+    criterion: All `ordered_*.cif` deliverables can be parsed as structure files.
+    axis: correctness
+    verify: struct_file_parsable
+  - id: ordered_files_occupancy_one
+    criterion: Every ordered-replica CIF has only occupancy-1 sites; no partial or split occupancies
+      remain in `_atom_site_occupancy`.
+    axis: correctness
+    verify: struct_file_all_occupancy_one
   - id: sc005_disorder_formulas
     criterion: The answer includes the four reference formula strings for DAP-4, PAP-H4, PAP-M5,
       and TILPEN; for DAN-2 the reported ordered-replica chemical_formula uses integer stoichiometry
@@ -204,6 +245,11 @@ questions:
       and ordered_output_archive.
     axis: correctness
     verify: llm_binary_judge
+  - id: ordered_file_name_mapping
+    criterion: Final answer explicitly names all five input CIF basenames and the five corresponding
+      `ordered_<basename>.cif` output files.
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: The answer explains the physical/chemical basis for each structure (disorder/occupancy,
       connectivity, valence or charge balance, and what changes when building an ordered replica),
@@ -234,7 +280,7 @@ questions:
       benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-- id: SC_struct_006_20260406
+- id: SC_struct_006_20260507
   capability: structure_construction
   domain: agnostic
   intent: Add missing hydrogens to the diacetylmorphine (DACMOR) molecular crystal CIF and
@@ -294,6 +340,11 @@ questions:
       filename: dacmor_hydrogenated.cif
       expected_formula: C21H23NO5
       z_value: 4
+  - key: explicit_report_tokens
+    value:
+    - C21H23NO5
+    - '109'
+    - dacmor_hydrogenated.cif
   - key: turn_budget
     value: *id001
   - key: duration_budget
@@ -322,6 +373,11 @@ questions:
       local geometry (hybridisation, coordination).
     axis: correctness
     verify: molcrys_local_env
+  - id: explicit_report_tokens
+    criterion: Final answer explicitly reports formula C21H23NO5, a representative H-C-H angle
+      near 109 degrees, and the `dacmor_hydrogenated.cif` output basename.
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: The answer states the chemical/geometry rationale (which C/N atoms receive
       H, tetrahedral geometry targets, carbonyl/ester O should not be hydrogenated) and ties
@@ -353,7 +409,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008_20260410
+- id: SC_struct_008_20260507
   capability: structure_construction
   domain: agnostic
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
@@ -363,7 +419,8 @@ questions:
     Al:O ratio, which should be approximately 2:3 (±5%); (3) the three cell angles, each close
     to 90 degrees (±2 degrees); (4) whether both tetrahedral and octahedral [AlO] environments
     exist; (5) whether all interatomic distances are greater than 1.0 A; (6) the relaxed maximum
-    force, which should be below 0.1 eV/A.
+    force, which should be below 0.1 eV/A. Also include a machine-readable block
+    `<eval_results>{"max_force_ev_per_ang": <number>}</eval_results>` in the final answer.
 
     '
   tags:
@@ -398,8 +455,14 @@ questions:
       expected: 90.0
       tolerance: 2.0
   - key: max_force_eV_A
-    value: 0.05
-    tolerance: 0.05
+    value:
+      json_path: max_force_ev_per_ang
+      target: 0.05
+      tolerance: 0.05
+  - key: min_distance_A
+    value:
+      filename: gamma_alumina.cif
+      min_distance_A: 1.0
   - key: required_fields
     value:
     - file_exists
@@ -438,9 +501,13 @@ questions:
     axis: correctness
     verify: struct_file_cell_param
   - id: max_force_eV_A
-    criterion: The reported relaxed maximum force is below 0.1 eV/A.
+    criterion: The reported relaxed maximum force in `<eval_results>` is below 0.1 eV/A.
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
+  - id: min_distance_A
+    criterion: The minimum interatomic distance read from `gamma_alumina.cif` is at least 1.0 A.
+    axis: correctness
+    verify: struct_file_min_interatomic_distance
   - id: required_fields
     criterion: The answer explicitly reports the Al:O ratio, all three cell angles, evidence
       for both tetrahedral and octahedral AlO environments, a minimum-distance sanity check
@@ -495,7 +562,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260420
+- id: SC_struct_009_20260507
   capability: structure_construction
   domain: agnostic
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce trilayers
@@ -506,8 +573,9 @@ questions:
     tri-layer contributes three planes (O–Ce–O style stacking), not three coarse trilayer
     blocks. In the final answer, explicitly report: (1) whether `ceo2_111_trilayer.cif` exists;
     (2) the total **atomic** layer count along z, which should be 9; (3) whether the slab
-    is symmetric; (4) whether the outermost surface layer is O-terminated; (5) the Ce:O stoichiometric
-    ratio, which should match CeO2.
+    is symmetric; here symmetric means the top and bottom halves are mirror-equivalent around
+    the slab center with matching O-terminated outermost planes; (4) whether the outermost surface
+    layer is O-terminated; (5) the Ce:O stoichiometric ratio, which should match CeO2.
 
     '
   tags:
@@ -573,8 +641,9 @@ questions:
     axis: correctness
     verify: struct_file_surface_termination
   - id: required_fields
-    criterion: The answer explicitly reports the 9-layer construction, symmetry check, oxygen-terminated
-      outermost layer, stoichiometric CeO2 ratio, and (111) surface orientation where relevant.
+    criterion: The answer explicitly reports the 9-layer construction, a slab-center mirror-equivalence
+      symmetry check, oxygen-terminated outermost layers on both sides, stoichiometric CeO2
+      ratio, and (111) surface orientation where relevant.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
@@ -602,7 +671,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_010_20260429
+- id: SC_struct_010_20260507
   capability: structure_construction
   domain: agnostic
   intent: Build a seven-layer Ag(111) slab with explicit water and potassium ions for an electrochemical
@@ -618,6 +687,8 @@ questions:
     (3) z 方向保留约 12 Å 真空层；
 
     (4) 最终答案中明确报告 Ag 原子数、H2O 分子数、K 离子数、slab 层数、真空层厚度， 并说明这些溶剂/离子位于金属表面同一侧上方。
+
+    最终答案还必须包含 `<eval_results>` JSON，例如 `{"vacuum_angstrom": 12.0, "supercell_a": 2, "supercell_b": 3, "adsorbate_side": "same_side"}`，用于机器判定真空厚度、面内超胞和溶剂/离子同侧说明。
 
     '
   tags:
@@ -656,6 +727,27 @@ questions:
       axis: z
       element: Ag
       layer_tol_A: 0.7
+  - key: vacuum_angstrom
+    value:
+      json_path: vacuum_angstrom
+      target: 12.0
+      tolerance: 2.0
+  - key: supercell_a
+    value:
+      json_path: supercell_a
+      target: 2
+      tolerance: 0
+  - key: supercell_b
+    value:
+      json_path: supercell_b
+      target: 3
+      tolerance: 0
+  - key: eval_result_keys
+    value:
+    - vacuum_angstrom
+    - supercell_a
+    - supercell_b
+    - adsorbate_side
   - key: required_fields
     value:
     - file_exists
@@ -703,6 +795,23 @@ questions:
     criterion: The Ag atoms form exactly 7 distinct z-layers in the slab.
     axis: correctness
     verify: struct_file_layer_count
+  - id: vacuum_angstrom
+    criterion: The `<eval_results>` JSON reports a vacuum thickness near 12 Å.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: supercell_a
+    criterion: The `<eval_results>` JSON reports the Ag(111) slab as a 2x supercell along a.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: supercell_b
+    criterion: The `<eval_results>` JSON reports the Ag(111) slab as a 3x supercell along b.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: eval_result_keys
+    criterion: The final answer includes machine-readable keys for vacuum, supercell_a,
+      supercell_b, and adsorbate_side so the same-side placement is explicit.
+    axis: correctness
+    verify: contains_all
   - id: required_fields
     criterion: The answer explicitly reports the output structure file, Ag atom count, H2O
       molecule count, K ion count, slab layer count, vacuum thickness near 12 Å, confirms
@@ -740,7 +849,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_013_20260411v3
+- id: SC_struct_013_20260507
   capability: structure_construction
   domain: agnostic
   intent: Construct and compare close-packed layer cross sections for fcc and hcp crystals,
@@ -762,6 +871,39 @@ questions:
     value: hcp_close_packed_5x5x1.cif
   - key: compare_artifact
     value: packing_comparison.md
+  - key: fcc_layer_count
+    value:
+      filename: fcc_close_packed_5x5x1.cif
+      expected: 5
+      tolerance: 0
+      axis: z
+      layer_tol_A: 0.25
+  - key: hcp_layer_count
+    value:
+      filename: hcp_close_packed_5x5x1.cif
+      expected: 5
+      tolerance: 0
+      axis: z
+      layer_tol_A: 0.25
+  - key: fcc_atom_count
+    value:
+      filename: fcc_close_packed_5x5x1.cif
+      expected: 125
+      tolerance: 0
+  - key: hcp_atom_count
+    value:
+      filename: hcp_close_packed_5x5x1.cif
+      expected: 125
+      tolerance: 0
+  - key: compare_tokens
+    value:
+      filename: packing_comparison.md
+      tokens:
+      - fcc
+      - hcp
+      - AB
+      - ABC
+      flags: i
   - key: turn_budget
     value:
       max: 20
@@ -784,6 +926,26 @@ questions:
     criterion: Agent writes `packing_comparison.md` to workspace.
     axis: correctness
     verify: artifact_exists
+  - id: fcc_layer_count
+    criterion: The file `fcc_close_packed_5x5x1.cif` contains exactly 5 distinct z-layers.
+    axis: correctness
+    verify: struct_file_layer_count
+  - id: hcp_layer_count
+    criterion: The file `hcp_close_packed_5x5x1.cif` contains exactly 5 distinct z-layers.
+    axis: correctness
+    verify: struct_file_layer_count
+  - id: fcc_atom_count
+    criterion: The file `fcc_close_packed_5x5x1.cif` has 125 atoms for a 5-layer 5x5x1 slab.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: hcp_atom_count
+    criterion: The file `hcp_close_packed_5x5x1.cif` has 125 atoms for a 5-layer 5x5x1 slab.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: compare_tokens
+    criterion: The file `packing_comparison.md` explicitly mentions fcc, hcp, AB stacking, and ABC stacking.
+    axis: correctness
+    verify: text_file_contains_all
   - id: grounding_source
     criterion: The final answer is grounded in both generated CIF files and the comparison
       note, rather than generic textbook-only statements.
@@ -812,14 +974,14 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_001_20260508
+- id: SC_struct_build_001_20260508v2
   capability: structure_construction
   domain: agnostic
-  intent: Build FCC copper primitive cell using ASE bulk prototype and verify lattice
-    constant and space group.
-  human_prompt_seed: '构建 FCC 铜 (Cu) 的晶体结构，使用实验晶格常数 a = 3.615 Å。
-    导出为 `cu_fcc.cif`。在最终回答中明确报告：(1) 晶格常数；(2) 空间群编号；(3)
-    单胞中的原子数。'
+  intent: Build FCC copper conventional cell using ASE bulk prototype and verify lattice
+    constant, atom count, and space group.
+  human_prompt_seed: '构建 FCC 铜 (Cu) 的惯用晶胞结构，使用实验晶格常数 a = 3.615 Å。
+    导出为 `cu_fcc.cif`。在最终回答中明确报告：(1) 晶格常数；(2) 空间群编号 #225 / Fm-3m；(3)
+    惯用晶胞中的原子数 4。'
   tags:
   - struct_build
   data_files: []
@@ -841,6 +1003,15 @@ questions:
       filename: cu_fcc.cif
       expected: 4
       tolerance: 0
+  - key: space_group_number
+    value:
+      filename: cu_fcc.cif
+      expected_number: 225
+      symprec: 0.1
+  - key: space_group_tokens
+    value:
+    - '225'
+    - Fm-3m
   - key: turn_budget
     value:
       max: 10
@@ -864,6 +1035,14 @@ questions:
     criterion: Conventional FCC cell contains 4 atoms.
     axis: correctness
     verify: struct_file_atom_count
+  - id: space_group_number
+    criterion: The file `cu_fcc.cif` is identified as space group #225 by pymatgen.
+    axis: correctness
+    verify: struct_file_space_group
+  - id: space_group_tokens
+    criterion: Final answer explicitly reports both space group number 225 and symbol Fm-3m.
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: Final answer explicitly states the lattice constant, space group number,
       and atom count from the built structure.
@@ -877,7 +1056,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_002_20260507
+- id: SC_struct_build_002_20260507v2
   capability: structure_construction
   domain: agnostic
   intent: Build hexagonal boron nitride (hBN) unit cell from space group and Wyckoff
@@ -918,6 +1097,16 @@ questions:
       filename: hbn.cif
       expected: 4
       tolerance: 0
+  - key: space_group_number
+    value:
+      filename: hbn.cif
+      expected_number: 194
+      symprec: 0.1
+  - key: space_group_tokens
+    value:
+    - '194'
+    - P6
+    - mmc
   - key: turn_budget
     value:
       max: 10
@@ -949,6 +1138,14 @@ questions:
     criterion: Unit cell contains exactly 4 atoms.
     axis: correctness
     verify: struct_file_atom_count
+  - id: space_group_number
+    criterion: The file `hbn.cif` is identified as space group #194 by pymatgen.
+    axis: correctness
+    verify: struct_file_space_group
+  - id: space_group_tokens
+    criterion: Final answer explicitly reports space group number 194 and the P6_3/mmc setting.
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: Final answer reports lattice parameters, gamma angle, atom count, and
       B:N ratio from the built structure.
@@ -962,14 +1159,14 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_003_20260507
+- id: SC_struct_build_003_20260507v2
   capability: structure_construction
   domain: agnostic
   intent: Build a phenol molecule from SMILES using RDKit and verify atom count and
     chemical formula.
   human_prompt_seed: '从 SMILES `c1ccc(cc1)O` 构建苯酚 (phenol) 分子的三维结构。
     导出为 `phenol.xyz`。在最终回答中报告：(1) 化学式；(2) 原子总数；(3)
-    是否所有原子都有合理的三维坐标（无重叠）。'
+    是否所有原子都有合理的三维坐标（最短原子间距离不小于 0.7 Å，无重叠）。'
   tags:
   - struct_build
   data_files: []
@@ -981,6 +1178,10 @@ questions:
       filename: phenol.xyz
       expected: 13
       tolerance: 0
+  - key: min_distance
+    value:
+      filename: phenol.xyz
+      min_distance_A: 0.7
   - key: required_fields
     value:
     - '13'
@@ -1000,6 +1201,11 @@ questions:
     criterion: Molecule contains exactly 13 atoms (6C + 6H + 1O).
     axis: correctness
     verify: struct_file_atom_count
+  - id: min_distance
+    criterion: The minimum interatomic distance in `phenol.xyz` is at least 0.7 Å, ruling
+      out overlapping coordinates.
+    axis: correctness
+    verify: struct_file_min_interatomic_distance
   - id: required_fields
     criterion: Final answer explicitly states atom count 13 and mentions phenol.
     axis: correctness
