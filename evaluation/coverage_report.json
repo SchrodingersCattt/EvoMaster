@@ -1,15 +1,15 @@
 {
-  "generated_at": "2026-05-07T17:19:25.198645+00:00",
+  "generated_at": "2026-05-07T17:32:42.395669+00:00",
   "summary": {
     "total_rules": 1428,
-    "covered_rules": 611,
-    "uncovered_rules": 817,
-    "coverage_pct": 42.8,
+    "covered_rules": 618,
+    "uncovered_rules": 810,
+    "coverage_pct": 43.3,
     "by_source_type": {
       "skill": {
         "total": 1318,
-        "covered": 585,
-        "pct": 44.4
+        "covered": 592,
+        "pct": 44.9
       },
       "tool": {
         "total": 89,
@@ -35,8 +35,8 @@
       },
       "general": {
         "total": 925,
-        "covered": 376,
-        "pct": 40.6
+        "covered": 381,
+        "pct": 41.2
       },
       "config_default": {
         "total": 26,
@@ -50,8 +50,8 @@
       },
       "decision_tree": {
         "total": 87,
-        "covered": 40,
-        "pct": 46.0
+        "covered": 42,
+        "pct": 48.3
       },
       "api_recipe": {
         "total": 17,
@@ -82,8 +82,8 @@
       },
       "assemble-atomic-structure": {
         "total": 31,
-        "covered": 6,
-        "pct": 19.4
+        "covered": 7,
+        "pct": 22.6
       },
       "build-atomic-structure": {
         "total": 28,
@@ -252,8 +252,8 @@
       },
       "vaspkit-postprocess": {
         "total": 35,
-        "covered": 7,
-        "pct": 20.0
+        "covered": 10,
+        "pct": 28.6
       },
       "proposal-review": {
         "total": 25,
@@ -267,8 +267,8 @@
       },
       "pyscf": {
         "total": 33,
-        "covered": 10,
-        "pct": 30.3
+        "covered": 11,
+        "pct": 33.3
       },
       "quantum_espresso": {
         "total": 25,
@@ -282,8 +282,8 @@
       },
       "vasp": {
         "total": 47,
-        "covered": 39,
-        "pct": 83.0
+        "covered": 41,
+        "pct": 87.2
       },
       "xrd-analysis": {
         "total": 16,
@@ -1558,9 +1558,12 @@
       "text": "For polar ionic surfaces, route through `tasker-polar-surface` before",
       "source_type": "skill",
       "id": "assemble-atomic-structure/decision-tree/88",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "is_covered": true,
+      "covered_by": [
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507"
+      ],
+      "match_method": "keyword_only"
     },
     {
       "source_name": "assemble-atomic-structure",
@@ -1836,6 +1839,7 @@
       "is_covered": true,
       "covered_by": [
         "BP_elec_001_20260428",
+        "SC_struct_009_20260507",
         "CR_SC_ZnS001_20260507"
       ],
       "match_method": "keyword_only"
@@ -6870,10 +6874,10 @@
         "IG_incar_002_20260507",
         "IG_incar_003_20260506",
         "IG_incar_017_20260506",
+        "IG_vasp_metagga_001_20260508",
         "SC_struct_008_20260507",
         "WO_mlip_dpa_001_20260411v2",
-        "WO_mlip_dpa_005_20260411v2",
-        "WO_mlip_dpa_002_20260411v2"
+        "WO_mlip_dpa_005_20260411v2"
       ],
       "match_method": "tag+keyword"
     },
@@ -8692,10 +8696,10 @@
         "IG_abacus_003_20260504",
         "IG_abacus_005_20260504",
         "IG_abacus_006_20260504",
+        "IG_vasp_metagga_001_20260508",
         "PXRD_thermal_expansion_001_20260506",
         "WO_general_perov_007_20260417",
-        "SC_struct_005_20260507",
-        "SC_struct_SiH_20260507"
+        "SC_struct_005_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -9151,14 +9155,14 @@
       "covered_by": [
         "DD_missing_input_001_20260428",
         "WO_direct_archive_extract_002_20260412",
+        "IG_vasp_metagga_001_20260508",
         "WO_general_perov_007_20260417",
         "SC_struct_006_20260507",
         "SC_struct_008_20260507",
         "SR_db_006_20260416v1",
         "SR_db_007_20260416v1",
         "SR_db_009_20260502",
-        "SR_db_005_20260416v1",
-        "SR_db_004_20260416v1"
+        "SR_db_005_20260416v1"
       ],
       "match_method": "keyword_only"
     },
@@ -11049,6 +11053,7 @@
       "is_covered": true,
       "covered_by": [
         "IG_cp2k_001_20260428",
+        "IG_vasp_dftu_001_20260508",
         "WO_mech_003_20260501"
       ],
       "match_method": "keyword_only"
@@ -13109,7 +13114,8 @@
       "id": "structure-manager/electronic-property-construction/990",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_004_20260504"
+        "IG_abacus_004_20260504",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -13276,9 +13282,10 @@
       "is_covered": true,
       "covered_by": [
         "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507",
         "SC_struct_hetero_20260507"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "tasker-polar-surface",
@@ -13289,9 +13296,10 @@
       "id": "tasker-polar-surface/tasker's-three-surface-types/1003",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260507"
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "tasker-polar-surface",
@@ -13306,7 +13314,7 @@
         "SC_struct_010_20260507",
         "CR_SC_ZnS001_20260507"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "tasker-polar-surface",
@@ -13321,7 +13329,7 @@
         "SC_struct_009_20260507",
         "CR_SC_ZnS001_20260507"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "tasker-polar-surface",
@@ -13334,6 +13342,7 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507",
         "CR_WO_Ag_adsorption_20260412"
       ],
       "match_method": "tag+weak_keyword"
@@ -13398,7 +13407,7 @@
         "WO_elec_005_20260404",
         "WO_struct_001_20260404"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "tasker-polar-surface",
@@ -13571,9 +13580,10 @@
       "covered_by": [
         "DD_tool_fail_recovery_001_20260428",
         "SA_unit_conversion_001_20260430",
+        "SC_struct_009_20260507",
         "WO_kinetic_001_20260504"
       ],
-      "match_method": "keyword_only"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "tasker-polar-surface",
@@ -13700,6 +13710,7 @@
         "IG_abacus_004_20260504",
         "IG_abacus_005_20260504",
         "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
         "SC_elec_004_20260507",
         "SC_struct_hetero_20260507",
         "WO_elec_007_20260415"
@@ -13743,6 +13754,7 @@
         "IG_incar_012_20260507",
         "IG_incar_013_20260506",
         "IG_incar_014_20260507",
+        "SC_struct_009_20260507",
         "WO_mlip_dpa_010_20260415"
       ],
       "match_method": "tag+keyword"
@@ -13896,6 +13908,7 @@
       "is_covered": true,
       "covered_by": [
         "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
         "SC_struct_SiH_20260507"
       ],
       "match_method": "tag+weak_keyword"
@@ -13950,6 +13963,7 @@
         "SC_struct_009_20260507",
         "SC_struct_010_20260507",
         "SC_struct_013_20260507",
+        "CR_SC_ZnS001_20260507",
         "SC_struct_hetero_20260507",
         "WO_struct_002_20260404"
       ],
@@ -13976,6 +13990,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_incar_013_20260506",
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507",
         "WO_elec_006_20260411v2",
         "CR_WO_Ag_adsorption_20260412",
         "WO_struct_001_20260404"
@@ -13991,6 +14007,7 @@
       "id": "tasker-polar-surface/2.-use-reference-and-lookup/1047",
       "is_covered": true,
       "covered_by": [
+        "CR_SC_ZnS001_20260507",
         "CR_WO_Ag_adsorption_20260412"
       ],
       "match_method": "tag+weak_keyword"
@@ -14007,6 +14024,7 @@
         "BP_elec_001_20260428",
         "IG_incar_013_20260506",
         "IG_incar_014_20260507",
+        "SC_struct_009_20260507",
         "SC_struct_010_20260507",
         "WO_elec_006_20260411v2",
         "WO_struct_001_20260404"
@@ -14041,7 +14059,9 @@
       "id": "tasker-polar-surface/2.1-when-the-lookup-table-has-no-entry:-search-literature-on-the-fly/1050",
       "is_covered": true,
       "covered_by": [
-        "IG_incar_013_20260506"
+        "IG_incar_013_20260506",
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14138,7 +14158,8 @@
       "id": "tasker-polar-surface/2.1-when-the-lookup-table-has-no-entry:-search-literature-on-the-fly/1055",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260507"
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14186,9 +14207,9 @@
         "SC_struct_002_20260507",
         "SC_struct_009_20260507",
         "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
         "SC_elec_004_20260507",
-        "SC_struct_hetero_20260507",
-        "WO_elec_006_20260411v2"
+        "SC_struct_hetero_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -14201,9 +14222,10 @@
       "id": "tasker-polar-surface/3.-interpret-output/1059",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260507"
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "tasker-polar-surface",
@@ -14230,9 +14252,10 @@
       "is_covered": true,
       "covered_by": [
         "SC_struct_002_20260507",
-        "SC_struct_009_20260507"
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "tasker-polar-surface",
@@ -14300,7 +14323,8 @@
       "id": "tasker-polar-surface/scripts/1066",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260507"
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14455,7 +14479,8 @@
       "id": "tasker-polar-surface/integration/1075",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260507"
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14515,6 +14540,8 @@
         "BP_elec_001_20260428",
         "IG_incar_013_20260506",
         "IG_incar_014_20260507",
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507",
         "SC_struct_hetero_20260507",
         "WO_elec_006_20260411v2",
         "CR_WO_Ag_adsorption_20260412"
@@ -14530,7 +14557,9 @@
       "id": "tasker-polar-surface/additional-resources/1080",
       "is_covered": true,
       "covered_by": [
+        "SC_struct_009_20260507",
         "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
         "WO_elec_006_20260411v2"
       ],
       "match_method": "tag+weak_keyword"
@@ -14777,6 +14806,7 @@
       "covered_by": [
         "BP_struct_005_20260406v2",
         "EC_filename_case_001_20260428",
+        "IG_vasp_dftu_001_20260508",
         "SC_struct_hetero_20260507",
         "SC_struct_SiH_20260507"
       ],
@@ -14793,6 +14823,7 @@
       "covered_by": [
         "BP_struct_005_20260406v2",
         "EC_filename_case_001_20260428",
+        "IG_vasp_dftu_001_20260508",
         "SC_struct_hetero_20260507",
         "SC_struct_SiH_20260507"
       ],
@@ -14898,9 +14929,11 @@
       "text": "710 | Optical (2D) | POSCAR, INCAR, vasprun.xml",
       "source_type": "skill",
       "id": "vaspkit-postprocess/common-tasks-(post-processing,-no-potcar)/1108",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "is_covered": true,
+      "covered_by": [
+        "IG_vasp_dftu_001_20260508"
+      ],
+      "match_method": "keyword_only"
     },
     {
       "source_name": "vaspkit-postprocess",
@@ -14909,9 +14942,11 @@
       "text": "711 | Optical (3D/bulk) | POSCAR, INCAR, vasprun.xml",
       "source_type": "skill",
       "id": "vaspkit-postprocess/common-tasks-(post-processing,-no-potcar)/1109",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "is_covered": true,
+      "covered_by": [
+        "IG_vasp_dftu_001_20260508"
+      ],
+      "match_method": "keyword_only"
     },
     {
       "source_name": "vaspkit-postprocess",
@@ -14920,9 +14955,11 @@
       "text": "\"Generate K-path for my POSCAR\" -> `run_vaspkit.py --task 303 --symprec 1E-5` (bulk) or 302 (2D).",
       "source_type": "skill",
       "id": "vaspkit-postprocess/when-to-use/1110",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "is_covered": true,
+      "covered_by": [
+        "IG_vasp_dftu_001_20260508"
+      ],
+      "match_method": "keyword_only"
     },
     {
       "source_name": "vaspkit-postprocess",
@@ -15850,6 +15887,7 @@
         "IG_abacus_001_20260504",
         "IG_abacus_002_20260504",
         "IG_cp2k_001_20260428",
+        "IG_vasp_dftu_001_20260508",
         "SC_struct_005_20260507",
         "WO_mech_003_20260501"
       ],
@@ -15862,9 +15900,11 @@
       "text": "`xc` | DFT functional | `'B3LYP'`, `'PBE'`, `'PBE0'`, `'wB97X-D3'`, `'r2SCAN'`",
       "source_type": "skill",
       "id": "pyscf/common-parameters/1190",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "is_covered": true,
+      "covered_by": [
+        "IG_vasp_metagga_001_20260508"
+      ],
+      "match_method": "keyword_only"
     },
     {
       "source_name": "pyscf",
@@ -16897,6 +16937,7 @@
         "IG_lammps_001_20260428",
         "IG_incar_003_20260506",
         "IG_incar_013_20260506",
+        "IG_vasp_metagga_001_20260508",
         "SC_struct_008_20260507",
         "WO_mlip_dpa_011_20260415",
         "WO_struct_001_20260404",
@@ -16940,6 +16981,7 @@
         "IG_lammps_001_20260428",
         "IG_incar_003_20260506",
         "IG_incar_013_20260506",
+        "IG_vasp_metagga_001_20260508",
         "SC_struct_008_20260507",
         "WO_mlip_dpa_011_20260415",
         "WO_struct_001_20260404",
@@ -16960,9 +17002,10 @@
         "BP_struct_003_20260428",
         "DD_general_004_20260422",
         "IG_incar_002_20260507",
-        "IG_incar_013_20260506"
+        "IG_incar_013_20260506",
+        "IG_vasp_metagga_001_20260508"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "vasp",
@@ -17017,7 +17060,8 @@
         "IG_incar_011_20260506",
         "IG_incar_012_20260507",
         "IG_incar_018_20260507",
-        "IG_incar_020_20260507"
+        "IG_incar_020_20260507",
+        "IG_vasp_mag_001_20260508"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -17106,9 +17150,10 @@
       "id": "vasp/hard-guards/1278",
       "is_covered": true,
       "covered_by": [
-        "IG_incar_005_20260504"
+        "IG_incar_005_20260504",
+        "IG_vasp_dftu_001_20260508"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "vasp",
@@ -17119,7 +17164,8 @@
       "id": "vasp/hard-guards/1279",
       "is_covered": true,
       "covered_by": [
-        "IG_incar_006_20260507"
+        "IG_incar_006_20260507",
+        "IG_vasp_metagga_001_20260508"
       ],
       "match_method": "tag+keyword"
     },
@@ -17201,6 +17247,7 @@
         "IG_abacus_003_20260504",
         "IG_abacus_005_20260504",
         "IG_incar_013_20260506",
+        "CR_SC_ZnS001_20260507",
         "WO_end_to_end_001_20260428"
       ],
       "match_method": "keyword_only"
@@ -17280,9 +17327,13 @@
       "text": "image | Use Bohrium `list_images` with keyword `vasp`. If none exists, do not submit.",
       "source_type": "skill",
       "id": "vasp/bohrium-submission/1290",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "is_covered": true,
+      "covered_by": [
+        "IG_vasp_mag_001_20260508",
+        "IG_vasp_dftu_001_20260508",
+        "IG_vasp_metagga_001_20260508"
+      ],
+      "match_method": "tag+weak_keyword"
     },
     {
       "source_name": "vasp",
@@ -17324,9 +17375,11 @@
       "text": "`-np` is typically half of CPU cores (32 virtual cores → 16 physical cores on Bohrium).",
       "source_type": "skill",
       "id": "vasp/bohrium-submission/1293",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "is_covered": true,
+      "covered_by": [
+        "IG_vasp_dftu_001_20260508"
+      ],
+      "match_method": "tag+weak_keyword"
     },
     {
       "source_name": "vasp",
@@ -17338,7 +17391,8 @@
       "is_covered": true,
       "covered_by": [
         "BP_struct_003_20260428",
-        "BP_struct_004_20260423"
+        "BP_struct_004_20260423",
+        "IG_vasp_metagga_001_20260508"
       ],
       "match_method": "tag+keyword"
     },
