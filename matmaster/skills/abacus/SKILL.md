@@ -20,20 +20,27 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
    Pseudopotentials (`.upf`) default path: `/root/apns-pseudopotentials-v1/`.
    Orbitals (`.orb`) default path: `/root/apns-orbitals-efficiency-v1/`.
 2. Generate `INPUT` (and `KPT` when needed).
-3. For uncertain params/workflows, check local `references/*` first.
-4. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
-5. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
+3. For Bohrium jobs:
+   - Set `pseudo_dir` and `orbital_dir` explicitly in `INPUT`.
+   - Ensure filenames in `STRU` exactly match files in those directories.
+   - Pseudopotential lookup order:
+     `references/apns_pseudopotentials_v1.list` -> `references/stru_multispecies.md`.
+   - Orbital lookup: `references/apns_orbitals_efficiency_v1.list`.
+4. For uncertain params/workflows, check local `references/*` first.
+5. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
+6. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
 
 ## Hard Guards (Must Pass)
 
 - `ntype` in `INPUT` must equal species count in `STRU` `ATOMIC_SPECIES`.
+- For Bohrium jobs, `INPUT` must include explicit `pseudo_dir` and `orbital_dir`, and PP/orbital filenames in `STRU` must exist in those directories.
 - For `relax`/`cell-relax`/`md`, set `cal_force 1` explicitly.
 - For `cell-relax`, also set `cal_stress 1` explicitly.
 - For SCF -> NSCF workflows:
   - SCF: `out_chg 1`
   - NSCF: `init_chg file`, `symmetry 0`, `nbands <N>`, plus `out_band 1` or `out_dos 1`
 - If file names are not defaults, set `stru_file` and `kpoint_file` to real names.
-- Every referenced file must exist in workspace.
+- Every referenced file must exist either in workspace or in the configured runtime directories.
 
 ## K-point Rules
 
@@ -97,6 +104,8 @@ Reference-first policy:
 
 - **Pre-flight validator**: `scripts/validate_input.py` — run before every Bohrium submit
 - Input templates and multi-step examples: `references/input_examples.md`
+- APNS pseudopotential list: `references/apns_pseudopotentials_v1.list`
+- APNS orbital list: `references/apns_orbitals_efficiency_v1.list`
 - STRU format basics: `references/stru_format.md`
 - Multi-species STRU examples: `references/stru_multispecies.md`
 - Electric field and dipole notes: `references/electric_field.md`

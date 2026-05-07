@@ -92,7 +92,7 @@ banks:
   - path: "input_generation/ig_agnostic_abacus.yaml"
     capability: "input_generation"
     domain: "agnostic"
-    questions: 6
+    questions: 8
 
   - path: "input_generation/ig_agnostic_gpumd.yaml"
     capability: "input_generation"

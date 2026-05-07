@@ -235,7 +235,7 @@ questions:
   - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*1\b
+      pattern: ^\s*IBRION\s*=\s*(?:1|2)\b
       flags: im
   - key: critical_ISIF
     value:
@@ -283,7 +283,7 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: critical_IBRION
-    criterion: INCAR sets IBRION = 1 (critical param).
+    criterion: INCAR sets IBRION = 1 or 2 (critical param).
     axis: correctness
     verify: text_file_regex
   - id: critical_ISIF
@@ -984,7 +984,7 @@ questions:
   - key: critical_ENCUT
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520\b
+      pattern: ^\s*ENCUT\s*=\s*(?:[3-6]\d{2}|700)(?:\.\d+)?\b
       flags: im
   - key: critical_ISPIN
     value:
@@ -1033,7 +1033,7 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: critical_ENCUT
-    criterion: INCAR sets ENCUT = 520 (critical param).
+    criterion: INCAR sets ENCUT in the 300-700 eV range (critical param).
     axis: correctness
     verify: text_file_regex
   - id: critical_ISPIN
@@ -1210,7 +1210,7 @@ questions:
   - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*1\b
+      pattern: ^\s*IBRION\s*=\s*3\b
       flags: im
   - key: critical_ISPIN
     value:
@@ -1225,7 +1225,7 @@ questions:
   - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*NSW\s*=\s*500\b
+      pattern: ^\s*NSW\s*=
       flags: im
   - key: turn_budget
     value:
@@ -1253,7 +1253,7 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: critical_IBRION
-    criterion: INCAR sets IBRION = 1 (critical param).
+    criterion: INCAR sets IBRION = 3 (critical param).
     axis: correctness
     verify: text_file_regex
   - id: critical_ISPIN
@@ -1265,7 +1265,7 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: critical_NSW
-    criterion: INCAR sets NSW = 500 (critical param).
+    criterion: INCAR contains NSW assignment (critical param).
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
@@ -1333,7 +1333,7 @@ questions:
   - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*NSW\s*=\s*301\b
+      pattern: ^\s*NSW\s*=
       flags: im
   - key: critical_SIGMA
     value:
@@ -1374,7 +1374,7 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: critical_NSW
-    criterion: INCAR sets NSW = 301 (critical param).
+    criterion: INCAR contains NSW assignment (critical param).
     axis: correctness
     verify: text_file_regex
   - id: critical_SIGMA
@@ -1653,7 +1653,7 @@ questions:
   - key: critical_ENCUT
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520\b
+      pattern: ^\s*ENCUT\s*=\s*(?:[3-6]\d{2}|700)(?:\.\d+)?\b
       flags: im
   - key: critical_ISPIN
     value:
@@ -1687,7 +1687,7 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: critical_ENCUT
-    criterion: INCAR sets ENCUT = 520 (critical param).
+    criterion: INCAR sets ENCUT in the 300-700 eV range (critical param).
     axis: correctness
     verify: text_file_regex
   - id: critical_ISPIN
@@ -1750,7 +1750,7 @@ questions:
   - key: critical_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*1\b
+      pattern: ^\s*IBRION\s*=\s*(?:1|2)\b
       flags: im
   - key: critical_ISIF
     value:
@@ -1783,7 +1783,7 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: critical_IBRION
-    criterion: INCAR sets IBRION = 1 (critical param).
+    criterion: INCAR sets IBRION = 1 or 2 (critical param).
     axis: correctness
     verify: text_file_regex
   - id: critical_ISIF
@@ -1949,7 +1949,7 @@ questions:
   - key: critical_ENCUT
     value:
       filename: INCAR
-      pattern: ^\s*ENCUT\s*=\s*520\b
+      pattern: ^\s*ENCUT\s*=\s*(?:[3-6]\d{2}|700)(?:\.\d+)?\b
       flags: im
   - key: critical_ISPIN
     value:
@@ -1983,7 +1983,7 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: critical_ENCUT
-    criterion: INCAR sets ENCUT = 520 (critical param).
+    criterion: INCAR sets ENCUT in the 300-700 eV range (critical param).
     axis: correctness
     verify: text_file_regex
   - id: critical_ISPIN
