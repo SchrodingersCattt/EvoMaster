@@ -650,7 +650,13 @@ questions:
 
     最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含：
     `calibration.slope_A_per_ugL`, `calibration.r_squared`, `sample.cd_mg_L`,
-    `sample.peak_potential_V`。'
+    `sample.peak_potential_V`。
+
+    JSON 中字段名形如 `a.b` 表示嵌套对象（顶层 `a` 下的子键 `b`），请使用嵌套结构而不要写成扁平字符串键。结构示例（数值仅占位）：
+
+    ```json
+    {"calibration": {"slope_A_per_ugL": 0, "r_squared": 0}, "sample": {"cd_mg_L": 0, "peak_potential_V": 0}}
+    ```'
   tags:
   - char_ec_lsv
   data_files:
@@ -714,7 +720,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 20000
+      max: 25000
   scoring_checklist:
   - id: calibration_slope
     criterion: The calibration slope reported in eval_results is consistent with the uploaded Cd standard traces.
@@ -776,7 +782,13 @@ questions:
     最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含：
     `assay.endpoint_wavelength_nm`, `calibration.slope_abs_per_uM`,
     `calibration.intercept_abs`, `calibration.r_squared`,
-    `sample1.diluted_glucose_uM`, `sample1.serum_glucose_mM`。'
+    `sample1.diluted_glucose_uM`, `sample1.serum_glucose_mM`。
+
+    JSON 中字段名形如 `a.b` 表示嵌套对象（顶层 `a` 下的子键 `b`），请使用嵌套结构而不要写成扁平字符串键。结构示例（数值仅占位）：
+
+    ```json
+    {"assay": {"endpoint_wavelength_nm": 0}, "calibration": {"slope_abs_per_uM": 0, "intercept_abs": 0, "r_squared": 0}, "sample1": {"diluted_glucose_uM": 0, "serum_glucose_mM": 0}}
+    ```'
   tags:
   - char_uvvis
   data_files:
@@ -827,7 +839,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 22000
+      max: 36000
   scoring_checklist:
   - id: endpoint_wavelength
     criterion: The endpoint wavelength reported in eval_results is consistent with the assay export.
@@ -897,7 +909,13 @@ questions:
     最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含：
     `pristine.peak1_2theta`, `pristine.peak2_2theta`, `pristine.peak3_2theta`,
     `comparison.mean_peak_shift_deg`, `comparison.max_peak_shift_deg`,
-    `comparison.pattern_correlation`。'
+    `comparison.pattern_correlation`。
+
+    JSON 中字段名形如 `a.b` 表示嵌套对象（顶层 `a` 下的子键 `b`），请使用嵌套结构而不要写成扁平字符串键。结构示例（数值仅占位）：
+
+    ```json
+    {"pristine": {"peak1_2theta": 0, "peak2_2theta": 0, "peak3_2theta": 0}, "comparison": {"mean_peak_shift_deg": 0, "max_peak_shift_deg": 0, "pattern_correlation": 0}}
+    ```'
   tags:
   - char_xrd
   data_files:
@@ -949,7 +967,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 20000
+      max: 22000
   scoring_checklist:
   - id: pristine_peak1
     criterion: The first main pristine MAF-4 peak position reported in eval_results is consistent with the uploaded PXRD trace.

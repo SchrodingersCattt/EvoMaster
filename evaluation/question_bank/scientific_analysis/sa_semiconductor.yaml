@@ -102,7 +102,13 @@ questions:
     4. 简要说明背景、噪声或尾部拟合对结果的影响。
 
     最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含：
-    `pl.lambda_max_nm`, `pl.fwhm_nm`, `decay.tau_avg_us`。'
+    `pl.lambda_max_nm`, `pl.fwhm_nm`, `decay.tau_avg_us`。
+
+    JSON 中字段名形如 `a.b` 表示嵌套对象（顶层 `a` 下的子键 `b`），请使用嵌套结构而不要写成扁平字符串键。结构示例（数值仅占位）：
+
+    ```json
+    {"pl": {"lambda_max_nm": 0, "fwhm_nm": 0}, "decay": {"tau_avg_us": 0}}
+    ```'
   tags:
   - char_pl
   - char_lifetime
@@ -142,7 +148,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 20000
+      max: 30000
   scoring_checklist:
   - id: lambda_max
     criterion: The emission maximum reported in eval_results is consistent with the uploaded emission spectrum.

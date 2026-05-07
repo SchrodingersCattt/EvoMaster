@@ -22,7 +22,13 @@ questions:
 
     最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含：
     `cycle1.discharge_capacity_mAh_g`, `cycle1.coulombic_efficiency_pct`,
-    `cycle10.discharge_capacity_mAh_g`, `cycle10.retention_vs_cycle2_pct`。'
+    `cycle10.discharge_capacity_mAh_g`, `cycle10.retention_vs_cycle2_pct`。
+
+    JSON 中字段名形如 `a.b` 表示嵌套对象（顶层 `a` 下的子键 `b`），请使用嵌套结构而不要写成扁平字符串键。结构示例（数值仅占位）：
+
+    ```json
+    {"cycle1": {"discharge_capacity_mAh_g": 0, "coulombic_efficiency_pct": 0}, "cycle10": {"discharge_capacity_mAh_g": 0, "retention_vs_cycle2_pct": 0}}
+    ```'
   tags:
   - char_battery_cycling
   data_files:
@@ -63,7 +69,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 20000
+      max: 28000
   scoring_checklist:
   - id: cycle1_capacity
     criterion: The first-cycle discharge specific capacity reported in eval_results is consistent with the uploaded cycling workbook.

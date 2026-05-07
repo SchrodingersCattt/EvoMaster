@@ -43,7 +43,13 @@ questions:
     最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含：
     `mos2.potential_at_5mA_V`, `exmos2.potential_at_5mA_V`,
     `mos2.tafel_mV_dec`, `exmos2.tafel_mV_dec`,
-    `mos2.cdl_mF`, `exmos2.cdl_mF`。'
+    `mos2.cdl_mF`, `exmos2.cdl_mF`。
+
+    JSON 中字段名形如 `a.b` 表示嵌套对象（顶层 `a` 下的子键 `b`），请使用嵌套结构而不要写成扁平字符串键。结构示例（数值仅占位）：
+
+    ```json
+    {"mos2": {"potential_at_5mA_V": 0, "tafel_mV_dec": 0, "cdl_mF": 0}, "exmos2": {"potential_at_5mA_V": 0, "tafel_mV_dec": 0, "cdl_mF": 0}}
+    ```'
   tags:
   - char_ec_lsv
   - char_ec_cv
