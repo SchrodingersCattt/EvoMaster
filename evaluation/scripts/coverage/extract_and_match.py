@@ -407,6 +407,33 @@ def extract_system_prompt_rules() -> list[dict]:
     return rules
 
 
+# ── Phase 3b: Classify rule scope ─────────────────────────────────────────────
+
+_PROCESS_PATTERNS = re.compile(
+    r"use\s+(the\s+)?(dedicated\s+)?(Read|Write|Edit|Glob|Grep|Bash|Skill|Agent)\s+tool"
+    r"|route\s+(to|through)\s+`"
+    r"|call\s+(the\s+)?`?(submit_|query_|terminate_)"
+    r"|must\s+use\s+`"
+    r"|prefer\s+(the\s+)?dedicated"
+    r"|do\s+not\s+use\s+(this\s+)?skill"
+    r"|use\s+MCP"
+    r"|use\s+AskQuestion"
+    r"|tool_include_only"
+    r"|avoid.*bash",
+    re.IGNORECASE,
+)
+
+
+def classify_scope(rules: list[dict]) -> list[dict]:
+    """Tag each rule as 'universal' or 'matmaster_specific'."""
+    for r in rules:
+        if _PROCESS_PATTERNS.search(r.get("text", "")):
+            r["scope"] = "matmaster_specific"
+        else:
+            r["scope"] = "universal"
+    return rules
+
+
 # ── Phase 4: Load questions and match ────────────────────────────────────────
 
 
@@ -535,6 +562,18 @@ def build_report(rules: list[dict]) -> dict:
     for v in by_skill.values():
         v["pct"] = round(100.0 * v["covered"] / v["total"], 1) if v["total"] else 0.0
 
+    # By scope
+    by_scope: dict[str, dict] = {}
+    for r in rules:
+        scope = r.get("scope", "universal")
+        if scope not in by_scope:
+            by_scope[scope] = {"total": 0, "covered": 0}
+        by_scope[scope]["total"] += 1
+        if r["is_covered"]:
+            by_scope[scope]["covered"] += 1
+    for v in by_scope.values():
+        v["pct"] = round(100.0 * v["covered"] / v["total"], 1) if v["total"] else 0.0
+
     # Critical uncovered rules
     critical_types = {"hard_guard", "pitfall", "physical_check"}
     uncovered_critical = [
@@ -558,6 +597,7 @@ def build_report(rules: list[dict]) -> dict:
             "by_source_type": by_source,
             "by_rule_type": by_type,
             "by_skill": by_skill,
+            "by_scope": by_scope,
         },
         "rules": rules,
         "uncovered_critical": uncovered_critical,
@@ -621,6 +661,7 @@ def main() -> None:
     print(f"  Found {len(sp_rules)} rules from system prompt")
 
     all_rules = skill_rules + tool_rules + sp_rules
+    all_rules = classify_scope(all_rules)
 
     print("Phase 4: Loading questions and matching...")
     questions = load_questions()
