@@ -20,22 +20,19 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
    Pseudopotentials (`.upf`) default path: `/root/apns-pseudopotentials-v1/`.
    Orbitals (`.orb`) default path: `/root/apns-orbitals-efficiency-v1/`.
 2. Generate `INPUT` (and `KPT` when needed).
-3. For Bohrium jobs, set `pseudo_dir` and `orbital_dir` explicitly in `INPUT`.
-4. Resolve PP/orbital filenames by exact match before submission.
-   Do not guess names like `Si_ONCV_PBE-1.0.upf` if the runtime actually has `Si.upf`.
-5. If local environment cannot access runtime PP/orbital directories, run a tiny remote
-   listing job first, then update `STRU` with the returned real filenames.
-6. Re-run validation after any `pseudo_dir`/`orbital_dir`/filename change.
-7. For uncertain params/workflows, check local `references/*` first.
-8. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
-9. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
+3. For Bohrium jobs, set `pseudo_dir` and `orbital_dir` explicitly in `INPUT`, and ensure
+   filenames in `STRU` exactly match files in those directories.
+4. If local environment cannot access runtime PP/orbital directories, run a lightweight
+   remote listing job first, then update `STRU` using returned filenames.
+5. Re-run validation after any `pseudo_dir`/`orbital_dir`/filename change.
+6. For uncertain params/workflows, check local `references/*` first.
+7. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
+8. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
 
 ## Hard Guards (Must Pass)
 
 - `ntype` in `INPUT` must equal species count in `STRU` `ATOMIC_SPECIES`.
-- For Bohrium jobs, `INPUT` must include explicit `pseudo_dir` and `orbital_dir`.
-- Every `ATOMIC_SPECIES` PP filename in `STRU` must exist in `pseudo_dir`.
-- Every `NUMERICAL_ORBITAL` filename in `STRU` must exist in `orbital_dir`.
+- For Bohrium jobs, `INPUT` must include explicit `pseudo_dir` and `orbital_dir`, and PP/orbital filenames in `STRU` must exist in those directories.
 - For `relax`/`cell-relax`/`md`, set `cal_force 1` explicitly.
 - For `cell-relax`, also set `cal_stress 1` explicitly.
 - For SCF -> NSCF workflows:
@@ -49,7 +46,7 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 - Supercell/vacancy/defect/BSSE: prefer `kspacing` in `INPUT` (avoid brittle manual meshes).
 - Band structure: use dedicated line-mode KPT for NSCF step.
 - SCF and NSCF should not share a single KPT by default in band/DOS workflows.
-- Metal slab calculations: **minimum 12x12 in-plane** k-points (or equivalent `kspacing <= 0.10` in-plane). Do not use less.
+- Metal slab calculations: **minimum 12×12 in-plane** k-points (or equivalent `kspacing ≤ 0.10` in-plane). Do not use less.
 
 ## Parameter Baseline (Use Judgment, Not Blind Fixed Values)
 
@@ -96,7 +93,7 @@ After generating all INPUT/STRU/KPT files, run the validation script before Bohr
 ```bash
 python ${SKILL_DIR}/scripts/validate_input.py --dir <input_dir>
 ```
-It catches the most common silent failures: ntype mismatch, missing cal_force/cal_stress, missing out_chg for SCF->NSCF, wrong basis_type, missing PP/orbital files, and stru_file/kpoint_file reference errors. Fix any FAIL items before submitting.
+It catches the most common silent failures: ntype mismatch, missing cal_force/cal_stress, missing out_chg for SCF→NSCF, wrong basis_type, missing PP/orbital files, and stru_file/kpoint_file reference errors. Fix any FAIL items before submitting.
 
 ## References
 
