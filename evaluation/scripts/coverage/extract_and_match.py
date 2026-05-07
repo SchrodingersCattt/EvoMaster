@@ -43,10 +43,10 @@ SKILL_TAG_MAP: dict[str, list[str]] = {
     "operate-molecular-crystal": ["struct_molcrys"],
     "mcp-mat-struct-db": ["meta_database"],
     "structure-manager": ["meta_database"],
-    "xrd-analysis": ["char_xrd"],
-    "checkcif-validator": ["char_xrd"],
-    "mcp-mat-xrd": ["char_xrd"],
-    "pxrd-refinement": ["char_xrd"],
+    "xrd-analysis": ["char_diffraction"],
+    "checkcif-validator": ["char_diffraction"],
+    "mcp-mat-xrd": ["char_diffraction"],
+    "pxrd-refinement": ["char_diffraction"],
 }
 
 # Section-to-rule_type classification
@@ -65,17 +65,67 @@ SECTION_TYPE_MAP: dict[str, str] = {
 }
 
 STOP_WORDS = {
-    "this", "that", "with", "from", "will", "have", "been", "when", "which",
-    "their", "each", "only", "should", "would", "could", "about", "into",
-    "than", "them", "then", "what", "your", "does", "also", "must", "before",
-    "after", "under", "above", "below", "other", "these", "those", "being",
-    "where", "there", "here", "more", "some", "same", "very", "just", "both",
-    "such", "like", "over", "most", "through", "between", "value", "default",
-    "file", "input", "output", "using", "used",
+    "this",
+    "that",
+    "with",
+    "from",
+    "will",
+    "have",
+    "been",
+    "when",
+    "which",
+    "their",
+    "each",
+    "only",
+    "should",
+    "would",
+    "could",
+    "about",
+    "into",
+    "than",
+    "them",
+    "then",
+    "what",
+    "your",
+    "does",
+    "also",
+    "must",
+    "before",
+    "after",
+    "under",
+    "above",
+    "below",
+    "other",
+    "these",
+    "those",
+    "being",
+    "where",
+    "there",
+    "here",
+    "more",
+    "some",
+    "same",
+    "very",
+    "just",
+    "both",
+    "such",
+    "like",
+    "over",
+    "most",
+    "through",
+    "between",
+    "value",
+    "default",
+    "file",
+    "input",
+    "output",
+    "using",
+    "used",
 }
 
 
 # ── Utility ──────────────────────────────────────────────────────────────────
+
 
 def classify_section(heading: str) -> str:
     """Map a markdown heading to a rule_type."""
@@ -103,6 +153,7 @@ def keyword_overlap(rule_kw: set[str], question_kw: set[str]) -> float:
 
 # ── Phase 1: Extract rules from SKILL.md files ──────────────────────────────
 
+
 def parse_skill_md(filepath: Path, skill_name: str) -> list[dict]:
     """Parse a SKILL.md into discrete rules."""
     text = filepath.read_text(encoding="utf-8")
@@ -110,7 +161,7 @@ def parse_skill_md(filepath: Path, skill_name: str) -> list[dict]:
     if text.startswith("---"):
         end = text.find("---", 3)
         if end != -1:
-            text = text[end + 3:]
+            text = text[end + 3 :]
 
     rules: list[dict] = []
     current_section = "General"
@@ -128,12 +179,14 @@ def parse_skill_md(filepath: Path, skill_name: str) -> list[dict]:
                 # End code block => emit rule
                 code_text = "\n".join(code_block_lines).strip()
                 if code_text:
-                    rules.append({
-                        "source_name": skill_name,
-                        "section": current_section,
-                        "rule_type": classify_section(current_section),
-                        "text": code_text,
-                    })
+                    rules.append(
+                        {
+                            "source_name": skill_name,
+                            "section": current_section,
+                            "rule_type": classify_section(current_section),
+                            "text": code_text,
+                        }
+                    )
                 code_block_lines = []
                 in_code_block = False
             else:
@@ -163,12 +216,14 @@ def parse_skill_md(filepath: Path, skill_name: str) -> list[dict]:
                 i += 1  # skip separator
                 continue
             if cells and any(c for c in cells):
-                rules.append({
-                    "source_name": skill_name,
-                    "section": current_section,
-                    "rule_type": classify_section(current_section),
-                    "text": " | ".join(cells),
-                })
+                rules.append(
+                    {
+                        "source_name": skill_name,
+                        "section": current_section,
+                        "rule_type": classify_section(current_section),
+                        "text": " | ".join(cells),
+                    }
+                )
             i += 1
             continue
 
@@ -177,15 +232,21 @@ def parse_skill_md(filepath: Path, skill_name: str) -> list[dict]:
         if bullet_match:
             rule_text = bullet_match.group(1).strip()
             # Accumulate continuation lines
-            while i + 1 < len(lines) and lines[i + 1].startswith("  ") and not re.match(r"^\s*[-*]\s", lines[i + 1]):
+            while (
+                i + 1 < len(lines)
+                and lines[i + 1].startswith("  ")
+                and not re.match(r"^\s*[-*]\s", lines[i + 1])
+            ):
                 i += 1
                 rule_text += " " + lines[i].strip()
-            rules.append({
-                "source_name": skill_name,
-                "section": current_section,
-                "rule_type": classify_section(current_section),
-                "text": rule_text,
-            })
+            rules.append(
+                {
+                    "source_name": skill_name,
+                    "section": current_section,
+                    "rule_type": classify_section(current_section),
+                    "text": rule_text,
+                }
+            )
             i += 1
             continue
 
@@ -193,12 +254,14 @@ def parse_skill_md(filepath: Path, skill_name: str) -> list[dict]:
         num_match = re.match(r"^\s*\d+\.\s+(.+)$", line)
         if num_match:
             rule_text = num_match.group(1).strip()
-            rules.append({
-                "source_name": skill_name,
-                "section": current_section,
-                "rule_type": classify_section(current_section),
-                "text": rule_text,
-            })
+            rules.append(
+                {
+                    "source_name": skill_name,
+                    "section": current_section,
+                    "rule_type": classify_section(current_section),
+                    "text": rule_text,
+                }
+            )
             i += 1
             continue
 
@@ -227,6 +290,7 @@ def extract_skill_rules() -> list[dict]:
 
 # ── Phase 2: Extract rules from builtin tools ────────────────────────────────
 
+
 def extract_tool_rules() -> list[dict]:
     """Extract rules from builtin tool files."""
     all_rules: list[dict] = []
@@ -251,23 +315,36 @@ def extract_tool_rules() -> list[dict]:
             continue
 
         # Extract json_schema parameters
-        schema_match = re.search(r"json_schema\s*[:=].*?(\{.*?\n\s*\})", source, re.DOTALL)
+        schema_match = re.search(
+            r"json_schema\s*[:=].*?(\{.*?\n\s*\})", source, re.DOTALL
+        )
         if schema_match:
             # Try to find properties in the schema text
             props = re.findall(r'"(\w+)":\s*\{[^}]*"description":\s*"([^"]*)"', source)
             for param_name, desc in props:
-                if param_name in ("type", "properties", "required", "additionalProperties"):
+                if param_name in (
+                    "type",
+                    "properties",
+                    "required",
+                    "additionalProperties",
+                ):
                     continue
-                all_rules.append({
-                    "source_type": "tool",
-                    "source_name": tool_name,
-                    "section": "json_schema",
-                    "rule_type": "general",
-                    "text": f"Parameter '{param_name}': {desc}",
-                })
+                all_rules.append(
+                    {
+                        "source_type": "tool",
+                        "source_name": tool_name,
+                        "section": "json_schema",
+                        "rule_type": "general",
+                        "text": f"Parameter '{param_name}': {desc}",
+                    }
+                )
 
         # Extract bullet points from prompt() method body
-        prompt_match = re.search(r"def prompt\(.*?\).*?:\s*\n(.*?)(?=\n    def |\nclass |\Z)", source, re.DOTALL)
+        prompt_match = re.search(
+            r"def prompt\(.*?\).*?:\s*\n(.*?)(?=\n    def |\nclass |\Z)",
+            source,
+            re.DOTALL,
+        )
         if prompt_match:
             body = prompt_match.group(1)
             # Find string literals with bullet points
@@ -275,18 +352,21 @@ def extract_tool_rules() -> list[dict]:
             for b in bullets:
                 clean = b.strip().strip("'\"").strip()
                 if len(clean) > 10:
-                    all_rules.append({
-                        "source_type": "tool",
-                        "source_name": tool_name,
-                        "section": "prompt",
-                        "rule_type": "general",
-                        "text": clean,
-                    })
+                    all_rules.append(
+                        {
+                            "source_type": "tool",
+                            "source_name": tool_name,
+                            "section": "prompt",
+                            "rule_type": "general",
+                            "text": clean,
+                        }
+                    )
 
     return all_rules
 
 
 # ── Phase 3: Extract rules from system prompt ────────────────────────────────
+
 
 def extract_system_prompt_rules() -> list[dict]:
     """Parse system_prompt from _base.toml and extract bullet rules."""
@@ -314,18 +394,21 @@ def extract_system_prompt_rules() -> list[dict]:
 
         bullet_match = re.match(r"^\s*[-*]\s+(.+)$", line)
         if bullet_match:
-            rules.append({
-                "source_type": "system_prompt",
-                "source_name": "system_prompt",
-                "section": current_section,
-                "rule_type": "general",
-                "text": bullet_match.group(1).strip(),
-            })
+            rules.append(
+                {
+                    "source_type": "system_prompt",
+                    "source_name": "system_prompt",
+                    "section": current_section,
+                    "rule_type": "general",
+                    "text": bullet_match.group(1).strip(),
+                }
+            )
 
     return rules
 
 
 # ── Phase 4: Load questions and match ────────────────────────────────────────
+
 
 def load_questions() -> list[dict]:
     """Load all questions from the question bank YAML files."""
@@ -354,19 +437,23 @@ def load_questions() -> list[dict]:
             for item in q.get("scoring_checklist", []):
                 text_parts.append(item.get("criterion", ""))
             full_text = " ".join(text_parts)
-            questions.append({
-                "id": q.get("id", "unknown"),
-                "tags": tags,
-                "keywords": extract_keywords(full_text),
-                "text": full_text,
-            })
+            questions.append(
+                {
+                    "id": q.get("id", "unknown"),
+                    "tags": tags,
+                    "keywords": extract_keywords(full_text),
+                    "text": full_text,
+                }
+            )
     return questions
 
 
 def match_rules_to_questions(rules: list[dict], questions: list[dict]) -> list[dict]:
     """For each rule, determine coverage by questions."""
     for idx, rule in enumerate(rules):
-        rule["id"] = f"{rule['source_name']}/{rule['section'].lower().replace(' ', '-')}/{idx}"
+        rule["id"] = (
+            f"{rule['source_name']}/{rule['section'].lower().replace(' ', '-')}/{idx}"
+        )
         rule["is_covered"] = False
         rule["covered_by"] = []
         rule["match_method"] = None
@@ -402,6 +489,7 @@ def match_rules_to_questions(rules: list[dict], questions: list[dict]) -> list[d
 
 
 # ── Phase 5: Generate output ─────────────────────────────────────────────────
+
 
 def build_report(rules: list[dict]) -> dict:
     """Build the coverage report JSON."""
@@ -450,7 +538,12 @@ def build_report(rules: list[dict]) -> dict:
     # Critical uncovered rules
     critical_types = {"hard_guard", "pitfall", "physical_check"}
     uncovered_critical = [
-        {"id": r["id"], "source_name": r["source_name"], "rule_type": r["rule_type"], "text": r["text"]}
+        {
+            "id": r["id"],
+            "source_name": r["source_name"],
+            "rule_type": r["rule_type"],
+            "text": r["text"],
+        }
         for r in rules
         if not r["is_covered"] and r["rule_type"] in critical_types
     ]
@@ -512,6 +605,7 @@ def print_summary(report: dict) -> None:
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     print("Phase 1: Extracting rules from SKILL.md files...")

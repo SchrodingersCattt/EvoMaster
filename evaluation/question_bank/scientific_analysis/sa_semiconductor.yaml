@@ -110,7 +110,8 @@ questions:
     {"pl": {"lambda_max_nm": 0, "fwhm_nm": 0}, "decay": {"tau_avg_us": 0}}
     ```'
   tags:
-  - char_spectroscopy
+  - char_optical_spectrum
+  - char_time_resolved
   data_files:
   - key: emission_spectrum
     path: data/SA_perovskite_pl_lifetime_001/mn_perovskite_em_ex365.txt

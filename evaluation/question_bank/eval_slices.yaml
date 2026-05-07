@@ -64,7 +64,7 @@ slices:
   - target: "Skill: xrd + checkcif"
     type: skill
     slices:
-      - "@char_xrd"
+      - "@char_diffraction"
     count: 3
 
   - target: "Skill: data-analysis"

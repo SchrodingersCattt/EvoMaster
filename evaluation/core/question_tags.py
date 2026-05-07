@@ -25,6 +25,8 @@ class QuestionTag(StrEnum):
     struct_transform = 'struct_transform'
     struct_molcrys = 'struct_molcrys'
     # 表征
-    char_xrd = 'char_xrd'
-    char_spectroscopy = 'char_spectroscopy'
+    char_diffraction = 'char_diffraction'
+    char_optical_spectrum = 'char_optical_spectrum'
+    char_time_resolved = 'char_time_resolved'
     char_electrochem = 'char_electrochem'
+    char_battery_cycling = 'char_battery_cycling'

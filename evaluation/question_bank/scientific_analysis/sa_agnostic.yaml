@@ -24,7 +24,7 @@ questions:
 
     '
   tags:
-  - char_xrd
+  - char_diffraction
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_001_20260408/A23050101A0735.hkl
@@ -148,7 +148,7 @@ questions:
 
     '
   tags:
-  - char_xrd
+  - char_diffraction
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_002_20260408/A23050102A0375.hkl
@@ -285,7 +285,7 @@ questions:
     数值必须来自实际 Pawley 精修与线性拟合，不得填入 prompt 中的初猜近似值。
     "
   tags:
-  - char_xrd
+  - char_diffraction
   data_files:
   - key: vt_pxrd_data
     path: data/PXRD_thermal_expansion_001_20260502_v5/_td-pxrd_test.txt
@@ -504,7 +504,7 @@ questions:
     数值必须来自实际 Pawley 精修结果，不得填入 prompt 中的初猜近似值。
     "
   tags:
-  - char_xrd
+  - char_diffraction
   data_files:
   - key: pxrd_data
     path: data/PXRD_pawley_303K_001_20260502_v1/pxrd_303K.xy
@@ -790,7 +790,7 @@ questions:
     {"assay": {"endpoint_wavelength_nm": 0}, "calibration": {"slope_abs_per_uM": 0, "intercept_abs": 0, "r_squared": 0}, "sample1": {"diluted_glucose_uM": 0, "serum_glucose_mM": 0}}
     ```'
   tags:
-  - char_spectroscopy
+  - char_optical_spectrum
   data_files:
   - key: plate_reader_export
     path: data/SA_uvvis_glucose_maf4_001/glucose_uvvis_platereader.txt
@@ -917,7 +917,7 @@ questions:
     {"pristine": {"peak1_2theta": 0, "peak2_2theta": 0, "peak3_2theta": 0}, "comparison": {"mean_peak_shift_deg": 0, "max_peak_shift_deg": 0, "pattern_correlation": 0}}
     ```'
   tags:
-  - char_xrd
+  - char_diffraction
   data_files:
   - key: paired_pxrd
     path: data/SA_pxrd_maf4_phase_001/maf4_enzyme_vs_pristine_pxrd.txt
