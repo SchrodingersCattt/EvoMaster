@@ -61,6 +61,25 @@ def _resolve_file(workspace: Path, pattern: str) -> Path | None:
     return max(hits, key=lambda p: p.stat().st_mtime)
 
 
+def _resolve_files(workspace: Path, pattern: str) -> list[Path]:
+    """Return all files matching *pattern* inside *workspace*.
+
+    Exact paths take precedence for non-glob filenames. Otherwise the pattern is
+    matched recursively against basenames, consistent with :func:`_resolve_file`.
+    """
+    exact = workspace / pattern
+    if exact.is_file():
+        return [exact]
+
+    return sorted(
+        [
+            p
+            for p in workspace.rglob("*")
+            if p.is_file() and fnmatch.fnmatch(p.name, pattern)
+        ]
+    )
+
+
 def _load_structure(path: Path) -> Structure | Molecule:
     """Read a CIF / POSCAR / XYZ / … file via pymatgen auto-detection."""
     suffix = path.suffix.lower()
@@ -699,3 +718,87 @@ def check_file_count(
         ok,
         f'{n} file(s) matching {pattern!r} in workspace (expected={expected}±{tolerance})',
     )
+
+# ---------------------------------------------------------------------------
+# 11. Structure-file parseability
+# ---------------------------------------------------------------------------
+
+
+def check_parsable(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+) -> tuple[bool, str]:
+    """Verify that every matching structure file can be parsed by pymatgen."""
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    root = Path(workspace_dir)
+    fpaths = _resolve_files(root, filename)
+    if not fpaths:
+        return False, f'no file matching {filename!r} in {root}'
+
+    parsed: list[str] = []
+    for fpath in fpaths:
+        try:
+            _load_structure(fpath)
+        except Exception as exc:
+            return False, f'could not parse {fpath.name}: {exc}'
+        parsed.append(fpath.name)
+
+    return True, f'parsed {len(parsed)} structure file(s): {parsed}'
+
+
+# ---------------------------------------------------------------------------
+# 12. Occupancy check for ordered CIF replicas
+# ---------------------------------------------------------------------------
+
+
+def check_all_occupancy_one(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    tolerance: float = 1e-6,
+) -> tuple[bool, str]:
+    """Verify that all species occupancies in every matching file are 1.
+
+    This is intentionally a file-level check for ordered replicas. A disordered
+    site with split species such as ``A0.5 B0.5`` fails even though total site
+    occupancy sums to 1.
+    """
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    root = Path(workspace_dir)
+    fpaths = _resolve_files(root, filename)
+    if not fpaths:
+        return False, f'no file matching {filename!r} in {root}'
+
+    checked_sites = 0
+    for fpath in fpaths:
+        try:
+            struct = _load_structure(fpath)
+        except Exception as exc:
+            return False, f'could not parse {fpath.name}: {exc}'
+
+        for idx, site in enumerate(struct.sites):
+            species_items = list(site.species.items())
+            if len(species_items) != 1:
+                return (
+                    False,
+                    f'{fpath.name}: site {idx} has split species '
+                    f'{site.species_string}, expected a single occupancy-1 species',
+                )
+            specie, occ = species_items[0]
+            if abs(float(occ) - 1.0) > tolerance:
+                return (
+                    False,
+                    f'{fpath.name}: site {idx} species {specie} occupancy={float(occ):g}, '
+                    f'expected 1±{tolerance}',
+                )
+            checked_sites += 1
+
+    return (
+        True,
+        f'all occupancies are 1±{tolerance} across {checked_sites} site(s) '
+        f'in {len(fpaths)} file(s)',
+    )
+

@@ -40,6 +40,10 @@ from .evaluator_helpers import (
     check_tool_name_used,
     check_turn_budget,
 )
+from .evaluator_struct_helpers import (
+    check_struct_file_all_occupancy_one,
+    check_struct_file_parsable,
+)
 
 _R = BinaryEvaluator._register_verify
 
@@ -168,6 +172,8 @@ for _name, _fn in [
     ("struct_file_stoichiometry_ratio", check_struct_file_stoichiometry_ratio),
     ("struct_file_coordination", check_struct_file_coordination),
     ("struct_file_layer_count", check_struct_file_layer_count),
+    ("struct_file_parsable", check_struct_file_parsable),
+    ("struct_file_all_occupancy_one", check_struct_file_all_occupancy_one),
     ("struct_file_count", check_struct_file_count),
     ("struct_file_surface_termination", check_struct_file_surface_termination),
     ("text_file_contains_all", check_text_file_contains_all_from_evidence),
