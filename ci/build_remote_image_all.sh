@@ -87,15 +87,33 @@ if [[ ${#FAILED_ENVS[@]} -gt 0 ]]; then
 fi
 
 echo "=== Updating $CONSTANT_FILE with test=${ID_BY_ENV[test]} uat=${ID_BY_ENV[uat]} prod=${ID_BY_ENV[prod]} ==="
-for env in test uat prod; do
-  sed -i.bak -E "/BOHRIUM_ENV_DEFAULT_IMAGE_IDS/,/}/{s/^([[:space:]]*'${env}': )[0-9]+,$/\1${ID_BY_ENV[$env]},/;}" "$CONSTANT_FILE"
-done
-for env in test uat prod; do
-  name="${NAME_BY_ENV[$env]}"
-  esc_name=$(printf '%s' "$name" | sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g" -e 's/&/\\&/g' -e 's/|/\\|/g')
-  sed -i.bak -E "/BOHRIUM_ENV_DEFAULT_IMAGE_NAMES/,/}/{s|^([[:space:]]*'${env}': )'[^']*',$|\1'${esc_name}',|;}" "$CONSTANT_FILE"
-done
-rm -f "${CONSTANT_FILE}.bak"
+python3 - "$CONSTANT_FILE" \
+  "${ID_BY_ENV[test]}" "${ID_BY_ENV[uat]}" "${ID_BY_ENV[prod]}" \
+  "${NAME_BY_ENV[test]}" "${NAME_BY_ENV[uat]}" "${NAME_BY_ENV[prod]}" << 'PYEOF'
+import re, sys
+
+fpath = sys.argv[1]
+ids = {"test": sys.argv[2], "uat": sys.argv[3], "prod": sys.argv[4]}
+names = {"test": sys.argv[5], "uat": sys.argv[6], "prod": sys.argv[7]}
+
+content = open(fpath).read()
+
+for env, new_id in ids.items():
+    content = re.sub(
+        rf'(?m)^(\s*["\']' + env + r'["\']:\s*)\d+,',
+        rf'\g<1>{new_id},',
+        content,
+    )
+
+for env, new_name in names.items():
+    content = re.sub(
+        rf'(?m)^(\s*["\']' + env + r'["\']:\s*)["\'][^"\']*["\'],',
+        rf'\1"{new_name}",',
+        content,
+    )
+
+open(fpath, "w").write(content)
+PYEOF
 
 cd "$REPO_ROOT"
 git config user.email "${GITLAB_USER_EMAIL:-zhouh@dp.tech}"

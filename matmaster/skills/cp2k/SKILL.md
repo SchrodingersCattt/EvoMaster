@@ -76,6 +76,8 @@ Merge a method template's XC/ADMM/HF sections into the chosen task template.
 
 - **`WFN_RESTART_FILE_NAME` belongs under `&DFT`, NOT `&SCF`**. Placing it under `&SCF` causes a parse error.
 - **ADMM auxiliary basis syntax (CP2K ≥ 2024.1)**: use `BASIS_SET AUX_FIT cFIT3` in `&KIND`, not the deprecated `AUX_FIT_BASIS_SET`. The matching file is `BASIS_SET_FILE_NAME BASIS_ADMM` (NOT `BASIS_ADMM_MOLOPT` — `cFIT3` is absent from that file).
+- **OT does NOT produce eigenvalues.** If you need HOMO-LUMO gap, band gap, or DOS, you MUST use `&DIAGONALIZATION` with `ADDED_MOS`. OT is only for total energy / geometry optimization where eigenvalues are not required.
+- **`ADMM_PURIFICATION_METHOD MO_DIAG` requires OT.** When using diagonalization, set `ADMM_PURIFICATION_METHOD NONE`. Using `MO_DIAG` with diagonalization causes an immediate ABORT.
 
 ## Physical Checks
 

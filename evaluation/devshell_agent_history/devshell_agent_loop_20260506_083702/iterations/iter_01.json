@@ -1,0 +1,13 @@
+{
+  "checklist_reports": [],
+  "iteration_index": 1,
+  "optimization_delegations": [],
+  "optimization_reports": [],
+  "outcome": {
+    "files_touched": [],
+    "iteration_index": 1,
+    "macro_mean_0_100": 80,
+    "rationale": "## Iteration 1 Summary\n\n**macro_mean_0_100 = 80** (4/5 questions fully passed all k=3 repeats).\n\n| Question | Passed |\n|----------|--------|\n| SC_struct_008_20260410 | ✅ 3/3 |\n| WO_elec_002_20260503 | ❌ (not all repeats passed) |\n| WO_kinetic_001_20260504 | ✅ 3/3 |\n| WO_mech_002_20260404 | ✅ 3/3 |\n| WO_struct_003_20260505 | ✅ 3/3 |\n\n- P0 gate: passed (no P0 questions in this run).\n- Target threshold 80 is met. No product-side or checklist-side delegation needed.\n- Stopping iteration.",
+    "target_met": true
+  }
+}

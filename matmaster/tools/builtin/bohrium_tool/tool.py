@@ -613,11 +613,14 @@ class BohriumTool(BuiltinTool):
         if not (host and path and token):
             return ''
         import urllib.request
-        url = f"https://{host}{path}?token={token}"
-        req = urllib.request.Request(url, headers={'Range': 'bytes=-4096'})
+        from urllib.parse import quote
+        encoded_path = quote(path, safe='/')
+        url = f"{host.rstrip('/')}/api/download/{encoded_path}?token={token}"
+        req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=5) as resp:
             raw = resp.read().decode('utf-8', errors='replace')
-        lines = raw.strip().splitlines()
+        tail = raw[-4096:] if len(raw) > 4096 else raw
+        lines = tail.strip().splitlines()
         return '\n'.join(lines[-max_lines:])
 
     def _download(self, args: dict[str, Any]) -> ToolResult:

@@ -2,12 +2,12 @@ version: v5
 capability: workflow_orchestration
 domain: agnostic
 questions:
-- id: WO_elec_002_20260503
+- id: WO_elec_002_20260506
   capability: workflow_orchestration
   domain: agnostic
-  intent: 'Build and execute periodic liquid water gap workflow: construct 64-water box, compute
+  intent: 'Build and execute periodic liquid water gap workflow: construct 32-water box, compute
     HOMO-LUMO gap with hybrid acceleration.'
-  human_prompt_seed: '计算周期性液态水体系的 HOMO-LUMO gap： 构建 64 个水分子的周期性盒子（密度 ~1.0 g/cm3）， 使用杂化泛函或加速方案（如先
+  human_prompt_seed: '计算周期性液态水体系的 HOMO-LUMO gap： 构建 32 个水分子的周期性盒子（密度 ~1.0 g/cm3）， 使用杂化泛函或加速方案（如先
     PBE 再 HSE 单点）计算电子 gap。
 
     请完成以下交付：
@@ -2240,7 +2240,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_struct_003_20260502
+- id: WO_struct_003_20260505
   capability: workflow_orchestration
   domain: agnostic
   intent: Generate and summarize 10 candidate crystal structures constrained by superconducting
@@ -2251,8 +2251,8 @@ questions:
 
     2) 空间群编号固定为 225；
 
-    3) 给出机器可校验的候选列表文件 `candidate_structures.json`，每条至少包含： `rank`, `structure_name`, `predicted_tc_k`,
-    `space_group`, `selection_basis`；
+    3) 给出机器可校验的候选列表文件 `candidate_structures.json`，每条至少包含： `rank`, `structure_file`, `predicted_tc_k`,
+    `space_group`, `selection_basis`。其中 `structure_file` 为工作目录中对应的结构文件名（如 POSCAR_2）；
 
     4) 生成 `generation_report.md`，说明生成参数（如 sample 数量、约束条件）、 候选筛选逻辑，以及不确定性声明。
 
@@ -2270,7 +2270,7 @@ questions:
       filename: candidate_structures.json
       tokens:
       - rank
-      - structure_name
+      - structure_file
       - predicted_tc_k
       - space_group
       - selection_basis
@@ -2279,7 +2279,7 @@ questions:
   - key: structure_artifacts
     value:
       filename: candidate_structures.json
-      path_key: structure_name
+      path_key: structure_file
       expected_count: 10
       count_tolerance: 0
   - key: report_required_tokens
