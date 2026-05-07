@@ -84,9 +84,7 @@ def check_struct_file_min_interatomic_distance(
     cfg = _cfg(ref)
     raw_elements = cfg.get('elements')
     elements = (
-        [str(item) for item in raw_elements]
-        if isinstance(raw_elements, list)
-        else None
+        [str(item) for item in raw_elements] if isinstance(raw_elements, list) else None
     )
     return check_min_interatomic_distance(
         ws,

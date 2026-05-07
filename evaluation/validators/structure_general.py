@@ -719,6 +719,7 @@ def check_file_count(
         f'{n} file(s) matching {pattern!r} in workspace (expected={expected}±{tolerance})',
     )
 
+
 # ---------------------------------------------------------------------------
 # 11. Structure-file parseability
 # ---------------------------------------------------------------------------
@@ -913,4 +914,3 @@ def check_min_interatomic_distance(
         f'{fpath.name}: min interatomic distance = {min_dist:.4f} Å ({pair_msg}), '
         f'expected >= {min_distance_A} Å',
     )
-

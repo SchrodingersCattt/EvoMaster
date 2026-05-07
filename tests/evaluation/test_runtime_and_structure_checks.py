@@ -709,9 +709,7 @@ def test_struct_file_space_group_checks_number(tmp_path: Path) -> None:
     reason='pymatgen optional; install with uv sync --extra calculation',
 )
 def test_min_interatomic_distance_rejects_overlap(tmp_path: Path) -> None:
-    (tmp_path / 'too_close.xyz').write_text(
-        '2\ncomment\nH 0 0 0\nH 0 0 0.5\n'
-    )
+    (tmp_path / 'too_close.xyz').write_text('2\ncomment\nH 0 0 0\nH 0 0 0.5\n')
 
     from evaluation.validators.structure_general import check_min_interatomic_distance
 
