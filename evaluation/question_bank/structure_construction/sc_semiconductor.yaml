@@ -132,14 +132,14 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260423
+- id: SC_struct_SiH_20260507
   capability: structure_construction
   domain: semiconductor
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab with
     hydrogen atoms.
   human_prompt_seed: '读取 `hydrogen_cap_spec.json`，对 Si(100) slab 上下两个表面的悬挂键进行氢饱和。 要求：识别 slab
     顶部和底部所有欠配位 Si 原子，添加 H 使其达到四配位。 Si-H 键长约 1.48 A。输出结构文件为 `Si100_H_passivated_POSCAR`，并报告添加的
-    H 原子总数。
+    H 原子总数。`hydrogen_cap_spec.json` 中的 6 层 slab 与 2x1 重构用于限定输入背景；硬性验收项为上下表面均完成四配位、Si-H 键长合理、最终 POSCAR 中 H 原子总数为 4。
 
     '
   tags:
@@ -175,6 +175,12 @@ questions:
       expected_deg: 109.47
       tolerance_deg: 8.0
       cutoff_A: 2.6
+  - key: h_atom_count
+    value:
+      filename: Si100_H_passivated_POSCAR
+      element: H
+      expected: 4
+      tolerance: 0
   - key: required_fields
     value:
     - structure_file
@@ -204,6 +210,11 @@ questions:
       positions around the surface Si atoms.
     axis: correctness
     verify: struct_file_bond_angle
+  - id: h_atom_count
+    criterion: The final POSCAR contains exactly 4 H atoms, matching top-and-bottom passivation
+      of the 2x1 Si(100) slab background.
+    axis: correctness
+    verify: struct_file_atom_count
   - id: required_fields
     criterion: Output includes structure file, total number of added H atoms (covering both
       surfaces), representative Si-H bond length, and an explicit check that all Si atoms
