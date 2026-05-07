@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: agnostic
 questions:
-- id: SC_struct_002_20260409
+- id: SC_struct_002_20260507
   capability: structure_construction
   domain: agnostic
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular crystal
@@ -53,6 +53,12 @@ questions:
     - total_atoms
     - atom_count_ratio_check
     - molecule_integrity_check
+  - key: explicit_report_tokens
+    value:
+    - '144'
+    - '576'
+    - '4'
+    - slab_PUBMUU03_110.cif
   - key: molcrys_slab_molecular_integrity
     value:
       unit_cell_atoms: 144
@@ -87,6 +93,11 @@ questions:
       / connectivity reasoning.
     axis: correctness
     verify: llm_binary_judge
+  - id: explicit_report_tokens
+    criterion: Final answer explicitly includes the 144-atom input cell, 576-atom slab,
+      4x atom-count scaling, and `slab_PUBMUU03_110.cif` output basename.
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: The answer states what physical picture is used (molecular connectivity, periodic
       boundaries, (110) plane vs bulk, and how that supports or contradicts cutting molecules),
