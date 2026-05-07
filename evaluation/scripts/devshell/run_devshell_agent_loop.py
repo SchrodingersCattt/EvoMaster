@@ -344,7 +344,6 @@ class DevshellAgentLoopCli:
             eval_ingest_submit_timeout=max(1.0, float(args.eval_ingest_submit_timeout)),
             enable_checklist_agent=bool(args.enable_checklist_agent),
             checklist_permission_mode=str(args.checklist_permission_mode or ""),
-            history_root=(repo_root / "evaluation" / "devshell_agent_history"),
         )
 
         print(f"Session directory: {session_dir}", file=sys.stderr)

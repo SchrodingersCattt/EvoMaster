@@ -92,7 +92,7 @@ banks:
   - path: "input_generation/ig_agnostic_abacus.yaml"
     capability: "input_generation"
     domain: "agnostic"
-    questions: 6
+    questions: 8
 
   - path: "input_generation/ig_agnostic_gpumd.yaml"
     capability: "input_generation"
@@ -177,7 +177,7 @@ banks:
   - path: "workflow_orchestration/wo_agnostic.yaml"
     capability: "workflow_orchestration"
     domain: "agnostic"
-    questions: 27
+    questions: 29
 
   - path: "workflow_orchestration/wo_agnostic_gpumd_nep_clean.yaml"
     capability: "workflow_orchestration"
@@ -199,4 +199,4 @@ banks:
     domain: "semiconductor"
     questions: 2
 
-# Total: 144 questions across 30 active bank files
+# Total: 148 questions across 30 active bank files

@@ -602,6 +602,126 @@ def test_check_layer_count_three_coarse_blocks_old_gap_method_would_be_three(
     assert n_gap_layers == 3
 
 
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_struct_file_parsable_accepts_valid_cif(tmp_path: Path) -> None:
+    from pymatgen.core import Lattice, Structure
+
+    struct = Structure(
+        Lattice.cubic(3.0),
+        ['Li'],
+        [[0.0, 0.0, 0.0]],
+    )
+    struct.to(filename=str(tmp_path / 'valid.cif'), fmt='cif')
+
+    from evaluation.validators.structure_general import check_parsable
+
+    ok, reason = check_parsable(tmp_path, filename='valid.cif')
+    assert ok is True, reason
+
+
+def test_struct_file_parsable_rejects_invalid_file(tmp_path: Path) -> None:
+    (tmp_path / 'broken.cif').write_text('not a valid structure file')
+
+    from evaluation.validators.structure_general import check_parsable
+
+    ok, reason = check_parsable(tmp_path, filename='broken.cif')
+    if importlib.util.find_spec('pymatgen') is None:
+        assert ok is False
+        assert 'pymatgen not installed' in reason
+    else:
+        assert ok is False
+        assert 'could not parse' in reason
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_all_occupancy_one_accepts_ordered_cif(tmp_path: Path) -> None:
+    from pymatgen.core import Lattice, Structure
+
+    struct = Structure(
+        Lattice.cubic(3.0),
+        ['Li', 'O'],
+        [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
+    )
+    struct.to(filename=str(tmp_path / 'ordered_a.cif'), fmt='cif')
+    struct.to(filename=str(tmp_path / 'ordered_b.cif'), fmt='cif')
+
+    from evaluation.validators.structure_general import check_all_occupancy_one
+
+    ok, reason = check_all_occupancy_one(tmp_path, filename='ordered_*.cif')
+    assert ok is True, reason
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_all_occupancy_one_rejects_split_occupancy(tmp_path: Path) -> None:
+    from pymatgen.core import Lattice, Structure
+
+    struct = Structure(
+        Lattice.cubic(3.0),
+        [{'Li': 0.5, 'Na': 0.5}],
+        [[0.0, 0.0, 0.0]],
+    )
+    struct.to(filename=str(tmp_path / 'ordered_bad.cif'), fmt='cif')
+
+    from evaluation.validators.structure_general import check_all_occupancy_one
+
+    ok, reason = check_all_occupancy_one(tmp_path, filename='ordered_*.cif')
+    assert ok is False
+    assert 'split species' in reason or 'occupancy' in reason
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_struct_file_space_group_checks_number(tmp_path: Path) -> None:
+    from pymatgen.core import Lattice, Structure
+
+    struct = Structure.from_spacegroup(
+        'Fm-3m',
+        Lattice.cubic(5.43),
+        ['Si'],
+        [[0.0, 0.0, 0.0]],
+    )
+    struct.to(filename=str(tmp_path / 'fcc_si.cif'), fmt='cif')
+
+    from evaluation.validators.structure_general import check_space_group
+
+    ok, reason = check_space_group(
+        tmp_path,
+        filename='fcc_si.cif',
+        expected_number=225,
+        symprec=0.1,
+    )
+    assert ok is True, reason
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_min_interatomic_distance_rejects_overlap(tmp_path: Path) -> None:
+    (tmp_path / 'too_close.xyz').write_text('2\ncomment\nH 0 0 0\nH 0 0 0.5\n')
+
+    from evaluation.validators.structure_general import check_min_interatomic_distance
+
+    ok, reason = check_min_interatomic_distance(
+        tmp_path,
+        filename='too_close.xyz',
+        min_distance_A=1.0,
+    )
+    assert ok is False
+    assert '0.5000' in reason
+
+
 def test_removed_slab_centered_verify_is_rejected() -> None:
     from evaluation.core.schemas import ScoringCheckItem
 

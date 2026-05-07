@@ -46,8 +46,11 @@ def parse_args() -> argparse.Namespace:
         "--displacement", type=float, default=0.005, help="Displacement distance (Å)"
     )
     p.add_argument(
-        "--supercell", type=int, nargs=3, default=[1, 1, 1],
-        help="Supercell dimensions (e.g. 5 5 1 for 2D materials)"
+        "--supercell",
+        type=int,
+        nargs=3,
+        default=[1, 1, 1],
+        help="Supercell dimensions (e.g. 5 5 1 for 2D materials)",
     )
     p.add_argument("--calc-tdos", action="store_true", help="Calculate total DOS")
     p.add_argument("--calc-pdos", action="store_true", help="Calculate projected DOS")

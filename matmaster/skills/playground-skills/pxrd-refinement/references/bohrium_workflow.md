@@ -12,7 +12,7 @@ tool, which submits to a Docker image with GSAS-II pre-installed.
 | machine (single Pawley, basic Rietveld) | `c8_m32_cpu` |
 | machine (directory batch >= 5 patterns, full Rietveld) | `c32_m128_cpu` |
 
-Wall-time guidance: single-pattern Pawley 1-2 min; 8-temperature batch 5-10 min;
+Wall-time guidance: single-pattern Pawley 1-2 min; 8-pattern batch 5-10 min;
 Rietveld standard 3-5 min; auto-index up to `--timeout` per Bravais family
 (default 200 s, hard SIGALRM-enforced).
 
@@ -44,24 +44,41 @@ python3 gsas2_pawley.py --data pattern.xye \
   -o result.json
 ```
 
-### Pawley, directory batch (`run.sh`, preferred for multi-temperature)
+### Pawley, directory batch (`run.sh`, preferred for multi-pattern series)
 
 ```bash
 #!/bin/bash
 python3 gsas2_pawley.py --data ./ \
   --space-group "<SG>" \
   --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-  --wavelength 1.5406 --multi-start 5 --chain-cell --debug-plot plots \
+  --wavelength 1.5406 --multi-start 5 --chain-cell \
+  --chain-cell-direction both --standardize-cell ref --debug-plot plots \
   -o results.json
 ```
 
 `--multi-start 5` runs each pattern five times from deterministically perturbed seed
-cells and keeps the lowest-wR result (~5x runtime per pattern; well worth it for noisy
-or DFT-simulated data — see `gsas2_refinement_guide.md` § "Multi-start"). `--chain-cell`
+cells and keeps the lowest-wR result (~5x runtime per pattern; cheap insurance against
+local-minimum traps — see `gsas2_refinement_guide.md` § "Multi-start"). **Do not raise
+`--multi-start` above 5 in any standard run**: combined with
+`--chain-cell-direction both` (which doubles work), each extra start adds noticeable
+runtime and the agent will exceed the 1200 s online task timeout. Use the cell-distance
+tiebreak + `merge_audit.warnings` to handle wrong-basin patterns instead. `--chain-cell`
 promotes each accepted refinement to seed the next pattern, gated by `--chain-wr-max`
 (default 25 %) and `--chain-vol-jump-max` (default 0.05) so a bad pattern can't poison
-downstream temperatures. Bump machine to `c32_m128_cpu` whenever `--multi-start ≥ 5` or
-the directory has > 5 patterns.
+downstream patterns. `--chain-cell-direction both` runs forward and reverse internally
+and returns merged `results` plus `merge_audit` (with `table` and `warnings`) /
+`forward_results` / `reverse_results`. The `warnings` list flags any pattern that is
+high-wR (>10%) in both directions AND > 1% off `reference_volume` in both — those
+patterns are at risk of being a wrong-basin solution even after merge.
+Bump machine to `c32_m128_cpu` whenever `--multi-start ≥ 5` or the directory has > 5
+patterns.
+
+`--self-heal-chain` is enabled by default for chained runs. It scans the merged
+series for single-pattern volume outliers and re-refines each rescued pattern
+in-process with `--self-heal-multi-start` starts (default 5). This improves wrong-basin
+robustness, but each rescued outlier costs roughly one extra K-start single-pattern
+refinement. Disable with `--no-self-heal-chain` when you intentionally need raw chain
+output or cannot afford rescue work under the wall-clock budget.
 
 ### Rietveld (`run.sh`)
 
@@ -99,7 +116,7 @@ Flat layout, script and all data files at the top level:
 
     input_dir/
       run.sh                 (REQUIRED - the shell wrapper you write)
-      gsas2_pawley.py        (or gsas2_rietveld.py / gsas2_autoindex.py)
+      gsas2_pawley*.py       (or gsas2_rietveld.py / gsas2_autoindex.py)
       curation.py            (REQUIRED - the script imports it)
       pattern_T1.xye
       pattern_T2.xye

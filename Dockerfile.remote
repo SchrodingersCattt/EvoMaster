@@ -4,7 +4,7 @@ FROM registry.dp.tech/dptech/ubuntu:ubuntu24.04-py3.12
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 安装 tmux、wget、curl、Open Babel（obabel 命令行及化学格式转换）
+# 安装 tmux、wget、curl、Open Babel（obabel 命令行及化学格式转换）、LaTeX
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tmux \
     wget \
@@ -15,6 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openbabel \
     nodejs \
     npm \
+    texlive-latex-base \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    latexmk \
     && rm -rf /var/lib/apt/lists/*
 
 # 飞书 Lark CLI

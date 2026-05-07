@@ -60,6 +60,10 @@ VerifyLiteral = Literal[
     'struct_file_stoichiometry_ratio',
     'struct_file_coordination',
     'struct_file_layer_count',
+    'struct_file_parsable',
+    'struct_file_all_occupancy_one',
+    'struct_file_space_group',
+    'struct_file_min_interatomic_distance',
     # file-system check (no pymatgen needed)
     'struct_file_count',
     # surface termination check
@@ -302,6 +306,10 @@ class QuestionItem(BaseModel):
             'molcrys_slab_molecular_integrity',
             'molcrys_local_env',
             'sc005_disorder_formulas',
+            'struct_file_parsable',
+            'struct_file_all_occupancy_one',
+            'struct_file_space_group',
+            'struct_file_min_interatomic_distance',
             'text_file_contains_all',
             'text_file_kpt_path',
             'text_file_numeric_range',
@@ -420,6 +428,13 @@ class EvalConfig(BaseModel):
     """Top-level evaluation config."""
 
     k: int = 1
+    exp: ModeLiteral = Field(
+        default='direct',
+        description=(
+            'Experiment / mode name passed to ``load_exp_config()``. '
+            'Maps to ``matmaster/exps/{exp}.toml``.'
+        ),
+    )
     question_bank_dir: str = 'evaluation/question_bank'
     output_dir: str = 'runs/mat_master_eval'
     run_label: str = 'matter_eval'

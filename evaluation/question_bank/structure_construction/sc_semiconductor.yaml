@@ -2,13 +2,15 @@ version: v5
 capability: structure_construction
 domain: semiconductor
 questions:
-- id: SC_struct_hetero_20260409
+- id: SC_struct_hetero_20260507
   capability: structure_construction
   domain: semiconductor
   intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled lattice
     mismatch.
   human_prompt_seed: '读取 `hetero_spec.json`，构建 graphene/h-BN 垂直范德华异质结。 要求：(1) 构建共度超胞使晶格失配
     < 2%；(2) AB 堆叠，层间距 3.35 A； (3) z 方向加 15 A 真空层。输出 `hetero_graphene_hBN.cif` 和 `hetero_graphene_hBN_POSCAR`，报告实际失配度和总原子数。
+
+    最终答案必须包含 `<eval_results>{"lattice_mismatch_percent": <number>}</eval_results>`，其中 `lattice_mismatch_percent` 为实际晶格失配百分比。
 
     '
   tags:
@@ -19,13 +21,30 @@ questions:
     oss_url: ''
     description: Specification for graphene/h-BN heterostructure construction.
   reference_answers:
+  - key: poscar_exists
+    value: hetero_graphene_hBN_POSCAR
+  - key: poscar_parsable
+    value:
+      filename: hetero_graphene_hBN_POSCAR
   - key: mismatch_percent
-    value: 1.6
-    tolerance: 1.0
-  - key: hetero_formula
+    value:
+      json_path: lattice_mismatch_percent
+      target: 1.6
+      tolerance: 1.0
+  - key: b_n_ratio
     value:
       filename: hetero_graphene_hBN.cif
-      formula: BC2N
+      element_a: B
+      element_b: N
+      expected_ratio: 1.0
+      tolerance: 0.01
+  - key: c_b_ratio
+    value:
+      filename: hetero_graphene_hBN.cif
+      element_a: C
+      element_b: B
+      expected_ratio: 2.0
+      tolerance: 0.05
   - key: interlayer_distance_A
     value:
       filename: hetero_graphene_hBN.cif
@@ -52,15 +71,26 @@ questions:
     value: &id003
       max: 8000
   scoring_checklist:
+  - id: poscar_exists
+    criterion: Agent writes `hetero_graphene_hBN_POSCAR` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: poscar_parsable
+    criterion: The POSCAR deliverable can be parsed as a structure file.
+    axis: correctness
+    verify: struct_file_parsable
   - id: mismatch_percent
-    criterion: Lattice mismatch is below 2%.
+    criterion: Lattice mismatch reported in `<eval_results>` is below 2% and close to the reference.
     axis: correctness
-    verify: numerical_range
-  - id: hetero_formula
-    criterion: The output CIF has the expected graphene/h-BN supercell formula (equal C, B,
-      N counts) verified by reading the structure file.
+    verify: answer_json_numeric
+  - id: b_n_ratio
+    criterion: The output CIF preserves B:N = 1:1 stoichiometry for the h-BN layer.
     axis: correctness
-    verify: struct_file_formula
+    verify: struct_file_stoichiometry_ratio
+  - id: c_b_ratio
+    criterion: The output CIF preserves C:B = 2:1, equivalent to graphene/h-BN composition BC2N up to supercell scaling.
+    axis: correctness
+    verify: struct_file_stoichiometry_ratio
   - id: interlayer_distance_A
     criterion: The mean C-B interlayer distance read from the output CIF is near 3.35 A.
     axis: correctness
@@ -102,14 +132,14 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260423
+- id: SC_struct_SiH_20260507
   capability: structure_construction
   domain: semiconductor
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab with
     hydrogen atoms.
   human_prompt_seed: '读取 `hydrogen_cap_spec.json`，对 Si(100) slab 上下两个表面的悬挂键进行氢饱和。 要求：识别 slab
     顶部和底部所有欠配位 Si 原子，添加 H 使其达到四配位。 Si-H 键长约 1.48 A。输出结构文件为 `Si100_H_passivated_POSCAR`，并报告添加的
-    H 原子总数。
+    H 原子总数。`hydrogen_cap_spec.json` 中的 6 层 slab 与 2x1 重构用于限定输入背景；硬性验收项为上下表面均完成四配位、Si-H 键长合理、最终 POSCAR 中 H 原子总数为 4。
 
     '
   tags:
@@ -145,6 +175,12 @@ questions:
       expected_deg: 109.47
       tolerance_deg: 8.0
       cutoff_A: 2.6
+  - key: h_atom_count
+    value:
+      filename: Si100_H_passivated_POSCAR
+      element: H
+      expected: 4
+      tolerance: 0
   - key: required_fields
     value:
     - structure_file
@@ -174,6 +210,11 @@ questions:
       positions around the surface Si atoms.
     axis: correctness
     verify: struct_file_bond_angle
+  - id: h_atom_count
+    criterion: The final POSCAR contains exactly 4 H atoms, matching top-and-bottom passivation
+      of the 2x1 Si(100) slab background.
+    axis: correctness
+    verify: struct_file_atom_count
   - id: required_fields
     criterion: Output includes structure file, total number of added H atoms (covering both
       surfaces), representative Si-H bond length, and an explicit check that all Si atoms
