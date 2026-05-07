@@ -116,7 +116,7 @@ Flat layout, script and all data files at the top level:
 
     input_dir/
       run.sh                 (REQUIRED - the shell wrapper you write)
-      gsas2_pawley.py        (or gsas2_rietveld.py / gsas2_autoindex.py)
+      gsas2_pawley*.py       (or gsas2_rietveld.py / gsas2_autoindex.py)
       curation.py            (REQUIRED - the script imports it)
       pattern_T1.xye
       pattern_T2.xye

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from evaluation.core import mat_runner
 from evaluation.core.runner import expand_run_plan
 from evaluation.core.schemas import EvalConfig, QuestionItem
-from evaluation.core import mat_runner
 from matmaster.config.loader import load_exp_config
 
 

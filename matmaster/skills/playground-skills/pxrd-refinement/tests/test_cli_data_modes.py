@@ -62,9 +62,12 @@ def test_single_file_mode(tmp_path, monkeypatch, capsys):
     cap = _stub_main_run(
         monkeypatch,
         argv=[
-            "--data", str(f),
-            "--space-group", "P 21",
-            "--cell", "a=10.83,b=9.62,c=10.13,beta=108.75",
+            "--data",
+            str(f),
+            "--space-group",
+            "P 21",
+            "--cell",
+            "a=10.83,b=9.62,c=10.13,beta=108.75",
         ],
     )
     assert cap["mode"] == "single"
@@ -81,9 +84,12 @@ def test_directory_mode(tmp_path, monkeypatch):
     cap = _stub_main_run(
         monkeypatch,
         argv=[
-            "--data", str(d),
-            "--space-group", "P 21",
-            "--cell", "a=10.83,b=9.62,c=10.13,beta=108.75",
+            "--data",
+            str(d),
+            "--space-group",
+            "P 21",
+            "--cell",
+            "a=10.83,b=9.62,c=10.13,beta=108.75",
         ],
     )
     assert cap["mode"] == "directory"
@@ -98,10 +104,15 @@ def test_two_theta_range_alias_sets_tmin_tmax(tmp_path, monkeypatch):
     cap = _stub_main_run(
         monkeypatch,
         argv=[
-            "--data", str(f),
-            "--space-group", "P 21",
-            "--cell", "a=10.83,b=9.62,c=10.13,beta=108.75",
-            "--two-theta-range", "14", "50",
+            "--data",
+            str(f),
+            "--space-group",
+            "P 21",
+            "--cell",
+            "a=10.83,b=9.62,c=10.13,beta=108.75",
+            "--two-theta-range",
+            "14",
+            "50",
         ],
     )
 
@@ -121,11 +132,18 @@ def test_multi_file_mode_routes_to_directory(tmp_path, monkeypatch):
     cap = _stub_main_run(
         monkeypatch,
         argv=[
-            "--data", str(f1), str(f2), str(f3), str(f4),
-            "--space-group", "P 21",
-            "--cell", "a=10.83,b=9.62,c=10.13,beta=108.75",
+            "--data",
+            str(f1),
+            str(f2),
+            str(f3),
+            str(f4),
+            "--space-group",
+            "P 21",
+            "--cell",
+            "a=10.83,b=9.62,c=10.13,beta=108.75",
             "--chain-cell",
-            "--chain-cell-direction", "both",
+            "--chain-cell-direction",
+            "both",
         ],
     )
     assert cap["mode"] == "directory"
@@ -133,7 +151,10 @@ def test_multi_file_mode_routes_to_directory(tmp_path, monkeypatch):
     assert explicit is not None
     assert len(explicit) == 4
     assert {p.name for p in explicit} == {
-        "pxrd_303K.xy", "pxrd_323K.xy", "pxrd_343K.xy", "pxrd_363K.xy",
+        "pxrd_303K.xy",
+        "pxrd_323K.xy",
+        "pxrd_343K.xy",
+        "pxrd_363K.xy",
     }
 
 
@@ -147,9 +168,15 @@ def test_multi_file_mode_preserves_argv_order_and_deduplicates(tmp_path, monkeyp
     cap = _stub_main_run(
         monkeypatch,
         argv=[
-            "--data", str(f1), str(f2), str(f1), str(f3),
-            "--space-group", "P 21",
-            "--cell", "a=10.83,b=9.62,c=10.13,beta=108.75",
+            "--data",
+            str(f1),
+            str(f2),
+            str(f1),
+            str(f3),
+            "--space-group",
+            "P 21",
+            "--cell",
+            "a=10.83,b=9.62,c=10.13,beta=108.75",
             "--chain-cell",
         ],
     )
@@ -165,12 +192,20 @@ def test_multi_file_mode_with_directory_rejected(tmp_path, monkeypatch, capsys):
     d.mkdir()
 
     monkeypatch.setattr(gsas2_pawley, "setup_gsas2", lambda *a, **k: None)
-    monkeypatch.setattr(sys, "argv", [
-        "gsas2_pawley.py",
-        "--data", str(f1), str(d),
-        "--space-group", "P 21",
-        "--cell", "a=10,b=10,c=10,beta=90",
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gsas2_pawley.py",
+            "--data",
+            str(f1),
+            str(d),
+            "--space-group",
+            "P 21",
+            "--cell",
+            "a=10,b=10,c=10,beta=90",
+        ],
+    )
     with pytest.raises(SystemExit) as exc:
         gsas2_pawley.main()
     assert exc.value.code == 1
@@ -187,13 +222,21 @@ def test_wide_csv_requires_single_path(tmp_path, monkeypatch, capsys):
     f2.write_text("T,2theta,intensity\n", encoding="utf-8")
 
     monkeypatch.setattr(gsas2_pawley, "setup_gsas2", lambda *a, **k: None)
-    monkeypatch.setattr(sys, "argv", [
-        "gsas2_pawley.py",
-        "--wide-csv",
-        "--data", str(f1), str(f2),
-        "--space-group", "P 21",
-        "--cell", "a=10,b=10,c=10,beta=90",
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gsas2_pawley.py",
+            "--wide-csv",
+            "--data",
+            str(f1),
+            str(f2),
+            "--space-group",
+            "P 21",
+            "--cell",
+            "a=10,b=10,c=10,beta=90",
+        ],
+    )
     with pytest.raises(SystemExit) as exc:
         gsas2_pawley.main()
     assert exc.value.code == 1
@@ -204,12 +247,19 @@ def test_wide_csv_requires_single_path(tmp_path, monkeypatch, capsys):
 
 def test_path_not_found_reports_error(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(gsas2_pawley, "setup_gsas2", lambda *a, **k: None)
-    monkeypatch.setattr(sys, "argv", [
-        "gsas2_pawley.py",
-        "--data", str(tmp_path / "missing.xy"),
-        "--space-group", "P 21",
-        "--cell", "a=10,b=10,c=10,beta=90",
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gsas2_pawley.py",
+            "--data",
+            str(tmp_path / "missing.xy"),
+            "--space-group",
+            "P 21",
+            "--cell",
+            "a=10,b=10,c=10,beta=90",
+        ],
+    )
     with pytest.raises(SystemExit) as exc:
         gsas2_pawley.main()
     assert exc.value.code == 1
