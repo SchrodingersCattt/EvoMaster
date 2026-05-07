@@ -214,7 +214,6 @@ questions:
   human_prompt_seed: 请为 Si 的 ABACUS LCAO-SCF 试算准备当前目录下的 `INPUT`、`STRU`、`KPT`，并把 Bohrium 提交配置写入 `submit_job.json`。
   tags:
   - eng_abacus
-  - workflow_execution
   reference_answers:
   - key: submit_json_artifact
     value: submit_job.json
@@ -324,7 +323,6 @@ questions:
   human_prompt_seed: 请为 Si 的 ABACUS PW-SCF 试算准备当前目录下的 `INPUT`、`STRU`、`KPT`，并把 Bohrium 提交配置写入 `submit_job.json`。
   tags:
   - eng_abacus
-  - workflow_execution
   reference_answers:
   - key: submit_json_artifact
     value: submit_job.json
