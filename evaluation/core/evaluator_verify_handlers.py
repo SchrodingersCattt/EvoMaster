@@ -42,7 +42,9 @@ from .evaluator_helpers import (
 )
 from .evaluator_struct_helpers import (
     check_struct_file_all_occupancy_one,
+    check_struct_file_min_interatomic_distance,
     check_struct_file_parsable,
+    check_struct_file_space_group,
 )
 
 _R = BinaryEvaluator._register_verify
@@ -174,6 +176,11 @@ for _name, _fn in [
     ("struct_file_layer_count", check_struct_file_layer_count),
     ("struct_file_parsable", check_struct_file_parsable),
     ("struct_file_all_occupancy_one", check_struct_file_all_occupancy_one),
+    ("struct_file_space_group", check_struct_file_space_group),
+    (
+        "struct_file_min_interatomic_distance",
+        check_struct_file_min_interatomic_distance,
+    ),
     ("struct_file_count", check_struct_file_count),
     ("struct_file_surface_termination", check_struct_file_surface_termination),
     ("text_file_contains_all", check_text_file_contains_all_from_evidence),

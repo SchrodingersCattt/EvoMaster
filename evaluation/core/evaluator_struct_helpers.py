@@ -10,7 +10,9 @@ from typing import Any
 
 from evaluation.validators.structure_general import (
     check_all_occupancy_one,
+    check_min_interatomic_distance,
     check_parsable,
+    check_space_group,
 )
 
 from .evidence import EvidenceBundle
@@ -54,4 +56,41 @@ def check_struct_file_all_occupancy_one(
         ws,
         filename=str(cfg.get('filename', '*.cif')),
         tolerance=float(cfg.get('tolerance', 1e-6)),
+    )
+
+
+def check_struct_file_space_group(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_space_group(
+        ws,
+        filename=str(cfg.get('filename', '*.cif')),
+        expected_number=int(cfg.get('expected_number', cfg.get('expected', 0))),
+        symprec=float(cfg.get('symprec', 0.1)),
+        angle_tolerance=float(cfg.get('angle_tolerance', 5.0)),
+    )
+
+
+def check_struct_file_min_interatomic_distance(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    raw_elements = cfg.get('elements')
+    elements = (
+        [str(item) for item in raw_elements]
+        if isinstance(raw_elements, list)
+        else None
+    )
+    return check_min_interatomic_distance(
+        ws,
+        filename=str(cfg.get('filename', '*.cif')),
+        min_distance_A=float(cfg.get('min_distance_A', cfg.get('expected_min_A', 0))),
+        elements=elements,
     )
