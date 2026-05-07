@@ -89,7 +89,8 @@ questions:
     axis: grounding
     verify: llm_binary_judge
   - id: soc_consideration
-    criterion: Agent acknowledges or considers spin-orbit coupling (SOC) for Lu (Z=71, heavy lanthanide) in the band structure calculation. The agent should either enable LSORBIT=.TRUE. or explicitly discuss whether SOC is needed for this system.
+    criterion: Agent acknowledges or considers spin-orbit coupling (SOC) for Lu (Z=71, heavy lanthanide) in the band structure calculation. The agent should either enable LSORBIT=.TRUE. or explicitly discuss
+      whether SOC is needed for this system.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -433,7 +434,8 @@ questions:
     axis: grounding
     verify: llm_binary_judge
   - id: correct_ISMEAR_semiconductor
-    criterion: INCAR sets ISMEAR = 0 (Gaussian) or ISMEAR = -5 (tetrahedron) which are appropriate for semiconductors/insulators with a band gap. Positive ISMEAR values (Methfessel-Paxton, for metals) must not be used.
+    criterion: INCAR sets ISMEAR = 0 (Gaussian) or ISMEAR = -5 (tetrahedron) which are appropriate for semiconductors/insulators with a band gap. Positive ISMEAR values (Methfessel-Paxton, for metals) must
+      not be used.
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
@@ -1549,7 +1551,8 @@ questions:
     axis: grounding
     verify: llm_binary_judge
   - id: correct_ISMEAR_insulator
-    criterion: INCAR sets ISMEAR = 0 (Gaussian) or ISMEAR = -5 (tetrahedron) which are appropriate for insulators. Positive ISMEAR values (Methfessel-Paxton, for metals) must not be used for insulating systems.
+    criterion: INCAR sets ISMEAR = 0 (Gaussian) or ISMEAR = -5 (tetrahedron) which are appropriate for insulators. Positive ISMEAR values (Methfessel-Paxton, for metals) must not be used for insulating
+      systems.
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
@@ -1989,7 +1992,8 @@ questions:
     axis: grounding
     verify: llm_binary_judge
   - id: soc_consideration
-    criterion: Agent acknowledges or considers spin-orbit coupling (SOC) for the 5d heavy transition metals Ta and Os. The agent should either enable LSORBIT=.TRUE. or explicitly discuss whether SOC is needed for these heavy 5d elements.
+    criterion: Agent acknowledges or considers spin-orbit coupling (SOC) for the 5d heavy transition metals Ta and Os. The agent should either enable LSORBIT=.TRUE. or explicitly discuss whether SOC is
+      needed for these heavy 5d elements.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2091,7 +2095,8 @@ questions:
     axis: grounding
     verify: llm_binary_judge
   - id: correct_ISMEAR_insulator
-    criterion: INCAR sets ISMEAR = 0 (Gaussian) or ISMEAR = -5 (tetrahedron) which are appropriate for wide-gap insulators. Positive ISMEAR values (Methfessel-Paxton, for metals) must not be used for insulating systems.
+    criterion: INCAR sets ISMEAR = 0 (Gaussian) or ISMEAR = -5 (tetrahedron) which are appropriate for wide-gap insulators. Positive ISMEAR values (Methfessel-Paxton, for metals) must not be used for insulating
+      systems.
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
@@ -2306,11 +2311,9 @@ questions:
   intent: Generate VASP INCAR for NiO with DFT+U (Dudarev) settings.
   human_prompt_seed: '工作区中有 NiO.vasp（NaCl结构氧化镍，4个原子：2 Ni + 2 O，POSCAR 中原子顺序为 Ni O）。
 
-    NiO 是强关联反铁磁绝缘体，Ni 3d 电子存在强 on-site Coulomb 相互作用。
-    请生成考虑强关联效应的静态计算 INCAR 文件 `INCAR_dftu`。
+    NiO 是强关联反铁磁绝缘体，Ni 3d 电子存在强 on-site Coulomb 相互作用。 请生成考虑强关联效应的静态计算 INCAR 文件 `INCAR_dftu`。
 
-    要求使用 Hubbard U 校正，Ni 的有效 U 值取 6.2 eV。
-    PBE 泛函，ENCUT=550 eV。'
+    要求使用 Hubbard U 校正，Ni 的有效 U 值取 6.2 eV。 PBE 泛函，ENCUT=550 eV。'
   tags:
   - eng_vasp
   data_files: []
@@ -2350,6 +2353,11 @@ questions:
   - key: token_budget_total
     value:
       max: 10000
+  - key: must_ispin
+    value:
+      filename: INCAR_dftu
+      pattern: ISPIN\s*=\s*2
+      flags: i
   scoring_checklist:
   - id: incar_dftu_artifact
     criterion: INCAR_dftu file exists in workspace.
@@ -2371,10 +2379,10 @@ questions:
     criterion: LDAUU array sets 6.2 for Ni and 0 for O, matching POSCAR species order.
     axis: correctness
     verify: text_file_regex
-  - id: ispin_set
-    criterion: ISPIN=2 is set because NiO is antiferromagnetic.
+  - id: must_ispin
+    criterion: INCAR_dftu sets ISPIN = 2 (required for antiferromagnetic NiO).
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_regex
   - id: grounding_dftu
     criterion: Agent explains the physical basis for U value choice and why Dudarev (not Liechtenstein) method is appropriate.
     axis: grounding
