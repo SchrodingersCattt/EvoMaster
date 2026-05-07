@@ -409,7 +409,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008_20260410
+- id: SC_struct_008_20260507
   capability: structure_construction
   domain: agnostic
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
@@ -419,7 +419,8 @@ questions:
     Al:O ratio, which should be approximately 2:3 (±5%); (3) the three cell angles, each close
     to 90 degrees (±2 degrees); (4) whether both tetrahedral and octahedral [AlO] environments
     exist; (5) whether all interatomic distances are greater than 1.0 A; (6) the relaxed maximum
-    force, which should be below 0.1 eV/A.
+    force, which should be below 0.1 eV/A. Also include a machine-readable block
+    `<eval_results>{"max_force_ev_per_ang": <number>}</eval_results>` in the final answer.
 
     '
   tags:
@@ -454,8 +455,14 @@ questions:
       expected: 90.0
       tolerance: 2.0
   - key: max_force_eV_A
-    value: 0.05
-    tolerance: 0.05
+    value:
+      json_path: max_force_ev_per_ang
+      target: 0.05
+      tolerance: 0.05
+  - key: min_distance_A
+    value:
+      filename: gamma_alumina.cif
+      min_distance_A: 1.0
   - key: required_fields
     value:
     - file_exists
@@ -494,9 +501,13 @@ questions:
     axis: correctness
     verify: struct_file_cell_param
   - id: max_force_eV_A
-    criterion: The reported relaxed maximum force is below 0.1 eV/A.
+    criterion: The reported relaxed maximum force in `<eval_results>` is below 0.1 eV/A.
     axis: correctness
-    verify: numerical_range
+    verify: answer_json_numeric
+  - id: min_distance_A
+    criterion: The minimum interatomic distance read from `gamma_alumina.cif` is at least 1.0 A.
+    axis: correctness
+    verify: struct_file_min_interatomic_distance
   - id: required_fields
     criterion: The answer explicitly reports the Al:O ratio, all three cell angles, evidence
       for both tetrahedral and octahedral AlO environments, a minimum-distance sanity check
